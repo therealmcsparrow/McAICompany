@@ -1,6 +1,8 @@
 .superpowers/
 node_modules/
-# global gitignore excludes these; the plugin needs them
+# global gitignore excludes these; this repo needs them
+!/docs/
+!/docs/*
 !/scripts/
 !/scripts/*
 !/tests/
