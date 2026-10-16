@@ -9,9 +9,9 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 
 ## 1. Setup (once per run)
 1. **Task slug**: kebab-case, at most 5 words. Work dir: `.company/work/<slug>/`.
-2. **Project profile**: if `.company/project.md` is missing, copy `${CLAUDE_PLUGIN_ROOT}/skills/lead/references/project-template.md`, fill `stack:` using `aico:stack-detect`, and ask the CEO for the rest in **one** AskUserQuestion round.
+2. **Project profile**: if `.company/project.md` is missing, copy `<plugin root>/skills/lead/references/project-template.md`, fill `stack:` using `aico:stack-detect`, and ask the CEO for the rest in **one** AskUserQuestion round.
 3. **Branch**: `aico/<slug>`. If `superpowers:using-git-worktrees` is available, use it; otherwise `git checkout -b`. Never work on main.
-4. **Company facts**: `${CLAUDE_PLUGIN_ROOT}/company/PROFILE.md`. Tell Roles to read the section they need; don't paste it.
+4. **Company profile**: the plugin root is two folders above this skill's base directory (shown when the skill loads). Resolve `<plugin root>/company/PROFILE.md` to an absolute path once and pass it in every dispatch. Don't paste its contents.
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:
@@ -20,13 +20,15 @@ Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role
 Goal: <one or two lines>
 Input Handoffs: <paths, or "none: first Step" + the CEO's request verbatim>
 Output: .company/work/<slug>/<NN>-<role>.md
+Round: <0 | 1 | 2>
 Project profile: .company/project.md
+Company profile: <absolute path to PROFILE.md>
 Follow aico:handoff.
 ```
 
 - **Input Handoffs = only what this Role needs.** Usually that's the brief plus the Architect's Handoff. Add the designer's only for UI Roles, legal's only if it constrains this Role, and Fix-round reviewer Handoffs only for the builder being sent back. Don't restate their contents in Goal; the Role reads them.
 - Roles with no dependency between them (e.g. architect ∥ ui-ux-designer, reviewer ∥ qa ∥ security) are dispatched **in parallel in one message**.
-- After each Step: `git add -A && git commit -m "aico(<role>): <one-line summary>"`.
+- After each Step, commit **only that Step's files**: its Handoff plus the paths under its `## Did`. Run `git add <those paths> && git commit -m "aico(<role>): <one-line summary>"`. Parallel Steps get one commit each, in turn. Never `git add -A`, because it bundles Steps and picks up strays like `.env`.
 - `status: blocked` → fix the cause (missing input, wrong Role) and re-dispatch. Don't do the work yourself.
 - `status: needs-ceo` → ask the CEO now, write the answer into the next dispatch.
 
@@ -37,8 +39,8 @@ At **Brief**, **Plan** and **Ship**, stop. Show the CEO a summary of at most 10 
 
 ## 4. Fix rounds
 When the Reviewer, QA or Security returns items under `## Blocking`:
-1. Dispatch the builder with that Handoff as input → then re-dispatch the same reviewer. That is **one Fix round**.
-2. Count rounds per piece of work. **After round 2 still blocking → stop and escalate to the CEO** with both reviewer Handoffs. Don't start a 3rd round, however close it looks.
+1. **One Fix round** = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel). Pass `Round: N` in each dispatch.
+2. The count lives in the Handoffs' `round:` field, not in your memory. After compaction, read the latest `round:` value. **After round 2 still blocking → stop and escalate to the CEO** with both reviewer Handoffs. Don't start a 3rd round, however close it looks.
 3. Nits never trigger a round. They are listed in the Ship Gate summary.
 
 ## 5. Finish

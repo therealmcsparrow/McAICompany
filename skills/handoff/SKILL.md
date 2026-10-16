@@ -16,7 +16,7 @@ Your dispatch prompt gives you:
 
 Rules:
 1. Read the input Handoffs first, then only the `.company/project.md` sections you need. Don't read other Steps' Handoffs or browse `.company/work/` to "get context".
-2. **No input Handoff and no output path → stop.** Write nothing else. Return `status: blocked`, reason "missing handoff", and leave it to the Lead to re-dispatch. Never reconstruct context by guessing. The only exception is the first Step of a run: its goal comes from the CEO's request in the prompt.
+2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`, and leave it to the Lead to re-dispatch. Never reconstruct context by guessing. The only exception is a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 
 ## Finishing a Step
@@ -29,6 +29,7 @@ step: 03
 role: backend-engineer
 task: <task-slug>
 status: done | blocked | needs-ceo
+round: 0            # Fix round this Step belongs to (0 = first pass), copied from the dispatch
 ---
 ## Did
 - What changed, as facts, with file paths. No narrative.

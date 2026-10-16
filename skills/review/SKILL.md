@@ -5,7 +5,7 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Use** `superpowers:requesting-code-review` (reviewer checklist) or `mattpocock-skills:code-review` if available, scoped to the diff of this run's branch against its base.
+**Use the checklist** from `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, applied by you to this branch's diff against its base. You are a subagent and can't dispatch other agents, so skip any step in those skills that dispatches a reviewer.
 
 **Always also check** the review blockers in `aico:contracts`.
 

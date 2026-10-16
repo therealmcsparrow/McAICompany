@@ -28,7 +28,7 @@ You can also ask for any Role directly, e.g. "use the aico security agent on src
 |---|---|---|
 | architect, code-reviewer, security | product-manager, account-manager, legal, backend-, frontend-, desktop-, ai-data-engineer, devops, ui-ux-designer, qa | writer, marketer |
 
-Reviewers (architect, code-reviewer, security, legal, PM, account manager) never edit source. QA edits tests only.
+Code-reviewer, security, legal, PM and account manager never edit source. The architect writes only ADRs and Contract definitions (interfaces/schemas). QA edits tests only.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend and desktop. Only CEO-approved items go in Core (`skills/contracts`).
