@@ -1,0 +1,29 @@
+{
+  "core": [
+    { "name": "find-skills", "source": "vercel-labs/skills" },
+    { "name": "humanizer", "source": "blader/humanizer" },
+    { "name": "hallmark", "source": "nutlope/hallmark" },
+    { "name": "impeccable", "install": "npx -y impeccable skills install" },
+    { "name": "frontend-ui-engineering", "source": "addyosmani/agent-skills" },
+    { "name": "security-and-hardening", "source": "addyosmani/agent-skills" },
+    { "name": "security-review", "source": "getsentry/skills" },
+    { "name": "auth-implementation-patterns", "source": "wshobson/agents" }
+  ],
+  "go": [
+    { "name": "golang-*", "source": "samber/cc-skills-golang" }
+  ],
+  "react": [
+    { "name": "vercel-react-best-practices", "source": "vercel-labs/agent-skills" },
+    { "name": "vercel-composition-patterns", "source": "vercel-labs/agent-skills" },
+    { "name": "typescript-advanced-types", "source": "wshobson/agents" }
+  ],
+  "tanstack": [
+    { "name": "tanstack-query", "source": "tanstack-skills/tanstack-skills" },
+    { "name": "tanstack-router", "source": "tanstack-skills/tanstack-skills" },
+    { "name": "tanstack-form", "source": "tanstack-skills/tanstack-skills" },
+    { "name": "tanstack-table", "source": "tanstack-skills/tanstack-skills" }
+  ],
+  "auth": [
+    { "name": "two-factor-authentication-best-practices", "source": "better-auth/skills" }
+  ]
+}

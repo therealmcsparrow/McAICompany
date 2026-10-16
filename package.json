@@ -1,0 +1,10 @@
+{
+  "name": "aico",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test scripts/check.test.mjs scripts/install-skills.test.mjs",
+    "check": "node scripts/check.mjs",
+    "setup": "node scripts/install-skills.mjs"
+  }
+}
