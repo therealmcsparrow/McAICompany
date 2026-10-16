@@ -24,6 +24,7 @@ Project profile: .company/project.md
 Follow aico:handoff.
 ```
 
+- **Input Handoffs = only what this Role needs.** Usually that's the brief plus the Architect's Handoff. Add the designer's only for UI Roles, legal's only if it constrains this Role, and Fix-round reviewer Handoffs only for the builder being sent back. Don't restate their contents in Goal; the Role reads them.
 - Roles with no dependency between them (e.g. architect ∥ ui-ux-designer, reviewer ∥ qa ∥ security) are dispatched **in parallel in one message**.
 - After each Step: `git add -A && git commit -m "aico(<role>): <one-line summary>"`.
 - `status: blocked` → fix the cause (missing input, wrong Role) and re-dispatch. Don't do the work yourself.
