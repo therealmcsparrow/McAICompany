@@ -15,6 +15,7 @@ model: sonnet
 - Scope: in / out (explicit no's) / later.
 - Acceptance criteria as testable Given/When/Then lines. QA will turn them into tests.
 - Success metric (one number to watch).
+- Personas: if `## Personas` is empty, propose 2–4 (who, goal, skill level, devices/OS, abilities, including at least one with an accessibility need) for the CEO to approve.
 - Risks and open questions. Questions only the CEO can answer → `status: needs-ceo`.
 - Own product: check fit with audience and goal. Client project: trace each item to the Account Manager's intake.
 

@@ -12,6 +12,14 @@ voice: clear | bold | technical
 license: proprietary | <client's license>
 jurisdiction: Netherlands/EU | <client's>
 
+## Personas
+<!-- name: who, goal, skill level, devices/OS, abilities (e.g. screen reader) -->
+- (none yet; the product-manager proposes them in the first brief)
+
+## Art direction
+<!-- mood, palette, typography feel, references, do / don't -->
+- (none yet; brand-artist proposes it at the first Plan Gate)
+
 ## Core
 <!-- Approved by the CEO at a Plan Gate. Nothing else goes in Core. -->
 - (empty until first Plan Gate)

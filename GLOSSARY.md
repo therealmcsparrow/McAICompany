@@ -41,4 +41,12 @@ _Avoid_: orchestrator (use Lead).
 
 **Contract** — the explicit, agreed interface between Core and a Module or between Modules (what is offered, what is expected). The only allowed coupling. Breaking it is a blocking review issue.
 
+**Persona** — a named, described target user (goals, skill level, devices, abilities) from the Project profile. User-testing Roles act as a Persona.
+
+**Usability finding** — a problem a Persona hits while using the product. Blocking only when an acceptance criterion fails or WCAG 2.2 AA is violated; otherwise a recommendation.
+
+**Asset** — a visual or motion deliverable from an artist Role (logo, icon, illustration, image prompt, animation, game/3D art), delivered with its source and license.
+
+**Art direction** — the product's visual style (mood, palette, references, do/don't), recorded in the Project profile. Every Asset follows it.
+
 **Practice** — a reusable way of working (e.g. test-first development, an OWASP checklist, brand voice). Loaded on demand by whichever Role needs it. Not a job, has no owner.

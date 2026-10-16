@@ -5,7 +5,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 ## Shape
 - Claude Code plugin named `aico`. Roles = subagents (`agents/`). Practices, the Lead and Playbooks = skills (`skills/`).
 - Subagents cannot spawn subagents, so the **Lead runs in the main session as a skill** (`/aico:lead`) carrying the Project Manager persona and dispatching Role subagents.
-- Entry points: `/aico:lead` (routes any request), Playbooks `/aico:feature`, `/aico:fix`, `/aico:launch`, `/aico:audit`, `/aico:client`, or any Role directly. Lead and Playbooks share the `pipeline` Practice; they never call each other.
+- Entry points: `/aico:lead` (routes any request), Playbooks `/aico:feature`, `/aico:fix`, `/aico:launch`, `/aico:audit`, `/aico:client`, `/aico:usability-test`, or any Role directly. Lead and Playbooks share the `pipeline` Practice; they never call each other.
 
 ## Run mechanics
 - Every Step = one Role subagent with fresh context. It reads only the Handoff files it is given plus the relevant section of `.company/project.md`, and writes exactly one Handoff: `.company/work/<task-slug>/NN-<role>.md`.
@@ -35,12 +35,20 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Code Reviewer | code-reviewer | opus | read-only + Write |
 | QA Tester | qa | sonnet | read + Bash + Write (tests & handoff only) |
 | Security Engineer | security | opus | read-only + Bash + Write |
+| Brand Artist | brand-artist | sonnet | full |
+| Prompt Artist | prompt-artist | haiku | read-only + Write |
+| Motion Artist | motion-artist | sonnet | full |
+| Game/3D Artist | game-artist | sonnet | full |
+| Persona Tester | persona-tester | sonnet | read-only + Write |
+| Hands-on Tester | hands-on-tester | sonnet | inherits all (browser/computer-use); never edits |
+| Accessibility Tester | accessibility-tester | sonnet | inherits all; never edits |
+| UX Researcher | ux-researcher | sonnet | read-only + Write |
 
 "read-only + Write" = Read, Grep, Glob, Skill, Write; Write is for its Handoff only. Exceptions: the Architect also writes ADRs and Contract definition files (interfaces/schemas, no implementation); Code Reviewer, Security and Legal also have Bash for read-only commands (git diff, audits).
 "full" = Read, Grep, Glob, Skill, Write, Edit, Bash.
 
 ## Practices (skills)
-Own: `handoff`, `pipeline`, `contracts`, `stack-detect`.
+Own: `handoff`, `pipeline`, `contracts`, `stack-detect`, `art-direction`, `usability`.
 Pointers (name the installed skill + 2–3 line fallback): `tdd`, `review`, `security-check`, `ui-design`, `debugging`, `writing`, `planning`, `verify`.
 Stack packs: none shipped; `stack-detect` maps manifests (Cargo.toml, go.mod, package.json, composer.json, *.csproj, pyproject.toml) to installed skills; packs are added under `skills/stack-detect/references/` only when a gap appears.
 

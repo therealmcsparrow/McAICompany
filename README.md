@@ -1,6 +1,6 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 15 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 23 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
 ## Install
 ```
@@ -20,15 +20,16 @@ A Claude Code plugin that runs a small software company. You are the **CEO**. A 
 | `/aico:launch <product>` | Positioning, copy, release notes, privacy/terms → Ship |
 | `/aico:audit [scope]` | Read-only quality, test, security and license report |
 | `/aico:client intake\|handoff` | Client brief, estimate and proposal, or the client handoff package |
+| `/aico:usability-test <target> [real-users]` | Every Persona tests in parallel (walkthrough, hands-on, accessibility) → one report |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
 
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, code-reviewer, security | product-manager, account-manager, legal, backend-, frontend-, desktop-, ai-data-engineer, devops, ui-ux-designer, qa | writer, marketer |
+| architect, code-reviewer, security | product-manager, account-manager, legal, backend-, frontend-, desktop-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher | writer, marketer, prompt-artist |
 
-Code-reviewer, security, legal, PM and account manager never edit source. The architect writes only ADRs and Contract definitions (interfaces/schemas). QA edits tests only.
+Code-reviewer, security, legal, PM and account manager never edit source. The architect writes only ADRs and Contract definitions (interfaces/schemas). QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend and desktop. Only CEO-approved items go in Core (`skills/contracts`).
