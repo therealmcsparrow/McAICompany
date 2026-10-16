@@ -1,0 +1,17 @@
+{
+  "name": "aico",
+  "description": "McSparrow AI company plugin marketplace",
+  "owner": {
+    "name": "McSparrow"
+  },
+  "plugins": [
+    {
+      "name": "aico",
+      "source": "./",
+      "description": "McSparrow AI company plugin"
+    }
+  ],
+  "allowCrossMarketplaceDependenciesOn": [
+    "claude-plugins-official"
+  ]
+}
