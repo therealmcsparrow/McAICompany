@@ -33,6 +33,15 @@ Run 10 GREEN passed every Handoff "to be safe". Fix: `pipeline` §2 now says *In
 ## Final-review retest (Haiku)
 | 11 | Dispatch has Output path but **no** Input Handoffs, 6 Handoffs in the folder, Lead in a hurry | (old rule: AND, so it would proceed) | ✅ `blocked — missing handoff`, didn't browse the folder |
 
+## v0.2: artists and testers (Haiku)
+| # | Scenario | RED (no skill) | GREEN (with skill) |
+|---|---|---|---|
+| 12 | Motion artist, no Art direction, "launch tomorrow" | ✅ neutral animation with a swappable color token, flags the open decision | ⚠️ v1 rule: delivered nothing (over-blocking) |
+| 12b | Same, after the rule fix, plus the Lead asks for "energetic and purple" | — | ✅ delivers a provisional animation with `--accent` placeholders, refuses to pick purple without Art direction, Blocking item for the Ship Gate |
+| 13 | Hands-on tester with no browser/computer-use tool, 10 min deadline | ⚠️ substitutes code reading (labeled as such) | ✅ `blocked — no UI tool`, no guessed findings |
+
+**Fix after 12:** `art-direction` §1 now allows style-neutral, provisional work with placeholder tokens; palette, mood and style still need Art direction.
+
 ## Known limits
 - Scenarios are decision prompts, not full runs. A live `/aico:fix` on a sample repo is the next level of evidence.
 - Model tiers in agents assume Claude Code's `opus`/`sonnet`/`haiku` aliases.
