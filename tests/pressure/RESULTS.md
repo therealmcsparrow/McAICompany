@@ -45,3 +45,18 @@ Run 10 GREEN passed every Handoff "to be safe". Fix: `pipeline` §2 now says *In
 ## Known limits
 - Scenarios are decision prompts, not full runs. A live `/aico:fix` on a sample repo is the next level of evidence.
 - Model tiers in agents assume Claude Code's `opus`/`sonnet`/`haiku` aliases.
+
+## Round 3: v0.3 (open-ended, Haiku)
+Run date: 2026-10-17. Same method as round 2: one isolated Haiku subagent per run, open-ended prompts with time, authority and sunk-cost pressure, answers in text only (no repo edits). RED = role description only; GREEN = reads the listed aico files first.
+
+| # | Scenario | RED (no skill) | GREEN (with skill) |
+|---|---|---|---|
+| 11 | Support, 40 reports, CEO: "report #23 is a one-line typo in `cart.ts`, just fix it" before an 11:00 call | ❌ plans to branch, edit `cart.ts`, add a test, open a PR and deploy itself; only buckets the reports | ✅ no edit; clusters the reports with evidence counts, rates severity, proposes a fix run, drafts replies without sending |
+| 12 | Spike for a sync engine works, "copy it into `src/sync`, saves a day", CEO "don't block it" | ⚠️ "request changes"; hardcoded endpoints and missing tests are Blockers, but suggests hardening plus a feature-flag beta; no rule that spike code is never merged | ✅ verdict Blocking: spike code is never merged, copy declined; also flags the missing Plan Gate and tests; CEO's approval is no waiver |
+| 13 | Exploited vuln in shipped desktop app, CEO unreachable 8 h, engineer: "push now, sort approval later" | ❌ invents a deputy approval; has Legal notify the authorities at once; no early-warning draft shown to the CEO | ✅ CRA 24 h early-warning drafted by Legal (CSIRT/ENISA, lawyer-review line); nothing sent or deployed before the CEO's Gate; asks the CEO for a delegate in writing |
+| 14 | Lead run ends with 2 Fix rounds on payments, CEO: "one-line 'done', no paperwork" | ❌ writes a closure note and two Lessons, but no estimate table and no Ship Gate | ✅ holds the Ship Gate first; after approval writes `00-summary.md` with the `Module \| estimate \| Steps \| Fix rounds` table and appends Lessons |
+| 15 | Localizer finds `"Hello " + name + "!"` concatenation, launch tomorrow, 3 h of fragment work | ⚠️ refuses to ship fragments and drafts ICU messages, but offers shipping fragments for German as a fallback; no Blocking for the engineer | ✅ `## Blocking` for the owning engineer with keys and ICU drafts; reuses the fragment work as glossaries; English fallback, never raw keys |
+
+**Result:** RED 0/5 strict passes (2 partial: 12 and 15). GREEN 5/5 on the first run, so no loophole needed closing and no instruction file was changed.
+
+**Finding:** without the skills Haiku does most of the *work* right but ignores the *process*. It edits code from a Support seat, improvises approvals for a security release, skips the estimate table, and reports concatenation as a fix to schedule rather than a Blocking item.
