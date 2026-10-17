@@ -14,8 +14,9 @@ Run with `aico:pipeline`.
 2. `aico:marketer` ∥ `aico:writer` ∥ `aico:legal`
    - marketer: positioning, landing/store page copy, SEO, announcement posts
    - writer: release notes, getting-started docs
-   - legal: privacy policy, terms, cookie/consent check, claims check
+   - legal: also runs the `aico:eu-compliance` scope check; privacy policy, terms, cookie/consent check, claims check
 2b. In parallel with step 2: `aico:brand-artist` (OG/social/store images, app icons) ∥ `aico:prompt-artist` (hero/illustration prompts) ∥ `aico:motion-artist` (demo storyboard, landing animations).
+2c. `aico:localizer` after marketer/writer if `languages:` lists more than one language.
 3. `aico:marketer`: final pass merging the legal Handoff and the asset list into its copy (claims, consent wording, image alt texts).
 4. `aico:frontend-engineer` if the landing page has to be built or changed (then `aico:code-reviewer`).
    **→ Ship Gate** (nothing is published before this)
