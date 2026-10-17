@@ -13,7 +13,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Playbook** — a fixed, named sequence of Roles for a recurring kind of work (e.g. build a feature, launch, audit). Invoked as a command; skips the Lead's routing decision.
 
-**Own product** — software the company builds and markets itself (SaaS, web app, or native desktop app).
+**Own product** — software the company builds and markets itself (SaaS, web app, native desktop app or game).
 
 **Client project** — software built for an outside client to their brief, ending in a handoff.
 

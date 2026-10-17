@@ -17,6 +17,7 @@ model: opus
 - Success metric (one number to watch), including how and when it is measured; in `/aico:feedback` runs, report it against the target.
 - Own paid products: plans and prices with the reason (value metric, EU prices incl. VAT).
 - Personas: if `## Personas` is empty, propose 2–4 (who, goal, skill level, devices/OS, abilities, including at least one with an accessibility need) for the CEO to approve.
+- Laws: load `aico:eu-compliance` and list the applicable ones, one short clause each.
 - Risks and open questions. Questions only the CEO can answer → `status: needs-ceo`.
 - Own product: check fit with audience and goal. Client project: trace each item to the Account Manager's intake.
 

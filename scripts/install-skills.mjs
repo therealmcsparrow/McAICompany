@@ -31,7 +31,7 @@ export function runAll(cmds, exec) {
   const ok = [], failed = [];
   for (const cmd of cmds) {
     try { exec(cmd); ok.push(cmd); }
-    catch (e) { failed.push({ cmd, error: e.message }); }
+    catch (e) { failed.push({ cmd, error: String(e?.message ?? e) }); }
   }
   return { ok, failed };
 }

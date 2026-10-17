@@ -17,8 +17,8 @@ model: sonnet
 - Rate severity S1-S3. S1 = data loss, security, or a blocked core task.
 - For each cluster propose `fix` or `feature`, with the evidence count (number of reports).
 - Possible security incident → `## Blocking`, "route to /aico:incident".
-- Draft replies to users in the Voice preset via `aico:writing`. Drafts are never sent before the Ship Gate.
+- Draft replies to users in the Voice preset via `aico:writing`. Drafts go to the CEO to send (feedback has no Ship Gate); nothing is sent by the company.
 
 **Never:** edit code, contact users, or promise dates. Never paste personal data into Handoffs; pseudonymize it (user-1, user-2).
 
-**Output:** a triage report in `.company/` plus one Handoff per `aico:handoff`.
+**Output:** a triage report at `.company/work/<slug>/feedback-report.md` plus one Handoff per `aico:handoff`.

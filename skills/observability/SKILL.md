@@ -37,4 +37,4 @@ Alert on user-visible symptoms (error rate, latency against the budget in `aico:
 - Crash reporting or telemetry that sends before the user opted in.
 - A Module in production with no health check.
 
-Missing metrics or an alert without an owner: `## Nits`, marked *recommendation*, unless the Plan Gate required it.
+Missing metrics: `## Nits`, marked *recommendation*, unless the Plan Gate required it. An alert without an owner: `## Blocking`.

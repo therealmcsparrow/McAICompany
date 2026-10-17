@@ -22,7 +22,7 @@ jurisdiction: Netherlands/EU | <client's>
 - (none yet; brand-artist proposes it at the first Plan Gate)
 
 ## Performance budget
-<!-- (empty = defaults from aico:performance) -->
+<!-- (empty = defaults from aico:performance). Approved budgets note: approved: <date> (CEO, at a Plan Gate) -->
 - (empty = defaults from aico:performance)
 
 ## Pricing

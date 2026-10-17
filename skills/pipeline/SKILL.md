@@ -34,12 +34,13 @@ Follow aico:handoff.
 - `status: needs-ceo` → ask the CEO now, write the answer into the next dispatch.
 
 ## 3. Spikes
-If the Architect's Handoff has `## Spikes`, you may dispatch the named engineer with Output `.company/work/<slug>/NN-spike-<role>.md` and code under `.company/work/<slug>/spike/`. Spike code is never merged. Show the result at the Plan Gate.
+If the Architect's Handoff has `## Spikes`, you may dispatch the named engineer, before the Plan Gate, with Output `.company/work/<slug>/NN-spike-<role>.md` and code under `.company/work/<slug>/spike/`. Spike code never enters the product (no merge, copy or import): commit only the spike Handoff, and delete the spike code before the Ship Gate. Show the result at the Plan Gate.
+Estimates: ask the Architect for S/M/L per Module; they are the estimate source for the Finish table.
 
 ## 4. Gates
 At **Brief**, **Plan** and **Ship**, stop. Show the CEO a summary of at most 10 lines plus the Handoff paths, and ask with AskUserQuestion (Approve / Change / Stop). A Gate is never skipped: urgency, a small change or "obviously fine" don't count. A Playbook may only skip a Gate if its own text says so.
 - **Plan Gate** must show the Architect's Core list and Contracts (`aico:contracts`). Approved Core goes into `.company/project.md`.
-- **Ship Gate** comes before any push, merge, deploy, publish or message to a client.
+- **Ship Gate** comes before any push, merge, deploy, publish or message to a client, user or authority.
 
 ## 5. Fix rounds
 When the Reviewer, QA or Security returns items under `## Blocking`:
@@ -48,4 +49,4 @@ When the Reviewer, QA or Security returns items under `## Blocking`:
 3. Nits never trigger a round. They are listed in the Ship Gate summary.
 
 ## 6. Finish
-After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups) with a table `Module | estimate | Steps | Fix rounds`. Then append at most 3 one-line Lessons to `.company/lessons.md` (format `- <date> <role>: <lesson>`) drawn from Fix rounds, escalations and blocked Steps; none → write nothing. Use `superpowers:finishing-a-development-branch` if it's available.
+After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups) with a table `Module | estimate | Steps | Fix rounds` (estimate from the Architect's Handoff). Read-only runs (audit, feedback, usability-test) do the same after the CEO's last decision. Then append at most 3 one-line Lessons to `.company/lessons.md` (format `- <date> <role>: <lesson>`) drawn from Fix rounds, escalations and blocked Steps; none → write nothing. Use `superpowers:finishing-a-development-branch` if it's available.

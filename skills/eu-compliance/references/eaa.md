@@ -4,7 +4,7 @@
 In force since 28 Jun 2025. In scope: e-commerce, consumer banking, e-books and readers, consumer communication services, passenger transport sites and apps, and similar consumer-facing services.
 
 ## Working target
-WCAG 2.2 AA, which maps to the EN 301 549 requirements. The `accessibility-tester` Role checks it (see `aico:usability`).
+WCAG 2.2 AA (a superset of the WCAG 2.1 AA that EN 301 549 references). The `accessibility-tester` Role checks it (see `aico:usability`).
 
 ## Obligations (checklist)
 - [ ] The whole user journey meets WCAG 2.2 AA: keyboard, focus, contrast, text alternatives, labels, error messages, zoom and reflow.

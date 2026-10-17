@@ -27,7 +27,7 @@ Languages come from `languages:` in `.company/project.md` (default `en`). One la
 
 ## Writers and translators
 - Give each string context (where it appears, max length) in a comment or description.
-- The `writer` Role keeps the Voice preset in every language.
+- The `localizer` Role keeps the Voice preset in every language.
 - Machine translation is a draft; a human reviews legal text and anything the CEO publishes.
 
 ## Severity

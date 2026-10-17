@@ -5,7 +5,7 @@ description: Use when designing, building or reviewing any McSparrow product str
 
 # Core, Modules, Contracts
 
-This applies to every product type: backend, frontend and desktop. Patterns per type are in `references/by-product-type.md`; read only your section.
+This applies to every product type: backend, frontend, desktop and game. Patterns per type are in `references/by-product-type.md`; read only your section.
 
 ## Rules
 1. **Core is minimal.** It holds only what the CEO approved at a Plan Gate, listed under `## Core` in `.company/project.md`. Typical Core: bootstrapping, the Module registry/loader, shared Contract definitions, cross-cutting plumbing (config, logging, auth context).

@@ -33,10 +33,10 @@ You can also ask for any Role directly, e.g. "use the aico security agent on src
 |---|---|---|
 | architect, code-reviewer, security, product-manager | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher | writer, localizer, prompt-artist |
 
-Code-reviewer, security, legal, PM and account manager never edit source. The architect writes only ADRs and Contract definitions (interfaces/schemas). QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, legal, PM, account manager and support never edit source. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas). QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
-- **Core + Modules + Contracts** for every product: backend, frontend and desktop. Only CEO-approved items go in Core (`skills/contracts`).
+- **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
 - **Fix rounds:** at most 2, then escalation to you. Nits never loop.
 - **Lessons:** a Ship appends up to 3 one-line Lessons to `.company/lessons.md`; later runs read it and pass the relevant ones to each Role.
 - **EU compliance** (`aico:eu-compliance`): GDPR, CRA, AI Act Art. 50, EAA, VAT and consumer law are checked before Ship.

@@ -62,7 +62,7 @@ Stack packs: none shipped; `stack-detect` maps manifests (Cargo.toml, go.mod, pa
 
 ## v0.3 additions
 - **Post-ship loop:** `/aico:feedback <reports>` — support triages, de-duplicates and clusters user reports, then the Lead proposes `/aico:fix` / `/aico:feature` runs at a Gate. `/aico:incident <what>` — devops triages and mitigates, owner engineer fixes via the fix route, legal checks CRA reporting (actively exploited vulnerability or severe incident → ENISA early warning within 24h), devops writes the postmortem.
-- **Refactor:** `/aico:refactor <scope>` — moves existing code toward Core + Modules + Contracts one slice at a time; QA writes characterization tests before any change; a Plan Gate per slice.
+- **Refactor:** `/aico:refactor <scope>` — moves existing code toward Core + Modules + Contracts one slice at a time; QA writes characterization tests before any change; one Plan Gate, then a Ship Gate per slice.
 - **Maintain:** `/aico:maintain` — dependency upgrades, security patches, license re-check, SBOM refresh; read-only report first, then fixes after a Gate; schedulable.
 - **Spike:** when the Architect lists a risk under `## Spikes`, the Lead may dispatch the owning engineer for a throwaway proof in `.company/work/<slug>/spike/` (never merged into the product); its result goes to the Plan Gate.
 - **Fix Playbook:** step 3 runs `qa` ∥ `code-reviewer` (∥ `security`) so the full suite is re-run.

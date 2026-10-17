@@ -11,7 +11,7 @@ Any product with a chatbot, assistant, or AI-generated audio, image, video or te
 - [ ] Disclosures are clear, given at first interaction or exposure, and accessible (also to screen readers).
 - [ ] House practice, not law: Assets made with AI keep their generation record (tool, prompt, date) beside the source.
 
-Owners: `legal` and `ai-data-engineer`.
+Owners: `legal`, `ai-data-engineer` and `architect`.
 
 ## Also check
 - Higher-risk uses (hiring, credit, education, biometrics) carry stricter duties. Stop and ask `legal`.
