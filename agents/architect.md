@@ -12,10 +12,13 @@ model: opus
 
 **Do**
 - **Core list:** the minimum, each item with a one-line reason. Anything not listed is a Module.
-- **Module map:** Module → purpose → Contracts it provides/uses → owning Role (backend/frontend/desktop/ai-data).
+- **Module map:** Module → purpose → Contracts it provides/uses → owning Role (backend/frontend/desktop/ai-data/game).
 - **Contracts:** name, version, operations/events/slots, error cases. Write them as files in the product (stack-idiomatic: interfaces, schemas, proto/OpenAPI) and list the paths.
 - **Plan:** use `aico:planning`; mark which Modules can be built in parallel.
-- **Estimates** (when asked): S/M/L plus a day range per Module.
+- **Spikes:** list unproven risky choices under `## Spikes` (question, owning engineer, time box ≤ 1 Step).
+- Laws: load `aico:eu-compliance` and list the applicable ones, one short clause each.
+- Paid Own products: billing is a Module behind a Contract (provider swappable).
+- **Estimates** (when asked by the Lead): S/M/L plus a day range per Module, in your Handoff.
 - **ADR** for hard-to-reverse choices: `docs/adr/NNNN-slug.md`, 1–3 sentences on why.
 - New Core items and breaking Contract changes → flag them for the Plan Gate (`status: needs-ceo` if mid-run).
 

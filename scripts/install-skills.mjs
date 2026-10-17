@@ -26,6 +26,16 @@ export function plan(manifest, groups, installed, platform = process.platform) {
   return [...new Set(cmds)];
 }
 
+// Runs every command; a failure is recorded, not thrown.
+export function runAll(cmds, exec) {
+  const ok = [], failed = [];
+  for (const cmd of cmds) {
+    try { exec(cmd); ok.push(cmd); }
+    catch (e) { failed.push({ cmd, error: String(e?.message ?? e) }); }
+  }
+  return { ok, failed };
+}
+
 function installedSkills() {
   const dirs = [join(homedir(), '.claude', 'skills'), join(process.cwd(), '.claude', 'skills')];
   return new Set(dirs.filter(existsSync).flatMap(d => readdirSync(d)));
@@ -38,8 +48,10 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) 
   const manifest = JSON.parse(readFileSync(join(ROOT, 'deps', 'skills.json'), 'utf8'));
   const cmds = plan(manifest, groups.length ? groups : ['core'], installedSkills());
   if (!cmds.length) { console.log('All skills already installed.'); process.exit(0); }
-  for (const cmd of cmds) {
-    console.log(`${dry ? '[dry-run] ' : '$ '}${cmd}`);
-    if (!dry) execSync(cmd, { stdio: 'inherit' });
-  }
+  cmds.forEach(cmd => console.log(`${dry ? '[dry-run] ' : '$ '}${cmd}`));
+  if (dry) process.exit(0);
+  const { ok, failed } = runAll(cmds, cmd => execSync(cmd, { stdio: 'inherit' }));
+  failed.forEach(f => console.log(`FAILED ${f.cmd}: ${f.error}`));
+  console.log(`${ok.length} installed, ${failed.length} failed`);
+  process.exit(failed.length ? 1 : 0);
 }

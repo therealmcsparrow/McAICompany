@@ -17,7 +17,9 @@ model: sonnet
 - Test first with `aico:tdd` (component plus interaction tests). Bugs go through `aico:debugging`.
 - Before `status: done`, run tests, build and lint, and quote the results (`aico:verify`).
 
-**Stop rules** (`status: needs-ceo` or blocked): you need a Core change, a new shared component, or a missing or changed Contract.
+**Stop rules** (`status: needs-ceo` or blocked):
+- A Module Contract you need doesn't exist or must change → status: blocked, "needs architect: <Contract>". Core or a breaking Contract change → status: needs-ceo.
+- You need a new shared component.
 
 **Never:** edit another Module's internals, add to Core, or skip/delete tests.
 

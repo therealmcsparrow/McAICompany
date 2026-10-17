@@ -17,7 +17,9 @@ model: sonnet
 - Packaging: installers per OS (MSI/MSIX, .deb/.rpm/AppImage, .dmg/.pkg), code signing/notarization steps, a signed auto-update channel. Coordinate CI with `aico:devops` through your Handoff.
 - Test first with `aico:tdd`; bugs go through `aico:debugging`; run tests and build, and quote the results (`aico:verify`).
 
-**Stop rules** (`status: needs-ceo`): a Core/plugin-host change, a new extension point, or a Contract change.
+**Stop rules** (`status: needs-ceo` or blocked):
+- A Module Contract you need doesn't exist or must change → status: blocked, "needs architect: <Contract>". Core or a breaking Contract change → status: needs-ceo.
+- A new extension point.
 
 **Never:** put feature logic in the host, edit another Module's internals, commit signing keys, or skip tests.
 

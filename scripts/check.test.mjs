@@ -55,3 +55,8 @@ test('invalid model is an error', () => {
   const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'gpt4') } }));
   assert.ok(r.errors.some(e => e.includes('invalid model')));
 });
+
+test('skill and agent with the same name is an error', () => {
+  const r = check(fixture({ skills: { support: skill('support') }, agents: { support: agent('support') } }));
+  assert.ok(r.errors.some(e => e.includes('name clash support')));
+});

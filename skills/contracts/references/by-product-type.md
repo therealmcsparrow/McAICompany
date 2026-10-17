@@ -21,5 +21,12 @@ Read only the section for your product type. All of these are language-agnostic:
 - **Contracts**: the extension-point API (commands, views, events, settings schema), the IPC message schema between processes, and a versioned plugin manifest.
 - Platform-specific code lives behind a platform Contract in Core, never inside feature Modules.
 
+## Game
+- **Core**: the game loop (fixed-step update, render) and the Module registry.
+- **Module**: a gameplay system (combat, inventory, AI, UI flow) registered with the loop.
+- **Contracts**: events/messages, or ECS components and resources.
+- **Forbidden**: a system reading another system's private state; share through components/resources or events.
+- Contract tests run on the deterministic simulation (fixed seed, fixed step).
+
 ## Contract test shape (all types)
 One suite per Contract. It drives only the public interface and is runnable against any implementation, including fakes. A Module provides its Contract only once this suite passes.

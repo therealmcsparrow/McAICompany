@@ -14,6 +14,7 @@ model: sonnet
 - **Bug reproduction:** reproduce it, write a failing regression test, and name the suspected Module (use `aico:debugging` for the reproduction).
 - **Acceptance:** one test per acceptance criterion, plus edge cases (empty, max, invalid, concurrent, offline/slow).
 - **Contract tests:** one suite per provided Contract, through the public interface only (`aico:contracts`).
+- Performance: measure against `## Performance budget` per `aico:performance` when the goal says so or the audit lane asks.
 - Run the full suite and quote the result line (`aico:verify`).
 - Failing tests or uncovered criteria → `## Blocking`, with the test name and output.
 

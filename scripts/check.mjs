@@ -32,6 +32,7 @@ function mdFiles(dir) {
 
 export function check(root) {
   const errors = [], warnings = [], names = new Set(), units = [];
+  const skillNames = new Set(), agentNames = new Set();
   const skillsDir = join(root, 'skills'), agentsDir = join(root, 'agents');
 
   if (existsSync(skillsDir)) for (const dir of readdirSync(skillsDir)) {
@@ -46,6 +47,7 @@ export function check(root) {
     const text = readFileSync(u.file, 'utf8');
     const fm = frontmatter(text);
     names.add(u.expected);
+    (u.kind === 'skill' ? skillNames : agentNames).add(u.expected);
     if (!fm) { errors.push(`ERROR ${rel}: missing frontmatter`); continue; }
     if (fm.name !== u.expected) errors.push(`ERROR ${rel}: name mismatch (${fm.name} vs ${u.expected})`);
     if (!fm.description) errors.push(`ERROR ${rel}: missing description`);
@@ -54,6 +56,8 @@ export function check(root) {
     const n = lineCount(text), max = LIMITS[u.kind];
     if (n > max) warnings.push(`WARN ${rel}: ${u.kind} ${n} > ${max} lines`);
   }
+
+  for (const n of skillNames) if (agentNames.has(n)) errors.push(`ERROR agents/${n}.md: name clash ${n} (skill and agent)`);
 
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir), ...mdFiles(join(root, 'company'))]) {
     const rel = relative(root, file).split(sep).join('/');

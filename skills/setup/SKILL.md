@@ -12,7 +12,7 @@ The plugin dependencies (`superpowers`, `mattpocock-skills`) install automatical
 1. Groups = the arguments, or `core` if there are none. Available groups: `core`, `go`, `react`, `tanstack`, `auth`.
 2. Dry run: `node "<plugin root>/scripts/install-skills.mjs" <groups> --dry-run`
 3. Show the CEO the commands it prints. They download third-party code, so ask once to approve. Nothing to install → say so and stop.
-4. If approved, run the same command without `--dry-run`.
+4. If approved, run the same command without `--dry-run`. If some installs fail, show the FAILED lines; the rest are installed. Re-running retries only the missing ones.
 5. Tell the CEO to restart Claude Code (or run `/reload-plugins`) so the new skills appear.
 
 Missing a skill for some other stack? Use `find-skills` to search, and add the result to `deps/skills.json` under a new group.

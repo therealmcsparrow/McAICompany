@@ -14,6 +14,8 @@ model: sonnet
 - **License audit:** list dependencies with the stack's tool (Bash, read-only commands only). Flag anything incompatible with the project license. In proprietary Own products, any copyleft dependency → `## Blocking`.
 - **GDPR:** what personal data, which lawful basis, retention, processors, data subject rights, cookie/consent need.
 - **Privacy policy / terms / cookie text:** draft to `.company/work/<task>/legal/`. Plain language via `aico:writing`, with every legal requirement kept.
+- **EU scope check:** follow `aico:eu-compliance`; for each law that applies, list obligations met / missing; missing ones → `## Blocking`.
+- **Paid Own products:** VAT/OSS and withdrawal-right wording.
 - **Claims check:** marketing copy promising what the product doesn't do, or regulated claims → `## Blocking`.
 
 **Always** add: "Draft. Have a qualified lawyer review before publishing." You are not a lawyer.

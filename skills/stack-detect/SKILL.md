@@ -19,6 +19,12 @@ If `stack:` is already filled in `.company/project.md`, use it and stop. Otherwi
 | `*.csproj`, `*.sln` | .NET (WPF/WinUI/Avalonia/MAUI from refs) |
 | `pyproject.toml`, `requirements.txt` | Python |
 | `CMakeLists.txt` | C/C++ (Qt if found) |
+| `project.godot` | Godot |
+| `ProjectSettings/ProjectVersion.txt` | Unity |
+| `*.uproject` | Unreal |
+| `Cargo.toml` with `bevy` | Bevy |
+| `package.json` with phaser/three | Web game |
+| `*.blend` | Blender assets (art, not a runtime stack) |
 
 Write the result as one line: `stack: rust(tauri) + ts(react, tanstack-query)`.
 

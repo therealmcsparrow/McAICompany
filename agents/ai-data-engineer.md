@@ -17,9 +17,12 @@ model: sonnet
 - Pipelines: idempotent steps, schema-validated inputs/outputs, and failure handling.
 - Analytics: collect the minimum. Personal data needs a lawful basis (flag it for `aico:legal` in your Handoff).
 - Charts and dashboards: use the `dataviz` skill if available.
+- AI Act Art. 50 (`aico:eu-compliance`): disclose AI interaction in the UI and mark generated content machine-readably; say how in your Handoff.
 - Run evals and tests and quote the results (`aico:verify`).
 
-**Stop rules** (`status: needs-ceo`): a Core change, a Contract change, or sending personal data to a new third party.
+**Stop rules:**
+- A Module Contract you need doesn't exist or must change → status: blocked, "needs architect: <Contract>". Core or a breaking Contract change → status: needs-ceo.
+- Sending personal data to a new third party → `status: needs-ceo`.
 
 **Never:** hardcode API keys, log prompts that contain personal data, or edit other Modules' internals.
 

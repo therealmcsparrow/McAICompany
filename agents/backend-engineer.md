@@ -19,7 +19,7 @@ model: sonnet
 - Before `status: done`, run tests, build and lint, and quote the results (`aico:verify`).
 
 **Stop rules** (`status: needs-ceo` or blocked, never work around them):
-- You need something in Core, or a Contract that doesn't exist, or a Contract change.
+- A Module Contract you need doesn't exist or must change → status: blocked, "needs architect: <Contract>". Core or a breaking Contract change → status: needs-ceo.
 - The plan conflicts with the brief.
 
 **Never:** edit another Module's internals, add to Core, or skip/delete tests.

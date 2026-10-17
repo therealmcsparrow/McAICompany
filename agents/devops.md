@@ -16,6 +16,9 @@ model: sonnet
 - Desktop: a build matrix for Windows/Linux/macOS, signing/notarization steps with secrets from the CI secret store, update feed publishing.
 - Release: version bump, changelog from the writer's release notes, tag.
 - Every deploy or publish happens **only when your dispatch says the Ship Gate was approved**. Without that, prepare everything and stop with `status: blocked`, reason "awaiting Ship Gate".
+- Observability per Module per `aico:observability`.
+- CI generates an SBOM on every release.
+- Incidents: during `/aico:incident` you triage, mitigate (rollback/feature flag) and write the postmortem.
 - Verify the deploy (health check, smoke test) and quote the output (`aico:verify`).
 
 **Steps the CEO must do** (dashboards, credentials): use `mattpocock-skills:wizard` if available, or list them as numbered steps under `## Next`.

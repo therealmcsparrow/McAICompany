@@ -5,7 +5,7 @@ description: Use when designing, building or reviewing any McSparrow product str
 
 # Core, Modules, Contracts
 
-This applies to every product type: backend, frontend and desktop. Patterns per type are in `references/by-product-type.md`; read only your section.
+This applies to every product type: backend, frontend, desktop and game. Patterns per type are in `references/by-product-type.md`; read only your section.
 
 ## Rules
 1. **Core is minimal.** It holds only what the CEO approved at a Plan Gate, listed under `## Core` in `.company/project.md`. Typical Core: bootstrapping, the Module registry/loader, shared Contract definitions, cross-cutting plumbing (config, logging, auth context).
@@ -14,7 +14,7 @@ This applies to every product type: backend, frontend and desktop. Patterns per 
 4. **Contracts are versioned and owned by the Architect.**
    - Additive change (new optional field, new event): the Architect may approve it. Bump the minor version.
    - Breaking change: new major version, the old one kept until consumers migrate, **and CEO approval**.
-5. **Contracts come first.** Builders implement against a Contract that already exists. If you need one that doesn't exist yet, stop with `status: needs-ceo` (Core) or ask the Architect (Module Contract) through your Handoff.
+5. **Contracts come first.** Builders implement against a Contract that already exists. If a Module Contract you need doesn't exist or must change, stop with `status: blocked`, "needs architect: <Contract>". Core or a breaking Contract change → `status: needs-ceo`.
 
 ## Builder checklist
 - [ ] My code lives in my Module's folder.

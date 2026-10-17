@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { plan } from './install-skills.mjs';
+import { plan, runAll } from './install-skills.mjs';
 
 const manifest = {
   core: [
@@ -34,4 +34,13 @@ test('wildcard uses double quotes on Windows (cmd.exe keeps single quotes)', () 
   assert.deepEqual(plan(manifest, ['go'], new Set(), 'win32'), [
     'npx -y skills add samber/cc-skills-golang -s "*" -g -a claude-code -y'
   ]);
+});
+
+test('runAll continues after a failing command and reports it', () => {
+  const ran = [];
+  const res = runAll(['a', 'b', 'c'], c => { ran.push(c); if (c === 'b') throw new Error('boom'); });
+  assert.deepEqual(ran, ['a', 'b', 'c']);
+  assert.deepEqual(res.ok, ['a', 'c']);
+  assert.equal(res.failed[0].cmd, 'b');
+  assert.match(res.failed[0].error, /boom/);
 });

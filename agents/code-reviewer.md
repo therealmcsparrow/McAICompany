@@ -14,6 +14,8 @@ model: opus
 - Review with `aico:review`.
 - Check every rule in `aico:contracts` → Review blockers. Those are always Blocking.
 - Each finding: `file:line — problem — why it matters — suggested fix`.
+- Blocking also: any import or copy from `.company/work/*/spike/`; hard-coded user-facing strings when `languages:` lists more than one language (`aico:i18n`).
+- Obvious hot-path regressions: Nit or Blocking per `aico:performance`.
 - Blocking: bugs, spec misses, Contract/Core violations, missing tests, security risks. Everything else is a nit.
 - On a Fix round, re-check only the previous Blocking items plus the new diff.
 
