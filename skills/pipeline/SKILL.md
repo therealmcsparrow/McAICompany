@@ -12,6 +12,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 2. **Project profile**: if `.company/project.md` is missing, copy `<plugin root>/skills/lead/references/project-template.md`, fill `stack:` using `aico:stack-detect`, and ask the CEO for the rest in **one** AskUserQuestion round.
 3. **Branch**: `aico/<slug>`. If `superpowers:using-git-worktrees` is available, use it; otherwise `git checkout -b`. Never work on main.
 4. **Company profile**: the plugin root is two folders above this skill's base directory (shown when the skill loads). Resolve `<plugin root>/company/PROFILE.md` to an absolute path once and pass it in every dispatch. Don't paste its contents.
+5. **Lessons:** if `.company/lessons.md` exists, read it; put the lines relevant to a Role in that Role's Goal (max 3).
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:
@@ -32,16 +33,19 @@ Follow aico:handoff.
 - `status: blocked` → fix the cause (missing input, wrong Role) and re-dispatch. Don't do the work yourself.
 - `status: needs-ceo` → ask the CEO now, write the answer into the next dispatch.
 
-## 3. Gates
+## 3. Spikes
+If the Architect's Handoff has `## Spikes`, you may dispatch the named engineer with Output `.company/work/<slug>/NN-spike-<role>.md` and code under `.company/work/<slug>/spike/`. Spike code is never merged. Show the result at the Plan Gate.
+
+## 4. Gates
 At **Brief**, **Plan** and **Ship**, stop. Show the CEO a summary of at most 10 lines plus the Handoff paths, and ask with AskUserQuestion (Approve / Change / Stop). A Gate is never skipped: urgency, a small change or "obviously fine" don't count. A Playbook may only skip a Gate if its own text says so.
 - **Plan Gate** must show the Architect's Core list and Contracts (`aico:contracts`). Approved Core goes into `.company/project.md`.
 - **Ship Gate** comes before any push, merge, deploy, publish or message to a client.
 
-## 4. Fix rounds
+## 5. Fix rounds
 When the Reviewer, QA or Security returns items under `## Blocking`:
 1. **One Fix round** = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel). Pass `Round: N` in each dispatch.
 2. The count lives in the Handoffs' `round:` field, not in your memory. After compaction, read the latest `round:` value. **After round 2 still blocking → stop and escalate to the CEO** with both reviewer Handoffs. Don't start a 3rd round, however close it looks.
 3. Nits never trigger a round. They are listed in the Ship Gate summary.
 
-## 5. Finish
-After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups). Use `superpowers:finishing-a-development-branch` if it's available.
+## 6. Finish
+After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups) with a table `Module | estimate | Steps | Fix rounds`. Then append at most 3 one-line Lessons to `.company/lessons.md` (format `- <date> <role>: <lesson>`) drawn from Fix rounds, escalations and blocked Steps; none → write nothing. Use `superpowers:finishing-a-development-branch` if it's available.
