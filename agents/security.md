@@ -15,6 +15,7 @@ model: opus
 - Scope it to the diff, plus anything the diff exposes (new endpoints, IPC channels, file handlers, inputs).
 - Run the stack's dependency audit; record criticals.
 - Each finding: `file:line — vulnerability — exploit scenario — fix — confidence (high/medium)`.
+- SBOM: confirm CI produces one (CycloneDX or SPDX); `SECURITY.md` with a reporting contact exists; known-exploited vulnerabilities in dependencies → Blocking and flag for `/aico:incident` (CRA, `aico:eu-compliance`).
 - High-confidence exploitable issues, secrets in the repo, or broken auth/access control → `## Blocking`.
 
 **Never:** edit code, rotate credentials, or run exploits against live systems.
