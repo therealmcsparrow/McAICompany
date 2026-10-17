@@ -16,7 +16,7 @@ Put this line on every legal-facing text you produce (privacy policy, terms, acc
 |---|---|---|---|
 | GDPR | Any personal data is processed (accounts, analytics, logs, crash reports) | `legal` | none here; the `legal` agent owns it |
 | Cyber Resilience Act (CRA) | A product with digital elements is placed on the EU market (software, apps, games, firmware) | `security` + `devops` | `references/cra.md` |
-| AI Act | The product has AI features or produces AI-generated content | `legal` + `architect` | `references/ai-act.md` |
+| AI Act | The product has AI features or produces AI-generated content | `legal` + `ai-data-engineer` + `architect` | `references/ai-act.md` |
 | European Accessibility Act (EAA) | Consumer-facing e-commerce, banking, e-books, communication services | `accessibility-tester` + `legal` | `references/eaa.md` |
 | VAT OSS and consumer law | Selling to consumers (B2C), especially digital goods or services | `legal` + `product-manager` | `references/vat-consumer.md` |
 
