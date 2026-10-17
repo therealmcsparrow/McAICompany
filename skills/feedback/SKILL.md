@@ -7,7 +7,7 @@ argument-hint: <reports: path, paste or export>
 
 # Playbook: feedback
 
-Run with `aico:pipeline`. Read-only: no builders.
+Run with `aico:pipeline`. No Plan or Ship Gate: nothing is built or shipped. Read-only: no builders.
 
 1. `aico:support`: triage the reports into clusters in `.company/work/<slug>/feedback-report.md`. If a cluster looks security-related, stop and suggest `/aico:incident` to the CEO.
 2. `aico:product-manager`: read the clusters and the success metric in `.company/project.md`, rank the top 5, and propose a fix or feature for each.

@@ -7,9 +7,9 @@ argument-hint: (no arguments)
 
 # Playbook: maintain
 
-Run with `aico:pipeline`. Read-only first: no builders until the CEO picks.
+Run with `aico:pipeline`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.
 
-1. In parallel: `aico:security` (dependency vulnerabilities, flag exploited ones), `aico:legal` (license re-check), `aico:devops` (outdated dependencies, SBOM refresh, CI health).
+1. In parallel: `aico:security` (dependency vulnerabilities, flag exploited ones: stop and suggest `/aico:incident`), `aico:legal` (license re-check), `aico:devops` (outdated dependencies, SBOM refresh, CI health).
 2. You (the Lead) merge the Handoffs into `.company/work/<slug>/maintenance-report.md`: Critical / Important / Minor, each with owner and size.
    **→ Brief Gate** (the CEO picks upgrades)
 3. The owning engineer per upgrade group (one Step per group), then `aico:code-reviewer` ∥ `aico:qa` ∥ `aico:security`.
