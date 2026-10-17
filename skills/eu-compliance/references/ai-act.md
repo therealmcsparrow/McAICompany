@@ -9,7 +9,9 @@ Any product with a chatbot, assistant, or AI-generated audio, image, video or te
 - [ ] Deepfakes (realistic AI-made or altered people, places, events) are disclosed as AI-generated or manipulated.
 - [ ] AI-generated text published to inform the public on matters of public interest is disclosed, unless a human reviewed it and takes editorial responsibility.
 - [ ] Disclosures are clear, given at first interaction or exposure, and accessible (also to screen readers).
-- [ ] Assets made with AI keep their generation record (tool, prompt, date) beside the source.
+- [ ] House practice, not law: Assets made with AI keep their generation record (tool, prompt, date) beside the source.
+
+Owners: `legal` and `ai-data-engineer`.
 
 ## Also check
 - Higher-risk uses (hiring, credit, education, biometrics) carry stricter duties. Stop and ask `legal`.

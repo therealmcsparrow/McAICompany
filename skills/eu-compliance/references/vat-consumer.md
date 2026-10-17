@@ -14,12 +14,16 @@ Selling to consumers (B2C) in the EU: SaaS subscriptions, downloads, games, in-a
 
 ## Consumer law (checklist)
 - [ ] 14-day right of withdrawal on distance sales, with a clear notice before purchase and a withdrawal form.
-- [ ] For immediate digital delivery the right is lost only if the consumer gives express prior consent and acknowledges losing the withdrawal right. Checkout captures both; the order confirmation repeats them.
+- [ ] Digital content not on a tangible medium (downloads, games, e-books, in-app items): the withdrawal right ends only if the consumer gives express prior consent and acknowledges losing it. Checkout captures both; confirmation is sent on a durable medium (e.g. e-mail).
+- [ ] Digital services (e.g. SaaS): the right remains. If the consumer asked for an early start, they owe a proportionate amount for what was used. The right ends only once the service is fully performed, and only with consent plus acknowledgement.
+- [ ] An online "withdraw from contract here" function (CRD Art. 11a, Directive (EU) 2023/2673, applies from 19 Jun 2026) is available wherever the contract was concluded online, with confirmation of receipt.
 - [ ] Total price, recurring costs, renewal and cancellation terms shown before the buyer pays; cancelling is as easy as signing up.
 - [ ] Trader identity (name, address, KvK number, VAT number) and contact shown.
 - [ ] Dutch consumer law: the ACM (Autoriteit Consument & Markt) supervises; ask `legal` for current rules on unfair terms and pre-ticked boxes.
 
 ## Goes to `## Blocking`
-- Digital checkout waiving withdrawal without the express consent and acknowledgement steps.
+- Digital content checkout waiving withdrawal without express consent, acknowledgement and durable-medium confirmation.
+- A digital service treated as waived before it is fully performed.
+- An online contract with no online withdrawal function.
 - Consumer prices shown without VAT.
 - No cancellation path for a subscription.

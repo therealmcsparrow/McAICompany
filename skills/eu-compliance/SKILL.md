@@ -31,7 +31,7 @@ Put this line on every legal-facing text you produce (privacy policy, terms, acc
 A date that has passed means the duty is live.
 
 ## How to use it
-1. Planning: the Product Manager and Architect list the laws that apply in the brief's `## Compliance` section. When unsure whether a law applies, ask `legal`.
+1. Planning: the Product Manager and Architect list the applicable laws and missing obligations in their Handoff. When unsure whether a law applies, ask `legal`.
 2. Building: engineers follow the reference checklists for the laws that apply.
 3. Review: reviewers check the same list. A missing mandatory item goes to `## Blocking`.
 4. Ship Gate: the Lead lists open compliance items for the CEO. Nothing legal-facing ships without the lawyer-review line.

@@ -19,6 +19,8 @@ Read `## Performance budget` in `.company/project.md`. When it is empty, use the
 | API (any product) | p95 latency | <= 300 ms |
 | game | Frame time | <= 16.7 ms at target hardware |
 
+Web metrics are judged at p75. INP comes from field data or a Lighthouse timespan run; in a plain lab run use TBT as the proxy.
+
 A budget counts as CEO-approved only when the Project profile says so (set at a Plan Gate). Defaults are not approved until then.
 
 ## 2. Measure

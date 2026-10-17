@@ -12,10 +12,10 @@ Products with digital elements placed on the EU market: apps, desktop software, 
 - [ ] Secure by default configuration; no default passwords.
 
 ## Reporting
-For an actively exploited vulnerability or a severe incident, report to ENISA:
+For an actively exploited vulnerability or a severe incident, report through the single reporting platform to the coordinating CSIRT; ENISA is notified simultaneously (not ENISA alone):
 - Early warning within 24 h.
 - Notification within 72 h.
-- Final report 14 days after a fix is available.
+- Final report: for an actively exploited vulnerability, 14 days after a fix is available; for a severe incident, 1 month after the 72 h notification.
 
 Start the Incident playbook and bring in `legal` and the CEO at once.
 
