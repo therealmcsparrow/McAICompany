@@ -17,7 +17,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Client project** — software built for an outside client to their brief, ending in a handoff.
 
-**Product type** — what kind of software is shipped: *web* (SaaS/web app) or *desktop* (native app for Windows, Linux, macOS). Applies to both Own products and Client projects.
+**Product type** — what kind of software is shipped: *web* (SaaS/web app), *desktop* (native app for Windows, Linux, macOS) or *game* (built on a game engine). Applies to both Own products and Client projects.
 
 **Stack pack** — optional, stack-specific guidance (e.g. Rust, Go, React, PHP) read only when the current project uses that stack. Roles and Practices never assume a language.
 
@@ -50,3 +50,11 @@ _Avoid_: orchestrator (use Lead).
 **Art direction** — the product's visual style (mood, palette, references, do/don't), recorded in the Project profile. Every Asset follows it.
 
 **Practice** — a reusable way of working (e.g. test-first development, an OWASP checklist, brand voice). Loaded on demand by whichever Role needs it. Not a job, has no owner.
+
+**Spike** — a throwaway proof, built by an engineer before the Plan Gate to settle a risk the Architect named. Never merged into the product.
+
+**Incident** — a production failure or security event in a shipped product. Handled by `/aico:incident`; ends with a postmortem.
+
+**Lesson** — one line in `.company/lessons.md`, written at the end of a run, that later runs must respect.
+
+**Performance budget** — measurable limits in the Project profile (e.g. LCP, bundle size, startup time, memory, frame time) that QA and the Code Reviewer check against.
