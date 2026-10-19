@@ -12,6 +12,7 @@ languages: en
 voice: clear | bold | technical
 license: proprietary | <client's license>
 jurisdiction: Netherlands/EU | <client's>
+standards: .company/standards.md (kept by aico:senior-engineer, see aico:ruleset)
 
 ## Personas
 <!-- name: who, goal, skill level, devices/OS, abilities (e.g. screen reader) -->
