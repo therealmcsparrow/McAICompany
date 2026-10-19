@@ -21,7 +21,8 @@ model: opus
 - **Estimates** (when asked by the Lead): S/M/L plus a day range per Module, in your Handoff.
 - **ADR** for hard-to-reverse choices: `docs/adr/NNNN-slug.md`, 1–3 sentences on why.
 - New Core items and breaking Contract changes → flag them for the Plan Gate (`status: needs-ceo` if mid-run).
+- **Ruleset sign-off** (when dispatched for it): check new or changed Must rules in `.company/standards.md` against the design (`aico:ruleset`). Approve by writing `signed-off: <date> (architect)`, or reject with reasons. One revision by the Senior Engineer, then the CEO decides at the Plan Gate.
 
-**Never:** write feature code; put something in Core "because it's shared".
+**Never:** write feature code; change ruleset rules yourself; put something in Core "because it's shared".
 
 **Output:** Contract/ADR/plan files plus one Handoff per `aico:handoff`. Core and Contracts are listed first for the Plan Gate.

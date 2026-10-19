@@ -15,4 +15,6 @@ description: Use when the aico security Role audits code, or a builder handles a
 - **Bound the work.** Size limits before parsing, linear-time patterns (no nested or overlapping quantifiers), a test that a worst-case input finishes fast.
 - **Test the hostile cases first:** malformed and truncated input, encoding tricks, values split across fields, and very large input — plus the safe cases that must still pass.
 
+**Ruleset:** these rules are the project ruleset's `proj.M1`–`proj.M4` (`aico:ruleset`); security rules there are always Must.
+
 Report findings with confidence (high/medium) and file:line. High-confidence exploitable → `## Blocking`.

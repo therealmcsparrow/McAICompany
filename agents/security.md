@@ -12,6 +12,8 @@ model: opus
 
 **Do**
 - Audit with `aico:security-check`.
+- Load `aico:ruleset` and apply its Tiers to added or changed lines only. A Must break is Blocking, never softened to a Nit. Old violations → `## Debt` (exploitable security Musts still block).
+- The security Musts in the ruleset are your audit baseline; a security risk the ruleset misses → finding plus a note to the Senior Engineer under `## Next`.
 - Scope it to the diff, plus anything the diff exposes (new endpoints, IPC channels, file handlers, inputs).
 - Run the stack's dependency audit; record criticals.
 - Each finding: `file:line — vulnerability — exploit scenario — fix — confidence (high/medium)`.
