@@ -85,6 +85,10 @@ Design: `docs/superpowers/specs/2026-10-19-senior-engineer-design.md`.
 - **Playbook** `/aico:standards [tool|refresh]`; `/aico:maintain` refreshes stale packs (older than 180 days or outside the version range); `/aico:audit` lane 6 checks the whole codebase.
 - **Commits:** `<type>: <summary>`, never prefixed with `aico` or a Role name.
 
+## v0.5 additions
+- **Playbook** `/aico:brainstorm <idea|file>`: the Lead picks 4–8 relevant Roles; rounds in mode ideas (default, parallel), debate (Roles answer each other) or moderated (one at a time); a digest per round; runs until the CEO says done. Roles are read-only.
+- **Outcomes:** plan and implement (continues as `/aico:feature`), roadmap, nice to have, parked. Files `YYYY-MM-DD HH.MM - <Short Topic>.md` in `.company/brainstorms/`, moved to `.company/roadmap/`, `.company/nice-to-have/` or `.company/parked/`; reopen with `/aico:brainstorm "<file>"`.
+
 ## Budgets (guideline, warn not fail)
 Agent files ≤ 50 lines, skill files ≤ 125 lines, description ≤ 1024 chars (hard). `scripts/check.mjs` reports every structural overrun.
 

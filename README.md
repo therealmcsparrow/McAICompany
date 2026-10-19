@@ -26,6 +26,7 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:incident <what broke>` | Mitigate, check EU reporting duties, fix, then write the postmortem. Urgency allowed; the Ship Gate stays |
 | `/aico:refactor <scope>` | Restructures existing code toward Core, Modules and Contracts in safe slices, no behavior change |
 | `/aico:maintain` | Routine upkeep: dependencies, vulnerabilities, licenses, CI health and stale rules, then the upgrades you pick |
+| `/aico:brainstorm <idea\|file>` | The relevant Roles weigh in on your idea, round after round, until you say done; then you choose: plan and implement, roadmap, nice to have, or park |
 | `/aico:standards [tool\|refresh]` | The Senior Engineer researches or refreshes sourced best-practice rules for the stack; the Architect signs off; exceptions come to you |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
@@ -69,6 +70,7 @@ Code-reviewer, security, senior-engineer, legal, PM, account manager and support
 - **Lessons:** a Ship appends up to 3 one-line Lessons to `.company/lessons.md`; later runs read it and pass the relevant ones to each Role.
 - **EU compliance** (`aico:eu-compliance`): GDPR, CRA, AI Act Art. 50, EAA, VAT and consumer law are checked before Ship.
 - **Git:** branch `aico/<task>`, one commit per Step, no push before the Ship Gate. Commit subjects are `<type>: <summary>` (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`), never prefixed with `aico` or a Role name.
+- **Ideas:** brainstorms live in `.company/brainstorms/` as `YYYY-MM-DD HH.MM - Topic.md`, then move to `.company/roadmap/`, `nice-to-have/` or `parked/`.
 - **Per product repo:** `.company/project.md` (product type, stack, voice, license, approved Core) and `.company/work/<task>/NN-<role>.md` Handoffs.
 
 ## Customize
