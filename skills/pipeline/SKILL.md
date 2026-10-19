@@ -22,6 +22,8 @@ Goal: <one or two lines>
 Input Handoffs: <paths, or "none: first Step" + the CEO's request verbatim>
 Output: .company/work/<slug>/<NN>-<role>.md
 Round: <0 | 1 | 2>
+Base commit: <sha the Step's range is cut from; reviewers diff against it>
+Risk tier: <low | medium | high from the Brief; forced high for auth, payments, personal data, migrations or a Contract change>
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Follow aico:handoff.
@@ -29,7 +31,8 @@ Follow aico:handoff.
 
 - **Input Handoffs = only what this Role needs.** Usually that's the brief plus the Architect's Handoff. Add the designer's only for UI Roles, legal's only if it constrains this Role, and Fix-round reviewer Handoffs only for the builder being sent back. Don't restate their contents in Goal; the Role reads them.
 - **Builders** (and devops) also get the Senior Engineer's Handoff: its `## Rules per task` is what they follow (`aico:ruleset`).
-- Roles with no dependency between them (e.g. architect ∥ ui-ux-designer, reviewer ∥ qa ∥ security) are dispatched **in parallel in one message**.
+- **Parallel by default.** Roles with no dependency between them are dispatched **in parallel in one message** (architect ∥ ui-ux-designer, reviewer ∥ qa ∥ security, and every builder whose Contracts are settled and whose Modules don't depend on each other). Sequence only where one Step consumes another's output. When in doubt, the Architect's Module map says which Modules are independent.
+- **Pre-filter before the reviewers.** Before dispatching the Code Reviewer (and in the audit lane), run `npm run check` (or the product's `aico-check`) over the diff and pass its output to the reviewer as input. It is **deterministic and additive only**: it appends tagged findings, it never closes a review, never emits `status: done`, and a pre-filter block does **not** consume a Fix round. Only the reviewer closes a review.
 - After each Step, commit **only that Step's files**: its Handoff plus the paths under its `## Did`. Run `git add <those paths> && git commit -m "<type>: <one-line summary>"`, with `<type>` one of `feat`, `fix`, `test`, `docs`, `refactor`, `chore` by what changed. Never commit with an `aico` or Role prefix or scope (no `aico:`, `aico/`, `[builder]`, `senior-engineer:` and the like): the subject starts with the `<type>` only. Parallel Steps get one commit each, in turn. Never `git add -A`, because it bundles Steps and picks up strays like `.env`.
 - `status: blocked` → fix the cause (missing input, wrong Role) and re-dispatch. Don't do the work yourself.
 - `status: needs-ceo` → ask the CEO now, write the answer into the next dispatch.
@@ -50,6 +53,7 @@ When the Reviewer, QA, Security or the Senior Engineer (compliance) returns item
 1. **One Fix round** = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel). Pass `Round: N` in each dispatch.
 2. The count lives in the Handoffs' `round:` field, not in your memory. After compaction, read the latest `round:` value. **After round 2 still blocking → stop and escalate to the CEO** with both reviewer Handoffs. Don't start a 3rd round, however close it looks.
 3. Nits never trigger a round. They are listed in the Ship Gate summary.
+   - Each blocker is tagged `contract|spec|security|test` (`aico:handoff`): send `security`/`contract` blockers to the owning builder first, and a `contract` blocker to the Architect if it needs a Contract change (a Plan Gate, not a Fix round).
 4. A builder's Must exception (`needs-ceo`, `aico:ruleset`) is a CEO question, not a Fix round. Debt never triggers a round; an exploitable security Must is not Debt but Blocking (`aico:ruleset`).
 
 ## 6. Finish

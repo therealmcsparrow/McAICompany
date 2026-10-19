@@ -73,6 +73,14 @@ _Avoid_: orchestrator (use Lead).
 
 **Debt** — existing violations of a rule that arrived after the code was written. Listed in the Ruleset; never blocks a run (except an exploitable security Must).
 
+**Handoff Contract** — the machine-readable shape of a Handoff: frontmatter fields (`status`, `round`, `base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) plus a `contract|spec|security|test` blocking taxonomy, so the Lead routes and resumes from fields rather than prose.
+
+**Risk tier** — `low | medium | high`, set in the Brief and carried in every dispatch; forced high for auth, payments, personal data, migrations or a Contract change. Drives test depth, rule scope and routing. A Role may raise it, never lower it.
+
+**Pre-filter** — a deterministic check run before the Code Reviewer that only appends tagged findings; it never closes a review, never emits `status: done`, and never consumes a Fix round.
+
+**Triage** — the `/aico:triage` Playbook: classifies a request by size, risk and type and recommends the shortest valid route before the Brief Gate; risk always overrides size.
+
 **Brainstorm** — a Playbook where the relevant Roles give ideas, risks and questions on a CEO idea over rounds (modes: ideas, debate, moderated) until the CEO says done. Ends in one of four outcomes: plan and implement, Roadmap, Nice to have, Parked; each outcome but the first has its own `.company/` folder.
 
 **Performance budget** — measurable limits in the Project profile (e.g. LCP, bundle size, startup time, memory, frame time) that QA and the Code Reviewer check against.

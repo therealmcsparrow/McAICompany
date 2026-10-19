@@ -60,3 +60,20 @@ test('skill and agent with the same name is an error', () => {
   const r = check(fixture({ skills: { support: skill('support') }, agents: { support: agent('support') } }));
   assert.ok(r.errors.some(e => e.includes('name clash support')));
 });
+
+test('mismatched version across files is an error; matching is clean', () => {
+  const root = fixture({ skills: { a: skill('a') } });
+  mkdirSync(join(root, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(root, '.claude-plugin', 'plugin.json'), '{\n  "version": "0.7.0"\n}\n');
+  mkdirSync(join(root, 'documentation'), { recursive: true });
+  writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [0.6.0] - 2026-10-20\n- old\n');
+  writeFileSync(join(root, 'documentation', 'README.md'), 'Current: **0.7.0**\n');
+  const r = check(root);
+  assert.ok(r.errors.some(e => e.includes('CHANGELOG.md: version 0.6.0 != plugin.json 0.7.0')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('documentation/README.md: version')), r.errors.join('\n'));
+});
+
+test('version check is skipped when plugin.json is absent', () => {
+  const r = check(fixture({ skills: { a: skill('a') } }));
+  assert.deepEqual(r.errors, []);
+});

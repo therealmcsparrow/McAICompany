@@ -64,6 +64,25 @@ export function check(root) {
     for (const [, ref] of readFileSync(file, 'utf8').matchAll(/aico:([a-z0-9-]+)/g))
       if (!names.has(ref)) errors.push(`ERROR ${rel}: unknown reference aico:${ref}`);
   }
+
+  // Version consistency: plugin.json is the source of truth; other files must agree.
+  // Skipped entirely when plugin.json is absent (e.g. test fixtures), so it never false-fails.
+  const pluginFile = join(root, '.claude-plugin', 'plugin.json');
+  if (existsSync(pluginFile)) {
+    const vm = readFileSync(pluginFile, 'utf8').match(/"version":\s*"([^"]+)"/);
+    const version = vm && vm[1];
+    const sources = [
+      ['CHANGELOG.md', /##\s*\[?v?(\d+\.\d+\.\d+)/],
+      ['documentation/README.md', /Current:\s*\*{0,2}(\d+\.\d+\.\d+)/],
+    ];
+    for (const [rel, re] of sources) {
+      const f = join(root, rel);
+      if (!existsSync(f)) continue;
+      const m = readFileSync(f, 'utf8').match(re);
+      if (version && m && m[1] !== version)
+        errors.push(`ERROR ${rel}: version ${m[1]} != plugin.json ${version}`);
+    }
+  }
   return { errors: [...new Set(errors)], warnings };
 }
 

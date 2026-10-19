@@ -30,18 +30,26 @@ role: backend-engineer
 task: <task-slug>
 status: done | blocked | needs-ceo
 round: 0            # Fix round this Step belongs to (0 = first pass), copied from the dispatch
+base-commit: <sha>  # commit this Step's range is cut from; reviewers diff against it, never HEAD~1
+risk-tier: medium   # from the Brief; see the forced-high list below. Builders/QA/reviewers copy it from the dispatch
+acceptance-ids: [AC1, AC3]   # the Brief's acceptance-criterion IDs this Step delivers (builders, QA)
+files-touched: [src/x.ts]    # files this Step changed, for affected-only tests and the smoke test
 ---
 ## Did
 - What changed, as facts, with file paths. No narrative.
 ## Decisions
 - Decision — why. (Anything another Role must respect.)
 ## Blocking
-- Issues that must be fixed before the next Step. Empty if none.
+- [contract|spec|security|test] <file:line> — problem — fix. Empty if none.
 ## Nits
 - Non-blocking remarks. These never trigger a Fix round.
 ## Next
 - What the next Step needs to know or do. Name the Role if obvious.
 ```
+
+**Fields are the contract.** Later Steps and the Lead read these frontmatter fields, not the prose: fill every one that applies. `base-commit`, `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed. A Role that only reasons (reviewer, PM) omits `files-touched`.
+
+**Blocking taxonomy.** Tag each blocker `contract`, `spec`, `security` or `test` so the Lead routes the Fix round precisely. **Risk tier** is `low | medium | high`; it is forced **high** for anything touching auth, payments, personal data, migrations or a Contract — a Role may raise the tier, never lower it.
 
 - `needs-ceo`: you need a decision only the CEO can make, e.g. a change to Core, a breaking Contract change, or a scope change. Put the question under Blocking.
 - Optional sections, only when `aico:ruleset` asks for them: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old rule violations), placed before `## Next`.

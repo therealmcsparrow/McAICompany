@@ -22,7 +22,7 @@ Reference material lives alongside these guides:
 
 ## Version
 
-**Current: 0.6.0** (29 Role agents).
+**Current: 0.7.0** (29 Role agents).
 
 Update an installed copy with:
 
@@ -32,6 +32,8 @@ Update an installed copy with:
 ```
 
 ### What's new
+
+- **0.7.0** — Streamlining the company's own workflow: a machine-readable [Handoff Contract](concepts.md#the-handoff-contract), [`/aico:triage`](commands.md#aicotriage) routing, parallel-by-default dispatch, risk-tiered testing, a deterministic reviewer pre-filter, plugin CI, and warm rule packs. No new Roles.
 
 - **0.6.0** — Two on-demand Quality & Security Roles: the [Pentester](roles.md#pentester) (`/aico:pentest`) and the [Vulnerability Scanner](roles.md#vuln-scanner) (`/aico:vulnscan`).
 - **0.5.0** — [`/aico:brainstorm`](commands.md#aicobrainstorm): the relevant Roles weigh in on an idea over rounds until you say done, then you choose to build it, roadmap it, keep it as nice-to-have, or park it.

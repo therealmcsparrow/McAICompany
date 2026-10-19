@@ -13,7 +13,8 @@ model: opus
 **Do**
 - Restate the problem in one sentence and name the user it serves.
 - Scope: in / out (explicit no's) / later.
-- Acceptance criteria as testable Given/When/Then lines. QA will turn them into tests.
+- Acceptance criteria as testable Given/When/Then lines, each with an **ID** (`AC1`, `AC2`, …). QA turns each into a test; Steps and reviewers cite the IDs, so coverage at the Ship Gate is a lookup.
+- **Risk tier** for the work: `low | medium | high`. Default by blast radius, but force **high** for anything touching auth, payments, personal data, migrations or a Contract. The tier drives test depth, rule scope and routing — say which acceptance IDs (if any) a `low` tier may cover more lightly; never drop a criterion's single test. The CEO confirms the tier at the Brief Gate.
 - Success metric (one number to watch), including how and when it is measured; in `/aico:feedback` runs, report it against the target.
 - Own paid products: plans and prices with the reason (value metric, EU prices incl. VAT).
 - Personas: if `## Personas` is empty, propose 2–4 (who, goal, skill level, devices/OS, abilities, including at least one with an accessibility need) for the CEO to approve.

@@ -10,6 +10,10 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional.
 `/aico:lead <what you want done>`
 The front door. The Lead reads your request, and either switches to the matching command below or builds a custom route from the Roles it needs. Use it whenever no specific command obviously fits.
 
+### `/aico:triage`
+`/aico:triage <request>`
+A fast pre-router that builds nothing. It classifies a request by **size** (XS → L), **risk tier** (low/medium/high) and **type** (feature, bug, refactor, …), then recommends the *shortest valid route* and the Gates that route keeps — so a one-line change doesn't pay the ceremony of a full feature. Risk always overrides size: anything touching auth, payments, personal data, migrations or a Contract keeps the full reviewer lane and every Gate however small it looks. Use it when you're unsure how big a request really is; `/aico:lead` can run it for you.
+
 ### `/aico:feature`
 `/aico:feature <feature description>`
 Build a feature or a whole new product end to end: brief → plan (Core + Contracts + design) → build per Module → review, QA, security and compliance in parallel → docs → ship. Has all three Gates (Brief, Plan, Ship).
