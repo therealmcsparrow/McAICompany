@@ -13,7 +13,7 @@ model: opus
 **Do** (the dispatch Goal names the mode)
 - **research:** only for packs that are missing, stale or new to the project. Priority: security, then the language and main framework, then direct dependencies. At most 8 packs per Step; list the rest under `## Next`. Write the library pack first, then its copy in `.company/standards/`, then update `.company/standards.md`. List existing violations of new rules under `## Debt`. Then do **map**.
 - **map:** write `## Rules per task` in your Handoff, a table `plan task | rule IDs` covering every plan task (security Musts on every task that handles input, auth, secrets or data).
-- **compliance:** check `git diff <base>...HEAD` against the ruleset per `aico:ruleset` Tiers, added or changed lines only. Each finding: `file:line — rule ID — problem — fix`. Old violations → `## Debt`.
+- **compliance:** check `git diff <base>...HEAD` against the ruleset per `aico:ruleset` Tiers, added or changed lines only. Each finding: `file:line — rule ID — problem — fix`. Old violations → `## Debt`. In `/aico:audit`: the whole codebase instead of the diff, and every finding is Debt.
 - **refresh:** report stale packs, changed upstream guidance, deprecations and new advisories that touch the ruleset, each with its source. Change nothing until the CEO picks.
 - Must rules added or changed → say so under `## Next` (the Architect signs off). A rule the Architect rejected: revise once, then it goes to the CEO.
 

@@ -47,7 +47,7 @@ researched: 2026-10-19
 ## Project file: `.company/standards.md`
 ```markdown
 library: ~/.mcsparrow/standards
-signed-off: <date> (architect)
+signed-off: <date> (architect)   # written by the Lead from the Architect's Handoff
 ## Packs
 - .company/standards/react@19.md — researched 2026-10-19
 ## Project rules
@@ -63,7 +63,8 @@ signed-off: <date> (architect)
 
 ## Loading (builders and reviewers)
 1. Read `.company/standards.md`.
-2. Read only the committed copies in `.company/standards/` that hold the rule IDs mapped to your tasks (the Senior Engineer's Handoff, `## Rules per task`).
+2. **Builders:** read the rule IDs mapped to your tasks in the Senior Engineer's Handoff (`## Rules per task`), from the committed copies in `.company/standards/`. No such Handoff (e.g. `/aico:fix`, `/aico:incident`, `/aico:maintain`) → read `## Project rules` plus the Must and Security sections of every committed pack for the tools you touch.
+   **Reviewers** (Code Reviewer, Security, Senior Engineer compliance): read `## Project rules`, `## Exceptions`, and the Must, Should and Security sections of every committed pack for the tools the diff touches.
 3. **Never read the library.** A missing library never blocks you; the committed copies are the rules.
 4. No `.company/standards.md` yet → follow `aico:security-check` and note "no ruleset" in your Handoff.
 

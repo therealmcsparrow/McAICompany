@@ -15,7 +15,7 @@ Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):
 2a. Spikes per `aico:pipeline` if the Architect listed any (show the result at the Plan Gate).
 2b. UI work: one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).
 2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`).
-2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate.
+2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate. A rejected rule goes back to the Senior Engineer once; still rejected → the CEO decides at the Plan Gate.
    **→ Plan Gate** (CEO approves Core, Contracts and Art direction)
 3. Builders, one Step per Module, in parallel when their Contracts are settled: `aico:backend-engineer` / `aico:frontend-engineer` / `aico:desktop-engineer` / `aico:ai-data-engineer` / `aico:game-engineer`, as the Module map says.
 3b. Assets the build needs: `aico:brand-artist` / `aico:motion-artist` / `aico:game-artist`, in parallel with the builders.

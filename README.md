@@ -60,7 +60,7 @@ flowchart TD
 |---|---|---|
 | architect, senior-engineer, code-reviewer, security, product-manager | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher | writer, localizer, prompt-artist |
 
-Code-reviewer, security, legal, PM, account manager and support never edit source. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas). QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, senior-engineer, legal, PM, account manager and support never edit source. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).

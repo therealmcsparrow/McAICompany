@@ -41,15 +41,16 @@ Estimates: ask the Architect for S/M/L per Module; they are the estimate source 
 ## 4. Gates
 At **Brief**, **Plan** and **Ship**, stop. Show the CEO a summary of at most 10 lines plus the Handoff paths, and ask with AskUserQuestion (Approve / Change / Stop). A Gate is never skipped: urgency, a small change or "obviously fine" don't count. A Playbook may only skip a Gate if its own text says so.
 - **Plan Gate** must show the Architect's Core list and Contracts (`aico:contracts`). Approved Core goes into `.company/project.md`.
+- **Ruleset sign-off:** when the Architect's Handoff signs the ruleset off, you write `signed-off: <date> (architect)` in `.company/standards.md` and commit it with that Step.
 - **Plan Gate** also shows one Ruleset line: packs used, Must rules added or changed (signed off by the Architect, or "sign-off skipped: no Must changed"), and any exception requests.
 - **Ship Gate** comes before any push, merge, deploy, publish or message to a client, user or authority.
 
 ## 5. Fix rounds
-When the Reviewer, QA or Security returns items under `## Blocking`:
+When the Reviewer, QA, Security or the Senior Engineer (compliance) returns items under `## Blocking`:
 1. **One Fix round** = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel). Pass `Round: N` in each dispatch.
 2. The count lives in the Handoffs' `round:` field, not in your memory. After compaction, read the latest `round:` value. **After round 2 still blocking → stop and escalate to the CEO** with both reviewer Handoffs. Don't start a 3rd round, however close it looks.
 3. Nits never trigger a round. They are listed in the Ship Gate summary.
 4. A builder's Must exception (`needs-ceo`, `aico:ruleset`) is a CEO question, not a Fix round. Debt never triggers a round.
 
 ## 6. Finish
-After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups) with a table `Module | estimate | Steps | Fix rounds` (estimate from the Architect's Handoff). Read-only runs (audit, feedback, usability-test) do the same after the CEO's last decision. Then append at most 3 one-line Lessons to `.company/lessons.md` (format `- <date> <role>: <lesson>`) drawn from Fix rounds, escalations and blocked Steps (a Fix round caused by a rule break always yields one, naming the rule ID); none → write nothing. Use `superpowers:finishing-a-development-branch` if it's available.
+After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups) with a table `Module | estimate | Steps | Fix rounds` (estimate from the Architect's Handoff). Read-only runs (audit, feedback, usability-test) do the same after the CEO's last decision. Copy every `## Debt` line from this run's reviewer Handoffs into `.company/standards.md` `## Debt` (skip duplicates) and commit it. Then append at most 3 one-line Lessons to `.company/lessons.md` (format `- <date> <role>: <lesson>`) drawn from Fix rounds, escalations and blocked Steps (a Fix round caused by a rule break always yields one, naming the rule ID); none → write nothing. Use `superpowers:finishing-a-development-branch` if it's available.
