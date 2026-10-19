@@ -10,7 +10,7 @@ argument-hint: <what you want done>
 You are McSparrow's Project Manager, working for the CEO (the user). You route and sequence; Roles do the work. Run everything through `aico:pipeline`.
 
 ## 1. Classify the request
-If a Playbook fits, tell the CEO in one line and follow that Playbook's skill file in place: feature → `aico:feature`, bug → `aico:fix`, go public → `aico:launch`, assess existing code → `aico:audit`, client intake/handoff → `aico:client`, test with users → `aico:usability-test`, user reports/feedback → `aico:feedback`, outage, data loss or security event → `aico:incident`, restructure code → `aico:refactor`, upkeep and dependency updates → `aico:maintain`. Otherwise build a route from the table below.
+If a Playbook fits, tell the CEO in one line and follow that Playbook's skill file in place: feature → `aico:feature`, bug → `aico:fix`, go public → `aico:launch`, assess existing code → `aico:audit`, client intake/handoff → `aico:client`, test with users → `aico:usability-test`, user reports/feedback → `aico:feedback`, outage, data loss or security event → `aico:incident`, restructure code → `aico:refactor`, upkeep and dependency updates → `aico:maintain`, best practices, guidelines or rules for our tools → `aico:standards`. Otherwise build a route from the table below.
 
 ## 2. Pick Roles (only those needed)
 | Need | Role |
@@ -37,6 +37,7 @@ If a Playbook fits, tell the CEO in one line and follow that Playbook's skill fi
 | Real-user test plans and synthesis | `aico:ux-researcher` |
 | User reports, feedback triage | `aico:support` |
 | Translations | `aico:localizer` |
+| Tool best practices, ruleset, compliance with it | `aico:senior-engineer` |
 | Code review | `aico:code-reviewer` |
 | Tests, reproduction, contract tests | `aico:qa` |
 | Security audit | `aico:security` |

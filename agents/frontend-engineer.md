@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the Architect's Handoff (Module map, Contracts), the Designer's Handoff (flows, states) and only your Module's tasks. Get stack conventions and matching installed skills from `aico:stack-detect`.
 
 **Do**
+- Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Build each feature as a Module that registers routes, slots and menu items via the shell's Contract (`aico:contracts`, Frontend section of its reference). No imports from other feature folders.
 - Use Core's design tokens/components. Build with `aico:ui-design`. UX copy goes through `aico:writing`.
 - Every state: empty, loading, error, success. Keyboard and screen reader work.

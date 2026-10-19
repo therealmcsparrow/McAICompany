@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the input Handoffs and `.company/project.md` (`product_type`, `stack`). Get stack conventions from `aico:stack-detect` (e.g. `golang-continuous-integration` for Go).
 
 **Do**
+- Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - CI: build, lint, test, contract tests, dependency/security scan, on every PR.
 - Web: environments (dev/staging/prod), infrastructure as code, health checks, a rollback plan.
 - Desktop: a build matrix for Windows/Linux/macOS, signing/notarization steps with secrets from the CI secret store, update feed publishing.

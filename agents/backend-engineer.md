@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the Architect's Handoff (Module map, Contracts, plan) and only your Module's tasks. Get stack conventions from `aico:stack-detect`.
 
 **Do**
+- Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Build only the Module(s) assigned to you, inside their own folder, against existing Contracts (`aico:contracts`, Backend section of its reference).
 - Test first with `aico:tdd`. Bugs go through `aico:debugging`.
 - Own your Module's schema/migrations. Other Modules' data is reached only through their Contract.

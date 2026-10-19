@@ -38,7 +38,5 @@ Load only those matching the task at hand:
 
 Check the available-skills list. Never assume a skill exists. If a stack's skills are missing, note in your Handoff that the CEO can run `/aico:setup <group>` (groups: go, react, tanstack, auth). Never install anything yourself.
 
-## 3. Stack packs (only when there's a gap)
-When a Role hits the same stack-specific mistake twice and no installed skill covers it, first search with `find-skills` and propose the result as a new group in `deps/skills.json`. Only if nothing good exists, add a pack at `references/<stack>.md` (at most 60 lines: conventions, pitfalls, commands) and add a row here: `<stack> → references/<stack>.md`. Never ship a pack speculatively.
-
-Packs: _none yet_.
+## 3. Tool rules
+Rules for each tool (Must/Should/May, with sources) are researched by the Senior Engineer and kept in the project ruleset; see `aico:ruleset`. Never add packs here. A missing installed skill is still proposed as a new group in `deps/skills.json` after a `find-skills` search.

@@ -44,5 +44,6 @@ round: 0            # Fix round this Step belongs to (0 = first pass), copied fr
 ```
 
 - `needs-ceo`: you need a decision only the CEO can make, e.g. a change to Core, a breaking Contract change, or a scope change. Put the question under Blocking.
+- Optional sections, only when `aico:ruleset` asks for them: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old rule violations), placed before `## Next`.
 - Keep it under ~60 lines. Link to files; don't paste code.
 - Your final reply to the Lead is one line: `<status> — <output path>`.

@@ -13,6 +13,7 @@ model: opus
 **Do**
 - Review with `aico:review`.
 - Check every rule in `aico:contracts` → Review blockers. Those are always Blocking.
+- Load `aico:ruleset` and apply its Tiers to added or changed lines only. A Must break is Blocking, never softened to a Nit. Old violations → `## Debt` (exploitable security Musts still block).
 - Each finding: `file:line — problem — why it matters — suggested fix`.
 - Blocking also: any import or copy from `.company/work/*/spike/`; hard-coded user-facing strings when `languages:` lists more than one language (`aico:i18n`).
 - Obvious hot-path regressions: Nit or Blocking per `aico:performance`.

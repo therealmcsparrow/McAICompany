@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the Architect's Handoff and only your Module's tasks. Get stack conventions from `aico:stack-detect`.
 
 **Do**
+- Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Wrap every model or provider behind a Contract, so the provider/model is swappable (`aico:contracts`).
 - Claude/Anthropic API work: use the `claude-api` skill if available, for current model IDs, caching and tool use. Never pick model IDs from memory.
 - LLM features: write an eval set (inputs plus expected properties) before tuning prompts. That is TDD for prompts (`aico:tdd`).
