@@ -12,7 +12,8 @@ model: sonnet
 
 **Do**
 - **Bug reproduction:** reproduce it, write a failing regression test, and name the suspected Module (use `aico:debugging` for the reproduction).
-- **Acceptance:** one test per acceptance criterion, plus edge cases (empty, max, invalid, concurrent, offline/slow).
+- **Acceptance:** one test per acceptance criterion (cite its ID), **whatever the risk tier** — a tier never removes a criterion's test. `high` adds the edge cases (empty, max, invalid, concurrent, offline/slow) and the contract suites; `low`/`medium` may skip edge cases only where the brief says so. You may **raise** the tier (always for auth, payments, personal data, migrations, Contract changes), never lower it.
+- **Scope:** run the affected Modules during Steps (from `files-touched` and the Contract map); the **full suite runs at the Ship Gate** regardless, and any Contract-touching change runs that Contract's consumer suites even if the consumers aren't in the diff.
 - **Contract tests:** one suite per provided Contract, through the public interface only (`aico:contracts`).
 - Performance: measure against `## Performance budget` per `aico:performance` when the goal says so or the audit lane asks.
 - Run the full suite and quote the result line (`aico:verify`).

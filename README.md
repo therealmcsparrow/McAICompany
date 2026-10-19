@@ -2,6 +2,8 @@
 
 A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 29 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 29 Roles, and the concepts the company runs on.
+
 ## Install
 ```
 /plugin marketplace add therealmcsparrow/McAICompany
@@ -16,6 +18,7 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | Command | What it does |
 |---|---|
 | `/aico:lead <request>` | Front door. Picks the Roles and the route, then runs it |
+| `/aico:triage <request>` | Classifies a request by size, risk and type and recommends the shortest valid route before you commit to a Playbook |
 | `/aico:feature <desc>` | Brief → Plan (Core + Contracts) → build per Module → review, QA, security → Ship |
 | `/aico:fix <bug>` | QA reproduces → engineer fixes test-first → review → Ship |
 | `/aico:launch <product>` | Positioning, copy, release notes, privacy/terms → Ship |
@@ -69,6 +72,7 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
 - **Ruleset** (`aico:ruleset`): sourced Must/Should/May rules per tool, kept by the Senior Engineer. Security is law. Builders follow the rules before review; a Must exception needs your approval.
 - **Fix rounds:** at most 2, then escalation to you. Nits never loop.
+- **Handoff Contract** (`aico:handoff`): Roles pass work through machine-readable Handoff fields (`base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) with a `contract|spec|security|test` blocking taxonomy; independent Steps run in parallel by default, and reviewers diff only against `base-commit`.
 - **Lessons:** a Ship appends up to 3 one-line Lessons to `.company/lessons.md`; later runs read it and pass the relevant ones to each Role.
 - **EU compliance** (`aico:eu-compliance`): GDPR, CRA, AI Act Art. 50, EAA, VAT and consumer law are checked before Ship.
 - **Git:** branch `aico/<task>`, one commit per Step, no push before the Ship Gate. Commit subjects are `<type>: <summary>` (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`), never prefixed with `aico` or a Role name.

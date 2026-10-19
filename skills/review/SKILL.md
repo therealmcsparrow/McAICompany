@@ -5,7 +5,9 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Use the checklist** from `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, applied by you to this branch's diff against its base. You are a subagent and can't dispatch other agents, so skip any step in those skills that dispatches a reviewer.
+**Scope: the diff against `base-commit`** from your dispatch (`git diff <base-commit>...HEAD`), added and changed lines only — never `HEAD~1`, never older code (that is Debt). **Use the checklist** from `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, applied by you to that diff. You are a subagent and can't dispatch other agents, so skip any step in those skills that dispatches a reviewer.
+
+**Pre-filter findings** may arrive in your input (from `aico:pipeline`'s deterministic pre-run). They are advisory and additive: confirm each against the diff before you keep it, and add your own. The pre-filter never closes a review — only you do.
 
 **Always also check** the review blockers in `aico:contracts`.
 

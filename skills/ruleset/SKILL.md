@@ -42,6 +42,7 @@ researched: 2026-10-19
 - Optional at the end of a rule: `enforced-by: <linter rule>` (information only).
 - Keep what matters for this tool and version; don't restate generic knowledge.
 - **Stale:** `researched` older than 180 days, or the project's version is outside `versions`.
+- **Warm reuse (90 days):** a library pack is reused for a new project only if `researched` is ≤ 90 days old **and** no new advisory has touched the tool since; otherwise a refresh Step runs before the build. Security Musts never bypass this. The warm-pack stacks kept current are **JavaScript/Node, SQL (PostgreSQL lead; MySQL/MariaDB deltas), React, Go, Rust, PHP, CSS and HTML** — research order is security/input-exposed first (JS/Node, SQL), then React, then Go/Rust/PHP, then CSS/HTML.
 - The **library** (default `~/.mcsparrow/standards/`) is the shared source for all projects. Each project commits **copies** of the packs it uses in `.company/standards/`.
 
 ## Project file: `.company/standards.md`
