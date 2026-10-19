@@ -57,6 +57,10 @@ _Avoid_: orchestrator (use Lead).
 
 **Lesson** — one line in `.company/lessons.md`, written at the end of a run, that later runs must respect.
 
+**Pentester** — the Role that, on demand and with authorization, attacks the company's own product (local or staging build) like a red team, chains weaknesses and proves findings with safe reproductions (`full` mode allows real exploit chains, still local-only). Reports; never edits code or attacks third-party systems.
+
+**Vulnerability Scanner** — the Role that, on demand, cross-references the product's dependencies and code against published vulnerability databases (NVD/CVE, OSV, GitHub Advisories, vendor advisories, CISA KEV) and reports what is flagged with fixed-in versions. Never edits code.
+
 **Senior Engineer** — the Role that researches sourced best-practice rules for every tool in a product's stack, keeps the Ruleset, maps rules to plan tasks and checks diffs against it. Reports to the Architect, who signs the Ruleset off.
 
 **Ruleset** — a product's binding rules: `.company/standards.md` plus the committed copies of its Rule packs in `.company/standards/`. Security rules are always Must.

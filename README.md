@@ -1,6 +1,6 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 27 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 29 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
 ## Install
 ```
@@ -28,6 +28,8 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:maintain` | Routine upkeep: dependencies, vulnerabilities, licenses, CI health and stale rules, then the upgrades you pick |
 | `/aico:brainstorm <idea\|file>` | The relevant Roles weigh in on your idea, round after round, until you say done; then you choose: plan and implement, roadmap, nice to have, or park |
 | `/aico:standards [tool\|refresh]` | The Senior Engineer researches or refreshes sourced best-practice rules for the stack; the Architect signs off; exceptions come to you |
+| `/aico:pentest <target> [full]` | On demand: the Pentester attacks a local/staging build of **your own** product like a red team, proves findings safely (`full` = real exploit chains), and reports them ranked. No code changes |
+| `/aico:vulnscan` | On demand: the Vulnerability Scanner checks your dependencies and code against CVE/NVD, OSV, GitHub Advisories and CISA KEV; Critical/High come to you, safe fixes come as a ready upgrade set |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
 
@@ -49,7 +51,7 @@ flowchart TD
   Eng --> Arch["architect (CTO)"]
   Arch --> SE["senior-engineer"] & BE["backend-engineer"] & FE["frontend-engineer"] & DE["desktop-engineer"] & AI["ai-data-engineer"] & GE["game-engineer"] & DO["devops"]
   Design --> UX["ui-ux-designer"] & BA["brand-artist"] & MA["motion-artist"] & GA["game-artist"] & PA["prompt-artist"]
-  Quality --> CR["code-reviewer"] & QA["qa"] & SEC["security"]
+  Quality --> CR["code-reviewer"] & QA["qa"] & SEC["security"] & PEN["pentester (on demand)"] & VSC["vuln-scanner (on demand)"]
   Research --> UR["ux-researcher"] & PT["persona-tester"] & HT["hands-on-tester"] & AT["accessibility-tester"]
   Content --> WR["writer"] & MK["marketer"] & LO["localizer"]
   Support --> SU["support"]
@@ -59,9 +61,9 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, product-manager | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher | writer, localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, vuln-scanner, product-manager | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher | writer, localizer, prompt-artist |
 
-Code-reviewer, security, senior-engineer, legal, PM, account manager and support never edit source. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager and support never edit source. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
