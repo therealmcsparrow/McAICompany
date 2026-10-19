@@ -10,7 +10,7 @@ argument-hint: <scope>
 Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise run `aico:audit` steps 1–2 first.
 
 1. `aico:architect`: target Core list, Module map, Contracts, and slices (each slice moves one Module out).
-1b. `aico:senior-engineer` (research or map) then `aico:architect` ruleset sign-off if Must rules changed, as in `aico:feature` 2c–2d. Existing violations go to Debt; a slice fixes only Debt it was planned for.
+1b. `aico:senior-engineer` (research or map) then `aico:architect` ruleset sign-off if Must rules changed, as in `aico:feature` 2c–2d. Existing violations go to Debt. Slices never fix Debt (no behavior change); the CEO picks `/aico:fix` runs for it.
    **→ Plan Gate**
 
 Per slice, in order:

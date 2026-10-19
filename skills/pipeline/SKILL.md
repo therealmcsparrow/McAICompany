@@ -50,7 +50,7 @@ When the Reviewer, QA, Security or the Senior Engineer (compliance) returns item
 1. **One Fix round** = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel). Pass `Round: N` in each dispatch.
 2. The count lives in the Handoffs' `round:` field, not in your memory. After compaction, read the latest `round:` value. **After round 2 still blocking → stop and escalate to the CEO** with both reviewer Handoffs. Don't start a 3rd round, however close it looks.
 3. Nits never trigger a round. They are listed in the Ship Gate summary.
-4. A builder's Must exception (`needs-ceo`, `aico:ruleset`) is a CEO question, not a Fix round. Debt never triggers a round.
+4. A builder's Must exception (`needs-ceo`, `aico:ruleset`) is a CEO question, not a Fix round. Debt never triggers a round; an exploitable security Must is not Debt but Blocking (`aico:ruleset`).
 
 ## 6. Finish
 After the Ship Gate is approved: push/merge as the CEO chose, then write `.company/work/<slug>/00-summary.md` (what shipped, open nits, follow-ups) with a table `Module | estimate | Steps | Fix rounds` (estimate from the Architect's Handoff). Read-only runs (audit, feedback, usability-test) do the same after the CEO's last decision. Copy every `## Debt` line from this run's reviewer Handoffs into `.company/standards.md` `## Debt` (skip duplicates) and commit it. Then append at most 3 one-line Lessons to `.company/lessons.md` (format `- <date> <role>: <lesson>`) drawn from Fix rounds, escalations and blocked Steps (a Fix round caused by a rule break always yields one, naming the rule ID); none → write nothing. Use `superpowers:finishing-a-development-branch` if it's available.
