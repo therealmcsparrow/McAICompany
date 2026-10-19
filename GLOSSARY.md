@@ -19,7 +19,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Product type** — what kind of software is shipped: *web* (SaaS/web app), *desktop* (native app for Windows, Linux, macOS) or *game* (built on a game engine). Applies to both Own products and Client projects.
 
-**Stack pack** — optional, stack-specific guidance (e.g. Rust, Go, React, PHP) read only when the current project uses that stack. Roles and Practices never assume a language.
+**Stack pack** — _Retired_: use **Rule pack**. Roles and Practices never assume a language.
 
 **Gate** — a point where the Lead stops and waits for the CEO's approval. Three Gates: **Brief** (scope agreed), **Plan** (plan/design agreed), **Ship** (before anything is released or made public).
 
@@ -56,5 +56,17 @@ _Avoid_: orchestrator (use Lead).
 **Incident** — a production failure or security event in a shipped product. Handled by `/aico:incident`; ends with a postmortem.
 
 **Lesson** — one line in `.company/lessons.md`, written at the end of a run, that later runs must respect.
+
+**Senior Engineer** — the Role that researches sourced best-practice rules for every tool in a product's stack, keeps the Ruleset, maps rules to plan tasks and checks diffs against it. Reports to the Architect, who signs the Ruleset off.
+
+**Ruleset** — a product's binding rules: `.company/standards.md` plus the committed copies of its Rule packs in `.company/standards/`. Security rules are always Must.
+
+**Rule pack** — the rules for one tool and major version (`<tool>@<major>.md`), each with its source URL. Kept in the company library (`~/.mcsparrow/standards/`) and copied into each product that uses it.
+
+**Must / Should / May** — rule tiers. Must: always followed; a break blocks. Should: followed, or a written reason in the Handoff. May: advice.
+
+**Exception** — CEO approval to not follow one Must rule in a stated scope, recorded in the Ruleset with its date.
+
+**Debt** — existing violations of a rule that arrived after the code was written. Listed in the Ruleset; never blocks a run (except an exploitable security Must).
 
 **Performance budget** — measurable limits in the Project profile (e.g. LCP, bundle size, startup time, memory, frame time) that QA and the Code Reviewer check against.
