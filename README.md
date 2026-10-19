@@ -4,12 +4,13 @@ A Claude Code plugin that runs a small software company. You are the **CEO**. A 
 
 ## Install
 ```
-/plugin marketplace add Z:\projects\aicompany
+/plugin marketplace add therealmcsparrow/McAICompany
 /plugin install aico@aico
 /aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
 /aico:setup go react        # optional stack groups: go, react, tanstack, auth
 ```
 `superpowers` and `mattpocock-skills` install automatically as plugin dependencies.
+The repo is private: your git must be able to clone it (e.g. `gh auth login`). Update later with `/plugin marketplace update aico`.
 
 ## Use
 | Command | What it does |
