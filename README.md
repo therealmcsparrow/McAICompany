@@ -2,6 +2,8 @@
 
 A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 29 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 29 Roles, and the concepts the company runs on.
+
 ## Install
 ```
 /plugin marketplace add therealmcsparrow/McAICompany
