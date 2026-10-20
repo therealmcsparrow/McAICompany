@@ -75,6 +75,8 @@ _Avoid_: orchestrator (use Lead).
 
 **Handoff Contract** — the machine-readable shape of a Handoff: frontmatter fields (`status`, `round`, `base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) plus a `contract|spec|security|test` blocking taxonomy, so the Lead routes and resumes from fields rather than prose.
 
+**Context budget** — no agent (Role or Lead) goes over 150k tokens of context. A Role near it stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
+
 **Risk tier** — `low | medium | high`, set in the Brief and carried in every dispatch; forced high for auth, payments, personal data, migrations or a Contract change. Drives test depth, rule scope and routing. A Role may raise it, never lower it.
 
 **Pre-filter** — a deterministic check run before the Code Reviewer that only appends tagged findings; it never closes a review, never emits `status: done`, and never consumes a Fix round.

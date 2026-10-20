@@ -2,6 +2,11 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [0.7.1] - 2026-10-21
+
+### Added
+- **Context budget** — no agent may go over 150k tokens of context. A Role near the budget stops at a clean point and writes a Handoff with the new `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next` (no Fix round consumed). The Lead hands itself over via `00-lead-state.md` and a fresh session (`aico:handoff`, `aico:pipeline`).
+
 ## [0.7.0] - 2026-10-20
 
 Streamlining the company's own workflow (from the "faster, streamlined development" brainstorm). No new Roles — shared machinery instead.
