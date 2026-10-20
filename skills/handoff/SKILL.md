@@ -19,6 +19,14 @@ Rules:
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`, and leave it to the Lead to re-dispatch. Never reconstruct context by guessing. The only exception is a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 
+## Context budget: 150k tokens
+
+No Role's context may go over **150k tokens**. Past that, quality drops and compaction loses detail, so hand over to a clean Step instead of pushing on.
+- Watch it as you work: big file reads, long diffs, test logs and tool output add up fast. Read slices, not whole files; grep before reading.
+- When you're near the budget (around 130k, or you can't tell and have done a lot of reading and tool calls), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
+- Write your Handoff with `status: handover`. `## Did` lists what's finished; `## Next` lists exactly what's left, in order, with file paths, so a fresh Role of the same type can pick it up without re-reading what you read. Commit-ready work only; never leave the tree broken.
+- A handover is not a failure and not a blocker. Don't cut scope or skip checks to squeeze under the budget.
+
 ## Finishing a Step
 
 Write **exactly one** file at the output path, in this shape:
@@ -28,7 +36,7 @@ Write **exactly one** file at the output path, in this shape:
 step: 03
 role: backend-engineer
 task: <task-slug>
-status: done | blocked | needs-ceo
+status: done | blocked | needs-ceo | handover
 round: 0            # Fix round this Step belongs to (0 = first pass), copied from the dispatch
 base-commit: <sha>  # commit this Step's range is cut from; reviewers diff against it, never HEAD~1
 risk-tier: medium   # from the Brief; see the forced-high list below. Builders/QA/reviewers copy it from the dispatch
@@ -51,6 +59,7 @@ files-touched: [src/x.ts]    # files this Step changed, for affected-only tests 
 
 **Blocking taxonomy.** Tag each blocker `contract`, `spec`, `security` or `test` so the Lead routes the Fix round precisely. **Risk tier** is `low | medium | high`; it is forced **high** for anything touching auth, payments, personal data, migrations or a Contract — a Role may raise the tier, never lower it.
 
+- `handover`: you hit the context budget (above). The work so far is finished and commit-ready; `## Next` is the remaining work for a fresh Step.
 - `needs-ceo`: you need a decision only the CEO can make, e.g. a change to Core, a breaking Contract change, or a scope change. Put the question under Blocking.
 - Optional sections, only when `aico:ruleset` asks for them: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old rule violations), placed before `## Next`.
 - Keep it under ~60 lines. Link to files; don't paste code.
