@@ -17,4 +17,6 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 **Untrusted input:** validation built as a block-list of bad patterns, a check that ignores how the consumer recovers from malformed input (unclosed strings, escapes), or an unbounded/backtracking pattern is `## Blocking`, even if every known attack is covered (see `aico:security-check`).
 
+**Comments:** a code comment about Handoffs, Steps, Roles, AI or company process (not about the code itself) is `## Blocking` `spec` (see `aico:tdd`).
+
 **Sort:** a bug, spec miss, Contract violation, missing test or security risk → `## Blocking`. Style or preference → `## Nits`. You never edit code; the finding is your output.
