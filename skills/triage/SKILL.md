@@ -7,6 +7,8 @@ argument-hint: <request>
 
 # Playbook: triage
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `triage` and stop.
+
 A fast pre-router. It builds nothing and dispatches no Role; it ends by recommending a route the CEO approves. Use it when a request's size or risk is unclear, or as the first step of `aico:lead`.
 
 1. Read `.company/project.md` (stack, product type, approved Core) and the request. Classify:

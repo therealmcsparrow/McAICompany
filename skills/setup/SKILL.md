@@ -7,6 +7,8 @@ argument-hint: [core] [go] [react] [tanstack] [auth]
 
 # Setup
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `setup` and stop.
+
 The plugin dependencies (`superpowers`, `mattpocock-skills`) install automatically with aico. This skill adds the **standalone skills** listed in `<plugin root>/deps/skills.json`. Plugin root = two folders above this skill's base directory.
 
 1. Groups = the arguments, or `core` if there are none. Available groups: `core`, `go`, `react`, `tanstack`, `auth`.

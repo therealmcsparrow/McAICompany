@@ -18,7 +18,9 @@ Optionally install the standalone and stack skills the Roles draw on:
 /aico:setup go react        # optional stack groups: go, react, tanstack, auth
 ```
 
-Update later with `/plugin marketplace update aico`, then `/reload-plugins`.
+Update later with `/plugin marketplace update aico`, then `/reload-plugins`. `/aico:version` shows which version you have.
+
+Not sure what a command does? `/aico:help` lists them all, and `/aico:help <command>` (or `/aico:<command> help`) explains its options without running it.
 
 ## Your first run
 

@@ -7,6 +7,8 @@ argument-hint: <what happened>
 
 # Playbook: incident
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `incident` and stop.
+
 Run with `aico:pipeline`. No Brief or Plan Gate: urgency is allowed, the Ship Gate is kept.
 
 1. `aico:devops`: triage (impact, scope, timeline) and propose a mitigation, ∥ `aico:security` if it is security-related, ∥ `aico:legal` (step 3) so drafts exist at the first Gate.

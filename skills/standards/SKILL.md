@@ -7,6 +7,8 @@ argument-hint: [tool | refresh]
 
 # Playbook: standards
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `standards` and stop.
+
 Run with `aico:pipeline`. No Brief or Plan Gate (this Playbook's own skip); the Ship Gate stays. Rules work per `aico:ruleset`.
 
 1. `aico:senior-engineer`:

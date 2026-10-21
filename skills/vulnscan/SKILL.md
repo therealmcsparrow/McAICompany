@@ -7,6 +7,8 @@ argument-hint: (no arguments)
 
 # Playbook: vulnscan
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `vulnscan` and stop.
+
 Run with `aico:pipeline`, **read-only**: no builders, no code changes, no Gates until the report is ready. On demand only — not part of the default `/aico:feature`, `/aico:audit` or `/aico:maintain` flows.
 
 1. `aico:vuln-scanner`: enumerate dependencies and versions (`aico:stack-detect`), cross-reference NVD/CVE, OSV, GitHub Advisories, the ecosystem DB, vendor advisories and CISA KEV. Output `.company/work/<slug>/vuln-report.md` with `## Report` (Critical/High, KEV/exploited) and `## Upgrade set` (safe Medium/Low fixed-in bumps).

@@ -7,6 +7,8 @@ argument-hint: <what to test: design path, URL or app> [real-users]
 
 # Playbook: usability-test
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `usability-test` and stop.
+
 Run with `aico:pipeline`. It's read-only like an audit: no builders until the CEO picks fixes.
 
 1. **Personas:** if `## Personas` in `.company/project.md` is empty, dispatch `aico:product-manager` to propose 2–4 → **Brief Gate** (the CEO approves the Personas).

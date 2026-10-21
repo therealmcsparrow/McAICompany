@@ -85,4 +85,6 @@ _Avoid_: orchestrator (use Lead).
 
 **Brainstorm** — a Playbook where the relevant Roles give ideas, risks and questions on a CEO idea over rounds (modes: ideas, debate, moderated) until the CEO says done. Ends in one of four outcomes: plan and implement, Roadmap, Nice to have, Parked; each outcome but the first has its own `.company/` folder.
 
+**Cooler** — the `/aico:cooler` Playbook: an unmoderated chat between randomly chosen Roles about the project; colleagues walk up and leave as it goes. Recorded in `.company/cooler/` with an Overheard list; never routed or built. Unlike a Brainstorm, nobody moderates and no outcome is chosen.
+
 **Performance budget** — measurable limits in the Project profile (e.g. LCP, bundle size, startup time, memory, frame time) that QA and the Code Reviewer check against.
