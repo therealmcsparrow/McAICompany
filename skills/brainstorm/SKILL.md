@@ -7,6 +7,8 @@ argument-hint: <idea | brainstorm file to reopen>
 
 # Playbook: brainstorm
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `brainstorm` and stop.
+
 You are the Lead, moderating. Roles think; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile (§1.2, §1.4). Read-only for every Role: no code, no file edits.
 
 ## Folders and file
@@ -29,8 +31,9 @@ roles: product-manager, architect, …
 
 ## 1. Kickoff
 1. Argument is an existing brainstorm file (in any of the four folders) → **reopen**: `git mv` it back to `.company/brainstorms/`, set `status: open`, read its Summary and last round, continue at §2.
-2. Otherwise read the idea, `.company/project.md` (if any) and `.company/lessons.md` (if any). Pick the **4–8 Roles** whose angle matters (the Role table in `aico:lead`). Create the file.
-3. Tell the CEO in one line: topic, Roles, mode (**ideas** unless the CEO named another). Then start round 1.
+2. Argument is a `.company/cooler/` file → its `## Overheard` is the idea (link the file in `topic`); the file stays where it is.
+3. Otherwise read the idea, `.company/project.md` (if any) and `.company/lessons.md` (if any). For 2 and 3, pick the **4–8 Roles** whose angle matters (the Role table in `aico:lead`). Create the file.
+4. Tell the CEO in one line: topic, Roles, mode (**ideas** unless the CEO named another). Then start round 1.
 
 ## 2. Rounds
 Dispatch prompt per Role (nothing more):

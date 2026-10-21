@@ -7,6 +7,8 @@ argument-hint: intake <client request> | handoff
 
 # Playbook: client
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `client` and stop.
+
 Run with `aico:pipeline`. Set `engagement: client` in `.company/project.md`, and the client's license and jurisdiction.
 
 ## intake

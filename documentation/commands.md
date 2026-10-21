@@ -7,7 +7,9 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Gates** are where the company stops for your approval — **Brief** (scope), **Plan** (design), **Ship** (before anything leaves the repo). At each you Approve, Change or Stop. A Playbook only skips a Gate if its own description says so.
 - **Work lands under `.company/`** in your repo: the brief, designs, reviews, reports and the per-step Handoff files. `<slug>` below is the short task name the run picks.
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
-- **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan) change no code — they end in a report you act on.
+- **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
+
+**Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` or `/aico:<command> help` (also `--help`) explains one command's options and what it does, without running it.
 
 Each entry below gives what the command does, when to reach for it, how it runs (Gates marked), what you get, and an example.
 
@@ -254,6 +256,22 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **Example.** `/aico:brainstorm debate how should we onboard first-time users`
 
+### `/aico:cooler`
+`/aico:cooler [topic] [turns=N | listen]`
+
+**What it does.** Colleagues chat at the water cooler about the project — thoughts, ideas, gripes, worries — with nobody running the meeting. It's recorded so you can read what was overheard.
+
+**When to use it.** When you want the company's unprompted take: what's bugging people, what they'd do next, ideas nobody asked for. Use `/aico:brainstorm` instead when you have an idea you want worked through.
+
+**How it runs.**
+1. 2–3 **random** Roles meet at the cooler. They talk about your topic, or without one, whatever is on their mind about the project.
+2. They speak one line at a time, replying to each other. Now and then a random colleague walks up (more likely when the talk is in their field) or someone heads back to their desk; 2–5 are there at once.
+3. It ends in one of three ways: **natural** (default — when nobody has anything new to say, or after 20 turns), **`turns=N`** (after N turns), or **`listen`** (every 4 turns you're asked: keep listening, chime in, or stop). No Gates.
+
+**You get.** `.company/cooler/YYYYMMDD-HHMM-topic.md` with the whole chat and an **Overheard** list of the ideas, problems and worries raised. Nothing is built or routed; take anything further with `/aico:brainstorm "<file>"` or `/aico:lead`.
+
+**Example.** `/aico:cooler` · `/aico:cooler our flaky CI listen` · `/aico:cooler pricing turns=12`
+
 ---
 
 ## Clients and launch
@@ -292,7 +310,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 ---
 
-## Setup
+## Setup and help
 
 ### `/aico:setup`
 `/aico:setup [core] [go] [react] [tanstack] [auth]`
@@ -306,6 +324,32 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **You get.** The standalone and stack skills available to the Roles.
 
 **Example.** `/aico:setup go react`
+
+### `/aico:help`
+`/aico:help [command]`
+
+**What it does.** Without a command, lists every command with one line each. With one, explains it: usage, every option and its effect (and the default when you leave it out), what it does, what you get, an example. `/aico:<command> help` or `--help` shows the same for that command.
+
+**When to use it.** Before running a command you haven't used, or to check an option.
+
+**How it runs.** Reads this guide and the command's own definition. Read-only, starts nothing, no Gates.
+
+**You get.** A short explanation in the terminal.
+
+**Example.** `/aico:help pentest` · `/aico:cooler help`
+
+### `/aico:version`
+`/aico:version`
+
+**What it does.** Shows which version of the plugin is installed, the date and one-line summary of its latest changelog entry, and where the plugin lives on disk.
+
+**When to use it.** To check whether an update landed (after `/plugin marketplace update aico`), or when reporting a problem.
+
+**How it runs.** Reads the plugin's own `plugin.json` and `CHANGELOG.md`. Read-only, no Gates.
+
+**You get.** A two- or three-line answer, e.g. `aico 0.7.4`.
+
+**Example.** `/aico:version`
 
 ---
 

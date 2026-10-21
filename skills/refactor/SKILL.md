@@ -7,6 +7,8 @@ argument-hint: <scope>
 
 # Playbook: refactor
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `refactor` and stop.
+
 Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise run `aico:audit` steps 1–2 first.
 
 1. `aico:architect`: target Core list, Module map, Contracts, and slices (each slice moves one Module out).

@@ -7,6 +7,8 @@ argument-hint: (no arguments)
 
 # Playbook: maintain
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `maintain` and stop.
+
 Run with `aico:pipeline`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.
 
 1. In parallel: `aico:security` (dependency vulnerabilities, flag exploited ones: stop and suggest `/aico:incident`), `aico:legal` (license re-check), `aico:devops` (outdated dependencies, report SBOM status, CI health), `aico:senior-engineer` (refresh: stale packs, changed guidance, deprecations, advisories).

@@ -67,3 +67,4 @@ Everything a job produces lands here, in your product's repo, in plain files you
 - `.company/standards.md` and `.company/standards/` — the Ruleset and its rule-pack copies
 - `.company/lessons.md` — the running list of Lessons
 - `.company/brainstorms/`, `.company/roadmap/`, `.company/nice-to-have/`, `.company/parked/` — ideas from [`/aico:brainstorm`](commands.md#aicobrainstorm) at each stage
+- `.company/cooler/` — recorded chats from [`/aico:cooler`](commands.md#aicocooler)

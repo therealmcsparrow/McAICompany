@@ -7,6 +7,8 @@ argument-hint: <feature description>
 
 # Playbook: feature
 
+**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `feature` and stop.
+
 Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):
 
 1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.
