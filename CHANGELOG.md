@@ -2,6 +2,11 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [0.7.3] - 2026-10-21
+
+### Changed
+- **Every ask to the CEO is a form.** Gates, `needs-ceo` questions, picks from audit/pentest/vulnscan/feedback/usability reports, escalations, brainstorm rounds and setup approval all go through AskUserQuestion; the Lead's text reply carries summaries and paths only and never ends with a question (`aico:pipeline`).
+
 ## [0.7.2] - 2026-10-21
 
 ### Changed

@@ -16,4 +16,4 @@ Run with `aico:pipeline`, but **read-only**: no branch commits except Handoffs, 
    - Ruleset: Must violations by rule ID (Debt), stale packs
    - Architecture: how far the code is from Core + Modules + Contracts
    - Top 5 recommended next actions
-3. Present the report to the CEO and offer to start `aico:fix` or `aico:feature` runs for chosen items.
+3. Present the report to the CEO and ask in a form (`multiSelect`) which items become `aico:fix` or `aico:feature` runs.

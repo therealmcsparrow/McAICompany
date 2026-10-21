@@ -21,7 +21,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Stack pack** — _Retired_: use **Rule pack**. Roles and Practices never assume a language.
 
-**Gate** — a point where the Lead stops and waits for the CEO's approval. Three Gates: **Brief** (scope agreed), **Plan** (plan/design agreed), **Ship** (before anything is released or made public).
+**Gate** — a point where the Lead stops and waits for the CEO's approval, asked in a form (AskUserQuestion), as is every other question to the CEO. Three Gates: **Brief** (scope agreed), **Plan** (plan/design agreed), **Ship** (before anything is released or made public).
 
 **Step** — one Role doing one piece of work. Every Step starts with a fresh context and knows only what its incoming Handoff tells it.
 

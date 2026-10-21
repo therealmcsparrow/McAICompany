@@ -9,7 +9,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 
 ## Run mechanics
 - Every Step = one Role subagent with fresh context. It reads only the Handoff files it is given plus the relevant section of `.company/project.md`, and writes exactly one Handoff: `.company/work/<task-slug>/NN-<role>.md`.
-- Gates (CEO approval): **Brief**, **Plan**, **Ship**. Nothing between them asks the CEO.
+- Gates (CEO approval): **Brief**, **Plan**, **Ship**. Nothing between them asks the CEO. Every ask to the CEO is a form (AskUserQuestion), never a question in the text reply.
 - Fix rounds: only blocking issues loop back to the builder; max 2 per piece of work, then escalate to CEO. Nits are recorded only.
 - Git: one branch per run (`aico/<task-slug>`, worktree if available), one commit per Step including its Handoff, no push/merge before Ship Gate.
 
@@ -106,6 +106,9 @@ Design: the "faster, streamlined development" brainstorm. No new Roles — share
 
 ## v0.7.2 additions
 - **Code comments:** product code, tests and config carry comments about the code only. Handoff, Step, Role, AI and company notes live in `.company/` (`aico:tdd`); the Code Reviewer blocks them as `spec` (`aico:review`).
+
+## v0.7.3 additions
+- **CEO asks are forms:** every question, choice, approval or request for input to the CEO goes through AskUserQuestion (≤4 questions, recommended option first, free text via "Other"); the text reply carries summaries and paths only and never ends with a question (`aico:pipeline`). Brainstorm rounds, report picks, `needs-ceo`, escalations and setup approval all use it.
 
 ## Budgets (guideline, warn not fail)
 Agent files ≤ 50 lines, skill files ≤ 125 lines, description ≤ 1024 chars (hard). `scripts/check.mjs` reports every structural overrun.

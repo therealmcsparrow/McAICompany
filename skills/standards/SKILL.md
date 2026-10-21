@@ -11,9 +11,9 @@ Run with `aico:pipeline`. No Brief or Plan Gate (this Playbook's own skip); the 
 
 1. `aico:senior-engineer`:
    - `<tool>` given → mode **research** for that tool.
-   - `refresh` or nothing → mode **refresh**. Show its report to the CEO, then dispatch **research** for the changes the CEO picks.
+   - `refresh` or nothing → mode **refresh**. Show its report to the CEO, ask in a form (`multiSelect`) which changes to take, then dispatch **research** for those.
 2. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. One rejection → one Senior Engineer revision; still rejected → the CEO decides.
-3. Exception requests and new `## Debt` lines go to the CEO in one AskUserQuestion round. Offer `/aico:fix` or `/aico:refactor` runs for Debt; never start them.
+3. Exception requests and new `## Debt` lines go to the CEO in one form. Offer `/aico:fix` or `/aico:refactor` runs for Debt; never start them.
    **→ Ship Gate** (merge the `.company/standards.md` and `.company/standards/` change)
 
 Library files under `~/.mcsparrow/standards/` are never committed by the run; tell the CEO which ones changed.
