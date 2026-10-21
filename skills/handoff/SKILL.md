@@ -29,7 +29,7 @@ No Role's context may go over **150k tokens**. Past that, quality drops and comp
 
 ## Finishing a Step
 
-Write **exactly one** file at the output path, in this shape:
+Write **exactly one** file at the output path, in this shape. Everything for the next Step goes here, never in code comments (`aico:tdd`).
 
 ```markdown
 ---

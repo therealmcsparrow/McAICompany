@@ -2,6 +2,11 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [0.7.2] - 2026-10-21
+
+### Changed
+- **Code comments are about the code only.** No Handoff, Step, Role, AI or company notes in product code, tests or config; they stay in `.company/` (`aico:tdd`, `aico:handoff`). The Code Reviewer blocks such a comment as `spec` (`aico:review`).
+
 ## [0.7.1] - 2026-10-21
 
 ### Added

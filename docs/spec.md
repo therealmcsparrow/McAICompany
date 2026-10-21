@@ -104,6 +104,9 @@ Design: the "faster, streamlined development" brainstorm. No new Roles — share
 - **Playbook** `/aico:triage <request>`: shortest-valid-route pre-router; risk overrides size.
 - **CI:** `.github/workflows/ci.yml` runs the checker and tests on every PR; `scripts/check.mjs` gains a version-consistency check (plugin.json vs CHANGELOG vs documentation). `CHANGELOG.md` added.
 
+## v0.7.2 additions
+- **Code comments:** product code, tests and config carry comments about the code only. Handoff, Step, Role, AI and company notes live in `.company/` (`aico:tdd`); the Code Reviewer blocks them as `spec` (`aico:review`).
+
 ## Budgets (guideline, warn not fail)
 Agent files ≤ 50 lines, skill files ≤ 125 lines, description ≤ 1024 chars (hard). `scripts/check.mjs` reports every structural overrun.
 
