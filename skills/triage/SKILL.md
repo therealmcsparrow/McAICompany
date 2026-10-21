@@ -19,6 +19,6 @@ A fast pre-router. It builds nothing and dispatches no Role; it ends by recommen
    - bug → `aico:fix` · refactor → `aico:refactor` · go public → `aico:launch` · assess → `aico:audit` · outage/security event → `aico:incident` · upkeep → `aico:maintain` · otherwise a feature → `aico:feature`.
    - **Risk overrides size:** any `high`-risk item keeps the full reviewer lane (code-reviewer ∥ qa ∥ security) and every Gate, however small. Triage shortens ceremony, never oversight.
 
-3. Present one line to the CEO: size, risk tier, type, and the recommended route with the Gates it keeps. **→ Brief Gate** (Approve / Change / Stop). On approve, hand straight to the chosen Playbook or `aico:lead` route; the risk tier travels into every dispatch.
+3. Present one line to the CEO: size, risk tier, type, and the recommended route with the Gates it keeps. **→ Brief Gate** (a form: Approve / Change / Stop). On approve, hand straight to the chosen Playbook or `aico:lead` route; the risk tier travels into every dispatch.
 
 Triage is advisory: it never skips a Gate a Playbook mandates, and the CEO can always choose a longer route.
