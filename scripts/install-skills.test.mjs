@@ -169,18 +169,31 @@ test('hostile: bad group names cannot reach Object.prototype', () => {
 });
 
 // ---- dates are compared against the local calendar day, not UTC ----
-test('approved today is accepted just after local midnight (00:00-02:00 window)', () => {
-  const justAfterMidnight = new Date(2026, 9, 22, 0, 30); // local 00:30; UTC is still the 21st when the zone is ahead of UTC
-  const got = parseDesignSkills(doc(line({ vetted: '2026-10-22', approved: '2026-10-22' })), manifest, justAfterMidnight);
-  assert.equal(got.length, 1);
-  const twoAm = new Date(2026, 9, 22, 1, 59);
-  assert.equal(parseDesignSkills(doc(line()), manifest, twoAm).length, 1);
+// Pin the process time zone per case so a UTC-comparison regression fails on any runner.
+function inZone(tz, fn) {
+  const prev = process.env.TZ;
+  process.env.TZ = tz;
+  try { fn(); } finally { if (prev === undefined) delete process.env.TZ; else process.env.TZ = prev; }
+}
+
+test('approved today is accepted just after local midnight in a zone ahead of UTC', () => {
+  inZone('Pacific/Auckland', () => {
+    const justAfterMidnight = new Date(2026, 9, 22, 0, 30); // local 22nd; UTC is still the 21st
+    assert.equal(justAfterMidnight.getUTCDate(), 21, 'zone pin took effect');
+    const got = parseDesignSkills(doc(line({ vetted: '2026-10-22', approved: '2026-10-22' })), manifest, justAfterMidnight);
+    assert.equal(got.length, 1);
+    const twoAm = new Date(2026, 9, 22, 1, 59);
+    assert.equal(parseDesignSkills(doc(line()), manifest, twoAm).length, 1);
+  });
 });
 
-test('tomorrow is still refused late in the local evening', () => {
-  const lateEvening = new Date(2026, 9, 22, 23, 30);
-  assert.throws(() => parseDesignSkills(doc(line({ approved: '2026-10-23' })), manifest, lateEvening), /approved invalid/);
-  assert.throws(() => parseDesignSkills(doc(line({ vetted: '2026-10-23' })), manifest, lateEvening), /vetted invalid/);
+test('tomorrow is still refused late in the local evening in a zone behind UTC', () => {
+  inZone('Pacific/Honolulu', () => {
+    const lateEvening = new Date(2026, 9, 22, 23, 30); // local 22nd; UTC is already the 23rd
+    assert.equal(lateEvening.getUTCDate(), 23, 'zone pin took effect');
+    assert.throws(() => parseDesignSkills(doc(line({ approved: '2026-10-23' })), manifest, lateEvening), /approved invalid/);
+    assert.throws(() => parseDesignSkills(doc(line({ vetted: '2026-10-23' })), manifest, lateEvening), /vetted invalid/);
+  });
 });
 
 // ---- valid parsing ----
