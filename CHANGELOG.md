@@ -22,7 +22,13 @@ After updating, run `/aico:setup` (it installs the `research` skill group) and `
 - **`/aico:brainstorm`** accepts a research report. Its close form gains "Research it first".
 - **`/aico:lead` and `/aico:triage`** route research, feasibility and quick-win questions to `/aico:research`.
 - **Five UI Roles** (ui-ux-designer, frontend-engineer, desktop-engineer, game-engineer, brand-artist) load the approved design skills from their dispatch. A skill that is not installed is named under `## Next`.
-- **Development:** `npm test` runs every `scripts/*.test.mjs`. The repo targets Node 24 (`.nvmrc`, `engines`). CI runs with read-only token permissions and pinned action commits. Skill installs need Node 22.20 or later.
+- **Development:** `npm test` runs every `scripts/*.test.mjs`. The repo targets Node 24 (`.nvmrc`, `engines`). CI runs with read-only token permissions and pinned action commits. Skill installs need Node 22.20 or later. Text files are stored with LF line endings (`.gitattributes`).
+
+### Fixed
+- **Report names are checked before use.** A topic with anything but letters, digits, single spaces or hyphens, or longer than 5 words or 60 characters, is not used. The report is named with the run slug instead, and the commit is made only from the checked name.
+- **Presence check stops cleanly on error.** If the install check fails, `/aico:research` shows the error, installs nothing, asks no form and continues on WebSearch and WebFetch.
+- **Design-skill dates use your local day.** Dates in `## Design skills` are checked against the local calendar, not UTC, so today is accepted and tomorrow refused in every time zone.
+- **Plugin script paths are quoted.** Commands run `node "${CLAUDE_PLUGIN_ROOT}/scripts/…"`, so they work when the install path contains spaces. Skill installs off Windows run `npx` without a shell.
 
 ### Rollback
 A design-skill install in a product adds `.agents/skills/`, `.claude/skills/<name>` and `skills-lock.json` in that product's repo. To remove a skill, run `npx -y skills@1.7.4 remove <name> -a claude-code` in the product root, then delete its line under `## Design skills`. impeccable uses its own installer, and its uninstall path is not verified.
