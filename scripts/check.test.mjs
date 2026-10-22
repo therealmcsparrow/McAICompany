@@ -1,13 +1,17 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { check } from './check.mjs';
 
+const tempDirs = [];
+after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
+
 function fixture({ skills = {}, agents = {} }) {
   const root = mkdtempSync(join(tmpdir(), 'aico-'));
+  tempDirs.push(root);
   for (const [dir, text] of Object.entries(skills)) {
     mkdirSync(join(root, 'skills', dir), { recursive: true });
     writeFileSync(join(root, 'skills', dir, 'SKILL.md'), text);
@@ -233,7 +237,7 @@ test('ci.yml is hardened: read-only token, SHA pins with tag comments, no persis
   assert.doesNotMatch(ci, /pull_request_target|workflow_run|npm (install|ci)/);
 });
 
-// One case per Playbook of this repo: the Language rule (AC14, dispatch-prompt v2).
+// One case per Playbook of this repo: the Language rule (dispatch-prompt v2).
 const realPlaybooks = readdirSync(join(REPO, 'skills')).filter(d => {
   const f = join(REPO, 'skills', d, 'SKILL.md');
   return existsSync(f) && /^disable-model-invocation:\s*true\s*$/m.test(readFileSync(f, 'utf8'));

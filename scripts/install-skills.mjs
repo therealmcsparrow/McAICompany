@@ -3,7 +3,7 @@
 // Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
 //   default group: core. Group `design` needs --project. Contract: docs/contracts/skills-manifest.md.
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +44,9 @@ function validDate(s, today) {
   const [y, m, d] = s.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return false;
-  return s <= today.toISOString().slice(0, 10);
+  // The user types the local calendar day, so compare against the local day, not UTC.
+  const pad = n => String(n).padStart(2, '0');
+  return s <= `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 }
 
 // Parses `## Design skills` of a project.md into entries. Throws DesignSkillError on any failure.
@@ -152,6 +154,12 @@ function commandFor(e, platform) {
   return `npx -y ${SKILLS_CLI} add ${e.source} -s ${skill}${e.scope === 'project' ? '' : ' -g'} -a claude-code -y`;
 }
 
+// Off Windows the same command runs as argv with no shell (node.M-SEC1); the wildcard is a bare `*`.
+function argvFor(e) {
+  const skill = e.name.endsWith('*') ? '*' : e.name;
+  return ['-y', SKILLS_CLI, 'add', e.source, '-s', skill, ...(e.scope === 'project' ? [] : ['-g']), '-a', 'claude-code', '-y'];
+}
+
 // Group `design` exists only when --project supplied it: { root, design }.
 function withDesign(manifest, project) {
   const eff = { ...manifest };
@@ -160,12 +168,13 @@ function withDesign(manifest, project) {
   return eff;
 }
 
-// Returns [{ cmd, cwd? }]. Design commands carry the product root as cwd.
+// Returns [{ cmd, cwd?, argv? }]. Design commands carry the product root as cwd.
 export function plan(manifest, groups, installed, platform = process.platform, project = null) {
   const seen = new Set();
   const cmds = [];
   for (const e of missing(withDesign(manifest, project), groups, installed)) {
     const item = { cmd: commandFor(e, platform) };
+    if (typeof e.install !== 'string' && platform !== 'win32') item.argv = argvFor(e);
     if (e.scope === 'project') item.cwd = project.root;
     const key = `${item.cwd ?? ''}|${item.cmd}`;
     if (!seen.has(key)) { seen.add(key); cmds.push(item); }
@@ -173,12 +182,12 @@ export function plan(manifest, groups, installed, platform = process.platform, p
   return cmds;
 }
 
-// Runs every command; a failure is recorded, not thrown. Items are strings or { cmd, cwd }.
+// Runs every command; a failure is recorded, not thrown. Items are strings or { cmd, cwd, argv }.
 export function runAll(items, exec) {
   const ok = [], failed = [];
   for (const item of items) {
-    const { cmd, cwd } = typeof item === 'string' ? { cmd: item } : item;
-    try { exec(cmd, cwd); ok.push(cmd); }
+    const { cmd, cwd, argv } = typeof item === 'string' ? { cmd: item } : item;
+    try { exec(cmd, cwd, argv); ok.push(cmd); }
     catch (e) { failed.push({ cmd, error: String(e?.message ?? e) }); }
   }
   return { ok, failed };
@@ -204,7 +213,7 @@ function loadProject(p, cwd, today, manifest) {
 // Returns the exit code. Everything outside is injectable so tests never run npx or touch the real home.
 export function main(args, env = {}) {
   const log = env.log ?? console.log;
-  const exec = env.exec ?? ((cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' }));
+  const exec = env.exec ?? ((cmd, cwd, argv) => (argv ? execFileSync('npx', argv, { cwd, stdio: 'inherit' }) : execSync(cmd, { cwd, stdio: 'inherit' })));
   const cwd = env.cwd ?? process.cwd();
   const platform = env.platform ?? process.platform;
   try {

@@ -168,6 +168,21 @@ test('hostile: bad group names cannot reach Object.prototype', () => {
   }
 });
 
+// ---- dates are compared against the local calendar day, not UTC ----
+test('approved today is accepted just after local midnight (00:00-02:00 window)', () => {
+  const justAfterMidnight = new Date(2026, 9, 22, 0, 30); // local 00:30; UTC is still the 21st when the zone is ahead of UTC
+  const got = parseDesignSkills(doc(line({ vetted: '2026-10-22', approved: '2026-10-22' })), manifest, justAfterMidnight);
+  assert.equal(got.length, 1);
+  const twoAm = new Date(2026, 9, 22, 1, 59);
+  assert.equal(parseDesignSkills(doc(line()), manifest, twoAm).length, 1);
+});
+
+test('tomorrow is still refused late in the local evening', () => {
+  const lateEvening = new Date(2026, 9, 22, 23, 30);
+  assert.throws(() => parseDesignSkills(doc(line({ approved: '2026-10-23' })), manifest, lateEvening), /approved invalid/);
+  assert.throws(() => parseDesignSkills(doc(line({ vetted: '2026-10-23' })), manifest, lateEvening), /vetted invalid/);
+});
+
 // ---- valid parsing ----
 test('parseDesignSkills accepts repo, manifest command and plugin lines', () => {
   const m = { ...manifest };
@@ -225,9 +240,9 @@ test('design commands carry the product root as cwd and no -g', () => {
 test('user-scope commands have -g and no cwd; plan returns the pinned form', () => {
   const cmds = plan(manifest, ['core'], new Set(['humanizer']), 'linux');
   assert.deepEqual(cmds, [
-    { cmd: 'npx -y skills@1.7.4 add nutlope/hallmark -s hallmark -g -a claude-code -y' },
+    { cmd: 'npx -y skills@1.7.4 add nutlope/hallmark -s hallmark -g -a claude-code -y', argv: ['-y', 'skills@1.7.4', 'add', 'nutlope/hallmark', '-s', 'hallmark', '-g', '-a', 'claude-code', '-y'] },
     { cmd: 'npx -y impeccable skills install' },
-    { cmd: 'npx -y skills@1.7.4 add vercel-labs/skills -s find-skills -g -a claude-code -y' }
+    { cmd: 'npx -y skills@1.7.4 add vercel-labs/skills -s find-skills -g -a claude-code -y', argv: ['-y', 'skills@1.7.4', 'add', 'vercel-labs/skills', '-s', 'find-skills', '-g', '-a', 'claude-code', '-y'] }
   ]);
 });
 
@@ -235,6 +250,51 @@ test('wildcard: skipped when any match is installed; quoted per platform', () =>
   assert.deepEqual(plan(manifest, ['go'], new Set(['golang-cli']), 'linux'), []);
   assert.equal(plan(manifest, ['go'], new Set(), 'linux')[0].cmd, "npx -y skills@1.7.4 add samber/cc-skills-golang -s '*' -g -a claude-code -y");
   assert.equal(plan(manifest, ['go'], new Set(), 'win32')[0].cmd, 'npx -y skills@1.7.4 add samber/cc-skills-golang -s "*" -g -a claude-code -y');
+});
+
+// ---- argv form off Windows (node.M-SEC1) ----
+test('linux: source entries carry exact argv; win32 and manifest install strings never do', () => {
+  const m = {
+    core: [
+      { name: 'hallmark', source: 'nutlope/hallmark' },
+      { name: 'impeccable', install: 'npx -y impeccable skills install' }
+    ],
+    go: [{ name: 'golang-*', source: 'samber/cc-skills-golang' }],
+    design: []
+  };
+  const lin = plan(m, ['core', 'go'], new Set(), 'linux');
+  assert.deepEqual(lin[0].argv, ['-y', 'skills@1.7.4', 'add', 'nutlope/hallmark', '-s', 'hallmark', '-g', '-a', 'claude-code', '-y']);
+  assert.equal(lin[1].cmd, 'npx -y impeccable skills install');
+  assert.ok(!('argv' in lin[1]));
+  assert.deepEqual(lin[2].argv, ['-y', 'skills@1.7.4', 'add', 'samber/cc-skills-golang', '-s', '*', '-g', '-a', 'claude-code', '-y']);
+  assert.equal(lin[2].cmd, "npx -y skills@1.7.4 add samber/cc-skills-golang -s '*' -g -a claude-code -y");
+  const win = plan(m, ['core', 'go'], new Set(), 'win32');
+  for (const item of win) assert.ok(!('argv' in item));
+  assert.equal(win[0].cmd, 'npx -y skills@1.7.4 add nutlope/hallmark -s hallmark -g -a claude-code -y');
+  assert.equal(win[2].cmd, 'npx -y skills@1.7.4 add samber/cc-skills-golang -s "*" -g -a claude-code -y');
+});
+
+test('linux: design entry argv has no -g, keeps cwd; the exec spy receives argv', () => {
+  const s = sandbox();
+  const seen = [];
+  const spy = (c, cwd, argv) => seen.push([c, cwd, argv]);
+  try {
+    const res = s.run(['design', '--project', s.projectFile], doc(line(), line({ name: 'impeccable', source: '`npx -y impeccable skills install`' })), { exec: spy });
+    assert.equal(res.code, 0);
+    assert.deepEqual(seen, [
+      ['npx -y skills@1.7.4 add nutlope/hallmark -s hallmark -a claude-code -y', s.root, ['-y', 'skills@1.7.4', 'add', 'nutlope/hallmark', '-s', 'hallmark', '-a', 'claude-code', '-y']],
+      ['npx -y impeccable skills install', s.root, undefined]
+    ]);
+    seen.length = 0;
+    s.run(['design', '--project', s.projectFile], undefined, { platform: 'win32', exec: spy });
+    assert.equal(seen[0][2], undefined);
+  } finally { s.done(); }
+});
+
+test('runAll passes argv through to exec', () => {
+  const seen = [];
+  runAll([{ cmd: 'a', cwd: '/x', argv: ['-y', 'b'] }, 'c'], (c, cwd, argv) => seen.push([c, cwd, argv]));
+  assert.deepEqual(seen, [['a', '/x', ['-y', 'b']], ['c', undefined, undefined]]);
 });
 
 // ---- include, dedupe ----

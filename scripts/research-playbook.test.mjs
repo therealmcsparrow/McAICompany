@@ -4,8 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Contract tests for the prose Playbooks of the research-team change. A skill file is the
-// public interface of a Playbook, so these pin the rules each acceptance criterion names.
+// Contract tests for the prose Playbooks. A skill file is the public interface of a Playbook,
+// so these pin the rules each Playbook states.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const skill = (n) => read(`skills/${n}/SKILL.md`);
@@ -45,7 +45,9 @@ test('AC4 every claim has a dated source, unverified claims cannot back a verdic
 
 test('AC5 pick form offers Start / Brainstorm / Roadmap / Park; only the report is committed, never pushed', () => {
   has(research, 'Start `/aico:feature` / Brainstorm / Roadmap / Park', 'Nothing starts without the pick',
-    'Commit **only the report**', 'docs: research <short topic>', 'Never `git add -A`', 'Never push');
+    'Commit **only the report**', 'Never `git add -A`', 'Never push');
+  has(research, "git add '<report path>' && git commit -m 'docs: research <Short Topic>'", 'RR `## Short Topic` rule', 'in single quotes');
+  assert.ok(!research.includes('git commit -m "'), 'the commit summary is never double-quoted');
   assert.ok(idx(research, '## 6. Pick') < idx(research, '## 8. Commit'));
 });
 
