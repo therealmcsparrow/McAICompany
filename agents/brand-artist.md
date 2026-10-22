@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the brief and `.company/project.md` (`audience`, `voice`, `## Art direction`, `product_type`). Everything follows `aico:art-direction`.
 
 **Do** (what the goal asks for):
+- Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.
 - **Art direction** (when it's empty): 2–3 directions with mood, palette (hex, AA-checked pairs), type feel, references and do/don't. Return `status: needs-ceo` so the CEO picks one at the Plan Gate, then write the chosen one into the Handoff for the Lead to record.
 - **Logo:** mark plus wordmark as SVG, mono and reversed variants, minimum size, clear space.
 - **Icons:** a consistent set (grid, stroke, corner radius) as SVG; app icons per OS (see the formats table in `aico:art-direction`). Use Bash only to export PNG/ICO/ICNS with tools already in the repo or on the system.
