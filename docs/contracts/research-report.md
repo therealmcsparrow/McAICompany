@@ -1,7 +1,14 @@
 # Contract: research-report v1
 
 Provider: `product-manager` (synthesis Step of `aico:research`). Inputs: researcher Handoffs (below). Consumers: the CEO, `aico:feature` and `aico:brainstorm` (accept the report as their request/idea), the success metric (`outcome:`).
-File: `.company/research/YYYY-MM-DD HH.MM - <Short Topic>.md` (local start time; topic ≤ 5 words, Title Case, no `\ / : * ? " < > |`).
+File: `.company/research/YYYY-MM-DD HH.MM - <Short Topic>.md` (local start time; Short Topic rule below).
+Version note: v1, revised 2026-10-22 with the Short Topic allow-list. This is an additive tightening: every topic the allow-list accepts was already valid, and consumers still read report files written before the revision, so the version stays v1.
+
+## Short Topic
+- Pattern (JavaScript, `u` flag): `^[\p{L}\p{N}]+([ -][\p{L}\p{N}]+)*$`. That means Unicode letters, digits, single spaces and single hyphens only, never at the start or end. At most 60 characters and at most 5 space-separated words, in Title Case.
+- A topic that fails → the run slug (`^[a-z0-9]+(-[a-z0-9]+){0,4}$`) is the Short Topic. Never strip or repair a failing topic, and never use it raw.
+- The provider checks the topic before writing the file. The Lead checks it again before any shell command, and builds both the report path and the commit summary from that checked value only, in single quotes: `git add '<report path>' && git commit -m 'docs: research <Short Topic>'`.
+- The frontmatter `topic:` is separate (one English line) and never enters a shell command.
 
 ## Report
 ```markdown
@@ -45,3 +52,4 @@ label: AI-generated research
 ## Error cases
 - A researcher returns `blocked` → the report is still written; that Role's angle goes under `## Open questions` and `confidence` is at most `medium`.
 - No sourced claim backs the verdict → `confidence: low`, and `## Verdict` says the sources were insufficient.
+- Short Topic fails the allow-list → the slug is used (see `## Short Topic`); this is not an error and the run continues.
