@@ -2,6 +2,31 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [0.9.0] - 2026-10-22
+
+Research before you build: three researcher Roles look a topic up online before work starts, and the Product Manager turns the findings into one sourced report. Also a language setting for aico's own output.
+
+After updating, run `/aico:setup` (it installs the `research` skill group) and `/reload-plugins`.
+
+### Added
+- **`/aico:research <topic | project | file> [quick|deep]`** — a read-only Playbook. One form approves the research question, the depth (default deep) and the Roles. The researchers search in parallel, and the Product Manager writes one report: `## Verdict` (go, go-with-conditions or no-go, with confidence), `## What to do` (ranked), `## Low-hanging fruit` (impact and effort), `## Risks`, `## Open questions` and `## Sources`. Every claim cites a source with its URL and check date. A claim without a source is marked `unverified` and cannot back the verdict. The report goes to `.company/research/YYYY-MM-DD HH.MM - <Topic>.md`, labelled AI-generated research. Then you pick: start `/aico:feature`, brainstorm, roadmap or park. Only the report is committed, and nothing is pushed.
+- **Three Roles:** `market-researcher` (demand, competitors, target users, pricing signals, EU flags for legal), `tech-researcher` (feasibility, libraries and APIs, licenses, fit with the repo, effort and risk; it reports facts and never picks the stack) and `design-researcher` (finds and vets UI/UX skills against your stack, Personas and Art direction; recommends at most 5). Researchers write only their own Handoff and never install anything.
+- **Design skills.** `## Design skills` in `.company/project.md` records the approved set: name, source, license, vetted and approved dates. `/aico:feature` runs the design-researcher for a UI product when the set is empty or older than 180 days. Installs run only after you approve the exact commands in a form.
+- **`/aico:language [<tag> [project] | clear [project]]`** — the language aico writes in: Handoff prose, forms, reports, summaries and commit summaries. Your default is stored in `config.json` under `~/.mcsparrow/` (or `MCSPARROW_HOME`). A project override is the `aico_language:` line in `.company/project.md`. With neither set, aico writes English, as before. Machine-read parts stay English in every language: frontmatter, headings, status values, blocking tags, file and folder names, commit types.
+- **`research` skill group** in `deps/skills.json`: `find-skills` (MIT), included in `core`. aico uses it for guidance only; the search itself uses WebSearch and WebFetch.
+- **Checks in `scripts/check.mjs`:** the Role count in the plugin description and docs, every agent listed in `documentation/roles.md` and the spec roster, a `/aico:<name>` entry in `documentation/commands.md` for every Playbook, `Language:` in every dispatch block, and the name and source patterns of skill manifest entries.
+
+### Changed
+- **Roles: 29 to 32.** The three researchers join the company. The hierarchy has a "Market & tech research" department, separate from "User research & testing".
+- **Dispatches carry `Language:`.** The pipeline resolves the language once per run and passes it to every Role, including the Playbooks that skip pipeline setup (brainstorm, cooler, research, triage, help).
+- **`/aico:brainstorm`** accepts a research report. Its close form gains "Research it first".
+- **`/aico:lead` and `/aico:triage`** route research, feasibility and quick-win questions to `/aico:research`.
+- **Five UI Roles** (ui-ux-designer, frontend-engineer, desktop-engineer, game-engineer, brand-artist) load the approved design skills from their dispatch. A skill that is not installed is named under `## Next`.
+- **Development:** `npm test` runs every `scripts/*.test.mjs`. The repo targets Node 24 (`.nvmrc`, `engines`). CI runs with read-only token permissions and pinned action commits. Skill installs need Node 22.20 or later.
+
+### Rollback
+A design-skill install in a product adds `.agents/skills/`, `.claude/skills/<name>` and `skills-lock.json` in that product's repo. To remove a skill, run `npx -y skills@1.7.4 remove <name> -a claude-code` in the product root, then delete its line under `## Design skills`. impeccable uses its own installer, and its uninstall path is not verified.
+
 ## [0.8.1] - 2026-10-22
 
 ### Fixed

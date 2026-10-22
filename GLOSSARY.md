@@ -88,3 +88,13 @@ _Avoid_: orchestrator (use Lead).
 **Cooler** — the `/aico:cooler` Playbook: an unmoderated chat between randomly chosen Roles about the project; colleagues walk up and leave as it goes. Recorded in `.company/cooler/` with an Overheard list; never routed or built. Unlike a Brainstorm, nobody moderates and no outcome is chosen.
 
 **Performance budget** — measurable limits in the Project profile (e.g. LCP, bundle size, startup time, memory, frame time) that QA and the Code Reviewer check against.
+
+**Research run** — one `/aico:research` Playbook run: an approved question, the researchers' Handoffs, one report in `.company/research/` and your pick (feature, brainstorm, roadmap or park). Builds nothing; the only commit is the report.
+
+**Feasibility verdict** — the `## Verdict` of a research report: `go`, `go-with-conditions` or `no-go`, with a confidence (high, medium or low) and a reason. It rests only on sourced claims; without them the confidence is low.
+
+**Low-hanging fruit** — the part of a research report that lists quick wins, each with impact (high, medium, low) and effort (S, M, L), sorted by impact over effort.
+
+**aico language** — `aico_language`: the BCP 47 tag of the language aico writes in (Handoff prose, forms, reports, summaries). Set with `/aico:language`, as your default or per project. Distinct from `languages:`, which lists the product's UI locales. Machine-read parts stay English.
+
+**Design skills** — the approved set of UI/UX skills for one product, at most five, in `## Design skills` of `.company/project.md`. Each line has its source, license, vetted and approval dates. Installed only after you approve the exact commands.

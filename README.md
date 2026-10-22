@@ -1,8 +1,8 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 29 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 32 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 29 Roles, and the concepts the company runs on.
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 32 Roles, and the concepts the company runs on.
 
 ## Install
 ```
@@ -23,6 +23,7 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:fix <bug>` | QA reproduces → engineer fixes test-first → review → Ship |
 | `/aico:launch <product>` | Positioning, copy, release notes, privacy/terms → Ship |
 | `/aico:audit [scope]` | Read-only quality, test, security and license report |
+| `/aico:research <topic\|project\|file> [quick\|deep]` | Before you build: the market, tech and (for UI work) design researchers look it up online, in parallel. You get one sourced report with a verdict, ranked actions and low-hanging fruit. You then pick: feature, brainstorm, roadmap or park. Nothing is built |
 | `/aico:client intake\|handoff` | Client brief, estimate and proposal, or the client handoff package |
 | `/aico:usability-test <target> [real-users]` | Every Persona tests in parallel (walkthrough, hands-on, accessibility) → one report |
 | `/aico:feedback <source>` | Turns user feedback, reviews and support reports into ranked fix and feature proposals you pick from |
@@ -35,6 +36,7 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:pentest <target> [full]` | On demand: the Pentester attacks a local/staging build of **your own** product like a red team, proves findings safely (`full` = real exploit chains), and reports them ranked. No code changes |
 | `/aico:help [command]` | Lists every command, or explains one: its options, their effect, and what it does. `/aico:<command> help` shows the same |
 | `/aico:version` | Shows which aico version is installed and its latest changelog entry |
+| `/aico:language [<tag> [project] \| clear [project]]` | Shows or sets the language aico writes in (reports, forms, Handoff prose). Your default applies everywhere; `project` overrides it for one product. Machine-read parts stay English |
 | `/aico:vulnscan` | On demand: the Vulnerability Scanner checks your dependencies and code against CVE/NVD, OSV, GitHub Advisories and CISA KEV; Critical/High come to you, safe fixes come as a ready upgrade set |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
@@ -49,6 +51,7 @@ flowchart TD
   Lead --> Eng["Engineering"]
   Lead --> Design["Design & Art"]
   Lead --> Quality["Quality & Security"]
+  Lead --> MTR["Market & tech research"]
   Lead --> Research["User research & testing"]
   Lead --> Content["Content & Growth"]
   Lead --> Support
@@ -58,6 +61,7 @@ flowchart TD
   Arch --> SE["senior-engineer"] & BE["backend-engineer"] & FE["frontend-engineer"] & DE["desktop-engineer"] & AI["ai-data-engineer"] & GE["game-engineer"] & DO["devops"]
   Design --> UX["ui-ux-designer"] & BA["brand-artist"] & MA["motion-artist"] & GA["game-artist"] & PA["prompt-artist"]
   Quality --> CR["code-reviewer"] & QA["qa"] & SEC["security"] & PEN["pentester (on demand)"] & VSC["vuln-scanner (on demand)"]
+  MTR --> MR["market-researcher"] & TR["tech-researcher"] & DR["design-researcher"]
   Research --> UR["ux-researcher"] & PT["persona-tester"] & HT["hands-on-tester"] & AT["accessibility-tester"]
   Content --> WR["writer"] & MK["marketer"] & LO["localizer"]
   Support --> SU["support"]
@@ -67,9 +71,9 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, pentester, vuln-scanner, product-manager | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher | writer, localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, vuln-scanner, product-manager, tech-researcher, design-researcher | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher | writer, localizer, prompt-artist |
 
-Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager and support never edit source. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all three researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
@@ -85,6 +89,7 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 ## Customize
 - Company facts and the three Voice presets (clear, bold, technical): `company/PROFILE.md`
 - Missing stack skills: `find-skills`, then add a group to `deps/skills.json`.
+- Language aico writes in: `/aico:language` sets your default; `/aico:language <tag> project` overrides it for one product (`aico_language:` in `.company/project.md`). Product UI strings follow `languages:` instead.
 - Rule library shared by all projects on this machine: `~/.mcsparrow/standards/` (make it a git repo to sync it). Each product commits copies of the packs it uses in `.company/standards/`.
 
 ## Maintain

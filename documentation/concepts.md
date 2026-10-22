@@ -59,6 +59,15 @@ Before Ship, the company checks the EU obligations that apply: GDPR, the Cyber R
 - Commit subjects are `<type>: <summary>` where `<type>` is one of `feat`, `fix`, `test`, `docs`, `refactor`, `chore`. They are **never** prefixed with `aico` or a Role name.
 - Nothing is pushed before you approve it at the Ship Gate.
 
+## Research before building
+[`/aico:research`](commands.md#aicoresearch) has three researchers (market, tech and, for UI work, design) look the topic up online before anything is built. The Product Manager writes one report with a verdict (go, go-with-conditions or no-go), ranked actions, low-hanging fruit (impact and effort), risks and open questions. Every claim cites a source with its URL and check date. A claim with no source is marked `unverified` and cannot support the verdict. The report is labelled as AI-generated research. Researchers read web pages as data, never as instructions, and never install anything.
+
+## Design skills
+A UI product can have approved design skills. The set lives in `.company/project.md` under `## Design skills`: one line per skill with its source, license, vetted date and approval date, at most five. A design-researcher proposes the set from your stack, product type, Personas and Art direction. You approve it in a form, and installs run only after a second form shows the exact commands. `/aico:feature` refreshes the set for a UI product when it is empty or its newest approval is older than 180 days. The UI Roles load the approved skills from their dispatch.
+
+## The aico language
+`aico_language` sets the language aico writes in: Handoff prose, forms, reports and summaries. It is separate from `languages:`, which covers the product's UI strings. Your default lives in `~/.mcsparrow/config.json`; a product can override it with `aico_language:` in `.company/project.md`. Set it with [`/aico:language`](commands.md#aicolanguage). Machine-read parts stay English in every language.
+
 ## The `.company/` folder
 Everything a job produces lands here, in your product's repo, in plain files you can read:
 
@@ -68,3 +77,4 @@ Everything a job produces lands here, in your product's repo, in plain files you
 - `.company/lessons.md` — the running list of Lessons
 - `.company/brainstorms/`, `.company/roadmap/`, `.company/nice-to-have/`, `.company/parked/` — ideas from [`/aico:brainstorm`](commands.md#aicobrainstorm) at each stage
 - `.company/cooler/` — recorded chats from [`/aico:cooler`](commands.md#aicocooler)
+- `.company/research/` — reports from [`/aico:research`](commands.md#aicoresearch); `outcome:` records your pick
