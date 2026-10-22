@@ -15,6 +15,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 3. **Branch**: `aico/<slug>`. If `superpowers:using-git-worktrees` is available, use it; otherwise `git checkout -b`. Never work on main.
 4. **Company profile**: the plugin root is two folders above this skill's base directory (shown when the skill loads). Resolve `<plugin root>/company/PROFILE.md` to an absolute path once and pass it in every dispatch. Don't paste its contents.
 5. **Lessons:** if `.company/lessons.md` exists, read it; put the lines relevant to a Role in that Role's Goal (max 3).
+6. **Language (§1.6)**: resolve the writing language once per run. From the product root run `node <plugin root>/scripts/language.mjs` (fixed command, no arguments) and take the text before the tab as `<tag>`. Exit not 0, no output or a tag that doesn't match `^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$` (≤ 35 chars) → use `en`. Pass it in every dispatch as `Language:`; never re-resolve mid-run, never paste any other config text. Your own forms, Gate summaries and replies are written in `<tag>`; with `en` nothing changes.
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:
@@ -28,14 +29,17 @@ Base commit: <sha the Step's range is cut from; reviewers diff against it>
 Risk tier: <low | medium | high from the Brief; forced high for auth, payments, personal data, migrations or a Contract change>
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
+Language: <tag from Setup §1.6>
+Design skills: <names | none>   # only ui-ux-designer, frontend-engineer, desktop-engineer, game-engineer, brand-artist
 Follow aico:handoff.
 ```
+`Design skills:` lists the names in `.company/project.md` `## Design skills`, or `none` when empty or absent. Omit the line for every other Role.
 
 - **Input Handoffs = only what this Role needs.** Usually that's the brief plus the Architect's Handoff. Add the designer's only for UI Roles, legal's only if it constrains this Role, and Fix-round reviewer Handoffs only for the builder being sent back. Don't restate their contents in Goal; the Role reads them.
 - **Builders** (and devops) also get the Senior Engineer's Handoff: its `## Rules per task` is what they follow (`aico:ruleset`).
 - **Parallel by default.** Roles with no dependency between them are dispatched **in parallel in one message** (architect ∥ ui-ux-designer, reviewer ∥ qa ∥ security, and every builder whose Contracts are settled and whose Modules don't depend on each other). Sequence only where one Step consumes another's output. When in doubt, the Architect's Module map says which Modules are independent.
 - **Pre-filter before the reviewers.** Before dispatching the Code Reviewer (and in the audit lane), run `npm run check` (or the product's `aico-check`) over the diff and pass its output to the reviewer as input. It is **deterministic and additive only**: it appends tagged findings, it never closes a review, never emits `status: done`, and a pre-filter block does **not** consume a Fix round. Only the reviewer closes a review.
-- After each Step, commit **only that Step's files**: its Handoff plus the paths under its `## Did`. Run `git add <those paths> && git commit -m "<type>: <one-line summary>"`, with `<type>` one of `feat`, `fix`, `test`, `docs`, `refactor`, `chore` by what changed. Never commit with an `aico` or Role prefix or scope (no `aico:`, `aico/`, `[builder]`, `senior-engineer:` and the like): the subject starts with the `<type>` only. Parallel Steps get one commit each, in turn. Never `git add -A`, because it bundles Steps and picks up strays like `.env`.
+- After each Step, commit **only that Step's files**: its Handoff plus the paths under its `## Did`. Run `git add <those paths> && git commit -m "<type>: <one-line summary>"`, with `<type>` one of `feat`, `fix`, `test`, `docs`, `refactor`, `chore` by what changed. Never commit with an `aico` or Role prefix or scope (no `aico:`, `aico/`, `[builder]`, `senior-engineer:` and the like): the subject starts with the `<type>` only. The `<type>` stays English; the summary after it is written in `Language:`. Parallel Steps get one commit each, in turn. Never `git add -A`, because it bundles Steps and picks up strays like `.env`.
 - `status: blocked` → fix the cause (missing input, wrong Role) and re-dispatch. Don't do the work yourself.
 - `status: needs-ceo` → ask the CEO now in a form (the Role's question, its options as choices), write the answer into the next dispatch.
 - `status: handover` → the Role hit the 150k context budget (`aico:handoff`). Commit its files, then dispatch a **fresh** Step of the same Role (next `NN`), same Round, Base commit and Risk tier, with the original Input Handoffs plus the handover Handoff, and Goal "continue from `<handover path>` `## Next`". It doesn't consume a Fix round. Reviewers treat the chain as one Step: the last link's Handoff closes it.
