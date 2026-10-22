@@ -268,7 +268,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 2. They speak one line at a time, replying to each other. Now and then a random colleague walks up (more likely when the talk is in their field) or someone heads back to their desk; 2–5 are there at once.
 3. It ends in one of three ways: **natural** (default — when nobody has anything new to say, or after 20 turns), **`turns=N`** (after N turns), or **`listen`** (every 4 turns you're asked: keep listening, chime in, or stop). No Gates.
 
-**You get.** `.company/cooler/YYYYMMDD-HHMM-topic.md` with the whole chat and an **Overheard** list of the ideas, problems and worries raised. Nothing is built or routed; take anything further with `/aico:brainstorm "<file>"` or `/aico:lead`.
+**You get.** `.company/cooler/YYYYMMDD-HHMM-topic.md`: an **Overheard** list (ideas, problems, worries and questions, each with who raised it), then the chat written as a movie script: scenes per subject, stage directions for who walks up or leaves, each speaker's name in capitals above their line, ending in FADE OUT. The terminal shows only the file path and who was there. Nothing is built or routed; take anything further with `/aico:brainstorm "<file>"` or `/aico:lead`.
 
 **Example.** `/aico:cooler` · `/aico:cooler our flaky CI listen` · `/aico:cooler pricing turns=12`
 

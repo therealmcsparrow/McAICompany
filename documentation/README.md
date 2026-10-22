@@ -22,7 +22,7 @@ Reference material lives alongside these guides:
 
 ## Version
 
-**Current: 0.8.0** (29 Role agents).
+**Current: 0.8.1** (29 Role agents).
 
 Update an installed copy with:
 
@@ -33,6 +33,7 @@ Update an installed copy with:
 
 ### What's new
 
+- **0.8.1** — [`/aico:cooler`](commands.md#aicocooler) chats are written as a movie script (scenes, stage directions, speaker cues), and the Overheard list is saved in the file instead of shown on screen.
 - **0.8.0** — [`/aico:cooler`](commands.md#aicocooler): random colleagues chat at the water cooler, unmoderated, and it is recorded in `.company/cooler/`; plus [`/aico:help`](commands.md#aicohelp) (also `/aico:<command> help`) and [`/aico:version`](commands.md#aicoversion).
 - **0.7.0** — Streamlining the company's own workflow: a machine-readable [Handoff Contract](concepts.md#the-handoff-contract), [`/aico:triage`](commands.md#aicotriage) routing, parallel-by-default dispatch, risk-tiered testing, a deterministic reviewer pre-filter, plugin CI, and warm rule packs. No new Roles.
 
