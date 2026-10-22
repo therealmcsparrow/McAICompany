@@ -15,7 +15,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 3. **Branch**: `aico/<slug>`. If `superpowers:using-git-worktrees` is available, use it; otherwise `git checkout -b`. Never work on main.
 4. **Company profile**: the plugin root is two folders above this skill's base directory (shown when the skill loads). Resolve `<plugin root>/company/PROFILE.md` to an absolute path once and pass it in every dispatch. Don't paste its contents.
 5. **Lessons:** if `.company/lessons.md` exists, read it; put the lines relevant to a Role in that Role's Goal (max 3).
-6. **Language (§1.6)**: resolve the writing language once per run. From the product root run `node <plugin root>/scripts/language.mjs` (fixed command, no arguments) and take the text before the tab as `<tag>`. Exit not 0, no output or a tag that doesn't match `^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$` (≤ 35 chars) → use `en`. Pass it in every dispatch as `Language:`; never re-resolve mid-run, never paste any other config text. Your own forms, Gate summaries and replies are written in `<tag>`; with `en` nothing changes.
+6. **Language (§1.6)**: resolve the writing language once per run. From the product root run `node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"` (fixed command, no arguments) and take the text before the tab as `<tag>`. Exit not 0, no output or a tag that doesn't match `^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$` (≤ 35 chars) → use `en`. Pass it in every dispatch as `Language:`; never re-resolve mid-run, never paste any other config text. Your own forms, Gate summaries and replies are written in `<tag>`; with `en` nothing changes.
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:

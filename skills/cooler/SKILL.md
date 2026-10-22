@@ -73,7 +73,7 @@ people: backend-engineer, ui-ux-designer, …   # everyone who was there at any 
 1. Parse the arguments: `turns=N` → **turns** mode (end after N turns); `listen` → **listen** mode; neither → **natural**. The rest is the topic (may be empty).
 2. Read `.company/project.md`, `.company/lessons.md` and the latest few files in `.company/roadmap/` and `.company/cooler/` (any that exist), so you can brief the colleagues on what's going on.
 3. Pick **2–3 Roles at random** from the agent names in `<plugin root>/agents/` (plugin root = two folders above this skill's base directory). Use real randomness, e.g. `node -e "const a=process.argv.slice(1);console.log(a.sort(()=>Math.random()-.5).slice(0,3).join(' '))" <names…>`; never choose by relevance.
-4. Resolve the language once per `aico:pipeline` Setup §1.6 (`node <plugin root>/scripts/language.mjs`, first field; anything invalid or failing → `en`). Everything you write in the file and to the CEO (logline, action lines, Overheard, summary) uses it; the file's frontmatter keys, `##` headings, `SCENE`/`INT.`/`FADE OUT.` script words and Role-name cues stay English.
+4. Resolve the language once per `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; anything invalid or failing → `en`). Everything you write in the file and to the CEO (logline, action lines, Overheard, summary) uses it; the file's frontmatter keys, `##` headings, `SCENE`/`INT.`/`FADE OUT.` script words and Role-name cues stay English.
 5. Create the file with the title, logline and Scene 1 (heading and opening action line). Tell the CEO in one line: who's there, the topic (or "open chat"), the mode, and the file path.
 
 ## 2. Turns
