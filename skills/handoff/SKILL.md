@@ -64,3 +64,10 @@ files-touched: [src/x.ts]    # files this Step changed, for affected-only tests 
 - Optional sections, only when `aico:ruleset` asks for them: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old rule violations), placed before `## Next`.
 - Keep it under ~60 lines. Link to files; don't paste code.
 - Your final reply to the Lead is one line: `<status> — <output path>`.
+
+## Language
+Your dispatch carries `Language: <tag>`. Write the prose in `<tag>`: Handoff text, forms, Gate summaries, digests, reports, lessons, cooler lines, brainstorm replies. Commit subjects are `<type>: <summary in tag>`.
+- **Always English** (machine-read): frontmatter keys and values, `##` headings, `status:` values, blocking tags `contract|spec|security|test`, AC IDs, file and folder names, slugs, branches, command, Role and Contract names, report `## ` headings. Example: `## Did` stays, the bullets under it are in `<tag>`.
+- **Code comments** you write: in `<tag>`, unless the product's Ruleset or the existing comments in that codebase use another language; then follow the codebase. Identifiers, code, log keys and API names stay code. Product UI and user docs follow `languages:` in `.company/project.md`, never `Language:`.
+- `Language:` absent → `en`. Value not a valid tag → `en`, and add a Nit `invalid Language <value>` (never echo more than 35 characters). `en` → no translation, no extra text.
+- `Design skills:` (UI Roles only): load each named skill with the Skill tool. One that isn't available → `missing design skill: <name>` under `## Next`; never skip silently. Absent → `none`.

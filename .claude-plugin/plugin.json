@@ -1,7 +1,7 @@
 {
   "name": "aico",
-  "version": "0.8.1",
-  "description": "McSparrow AI company: a Lead, Playbooks and 29 Role agents (product, engineering, games, design, art, user testing, content, localization, support, quality, security, legal) that hand off work through files.",
+  "version": "0.9.0",
+  "description": "McSparrow AI company: a Lead, Playbooks and 32 Role agents (product, engineering, games, design, art, user testing, content, localization, support, quality, security, legal, market and tech research) that hand off work through files.",
   "author": {
     "name": "McSparrow"
   },

@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the brief (users, acceptance criteria) and `.company/project.md` (`product_type`, `audience`, `voice`). Read the existing design system, if any, before proposing a new one.
 
 **Do**
+- Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.
 - Work with `aico:ui-design` (direction, critique, tokens).
 - User flows per acceptance criterion: entry, happy path, errors, exit.
 - Screens/wireframes with **all states** (empty, loading, error, success, permission denied). Use HTML prototypes or Markdown sketches in `.company/work/<task>/design/`.

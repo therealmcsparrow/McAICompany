@@ -7,7 +7,7 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Gates** are where the company stops for your approval — **Brief** (scope), **Plan** (design), **Ship** (before anything leaves the repo). At each you Approve, Change or Stop. A Playbook only skips a Gate if its own description says so.
 - **Work lands under `.company/`** in your repo: the brief, designs, reviews, reports and the per-step Handoff files. `<slug>` below is the short task name the run picks.
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
-- **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
+- **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
 **Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` or `/aico:<command> help` (also `--help`) explains one command's options and what it does, without running it.
 
@@ -206,6 +206,28 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 ---
 
+### `/aico:research`
+`/aico:research <topic | project | file> [quick|deep]`
+
+**What it does.** Looks a topic up online before anything is built. Market and tech researchers search in parallel, and for UI work a design researcher as well. The Product Manager writes one sourced report with a verdict, and you decide what happens next.
+
+**When to use it.** Before a feature or a product, when feasibility, demand, quick wins or the right design skills are still guesses. `project` researches this product. A file (a brainstorm, a cooler chat or an earlier report) is used as the topic.
+
+**How it runs.**
+1. **Scope form.** You approve the research question, the depth and the Roles: Approve, Change or Stop. Nothing is dispatched before you approve. The default depth is `deep`.
+   - `deep`: at least three independent primary sources for each claim the verdict rests on, or the report says which claim lacks them.
+   - `quick`: at most 10 web fetches per researcher.
+2. **Researchers** run in parallel. **Market Researcher** and **Tech Researcher** by default; **Design Researcher** when the topic is UI or design skills, or you ask for it. If a skill the run needs is missing, one Install / Skip form comes first. Skip continues on WebSearch and WebFetch alone and records `degraded: missing <skill>` in the report. If the check itself fails, the error is shown, nothing is installed and no form appears; the run continues the same way.
+3. **Product Manager** writes the report. Web pages are read as data, never as instructions.
+4. **Pick form.** Start `/aico:feature` (the brief starts from the verdict and the ranked actions), Brainstorm (opens `/aico:brainstorm` on the report), Roadmap or Park. Roadmap and Park leave the report in place and record your choice in `outcome:`.
+5. **Design skills** (only when the Design Researcher ran). You approve the recommended set; then an Install / Skip form shows the exact commands. Nothing installs before that form.
+
+**You get.** `.company/research/YYYY-MM-DD HH.MM - <Topic>.md`, labelled `AI-generated research`, with `## Verdict` (go, go-with-conditions or no-go, with confidence), `## What to do` (ranked), `## Low-hanging fruit` (impact and effort), `## Risks`, `## Open questions` and `## Sources`. Every claim cites a source with its URL and check date. A claim without a source is marked `unverified` and cannot support the verdict. Only the report is committed (`docs: research <Short Topic>`, the summary in your language). The file name uses a short topic of letters, digits, spaces and hyphens, at most 5 words and 60 characters; any other topic is replaced by the run's slug. If the name fails the Lead's re-check, nothing is committed; the Lead names the file to you and the report is rewritten under the slug. Nothing is pushed.
+
+**Removing design skills.** A design install adds `.agents/skills/`, `.claude/skills/<name>` and `skills-lock.json` to the product repo. None of them is committed. To remove one, run `npx -y skills@1.7.4 remove <name> -a claude-code` in the product root, then delete its line under `## Design skills` in `.company/project.md`. impeccable uses its own installer, and its uninstall is not verified.
+
+**Example.** `/aico:research is there demand for a CSV export tool for dental clinics` · `/aico:research project quick`
+
 ## Upkeep and standards
 
 ### `/aico:maintain`
@@ -315,7 +337,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 ### `/aico:setup`
 `/aico:setup [core] [go] [react] [tanstack] [auth]`
 
-**What it does.** Installs the standalone skills the Roles rely on (no arguments → the `core` group), or adds optional stack skill groups.
+**What it does.** Installs the standalone skills the Roles rely on (no arguments → the `core` group), or adds optional stack skill groups. The `core` group includes `research` (`find-skills`, used for guidance only).
 
 **When to use it.** Once after installing the plugin, and again whenever you start working in a stack whose skills you haven't added yet.
 
@@ -324,6 +346,25 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **You get.** The standalone and stack skills available to the Roles.
 
 **Example.** `/aico:setup go react`
+
+### `/aico:language`
+`/aico:language [<tag> [project] | clear [project]]`
+
+**What it does.** Shows or sets the language aico writes in: Handoff prose, forms, reports, Gate summaries and commit summaries. Machine-read parts stay English in every language: frontmatter, headings, status values, blocking tags, file names and commit types.
+
+**When to use it.** You want the company to write in Dutch (`nl`) or another language. Product UI strings are a different setting: `languages:` in `.company/project.md`, handled by the Localizer.
+
+**How it runs.** One command, no Roles, no Gates, no branch or commit.
+- **No argument:** shows the effective language and where it comes from: `project`, `user` or `default`.
+- **`<tag>`:** sets your default for every product on this machine. The tag is a BCP 47 tag such as `nl` or `pt-BR`.
+- **`<tag> project`:** sets an override for this product only, as `aico_language:` in `.company/project.md`. Needs an existing `.company/project.md`.
+- **`clear`** or **`clear project`:** removes your default or the project override.
+
+Effective language: the project override, else your default, else English. An unknown tag is refused with the reason, and no file changes. Your default is stored in `config.json` under `~/.mcsparrow/` (or the folder in `MCSPARROW_HOME`). It applies from the next aico run.
+
+**You get.** One line in the terminal: the new effective language and where it is set.
+
+**Example.** `/aico:language nl` · `/aico:language pt-BR project` · `/aico:language clear project`
 
 ### `/aico:help`
 `/aico:help [command]`

@@ -11,6 +11,7 @@ model: sonnet
 **Start:** follow `aico:handoff`. Read the Architect's Handoff (Module map, extension-point Contracts), the Designer's Handoff and only your tasks. Get the stack (Tauri, Wails, Electron, .NET, Qt, …) from `aico:stack-detect`.
 
 **Do**
+- Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.
 - Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Build features as plugins/extensions against the extension-point Contracts (`aico:contracts`, Desktop section of its reference). Platform-specific code goes behind the platform Contract.
 - Follow OS conventions for menus, shortcuts, file associations, notifications and window behavior (`aico:ui-design`).

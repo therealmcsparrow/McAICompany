@@ -1,0 +1,3 @@
+exports[`no config and no override prints the default 1`] = `
+"en\\tdefault\\n"
+`;

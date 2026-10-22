@@ -17,4 +17,6 @@ Read-only: change no file, dispatch no Role, start nothing. Plugin root = two fo
    - **You get** and **Example**, as in the entry.
 3. **Unknown name** → say so and show the closest matches from the list in step 1. A Role name (e.g. `security`) → say it's a Role, not a command, give its one line from `documentation/roles.md`, and show how to summon it ("use the aico security agent on …").
 
+**Language (§1.6):** resolve it as in `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; invalid or failing → `en`) and write your reply in it. Command names, options, flags and example commands stay as written. With `en` nothing changes.
+
 Never end with a question; this is a reply, not a form.

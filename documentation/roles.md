@@ -1,6 +1,6 @@
 # Roles
 
-The company has **29 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
+The company has **32 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
 
 Each Role runs on a model matched to its work — **Opus** for the roles that reason hardest (architecture, review, security, product strategy), **Sonnet** for most building and testing, **Haiku** for mechanical content work.
 
@@ -9,6 +9,15 @@ Each Role runs on a model matched to its work — **Opus** for the roles that re
 |---|---|---|
 | **product-manager** | opus | Turns a request into a brief: problem, users, scope, acceptance criteria. Decides *what* and *why*, never *how*. |
 | **account-manager** | sonnet | Client intake, proposals, estimates, status reports and handoff letters. |
+
+## Market & tech research
+| Role | Model | What it's for |
+|---|---|---|
+| **market-researcher** | sonnet | Researches demand, competitors, target users, pricing signals and EU flags for an idea, from public sources with a URL and date for each claim. |
+| **tech-researcher** | opus | Checks feasibility: libraries and APIs, their licenses and maintenance, fit with the repo, effort and risk. Reports facts; never picks the stack. |
+| **design-researcher** | opus | Finds and vets UI/UX and design skills that fit your stack, product type, Personas and Art direction, judges the installed ones, and recommends at most 5. Never installs. |
+
+The three researchers run in parallel inside [`/aico:research`](commands.md#aicoresearch). The Product Manager writes the report from their Handoffs. The design-researcher also runs in [`/aico:feature`](commands.md#aicofeature) for UI products whose design skills are missing or stale.
 
 ## Engineering
 | Role | Model | What it's for |
@@ -63,7 +72,7 @@ Each Role runs on a model matched to its work — **Opus** for the roles that re
 
 ## Who may edit code
 
-Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager and support never edit source.** The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
+Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the three researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
 
 ## The two on-demand security Roles
 

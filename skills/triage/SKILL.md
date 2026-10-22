@@ -11,14 +11,15 @@ argument-hint: <request>
 
 A fast pre-router. It builds nothing and dispatches no Role; it ends by recommending a route the CEO approves. Use it when a request's size or risk is unclear, or as the first step of `aico:lead`.
 
+0. Resolve the language once (`aico:pipeline` §1.6) and use it for your reply and form; triage dispatches no Role.
 1. Read `.company/project.md` (stack, product type, approved Core) and the request. Classify:
    - **Size:** XS (one-line / copy / config) · S (one Module, no Contract change) · M (several Modules) · L (new product or Core/Contract change).
    - **Risk tier:** `low | medium | high` — forced **high** for anything touching auth, payments, personal data, migrations or a Contract (`aico:handoff`).
-   - **Type:** feature · bug · refactor · launch · audit · incident · upkeep · content.
+   - **Type:** feature · bug · refactor · launch · audit · incident · upkeep · content · research (find out online first: feasibility, market, quick wins, design skills).
 
 2. Recommend the **shortest valid route**, never shorter than the risk allows:
    - XS + low, no Contract/Core, no security surface → a direct Lead route (the one builder, then one reviewer) via `aico:lead`.
-   - bug → `aico:fix` · refactor → `aico:refactor` · go public → `aico:launch` · assess → `aico:audit` · outage/security event → `aico:incident` · upkeep → `aico:maintain` · otherwise a feature → `aico:feature`.
+   - bug → `aico:fix` · refactor → `aico:refactor` · go public → `aico:launch` · assess → `aico:audit` · outage/security event → `aico:incident` · upkeep → `aico:maintain` · research → `aico:research` · otherwise a feature → `aico:feature`.
    - **Risk overrides size:** any `high`-risk item keeps the full reviewer lane (code-reviewer ∥ qa ∥ security) and every Gate, however small. Triage shortens ceremony, never oversight.
 
 3. Present one line to the CEO: size, risk tier, type, and the recommended route with the Gates it keeps. **→ Brief Gate** (a form: Approve / Change / Stop). On approve, hand straight to the chosen Playbook or `aico:lead` route; the risk tier travels into every dispatch.

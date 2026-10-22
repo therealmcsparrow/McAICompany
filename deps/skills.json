@@ -7,7 +7,11 @@
     { "name": "frontend-ui-engineering", "source": "addyosmani/agent-skills" },
     { "name": "security-and-hardening", "source": "addyosmani/agent-skills" },
     { "name": "security-review", "source": "getsentry/skills" },
-    { "name": "auth-implementation-patterns", "source": "wshobson/agents" }
+    { "name": "auth-implementation-patterns", "source": "wshobson/agents" },
+    { "include": "research" }
+  ],
+  "research": [
+    { "name": "find-skills", "source": "vercel-labs/skills", "license": "MIT", "vetted": "2026-10-22" }
   ],
   "go": [
     { "name": "golang-*", "source": "samber/cc-skills-golang" }
