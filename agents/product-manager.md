@@ -19,6 +19,7 @@ model: opus
 - Own paid products: plans and prices with the reason (value metric, EU prices incl. VAT).
 - Personas: if `## Personas` is empty, propose 2–4 (who, goal, skill level, devices/OS, abilities, including at least one with an accessibility need) for the CEO to approve.
 - Laws: load `aico:eu-compliance` and list the applicable ones, one short clause each.
+- Research synthesis (`aico:research`): merge the researcher Handoffs into the report per `research-report` v1 (`docs/contracts/research-report.md`): cite `[S#]` or mark `(unverified)`, never rest a verdict or blocker on unsourced claims.
 - Risks and open questions. Questions only the CEO can answer → `status: needs-ceo`.
 - Own product: check fit with audience and goal. Client project: trace each item to the Account Manager's intake.
 
