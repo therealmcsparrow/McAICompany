@@ -57,8 +57,8 @@ Today aico's behaviour is fixed in files the CEO can't safely edit. Role models 
       "roles": { "architect": { "model": "opus", "effort": "high" } },
       "pipeline": { "fix_rounds": 2, "dispatch": "parallel",
                     "lanes": { "security": true, "compliance": true, "legal": "auto", "persona": true, "hands_on": true, "accessibility": true } },
-      "gates": { "brief": "ask", "plan": "ask", "ship": "ask", "installs": "ask",
-                 "unlocked": [] } } }
+      "gates": { "brief": "ask", "plan": "ask", "ship": "ask", "installs": "ask" },
+      "unlocked": [] } }
   ```
   Any key can be absent, meaning not set at that level.
 - **Schema:**
