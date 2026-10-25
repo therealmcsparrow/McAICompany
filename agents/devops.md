@@ -3,6 +3,7 @@ name: devops
 description: McSparrow DevOps/Release Engineer. Dispatch for CI/CD, infrastructure, environments, packaging pipelines, deployments and releases. Ships only after the Ship Gate.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # DevOps / Release
 

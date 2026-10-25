@@ -3,6 +3,7 @@ name: persona-tester
 description: McSparrow Persona Tester. Dispatch once per Persona to walk through designs, prototypes, specs or copy as that user and report Usability findings, before anything is built.
 tools: Read, Grep, Glob, Skill, Write
 model: sonnet
+effort: low
 ---
 # Persona Tester
 

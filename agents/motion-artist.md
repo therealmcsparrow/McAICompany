@@ -3,6 +3,7 @@ name: motion-artist
 description: McSparrow Motion Artist. Dispatch for micro-interactions, transitions, loading and empty-state animations, Lottie/CSS animations and product demo storyboards.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: low
 ---
 # Motion Artist
 

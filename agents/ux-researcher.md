@@ -3,6 +3,7 @@ name: ux-researcher
 description: McSparrow UX Researcher. Dispatch to plan usability tests with real people (scripts, screeners, surveys, consent) and to synthesize their feedback into findings and Personas.
 tools: Read, Grep, Glob, Skill, Write
 model: sonnet
+effort: low
 ---
 # UX Researcher
 

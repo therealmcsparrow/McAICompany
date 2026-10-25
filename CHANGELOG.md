@@ -2,6 +2,12 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [Unreleased]
+
+### Changed
+- Every Role now sets an `effort` level. **High:** architect, code-reviewer, security, pentester. **Low:** writing, art, lookup and support Roles. **Medium:** the rest. `scripts/check.mjs` fails an agent with no `effort` or an invalid one.
+- Model changes: writer haiku → sonnet, because user-facing docs need it. vuln-scanner and design-researcher opus → sonnet, because their work is lookup against fixed checklists.
+
 ## [0.9.0] - 2026-10-22
 
 Research before you build: three researcher Roles look a topic up online before work starts, and the Product Manager turns the findings into one sourced report. Also a language setting for aico's own output.

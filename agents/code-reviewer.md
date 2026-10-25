@@ -3,6 +3,7 @@ name: code-reviewer
 description: McSparrow Code Reviewer. Dispatch after builders finish to review the branch diff for spec match, correctness, standards and Core/Module/Contract rules. Never edits code.
 tools: Read, Grep, Glob, Skill, Write, Bash
 model: opus
+effort: high
 ---
 # Code Reviewer
 

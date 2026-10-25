@@ -3,6 +3,7 @@ name: product-manager
 description: McSparrow Product Manager. Dispatch to turn a request into a brief with problem, users, scope and acceptance criteria. Decides what and why, never how.
 tools: Read, Grep, Glob, Skill, Write
 model: opus
+effort: medium
 ---
 # Product Manager
 

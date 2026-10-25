@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
+const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 function frontmatter(text) {
   const lines = text.split(/\r?\n/);
@@ -97,7 +98,7 @@ function checkManifest(root, errors) {
 }
 
 // Role count in the plugin description and docs, and every agent listed in roles.md and the spec roster.
-function checkRoleCounts(root, roleNames, errors) {
+function checkRoleCounts(root, roleNames, errors, roleFm = new Map()) {
   if (!roleNames.size) return;
   const n = roleNames.size;
   const files = ['.claude-plugin/plugin.json', 'README.md', 'documentation/README.md', 'documentation/roles.md', 'docs/spec.md'];
@@ -113,6 +114,13 @@ function checkRoleCounts(root, roleNames, errors) {
   if (existsSync(rolesDoc)) {
     const t = readFileSync(rolesDoc, 'utf8');
     for (const a of roleNames) if (!t.includes(`**${a}**`)) errors.push(`ERROR documentation/roles.md: Role ${a} missing`);
+    for (const line of t.split(/\r?\n/)) {
+      const m = line.match(/^\|\s*\*\*([a-z-]+)\*\*[^|]*\|\s*(\w+)\s*\|\s*(\w+)\s*\|/);
+      const fm = m && roleFm.get(m[1]);
+      if (!fm) continue;
+      if (fm.model && m[2] !== fm.model) errors.push(`ERROR documentation/roles.md: ${m[1]} model ${m[2]} != ${fm.model}`);
+      if (fm.effort && m[3] !== fm.effort) errors.push(`ERROR documentation/roles.md: ${m[1]} effort ${m[3]} != ${fm.effort}`);
+    }
   }
   const spec = join(root, 'docs', 'spec.md');
   if (existsSync(spec)) {
@@ -123,7 +131,7 @@ function checkRoleCounts(root, roleNames, errors) {
 
 export function check(root) {
   const errors = [], warnings = [], names = new Set(), units = [], playbooks = [];
-  const skillNames = new Set(), agentNames = new Set();
+  const skillNames = new Set(), agentNames = new Set(), agentFm = new Map();
   const skillsDir = join(root, 'skills'), agentsDir = join(root, 'agents');
 
   if (existsSync(skillsDir)) for (const dir of readdirSync(skillsDir)) {
@@ -140,11 +148,14 @@ export function check(root) {
     names.add(u.expected);
     (u.kind === 'skill' ? skillNames : agentNames).add(u.expected);
     if (!fm) { errors.push(`ERROR ${rel}: missing frontmatter`); continue; }
+    if (u.kind === 'agent') agentFm.set(u.expected, { model: fm.model, effort: fm.effort });
     if (u.kind === 'skill' && fm['disable-model-invocation'] === 'true') playbooks.push({ rel, name: u.expected, text });
     if (fm.name !== u.expected) errors.push(`ERROR ${rel}: name mismatch (${fm.name} vs ${u.expected})`);
     if (!fm.description) errors.push(`ERROR ${rel}: missing description`);
     else if (fm.description.length > LIMITS.description) errors.push(`ERROR ${rel}: description too long (${fm.description.length} > ${LIMITS.description})`);
     if (u.kind === 'agent' && fm.model && !MODELS.has(fm.model)) errors.push(`ERROR ${rel}: invalid model ${fm.model}`);
+    if (u.kind === 'agent' && !fm.effort) errors.push(`ERROR ${rel}: missing effort`);
+    else if (u.kind === 'agent' && !EFFORTS.has(fm.effort)) errors.push(`ERROR ${rel}: invalid effort ${fm.effort}`);
     const n = lineCount(text), max = LIMITS[u.kind];
     if (n > max) warnings.push(`WARN ${rel}: ${u.kind} ${n} > ${max} lines`);
   }
@@ -194,7 +205,7 @@ export function check(root) {
         errors.push(`ERROR documentation/commands.md: Playbook ${p.name} has no ### /aico:${p.name} entry`);
   }
   checkManifest(root, errors);
-  checkRoleCounts(root, agentNames, errors);
+  checkRoleCounts(root, agentNames, errors, agentFm);
   return { errors: [...new Set(errors)], warnings };
 }
 

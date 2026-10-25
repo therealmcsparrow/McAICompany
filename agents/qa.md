@@ -3,6 +3,7 @@ name: qa
 description: McSparrow QA Tester. Dispatch to reproduce bugs, turn acceptance criteria into tests, write contract tests per Module, and run the suite. Edits test files only.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # QA Tester
 

@@ -3,6 +3,7 @@ name: desktop-engineer
 description: McSparrow Desktop Engineer. Dispatch to build native Windows, Linux and macOS apps as a plugin host plus Modules - OS integration, packaging, signing, installers and auto-update.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # Desktop Engineer
 

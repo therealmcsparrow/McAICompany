@@ -3,6 +3,7 @@ name: marketer
 description: McSparrow Marketer. Dispatch for positioning, messaging, landing and store-page copy, SEO, launch plans and announcement posts, in the project's Voice preset.
 tools: Read, Grep, Glob, Skill, Write, Edit
 model: sonnet
+effort: low
 ---
 # Marketer
 

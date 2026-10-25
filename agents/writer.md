@@ -2,7 +2,8 @@
 name: writer
 description: McSparrow Writer. Dispatch for user docs, getting-started guides, UX copy, release notes, READMEs and client handoff docs, in the project's Voice preset.
 tools: Read, Grep, Glob, Skill, Write, Edit
-model: haiku
+model: sonnet
+effort: low
 ---
 # Writer
 

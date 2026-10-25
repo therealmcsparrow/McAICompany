@@ -21,7 +21,8 @@ function fixture({ skills = {}, agents = {} }) {
   return root;
 }
 const skill = (name, body = 'Body.', desc = 'Use when testing.') => `---\nname: ${name}\ndescription: ${desc}\n---\n${body}\n`;
-const agent = (name, body = 'Body.', model = 'sonnet') => `---\nname: ${name}\ndescription: Dispatch when testing.\ntools: Read\nmodel: ${model}\n---\n${body}\n`;
+const agent = (name, body = 'Body.', model = 'sonnet', effort = 'medium') =>
+  `---\nname: ${name}\ndescription: Dispatch when testing.\ntools: Read\nmodel: ${model}\n${effort ? `effort: ${effort}\n` : ''}---\n${body}\n`;
 
 test('good fixture has no errors', () => {
   const r = check(fixture({ skills: { a: skill('a', 'See aico:b and aico:qa.') , b: skill('b') }, agents: { qa: agent('qa') } }));
@@ -50,7 +51,7 @@ test('unknown aico reference is an error', () => {
 
 test('oversized agent and skill are warnings, not errors', () => {
   const long = n => Array.from({ length: n }, (_, i) => `line ${i}`).join('\n');
-  const r = check(fixture({ skills: { a: skill('a', long(122)) }, agents: { qa: agent('qa', long(45)) } }));
+  const r = check(fixture({ skills: { a: skill('a', long(122)) }, agents: { qa: agent('qa', long(44)) } }));
   assert.ok(r.warnings.some(w => w.includes('agent 51 > 50 lines')), r.warnings.join('\n'));
   assert.ok(r.warnings.some(w => w.includes('skill 126 > 125 lines')), r.warnings.join('\n'));
   assert.deepEqual(r.errors, []);
@@ -59,6 +60,16 @@ test('oversized agent and skill are warnings, not errors', () => {
 test('invalid model is an error', () => {
   const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'gpt4') } }));
   assert.ok(r.errors.some(e => e.includes('invalid model')));
+});
+
+test('invalid effort is an error', () => {
+  const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', 'extreme') } }));
+  assert.ok(r.errors.some(e => e.includes('invalid effort extreme')));
+});
+
+test('missing effort is an error', () => {
+  const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', '') } }));
+  assert.ok(r.errors.some(e => e.includes('missing effort')));
 });
 
 test('skill and agent with the same name is an error', () => {
@@ -212,6 +223,19 @@ test('an agent missing from roles.md or the spec roster is an error', () => {
   const r = check(root);
   assert.ok(r.errors.some(e => e.includes('roles.md: Role support missing')), r.errors.join('\n'));
   assert.ok(r.errors.some(e => e.includes('spec.md: Role support missing')), r.errors.join('\n'));
+});
+
+test('roles.md model or effort that differs from frontmatter is an error', () => {
+  const root = fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', 'medium') } });
+  write(root, 'documentation/roles.md', '| **qa** | opus | medium | x |');
+  let r = check(root);
+  assert.ok(r.errors.some(e => e.includes('documentation/roles.md: qa model opus != sonnet')), r.errors.join('\n'));
+  write(root, 'documentation/roles.md', '| **qa** (lead) | sonnet | high | x |');
+  r = check(root);
+  assert.ok(r.errors.some(e => e.includes('documentation/roles.md: qa effort high != medium')), r.errors.join('\n'));
+  write(root, 'documentation/roles.md', '| **qa** | sonnet | medium | x |');
+  r = check(root);
+  assert.ok(!r.errors.some(e => e.includes('roles.md')), r.errors.join('\n'));
 });
 
 test('package.json test script is a glob, not a list of files', () => {

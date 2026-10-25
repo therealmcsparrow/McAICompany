@@ -10,7 +10,7 @@ const frontmatter = (text) => Object.fromEntries(
   text.split(/\r?\n/).slice(1, text.split(/\r?\n/).indexOf('---', 1))
     .map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
 
-const ROLES = { 'market-researcher': 'sonnet', 'tech-researcher': 'opus', 'design-researcher': 'opus' };
+const ROLES = { 'market-researcher': 'sonnet', 'tech-researcher': 'opus', 'design-researcher': 'sonnet' };
 const TOOLS = ['Read', 'Grep', 'Glob', 'Skill', 'Write', 'Bash', 'WebSearch', 'WebFetch'];
 
 for (const [role, model] of Object.entries(ROLES)) {

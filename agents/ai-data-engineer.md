@@ -3,6 +3,7 @@ name: ai-data-engineer
 description: McSparrow AI/Data Engineer. Dispatch to build LLM features, retrieval, data pipelines and analytics as Modules behind Contracts, with evals and privacy in mind.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # AI / Data Engineer
 

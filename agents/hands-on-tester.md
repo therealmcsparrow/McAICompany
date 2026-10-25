@@ -2,6 +2,7 @@
 name: hands-on-tester
 description: McSparrow Hands-on Tester. Dispatch once per Persona to use the running web or desktop app for real through a browser or computer-use tools, and report Usability findings with screenshots.
 model: sonnet
+effort: medium
 ---
 # Hands-on Tester
 

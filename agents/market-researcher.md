@@ -3,6 +3,7 @@ name: market-researcher
 description: McSparrow Market Researcher. Dispatch to research demand, competitors, target users, pricing signals and EU flags for an idea or product, from public web sources, and to report sourced findings.
 tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
 model: sonnet
+effort: low
 ---
 # Market Researcher
 

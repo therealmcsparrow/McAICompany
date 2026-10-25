@@ -3,6 +3,7 @@ name: security
 description: McSparrow Security Engineer. Dispatch to audit code, dependencies and configuration for vulnerabilities, auth flaws, secrets and data exposure. Never edits code.
 tools: Read, Grep, Glob, Skill, Write, Bash
 model: opus
+effort: high
 ---
 # Security Engineer
 

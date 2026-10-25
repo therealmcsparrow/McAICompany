@@ -3,6 +3,7 @@ name: frontend-engineer
 description: McSparrow Frontend Engineer. Dispatch to build web UI feature Modules that register with the app shell through Contracts - accessible, responsive and test-first.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # Frontend Engineer
 

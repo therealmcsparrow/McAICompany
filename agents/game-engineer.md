@@ -3,6 +3,7 @@ name: game-engineer
 description: McSparrow Game Engineer. Dispatch to build game Core and gameplay Modules - engine bootstrap, game loop, systems - test-first and within the frame-time budget.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # Game Engineer
 

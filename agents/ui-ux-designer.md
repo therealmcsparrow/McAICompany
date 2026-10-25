@@ -3,6 +3,7 @@ name: ui-ux-designer
 description: McSparrow UI/UX Designer. Dispatch to design user flows, wireframes, screen states, design tokens and the design system for web and desktop products.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # UI / UX Designer
 

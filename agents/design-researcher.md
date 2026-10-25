@@ -2,7 +2,8 @@
 name: design-researcher
 description: McSparrow Design Researcher. Dispatch to find and vet UI/UX/design skills that fit a product's stack, product type, Personas and Art direction, judge the installed ones, and recommend a set of at most 5. Never installs.
 tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
-model: opus
+model: sonnet
+effort: medium
 ---
 # Design Researcher
 

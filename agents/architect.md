@@ -3,6 +3,7 @@ name: architect
 description: McSparrow Architect (CTO). Dispatch to design how a product is built - Core list, Module map, versioned Contracts, technology choices, estimates and ADRs.
 tools: Read, Grep, Glob, Skill, Write
 model: opus
+effort: high
 ---
 # Architect
 
