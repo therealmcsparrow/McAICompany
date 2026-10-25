@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NAME_RE } from './check.mjs';
+import { headerEnd, resolve as resolveLanguage, validate as validateLanguage } from './language.mjs';
 
 export const MODELS = ['opus', 'sonnet', 'haiku', 'fable', 'inherit'];
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -22,7 +23,11 @@ export const PIPELINE_DEFAULTS = {
 };
 export const GATE_DEFAULTS = { brief: 'ask', plan: 'ask', ship: 'ask', installs: 'ask' };
 
+export const PROFILE_FIELDS = ['product_type', 'engagement', 'client', 'audience', 'goal', 'stack', 'languages', 'voice', 'license', 'jurisdiction'];
+
 const KEY = 'aico_settings';
+const OPTION_FIELDS = ['product_type', 'engagement', 'voice'];
+const MAX_TEXT = 200;
 const LEGAL = ['auto', 'on', 'off'];
 const DISPATCH = ['parallel', 'sequential'];
 const GATE_VALUES = ['ask', 'auto'];
@@ -260,6 +265,95 @@ function nameClashes(roles) {
   return clashes;
 }
 
+const projectFile = (cwd) => path.join(cwd ?? process.cwd(), '.company', 'project.md');
+
+// Options come from the `a | b | c` values in the project template; `<...>` placeholders are skipped.
+export function templateOptions(pluginRoot = DEFAULT_PLUGIN_ROOT) {
+  const options = Object.fromEntries(OPTION_FIELDS.map((f) => [f, []]));
+  const bytes = readBounded(path.join(pluginRoot, 'skills', 'lead', 'references', 'project-template.md'));
+  if (bytes === null) return options;
+  const lines = bytes.toString('utf8').split(/\r?\n/);
+  for (const line of lines.slice(0, headerEnd(lines))) {
+    const m = /^([a-z_]+):\s*(.*?)\s*$/.exec(line);
+    if (m && OPTION_FIELDS.includes(m[1]) && !m[2].includes('<')) options[m[1]] = m[2].split('|').map((o) => o.trim()).filter(Boolean);
+  }
+  return options;
+}
+
+function profileLines(cwd) {
+  const bytes = readBounded(projectFile(cwd));
+  if (bytes === null) return null;
+  return bytes.toString('utf8').split(/\r?\n/);
+}
+
+export function readProfile({ cwd } = {}) {
+  const lines = profileLines(cwd);
+  if (lines === null) return { hasProject: false, fields: {} };
+  const fields = {};
+  for (const line of lines.slice(0, headerEnd(lines))) {
+    const m = /^([a-z_]+):[ \t]*(.*?)\s*$/.exec(line);
+    if (m && PROFILE_FIELDS.includes(m[1]) && !Object.hasOwn(fields, m[1])) fields[m[1]] = m[2];
+  }
+  return { hasProject: true, fields };
+}
+
+// Returns a reason string when `value` is not acceptable for `field`, else null.
+function profileProblem(field, value, options) {
+  if (typeof value !== 'string' || value.trim() === '') return 'must be text';
+  if (/[\u0000-\u001f\u007f]/.test(value)) return 'must be one line without control characters';
+  if (value.length > MAX_TEXT) return `must be at most ${MAX_TEXT} characters`;
+  if (value !== value.trim()) return 'must not start or end with spaces';
+  if (field === 'languages') {
+    return value.split(',').every((tag) => validateLanguage(tag.trim()).ok) ? null : 'must be a comma-separated list of language tags';
+  }
+  if (field === 'voice') {
+    return value.split(' + ').every((v) => options.voice.includes(v)) ? null : `must be ${options.voice.join(', ')}, joined with " + "`;
+  }
+  if (OPTION_FIELDS.includes(field)) return options[field].includes(value) ? null : `must be one of ${options[field].join(', ')}`;
+  return null;
+}
+
+// Rewrites only the edited header lines of .company/project.md. Unchanged values are not re-validated.
+export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
+  const file = projectFile(cwd);
+  const bytes = readBounded(file);
+  if (bytes === null) throw new Refusal('no .company/project.md');
+  if (!isObject(changes)) throw new Refusal('profile changes must be an object');
+  const text = bytes.toString('utf8');
+  const parts = text.split(/(\r?\n)/); // even indexes are lines, odd are their line breaks
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lineAt = (i) => parts[2 * i];
+  const count = Math.ceil(parts.length / 2);
+  const stored = readProfile({ cwd }).fields;
+  const options = templateOptions(pluginRoot);
+  const reasons = [];
+  const edits = [];
+  for (const field of Object.keys(changes)) {
+    if (!PROFILE_FIELDS.includes(field)) { reasons.push(`${label(field)}: unknown profile field`); continue; }
+    if (changes[field] === stored[field]) continue;
+    const problem = profileProblem(field, changes[field], options);
+    if (problem) reasons.push(`${field}: ${problem}`);
+    else edits.push(field);
+  }
+  if (reasons.length) throw new Refusal(reasons.join('; '));
+  if (edits.length === 0) return;
+  const lines = Array.from({ length: count }, (_, i) => lineAt(i));
+  const end = headerEnd(lines);
+  for (const field of edits) {
+    const line = `${field}: ${changes[field]}`;
+    const at = lines.findIndex((l, i) => i < end && l.startsWith(`${field}:`));
+    if (at !== -1) {
+      parts[2 * at] = line;
+      continue;
+    }
+    let last = -1;
+    for (let i = 0; i < end; i++) if (/^[a-z_]+:/.test(parts[2 * i])) last = i;
+    parts.splice(2 * last + 1, 0, eol, line);
+    lines.splice(last + 1, 0, line);
+  }
+  writeAtomic(file, parts.join(''));
+}
+
 export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
@@ -302,7 +396,9 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   }
 
   const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).digest('hex');
-  return { revision, roles, pipeline, gates, unlocked: [...unlocked], ignored, warnings };
+  const language = resolveLanguage({ home, cwd });
+  const profile = { ...readProfile({ cwd }), options: templateOptions(pluginRoot) };
+  return { revision, roles, pipeline, gates, unlocked: [...unlocked], ignored, warnings, language, profile };
 }
 
 export function writeLayer(level, layer, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {

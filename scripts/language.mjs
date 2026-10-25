@@ -108,7 +108,7 @@ function userValue(home) {
 }
 
 // The header block is everything before the first `## ` heading.
-function headerEnd(lines) {
+export function headerEnd(lines) {
   const at = lines.findIndex((line) => line.startsWith('## '));
   return at === -1 ? lines.length : at;
 }

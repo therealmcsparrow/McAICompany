@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  GATE_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, resolveSettings, run,
-  validateLayer, writeLayer
+  GATE_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
 const script = path.join(import.meta.dirname, 'settings.mjs');
@@ -32,6 +32,8 @@ function sandbox(t, { company = true } = {}) {
   if (company) fs.mkdirSync(path.join(cwd, '.company'));
   fs.mkdirSync(path.join(pluginRoot, 'agents'), { recursive: true });
   fs.mkdirSync(path.join(pluginRoot, 'company'));
+  fs.mkdirSync(path.join(pluginRoot, 'skills', 'lead', 'references'), { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, '..', 'skills', 'lead', 'references', 'project-template.md'), path.join(pluginRoot, 'skills', 'lead', 'references', 'project-template.md'));
   const names = {};
   for (const [role, a] of Object.entries(AGENTS)) {
     fs.writeFileSync(path.join(pluginRoot, 'agents', `${role}.md`), agentFile(role, a));
@@ -270,7 +272,7 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['gates', 'ignored', 'pipeline', 'revision', 'roles', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['gates', 'ignored', 'language', 'pipeline', 'profile', 'revision', 'roles', 'unlocked', 'warnings']);
   assert.equal(Object.keys(data.roles).length, 32);
   assert.equal(data.roles.architect.name, 'Ava');
 });
@@ -293,4 +295,113 @@ test('unknown commands print usage and exit 2', (t) => {
   for (const args of [[], ['bogus'], ['serve'], ['get', 'a', 'b']]) {
     assert.deepEqual(run(args, s.ctx), { code: 2, out: usage }, args.join(' '));
   }
+});
+
+const PROJECT_MD = [
+  '# Project profile', '', '<!-- note -->', '',
+  'product_type: plugin', 'engagement: own', 'client: none', 'audience: the CEO',
+  'languages: en', 'voice: technical + clear', 'standards: .company/standards.md', '',
+  '## Personas', 'product_type: not a header line', '- (none)', ''
+].join('\r\n');
+
+function projectMd(s, text = PROJECT_MD) {
+  const file = path.join(s.cwd, '.company', 'project.md');
+  fs.writeFileSync(file, text);
+  return file;
+}
+
+test('templateOptions parses the template and skips placeholders', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(templateOptions(s.pluginRoot), {
+    product_type: ['web', 'desktop', 'game'],
+    engagement: ['own', 'client'],
+    voice: ['clear', 'bold', 'technical']
+  });
+});
+
+test('writeProfile changes only edited lines', (t) => {
+  const s = sandbox(t);
+  const file = projectMd(s);
+  writeProfile({ audience: 'makers', goal: 'ship it' }, s.ctx);
+  const lines = PROJECT_MD.split('\r\n');
+  lines[lines.indexOf('audience: the CEO')] = 'audience: makers';
+  lines.splice(lines.indexOf('languages: en'), 0, 'goal: ship it');
+  // goal is inserted after the last header key line, so rebuild the expectation that way
+  const want = PROJECT_MD.split('\r\n');
+  want[want.indexOf('audience: the CEO')] = 'audience: makers';
+  want.splice(want.indexOf('standards: .company/standards.md') + 1, 0, 'goal: ship it');
+  assert.equal(fs.readFileSync(file, 'utf8'), want.join('\r\n'));
+  assert.equal(readProfile(s.ctx).fields.goal, 'ship it');
+  assert.equal(readProfile(s.ctx).fields.audience, 'makers');
+});
+
+test('writeProfile keeps LF files LF', (t) => {
+  const s = sandbox(t);
+  const file = projectMd(s, PROJECT_MD.replaceAll('\r\n', '\n'));
+  writeProfile({ client: 'Acme' }, s.ctx);
+  const text = fs.readFileSync(file, 'utf8');
+  assert.ok(!text.includes('\r'));
+  assert.ok(text.includes('\nclient: Acme\n'));
+});
+
+test('writeProfile refuses bad values', (t) => {
+  const s = sandbox(t);
+  const file = projectMd(s);
+  const before = fs.readFileSync(file, 'utf8');
+  for (const changes of [
+    { product_type: 'spaceship' },
+    { goal: 'a\nb' },
+    { audience: 'x'.repeat(201) },
+    { languages: 'en, xx-!!' },
+    { voice: 'clear + loud' },
+    { nonsense: 'x' }
+  ]) {
+    assert.throws(() => writeProfile(changes, s.ctx), Refusal, JSON.stringify(changes).slice(0, 40));
+  }
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
+test('writeProfile accepts valid values', (t) => {
+  const s = sandbox(t);
+  projectMd(s);
+  writeProfile({ audience: 'x'.repeat(200), languages: 'en, nl-NL', product_type: 'game', voice: 'bold + clear' }, s.ctx);
+  const f = readProfile(s.ctx).fields;
+  assert.equal(f.languages, 'en, nl-NL');
+  assert.equal(f.product_type, 'game');
+  assert.equal(f.voice, 'bold + clear');
+});
+
+test('voice accepts "technical + clear"', (t) => {
+  const s = sandbox(t);
+  projectMd(s);
+  writeProfile({ voice: 'clear + technical' }, s.ctx);
+  assert.equal(readProfile(s.ctx).fields.voice, 'clear + technical');
+});
+
+test('an unchanged stored value outside the options is kept', (t) => {
+  const s = sandbox(t);
+  projectMd(s);
+  writeProfile({ product_type: 'plugin', audience: 'makers' }, s.ctx);
+  const f = readProfile(s.ctx).fields;
+  assert.equal(f.product_type, 'plugin');
+  assert.equal(f.audience, 'makers');
+  assert.throws(() => writeProfile({ product_type: 'spaceship' }, s.ctx), Refusal);
+});
+
+test('no .company/project.md: readProfile.hasProject false and writeProfile refuses', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(readProfile(s.ctx), { hasProject: false, fields: {} });
+  assert.throws(() => writeProfile({ goal: 'x' }, s.ctx), (e) => e instanceof Refusal && /no \.company\/project\.md/.test(e.message));
+});
+
+test('resolveSettings returns language and profile', (t) => {
+  const s = sandbox(t);
+  projectMd(s);
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(r.language, { tag: 'en', source: 'default' });
+  assert.equal(r.profile.hasProject, true);
+  assert.equal(r.profile.fields.voice, 'technical + clear');
+  assert.deepEqual(r.profile.options.engagement, ['own', 'client']);
+  const bare = sandbox(t, { company: false });
+  assert.equal(resolveSettings(bare.ctx).profile.hasProject, false);
 });
