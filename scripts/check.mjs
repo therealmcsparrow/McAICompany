@@ -33,7 +33,7 @@ function mdFiles(dir) {
 
 // Playbooks that dispatch no Role and only print or run a CLI: they need no language resolution.
 export const LANGUAGE_EXEMPT = new Set(['setup', 'language']);
-const NAME_RE =/^[a-z0-9][a-z0-9-]{0,63}\*?$/;
+const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -82,7 +82,7 @@ function checkManifest(root, errors) {
       if (e === null || typeof e !== 'object') { errors.push(`ERROR ${at}: entry must be an object`); return; }
       const isInclude = Object.hasOwn(e, 'include');
       if (!isInclude) {
-        if (typeof e.name !== 'string' || !NAME_RE.test(e.name)) errors.push(`ERROR ${at}: name fails the agentsec.M-SEC7 pattern`);
+        if (typeof e.name !== 'string' || !MANIFEST_NAME_RE.test(e.name)) errors.push(`ERROR ${at}: name fails the agentsec.M-SEC7 pattern`);
         if (Object.hasOwn(e, 'source')) {
           const src = e.source;
           if (typeof src !== 'string' || !REPO_RE.test(src) || src.endsWith('/.') || src.endsWith('/..'))
@@ -94,6 +94,26 @@ function checkManifest(root, errors) {
         }
       }
     });
+  }
+}
+
+export const NAME_RE = /^[\p{L}][\p{L} '\-]{0,29}$/u;
+
+// company/names.json: exactly one valid, unique (case-insensitive) name per agent. Skipped when absent.
+export function checkNames(root, agentNames, errors) {
+  const f = join(root, 'company', 'names.json');
+  if (!existsSync(f)) return;
+  let names;
+  try { names = JSON.parse(readFileSync(f, 'utf8')); } catch (e) { errors.push(`ERROR company/names.json: not valid JSON (${e.message})`); return; }
+  if (!names || typeof names !== 'object' || Array.isArray(names)) { errors.push('ERROR company/names.json: must be an object of role to name'); return; }
+  for (const role of agentNames) if (!(role in names)) errors.push(`ERROR company/names.json: ${role} has no name`);
+  const seen = new Map();
+  for (const [role, name] of Object.entries(names)) {
+    if (!agentNames.has(role)) { errors.push(`ERROR company/names.json: ${role} is not a Role`); continue; }
+    if (typeof name !== 'string' || !NAME_RE.test(name)) { errors.push(`ERROR company/names.json: ${role}: invalid name ${JSON.stringify(name)}`); continue; }
+    const key = name.toLowerCase();
+    if (seen.has(key)) errors.push(`ERROR company/names.json: duplicate name ${key} (${seen.get(key)}, ${role})`);
+    else seen.set(key, role);
   }
 }
 
@@ -206,6 +226,7 @@ export function check(root) {
   }
   checkManifest(root, errors);
   checkRoleCounts(root, agentNames, errors, agentFm);
+  checkNames(root, agentNames, errors);
   return { errors: [...new Set(errors)], warnings };
 }
 

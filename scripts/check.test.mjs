@@ -9,7 +9,7 @@ import { check } from './check.mjs';
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
 
-function fixture({ skills = {}, agents = {} }) {
+function fixture({ skills = {}, agents = {}, names }) {
   const root = mkdtempSync(join(tmpdir(), 'aico-'));
   tempDirs.push(root);
   for (const [dir, text] of Object.entries(skills)) {
@@ -18,6 +18,10 @@ function fixture({ skills = {}, agents = {} }) {
   }
   mkdirSync(join(root, 'agents'), { recursive: true });
   for (const [name, text] of Object.entries(agents)) writeFileSync(join(root, 'agents', `${name}.md`), text);
+  if (names) {
+    mkdirSync(join(root, 'company'), { recursive: true });
+    writeFileSync(join(root, 'company', 'names.json'), JSON.stringify(names));
+  }
   return root;
 }
 const skill = (name, body = 'Body.', desc = 'Use when testing.') => `---\nname: ${name}\ndescription: ${desc}\n---\n${body}\n`;
@@ -273,3 +277,30 @@ for (const name of realPlaybooks) {
     assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:'))), r.errors.join('\n'));
   });
 }
+
+const nameAgents = { qa: agent('qa'), support: agent('support') };
+
+test('names.json missing a Role is an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { support: 'Sofia' } }));
+  assert.ok(r.errors.some(e => e.includes('company/names.json: qa has no name')), r.errors.join(', '));
+});
+
+test('duplicate names (case-insensitive) are an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Sam', support: 'sam' } }));
+  assert.ok(r.errors.some(e => e.includes('duplicate name sam')), r.errors.join(', '));
+});
+
+test('invalid name is an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Sam!', support: 'Sofia' } }));
+  assert.ok(r.errors.some(e => e.includes('invalid name')), r.errors.join(', '));
+});
+
+test('a name for an unknown Role is an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Quinn', support: 'Sofia', ghost: 'Gus' } }));
+  assert.ok(r.errors.some(e => e.includes('ghost is not a Role')), r.errors.join(', '));
+});
+
+test('valid names.json has no errors', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Quinn', support: 'Lucía' } }));
+  assert.deepEqual(r.errors, []);
+});
