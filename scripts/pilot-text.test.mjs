@@ -36,6 +36,7 @@ test('AC22 reviewers read rule-check list and confirm T- rows, tools never block
   has(read('skills/review/SKILL.md'), 'Confirm each `T-` row', 'never blocks on its own', 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
   has(read('agents/code-reviewer.md'), 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
   has(read('agents/code-reviewer.md'), 'never blocks on its own');
+  has(read('docs/contracts/rule-check.md'), 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
 });
 
 test('AC23 slices carry every security Must and a findings ledger survives handover', () => {
