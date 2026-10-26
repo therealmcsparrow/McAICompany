@@ -18,7 +18,7 @@ Every Role has a person name for display (change them in `/aico:settings`). You 
 | **market-researcher** | sonnet | low | Mateo | Researches demand, competitors, target users, pricing signals and EU flags for an idea, from public sources with a URL and date for each claim. |
 | **tech-researcher** | opus | medium | Tariq | Checks feasibility: libraries and APIs, their licenses and maintenance, fit with the repo, effort and risk. Reports facts; never picks the stack. |
 | **design-researcher** | sonnet | medium | Daria | Finds and vets UI/UX and design skills that fit your stack, product type, Personas and Art direction, judges the installed ones, and recommends at most 5. Never installs. |
-| **skill-researcher** | sonnet | medium | Selin | Finds, vets and scans third-party skills for your stack, product type, company type or design, and recommends at most 5. Every candidate is scanned in a quarantine first. Never adds a skill; the Lead does that after your approval. |
+| **skill-researcher** | sonnet | medium | Selin | Finds and vets third-party skills for your stack, product type, company type or design, and recommends at most 5. Has no Bash: the Lead scans every pick in a quarantine before you see it. Never adds a skill; the Lead does that after your approval, pinned to the scanned commit. |
 
 The first three researchers run in parallel inside [`/aico:research`](commands.md#aicoresearch). The Product Manager writes the report from their Handoffs. The design-researcher also runs in [`/aico:feature`](commands.md#aicofeature) for UI products whose design skills are missing or stale. The skill-researcher runs when you ask for skill picks.
 
