@@ -9,17 +9,18 @@
 :root {
   --bg: #f7f7f5; --surface: #ffffff; --text: #1b1b1f; --muted: #5d5d66; --line: #d9d9de;
   --accent: #2557c7; --accent-text: #ffffff; --head: #eeeef1; --warn-bg: #fff4d6; --warn: #7a5200;
-  --err-bg: #fde7e7; --err: #a01d1d; --ok: #1d6b35; --focus: #2557c7;
+  --err-bg: #fde7e7; --err: #a01d1d; --ok: #1d6b35; --focus: #2557c7; --control-border: #767680;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #141417; --surface: #1d1d22; --text: #ececf1; --muted: #a3a3ad; --line: #34343c;
     --accent: #7ea2ff; --accent-text: #0d0d10; --head: #26262d; --warn-bg: #3a2f12; --warn: #f2cf7a;
-    --err-bg: #3d1c1c; --err: #ff9c9c; --ok: #8fdca5; --focus: #7ea2ff;
+    --err-bg: #3d1c1c; --err: #ff9c9c; --ok: #8fdca5; --focus: #7ea2ff; --control-border: #8a8a96;
   }
 }
 * { box-sizing: border-box; }
+html { scroll-padding-bottom: calc(var(--footer-h, 0px) + 8px); }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 header, main { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
 header h1 { font-size: 1.3rem; margin: 20px 0 4px; }
@@ -39,13 +40,14 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 thead th { background: var(--head); font-size: .85rem; color: var(--muted); font-weight: 600; position: sticky; top: 0; }
 tr.dept th { background: var(--head); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 tbody th { font-weight: 500; white-space: nowrap; }
+tbody th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--surface); }
 td.plugin, td.effect { white-space: nowrap; }
 td.effect { font-weight: 600; }
 td.effect.text { white-space: normal; min-width: 12rem; overflow-wrap: anywhere; }
 .src { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 4px; }
 .held { display: block; font-weight: 400; color: var(--warn); font-size: .8rem; }
 .cell { display: flex; gap: 4px; flex-wrap: nowrap; }
-select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; }
+select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--control-border); border-radius: 4px; padding: 3px 6px; }
 input[type="text"] { width: 9rem; }
 input.wide { width: 16rem; }
 select:disabled, input:disabled { opacity: .5; }
@@ -54,7 +56,7 @@ select.set, input.set { border-color: var(--accent); }
 .ro { color: var(--muted); font-size: .85rem; }
 .bulk { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .bulk label { display: flex; gap: 4px; align-items: center; color: var(--muted); font-size: .9rem; }
-button { font: inherit; border-radius: 4px; padding: 5px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+button { font: inherit; border-radius: 4px; padding: 5px 12px; border: 1px solid var(--control-border); background: var(--surface); color: var(--text); cursor: pointer; }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
 h2 { font-size: 1rem; margin: 16px 0 8px; }
@@ -68,6 +70,10 @@ dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--su
 dialog::backdrop { background: rgba(0, 0, 0, .45); }
 dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 [hidden] { display: none !important; }
+@media (max-width: 600px), (max-height: 500px) {
+  html { scroll-padding-bottom: 8px; }
+  footer { position: static; }
+}
 </style>
 </head>
 <body>
@@ -82,13 +88,15 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top
     <button role="tab" id="tab-language" aria-controls="panel-language" aria-selected="false" tabindex="-1">Language &amp; profile</button>
     <button role="tab" id="tab-pipeline" aria-controls="panel-pipeline" aria-selected="false" tabindex="-1">Pipeline</button>
     <button role="tab" id="tab-gates" aria-controls="panel-gates" aria-selected="false" tabindex="-1">Gates</button>
+    <button role="tab" id="tab-scan" aria-controls="panel-scan" aria-selected="false" tabindex="-1">Skill scan</button>
     <button role="tab" id="tab-mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button>
   </div>
   <section role="tabpanel" id="panel-roles" aria-labelledby="tab-roles"></section>
   <section role="tabpanel" id="panel-language" aria-labelledby="tab-language" hidden></section>
   <section role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden></section>
   <section role="tabpanel" id="panel-gates" aria-labelledby="tab-gates" hidden></section>
-  <section role="tabpanel" id="panel-mods" aria-labelledby="tab-mods" hidden></section>
+  <section role="tabpanel" id="panel-scan" aria-labelledby="tab-scan" hidden></section>
+  <section role="tabpanel" id="panel-mods"aria-labelledby="tab-mods" hidden></section>
 </main>
 <footer>
   <div id="status" role="status" aria-live="polite"></div>
@@ -295,6 +303,10 @@ function showEffect(cell, path, pluginValue, format, resolvedValue) {
   let eff = effective(path, pluginValue);
   // Unchanged rows show what the server resolved, so the page matches what dispatch will use.
   if (!dirty(path) && !anyUnlockDirty() && resolvedValue !== undefined && resolvedValue !== eff.value) eff = { value: resolvedValue, source: 'resolved' };
+  // Rewrite only on a change, so the live region announces what changed and nothing else.
+  const signature = JSON.stringify([format(eff.value), eff.source, eff.held ?? '']);
+  if (cell.dataset.signature === signature) return;
+  cell.dataset.signature = signature;
   cell.replaceChildren(format(eff.value), el('span', { class: 'src' }, `(${eff.source})`));
   if (eff.held) cell.append(el('span', { class: 'held' }, eff.held));
 }
@@ -518,7 +530,7 @@ function renderLanguage(panel) {
 
 // ---------- Pipeline tab ----------
 function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, format, opts = {}) {
-  const effect = el('td', { class: 'effect' });
+  const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
   const cells = ['user', 'project'].map((level) => {
     const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock, opts.dialog) : null;
     return el('td', {}, bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard));
@@ -638,12 +650,27 @@ function renderMods(panel) {
     panel.append(wrap);
   }
   panel.append(el('p', { class: 'hint' }, 'Pane auto: the pane opens by itself when a run starts, where the surface docks it. Reflect model mode spends tokens and is written to the token ledger.'));
+}
+
+// ---------- Skill scan tab ----------
+const SCAN_NOTE = "No-LLM: SkillSpector's static rules run on this machine and no skill text leaves it; package names and versions from a skill's dependency files go to OSV.dev for a vulnerability lookup. Claude CLI: the text of each scanned skill also goes to Claude (Anthropic) under your login and counts toward your usage. Set it for yourself only; a project setting cannot turn it on.";
+function scanModeSelect(label) {
+  const sel = selectFor(['no-llm', 'claude_cli'], label);
+  if (label.endsWith(', project')) {
+    // A project can only tighten: claude_cli is not offered, but a stored one stays visible (and locked in In effect).
+    const stored = state.project.skillspector?.mode === 'claude_cli';
+    sel.replaceChildren(...[...sel.options].filter((o) => o.value !== 'claude_cli'));
+    if (stored) sel.append(el('option', { value: 'claude_cli', disabled: true }, 'claude_cli'));
+  }
+  sel.setAttribute('aria-describedby', 'scan-note');
+  return sel;
+}
+function renderScan(panel) {
   panel.append(el('h2', {}, 'SkillSpector'));
   const ss = table(COLUMNS);
-  pipelineRow(ss.tbody, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm',
-    (l) => selectFor(['no-llm', 'claude_cli'], l), String, String);
+  pipelineRow(ss.tbody, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm', scanModeSelect, String, String);
   panel.append(ss.wrap);
-  panel.append(el('p', { class: 'hint' }, 'No-LLM: static rules only; nothing leaves this machine. Claude CLI: the text of each scanned skill goes to Claude (Anthropic) under your login and counts toward your usage. Set it for yourself only; a project setting cannot turn it on.'));
+  panel.append(el('p', { class: 'hint', id: 'scan-note' }, SCAN_NOTE));
 }
 
 // ---------- page ----------
@@ -658,7 +685,7 @@ function renderNotices() {
 function render() {
   syncers = [];
   renderNotices();
-  const renderers = { roles: renderRoles, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, mods: renderMods };
+  const renderers = { roles: renderRoles, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
   for (const [name, fn] of Object.entries(renderers)) {
     const panel = document.getElementById(`panel-${name}`);
     panel.replaceChildren();
@@ -732,7 +759,8 @@ async function save() {
 function clearLevel(level) {
   if (activeTab === 'roles') delete draft[level].roles;
   else if (activeTab === 'pipeline') delete draft[level].pipeline;
-  else if (activeTab === 'mods') { delete draft[level].mods; delete draft[level].skillspector; }
+  else if (activeTab === 'mods') delete draft[level].mods;
+  else if (activeTab === 'scan') delete draft[level].skillspector;
   else if (activeTab === 'gates') { delete draft[level].gates; if (level === 'user') delete draft.user.unlocked; }
   else if (activeTab === 'language') {
     draft.language[level] = '';
@@ -761,7 +789,7 @@ function selectTab(name, focus = false) {
     if (on && focus) tab.focus();
   }
 }
-const TAB_NAMES = ['roles', 'language', 'pipeline', 'gates', 'mods'];
+const TAB_NAMES = ['roles', 'language', 'pipeline', 'gates', 'scan', 'mods'];
 for (const tab of document.querySelectorAll('[role="tab"]')) {
   tab.addEventListener('click', () => selectTab(tab.id.slice(4)));
   tab.addEventListener('keydown', (e) => {
@@ -772,6 +800,11 @@ for (const tab of document.querySelectorAll('[role="tab"]')) {
     selectTab(TAB_NAMES[(next + TAB_NAMES.length) % TAB_NAMES.length], true);
   });
 }
+// Keeps the footer height in a CSS variable so scroll-padding-bottom clears it.
+const footerEl = document.querySelector('footer');
+const syncFooterHeight = () => document.documentElement.style.setProperty('--footer-h', `${footerEl.hidden ? 0 : Math.ceil(footerEl.getBoundingClientRect().height)}px`);
+syncFooterHeight();
+if (typeof ResizeObserver === 'function') new ResizeObserver(syncFooterHeight).observe(footerEl);
 document.getElementById('save').addEventListener('click', save);
 document.getElementById('done').addEventListener('click', done);
 document.getElementById('clear-user').addEventListener('click', () => clearLevel('user'));

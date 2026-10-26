@@ -13,16 +13,13 @@ function bar(cells, count, total) {
   return '#'.repeat(done) + '-'.repeat(cells - done);
 }
 
-// The longest form that fits: bar, then no bar, then no tail, then the one-letter label.
-function row(label, short, count, total, tail, width) {
-  const text = `${count}/${total}`;
-  const withTail = tail === '' ? text : `${text} ${tail}`;
-  const cells = Math.min(MAX_CELLS, width - `${label} [] ${withTail}`.length);
-  if (cells >= MIN_CELLS) return `${label} [${bar(cells, count, total)}] ${withTail}`;
-  for (const candidate of [`${label} ${withTail}`, `${label} ${text}`]) {
+// A row too wide even without its tail gets the one-letter label; the count is never dropped.
+function plain(r, width) {
+  const text = `${r.count}/${r.total}`;
+  for (const candidate of [`${r.label} ${text}${r.tail}`, `${r.label} ${text}`]) {
     if (candidate.length <= width) return candidate;
   }
-  return `${short} ${text}`;
+  return `${r.short} ${text}`;
 }
 
 function isKnown(view) {
@@ -55,5 +52,14 @@ export function progressRows(view, width) {
     if (gates === 0) last = 'none';
   }
   const done = isShipped ? total : view.steps.filter((s) => s !== null && typeof s === 'object' && s.status === 'done').length;
-  return [row('Gates', 'G', gates, GATES.length, last, width), row('Steps', 'S', done, total, '', width)];
+  const rows = [
+    { label: 'Gates', short: 'G', count: gates, total: GATES.length, tail: ` last: ${last}` },
+    { label: 'Steps', short: 'S', count: done, total, tail: '' }
+  ];
+  const widest = Math.max(...rows.map((r) => `${r.label} ${r.count}/${r.total}${r.tail}`.length));
+  const cells = Math.min(MAX_CELLS, width - 3 - widest);
+  return rows.map((r) => {
+    if (cells >= MIN_CELLS && r.total > 0) return `${r.label} ${r.count}/${r.total} [${bar(cells, r.count, r.total)}]${r.tail}`;
+    return plain(r, width);
+  });
 }

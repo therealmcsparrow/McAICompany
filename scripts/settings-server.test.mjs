@@ -326,9 +326,9 @@ test('startServer prints the URL', async (t) => {
   assert.deepEqual(lines, [`aico settings: ${server.url}`]);
 });
 
-test('page has the five tabs, a lock dialog, and no external resources', () => {
+test('page has the six tabs, a lock dialog, and no external resources', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const tab of ['Roles', 'Language &amp; profile', 'Pipeline', 'Gates', 'Mods']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
+  for (const tab of ['Roles', 'Language &amp; profile', 'Pipeline', 'Gates', 'Skill scan', 'Mods']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
   assert.ok(html.includes('<dialog'));
   assert.ok(html.includes('<meta name="aico-token" content="__AICO_TOKEN__">'));
   assert.ok(!/<script[^>]*\ssrc=/i.test(html));
@@ -418,4 +418,64 @@ test('page has a Mods section built from the existing controls, shows lock reaso
   assert.ok(!html.includes('keep_warm') && !html.includes('keep-warm'));
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(html));
   assert.ok(/mods:\s*renderMods/.test(html) && /TAB_NAMES = \[[^\]]*'mods'\]/.test(html));
+});
+
+const pageHtml = () => fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+const contractText = () => fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+
+test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row', () => {
+  const html = pageHtml();
+  const at = (needle) => html.indexOf(needle);
+  assert.ok(at('id="tab-gates"') < at('id="tab-scan"') && at('id="tab-scan"') < at('id="tab-mods"'));
+  assert.ok(at('id="panel-gates"') < at('id="panel-scan"') && at('id="panel-scan"') < at('id="panel-mods"'));
+  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
+  const mods = html.slice(at('function renderMods'), at('const SCAN_NOTE'));
+  assert.ok(!mods.includes('skillspector') && !mods.includes('SkillSpector'));
+  const scan = html.slice(at('const SCAN_NOTE'), at('// ---------- page'));
+  for (const needle of ["'SkillSpector'", "'Scan mode'", "['skillspector', 'mode']", 'aria-describedby']) assert.ok(scan.includes(needle), needle);
+});
+
+test('the Skill scan sentence is the Contract sentence byte for byte', () => {
+  const line = contractText().split('\n').find((l) => l.startsWith('v1.2: the page has a **Skill scan** tab'));
+  const sentence = /the sentence "([^"]+)"/.exec(line)?.[1];
+  assert.ok(sentence && sentence.startsWith("No-LLM: SkillSpector's static rules"));
+  assert.ok(pageHtml().includes(sentence));
+  assert.ok(pageHtml().includes("id: 'scan-note'"));
+});
+
+test('the Project column offers claude_cli only when the project file already holds it, locked', () => {
+  const html = pageHtml();
+  const scan = html.slice(html.indexOf('const SCAN_NOTE'), html.indexOf('// ---------- page'));
+  assert.ok(scan.includes("'no-llm'") && scan.includes("'claude_cli'"));
+  assert.ok(/state\.project\.skillspector\?\.mode === 'claude_cli'/.test(scan));
+  assert.ok(html.includes("area === 'skillspector'") && html.includes('counts only from your user settings'));
+});
+
+test('a focused control never sits under the footer, and the footer lets go on small screens', () => {
+  const html = pageHtml();
+  assert.ok(/scroll-padding-bottom:\s*calc\(var\(--footer-h[^)]*\)\s*\+\s*8px\)/.test(html));
+  assert.ok(html.includes('new ResizeObserver') && html.includes("'--footer-h'"));
+  assert.ok(/@media \(max-width: 600px\), \(max-height: 500px\) \{[^@]*footer \{[^}]*position: static/.test(html));
+});
+
+test('select and text-input borders have 3:1 contrast in light and dark', () => {
+  const html = pageHtml();
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  const light = html.slice(html.indexOf(':root {'), html.indexOf('@media (prefers-color-scheme: dark)'));
+  const dark = html.slice(html.indexOf('@media (prefers-color-scheme: dark)'), html.indexOf('* { box-sizing'));
+  for (const [scheme, css] of [['light', light], ['dark', dark]]) {
+    const token = (name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)?.[1];
+    for (const ground of ['surface', 'bg']) assert.ok(ratio(token('control-border'), token(ground)) >= 3, `${scheme} on ${ground}`);
+  }
+  assert.ok(/select, input\[type="text"\] \{[^}]*border: 1px solid var\(--control-border\)/.test(html));
+});
+
+test('the In effect text is a polite live region and row headers stay in view', () => {
+  const html = pageHtml();
+  assert.ok(html.includes("'aria-live': 'polite'"));
+  assert.ok(/tbody th\[scope="row"\] \{[^}]*position: sticky/.test(html));
 });
