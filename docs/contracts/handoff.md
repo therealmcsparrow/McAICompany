@@ -14,7 +14,7 @@ A fenced block with info string `aico-top`, directly after the `By:` line and be
 | `ac_ids` | `[AC1, …]`; same set as frontmatter `acceptance-ids` (`[]` when absent) |
 | `rule_ids` | `[proj.M3, …]` rule IDs this Step applied or checked; each matches `^[a-z][a-z0-9-]{0,30}\.(M\|S\|Y)(-SEC)?\d{1,3}$`; `[]` allowed |
 | `risks` | `[R-1, …]` finding IDs (part 2) that carry a risk, or `[]` |
-| `read_next` | `[path, path#heading, R-2, …]` at most 5 pointers the next Step should read; pointers, never copied text |
+| `read_next` | `[path, path#heading, R-2, …]` at most 5 pointers the next Step should read; pointers, never copied text; `path#heading` keeps the heading text as written (spaces allowed after `#`, no commas); `path` and `R-n` have no spaces |
 | `tokens_used` | integer (the Role's own count, if it has one) or `unknown`; the token ledger (`token-ledger` v1) is the authoritative count |
 
 - The frontmatter stays the routing source. The block repeats `status`, `files` and `ac_ids` so a reader can stop after it; a mismatch is malformed.
@@ -48,6 +48,7 @@ base-commit: <sha>
 - Tag: one of the four Blocking tags (part 2), or `[nit]` for a Nit (`- R-3 | open | [nit] | scripts/x.mjs:3 | <problem> | <why> | <fix>`). The Nit's Handoff row (part 2) drops the tag.
 - The final Handoff's rows are the `open` ledger rows when a ledger exists; the Lead commits the ledger with the Step when it exists.
 - **IDs without a ledger.** A Fix-round reviewer with no ledger in its chain keeps the IDs of the rows it re-reports from the earlier reviewer Handoffs of the task, lists closed ones in `## Did` (`fixed R-2`, `withdrawn R-5`), and numbers a new finding from 1 + the highest `R-<n>` (or `C-<n>`) in any earlier Handoff or ledger of the task, so no ID is reused.
+A continuation appends every new finding to the chain's ledger before it writes its Handoff.
 
 ## Validator (`scripts/handoff-lint.mjs`)
 - `node handoff-lint.mjs <handoff.md> [--require-top]`: exit 0 and the routing JSON on stdout (v1.1 adds `"top": {…} | null` and `"findings": [IDs]`); exit 1 and `ERROR <reason>` lines otherwise.
