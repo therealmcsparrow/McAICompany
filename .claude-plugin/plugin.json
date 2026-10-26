@@ -15,5 +15,6 @@
   "dependencies": [
     "superpowers@claude-plugins-official",
     "mattpocock-skills@claude-plugins-official"
-  ]
+  ],
+  "types": "./types/index.d.ts"
 }
