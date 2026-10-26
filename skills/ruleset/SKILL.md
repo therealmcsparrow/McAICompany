@@ -65,9 +65,14 @@ signed-off: <date> (architect)   # written by the Lead from the Architect's Hand
 ## Loading (builders and reviewers)
 1. Read `.company/standards.md`.
 2. **Builders:** read the rule IDs mapped to your tasks in the Senior Engineer's Handoff (`## Rules per task`), from the committed copies in `.company/standards/`. No such Handoff (e.g. `/aico:fix`, `/aico:incident`, `/aico:maintain`) → read `## Project rules` plus the Must and Security sections of every committed pack for the tools you touch.
-   **Reviewers** (Code Reviewer, Security, Senior Engineer compliance): read `## Project rules`, `## Exceptions`, and the Must, Should and Security sections of every committed pack for the tools the diff touches.
+   **Reviewers** (Code Reviewer, Security, Senior Engineer compliance): read `## Project rules`, `## Exceptions`, and the Must, Should and Security sections of every committed pack for the tools the diff touches. Read `node "${CLAUDE_PLUGIN_ROOT}/scripts/rule-check.mjs" list` too: a rule with a tool check is judged by the tool; you only confirm its `T-` row.
 3. **Never read the library.** A missing library never blocks you; the committed copies are the rules.
 4. No `.company/standards.md` yet → follow `aico:security-check` and note "no ruleset" in your Handoff.
+
+## Rule slices and tool checks
+- **Slice per task:** the `## Rules per task` row is the builder's slice. Every row lists every security Must (IDs with `-SEC`, every rule in a committed pack's `## Security`), whatever the task. `rule-check.mjs slices <handoff>` exits 1 on a gap; the Lead runs it before builders start.
+- **Check tags:** a Project rule may end `— check: <tool>` (or `check: judgment`); packs carry no tags. `.company/checks.json` binds a tool to one rule; `rule-check.mjs drift` fails when the binding and the rule text part ways. A rule rewrite keeps its tag.
+- Tool checks run first; a failure is a finding the reviewer confirms before it blocks (`aico:review`).
 
 ## Self-check (builders, before `status: done`)
 Add a `## Standards` section to your Handoff: one line per mapped Must ID → `complied` or `exception requested`. Should deviations stay under `## Decisions`.

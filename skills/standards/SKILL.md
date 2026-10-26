@@ -15,6 +15,8 @@ Run with `aico:pipeline`. No Brief or Plan Gate (this Playbook's own skip); the 
    - `<tool>` given → mode **research** for that tool.
    - `refresh` or nothing → mode **refresh**. Show its report to the CEO, ask in a form (`multiSelect`) which changes to take, then dispatch **research** for those.
 2. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. One rejection → one Senior Engineer revision; still rejected → the CEO decides.
+   After sign-off the Lead runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/rule-check.mjs" drift`. Exit 1 → back to the Senior Engineer: rebind the check or restore the rule text. A changed rule that has a `check:` tag keeps its binding in `.company/checks.json`.
+   `research` and `map` modes: every `## Rules per task` row carries all security Musts (`aico:ruleset` slices).
 3. Exception requests and new `## Debt` lines go to the CEO in one form. Offer `/aico:fix` or `/aico:refactor` runs for Debt; never start them.
    **→ Ship Gate** (merge the `.company/standards.md` and `.company/standards/` change)
 

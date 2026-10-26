@@ -12,6 +12,7 @@ argument-hint: <reports: path, paste or export>
 Run with `aico:pipeline`. No Plan or Ship Gate: nothing is built or shipped. Read-only: no builders.
 
 1. `aico:support`: triage the reports into clusters in `.company/work/<slug>/feedback-report.md`. If a cluster looks security-related, stop and ask the CEO in a form whether to start `/aico:incident`.
-2. `aico:product-manager`: read the clusters and the success metric in `.company/project.md`, rank the top 5, and propose a fix or feature for each.
+2. Cost numbers: for the last 3 runs in `.company/ledger/` (newest first) run `node "${CLAUDE_PLUGIN_ROOT}/scripts/ledger.mjs" report <run>` from the repo root. Keep two lines apart: **spend** (`in + cache_write + out`) and **cache read**, each per shipped AC. Never add them. A run with no ledger or `not reconciled` is named as such, never guessed. Put the lines in `feedback-report.md` under `## Cost`.
+3. `aico:product-manager`: read the clusters, the `## Cost` lines and the success metric in `.company/project.md`, rank the top 5, and propose a fix or feature for each.
    **→ Brief Gate** (the CEO picks in a form, `multiSelect`)
-3. You (the Lead) tell the CEO which `/aico:fix` and `/aico:feature` runs to start. Never start them yourself.
+4. You (the Lead) tell the CEO which `/aico:fix` and `/aico:feature` runs to start. Never start them yourself.
