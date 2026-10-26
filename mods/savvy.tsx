@@ -2,10 +2,10 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
 import { guardRunActive } from './lib/guard.mjs'
-import { composeStatus } from './lib/status.mjs'
-import { fit, fmtDuration, UNKNOWN } from './lib/format.mjs'
+import { fit, fmtDuration, fmtMinutes, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
+import { setStatusPart } from './shared/status'
 import { isViewSurface } from './shared/surface'
 import type { AgentRow, RunState, RunView, SettingsState } from '../types'
 
@@ -16,6 +16,7 @@ const POLL_MS = 10000
 const MAX_AGENTS = 40
 const SHOWN_AGENTS = 10
 const DEFAULT_WIDTH = 39
+const SLUG_CELLS = 24
 const PROMPT_HEAD = 65536
 
 // The validator reads a state key from an atom declared in the file that uses it.
@@ -28,7 +29,6 @@ let timer: { cancel: () => unknown } | undefined
 let isForced = false
 let lastSignature = ''
 let lastPollMs = 0
-let lastStatus: string | undefined
 
 const OUTPUT_LINE = /^Output: \.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/m
 const NAME_LINE = /^Name: ([^\r\n]{1,40})$/m
@@ -74,7 +74,7 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   }
   const slug = state.slug
   if (view === null) {
-    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, elapsed: UNKNOWN, agents: [], status: `run ${slug} w${UNKNOWN} S${UNKNOWN} r${UNKNOWN} ${UNKNOWN}` }
+    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, elapsed: UNKNOWN, agents: [], status: `run ${fit(slug, SLUG_CELLS)} w${UNKNOWN} S${UNKNOWN} r${UNKNOWN} ${UNKNOWN}` }
   }
   const wave = typeof view.wave === 'number' ? String(view.wave) : UNKNOWN
   const round = typeof view.round === 'number' ? String(view.round) : UNKNOWN
@@ -102,11 +102,13 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const step = current === undefined ? UNKNOWN : whoLabel(current.step, current.role, current.name)
   const stepNumber = current === undefined ? UNKNOWN : current.step
   const label = isEnded ? `ended (${view.outcome ?? UNKNOWN})` : view.state
+  const minutes = fmtMinutes((isEnded && !Number.isNaN(endedMs) ? endedMs : nowMs) - startedMs)
+  const shortSlug = fit(slug, SLUG_CELLS)
   const status = isEnded
-    ? `run ${slug} ended ${view.outcome ?? UNKNOWN} ${elapsed}`
+    ? `run ${shortSlug} ended ${view.outcome ?? UNKNOWN} ${minutes}`
     : view.state === 'running'
-      ? `run ${slug} w${wave} S${stepNumber} r${round} ${elapsed}`
-      : `run ${slug} ${view.state}`
+      ? `run ${shortSlug} w${wave} S${stepNumber} r${round} ${minutes}`
+      : `run ${shortSlug} ${view.state}`
   return { slug, state: label, wave, step, round, gates, elapsed, agents: lines, status }
 }
 
@@ -186,16 +188,10 @@ async function drawPane($: EngineInterface, e: RenderInput) {
   )
 }
 
-async function setStatus($: EngineInterface, text: string | undefined): Promise<void> {
-  if (text === lastStatus) return
-  lastStatus = text
-  await $.ui.status(text)
-}
-
 async function publish($: EngineInterface): Promise<void> {
   const { settings, state, entries, nowMs } = await gather($)
   const model = buildModel(state, entries, settings.roles, nowMs)
-  await setStatus($, model === undefined || model.status === undefined ? undefined : composeStatus({ savvy: model.status }))
+  await setStatusPart($, 'savvy', model?.status)
   if (model !== undefined) await $.ui.invalidate('ui.render')
 }
 
@@ -248,7 +244,7 @@ async function tickOnce($: EngineInterface): Promise<void> {
   const settings = await readSettings($)
   if (!settings.mods.savvy.enabled) {
     stopTimer()
-    await setStatus($, undefined)
+    await setStatusPart($, 'savvy', undefined)
     return
   }
   const nowMs = await $.clock.now()
@@ -364,7 +360,6 @@ export function registerSavvy(on: On): void {
     stopTimer()
     lastSignature = ''
     lastPollMs = 0
-    lastStatus = undefined
     void begin($)
     return next(e)
   })

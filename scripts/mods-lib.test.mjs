@@ -1,12 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   MAX_STDOUT, MODS_DEFAULTS, trimEol, cleanText, parseJson, str, int, bool, oneOf, arr, obj, opt, rec, pattern,
   interpretRun, guardSettings, guardRunActive, guardReviewDepth
 } from '../mods/lib/guard.mjs';
-import { composeStatus, STATUS_MAX } from '../mods/lib/status.mjs';
+import { composeStatus, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
 import { commitIntent } from '../mods/lib/git-commit.mjs';
-import { cut, cellWidth, fit, fmtInt, fmtPct, fmtDuration, fmtClock, colorEnabled } from '../mods/lib/format.mjs';
+import { cut, cellWidth, fit, fmtInt, fmtPct, fmtDuration, fmtMinutes, fmtClock, colorEnabled } from '../mods/lib/format.mjs';
 import {
   MAIN_LIFETIME_MS, SUBAGENT_LIFETIME_MS, LIFETIME_LABEL, SUBAGENT_LINE, EMPTY_CLOCK, noteRequest, cacheClock, clockLines, clockStatus, wrap
 } from '../mods/lib/cache-clock.mjs';
@@ -210,42 +213,91 @@ test('guardReviewDepth ignores unknown categories and refuses a bad depth or tie
 
 // ---- status.mjs
 
-test('composeStatus joins parts in order with the aico prefix', () => {
-  assert.equal(composeStatus({ savvy: 'run x w1', cost: 'spend 5', blast: 'blast warn contract 1', reflect: 'reflect 2' }),
-    'aico · run x w1 · spend 5 · blast warn contract 1 · reflect 2');
+test('composeStatus ignores prototype keys, unknown keys and non-string values', () => {
+  const hostile = JSON.parse('{"__proto__":"x","constructor":"y","prototype":"z","extra":"e","savvy":7,"blast":["b"],"cost":{"a":1},"reflect":null}');
+  assert.equal(composeStatus(hostile), undefined);
+  const mixed = JSON.parse('{"__proto__":"x","constructor":"y","unknown":"u","cost":"spend 1"}');
+  assert.equal(composeStatus(mixed), 'aico · spend 1');
+  assert.equal(Object.getPrototypeOf({}), Object.prototype);
+  assert.equal({}.x, undefined);
+});
+
+test('composeStatus cuts a 10 MiB part to its cap', () => {
+  const line = composeStatus({ savvy: 'x'.repeat(10 * 1024 * 1024) });
+  assert.equal(cellWidth(line), 7 + STATUS_CAPS.savvy);
+  assert.ok(line.endsWith('…'));
+});
+
+test('composeStatus makes CR, LF, tab and ESC one clean line', () => {
+  const line = composeStatus({ savvy: 'a\r\nb\tc\u001b[31md' });
+  assert.ok(!/[\r\n\t\u001b]/.test(line));
+  assert.ok(line.startsWith('aico · a b c'));
+});
+
+test('composeStatus cuts a CJK part to its cell cap', () => {
+  const line = composeStatus({ blast: '漢'.repeat(30) });
+  assert.ok(cellWidth(line) - 7 <= STATUS_CAPS.blast);
+  assert.ok(line.endsWith('…'));
+});
+
+test('composeStatus joins parts in order savvy, blast, cost, reflect', () => {
+  assert.equal(composeStatus({ reflect: 'reflect 2 suggested', cost: 'spend 5', blast: 'blast warn contract 1', savvy: 'run x w1' }),
+    'aico · run x w1 · blast warn contract 1 · spend 5 · reflect 2 suggested');
 });
 
 test('composeStatus returns undefined when there is nothing to say', () => {
   assert.equal(composeStatus({}), undefined);
   assert.equal(composeStatus({ savvy: '', cost: '   ', blast: null, reflect: undefined }), undefined);
   assert.equal(composeStatus(undefined), undefined);
+  assert.equal(composeStatus(null), undefined);
   assert.equal(composeStatus('x'), undefined);
 });
 
-test('composeStatus stays within 160 characters and drops reflect, cost, blast before cutting savvy', () => {
-  const savvy = 's'.repeat(100);
-  const s1 = composeStatus({ savvy, cost: 'c'.repeat(30), blast: 'b'.repeat(20), reflect: 'r'.repeat(20) });
-  assert.ok(s1.length <= STATUS_MAX);
-  assert.ok(s1.includes(savvy));
-  assert.ok(!s1.includes('r'.repeat(20)));
-  const s2 = composeStatus({ savvy, cost: 'c'.repeat(30), blast: 'b'.repeat(10), reflect: 'r'.repeat(40) });
-  assert.ok(s2.includes('b'.repeat(10)) || !s2.includes('c'.repeat(30)));
-  assert.ok(!s2.includes('r'.repeat(40)));
-  const s3 = composeStatus({ savvy: 's'.repeat(400), cost: 'c', blast: 'b', reflect: 'r' });
-  assert.equal(s3.length, STATUS_MAX);
-  assert.ok(s3.endsWith('…'));
-  assert.ok(!s3.includes(' · c'));
+test('STATUS_CAPS add up to fit STATUS_MAX with all four parts', () => {
+  const sum = Object.values(STATUS_CAPS).reduce((a, b) => a + b, 0);
+  assert.deepEqual(STATUS_CAPS, { savvy: 52, blast: 24, cost: 46, reflect: 20 });
+  assert.ok(7 + sum + 3 * 3 <= STATUS_MAX);
+  const line = composeStatus({ savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
+  assert.ok(cellWidth(line) <= STATUS_MAX);
+  assert.equal(line.split(' · ').length, 5);
 });
 
-test('composeStatus cuts a lone later part and cleans control characters to one line', () => {
-  const s = composeStatus({ blast: 'b'.repeat(400) });
-  assert.equal(s.length, STATUS_MAX);
-  const t = composeStatus({ savvy: 'a\r\nb\u001b[31mc' });
-  assert.ok(!/[\r\n\u001b]/.test(t));
+test('composeStatus with a small max drops reflect, cost, blast, then cuts savvy', () => {
+  const parts = { savvy: 's'.repeat(40), blast: 'b'.repeat(20), cost: 'c'.repeat(30), reflect: 'r'.repeat(15) };
+  const l1 = composeStatus(parts, { max: 105 });
+  assert.ok(cellWidth(l1) <= 105 && !l1.includes('r'.repeat(15)) && l1.includes('c'.repeat(30)));
+  const l2 = composeStatus(parts, { max: 75 });
+  assert.ok(cellWidth(l2) <= 75);
+  assert.ok(!l2.includes('r'.repeat(15)) && !l2.includes('c'.repeat(30)) && l2.includes('b'.repeat(20)));
+  const l3 = composeStatus(parts, { max: 20 });
+  assert.ok(cellWidth(l3) <= 20);
+  assert.ok(l3.endsWith('…') && !l3.includes('b'));
 });
 
-test('composeStatus bounds a 10 MiB part', () => {
-  assert.equal(composeStatus({ savvy: 'x'.repeat(10 * 1024 * 1024) }).length, STATUS_MAX);
+test('fmtMinutes prints whole minutes and hours', () => {
+  assert.equal(fmtMinutes(0), '0m');
+  assert.equal(fmtMinutes(59999), '0m');
+  assert.equal(fmtMinutes(12 * 60000 + 59000), '12m');
+  assert.equal(fmtMinutes(65 * 60000), '1h05m');
+  for (const bad of [-1, NaN, Infinity, 'x', undefined]) assert.equal(fmtMinutes(bad), '?');
+});
+
+test('only mods/shared/status.ts calls $.ui.status', () => {
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'test' && entry.name !== 'node_modules') walk(full);
+      } else if (/\.(ts|tsx|mjs)$/.test(entry.name) && relative(root, full).split(sep).join('/') !== 'mods/shared/status.ts') {
+        if (/\bui\.status\s*\(/.test(readFileSync(full, 'utf8'))) found.push(relative(root, full));
+      }
+    }
+  };
+  for (const top of ['hooks', 'mods']) if (existsSync(join(root, top))) walk(join(root, top));
+  assert.deepEqual(found, []);
+  assert.match(readFileSync(join(root, 'mods/shared/status.ts'), 'utf8'), /\bui\.status\s*\(/);
 });
 
 // ---- git-commit.mjs

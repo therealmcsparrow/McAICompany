@@ -4,9 +4,9 @@ import type { EngineInterface, On, RenderInput } from 'claude-code'
 import { EMPTY_CLOCK, cacheClock, clockLines, clockStatus, noteRequest, wrap } from './lib/cache-clock.mjs'
 import { arr, guardRunActive, int, obj, oneOf, opt, pattern, str } from './lib/guard.mjs'
 import { fit, fmtInt, UNKNOWN } from './lib/format.mjs'
-import { composeStatus } from './lib/status.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
+import { setStatusPart } from './shared/status'
 import { isViewSurface } from './shared/surface'
 import type { AgentRow, CacheClockState, CostState, RunView } from '../types'
 
@@ -193,13 +193,11 @@ function partOf(isOn: boolean, cost: { cost: Cost }, clock: CacheClockState, now
   return `${spend} ${clockStatus(cacheClock(clock, nowMs))}`
 }
 
-// The status line is one per plugin and Savvy writes it every 2 s while a run is active: Cache Tax sets its part when it changes
-// and clears the line only when Savvy is off, so it never wipes Savvy's text.
-async function applyPart($: EngineInterface, part: string, isRedraw: boolean, isSavvyOn: boolean): Promise<void> {
+// The status part is set on every tick: the composer writes the line only when it changes.
+async function applyPart($: EngineInterface, part: string, isRedraw: boolean): Promise<void> {
   const isChanged = part !== lastPart
   lastPart = part
-  if (isChanged && part !== '') $.ui.status(composeStatus({ cost: part }))
-  if (isChanged && part === '' && !isSavvyOn) $.ui.status(undefined)
+  await setStatusPart($, 'cost', part || undefined)
   if (isChanged || isRedraw) await $.ui.invalidate('ui.render')
 }
 
@@ -231,7 +229,7 @@ async function tickOnce($: EngineInterface): Promise<void> {
   const settings = await readSettings($)
   if (!settings.mods.cache_tax.enabled) {
     stopTimer()
-    await applyPart($, '', false, settings.mods.savvy.enabled)
+    await applyPart($, '', false)
     return
   }
   const nowMs = await $.clock.now()
@@ -284,7 +282,7 @@ async function tickOnce($: EngineInterface): Promise<void> {
     isRedraw = true
   }
   const clock = await read($, clockAtom)
-  await applyPart($, partOf(true, current, clock, nowMs), isRedraw, settings.mods.savvy.enabled)
+  await applyPart($, partOf(true, current, clock, nowMs), isRedraw)
 }
 
 async function tick($: EngineInterface): Promise<void> {

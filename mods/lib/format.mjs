@@ -76,6 +76,14 @@ export function fmtDuration(ms) {
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
 }
 
+// Whole minutes only, for the status line: `0m`, `12m`, `1h05m`.
+export function fmtMinutes(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return UNKNOWN;
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
+}
+
 // Local HH:MM of an epoch time in milliseconds.
 export function fmtClock(ms) {
   if (!Number.isFinite(ms)) return UNKNOWN;

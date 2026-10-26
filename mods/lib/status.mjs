@@ -1,34 +1,37 @@
-// The one status line of the plugin: `aico · <savvy> · <cost> · <blast> · <reflect>`.
-import { cleanText } from './guard.mjs';
+// The one status line of the plugin: `aico · <savvy> · <blast> · <cost> · <reflect>`.
+import { cellWidth, fit } from './format.mjs';
 
 export const STATUS_MAX = 160;
+// Per-part caps in terminal cells: 7 + 142 + 3 * 3 = 158, so all four parts always fit.
+export const STATUS_CAPS = Object.freeze({ savvy: 52, blast: 24, cost: 46, reflect: 20 });
 const PREFIX = 'aico · ';
 const SEP = ' · ';
-const ORDER = ['savvy', 'cost', 'blast', 'reflect'];
+const ORDER = ['savvy', 'blast', 'cost', 'reflect'];
 const DROP = ['reflect', 'cost', 'blast'];
 
-function onePart(value) {
-  const text = cleanText(value, STATUS_MAX + 1);
-  return text === undefined ? '' : text.replace(/\s+/g, ' ').trim();
+function onePart(value, cap) {
+  if (typeof value !== 'string') return '';
+  return fit(value.slice(0, cap * 4 + 8).replace(/\s+/g, ' ').trim(), cap);
 }
 
 // Returns the line, or undefined when no mod has anything to say.
-export function composeStatus(parts) {
+export function composeStatus(parts, options) {
   if (parts === null || typeof parts !== 'object') return undefined;
+  const max = options !== null && typeof options === 'object' && Number.isSafeInteger(options.max) ? options.max : STATUS_MAX;
   const have = {};
   for (const key of ORDER) {
-    const text = onePart(Object.hasOwn(parts, key) ? parts[key] : undefined);
+    if (!Object.hasOwn(parts, key)) continue;
+    const text = onePart(parts[key], STATUS_CAPS[key]);
     if (text !== '') have[key] = text;
   }
-  const line = () => PREFIX + ORDER.filter((k) => k in have).map((k) => have[k]).join(SEP);
   if (Object.keys(have).length === 0) return undefined;
+  const line = () => PREFIX + ORDER.filter((k) => k in have).map((k) => have[k]).join(SEP);
   for (const key of DROP) {
-    if (line().length <= STATUS_MAX) break;
+    if (cellWidth(line()) <= max) break;
     if (Object.keys(have).length > 1) delete have[key];
   }
-  if (line().length <= STATUS_MAX) return line();
+  if (cellWidth(line()) <= max) return line();
   const first = ORDER.find((k) => k in have);
-  const room = STATUS_MAX - PREFIX.length;
-  have[first] = cleanText(have[first], room);
+  have[first] = fit(have[first], Math.max(1, max - cellWidth(PREFIX)));
   return line();
 }

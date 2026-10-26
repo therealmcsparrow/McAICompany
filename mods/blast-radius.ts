@@ -4,9 +4,9 @@ import type { EngineInterface, On } from 'claude-code'
 import { buildReason, agentLabel, decide, hitsFromDepth, listing, parseSpawnLines, reviewArgs, unknownHits } from './lib/blast.mjs'
 import { guardReviewDepth, guardRunActive } from './lib/guard.mjs'
 import { commitIntent } from './lib/git-commit.mjs'
-import { composeStatus } from './lib/status.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
+import { setStatusPart } from './shared/status'
 import type { BlastState } from '../types'
 
 const SHOW_MS = 60000
@@ -70,13 +70,13 @@ async function show($: EngineInterface, part: string, warn: BlastState['warn']):
   const token = ++shownToken
   const untilMs = (await $.clock.now()) + SHOW_MS
   await update($, blast, () => ({ warn: warn === null ? null : { ...warn, untilMs } }))
-  $.ui.status(composeStatus({ blast: part }))
+  void setStatusPart($, 'blast', part)
   void $.clock
     .sleep(SHOW_MS)
     .then(async () => {
       if (token !== shownToken) return
       await update($, blast, () => ({ warn: null }))
-      $.ui.status(undefined)
+      void setStatusPart($, 'blast', undefined)
     })
     .catch(() => undefined)
 }
