@@ -272,7 +272,8 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **How it runs.**
 1. The Lead picks the 4–8 Roles whose angle matters and opens a notes file in `.company/brainstorms/`.
 2. **Rounds** in one of three modes — **ideas** (Roles answer in parallel, the default), **debate** (Roles respond to each other), **moderated** (one at a time). You can switch mode or add/drop Roles anytime. It runs until you say **done**.
-   - From round 2, each Role gets the digest first, its own last reply, and up to five one-line headlines under "Others said". It does not re-read the whole file unless asked.
+   - Each Role gets one constant dispatch prompt for the whole run. What changes per round goes in a small input file for that Role in `.company/brainstorm-input/`, which the script writes and removes at Close. From round 2 it holds the digest, the questions already asked and answered, and up to five one-line headlines under "Others said", each with its idea ID. The Role does not re-read the whole brainstorm file unless asked.
+   - Replies are short: about 100 words in the ideas pass. A Role that sees a question already answered does not ask it again; the Lead merges it into the answered one.
    - A Role may **skip** a round when it has nothing to add. That is recorded and is not an error.
    - **Debate** runs the ideas pass, then one **crossfire**: the sharpest clash of the round, one pair, about 50 words each. Set `brainstorm.debate` to `full_pass` in `/aico:settings` for the older full second pass, which reads more and saves nothing.
 3. **After each round** you get a form. Open questions are merged, ranked (blocking first, then by votes) and never repeat an answered one. Each has options and a default; skip a question and the default is recorded as "CEO skipped". The form shows three questions, then Next, with a fourth shown as "up next". Unanswered defaults are assumed.

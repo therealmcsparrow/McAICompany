@@ -21,7 +21,7 @@ You can change the limit for Roles in [settings](#settings) as **max context** (
 ## Token cost
 aico records how many tokens each Step used in a ledger at `.company/ledger/<run>.jsonl`. The ledger stores **counts only**: no prompts, no replies. At the Ship Gate the Lead shows one cost line, with spend (input, cache write and output) and cache read kept apart. `/aico:feedback` compares the last three runs.
 
-Prompt caching gives no saving here, and aico claims none. The savings come from reading less: shorter prompts, fewer file reads, fewer dispatches, a digest in place of a full transcript. Prompts keep one fixed order so they stay readable and testable, not to get a discount.
+The savings come from reading less: shorter prompts, fewer file reads, fewer dispatches, a digest in place of a full transcript. Brainstorm Roles also keep one constant prompt for the whole run, with changing content in a per-round input file. aico claims no saving percentage for this yet. Prompts keep one fixed order so they stay readable and testable.
 
 ## Tool checks, slices and review depth
 - **Tool checks.** A rule can carry `check: <tool>` or `check: judgment`. Checks bind to a rule by its ID in `.company/checks.json` and run before review. A failure becomes a finding that the reviewer must confirm before it blocks. Compliance stays a separate lane.

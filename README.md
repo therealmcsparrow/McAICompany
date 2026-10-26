@@ -30,7 +30,7 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:incident <what broke>` | Mitigate, check EU reporting duties, fix, then write the postmortem. Urgency allowed; the Ship Gate stays |
 | `/aico:refactor <scope>` | Restructures existing code toward Core, Modules and Contracts in safe slices, no behavior change |
 | `/aico:maintain` | Routine upkeep: dependencies, vulnerabilities, licenses, CI health and stale rules, then the upgrades you pick |
-| `/aico:brainstorm <idea\|file>` | The relevant Roles weigh in on your idea, round after round, until you say done. Each round ends with a digest and a short question form; then you choose: plan and implement, roadmap, nice to have, or park |
+| `/aico:brainstorm <idea\|file>` | The relevant Roles weigh in on your idea, round after round, until you say done. Replies are short (about 100 words). Each round ends with a digest and a short question form, and answered questions are not asked again; then you choose: plan and implement, roadmap, nice to have, or park |
 | `/aico:cooler [topic] [turns=N\|listen]` | Random colleagues chat at the water cooler about the project, unmoderated; others walk up or leave. Recorded in `.company/cooler/`, nothing built |
 | `/aico:standards [tool\|refresh]` | The Senior Engineer researches or refreshes sourced best-practice rules for the stack; the Architect signs off; exceptions come to you |
 | `/aico:pentest <target> [full]` | On demand: the Pentester attacks a local/staging build of **your own** product like a red team, proves findings safely (`full` = real exploit chains), and reports them ranked. No code changes |
@@ -85,7 +85,7 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 - **Ruleset** (`aico:ruleset`): sourced Must/Should/May rules per tool, kept by the Senior Engineer. Security is law. Builders follow the rules before review; a Must exception needs your approval.
 - **Fix rounds:** at most 2 by default (0–5 in `/aico:settings`), then escalation to you. Nits never loop.
 - **Handoff Contract** (`aico:handoff`): Roles pass work through machine-readable Handoff fields (`base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) with a `contract|spec|security|test` blocking taxonomy; independent Steps run in parallel by default, and reviewers diff only against `base-commit`. From v1.1 the code-reviewer and compliance Steps also write a top block and `ID | file:line | problem | why | fix` rows.
-- **Token cost:** a max context per Role in `/aico:settings` (default 150000, minimum 60000, handover at 80%), and a counts-only token ledger with one cost line at Ship. Savings come from reading less; caching gives none.
+- **Token cost:** a max context per Role in `/aico:settings` (default 150000, minimum 60000, handover at 80%), and a counts-only token ledger with one cost line at Ship. Savings come from reading less; no saving percentage is claimed yet.
 - **Lessons:** a Ship appends up to 3 one-line Lessons to `.company/lessons.md`; later runs read it and pass the relevant ones to each Role.
 - **EU compliance** (`aico:eu-compliance`): GDPR, CRA, AI Act Art. 50, EAA, VAT and consumer law are checked before Ship.
 - **Git:** branch `aico/<task>`, one commit per Step, no push before the Ship Gate (an unlocked auto Ship Gate pushes and opens a PR, never merges). Commit subjects are `<type>: <summary>` (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`), never prefixed with `aico` or a Role name.

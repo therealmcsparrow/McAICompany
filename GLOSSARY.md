@@ -79,7 +79,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Context cap** — `context_cap`: the max context a Role gets, set in Settings (global and per Role). Default 150000, floor 60000. A Role hands over at 80%; high-risk work is never below the default. A soft limit passed in the dispatch.
 
-**Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Caching gives no saving; savings come from reading less.
+**Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 
 **Tool check** — a rule tagged `check: <tool>`, bound to its rule ID in `.company/checks.json`. It runs before review; a failure is a finding the reviewer confirms before it blocks.
 
@@ -94,6 +94,8 @@ _Avoid_: orchestrator (use Lead).
 **Digest** — the part of a format 2 brainstorm file that quotes your answers word for word, lists open threads, keeps a dissent line and links each item to its round.
 
 **Crossfire** — in debate mode, one pair of Roles answers the round's sharpest clash, about 50 words each. The setting `brainstorm.debate` is `crossfire` (default) or `full_pass`.
+
+**Round input** — the small per-Role file in `.company/brainstorm-input/` that holds what changes each brainstorm round (digest, questions, "Others said" with idea IDs). The Role's dispatch prompt stays constant for the whole run. The script writes the file and removes it at Close.
 
 **Film script** — an optional separate file (`brainstorm.film_script`, off by default) where every line quotes a stored brainstorm reply. No model call.
 
