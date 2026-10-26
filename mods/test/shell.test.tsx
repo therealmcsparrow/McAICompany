@@ -135,3 +135,31 @@ test('only the terminal and the desktop draw views', () => {
   expect(isViewSurface(null)).toBe(false)
   expect(isViewSurface(undefined)).toBe(false)
 })
+
+async function bootWithOutputs($: Env[0], on: Env[1], answer: (e: Run) => unknown) {
+  const toasts: string[] = []
+  const statuses: (string | undefined)[] = []
+  on('ui.toast', (_, e) => (toasts.push(e.text), { value: undefined }))
+  on('ui.status', (_, e) => (statuses.push(e.text), { value: undefined }))
+  await boot($, on, 'terminal', answer)
+  return { toasts, statuses }
+}
+
+test('session start shows one toast that lists the mods that are on, and the idle status part', async ($, on) => {
+  const out = await bootWithOutputs($, on, () => ok(GOOD))
+  expect(out.toasts).toEqual(['aico mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(out.statuses[0]).toBe('aico idle')
+})
+
+test('a settings call that fails still toasts, and says the settings are unknown', async ($, on) => {
+  const out = await bootWithOutputs($, on, () => ({ deny: 'no process here' }))
+  expect(out.toasts).toHaveLength(1)
+  expect(out.toasts[0]).toMatch(/^aico mods ready \(settings unknown\): /)
+})
+
+test('a refused toast does not break the session start', async ($, on) => {
+  on('ui.toast', () => ({ deny: 'no toast' }))
+  on('ui.status', () => ({ deny: 'no status' }))
+  const writes = await boot($, on, 'terminal', () => ok(GOOD))
+  expect(writes[writes.length - 1].value.known).toBe(true)
+})

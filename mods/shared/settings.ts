@@ -18,10 +18,11 @@ export async function readSettings($: EngineInterface): Promise<SettingsState> {
 }
 
 // Reads the resolved settings; a failed call leaves the defaults and `known: false` (the views say `settings unknown`).
-export async function refreshSettings($: EngineInterface): Promise<void> {
+export async function refreshSettings($: EngineInterface): Promise<SettingsState> {
   const r = await runScript($, 'settings', ['get'], TIMEOUT_MS.get, guardSettings)
   const next: SettingsState = r.ok
     ? { known: true, mods: r.value.mods as ModsSettings, roles: Object.fromEntries(Object.entries(r.value.roles).map(([role, one]) => [role, (one as { name: string }).name])) }
     : { known: false, mods: structuredClone(MODS_DEFAULTS) as ModsSettings, roles: {} }
   await update($, settings, () => next)
+  return next
 }

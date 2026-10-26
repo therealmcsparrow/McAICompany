@@ -42,7 +42,7 @@ async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o
     return { value: { isSet: true, version: 1 } }
   }) as never)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('ui.toast', (_, e) => (toasts.push(e.text), { value: undefined }))
+  on('ui.toast', (_, e) => (/^aico mods ready/.test(e.text) || toasts.push(e.text), { value: undefined }))
   on('ui.status', (_, e) => (statuses.push(e.text), { value: undefined }))
   on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }))
   on('tool.check', () => ({ decision: (o.core ?? 'allow') as 'allow' }))
@@ -87,9 +87,9 @@ for (const surface of SURFACES) {
     const r = await t.check('Bash', GIT.Bash)
     expect(r.decision).toBe('allow')
     expect(t.toasts.length).toBe(1)
-    expect(t.statuses[t.statuses.length - 1]).toBe('⚠ contract')
+    expect(t.statuses[t.statuses.length - 1]).toBe('aico idle · ⚠ contract')
     await t.clock.advance(60000)
-    expect(t.statuses[t.statuses.length - 1]).toBe(undefined)
+    expect(t.statuses[t.statuses.length - 1]).toBe('aico idle')
   })
 
   test(`a script failure is a security hit and asks with a person (${surface})`, async ($, on) => {

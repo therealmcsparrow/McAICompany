@@ -7,3 +7,5 @@ node_modules/
 !/scripts/*
 !/tests/
 !/tests/*
+# the host writes this into the plugin root on every --plugin-dir start
+/tsconfig.json

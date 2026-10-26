@@ -7,7 +7,8 @@ import {
   MAX_STDOUT, MODS_DEFAULTS, trimEol, cleanText, parseJson, str, int, bool, oneOf, arr, obj, opt, rec, pattern,
   interpretRun, guardSettings, guardRunActive, guardReviewDepth
 } from '../mods/lib/guard.mjs';
-import { composeStatus, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
+import { composeStatus, IDLE, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
+import { readyText } from '../mods/lib/ready.mjs';
 import { commitIntent } from '../mods/lib/git-commit.mjs';
 import { cut, cellWidth, fit, fmtInt, fmtCompact, fmtPct, fmtDuration, fmtMinutes, fmtClock, colorEnabled } from '../mods/lib/format.mjs';
 import {
@@ -283,6 +284,51 @@ test('composeStatus with a small max drops reflect, cost, blast, then cuts savvy
   const l3 = composeStatus(parts, { max: 15 });
   assert.ok(cellWidth(l3) <= 15);
   assert.ok(l3.endsWith('…') && !l3.includes('b'));
+});
+
+test('composeStatus with idle shows `aico idle` in the first slot when no run part is there', () => {
+  assert.equal(IDLE, 'aico idle');
+  assert.equal(composeStatus({}, { idle: true }), 'aico idle');
+  assert.equal(composeStatus({ savvy: '', cost: '   ' }, { idle: true }), 'aico idle');
+  assert.equal(composeStatus(undefined, { idle: true }), 'aico idle');
+  assert.equal(composeStatus({ cost: '5 tax', blast: '⚠ core' }, { idle: true }), 'aico idle · ⚠ core · 5 tax');
+  assert.equal(composeStatus({}), undefined);
+  assert.equal(composeStatus({}, { idle: false }), undefined);
+});
+
+test('composeStatus with idle gives way to the Savvy part and keeps the 70 cell budget', () => {
+  assert.equal(composeStatus({ savvy: 'W3 S12 be-eng 14m', cost: '5 tax' }, { idle: true }), 'W3 S12 be-eng 14m · 5 tax');
+  assert.equal(composeStatus({ savvy: 'ended ok 14m' }, { idle: true }), 'ended ok 14m');
+  const all = composeStatus({ blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) }, { idle: true });
+  assert.ok(cellWidth(all) <= STATUS_MAX);
+  assert.equal(all.split(' · ').length, 4);
+  assert.ok(all.startsWith('aico idle · '));
+  assert.ok(cellWidth(composeStatus({}, { idle: true })) <= STATUS_CAPS.savvy);
+  const small = composeStatus({ blast: 'b'.repeat(8), cost: 'c'.repeat(15), reflect: 'r'.repeat(8) }, { idle: true, max: 15 });
+  assert.ok(cellWidth(small) <= 15);
+});
+
+test('composeStatus with idle ignores hostile parts and a hostile option', () => {
+  const hostile = JSON.parse('{"__proto__":"x","savvy":7,"blast":["b"],"cost":{"a":1}}');
+  assert.equal(composeStatus(hostile, { idle: true }), 'aico idle');
+  assert.equal(composeStatus({}, { idle: 'yes' }), undefined);
+});
+
+test('readyText lists the mods that are on, in a fixed order', () => {
+  const on = (enabled) => ({ enabled });
+  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true), blast_radius: on(true) }, true),
+    'aico mods ready: Savvy, Cache Tax, Reflect, Blast Radius');
+  assert.equal(readyText({ savvy: on(false), cache_tax: on(true), reflect: on(false), blast_radius: on(true) }, true),
+    'aico mods ready: Cache Tax, Blast Radius');
+  assert.equal(readyText({ savvy: on(false) }, true), 'aico mods ready: none on');
+});
+
+test('readyText says when the settings are unknown and survives hostile input', () => {
+  assert.equal(readyText({ savvy: { enabled: true } }, false), 'aico mods ready (settings unknown): Savvy');
+  for (const bad of [null, undefined, 'x', 7]) assert.equal(readyText(bad, true), 'aico mods ready');
+  const hostile = JSON.parse('{"__proto__":{"enabled":true},"savvy":"yes","reflect":{"enabled":"true"},"blast_radius":null}');
+  assert.equal(readyText(hostile, true), 'aico mods ready: none on');
+  assert.ok(readyText({ savvy: { enabled: true } }, true).length <= 80);
 });
 
 test('fmtCompact shortens a count to at most 7 cells', () => {

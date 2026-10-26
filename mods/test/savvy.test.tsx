@@ -216,7 +216,7 @@ test('no active run shows nothing and sets no status', async ($, on) => {
   w.active = NONE
   await boot($, on, w)
   expect(w.opened).toEqual([])
-  expect(w.statuses.filter(s => s !== undefined)).toEqual([])
+  expect(w.statuses.filter(s => s !== undefined && s !== 'aico idle')).toEqual([])
   const ui = await $.ui.mount(pane('terminal'))
   expect(await lines(ui)).toEqual([])
   await ui.unmount()
@@ -284,7 +284,7 @@ test('a __proto__ key in the answer is dropped, not merged', async ($, on) => {
   w.active = '{"slug":null,"view":null,"__proto__":{"polluted":true}}'
   await boot($, on, w)
   expect(({} as Record<string, unknown>).polluted).toBeUndefined()
-  expect(w.statuses.filter(s => s !== undefined)).toEqual([])
+  expect(w.statuses.filter(s => s !== undefined && s !== 'aico idle')).toEqual([])
 })
 
 test('a script that never answers times out and the run shows unknown', async ($, on) => {
@@ -318,7 +318,7 @@ test('a mod that is off draws nothing, runs no script and sets no status', async
   await clock.advance(30_000)
   expect(w.runStateCalls).toEqual([])
   expect(w.opened).toEqual([])
-  expect(w.statuses.filter(s => s !== undefined)).toEqual([])
+  expect(w.statuses.filter(s => s !== undefined && s !== 'aico idle')).toEqual([])
   const ui = await $.ui.mount(pane('terminal'))
   expect(await lines(ui)).toEqual([])
   await ui.unmount()

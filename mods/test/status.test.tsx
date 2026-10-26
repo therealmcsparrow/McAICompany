@@ -139,7 +139,7 @@ test('Cache Tax off leaves only the Savvy part, then the reverse', async ($, on)
   await clock.advance(100)
   for await (const chunk of $.turn.step({ turnId: 't1', index: 0, model: 'm', messageCount: 1 } as never)) void chunk
   await clock.advance(4100)
-  expect(last(w)).toMatch(new RegExp(`^${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^aico idle · ${COST}$`))
 })
 
 test('with Savvy off and no placed pane the Cache Tax summary stands alone on the line', async ($, on) => {
@@ -148,7 +148,7 @@ test('with Savvy off and no placed pane the Cache Tax summary stands alone on th
   w.isPlaced = false
   await boot($, on, w)
   expect(w.opened).toContain('aico-cost')
-  expect(last(w)).toMatch(new RegExp(`^${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^aico idle · ${COST}$`))
 })
 
 test('the longest slug, the largest spend and a warning all fit in 70 cells', async ($, on) => {

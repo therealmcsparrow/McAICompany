@@ -24,15 +24,28 @@ export async function setStatusPart($: EngineInterface, key: StatusKey, text: st
     if (!KEYS.includes(key)) return
     if (typeof text === 'string' && text !== '') parts[key] = text
     else delete parts[key]
-    const line: string | undefined = composeStatus(parts)
-    if (line === lastLine) return
-    lastLine = line
-    try {
-      await $.ui.status(line)
-    } catch {
-      if (lastLine === line) lastLine = NOT_WRITTEN
-    }
+    await writeLine($)
   } catch {
     // A status part is a convenience; nothing here may reach a hook.
+  }
+}
+
+// Writes the line as it stands now (the idle part when no run part is set). Used at session start. Never throws.
+export async function showStatus($: EngineInterface): Promise<void> {
+  try {
+    await writeLine($)
+  } catch {
+    // Same as above.
+  }
+}
+
+async function writeLine($: EngineInterface): Promise<void> {
+  const line: string | undefined = composeStatus(parts, { idle: true })
+  if (line === lastLine) return
+  lastLine = line
+  try {
+    await $.ui.status(line)
+  } catch {
+    if (lastLine === line) lastLine = NOT_WRITTEN
   }
 }
