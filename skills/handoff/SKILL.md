@@ -5,33 +5,26 @@ description: Use when starting or finishing any aico Step. Defines what a Role m
 
 # Handoff
 
-Every Step starts with a fresh context. The Handoff is the only memory between Steps.
+Every Step starts with a fresh context; the Handoff is the only memory between Steps.
 
 ## Starting a Step
 
-Your dispatch prompt gives you:
-- **Input Handoffs**: paths under `.company/work/<task>/`
-- **Output path**: the one Handoff file you will write
-- **Goal**: what this Step must deliver
-
-Rules:
-1. Read the input Handoffs first, then only the `.company/project.md` sections you need. Don't read other Steps' Handoffs or browse `.company/work/` to "get context".
-2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`, and leave it to the Lead to re-dispatch. Never reconstruct context by guessing. The only exception is a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
+Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the one **Output** file you write and the **Goal**.
+1. Read the input Handoffs first, then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
+2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`; the Lead re-dispatches. Never guess the context. Exception: a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
+4. Pilot Roles also follow `references/pilot.md`; builders cite finding IDs in `## Did`.
 
 ## Context budget: the `Context cap:` line
 
-Your dispatch carries `Context cap: <cap> handover <n>`. Treat `<cap>` as the most context you may use and `<n>` as the handover point. The Lead computes both (per-Role cap, high-risk floor, 80%); you never compute them. Past the cap, quality drops and compaction loses detail, so hand over to a clean Step instead of pushing on.
-- `Context cap:` absent → cap 150000, handover at 120000 (150k tokens).
-- `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 150000, handover at 120000, and add a Nit `invalid Context cap` (echo at most 35 characters of the value).
-- Watch it as you work: big file reads, long diffs, test logs and tool output add up fast. Read slices, not whole files; grep before reading.
-- When you're near `<n>` (or you can't tell and have done a lot of reading and tool calls), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
-- Write your Handoff with `status: handover`. `## Did` lists what's finished; `## Next` lists exactly what's left, in order, with file paths, so a fresh Role of the same type can pick it up without re-reading what you read. Commit-ready work only; never leave the tree broken.
-- A handover is not a failure and not a blocker. Don't cut scope or skip checks to squeeze under the budget.
+Your dispatch carries `Context cap: <cap> handover <n>`: `<cap>` is the most context you may use, `<n>` the handover point. The Lead computes both; you never compute them. Past the cap quality drops, so hand over to a clean Step.
+- Absent → cap 150000, handover at 120000. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v3.1).
+- Big reads, long diffs and test logs add up: read slices, grep first. Near `<n>` (or you can't tell and have done a lot of reading), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
+- Write `status: handover`: `## Did` what's finished, `## Next` what's left, in order, with file paths, so a fresh Role of the same type continues without re-reading. Commit-ready work only. A handover is not a failure or a blocker; never cut scope or skip checks to squeeze under the budget.
 
 ## Finishing a Step
 
-Write **exactly one** file at the output path, in this shape. Everything for the next Step goes here, never in code comments (`aico:tdd`).
+Write **exactly one** file at the output path. Everything for the next Step goes here, never in code comments.
 
 ```markdown
 ---
@@ -39,70 +32,36 @@ step: 03
 role: backend-engineer
 task: <task-slug>
 status: done | blocked | needs-ceo | handover
-round: 0            # Fix round this Step belongs to (0 = first pass), copied from the dispatch
-base-commit: <sha>  # commit this Step's range is cut from; reviewers diff against it, never HEAD~1
-risk-tier: medium   # from the Brief; see the forced-high list below. Builders/QA/reviewers copy it from the dispatch
-acceptance-ids: [AC1, AC3]   # the Brief's acceptance-criterion IDs this Step delivers (builders, QA)
-files-touched: [src/x.ts]    # files this Step changed, for affected-only tests and the smoke test
+round: 0
+base-commit: <sha>
+risk-tier: medium
+acceptance-ids: [AC1, AC3]
+files-touched: [src/x.ts]
 ---
 By: <Name> (<role>)
 ## Did
-- What changed, as facts, with file paths. No narrative.
+- What changed, as facts, with file paths.
 ## Decisions
-- Decision — why. (Anything another Role must respect.)
+- Decision — why.
 ## Blocking
-- [contract|spec|security|test] <file:line> — problem — fix. Empty if none.
+- [contract|spec|security|test] <file:line> — problem — fix.
 ## Nits
-- Non-blocking remarks. These never trigger a Fix round.
+- Non-blocking; never a Fix round.
 ## Next
-- What the next Step needs to know or do. Name the Role if obvious.
+- What the next Step needs; name the Role.
 ```
 
-**By line.** `By: <Name> (<role>)` goes directly under the frontmatter, from your dispatch's `Name:` line; with no `Name:`, use the Role title. Display only; machine reading ignores it.
+`By:` comes from your dispatch's `Name:` line (none → the Role title). **Fields are the contract:** the Lead and later Steps read the frontmatter, not the prose; fill every field that applies. `round`, `base-commit` (reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit it if you only reason).
 
-**Fields are the contract.** Later Steps and the Lead read these frontmatter fields, not the prose: fill every one that applies. `base-commit`, `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed. A Role that only reasons (reviewer, PM) omits `files-touched`.
+**Blocking tags** `contract`, `spec`, `security`, `test` route the Fix round. **Risk tier** `low | medium | high` is forced **high** for anything touching auth, payments, personal data, migrations or a Contract; a Role may raise it, never lower it.
 
-**Blocking taxonomy.** Tag each blocker `contract`, `spec`, `security` or `test` so the Lead routes the Fix round precisely. **Risk tier** is `low | medium | high`; it is forced **high** for anything touching auth, payments, personal data, migrations or a Contract — a Role may raise the tier, never lower it.
-
-- `handover`: you hit the context budget (above). The work so far is finished and commit-ready; `## Next` is the remaining work for a fresh Step.
-- `needs-ceo`: you need a decision only the CEO can make, e.g. a change to Core, a breaking Contract change, or a scope change. Put the question under Blocking.
-- Optional sections, only when `aico:ruleset` asks for them: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old rule violations), placed before `## Next`.
-- Keep it under ~60 lines. Link to files; don't paste code.
-- Your final reply to the Lead is one line: `<status> — <output path>`.
-
-## Handoff v1.1 (pilot)
-Contract: `docs/contracts/handoff.md`. A v1.0 Handoff stays valid; v1.1 only adds. The Lead runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs" <file>` after each Step, with `--require-top` for `code-reviewer` and `senior-engineer` compliance-pass Handoffs. A malformed top block blocks the Step: you are re-dispatched with the lint errors; it costs no Fix round.
-
-**Top block.** Directly after the `By:` line, before `## Did`, one fence with info string `aico-top`. Exactly these keys, in this order, one line each, nothing else:
-
-````markdown
-By: Rin (code-reviewer)
-```aico-top
-status: done
-files: [src/x.ts]
-ac_ids: [AC1]
-rule_ids: [proj.M3]
-risks: [R-1]
-read_next: [src/x.ts#top, R-1]
-tokens_used: unknown
-```
-````
-
-- `status`, `files`, `ac_ids` repeat the frontmatter `status`, `files-touched`, `acceptance-ids` (same set; `[]` when absent). A mismatch is malformed.
-- `rule_ids`: rule IDs you applied or checked. `risks`: finding IDs that carry a risk. `read_next`: at most 5 pointers (`path`, `path#heading`, `R-n`), never copied text. `tokens_used`: your own integer count or `unknown`.
-- Only one block; lines under 1000 characters.
-
-**Finding rows (pilot Roles).** In `## Blocking` and `## Nits`, one row per finding:
-- Blocking: `- [contract|spec|security|test] <ID> | <file>[:<line>[-<line>]] | <problem> | <why> | <fix>`
-- Nit: `- <ID> | <file>[:<line>] | <problem> | <why> | <fix>`
-- `<ID>` is `R-<n>` (review), `C-<n>` (compliance pass) or `T-<n>` (tool check). IDs are stable across Fix rounds and never reused. `why` is never empty. Builders cite IDs in `## Did` (`fixed R-2`).
-- No `|` inside a field.
-
-**Findings ledger.** A pilot reviewer keeps `<NN>-<role>.findings.md` while working (frontmatter `step`, `role`, `base-commit`; `## Checked` file list; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, status `open|fixed|withdrawn`). Rows are appended or change status, never deleted. A handover or Fix-round reviewer continues the same file. A Nit is stored with the tag `[nit]` (`- R-3 | open | [nit] | file:line | problem | why | fix`) and its Handoff row drops the tag. Check it with `node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs" --findings <file>`.
+- `needs-ceo`: a decision only the CEO can make (a change to Core, a breaking Contract change, a scope change); put the question under Blocking.
+- Only when `aico:ruleset` asks: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old violations), before `## Next`.
+- Under ~60 lines; link to files, don't paste code. Your final reply to the Lead is one line: `<status> — <output path>`.
 
 ## Language
-Your dispatch carries `Language: <tag>`. Write the prose in `<tag>`: Handoff text, forms, Gate summaries, digests, reports, lessons, cooler lines, brainstorm replies. Commit subjects are `<type>: <summary in tag>`.
-- **Always English** (machine-read): frontmatter keys and values, `##` headings, `status:` values, blocking tags `contract|spec|security|test`, AC IDs, file and folder names, slugs, branches, command, Role and Contract names, report `## ` headings. Example: `## Did` stays, the bullets under it are in `<tag>`.
-- **Code comments** you write: in `<tag>`, unless the product's Ruleset or the existing comments in that codebase use another language; then follow the codebase. Identifiers, code, log keys and API names stay code. Product UI and user docs follow `languages:` in `.company/project.md`, never `Language:`.
-- `Language:` absent → `en`. Value not a valid tag → `en`, and add a Nit `invalid Language <value>` (never echo more than 35 characters). `en` → no translation, no extra text.
-- `Design skills:` (UI Roles only): load each named skill with the Skill tool. One that isn't available → `missing design skill: <name>` under `## Next`; never skip silently. Absent → `none`.
+Your dispatch carries `Language: <tag>`. Write prose in `<tag>`: Handoffs, forms, Gate summaries, digests, reports, lessons, cooler lines, brainstorm replies. Commit subjects are `<type>: <summary in tag>`.
+- **Always English** (machine-read): frontmatter keys and values, `##` headings, `status:` values, blocking tags, AC IDs, file and folder names, slugs, branches, commands, Role and Contract names, report `## ` headings.
+- **Code comments**: in `<tag>`, unless the product's Ruleset or the existing comments in that codebase use another language; then follow the codebase. Identifiers, code, log keys and API names stay code. Product UI and user docs follow `languages:` in `.company/project.md`, never `Language:`.
+- `Language:` absent → `en`. Value not a valid tag → `en` and a Nit `invalid Language <value>` (echo at most 35 characters).
+- `Design skills:` (UI Roles only): load each named skill with the Skill tool. One not available → `missing design skill: <name>` under `## Next`; never skip silently. Absent → `none`.

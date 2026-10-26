@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -14,6 +14,19 @@ const FILES = {
   'agents/code-reviewer.md': 50, 'agents/senior-engineer.md': 50,
   'skills/review/SKILL.md': 125, 'skills/ruleset/SKILL.md': 125,
   'skills/standards/SKILL.md': 125, 'skills/feedback/SKILL.md': 125,
+  'skills/handoff/SKILL.md': 125, 'skills/handoff/references/pilot.md': 125,
+};
+const PILOT = 'skills/handoff/references/pilot.md';
+const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
+
+// Byte budget (CEO, Fix round 4): pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
+const PRE = {
+  'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 1899,
+  'skills/standards/SKILL.md': 1230, 'agents/code-reviewer.md': 1950, 'agents/senior-engineer.md': 2365,
+};
+const LOAD = {
+  'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
+  'agents/senior-engineer.md': ['agents/senior-engineer.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md', 'skills/standards/SKILL.md'],
 };
 
 test('size limits and LF only (proj.M5, proj.M11)', () => {
@@ -24,30 +37,65 @@ test('size limits and LF only (proj.M5, proj.M11)', () => {
   }
 });
 
-test('AC20 reviewers write rows and the aico-top block', () => {
-  for (const f of ['agents/code-reviewer.md', 'agents/senior-engineer.md']) has(read(f), 'file:line | problem | why | fix', '--require-top');
-  has(read('agents/code-reviewer.md'), '`why` never empty', 'R-<n>');
-  has(read('agents/senior-engineer.md'), 'C-<n>');
-  has(read('skills/review/SKILL.md'), 'R-<n> | file:line | problem | why | fix');
+test('byte budget: every pre-existing pilot file is at most its size at bea3242', () => {
+  for (const [f, max] of Object.entries(PRE)) assert.ok(bytes(f) <= max, `${f} is ${bytes(f)} B, pre-run ${max} B`);
+});
+
+test('byte budget: each pilot Role loads at most the pre-run sum, references/pilot.md included', () => {
+  for (const [agent, files] of Object.entries(LOAD)) {
+    const pre = files.reduce((n, f) => n + PRE[f], 0);
+    const now = files.reduce((n, f) => n + bytes(f), 0) + bytes(PILOT);
+    assert.ok(now <= pre, `${agent} loads ${now} B, pre-run ${pre} B`);
+  }
+  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 15608);
+});
+
+test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () => {
+  assert.ok(existsSync(join(root, PILOT)));
+  const h = read('skills/handoff/SKILL.md');
+  has(h, 'references/pilot.md', 'builders cite finding IDs in `## Did`');
+  assert.doesNotMatch(h, /aico-top/);
+  assert.doesNotMatch(h, /findings\.md/);
+  for (const f of ['agents/code-reviewer.md', 'agents/senior-engineer.md', 'skills/review/SKILL.md']) has(read(f), 'references/pilot.md');
+});
+
+test('AC20 pilot.md holds the top block keys and the finding rows; agents name the row shapes', () => {
+  const p = read(PILOT);
+  has(p, '`status`, `files`, `ac_ids`', '`rule_ids`', '`risks`', '`read_next`', '`tokens_used`', 'aico-top', '--require-top',
+    '- [contract|spec|security|test] <ID> | <file>[:<line>[-<line>]] | <problem> | <why> | <fix>',
+    '- <ID> | <file>[:<line>] | <problem> | <why> | <fix>', '`why` never empty', '`R-<n>`', '`C-<n>`', '`T-<n>`');
+  has(read('agents/code-reviewer.md'), 'R-<n> | file:line | problem | why | fix', '--require-top');
+  has(read('agents/senior-engineer.md'), 'C-<n> | file:line | problem | why | fix', '--require-top');
 });
 
 test('AC22 reviewers read rule-check list and confirm T- rows, tools never block alone', () => {
-  for (const f of ['agents/code-reviewer.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md']) has(read(f), /rule-check\.mjs/, 'list');
+  for (const f of ['skills/review/SKILL.md', 'skills/ruleset/SKILL.md']) has(read(f), /rule-check\.mjs/, 'list');
   has(read('skills/review/SKILL.md'), 'Confirm each `T-` row', 'never blocks on its own', 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
-  has(read('agents/code-reviewer.md'), 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
-  has(read('agents/code-reviewer.md'), 'never blocks on its own');
+  has(read('agents/code-reviewer.md'), 'aico:review');
   has(read('docs/contracts/rule-check.md'), 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
 });
 
 test('AC23 slices carry every security Must and a findings ledger survives handover', () => {
   has(read('skills/ruleset/SKILL.md'), 'every security Must', /rule-check\.mjs"? slices/);
   has(read('agents/senior-engineer.md'), 'every security Must', /rule-check\.mjs"? slices/);
-  has(read('agents/code-reviewer.md'), 'findings.md', 'continues the same file');
-  has(read('skills/review/SKILL.md'), '## Checked', '## Findings', 'never deleted');
+  has(read(PILOT), 'findings.md', 'continues the same file', '## Checked', '## Findings', 'never deleted', '`open|fixed|withdrawn`', '[nit]', 'handoff-lint.mjs --findings');
+});
+
+test('ledger timing: written only near a handover (60% of the cap or a decision to hand over), IDs without a ledger', () => {
+  const p = read(PILOT);
+  has(p, 'only near a handover', '75% of `<n>` (60% of `<cap>`', '90000', 'status: handover', 'writes none', 'always has it',
+    'fixed R-2', '1 + the highest');
+  assert.doesNotMatch(read('agents/code-reviewer.md') + read('skills/review/SKILL.md'), /before the first file|from the first file/);
+});
+
+test('rule slices: builders follow Rule slice, the senior engineer writes the files before done', () => {
+  const r = read('skills/ruleset/SKILL.md');
+  has(r, '`Rule slice:`', '.company/work/<slug>/rules/<task>.md', 'blocked — missing rule slice', 'instead of the senior-engineer Handoff');
+  for (const f of ['skills/standards/SKILL.md', 'agents/senior-engineer.md']) has(read(f), /rule-check\.mjs"? slices <[^>]+> --write/);
 });
 
 test('AC24 depth comes from review-depth and is never lowered', () => {
-  has(read('agents/code-reviewer.md'), 'review-depth.mjs', 'never lower it');
+  has(read('agents/code-reviewer.md'), 'Review depth:', 'never lower it');
   has(read('skills/review/SKILL.md'), 'Review depth:', 'not the builder\'s label', 'never lower it');
 });
 
@@ -56,8 +104,9 @@ test('AC26 feedback reads ledger report for the last 3 runs, spend and cache rea
 });
 
 test('kept rules: reviewer never edits, Must never softened, old rules still present', () => {
-  has(read('agents/code-reviewer.md'), 'You never change code', 'never softened to a Nit', 'spike/', 'aico:i18n', 'aico:performance', 'previous Blocking items');
+  has(read('agents/code-reviewer.md'), 'You never change code', 'soften a Blocking item', 'spike/', 'aico:i18n', 'aico:performance', 'previous Blocking items');
   has(read('agents/senior-engineer.md'), 'accept a Must without a primary source', 'edit product code', 'Debt');
+  has(read('skills/ruleset/SKILL.md'), 'never softened to a Nit', 'Reviewers apply the tiers **only to lines the run adds or changes**');
   has(read('skills/review/SKILL.md'), 'block-list', 'Handoffs, Steps, Roles');
 });
 
@@ -65,6 +114,6 @@ test('handoff skill: context budget follows the Context cap line, lint runs from
   const t = read('skills/handoff/SKILL.md');
   has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '150000', '120000', 'never compute');
   assert.doesNotMatch(t, /around 130k/);
-  assert.doesNotMatch(t, /node scripts\/handoff-lint\.mjs/);
-  has(t, '${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs');
+  has(read(PILOT), '${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs');
+  assert.doesNotMatch(read(PILOT), /node scripts\/handoff-lint\.mjs/);
 });
