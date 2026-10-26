@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-26
+
 Cheaper brainstorms and cheaper runs. The savings come from reading less (shorter prompts, fewer reads, fewer dispatches). Brainstorm Roles now keep one constant prompt, so it can be cached. No saving percentage is claimed yet.
 
 ### Added
