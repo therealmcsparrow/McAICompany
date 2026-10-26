@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Lints a Handoff file (handoff v1.1): machine-read parts stay English whatever `Language:` is (dispatch-prompt v2).
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only (proj.M1 to M4).
-import { readFileSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { lstatSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const MAX_BYTES = 64 * 1024;
@@ -292,6 +292,34 @@ export function lintFindings(text) {
   return { errors, ledger: { checked, findings } };
 }
 
+// A handover Handoff needs its sibling ledger <NN>-<role>.findings.md (handoff v1.1 part 3, AC23).
+// The ledger path is built from the checked file name only, inside the Handoff's own folder.
+const HANDOFF_NAME = /^(\d{2,3}-[a-z][a-z0-9-]{0,40})\.md$/;
+
+export function checkLedger(file, findingIds) {
+  const m = HANDOFF_NAME.exec(basename(file));
+  if (!m) return ['cannot locate ledger'];
+  const ledger = join(dirname(resolve(file)), `${m[1]}.findings.md`);
+  let st;
+  try {
+    st = lstatSync(ledger);
+  } catch (e) {
+    return e.code === 'ENOENT' ? ['handover without findings ledger'] : ['cannot locate ledger'];
+  }
+  if (!st.isFile()) return ['cannot locate ledger'];
+  if (st.size > MAX_BYTES) return ['ledger: file too large'];
+  let text;
+  try {
+    text = readFileSync(ledger, 'utf8');
+  } catch {
+    return ['cannot locate ledger'];
+  }
+  const r = lintFindings(text);
+  if (r.errors.length) return r.errors.map(e => `ledger: ${e}`);
+  const have = new Set(r.ledger.findings.map(x => x.id));
+  return findingIds.filter(id => !have.has(id)).map(id => `finding ${id} missing from ledger`);
+}
+
 function main(argv) {
   const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md>';
   const args = argv.slice(2);
@@ -311,6 +339,7 @@ function main(argv) {
     return 1;
   }
   const r = wantLedger ? lintFindings(text) : lint(text, { requireTop });
+  if (!wantLedger && requireTop && r.routing?.status === 'handover') r.errors.push(...checkLedger(file, r.routing.findings));
   r.errors.forEach(e => console.log(`ERROR ${e}`));
   if (!r.errors.length) console.log(JSON.stringify(wantLedger ? r.ledger : r.routing));
   return r.errors.length ? 1 : 0;

@@ -420,3 +420,234 @@ test('run handoff-lint: rows for a bad Handoff; tool failed without --handoff', 
   const escape = cli(root, ['run', '--base', 'abcdef1', '--root', root, '--handoff', '../outside.md']);
   assert.equal(escape.status, 2);
 });
+
+// ---------- slice files (Fix round 4, rule-check v1 "Slice files") ----------
+
+const SF_REL = '.company/work/s/04-senior-engineer.md';
+const SF_SEC = 'security: proj.M-SEC1, nodetest.M-SEC1';
+const SF_ROW1 = `| T1 | proj.M11, proj.S1, proj.M11; focus: validate the input, then \`cut\` it; ${SF_SEC} |`;
+const SF_ROW2 = `| T2c | proj.M5, nodetest.M1; ${SF_SEC} |`;
+
+function sliceRoot(rows = [SF_ROW1, SF_ROW2], { rulesDir = true } = {}) {
+  const root = makeRoot();
+  write(root, SF_REL, `${SLICE_HEAD}${rows.join('\n')}\n## Next\n- done\n`);
+  const rules = path.join(root, '.company/work/s/rules');
+  if (rulesDir) fs.mkdirSync(rules, { recursive: true });
+  return { root, handoff: path.join(root, SF_REL), rules };
+}
+
+const wr = s => cli(s.root, ['slices', s.handoff, '--write', '--root', s.root]);
+const chk = s => cli(s.root, ['slices', s.handoff, '--root', s.root]);
+
+const EXPECTED_T1 = `---
+task: T1
+source: .company/work/s/04-senior-engineer.md
+---
+## Rules
+- proj.M11 — ${RULES['proj.M11']}
+- proj.S1 — Built-ins only
+## Focus
+> validate the input, then \`cut\` it
+## Security
+proj.M-SEC1, nodetest.M-SEC1
+`;
+
+const EXPECTED_T2C = `---
+task: T2c
+source: .company/work/s/04-senior-engineer.md
+---
+## Rules
+- proj.M5 — Agent files are short
+- nodetest.M1 — Tests are found by pattern
+## Focus
+> (none)
+## Security
+proj.M-SEC1, nodetest.M-SEC1
+`;
+
+test('slices --write renders each row byte for byte, with rule text, and the check passes', () => {
+  const s = sliceRoot();
+  const r = wr(s);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.out, /^wrote 2 slices$/m);
+  assert.equal(fs.readFileSync(path.join(s.rules, 'T1.md'), 'utf8'), EXPECTED_T1);
+  assert.equal(fs.readFileSync(path.join(s.rules, 'T2c.md'), 'utf8'), EXPECTED_T2C);
+  assert.deepEqual(fs.readdirSync(s.rules).sort(), ['T1.md', 'T2c.md']);
+  assert.equal(chk(s).status, 0);
+});
+
+test('slices --write creates rules/ when it is missing and writes only inside it', () => {
+  const s = sliceRoot(undefined, { rulesDir: false });
+  const r = wr(s);
+  assert.equal(r.status, 0, r.all);
+  assert.deepEqual(fs.readdirSync(s.rules).sort(), ['T1.md', 'T2c.md']);
+  assert.deepEqual(fs.readdirSync(path.dirname(s.handoff)).sort(), ['04-senior-engineer.md', 'rules']);
+});
+
+test('a rule text over 200 characters is cut on a word boundary and ends with an ellipsis', () => {
+  const s = sliceRoot();
+  const long = `${'word '.repeat(60)}end`;
+  fs.writeFileSync(path.join(s.root, '.company/standards.md'), standardsText().replace('Built-ins only', long));
+  const r = wr(s);
+  assert.equal(r.status, 0, r.all);
+  const line = fs.readFileSync(path.join(s.rules, 'T1.md'), 'utf8').split('\n').find(l => l.startsWith('- proj.S1'));
+  assert.equal(line, `- proj.S1 — ${'word '.repeat(39)}word…`);
+});
+
+test('a focus over 1000 characters is cut at 1000', () => {
+  const s = sliceRoot([`| T1 | proj.M11; focus: ${'x'.repeat(1500)}; ${SF_SEC} |`]);
+  const r = wr(s);
+  assert.equal(r.status, 0, r.all);
+  const line = fs.readFileSync(path.join(s.rules, 'T1.md'), 'utf8').split('\n').find(l => l.startsWith('> '));
+  assert.equal(line, `> ${'x'.repeat(1000)}`);
+});
+
+test('a hand-edited slice file shows as slice stale', () => {
+  const s = sliceRoot();
+  wr(s);
+  fs.appendFileSync(path.join(s.rules, 'T1.md'), 'extra\n');
+  const r = chk(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^slice stale: T1$/m);
+  assert.doesNotMatch(r.out, /T2c/);
+});
+
+test('a row without its file shows as slice missing', () => {
+  const s = sliceRoot();
+  wr(s);
+  fs.rmSync(path.join(s.rules, 'T2c.md'));
+  const r = chk(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^slice missing: T2c$/m);
+});
+
+test('a file with no row shows as slice without row', () => {
+  const s = sliceRoot();
+  wr(s);
+  fs.writeFileSync(path.join(s.rules, 'T9.md'), 'x\n');
+  const r = chk(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^slice without row: T9\.md$/m);
+});
+
+test('without a rules/ folder the check stays the old one', () => {
+  const s = sliceRoot(undefined, { rulesDir: false });
+  const r = chk(s);
+  assert.equal(r.status, 0, r.all);
+  assert.doesNotMatch(r.out, /slice (missing|stale)/);
+});
+
+test('--write replaces rules/: a task removed from the table loses its file', () => {
+  const s = sliceRoot();
+  wr(s);
+  write(s.root, SF_REL, `${SLICE_HEAD}${SF_ROW1}\n## Next\n- done\n`);
+  const r = wr(s);
+  assert.equal(r.status, 0, r.all);
+  assert.deepEqual(fs.readdirSync(s.rules), ['T1.md']);
+});
+
+test('a bad task ID is refused and nothing is written', () => {
+  for (const id of ['../x', 'a/b', '.hidden', 'T'.repeat(17), 'T 1']) {
+    const s = sliceRoot([`| ${id} | proj.M11; ${SF_SEC} |`]);
+    const r = wr(s);
+    assert.equal(r.status, 1, id);
+    assert.match(r.out, /^refused: bad task id /m, id);
+    assert.deepEqual(fs.readdirSync(s.rules), [], id);
+    assert.deepEqual(fs.readdirSync(path.dirname(s.handoff)).sort(), ['04-senior-engineer.md', 'rules'], id);
+  }
+});
+
+test('an unknown rule is refused and nothing is written', () => {
+  const s = sliceRoot([SF_ROW1, `| T2 | proj.M11, proj.M77; ${SF_SEC} |`]);
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^refused: unknown rule proj\.M77 in T2$/m);
+  assert.deepEqual(fs.readdirSync(s.rules), []);
+});
+
+test('a slice over 6 KiB is refused and nothing is written', () => {
+  const s = sliceRoot();
+  const ids = Array.from({ length: 40 }, (_, i) => `proj.M${100 + i}`);
+  const many = ids.map(id => `- ${id} — ${'z'.repeat(190)} — source: https://x.test`).join('\n');
+  fs.writeFileSync(path.join(s.root, '.company/standards.md'), standardsText({ extra: `${many}\n` }));
+  write(s.root, SF_REL, `${SLICE_HEAD}${SF_ROW1}\n| T3 | ${ids.join(', ')}; ${SF_SEC} |\n## Next\n- done\n`);
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^refused: slice T3 over 6 KiB$/m);
+  assert.deepEqual(fs.readdirSync(s.rules), []);
+});
+
+test('a duplicate task ID is refused', () => {
+  const s = sliceRoot([SF_ROW1, SF_ROW1]);
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^refused: duplicate task id T1$/m);
+  assert.deepEqual(fs.readdirSync(s.rules), []);
+});
+
+test('a symlink in rules/ is refused and everything stays untouched', () => {
+  const s = sliceRoot();
+  wr(s);
+  fs.appendFileSync(path.join(s.rules, 'T1.md'), 'hand edit\n');
+  const edited = fs.readFileSync(path.join(s.rules, 'T1.md'), 'utf8');
+  const secret = path.join(s.root, 'secret.txt');
+  fs.writeFileSync(secret, 'secret\n');
+  try { fs.symlinkSync(secret, path.join(s.rules, 'link.md')); } catch (e) {
+    if (e.code !== 'EPERM' && e.code !== 'EACCES') throw e;
+    fs.symlinkSync(s.root, path.join(s.rules, 'link.md'), 'junction');
+  }
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^refused: unexpected entry in rules\/$/m);
+  assert.equal(fs.readFileSync(path.join(s.rules, 'T1.md'), 'utf8'), edited);
+  assert.equal(fs.readFileSync(secret, 'utf8'), 'secret\n');
+  assert.ok(fs.lstatSync(path.join(s.rules, 'link.md')).isSymbolicLink());
+});
+
+test('a foreign entry in rules/ is refused and nothing is written', () => {
+  const s = sliceRoot();
+  fs.writeFileSync(path.join(s.rules, 'notes.txt'), 'mine\n');
+  fs.mkdirSync(path.join(s.rules, 'sub'));
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^refused: unexpected entry in rules\/$/m);
+  assert.deepEqual(fs.readdirSync(s.rules).sort(), ['notes.txt', 'sub']);
+});
+
+test('a symlinked rules/ folder is refused', () => {
+  const s = sliceRoot(undefined, { rulesDir: false });
+  const elsewhere = path.join(s.root, 'elsewhere');
+  fs.mkdirSync(elsewhere);
+  try { fs.symlinkSync(elsewhere, s.rules, 'junction'); } catch (e) {
+    if (e.code === 'EPERM' || e.code === 'EACCES') return;
+    throw e;
+  }
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^refused: unexpected entry in rules\/$/m);
+  assert.deepEqual(fs.readdirSync(elsewhere), []);
+});
+
+test('--write with no ruleset writes nothing', () => {
+  const root = tmp();
+  write(root, SF_REL, `${SLICE_HEAD}${SF_ROW2}\n## Next\n- done\n`);
+  const r = cli(root, ['slices', path.join(root, SF_REL), '--write', '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.out, /no ruleset/);
+  assert.ok(!fs.existsSync(path.join(root, '.company/work/s/rules')));
+});
+
+test('--write with a security gap still writes, prints the gap and exits 1', () => {
+  const s = sliceRoot([SF_ROW1, '| T2 | proj.M5; security: proj.M-SEC1 |']);
+  const r = wr(s);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /^wrote 2 slices$/m);
+  assert.match(r.out, /^T2: missing nodetest\.M-SEC1$/m);
+});
+
+test('--write is a flag of slices only, takes no value and cannot repeat', () => {
+  const s = sliceRoot();
+  assert.equal(cli(s.root, ['drift', '--write', '--root', s.root]).status, 2);
+  assert.equal(cli(s.root, ['slices', s.handoff, '--write', '--write', '--root', s.root]).status, 2);
+  assert.equal(main(['slices', s.handoff, '--write', '--root', s.root]).lines[0], 'wrote 2 slices');
+});

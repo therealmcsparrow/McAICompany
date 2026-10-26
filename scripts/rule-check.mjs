@@ -27,12 +27,16 @@ const HASH = /^[0-9a-f]{64}$/;
 const MARKERS = [' — why: ', ' — source: ', ' — enforced-by: ', ' — check: '];
 const BUILTINS = new Set(['aico-check', 'lf', 'node-test', 'handoff-lint']);
 const PACK_SECTIONS = new Set(['Must', 'Should', 'May', 'Security']);
+const TASK_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,15}$/;
+const MAX_SLICE_BYTES = 6 * KiB;
+const RULE_CUT = 200;
+const FOCUS_CUT = 1000;
 const GITATTRIBUTES_LINE = '* text=auto eol=lf';
 const USAGE = [
   'usage: rule-check.mjs <command> [--root <dir>]',
   '  run --base <sha> [--handoff <file>]',
   '  list',
-  '  slices <senior-engineer handoff>',
+  '  slices <senior-engineer handoff> [--write]',
   '  drift'
 ].join('\n');
 
@@ -368,32 +372,178 @@ function cmdList(a) {
   return { code: 0, lines: [...loadChecks(a.root)].map(([id, b]) => `${b.rule} ${id}`) };
 }
 
-function cmdSlices(a) {
-  if (!ruleset(a.root).standards) return { code: 0, lines: ['no ruleset'] };
-  const file = path.resolve(a.positional);
-  if (!isFile(file)) throw new Refusal('bad handoff');
-  const text = readCapped(file, MAX_TEXT_BYTES, 'handoff');
-  const { security } = loadRules(a.root);
-  if (!/^## Rules per task\s*$/m.test(text)) return { code: 1, lines: ['## Rules per task is missing'] };
-  const body = sections(text).filter(s => s.section === 'Rules per task').map(s => s.line);
-  const gaps = [];
-  let tasks = 0;
+// ---------- slices and slice files ----------
+
+// The task lines of `## Rules per task`: { cell0 (the first cell), rest (everything after it) }.
+function taskRows(text) {
+  const rows = [];
   let tableRow = -1;
-  for (const line of body) {
+  for (const { section, line } of sections(text)) {
+    if (section !== 'Rules per task') continue;
     if (!line.startsWith('|')) {
       tableRow = -1;
       continue;
     }
     tableRow++;
     if (tableRow === 0 || /^\|[\s:|-]+\|?\s*$/.test(line)) continue;
-    const cells = line.split('|').slice(1, line.trimEnd().endsWith('|') ? -1 : undefined).map(c => c.trim());
-    tasks++;
-    const listed = new Set(cells.slice(1).join(' ').match(RULE_ID_ANY) ?? []);
-    const missing = [...security].filter(id => !listed.has(id));
-    if (missing.length) gaps.push(`${cut(cells[0], 40)}: missing ${missing.join(', ')}`);
+    const m = /^\|([^|]*)(?:\|(.*))?$/.exec(line);
+    rows.push({ cell0: m[1].trim(), rest: (m[2] ?? '').replace(/\|\s*$/, '').trim() });
   }
-  if (!tasks) return { code: 1, lines: ['## Rules per task has no task lines'] };
-  return { code: gaps.length ? 1 : 0, lines: gaps.length ? gaps : [`slices ok: ${tasks} task line(s)`] };
+  return rows;
+}
+
+function cutWord(value, n) {
+  if (value.length <= n) return value;
+  let s = value.slice(0, n);
+  if (value[n] !== ' ') {
+    const i = s.lastIndexOf(' ');
+    if (i > 0) s = s.slice(0, i);
+  }
+  return `${s.trimEnd()}…`;
+}
+
+const uniq = list => [...new Set(list)];
+
+// Renders one slice file from its row; returns the text or throws a Refusal (exit code 1).
+function renderSlice(row, { rules, security }, source) {
+  const task = row.cell0;
+  if (!TASK_ID.test(task)) throw new Refusal(`bad task id ${task.slice(0, 35)}`, 1);
+  const f = row.rest.indexOf('focus:');
+  let focus = '';
+  let outside = row.rest;
+  if (f !== -1) {
+    const e = row.rest.indexOf('; security:', f);
+    const end = e === -1 ? row.rest.length : e;
+    focus = row.rest.slice(f + 'focus:'.length, end).trim();
+    outside = `${row.rest.slice(0, f)} ${row.rest.slice(end)}`;
+  }
+  const ids = uniq(outside.match(RULE_ID_ANY) ?? []);
+  for (const id of ids) if (!rules.has(id)) throw new Refusal(`unknown rule ${id} in ${task}`, 1);
+  const sec = uniq(row.rest.match(RULE_ID_ANY) ?? []).filter(id => security.has(id));
+  const lines = ['---', `task: ${task}`, `source: ${source}`, '---', '## Rules'];
+  for (const id of ids) {
+    if (security.has(id)) continue;
+    lines.push(`- ${id} — ${cutWord(rules.get(id).text.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim(), RULE_CUT)}`);
+  }
+  lines.push('## Focus', `> ${focus ? focus.slice(0, FOCUS_CUT) : '(none)'}`, '## Security', sec.join(', '));
+  const content = `${lines.join('\n')}\n`;
+  if (Buffer.byteLength(content, 'utf8') > MAX_SLICE_BYTES) throw new Refusal(`slice ${task} over 6 KiB`, 1);
+  return content;
+}
+
+// Renders every row: { rendered: Map(task -> text), problems: [reason] }.
+function renderAll(rows, ctx, source) {
+  const rendered = new Map();
+  const problems = [];
+  for (const row of rows) {
+    try {
+      if (rendered.has(row.cell0)) throw new Refusal(`duplicate task id ${row.cell0.slice(0, 35)}`, 1);
+      rendered.set(row.cell0, renderSlice(row, ctx, source));
+    } catch (error) {
+      if (!(error instanceof Refusal)) throw error;
+      problems.push(error.message);
+    }
+  }
+  return { rendered, problems };
+}
+
+function lstatOrNull(file) {
+  try {
+    return fs.lstatSync(file);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+// The entries of rules/: only regular `*.md` files are ours; anything else is foreign.
+function ruleEntries(rulesDir) {
+  const st = lstatOrNull(rulesDir);
+  if (!st) return { exists: false, names: [], foreign: false };
+  if (!st.isDirectory()) return { exists: true, names: [], foreign: true };
+  const names = [];
+  let foreign = false;
+  for (const name of fs.readdirSync(rulesDir)) {
+    const e = fs.lstatSync(path.join(rulesDir, name));
+    if (e.isFile() && name.endsWith('.md')) names.push(name);
+    else foreign = true;
+  }
+  return { exists: true, names, foreign };
+}
+
+function writeSlices(dir, rendered, entries) {
+  const rulesDir = path.join(dir, 'rules');
+  if (!entries.exists) fs.mkdirSync(rulesDir);
+  const inside = path.join(fs.realpathSync(dir), 'rules');
+  if (fs.realpathSync(rulesDir) !== inside) throw new Refusal('unexpected entry in rules/', 1);
+  for (const [task, content] of rendered) {
+    const target = path.join(rulesDir, `${task}.md`);
+    const where = path.relative(rulesDir, target);
+    if (where !== `${task}.md`) throw new Refusal(`bad task id ${task.slice(0, 35)}`, 1);
+    const tmp = path.join(dir, `.rules-${process.pid}-${task}.tmp`);
+    try {
+      fs.writeFileSync(tmp, content, { flag: 'wx' });
+      fs.renameSync(tmp, target);
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  }
+  for (const name of entries.names) if (!rendered.has(name.slice(0, -3))) fs.unlinkSync(path.join(rulesDir, name));
+}
+
+function sliceFileGaps(dir, rows, rendered, entries) {
+  const gaps = [];
+  if (entries.foreign) gaps.push('unexpected entry in rules/');
+  const tasks = new Set(rows.map(r => r.cell0));
+  for (const name of entries.names) if (!tasks.has(name.slice(0, -3))) gaps.push(`slice without row: ${cut(name, 40)}`);
+  for (const [task, content] of rendered) {
+    if (!entries.names.includes(`${task}.md`)) {
+      gaps.push(`slice missing: ${task}`);
+      continue;
+    }
+    const file = path.join(dir, 'rules', `${task}.md`);
+    if (fs.statSync(file).size > MAX_SLICE_BYTES * 2 || fs.readFileSync(file, 'utf8') !== content) gaps.push(`slice stale: ${task}`);
+  }
+  return gaps;
+}
+
+function cmdSlices(a) {
+  if (!ruleset(a.root).standards) return { code: 0, lines: ['no ruleset'] };
+  const file = path.resolve(a.positional);
+  if (!isFile(file)) throw new Refusal('bad handoff');
+  const text = readCapped(file, MAX_TEXT_BYTES, 'handoff');
+  const ctx = loadRules(a.root);
+  if (!/^## Rules per task\s*$/m.test(text)) return { code: 1, lines: ['## Rules per task is missing'] };
+  const rows = taskRows(text);
+  const gaps = [];
+  for (const row of rows) {
+    const listed = new Set(row.rest.match(RULE_ID_ANY) ?? []);
+    const missing = [...ctx.security].filter(id => !listed.has(id));
+    if (missing.length) gaps.push(`${cut(row.cell0, 40)}: missing ${missing.join(', ')}`);
+  }
+  if (!rows.length) return { code: 1, lines: ['## Rules per task has no task lines'] };
+
+  const dir = path.dirname(file);
+  const source = rel(a.root, file);
+  const entries = ruleEntries(path.join(dir, 'rules'));
+  const lines = [];
+  if (a.write || entries.exists) {
+    if (a.write && (source.startsWith('..') || path.isAbsolute(source))) throw new Refusal('bad handoff');
+    const { rendered, problems } = renderAll(rows, ctx, source);
+    if (a.write) {
+      if (problems.length || entries.foreign) {
+        const reasons = problems.length ? problems : ['unexpected entry in rules/'];
+        return { code: 1, lines: reasons.map(p => `refused: ${p}`) };
+      }
+      writeSlices(dir, rendered, entries);
+      lines.push(`wrote ${rendered.size} slices`);
+      gaps.push(...sliceFileGaps(dir, rows, rendered, ruleEntries(path.join(dir, 'rules'))));
+    } else {
+      gaps.push(...problems.map(p => `slice invalid: ${p}`), ...sliceFileGaps(dir, rows, rendered, entries));
+    }
+  }
+  if (gaps.length) return { code: 1, lines: [...lines, ...gaps] };
+  return { code: 0, lines: [...lines, `slices ok: ${rows.length} task line(s)`] };
 }
 
 function cmdDrift(a) {
@@ -432,14 +582,19 @@ function cmdDrift(a) {
 
 function parseArgs(args) {
   const [command, ...rest] = args;
-  const allowed = { run: ['--root', '--base', '--handoff'], list: ['--root'], slices: ['--root'], drift: ['--root'] };
+  const allowed = { run: ['--root', '--base', '--handoff'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root'] };
   if (!command || !Object.hasOwn(allowed, command)) throw new Refusal(USAGE);
   const opts = {};
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
     if (arg.startsWith('--')) {
-      if (!allowed[command].includes(arg) || Object.hasOwn(opts, arg) || i + 1 >= rest.length) throw new Refusal(USAGE);
+      if (!allowed[command].includes(arg) || Object.hasOwn(opts, arg)) throw new Refusal(USAGE);
+      if (arg === '--write') {
+        opts[arg] = true;
+        continue;
+      }
+      if (i + 1 >= rest.length) throw new Refusal(USAGE);
       opts[arg] = rest[++i];
     } else {
       positional.push(arg);
@@ -462,7 +617,7 @@ export function main(args, options = {}) {
       isDir = false;
     }
     if (!isDir) throw new Refusal('bad root');
-    const a = { root, base, positional, handoff: null };
+    const a = { root, base, positional, handoff: null, write: opts['--write'] === true };
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);
       const inside = path.relative(root, abs);

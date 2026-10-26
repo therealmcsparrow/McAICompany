@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -340,4 +340,105 @@ test('CLI: exit codes, --require-top and --findings', () => {
     assert.equal(run(good, '--bogus').status, 2);
     assert.equal(run(join(dir, 'nope.md')).status, 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- Fix round 4: a handover Handoff needs its findings ledger (AC23) ----
+const HANDOVER = make().replaceAll('status: blocked', 'status: handover');
+const FULL_LEDGER = `${LEDGER}- R-3 | open | [nit] | src/y.ts:9 | unclear name | readability | rename\n`;
+
+function withDir(fn) {
+  const dir = mkdtempSync(join(tmpdir(), 'hl-led-'));
+  try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+const script = fileURLToPath(new URL('./handoff-lint.mjs', import.meta.url));
+const runLint = (...a) => spawnSync(process.execPath, [script, ...a], { encoding: 'utf8' });
+
+test('handover with --require-top and a complete sibling ledger passes', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  writeFileSync(join(dir, '07-code-reviewer.findings.md'), FULL_LEDGER);
+  const r = runLint(h, '--require-top');
+  assert.equal(r.status, 0, r.stdout);
+  assert.equal(JSON.parse(r.stdout).status, 'handover');
+}));
+
+test('handover without a ledger fails with ERROR handover without findings ledger', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  const r = runLint(h, '--require-top');
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^ERROR handover without findings ledger$/m);
+}));
+
+test('handover without --require-top does not look for a ledger', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  assert.equal(runLint(h).status, 0);
+}));
+
+test('a ledger that misses a row ID fails with ERROR finding <ID> missing from ledger', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  writeFileSync(join(dir, '07-code-reviewer.findings.md'), LEDGER);
+  const r = runLint(h, '--require-top');
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^ERROR finding R-3 missing from ledger$/m);
+  assert.doesNotMatch(r.stdout, /finding R-1 missing/);
+}));
+
+test('an invalid ledger fails the handover', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  writeFileSync(join(dir, '07-code-reviewer.findings.md'), FULL_LEDGER.replace('| open |', '| closed |'));
+  const r = runLint(h, '--require-top');
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^ERROR ledger: line \d+: status must be/m);
+}));
+
+test('a ledger of another Step or Role does not count', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  writeFileSync(join(dir, '06-code-reviewer.findings.md'), FULL_LEDGER);
+  writeFileSync(join(dir, '07-security.findings.md'), FULL_LEDGER);
+  assert.match(runLint(h, '--require-top').stdout, /^ERROR handover without findings ledger$/m);
+}));
+
+test('a Handoff file name that gives no ledger name fails with ERROR cannot locate ledger', () => withDir(dir => {
+  for (const name of ['handover.md', '7-code-reviewer.md', '07-Code.md', '07-code-reviewer.txt']) {
+    const h = join(dir, name);
+    writeFileSync(h, HANDOVER);
+    const r = runLint(h, '--require-top');
+    assert.equal(r.status, 1, name);
+    assert.match(r.stdout, /^ERROR cannot locate ledger$/m, name);
+  }
+}));
+
+test('a symlinked ledger fails with ERROR cannot locate ledger', () => withDir(dir => {
+  const h = join(dir, '07-code-reviewer.md');
+  writeFileSync(h, HANDOVER);
+  const real = join(dir, 'real.md');
+  writeFileSync(real, FULL_LEDGER);
+  const link = join(dir, '07-code-reviewer.findings.md');
+  try { symlinkSync(real, link); } catch (e) {
+    if (e.code !== 'EPERM' && e.code !== 'EACCES') throw e;
+    const sub = join(dir, 'sub');
+    mkdirSync(sub);
+    symlinkSync(sub, link, 'junction');
+  }
+  const r = runLint(h, '--require-top');
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^ERROR cannot locate ledger$/m);
+}));
+
+test('status done with no ledger stays valid; status blocked too', () => withDir(dir => {
+  for (const st of ['done', 'blocked']) {
+    const h = join(dir, `07-code-reviewer.md`);
+    writeFileSync(h, make().replaceAll('status: blocked', `status: ${st}`));
+    const r = runLint(h, '--require-top');
+    assert.equal(r.status, 0, `${st}: ${r.stdout}`);
+  }
+}));
+
+test('lint() stays pure: a handover text alone raises no ledger error', () => {
+  assert.deepEqual(lint(HANDOVER, { requireTop: true }).errors, []);
 });

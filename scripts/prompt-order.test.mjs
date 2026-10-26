@@ -35,12 +35,12 @@ const keys = (lines) => lines
   .map(l => l.startsWith('Follow aico:handoff.') ? 'Follow' : /^([A-Z][A-Za-z ]*?):/.exec(l)?.[1])
   .filter(Boolean);
 
-const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Input Handoffs', 'Output', 'Goal', 'Follow'];
+const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Input Handoffs', 'Rule slice', 'Output', 'Goal', 'Follow'];
 const ROUND_1 = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Input', 'Output', 'Goal'];
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Input Handoffs:`, `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -55,6 +55,7 @@ test('the pipeline dispatch block carries Context cap: and Review depth: as in v
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
   assert.match(b, /^Design skills: .*# only /m);
   assert.match(b, /^Settings: .*# only the values passed/m);
+  assert.match(b, /^Rule slice: .*# builders and devops only/m);
 });
 
 test('the brainstorm skill has one dispatch block, in the canonical order, with no per-round content', () => {
@@ -116,6 +117,23 @@ test('slices are checked before builders; drift runs after sign-off and before S
   has(signoff, 'rule-check.mjs" drift');
   const finish = pipeline.slice(pipeline.indexOf('## 6. Finish'));
   has(finish, 'rule-check.mjs" drift', /before the Ship Gate/i);
+});
+
+test('builders get Rule slice: after Input Handoffs: instead of the senior-engineer Handoff (dispatch-prompt v3.1)', () => {
+  const names = stepBlock().filter(l => !l.startsWith('#')).map(l => l.split(':')[0]);
+  assert.equal(names[names.indexOf('Input Handoffs') + 1], 'Rule slice');
+  const bullet = skillOnly.split('\n').find(l => l.startsWith('- **Builders**'));
+  assert.ok(bullet, 'builders bullet present');
+  has(bullet, '.company/work/<slug>/rules/<task>.md', 'directly after `Input Handoffs:`', "no longer the Senior Engineer's Handoff", 'from the plan, never from Role output');
+  has(bullet, 'rule-check.mjs" slices <that Handoff>', "no slice file for the builder's task", 'no Fix round');
+  has(bullet, 'blocked — missing rule slice', 'no ruleset', 'at most 3');
+});
+
+test('the findings ledger of a pilot reviewer is committed only when it exists; a handover without one is re-dispatched', () => {
+  const commit = skillOnly.split('\n').find(l => l.startsWith('- Commit **only that Step'));
+  has(commit, '.findings.md', 'only when it exists');
+  const after = skillOnly.split('\n').find(l => l.startsWith('- After each Step'));
+  has(after, 'handover without findings ledger', 'finding <ID> missing from ledger', 'cannot locate ledger', 'same Step', 'no Fix round');
 });
 
 test('the commit line is built from checked values in single quotes (agentsec.M-SEC7)', () => {
