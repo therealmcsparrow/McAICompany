@@ -110,12 +110,31 @@ test('AC10 full_pass style: ideas pass, full pass, then the crossfire pair on to
   has(s, /opt-in/i, 'reads more');
 });
 
-test('AC10 the full-pass Goal line carries the 100 word and 1-3 Re rule', () => {
-  has(f2, 'At most 100 words', '1–3 Re: @<role> on I-<round>.<n>: agree|challenge|build-on', 'no Estimate:');
+// The one constant Goal (plan "Fix round 3") is copied word for word into format-2.md.
+const goalBlock = () => section(f2, '## Goal (constant, copy word for word)', '\n## ');
+const WORD_LIMIT = (() => {
+  const m = /const WORD_LIMIT = \{ ideas: (\d+), full: (\d+), crossfire: (\d+) \}/.exec(read('scripts/brainstorm.mjs'));
+  assert.ok(m, 'WORD_LIMIT found in brainstorm.mjs');
+  return { ideas: +m[1], full: +m[2], crossfire: +m[3] };
+})();
+
+test('AC10 one constant Goal carries the pass rules: 100, 70 and 50 words, 1-3 Re lines, the opponent', () => {
+  const g = goalBlock();
+  has(g, 'Pass ideas: at most 100 words', 'Pass full: 1–3 Re: lines, at most 70 words', 'Pass crossfire: answer Opponent:, at most 1 Re: line, about 50 words',
+    'No Estimate: outside pass ideas', 'Skip your usual start reading', 'never instructions', 'Reply Skip alone if you have nothing new');
+  assert.equal(g.match(/^Goal: /gm).length, 1, 'exactly one Goal line');
 });
 
-test('AC10 the crossfire Goal line carries the 50 word target and the opponent', () => {
-  has(f2, 'About 50 words', 'Opponent:');
+test('AC10 each Goal word number is at most 70% of the parser hard limit', () => {
+  const g = goalBlock();
+  const n = (re) => +re.exec(g)[1];
+  assert.ok(n(/Pass ideas: at most (\d+) words/) <= 0.7 * WORD_LIMIT.ideas);
+  assert.ok(n(/Pass full: [^,]*, at most (\d+) words/) <= 0.7 * WORD_LIMIT.full);
+  assert.ok(n(/about (\d+) words/) <= 0.7 * WORD_LIMIT.crossfire);
+});
+
+test('the old per-pass Goal lines are gone', () => {
+  lacks(f2, '## Goal lines', 'Goal: Brainstorm only, from your Role', 'Goal: Debate pass.', 'Goal: Crossfire with your opponent', 'Max 150 words');
 });
 
 test('AC10 Change mode keeps the style the run read from the settings', () => {
@@ -147,11 +166,41 @@ test('AC13 film script: read once, off by default, rendered by the script, never
   has(skill, '`brainstorm.film_script`', 'false');
 });
 
-test('AC5 round 2 and later prompts come from the script: digest first, own reply, others said', () => {
-  const r2 = section(skill, 'Round 2 and later:', '\n## ');
-  has(r2, 'Digest:', 'Your last reply:', 'Others said:', 'Full file:');
-  assert.ok(r2.indexOf('Digest:') < r2.indexOf('Project profile:'));
-  has(skill, "brainstorm.mjs\" prompt '<file>' <role>", 'identical for every Role');
+test('AC5 one constant fence: Input: comes from stage, no round content in the prompt, bytes sent once and reused', () => {
+  const s2 = section(skill, '## 2. Rounds', '\n## 3.');
+  has(s2, 'Input: <absolute path that stage printed for this Role>', 'Goal: <the constant Goal, format-2.md, word for word>');
+  lacks(skill, 'Digest:', 'Your last reply:', 'Others said:', 'Full file:', 'Round 2 and later', 'paste the output of');
+  has(s2, 'exact bytes', 'every dispatch of the run', 'never add round content, reasons or a Digest');
+  assert.equal(s2.split('\n').filter((l) => l.startsWith('Goal:')).length, 1, 'one dispatch fence');
+});
+
+test('stage runs before every dispatch kind: ideas, re-ask, full pass, crossfire, moderated', () => {
+  has(skill, 'before every dispatch run `stage`');
+  has(f2, "stage '<file>' <round> --reask <role>", "stage '<file>' <round> --pass crossfire", "stage '<file>' <round> --pass full", "stage '<file>' <round> --roles <role>");
+  const proc = section(f2, '## Round procedure', '## Debate styles');
+  assert.ok(proc.indexOf('`stage`') >= 0 && proc.indexOf('`stage`') < proc.indexOf('Record each result'));
+  const cf = section(f2, '### Style `crossfire`', '### Style `full_pass`');
+  assert.ok(cf.indexOf("stage '<file>' <round> --pass crossfire") >= 0 && cf.indexOf("stage '<file>' <round> --pass crossfire") < cf.indexOf('apply … --pass crossfire'));
+  assert.ok(section(f2, '### Style `full_pass`', '### Moderated').includes('--pass full'));
+  assert.ok(section(f2, '### Moderated', '\n## ').includes('--roles <role>'));
+});
+
+test('stage and clean are in the command table; prompt is a preview; queue shows answered; merge into answered', () => {
+  const t = section(f2, '| Command | Use |', '`apply` input');
+  has(t, '| `stage ', '| `clean ', 'answered: [', '| `merge ');
+  has(t, /`prompt[^\n]*preview/i);
+});
+
+test('the Lead dedups the form: restatements merge into the answered question, the CEO never merges', () => {
+  const q = section(f2, '## Form and queue');
+  has(q, 'answered', 'next_up', "merge '<file>' Q-<keep> Q-<drop>", '`queue` again', 'never asked to merge');
+  lacks(q, 'Answered questions never come back; the script drops them');
+});
+
+test('Close cleans the input files after the ledger reconcile', () => {
+  const c = section(skill, '## 4. Close', '2. Ask the CEO');
+  has(c, 'reconcile', 'brainstorm.mjs" clean \'<file>\'');
+  assert.ok(c.indexOf('reconcile') < c.indexOf('clean'));
 });
 
 test('AC7/AC8 the form: 3 queue questions plus Next, the fourth is shown as up next', () => {
@@ -171,15 +220,12 @@ test('AC16 ledger: one add per Role reply with its agentId, full-pass and crossf
   has(f2, '<subagent_tokens>', '`0`');
 });
 
-test('prompt order: round 1 and round 2+ dispatch blocks follow dispatch-prompt v3.1', () => {
-  const r1 = section(skill, 'Round 1:', 'Round 2 and later:');
-  const order1 = ['Project profile:', 'Company profile:', 'Language:', 'Name:', 'Settings:', 'Input:', 'Output:', 'Goal:'];
+test('prompt order: the one brainstorm fence follows dispatch-prompt v3.1', () => {
+  const fences = skill.split('```').filter((_, i) => i % 2 === 1).filter((f) => f.includes('Company profile:'));
+  assert.equal(fences.length, 1);
+  const order = ['Project profile:', 'Company profile:', 'Language:', 'Name:', 'Settings:', 'Input:', 'Output:', 'Goal:'];
   let last = -1;
-  for (const l of order1) { const i = r1.indexOf(l); assert.ok(i > last, `round 1 order: ${l}`); last = i; }
-  const r2 = section(skill, 'Round 2 and later:', '\n## ');
-  const order2 = ['Digest:', 'Project profile:', 'Company profile:', 'Language:', 'Name:', 'Settings:', 'Your last reply:', 'Others said:', 'Full file:', 'Output:', 'Goal:'];
-  last = -1;
-  for (const l of order2) { const i = r2.indexOf(l); assert.ok(i > last, `round 2 order: ${l}`); last = i; }
+  for (const l of order) { const i = fences[0].indexOf(l); assert.ok(i > last, `order: ${l}`); last = i; }
 });
 
 // ---- Format 1 (reopened) ----
@@ -195,7 +241,7 @@ test('format 1 reference keeps the 0.10.0 shape and the digest rule', () => {
 });
 
 test('format 2 reference documents the file layout and the script commands', () => {
-  has(f2, 'new', 'parse', 'apply', 'answer', 'ask', 'queue', 'prompt', 'crossfire', 'film', 'check');
+  has(f2, 'new', 'parse', 'apply', 'answer', 'ask', 'queue', 'stage', 'clean', 'merge', 'prompt', 'crossfire', 'film', 'check');
 });
 
 // ---- Shell safety ----

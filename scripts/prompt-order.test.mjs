@@ -37,7 +37,6 @@ const keys = (lines) => lines
 
 const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Input Handoffs', 'Output', 'Goal', 'Follow'];
 const ROUND_1 = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Input', 'Output', 'Goal'];
-const ROUND_2 = ['Digest', 'Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Your last reply', 'Others said', 'Full file', 'Output', 'Goal'];
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
@@ -58,11 +57,16 @@ test('the pipeline dispatch block carries Context cap: and Review depth: as in v
   assert.match(b, /^Settings: .*# only the values passed/m);
 });
 
-test('the brainstorm round blocks follow the canonical order', () => {
+test('the brainstorm skill has one dispatch block, in the canonical order, with no per-round content', () => {
   const bs = blocks(brainstorm).filter(l => l.some(x => x.startsWith('Company profile:')));
-  assert.equal(bs.length, 2);
+  assert.equal(bs.length, 1);
   assert.deepEqual(keys(bs[0]), ROUND_1);
-  assert.deepEqual(keys(bs[1]), ROUND_2);
+  assert.doesNotMatch(bs[0].join('\n'), /Digest|Your last reply|Others said|Full file|Round \d/);
+});
+
+test('the brainstorm prompt is the same bytes for the whole run (same-bytes rule)', () => {
+  has(contract, 'Brainstorm byte-identity');
+  has(brainstorm, 'exact bytes', 'every dispatch of the run');
 });
 
 test('the order is described as fixed for reading, with no cache claim', () => {

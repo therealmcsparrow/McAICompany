@@ -25,36 +25,22 @@ File name: `YYYY-MM-DD HH.MM - <Short Topic>.md` (local time at start). Never a 
 6. Tell the CEO in one line: topic, Roles, mode (**ideas** unless the CEO named another), debate style. Then start round 1.
 
 ## 2. Rounds
-Format 2 rounds follow [references/format-2.md](references/format-2.md), which you load now: Goal lines per pass, the apply JSON, both debate styles, the ledger. Dispatch prompt per Role (nothing more):
+Format 2 rounds follow [references/format-2.md](references/format-2.md), which you load now: the constant Goal, the apply JSON, both debate styles, the ledger. Rule: before every dispatch run `stage` for exactly the Roles dispatched; it writes each Role's round input file and prints its absolute path. Dispatch prompt per Role (nothing more):
 ```
-# Round 1:
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from §1.6>
 Name: <the Role's name from §1.7>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
-Input: <absolute path to the brainstorm file> (the idea, earlier rounds and the CEO's replies)
+Input: <absolute path that stage printed for this Role>
 Output: your reply only. Write no files and no Handoff.
-Goal: <ideas-pass Goal, format-2.md>
+Goal: <the constant Goal, format-2.md, word for word>
 ```
-```
-# Round 2 and later: paste the output of brainstorm.mjs" prompt '<file>' <role> (add --pass full|crossfire <round> in a debate pass)
-Digest: <from the script; identical for every Role in the round>
-Project profile: .company/project.md
-Company profile: <absolute path to PROFILE.md>
-Language: <tag from §1.6>
-Name: <the Role's name from §1.7>
-Settings: model=<m> effort=<e>   # as above
-Your last reply: <from the script>
-Others said: <from the script>
-Full file: <from the script>
-Output: your reply only. Write no files and no Handoff.
-Goal: <Goal of the pass, format-2.md>
-```
+Build each Role's prompt once, after the first `stage` that names it, and send those exact bytes in every dispatch of the run (ideas, re-ask, full pass, crossfire, moderated turn): the path is the same string every time. never add round content, reasons or a Digest to it; all of that is in the input file.
 Modes:
 - **ideas** (default): all chosen Roles in parallel, one message.
 - **debate** (style from the settings): the ideas pass, then the style from the settings, read once for the run: `crossfire` (default) adds one pair, the sharpest clash, about 50 words each; `full_pass` adds a full pass (every Role answers the others, at most 100 words) and then the pair. `full_pass` reads more by design and is the CEO's opt-in. The round heading names the style. "Change mode" keeps the run's debate style.
-- **moderated** (one Role at a time): you pick who speaks next from what was just said; each gets the replies so far this round. 3–5 turns per round.
+- **moderated** (one Role at a time): you pick who speaks next from what was just said; each gets the replies so far this round in its input file. 3–5 turns per round.
 
 A Role may `Skip`; that is recorded, not an error. After each dispatch write its ledger record (`ledger.mjs add`, format-2.md). Every reply goes into the file through `brainstorm.mjs apply` with its Role as `"Name (role)"`; a crossfire apply holds both pair members. A malformed reply is stored, marked and reported, never dropped.
 
@@ -63,7 +49,7 @@ Show the CEO your digest paragraph, then run `queue` and ask in one form (`aico:
 Record every answer through `answer` verbatim (`--skip` records the default as "CEO skipped"), queue a mid-round CEO question with `ask` (JSON on stdin with `"ceo": true`, the CEO's words only in that file) for the next round, apply any mode or Role change, and run the next round on it. With `brainstorm.film_script` `true`, `film` renders the film script after each round. Never end on your own and never cap the rounds; only the CEO's "done" (or "stop", "wrap up", "that's it") ends it.
 
 ## 4. Close
-1. Format 2: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/ledger.mjs" reconcile brainstorm-<YYYYMMDD-HHMM>` once. Then write `## Summary` at the top of the body: the idea in one paragraph, decisions made, open questions, and size and risk (S/M/L from the Digest's `### Estimate`, set when the Architect was in the room; else say "not estimated"). Format 2: use Edit, then `brainstorm.mjs check '<file>'`.
+1. Format 2: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/ledger.mjs" reconcile brainstorm-<YYYYMMDD-HHMM>` once, then `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" clean '<file>'` (removes the round input files). Then write `## Summary` at the top of the body: the idea in one paragraph, decisions made, open questions, and size and risk (S/M/L from the Digest's `### Estimate`, set when the Architect was in the room; else say "not estimated"). Format 2: use Edit, then `brainstorm.mjs check '<file>'`.
 2. Ask the CEO in one form:
    1. **Create a plan and implement**
    2. **Research it first**
