@@ -1,5 +1,5 @@
 // Quality floor: seeds that must stay caught by the machinery (rule-check, check.mjs, settings).
-// Seeds 1-2 are lines of .company/lessons.md, seeds 4-5 the fix commits bddd366 and 052a035.
+// Seeds 1-3 are lines of .company/lessons.md, seeds 4-5 the fix commits bddd366 and 052a035.
 // Fixtures live in tests/regression/ or temp dirs; the real repo and the real home are never written.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -106,6 +106,16 @@ test('seed 2 lessons: the repo keeps .gitattributes eol=lf and the regression fi
   for (const f of ['scripts/regression.test.mjs', 'tests/regression/dispatch-ok.md', 'tests/regression/dispatch-no-language.md']) {
     assert.ok(!fs.readFileSync(path.join(realRoot, f), 'utf8').includes('\r'), f);
   }
+});
+
+// ---------- seed 3 lessons: wait for CI to finish before merging a PR ----------
+
+test('seed 3 lessons: the pipeline Finish merges only after CI on the PR is green, and an auto Ship Gate never merges', () => {
+  const text = fs.readFileSync(path.join(realRoot, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
+  const finish = text.slice(text.indexOf('## 6. Finish'));
+  assert.match(finish, /only after CI on the PR is green/);
+  assert.match(finish, /gh pr checks <n> --watch/);
+  assert.match(finish, /never merges/);
 });
 
 // ---------- seed 4 (bddd366): a project file with any problem keeps ship and security locked ----------
