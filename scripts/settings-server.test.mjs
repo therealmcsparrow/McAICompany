@@ -335,3 +335,36 @@ test('page has the four tabs, a lock dialog, and no external resources', () => {
   assert.ok(!/<link[^>]*rel="?stylesheet/i.test(html));
   assert.ok(!html.includes('@import'));
 });
+
+test('save round-trips context_cap and brainstorm keys, refuses bad ones and writes nothing', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.equal(before.plugin.pipeline.context_cap, 150000);
+  assert.deepEqual(before.plugin.brainstorm, { film_script: false, debate: 'crossfire' });
+  assert.deepEqual(before.resolved.brainstorm, { film_script: false, debate: 'crossfire' });
+  const bad = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, brainstorm: { debate: 'duel' }, pipeline: { context_cap: 10 } } });
+  assert.equal(bad.status, 400);
+  const { refused } = await bad.json();
+  assert.ok(refused.some((r) => r.includes('brainstorm.debate must be crossfire or full_pass')), refused.join(' | '));
+  assert.ok(refused.some((r) => r.includes('context_cap must be a whole number from 60000 to 1000000')), refused.join(' | '));
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', {
+    revision: before.resolved.revision,
+    user: { version: 1, brainstorm: { film_script: true }, pipeline: { context_cap: 120000 } },
+    project: { version: 1, brainstorm: { debate: 'full_pass' }, roles: { qa: { context_cap: 80000 } } }
+  });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  assert.deepEqual(after.resolved.brainstorm, { film_script: true, debate: 'full_pass' });
+  assert.equal(after.resolved.roles.qa.context_cap, 80000);
+  assert.equal(after.resolved.roles.architect.context_cap, 120000);
+});
+
+test('page has the cap, film-script and debate rows built from the existing controls', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ["['pipeline', 'context_cap']", "['brainstorm', 'film_script']", "['brainstorm', 'debate']", "'crossfire'", "'full_pass'", "'context_cap'"]) {
+    assert.ok(html.includes(needle), needle);
+  }
+  assert.ok(!html.includes('type="range"') && !/<script[^>]*\ssrc=/i.test(html));
+});

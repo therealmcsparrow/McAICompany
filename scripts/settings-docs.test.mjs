@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { GATE_DEFAULTS, GATES, LANES, PIPELINE_DEFAULTS } from './settings.mjs';
+import { BRAINSTORM_DEFAULTS, GATE_DEFAULTS, GATES, LANES, PIPELINE_DEFAULTS } from './settings.mjs';
 
 const root = path.join(import.meta.dirname, '..');
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -46,9 +46,10 @@ test('every lane key appears in a Playbook', () => {
     assert.ok(skills.some(t => t.includes(`lanes.${key}\``)), `no Playbook mentions \`lanes.${key}\``);
 });
 
-test('dispatch-prompt is v3 and lists Name: and Settings:', () => {
+test('dispatch-prompt is v3.1 and lists Name:, Settings: and Context cap:', () => {
   const doc = read('docs/contracts/dispatch-prompt.md');
-  assert.match(doc, /^# Contract: dispatch-prompt v3$/m);
+  assert.match(doc, /^# Contract: dispatch-prompt v3\.1$/m);
+  assert.match(doc, /`Context cap: <cap> handover <n>`/);
   assert.match(doc, /`Name: <name>`/);
   assert.match(doc, /`Settings: model=<m> effort=<e>`/);
   assert.match(pipeline, /^Name: /m);
@@ -69,4 +70,18 @@ test('roles.md lists every default name', () => {
   const doc = read('documentation/roles.md');
   for (const [role, name] of Object.entries(names))
     assert.ok(doc.includes(`| ${name} |`), `roles.md lacks ${name} (${role})`);
+});
+
+test('aico-settings v1.1 names the cap range, the brainstorm keys and their defaults', () => {
+  const doc = read('docs/contracts/aico-settings.md');
+  assert.match(doc, /^# Contract: aico-settings v1\.1$/m);
+  assert.equal(PIPELINE_DEFAULTS.context_cap, 150000);
+  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 150000/);
+  assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
+  assert.match(doc, /refused: context_cap must be a whole number from 60000 to 1000000/);
+  assert.deepEqual(BRAINSTORM_DEFAULTS, { film_script: false, debate: 'crossfire' });
+  assert.match(doc, /`brainstorm\.film_script` \| boolean; default `false`/);
+  assert.match(doc, /`brainstorm\.debate` \| `crossfire \\| full_pass`; default `crossfire`/);
+  assert.match(doc, /refused: brainstorm\.debate must be crossfire or full_pass/);
+  assert.match(doc, /Plugin defaults include `context_cap` 150000, `film_script` false and `debate` `crossfire`/);
 });

@@ -353,11 +353,16 @@ function roleGroups() {
   if (other.length) groups.push(['Other', other]);
   return groups;
 }
+// A whole-number text field; the server holds the 60000-1000000 range and refuses anything else.
+function capInput(label) {
+  return el('input', { type: 'text', inputMode: 'numeric', placeholder: 'cap', maxLength: 7, 'aria-label': label });
+}
 function roleCell(level, role) {
   const name = bindLayer(el('input', { type: 'text', placeholder: '—', maxLength: 30, 'aria-label': `${role} name, ${level}` }), level, ['roles', role, 'name']);
   const model = bindLayer(selectFor(MODELS, `${role} model, ${level}`), level, ['roles', role, 'model']);
   const effort = bindLayer(selectFor(EFFORTS, `${role} effort, ${level}`), level, ['roles', role, 'effort']);
-  return el('td', {}, el('div', { class: 'cell' }, name, model, effort));
+  const cap = bindLayer(capInput(`${role} context cap, ${level}`), level, ['roles', role, 'context_cap'], Number);
+  return el('td', {}, el('div', { class: 'cell' }, name, model, effort, cap));
 }
 function renderRoles(panel) {
   const groups = roleGroups();
@@ -399,6 +404,15 @@ function renderRoles(panel) {
           if (!dirty(path) && resolved[f] !== undefined) return [resolved[f], resolved.source?.[f] ?? 'plugin'];
           return pickSource(path, base[f]);
         });
+        // The Role cap, else the global cap, else the plugin default.
+        const capPath = ['roles', role, 'context_cap'];
+        const globalPath = ['pipeline', 'context_cap'];
+        if (!dirty(capPath) && !dirty(globalPath) && resolved.context_cap !== undefined) parts.push([`cap ${resolved.context_cap}`, resolved.source?.context_cap ?? 'plugin']);
+        else {
+          const [own, ownFrom] = pickSource(capPath, undefined);
+          const [global, globalFrom] = pickSource(globalPath, state.plugin.pipeline.context_cap);
+          parts.push(own !== undefined ? [`cap ${own}`, ownFrom] : [`cap ${global}`, globalFrom]);
+        }
         effect.append(parts.map(([v]) => v ?? '—').join(' · '));
         const sources = [...new Set(parts.map(([, s]) => s))];
         effect.append(el('span', { class: 'src' }, `(${sources.join(', ')})`));
@@ -490,7 +504,19 @@ function renderPipeline(panel) {
     (l) => selectFor([0, 1, 2, 3, 4, 5], l), Number, String);
   pipelineRow(tbody, 'Dispatch', ['pipeline', 'dispatch'], defaults.dispatch,
     (l) => selectFor(['parallel', 'sequential'], l), String, String);
+  pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
+    (l) => capInput(l), Number, String);
   panel.append(wrap);
+  panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
+  panel.append(el('h2', {}, 'Brainstorm'));
+  const bs = table(COLUMNS);
+  const bsDefaults = state.plugin.brainstorm;
+  pipelineRow(bs.tbody, 'Film script', ['brainstorm', 'film_script'], bsDefaults.film_script,
+    (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' }), (s) => s === 'true', onOff);
+  pipelineRow(bs.tbody, 'Debate style', ['brainstorm', 'debate'], bsDefaults.debate,
+    (l) => selectFor(['crossfire', 'full_pass'], l), String, String);
+  panel.append(bs.wrap);
+  panel.append(el('p', { class: 'hint' }, 'Debate rounds: crossfire is one pair answering each other; full_pass adds a pass where every Role answers the others, then the crossfire.'));
   panel.append(el('h2', {}, 'Optional lanes'));
   panel.append(el('p', { class: 'hint' }, 'Turning off Security or Compliance needs your security unlock. A project can always turn a lane back on.'));
   const lanes = table(COLUMNS);

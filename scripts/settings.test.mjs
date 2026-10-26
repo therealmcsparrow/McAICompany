@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  GATE_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -69,13 +69,16 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
   assert.deepEqual(d.roles, AGENTS);
   assert.deepEqual(d.pipeline, PIPELINE_DEFAULTS);
   assert.deepEqual(d.gates, GATE_DEFAULTS);
+  assert.deepEqual(d.brainstorm, { film_script: false, debate: 'crossfire' });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'sonnet', effort: 'medium',
-    source: { name: 'plugin', model: 'plugin', effort: 'plugin' }
+    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 150000,
+    source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' }
   });
   assert.deepEqual(r.pipeline, PIPELINE_DEFAULTS);
   assert.deepEqual(r.gates, GATE_DEFAULTS);
+  assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
+  assert.equal(r.pipeline.context_cap, 150000);
   assert.deepEqual(r.unlocked, []);
   assert.deepEqual(r.ignored, []);
   assert.deepEqual(r.warnings, []);
@@ -88,8 +91,8 @@ test('project beats user beats plugin, per field', (t) => {
   s.project({ roles: { qa: { effort: 'high' } }, pipeline: { fix_rounds: 0, lanes: { legal: 'on' } } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'opus', effort: 'high',
-    source: { name: 'plugin', model: 'user', effort: 'project' }
+    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 150000,
+    source: { name: 'plugin', model: 'user', effort: 'project', context_cap: 'plugin' }
   });
   assert.equal(r.pipeline.fix_rounds, 0);
   assert.equal(r.pipeline.dispatch, 'parallel');
@@ -200,7 +203,7 @@ test('broken config.json falls back to defaults with a warning', (t) => {
   const s = sandbox(t);
   fs.writeFileSync(s.config, '{broken');
   let r = resolveSettings(s.ctx);
-  assert.deepEqual(r.roles.qa.source, { name: 'plugin', model: 'plugin', effort: 'plugin' });
+  assert.deepEqual(r.roles.qa.source, { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' });
   assert.equal(r.warnings.length, 1);
   assert.match(r.warnings[0], /not valid JSON/);
 
@@ -214,6 +217,8 @@ test('broken config.json falls back to defaults with a warning', (t) => {
   assert.equal(r.pipeline.fix_rounds, 2);
   assert.equal(r.pipeline.dispatch, 'sequential');
   assert.deepEqual(r.gates, GATE_DEFAULTS);
+  assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
+  assert.equal(r.pipeline.context_cap, 150000);
   assert.equal(r.warnings.length, 4, JSON.stringify(r.warnings));
 
   const { layer, warnings } = readLayer('user', s.ctx);
@@ -272,7 +277,7 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['gates', 'ignored', 'language', 'pipeline', 'profile', 'revision', 'roles', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'pipeline', 'profile', 'revision', 'roles', 'unlocked', 'warnings']);
   assert.equal(Object.keys(data.roles).length, 32);
   assert.equal(data.roles.architect.name, 'Ava');
 });
@@ -507,4 +512,83 @@ test('names refuse edge spaces and double spaces, allow combining marks, clash c
   const s = sandbox(t);
   s.user({ roles: { qa: { name: 'Zed' }, security: { name: 'ZED' } } });
   assert.ok(resolveSettings(s.ctx).warnings.some((w) => w.includes('qa') && w.includes('security')));
+});
+
+test('context_cap: Role beats pipeline, project beats user, plugin default 150000', (t) => {
+  const s = sandbox(t);
+  s.user({ roles: { qa: { context_cap: 200000 } }, pipeline: { context_cap: 100000 } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.roles.qa.context_cap, 200000);
+  assert.equal(r.roles.qa.source.context_cap, 'user');
+  assert.equal(r.roles.architect.context_cap, 100000);
+  assert.equal(r.roles.architect.source.context_cap, 'pipeline:user');
+  assert.equal(r.pipeline.context_cap, 100000);
+  s.project({ roles: { qa: { context_cap: 60000 } }, pipeline: { context_cap: 1000000 } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.roles.qa.context_cap, 60000);
+  assert.equal(r.roles.qa.source.context_cap, 'project');
+  assert.equal(r.roles.architect.context_cap, 1000000);
+  assert.equal(r.roles.architect.source.context_cap, 'pipeline:project');
+  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '60000\n');
+  assert.equal(s.cli('get', 'pipeline.context_cap').out, '1000000\n');
+});
+
+test('context_cap refuses anything but a whole number from 60000 to 1000000', () => {
+  for (const bad of [59999, 1000001, 150000.5, '150000', null, true, -1, Number.NaN]) {
+    for (const layer of [{ pipeline: { context_cap: bad } }, { roles: { qa: { context_cap: bad } } }]) {
+      const reasons = validateLayer({ version: 1, ...layer }, roleSet);
+      assert.deepEqual(reasons, ['context_cap must be a whole number from 60000 to 1000000'], JSON.stringify(layer));
+    }
+  }
+  for (const ok of [60000, 150000, 1000000]) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { context_cap: ok }, roles: { qa: { context_cap: ok } } }, roleSet), []);
+  }
+});
+
+test('brainstorm keys validate, resolve per field and are not locks', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(validateLayer({ version: 1, brainstorm: { film_script: true, debate: 'full_pass' } }, roleSet), []);
+  assert.deepEqual(validateLayer({ version: 1, brainstorm: { debate: 'duel' } }, roleSet), ['brainstorm.debate must be crossfire or full_pass']);
+  assert.equal(validateLayer({ version: 1, brainstorm: { film_script: 'yes' } }, roleSet).length, 1);
+  assert.equal(validateLayer({ version: 1, brainstorm: { nope: 1 } }, roleSet).length, 1);
+  assert.equal(validateLayer({ version: 1, brainstorm: [] }, roleSet).length, 1);
+  s.user({ brainstorm: { film_script: true, debate: 'full_pass' } });
+  s.project({ brainstorm: { debate: 'crossfire' } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(r.brainstorm, { film_script: true, debate: 'crossfire' });
+  assert.deepEqual(r.ignored, []);
+  assert.equal(s.cli('get', 'brainstorm.debate').out, 'crossfire\n');
+  assert.equal(s.cli('get', 'brainstorm.film_script').out, 'true\n');
+  assert.deepEqual(JSON.parse(s.cli('get').out).brainstorm, { film_script: true, debate: 'crossfire' });
+});
+
+test('a bad brainstorm or context_cap layer falls back to the level below with a warning', (t) => {
+  const s = sandbox(t);
+  s.user({ brainstorm: { debate: 'full_pass' }, pipeline: { context_cap: 90000 } });
+  s.project({ brainstorm: { debate: 'duel' }, pipeline: { context_cap: 5 }, roles: { qa: { context_cap: 'big' } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.brainstorm.debate, 'full_pass');
+  assert.equal(r.pipeline.context_cap, 90000);
+  assert.equal(r.roles.qa.context_cap, 90000);
+  assert.equal(r.warnings.filter((w) => /brainstorm\.debate|context_cap/.test(w)).length, 3);
+});
+
+test('a bad project debate value changes no lock and the fail-closed rule still holds', (t) => {
+  const s = sandbox(t);
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], brainstorm: { debate: 'full_pass' } });
+  s.project({ brainstorm: { debate: 'duel' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.brainstorm.debate, 'full_pass');
+  assert.equal(r.gates.ship, 'ask', 'a project layer with problems still fails closed');
+});
+
+test('writeLayer refuses a bad debate value with the Contract text and writes nothing', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, brainstorm: { debate: 'duel' } }, s.ctx), /brainstorm\.debate must be crossfire or full_pass/);
+  assert.equal(fs.existsSync(s.config), false);
+  writeLayer('user', { version: 1, brainstorm: { film_script: true, debate: 'full_pass' }, pipeline: { context_cap: 120000 } }, s.ctx);
+  assert.deepEqual(readLayer('user', s.ctx).layer, { version: 1, brainstorm: { film_script: true, debate: 'full_pass' }, pipeline: { context_cap: 120000 } });
+  const out = s.cli('get', 'brainstorm.nope');
+  assert.equal(out.code, 2);
+  assert.equal(out.out, 'refused: no setting brainstorm.nope\n');
 });

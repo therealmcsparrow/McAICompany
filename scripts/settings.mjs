@@ -16,12 +16,18 @@ export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 export const LANES = ['security', 'compliance', 'legal', 'persona', 'hands_on', 'accessibility'];
 export const GATES = ['brief', 'plan', 'ship', 'installs'];
 export const LOCKABLE = ['ship', 'security', 'installs'];
+export const CONTEXT_CAP_MIN = 60000;
+export const CONTEXT_CAP_MAX = 1000000;
+export const CONTEXT_CAP_DEFAULT = 150000;
+export const DEBATES = ['crossfire', 'full_pass'];
 export const PIPELINE_DEFAULTS = {
   fix_rounds: 2,
   dispatch: 'parallel',
+  context_cap: CONTEXT_CAP_DEFAULT,
   lanes: { security: true, compliance: true, legal: 'auto', persona: true, hands_on: true, accessibility: true }
 };
 export const GATE_DEFAULTS = { brief: 'ask', plan: 'ask', ship: 'ask', installs: 'ask' };
+export const BRAINSTORM_DEFAULTS = { film_script: false, debate: 'crossfire' };
 
 export const PROFILE_FIELDS = ['product_type', 'engagement', 'client', 'audience', 'goal', 'stack', 'languages', 'voice', 'license', 'jurisdiction'];
 
@@ -145,21 +151,32 @@ export function pluginDefaults(pluginRoot = DEFAULT_PLUGIN_ROOT) {
     const name = typeof names[role] === 'string' && Object.hasOwn(names, role) ? names[role] : role;
     roles[role] = { name, model, effort };
   }
-  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS } };
+  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS } };
 }
 
 function oneOf(values) {
   return { ok: (v) => values.includes(v), why: `must be one of ${values.join(', ')}` };
 }
 const BOOLEAN = { ok: (v) => typeof v === 'boolean', why: 'must be true or false' };
+// A rule with `msg` is refused with exactly that text (the Contract's wording), not "<path>: <why>".
+const CONTEXT_CAP = {
+  ok: (v) => Number.isInteger(v) && v >= CONTEXT_CAP_MIN && v <= CONTEXT_CAP_MAX,
+  msg: `context_cap must be a whole number from ${CONTEXT_CAP_MIN} to ${CONTEXT_CAP_MAX}`
+};
 const ROLE_RULES = {
   name: { ok: (v) => typeof v === 'string' && NAME_RE.test(v), why: "must be 1-30 letters, single spaces, hyphens or apostrophes, starting with a letter" },
   model: oneOf(MODELS),
-  effort: oneOf(EFFORTS)
+  effort: oneOf(EFFORTS),
+  context_cap: CONTEXT_CAP
 };
 const PIPELINE_RULES = {
   fix_rounds: { ok: (v) => Number.isInteger(v) && v >= 0 && v <= 5, why: 'must be a whole number from 0 to 5' },
-  dispatch: oneOf(DISPATCH)
+  dispatch: oneOf(DISPATCH),
+  context_cap: CONTEXT_CAP
+};
+const BRAINSTORM_RULES = {
+  film_script: BOOLEAN,
+  debate: { ok: (v) => DEBATES.includes(v), msg: `brainstorm.debate must be ${DEBATES.join(' or ')}` }
 };
 const LANE_RULES = Object.fromEntries(LANES.map((l) => [l, l === 'legal' ? oneOf(LEGAL) : BOOLEAN]));
 const GATE_RULES = Object.fromEntries(GATES.map((g) => [g, oneOf(GATE_VALUES)]));
@@ -170,7 +187,7 @@ function checkFields(obj, rules, at, reasons, nested = []) {
   for (const k of Object.keys(obj)) {
     if (nested.includes(k)) continue;
     if (!Object.hasOwn(rules, k)) reasons.push(`${at}.${label(k)}: unknown key`);
-    else if (!rules[k].ok(obj[k])) reasons.push(`${at}.${k}: ${rules[k].why}`);
+    else if (!rules[k].ok(obj[k])) reasons.push(rules[k].msg ?? `${at}.${k}: ${rules[k].why}`);
     else clean[k] = obj[k];
   }
   return clean;
@@ -212,6 +229,10 @@ function sanitize(layer, roleNames) {
       if (!isObject(value)) { reasons.push('gates: must be an object'); continue; }
       const gates = checkFields(value, GATE_RULES, 'gates', reasons);
       if (notEmpty(gates)) clean.gates = gates;
+    } else if (key === 'brainstorm') {
+      if (!isObject(value)) { reasons.push('brainstorm: must be an object'); continue; }
+      const brainstorm = checkFields(value, BRAINSTORM_RULES, 'brainstorm', reasons);
+      if (notEmpty(brainstorm)) clean.brainstorm = brainstorm;
     } else if (key === 'unlocked') {
       if (!Array.isArray(value)) { reasons.push('unlocked: must be a list'); continue; }
       const unlocked = [];
@@ -269,6 +290,13 @@ function resolveRoles(defaults, user, project) {
     const source = {};
     for (const f of ROLE_FIELDS) {
       [entry[f], source[f]] = pick(project.roles?.[role]?.[f], user.roles?.[role]?.[f], base[f]);
+    }
+    // Role cap, else the global cap, else the plugin default. `source` says which level supplied it.
+    const own = pick(project.roles?.[role]?.context_cap, user.roles?.[role]?.context_cap, undefined);
+    if (own[0] !== undefined) [entry.context_cap, source.context_cap] = own;
+    else {
+      const [value, from] = pick(project.pipeline?.context_cap, user.pipeline?.context_cap, PIPELINE_DEFAULTS.context_cap);
+      [entry.context_cap, source.context_cap] = [value, from === 'plugin' ? 'plugin' : `pipeline:${from}`];
     }
     roles[role] = { ...entry, source };
   }
@@ -405,8 +433,14 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const pipeline = {
     fix_rounds: pick(project.pipeline?.fix_rounds, user.pipeline?.fix_rounds, PIPELINE_DEFAULTS.fix_rounds)[0],
     dispatch: pick(project.pipeline?.dispatch, user.pipeline?.dispatch, PIPELINE_DEFAULTS.dispatch)[0],
+    context_cap: pick(project.pipeline?.context_cap, user.pipeline?.context_cap, PIPELINE_DEFAULTS.context_cap)[0],
     lanes: {}
   };
+  // Not locks: no unlock is involved, and a fail-closed project layer does not change them.
+  const brainstorm = {};
+  for (const k of Object.keys(BRAINSTORM_DEFAULTS)) {
+    brainstorm[k] = pick(project.brainstorm?.[k], user.brainstorm?.[k], BRAINSTORM_DEFAULTS[k])[0];
+  }
   for (const lane of LANES) {
     const [value, source] = pick(project.pipeline?.lanes?.[lane], user.pipeline?.lanes?.[lane], PIPELINE_DEFAULTS.lanes[lane]);
     if (LOCKED_LANES.includes(lane) && value === false && !isUnlocked('security')) {
@@ -439,7 +473,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).update('\0').update(md).digest('hex');
   const language = resolveLanguage({ home, cwd });
   const profile = { ...readProfile({ cwd }), options: templateOptions(pluginRoot) };
-  return { revision, roles, pipeline, gates, unlocked: [...unlocked], ignored, warnings, language, profile };
+  return { revision, roles, pipeline, gates, brainstorm, unlocked: [...unlocked], ignored, warnings, language, profile };
 }
 
 // Checks a user and a project layer together, as they would be stored. Returns all reasons.
