@@ -20,7 +20,7 @@ Cheaper brainstorms and cheaper runs. The savings come from reading less (shorte
 - **Contracts:** `handoff` v1.1, `dispatch-prompt` v3.1 (`Context cap:`, `Review depth:`), `aico-settings` v1.1, `brainstorm-file` v2, `brainstorm-reply` v1, `token-ledger` v1, `rule-pack` v1.1, `rule-check` v1, `review-depth` v1. ADRs 0007 to 0012.
 
 ### Changed
-- **Pipeline dispatches** carry `Context cap:` and, for the code-reviewer, `Review depth:`. `scripts/check.mjs` fails a dispatch block without `Context cap:` (research is exempt).
+- **Pipeline dispatches** carry `Context cap:` and, for the code-reviewer, `Review depth:`. `scripts/check.mjs` fails a dispatch block without `Context cap:`. No Playbook is exempt: research prompts carry it too; only brainstorm and cooler, which write no Handoff, have no such line.
 - The commit lines in the pipeline and brainstorm Playbooks check paths and names before any shell command.
 
 ## [0.10.0] - 2026-10-26
