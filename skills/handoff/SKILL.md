@@ -68,6 +68,36 @@ By: <Name> (<role>)
 - Keep it under ~60 lines. Link to files; don't paste code.
 - Your final reply to the Lead is one line: `<status> — <output path>`.
 
+## Handoff v1.1 (pilot)
+Contract: `docs/contracts/handoff.md`. A v1.0 Handoff stays valid; v1.1 only adds. The Lead runs `node scripts/handoff-lint.mjs <file>` after each Step, with `--require-top` for `code-reviewer` and `senior-engineer` compliance-pass Handoffs. A malformed top block blocks the Step: you are re-dispatched with the lint errors; it costs no Fix round.
+
+**Top block.** Directly after the `By:` line, before `## Did`, one fence with info string `aico-top`. Exactly these keys, in this order, one line each, nothing else:
+
+````markdown
+By: Rin (code-reviewer)
+```aico-top
+status: done
+files: [src/x.ts]
+ac_ids: [AC1]
+rule_ids: [proj.M3]
+risks: [R-1]
+read_next: [src/x.ts#top, R-1]
+tokens_used: unknown
+```
+````
+
+- `status`, `files`, `ac_ids` repeat the frontmatter `status`, `files-touched`, `acceptance-ids` (same set; `[]` when absent). A mismatch is malformed.
+- `rule_ids`: rule IDs you applied or checked. `risks`: finding IDs that carry a risk. `read_next`: at most 5 pointers (`path`, `path#heading`, `R-n`), never copied text. `tokens_used`: your own integer count or `unknown`.
+- Only one block; lines under 1000 characters.
+
+**Finding rows (pilot Roles).** In `## Blocking` and `## Nits`, one row per finding:
+- Blocking: `- [contract|spec|security|test] <ID> | <file>[:<line>[-<line>]] | <problem> | <why> | <fix>`
+- Nit: `- <ID> | <file>[:<line>] | <problem> | <why> | <fix>`
+- `<ID>` is `R-<n>` (review), `C-<n>` (compliance pass) or `T-<n>` (tool check). IDs are stable across Fix rounds and never reused. `why` is never empty. Builders cite IDs in `## Did` (`fixed R-2`).
+- No `|` inside a field.
+
+**Findings ledger.** A pilot reviewer keeps `<NN>-<role>.findings.md` while working (frontmatter `step`, `role`, `base-commit`; `## Checked` file list; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, status `open|fixed|withdrawn`). Rows are appended or change status, never deleted. A handover or Fix-round reviewer continues the same file. Check it with `node scripts/handoff-lint.mjs --findings <file>`.
+
 ## Language
 Your dispatch carries `Language: <tag>`. Write the prose in `<tag>`: Handoff text, forms, Gate summaries, digests, reports, lessons, cooler lines, brainstorm replies. Commit subjects are `<type>: <summary in tag>`.
 - **Always English** (machine-read): frontmatter keys and values, `##` headings, `status:` values, blocking tags `contract|spec|security|test`, AC IDs, file and folder names, slugs, branches, command, Role and Contract names, report `## ` headings. Example: `## Did` stays, the bullets under it are in `<tag>`.
