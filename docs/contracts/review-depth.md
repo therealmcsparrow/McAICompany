@@ -8,7 +8,7 @@ Depth follows the touched paths, never the builder's label (AC24).
 
 ### Part M additions (additive, still unshipped; the text output above is unchanged)
 - `node review-depth.mjs --staged [--risk …] [--repo <dir>]`: paths from `git diff --cached --name-only` (no HEAD yet: `git diff --cached --name-only --root` equivalent, every staged path).
-- `node review-depth.mjs --worktree [--risk …] [--repo <dir>]`: paths from `git diff --name-only HEAD` plus `git diff --cached --name-only` (staged and unstaged tracked changes; what `git commit -a` or a pathspec commit can include).
+- `node review-depth.mjs --worktree [--risk …] [--repo <dir>]`: paths from `git diff --name-only HEAD` plus `git diff --cached --name-only` plus `git ls-files -z --others --exclude-standard --full-name -- :/` (staged, unstaged and untracked, ignored files left out; what a commit run after `git add` can include).
 - `<base-sha>`, `--staged` and `--worktree` are mutually exclusive; exactly one is required (`refused: give one of <base-sha>, --staged, --worktree`).
 - `--repo <dir>`: run git with `-C <dir>`; `<dir>` must resolve (realpath) inside the cwd's repository top level or equal it, else `refused: repo outside the project`.
 - `--json`: instead of the text lines, one JSON object on stdout:
