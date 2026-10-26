@@ -680,7 +680,7 @@ const json = s => JSON.parse(s);
 function endToEnd(style) {
   const dir = tmp();
   const f = join(dir, '2026-10-26 14.05 - Settings server.md');
-  assert.equal(cli(['new', f, 'Settings server', 'architect,writer,product-manager', 'debate']).code, 0);
+  assert.equal(cli(['new', f], JSON.stringify({ topic: 'Settings server', roles: 'architect,writer,product-manager', mode: 'debate' })).code, 0);
   const rep = n => reply(n);
   const a1 = cli(['apply', f, '1'], JSON.stringify({ replies: set({ architect: 'r1-architect.txt', writer: 'r1-writer.txt', 'product-manager': 'r1-pm.txt' }), lead: 'Local first.' }));
   assert.equal(a1.code, 0, a1.err);
@@ -746,9 +746,11 @@ test('CLI: usage errors exit 2 and refusals exit 1 with the file unchanged', () 
   assert.equal(cli(['apply']).code, 2);
   assert.equal(cli(['parse', 'x', 'architect'], 'Skip').code, 2);
   assert.equal(cli(['parse', '1', 'architect', '--pass', 'loud'], 'Skip').code, 2);
-  assert.equal(cli(['new', f, 'T', 'architect', 'loud']).code, 2);
-  assert.equal(cli(['new', f, 'T', 'architect']).code, 0);
-  const again = cli(['new', f, 'T', 'architect']);
+  const newIn = extra => JSON.stringify({ topic: 'T', roles: 'architect', ...extra });
+  assert.equal(cli(['new', f], newIn({ mode: 'loud' })).code, 1);
+  assert.equal(cli(['new', f, 'T', 'architect']).code, 2, 'the old argument form is a usage error');
+  assert.equal(cli(['new', f], newIn()).code, 0);
+  const again = cli(['new', f], newIn());
   assert.equal(again.code, 1);
   assert.match(again.err, /^refused: /);
   const before = readFileSync(f, 'utf8');
@@ -773,13 +775,36 @@ test('CLI: usage errors exit 2 and refusals exit 1 with the file unchanged', () 
 test('CLI: ask, merge, queue and check work on a file path', () => {
   const dir = tmp();
   const f = join(dir, 'a.md');
-  cli(['new', f, 'T', 'architect,writer']);
-  assert.equal(cli(['ask', f, 'Go now?', '--options', 'yes|no', '--default', 'yes', '--tag', 'blocking']).code, 0);
-  assert.equal(cli(['ask', f, 'Maybe?', '--options', 'yes|no', '--default', 'no', '--tag', 'nice-to-have', '--ceo']).code, 0);
-  assert.equal(cli(['ask', f, 'Go?', '--options', 'yes|no', '--default', 'maybe', '--tag', 'blocking']).code, 1);
-  assert.equal(cli(['ask', f, 'Go?', '--options', 'yes|no', '--tag', 'blocking']).code, 2);
+  cli(['new', f], JSON.stringify({ topic: 'T', roles: ['architect', 'writer'] }));
+  const ask = o => cli(['ask', f], JSON.stringify(o));
+  assert.equal(ask({ text: 'Go now?', options: ['yes', 'no'], default: 'yes', tag: 'blocking' }).code, 0);
+  assert.equal(ask({ text: 'Maybe?', options: ['yes', 'no'], default: 'no', tag: 'nice-to-have', ceo: true }).code, 0);
+  assert.equal(ask({ text: 'Go?', options: ['yes', 'no'], default: 'maybe', tag: 'blocking' }).code, 1);
+  assert.equal(ask({ text: 'Go?', options: ['yes', 'no'], tag: 'blocking' }).code, 1);
+  assert.equal(ask({ text: 'Go?', options: ['yes', 'no'], default: 'yes', tag: 'blocking', extra: 1 }).code, 1);
+  assert.equal(ask({ text: 'Go?', options: ['yes', 'no'], default: 'yes', tag: 'blocking', ceo: 'yes' }).code, 1);
+  assert.equal(cli(['ask', f], '{not json').code, 1);
+  assert.equal(cli(['ask', f, 'Go?', '--options', 'yes|no', '--default', 'yes', '--tag', 'blocking']).code, 2, 'the old flag form is a usage error');
   assert.deepEqual(json(cli(['queue', f]).out).ask.map(x => x.id), ['Q-1', 'Q-2']);
   assert.equal(cli(['merge', f, 'Q-1', 'Q-2']).code, 0);
   assert.deepEqual(json(cli(['queue', f]).out).ask.map(x => x.id), ['Q-1']);
   assert.equal(cli(['check', f]).code, 0);
+});
+
+test('CLI: free text with quotes, shell characters and newlines travels on stdin, never as an argument', () => {
+  const dir = tmp();
+  const f = join(dir, 'a.md');
+  const topic = "It's a \"topic\" with $(x) and `y` ; & | > < chars";
+  assert.equal(cli(['new', f], JSON.stringify({ topic, roles: 'architect,writer' })).code, 0);
+  assert.ok(readFileSync(f, 'utf8').includes(`topic: ${topic}`));
+  const q = "Is the CEO's \"plan\" $(rm -rf x) ok?";
+  assert.equal(cli(['ask', f], JSON.stringify({ text: q, options: ["Yes, it's fine", 'No & stop'], default: 'No & stop', tag: 'blocking', ceo: true })).code, 0);
+  assert.ok(readFileSync(f, 'utf8').includes(q));
+  assert.equal(cli(['check', f]).code, 0);
+  const nl = cli(['new', join(dir, 'b.md')], JSON.stringify({ topic: 'two\nlines', roles: 'architect' }));
+  assert.equal(nl.code, 1);
+  assert.match(nl.err, /^refused: /);
+  assert.equal(existsSync(join(dir, 'b.md')), false);
+  assert.equal(cli(['new', join(dir, 'c.md')], JSON.stringify({ topic: 'T', roles: 'architect', cmd: 'x' })).code, 1);
+  assert.equal(cli(['new', join(dir, 'd.md')], '[]').code, 1);
 });

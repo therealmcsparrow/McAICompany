@@ -30,6 +30,7 @@ const RECORD_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
   'dispatches', 'acs', 'fix_rounds', 'high_blockers'
 ]);
+const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers'];
 const SHIP_KEYS = new Set(['v', 'run', 'kind', 'acs', 'fix_rounds', 'high_blockers']);
 const BASELINE_FIELDS = ['first', 'dispatches', 'requests', 'in', 'cache_write', 'cache_read', 'out', 'notif_total', 'roles'];
 const USAGE = [
@@ -81,10 +82,11 @@ export function validateRecord(input) {
     for (const k of Object.keys(rec)) if (!SHIP_KEYS.has(k)) return fail('key not allowed on ship');
     if (!isInt(rec.acs, MAX_REQUESTS)) return fail('acs must be an integer 0-100000');
     for (const k of ['fix_rounds', 'high_blockers']) {
-      if (k in rec && !isInt(rec[k], MAX_REQUESTS)) return fail(`${k} must be an integer 0-100000`);
+      if (Object.hasOwn(rec, k) && !isInt(rec[k], MAX_REQUESTS)) return fail(`${k} must be an integer 0-100000`);
     }
     return { ok: true };
   }
+  for (const k of SHIP_ONLY) if (Object.hasOwn(rec, k)) return fail(`${k} only on ship`);
   const idOk = {
     step: /^\d{2}$/,
     round: /^R\d{1,3}$/,
@@ -94,27 +96,27 @@ export function validateRecord(input) {
   }[rec.kind];
   if (typeof rec.id !== 'string' || !idOk.test(rec.id)) return fail('invalid id');
   if (typeof rec.role !== 'string' || !ROLE.test(rec.role)) return fail('invalid role');
-  if ('agent' in rec && (typeof rec.agent !== 'string' || !AGENT.test(rec.agent))) return fail('invalid agent');
-  if (rec.kind !== 'total' && !('agent' in rec)) return fail('agent required');
+  if (Object.hasOwn(rec, 'agent') && (typeof rec.agent !== 'string' || !AGENT.test(rec.agent))) return fail('invalid agent');
+  if (rec.kind !== 'total' && !(Object.hasOwn(rec, 'agent'))) return fail('agent required');
   if (rec.kind === 'total' && !isInt(rec.dispatches, MAX_REQUESTS)) return fail('dispatches must be an integer 0-100000');
-  if (rec.kind !== 'total' && 'dispatches' in rec) return fail('dispatches only on total');
+  if (rec.kind !== 'total' && Object.hasOwn(rec, 'dispatches')) return fail('dispatches only on total');
   if (rec.src !== 'notification' && rec.src !== 'transcript') return fail('invalid src');
   if (rec.kind === 'total' && rec.src !== 'transcript') return fail('total needs src transcript');
   if (rec.src === 'notification') {
     if (!isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
-    if ('tokens' in rec) return fail('tokens not allowed on a notification');
+    if (Object.hasOwn(rec, 'tokens')) return fail('tokens not allowed on a notification');
   } else {
-    if ('ctx_end' in rec && !isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
+    if (Object.hasOwn(rec, 'ctx_end') && !isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
     const t = rec.tokens;
     if (!isObject(t)) return fail('tokens required on a transcript record');
     const keys = Object.keys(t);
     if (keys.length !== 4 || !TOKEN_KEYS.every((k) => keys.includes(k))) return fail('tokens needs exactly in, cache_write, cache_read, out');
     if (!TOKEN_KEYS.every((k) => isInt(t[k], MAX_COUNT))) return fail('token counts must be integers 0-1000000000');
   }
-  if ('reqs' in rec && !isInt(rec.reqs, MAX_REQUESTS)) return fail('reqs must be an integer 0-100000');
-  if ('tool_uses' in rec && !isInt(rec.tool_uses, MAX_REQUESTS)) return fail('tool_uses must be an integer 0-100000');
-  if ('ms' in rec && !isInt(rec.ms, 86400000)) return fail('ms must be an integer 0-86400000');
-  if ('model' in rec && (typeof rec.model !== 'string' || !MODEL.test(rec.model))) return fail('invalid model');
+  if (Object.hasOwn(rec, 'reqs') && !isInt(rec.reqs, MAX_REQUESTS)) return fail('reqs must be an integer 0-100000');
+  if (Object.hasOwn(rec, 'tool_uses') && !isInt(rec.tool_uses, MAX_REQUESTS)) return fail('tool_uses must be an integer 0-100000');
+  if (Object.hasOwn(rec, 'ms') && !isInt(rec.ms, 86400000)) return fail('ms must be an integer 0-86400000');
+  if (Object.hasOwn(rec, 'model') && (typeof rec.model !== 'string' || !MODEL.test(rec.model))) return fail('invalid model');
   return { ok: true };
 }
 

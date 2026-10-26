@@ -690,7 +690,7 @@ function writeAtomic(file, text) {
   try { writeFileSync(tmp, text); renameSync(tmp, file); } finally { rmSync(tmp, { force: true }); }
 }
 
-const FLAGS = new Map([['--pass', true], ['--mode', true], ['--options', true], ['--default', true], ['--tag', true], ['--file', true], ['--skip', false], ['--ceo', false]]);
+const FLAGS = new Map([['--pass', true], ['--mode', true], ['--file', true], ['--skip', false]]);
 function parseArgs(argv) {
   const pos = [], flags = new Map();
   for (let i = 0; i < argv.length; i++) {
@@ -729,9 +729,11 @@ export function run(argv) {
   const out = [];
   switch (cmd) {
     case 'new': {
-      arity(pos, 3, 4, 'new <file> <topic> <roles> [mode]');
-      if (pos[3] !== undefined) oneOf(pos[3], FILE_MODES, 'mode');
-      const text = newFile({ topic: pos[1], roles: pos[2], mode: pos[3] });
+      arity(pos, 1, 1, 'new <file> (JSON on stdin: { topic, roles, mode? })');
+      const input = jsonIn();
+      if (!isPlain(input)) throw new Refused('input must be a JSON object');
+      for (const k of Object.keys(input)) if (!['topic', 'roles', 'mode'].includes(k)) throw new Refused(`unknown key ${short(k)}`);
+      const text = newFile({ topic: input.topic, roles: input.roles, mode: input.mode });
       try { writeFileSync(f, text, { flag: 'wx' }); } catch (e) { throw new Refused(e.code === 'EEXIST' ? `${short(f)} already exists` : `cannot write ${short(f)}`); }
       out.push(`created ${f}`);
       break;
@@ -765,10 +767,12 @@ export function run(argv) {
       break;
     }
     case 'ask': {
-      arity(pos, 2, 2, 'ask <file> <text> --options a|b --default a --tag blocking|nice-to-have [--ceo]');
-      for (const k of ['--options', '--default', '--tag']) if (!flags.has(k)) throw new Usage(`ask needs ${k}`);
-      const tag = oneOf(flags.get('--tag'), TAGS, '--tag');
-      mutate(f, text => askQuestion(text, { text: pos[1], options: flags.get('--options').split('|'), default: flags.get('--default'), tag, ceo: flags.has('--ceo') }, { file: f }));
+      arity(pos, 1, 1, 'ask <file> (JSON on stdin: { text, options, default, tag, ceo? })');
+      const input = jsonIn();
+      if (!isPlain(input)) throw new Refused('input must be a JSON object');
+      for (const k of Object.keys(input)) if (!['text', 'options', 'default', 'tag', 'ceo'].includes(k)) throw new Refused(`unknown key ${short(k)}`);
+      if (input.ceo !== undefined && typeof input.ceo !== 'boolean') throw new Refused('ceo must be true or false');
+      mutate(f, text => askQuestion(text, input, { file: f }));
       out.push('ok');
       break;
     }

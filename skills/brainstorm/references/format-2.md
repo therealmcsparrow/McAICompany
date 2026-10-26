@@ -3,14 +3,14 @@
 Load this for every format 2 round. The contracts are `docs/contracts/brainstorm-file.md` v2, `brainstorm-reply.md` v1 and `token-ledger.md` v1; the script enforces them, you drive it.
 
 ## Calling the scripts
-From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <command> …`. The file path is the checked name, in single quotes. Text from Roles or the CEO goes in only as a file on stdin (`< '<scratch file>'`), never as an argument. Text you write yourself for an argument (`ask`) is one plain line in your own words, no `'`, at most 200 characters.
+From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <command> …`. The file path is the checked name, in single quotes. All free text goes in only as a file on stdin (`< '<scratch file>'`), never as an argument: replies, the CEO's answer, the `new` topic and the `ask` text and options, whoever wrote them. Write that file with the Write tool.
 | Command | Use |
 |---|---|
-| `new '<file>' '<topic>' <roles> [ideas\|debate\|moderated]` | writes the empty file; `<roles>` comma-separated slugs |
+| `new '<file>' < json` | writes the empty file; JSON `{ "topic": "<one line, at most 200 characters>", "roles": "<comma-separated slugs>", "mode": "ideas\|debate\|moderated" }` (`mode` optional) |
 | `parse <round> <role> [--pass ideas\|full\|crossfire] < reply` | optional check of one reply before you apply |
 | `apply '<file>' <round> [--mode ideas\|moderated\|debate:crossfire\|debate:full_pass] [--pass ideas\|full\|crossfire] < json` | stores the pass |
 | `answer '<file>' Q-<n> < answer` / `answer … --skip` | the CEO's answer verbatim, or the default as "CEO skipped" |
-| `ask '<file>' '<text>' --options '<a>\|<b>' --default '<a>' --tag blocking\|nice-to-have [--ceo]` | queues a question for the next round |
+| `ask '<file>' < json` | queues a question for the next round; JSON `{ "text": "<one line>", "options": ["<a>", "<b>"], "default": "<a>", "tag": "blocking\|nice-to-have", "ceo": true }` (`ceo` optional) |
 | `queue '<file>'` | `{ ask: [3 questions], next_up }` |
 | `prompt '<file>' <role> [--pass full\|crossfire <round>]` | the input blocks of a Role |
 | `crossfire '<file>' <round>` | the pair `["challenger","author"]` or `null` |
@@ -71,5 +71,5 @@ Run name `brainstorm-<YYYYMMDD-HHMM>` of this run's start. After every dispatch,
 ## Form and queue
 After the round: `queue '<file>'`. Show the digest, then one form (`aico:pipeline`): the `ask` questions (3 at most) with their options and the default first as "(Recommended)", plus a skip option when there are fewer than 4 options, and **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Print `next_up` as one line "Up next: <text>" (not asked yet). Steering comes through "Other".
 - Answers: write the CEO's words to a scratch file, `answer '<file>' Q-<n> < '<scratch file>'`; a declined question gets `answer … --skip`. Verbatim means no edit.
-- A question the CEO raises mid-round: `ask … --ceo` for the next round. Steering text: queue it the same way as a `blocking` question in your own words (`--options 'Take it into account|Drop it'`).
+- A question the CEO raises mid-round: `ask` with `"ceo": true` in the JSON for the next round. Steering text: queue it the same way as a `blocking` question in your own words (`"options": ["Take it into account", "Drop it"]`).
 - Answered questions never come back; the script drops them from the queue.

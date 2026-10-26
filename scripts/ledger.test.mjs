@@ -12,7 +12,7 @@ const FAKE_HOME = path.join(fixtures, 'claude-home');
 const BASELINE = path.join(fixtures, 'baseline-counts.json');
 const MiB = 1024 * 1024;
 
-// Every test works in its own temp project dir; the real user home is never touched (proj.M8).
+// Every test works in its own temp project dir; the real user home is never touched.
 function sandbox() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-test-'));
   const home = path.join(dir, 'home');
@@ -42,7 +42,7 @@ const ALLOWED_KEYS = new Set([
   'dispatches', 'acs', 'fix_rounds', 'high_blockers'
 ]);
 
-// ---------- schema (hostile cases first, proj.M4) ----------
+// ---------- schema (hostile cases first) ----------
 
 const goodNotification = {
   v: 1, run: 'demo', kind: 'step', id: '01', role: 'architect', agent: 'aaa111', src: 'notification', ctx_end: 5000
@@ -102,6 +102,53 @@ test('validateRecord checks ship and total records', () => {
   };
   assert.equal(validateRecord(total).ok, true);
   assert.equal(validateRecord({ ...total, id: '01' }).ok, false);
+});
+
+test('ship-only count fields are refused on every other record type, whatever their value (Art. 5(1)(c))', () => {
+  const total = {
+    v: 1, run: 'demo', kind: 'total', id: 'aaaaaaaa', role: 'lead', src: 'transcript', dispatches: 3,
+    tokens: { in: 1, cache_write: 1, cache_read: 1, out: 1 }
+  };
+  const transcript = { ...goodNotification, src: 'transcript', ctx_end: undefined, tokens: { in: 1, cache_write: 2, cache_read: 3, out: 4 } };
+  for (const base of [goodNotification, transcript, total, { ...goodNotification, kind: 'round', id: 'R2' }]) {
+    for (const key of ['acs', 'fix_rounds', 'high_blockers']) {
+      for (const value of ['Jane Doe', 'jane@example.com', 5, -1, null, { name: 'x' }]) {
+        assert.equal(validateRecord({ ...base, [key]: value }).ok, false, `${base.kind} ${key}=${JSON.stringify(value)}`);
+      }
+    }
+  }
+});
+
+test('ship counts must be integers, also as free text', () => {
+  const ship = { v: 1, run: 'demo', kind: 'ship', acs: 5 };
+  for (const key of ['acs', 'fix_rounds', 'high_blockers']) {
+    for (const value of ['Jane Doe', 'jane@example.com', '5', 1.5, -1, null, true, [], { n: 1 }, 100001]) {
+      assert.equal(validateRecord({ ...ship, [key]: value }).ok, false, `${key}=${JSON.stringify(value)}`);
+    }
+  }
+  assert.equal(validateRecord({ ...ship, fix_rounds: undefined }).ok, true);
+});
+
+test('key checks ignore inherited properties (node.M-SEC2)', () => {
+  const inherited = Object.create({ agent: 'a/b', dispatches: 3, ctx_end: 'x', tokens: 'x', reqs: 'x', model: 'X Y' });
+  Object.assign(inherited, goodNotification);
+  delete inherited.agent;
+  assert.equal(validateRecord(inherited).ok, false, 'agent required: an inherited agent does not count');
+  const proto = Object.create({ fix_rounds: 'Jane Doe' });
+  Object.assign(proto, { v: 1, run: 'demo', kind: 'ship', acs: 5 });
+  assert.equal(validateRecord(proto).ok, true, 'inherited fields are not read');
+  const src = fs.readFileSync(script, 'utf8');
+  assert.ok(!/'[a-z_]+' in rec\b/.test(src), 'no in-operator key checks on records');
+});
+
+test('add never writes a ship-only field on a step record (reproduced case)', () => {
+  const sb = sandbox();
+  const r = run(sb, ['add', 'demo', 'step', '01', 'architect', 'aaa111', '5000']);
+  assert.equal(r.status, 0);
+  const bad = { ...readLines(sb, 'demo')[0], acs: 'Jane Doe jane@example.com' };
+  assert.equal(validateRecord(bad).ok, false);
+  writeLedger(sb, 'demo', `${JSON.stringify(bad)}\n`);
+  assert.match(run(sb, ['report', 'demo']).out, /line 1 skipped/, 'a stored bad line is skipped on read');
 });
 
 // ---------- add ----------
@@ -490,7 +537,7 @@ test('brainstorm-report with no ledger or no rounds exits 0', () => {
   assert.match(r2.out, /no rounds from round 2 on/);
 });
 
-// ---------- end to end and LF (proj.M11) ----------
+// ---------- end to end and LF ----------
 
 test('whole flow: add, reconcile, ship, report', () => {
   const sb = sandbox();
