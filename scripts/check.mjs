@@ -32,7 +32,7 @@ function mdFiles(dir) {
 }
 
 // Playbooks that dispatch no Role and only print or run a CLI: they need no language resolution.
-export const LANGUAGE_EXEMPT = new Set(['setup', 'language']);
+export const LANGUAGE_EXEMPT = new Set(['setup', 'language', 'settings']);
 const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
