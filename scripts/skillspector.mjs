@@ -133,7 +133,7 @@ export function childEnv(env, kind) {
     if (typeof env.CLAUDE_CONFIG_DIR === 'string' && env.CLAUDE_CONFIG_DIR !== '') out.CLAUDE_CONFIG_DIR = env.CLAUDE_CONFIG_DIR;
     out.SKILLSPECTOR_PROVIDER = 'claude_cli';
   } else if (kind === 'git') {
-    // 'gitconfig' (the user-config reads) gets the plain allow-list, without the two overrides below.
+    // 'gitconfig' (the user-config reads) gets the plain allow-list, without the git overrides below.
     out.GIT_TERMINAL_PROMPT = '0';
     out.GIT_LFS_SKIP_SMUDGE = '1';
     out.GIT_CONFIG_NOSYSTEM = '1';
@@ -684,7 +684,7 @@ const UNREADABLE = Symbol('unreadable');
 const FRONTMATTER_RE = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const KEY_LINE_RE = /^([A-Za-z0-9_-]+) *:( |$)/;
 const PLAIN_START_RE = /^[\s'"&*!|>%@`{}[\],?:#-]/;
-const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f-\u009f]/;
+const NAME_VALUE_RE = /^[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/;
 
 // Reads `name` from SKILL.md frontmatter the way the skills CLI's YAML parser does, for the small subset that can be
 // read with certainty. Returns a string, undefined (no name declared) or UNREADABLE; whatever it cannot match fails closed.
@@ -693,18 +693,20 @@ function nameFromFrontmatter(text) {
   if (m === null) return undefined;
   const names = [];
   let afterName = false;
+  let seenKey = false;
   for (const raw of m[1].split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
-    if (line.trim() === '' && !line.includes('\t')) continue;
+    if (/^ *$/.test(line)) continue;
     if (line.startsWith('#')) continue;
     if (line.startsWith('\t')) return UNREADABLE;
     if (line.startsWith(' ')) {
-      if (afterName) return UNREADABLE;
+      if (afterName || !seenKey) return UNREADABLE;
       continue;
     }
     afterName = false;
     const k = KEY_LINE_RE.exec(line);
     if (k === null) return UNREADABLE;
+    seenKey = true;
     if (k[1] === 'name') {
       names.push(line.slice(line.indexOf(':') + 1).replace(/^ +| +$/g, ''));
       afterName = true;
@@ -725,7 +727,7 @@ function nameFromFrontmatter(text) {
     name = (cut === -1 ? value : value.slice(0, cut)).replace(/ +$/, '');
     if (name.includes(': ') || name.endsWith(':') || name.includes('\t')) return UNREADABLE;
   }
-  return CONTROL_CHARS_RE.test(name) ? UNREADABLE : name;
+  return NAME_VALUE_RE.test(name) ? name : UNREADABLE;
 }
 
 export function readSkillName(file) {
