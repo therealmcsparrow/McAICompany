@@ -67,6 +67,7 @@ function makeWorld() {
     models: [] as { prompt: unknown; model: string }[],
     modelReply: { isAnswered: true, text: 'remember: Use the shared retry\nlesson: backend-engineer prefers one retry wrapper', usage: { input_tokens: 11, output_tokens: 22, cache_read_input_tokens: 33, cache_creation_input_tokens: 44 } } as unknown,
     writes: 0,
+    sessionModel: 'claude-sonnet-5-5',
   }
 }
 type World = ReturnType<typeof makeWorld>
@@ -74,7 +75,7 @@ type World = ReturnType<typeof makeWorld>
 async function boot($: Env[0], on: Env[1], world: World, surface: 'terminal' | 'desktop' = 'terminal') {
   const clock = mock.clock(on, { now: world.now })
   on('session.root', () => ({ value: '/work' }))
-  on('session.model', (() => ({ value: 'claude-sonnet-5-5' })) as never)
+  on('session.model', (() => ({ value: world.sessionModel })) as never)
   on('command.register', (_: unknown, e: { name: string }) => ({ value: { command: e.name } }) as never)
   on('fs.exists', () => ({ value: true }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 10, mtimeMs: world.runMtime, isLink: world.isHandoffLink } }) as never)
@@ -165,7 +166,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(rows).toContain(LESSON_A.slice(0, 20))
     expect(rows).toContain('suggested')
     expect(await ui.findAll({ type: 'Button' })).toHaveLength(4)
-    expect(last(w)).toContain('reflect 2 suggested')
+    expect(last(w)).toContain('2 lessons')
     await ui.unmount()
   })
 }
@@ -186,7 +187,7 @@ test('Step files present when Reflect first sees the run are not checked; a chan
 
 test('Accept runs lessons.mjs with --role and --text as separate arguments and writes only that Lesson', async ($, on) => {
   const w = makeWorld()
-  const hostile = 'security finding in Step 07: "; rm -rf / && echo $(x)'
+  const hostile = 'security finding in Step 07: "; rm -rf / ; echo (x)'
   w.checks['07-backend-engineer.md'] = ok(check({ lessons: [{ role: 'backend-engineer', text: hostile }, { role: 'backend-engineer', text: LESSON_B }] }))
   const clock = await boot($, on, w)
   await addStep(w, clock)
@@ -196,7 +197,7 @@ test('Accept runs lessons.mjs with --role and --text as separate arguments and w
   expect(lessonCalls(w)).toEqual([])
   await ui.press({ key: buttons[0].key as string })
   expect(lessonCalls(w)).toEqual([['lessons.mjs', 'accept', '--role', 'backend-engineer', '--text', hostile]])
-  expect(last(w)).toContain('reflect 1 suggested')
+  expect(last(w)).toContain('1 lesson')
   const rows = (await lines(ui)).join('\n')
   expect(rows).toContain('Saved')
   expect(rows).not.toContain('rm -rf')
@@ -212,7 +213,7 @@ test('Decline writes nothing and removes the Lesson; the status part goes at zer
   const buttons = await ui.findAll({ type: 'Button' })
   const decline = buttons.filter(b => String(b.text).startsWith('Decline'))
   await ui.press({ key: decline[0].key as string })
-  expect(last(w)).toContain('reflect 1 suggested')
+  expect(last(w)).toContain('1 lesson')
   await ui.press({ key: decline[1].key as string })
   expect(last(w)).toBeUndefined()
   expect(lessonCalls(w)).toEqual([])
@@ -272,7 +273,7 @@ test('the retrospective runs once when the run ends: top spend, top time, causes
   expect(rows).toContain('2m05s')
   expect(rows).toContain('security 3')
   expect(rows).toContain('security findings caused 3')
-  expect(last(w)).toContain('reflect 1 suggested')
+  expect(last(w)).toContain('1 lesson')
   await ui.unmount()
 })
 
@@ -343,7 +344,7 @@ test('model mode: one cached instruction block first, at most 16 KiB of the Hand
   expect(rows.split(String.fromCharCode(10)).join(' ')).toContain('prefers one retry wrapper')
   expect(rows).not.toContain('Retries stop at 3')
   expect(rows).not.toContain('token logged')
-  expect(last(w)).toContain('reflect 1 suggested')
+  expect(last(w)).toContain('1 lesson')
   await ui.unmount()
 })
 
@@ -355,7 +356,7 @@ test('model mode: a failed call keeps the deterministic result and writes no led
   const clock = await boot($, on, w)
   await addStep(w, clock)
   expect(w.calls.filter(c => c[0] === 'ledger.mjs')).toEqual([])
-  expect(last(w)).toContain('reflect 2 suggested')
+  expect(last(w)).toContain('2 lessons')
   const rows = (await lines(await $.ui.mount(pane()))).join('\n')
   expect(rows).toContain('Retries stop at 3')
 })
@@ -368,8 +369,22 @@ test('model mode: hostile model text is dropped line by line', async ($, on) => 
   const clock = await boot($, on, w)
   await addStep(w, clock)
   // Nothing usable came back: the deterministic result stands.
-  expect(last(w)).toContain('reflect 2 suggested')
+  expect(last(w)).toContain('2 lessons')
 })
+
+for (const [name, model, isLedgered] of [['an upper case id', 'Claude-Sonnet', false], ['a slash id', 'vendor/model', false], ['a colon id', 'model:1', false], ['64 characters', 'a'.repeat(64), true], ['65 characters', 'a'.repeat(65), false], ['a dotted id', 'claude-3.5-sonnet', true]] as const) {
+  test(`model mode: the ledger gets the model only when the id fits the ledger rule (${name})`, async ($, on) => {
+    const w = makeWorld()
+    w.settings = SETTINGS({ ...ON, mode: 'model' })
+    w.sessionModel = model
+    w.checks['07-backend-engineer.md'] = ok(check())
+    const clock = await boot($, on, w)
+    await addStep(w, clock)
+    const row = w.calls.filter(c => c[0] === 'ledger.mjs')[0]
+    expect(row.length).toBe(isLedgered ? 11 : 9)
+    expect(row.includes(model)).toBe(isLedgered)
+  })
+}
 
 test('model mode: a symlinked Handoff is not read and no model call is made', async ($, on) => {
   const w = makeWorld()
@@ -379,7 +394,7 @@ test('model mode: a symlinked Handoff is not read and no model call is made', as
   const clock = await boot($, on, w)
   await addStep(w, clock)
   expect(w.models).toEqual([])
-  expect(last(w)).toContain('reflect 2 suggested')
+  expect(last(w)).toContain('2 lessons')
 })
 
 for (const [name, reply] of [['bad JSON', ok('not json')], ['exit 2', refused('x')], ['a wrong type', ok({ v: 1, step: 7 })], ['lessons not a list', ok(check({ lessons: 'x' }))]] as const) {
@@ -406,21 +421,40 @@ test('a script that never answers is cut off and shows unknown', async ($, on) =
   expect(rows).toContain('unknown')
 })
 
-test('suggestions with a tag, a backtick, a leading dash or over 240 characters are dropped before they are shown', async ($, on) => {
+test('suggestions outside the allow-list are dropped before they are shown: tags, comments, backticks, dash, length, other marks', async ($, on) => {
   const w = makeWorld()
   w.checks['07-backend-engineer.md'] = ok(check({
     lessons: [
-      { role: 'backend-engineer', text: '<b>bold</b> lesson text' },
-      { role: 'backend-engineer', text: 'has a `backtick` inside' },
-      { role: 'backend-engineer', text: '- starts with a dash' },
-      { role: 'backend-engineer', text: 'x'.repeat(241) },
-      { role: 'Bad Role', text: 'fine text here for a role' },
       { role: 'backend-engineer', text: 'one good lesson stays' },
+      { role: 'backend-engineer', text: '<b>bold</b> lesson text' },
+      { role: 'backend-engineer', text: 'a lesson <!-- hidden note --> here' },
+      { role: 'backend-engineer', text: 'a lesson with <script>x</script>' },
+      { role: 'backend-engineer', text: 'has a `backtick` inside' },
+      { role: 'backend-engineer', text: 'use $(whoami) and a pipe | here' },
+      { role: 'backend-engineer', text: 'link [a](http://x.example) here' },
+      { role: 'backend-engineer', text: 'braces {{x}} and * stars # here' },
+      { role: 'backend-engineer', text: 'first line here\nsecond line here' },
+      { role: 'backend-engineer', text: 'zero\u200bwidth in this text' },
     ],
   }))
   const clock = await boot($, on, w)
   await addStep(w, clock)
-  expect(last(w)).toContain('reflect 1 suggested')
+  expect(last(w)).toContain('1 lesson')
+})
+
+test('suggestions with a leading dash, over 240 characters or a bad role are dropped', async ($, on) => {
+  const w = makeWorld()
+  w.checks['07-backend-engineer.md'] = ok(check({
+    lessons: [
+      { role: 'backend-engineer', text: 'one good lesson stays' },
+      { role: 'backend-engineer', text: '- starts with a dash' },
+      { role: 'backend-engineer', text: 'x'.repeat(241) },
+      { role: 'Bad Role', text: 'fine text here for a role' },
+    ],
+  }))
+  const clock = await boot($, on, w)
+  await addStep(w, clock)
+  expect(last(w)).toContain('1 lesson')
 })
 
 test('the same Lesson is not listed twice', async ($, on) => {
@@ -430,7 +464,7 @@ test('the same Lesson is not listed twice', async ($, on) => {
   const clock = await boot($, on, w)
   await addStep(w, clock)
   await addStep(w, clock, '09', 'backend-engineer', START + 2 * MIN)
-  expect(last(w)).toContain('reflect 2 suggested')
+  expect(last(w)).toContain('2 lessons')
 })
 
 test('handoff text is drawn as plain Text only, with control characters replaced', async ($, on) => {

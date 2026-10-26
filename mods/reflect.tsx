@@ -4,6 +4,7 @@ import type { EngineInterface, On, RenderInput } from 'claude-code'
 import { wrap } from './lib/cache-clock.mjs'
 import { arr, cleanText, guardRunActive, int, obj, oneOf, opt, pattern, str, trimEol } from './lib/guard.mjs'
 import { fmtDuration, fmtInt } from './lib/format.mjs'
+import { checkText } from './lib/lesson-text.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
 import { setStatusPart } from './shared/status'
@@ -29,8 +30,10 @@ const PROMPT_HEAD = 65536
 const OUTPUT_LINE = /^Output: \.company\/work\/[a-z0-9][a-z0-9-]{0,63}\/\d{2}-[a-z][a-z0-9-]{0,40}\.md\r?$/m
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/
+// The model id the ledger accepts; any other id is not recorded.
+const LEDGER_MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/
 const STEP_ID = /^\d{2}$/
-// Characters a Lesson never holds: controls, line and bidi separators, zero-width marks.
+// Characters the remember line never holds: controls, line and bidi separators, zero-width marks.
 const UNSAFE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/
 
 // One suggested Lesson waiting for the CEO's answer; the id is the number the pane shows.
@@ -66,16 +69,7 @@ const seen = new Set<string>()
 const retroDone = new Set<string>()
 
 function isLessonText(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length >= 10 &&
-    value.length <= 240 &&
-    value === value.trim() &&
-    !UNSAFE.test(value) &&
-    !/^[-#>|]/.test(value) &&
-    !value.includes('`') &&
-    !/<[A-Za-z]/.test(value)
-  )
+  return typeof value === 'string' && value === value.trim() && checkText(value) === null
 }
 
 const lessonText = (v: unknown) => (isLessonText(v) ? v : undefined)
@@ -207,7 +201,7 @@ async function record($: EngineInterface, group: string[], lessons: Lesson[]): P
 
 async function publish($: EngineInterface): Promise<void> {
   const v = viewOf(await read($, reflectAtom))
-  await setStatusPart($, 'reflect', v.pending.length > 0 ? `reflect ${v.pending.length} suggested` : undefined)
+  await setStatusPart($, 'reflect', pendingStatus(v))
   await $.ui.invalidate('ui.render')
 }
 
@@ -267,7 +261,7 @@ async function askModel($: EngineInterface, slug: string, id: string, role: stri
     const whole = (n: unknown) => (Number.isSafeInteger(n) && (n as number) >= 0 ? String(n) : '0')
     const ms = Math.min(86400000, Math.max(0, (await $.clock.now()) - startMs))
     const args = ['add-mod', slug, 'reflect', id, whole(u.input_tokens), whole(u.cache_creation_input_tokens), whole(u.cache_read_input_tokens), whole(u.output_tokens)]
-    if (/^[A-Za-z0-9._:\/-]{1,80}$/.test(model)) args.push(model, String(ms))
+    if (LEDGER_MODEL.test(model)) args.push(model, String(ms))
     await runPlain($, 'ledger', args, TIMEOUT_MS.ledger)
     return parseModel(r.text, role)
   } catch {
@@ -408,7 +402,7 @@ async function tickOnce($: EngineInterface): Promise<void> {
 }
 
 function pendingStatus(v: View): string | undefined {
-  return v.pending.length > 0 ? `reflect ${v.pending.length} suggested` : undefined
+  return v.pending.length > 0 ? `${v.pending.length} ${v.pending.length === 1 ? 'lesson' : 'lessons'}` : undefined
 }
 
 async function tick($: EngineInterface): Promise<void> {

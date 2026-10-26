@@ -5,28 +5,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { MIN_TEXT, MAX_TEXT, TEXT_RE, checkText } from '../mods/lib/lesson-text.mjs';
 
 export const MAX_FILE_BYTES = 64 * 1024;
-export const MIN_TEXT = 10;
-export const MAX_TEXT = 240;
+export { MIN_TEXT, MAX_TEXT, TEXT_RE, checkText };
 export const ROLE_RE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
-// Allow-list: letters, digits, a plain space and . , ; : ! ? ' " ( ) - _ / %
-export const TEXT_RE = /^[\p{L}\p{N} .,;:!?'"()\-_/%]+$/u;
 const LINE_RE = /^- (\d{4}-\d{2}-\d{2}) (lead|[a-z][a-z0-9-]{0,40}): (\S.*)$/;
 const USAGE = 'usage: lessons.mjs accept --role <role> --text <text> | list --json';
 
 class Refusal extends Error {}
-
-// Returns null when the text may be written, else the reason it is refused.
-export function checkText(text) {
-  if (typeof text !== 'string') return 'text must be a string';
-  if (/[\p{C}\p{Zl}\p{Zp}]/u.test(text)) return 'text must be one line with no control character';
-  const t = text.trim();
-  if (t.length < MIN_TEXT || t.length > MAX_TEXT) return `text must be ${MIN_TEXT}-${MAX_TEXT} characters`;
-  if (t.startsWith('-')) return 'text must not start with -';
-  if (!TEXT_RE.test(t)) return 'text may hold only letters, digits, spaces and the marks . , ; : ! ? \' " ( ) - _ / %';
-  return null;
-}
 
 const dirPath = () => path.join(process.cwd(), '.company');
 const filePath = () => path.join(dirPath(), 'lessons.md');
