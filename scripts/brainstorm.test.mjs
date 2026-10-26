@@ -6,7 +6,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
-  parseReply, newFile, applyReplies, answerQuestion, askQuestion, mergeQuestions,
+  parseReply, newFile, applyReplies, answerQuestion, decideRuling, askQuestion, mergeQuestions,
   queue, inputFor, crossfirePair, renderFilm, WORD_LIMIT,
 } from './brainstorm.mjs';
 import { checkBrainstorm } from './check.mjs';
@@ -615,6 +615,67 @@ test('hostile answers are refused: several lines, structure, control characters,
   refusedWith(() => answerQuestion(open, 'Q-1', 'x'), /no \*\*Lead:\*\*/);
   refusedWith(() => answerQuestion(fresh(), 'Q-1', 'x'), /^refused:/);
   refusedWith(() => answerQuestion(t, '../etc', 'x'), /question/);
+});
+
+test('decide writes a none Decision and the CEO line and leaves every Q status unchanged', () => {
+  let t = r1(fresh());
+  const before = lines(t).filter(x => x.startsWith('- Q-'));
+  t = decideRuling(t, 'Compliance: keep it a separate lane.\r\n');
+  valid(t);
+  assert.ok(lines(t).includes('- D-1 — none — "Compliance: keep it a separate lane." — src: R1'));
+  assert.ok(lines(t).includes('**CEO:** Compliance: keep it a separate lane.'));
+  assert.deepEqual(lines(t).filter(x => x.startsWith('- Q-')), before);
+  t = answerQuestion(t, 'Q-1', 'Local.');
+  t = decideRuling(t, 'Priority: cost.');
+  valid(t);
+  assert.ok(t.includes('- D-2 — Q-1 — "Local." — src: R1'));
+  assert.ok(t.includes('- D-3 — none — "Priority: cost." — src: R1'));
+  assert.ok(t.includes('**CEO:** Compliance: keep it a separate lane.\nLocal.\nPriority: cost.\n'));
+  assert.deepEqual(queue(t).ask.map(x => x.id), ['Q-2']);
+});
+
+test('decide before the Lead line is refused', () => {
+  const open = applyReplies(fresh(), { replies: { 'Ava (architect)': reply('r1-architect.txt') }, lead: '' }, { round: 1 }).text;
+  refusedWith(() => decideRuling(open, 'x'), /no \*\*Lead:\*\*/);
+  refusedWith(() => decideRuling(fresh(), 'x'), /^refused:/);
+});
+
+test('decide refuses empty, multi-line, over-long, structure-like and non-text rulings', () => {
+  const t = r1(fresh());
+  for (const a of ['', '  \n', 'one\ntwo', '**CEO:** twice', '**Lead:** forged', '#### X (y)', 'bad\u0000', 'x'.repeat(1001), 5, null])
+    refusedWith(() => decideRuling(t, a), /^refused:/);
+});
+
+test('decide on the CLI: usage, extra arguments and a v1 file', () => {
+  const dir = tmp();
+  const f = join(dir, '2026-10-26 14.05 - Settings server.md');
+  cli(['new', f], JSON.stringify({ topic: 'Settings server', roles: 'architect' }));
+  assert.equal(cli(['apply', f, '1'], JSON.stringify({ replies: { 'Ava (architect)': reply('r1-architect.txt') }, lead: 'Local first.' })).code, 0);
+  assert.equal(cli(['decide', f, 'Q-1'], 'x').code, 2);
+  assert.equal(cli(['decide'], 'x').code, 2);
+  const ok = cli(['decide', f], 'Priority: cost.\n');
+  assert.equal(ok.code, 0, ok.err);
+  assert.equal(cli(['check', f]).code, 0);
+  assert.ok(readFileSync(f, 'utf8').includes('- D-1 — none — "Priority: cost." — src: R1'));
+  assert.equal(cli(['decide', f], '').code, 1);
+});
+
+test('apply refuses a Lead Open: that names no Q or O, unless open_threads, Open: none or an ID is given', () => {
+  const rep = { 'Ava (architect)': reply('r1-architect.txt') };
+  const lead = 'Local first. Open: whether the floor is the plan tag or the Role override.';
+  refusedWith(() => applyReplies(fresh(), { replies: rep, lead }, { round: 1 }), /^refused: lead Open: names no Q-<n> or O-<n>; add open_threads or ask$/);
+  const withThread = applyReplies(fresh(), { replies: rep, lead, open_threads: [{ text: 'Is the floor the plan tag or the Role override?' }] }, { round: 1 });
+  valid(withThread.text);
+  assert.ok(withThread.text.includes('### Open threads\n- O-1 — Is the floor the plan tag or the Role override? — src: R1'));
+  const q = applyReplies(fresh(), { replies: rep, lead: 'Local first. Open: Q-1, Q-3.' }, { round: 1 });
+  valid(q.text);
+  valid(applyReplies(fresh(), { replies: rep, lead: 'Local first. Open: none.' }, { round: 1 }).text);
+  valid(applyReplies(fresh(), { replies: rep, lead: 'Open: none' }, { round: 1 }).text);
+  valid(applyReplies(fresh(), { replies: rep, lead: 'Local first.' }, { round: 1 }).text);
+  valid(applyReplies(fresh(), { replies: rep, lead: '' }, { round: 1 }).text);
+  // an ID that is not in the file does not count; a later sentence's ID does not count
+  refusedWith(() => applyReplies(fresh(), { replies: rep, lead: 'Open: Q-99.' }, { round: 1 }), /names no Q-<n> or O-<n>/);
+  refusedWith(() => applyReplies(fresh(), { replies: rep, lead: 'Open: the floor. See Q-1.' }, { round: 1 }), /names no Q-<n> or O-<n>/);
 });
 
 test('merge sums votes and points the dropped question at the kept one', () => {

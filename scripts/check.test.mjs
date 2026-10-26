@@ -428,6 +428,18 @@ test('brainstorm rule 7: answered questions and decisions match one to one', () 
   assert.ok(has(checkBrainstorm(swap(t, d1, d1.replace('Q-1', 'Q-9'))), 'rule 7', 'Q-9'));
 });
 
+test('brainstorm rule 6: a none Decision is a quote found in the CEO line of its round, never skipped', () => {
+  const t = bs('v2-crossfire.md');
+  const d1 = '- D-1 — Q-1 — "Yes, ship dark mode first, light stays the default." — src: R1';
+  const none = q => d1 + `\n- D-2 — none — ${q} — src: R1`;
+  assert.deepEqual(checkBrainstorm(swap(t, d1, none('"ship dark mode first"'))), []);
+  assert.ok(has(checkBrainstorm(swap(t, d1, none('"Nobody said this."'))), 'rule 6', 'CEO'));
+  assert.ok(has(checkBrainstorm(swap(t, d1, none('default: follow (CEO skipped)'))), 'rule 6', 'none'));
+  assert.ok(has(checkBrainstorm(swap(t, d1, d1 + '\n- D-2 — maybe — "ship dark mode first" — src: R1')), 'rule 6'));
+  // rule 7 counts no none Decision for any question
+  assert.deepEqual(checkBrainstorm(swap(t, d1, none('"light stays the default."'))).filter(e => e.includes('rule 7')), []);
+});
+
 test('brainstorm rule 8: round headings', () => {
   const t = bs('v2-crossfire.md');
   assert.ok(has(checkBrainstorm(swap(t, 'Round 2 — debate: crossfire', 'Round 2 — debate')), 'rule 8', 'debate round needs a style'));

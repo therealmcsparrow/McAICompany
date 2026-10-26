@@ -384,6 +384,37 @@ export function mergeQuestions(text, keep, drop, { file } = {}) {
   return finish(doc.L, file);
 }
 
+// One CEO line of 1 to 1000 characters, trimmed; shared by `answer` and `decide`.
+function checkCeoText(answer, what) {
+  if (typeof answer !== 'string') throw new Refused(`${what} is not text`);
+  const a = norm(answer).replace(/\n+$/, '').trim();
+  if (!a) throw new Refused(`${what} is empty`);
+  if (a.includes('\n')) throw new Refused(`${what} must be one line`);
+  if (CONTROL.test(a)) throw new Refused(`control character in the ${what}`);
+  if (a.length > 1000) throw new Refused(`${what} is longer than 1000 characters`);
+  if (STRUCTURE.test(a)) throw new Refused(`${what} starts like file structure`);
+  return a;
+}
+
+function ceoRound(doc) {
+  const round = doc.rounds.at(-1);
+  if (!round) throw new Refused('there is no round to answer in');
+  if (round.leadAt === null) throw new Refused(`round ${round.n} has no **Lead:** line yet`);
+  return round;
+}
+
+// A CEO ruling that answers no queued question: link `none`, no question changes status.
+export function decideRuling(text, ruling, { file } = {}) {
+  const doc = loadDoc(text, file);
+  const L = doc.L;
+  const round = ceoRound(doc);
+  const a = checkCeoText(ruling, 'ruling');
+  if (round.ceoAt === null) L.splice(round.end, 0, `**CEO:** ${a}`);
+  else if (!round.ceoLines.join('\n').includes(a)) L.splice(round.end, 0, a);
+  addToPart(L, 'Decisions', `- D-${nextId(L, 'D')} — none — "${a}" — src: R${round.n}`);
+  return finish(L, file);
+}
+
 export function answerQuestion(text, qid, answer, { file } = {}) {
   const id = qId(qid);
   const doc = loadDoc(text, file);
@@ -391,19 +422,8 @@ export function answerQuestion(text, qid, answer, { file } = {}) {
   const found = questionsOf(L).find(x => x.q.id === id);
   if (!found) throw new Refused(`no such question Q-${id}`);
   if (found.q.status !== 'open') throw new Refused(`Q-${id} is not open`);
-  const round = doc.rounds.at(-1);
-  if (!round) throw new Refused('there is no round to answer in');
-  if (round.leadAt === null) throw new Refused(`round ${round.n} has no **Lead:** line yet`);
-  let a = null;
-  if (answer !== null) {
-    if (typeof answer !== 'string') throw new Refused('answer is not text');
-    a = norm(answer).replace(/\n+$/, '').trim();
-    if (!a) throw new Refused('answer is empty');
-    if (a.includes('\n')) throw new Refused('answer must be one line');
-    if (CONTROL.test(a)) throw new Refused('control character in the answer');
-    if (a.length > 1000) throw new Refused('answer is longer than 1000 characters');
-    if (STRUCTURE.test(a)) throw new Refused('answer starts like file structure');
-  }
+  const round = ceoRound(doc);
+  const a = answer === null ? null : checkCeoText(answer, 'answer');
   const decision = a === null
     ? `- D-${nextId(L, 'D')} — Q-${id} — default: ${found.q.default} (CEO skipped) — src: R${round.n}`
     : `- D-${nextId(L, 'D')} — Q-${id} — "${a}" — src: R${round.n}`;
@@ -505,6 +525,20 @@ function checkApplyInput(input) {
   return { replies: input.replies, lead, dissent, open };
 }
 
+// The Lead's `Open:` sentence must name a Q-<n> or O-<n> of the file, or read `none`.
+function checkLeadOpen(lead, L) {
+  const at = lead.indexOf('Open:');
+  if (at < 0) return;
+  const rest = lead.slice(at + 5);
+  const end = /[.!?](?:\s|$)/.exec(rest);
+  const sentence = (end ? rest.slice(0, end.index) : rest).trim();
+  if (/^none$/i.test(sentence)) return;
+  const ids = new Set(questionsOf(L).map(x => `Q-${x.q.id}`));
+  for (const l of L) { const m = /^- (O-\d+) — /.exec(l); if (m) ids.add(m[1]); }
+  for (const m of sentence.matchAll(/\b([QO]-\d{1,6})\b/g)) if (ids.has(m[1])) return;
+  throw new Refused('lead Open: names no Q-<n> or O-<n>; add open_threads or ask');
+}
+
 export function applyReplies(text, input, { round, mode, pass = 'ideas', file } = {}) {
   if (!Number.isInteger(round) || round < 1 || round > 999999) throw new Refused('round must be a positive integer');
   if (!PASSES.includes(pass)) throw new Refused('pass must be ideas, full or crossfire');
@@ -600,6 +634,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
     const tail = o.ideas.length ? ` — ideas: ${o.ideas.join(', ')}` : '';
     addToPart(L, 'Open threads', `- O-${nextId(L, 'O')} — ${o.text}${tail} — src: R${round}`);
   }
+  if (inp.lead && !inp.open.length) checkLeadOpen(inp.lead, L);
   return { text: finish(L, file), malformed, ideas: ideaIds };
 }
 
@@ -971,6 +1006,11 @@ export function run(argv) {
       out.push('ok');
       break;
     }
+    case 'decide':
+      arity(pos, 1, 1, 'decide <file> (ruling on stdin)');
+      mutate(f, text => decideRuling(text, readStdin(), { file: f }));
+      out.push('ok');
+      break;
     case 'ask': {
       arity(pos, 1, 1, 'ask <file> (JSON on stdin: { text, options, default, tag, ceo? })');
       const input = jsonIn();
@@ -1033,7 +1073,7 @@ export function run(argv) {
       break;
     }
     default:
-      throw new Usage('usage: brainstorm.mjs new|parse|apply|answer|ask|merge|queue|stage|prompt|clean|crossfire|film|check');
+      throw new Usage('usage: brainstorm.mjs new|parse|apply|answer|decide|ask|merge|queue|stage|prompt|clean|crossfire|film|check');
   }
   return { code: 0, out: `${out.join('\n')}\n`, err: '' };
 }

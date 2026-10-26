@@ -350,12 +350,13 @@ export function checkBrainstorm(text, { file = 'brainstorm' } = {}) {
       if (!s) { errors.push(err(5, `Digest item lacks "src: R<n>": ${short(line)}`)); continue; }
       if (!rounds.has(s.round)) { errors.push(err(5, `src R${s.round} names no round: ${short(line)}`)); continue; }
       if (name === 'Decisions') {
-        const m = /^- D-\d{1,6} — Q-(\d{1,6}) — (.*)$/.exec(s.body);
+        const m = /^- D-\d{1,6} — (?:Q-(\d{1,6})|(none)) — (.*)$/.exec(s.body);
         if (!m) { errors.push(err(6, `Decision line malformed: ${short(line)}`)); continue; }
-        decisions.set(m[1], (decisions.get(m[1]) ?? 0) + 1);
-        const q = quoted(m[2]);
+        if (m[1] !== undefined) decisions.set(m[1], (decisions.get(m[1]) ?? 0) + 1);
+        const q = quoted(m[3]);
+        if (m[2] && q === null) { errors.push(err(6, `a "none" Decision must be a quote from the **CEO:** line: ${short(line)}`)); continue; }
         if (q !== null) { if (!(rounds.get(s.round).ceo ?? '').includes(q)) errors.push(err(6, `Decision quote is not in the **CEO:** line of R${s.round}: ${short(q)}`)); }
-        else if (!(m[2].startsWith('default: ') && m[2].endsWith(' (CEO skipped)'))) errors.push(err(6, `Decision is neither a quote nor "default: … (CEO skipped)": ${short(line)}`));
+        else if (!(m[3].startsWith('default: ') && m[3].endsWith(' (CEO skipped)'))) errors.push(err(6, `Decision is neither a quote nor "default: … (CEO skipped)": ${short(line)}`));
       } else if (name === 'Dissent' || name === 'Threads') {
         const m = name === 'Dissent'
           ? new RegExp(`^- ([^()]+) \\((${ROLE_RE})\\) — (.*)$`).exec(s.body)
