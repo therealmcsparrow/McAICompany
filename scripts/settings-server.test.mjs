@@ -322,3 +322,13 @@ test('startServer prints the URL', async (t) => {
   const { server } = await start(t, sandbox(t), { log: (line) => lines.push(line) });
   assert.deepEqual(lines, [`aico settings: ${server.url}`]);
 });
+
+test('page has the four tabs, a lock dialog, and no external resources', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const tab of ['Roles', 'Language &amp; profile', 'Pipeline', 'Gates']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
+  assert.ok(html.includes('<dialog'));
+  assert.ok(html.includes('<meta name="aico-token" content="__AICO_TOKEN__">'));
+  assert.ok(!/<script[^>]*\ssrc=/i.test(html));
+  assert.ok(!/<link[^>]*rel="?stylesheet/i.test(html));
+  assert.ok(!html.includes('@import'));
+});
