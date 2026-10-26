@@ -7,7 +7,7 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Gates** are where the company stops for your approval — **Brief** (scope), **Plan** (design), **Ship** (before anything leaves the repo). At each you Approve, Change or Stop. A Playbook only skips a Gate if its own description says so.
 - **Work lands under `.company/`** in your repo: the brief, designs, reviews, reports and the per-step Handoff files. `<slug>` below is the short task name the run picks.
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
-- **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
+- **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, skillspector, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
 **Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` or `/aico:<command> help` (also `--help`) explains one command's options and what it does, without running it.
 
@@ -177,10 +177,30 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **When to use it.** You installed a third-party skill and want a check before you trust it, or you want to install the scanner.
 
+**Options.**
+- No argument or `--project`: scan the skills in this project. `--global`: scan the skills in your user folder. With both, it asks which.
+- `<skill-name>`: scan one installed skill. The name is matched against the installed skills and never passed to a command line; an unknown name is reported as not found.
+- `--no-llm` or `--claude-cli`: the scan mode for this run. Without either, the `skillspector.mode` setting decides.
+- `install`: install the scanner (see step 1 below).
+
 **How it runs.**
-1. Checks that the tool is installed. If not, it shows an install form with the pinned release (v2.13.1), the exact commands, and the rollback. The install changes your user-scope Claude config, so it always asks. Skip runs nothing.
-2. Scans each skill in scope. The mode comes from the `skillspector.mode` setting (default `no-llm`, no text leaves your machine); `--no-llm` or `--claude-cli` overrides it for one run. `--claude-cli` sends skill text to Anthropic through your `claude` login and says so first.
+1. Checks that the tool is installed. If not, it shows an install form with the pinned release (v2.13.1), the two exact commands, and the rollback. The install changes your user-scope Claude config, so it always asks, even when your Gates are set to auto. Skip runs nothing. aico never installs `uv`; without it, the command stops and says so.
+2. Scans each skill in scope. The mode comes from the `skillspector.mode` setting (default `no-llm`, no text leaves your machine); `--no-llm` or `--claude-cli` overrides it for one run.
 3. Reports per skill: pass, findings or error. An error is never shown as safe. For a skill with blocking findings it suggests removal commands for you to run; it runs none.
+
+**Install commands.** Run in this order, only after you choose Install:
+```
+uv tool install 'skillspector[mcp] @ git+https://github.com/NVIDIA/skillspector.git@v2.13.1'
+claude mcp add --scope user skillspector -- skillspector mcp
+```
+Rollback:
+```
+uv tool uninstall skillspector
+claude mcp remove --scope user skillspector
+```
+Both install commands change your user-scope configuration, not just this project. The release is pinned to v2.13.1. An unpinned install from the SkillSpector `main` branch would run whatever was last pushed there, which is a supply-chain risk, so aico does not offer it.
+
+**Scan mode.** `no-llm` runs static rules only and nothing leaves your machine. `claude_cli` also asks Claude to judge each skill: the text of every scanned skill goes to Anthropic through your local `claude` login and counts toward your usage, and the command says so before it scans. If `claude` is not available, a skill is reported as `error`, never as clean. Set the default in [`/aico:settings`](#aicosettings) (Mods tab, SkillSpector). `claude_cli` counts only from your user settings; a project file cannot turn it on.
 
 **You get.** `.company/work/<slug>/skillspector-report.md` with names, verdicts and counts only, never skill text. No other file changes.
 

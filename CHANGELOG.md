@@ -4,6 +4,17 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+Skill picks you can trust, a scanner for the skills you already have, and progress bars in the Savvy pane.
+
+### Added
+- **skill-researcher (Selin).** A new Role that finds, vets and scans third-party skills for four areas: `stack`, `product-type`, `company-type` and `design`. It recommends at most 5, ranked by fit and evidence. Every candidate is checked in a new quarantine folder and is never run. A critical or high finding, a failed scan or a timeout rejects it; with no scanner installed it recommends nothing. You approve the set in one form and confirm the exact install commands in a second. Nothing installs unless both are yes.
+- **`/aico:skillspector [--project|--global|<skill-name>] [--no-llm|--claude-cli] [install]`.** Scans the skills installed in this project or your user folder with NVIDIA SkillSpector and reports pass, findings or error per skill, in `.company/work/<slug>/skillspector-report.md` (names, verdicts and counts only, never skill text). It is read-only: it suggests removal commands and runs none. An error is never shown as safe.
+  - **Pinned install.** The install form names the release v2.13.1 and runs two commands, in this order: `uv tool install 'skillspector[mcp] @ git+https://github.com/NVIDIA/skillspector.git@v2.13.1'` and `claude mcp add --scope user skillspector -- skillspector mcp`. Both change your user-scope Claude config. Rollback: `uv tool uninstall skillspector` and `claude mcp remove --scope user skillspector`. It always asks, whatever your Gates say, and aico never installs `uv`. Installing from the unpinned `main` branch would be a supply-chain risk, so it is not offered.
+  - **Scan mode setting.** `skillspector.mode` in `/aico:settings` (Mods tab) is `no-llm` (default; static rules, nothing leaves your machine) or `claude_cli`. `claude_cli` sends the text of each scanned skill to Anthropic through your `claude` login and counts toward your usage, so it counts only from your user settings and the command says so before it scans. The flags `--no-llm` and `--claude-cli` override it for one run.
+- **`## Skills` project section.** Approved `stack`, `product-type` and `company-type` skills are recorded in `.company/project.md` under `## Skills`, one line each. Design skills stay under `## Design skills`. The project template has the new section.
+- **Savvy progress bars.** The pane shows `Gates [###-----] 1/3 brief` and `Steps [#####---] 5/8`. They are plain ASCII, always show the numbers and fit panes from 10 to 400 columns wide. An unreadable value shows `?` with no bar. A shipped run shows both bars full. The status line is unchanged.
+- **Contracts:** `skillspector-scan` v1, `skill-recommendation` v1 and `skills-section` v1 (new); `aico-settings` v1.2 and `aico-mods` v1.1 (additive). ADR 0018.
+
 ## [0.11.0] - 2026-10-26
 
 Cheaper brainstorms and cheaper runs. The savings come from reading less (shorter prompts, fewer reads, fewer dispatches). Brainstorm Roles now keep one constant prompt, so it can be cached. No saving percentage is claimed yet.

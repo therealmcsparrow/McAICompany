@@ -18,7 +18,7 @@ Every state is written in words (`running`, `unknown`, `warn`, `asked`, `refused
 
 ### Savvy
 
-Shows the progress of the current run: task, wave, current Step and Role (with its name), Gates passed, Fix round, elapsed time, and one line per running subagent. After the run ends it keeps the final state with outcome and total time until the next run starts or the session ends. With no active run it shows nothing.
+Shows the progress of the current run: task, wave, current Step and Role (with its name), Gates passed, Fix round, elapsed time, and one line per running subagent. Two text bars sit under the elapsed time: `Gates [###-----] 1/3 brief` (Gates passed of three, and the latest one) and `Steps [#####---] 5/8` (done Steps of those listed). The bars use plain ASCII, always carry the numbers and shrink to fit the pane. A value Savvy cannot read shows `?` with no bar; a run that shipped shows both bars full; with the mod off there are no bars. The status line is unchanged. After the run ends it keeps the final state with outcome and total time until the next run starts or the session ends. With no active run it shows nothing.
 
 Open it with the `aico-run` command. With `pane: auto` (the default) it opens on its own when a run starts, but only where it can dock as a sidebar: a terminal at least 110 columns wide. Below that, or under `claude -p`, nothing opens and the one-line summary is on the status line instead.
 
