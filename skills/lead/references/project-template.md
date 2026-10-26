@@ -26,6 +26,10 @@ standards: .company/standards.md (kept by aico:senior-engineer, see aico:ruleset
 <!-- approved by the CEO from a design-researcher run; one skill per line -->
 - (none yet; the design-researcher proposes them)
 
+## Skills
+<!-- approved by the CEO from a skill-researcher run; one skill per line -->
+- (none yet; the skill-researcher proposes them)
+
 ## Performance budget
 <!-- (empty = defaults from aico:performance). Approved budgets note: approved: <date> (CEO, at a Plan Gate) -->
 - (empty = defaults from aico:performance)

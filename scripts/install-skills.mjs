@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Installs the standalone skills aico points to (deps/skills.json) that are not installed yet.
 // Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
-//   default group: core. Group `design` needs --project. Contract: docs/contracts/skills-manifest.md.
+//   default group: core. Groups `design` and `skills` need --project. Contract: docs/contracts/skills-manifest.md.
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -22,16 +22,21 @@ const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const LINE_RE = /^- name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); why: ([^;]+); approved: ([^;]+)$/;
 const WHY_BAD_RE = /[`<>\u0000-\u001f\u007f]/;
-const NONE_LINE = '- (none yet; the design-researcher proposes them)';
+const SKILLS_LINE_RE = /^- area: (stack|product-type|company-type); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); why: ([^;]+); approved: ([^;]+)$/;
+const MAX_SKILLS_TOTAL = 15;
+const PROJECT_GROUPS = ['design', 'skills'];
+const DESIGN_SECTION = { heading: '## Design skills', label: 'design skill', none: '- (none yet; the design-researcher proposes them)', re: LINE_RE, areas: false, plugins: true };
+const SKILLS_SECTION = { heading: '## Skills', label: 'skills', none: '- (none yet; the skill-researcher proposes them)', re: SKILLS_LINE_RE, areas: true, plugins: false };
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_LINE_CHARS = 500;
 const MAX_ENTRIES = 5;
 
 class DesignSkillError extends Error {}
 // Never echoes the offending text, only where it is and which field failed.
-const fail = (n, field, reason) => {
-  throw new DesignSkillError(n ? `design skill line ${n}: ${field} ${reason}` : `design skill file: ${field} ${reason}`);
+const failIn = (label, n, field, reason) => {
+  throw new DesignSkillError(n ? `${label} line ${n}: ${field} ${reason}` : `${label} file: ${field} ${reason}`);
 };
+const fail = (n, field, reason) => failIn(DESIGN_SECTION.label, n, field, reason);
 
 function validRepo(source) {
   if (!REPO_RE.test(source)) return false;
@@ -49,12 +54,13 @@ function validDate(s, today) {
   return s <= `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 }
 
-// Parses `## Design skills` of a project.md into entries. Throws DesignSkillError on any failure.
-export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
+// Parses one skill section of a project.md into entries. Throws DesignSkillError on any failure.
+function parseSection(markdown, manifest, today, cfg) {
+  const fail = (n, field, reason) => failIn(cfg.label, n, field, reason);
   if (typeof markdown !== 'string') return [];
   if (Buffer.byteLength(markdown, 'utf8') > MAX_FILE_BYTES) fail(0, 'file', 'too large');
   const lines = markdown.split('\n');
-  const start = lines.findIndex(l => l.replace(/\r$/, '').trimEnd() === '## Design skills');
+  const start = lines.findIndex(l => l.replace(/\r$/, '').trimEnd() === cfg.heading);
   if (start === -1) return [];
   const section = [];
   for (let i = start + 1; i < lines.length; i++) {
@@ -68,7 +74,7 @@ export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
     const t = text.trim();
     return t !== '' && !(t.startsWith('<!--') && t.endsWith('-->'));
   });
-  if (body.length === 1 && body[0].text === NONE_LINE) return [];
+  if (body.length === 1 && body[0].text === cfg.none) return [];
   const manifestCmds = [];
   for (const entries of Object.values(manifest)) {
     for (const e of Array.isArray(entries) ? entries : []) {
@@ -76,18 +82,26 @@ export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
     }
   }
   const out = [];
+  const perArea = {};
   for (const { n, text } of body) {
     if (!text.startsWith('- ')) fail(n, 'line', 'malformed');
-    if (out.length >= MAX_ENTRIES) fail(n, 'entries', 'too many entries');
-    const m = LINE_RE.exec(text);
+    if (out.length >= (cfg.areas ? MAX_SKILLS_TOTAL : MAX_ENTRIES)) fail(n, 'entries', 'too many entries');
+    const m = cfg.re.exec(text);
     if (!m) fail(n, 'line', 'malformed');
-    const [, name, source, license, vetted, why, approved] = m;
+    const fields = m.slice(1);
+    const area = cfg.areas ? fields.shift() : undefined;
+    const [name, source, license, vetted, why, approved] = fields;
+    if (area) {
+      perArea[area] = (perArea[area] ?? 0) + 1;
+      if (perArea[area] > MAX_ENTRIES) fail(n, 'entries', 'too many entries');
+    }
     let kind, plugin, cmd;
     if (source.length >= 3 && source.startsWith('`') && source.endsWith('`')) {
       kind = 'command'; cmd = source.slice(1, -1);
       if (!manifestCmds.some(([nm, c]) => nm === name && c === cmd)) fail(n, 'source', 'not a manifest command');
       if (!NAME_RE.test(name)) fail(n, 'name', 'invalid');
     } else if (source.startsWith('plugin ')) {
+      if (!cfg.plugins) fail(n, 'source', 'invalid');
       kind = 'plugin'; plugin = source.slice(7);
       if (!PLUGIN_RE.test(plugin)) fail(n, 'source', 'invalid plugin');
       const parts = name.split(':');
@@ -103,6 +117,7 @@ export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
     if (!validDate(approved, today)) fail(n, 'approved', 'invalid');
     if (why.length < 1 || why.length > 200 || WHY_BAD_RE.test(why)) fail(n, 'why', 'invalid');
     const entry = { name, license, vetted, approved, why };
+    if (area) entry.area = area;
     if (kind === 'repo') entry.source = source;
     else if (kind === 'command') entry.install = cmd;
     else entry.plugin = plugin;
@@ -111,7 +126,17 @@ export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
   return out;
 }
 
-// Expands includes into a flat entry list; entries from group `design` carry scope 'project'.
+// Parses `## Design skills` (design-skills-section v1).
+export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
+  return parseSection(markdown, manifest, today, DESIGN_SECTION);
+}
+
+// Parses `## Skills` (skills-section v1).
+export function parseSkillsSection(markdown, manifest = {}, today = new Date()) {
+  return parseSection(markdown, manifest, today, SKILLS_SECTION);
+}
+
+// Expands includes into a flat entry list; entries from groups `design` and `skills` carry scope 'project'.
 export function expand(manifest, groups) {
   const out = [];
   const visit = (g, stack) => {
@@ -119,7 +144,7 @@ export function expand(manifest, groups) {
     if (stack.includes(g)) throw new Error(`include cycle ${[...stack.slice(stack.indexOf(g)), g].join(' -> ')}`);
     for (const e of manifest[g]) {
       if (e && e.include !== undefined) visit(e.include, [...stack, g]);
-      else if (e && typeof e.name === 'string') out.push({ ...e, scope: g === 'design' ? 'project' : 'user' });
+      else if (e && typeof e.name === 'string') out.push({ ...e, scope: PROJECT_GROUPS.includes(g) ? 'project' : 'user' });
       else throw new Error(`invalid manifest entry in group ${g}`);
     }
   };
@@ -160,15 +185,17 @@ function argvFor(e) {
   return ['-y', SKILLS_CLI, 'add', e.source, '-s', skill, ...(e.scope === 'project' ? [] : ['-g']), '-a', 'claude-code', '-y'];
 }
 
-// Group `design` exists only when --project supplied it: { root, design }.
+// Groups `design` and `skills` exist only when --project supplied them: { root, design, skills }.
 function withDesign(manifest, project) {
   const eff = { ...manifest };
-  delete eff.design;
-  if (project) eff.design = project.design.map(e => ({ ...e }));
+  for (const g of PROJECT_GROUPS) {
+    delete eff[g];
+    if (project) eff[g] = project[g].map(e => ({ ...e }));
+  }
   return eff;
 }
 
-// Returns [{ cmd, cwd?, argv? }]. Design commands carry the product root as cwd.
+// Returns [{ cmd, cwd?, argv? }]. Project-group commands carry the product root as cwd.
 export function plan(manifest, groups, installed, platform = process.platform, project = null) {
   const seen = new Set();
   const cmds = [];
@@ -205,9 +232,10 @@ function loadProject(p, cwd, today, manifest) {
     throw new Error('--project must point to <root>/.company/project.md');
   }
   const root = dirname(dirname(abs));
-  if (!existsSync(abs)) return { root, design: [] };
+  if (!existsSync(abs)) return { root, design: [], skills: [] };
   if (statSync(abs).size > MAX_FILE_BYTES) fail(0, 'file', 'too large');
-  return { root, design: parseDesignSkills(readFileSync(abs, 'utf8'), manifest, today) };
+  const text = readFileSync(abs, 'utf8');
+  return { root, design: parseDesignSkills(text, manifest, today), skills: parseSkillsSection(text, manifest, today) };
 }
 
 // Returns the exit code. Everything outside is injectable so tests never run npx or touch the real home.
@@ -230,7 +258,7 @@ export function main(args, env = {}) {
       else groups.push(a);
     }
     const manifest = env.manifest ?? JSON.parse(readFileSync(join(ROOT, 'deps', 'skills.json'), 'utf8'));
-    // Parse first: a bad design line stops everything, nothing is installed in any group.
+    // Parse first: a bad design or skills line stops everything, nothing is installed in any group.
     const project = projectArg ? loadProject(projectArg, cwd, env.today ?? new Date(), manifest) : null;
     const installed = installedSkills(env.home ?? homedir(), project?.root);
     const want = groups.length ? groups : ['core'];
