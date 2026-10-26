@@ -170,7 +170,7 @@ test('guard: the new files stay inside the line caps the pins above assume', () 
   }
 });
 
-// ---------- the Lead's side: skill-picks.md (AC3, AC5, AC14) ----------
+// ---------- the Lead's side: skill-picks.md ----------
 const PICKS = 'skills/lead/references/skill-picks.md';
 test('AC3 skill-picks: detect runs before the dispatch; vet comes after the Handoff', () => {
   const t = read(PICKS);
@@ -227,6 +227,49 @@ test('every text that describes the no-llm mode names the OSV.dev lookup', () =>
     for (const l of lines) assert.match(l, /OSV\.dev/, `${f}: ${l.slice(0, 80)}`);
   }
 });
+const EGRESS_FILES = [...MODE_FILES, 'documentation/concepts.md', 'README.md'];
+test('every no-llm description names ecosystems and never says "package names and versions"', () => {
+  for (const f of EGRESS_FILES) {
+    const text = read(f);
+    const stale = text.split(/\r?\n/).filter((l) => /package names and versions/i.test(l) && !/never "package names and versions"/.test(l));
+    assert.deepEqual(stale, [], `${f} uses the old egress phrase`);
+    const lines = text.split(/\r?\n/).filter((l) => /no-?llm/i.test(l) && /OSV\.dev/.test(l));
+    assert.ok(lines.length > 0, `${f} describes the no-llm egress`);
+    for (const l of lines) assert.match(l, /ecosystems/, `${f}: ${l.slice(0, 80)}`);
+  }
+});
 test('the Playbook states the OSV.dev lookup before it scans', () => {
   assert.match(read('skills/skillspector/SKILL.md'), /OSV\.dev/);
+});
+
+// ---------- skill-picks.md: post-install checks ----------
+const postInstall = () => {
+  const t = read(PICKS);
+  const i = t.indexOf('## 4.');
+  const j = t.indexOf('## 5.');
+  assert.ok(i >= 0 && j > i, 'sections 4 and 5 exist');
+  return t.slice(i, j);
+};
+test('skill-picks post-install: check-install runs with the name and hash from vet, before the scan', () => {
+  const t = postInstall();
+  order(t, ['skill-picks.mjs" check-install --name <name> --hash <hash>', 'skillspector.mjs" scan --scope project --skill <name>']);
+  assert.match(t, /`picks\[\]\.name`/);
+  assert.match(t, /`picks\[\]\.hash`/);
+  assert.match(t, /from the `vet` output only/);
+});
+test('skill-picks post-install: every other outcome stops the run', () => {
+  const t = postInstall();
+  assert.match(t, /Go on only when `check-install` printed `bound: true`/);
+  for (const stop of ['`bound: false`', 'refused: ', 'a non-zero exit', 'output that is not one JSON document', 'an empty `results`']) {
+    assert.ok(t.includes(stop), `stop case missing: ${stop}`);
+  }
+  assert.match(t, /\*\*stops the run\*\*/);
+  assert.match(t, /never auto, whatever the Gate settings/);
+});
+test('skill-picks: no step runs a removal command; the removal text is only suggested', () => {
+  const t = read(PICKS);
+  assert.match(t, /run no removal command/);
+  const mentions = t.split(/\r?\n/).filter((l) => /remove <name>/.test(l));
+  assert.ok(mentions.length > 0);
+  for (const l of mentions) assert.doesNotMatch(l, /^\s*(\d+\.|-)\s*`?(npx|node)\b/, `a step runs removal: ${l.slice(0, 80)}`);
 });

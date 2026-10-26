@@ -1,4 +1,4 @@
-// Acceptance gaps that no other suite pins (AC1, AC5, AC6, AC7, AC15-AC17 wiring) plus the Contract-level
+// Wiring and Contract-level checks that no other suite pins (Role report layout, approve and install forms, skill-recommendation, registration, Savvy bars), plus the
 // checks for skill-recommendation v1, skills-section v1 and aico-mods v1.1.
 // The deep suites live in skillspector.test.mjs (skillspector-scan v1), skill-picks.test.mjs, settings.test.mjs
 // (aico-settings v1.2), mods-lib.test.mjs (bars) and install-skills-skills.test.mjs (skills-section parser).
@@ -21,7 +21,7 @@ const order = (text, parts) => {
   }
 };
 
-// ---------- AC1 ----------
+// ---------- report layout: Candidates, Recommended set, Rejected ----------
 test('AC1 Contract and Role agree: Candidates, Recommended set, Rejected, in order, at most 5, never ranked by stars', () => {
   const contract = read('docs/contracts/skill-recommendation.md');
   order(contract, ['## Candidates', '## Recommended set', '## Rejected']);
@@ -35,7 +35,7 @@ test('AC1 Contract and Role agree: Candidates, Recommended set, Rejected, in ord
   for (const area of ['stack', 'product-type', 'company-type', 'design']) assert.ok(agent.includes(area), area);
 });
 
-// ---------- AC5 ----------
+// ---------- form order: approve before install ----------
 test('AC5 the Lead asks the approve form before the Install / Skip form; Skip installs nothing; both must be yes', () => {
   const t = read('skills/lead/references/skill-picks.md');
   order(t, ['**Approve form** (never auto)', '**Install / Skip form**']);
@@ -45,7 +45,7 @@ test('AC5 the Lead asks the approve form before the Install / Skip form; Skip in
   assert.match(read('docs/contracts/skill-recommendation.md'), /Nothing installs unless the approve form says yes and the Install form says yes/);
 });
 
-// ---------- AC6 / skill-recommendation v1 ----------
+// ---------- skill-recommendation v1 ----------
 test('AC6 skill-recommendation v1 names area, keeps the source/name allow-list by reusing the design-skills-section parser', () => {
   const c = read('docs/contracts/skill-recommendation.md');
   assert.match(c, /^# Contract: skill-recommendation v1/);
@@ -66,7 +66,7 @@ test('skills-section v1: Contract, project template and installer agree on the #
   assert.match(read('scripts/install-skills.mjs'), /parseSkillsSection/);
 });
 
-// ---------- AC7 ----------
+// ---------- registration and check.mjs ----------
 test('AC7 skill-researcher is registered everywhere and scripts/check.mjs passes', () => {
   assert.equal(JSON.parse(read('company/names.json'))['skill-researcher'], 'Selin');
   for (const f of ['documentation/roles.md', 'README.md', 'documentation/concepts.md']) assert.match(read(f), /skill-researcher/, f);
@@ -75,7 +75,7 @@ test('AC7 skill-researcher is registered everywhere and scripts/check.mjs passes
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
-// ---------- aico-mods v1.1 (AC15-AC17) ----------
+// ---------- aico-mods v1.1 progress bars ----------
 const gate = (g, result = 'passed') => ({ gate: g, result, at: '2026-01-01T10:00:00Z' });
 const base = { v: 1, slug: 'demo', started: '2026-01-01T10:00:00Z', ended: null, outcome: null, wave: 1, round: 0, tier: 'medium', warnings: [] };
 test('aico-mods v1.1 bars: the Contract example rows, ended ship run, unknown, mod off', () => {
