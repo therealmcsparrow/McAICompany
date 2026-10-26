@@ -22,7 +22,7 @@ Reference material lives alongside these guides:
 
 ## Version
 
-**Current: 0.9.0** (32 Role agents).
+**Current: 0.10.0** (32 Role agents).
 
 Update an installed copy with:
 

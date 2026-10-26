@@ -18,40 +18,40 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 - Code Reviewer: blocking if a Module touches another Module's internals, Core gains unapproved code, or a Contract is broken. QA writes contract tests per Module.
 
 ## Roster (agents)
-| Role | file | model | effort | tools |
-|---|---|---|---|---|
-| Product Manager | product-manager | opus | medium | read-only + Write |
-| Account Manager | account-manager | sonnet | low | read-only + Write |
-| Architect | architect | opus | high | read-only + Write |
-| Legal/Compliance | legal | sonnet | medium | read-only + Write |
-| Backend Engineer | backend-engineer | sonnet | medium | full |
-| Frontend Engineer | frontend-engineer | sonnet | medium | full |
-| Desktop Engineer | desktop-engineer | sonnet | medium | full |
-| AI/Data Engineer | ai-data-engineer | sonnet | medium | full |
-| DevOps/Release | devops | sonnet | medium | full |
-| UI/UX Designer | ui-ux-designer | sonnet | medium | full |
-| Writer | writer | sonnet | low | full |
-| Marketer | marketer | sonnet | low | full |
-| Code Reviewer | code-reviewer | opus | high | read-only + Write |
-| QA Tester | qa | sonnet | medium | read + Bash + Write (tests & handoff only) |
-| Security Engineer | security | opus | high | read-only + Bash + Write |
-| Brand Artist | brand-artist | sonnet | low | full |
-| Prompt Artist | prompt-artist | haiku | low | read-only + Write |
-| Motion Artist | motion-artist | sonnet | low | full |
-| Game/3D Artist | game-artist | sonnet | low | full |
-| Persona Tester | persona-tester | sonnet | low | read-only + Write |
-| Hands-on Tester | hands-on-tester | sonnet | medium | inherits all (browser/computer-use); never edits |
-| Accessibility Tester | accessibility-tester | sonnet | medium | inherits all; never edits |
-| UX Researcher | ux-researcher | sonnet | low | read-only + Write |
-| Support | support | sonnet | low | read-only + Write |
-| Localizer | localizer | haiku | low | full |
-| Game Engineer | game-engineer | sonnet | medium | full |
-| Senior Engineer | senior-engineer | opus | medium | read-only + Bash + WebSearch/WebFetch + Write |
-| Pentester | pentester | opus | high | inherits all; on demand; never edits |
-| Vulnerability Scanner | vuln-scanner | sonnet | low | read-only + Bash + WebSearch/WebFetch + Write; on demand; never edits |
-| Market Researcher | market-researcher | sonnet | low | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
-| Tech Researcher | tech-researcher | opus | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
-| Design Researcher | design-researcher | sonnet | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write; never installs |
+| Role | file | Name | model | effort | tools |
+|---|---|---|---|---|---|
+| Product Manager | product-manager | Nora | opus | medium | read-only + Write |
+| Account Manager | account-manager | Carmen | sonnet | low | read-only + Write |
+| Architect | architect | Ava | opus | high | read-only + Write |
+| Legal/Compliance | legal | Leila | sonnet | medium | read-only + Write |
+| Backend Engineer | backend-engineer | Ben | sonnet | medium | full |
+| Frontend Engineer | frontend-engineer | Freya | sonnet | medium | full |
+| Desktop Engineer | desktop-engineer | Kenji | sonnet | medium | full |
+| AI/Data Engineer | ai-data-engineer | Dev | sonnet | medium | full |
+| DevOps/Release | devops | Omar | sonnet | medium | full |
+| UI/UX Designer | ui-ux-designer | Yuki | sonnet | medium | full |
+| Writer | writer | Wen | sonnet | low | full |
+| Marketer | marketer | Maya | sonnet | low | full |
+| Code Reviewer | code-reviewer | Rui | opus | high | read-only + Write |
+| QA Tester | qa | Quinn | sonnet | medium | read + Bash + Write (tests & handoff only) |
+| Security Engineer | security | Sam | opus | high | read-only + Bash + Write |
+| Brand Artist | brand-artist | Bianca | sonnet | low | full |
+| Prompt Artist | prompt-artist | Iris | haiku | low | read-only + Write |
+| Motion Artist | motion-artist | Milo | sonnet | low | full |
+| Game/3D Artist | game-artist | Gabriel | sonnet | low | full |
+| Persona Tester | persona-tester | Priya | sonnet | low | read-only + Write |
+| Hands-on Tester | hands-on-tester | Hana | sonnet | medium | inherits all (browser/computer-use); never edits |
+| Accessibility Tester | accessibility-tester | Amara | sonnet | medium | inherits all; never edits |
+| UX Researcher | ux-researcher | Uma | sonnet | low | read-only + Write |
+| Support | support | Sofia | sonnet | low | read-only + Write |
+| Localizer | localizer | Lucía | haiku | low | full |
+| Game Engineer | game-engineer | Hugo | sonnet | medium | full |
+| Senior Engineer | senior-engineer | Erik | opus | medium | read-only + Bash + WebSearch/WebFetch + Write |
+| Pentester | pentester | Pavel | opus | high | inherits all; on demand; never edits |
+| Vulnerability Scanner | vuln-scanner | Viktor | sonnet | low | read-only + Bash + WebSearch/WebFetch + Write; on demand; never edits |
+| Market Researcher | market-researcher | Mateo | sonnet | low | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
+| Tech Researcher | tech-researcher | Tariq | opus | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
+| Design Researcher | design-researcher | Daria | sonnet | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write; never installs |
 
 "read-only + Write" = Read, Grep, Glob, Skill, Write; Write is for its Handoff only. Exceptions: the Architect also writes ADRs and Contract definition files (interfaces/schemas, no implementation); Code Reviewer, Security and Legal also have Bash for read-only commands (git diff, audits).
 "full" = Read, Grep, Glob, Skill, Write, Edit, Bash.
@@ -130,6 +130,13 @@ Decisions: `docs/adr/` 0003–0005. Contracts: `docs/contracts/` (dispatch-promp
 - **Design skills** (`design-skills-section` v1): `## Design skills` in `.company/project.md`, at most 5 lines, parsed with an allow-list before any command runs (ADR 0005). `/aico:feature` refreshes the set for UI products when it is empty or its newest approval is older than 180 days. Five UI Roles load it from their dispatch; a missing skill goes under `## Next`.
 - **Checks:** `scripts/check.mjs` also verifies the Role count in the plugin description and docs, roster and `roles.md` coverage, `### /aico:<name>` entries for every Playbook, `Language:` in dispatch blocks, and manifest name and source patterns. `scripts/handoff-lint.mjs` checks Handoff structure.
 - **Build:** `npm test` runs every `scripts/*.test.mjs`; `.nvmrc` 24 and `engines` >= 24; CI uses read-only token permissions and commit-pinned actions.
+
+## v0.10 additions
+Decisions: `docs/adr/` 0006. Contracts: `docs/contracts/` (`aico-settings`, `role-names`, `dispatch-prompt` v3).
+- **Playbook** `/aico:settings`: starts the local page (`scripts/settings.mjs serve`, `settings-server.mjs`, `settings-page.html`) and hands the CEO the URL with its token. The page sets each Role's name, model and effort, the Fix-round limit, dispatch mode, optional lanes and Gates, at user level (`~/.mcsparrow/config.json`) or project level (`.company/settings.json`). Precedence is project > user > plugin. Ship, installs and the security lanes unlock only from user level. The script owns validation and every write.
+- **Role names** (`role-names` v1): each Role has a person name in `company/names.json` (editable per level). The Lead routes by name only when it is used as a person; scripts, Handoffs, Gates and help show the name with the Role.
+- **Pipeline** Setup §1.7 resolves settings once per run; every dispatch carries `Name:` and `Settings:` lines (`dispatch-prompt` v3) and passes `model` and `effort` as Agent-call parameters. Agent files are never edited. With nothing set, behaviour is unchanged.
+- **Roles:** each Role sets an `effort` level; writer, vuln-scanner and design-researcher moved to sonnet.
 
 ## Budgets (guideline, warn not fail)
 Agent files ≤ 50 lines, skill files ≤ 125 lines, description ≤ 1024 chars (hard). `scripts/check.mjs` reports every structural overrun.
