@@ -326,9 +326,9 @@ test('startServer prints the URL', async (t) => {
   assert.deepEqual(lines, [`aico settings: ${server.url}`]);
 });
 
-test('page has the four tabs, a lock dialog, and no external resources', () => {
+test('page has the five tabs, a lock dialog, and no external resources', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const tab of ['Roles', 'Language &amp; profile', 'Pipeline', 'Gates']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
+  for (const tab of ['Roles', 'Language &amp; profile', 'Pipeline', 'Gates', 'Mods']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
   assert.ok(html.includes('<dialog'));
   assert.ok(html.includes('<meta name="aico-token" content="__AICO_TOKEN__">'));
   assert.ok(!/<script[^>]*\ssrc=/i.test(html));
@@ -375,4 +375,47 @@ test('page has a Review format row built like the Dispatch row, with the Contrac
     'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).']) {
     assert.ok(html.includes(needle), needle);
   }
+});
+
+test('save round-trips mods, refuses keep_warm and bad values with nothing written, and reports lock ignores', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.equal(before.plugin.mods.blast_radius.security, 'ask');
+  assert.equal(before.resolved.mods.cache_tax.pane, 'command');
+  const bad = await post('/api/save', {
+    revision: before.resolved.revision,
+    user: { version: 1, mods: { cache_tax: { keep_warm: true }, reflect: { mode: 'free' }, savvy: { pane: '__proto__' } } }
+  });
+  assert.equal(bad.status, 400);
+  const { refused } = await bad.json();
+  assert.ok(refused.some((r) => r.includes('mods.cache_tax.keep_warm: unknown key')), refused.join(' | '));
+  assert.ok(refused.some((r) => r.includes('mods.reflect.mode must be deterministic or model')), refused.join(' | '));
+  assert.ok(refused.some((r) => r.includes('mods.savvy.pane must be auto or command')), refused.join(' | '));
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', {
+    revision: before.resolved.revision,
+    user: { version: 1, mods: { savvy: { enabled: false, pane: 'command' }, blast_radius: { security: 'warn' } } },
+    project: { version: 1, mods: { reflect: { mode: 'model' }, blast_radius: { core: 'warn' } } }
+  });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  assert.deepEqual(after.resolved.mods.savvy, { enabled: false, pane: 'command' });
+  assert.equal(after.resolved.mods.blast_radius.security, 'ask');
+  assert.equal(after.resolved.mods.blast_radius.core, 'ask');
+  assert.equal(after.resolved.mods.reflect.mode, 'deterministic');
+  for (const key of ['mods.blast_radius.security', 'mods.blast_radius.core', 'mods.reflect.mode']) {
+    assert.ok(after.resolved.ignored.some((i) => i.startsWith(key)), key);
+  }
+});
+
+test('page has a Mods section built from the existing controls, shows lock reasons, and never uses innerHTML', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ['id="tab-mods"', 'id="panel-mods"', 'function renderMods', "['mods', mod, 'enabled']", "['mods', 'reflect', 'mode']",
+    "['mods', 'blast_radius', 'security']", "['mods', 'blast_radius', 'enabled']", "'step_check'", "'retrospective'", 'pipelineRow(', 'selectFor(']) {
+    assert.ok(html.includes(needle), needle);
+  }
+  assert.ok(!html.includes('keep_warm') && !html.includes('keep-warm'));
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(html));
+  assert.ok(/mods:\s*renderMods/.test(html) && /TAB_NAMES = \[[^\]]*'mods'\]/.test(html));
 });

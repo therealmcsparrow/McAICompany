@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, MODS_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -277,7 +277,7 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'pipeline', 'profile', 'revision', 'roles', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'revision', 'roles', 'unlocked', 'warnings']);
   assert.equal(Object.keys(data.roles).length, 32);
   assert.equal(data.roles.architect.name, 'Ava');
 });
@@ -638,4 +638,179 @@ test('writeLayer refuses a bad review_format with the Contract text and writes n
 test('no keep-warm key exists in the schema', () => {
   assert.equal(validateLayer({ version: 1, mods: { keep_warm: true } }, roleSet).length > 0, true);
   assert.equal(JSON.stringify(PIPELINE_DEFAULTS).includes('warm'), false);
+});
+
+// ---------- mods.* (aico-settings v1.1, part M) ----------
+const MODS_ALL = {
+  savvy: { enabled: true, pane: 'auto' },
+  cache_tax: { enabled: true, pane: 'command' },
+  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
+  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' }
+};
+const plain = (v) => JSON.parse(JSON.stringify(v));
+const modsOf = (s) => plain(resolveSettings(s.ctx).mods);
+
+test('MODS_DEFAULTS: all four mods on, Blast Radius core ask, contract warn, security ask, no keep-warm key', () => {
+  assert.deepEqual(plain(MODS_DEFAULTS), MODS_ALL);
+  assert.ok(!JSON.stringify(MODS_DEFAULTS).includes('keep_warm'));
+});
+
+test('a fresh install resolves every mod on, through get and get <key>', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(modsOf(s), MODS_ALL);
+  assert.deepEqual(plain(pluginDefaults(s.pluginRoot).mods), MODS_ALL);
+  assert.deepEqual(JSON.parse(s.cli('get').out).mods, MODS_ALL);
+  assert.equal(s.cli('get', 'mods.blast_radius.security').out, 'ask\n');
+  assert.equal(s.cli('get', 'mods.blast_radius.contract').out, 'warn\n');
+  assert.equal(s.cli('get', 'mods.reflect.mode').out, 'deterministic\n');
+});
+
+test('mods.* refuses hostile values first, each with the Contract text', () => {
+  const hostile = ['__proto__', 'ASK', 'Warn', 7, null, ['ask'], { a: 1 }, 'x'.repeat(10240), ''];
+  const cases = [
+    [['savvy', 'enabled'], 'mods.savvy.enabled must be true or false'],
+    [['cache_tax', 'enabled'], 'mods.cache_tax.enabled must be true or false'],
+    [['reflect', 'enabled'], 'mods.reflect.enabled must be true or false'],
+    [['blast_radius', 'enabled'], 'mods.blast_radius.enabled must be true or false'],
+    [['reflect', 'step_check'], 'mods.reflect.step_check must be true or false'],
+    [['reflect', 'retrospective'], 'mods.reflect.retrospective must be true or false'],
+    [['savvy', 'pane'], 'mods.savvy.pane must be auto or command'],
+    [['cache_tax', 'pane'], 'mods.cache_tax.pane must be auto or command'],
+    [['reflect', 'mode'], 'mods.reflect.mode must be deterministic or model'],
+    [['blast_radius', 'core'], 'mods.blast_radius.core must be ask or warn'],
+    [['blast_radius', 'contract'], 'mods.blast_radius.contract must be ask or warn'],
+    [['blast_radius', 'security'], 'mods.blast_radius.security must be ask or warn']
+  ];
+  for (const [[mod, key], msg] of cases) {
+    for (const bad of hostile) {
+      assert.deepEqual(validateLayer({ version: 1, mods: { [mod]: { [key]: bad } } }, roleSet), [msg], `${mod}.${key} ${String(bad).slice(0, 12)}`);
+    }
+  }
+  for (const [mod, key, ok] of [['savvy', 'enabled', false], ['savvy', 'pane', 'command'], ['reflect', 'mode', 'model'], ['blast_radius', 'core', 'warn']]) {
+    assert.deepEqual(validateLayer({ version: 1, mods: { [mod]: { [key]: ok } } }, roleSet), []);
+  }
+});
+
+test('mods.* refuses unknown keys, unknown mods and wrong shapes; keep_warm is unknown', () => {
+  assert.deepEqual(validateLayer({ version: 1, mods: { cache_tax: { keep_warm: true } } }, roleSet), ['mods.cache_tax.keep_warm: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: { cache_tax: { keep_warm: { enabled: true } } } }, roleSet), ['mods.cache_tax.keep_warm: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: { nope: {} } }, roleSet), ['mods.nope: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: JSON.parse('{"__proto__":{"enabled":true}}') }, roleSet), ['mods.__proto__: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: JSON.parse('{"savvy":{"__proto__":"x"}}') }, roleSet), ['mods.savvy.__proto__: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: { savvy: { core: 'ask' } } }, roleSet), ['mods.savvy.core: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: { savvy: { mode: 'model' } } }, roleSet), ['mods.savvy.mode: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, mods: 'on' }, roleSet), ['mods: must be an object']);
+  assert.deepEqual(validateLayer({ version: 1, mods: [] }, roleSet), ['mods: must be an object']);
+  assert.deepEqual(validateLayer({ version: 1, mods: { savvy: 'on' } }, roleSet), ['mods.savvy: must be an object']);
+  assert.deepEqual(validateLayer({ version: 1, mods: { savvy: null } }, roleSet), ['mods.savvy: must be an object']);
+});
+
+test('writeLayer refuses a bad mods value and writes nothing; a good one round-trips and keeps options when off', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, mods: { reflect: { mode: 'free' } } }, s.ctx), (e) => e instanceof Refusal && e.message === 'mods.reflect.mode must be deterministic or model');
+  assert.ok(!fs.existsSync(s.config));
+  assert.throws(() => writeLayer('user', { version: 1, mods: { cache_tax: { keep_warm: true } } }, s.ctx), /unknown key/);
+  assert.ok(!fs.existsSync(s.config));
+  writeLayer('user', { version: 1, mods: { savvy: { enabled: false, pane: 'command' } } }, s.ctx);
+  assert.deepEqual(modsOf(s).savvy, { enabled: false, pane: 'command' });
+  assert.deepEqual(plain(readLayer('user', s.ctx).layer.mods.savvy), { enabled: false, pane: 'command' });
+});
+
+test('free keys resolve per field, project over user over plugin', (t) => {
+  const s = sandbox(t);
+  s.user({ mods: { savvy: { enabled: false, pane: 'command' }, reflect: { step_check: false } } });
+  s.project({ mods: { savvy: { enabled: true }, reflect: { retrospective: false } } });
+  const m = modsOf(s);
+  assert.deepEqual(m.savvy, { enabled: true, pane: 'command' });
+  assert.deepEqual(m.reflect, { enabled: true, step_check: false, retrospective: false, mode: 'deterministic' });
+});
+
+test('lock 1: Reflect model counts only from the user level', (t) => {
+  const s = sandbox(t);
+  s.project({ mods: { reflect: { mode: 'model' } } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.mods.reflect.mode, 'deterministic');
+  assert.ok(r.ignored.some((i) => i.startsWith('mods.reflect.mode: model from project')), r.ignored.join(' | '));
+  s.user({ mods: { reflect: { mode: 'model' } } });
+  s.project({ mods: { reflect: { mode: 'model' } } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.mods.reflect.mode, 'model', 'the user level may spend');
+  assert.ok(r.ignored.some((i) => i.startsWith('mods.reflect.mode: model from project')));
+  s.project({ mods: { reflect: { mode: 'deterministic' } } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.mods.reflect.mode, 'deterministic', 'a project may only tighten');
+  assert.equal(r.ignored.filter((i) => i.startsWith('mods.reflect.mode')).length, 0);
+});
+
+test('lock 2: a project only tightens Blast Radius', (t) => {
+  const s = sandbox(t);
+  s.project({ mods: { blast_radius: { core: 'warn', contract: 'ask', enabled: false } } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.mods.blast_radius.core, 'ask');
+  assert.equal(r.mods.blast_radius.contract, 'ask', 'a project ask over the warn default is kept');
+  assert.equal(r.mods.blast_radius.enabled, true);
+  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.core: warn from project')), r.ignored.join(' | '));
+  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.enabled: off from project')), r.ignored.join(' | '));
+  assert.ok(!r.ignored.some((i) => i.startsWith('mods.blast_radius.contract')));
+  s.user({ unlocked: ['security'], mods: { blast_radius: { core: 'warn', enabled: false } } });
+  s.project({ mods: { blast_radius: { core: 'warn' } } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.mods.blast_radius.core, 'warn', 'the user value stays');
+  assert.equal(r.mods.blast_radius.enabled, false);
+  s.project({ mods: { blast_radius: { enabled: true } } });
+  assert.equal(resolveSettings(s.ctx).mods.blast_radius.enabled, true);
+});
+
+test('lock 3: security warn and Blast Radius off need the user security unlock', (t) => {
+  const s = sandbox(t);
+  s.user({ mods: { blast_radius: { security: 'warn', enabled: false, core: 'warn', contract: 'warn' } } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.mods.blast_radius.security, 'ask');
+  assert.equal(r.mods.blast_radius.enabled, true);
+  assert.equal(r.mods.blast_radius.core, 'warn', 'core and contract warn need no unlock');
+  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.security: warn from user needs the user unlock security')), r.ignored.join(' | '));
+  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.enabled: off from user needs the user unlock security')), r.ignored.join(' | '));
+  s.user({ unlocked: ['security'], mods: { blast_radius: { security: 'warn', enabled: false } } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.mods.blast_radius.security, 'warn');
+  assert.equal(r.mods.blast_radius.enabled, false);
+  assert.ok(!r.ignored.some((i) => i.startsWith('mods.blast_radius')));
+  s.user({ mods: { blast_radius: { security: 'warn' } } });
+  s.project({ unlocked: ['security'] });
+  assert.equal(resolveSettings(s.ctx).mods.blast_radius.security, 'ask', 'a project unlock never counts');
+});
+
+test('a broken project layer holds Blast Radius at defaults and Reflect deterministic', (t) => {
+  const s = sandbox(t);
+  s.user({ unlocked: ['security'], mods: { blast_radius: { enabled: false, security: 'warn', core: 'warn' }, reflect: { mode: 'model' } } });
+  s.project({ mods: { savvy: { pane: 'sideways' } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(plain(r.mods.blast_radius), MODS_ALL.blast_radius);
+  assert.equal(r.mods.reflect.mode, 'deterministic');
+  assert.ok(r.warnings.some((w) => /held/.test(w) && w.includes('mods.blast_radius')), r.warnings.join(' | '));
+  assert.ok(r.warnings.some((w) => w.includes('mods.savvy.pane must be auto or command')));
+  assert.equal(r.mods.savvy.pane, 'auto', 'the bad field falls back to the level below');
+  s.project({ roles: { qa: { effort: 'low' } } });
+  const ok = resolveSettings(s.ctx);
+  assert.equal(ok.mods.blast_radius.enabled, false);
+  assert.equal(ok.mods.reflect.mode, 'model');
+});
+
+test('a bad mods layer value falls back to the level below with a warning', (t) => {
+  const s = sandbox(t);
+  s.user({ mods: { savvy: { pane: 'command' } } });
+  s.project({ mods: { savvy: { pane: 'AUTO' } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.mods.savvy.pane, 'command');
+  assert.equal(r.warnings.filter((w) => w.includes('mods.savvy.pane')).length, 1);
+});
+
+test('a hostile config file cannot reach Object.prototype through mods', (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(s.config, '{"aico_settings":{"version":1,"mods":{"__proto__":{"enabled":false},"constructor":{"prototype":{"x":1}},"savvy":{"__proto__":{"enabled":false}}}}}');
+  const r = resolveSettings(s.ctx);
+  assert.equal({}.enabled, undefined);
+  assert.equal({}.x, undefined);
+  assert.equal(r.mods.savvy.enabled, true);
+  assert.equal(r.warnings.length, 3, r.warnings.join(' | '));
 });

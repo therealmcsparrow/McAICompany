@@ -30,6 +30,13 @@ export const PIPELINE_DEFAULTS = {
 };
 export const GATE_DEFAULTS = { brief: 'ask', plan: 'ask', ship: 'ask', installs: 'ask' };
 export const BRAINSTORM_DEFAULTS = { film_script: false, debate: 'crossfire' };
+export const MODS = ['savvy', 'cache_tax', 'reflect', 'blast_radius'];
+export const MODS_DEFAULTS = {
+  savvy: { enabled: true, pane: 'auto' },
+  cache_tax: { enabled: true, pane: 'command' },
+  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
+  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' }
+};
 
 export const PROFILE_FIELDS = ['product_type', 'engagement', 'client', 'audience', 'goal', 'stack', 'languages', 'voice', 'license', 'jurisdiction'];
 
@@ -153,7 +160,7 @@ export function pluginDefaults(pluginRoot = DEFAULT_PLUGIN_ROOT) {
     const name = typeof names[role] === 'string' && Object.hasOwn(names, role) ? names[role] : role;
     roles[role] = { name, model, effort };
   }
-  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS } };
+  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS }, mods: structuredClone(MODS_DEFAULTS) };
 }
 
 function oneOf(values) {
@@ -180,6 +187,24 @@ const PIPELINE_RULES = {
 const BRAINSTORM_RULES = {
   film_script: BOOLEAN,
   debate: { ok: (v) => DEBATES.includes(v), msg: `brainstorm.debate must be ${DEBATES.join(' or ')}` }
+};
+const modBool = (mod, key) => ({ ok: (v) => typeof v === 'boolean', msg: `mods.${mod}.${key} must be true or false` });
+const modOneOf = (mod, key, values) => ({ ok: (v) => values.includes(v), msg: `mods.${mod}.${key} must be ${values.join(' or ')}` });
+const MOD_RULES = {
+  savvy: { enabled: modBool('savvy', 'enabled'), pane: modOneOf('savvy', 'pane', ['auto', 'command']) },
+  cache_tax: { enabled: modBool('cache_tax', 'enabled'), pane: modOneOf('cache_tax', 'pane', ['auto', 'command']) },
+  reflect: {
+    enabled: modBool('reflect', 'enabled'),
+    step_check: modBool('reflect', 'step_check'),
+    retrospective: modBool('reflect', 'retrospective'),
+    mode: modOneOf('reflect', 'mode', ['deterministic', 'model'])
+  },
+  blast_radius: {
+    enabled: modBool('blast_radius', 'enabled'),
+    core: modOneOf('blast_radius', 'core', ['ask', 'warn']),
+    contract: modOneOf('blast_radius', 'contract', ['ask', 'warn']),
+    security: modOneOf('blast_radius', 'security', ['ask', 'warn'])
+  }
 };
 const LANE_RULES = Object.fromEntries(LANES.map((l) => [l, l === 'legal' ? oneOf(LEGAL) : BOOLEAN]));
 const GATE_RULES = Object.fromEntries(GATES.map((g) => [g, oneOf(GATE_VALUES)]));
@@ -236,6 +261,16 @@ function sanitize(layer, roleNames) {
       if (!isObject(value)) { reasons.push('brainstorm: must be an object'); continue; }
       const brainstorm = checkFields(value, BRAINSTORM_RULES, 'brainstorm', reasons);
       if (notEmpty(brainstorm)) clean.brainstorm = brainstorm;
+    } else if (key === 'mods') {
+      if (!isObject(value)) { reasons.push('mods: must be an object'); continue; }
+      const mods = Object.create(null);
+      for (const mod of Object.keys(value)) {
+        if (!Object.hasOwn(MOD_RULES, mod)) { reasons.push(`mods.${label(mod)}: unknown key`); continue; }
+        if (!isObject(value[mod])) { reasons.push(`mods.${mod}: must be an object`); continue; }
+        const fields = checkFields(value[mod], MOD_RULES[mod], `mods.${mod}`, reasons);
+        if (notEmpty(fields)) mods[mod] = fields;
+      }
+      if (notEmpty(mods)) clean.mods = mods;
     } else if (key === 'unlocked') {
       if (!Array.isArray(value)) { reasons.push('unlocked: must be a list'); continue; }
       const unlocked = [];
@@ -414,6 +449,51 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
   writeAtomic(file, parts.join(''));
 }
 
+const BLAST_CATEGORIES = ['core', 'contract', 'security'];
+
+// Resolves `mods.*`: free keys per field, then the three lock rules (aico-settings v1.1).
+function resolveMods(user, project, { isUnlocked, broken, ignored, warnings }) {
+  const out = structuredClone(MODS_DEFAULTS);
+  const u = (mod, key) => user.mods?.[mod]?.[key];
+  const p = (mod, key) => project.mods?.[mod]?.[key];
+  for (const mod of ['savvy', 'cache_tax', 'reflect']) {
+    for (const key of Object.keys(MODS_DEFAULTS[mod])) {
+      if (mod === 'reflect' && key === 'mode') continue;
+      out[mod][key] = pick(p(mod, key), u(mod, key), MODS_DEFAULTS[mod][key])[0];
+    }
+  }
+  if (broken) {
+    // A broken project layer may have lost a tightening, so the user's loosening does not count.
+    const userLoosens = BLAST_CATEGORIES.some((c) => u('blast_radius', c) !== undefined && u('blast_radius', c) !== MODS_DEFAULTS.blast_radius[c])
+      || u('blast_radius', 'enabled') === false || u('reflect', 'mode') === 'model';
+    if (userLoosens) warnings.push('project settings have problems: mods.blast_radius held at its plugin defaults, mods.reflect.mode held deterministic');
+    return out;
+  }
+  // Lock 1: Reflect model counts only from the user level; a project may only say deterministic.
+  out.reflect.mode = u('reflect', 'mode') ?? MODS_DEFAULTS.reflect.mode;
+  if (p('reflect', 'mode') === 'model') ignored.push('mods.reflect.mode: model from project counts only from your user settings');
+  else if (p('reflect', 'mode') !== undefined) out.reflect.mode = p('reflect', 'mode');
+  // Lock 2: a project only tightens Blast Radius. Lock 3: security warn and off need the user unlock.
+  const blast = out.blast_radius;
+  for (const c of BLAST_CATEGORIES) {
+    blast[c] = u('blast_radius', c) ?? MODS_DEFAULTS.blast_radius[c];
+    if (p('blast_radius', c) === 'ask') blast[c] = 'ask';
+    else if (p('blast_radius', c) === 'warn') ignored.push(`mods.blast_radius.${c}: warn from project can only tighten`);
+  }
+  if (blast.security === 'warn' && !isUnlocked('security')) {
+    blast.security = 'ask';
+    ignored.push('mods.blast_radius.security: warn from user needs the user unlock security');
+  }
+  blast.enabled = u('blast_radius', 'enabled') ?? true;
+  if (p('blast_radius', 'enabled') === true) blast.enabled = true;
+  else if (p('blast_radius', 'enabled') === false) ignored.push('mods.blast_radius.enabled: off from project can only tighten');
+  if (blast.enabled === false && !isUnlocked('security')) {
+    blast.enabled = true;
+    ignored.push('mods.blast_radius.enabled: off from user needs the user unlock security');
+  }
+  return out;
+}
+
 export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
@@ -466,6 +546,8 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     }
   }
 
+  const mods = resolveMods(user, project, { isUnlocked, broken: p.warnings.length > 0, ignored, warnings });
+
   // The revision also covers project.md (profile and project language), so a stale page can't overwrite it.
   let md;
   try {
@@ -477,7 +559,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).update('\0').update(md).digest('hex');
   const language = resolveLanguage({ home, cwd });
   const profile = { ...readProfile({ cwd }), options: templateOptions(pluginRoot) };
-  return { revision, roles, pipeline, gates, brainstorm, unlocked: [...unlocked], ignored, warnings, language, profile };
+  return { revision, roles, pipeline, gates, brainstorm, mods, unlocked: [...unlocked], ignored, warnings, language, profile };
 }
 
 // Checks a user and a project layer together, as they would be stored. Returns all reasons.
