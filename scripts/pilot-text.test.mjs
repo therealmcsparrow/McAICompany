@@ -56,7 +56,10 @@ test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () =
   has(h, 'references/pilot.md', 'builders cite finding IDs in `## Did`');
   assert.doesNotMatch(h, /aico-top/);
   assert.doesNotMatch(h, /findings\.md/);
-  for (const f of ['agents/code-reviewer.md', 'agents/senior-engineer.md', 'skills/review/SKILL.md']) has(read(f), 'references/pilot.md');
+  for (const f of ['agents/code-reviewer.md', 'agents/senior-engineer.md']) has(read(f), 'references/pilot.md', 'Review format: pilot', 'no `|` inside a field', 'Prose never starts with an ID');
+  has(h, 'Review format: pilot');
+  has(read(PILOT), 'no `|` inside a field');
+  assert.doesNotMatch(read('skills/review/SKILL.md'), /pilot\.md/);
 });
 
 test('AC20 pilot.md holds the top block keys and the finding rows; agents name the row shapes', () => {
@@ -82,8 +85,8 @@ test('AC23 slices carry every security Must and a findings ledger survives hando
 });
 
 const HANDOVER = [
-  '- Handover: first write `<NN>-<role>.findings.md` beside the Handoff (frontmatter `step`, `role`, `base-commit`; `## Checked`; `## Findings` rows `- ',
-  ' | open | [spec] | file:line | problem | why | fix`, `[nit]` for a Nit); a continuation appends its new rows.',
+  '- Pilot handover (`status: handover` only): first write `<NN>-<role>.findings.md` beside the Handoff (frontmatter `step`, `role`, `base-commit`; `## Checked`; `## Findings` rows `- ',
+  ' | open | [spec] | file:line | problem | why | fix`, `[nit]` for a Nit, no `|` inside a field); a continuation appends its new rows. Prose never starts with an ID: under `## Blocking` and `## Nits` every bullet is a row.',
 ];
 test('AC23 both pilot agents hold the Handover line; the pins that left pilot.md live there (AC34)', () => {
   for (const [f, id] of [['agents/code-reviewer.md', 'R-1'], ['agents/senior-engineer.md', 'C-1']]) {
@@ -92,16 +95,16 @@ test('AC23 both pilot agents hold the Handover line; the pins that left pilot.md
     assert.ok(t.trimEnd().split('\n').length <= 50);
   }
   const rev = read('agents/code-reviewer.md').split('\n');
-  assert.equal(rev.findIndex((l) => l.startsWith('- Handover:')), rev.findIndex((l) => l.startsWith('- Findings are rows')) + 1);
+  assert.equal(rev.findIndex((l) => l.startsWith('- Pilot handover')), rev.findIndex((l) => l.startsWith('- With `Review format: pilot` only')) + 1);
   const sen = read('agents/senior-engineer.md').split('\n');
-  assert.equal(sen.findIndex((l) => l.startsWith('- Handover:')), sen.findIndex((l) => l.startsWith('- **compliance:**')) + 1);
+  assert.equal(sen.findIndex((l) => l.startsWith('- Pilot handover')), sen.findIndex((l) => l.startsWith('- **compliance:**')) + 1);
   assert.doesNotMatch(read('agents/code-reviewer.md'), /Read the brief, the Architect's Handoff/);
 });
 
 test('pilot.md: the Lead-side lint text is cut, layout points at the agent, read_next allows heading spaces', () => {
   const p = read(PILOT);
-  has(p, 'Contract: `docs/contracts/handoff.md`; the Lead lints your Handoff (`handoff-lint.mjs --require-top`); a lint error re-dispatches you, no Fix round.',
-    'Layout: the Handover line of your agent; statuses `open|fixed|withdrawn`; a Nit\'s Handoff row drops `[nit]`. Rows are appended or change status, never deleted.',
+  has(p, 'Contract: `docs/contracts/handoff.md`. Lint: `handoff-lint.mjs --require-top`; an error re-dispatches you, no Fix round.',
+    'Layout: the Handover line of your agent; statuses `open|fixed|withdrawn`; no `|` inside a field; a Nit\'s Handoff row drops `[nit]`. Rows are appended or change status, never deleted.',
     '(heading text may hold spaces)');
   assert.doesNotMatch(p, /The Lead runs/);
 });
@@ -122,7 +125,7 @@ test('builder agents: search before you read a file you will edit', () => {
 
 test('ledger timing: written only near a handover (60% of the cap or a decision to hand over), IDs without a ledger', () => {
   const p = read(PILOT);
-  has(p, 'only near a handover', '75% of `<n>` (60% of `<cap>`', '90000', 'status: handover', 'writes none', 'always has it',
+  has(p, 'only with `status: handover`', '75% of `<n>` (60% of `<cap>`', '90000', 'status: handover', 'writes none', 'always has it',
     'fixed R-2', '1 + the highest');
   assert.doesNotMatch(read('agents/code-reviewer.md') + read('skills/review/SKILL.md'), /before the first file|from the first file/);
 });

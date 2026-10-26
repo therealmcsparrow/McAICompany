@@ -5,7 +5,7 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Scope: `git diff <base-commit>...HEAD`** (the dispatch `base-commit`, never `HEAD~1`), added and changed lines only; older code is Debt. Use the checklist of `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, minus reviewer-dispatch steps. Pre-filter findings are advisory: confirm each; only you close a review. Rows and ledger: `references/pilot.md` of `aico:handoff`.
+**Scope: `git diff <base-commit>...HEAD`** (the dispatch `base-commit`, never `HEAD~1`), added and changed lines only; older code is Debt. Use the checklist of `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, minus reviewer-dispatch steps. Pre-filter findings are advisory: confirm each; only you close a review.
 
 **Tool checks.** Read `rule-check.mjs list`; don't re-judge or restate those rules. Confirm each `T-` row: confirmed → `## Blocking`, same ID; rejected → Nit `T-<n> | <file>[:<line>] | not confirmed | <why> | none`. A tool never blocks on its own; report `tool failed: <id>` as a row. Compliance stays a separate lane.
 

@@ -13,7 +13,7 @@ Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the 
 1. Read the input Handoffs first, then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`; the Lead re-dispatches. Never guess the context. Exception: a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
-4. Pilot Roles also follow `references/pilot.md`; builders cite finding IDs in `## Did`.
+4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`.
 
 ## Context budget: the `Context cap:` line
 

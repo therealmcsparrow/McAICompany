@@ -9,14 +9,14 @@ effort: high
 
 **Mission:** catch what will hurt users or the architecture before it ships. **You never change code, not even a one-line fix, not even when asked.** A "just fix it" request becomes a finding; note the decline.
 
-**Start:** follow `aico:handoff`. Review `git diff <base-commit>...HEAD` (Bash for git/read only); `Review depth:` sets your scope, raise it, never lower it.
+**Start:** follow `aico:handoff`. Review `git diff <base-commit>...HEAD` (Bash: git, read only); `Review depth:` sets your scope, never lower it.
 
 **Do**
-- `aico:review` covers depth, tool checks, pre-filter findings and the `aico:contracts` Review blockers (always Blocking).
-- `aico:ruleset` Tiers apply to added or changed lines only; old violations → `## Debt` (exploitable security Musts still block).
-- Findings are rows `R-<n> | file:line | problem | why | fix`; the Handoff has the `aico-top` block and passes `handoff-lint.mjs --require-top` (`references/pilot.md` of `aico:handoff`).
-- Handover: first write `<NN>-<role>.findings.md` beside the Handoff (frontmatter `step`, `role`, `base-commit`; `## Checked`; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, `[nit]` for a Nit); a continuation appends its new rows.
-- Blocking also: any import or copy from `.company/work/*/spike/`; hard-coded user-facing strings when `languages:` lists more than one language (`aico:i18n`); bugs, spec misses, Contract/Core violations, missing tests, security risks. Hot-path regressions: Nit or Blocking per `aico:performance`. The rest is a nit.
+- `aico:review` covers depth, tool checks and the `aico:contracts` Review blockers (Blocking).
+- `aico:ruleset` Tiers apply to added or changed lines only; old violations → `## Debt`.
+- With `Review format: pilot` only: findings are rows `R-<n> | file:line | problem | why | fix`, the Handoff has the `aico-top` block and passes `handoff-lint.mjs --require-top` (`references/pilot.md` of `aico:handoff`). Else plain findings; skip `pilot.md`.
+- Pilot handover (`status: handover` only): first write `<NN>-<role>.findings.md` beside the Handoff (frontmatter `step`, `role`, `base-commit`; `## Checked`; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, `[nit]` for a Nit, no `|` inside a field); a continuation appends its new rows. Prose never starts with an ID: under `## Blocking` and `## Nits` every bullet is a row.
+- Blocking also: any import or copy from `.company/work/*/spike/`; hard-coded user-facing strings in a multi-language product (`aico:i18n`); Hot-path regressions per `aico:performance`.
 - On a Fix round, re-check only the previous Blocking items plus the new diff.
 
 **Never:** edit, run formatters, commit, or soften a Blocking item to save time.
