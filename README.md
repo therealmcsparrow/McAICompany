@@ -83,11 +83,11 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
 - **Ruleset** (`aico:ruleset`): sourced Must/Should/May rules per tool, kept by the Senior Engineer. Security is law. Builders follow the rules before review; a Must exception needs your approval.
-- **Fix rounds:** at most 2, then escalation to you. Nits never loop.
+- **Fix rounds:** at most 2 by default (0–5 in `/aico:settings`), then escalation to you. Nits never loop.
 - **Handoff Contract** (`aico:handoff`): Roles pass work through machine-readable Handoff fields (`base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) with a `contract|spec|security|test` blocking taxonomy; independent Steps run in parallel by default, and reviewers diff only against `base-commit`.
 - **Lessons:** a Ship appends up to 3 one-line Lessons to `.company/lessons.md`; later runs read it and pass the relevant ones to each Role.
 - **EU compliance** (`aico:eu-compliance`): GDPR, CRA, AI Act Art. 50, EAA, VAT and consumer law are checked before Ship.
-- **Git:** branch `aico/<task>`, one commit per Step, no push before the Ship Gate. Commit subjects are `<type>: <summary>` (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`), never prefixed with `aico` or a Role name.
+- **Git:** branch `aico/<task>`, one commit per Step, no push before the Ship Gate (an unlocked auto Ship Gate pushes and opens a PR, never merges). Commit subjects are `<type>: <summary>` (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`), never prefixed with `aico` or a Role name.
 - **Ideas:** brainstorms live in `.company/brainstorms/` as `YYYY-MM-DD HH.MM - Topic.md`, then move to `.company/roadmap/`, `nice-to-have/` or `parked/`. Cooler chats are recorded in `.company/cooler/` as `YYYYMMDD-HHMM-topic.md`.
 - **Per product repo:** `.company/project.md` (product type, stack, voice, license, approved Core) and `.company/work/<task>/NN-<role>.md` Handoffs.
 

@@ -61,7 +61,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 1. **Product Manager** writes the brief: problem, users, scope, IDed acceptance criteria, risk tier. **→ Brief Gate.**
 2. **Architect** ∥ **UI/UX Designer** (if there's UI) ∥ **Brand Artist** (if new art is needed) produce the Core list, Contracts, Module map and wireframes. Persona testers walk the design; the **Senior Engineer** researches or maps the ruleset; the Architect signs it off if Must rules changed. **→ Plan Gate** (you approve Core, Contracts and art direction).
 3. **Builders** build one Module each (in parallel once Contracts are settled), test-first, following the rules mapped to their tasks. Assets are produced alongside.
-4. **Code Reviewer** ∥ **QA** ∥ **Security** ∥ **Senior Engineer** (compliance) review in parallel (plus **Legal** for AI/payments/personal data, and hands-on + accessibility testers for UI). Blocking findings go back to the builder — at most two Fix rounds.
+4. **Code Reviewer** ∥ **QA** ∥ **Security** ∥ **Senior Engineer** (compliance) review in parallel (plus **Legal** for AI/payments/personal data, and hands-on + accessibility testers for UI). Blocking findings go back to the builder — at most two Fix rounds by default (set the limit in `/aico:settings`).
 5. **Writer** adds docs and release notes; **Localizer** translates if you support more than one language. **→ Ship Gate.**
 6. **DevOps** releases as approved.
 

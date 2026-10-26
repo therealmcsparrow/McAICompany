@@ -33,7 +33,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Voice preset** — one of three named writing voices (*clear*: friendly, no hype; *bold*: playful and punchy; *technical*: precise and formal). Each Project profile picks one.
 
-**Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After two Fix rounds on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded, never looped.
+**Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After the Fix-round limit (2 by default, 0–5 in settings) on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded, never looped.
 
 **Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate. Nothing enters Core without that approval.
 
@@ -98,3 +98,13 @@ _Avoid_: orchestrator (use Lead).
 **aico language** — `aico_language`: the BCP 47 tag of the language aico writes in (Handoff prose, forms, reports, summaries). Set with `/aico:language`, as your default or per project. Distinct from `languages:`, which lists the product's UI locales. Machine-read parts stay English.
 
 **Design skills** — the approved set of UI/UX skills for one product, at most five, in `## Design skills` of `.company/project.md`. Each line has its source, license, vetted and approval dates. Installed only after you approve the exact commands.
+
+**Effort** — how long a Role thinks before acting: `low | medium | high | xhigh | max`. Each Role's default is in its agent file; the CEO can change it in Settings.
+
+**Role name** — the person name a Role shows in cooler chats, brainstorms, Gate summaries and Handoff bylines (e.g. Ava for the architect). Display only: `aico:<role>` IDs, file names and routing never change. Defaults live in `company/names.json`.
+
+**Settings** — the CEO's choices for Role name, model and effort, language and profile, Fix-round limit, dispatch mode, review lanes and Gates, changed on the `/aico:settings` page. Three levels: plugin default, user default (`~/.mcsparrow/config.json`) and project override (`.company/settings.json`); project wins over user, user over plugin.
+
+**Auto Gate** — a Gate set to `auto` in Settings: the Lead writes the Gate summary to the run folder and continues without a form. An auto Ship Gate pushes the branch and opens a PR, and never merges.
+
+**Lock** — a setting that could skip a safety check (auto Ship Gate, auto installs, turning off the security or compliance lane) and starts locked. Unlocks count only from the CEO's user settings; a project can lock again but never unlock, and a broken project settings file keeps its locks.

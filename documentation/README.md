@@ -9,7 +9,7 @@ Start here:
 | [Getting started](getting-started.md) | Install, your first run, how a job flows, and the three Gates where you approve |
 | [Commands](commands.md) | Every `/aico:*` command (the Playbooks), what it does and when to reach for it |
 | [Roles](roles.md) | All 32 Role agents, grouped by department, and what each one is for |
-| [Concepts](concepts.md) | The ideas the company runs on: Handoffs, Gates, Core/Modules/Contracts, the Ruleset, Debt, Lessons, EU compliance and Git conventions |
+| [Concepts](concepts.md) | The ideas the company runs on: Handoffs, Gates, Core/Modules/Contracts, the Ruleset, Debt, Lessons, settings and locks, EU compliance and Git conventions |
 
 Reference material lives alongside these guides:
 
@@ -33,6 +33,7 @@ Update an installed copy with:
 
 ### What's new
 
+- **0.10.0** — [`/aico:settings`](commands.md#aicosettings): a local page to change each Role's name, model and effort, the language and profile, the Fix-round limit, review lanes and Gates. Settings are saved as a user default or per project. Risky changes are [locked](concepts.md#locks) until you unlock them in your user settings. Every Role now has a person name and an [effort level](concepts.md#models-effort-and-names).
 - **0.9.0** — [`/aico:research`](commands.md#aicoresearch): before you build, three researchers look the topic up online and the Product Manager writes one sourced report with a verdict, ranked actions and low-hanging fruit; you then pick feature, brainstorm, roadmap or park. Plus [`/aico:language`](commands.md#aicolanguage) to set the language aico writes in, and approved [design skills](concepts.md#design-skills) for UI work.
 - **0.8.1** — [`/aico:cooler`](commands.md#aicocooler) chats are written as a movie script (scenes, stage directions, speaker cues), and the Overheard list is saved in the file instead of shown on screen.
 - **0.8.0** — [`/aico:cooler`](commands.md#aicocooler): random colleagues chat at the water cooler, unmoderated, and it is recorded in `.company/cooler/`; plus [`/aico:help`](commands.md#aicohelp) (also `/aico:<command> help`) and [`/aico:version`](commands.md#aicoversion).

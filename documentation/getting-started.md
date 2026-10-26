@@ -42,7 +42,7 @@ The first time the company works in a repository, it creates `.company/project.m
 4. **You approve at Gates.** The run pauses at each Gate (below) until you approve, ask for a change, or stop.
 5. **Ship.** After the Ship Gate, release happens as you approved, and the Lead writes a short summary and records any Lessons for next time.
 
-Nothing is pushed or released before you approve it at the Ship Gate.
+Nothing is pushed or released before you approve it at the Ship Gate (unless you unlock an auto Ship Gate in settings, which pushes and opens a PR but never merges).
 
 ## The three Gates
 
@@ -55,6 +55,17 @@ A **Gate** is a checkpoint where the company stops and waits for you:
 | **Ship** | Before anything is released or made public | The finished, reviewed work — before it goes out |
 
 At every Gate you can **Approve**, **Change** (send it back with notes) or **Stop**. Read-only commands such as [`/aico:audit`](commands.md#aicoaudit) have no Plan or Ship Gate because they build nothing — they end with a report you act on.
+
+## Tune the company
+
+Run `/aico:settings` to open the settings page in your browser. There you can:
+- rename Roles
+- move a Role to another model or effort level
+- change how many Fix rounds run before aico asks you
+- choose which review lanes run
+- let the Brief or Plan Gate continue on its own
+
+Save a change for every project (your user default) or only for the current one. Nothing changes until you save something. See [Settings](concepts.md#settings) and [Locks](concepts.md#locks).
 
 ## Where to go next
 
