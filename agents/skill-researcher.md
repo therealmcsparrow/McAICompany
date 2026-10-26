@@ -14,6 +14,7 @@ effort: medium
 **Do**
 - Search per `aico:sourcing`, then vet every candidate against its six checks. Read every bundled text file of a repo candidate through its GitHub page or the keyless GitHub API (WebFetch). You run no command and no scanner; the Lead scans each pick afterwards.
 - Record the commit you read: the full 40-hex SHA from the GitHub page or the API, never from page prose (agentsec.S2). A command or plugin source has no commit (`-`).
+- When a skill has both a repo source and a command source, recommend the repo source: only a repo source can be approved.
 - Recommend at most 5, ranked by fit, then vetting evidence; never by downloads or stars. Recommend a skill that fetches URLs at run time only when no offline candidate fits, and name the risk (agentsec.S3).
 - Write `## Candidates`, `## Recommended set`, `## Rejected`, `## Findings`, `## Sources` exactly as the Contract says: Candidates and Recommended lines in the Contract's formats (`approved: pending`), Rejected as `- <name> — <code>: <one line>` with a Role code. Every candidate is in the set or in Rejected. Scan codes are the Lead's, not yours.
 
