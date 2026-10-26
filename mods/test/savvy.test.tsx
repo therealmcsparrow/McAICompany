@@ -335,3 +335,50 @@ test('vscode and mobile pass the render through', async ($, on) => {
     await ui.unmount()
   }
 })
+
+test('the Gates and Steps bars follow Elapsed, with the count', async ($, on) => {
+  const w = makeWorld()
+  await boot($, on, w)
+  const ui = await $.ui.mount(pane('terminal', 39))
+  const all = await lines(ui)
+  const at = all.findIndex(row => row.startsWith('Elapsed'))
+  expect(all[at + 1]).toMatch(/^Gates \[#+-+\] 2\/3 plan$/)
+  expect(all[at + 2]).toMatch(/^Steps \[#{20}\] 2\/2$/)
+  expect(all).toContain('Gates    brief, plan')
+  for (const row of all) expect(row.length).toBeLessThanOrEqual(39)
+  await ui.unmount()
+})
+
+test('a narrow pane keeps the numeric counts', async ($, on) => {
+  const w = makeWorld()
+  await boot($, on, w)
+  const ui = await $.ui.mount(pane('terminal', 10))
+  const all = await lines(ui)
+  expect(all).toContain('Gates 2/3')
+  expect(all).toContain('Steps 2/2')
+  await ui.unmount()
+})
+
+test('an ended ship run shows both bars full', async ($, on) => {
+  const w = makeWorld()
+  const clock = await boot($, on, w)
+  w.active = NONE
+  w.mtime = 2
+  await clock.advance(12_000)
+  const ui = await $.ui.mount(pane('terminal', 39))
+  const all = await lines(ui)
+  expect(all.some(row => /^Gates \[#+\] 3\/3 ship$/.test(row))).toBe(true)
+  expect(all.some(row => /^Steps \[#+\] 2\/2$/.test(row))).toBe(true)
+  await ui.unmount()
+})
+
+test('an unknown run view shows a question mark and no bar', async ($, on) => {
+  const w = makeWorld()
+  w.active = () => ({ value: { exitCode: 1, stdout: '', stderr: '' } })
+  await boot($, on, w)
+  const ui = await $.ui.mount(pane('terminal', 39))
+  const all = await lines(ui)
+  expect(all).toContain('Gates ?')
+  expect(all).toContain('Steps ?')
+  await ui.unmount()
+})
