@@ -51,9 +51,9 @@ A `context_cap` below 60000 (the floor), above 1000000, or not a whole number is
 Any other `brainstorm.debate` value is refused: `refused: brainstorm.debate must be crossfire or full_pass`, nothing written.
 
 `brainstorm.debate` picks how a **debate** round runs (`brainstorm-file` v2, `brainstorm-reply` v1):
-- `crossfire`: the ideas pass, then one crossfire pair (the two clashing Roles answer each other once).
-- `full_pass`: the ideas pass, then a full pass (every Role answers the others' replies of that round), then the crossfire pair on top.
-It has no effect on `ideas` or `moderated` rounds.
+- `crossfire`: the ideas pass only; the strongest challenge (the crossfire pair) is answered by the idea's author in the next round's ideas pass, with no extra dispatch (Fix round 4, `docs/adr/0014-crossfire-folded-into-next-round.md`; before: one extra dispatch per pair member in the same round).
+- `full_pass`: the ideas pass, then a full pass (every Role answers the others' replies of that round), then the crossfire pair on top, dispatched in the same round.
+It has no effect on `ideas` or `moderated` rounds. Values and default are unchanged by Fix round 4.
 
 ## CLI (Node ESM, no dependencies, cwd = product repo)
 | Command | stdout (exit 0) |
