@@ -303,3 +303,13 @@ test('AC33 LF only in the Playbook and its test (proj.M11)', () => {
     assert.ok(!read(p).includes('\r'), `${p} has a CR byte`);
   }
 });
+
+// ---- Fix round 5: answers link only to the question the CEO answered ----
+test('round 5 answers go to the question the CEO answered; a ruling with no question goes in with decide', () => {
+  has(f2, '| `decide ', 'link `none`', 'never by position', 'Each form question carries its `Q-<n>`');
+  const proc = section(f2, '## Round procedure', '## Debate styles');
+  has(proc, '`Open:`', '`Q-<n>`', '`O-<n>`', '`none`', '`open_threads`');
+  has(section(f2, '## Form and queue'), 'only the question the CEO answered', '`decide`', 'near question');
+  has(skill, '`decide`', 'only the question the CEO answered', 'never by position');
+  assert.ok(skill.split('\n').length <= 125);
+});
