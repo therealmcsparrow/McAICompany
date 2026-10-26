@@ -479,3 +479,7 @@ test('the In effect text is a polite live region and row headers stay in view', 
   assert.ok(html.includes("'aria-live': 'polite'"));
   assert.ok(/tbody th\[scope="row"\] \{[^}]*position: sticky/.test(html));
 });
+
+test('the mods tabpanel has a space before aria-labelledby', () => {
+  assert.ok(pageHtml().includes('id="panel-mods" aria-labelledby="tab-mods"'));
+});
