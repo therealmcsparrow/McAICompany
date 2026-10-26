@@ -14,6 +14,9 @@ const SCRIPT = join(root, 'scripts', 'skill-picks.mjs');
 const SHA = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
 const REL = '.company/work/demo/08-skill-researcher.md';
 const mod = () => import(pathToFileURL(SCRIPT).href);
+// The empty-set line, byte for byte as the Contract writes it.
+const NONE_LINE = '- (none: no candidate passed vetting)';
+const HASH = 'f'.repeat(64);
 
 const line = (o = {}) => {
   const f = {
@@ -115,8 +118,15 @@ test('a command source with a sha, and a command that is not the manifest comman
   assert.equal(run(t, [line({ name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: SHA })]).json.lines[0].ok, false);
   assert.equal(run(t, [line({ name: 'impeccable', source: '`npx -y impeccable skills install && calc`', license: 'Apache-2.0', commit: '-' })]).json.lines[0].ok, false);
 });
+test('the old empty-set wording, and the line with extra text, are lint lines and not an empty set', (t) => {
+  for (const text of ['- (none: no candidate passed vetting and scan)', `${NONE_LINE} `, '- (none)', '- (none: no candidate passed vetting); x']) {
+    const r = run(t, [text]);
+    assert.equal(r.json.lines.length, 1, text);
+    assert.equal(r.json.lines[0].ok, false, text);
+  }
+});
 test('the empty-set line is accepted with no picks', (t) => {
-  const r = run(t, ['- (none: no candidate passed vetting and scan)']);
+  const r = run(t, [NONE_LINE]);
   assert.equal(r.code, 0);
   assert.deepEqual(r.json.picks, []);
   assert.ok(r.json.lines.every((l) => l.ok !== false) || r.json.lines.length === 0);
@@ -309,8 +319,8 @@ const scanOf = (o = {}) => ({
   name: 'tdd-helper', scope: 'quarantine', root: 'quarantine', verdict: 'pass', blocking: false, reason: null, incomplete_codes: [], refs_not_bundled: 0,
   effective_mode: 'no-llm', shipped_baseline: false, score: 0, recommendation: 'SAFE', counts: { critical: 0, high: 0, medium: 0, low: 0 }, issues: [], ...o,
 });
-function fakeScanners({ repoResults = {}, repoRefused, installed = {}, installedRefused } = {}) {
-  const calls = { repo: [], installed: [], settings: 0 };
+function fakeScanners({ repoResults = {}, repoRefused, noHash = false } = {}) {
+  const calls = { repo: [], settings: 0 };
   return {
     calls,
     deps: {
@@ -319,13 +329,12 @@ function fakeScanners({ repoResults = {}, repoRefused, installed = {}, installed
         calls.repo.push(input);
         if (repoRefused) return { refused: repoRefused };
         const results = Object.create(null);
-        for (const n of input.names) results[n] = repoResults[n] ?? scanOf({ name: n });
-        return { commit: input.commit, results };
-      },
-      scanInstalled: async (input) => {
-        calls.installed.push(input);
-        if (installedRefused) return { refused: installedRefused };
-        return { results: installed[input.name] ?? [] };
+        const hashes = Object.create(null);
+        for (const n of input.names) {
+          results[n] = repoResults[n] ?? scanOf({ name: n });
+          if (results[n].refused === undefined && !noHash) hashes[n] = HASH;
+        }
+        return { commit: input.commit, results, hashes };
       },
     },
   };
@@ -342,7 +351,8 @@ test('vet output has lint\'s lines plus mode and, per pick, the scan, scan_refus
   const { out } = await vetRun(t, [line()], s);
   assert.deepEqual(Object.keys(out), ['v', 'area', 'mode', 'lines', 'picks']);
   assert.equal(out.mode, 'no-llm');
-  assert.deepEqual(Object.keys(out.picks[0]), ['n', 'kind', 'name', 'source', 'commit', 'record', 'scan', 'scan_refused', 'approvable', 'reject_code']);
+  assert.deepEqual(Object.keys(out.picks[0]), ['n', 'kind', 'name', 'source', 'commit', 'record', 'scan', 'scan_refused', 'hash', 'approvable', 'reject_code']);
+  assert.equal(out.picks[0].hash, HASH);
   assert.equal(out.picks[0].approvable, true);
   assert.equal(out.picks[0].reject_code, null);
   assert.equal(out.picks[0].scan_refused, null);
@@ -391,33 +401,52 @@ test('vet: one fetch per distinct (source, commit); a second commit or repo is a
   assert.equal(out.picks.length, 4);
   assert.ok(out.picks.every((p) => p.approvable));
 });
-test('vet: a command pick is scanned as installed; not installed is scan-not-possible', async (t) => {
+test('vet: a command pick is never approvable and nothing is scanned or fetched for it', async (t) => {
   const cmd = '`npx -y impeccable skills install`';
   const l = line({ name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: '-' });
-  const here = fakeScanners({ installed: { impeccable: [scanOf({ name: 'impeccable', scope: 'project', root: 'claude' })] } });
-  const a = (await vetRun(t, [l], here)).out.picks[0];
-  assert.equal(a.approvable, true);
-  assert.deepEqual(here.calls.installed, [{ name: 'impeccable', mode: 'no-llm' }]);
-  assert.equal(here.calls.repo.length, 0);
-  const absent = fakeScanners({ installedRefused: 'skill not found' });
-  const b = (await vetRun(t, [l], absent)).out.picks[0];
-  assert.deepEqual([b.scan, b.scan_refused, b.approvable, b.reject_code], [null, 'skill not found', false, 'scan-not-possible']);
-  const none = fakeScanners({ installed: { impeccable: [] } });
-  assert.equal((await vetRun(t, [l], none)).out.picks[0].reject_code, 'scan-not-possible');
-});
-test('vet: when two installed folders share the name, the worst result decides', async (t) => {
-  const l = line({ name: 'impeccable', source: '`npx -y impeccable skills install`', license: 'Apache-2.0', commit: '-' });
-  const bad = scanOf({ verdict: 'findings', blocking: true });
-  const s = fakeScanners({ installed: { impeccable: [scanOf(), bad, scanOf({ verdict: 'findings' })] } });
+  const s = fakeScanners();
   const p = (await vetRun(t, [l], s)).out.picks[0];
-  assert.equal(p.approvable, false);
-  assert.equal(p.reject_code, 'scan-findings');
+  assert.deepEqual([p.kind, p.scan, p.hash, p.approvable, p.reject_code], ['command', null, null, false, 'scan-not-possible']);
+  assert.equal(p.scan_refused, 'command source cannot be pinned');
+  assert.equal(s.calls.repo.length, 0);
+});
+test('vet: a command pick does not read the installed copy, whatever deps offer', async (t) => {
+  const { vet } = await mod();
+  const cmd = '`npx -y impeccable skills install`';
+  const cwd = repo(t, handoff([line({ name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: '-' })]));
+  const deps = { ...fakeScanners().deps, scanInstalled: async () => assert.fail('an installed copy must not be scanned') };
+  const out = await vet(REL, { cwd, deps, progress: () => {} });
+  assert.equal(out.picks[0].approvable, false);
+});
+test('vet: a repo pick without a folder hash is not approvable even when its scan passes', async (t) => {
+  const { out } = await vetRun(t, [line()], fakeScanners({ noHash: true }));
+  assert.deepEqual([out.picks[0].hash, out.picks[0].approvable, out.picks[0].reject_code], [null, false, 'scan-not-possible']);
+});
+test('vet: a malformed hash from the scanner is dropped and the pick is not approvable', async (t) => {
+  const s = fakeScanners();
+  const inner = s.deps.vetCandidates;
+  s.deps.vetCandidates = async (input) => { const r = await inner(input); for (const k of Object.keys(r.hashes)) r.hashes[k] = 'XYZ'; return r; };
+  const { out } = await vetRun(t, [line()], s);
+  assert.deepEqual([out.picks[0].hash, out.picks[0].approvable], [null, false]);
+});
+test('vet: a commit that is on no branch or tag has its own reject code', async (t) => {
+  const s = fakeScanners({ repoRefused: 'commit not in repo' });
+  const p = (await vetRun(t, [line()], s)).out.picks[0];
+  assert.deepEqual([p.scan, p.scan_refused, p.hash, p.approvable, p.reject_code], [null, 'commit not in repo', null, false, 'commit-not-in-repo']);
+  const per = fakeScanners({ repoResults: { 'tdd-helper': { refused: 'commit not in repo' } } });
+  assert.equal((await vetRun(t, [line()], per)).out.picks[0].reject_code, 'commit-not-in-repo');
+});
+test('vet: every other refusal of the fetch and the bound folder is scan-not-possible', async (t) => {
+  for (const reason of ['candidate has a link or submodule', 'skill not bound (root skill)', 'skill not bound (unreadable name)', 'skill not bound (same name twice)', 'skill not bound (name differs from folder)', 'skill not in repo', 'fetch failed', 'candidate too large']) {
+    const p = (await vetRun(t, [line()], fakeScanners({ repoResults: { 'tdd-helper': { refused: reason } } }))).out.picks[0];
+    assert.deepEqual([p.scan, p.hash, p.approvable, p.reject_code, p.scan_refused], [null, null, false, 'scan-not-possible', reason], reason);
+  }
 });
 test('vet: a plugin pick is approvable, never scanned and never fetched', async (t) => {
   const s = fakeScanners();
   const { out } = await vetRun(t, [line({ area: 'design', name: 'aico:ui-design', source: 'plugin aico', license: '-', vetted: '-', commit: '-' })], s, { area: 'design' });
-  assert.deepEqual([out.picks[0].scan, out.picks[0].approvable, out.picks[0].reject_code], [null, true, null]);
-  assert.equal(s.calls.repo.length + s.calls.installed.length, 0);
+  assert.deepEqual([out.picks[0].scan, out.picks[0].hash, out.picks[0].approvable, out.picks[0].reject_code], [null, null, true, null]);
+  assert.equal(s.calls.repo.length, 0);
 });
 test('vet: lint failures stay in lines and are never scanned', async (t) => {
   const s = fakeScanners();
@@ -432,8 +461,6 @@ test('vet: skillspector missing and git missing stop the run with their exit cod
   for (const [reason, code] of [['skillspector missing', 3], ['git missing', 2]]) {
     await assert.rejects(() => vet(REL, { cwd, deps: fakeScanners({ repoRefused: reason }).deps, progress: () => {} }), (e) => e instanceof Refused && e.message === reason && e.exitCode === code);
   }
-  const cmd = repo(t, handoff([line({ name: 'impeccable', source: '`npx -y impeccable skills install`', license: 'Apache-2.0', commit: '-' })]));
-  await assert.rejects(() => vet(REL, { cwd: cmd, deps: fakeScanners({ installedRefused: 'skillspector missing' }).deps, progress: () => {} }), (e) => e.exitCode === 3);
 });
 test('vet: progress goes to the progress sink, one line per pick', async (t) => {
   const { progress } = await vetRun(t, [line(), line({ name: 'second', source: 'o/second' })], fakeScanners());
@@ -452,7 +479,7 @@ function tmpSandbox(t) {
   return base;
 }
 const GOLDEN = JSON.parse(readFileSync(join(root, 'tests', 'fixtures', 'skillspector', 'golden', 'hostile-c.nobaseline.json'), 'utf8'));
-function fakeGit({ commit = SHA, skills = ['tdd-helper'], error = null } = {}) {
+function fakeGit({ commit = SHA, skills = ['tdd-helper'], error = null, reachable = 'refs/heads/main\n', tree = '' } = {}) {
   const calls = [];
   const run = async (argv) => {
     calls.push(argv);
@@ -463,7 +490,11 @@ function fakeGit({ commit = SHA, skills = ['tdd-helper'], error = null } = {}) {
     const op = argv[i];
     if (error) return { error };
     if (op === 'init') mkdirSync(argv.at(-1), { recursive: true });
-    if (op === 'checkout') for (const n of skills) { mkdirSync(join(dir, n), { recursive: true }); writeFileSync(join(dir, n, 'SKILL.md'), '---\nname: x\ndescription: x\n---\n# x\n'); }
+    if (op === 'clone' && argv.includes('--bare')) mkdirSync(argv.at(-1), { recursive: true });
+    if (op === 'config') return { exit: 1, stdout: '' };
+    if (op === 'for-each-ref') return { exit: 0, stdout: reachable };
+    if (op === 'ls-tree') return { exit: 0, stdout: tree };
+    if (op === 'checkout') for (const n of skills) { mkdirSync(join(dir, n), { recursive: true }); writeFileSync(join(dir, n, 'SKILL.md'), `---\nname: ${n}\ndescription: x\n---\n# ${n}\n`); }
     if (op === 'rev-parse') return { exit: 0, stdout: `${commit}\n` };
     return { exit: 0, stdout: '' };
   };
@@ -527,4 +558,150 @@ test('vet CLI: a plugin-only Handoff needs no scanner, prints one JSON document 
   assert.equal(j.mode, 'no-llm');
   assert.equal(j.picks[0].approvable, true);
   assert.equal(r.err.trim(), 'vet: 1/1 aico:ui-design not-scanned');
+});
+
+// ---------- vet wired to the real fetch: hash, reachability, links ----------
+const PASSING = JSON.parse(readFileSync(join(root, 'tests', 'fixtures', 'skillspector', 'golden', 'ref-missing.nobaseline.json'), 'utf8'));
+test('vet through the real fetch: a passing scan of a reachable commit is approvable and carries the 64-hex folder hash', async (t) => {
+  const { vet } = await mod();
+  tmpSandbox(t);
+  const cwd = repo(t, handoff([line()]));
+  const out = await vet(REL, { cwd, deps: realDeps(fakeGit(), PASSING), progress: () => {} });
+  assert.equal(out.picks[0].scan.verdict, 'pass');
+  assert.match(out.picks[0].hash, /^[0-9a-f]{64}$/);
+  assert.deepEqual([out.picks[0].approvable, out.picks[0].reject_code], [true, null]);
+});
+test('vet through the real fetch: a commit on no branch or tag is commit-not-in-repo and nothing is approvable', async (t) => {
+  const { vet } = await mod();
+  tmpSandbox(t);
+  const cwd = repo(t, handoff([line()]));
+  const out = await vet(REL, { cwd, deps: realDeps(fakeGit({ reachable: '' }), PASSING), progress: () => {} });
+  assert.deepEqual([out.picks[0].scan, out.picks[0].hash, out.picks[0].approvable, out.picks[0].reject_code], [null, null, false, 'commit-not-in-repo']);
+});
+test('vet through the real fetch: a link in the tree is scan-not-possible', async (t) => {
+  const { vet } = await mod();
+  tmpSandbox(t);
+  const cwd = repo(t, handoff([line()]));
+  const tree = `120000 blob ${'c'.repeat(40)}\tskills/x/run.sh\0`;
+  const out = await vet(REL, { cwd, deps: realDeps(fakeGit({ tree }), PASSING), progress: () => {} });
+  assert.deepEqual([out.picks[0].scan_refused, out.picks[0].approvable, out.picks[0].reject_code], ['candidate has a link or submodule', false, 'scan-not-possible']);
+});
+
+// ---------- check-install ----------
+const LOCK_HASH = 'a'.repeat(64);
+function lockRepo(t, content, { asLink = false } = {}) {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'aico-ci-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  if (content !== null) {
+    if (asLink) {
+      writeFileSync(join(base, 'real-lock.json'), content);
+      try { symlinkSync(join(base, 'real-lock.json'), join(base, 'skills-lock.json'), 'file'); } catch (e) {
+        if (['EPERM', 'EACCES', 'ENOSYS'].includes(e.code)) return null;
+        throw e;
+      }
+    } else {
+      writeFileSync(join(base, 'skills-lock.json'), content);
+    }
+  }
+  return base;
+}
+const lockOf = (skills) => JSON.stringify({ version: 1, skills });
+function checkCli(cwd, args) {
+  const r = spawnSync(process.execPath, [SCRIPT, 'check-install', ...args], { cwd, encoding: 'utf8', timeout: 30000, windowsHide: true });
+  let json = null;
+  try { json = JSON.parse(r.stdout); } catch { /* refusals are plain text */ }
+  return { code: r.status, out: r.stdout ?? '', err: r.stderr ?? '', json };
+}
+const ARGS = ['--name', 'tdd-helper', '--hash', LOCK_HASH, '--json'];
+test('check-install: a lock entry with the same hash is bound', (t) => {
+  const r = checkCli(lockRepo(t, lockOf({ 'tdd-helper': { source: 'o/r', computedHash: LOCK_HASH } })), ARGS);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.json, { v: 1, name: 'tdd-helper', bound: true, reason: null });
+});
+test('check-install: a different hash is hash-mismatch, and the flags may come in any order', (t) => {
+  const cwd = lockRepo(t, lockOf({ 'tdd-helper': { computedHash: 'b'.repeat(64) } }));
+  assert.deepEqual(checkCli(cwd, ARGS).json, { v: 1, name: 'tdd-helper', bound: false, reason: 'hash-mismatch' });
+  assert.deepEqual(checkCli(cwd, ['--json', '--hash', LOCK_HASH, '--name', 'tdd-helper']).json.reason, 'hash-mismatch');
+});
+test('check-install: no lock file is no-lock, with exit 0', (t) => {
+  const r = checkCli(lockRepo(t, null), ARGS);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.json, { v: 1, name: 'tdd-helper', bound: false, reason: 'no-lock' });
+});
+test('check-install: a lock that is a link is no-lock', (t) => {
+  const cwd = lockRepo(t, lockOf({ 'tdd-helper': { computedHash: LOCK_HASH } }), { asLink: true });
+  if (cwd === null) { t.skip('links unavailable here'); return; }
+  assert.equal(checkCli(cwd, ARGS).json.reason, 'no-lock');
+});
+test('check-install: a lock that is a folder, over 1 MiB, bad JSON, an array or without a skills object is no-lock', (t) => {
+  const dirLock = lockRepo(t, null);
+  mkdirSync(join(dirLock, 'skills-lock.json'));
+  assert.equal(checkCli(dirLock, ARGS).json.reason, 'no-lock', 'a folder');
+  const big = lockOf({ 'tdd-helper': { computedHash: LOCK_HASH, pad: 'x'.repeat(1024 * 1024) } });
+  assert.ok(big.length > 1024 * 1024);
+  assert.equal(checkCli(lockRepo(t, big), ARGS).json.reason, 'no-lock', 'over 1 MiB');
+  for (const text of ['{ not json', '', '[]', 'null', '"x"', '{}', '{"skills": []}', '{"skills": null}', '{"skills": "x"}', '{"version":1}']) {
+    assert.equal(checkCli(lockRepo(t, text), ARGS).json.reason, 'no-lock', JSON.stringify(text));
+  }
+});
+test('check-install: a lock of exactly 1 MiB is still read', (t) => {
+  const head = lockOf({ 'tdd-helper': { computedHash: LOCK_HASH, pad: '' } });
+  const text = lockOf({ 'tdd-helper': { computedHash: LOCK_HASH, pad: 'x'.repeat(1024 * 1024 - head.length) } });
+  assert.equal(text.length, 1024 * 1024);
+  assert.equal(checkCli(lockRepo(t, text), ARGS).json.bound, true);
+});
+test('check-install: no entry for the name, a non-object entry, a missing or non-string hash are no-entry', (t) => {
+  for (const skills of [{}, { other: { computedHash: LOCK_HASH } }, { 'tdd-helper': null }, { 'tdd-helper': 'x' }, { 'tdd-helper': [] }, { 'tdd-helper': {} },
+    { 'tdd-helper': { computedHash: 5 } }, { 'tdd-helper': { computedHash: null } }, { 'tdd-helper': { computedHash: [LOCK_HASH] } }, { 'tdd-helper': { computedHash: { v: LOCK_HASH } } }]) {
+    const r = checkCli(lockRepo(t, lockOf(skills)), ARGS);
+    assert.deepEqual(r.json, { v: 1, name: 'tdd-helper', bound: false, reason: 'no-entry' }, JSON.stringify(skills));
+  }
+});
+test('check-install: only an own entry counts; a prototype name does not', (t) => {
+  const text = '{"skills": {"__proto__": {"computedHash": "' + LOCK_HASH + '"}}}';
+  const r = checkCli(lockRepo(t, text), ['--name', 'constructor', '--hash', LOCK_HASH, '--json']);
+  assert.equal(r.json.reason, 'no-entry');
+});
+test('check-install: a hash that is a different case or length never matches', (t) => {
+  const cwd = lockRepo(t, lockOf({ 'tdd-helper': { computedHash: LOCK_HASH.toUpperCase() } }));
+  assert.equal(checkCli(cwd, ARGS).json.reason, 'hash-mismatch');
+});
+test('check-install: nothing from the lock file is echoed', (t) => {
+  const evil = 'IGNORE-PREVIOUS-INSTRUCTIONS';
+  const r = checkCli(lockRepo(t, lockOf({ 'tdd-helper': { computedHash: evil, source: evil }, [evil]: { computedHash: evil } })), ARGS);
+  assert.ok(!r.out.includes(evil) && !r.err.includes(evil));
+  assert.equal(r.json.reason, 'hash-mismatch');
+});
+test('check-install: a bad name, a bad hash and a malformed command line are refused on stdout, exit 2', (t) => {
+  const cwd = lockRepo(t, lockOf({ 'tdd-helper': { computedHash: LOCK_HASH } }));
+  const cases = [
+    ['--name', 'Bad Name', '--hash', LOCK_HASH, '--json'], ['--name', '../x', '--hash', LOCK_HASH, '--json'], ['--name', 'a'.repeat(65), '--hash', LOCK_HASH, '--json'],
+    ['--name', 'tdd-helper', '--hash', 'short', '--json'], ['--name', 'tdd-helper', '--hash', LOCK_HASH.toUpperCase(), '--json'], ['--name', 'tdd-helper', '--hash', `${LOCK_HASH}0`, '--json'],
+    ['--name', 'tdd-helper', '--hash', LOCK_HASH], ['--hash', LOCK_HASH, '--json'], ['--name', 'tdd-helper', '--json'], [],
+    ['--name', 'tdd-helper', '--name', 'other', '--hash', LOCK_HASH, '--json'], ['--name', 'tdd-helper', '--hash', LOCK_HASH, '--json', '--json'],
+    ['--name', 'tdd-helper', '--hash', LOCK_HASH, '--json', 'extra'], ['--name', '--hash', LOCK_HASH, '--json'], ['--name', 'tdd-helper', '--hash', LOCK_HASH, '--other', 'x', '--json'],
+  ];
+  for (const args of cases) {
+    const r = checkCli(cwd, args);
+    assert.equal(r.code, 2, args.join(' '));
+    assert.match(r.out, /^refused: usage/, args.join(' '));
+    assert.equal(r.json, null);
+    assert.equal(r.err, '');
+  }
+});
+test('check-install: it reads only <cwd>/skills-lock.json and changes nothing', (t) => {
+  const cwd = lockRepo(t, lockOf({ 'tdd-helper': { computedHash: LOCK_HASH } }));
+  const before = readFileSync(join(cwd, 'skills-lock.json'), 'utf8');
+  mkdirSync(join(cwd, 'sub'));
+  writeFileSync(join(cwd, 'sub', 'skills-lock.json'), lockOf({ 'tdd-helper': { computedHash: 'b'.repeat(64) } }));
+  assert.equal(checkCli(cwd, ARGS).json.bound, true);
+  assert.deepEqual(readdirSync(cwd).sort(), ['skills-lock.json', 'sub']);
+  assert.equal(readFileSync(join(cwd, 'skills-lock.json'), 'utf8'), before);
+});
+test('check-install: a lock whose lstat is a link is no-lock even when the link target holds a matching hash', async (t) => {
+  const { checkInstall } = await mod();
+  const cwd = lockRepo(t, lockOf({ 'tdd-helper': { computedHash: LOCK_HASH } }));
+  const asLink = () => ({ isFile: () => false, isSymbolicLink: () => true, size: 10 });
+  assert.equal(checkInstall('tdd-helper', LOCK_HASH, cwd, { lstat: asLink }).reason, 'no-lock');
+  assert.equal(checkInstall('tdd-helper', LOCK_HASH, cwd).bound, true);
 });

@@ -2,12 +2,13 @@
 // Lints the `## Recommended set` of a skill-researcher file and, with `vet`, scans each pick itself.
 // Usage: node skill-picks.mjs lint .company/work/<slug>/<NN>-skill-researcher.md   (cwd = product repo)
 //        node skill-picks.mjs vet  .company/work/<slug>/<NN>-skill-researcher.md --json
+//        node skill-picks.mjs check-install --name <skill> --hash <sha-256 hex> --json
 // Contract: docs/contracts/skill-recommendation.md. Offending text is never echoed; refusals go to stdout.
 import { lstatSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
-import { scanInstalled, settingsMode, vetCandidates } from './skillspector.mjs';
+import { NAME_RE, settingsMode, vetCandidates } from './skillspector.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const HANDOFF_RE = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/\d{2}-skill-researcher\.md$/;
@@ -15,7 +16,9 @@ const AREA_RE = /^(stack|product-type|company-type|design)$/;
 const LINE_RE = /^- area: (stack|product-type|company-type|design); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: pending$/;
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
-const NONE_LINE = '- (none: no candidate passed vetting and scan)';
+const NONE_LINE = '- (none: no candidate passed vetting)';
+const HASH_RE = /^[0-9a-f]{64}$/;
+const MAX_LOCK_BYTES = 1024 * 1024;
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_LINE_CHARS = 500;
 const MAX_ENTRIES = 5;
@@ -121,15 +124,15 @@ export function lint(arg, today = new Date(), cwd = process.cwd()) {
 const approvableScan = (s) => s.verdict === 'pass'
   || (s.verdict === 'findings' && s.blocking === false && s.counts.critical === 0 && s.counts.high === 0);
 
-const badness = (s) => (s.verdict === 'error' ? 3 : s.verdict === 'findings' ? (s.blocking ? 2 : 1) : 0);
-
-function judge(scan, refused) {
-  const out = { scan: scan ?? null, scan_refused: refused ?? null, approvable: false, reject_code: null };
+// A repo pick is approvable only with an approvable scan and the hash of the scanned folder.
+function judge(scan, refused, hash) {
+  const out = { scan: scan ?? null, scan_refused: refused ?? null, hash: typeof hash === 'string' && HASH_RE.test(hash) ? hash : null, approvable: false, reject_code: null };
   if (scan) {
-    out.approvable = approvableScan(scan);
-    if (!out.approvable) out.reject_code = scan.verdict === 'error' ? 'scan-error' : 'scan-findings';
+    if (!approvableScan(scan)) out.reject_code = scan.verdict === 'error' ? 'scan-error' : 'scan-findings';
+    else if (out.hash === null) out.reject_code = 'scan-not-possible';
+    else out.approvable = true;
   } else {
-    out.reject_code = 'scan-not-possible';
+    out.reject_code = refused === 'commit not in repo' ? 'commit-not-in-repo' : 'scan-not-possible';
   }
   return out;
 }
@@ -144,7 +147,6 @@ export async function vet(arg, { today = new Date(), cwd = process.cwd(), deps =
   const base = lint(arg, today, cwd);
   const mode = await (deps.settingsMode ?? settingsMode)();
   const vetRepo = deps.vetCandidates ?? vetCandidates;
-  const vetInstalled = deps.scanInstalled ?? scanInstalled;
   // One fetch per distinct (source, commit).
   const groups = new Map();
   for (const p of base.picks) {
@@ -164,20 +166,16 @@ export async function vet(arg, { today = new Date(), cwd = process.cwd(), deps =
   for (const p of base.picks) {
     let j;
     if (p.kind === 'plugin') {
-      j = { scan: null, scan_refused: null, approvable: true, reject_code: null };
+      j = { scan: null, scan_refused: null, hash: null, approvable: true, reject_code: null };
     } else if (p.kind === 'command') {
-      const r = await vetInstalled({ name: p.name, mode }, deps);
-      if (r.refused !== undefined) stopOn(r.refused);
-      // Two installed folders can share a name; the worst result decides.
-      j = r.refused !== undefined || r.results.length === 0
-        ? judge(null, r.refused ?? 'skill not found')
-        : judge(r.results.reduce((x, y) => (badness(y) > badness(x) ? y : x)));
+      // What an unpinned command fetches is unknown, so a scan of a same-named installed copy proves nothing.
+      j = judge(null, 'command source cannot be pinned');
     } else {
       const f = fetched.get(`${p.source}\n${p.commit}`);
       if (f.refused !== undefined) j = judge(null, f.refused);
       else {
         const one = f.results[p.name];
-        j = one.refused !== undefined ? judge(null, one.refused) : judge(one);
+        j = one.refused !== undefined ? judge(null, one.refused) : judge(one, null, f.hashes?.[p.name]);
       }
     }
     picks.push({ ...p, ...j });
@@ -186,12 +184,50 @@ export async function vet(arg, { today = new Date(), cwd = process.cwd(), deps =
   return { v: 1, area: base.area, mode, lines: base.lines, picks };
 }
 
+// Compares the hash `vet` recorded with the one the skills CLI wrote to skills-lock.json. Only a regular file within
+// the size cap is read, and nothing from it is echoed.
+export function checkInstall(name, hash, cwd = process.cwd(), { lstat = lstatSync } = {}) {
+  if (typeof name !== 'string' || !NAME_RE.test(name) || typeof hash !== 'string' || !HASH_RE.test(hash)) {
+    throw new Refused('usage: check-install --name <skill> --hash <sha-256 hex> --json');
+  }
+  const answer = (bound, reason) => ({ v: 1, name, bound, reason });
+  const file = resolve(cwd, 'skills-lock.json');
+  let lock;
+  try {
+    const st = lstat(file);
+    if (!st.isFile() || st.size > MAX_LOCK_BYTES) return answer(false, 'no-lock');
+    lock = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return answer(false, 'no-lock');
+  }
+  const skills = lock !== null && typeof lock === 'object' && !Array.isArray(lock) && Object.hasOwn(lock, 'skills') ? lock.skills : undefined;
+  if (skills === null || typeof skills !== 'object' || Array.isArray(skills)) return answer(false, 'no-lock');
+  const entry = Object.hasOwn(skills, name) ? skills[name] : undefined;
+  const computed = entry !== null && typeof entry === 'object' && !Array.isArray(entry) && Object.hasOwn(entry, 'computedHash') ? entry.computedHash : undefined;
+  if (typeof computed !== 'string') return answer(false, 'no-entry');
+  return computed === hash ? answer(true, null) : answer(false, 'hash-mismatch');
+}
+
+function checkInstallArgs(args) {
+  const seen = new Map();
+  let json = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--json' && !json) json = true;
+    else if ((a === '--name' || a === '--hash') && !seen.has(a) && typeof args[i + 1] === 'string' && !args[i + 1].startsWith('-')) seen.set(a, args[++i]);
+    else throw new Refused('usage: check-install --name <skill> --hash <sha-256 hex> --json');
+  }
+  if (!json || seen.size !== 2) throw new Refused('usage: check-install --name <skill> --hash <sha-256 hex> --json');
+  return [seen.get('--name'), seen.get('--hash')];
+}
+
 export async function main(args, opts = {}) {
   try {
     let out;
     if (args.length === 2 && args[0] === 'lint') out = lint(args[1], opts.today, opts.cwd);
     else if (args.length === 3 && args[0] === 'vet' && args[2] === '--json') out = await vet(args[1], opts);
-    else throw new Refused('usage: lint <handoff> | vet <handoff> --json');
+    else if (args[0] === 'check-install') out = checkInstall(...checkInstallArgs(args.slice(1)), opts.cwd);
+    else throw new Refused('usage: lint <handoff> | vet <handoff> --json | check-install --name <skill> --hash <sha-256 hex> --json');
     console.log(JSON.stringify(out));
     return 0;
   } catch (e) {

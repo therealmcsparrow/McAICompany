@@ -3,7 +3,7 @@
 // Everything the tool prints is untrusted: only allow-listed, type-checked fields are read, and no
 // free text from it reaches stdout or a report.
 import { execFile as nodeExecFile, spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,6 +55,12 @@ const QUARANTINE_MAX_DEPTH = 4;
 const QUARANTINE_PREFIX = 'aico-quarantine-';
 const QUARANTINE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const BASELINE_FILE = '.skillspector-baseline.yaml';
+const MAX_TREE_BYTES = 4 * 1024 * 1024;
+const MAX_SKILL_MD_BYTES = 1024 * 1024;
+const AUTOCRLF_RE = /^(true|false|input)$/;
+const EOL_RE = /^(lf|crlf|native)$/;
+const EOL_KEYS = ['core.autocrlf', 'core.eol'];
+const TREE_RECORD_RE = /^(\d{6}) (blob|tree|commit) ([0-9a-f]{40}|[0-9a-f]{64})\t[\s\S]+$/;
 
 const ENV_ALLOW = ['PATH', 'PATHEXT', 'SYSTEMROOT', 'SystemDrive', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE',
   'APPDATA', 'LOCALAPPDATA', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'LANG', 'LC_ALL'];
@@ -127,6 +133,7 @@ export function childEnv(env, kind) {
     if (typeof env.CLAUDE_CONFIG_DIR === 'string' && env.CLAUDE_CONFIG_DIR !== '') out.CLAUDE_CONFIG_DIR = env.CLAUDE_CONFIG_DIR;
     out.SKILLSPECTOR_PROVIDER = 'claude_cli';
   } else if (kind === 'git') {
+    // 'gitconfig' (the user-config reads) gets the plain allow-list, without the two overrides below.
     out.GIT_TERMINAL_PROMPT = '0';
     out.GIT_LFS_SKIP_SMUDGE = '1';
     out.GIT_CONFIG_NOSYSTEM = '1';
@@ -146,7 +153,27 @@ function checkRepo(owner, repo) {
   }
 }
 
-export function gitArgv(op, { owner, repo, dir, sha } = {}) {
+// `eol` is { autocrlf, eol }, each optional and checked again here; it goes on the clone or checkout call only.
+function eolFlags(eol) {
+  const flags = [];
+  const autocrlf = eol?.autocrlf;
+  const mode = eol?.eol;
+  if (autocrlf !== undefined) {
+    if (typeof autocrlf !== 'string' || !AUTOCRLF_RE.test(autocrlf)) throw new Error('bad eol');
+    flags.push('-c', `core.autocrlf=${autocrlf}`);
+  }
+  if (mode !== undefined) {
+    if (typeof mode !== 'string' || !EOL_RE.test(mode)) throw new Error('bad eol');
+    flags.push('-c', `core.eol=${mode}`);
+  }
+  return flags;
+}
+
+export function gitArgv(op, { owner, repo, dir, sha, eol, key } = {}) {
+  if (op === 'config') {
+    if (!EOL_KEYS.includes(key)) throw new Error('bad key');
+    return ['git', 'config', '--get', key];
+  }
   if (typeof dir !== 'string' || dir === '') throw new Error('bad dir');
   const hooks = path.join(path.dirname(dir), 'empty-hooks');
   const cfg = [];
@@ -154,14 +181,20 @@ export function gitArgv(op, { owner, repo, dir, sha } = {}) {
     'protocol.https.allow=always', 'transfer.fsckObjects=true']) cfg.push('-c', c);
   const base = ['git', ...cfg];
   if (op === 'init') return [...base, 'init', dir];
-  if (op === 'checkout') return [...base, '-C', dir, 'checkout', '--detach', 'FETCH_HEAD'];
+  if (op === 'checkout') return [...base, ...eolFlags(eol), '-C', dir, 'checkout', '--detach', 'FETCH_HEAD'];
   if (op === 'rev-parse') return [...base, '-C', dir, 'rev-parse', 'HEAD'];
-  if (op === 'clone' || op === 'fetch') {
+  if (op === 'ls-tree') return [...base, '-C', dir, 'ls-tree', '-r', '-z', '--full-tree', 'HEAD'];
+  if (op === 'for-each-ref') {
+    if (typeof sha !== 'string' || !SHA_RE.test(sha)) throw new Error('bad sha');
+    return [...base, '-C', dir, 'for-each-ref', '--contains', sha, '--count=1', '--format=%(refname)', 'refs/heads', 'refs/tags'];
+  }
+  if (op === 'clone' || op === 'refs-clone' || op === 'fetch') {
     checkRepo(owner, repo);
     const url = `https://github.com/${owner}/${repo}.git`;
     if (op === 'clone') {
-      return [...base, 'clone', '--depth', '1', '--single-branch', '--no-tags', '--no-recurse-submodules', '--', url, dir];
+      return [...base, ...eolFlags(eol), 'clone', '--depth', '1', '--single-branch', '--no-tags', '--no-recurse-submodules', '--', url, dir];
     }
+    if (op === 'refs-clone') return [...base, 'clone', '--bare', '--filter=tree:0', '--no-recurse-submodules', '--', url, dir];
     if (typeof sha !== 'string' || !SHA_RE.test(sha)) throw new Error('bad sha');
     return [...base, '-C', dir, 'fetch', '--depth', '1', '--no-tags', '--no-recurse-submodules', '--', url, sha];
   }
@@ -646,6 +679,128 @@ export function discoverQuarantine(repoReal) {
   return { found, skippedInvalid };
 }
 
+// ---------- bound skill folder ----------
+const UNREADABLE = Symbol('unreadable');
+const FRONTMATTER_RE = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+const KEY_LINE_RE = /^([A-Za-z0-9_-]+) *:( |$)/;
+const PLAIN_START_RE = /^[\s'"&*!|>%@`{}[\],?:#-]/;
+const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f-\u009f]/;
+
+// Reads `name` from SKILL.md frontmatter the way the skills CLI's YAML parser does, for the small subset that can be
+// read with certainty. Returns a string, undefined (no name declared) or UNREADABLE; whatever it cannot match fails closed.
+function nameFromFrontmatter(text) {
+  const m = FRONTMATTER_RE.exec(text);
+  if (m === null) return undefined;
+  const names = [];
+  let afterName = false;
+  for (const raw of m[1].split('\n')) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    if (line.trim() === '' && !line.includes('\t')) continue;
+    if (line.startsWith('#')) continue;
+    if (line.startsWith('\t')) return UNREADABLE;
+    if (line.startsWith(' ')) {
+      if (afterName) return UNREADABLE;
+      continue;
+    }
+    afterName = false;
+    const k = KEY_LINE_RE.exec(line);
+    if (k === null) return UNREADABLE;
+    if (k[1] === 'name') {
+      names.push(line.slice(line.indexOf(':') + 1).replace(/^ +| +$/g, ''));
+      afterName = true;
+    }
+  }
+  if (names.length === 0) return undefined;
+  if (names.length > 1) return UNREADABLE;
+  const value = names[0];
+  if (value === '') return undefined;
+  let name;
+  const quoted = value[0] === "'" ? /^'([^']*)'(?: +#.*| *)$/.exec(value) : value[0] === '"' ? /^"([^"\\]*)"(?: +#.*| *)$/.exec(value) : null;
+  if (value[0] === "'" || value[0] === '"') {
+    if (quoted === null) return UNREADABLE;
+    name = quoted[1];
+  } else {
+    if (PLAIN_START_RE.test(value)) return UNREADABLE;
+    const cut = value.indexOf(' #');
+    name = (cut === -1 ? value : value.slice(0, cut)).replace(/ +$/, '');
+    if (name.includes(': ') || name.endsWith(':') || name.includes('\t')) return UNREADABLE;
+  }
+  return CONTROL_CHARS_RE.test(name) ? UNREADABLE : name;
+}
+
+export function readSkillName(file) {
+  try {
+    if (fs.statSync(file).size > MAX_SKILL_MD_BYTES) return UNREADABLE;
+    return nameFromFrontmatter(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return UNREADABLE;
+  }
+}
+export { UNREADABLE };
+
+// Every file named skill.md (any case) in the tree, with the folder it sits in relative to the repo.
+function findSkillFiles(repoReal) {
+  const out = [];
+  const stack = [repoReal];
+  let visited = 0;
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let names;
+    try { names = fs.readdirSync(dir); } catch { throw new Refusal('candidate too large'); }
+    for (const n of names) {
+      if (n === '.git' && dir === repoReal) continue;
+      if (++visited > MAX_ENTRIES) throw new Refusal('candidate too large');
+      const full = path.join(dir, n);
+      let st;
+      try { st = fs.lstatSync(full); } catch { throw new Refusal('candidate too large'); }
+      if (st.isDirectory()) stack.push(full);
+      else if (st.isFile() && n.toLowerCase() === 'skill.md') out.push({ file: full, base: n, dir, rel: path.relative(repoReal, dir) });
+    }
+  }
+  return out;
+}
+
+// The one folder the skills CLI can pick for `-s <name>`, or a refusal.
+export function boundSkillFolder(repoReal, name) {
+  if (typeof name !== 'string' || !NAME_RE.test(name)) throw new Refusal(BAD_NAME);
+  const files = findSkillFiles(repoReal).map((f) => ({ ...f, declared: readSkillName(f.file) }));
+  if (files.some((f) => f.rel === '')) throw new Refusal('skill not bound (root skill)');
+  if (files.some((f) => f.declared === UNREADABLE)) throw new Refusal('skill not bound (unreadable name)');
+  const same = files.filter((f) => typeof f.declared === 'string' && f.declared.toLowerCase() === name);
+  if (same.length === 0) throw new Refusal('skill not in repo');
+  if (same.length > 1) throw new Refusal('skill not bound (same name twice)');
+  const [one] = same;
+  const depth = one.rel.split(path.sep).length;
+  if (one.base !== 'SKILL.md' || depth < 1 || depth > QUARANTINE_MAX_DEPTH || path.basename(one.dir) !== name || one.declared !== name) {
+    throw new Refusal('skill not bound (name differs from folder)');
+  }
+  return { dir: one.dir };
+}
+
+// The skills CLI's folder hash (computeSkillFolderHash), over the same files in the same order.
+export function skillFolderHash(dir) {
+  const files = [];
+  const collect = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === '.git' || entry.name === 'node_modules') continue;
+        collect(full);
+      } else if (entry.isFile()) {
+        files.push({ relativePath: path.relative(dir, full).split('\\').join('/'), full });
+      }
+    }
+  };
+  collect(dir);
+  files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  const hash = createHash('sha256');
+  for (const f of files) {
+    hash.update(f.relativePath);
+    hash.update(fs.readFileSync(f.full));
+  }
+  return hash.digest('hex');
+}
+
 export function openQuarantine(id, { getuid = defaultUid } = {}) {
   const q = quarantineDir(id);
   let st;
@@ -654,6 +809,37 @@ export function openQuarantine(id, { getuid = defaultUid } = {}) {
   const repo = realOrNull(path.join(q, 'repo'));
   if (repo === null || !inside([realOrNull(q) ?? q], repo)) throw new Refusal('quarantine not found');
   return repo;
+}
+
+// `git ls-tree` output must parse in full; a link (120000) or a submodule (160000) refuses the candidate.
+function checkTreeRecords(stdout) {
+  const records = String(stdout).split('\0');
+  if (records[records.length - 1] === '') records.pop();
+  let linked = false;
+  for (const rec of records) {
+    const m = TREE_RECORD_RE.exec(rec);
+    if (m === null) throw new Refusal('fetch failed');
+    if (m[1] === '120000' || m[1] === '160000') linked = true;
+  }
+  if (linked) throw new Refusal('candidate has a link or submodule');
+}
+
+// The two settings the skills CLI would inherit from the user's git config. Each value is checked against an
+// allow-list; anything else, an unset key or an error passes nothing.
+async function readEolConfig(run, kill, cwd, deadline) {
+  const env = childEnv(process.env, 'gitconfig');
+  const eol = {};
+  for (const key of EOL_KEYS) {
+    const left = deadline - Date.now();
+    if (left <= 0) break;
+    const r = await run(gitArgv('config', { key }), { env, cwd, timeoutMs: Math.min(PROBE_MS, left), maxBytes: 4096 });
+    await stopTree(r, kill);
+    if (r.error || r.timedOut || r.oversize || r.exit !== 0) continue;
+    const v = String(r.stdout).trim().toLowerCase();
+    if (key === 'core.autocrlf' && AUTOCRLF_RE.test(v)) eol.autocrlf = v;
+    if (key === 'core.eol' && EOL_RE.test(v)) eol.eol = v;
+  }
+  return eol;
 }
 
 export async function fetchRepo(owner, repo, ref, deps = {}) {
@@ -672,26 +858,39 @@ export async function fetchRepo(owner, repo, ref, deps = {}) {
   try {
     fs.mkdirSync(path.join(q, 'empty-hooks'));
     const target = path.join(q, 'repo');
+    const refsDir = path.join(q, 'refs.git');
     const env = childEnv(process.env, 'git');
     const deadline = Date.now() + FETCH_MS;
-    const git = async (argv) => {
+    const git = async (argv, maxBytes = 1024 * 1024) => {
       const left = deadline - Date.now();
       if (left <= 0) return { timedOut: true };
-      const r = await run(argv, { env, cwd: q, timeoutMs: left, maxBytes: 1024 * 1024 });
+      const r = await run(argv, { env, cwd: q, timeoutMs: left, maxBytes });
       await stopTree(r, kill);
       return r;
     };
-    const steps = ref === undefined
-      ? [gitArgv('clone', { owner, repo, dir: target })]
-      : [gitArgv('init', { dir: target }), gitArgv('fetch', { owner, repo, dir: target, sha: ref }), gitArgv('checkout', { dir: target })];
-    for (const argv of steps) {
+    const must = async (argv) => {
       const r = await git(argv);
       if (r.error?.code === 'ENOENT') throw new Refusal('git missing');
       if (r.error || r.timedOut || r.oversize || r.exit !== 0) throw new Refusal('fetch failed');
+    };
+    if (ref !== undefined) {
+      // GitHub serves a fork's commit under the upstream name, so the commit must sit on a branch or tag of this repo.
+      await must(gitArgv('refs-clone', { owner, repo, dir: refsDir }));
+      const seen = await git(gitArgv('for-each-ref', { dir: refsDir, sha: ref }));
+      const first = !seen.error && !seen.timedOut && !seen.oversize && seen.exit === 0 ? String(seen.stdout).split('\n')[0].trim() : '';
+      if (!/^refs\/(heads|tags)\/\S+$/.test(first)) throw new Refusal('commit not in repo');
     }
+    const eol = await readEolConfig(run, kill, q, deadline);
+    const steps = ref === undefined
+      ? [gitArgv('clone', { owner, repo, dir: target, eol })]
+      : [gitArgv('init', { dir: target }), gitArgv('fetch', { owner, repo, dir: target, sha: ref }), gitArgv('checkout', { dir: target, eol })];
+    for (const argv of steps) await must(argv);
     const head = await git(gitArgv('rev-parse', { dir: target }));
     const commit = !head.error && head.exit === 0 ? String(head.stdout).trim() : '';
     if (!SHA_RE.test(commit) || (ref !== undefined && commit !== ref)) throw new Refusal('fetch failed');
+    const tree = await git(gitArgv('ls-tree', { dir: target }), MAX_TREE_BYTES);
+    if (tree.error || tree.timedOut || tree.oversize || tree.exit !== 0) throw new Refusal('fetch failed');
+    checkTreeRecords(tree.stdout);
     const repoReal = realOrNull(target);
     if (repoReal === null) throw new Refusal('fetch failed');
     const w = walk(repoReal, { maxEntries: limits.entries, maxDepth: 64, skipGit: true, sumBytes: true });
@@ -797,7 +996,7 @@ export function renderReport(output, { date = new Date(), scopeLabel } = {}) {
   const lines = [
     '# SkillSpector scan',
     `- Date: ${date.toISOString()}; tool: skillspector ${version}${commit}; mode: ${mode}; scope: ${scope}`,
-    `- Network: package names and versions from dependency files go to OSV.dev${mode === 'claude_cli' ? '; skill text goes to Anthropic (claude_cli)' : ''}`,
+    `- Network: package names, versions and ecosystems from dependency files, plus the ids of any vulnerabilities found, go to OSV.dev${mode === 'claude_cli' ? '; skill text goes to Anthropic (claude_cli)' : ''}`,
     '## Summary',
     `- pass ${n(sum.pass)}, findings ${n(sum.findings)}, error ${n(sum.error)}`,
     '## Skills',
@@ -930,9 +1129,15 @@ async function runScan(flags, deps = {}) {
   let rootsRefused = 0;
   if (a.quarantine !== undefined) {
     const repoReal = openQuarantine(a.quarantine, deps);
-    const { found, skippedInvalid: bad } = discoverQuarantine(repoReal);
-    skippedInvalid = bad;
-    targets = [...found].filter(([n]) => a.skill === undefined || n === a.skill).map(([name, dir]) => (
+    let entries;
+    if (a.skill !== undefined) {
+      entries = [[a.skill, boundSkillFolder(repoReal, a.skill).dir]];
+    } else {
+      const { found, skippedInvalid: bad } = discoverQuarantine(repoReal);
+      skippedInvalid = bad;
+      entries = [...found];
+    }
+    targets = entries.map(([name, dir]) => (
       inside([repoReal], realOrNull(dir) ?? dir)
         ? { name, scope: 'quarantine', root: 'quarantine', dir }
         : { name, scope: 'quarantine', root: 'quarantine', failure: 'outside-roots' }));
@@ -964,8 +1169,9 @@ function parseRepo(source) {
   return parts;
 }
 
-// Pre-approval scan: fetch the exact commit into a quarantine, scan the named skills there,
-// and always remove the quarantine. Returns { commit, results: { <name>: result | { refused } } } or { refused }.
+// Pre-approval scan: fetch the exact commit into a quarantine, scan the one folder the skills CLI would install for
+// each name, and always remove the quarantine. Returns
+// { commit, results: { <name>: result | { refused } }, hashes: { <name>: <sha-256 hex> } } or { refused }.
 export async function vetCandidates({ source, commit, names, mode } = {}, deps = {}) {
   try {
     const [owner, repo] = parseRepo(source);
@@ -980,15 +1186,21 @@ export async function vetCandidates({ source, commit, names, mode } = {}, deps =
     const q = await fetchRepo(owner, repo, commit, deps);
     try {
       const repoReal = openQuarantine(q.id, deps);
-      const { found } = discoverQuarantine(repoReal);
       const results = Object.create(null);
+      const hashes = Object.create(null);
       for (const name of new Set(names)) {
-        const dir = found.get(name);
-        results[name] = dir === undefined
-          ? { refused: 'skill not in repo' }
-          : await scanOne(dir, { mode: effective, scope: 'quarantine', root: 'quarantine', name, runTool: deps.runTool, killTree: deps.killTree });
+        let bound;
+        try {
+          bound = boundSkillFolder(repoReal, name);
+          hashes[name] = skillFolderHash(bound.dir);
+        } catch (e) {
+          if (!(e instanceof Refusal)) throw e;
+          results[name] = { refused: e.message };
+          continue;
+        }
+        results[name] = await scanOne(bound.dir, { mode: effective, scope: 'quarantine', root: 'quarantine', name, runTool: deps.runTool, killTree: deps.killTree });
       }
-      return { commit: q.commit, results };
+      return { commit: q.commit, results, hashes };
     } finally {
       cleanQuarantine(q.id, deps);
     }
@@ -1002,7 +1214,7 @@ export async function vetCandidate({ source, commit, name, mode } = {}, deps = {
   const r = await vetCandidates({ source, commit, names: [name], mode }, deps);
   if (r.refused !== undefined) return { refused: r.refused };
   const one = r.results[name];
-  return one.refused !== undefined ? { refused: one.refused } : { commit: r.commit, result: one };
+  return one.refused !== undefined ? { refused: one.refused } : { commit: r.commit, hash: r.hashes[name], result: one };
 }
 
 // Scans an installed skill by name in every scope; returns { results } or { refused }.

@@ -18,6 +18,7 @@ import {
   cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
   rmSync, symlinkSync, utimesSync, writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -851,7 +852,7 @@ async function waitGone(pid) {
 }
 
 // ---------- project root containment ----------
-test('B1 a project .agents/skills that links outside is refused: nothing listed, nothing scanned', async (t) => {
+test('project root: a project .agents/skills that links outside is refused: nothing listed, nothing scanned', async (t) => {
   const { main } = await mod();
   const sb = sandbox(t);
   const outside = join(sb.base, 'outside');
@@ -867,7 +868,7 @@ test('B1 a project .agents/skills that links outside is refused: nothing listed,
   assert.equal(out.roots_refused, 1);
   assert.equal(s.calls.length, 0, 'the tool never saw the outside folder');
 });
-test('B1 a project .claude that is itself a link is refused, even though skills/ inside it is a real folder', async (t) => {
+test('project root: a project .claude that is itself a link is refused, even though skills/ inside it is a real folder', async (t) => {
   const { main } = await mod();
   const sb = sandbox(t);
   const outside = join(sb.base, 'outside-claude');
@@ -883,7 +884,7 @@ test('B1 a project .claude that is itself a link is refused, even though skills/
   assert.equal(out.results.length, 1);
   assert.equal(s.calls.length, 1);
 });
-test('B1 a project .claude/skills that links to a folder inside the project is still refused (a link at the root)', async (t) => {
+test('project root: a project .claude/skills that links to a folder inside the project is still refused (a link at the root)', async (t) => {
   const { projectRoots } = await mod();
   const sb = sandbox(t);
   makeSkill(join(sb.project, 'vendor', 'skills', 'inner'));
@@ -893,7 +894,7 @@ test('B1 a project .claude/skills that links to a folder inside the project is s
   assert.equal(r.refused, 1);
   assert.deepEqual(r.roots.map((x) => x.label), ['agents']);
 });
-test('B1 a root whose real path leaves the project is refused even when no link shows', async () => {
+test('project root: a root whose real path leaves the project is refused even when no link shows', async () => {
   const { projectRoots } = await mod();
   const noLinks = () => ({ isSymbolicLink: () => false });
   const r = projectRoots('/work/project', {
@@ -903,18 +904,18 @@ test('B1 a root whose real path leaves the project is refused even when no link 
   assert.equal(r.refused, 2);
   assert.deepEqual(r.roots, []);
 });
-test('B1 a root equal to the project folder is not strictly inside and is refused', async () => {
+test('project root: a root equal to the project folder is not strictly inside and is refused', async () => {
   const { projectRoots } = await mod();
   const r = projectRoots('/work/project', { lstat: () => ({ isSymbolicLink: () => false }), realpath: () => '/work/project' });
   assert.equal(r.refused, 2);
 });
-test('B1 a lstat failure on an existing root fails closed', async () => {
+test('project root: a lstat failure on an existing root fails closed', async () => {
   const { projectRoots } = await mod();
   const r = projectRoots('/work/project', { lstat: () => { throw new Error('EACCES'); }, realpath: (p) => p });
   assert.equal(r.refused, 2);
   assert.deepEqual(r.roots, []);
 });
-test('B1 real project folders without links are used and nothing is refused; a missing root is skipped, not counted', async (t) => {
+test('project root: real project folders without links are used and nothing is refused; a missing root is skipped, not counted', async (t) => {
   const { projectRoots } = await mod();
   const sb = sandbox(t);
   rmSync(join(sb.project, '.agents'), { recursive: true });
@@ -922,7 +923,7 @@ test('B1 real project folders without links are used and nothing is refused; a m
   assert.equal(r.refused, 0);
   assert.deepEqual(r.roots.map((x) => x.label), ['claude']);
 });
-test('B1 global roots stay trusted even when linked', async (t) => {
+test('project root: global roots stay trusted even when linked', async (t) => {
   const { main } = await mod();
   const sb = sandbox(t);
   const elsewhere = join(sb.base, 'shared-skills');
@@ -1039,29 +1040,45 @@ function tmpSandbox(t) {
   return base;
 }
 const quarantines = (base) => readdirSync(base).filter((n) => n.startsWith('aico-quarantine-'));
-function fakeGit({ commit = SHA40, populate = () => {}, fail = null, error = null, hang = false } = {}) {
+// A scripted git. `reachable` is the for-each-ref answer, `tree` the ls-tree output, `config` the user's git config.
+function fakeGit({ commit = SHA40, populate = () => {}, fail = null, error = null, hang = false, reachable = 'refs/heads/main\n', tree = '', config = {} } = {}) {
   const calls = [];
+  const envs = [];
   const kills = [];
-  const run = async (argv) => {
-    calls.push(argv);
+  const opOf = (argv) => {
     let i = 1;
     while (argv[i] === '-c') i += 2;
     let dir = null;
     if (argv[i] === '-C') { dir = argv[i + 1]; i += 2; }
-    const op = argv[i];
+    const op = argv[i] === 'clone' && argv.includes('--bare') ? 'refs-clone' : argv[i];
+    return { op, dir };
+  };
+  const run = async (argv, opts) => {
+    calls.push(argv);
+    envs.push(opts?.env);
+    const { op, dir } = opOf(argv);
     if (error) return { error };
     if (hang) return { exit: null, stdout: '', pid: 4242, timedOut: true };
     if (fail === op) return { exit: 128, stdout: '' };
+    if (op === 'config') {
+      const v = config[argv[3]];
+      return v === undefined ? { exit: 1, stdout: '' } : { exit: 0, stdout: `${v}\n` };
+    }
+    if (op === 'refs-clone') { mkdirSync(argv.at(-1), { recursive: true }); return { exit: 0, stdout: '' }; }
+    if (op === 'for-each-ref') return { exit: 0, stdout: reachable };
     if (op === 'clone') { const target = argv.at(-1); mkdirSync(target, { recursive: true }); populate(target); }
     if (op === 'init') mkdirSync(argv.at(-1), { recursive: true });
     if (op === 'checkout') populate(dir);
     if (op === 'rev-parse') return { exit: 0, stdout: `${typeof commit === 'function' ? commit() : commit}\n` };
+    if (op === 'ls-tree') return { exit: 0, stdout: tree };
     return { exit: 0, stdout: '' };
   };
-  const ops = () => calls.map((a) => { let i = 1; while (a[i] === '-c') i += 2; if (a[i] === '-C') i += 2; return a[i]; });
-  return { calls, kills, run, ops, killTree: async (pid) => { kills.push(pid); } };
+  const ops = () => calls.map((a) => opOf(a).op);
+  const withoutConfig = () => ops().filter((o) => o !== 'config');
+  return { calls, envs, kills, run, ops, withoutConfig, killTree: async (pid) => { kills.push(pid); } };
 }
-const skillIn = (root, ...segs) => { const d = join(root, ...segs); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'SKILL.md'), '---\nname: x\ndescription: x\n---\n# x\n'); };
+// A skill folder whose SKILL.md declares the folder's own name.
+const skillIn = (root, ...segs) => { const d = join(root, ...segs); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'SKILL.md'), FM(segs.at(-1))); };
 const gdeps = (g, extra = {}) => ({ runCommand: g.run, killTree: g.killTree, ...extra });
 
 test('quarantine: skills are found at depth 1 to 4 only, .git is skipped, invalid names are counted, duplicates listed once', async (t) => {
@@ -1083,15 +1100,15 @@ test('quarantine: skills are found at depth 1 to 4 only, .git is skipped, invali
   assert.deepEqual([...q.skills].sort(), ['four', 'one', 'three', 'two']);
   assert.equal(q.skipped_invalid, 1);
   assert.equal(q.v, 1);
-  assert.deepEqual(g.ops(), ['clone', 'rev-parse']);
+  assert.deepEqual(g.withoutConfig(), ['clone', 'rev-parse', 'ls-tree']);
   assert.deepEqual(quarantines(base), [`aico-quarantine-${q.id}`]);
 });
-test('quarantine: with --ref the order is init, fetch, checkout, rev-parse and the commit must equal the ref', async (t) => {
+test('quarantine: with --ref the order is the reachability check, init, fetch, checkout, rev-parse, ls-tree, and the commit must equal the ref', async (t) => {
   const { fetchRepo } = await mod();
   tmpSandbox(t);
   const g = fakeGit({ commit: SHA40, populate: (repo) => skillIn(repo, 'only') });
   const q = await fetchRepo('owner', 'repo', SHA40, gdeps(g));
-  assert.deepEqual(g.ops(), ['init', 'fetch', 'checkout', 'rev-parse']);
+  assert.deepEqual(g.withoutConfig(), ['refs-clone', 'for-each-ref', 'init', 'fetch', 'checkout', 'rev-parse', 'ls-tree']);
   assert.deepEqual(q.skills, ['only']);
 });
 test('quarantine: a commit that differs from --ref is fetch failed and the folder is removed', async (t) => {
@@ -1124,14 +1141,14 @@ test('quarantine: a failing git step and a timed-out git step are fetch failed; 
   await assert.rejects(() => fetchRepo('owner', 'repo', SHA40, gdeps(fakeGit({ fail: 'fetch' }))), /fetch failed/);
   const hung = fakeGit({ hang: true });
   await assert.rejects(() => fetchRepo('owner', 'repo', undefined, gdeps(hung)), /fetch failed/);
-  assert.deepEqual(hung.kills, [4242]);
+  assert.ok(hung.kills.length > 0 && hung.kills.every((pid) => pid === 4242), 'every timed-out tree is killed');
   assert.deepEqual(quarantines(base), []);
 });
 test('quarantine: the size bound is exact (equal passes, one byte more is refused)', async (t) => {
   const { fetchRepo } = await mod();
   const base = tmpSandbox(t);
   const sized = (n) => fakeGit({ populate: (repo) => { skillIn(repo, 's'); writeFileSync(join(repo, 'big.bin'), Buffer.alloc(n)); } });
-  const skillMd = '---\nname: x\ndescription: x\n---\n# x\n'.length;
+  const skillMd = FM('s').length;
   const limits = { bytes: 1000 + skillMd, entries: 100 };
   await fetchRepo('owner', 'repo', undefined, gdeps(sized(1000), { limits }));
   await assert.rejects(() => fetchRepo('owner', 'repo', undefined, gdeps(sized(1001), { limits })), /candidate too large/);
@@ -1223,7 +1240,7 @@ test('quarantine: scan --quarantine scans every skill, or only --skill, and labe
   const one = await main(['scan', '--quarantine', q.id, '--skill', 'beta', '--mode', 'no-llm', '--json'], deps);
   assert.deepEqual(one.results.map((r) => r.name), ['beta']);
   assert.equal(s.calls.length, 3);
-  await assert.rejects(() => main(['scan', '--quarantine', q.id, '--skill', 'gamma', '--mode', 'no-llm', '--json'], deps), /skill not found/);
+  await assert.rejects(() => main(['scan', '--quarantine', q.id, '--skill', 'gamma', '--mode', 'no-llm', '--json'], deps), /skill not in repo/);
   await assert.rejects(() => main(['scan', '--quarantine', 'aaaaaaaaaaaa', '--mode', 'no-llm', '--json'], deps), /quarantine not found/);
   assert.deepEqual(await main(['clean', '--quarantine', q.id], deps), { v: 1, removed: true });
   assert.deepEqual(quarantines(base), []);
@@ -1240,9 +1257,10 @@ test('vetCandidate fetches the exact commit, scans that one skill, and always cl
   assert.equal(r.commit, SHA40);
   assert.equal(r.result.name, 'wanted');
   assert.equal(r.result.scope, 'quarantine');
+  assert.match(r.hash, /^[0-9a-f]{64}$/);
   assert.equal(r.result.verdict, 'findings');
   assert.equal(s.calls.length, 1, 'only the named skill is scanned');
-  assert.deepEqual(g.ops(), ['init', 'fetch', 'checkout', 'rev-parse']);
+  assert.deepEqual(g.withoutConfig(), ['refs-clone', 'for-each-ref', 'init', 'fetch', 'checkout', 'rev-parse', 'ls-tree']);
   assert.deepEqual(quarantines(base), []);
 });
 test('vetCandidate cleans even when the scan throws', async (t) => {
@@ -1540,10 +1558,11 @@ const lineOf = (md, prefix) => md.split('\n').find((l) => l.startsWith(prefix));
 test('report has the Network line for no-llm, and adds Anthropic for claude_cli', async () => {
   const { renderReport } = await mod();
   const a = renderReport(outputOf([]), { date: DATE });
-  assert.ok(a.split('\n').includes('- Network: package names and versions from dependency files go to OSV.dev'));
+  assert.ok(a.split('\n').includes('- Network: package names, versions and ecosystems from dependency files, plus the ids of any vulnerabilities found, go to OSV.dev'));
   const b = renderReport(outputOf([], { mode: 'claude_cli' }), { date: DATE });
-  assert.ok(b.split('\n').includes('- Network: package names and versions from dependency files go to OSV.dev; skill text goes to Anthropic (claude_cli)'));
+  assert.ok(b.split('\n').includes('- Network: package names, versions and ecosystems from dependency files, plus the ids of any vulnerabilities found, go to OSV.dev; skill text goes to Anthropic (claude_cli)'));
   assert.ok(!/nothing leaves/i.test(a));
+  assert.ok(!/package names and versions/.test(a), 'never the shorter two-kind wording');
 });
 const CANNOT_TRUST = ['SkillSpector gave a result aico cannot trust', 'run /aico:skillspector install to check the pinned version, then scan again'];
 const WHY_NEXT = [
@@ -1655,4 +1674,495 @@ test('e2e: the CLI writes progress to stderr only and keeps stdout one JSON docu
   assert.equal(r.code, 0, r.err);
   assert.equal(JSON.parse(r.out).results[0].verdict, 'pass');
   assert.deepEqual(r.err.trim().split(/\r?\n/), ['scan: 1 skills, about 15 s', 'scan: 1/1 ref-missing pass']);
+});
+
+// ---------- real git, built offline: the three attacks on the bound scan ----------
+const HAVE_GIT = spawnSync('git', ['--version'], { windowsHide: true }).status === 0;
+const GIT_IDENT = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false'];
+function git(cwd, args, input) {
+  const r = spawnSync('git', [...GIT_IDENT, ...args], { cwd, encoding: 'utf8', input, windowsHide: true });
+  assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
+  return r.stdout.trim();
+}
+const FM = (name) => `---\nname: ${name}\ndescription: fixture\n---\n# ${name}\n`;
+// A local repository standing in for GitHub. `files` is { path: text }; `links` is { path: [mode, target] } written
+// as raw index entries, so no working-tree link is needed.
+function sourceRepo(t, files, { links = {}, onlyOffBranch = false } = {}) {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'aico-src-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  git(dir, ['init', '-q', '-b', 'main']);
+  git(dir, ['config', 'uploadpack.allowAnySHA1InWant', 'true']);
+  writeFileSync(join(dir, 'README.md'), 'base\n');
+  git(dir, ['add', '.']);
+  git(dir, ['commit', '-q', '-m', 'base']);
+  if (onlyOffBranch) git(dir, ['checkout', '-q', '--detach']);
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), text);
+  }
+  git(dir, ['add', '.']);
+  for (const [rel, [mode, target]] of Object.entries(links)) {
+    const oid = mode === '160000' ? target : git(dir, ['hash-object', '-w', '--stdin'], target);
+    git(dir, ['update-index', '--add', '--cacheinfo', `${mode},${oid},${rel}`]);
+  }
+  git(dir, ['commit', '-q', '-m', 'content']);
+  const sha = git(dir, ['rev-parse', 'HEAD']);
+  if (onlyOffBranch) git(dir, ['checkout', '-q', 'main']);
+  return { dir, sha };
+}
+// Runs the module's git calls against a local repository: the GitHub URL becomes the local path, and the options a
+// local transport cannot use are dropped.
+function localRunner(src, mod2) {
+  return async (argv, opts) => {
+    const out = [];
+    for (let i = 0; i < argv.length; i++) {
+      const a = argv[i];
+      if (a === 'https://github.com/owner/repo.git') out.push(src);
+      else if (a === 'protocol.allow=never') out.push('protocol.allow=always');
+      else if (a === '--filter=tree:0') out.push('--no-local');
+      else out.push(a);
+    }
+    return mod2.runCommand(out, opts);
+  };
+}
+async function vetLocal(t, src, name, extra = {}) {
+  const m = await mod();
+  const base = tmpSandbox(t);
+  const s = stub(ok(golden('hostile-c.nobaseline.json')));
+  const r = await m.vetCandidate({ source: 'owner/repo', commit: src.sha, name, mode: 'no-llm' },
+    { detect: async () => INFO, runTool: s.runTool, killTree: s.killTree, runCommand: localRunner(src.dir, m), ...extra });
+  return { r, s, base };
+}
+
+test('attack: a folder named like the skill but declaring another name, beside the real owner of the name, is refused unscanned', { skip: !HAVE_GIT && 'git not installed' }, async (t) => {
+  const src = sourceRepo(t, { 'skills/find-skills/SKILL.md': FM('decoy'), 'skills/aaa/SKILL.md': FM('find-skills') });
+  const { r, s, base } = await vetLocal(t, src, 'find-skills');
+  assert.deepEqual(r, { refused: 'skill not bound (name differs from folder)' });
+  assert.equal(s.calls.length, 0, 'nothing is scanned');
+  assert.deepEqual(quarantines(base), []);
+});
+test('attack: a SKILL.md at the repo root hides the skills folder, so nothing is scanned', { skip: !HAVE_GIT && 'git not installed' }, async (t) => {
+  const src = sourceRepo(t, { 'SKILL.md': FM('find-skills'), 'skills/find-skills/SKILL.md': FM('find-skills') });
+  const { r, s } = await vetLocal(t, src, 'find-skills');
+  assert.deepEqual(r, { refused: 'skill not bound (root skill)' });
+  assert.equal(s.calls.length, 0);
+});
+test('attack: a committed link (mode 120000) is refused although core.symlinks=false checks it out as a file', { skip: !HAVE_GIT && 'git not installed' }, async (t) => {
+  const src = sourceRepo(t, { 'skills/x/SKILL.md': FM('x') }, { links: { 'skills/x/run.sh': ['120000', '../../evil/payload.sh'] } });
+  const { r, s, base } = await vetLocal(t, src, 'x');
+  assert.deepEqual(r, { refused: 'candidate has a link or submodule' });
+  assert.equal(s.calls.length, 0);
+  assert.deepEqual(quarantines(base), []);
+});
+test('attack: a submodule entry (mode 160000) is refused', { skip: !HAVE_GIT && 'git not installed' }, async (t) => {
+  const src = sourceRepo(t, { 'skills/x/SKILL.md': FM('x') }, { links: { 'skills/x/vendor': ['160000', 'b'.repeat(40)] } });
+  const { r } = await vetLocal(t, src, 'x');
+  assert.deepEqual(r, { refused: 'candidate has a link or submodule' });
+});
+test('attack: a commit that sits on no branch or tag of the named repo is refused', { skip: !HAVE_GIT && 'git not installed' }, async (t) => {
+  const src = sourceRepo(t, { 'skills/x/SKILL.md': FM('x') }, { onlyOffBranch: true });
+  const { r, s, base } = await vetLocal(t, src, 'x');
+  assert.deepEqual(r, { refused: 'commit not in repo' });
+  assert.equal(s.calls.length, 0);
+  assert.deepEqual(quarantines(base), []);
+});
+test('a commit on a branch, with one bound skill and no links, is scanned and carries its folder hash', { skip: !HAVE_GIT && 'git not installed' }, async (t) => {
+  const src = sourceRepo(t, { 'skills/x/SKILL.md': FM('x'), 'skills/x/lib/a.txt': 'a\n' });
+  const { r, s } = await vetLocal(t, src, 'x');
+  assert.equal(r.result?.verdict, 'findings');
+  assert.equal(r.commit, src.sha);
+  assert.match(r.hash, /^[0-9a-f]{64}$/);
+  assert.equal(s.calls.length, 1);
+});
+
+// ---------- git argv for the new calls ----------
+test('gitArgv pins the reachability, tree and config calls', async () => {
+  const { gitArgv } = await mod();
+  const refs = assertCfg(gitArgv('refs-clone', { owner: 'owner', repo: 'repo', dir: '/q/refs.git' }));
+  assert.deepEqual(refs, ['clone', '--bare', '--filter=tree:0', '--no-recurse-submodules', '--', URL_OK, '/q/refs.git']);
+  const seen = assertCfg(gitArgv('for-each-ref', { dir: '/q/refs.git', sha: SHA }));
+  assert.deepEqual(seen, ['-C', '/q/refs.git', 'for-each-ref', '--contains', SHA, '--count=1', '--format=%(refname)', 'refs/heads', 'refs/tags']);
+  const tree = assertCfg(gitArgv('ls-tree', { dir: '/q/repo' }));
+  assert.deepEqual(tree, ['-C', '/q/repo', 'ls-tree', '-r', '-z', '--full-tree', 'HEAD']);
+  assert.deepEqual(gitArgv('config', { key: 'core.autocrlf' }), ['git', 'config', '--get', 'core.autocrlf']);
+  assert.deepEqual(gitArgv('config', { key: 'core.eol' }), ['git', 'config', '--get', 'core.eol']);
+});
+test('gitArgv refuses a config key outside the two line-ending settings, and a bad sha for the reachability call', async () => {
+  const { gitArgv } = await mod();
+  for (const key of ['core.hooksPath', 'core.sshCommand', 'user.name', '--global', undefined]) assert.throws(() => gitArgv('config', { key }), undefined, String(key));
+  for (const sha of ['main', 'A'.repeat(40), '--all', undefined]) assert.throws(() => gitArgv('for-each-ref', { dir: '/q/refs.git', sha }), undefined, String(sha));
+});
+test('gitArgv puts the line-ending flags on the clone and the checkout only, after the pinned -c set, and refuses other values', async () => {
+  const { gitArgv } = await mod();
+  const eol = { autocrlf: 'true', eol: 'crlf' };
+  const checkout = gitArgv('checkout', { dir: '/q/repo', eol });
+  const at = checkout.indexOf('core.autocrlf=true');
+  assert.equal(checkout[at - 1], '-c');
+  assert.equal(checkout[at + 1], '-c');
+  assert.equal(checkout[at + 2], 'core.eol=crlf');
+  assert.ok(gitArgv('clone', { owner: 'owner', repo: 'repo', dir: '/q/repo', eol }).includes('core.autocrlf=true'));
+  for (const op of ['init', 'rev-parse', 'ls-tree']) assert.ok(!gitArgv(op, { dir: '/q/repo', eol }).some((a) => /core\.(autocrlf|eol)/.test(a)), op);
+  assert.ok(!gitArgv('fetch', { owner: 'owner', repo: 'repo', dir: '/q/repo', sha: SHA, eol }).some((a) => /core\.(autocrlf|eol)/.test(a)));
+  for (const bad of [{ autocrlf: 'garbage' }, { autocrlf: 'true;x' }, { eol: 'cr' }, { eol: '--x' }]) assert.throws(() => gitArgv('checkout', { dir: '/q/repo', eol: bad }), undefined, JSON.stringify(bad));
+});
+
+// ---------- reachability from a branch or tag ----------
+test('reachability: an empty answer, a failing call and an unknown object each refuse the commit, and nothing is initialised or fetched', async (t) => {
+  const { fetchRepo } = await mod();
+  const base = tmpSandbox(t);
+  for (const g of [fakeGit({ reachable: '' }), fakeGit({ fail: 'for-each-ref' }), fakeGit({ reachable: '\n' })]) {
+    await assert.rejects(() => fetchRepo('owner', 'repo', SHA40, gdeps(g)), /commit not in repo/);
+    assert.deepEqual(g.withoutConfig(), ['refs-clone', 'for-each-ref']);
+  }
+  assert.deepEqual(quarantines(base), []);
+});
+test('reachability: only a branch or tag counts; a pull request ref or other text does not', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  for (const reachable of ['refs/pull/9/head\n', 'refs/remotes/origin/x\n', 'HEAD\n', 'refs/heads/\n', 'refs/heads/a b\n']) {
+    await assert.rejects(() => fetchRepo('owner', 'repo', SHA40, gdeps(fakeGit({ reachable }))), /commit not in repo/, reachable);
+  }
+  for (const reachable of ['refs/heads/main\n', 'refs/tags/v1.0.0\n', 'refs/heads/feature/x\n']) {
+    const g = fakeGit({ reachable, populate: (repo) => skillIn(repo, 'only') });
+    const q = await fetchRepo('owner', 'repo', SHA40, gdeps(g));
+    assert.deepEqual(q.skills, ['only']);
+  }
+});
+test('reachability: a failed treeless clone is fetch failed, git missing is git missing, and a clone with no --ref skips the check', async (t) => {
+  const { fetchRepo } = await mod();
+  const base = tmpSandbox(t);
+  await assert.rejects(() => fetchRepo('owner', 'repo', SHA40, gdeps(fakeGit({ fail: 'refs-clone' }))), /fetch failed/);
+  await assert.rejects(() => fetchRepo('owner', 'repo', SHA40, gdeps(fakeGit({ error: { code: 'ENOENT' } }))), /git missing/);
+  assert.deepEqual(quarantines(base), []);
+  const g = fakeGit({ populate: (repo) => skillIn(repo, 'only') });
+  await fetchRepo('owner', 'repo', undefined, gdeps(g));
+  assert.ok(!g.ops().includes('refs-clone') && !g.ops().includes('for-each-ref'));
+});
+test('reachability: the check clones with the treeless filter and asks about the same folder and commit', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ populate: (repo) => skillIn(repo, 'only') });
+  await fetchRepo('owner', 'repo', SHA40, gdeps(g));
+  const refs = g.calls.find((a) => a.includes('--bare'));
+  const seen = g.calls.find((a) => a.includes('for-each-ref'));
+  assert.ok(refs.includes('--filter=tree:0') && refs.includes('transfer.fsckObjects=true'));
+  assert.equal(refs.at(-1), seen[seen.indexOf('-C') + 1]);
+  assert.ok(seen.includes(SHA40) && seen.includes('--count=1'));
+});
+
+// ---------- links and submodules in the committed tree ----------
+const rec = (mode, type, oid, file) => `${mode} ${type} ${oid}\t${file}`;
+const OID = 'c'.repeat(40);
+test('link check: mode 120000 and mode 160000 each refuse the candidate and remove the quarantine', async (t) => {
+  const { fetchRepo } = await mod();
+  const base = tmpSandbox(t);
+  for (const tree of [`${rec('100644', 'blob', OID, 'a')}\0${rec('120000', 'blob', OID, 'skills/x/run.sh')}\0`, `${rec('160000', 'commit', OID, 'vendor')}\0`]) {
+    await assert.rejects(() => fetchRepo('owner', 'repo', undefined, gdeps(fakeGit({ tree }))), /candidate has a link or submodule/);
+  }
+  assert.deepEqual(quarantines(base), []);
+});
+test('link check: ordinary modes pass, also with a path that holds a tab or a newline', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  // A newline in a path cannot forge a second record: records end at NUL only.
+  const forged = `x\n${rec('120000', 'blob', OID, 'forged')}`;
+  const tree = [rec('100644', 'blob', OID, 'a'), rec('100755', 'blob', OID, 'b.sh'), rec('100644', 'blob', OID, 'we\tird\nname'), rec('100644', 'blob', OID, forged)].map((r) => `${r}\0`).join('');
+  await fetchRepo('owner', 'repo', undefined, gdeps(fakeGit({ tree, populate: (repo) => skillIn(repo, 'only') })));
+});
+test('link check: a record that does not parse, a failing call and an oversize answer are fetch failed', async (t) => {
+  const { fetchRepo } = await mod();
+  const base = tmpSandbox(t);
+  for (const tree of ['100644 blob nothex\tfile\0', 'garbage\0', `${rec('100644', 'blob', OID, 'a')}${'\0'}100644 blob`, `${rec('12000', 'blob', OID, 'a')}\0`]) {
+    await assert.rejects(() => fetchRepo('owner', 'repo', undefined, gdeps(fakeGit({ tree }))), /fetch failed/, JSON.stringify(tree));
+  }
+  await assert.rejects(() => fetchRepo('owner', 'repo', undefined, gdeps(fakeGit({ fail: 'ls-tree' }))), /fetch failed/);
+  const big = fakeGit();
+  const run = big.run;
+  big.run = async (argv, opts) => (argv.includes('ls-tree') ? { exit: null, stdout: '', pid: 7, oversize: true } : run(argv, opts));
+  await assert.rejects(() => fetchRepo('owner', 'repo', undefined, gdeps(big)), /fetch failed/);
+  assert.deepEqual(quarantines(base), []);
+});
+test('link check: the tree call reads at most 4 MiB', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  const seen = [];
+  const g = fakeGit({ populate: (repo) => skillIn(repo, 'only') });
+  const run = g.run;
+  await fetchRepo('owner', 'repo', undefined, gdeps(g, { runCommand: async (argv, opts) => { seen.push([argv, opts.maxBytes]); return run(argv, opts); } }));
+  assert.equal(seen.find(([argv]) => argv.includes('ls-tree'))[1], 4 * 1024 * 1024);
+});
+
+// ---------- line endings ----------
+const EOL_FLAG = /^core\.(autocrlf|eol)=/;
+test('line endings: a true autocrlf and a known eol reach the checkout and nothing else', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ config: { 'core.autocrlf': 'true', 'core.eol': 'CRLF' }, populate: (repo) => skillIn(repo, 'only') });
+  await fetchRepo('owner', 'repo', SHA40, gdeps(g));
+  const checkout = g.calls.find((a) => a.includes('checkout'));
+  assert.ok(checkout.includes('core.autocrlf=true') && checkout.includes('core.eol=crlf'));
+  for (const a of g.calls.filter((c) => !c.includes('checkout'))) assert.ok(!a.some((x) => EOL_FLAG.test(x)), a.join(' '));
+});
+test('line endings: with no --ref the flags sit on the clone', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ config: { 'core.autocrlf': 'input' }, populate: (repo) => skillIn(repo, 'only') });
+  await fetchRepo('owner', 'repo', undefined, gdeps(g));
+  assert.ok(g.calls.find((a) => a.includes('clone')).includes('core.autocrlf=input'));
+});
+test('line endings: garbage and an unset key pass no flag', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  for (const config of [{ 'core.autocrlf': 'garbage', 'core.eol': 'weird' }, {}, { 'core.autocrlf': 'true;touch x', 'core.eol': '--x' }, { 'core.autocrlf': '' }]) {
+    const g = fakeGit({ config, populate: (repo) => skillIn(repo, 'only') });
+    await fetchRepo('owner', 'repo', SHA40, gdeps(g));
+    assert.ok(!g.calls.flat().some((x) => EOL_FLAG.test(x)), JSON.stringify(config));
+  }
+});
+test('line endings: the two reads are exact and keep the user config reachable; every other call keeps it isolated', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ populate: (repo) => skillIn(repo, 'only') });
+  await fetchRepo('owner', 'repo', SHA40, gdeps(g));
+  const reads = g.calls.map((a, i) => [a, g.envs[i]]).filter(([a]) => a[1] === 'config');
+  assert.deepEqual(reads.map(([a]) => a), [['git', 'config', '--get', 'core.autocrlf'], ['git', 'config', '--get', 'core.eol']]);
+  for (const [, env] of reads) {
+    assert.ok(!('GIT_CONFIG_NOSYSTEM' in env) && !('GIT_CONFIG_GLOBAL' in env));
+    assert.ok(!('GITHUB_TOKEN' in env));
+  }
+  const others = g.envs.filter((e, i) => g.calls[i][1] !== 'config');
+  assert.ok(others.length > 0 && others.every((e) => e.GIT_CONFIG_NOSYSTEM === '1' && 'GIT_CONFIG_GLOBAL' in e));
+});
+test('line endings: a failing config read passes no flag and does not fail the fetch', async (t) => {
+  const { fetchRepo } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ fail: 'config', populate: (repo) => skillIn(repo, 'only') });
+  await fetchRepo('owner', 'repo', SHA40, gdeps(g));
+  assert.ok(!g.calls.flat().some((x) => EOL_FLAG.test(x)));
+});
+
+// ---------- bound skill folder: the name reader ----------
+function tree(t, files) {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'aico-bound-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), text);
+  }
+  return dir;
+}
+async function nameOf(t, text) {
+  const { readSkillName } = await mod();
+  return readSkillName(join(tree(t, { 'SKILL.md': text }), 'SKILL.md'));
+}
+test('name reader: the plain, quoted, commented, CRLF and BOM forms are read', async (t) => {
+  const cases = [
+    ['---\nname: find-skills\n---\n', 'find-skills'],
+    ["---\nname: 'find-skills'\n---\n", 'find-skills'],
+    ['---\nname: "find-skills"\n---\n', 'find-skills'],
+    ['---\nname: find-skills # the skill\n---\n', 'find-skills'],
+    ["---\nname: 'find-skills' # the skill\n---\n", 'find-skills'],
+    ['---\r\nname: find-skills\r\ndescription: x\r\n---\r\n# t\r\n', 'find-skills'],
+    ['﻿---\nname: find-skills\n---\n', 'find-skills'],
+    ['---\n# a comment\nname: find-skills\n\ndescription: x\n---\n', 'find-skills'],
+    ['---\ndescription: a long one\n  with a continuation\nname: find-skills\n---\n', 'find-skills'],
+    ['---\ndescription: |\n  block text: with colons\n  more\nname: find-skills\n---\n', 'find-skills'],
+    ['---\nname : find-skills\n---\n', 'find-skills'],
+    ['---\nname: Find-Skills\n---\n', 'Find-Skills'],
+  ];
+  for (const [text, want] of cases) assert.equal(await nameOf(t, text), want, JSON.stringify(text));
+});
+test('name reader: no frontmatter, no name key and an empty value declare no name', async (t) => {
+  for (const text of ['# just a heading\n', '---\ndescription: x\n---\n', '---\nname:\n---\n', 'name: find-skills\n', '---\nname: find-skills\n', '']) {
+    assert.equal(await nameOf(t, text), undefined, JSON.stringify(text));
+  }
+});
+test('name reader: every form it cannot read with certainty is unreadable', async (t) => {
+  const { UNREADABLE, readSkillName } = await mod();
+  const cases = [
+    ['a quoted key', '---\n"name": find-skills\n---\n'],
+    ['a flow mapping', '---\n{name: find-skills}\n---\n'],
+    ['a flow value', '---\nname: [find-skills]\n---\n'],
+    ['two name keys', '---\nname: decoy\nname: find-skills\n---\n'],
+    ['a tab indent', '---\nname: find-skills\n\tdescription: x\n---\n'],
+    ['a tab-led line', '---\n\tname: find-skills\n---\n'],
+    ['a continuation after name', '---\nname: decoy\n  more: find-skills\n---\n'],
+    ['a continuation after name past a blank line', '---\nname: decoy\n\n  more\n---\n'],
+    ['a list item', '---\n- name: find-skills\n---\n'],
+    ['a merge key', '---\n<<: *base\nname: find-skills\n---\n'],
+    ['an anchor', '---\nname: &a find-skills\n---\n'],
+    ['an alias', '---\nname: *a\n---\n'],
+    ['a tag', '---\nname: !!str find-skills\n---\n'],
+    ['a block scalar', '---\nname: |\n  find-skills\n---\n'],
+    ['a document end marker', '---\nname: find-skills\n...\n---\n'],
+    ['a colon inside a plain value', '---\nname: a: b\n---\n'],
+    ['a trailing colon', '---\nname: find-skills:\n---\n'],
+    ['a quote that is not closed', '---\nname: "find-skills\n---\n'],
+    ['an escape inside double quotes', '---\nname: "find\\x2dskills"\n---\n'],
+    ['text after a closing quote', '---\nname: "a" b\n---\n'],
+    ['a doubled single quote', "---\nname: 'it''s'\n---\n"],
+    ['a control character', '---\nname: find\u0007skills\n---\n'],
+    ['a C1 control character', '---\nname: find\u0085skills\n---\n'],
+    ['a directive line', '---\n%YAML 1.2\nname: find-skills\n---\n'],
+    ['a question-mark key', '---\n? name\n: find-skills\n---\n'],
+  ];
+  for (const [label, text] of cases) assert.equal(await nameOf(t, text), UNREADABLE, label);
+  assert.equal(readSkillName(join(tree(t, { 'SKILL.md': `---\nname: ${'a'.repeat(1024 * 1024)}\n---\n` }), 'SKILL.md')), UNREADABLE, 'over 1 MiB');
+  assert.equal(readSkillName(join(tree(t, {}), 'missing.md')), UNREADABLE, 'unreadable file');
+});
+
+// ---------- bound skill folder: which folder ----------
+async function bound(t, files, name = 'find-skills') {
+  const { boundSkillFolder } = await mod();
+  const dir = tree(t, files);
+  try { return { dir, ...boundSkillFolder(dir, name) }; } catch (e) { return { dir, refused: e.message }; }
+}
+test('bound folder: the folder named like the skill, declaring that name, at depth 1 to 4, is the bound one', async (t) => {
+  for (const rel of ['find-skills', 'skills/find-skills', 'a/b/c/find-skills']) {
+    const r = await bound(t, { [`${rel}/SKILL.md`]: FM('find-skills'), 'README.md': 'x\n', 'other/SKILL.md': FM('other') });
+    assert.equal(r.refused, undefined, rel);
+    assert.ok(r.dir.endsWith(join(...rel.split('/'))), rel);
+  }
+  const r = await bound(t, { 'skills/find-skills/SKILL.md': FM('find-skills') });
+  assert.equal(r.refused, undefined);
+});
+test('bound folder: repo A (a decoy folder name, the real name in another folder) is "name differs from folder"', async (t) => {
+  const r = await bound(t, { 'skills/find-skills/SKILL.md': FM('decoy'), 'skills/aaa/SKILL.md': FM('find-skills') });
+  assert.equal(r.refused, 'skill not bound (name differs from folder)');
+});
+test('bound folder: repo B (a SKILL.md at the root) is "root skill", whatever it declares', async (t) => {
+  for (const root of [FM('find-skills'), FM('other'), '# no frontmatter\n', '---\n{bad: [\n---\n']) {
+    const r = await bound(t, { 'SKILL.md': root, 'skills/find-skills/SKILL.md': FM('find-skills') });
+    assert.equal(r.refused, 'skill not bound (root skill)', root);
+  }
+});
+test('bound folder: a root skill.md in lower case is a root skill too', async (t) => {
+  const r = await bound(t, { 'skill.md': FM('other'), 'skills/find-skills/SKILL.md': FM('find-skills') });
+  assert.equal(r.refused, 'skill not bound (root skill)');
+});
+test('bound folder: foo and Foo are the same name twice, at any depth', async (t) => {
+  const r = await bound(t, { 'skills/foo/SKILL.md': FM('foo'), 'x/y/Foo/SKILL.md': FM('Foo') }, 'foo');
+  assert.equal(r.refused, 'skill not bound (same name twice)');
+  const r2 = await bound(t, { 'skills/foo/SKILL.md': FM('foo'), 'zzz/other/SKILL.md': FM('FOO') }, 'foo');
+  assert.equal(r2.refused, 'skill not bound (same name twice)');
+});
+test('bound folder: a lower-case skill.md that declares the name is counted', async (t) => {
+  const twice = await bound(t, { 'skills/find-skills/SKILL.md': FM('find-skills'), 'skills/other/skill.md': FM('find-skills') });
+  assert.equal(twice.refused, 'skill not bound (same name twice)');
+  const alone = await bound(t, { 'skills/find-skills/skill.md': FM('find-skills') });
+  assert.equal(alone.refused, 'skill not bound (name differs from folder)', 'not exactly SKILL.md');
+});
+test('bound folder: a name that lower-cases to the target (U+212A KELVIN SIGN) is counted', async (t) => {
+  assert.equal('Kit'.toLowerCase(), 'kit');
+  const r = await bound(t, { 'skills/kit/SKILL.md': FM('kit'), 'skills/other/SKILL.md': FM('Kit') }, 'kit');
+  assert.equal(r.refused, 'skill not bound (same name twice)');
+  const alone = await bound(t, { 'skills/kit/SKILL.md': FM('Kit') }, 'kit');
+  assert.equal(alone.refused, 'skill not bound (name differs from folder)', 'the declared name is not the folder name');
+});
+test('bound folder: any SKILL.md with an unreadable name refuses, even one that has nothing to do with the target', async (t) => {
+  const hostile = ['---\n"name": find-skills\n---\n', '---\n{name: find-skills}\n---\n', '---\nname: a\nname: find-skills\n---\n', '---\nname: x\n\tdescription: y\n---\n', '---\nname: x\n  continued\n---\n'];
+  for (const text of hostile) {
+    const r = await bound(t, { 'skills/find-skills/SKILL.md': FM('find-skills'), 'skills/evil/SKILL.md': text });
+    assert.equal(r.refused, 'skill not bound (unreadable name)', JSON.stringify(text));
+  }
+});
+test('bound folder: a SKILL.md without frontmatter or without a name is ignored', async (t) => {
+  const r = await bound(t, { 'skills/find-skills/SKILL.md': FM('find-skills'), 'docs/a/SKILL.md': '# notes\n', 'docs/b/SKILL.md': '---\ndescription: x\n---\n' });
+  assert.equal(r.refused, undefined);
+});
+test('bound folder: a name missing from the repo is "skill not in repo"; deeper than 4 levels is not bound', async (t) => {
+  assert.equal((await bound(t, { 'skills/other/SKILL.md': FM('other') })).refused, 'skill not in repo');
+  assert.equal((await bound(t, { 'a/b/c/d/find-skills/SKILL.md': FM('find-skills') })).refused, 'skill not bound (name differs from folder)');
+});
+test('bound folder: the .git folder at the root is not searched, and a bad name is refused before any file access', async (t) => {
+  const { boundSkillFolder } = await mod();
+  const r = await bound(t, { '.git/x/SKILL.md': FM('find-skills'), 'skills/find-skills/SKILL.md': FM('find-skills') });
+  assert.equal(r.refused, undefined);
+  assert.throws(() => boundSkillFolder('/does/not/exist', '../x'), /bad skill name/);
+});
+test('bound folder: a tree over the entry bound is refused as too large', async (t) => {
+  const files = { 'skills/find-skills/SKILL.md': FM('find-skills') };
+  for (let i = 0; i < 5001; i++) files[`m/f${i}`] = '';
+  assert.equal((await bound(t, files)).refused, 'candidate too large');
+});
+test('bound folder: scan --quarantine --skill refuses an unbound skill and scans nothing', async (t) => {
+  const { main, fetchRepo } = await mod();
+  const base = tmpSandbox(t);
+  const sb = { project: join(base, 'p'), home: join(base, 'h') };
+  mkdirSync(sb.project); mkdirSync(sb.home);
+  const g = fakeGit({ populate: (repo) => { skillIn(repo, 'skills', 'find-skills'); writeFileSync(join(repo, 'skills', 'find-skills', 'SKILL.md'), FM('decoy')); skillIn(repo, 'skills', 'aaa'); writeFileSync(join(repo, 'skills', 'aaa', 'SKILL.md'), FM('find-skills')); } });
+  const q = await fetchRepo('owner', 'repo', undefined, gdeps(g));
+  const { s, deps } = inproc(sb, ok(golden('hostile-c.nobaseline.json')));
+  await assert.rejects(() => main(['scan', '--quarantine', q.id, '--skill', 'find-skills', '--mode', 'no-llm', '--json'], deps), /skill not bound \(name differs from folder\)/);
+  assert.equal(s.calls.length, 0);
+});
+
+// ---------- folder hash ----------
+const sha256 = (parts) => { const h = createHash('sha256'); for (const p of parts) h.update(p); return h.digest('hex'); };
+test('folder hash: the value skills@1.7.4 wrote for a recorded fixture folder', async () => {
+  const { skillFolderHash } = await mod();
+  const want = readFileSync(join(FIX, 'bound', 'golden-skill.hash'), 'utf8').trim();
+  assert.match(want, /^[0-9a-f]{64}$/);
+  assert.equal(skillFolderHash(join(FIX, 'bound', 'golden-skill')), want);
+});
+test('folder hash: .git and node_modules are skipped at every depth, other dot folders are not', async (t) => {
+  const { skillFolderHash } = await mod();
+  const plain = tree(t, { 'SKILL.md': 'a\n', 'lib/x.txt': 'x\n' });
+  const noisy = tree(t, { 'SKILL.md': 'a\n', 'lib/x.txt': 'x\n', '.git/config': 'c', 'node_modules/p/index.js': 'j', 'lib/node_modules/q.js': 'k', 'lib/.git/h': 'h' });
+  assert.equal(skillFolderHash(noisy), skillFolderHash(plain));
+  const dotted = tree(t, { 'SKILL.md': 'a\n', 'lib/x.txt': 'x\n', '.hidden/y': 'y' });
+  assert.notEqual(skillFolderHash(dotted), skillFolderHash(plain));
+});
+test('folder hash: paths use / and the order is localeCompare, not code-unit order', async (t) => {
+  const { skillFolderHash } = await mod();
+  const dir = tree(t, { 'SKILL.md': 's\n', 'lib/B.md': 'b\n', 'lib/a.md': 'a\n', 'z.txt': 'z\n', 'a b.txt': 'ab\n' });
+  const rels = ['SKILL.md', 'lib/B.md', 'lib/a.md', 'z.txt', 'a b.txt'];
+  const byLocale = [...rels].sort((x, y) => x.localeCompare(y));
+  assert.notDeepEqual(byLocale, [...rels].sort(), 'fixture sanity: the two orders differ');
+  const content = (r) => readFileSync(join(dir, ...r.split('/')));
+  assert.equal(skillFolderHash(dir), sha256(byLocale.flatMap((r) => [r, content(r)])));
+});
+test('folder hash: a changed byte, a renamed file and an added file each change it', async (t) => {
+  const { skillFolderHash } = await mod();
+  const base = skillFolderHash(tree(t, { 'SKILL.md': 'a\n' }));
+  assert.notEqual(skillFolderHash(tree(t, { 'SKILL.md': 'b\n' })), base);
+  assert.notEqual(skillFolderHash(tree(t, { 'skill2.md': 'a\n' })), base);
+  assert.notEqual(skillFolderHash(tree(t, { 'SKILL.md': 'a\n', x: '' })), base);
+});
+test('folder hash: vetCandidate returns the hash of the scanned folder, not of the repo', async (t) => {
+  const { vetCandidate, skillFolderHash } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ populate: (repo) => { skillIn(repo, 'skills', 'wanted'); writeFileSync(join(repo, 'skills', 'wanted', 'extra.txt'), 'e\n'); skillIn(repo, 'skills', 'other'); } });
+  const s = stub(ok(golden('hostile-c.nobaseline.json')));
+  let scanned = null;
+  const r = await vetCandidate({ source: 'owner/repo', commit: SHA40, name: 'wanted', mode: 'no-llm' },
+    gdeps(g, { detect: async () => INFO, runTool: async (argv, o) => { scanned = skillFolderHash(argv[2]); return s.runTool(argv, o); } }));
+  assert.equal(r.hash, scanned);
+  assert.ok(scanned !== null);
+});
+
+// ---------- vetCandidates hashes and refusals ----------
+test('vetCandidates gives a hash per bound name and none for a refused one', async (t) => {
+  const { vetCandidates } = await mod();
+  tmpSandbox(t);
+  const g = fakeGit({ populate: (repo) => { skillIn(repo, 'one'); skillIn(repo, 'two'); } });
+  const s = stub(ok(golden('hostile-c.nobaseline.json')));
+  const r = await vetCandidates({ source: 'owner/repo', commit: SHA40, names: ['one', 'two', 'three'], mode: 'no-llm' }, gdeps(g, { detect: async () => INFO, runTool: s.runTool }));
+  assert.deepEqual(Object.keys(r.hashes).sort(), ['one', 'two']);
+  assert.match(r.hashes.one, /^[0-9a-f]{64}$/);
+  assert.notEqual(r.hashes.one, r.hashes.two);
+  assert.deepEqual(r.results.three, { refused: 'skill not in repo' });
+});
+test('vetCandidate refusals include the commit and bound-folder reasons, each removing the quarantine', async (t) => {
+  const { vetCandidate } = await mod();
+  const base = tmpSandbox(t);
+  const input = { source: 'owner/repo', commit: SHA40, name: 'wanted', mode: 'no-llm' };
+  const run = (g) => vetCandidate(input, gdeps(g, { detect: async () => INFO, runTool: stub(ok({})).runTool }));
+  assert.deepEqual(await run(fakeGit({ reachable: '' })), { refused: 'commit not in repo' });
+  assert.deepEqual(await run(fakeGit({ tree: `${rec('120000', 'blob', OID, 'l')}\0` })), { refused: 'candidate has a link or submodule' });
+  assert.deepEqual(await run(fakeGit({ populate: (repo) => writeFileSync(join(repo, 'SKILL.md'), FM('wanted')) })), { refused: 'skill not bound (root skill)' });
+  assert.deepEqual(await run(fakeGit({ populate: (repo) => { skillIn(repo, 'wanted'); writeFileSync(join(repo, 'wanted', 'SKILL.md'), '---\n{x\n---\n'); } })), { refused: 'skill not bound (unreadable name)' });
+  assert.deepEqual(await run(fakeGit({ populate: (repo) => { skillIn(repo, 'wanted'); skillIn(repo, 'b', 'Wanted'); writeFileSync(join(repo, 'b', 'Wanted', 'SKILL.md'), FM('WANTED')); } })), { refused: 'skill not bound (same name twice)' });
+  assert.deepEqual(await run(fakeGit({ populate: (repo) => { skillIn(repo, 'wanted'); writeFileSync(join(repo, 'wanted', 'SKILL.md'), FM('decoy')); } })), { refused: 'skill not in repo' });
+  assert.deepEqual(quarantines(base), []);
 });
