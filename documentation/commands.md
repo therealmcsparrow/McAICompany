@@ -170,6 +170,22 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **Example.** `/aico:vulnscan`
 
+### `/aico:skillspector`
+`/aico:skillspector [--project | --global | <skill-name>] [--no-llm | --claude-cli] [install]`
+
+**What it does.** Scans the agent skills installed in this project or your user folder with NVIDIA SkillSpector and reports what it finds per skill. It never removes anything.
+
+**When to use it.** You installed a third-party skill and want a check before you trust it, or you want to install the scanner.
+
+**How it runs.**
+1. Checks that the tool is installed. If not, it shows an install form with the pinned release (v2.13.1), the exact commands, and the rollback. The install changes your user-scope Claude config, so it always asks. Skip runs nothing.
+2. Scans each skill in scope. The mode comes from the `skillspector.mode` setting (default `no-llm`, no text leaves your machine); `--no-llm` or `--claude-cli` overrides it for one run. `--claude-cli` sends skill text to Anthropic through your `claude` login and says so first.
+3. Reports per skill: pass, findings or error. An error is never shown as safe. For a skill with blocking findings it suggests removal commands for you to run; it runs none.
+
+**You get.** `.company/work/<slug>/skillspector-report.md` with names, verdicts and counts only, never skill text. No other file changes.
+
+**Example.** `/aico:skillspector --project`
+
 ### `/aico:feedback`
 `/aico:feedback <reports: path, paste or export>`
 

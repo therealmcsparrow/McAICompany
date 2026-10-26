@@ -1,5 +1,5 @@
 // T2: text pins for the skill-researcher Role, the /aico:skillspector Playbook and the install constants.
-// Cases that need files T4, T6 or T7 build are `todo` until then (npm test stays green, proj.M12); the
+// Cases that need files T4 or T7 build are `todo` until then (npm test stays green, proj.M12); the
 // owning Step removes the `todo` option as each case passes. Cases that already hold are live guards.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,6 @@ import { dirname, join, relative } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const T4 = { todo: 'T4' };
-const T6 = { todo: 'T6' };
 const T7 = { todo: 'T7' };
 const frontmatter = (text) => {
   const lines = text.split(/\r?\n/);
@@ -33,7 +32,7 @@ const FORBIDDEN = [
 ];
 
 // ---------- the Role file (AC4, AC3) ----------
-test('AC4 agent skill-researcher: frontmatter, tools, model, effort, at most 50 lines', T6, () => {
+test('AC4 agent skill-researcher: frontmatter, tools, model, effort, at most 50 lines', () => {
   const text = read(AGENT);
   const fm = frontmatter(text);
   assert.equal(fm.name, 'skill-researcher');
@@ -42,18 +41,18 @@ test('AC4 agent skill-researcher: frontmatter, tools, model, effort, at most 50 
   assert.equal(fm.effort, 'medium');
   assert.ok(text.split(/\r?\n/).length <= 51, 'proj.M5: at most 50 lines');
 });
-test('AC4 agent skill-researcher: names the residual Write and Bash risk and deviates: agentsec.S5', T6, () => {
+test('AC4 agent skill-researcher: names the residual Write and Bash risk and deviates: agentsec.S5', () => {
   const text = read(AGENT);
   assert.match(text, /deviates: agentsec\.S5/);
   assert.match(text, /aico:sourcing/);
   assert.match(text, /skillspector-scan/);
 });
 for (const [label, re] of FORBIDDEN) {
-  test(`AC4 agent skill-researcher never contains "${label}"`, T6, () => {
+  test(`AC4 agent skill-researcher never contains "${label}"`, () => {
     assert.doesNotMatch(read(AGENT), re);
   });
 }
-test('AC4 agent Bash rule: only the four P3 forms of the wrapper, nothing else', T6, () => {
+test('AC4 agent Bash rule: only the four P3 forms of the wrapper, nothing else', () => {
   const text = read(AGENT);
   const head = 'node "${CLAUDE_PLUGIN_ROOT}/scripts/skillspector.mjs"';
   assert.ok(text.includes(head), 'the exact wrapper command prefix is named');
@@ -70,12 +69,12 @@ test('AC4 agent Bash rule: only the four P3 forms of the wrapper, nothing else',
   assert.deepEqual([...seen].sort(), ['clean', 'detect', 'fetch', 'scan']);
   for (const banned of ['install-commands', ' list ', 'settings.mjs']) assert.ok(!text.includes(`skillspector.mjs" ${banned.trim()}`), banned);
 });
-test('AC4 agent never lists or calls the MCP tool and never passes --mode (the CEO Playbook does)', T6, () => {
+test('AC4 agent never lists or calls the MCP tool and never passes --mode (the CEO Playbook does)', () => {
   const text = read(AGENT);
   assert.doesNotMatch(text, /mcp__/);
   assert.doesNotMatch(text, /--mode/);
 });
-test('AC3 agent: a missing tool is a blocked Handoff, not an install', T6, () => {
+test('AC3 agent: a missing tool is a blocked Handoff, not an install', () => {
   const text = read(AGENT);
   assert.match(text, /skillspector missing/);
   assert.match(text, /blocked/);
@@ -159,15 +158,15 @@ test('AC8 the command is documented in documentation/commands.md', T7, () => {
 });
 
 // ---------- Role registration (AC1, AC7) ----------
-test('AC7 company/names.json names the skill-researcher Selin', T6, () => {
+test('AC7 company/names.json names the skill-researcher Selin', () => {
   const names = JSON.parse(read('company/names.json'));
   assert.equal(names['skill-researcher'], 'Selin');
 });
-test('AC7 the Lead routes to skill-researcher and sourcing names it', T6, () => {
+test('AC7 the Lead routes to skill-researcher and sourcing names it', () => {
   assert.match(read('skills/lead/SKILL.md'), /skill-researcher/);
   assert.match(read('skills/sourcing/SKILL.md'), /skill-researcher/);
 });
-test('AC7 documentation/roles.md lists the skill-researcher', T6, () => {
+test('AC7 documentation/roles.md lists the skill-researcher', () => {
   assert.match(read('documentation/roles.md'), /skill-researcher/);
 });
 test('AC4 the P3 exception is recorded in .company/standards.md under ## Exceptions (live guard)', () => {
