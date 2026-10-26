@@ -368,3 +368,11 @@ test('page has the cap, film-script and debate rows built from the existing cont
   }
   assert.ok(!html.includes('type="range"') && !/<script[^>]*\ssrc=/i.test(html));
 });
+
+test('page has a Review format row built like the Dispatch row, with the Contract sentence', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ["'Review format'", "['pipeline', 'review_format']", "['plain', 'pilot']",
+    'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).']) {
+    assert.ok(html.includes(needle), needle);
+  }
+});

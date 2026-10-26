@@ -592,3 +592,50 @@ test('writeLayer refuses a bad debate value with the Contract text and writes no
   assert.equal(out.code, 2);
   assert.equal(out.out, 'refused: no setting brainstorm.nope\n');
 });
+
+test('pipeline.review_format rejects hostile values first and accepts only plain or pilot', () => {
+  const msg = ['pipeline.review_format must be plain or pilot'];
+  for (const bad of ['PILOT', 'Plain', ' pilot', '__proto__', 3, true, null, ['pilot'], { a: 1 }, 'x'.repeat(10 * 1024)]) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { review_format: bad } }, roleSet), msg, String(bad).slice(0, 20));
+  }
+  for (const ok of ['plain', 'pilot']) assert.deepEqual(validateLayer({ version: 1, pipeline: { review_format: ok } }, roleSet), []);
+});
+
+test('review_format defaults to plain, resolves per field and is not a lock', (t) => {
+  const s = sandbox(t);
+  assert.equal(PIPELINE_DEFAULTS.review_format, 'plain');
+  assert.equal(resolveSettings(s.ctx).pipeline.review_format, 'plain');
+  assert.equal(s.cli('get', 'pipeline.review_format').out, 'plain\n');
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { review_format: 'plain' } });
+  s.project({ pipeline: { review_format: 'pilot' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.review_format, 'pilot');
+  assert.deepEqual(r.ignored, []);
+  assert.equal(s.cli('get', 'pipeline.review_format').out, 'pilot\n');
+  assert.equal(JSON.parse(s.cli('get').out).pipeline.review_format, 'pilot');
+});
+
+test('a bad review_format layer falls back to the level below with a warning and a fail-closed project does not change it', (t) => {
+  const s = sandbox(t);
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { review_format: 'pilot' } });
+  s.project({ pipeline: { review_format: 'PILOT' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.review_format, 'pilot');
+  assert.equal(r.warnings.filter((w) => /review_format/.test(w)).length, 1);
+  assert.equal(r.gates.ship, 'ask');
+  s.user({ pipeline: { review_format: 7 } });
+  assert.equal(resolveSettings(s.ctx).pipeline.review_format, 'plain');
+});
+
+test('writeLayer refuses a bad review_format with the Contract text and writes nothing', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, pipeline: { review_format: 'Pilot' } }, s.ctx), /pipeline\.review_format must be plain or pilot/);
+  assert.equal(fs.existsSync(s.config), false);
+  writeLayer('user', { version: 1, pipeline: { review_format: 'pilot' } }, s.ctx);
+  assert.deepEqual(readLayer('user', s.ctx).layer, { version: 1, pipeline: { review_format: 'pilot' } });
+});
+
+test('no keep-warm key exists in the schema', () => {
+  assert.equal(validateLayer({ version: 1, mods: { keep_warm: true } }, roleSet).length > 0, true);
+  assert.equal(JSON.stringify(PIPELINE_DEFAULTS).includes('warm'), false);
+});

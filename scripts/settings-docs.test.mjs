@@ -83,5 +83,8 @@ test('aico-settings v1.1 names the cap range, the brainstorm keys and their defa
   assert.match(doc, /`brainstorm\.film_script` \| boolean; default `false`/);
   assert.match(doc, /`brainstorm\.debate` \| `crossfire \\| full_pass`; default `crossfire`/);
   assert.match(doc, /refused: brainstorm\.debate must be crossfire or full_pass/);
-  assert.match(doc, /Plugin defaults include `context_cap` 150000, `film_script` false and `debate` `crossfire`/);
+  assert.match(doc, /Plugin defaults include `context_cap` 150000, `review_format` `plain`, `film_script` false and `debate` `crossfire`/);
+  assert.equal(PIPELINE_DEFAULTS.review_format, 'plain');
+  assert.match(doc, /`pipeline\.review_format` \| `plain \\| pilot`; default `plain`/);
+  assert.match(doc, /refused: pipeline\.review_format must be plain or pilot/);
 });

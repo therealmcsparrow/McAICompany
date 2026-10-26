@@ -504,9 +504,12 @@ function renderPipeline(panel) {
     (l) => selectFor([0, 1, 2, 3, 4, 5], l), Number, String);
   pipelineRow(tbody, 'Dispatch', ['pipeline', 'dispatch'], defaults.dispatch,
     (l) => selectFor(['parallel', 'sequential'], l), String, String);
+  pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
+    (l) => selectFor(['plain', 'pilot'], l), String, String);
   pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
     (l) => capInput(l), Number, String);
   panel.append(wrap);
+  panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
   panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
   panel.append(el('h2', {}, 'Brainstorm'));
   const bs = table(COLUMNS);
