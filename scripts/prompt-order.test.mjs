@@ -35,12 +35,12 @@ const keys = (lines) => lines
   .map(l => l.startsWith('Follow aico:handoff.') ? 'Follow' : /^([A-Z][A-Za-z ]*?):/.exec(l)?.[1])
   .filter(Boolean);
 
-const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Input Handoffs', 'Rule slice', 'Output', 'Goal', 'Follow'];
+const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Review format', 'Input Handoffs', 'Rule slice', 'Output', 'Goal', 'Follow'];
 const ROUND_1 = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Input', 'Output', 'Goal'];
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -53,6 +53,7 @@ test('the pipeline dispatch block carries Context cap: and Review depth: as in v
   const b = stepBlock().join('\n');
   assert.match(b, /^Context cap: <cap> handover <n>/m);
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
+  assert.match(b, /^Review format: pilot +# code-reviewer and senior-engineer compliance, only when pipeline\.review_format is pilot/m);
   assert.match(b, /^Design skills: .*# only /m);
   assert.match(b, /^Settings: .*# only the values passed/m);
   assert.match(b, /^Rule slice: .*# builders and devops only/m);
@@ -127,6 +128,16 @@ test('builders get Rule slice: after Input Handoffs: instead of the senior-engin
   has(bullet, '.company/work/<slug>/rules/<task>.md', 'directly after `Input Handoffs:`', "no longer the Senior Engineer's Handoff", 'from the plan, never from Role output');
   has(bullet, 'rule-check.mjs" slices <that Handoff>', "no slice file for the builder's task", 'no Fix round');
   has(bullet, 'blocked — missing rule slice', 'no ruleset', 'at most 3');
+});
+
+test('Review format: pilot is sent only when the setting resolves exactly pilot; --require-top only for a Step that carried it', () => {
+  const b = stepBlock().join('\n');
+  assert.ok(b.indexOf('Review depth:') < b.indexOf('Review format: pilot') && b.indexOf('Review format: pilot') < b.indexOf('Input Handoffs:'));
+  has(pipeline, '**Review format (§1.7):**', 'pipeline.review_format', 'exactly `pilot`', 'omit the line for any other value', 'handover continuation of such a Step keeps it');
+  const after = skillOnly.split('\n').find(l => l.startsWith('- After each Step'));
+  has(after, '`--require-top` only for a Step whose dispatch carried `Review format: pilot`', 'plain lint', 'no Fix round');
+  assert.doesNotMatch(after, /with `--require-top` for `code-reviewer`/);
+  has(pipeline, 'handover without findings ledger');
 });
 
 test('the findings ledger of a pilot reviewer is committed only when it exists; a handover without one is re-dispatched', () => {

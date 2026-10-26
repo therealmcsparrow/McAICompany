@@ -232,6 +232,58 @@ test('with --require-top a legacy prose finding fails as a row', () => {
   assert.match(errsTop(ENGLISH_TWIN), /row/);
 });
 
+const PIPE_HINT = '; a | inside a field splits it, write it without |';
+const PROSE_HINT = '; every bullet here is a finding row, put prose in ## Did or ## Next';
+
+test('row mode: a prose bullet that starts with an ID gets the prose hint', () => {
+  const e = errs(make({ nits: '- R-11 to R-17, R-19 and R-20 are still open Nits' }));
+  assert.match(e, /line \d+: row needs 5 fields.*\(got 1\)/);
+  assert.ok(e.includes(PROSE_HINT), e);
+  assert.ok(!e.includes(PIPE_HINT), e);
+  assert.ok(errsTop(ENGLISH_TWIN).includes(PROSE_HINT));
+});
+
+test('the same prose bullet without a top block stays exit 0 (plain lint)', () => withDir(dir => {
+  const plain = ENGLISH_TWIN.replace('- The name tmp is unclear.', '- R-11 to R-17, R-19 and R-20 are still open Nits');
+  assert.deepEqual(lint(plain).errors, []);
+  const f = join(dir, '07-code-reviewer.md');
+  writeFileSync(f, plain);
+  assert.equal(runLint(f).status, 0);
+  const r = runLint(f, '--require-top');
+  assert.equal(r.status, 1);
+  assert.ok(r.stdout.includes(PROSE_HINT));
+}));
+
+test('a Handoff row with a | inside a field gets the pipe hint', () => {
+  const e = errs(make({ nits: '- R-3 | src/y.ts:9 | quotes T-3 | x in prose | readability | rename' }));
+  assert.match(e, /row needs 5 fields.*\(got 6\)/);
+  assert.ok(e.includes(PIPE_HINT), e);
+  assert.ok(!e.includes(PROSE_HINT), e);
+  const short = errs(make({ nits: '- R-3 | src/y.ts:9 | only three' }));
+  assert.match(short, /\(got 3\)/);
+  assert.ok(!short.includes(PIPE_HINT) && !short.includes(PROSE_HINT), short);
+});
+
+test('a tagged Blocking prose bullet gets the prose hint; CRLF input too', () => {
+  assert.ok(errs(make({ rows: '- [spec] R-1 and R-2 are still open' })).includes(PROSE_HINT));
+  const crlf = make({ nits: '- R-11 are still open' }).replace(/\n/g, '\r\n');
+  const e = errs(crlf);
+  assert.ok(e.includes(PROSE_HINT), e);
+  assert.ok(!e.includes('\r'), 'no CR in the errors');
+});
+
+test('a ledger row with a | inside a field gets the pipe hint', () => {
+  const bad = LEDGER.replace('## Findings\n', '## Findings\n- R-9 | open | [spec] | a.mjs:1 | quotes T-3 | x | why | fix\n');
+  assert.ok(lintFindings(bad).errors.some(e => /row needs 7 fields.*\(got 8\)/.test(e) && e.endsWith(PIPE_HINT)));
+  const few = lintFindings(LEDGER.replace('## Findings\n', '## Findings\n- R-9 | open | [spec]\n')).errors.join('\n');
+  assert.match(few, /\(got 3\)/);
+  assert.ok(!few.includes(PIPE_HINT));
+});
+
+test('hints echo no Handoff text', () => {
+  assert.ok(!errs(make({ nits: '- SECRET-TOKEN-abc123 prose' })).includes('SECRET-TOKEN'));
+});
+
 test('hostile top block and rows finish quickly', () => {
   const t0 = performance.now();
   lint(make({ top: swap('files', `[${'a,'.repeat(10000)}]`), rows: `- [spec] ${'R-1 | '.repeat(5000)}` }));

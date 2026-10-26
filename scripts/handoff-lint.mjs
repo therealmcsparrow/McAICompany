@@ -28,6 +28,9 @@ const POINTER_RE = /^(?=[^\x00-\x1f\x7f]{1,200}$)[^\s\x00-\x1f\x7f,#]+(?:#[^\x00
 const LOC_RE = /^([^\s:]{1,260})(?::(\d{1,6})(?:-(\d{1,6}))?)?$/;
 const NONE_RE = /^(none|\(none[^)]{0,100}\))\.?$/i;
 const ROW_SHAPED_RE = /^(\[[^\]\s]{1,40}\] )?[A-Za-z]{1,3}-[A-Za-z0-9]{1,6} \|/;
+// Hints (handoff v1.1): static text, they echo nothing from the Handoff.
+const PIPE_HINT = '; a | inside a field splits it, write it without |';
+const PROSE_HINT = '; every bullet here is a finding row, put prose in ## Did or ## Next';
 const ID_ERR = 'finding ID must be R-, C- or T-<n>';
 
 function value(raw) {
@@ -58,7 +61,10 @@ function sameSet(a, b) {
 
 // Parses `ID-less` row fields after the tag; returns an error text or null. `parts` = [ID, loc, problem, why, fix].
 function checkRow(parts, allowRange) {
-  if (parts.length !== 5) return `row needs 5 fields: ID | file:line | problem | why | fix (got ${parts.length})`;
+  if (parts.length !== 5) {
+    const hint = parts.length > 5 ? PIPE_HINT : '';
+    return `row needs 5 fields: ID | file:line | problem | why | fix (got ${parts.length})${hint}`;
+  }
   const [id, loc, problem, why, fix] = parts;
   if (!ID_RE.test(id)) return ID_ERR;
   const m = LOC_RE.exec(loc);
@@ -225,7 +231,7 @@ export function lint(text, opts = {}) {
     if (!rowMode && !ROW_SHAPED_RE.test(it.body)) continue;
     const parts = body.split('|').map(s => s.trim());
     const bad = checkRow(parts, it.section === 'Blocking');
-    if (bad) { errors.push(`line ${n}: ${bad}`); continue; }
+    if (bad) { errors.push(`line ${n}: ${bad}${parts.length === 1 ? PROSE_HINT : ''}`); continue; }
     if (findingIds.includes(parts[0])) errors.push(`line ${n}: duplicate finding ID ${parts[0]}`);
     else findingIds.push(parts[0]);
   }
@@ -277,7 +283,7 @@ export function lintFindings(text) {
     if (section === 'Checked') { checked.push(b[1].trim()); continue; }
     if (section !== 'Findings' || NONE_RE.test(b[1])) continue;
     const p = b[1].split('|').map(s => s.trim());
-    if (p.length !== 7) { errors.push(`line ${n}: row needs 7 fields: ID | status | [tag] | file:line | problem | why | fix (got ${p.length})`); continue; }
+    if (p.length !== 7) { errors.push(`line ${n}: row needs 7 fields: ID | status | [tag] | file:line | problem | why | fix (got ${p.length})${p.length > 7 ? PIPE_HINT : ''}`); continue; }
     const [id, status, tag, ...rest] = p;
     if (!ID_RE.test(id)) { errors.push(`line ${n}: ${ID_ERR}`); continue; }
     if (!LEDGER_STATUS.has(status)) { errors.push(`line ${n}: status must be open|fixed|withdrawn`); continue; }
