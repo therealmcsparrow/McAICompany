@@ -1,10 +1,9 @@
-// The one status line of the plugin: `aico · <savvy> · <blast> · <cost> · <reflect>`.
+// The one status line of the plugin: `<savvy> · <blast> · <cost> · <reflect>` (the host adds its own 8 cell prefix).
 import { cellWidth, fit } from './format.mjs';
 
-export const STATUS_MAX = 80;
-// Per-part caps in terminal cells: 7 + 64 + 3 * 3 = 80, so all four parts always fit on one line.
-export const STATUS_CAPS = Object.freeze({ savvy: 24, blast: 10, cost: 20, reflect: 10 });
-const PREFIX = 'aico · ';
+export const STATUS_MAX = 70;
+// Per-part caps in terminal cells: 61 + 3 * 3 = 70; the host prefix is 8 cells, so the row stays within 80 with 2 spare.
+export const STATUS_CAPS = Object.freeze({ savvy: 22, blast: 12, cost: 17, reflect: 10 });
 const SEP = ' · ';
 const ORDER = ['savvy', 'blast', 'cost', 'reflect'];
 const DROP = ['reflect', 'cost', 'blast'];
@@ -25,13 +24,13 @@ export function composeStatus(parts, options) {
     if (text !== '') have[key] = text;
   }
   if (Object.keys(have).length === 0) return undefined;
-  const line = () => PREFIX + ORDER.filter((k) => k in have).map((k) => have[k]).join(SEP);
+  const line = () => ORDER.filter((k) => k in have).map((k) => have[k]).join(SEP);
   for (const key of DROP) {
     if (cellWidth(line()) <= max) break;
     if (Object.keys(have).length > 1) delete have[key];
   }
   if (cellWidth(line()) <= max) return line();
   const first = ORDER.find((k) => k in have);
-  have[first] = fit(have[first], Math.max(1, max - cellWidth(PREFIX)));
+  have[first] = fit(have[first], Math.max(1, max));
   return line();
 }

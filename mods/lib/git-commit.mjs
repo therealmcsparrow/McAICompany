@@ -162,8 +162,26 @@ function isLiteral(token) {
   return token !== '.' && token !== '&' && !NON_LITERAL.test(token);
 }
 
+// Long options that run a program; git accepts any unambiguous prefix, so a prefix of four characters or more counts.
+const RUNNERS = ['--upload-pack', '--receive-pack', '--exec', '--ext-diff', '--open-files-in-pager'];
+
+function runsProgram(toks, from, sub) {
+  for (let j = from; j < toks.length; j++) {
+    const t = toks[j];
+    if (!t.startsWith('-')) continue;
+    if (t.startsWith('-O')) return true;
+    if (sub === 'clone' && t.startsWith('-u')) return true;
+    if (t.startsWith('--')) {
+      const eq = t.indexOf('=');
+      const name = (eq === -1 ? t : t.slice(0, eq)).toLowerCase();
+      if (name.length >= 4 && RUNNERS.some((r) => r.startsWith(name))) return true;
+    }
+  }
+  return false;
+}
+
 // A `git` statement: a commit (or doubt) unless the subcommand is a literal one that never commits.
-function analyseGit(toks, cwd) {
+function analyseGit(toks, cwd, mentionsCommit) {
   let repo = null;
   let sure = false;
   let override = false;
@@ -176,8 +194,8 @@ function analyseGit(toks, cwd) {
     } else if (t === '-c' || t === '--config-env' || t.startsWith('--config-env=')) {
       const eq = t.indexOf('=');
       const value = t === '-c' || eq === -1 ? toks[i + 1] : t.slice(eq + 1);
-      if (value === undefined || /^alias\./i.test(value)) sure = true;
-      else if (/^core\.worktree/i.test(value)) override = true;
+      sure = true;
+      if (value !== undefined && /^core\.worktree/i.test(value)) override = true;
       i += t === '-c' || eq === -1 ? 2 : 1;
     } else if (t === '--git-dir' || t === '--work-tree') {
       override = true;
@@ -195,17 +213,25 @@ function analyseGit(toks, cwd) {
     }
   }
   const sub = toks[i];
+  if (mentionsCommit && (sub === 'config' || runsProgram(toks, i + 1, sub))) sure = true;
   if (!sure && (sub === undefined || (isLiteral(sub) && ALLOWED.has(sub)))) return { kind: 'git' };
   return { kind: 'commit', override, repo: repo === null ? cwd : isAbsolute(repo) ? repo : joinRepo(cwd, repo) };
 }
 
-function analyse(statement, ps, cwd) {
+// ctx: { mentionsCommit, env, git } filled while the statements are read.
+function analyse(statement, ps, cwd, ctx) {
   const toks = statement.tokens.slice();
   for (;;) {
     const t = toks[0];
     if (t === undefined) return { kind: 'none' };
-    if (KEYWORDS.has(t) || (!ps && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || (ps && /^\$env:[^=]*=/i.test(t))) toks.shift();
+    const assign = (!ps && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || (ps && /^\$env:[^=]*=/i.test(t));
+    if (assign) ctx.env = true;
+    if (KEYWORDS.has(t) || assign) toks.shift();
     else break;
+  }
+  if (ps && /^\$env:[^\\/]+$/i.test(toks[0]) && toks[1] !== undefined && toks[1].startsWith('=')) {
+    ctx.env = true;
+    return { kind: 'none' };
   }
   if (!isLiteral(toks[0])) return { kind: 'dynamic' };
   const prog = baseName(toks[0]);
@@ -224,8 +250,12 @@ function analyse(statement, ps, cwd) {
     }
     return { kind: 'cd', target: cap(target) };
   }
-  if (prog === 'git' || prog === 'git.exe') return analyseGit(toks, cwd);
+  if (prog === 'git' || prog === 'git.exe') {
+    ctx.git = true;
+    return analyseGit(toks, cwd, ctx.mentionsCommit);
+  }
   if (/^git[.-]/.test(prog)) return { kind: 'commit', override: TEXT_REDIRECT.test(statement.raw), repo: cwd };
+  if ((prog === 'export' || prog === 'set') && toks.some((t) => t.includes('='))) ctx.env = true;
   return HARMLESS.has(prog) ? { kind: 'none' } : { kind: 'foreign' };
 }
 
@@ -243,14 +273,17 @@ function intent(command, ps) {
   let found = null;
   let foreign = false;
   let dynamic = false;
+  const ctx = { mentionsCommit: /commit/i.test(command), env: false, git: false };
   for (const st of statements) {
-    const r = analyse(st, ps, cwd);
+    const r = analyse(st, ps, cwd, ctx);
     if (r.kind === 'cd') cwd = joinRepo(cwd, r.target);
     else if (r.kind === 'commit') found = found === null ? r : found;
     else if (r.kind === 'foreign') foreign = true;
     else if (r.kind === 'dynamic') dynamic = true;
   }
   if (found !== null) return commit(found.repo, ENV_REDIRECT.test(command) || found.override);
+  // An environment variable can make git run a program (GIT_EXTERNAL_DIFF, GIT_CONFIG_*, GIT_SSH_COMMAND, ...).
+  if (ctx.env && ctx.git && ctx.mentionsCommit) return commit(cwd, ENV_REDIRECT.test(command));
   const substitution = ps ? command.includes('$(') : command.includes('$(') || command.includes('`');
   const doubt =
     (dynamic && /git|commit/i.test(command)) ||

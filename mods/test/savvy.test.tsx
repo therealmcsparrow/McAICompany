@@ -129,7 +129,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(text).toContain('Fix round 1')
     expect(text).toMatch(/Elapsed  12m0\ds/)
     expect(text).toMatch(/06 frontend-engineer \(Freya\) +\d+s/)
-    expect(last(w)).toMatch(/^aico · W2 S06 fr-eng 12m$/)
+    expect(last(w)).toMatch(/^W2 S06 fr-eng 12m$/)
     await ui.unmount()
   })
 }
@@ -141,7 +141,7 @@ test('without a running subagent the Step is the newest Step file', async ($, on
   const text = (await lines(ui)).join('\n')
   expect(text).toContain('Step     05 backend-engineer (Ben)')
   expect(text).toContain('No subagent running.')
-  expect(last(w)).toMatch(/^aico · W2 S05 ba-eng 12m$/)
+  expect(last(w)).toMatch(/^W2 S05 ba-eng 12m$/)
   await ui.unmount()
 })
 
@@ -169,7 +169,7 @@ test('below 110 columns the pane is not placed and the status line holds every f
   expect(w.opened).toEqual(['aico-run'])
   const status = last(w) ?? ''
   for (const part of ['W2', 'S05', 'ba-eng', '12m']) expect(status).toContain(part)
-  expect(cellWidth(status)).toBeLessThanOrEqual(80)
+  expect(cellWidth(status)).toBeLessThanOrEqual(70)
 })
 
 // A row is never wider than the pane body (docked panes measure 39 to 89 cells).
@@ -236,11 +236,11 @@ test('after end the final state stays with outcome and total time', async ($, on
   const text = (await lines(ui)).join('\n')
   expect(text).toContain('State    ended (ship)')
   expect(text).toContain('Elapsed  30m00s')
-  expect(last(w)).toBe('aico · ended ship 30m')
+  expect(last(w)).toBe('ended ship 30m')
   await ui.unmount()
   // time passes: the total does not
   await clock.advance(60_000)
-  expect(last(w)).toBe('aico · ended ship 30m')
+  expect(last(w)).toBe('ended ship 30m')
 })
 
 test('the view follows a change within 5 seconds and calls no script while nothing changed', async ($, on) => {
@@ -253,7 +253,7 @@ test('the view follows a change within 5 seconds and calls no script while nothi
   w.active = ACTIVE(view({ wave: 3, round: 2 }))
   w.mtime = 9
   await clock.advance(4000)
-  expect(last(w)).toMatch(/^aico · W3 S05 ba-eng 12m$/)
+  expect(last(w)).toMatch(/^W3 S05 ba-eng 12m$/)
 })
 
 const BREAKS: [string, () => unknown][] = [

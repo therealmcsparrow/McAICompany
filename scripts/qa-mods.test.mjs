@@ -88,7 +88,7 @@ test('AC47/AC48 the commit gate registers for Bash and PowerShell only', () => {
 
 test('AC49 the docs name the four mods, the shell tools, the cache clock, no keep-warm and desktop unverified', () => {
   const docs = read('documentation/mods.md');
-  for (const need of ['Savvy', 'Cache Tax', 'Reflect', 'Blast Radius', 'PowerShell', 'Bash', 'cache clock', 'no keep-warm', 'Unverified', 'nobody can be asked; commit refused', 'aico · <savvy> · <blast> · <cost> · <reflect>', 'mods.cache_tax.keep_warm']) {
+  for (const need of ['Savvy', 'Cache Tax', 'Reflect', 'Blast Radius', 'PowerShell', 'Bash', 'cache clock', 'no keep-warm', 'Unverified', 'nobody can be asked; commit refused', '<savvy> · <blast> · <cost> · <reflect>', 'mods.cache_tax.keep_warm']) {
     assert.ok(docs.includes(need) || docs.toLowerCase().includes(need.toLowerCase()), `documentation/mods.md lacks: ${need}`);
   }
   for (const key of ['mods.savvy.enabled', 'mods.savvy.pane', 'mods.cache_tax.enabled', 'mods.cache_tax.pane', 'mods.reflect.enabled', 'mods.reflect.step_check', 'mods.reflect.retrospective', 'mods.reflect.mode', 'mods.blast_radius.enabled', 'mods.blast_radius.core', 'mods.blast_radius.contract', 'mods.blast_radius.security']) {

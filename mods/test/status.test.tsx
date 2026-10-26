@@ -110,7 +110,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const first = w.statuses.findIndex(s => s !== undefined && s.includes(' tax '))
     expect(first).toBeGreaterThan(-1)
     for (let i = 0; i < 30; i++) await clock.advance(2000)
-    const shape = new RegExp(`^aico · ${SAVVY} · ${COST}$`)
+    const shape = new RegExp(`^${SAVVY} · ${COST}$`)
     for (const line of w.statuses.slice(first)) expect(line).toMatch(shape)
   })
 }
@@ -121,9 +121,9 @@ test('a Contract commit puts the blast part second, and it leaves after 60 secon
   const r = await commit($)
   expect(r.decision).toBe('allow')
   await clock.advance(0)
-  expect(last(w)).toMatch(new RegExp(`^aico · ${SAVVY} · ⚠ contract · ${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^${SAVVY} · ⚠ contract · ${COST}$`))
   await clock.advance(60_000)
-  expect(last(w)).toMatch(new RegExp(`^aico · ${SAVVY} · ${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^${SAVVY} · ${COST}$`))
   expect(w.statuses.includes(undefined)).toBe(false)
 })
 
@@ -133,13 +133,13 @@ test('Cache Tax off leaves only the Savvy part, then the reverse', async ($, on)
   w.settings = SETTINGS({ savvy: true, tax: false })
   await $.turn.start({ turnId: 't2', model: 'm', messageCount: 1 } as never)
   await clock.advance(4100)
-  expect(last(w)).toMatch(new RegExp(`^aico · ${SAVVY}$`))
+  expect(last(w)).toMatch(new RegExp(`^${SAVVY}$`))
   w.settings = SETTINGS({ savvy: false, tax: true })
   await $.turn.start({ turnId: 't3', model: 'm', messageCount: 1 } as never)
   await clock.advance(100)
   for await (const chunk of $.turn.step({ turnId: 't1', index: 0, model: 'm', messageCount: 1 } as never)) void chunk
   await clock.advance(4100)
-  expect(last(w)).toMatch(new RegExp(`^aico · ${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^${COST}$`))
 })
 
 test('with Savvy off and no placed pane the Cache Tax summary stands alone on the line', async ($, on) => {
@@ -148,10 +148,10 @@ test('with Savvy off and no placed pane the Cache Tax summary stands alone on th
   w.isPlaced = false
   await boot($, on, w)
   expect(w.opened).toContain('aico-cost')
-  expect(last(w)).toMatch(new RegExp(`^aico · ${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^${COST}$`))
 })
 
-test('the longest slug, the largest spend and a warning all fit in 80 cells', async ($, on) => {
+test('the longest slug, the largest spend and a warning all fit in 70 cells', async ($, on) => {
   const w = makeWorld()
   w.slug = 'a'.repeat(64)
   w.spend = 9007199254740991
@@ -159,7 +159,7 @@ test('the longest slug, the largest spend and a warning all fit in 80 cells', as
   await commit($)
   await clock.advance(0)
   const line = last(w) ?? ''
-  expect(cellWidth(line)).toBeLessThanOrEqual(80)
+  expect(cellWidth(line)).toBeLessThanOrEqual(70)
   for (const part of ['W2 ', 'm · ', ' tax ', '⚠ contract']) expect(line).toContain(part)
 })
 
@@ -189,5 +189,5 @@ test('a refused ui.status raises no error and the line is written on the next se
   const clock = await boot($, on, w)
   await clock.advance(4100)
   expect(w.statusCalls).toBeGreaterThan(1)
-  expect(last(w)).toMatch(/^aico · W2 /)
+  expect(last(w)).toMatch(/^W2 /)
 })

@@ -87,7 +87,7 @@ for (const surface of SURFACES) {
     const r = await t.check('Bash', GIT.Bash)
     expect(r.decision).toBe('allow')
     expect(t.toasts.length).toBe(1)
-    expect(t.statuses[t.statuses.length - 1]).toBe('aico · ⚠ contract')
+    expect(t.statuses[t.statuses.length - 1]).toBe('⚠ contract')
     await t.clock.advance(60000)
     expect(t.statuses[t.statuses.length - 1]).toBe(undefined)
   })

@@ -217,32 +217,32 @@ test('composeStatus ignores prototype keys, unknown keys and non-string values',
   const hostile = JSON.parse('{"__proto__":"x","constructor":"y","prototype":"z","extra":"e","savvy":7,"blast":["b"],"cost":{"a":1},"reflect":null}');
   assert.equal(composeStatus(hostile), undefined);
   const mixed = JSON.parse('{"__proto__":"x","constructor":"y","unknown":"u","cost":"spend 1"}');
-  assert.equal(composeStatus(mixed), 'aico · spend 1');
+  assert.equal(composeStatus(mixed), 'spend 1');
   assert.equal(Object.getPrototypeOf({}), Object.prototype);
   assert.equal({}.x, undefined);
 });
 
 test('composeStatus cuts a 10 MiB part to its cap', () => {
   const line = composeStatus({ savvy: 'x'.repeat(10 * 1024 * 1024) });
-  assert.equal(cellWidth(line), 7 + STATUS_CAPS.savvy);
+  assert.equal(cellWidth(line), STATUS_CAPS.savvy);
   assert.ok(line.endsWith('…'));
 });
 
 test('composeStatus makes CR, LF, tab and ESC one clean line', () => {
   const line = composeStatus({ savvy: 'a\r\nb\tc\u001b[31md' });
   assert.ok(!/[\r\n\t\u001b]/.test(line));
-  assert.ok(line.startsWith('aico · a b c'));
+  assert.ok(line.startsWith('a b c'));
 });
 
 test('composeStatus cuts a CJK part to its cell cap', () => {
   const line = composeStatus({ blast: '漢'.repeat(30) });
-  assert.ok(cellWidth(line) - 7 <= STATUS_CAPS.blast);
+  assert.ok(cellWidth(line) <= STATUS_CAPS.blast);
   assert.ok(line.endsWith('…'));
 });
 
 test('composeStatus joins parts in order savvy, blast, cost, reflect', () => {
   assert.equal(composeStatus({ reflect: '2 lessons', cost: '5 tax', blast: '⚠ core', savvy: 'W1 S01' }),
-    'aico · W1 S01 · ⚠ core · 5 tax · 2 lessons');
+    'W1 S01 · ⚠ core · 5 tax · 2 lessons');
 });
 
 test('composeStatus returns undefined when there is nothing to say', () => {
@@ -253,33 +253,35 @@ test('composeStatus returns undefined when there is nothing to say', () => {
   assert.equal(composeStatus('x'), undefined);
 });
 
-test('STATUS_CAPS add up so the whole line stays on one 80 cell line with all four parts', () => {
+test('STATUS_CAPS add up so the whole line stays on 70 cells, so the host prefix of 8 leaves 2 spare', () => {
   const sum = Object.values(STATUS_CAPS).reduce((a, b) => a + b, 0);
-  assert.equal(STATUS_MAX, 80);
-  assert.deepEqual(STATUS_CAPS, { savvy: 24, blast: 10, cost: 20, reflect: 10 });
-  assert.ok(7 + sum + 3 * 3 <= STATUS_MAX);
+  assert.equal(STATUS_MAX, 70);
+  assert.deepEqual(STATUS_CAPS, { savvy: 22, blast: 12, cost: 17, reflect: 10 });
+  assert.ok(sum + 3 * 3 <= STATUS_MAX);
 });
 
-test('composeStatus with all four parts at their cap is at most 80 cells and keeps every part', () => {
+test('composeStatus with all four parts at their cap is at most 70 cells and keeps every part', () => {
   const line = composeStatus({ savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
-  assert.ok(cellWidth(line) <= 80);
-  assert.equal(line.split(' · ').length, 5);
+  assert.ok(cellWidth(line) <= 70);
+  assert.equal(line.split(' · ').length, 4);
   const wide = composeStatus({ savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
-  assert.ok(cellWidth(wide) <= 80);
+  assert.ok(cellWidth(wide) <= 70);
+  assert.ok(8 + cellWidth(wide) <= 78);
+  assert.equal(wide.split(' · ').length, 4);
   const real = composeStatus({ savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '9007.2P tax 120m', reflect: '20 lessons' });
-  assert.equal(real, 'aico · W3 S12 be-eng 14m · ⚠ security · 9007.2P tax 120m · 20 lessons');
-  assert.ok(cellWidth(real) <= 80);
+  assert.equal(real, 'W3 S12 be-eng 14m · ⚠ security · 9007.2P tax 120m · 20 lessons');
+  assert.ok(cellWidth(real) <= 70);
 });
 
 test('composeStatus with a small max drops reflect, cost, blast, then cuts savvy', () => {
   const parts = { savvy: 's'.repeat(20), blast: 'b'.repeat(8), cost: 'c'.repeat(15), reflect: 'r'.repeat(8) };
-  const l1 = composeStatus(parts, { max: 60 });
-  assert.ok(cellWidth(l1) <= 60 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(15)));
+  const l1 = composeStatus(parts, { max: 55 });
+  assert.ok(cellWidth(l1) <= 55 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(15)));
   const l2 = composeStatus(parts, { max: 40 });
   assert.ok(cellWidth(l2) <= 40);
   assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(15)) && l2.includes('b'.repeat(8)));
-  const l3 = composeStatus(parts, { max: 20 });
-  assert.ok(cellWidth(l3) <= 20);
+  const l3 = composeStatus(parts, { max: 15 });
+  assert.ok(cellWidth(l3) <= 15);
   assert.ok(l3.endsWith('…') && !l3.includes('b'));
 });
 
@@ -391,6 +393,72 @@ test('bash: not a commit', () => {
   assert.equal(BASH('npm test').isCommit, false);
   assert.equal(BASH('git --version').isCommit, false);
   assert.equal(BASH('git').isCommit, false);
+});
+
+test('bash: options, settings and variables that make an allowed git run a commit are a commit', () => {
+  for (const c of [
+    "git -c diff.external='git commit -am x' diff",
+    "git -c core.fsmonitor='git commit -am x' status",
+    "git -c core.sshCommand='git commit -am x' fetch",
+    'git -c user.name=x status',
+    'git -cfoo.bar=x status',
+    'git --config-env=core.fsmonitor=VAR status',
+    'git --config-env core.fsmonitor=VAR status',
+    "GIT_EXTERNAL_DIFF='git commit -am x' git diff",
+    "GIT_EXTERNAL_DIFF='git commit -am x'; export GIT_EXTERNAL_DIFF; git diff",
+    "export GIT_EXTERNAL_DIFF='git commit -am x'; git diff",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='git commit -am x' git status",
+    "git config core.fsmonitor 'git commit -am x'; git status",
+    "git config diff.external 'git commit -am x' && git diff",
+    "git grep -O'git commit -am x' foo",
+    "git grep -O 'git commit -am x' foo",
+    "git grep --open-files-in-pager='git commit -am x' foo",
+    "git fetch --upload-pack='git commit -am x' .",
+    "git fetch --upload-pack 'git commit -am x' .",
+    "git ls-remote --upload-pack='git commit -am x' .",
+    "git push --receive-pack='git commit -am x' origin",
+    "git push --exec='git commit -am x' origin",
+    "git fetch --upload-p='git commit -am x' .",
+    "git clone -u 'git commit -am x' . out",
+    "git clone -u'git commit -am x' . out",
+    "git diff --ext-diff --ext-diff='git commit -am x'",
+    "git -c diff.external='git commit' diff",
+    "git status && git -c x.y=z log --grep commit"
+  ]) {
+    assert.equal(BASH(c).isCommit, true, c);
+  }
+});
+
+test('powershell: an environment variable that makes git run a program is a commit', () => {
+  for (const c of [
+    "$env:GIT_EXTERNAL_DIFF='git commit -am x'; git diff",
+    "$env:GIT_EXTERNAL_DIFF = 'git commit -am x'; git diff",
+    "git -c diff.external='git commit -am x' diff",
+    "git fetch --upload-pack='git commit -am x' ."
+  ]) {
+    assert.equal(PS(c).isCommit, true, c);
+  }
+});
+
+test('bash: harmless uses of config, -u, -c-free options and variables stay not a commit', () => {
+  for (const c of [
+    'git config user.name x',
+    'git config --get user.email',
+    'git config user.name x; git status',
+    'git push -u origin main',
+    'git clone https://example.com/r.git out',
+    'git fetch --upload-pack',
+    'git diff --stat',
+    'git grep -n foo',
+    'git status --porcelain',
+    'FOO=1 git status',
+    'export FOO=1; git log --oneline',
+    'git log --grep=commit',
+    'git log -O'
+  ]) {
+    assert.equal(BASH(c).isCommit, false, c);
+  }
+  assert.equal(PS('$env:FOO = 1; git status').isCommit, false);
 });
 
 test('bash: quoted separators and heredoc messages do not hide or invent a commit', () => {
