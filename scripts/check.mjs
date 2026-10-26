@@ -33,6 +33,8 @@ function mdFiles(dir) {
 
 // Playbooks that dispatch no Role and only print or run a CLI: they need no language resolution.
 export const LANGUAGE_EXEMPT = new Set(['setup', 'language', 'settings']);
+// Playbooks that dispatch Roles under .company/work/ without pipeline Setup: their prompts carry no Context cap: line (dispatch-prompt v3.1).
+export const CONTEXT_CAP_EXEMPT = new Set(['research']);
 const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
@@ -594,7 +596,11 @@ export function check(root, { today } = {}) {
   // and every Playbook resolves the language.
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir)]) {
     const rel = relative(root, file).split(sep).join('/');
+    // Context cap rule (dispatch-prompt v3.1): a Step dispatch (Output under .company/work/) carries Context cap:.
+    const owner = rel.startsWith('skills/') ? rel.split('/')[1] : '';
     for (const b of fencedBlocks(readFileSync(file, 'utf8'))) {
+      if (!CONTEXT_CAP_EXEMPT.has(owner) && /^Output: \.company\/work\//m.test(b.text) && !/^Context cap:/m.test(b.text))
+        errors.push(`ERROR ${rel}:${b.line}: dispatch block has Output: .company/work/ but no Context cap:`);
       if (!b.text.includes('Company profile:')) continue;
       if (!b.text.includes('Language:'))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Language:`);

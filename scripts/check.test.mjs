@@ -675,3 +675,31 @@ test('the fixtures folder holds only LF text (proj.M11)', () => {
   const walk = d => readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]);
   for (const f of walk(FIX)) assert.ok(!readFileSync(f, 'utf8').includes('\r'), f);
 });
+
+// ---- T11: dispatch rule, Context cap: (dispatch-prompt v3.1) ----
+const stepBlock = (extra = '', dir = 's') => '```\nProject profile: p\nCompany profile: x\nLanguage: en\nName: Ava\n' + extra + 'Output: .company/work/' + dir + '/01-r.md\nGoal: y\n```';
+
+test('dispatch block with Output: .company/work/ but no Context cap: is an error', () => {
+  const bad = skill('a', stepBlock());
+  const good = skill('b', stepBlock('Context cap: 150000 handover 120000\n'));
+  const r = check(fixture({ skills: { a: bad, b: good } }));
+  assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Context cap:')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
+});
+
+test('dispatch blocks whose Output is a reply only need no Context cap:', () => {
+  const bs = skill('a', '```\nCompany profile: x\nLanguage: en\nName: Ava\nOutput: your reply only.\nGoal: y\n```');
+  assert.deepEqual(check(fixture({ skills: { a: bs } })).errors, []);
+});
+
+test('only the research Playbook is exempt from the Context cap: rule', () => {
+  const body = stepBlock('', 'research-s');
+  const r = check(fixture({ skills: { research: skill('research', body), other: skill('other', body) } }));
+  assert.ok(!r.errors.some(e => e.includes('skills/research/') && e.includes('Context cap')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('skills/other/') && e.includes('no Context cap:')), r.errors.join('\n'));
+});
+
+test('this repo passes the Context cap: rule', () => {
+  const r = check(REPO);
+  assert.ok(!r.errors.some(e => e.includes('Context cap')), r.errors.join('\n'));
+});
