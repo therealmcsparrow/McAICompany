@@ -1,7 +1,7 @@
-# Contract: dispatch-prompt v3
+# Contract: dispatch-prompt v3.1
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`). Consumer: every Role, through `aico:handoff`.
-v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before.
+v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
 
 ## Lines added in v2
 | Line | When | Value |
@@ -15,6 +15,19 @@ v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: 
 | `Name: <name>` | every dispatch, every Playbook, directly after `Language:` | the Role's effective name, `roles.<role>.name` from `aico-settings` v1 `get`, resolved **once** per run in pipeline Setup §1.7 (`role-names` v1 defaults) |
 | `Settings: model=<m> effort=<e>` | only when the Lead passes `model` and/or `effort` on the Agent call, directly after `Name:`; omitted when nothing is overridden | exactly the values passed: `model=<m>`, `effort=<e>` or both. Passed only when the resolved value differs from the agent frontmatter. A resolved `inherit` is passed as the Lead's session model family (`opus | sonnet | haiku | fable`), never as the literal `inherit` and never by omitting `model`; `<m>` is that concrete family |
 
+## Lines added in v3.1
+| Line | When | Value |
+|---|---|---|
+| `Context cap: <cap> handover <n>` | every pipeline Step dispatch (Output under `.company/work/`), directly after `Settings:` (or after `Name:` when `Settings:` is omitted); not in brainstorm, cooler or research Role prompts | `<cap>` = `roles.<role>.context_cap` from `aico-settings` v1.1 `get`; when the Risk tier is `high`, `<cap>` = max(that value, 150000). `<n>` = floor(`<cap>` × 0.8). Both computed **only** in pipeline Core (Setup §1.7), once per run per Role. Integers, 5 to 7 digits |
+| `Review depth: full \| standard` | only for `code-reviewer`, directly after `Round:` | output of `review-depth` v1 over the Step's diff; never taken from a builder's label. Risk tier `high` is always `full` |
+
+## Canonical line order (v3.1)
+One fixed order, so a Role always finds a line in the same place and the drift test can compare prompts. It gives **no cache saving** across dispatches: the host puts the prompt before the Role block, with no cache breakpoint after the prompt (Spike S2, `docs/adr/0011-token-counts-from-transcripts.md`). Token savings come from shorter prompts and fewer reads, never from this order. A drift test (`scripts/prompt-order.test.mjs`) compares the dispatch blocks in `skills/pipeline/SKILL.md` and `skills/brainstorm/SKILL.md` with these lists.
+- **Pipeline Step:** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Input Handoffs:`, `Output:`, `Goal:`, then the closing `Follow aico:handoff.`
+- **Brainstorm round 1:** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Input:`, `Output:`, `Goal:`.
+- **Brainstorm round 2 and later** (`brainstorm-file` v2): `Digest:` (identical for every Role in the round, read first), then `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Your last reply:`, `Others said:`, `Full file:`, `Output:`, `Goal:`.
+- Cooler and research prompts keep their v3 order.
+
 Lead-only Playbooks that dispatch no Role (`aico:triage`, `aico:help`, `aico:version`, `aico:language`, `aico:settings`) resolve the language the same way and use it for their own forms and replies.
 
 ## Role-side rules (written into `aico:handoff`)
@@ -26,6 +39,8 @@ Lead-only Playbooks that dispatch no Role (`aico:triage`, `aico:help`, `aico:ver
 - `Design skills:` → load each named skill (Skill tool). A named skill that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.
 - `Name:` is display only (bylines, cues, digests). Never route, file or name anything machine-read by it; `aico:<role>` stays the ID.
 - `Settings:` is a record for the Handoff; the Role does nothing with it.
+- `Context cap:` → the Role hands over (`status: handover`) at the next clean point once its context nears `<n>`. The Role never computes the 80% or the high-risk floor itself.
+- `Review depth:` → `full`: every touched line plus its callers and Contracts; `standard`: the diff scope as in `aico:review`. The reviewer may raise `standard` to `full`, never lower it.
 
 ## Error cases
 - `Language:` absent (v1 prompt, old resume state) → treat as `en`.
@@ -34,3 +49,6 @@ Lead-only Playbooks that dispatch no Role (`aico:triage`, `aico:help`, `aico:ver
 - `Design skills:` absent for a UI Role → behave as `none`.
 - `Name:` absent (v1/v2 prompt, old resume state) → the Role uses its Role title.
 - `Settings:` absent → nothing was overridden.
+- `Context cap:` absent (v3 prompt, old resume state) → cap 150000, handover at 120000.
+- `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 150000, handover at 120000, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
+- `Review depth:` absent or not `full | standard` → `full`.
