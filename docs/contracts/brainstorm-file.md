@@ -2,11 +2,12 @@
 
 Provider: `aico:brainstorm` (the Lead) through `scripts/brainstorm.mjs`. Validator: `checkBrainstorm(text)` exported by `scripts/check.mjs` (Core). Consumers: `aico:brainstorm`, `aico:feature` (a built brainstorm's `## Summary` starts the brief), `aico:research`, `check.mjs` CI.
 - **v1** = a brainstorm file without `format:` in its frontmatter (the shape in `skills/brainstorm/SKILL.md` at 0.10.0). It is read start to finish, passes `check.mjs`, and is **never rewritten or converted** (CEO, Brief Gate Q1). A reopened v1 file continues in v1.
-- **v2** = `format: 2`. New major version because the body layout changes; approved by the CEO in the brainstorm Summary and at the Brief Gate. Rationale: `docs/adr/0009-brainstorm-format-2.md`.
+- **v2** = `format: 2`. New major version because the body layout changes; approved by the CEO in the brainstorm Summary and at the Brief Gate. Rationale: `docs/adr/0009-brainstorm-format-2.md`; constant prompt and input files: `docs/adr/0013-brainstorm-constant-prompt.md`.
 
 ## Files
 - Brainstorm: `.company/<brainstorms|roadmap|nice-to-have|parked>/YYYY-MM-DD HH.MM - <Short Topic>.md` (name rule unchanged).
 - Film script (only when `brainstorm.film_script` is `true`, `aico-settings` v1.1): `<same folder>/<same stem> - film.md`, frontmatter `kind: film`, `source: <brainstorm file name>`, `label: rendered from stored replies; no invented lines`. It moves with the brainstorm on close. `check.mjs` skips `kind: film` files except for that frontmatter.
+- Round input files (local, never committed): `.company/brainstorm-input/<run>/<role>.md`, see "Round input". They are views written by the script, not brainstorm files: `check.mjs` never scans them, Close never moves them, `film` never reads them.
 
 ## v2 layout
 Frontmatter: `topic`, `started`, `status` (`open | built | roadmap | nice-to-have | parked`), `roles`, `format: 2`, optional `mode` (`ideas | debate | moderated`).
@@ -66,6 +67,7 @@ skip
 - Valid reply: the text as sent, line endings made LF, surrounding whitespace trimmed.
 - `Skip` (alone, any letter case, `brainstorm-reply` v1) is stored as `skip`. This is the one normalised body; rule 6 compares with `skip`.
 - Malformed reply: the first body line is `(malformed)` (never in the heading), then the text with control characters replaced by `?`, cut at 4 KiB with a last line `(truncated)`, each line cut at 1000 characters. A line starting `#`, `**Lead:**` or `**CEO:**` is stored with a `> ` prefix, so a reply can never forge file structure and the file stays valid.
+- Idea IDs are never written into a stored reply. The ID-annotated "shown form" (below) exists only in round input files, so rule 6 quotes and `film` lines stay byte for byte.
 
 ## Rules `checkBrainstorm` enforces (each error names the file and the rule)
 1. No `format:` → v1: only the existing frontmatter checks; never an error for missing v2 sections.
@@ -77,35 +79,65 @@ skip
 7. Every `answered` Question has exactly one Decision; every Decision names an existing Question.
 8. Every round heading matches the heading rule above (`debate` without a style → `debate round needs a style`; another style → `unknown debate style`). Every reply heading matches the reply rule. `— full pass` replies appear only in a `debate: full_pass` round; `— crossfire` replies only in a debate round, zero or two of them; passes keep the order above (`pass out of order`).
 - Limits: file ≤ 1 MiB, lines ≤ 4000 characters, anchored linear patterns only (proj.M1 to M4).
+- Round input files add no rule: they are not brainstorm files.
 
-## Prompt inputs (round 2 and later)
-`node brainstorm.mjs prompt <file> <role>` prints the round input block in `dispatch-prompt` v3.1 order: `Digest:` (the `## Digest` section as stored, identical for every Role), the Role's own last reply, `Others said:` (at most 5 one-line headlines, one per other Role, its first idea line cut to 120 characters), and `Full file: <absolute path>` (the Role opens it only when it needs to).
-`prompt <file> <role> --pass full <round>` (full pass, `debate: full_pass` only) prints `Digest:`, the Role's own ideas-pass reply of `<round>`, `Other Roles:` with every other Role's ideas-pass reply of `<round>` verbatim (`skip` ones left out, malformed ones marked `(malformed)`), and `Full file:`. This pass reads more by design; it is the CEO's opt-in style.
-`prompt <file> <role> --pass crossfire <round>` prints `Digest:`, the Role's own replies of `<round>`, and `Opponent:` with the other pair member's replies of `<round>` verbatim.
+## Round input (every round and pass)
+A Role's dispatch prompt is **byte-identical for the whole run**: every round, every pass, every re-ask (`dispatch-prompt` v3.1, "Brainstorm"). Everything that changes is in that Role's **input file**, which `stage` writes and the Role reads first. Reason: the host puts the prompt before the ~13k-token Role block; an identical prompt reuses the cached block, a changed one rewrites it (Spike S2; replay `25-ai-data-engineer.md`).
 
-Output labels (exact text; each label is a line of its own, its content follows; an empty block prints `(none)`):
-| Prompt | Labels, in order |
+### Path and lifetime
+- `<repo root>/.company/brainstorm-input/<run>/<role>.md`, where `.company/` is the folder that holds the brainstorm file's folder (the file must sit in one of the four brainstorm folders, else `refused: <file> is not in a brainstorm folder`). `<run>` = `brainstorm-<YYYYMMDD-HHMM>` from the file name's stamp `YYYY-MM-DD HH.MM` (the ledger's run name, `token-ledger` v1); `<role>` is a roster slug. Neither part ever comes from free text. A file name without that stamp → `refused: no time stamp in the file name`.
+- The path is the same for a Role in every round and pass, so the prompt naming it never changes. On a reopen (or a move between the four folders) the stamp, and so the path, stays the same.
+- One file per Role, not one shared file: each Role reads only its own material, and a shared prompt would not share a cache anyway (the Role block after it differs per Role).
+- Never committed: `stage` creates `.company/brainstorm-input/.gitignore` with the one line `*` when it is missing. The folder is outside the four brainstorm folders.
+- Written only by the script: LF, atomically (temp file plus rename). `stage` first removes every `<slug>.md` in `<run>/`, so a Role that is not staged for this pass has no file and nothing stale can be read.
+- Removed by `clean` at Close (the Lead runs it); stale folders after a crash are local, ignored and removed by the next `clean` of that run.
+
+### Layout (labels are exact; each label is a line of its own, its content follows; an empty block prints `(none)`; an optional label is left out entirely when it does not apply)
+| Label | Content |
 |---|---|
-| default (ideas) | `Digest:`, `Your last reply:` (the Role's last stored reply, any round or pass), `Others said:` (lines `- <Name> (<role>): <headline>`, from valid replies with at least one idea), `Full file:` |
-| `--pass full <round>` | `Digest:`, `Your ideas-pass reply of round <round>:`, `Other Roles:` (each reply under its `#### <Name> (<role>)` heading), `Full file:` |
-| `--pass crossfire <round>` | `Digest:`, `Your replies of round <round>:`, `Opponent:` (each reply under its stored heading), `Full file:` |
-- Another Role's malformed reply reaches a prompt only as `(malformed)`, never its text.
-- `--pass crossfire` for a Role outside the round's pair → `refused: <role> is not in the crossfire pair of round <round>`.
+| `Round: <n>` | the round being played |
+| `Pass: ideas \| full \| crossfire` | the pass (`ideas` also for a moderated turn) |
+| `Topic:` | the frontmatter `topic`, one line |
+| `Read also:` (optional) | the absolute path of `.company/project.md`, only when that file exists and this Role has no stored reply in the file yet (its first turn) |
+| `Summary:` (optional) | the stored `## Summary` paragraph, only when one was written (a reopened file) |
+| `Re-ask:` (optional) | only for `stage --reask`: the parse reasons of the Role's malformed reply, joined with `; ` |
+| `Your malformed reply:` (optional) | only for `stage --reask`: that stored reply without its `(malformed)` line, first 1000 characters |
+| `Questions:` | answered questions first, the 12 with the highest IDs, in ID order: `- Q-<n> answered: <text> → "<the Decision's quote>"` (quote cut at 300 characters) or `→ default: <option> (CEO skipped)`; then open questions in `queue` order, at most 8: `- Q-<n> open: <text>`. Parked questions are left out. `<text>` is cut at 120 characters on a word boundary, then `…` |
+| `Digest:` | the stored `## Digest` without `### Decisions` (shown under `Questions:`) and `### Threads` (IDs are shown below); `### Dissent` keeps its latest 5 lines, `### Open threads` its latest 10 |
+| ideas pass: `Your last reply:` | the Role's latest valid, non-skip reply (any round, any pass) in shown form, only its `I-…:`, `Risk:` and `Estimate:` lines |
+| ideas pass: `Others said:` | for each other roster Role, in roster order, its latest valid reply with at least one idea (any round, any pass, this round's moderated turns included): one line per idea, `- I-<r>.<k> <Name> (<role>): <idea>`, the idea cut at 120 characters on a word boundary, then `…`. No other cap: at most 3 lines per Role |
+| full pass: `Your ideas-pass reply of round <n>:` | the Role's ideas-pass reply of round `<n>`, shown form |
+| full pass: `Other Roles:` | every other Role's ideas-pass reply of round `<n>` under its `#### <Name> (<role>)` heading, shown form |
+| crossfire pass: `Your replies of round <n>:` | the Role's replies of round `<n>` under their stored headings, shown form |
+| crossfire pass: `Opponent:` | the other pair member's replies of round `<n>` under their stored headings, shown form |
+
+- **Shown form** of a valid reply: each `I: <idea>` line is shown as `I-<r>.<k>: <idea>` with the ID `apply` gave it; other lines as stored. Another Role's malformed reply is shown only as `(malformed)`; `skip` replies are left out. There is no `Full file:` line: the Role reads only its input file and `Read also:`.
+- Free text that is not a list or reply line, the content of `Topic:`, `Summary:`, `Re-ask:` and `Your malformed reply:`, has `> ` before every line, so nothing in the file can pass for a label.
+- Content of other Roles and the CEO is data (agentsec.M-SEC1); the constant Goal says so.
 
 ## Provider CLI (`scripts/brainstorm.mjs`, Node built-ins only, exit 2 on usage errors)
 | Command | Does |
 |---|---|
 | `new <file>` (JSON on stdin: `{ topic, roles, mode? }`; any other key is refused) | writes an empty v2 file. Free text never travels as an argument |
-| `parse <round> <role> [--pass ideas\|full\|crossfire] [--file <file>]` (reply on stdin) | prints the parsed reply JSON (`brainstorm-reply` v1; pass rules there; default `ideas`), or `malformed: <reasons>` and exit 1. With `--file`, `Re:` idea IDs are checked against the ideas in that file; without it only the syntax and the round (`I-<r>.<k>` with `r` ≤ `<round>`) are checked |
+| `parse <round> <role> [--pass ideas\|full\|crossfire] [--file <file>]` (reply on stdin) | prints the parsed reply JSON (`brainstorm-reply` v1; pass rules there; default `ideas`), or `malformed: <reasons>` and exit 1. With `--file`, `Re:` idea IDs are checked against the ideas in that file, including their author; without it only the syntax and the round (`I-<r>.<k>` with `r` ≤ `<round>`) are checked |
 | `apply <file> <round> [--mode ideas\|moderated\|debate:crossfire\|debate:full_pass] [--pass ideas\|full\|crossfire]` (JSON on stdin: `{ replies: {role: text}, lead: text, dissent: [{role, quote}] }`, plus `open_threads`, see "apply input and output") | appends the replies of that pass with every reply verbatim (a malformed one is stored, marked `(malformed)`, and listed on stdout for the Lead; never dropped), assigns `I-<round>.<n>` continuing the round's numbering, merges questions, updates Digest Threads, Estimate and Questions; validates with `checkBrainstorm`; writes atomically or refuses and changes nothing. `--mode` is given on the round's first apply (default `ideas`) and writes the heading; `--pass` defaults to `ideas`. `lead` may be empty on an apply that is not the round's last; a non-empty `lead` writes `**Lead:**` and closes the round's passes |
 | `answer <file> <Q-id>` (answer on stdin) / `answer <file> <Q-id> --skip` | records the CEO's answer verbatim as a Decision, or the default as `(CEO skipped)`; sets `status:answered` (rules in "answer") |
 | `ask <file>` (JSON on stdin: `{ text, options: [..], default, tag: blocking\|nice-to-have, ceo? }`; any other key is refused) | queues a mid-round CEO or Lead question for the next round. `src:` is the latest round (`R1` before any round); `"ceo": true` writes `src: R<n> CEO`, without it `src: R<n>`. Text one line of 1 to 300 characters; 2 to 6 options without `\|`; the default is one of them |
-| `merge <file> <Q-keep> <Q-drop>` | both must be open; votes summed into `Q-keep`; the dropped line becomes `votes:0 status:parked — merged into Q-<keep> (<old text>)` |
-| `queue <file>` | JSON `{ ask: [3 questions], next_up: question \| null }`: open only, blocking before nice-to-have, then votes, then oldest (CEO, Brief Gate Q2) |
-| `prompt <file> <role> [--pass full\|crossfire <round>]` | the round input blocks above |
+| `merge <file> <Q-keep> <Q-drop>` | `Q-drop` must be open; `Q-keep` must be open or answered (a restatement of an answered question is merged into it, so it never returns). Votes summed into `Q-keep`, its status unchanged; the dropped line becomes `votes:0 status:parked — merged into Q-<keep> (<old text>)` |
+| `queue <file>` | JSON `{ ask: [3 questions], next_up: question \| null, answered: [{ id, text }] }`: `ask`/`next_up` open only, blocking before nice-to-have, then votes, then oldest (CEO, Brief Gate Q2); `answered` lists every answered question in ID order, for the Lead's duplicate check |
+| `stage <file> <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | writes the round input files ("Round input") and prints JSON `{ run, files: { "<role>": "<absolute path>" } }`. Staged Roles: ideas pass → `--roles` or every roster Role; full pass → `--roles` or every roster Role; crossfire → exactly the computed pair (`--roles` refused). `--reask <role>` → ideas pass, that Role only. Never changes the brainstorm file |
+| `prompt <file> <role> [--pass full\|crossfire <round>]` | prints the input file text `stage` would write for that Role (ideas pass: for the latest round while it is open, else the next round); writes nothing |
+| `clean <file>` | removes `.company/brainstorm-input/<run>/` of that file; prints `cleaned <run>` (also when there was nothing to remove) |
 | `crossfire <file> <round>` | JSON pair `[roleA, roleB]` or `null` (debate rounds only, either style; see `brainstorm-reply` v1). `roleA` is the challenger, `roleB` the idea's author (role slugs). Also `null` when the round does not exist, already has crossfire replies, or is closed, so a played pass is never dealt twice |
 | `film <file>` | writes the film script file; no model call; every line quotes a stored reply word for word |
 | `check <file>` | runs `checkBrainstorm`; exit 1 with the errors |
+
+### stage rules
+- Round: the ideas pass stages the next round (latest + 1, or 1 in an empty file) or the latest round while it is open (moderated turns, re-asks). The full and crossfire passes stage the latest round, open, headed `debate: full_pass` (full) or `debate: …` (crossfire). Anything else → `refused: round <n> cannot be staged`.
+- `--reask <role>`: the Role's latest reply in round `<round>` must be a malformed ideas-pass reply, else `refused: <role> has no malformed reply in round <n>`. The reasons come from parsing the stored text again (`parse --file` rules).
+- A `--roles` slug outside the roster → `refused: <slug> is not in the roster`. `--pass crossfire` with no pair → `refused: no crossfire pair in round <n>`.
+- File system: the run folder and `.gitignore` are created when missing; a symlink or any entry other than `<slug>.md` and the script's own temp files in `<run>/` → `refused: unexpected entry in <run>`, nothing written. Paths are built from the checked stamp and roster slugs only, and must resolve inside `.company/brainstorm-input/`.
+- `clean` deletes only `<slug>.md` files and the script's temp files in `<run>/`, then the folder; any other entry or a symlink → `refused: unexpected entry in <run>`, nothing deleted. It never touches `.gitignore` or other runs.
 
 ### apply input and output
 - Keys allowed on stdin: `replies`, `lead`, `dissent`, `open_threads`; any other key → `refused: unknown key <k>`.
@@ -120,14 +152,14 @@ Output labels (exact text; each label is a line of its own, its content follows;
 - The round's first answer writes `**CEO:** <answer>` (`**CEO:** (skipped)` with `--skip`). Later answers add the answer as a plain line of the same CEO reply, unless that text is already in it; a later `--skip` adds no line.
 - The Decision's `src:` is that round.
 
-Debate round flow (Lead, `aico:brainstorm`): `crossfire` style = ideas pass → `apply --mode debate:crossfire` → `crossfire` → pair dispatch → `apply --pass crossfire` (with `lead`). `full_pass` style = ideas pass → `apply --mode debate:full_pass` → `prompt --pass full` per Role → full-pass dispatch → `apply --pass full` → `crossfire` → pair dispatch → `apply --pass crossfire` (with `lead`). When `crossfire` prints `null`, the previous apply carries `lead` (or a final `apply` with empty `replies` and `lead` does).
+Round flow (Lead, `aico:brainstorm`): every dispatch is preceded by `stage` for exactly the Roles dispatched, with the Role's constant prompt. Ideas or moderated round = `stage` → dispatch → `apply` (re-ask: `stage --reask` → dispatch → `apply`). `crossfire` style = ideas pass → `apply --mode debate:crossfire` → `crossfire` → `stage --pass crossfire` → pair dispatch → `apply --pass crossfire` (with `lead`). `full_pass` style = ideas pass → `apply --mode debate:full_pass` → `stage --pass full` → full-pass dispatch → `apply --pass full` → `crossfire` → `stage --pass crossfire` → pair dispatch → `apply --pass crossfire` (with `lead`). When `crossfire` prints `null`, the previous apply carries `lead` (or a final `apply` with empty `replies` and `lead` does). Before the form: the Lead's duplicate check (`queue` `answered`, then `merge`). At Close: `clean`.
 
 ## Error cases
 - Malformed reply → stored verbatim with `(malformed)` and reported; the Lead may re-ask that Role once. A re-ask works in the ideas pass only: a second block for that Role is appended and idea numbering never shifts. In the full and crossfire passes one reply per Role is allowed, so a second one → `refused: <Name> (<role>) already replied in pass <p> of round <n>`.
 - `apply` result fails `checkBrainstorm` → `refused: <errors>`, file unchanged.
 - `apply` for a round whose `**Lead:**` line exists → `refused: round <n> is closed`, file unchanged.
 - `apply --pass full` on a round not headed `debate: full_pass`, or `--pass crossfire` on a round that is not a debate round → `refused: pass <p> not allowed in round <n>`, file unchanged.
-- Duplicate questions: merged when their normalized text (lowercase, collapsed spaces, punctuation stripped) is equal, votes summed; the Lead may merge near-duplicates with `merge <file> <Q-keep> <Q-drop>` (votes summed, the dropped ID points to the kept one).
-- An answered question never reaches `queue`.
+- Duplicate questions: merged automatically when their normalized text (lowercase, collapsed spaces, punctuation stripped) equals any existing question's, whatever its status (votes summed, status unchanged, so an exact restatement of an answered question never reopens it). Restatements in other words are prevented by the `Questions:` block of the input file and caught by the Lead with `merge <file> <Q-keep> <Q-drop>` (keep may be answered). The script does no fuzzy matching: the replay's restatements share too few words for a fixed rule.
+- An answered question never reaches `queue` `ask` or `next_up`.
 - Files: CRLF files are read and written back with LF. Every command except `new` and `check` refuses, untouched, a v1 file (it continues in the 0.10.0 flow), a `kind: film` file, and a file that already fails `checkBrainstorm`.
 - Output: refusals go to stderr as `refused: …` with exit 1; usage errors exit 2; `parse` prints `malformed: <reasons>` to stdout with exit 1.
