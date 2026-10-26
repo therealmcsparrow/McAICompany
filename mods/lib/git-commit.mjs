@@ -40,6 +40,9 @@ const GLOBAL_WITH_VALUE = new Set(['--namespace', '--super-prefix', '--attr-sour
 const NON_LITERAL = /[$@*?[\]`%!<>]/;
 const ENV_REDIRECT = /GIT_(?:DIR|WORK_TREE|INDEX_FILE)\b/i;
 const TEXT_REDIRECT = /--git-dir|--work-tree|core\.worktree|GIT_(?:DIR|WORK_TREE|INDEX_FILE)\b/i;
+// Subcommands that can put work on a branch without naming commit; their word in the text widens the strict rules.
+const LANDS_WORK = /(?<![A-Za-z0-9_-])(?:merge|pull|cherry-pick|revert|am|rebase|stash|reset|update-ref|commit-tree)(?![A-Za-z0-9_-])/i;
+const GIT_WORD = /(?<![A-Za-z0-9_./\-])git(?![A-Za-z0-9_.\/-])/i;
 const DASH_C = /(?:^|\s)-C\s/;
 
 function isAbsolute(p) {
@@ -156,6 +159,22 @@ function parse(src, ps) {
   return { statements, unterminated };
 }
 
+// A `git` word in any token outside a statement's program position: a payload that calls git from inside an option, a value or a variable.
+function nestsGit(statements, ps) {
+  for (const st of statements) {
+    let k = 0;
+    for (; k < st.tokens.length; k++) {
+      const t = st.tokens[k];
+      const assign = (!ps && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || (ps && /^\$env:[^=]*=/i.test(t));
+      if (assign) {
+        if (GIT_WORD.test(t)) return true;
+      } else if (!KEYWORDS.has(t)) break;
+    }
+    for (let j = k + 1; j < st.tokens.length; j++) if (GIT_WORD.test(st.tokens[j])) return true;
+  }
+  return false;
+}
+
 function baseName(token) {
   const cut = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
   return (cut === -1 ? token : token.slice(cut + 1)).toLowerCase();
@@ -165,7 +184,7 @@ function isLiteral(token) {
   return token !== '.' && token !== '&' && !NON_LITERAL.test(token);
 }
 
-// Long options that run a program; git accepts any unambiguous prefix, so a prefix of four characters or more counts.
+// Long options that run a program; git accepts any unambiguous prefix, so any prefix of one letter or more (three characters with the dashes) counts.
 const RUNNERS = ['--upload-pack', '--receive-pack', '--exec', '--ext-diff', '--open-files-in-pager'];
 
 function runsProgram(toks, from, sub) {
@@ -173,11 +192,10 @@ function runsProgram(toks, from, sub) {
     const t = toks[j];
     if (!t.startsWith('-')) continue;
     if (t.startsWith('-O')) return true;
-    if (sub === 'clone' && t.startsWith('-u')) return true;
     if (t.startsWith('--')) {
       const eq = t.indexOf('=');
       const name = (eq === -1 ? t : t.slice(0, eq)).toLowerCase();
-      if (name.length >= 4 && RUNNERS.some((r) => r.startsWith(name))) return true;
+      if (name.length >= 3 && RUNNERS.some((r) => r.startsWith(name))) return true;
     }
   }
   return false;
@@ -291,7 +309,7 @@ function intent(command, ps) {
   let found = null;
   let foreign = false;
   let dynamic = false;
-  const ctx = { mentionsCommit: /commit/i.test(command), env: false, git: false, force: false };
+  const ctx = { mentionsCommit: /commit/i.test(command) || LANDS_WORK.test(command) || nestsGit(statements, ps), env: false, git: false, force: false };
   for (const st of statements) {
     const r = analyse(st, ps, cwd, ctx);
     if (r.kind === 'cd') cwd = joinRepo(cwd, r.target);

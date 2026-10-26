@@ -448,6 +448,56 @@ test('bash: a network or search subcommand next to the word commit is a commit, 
   }
 });
 
+test('bash: a payload that lands work on the branch without the word commit is a commit', () => {
+  for (const c of [
+    "git ls-remote --upload-pack='git stash -q; git merge -q --no-edit refs/stash;:' .",
+    "GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:' git diff",
+    "git config diff.external 'git stash -q; git merge -q --no-edit refs/stash;:'; git diff",
+    "git fetch --upload-pack='git cherry-pick -n x' .",
+    "git fetch --upload-pack='git pull' .",
+    "git fetch --upload-pack='git revert x' .",
+    "git fetch --upload-pack='git am p' .",
+    "git fetch --upload-pack='git rebase x' .",
+    "git fetch --upload-pack='git reset --soft x' .",
+    "git fetch --upload-pack='git update-ref refs/heads/x y' .",
+    "git fetch --upload-pack='git commit-tree t' .",
+    "git config diff.external 'x'; git log -p --ext-diff; echo merge",
+    "GIT_EXTERNAL_DIFF=./x git diff; git status -s -- git"
+  ]) {
+    assert.equal(BASH(c).isCommit, true, c);
+  }
+  // a nested git outside the program position is enough, whatever the other words are
+  assert.equal(BASH("git ls-remote --upload-pack='git x' .").isCommit, true);
+  assert.equal(BASH("GIT_EXTERNAL_DIFF='git x' git diff").isCommit, true);
+  assert.equal(BASH("git config diff.external 'git x'; git diff").isCommit, true);
+  for (const c of ['git fetch origin && git status', 'git push origin main', 'export PATH=x; git status', 'git stash', 'git merge-base a b', 'git ls-remote origin',
+    'git fetch --upload-pack', 'git diff --exit-code', 'git config user.name x', 'git reset --hard; git status']) {
+    assert.equal(BASH(c).isCommit, false, c);
+  }
+});
+
+test('bash: an abbreviated runner option of three or more characters counts when the command names commit', () => {
+  for (const c of ["git diff --ext 'commit'", "git log --ext-d -p commit", "git diff --ext=x commit", "git log --ext commit", "git show --ext commit",
+    "git diff-files --ext commit", "git format-patch --ext commit", "git range-diff --ext commit", "git diff --ext-diff commit", "git diff --open commit",
+    "git diff --rec commit", "git diff --upl commit", 'git diff --e commit', 'git log --e commit', 'git diff --o commit']) {
+    assert.equal(BASH(c).isCommit, true, c);
+  }
+  for (const c of ['git diff --exit-code commit', 'git diff --stat commit', 'git log --oneline --graph commit',
+    'git diff --name-only commit', 'git diff --ext']) {
+    assert.equal(BASH(c).isCommit, false, c);
+  }
+});
+
+test('bash: Contract-pinned commit and not-a-commit cases', () => {
+  for (const c of ['export GIT_EXTERNAL_DIFF; git diff --stat commit', "git archive --e='x' commit", 'git add --fo a && git commit -m x', 'git add --fo a; git commit -m x']) {
+    assert.equal(BASH(c).isCommit, true, c);
+  }
+  assert.equal(BASH('git add --fo a && git commit -m x').unknown, true);
+  for (const c of ["printf 'git commit\\n'", 'git fetch origin && git status', 'git clone https://h/x.git y', 'export PATH=x; git status', 'rg TODO', 'rg commit']) {
+    assert.equal(BASH(c).isCommit, false, c);
+  }
+});
+
 test('bash: printf -v, a bare export and set -a set the environment for git', () => {
   for (const c of [
     "printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; export GIT_EXTERNAL_DIFF; git diff",
