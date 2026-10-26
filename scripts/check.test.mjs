@@ -692,11 +692,9 @@ test('dispatch blocks whose Output is a reply only need no Context cap:', () => 
   assert.deepEqual(check(fixture({ skills: { a: bs } })).errors, []);
 });
 
-test('only the research Playbook is exempt from the Context cap: rule', () => {
-  const body = stepBlock('', 'research-s');
-  const r = check(fixture({ skills: { research: skill('research', body), other: skill('other', body) } }));
-  assert.ok(!r.errors.some(e => e.includes('skills/research/') && e.includes('Context cap')), r.errors.join('\n'));
-  assert.ok(r.errors.some(e => e.includes('skills/other/') && e.includes('no Context cap:')), r.errors.join('\n'));
+test('the research Playbook is not exempt from the Context cap: rule', () => {
+  const r = check(fixture({ skills: { research: skill('research', stepBlock('', 'research-s')) } }));
+  assert.ok(r.errors.some(e => e.includes('skills/research/') && e.includes('no Context cap:')), r.errors.join('\n'));
 });
 
 test('this repo passes the Context cap: rule', () => {
