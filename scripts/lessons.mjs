@@ -10,6 +10,8 @@ export const MAX_FILE_BYTES = 64 * 1024;
 export const MIN_TEXT = 10;
 export const MAX_TEXT = 240;
 export const ROLE_RE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
+// Allow-list: letters, digits, a plain space and . , ; : ! ? ' " ( ) - _ / %
+export const TEXT_RE = /^[\p{L}\p{N} .,;:!?'"()\-_/%]+$/u;
 const LINE_RE = /^- (\d{4}-\d{2}-\d{2}) (lead|[a-z][a-z0-9-]{0,40}): (\S.*)$/;
 const USAGE = 'usage: lessons.mjs accept --role <role> --text <text> | list --json';
 
@@ -21,9 +23,8 @@ export function checkText(text) {
   if (/[\p{C}\p{Zl}\p{Zp}]/u.test(text)) return 'text must be one line with no control character';
   const t = text.trim();
   if (t.length < MIN_TEXT || t.length > MAX_TEXT) return `text must be ${MIN_TEXT}-${MAX_TEXT} characters`;
-  if (/^[-#>|]/.test(t)) return 'text must not start with -, #, > or |';
-  if (t.includes('`')) return 'text must not contain a backtick';
-  if (/<[A-Za-z]/.test(t)) return 'text must not contain a tag';
+  if (t.startsWith('-')) return 'text must not start with -';
+  if (!TEXT_RE.test(t)) return 'text may hold only letters, digits, spaces and the marks . , ; : ! ? \' " ( ) - _ / %';
   return null;
 }
 

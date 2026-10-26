@@ -26,7 +26,7 @@ const plain = (text) => text.replace(CONTROL, ' ');
 // ---------- reading a Handoff ----------
 
 function frontmatter(lines) {
-  const fm = {};
+  const fm = Object.create(null);
   if (lines[0] !== '---') return fm;
   for (let i = 1; i < lines.length && lines[i] !== '---'; i++) {
     const m = /^([a-z-]+):[ \t]*(.*)$/.exec(lines[i]);
