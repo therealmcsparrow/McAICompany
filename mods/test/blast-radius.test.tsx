@@ -87,7 +87,7 @@ for (const surface of SURFACES) {
     const r = await t.check('Bash', GIT.Bash)
     expect(r.decision).toBe('allow')
     expect(t.toasts.length).toBe(1)
-    expect(t.statuses[t.statuses.length - 1]).toBe('aico · blast warn contract 1')
+    expect(t.statuses[t.statuses.length - 1]).toBe('aico · ⚠ contract')
     await t.clock.advance(60000)
     expect(t.statuses[t.statuses.length - 1]).toBe(undefined)
   })
@@ -192,5 +192,114 @@ test('an error in the hook denies a commit and passes any other shell call', asy
     expect(r.decision).toBe('deny')
     expect(r.reason).toBe('Blast Radius failed; commit refused')
     expect((await t.check(tool, 'ls -la')).decision).toBe('allow')
+  }
+})
+
+test('a dispatched subagent commit starts with From subagent <Step> <role>', async ($, on) => {
+  await boot($, on, 'terminal', { review: ok(SEC) })
+  const prompt = 'Output: .company/work/x/12-backend-engineer.md\nBase commit: 1551e10\nRisk tier: high\n'
+  const spawned = await $.agent.spawn({ prompt, subagentType: 'aico:backend-engineer' })
+  expect(spawned.deny).toBe(undefined)
+  const r = await $.tool.check({ tool: 'Bash', input: { command: GIT.Bash }, agentId: 'r1' } as never)
+  expect(r.decision).toBe('deny')
+  expect(r.reason).toMatch(/^From subagent 12 backend-engineer: Blast Radius: /)
+  expect(r.reason).toContain('nobody can be asked; commit refused')
+})
+
+test('a subagent whose dispatch line is odd falls back to its cleaned id', async ($, on) => {
+  await boot($, on, 'terminal', { review: ok(SEC) })
+  await $.agent.spawn({ prompt: 'Output: ../../x/12-backend-engineer.md', subagentType: 'aico:backend-engineer' })
+  const r = await $.tool.check({ tool: 'Bash', input: { command: GIT.Bash }, agentId: 'r1' } as never)
+  expect(r.reason).toMatch(/^From subagent r1: Blast Radius: /)
+})
+
+const READS_ALL = ['--worktree', '--json']
+for (const [shell, command] of [
+  ['Bash', 'git add -A && git commit -m x'],
+  ['Bash', 'git add mods/a.ts; git commit -m x'],
+  ['Bash', 'git commit --pathspec-from-file=p.txt'],
+  ['Bash', 'git commit -m x'],
+  ['PowerShell', 'git add .; git commit -m x'],
+] as const) {
+  test(`${shell}: "${command}" reads worktree, staged and untracked, never staged only`, async ($, on) => {
+    const t = await boot($, on, 'terminal', { review: ok(CORE), approver: 'person' })
+    const r = await t.check(shell, command)
+    expect(r.decision).toBe('ask')
+    const last = t.calls[t.calls.length - 1]
+    expect(last.slice(1)).toEqual(READS_ALL)
+    expect(t.calls.some(c => c.includes('--staged'))).toBe(false)
+  })
+}
+
+const EVASIONS: [string, string][] = [
+  ['Bash', 'G=git; $G commit -m x'],
+  ['Bash', "$'git' commit -m x"],
+  ['Bash', 'git -c alias.ci=commit ci -m x'],
+  ['Bash', 'find . -exec git commit -m x \\;'],
+  ['Bash', 'stdbuf -o0 git commit'],
+  ['Bash', 'echo commit | xargs git'],
+  ['Bash', '/usr/bin/gi? commit'],
+  ['Bash', 'git commit-tree abc'],
+  ['Bash', 'node -e "require(\'child_process\').execSync(\'git commit -m x\')"'],
+  ['PowerShell', "$g='git'; & $g commit"],
+  ['PowerShell', '. git commit -m x'],
+  ['PowerShell', 'git @a'],
+  ['PowerShell', '& (Get-Command git) commit'],
+  ['PowerShell', 'git.cmd commit -m x'],
+]
+for (const [shell, command] of EVASIONS) {
+  test(`${shell}: the evasion "${command}" is gated like a commit`, async ($, on) => {
+    const t = await boot($, on, 'terminal', { review: ok(CORE), approver: 'person' })
+    expect((await t.check(shell, command)).decision).toBe('ask')
+  })
+}
+
+for (const command of [
+  'git --git-dir=/x/.git commit -m y',
+  'git --work-tree=/x commit -m y',
+  'GIT_DIR=/x/.git git commit -m y',
+  'GIT_WORK_TREE=/x git commit -m y',
+  'GIT_INDEX_FILE=/tmp/idx git commit -m y',
+]) {
+  test(`"${command}" is an unknown security hit, without a script call`, async ($, on) => {
+    const t = await boot($, on, 'terminal', { review: ok(PLAIN), approver: 'person' })
+    const before = t.calls.length
+    const r = await t.check('Bash', command)
+    expect(r.decision).toBe('ask')
+    expect(r.reason).toContain('Security: unknown')
+    expect(t.calls.length).toBe(before)
+  })
+}
+
+test('an evasion with nobody to ask is refused', async ($, on) => {
+  const t = await boot($, on, 'terminal', { review: ok(CORE) })
+  const r = await t.check('Bash', 'g=git; $g commit -m x')
+  expect(r.decision).toBe('deny')
+  expect(r.reason).toContain('nobody can be asked; commit refused')
+})
+
+test('an override with nobody to ask is refused, without a script call', async ($, on) => {
+  const t = await boot($, on, 'terminal', { review: ok(PLAIN) })
+  const before = t.calls.length
+  const r = await t.check('Bash', 'GIT_DIR=/x/.git git commit -m y')
+  expect(r.decision).toBe('deny')
+  expect(r.reason).toContain('nobody can be asked; commit refused')
+  expect(t.calls.length).toBe(before)
+})
+
+test('the hook error path denies the evasions too', async ($, on) => {
+  const t = await boot($, on, 'terminal', { review: ok(PLAIN), approver: 'person' })
+  t.breakSettings()
+  for (const [shell, command] of EVASIONS) {
+    const r = await t.check(shell, command)
+    expect(r.decision).toBe('deny')
+    expect(r.reason).toBe('Blast Radius failed; commit refused')
+  }
+})
+
+test('the gate never answers allow for a hit, whatever the commit form', async ($, on) => {
+  const t = await boot($, on, 'terminal', { review: ok(SEC), approver: 'person' })
+  for (const [shell, command] of [...EVASIONS, ['Bash', 'git add -A && git commit -m x']]) {
+    expect((await t.check(shell, command)).decision).not.toBe('allow')
   }
 })

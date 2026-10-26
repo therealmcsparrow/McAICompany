@@ -49,11 +49,11 @@ export function agentLabel(step, role) {
 }
 
 // Arguments after the script name for `review-depth.mjs`, or null when a part is not safe to pass.
+// A commit is always read as worktree + staged + untracked; there is no staged-only source.
 export function reviewArgs(spec) {
   if (spec === null || typeof spec !== 'object') return null;
   let args;
-  if (spec.source === 'staged') args = ['--staged', '--json'];
-  else if (spec.source === 'worktree') args = ['--worktree', '--json'];
+  if (spec.source === 'worktree') args = ['--worktree', '--json'];
   else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base)) args = [spec.base, '--json'];
   else return null;
   if (spec.risk === 'low' || spec.risk === 'medium' || spec.risk === 'high') args.push('--risk', spec.risk);

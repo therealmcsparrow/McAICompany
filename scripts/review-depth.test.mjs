@@ -179,7 +179,7 @@ test('staged: a repo with no HEAD yet lists every staged path', () => {
   assert.equal(j.depth, 'full');
 });
 
-test('worktree: staged and unstaged tracked changes, not untracked files', () => {
+test('worktree: staged, unstaged and untracked files', () => {
   const { d } = repo();
   put(d, 'a.txt', 'changed\n');
   put(d, 'src/new.mjs');
@@ -187,8 +187,40 @@ test('worktree: staged and unstaged tracked changes, not untracked files', () =>
   put(d, 'auth-untracked.txt');
   const j = json(d, ['--worktree']);
   assert.equal(j.source, 'worktree');
-  assert.deepEqual(j.paths.map((p) => p.path).sort(), ['a.txt', 'src/new.mjs']);
-  assert.equal(j.depth, 'standard');
+  assert.deepEqual(j.paths.map((p) => p.path).sort(), ['a.txt', 'auth-untracked.txt', 'src/new.mjs']);
+  assert.equal(j.depth, 'full');
+});
+
+test('worktree: an untracked file in a Core folder or a new folder is listed, an ignored one is not', () => {
+  const { d } = repo();
+  put(d, 'skills/pipeline/new.md');
+  put(d, 'deep/er/file.txt');
+  put(d, 'ignored.log');
+  fs.writeFileSync(path.join(d, '.gitignore'), '*.log\n');
+  const j = json(d, ['--worktree']);
+  assert.deepEqual(j.paths.map((p) => p.path).sort(), ['.gitignore', 'deep/er/file.txt', 'skills/pipeline/new.md']);
+  assert.equal(j.depth, 'full');
+});
+
+test('worktree: untracked paths are relative to the top level when --repo is a subfolder', () => {
+  const { d } = repo();
+  put(d, 'sub/inner/x.txt');
+  put(d, 'skills/pipeline/new.md');
+  const j = json(d, ['--worktree', '--repo', path.join(d, 'sub')]);
+  assert.deepEqual(j.paths.map((p) => p.path).sort(), ['skills/pipeline/new.md', 'sub/inner/x.txt']);
+});
+
+test('worktree: an untracked path with a space or a newline is listed whole', (t) => {
+  const { d } = repo();
+  put(d, 'with space/a b.txt');
+  const want = ['with space/a b.txt'];
+  try {
+    put(d, 'skills/pipeline/new\nline.md');
+    want.unshift('skills/pipeline/new\nline.md');
+  } catch {
+    t.diagnostic('no newline in file names');
+  }
+  assert.deepEqual(json(d, ['--worktree']).paths.map((p) => p.path).sort(), want.sort());
 });
 
 test('worktree: a path staged and then edited is listed once', () => {
@@ -199,11 +231,18 @@ test('worktree: a path staged and then edited is listed once', () => {
   assert.deepEqual(json(d, ['--worktree']).paths.map((p) => p.path), ['src/a.mjs']);
 });
 
-test('worktree: no HEAD falls back to the staged paths', () => {
+test('worktree: no HEAD lists the staged and the untracked paths', () => {
   const d = bare();
   put(d, 'src/a.mjs');
   git(d, 'add', '-A');
-  assert.deepEqual(json(d, ['--worktree']).paths.map((p) => p.path), ['src/a.mjs']);
+  put(d, 'src/b.mjs');
+  assert.deepEqual(json(d, ['--worktree']).paths.map((p) => p.path).sort(), ['src/a.mjs', 'src/b.mjs']);
+});
+
+test('staged: untracked files are not listed', () => {
+  const { d } = repo();
+  put(d, 'src/untracked.mjs');
+  assert.deepEqual(json(d, ['--staged']).paths, []);
 });
 
 test('staged: empty index is standard with no paths', () => {

@@ -119,15 +119,16 @@ test('parseSpawnLines reads only the four anchored lines, from the first 64 KiB'
 });
 
 test('reviewArgs builds an argument array and refuses anything that could be an option', () => {
-  assert.deepEqual(reviewArgs({ source: 'staged' }), ['--staged', '--json']);
+  assert.equal(reviewArgs({ source: 'staged' }), null);
+  assert.equal(reviewArgs({ source: 'staged', risk: 'high', repo: 'sub' }), null);
   assert.deepEqual(reviewArgs({ source: 'worktree', risk: 'high', repo: 'sub/dir' }), ['--worktree', '--json', '--risk', 'high', '--repo', 'sub/dir']);
   assert.deepEqual(reviewArgs({ source: 'base', base: '1551e10', risk: 'low' }), ['1551e10', '--json', '--risk', 'low']);
-  assert.deepEqual(reviewArgs({ source: 'staged', risk: 'unknown' }), ['--staged', '--json']);
+  assert.deepEqual(reviewArgs({ source: 'worktree', risk: 'unknown' }), ['--worktree', '--json']);
   assert.equal(reviewArgs({ source: 'base', base: '--staged' }), null);
   assert.equal(reviewArgs({ source: 'base', base: 'abc' }), null);
-  assert.equal(reviewArgs({ source: 'staged', repo: '--upload-pack=x' }), null);
-  assert.equal(reviewArgs({ source: 'staged', repo: 'a\u0000b' }), null);
-  assert.equal(reviewArgs({ source: 'staged', repo: 'x'.repeat(5000) }), null);
+  assert.equal(reviewArgs({ source: 'worktree', repo: '--upload-pack=x' }), null);
+  assert.equal(reviewArgs({ source: 'worktree', repo: 'a\u0000b' }), null);
+  assert.equal(reviewArgs({ source: 'worktree', repo: 'x'.repeat(5000) }), null);
   assert.equal(reviewArgs({ source: 'nope' }), null);
   assert.equal(reviewArgs(null), null);
 });
@@ -168,7 +169,7 @@ function shown(stdout) {
   return { hits: hitsFromDepth(parsed.value), json: JSON.parse(stdout) };
 }
 
-test('drift: the tier and depth the mod shows equal review-depth --json (staged, worktree, base)', (t) => {
+test('drift: the tier and depth the mod shows equal review-depth --json (worktree, base)', (t) => {
   const { d, g, base, put } = fixture();
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
   put('skills/pipeline/SKILL.md');
@@ -178,10 +179,9 @@ test('drift: the tier and depth the mod shows equal review-depth --json (staged,
   put('plain/src.txt');
   g('add', '-A');
   const modes = [
-    [['--staged', '--json'], { source: 'staged' }],
     [['--worktree', '--json'], { source: 'worktree' }],
-    [['--staged', '--json', '--risk', 'high'], { source: 'staged', risk: 'high' }],
-    [['--staged', '--json', '--risk', 'low'], { source: 'staged', risk: 'low' }]
+    [['--worktree', '--json', '--risk', 'high'], { source: 'worktree', risk: 'high' }],
+    [['--worktree', '--json', '--risk', 'low'], { source: 'worktree', risk: 'low' }]
   ];
   for (const [args, want] of modes) {
     assert.deepEqual(reviewArgs(want), args);
@@ -202,6 +202,17 @@ test('drift: the tier and depth the mod shows equal review-depth --json (staged,
   assert.equal(hits.tier, 'medium');
   assert.equal(hits.depth, json.depth);
   assert.equal(hits.depth, 'full');
+});
+
+test('drift: the gate arguments see a Core file that is only untracked, before git add runs', (t) => {
+  const { d, put } = fixture();
+  t.after(() => fs.rmSync(d, { recursive: true, force: true }));
+  put('skills/pipeline/new.md');
+  put('mods/new.ts');
+  const { hits } = shown(review(d, reviewArgs({ source: 'worktree' })));
+  assert.deepEqual(hits.core, ['skills/pipeline/new.md']);
+  assert.deepEqual(hits.security, ['mods/new.ts']);
+  assert.equal(decide(hits, GATE, undefined).action, 'deny');
 });
 
 test('drift: a plain change is standard and has no hit', (t) => {

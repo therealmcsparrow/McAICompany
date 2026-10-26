@@ -82,8 +82,8 @@ async function show($: EngineInterface, part: string, warn: BlastState['warn']):
 }
 
 async function gate($: EngineInterface, e: { agentId?: string; approver?: string }, intent: ReturnType<typeof commitIntent>, settings: Gate, verdict: unknown) {
-  const risk = await runTier($)
-  const hits = (await readDepth($, { source: intent.scope === 'staged' ? 'staged' : 'worktree', risk, repo: intent.repo }, TIMEOUT_MS.depthGate)) ?? unknownHits()
+  const risk = intent.unknown ? undefined : await runTier($)
+  const hits = intent.unknown ? unknownHits() : (await readDepth($, { source: 'worktree', risk, repo: intent.repo }, TIMEOUT_MS.depthGate)) ?? unknownHits()
   const answer = decide(hits, settings, e.approver)
   if (answer.action === 'none') return verdict
   $.ui.log(listing(hits))
@@ -94,7 +94,7 @@ async function gate($: EngineInterface, e: { agentId?: string; approver?: string
   const warn = answer.warn
   if (warn !== null) {
     $.ui.toast(`Blast Radius: ${warn.category} ${warn.count} (warn); commit goes on`)
-    await show($, `blast warn ${warn.category} ${warn.count}`, { ...warn, untilMs: 0 })
+    await show($, `⚠ ${warn.category}`, { ...warn, untilMs: 0 })
   }
   return verdict
 }
@@ -131,7 +131,7 @@ export function registerBlastRadius(on: On): void {
       if (hits !== null) {
         $.ui.log(listing(hits))
         $.ui.toast(`Blast Radius: review depth ${hits.depth}, tier ${hits.tier}, ${hits.files} files`)
-        await show($, `blast ${hits.tier} ${hits.depth}`, null)
+        await show($, `rev ${hits.depth}`, null)
       }
     }
     const started = await next(e)

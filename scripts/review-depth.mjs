@@ -186,8 +186,10 @@ function hasHead(repo) {
 function readPaths(opts, repo) {
   if (opts.sha !== undefined) return gitPaths(repo, ['diff', '-z', '--name-only', `${opts.sha}..HEAD`]);
   const staged = () => gitPaths(repo, ['diff', '-z', '--name-only', '--no-renames', '--cached']);
-  if (opts.staged || !hasHead(repo)) return staged();
-  return [...new Set([...gitPaths(repo, ['diff', '-z', '--name-only', '--no-renames', 'HEAD']), ...staged()])];
+  if (opts.staged) return staged();
+  const untracked = () => gitPaths(repo, ['ls-files', '-z', '--others', '--exclude-standard', '--full-name', '--', ':/']);
+  if (!hasHead(repo)) return [...new Set([...staged(), ...untracked()])];
+  return [...new Set([...gitPaths(repo, ['diff', '-z', '--name-only', '--no-renames', 'HEAD']), ...staged(), ...untracked()])];
 }
 
 function main(argv) {

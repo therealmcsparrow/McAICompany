@@ -1,30 +1,43 @@
 // Finds a `git commit` in a Bash or PowerShell command line. Total: never throws.
-// Doubt counts as a commit: what the parser cannot place but that names git and commit is one.
+// Detection is an allow-list. A command is not a commit only when every statement is a cd, a harmless text tool,
+// or `git` with a literal subcommand from ALLOWED. Anything else that could commit counts as a commit, and the
+// gate then asks: a program name or subcommand the parser cannot read, an alias, another program whose text
+// names git and commit, a repository or index override. The gate always reads worktree, staged and untracked
+// files, so a result carries no scope.
 
 const MAX_PARSE = 65536;
 const MAX_REPO = 4096;
 
 const KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', 'time', 'nohup', 'command', 'builtin', 'exec']);
-const WRAPPERS = new Set([
-  'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'pwsh', 'pwsh.exe', 'powershell', 'powershell.exe', 'cmd', 'cmd.exe',
-  'eval', 'sudo', 'doas', 'su', 'env', 'xargs', 'invoke-expression', 'iex', 'start-process', 'start', 'invoke-command', 'icm',
-  'wsl', 'ssh', 'runas', 'nice', 'timeout', 'watch', 'script'
-]);
 const CD = new Set(['cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location']);
-const GLOBAL_WITH_VALUE = new Set(['-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env', '--attr-source']);
-const LONG_WITH_VALUE = new Set([
-  'message', 'file', 'author', 'date', 'reuse-message', 'reedit-message', 'fixup', 'squash', 'template', 'cleanup',
-  'pathspec-from-file', 'trailer'
+
+// Programs that only print, search or list, or shell words that run nothing: their text may name git and commit.
+const HARMLESS = new Set([
+  'echo', 'printf', 'write-output', 'write-host', 'write-error', 'write-warning', 'write-verbose', 'write-information',
+  'grep', 'egrep', 'fgrep', 'rg', 'select-string', 'sls', 'cat', 'type', 'get-content', 'gc', 'ls', 'dir', 'gci', 'get-childitem',
+  'head', 'tail', 'wc', 'sort', 'uniq', 'pwd', 'true', 'false', 'fi', 'done', 'esac', 'test', 'sleep', 'which', 'where', 'date',
+  'get-date', 'mkdir', 'touch', 'export', 'unset', 'exit', 'set'
 ]);
-const LONG_PLAIN = new Set([
-  'amend', 'no-edit', 'edit', 'signoff', 'no-signoff', 'verify', 'no-verify', 'allow-empty', 'allow-empty-message', 'quiet',
-  'verbose', 'dry-run', 'short', 'branch', 'porcelain', 'long', 'null', 'status', 'no-status', 'reset-author',
-  'no-post-rewrite', 'gpg-sign', 'no-gpg-sign', 'untracked-files'
+
+// git subcommands that never create a commit on a branch (stash keeps its work on its own ref).
+const ALLOWED = new Set([
+  'status', 'log', 'diff', 'show', 'add', 'stage', 'fetch', 'push', 'branch', 'tag', 'remote', 'ls-files', 'ls-tree', 'ls-remote',
+  'rev-parse', 'rev-list', 'blame', 'annotate', 'grep', 'describe', 'config', 'init', 'clone', 'checkout', 'switch', 'restore', 'reset',
+  'stash', 'mv', 'rm', 'clean', 'shortlog', 'whatchanged', 'show-ref', 'show-branch', 'cat-file', 'diff-tree', 'diff-index',
+  'diff-files', 'for-each-ref', 'merge-base', 'name-rev', 'version', 'help', 'worktree', 'gc', 'fsck', 'count-objects', 'reflog',
+  'archive', 'format-patch', 'symbolic-ref', 'check-ignore', 'check-attr', 'var', 'commit-graph', 'range-diff', 'verify-commit',
+  'verify-tag', 'apply', 'sparse-checkout', 'maintenance', 'prune', 'pack-refs', 'repack'
 ]);
-const LONG_WORKTREE = new Set(['all', 'include', 'only', 'patch', 'interactive']);
-const SHORT_WITH_VALUE = new Set(['m', 'F', 'C', 'c', 't']);
-const SHORT_OPTIONAL_VALUE = new Set(['u', 'S']);
-const SHORT_WORKTREE = new Set(['a', 'i', 'o', 'p']);
+const GLOBAL_PLAIN = new Set([
+  '-p', '--paginate', '-P', '--no-pager', '--no-replace-objects', '--bare', '--literal-pathspecs', '--glob-pathspecs',
+  '--noglob-pathspecs', '--icase-pathspecs', '--no-optional-locks', '--no-advice', '--version', '--help', '-h', '-v'
+]);
+const GLOBAL_WITH_VALUE = new Set(['--namespace', '--super-prefix', '--attr-source']);
+
+const NON_LITERAL = /[$@*?[\]`%!<>]/;
+const ENV_REDIRECT = /GIT_(?:DIR|WORK_TREE|INDEX_FILE)\b/i;
+const TEXT_REDIRECT = /--git-dir|--work-tree|core\.worktree|GIT_(?:DIR|WORK_TREE|INDEX_FILE)\b/i;
+const DASH_C = /(?:^|\s)-C\s/;
 
 function isAbsolute(p) {
   return /^([/\\~$]|[A-Za-z]:)/.test(p);
@@ -40,9 +53,7 @@ function cap(p) {
 }
 
 function namesGitAndCommit(text) {
-  const git = /\bgit(?:\.exe)?\b/i.exec(text);
-  if (!git) return false;
-  return /\bcommit\b/.test(text.slice(git.index + git[0].length));
+  return /(?<![A-Za-z0-9])git(?![A-Za-z0-9])/i.test(text) && /(?<![A-Za-z0-9])commit(?![A-Za-z0-9])/i.test(text);
 }
 
 // Splits a command line into statements of unquoted tokens.
@@ -147,37 +158,45 @@ function baseName(token) {
   return (cut === -1 ? token : token.slice(cut + 1)).toLowerCase();
 }
 
-// The scope and the options of the commit that starts at toks[i] (the word `commit`).
-function commitScope(toks, i) {
-  let worktree = false;
-  for (let j = i + 1; j < toks.length; j++) {
-    const t = toks[j];
-    if (t === '--') {
-      if (j + 1 < toks.length) worktree = true;
-      break;
-    }
-    if (t.startsWith('--')) {
+function isLiteral(token) {
+  return token !== '.' && token !== '&' && !NON_LITERAL.test(token);
+}
+
+// A `git` statement: a commit (or doubt) unless the subcommand is a literal one that never commits.
+function analyseGit(toks, cwd) {
+  let repo = null;
+  let sure = false;
+  let override = false;
+  let i = 1;
+  while (i < toks.length && toks[i].startsWith('-')) {
+    const t = toks[i];
+    if (t === '-C') {
+      if (toks[i + 1] !== undefined) repo = joinRepo(repo, toks[i + 1]);
+      i += 2;
+    } else if (t === '-c' || t === '--config-env' || t.startsWith('--config-env=')) {
       const eq = t.indexOf('=');
-      const name = eq === -1 ? t.slice(2) : t.slice(2, eq);
-      if (LONG_WORKTREE.has(name)) worktree = true;
-      else if (LONG_WITH_VALUE.has(name)) {
-        if (eq === -1) j++;
-      } else if (!LONG_PLAIN.has(name)) worktree = true;
-    } else if (t.startsWith('-') && t.length > 1) {
-      for (let k = 1; k < t.length; k++) {
-        const ch = t[k];
-        if (SHORT_WORKTREE.has(ch)) worktree = true;
-        if (SHORT_WITH_VALUE.has(ch)) {
-          if (k === t.length - 1) j++;
-          break;
-        }
-        if (SHORT_OPTIONAL_VALUE.has(ch)) break;
-      }
+      const value = t === '-c' || eq === -1 ? toks[i + 1] : t.slice(eq + 1);
+      if (value === undefined || /^alias\./i.test(value)) sure = true;
+      else if (/^core\.worktree/i.test(value)) override = true;
+      i += t === '-c' || eq === -1 ? 2 : 1;
+    } else if (t === '--git-dir' || t === '--work-tree') {
+      override = true;
+      i += 2;
+    } else if (t.startsWith('--git-dir=') || t.startsWith('--work-tree=')) {
+      override = true;
+      i++;
+    } else if (GLOBAL_WITH_VALUE.has(t)) {
+      i += 2;
+    } else if (GLOBAL_PLAIN.has(t)) {
+      i++;
     } else {
-      worktree = true;
+      sure = true;
+      i++;
     }
   }
-  return worktree ? 'worktree' : 'staged';
+  const sub = toks[i];
+  if (!sure && (sub === undefined || (isLiteral(sub) && ALLOWED.has(sub)))) return { kind: 'git' };
+  return { kind: 'commit', override, repo: repo === null ? cwd : isAbsolute(repo) ? repo : joinRepo(cwd, repo) };
 }
 
 function analyse(statement, ps, cwd) {
@@ -188,6 +207,7 @@ function analyse(statement, ps, cwd) {
     if (KEYWORDS.has(t) || (!ps && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || (ps && /^\$env:[^=]*=/i.test(t))) toks.shift();
     else break;
   }
+  if (!isLiteral(toks[0])) return { kind: 'dynamic' };
   const prog = baseName(toks[0]);
   if (CD.has(prog)) {
     let target = '~';
@@ -204,53 +224,48 @@ function analyse(statement, ps, cwd) {
     }
     return { kind: 'cd', target: cap(target) };
   }
-  if (WRAPPERS.has(prog)) return namesGitAndCommit(statement.raw) ? { kind: 'commit', scope: 'worktree', repo: cwd } : { kind: 'none' };
-  if (prog !== 'git' && prog !== 'git.exe') return { kind: 'none' };
-  let repo = null;
-  let i = 1;
-  while (i < toks.length && toks[i].startsWith('-')) {
-    const t = toks[i];
-    if (t === '-C') {
-      if (toks[i + 1] !== undefined) repo = joinRepo(repo, toks[i + 1]);
-      i += 2;
-    } else if (GLOBAL_WITH_VALUE.has(t)) i += 2;
-    else i++;
-  }
-  if (toks[i] !== 'commit') return { kind: 'none' };
-  return { kind: 'commit', scope: commitScope(toks, i), repo: repo === null ? cwd : isAbsolute(repo) ? repo : joinRepo(cwd, repo) };
+  if (prog === 'git' || prog === 'git.exe') return analyseGit(toks, cwd);
+  if (/^git[.-]/.test(prog)) return { kind: 'commit', override: TEXT_REDIRECT.test(statement.raw), repo: cwd };
+  return HARMLESS.has(prog) ? { kind: 'none' } : { kind: 'foreign' };
 }
 
-const NOT = Object.freeze({ isCommit: false, scope: null, repo: null });
+const NOT = Object.freeze({ isCommit: false, repo: null, unknown: false });
 
-function doubt(repo) {
-  return { isCommit: true, scope: 'worktree', repo };
+function commit(repo, unknown) {
+  return { isCommit: true, repo: repo === null ? null : cap(repo), unknown };
 }
 
 function intent(command, ps) {
   if (typeof command !== 'string') return { ...NOT };
-  if (command.length > MAX_PARSE) return namesGitAndCommit(command) ? doubt(null) : { ...NOT };
+  if (command.length > MAX_PARSE) return namesGitAndCommit(command) ? commit(null, false) : { ...NOT };
   const { statements, unterminated } = parse(command, ps);
   let cwd = null;
   let found = null;
+  let foreign = false;
+  let dynamic = false;
   for (const st of statements) {
     const r = analyse(st, ps, cwd);
     if (r.kind === 'cd') cwd = joinRepo(cwd, r.target);
-    else if (r.kind === 'commit') {
-      if (found === null) found = r;
-      else if (r.scope === 'worktree') found = { ...found, scope: 'worktree' };
-    }
+    else if (r.kind === 'commit') found = found === null ? r : found;
+    else if (r.kind === 'foreign') foreign = true;
+    else if (r.kind === 'dynamic') dynamic = true;
   }
-  if (found !== null) return { isCommit: true, scope: found.scope, repo: found.repo === null ? null : cap(found.repo) };
+  if (found !== null) return commit(found.repo, ENV_REDIRECT.test(command) || found.override);
   const substitution = ps ? command.includes('$(') : command.includes('$(') || command.includes('`');
-  if ((unterminated || substitution) && namesGitAndCommit(command)) return doubt(cwd === null ? null : cap(cwd));
-  return { ...NOT };
+  const doubt =
+    (dynamic && /git|commit/i.test(command)) ||
+    (foreign && namesGitAndCommit(command)) ||
+    ((unterminated || substitution) && namesGitAndCommit(command));
+  if (!doubt) return { ...NOT };
+  return commit(cwd, TEXT_REDIRECT.test(command) || DASH_C.test(command));
 }
 
-// shell: 'bash' or 'powershell'. Returns { isCommit, scope: 'staged' | 'worktree' | null, repo: string | null }.
+// shell: 'bash' or 'powershell'. Returns { isCommit, repo: string | null, unknown }.
+// `unknown` is true when the repository or index may differ from the session's own: the gate then treats the commit as a security hit.
 export function commitIntent(command, shell) {
   try {
     return intent(command, shell === 'powershell');
   } catch {
-    return typeof command === 'string' ? doubt(null) : { ...NOT };
+    return typeof command === 'string' ? commit(null, false) : { ...NOT };
   }
 }
