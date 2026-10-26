@@ -110,7 +110,7 @@ test('AC10 full_pass style: ideas pass, full pass, then the crossfire pair on to
   has(s, /opt-in/i, 'reads more');
 });
 
-// The one constant Goal (plan "Fix round 3") is copied word for word into format-2.md.
+// The one constant Goal is copied word for word into format-2.md.
 const goalBlock = () => section(f2, '## Goal (constant, copy word for word)', '\n## ');
 const WORD_LIMIT = (() => {
   const m = /const WORD_LIMIT = \{ ideas: (\d+), full: (\d+), crossfire: (\d+) \}/.exec(read('scripts/brainstorm.mjs'));
@@ -304,8 +304,8 @@ test('AC33 LF only in the Playbook and its test (proj.M11)', () => {
   }
 });
 
-// ---- Fix round 5: answers link only to the question the CEO answered ----
-test('round 5 answers go to the question the CEO answered; a ruling with no question goes in with decide', () => {
+// ---- answers link only to the question the CEO answered ----
+test('answers go to the question the CEO answered; a ruling with no question goes in with decide', () => {
   has(f2, '| `decide ', 'link `none`', 'never by position', 'Each form question carries its `Q-<n>`');
   const proc = section(f2, '## Round procedure', '## Debate styles');
   has(proc, '`Open:`', '`Q-<n>`', '`O-<n>`', '`none`', '`open_threads`');

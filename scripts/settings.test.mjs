@@ -640,7 +640,7 @@ test('no keep-warm key exists in the schema', () => {
   assert.equal(JSON.stringify(PIPELINE_DEFAULTS).includes('warm'), false);
 });
 
-// ---------- mods.* (aico-settings v1.1, part M) ----------
+// ---------- mods.* (aico-settings v1.1) ----------
 const MODS_ALL = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: true, pane: 'command' },

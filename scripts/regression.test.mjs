@@ -166,7 +166,7 @@ test('seed 4 bddd366: an unlocked list in the project file never unlocks anythin
   assert.ok(r.ignored.some((i) => /project unlocked: ship/.test(i)));
 });
 
-// ---------- seed 5 (052a035): incident Ship Gates always ask, the CEO sees project overrides ----------
+// ---------- seed 5 (052a035): incident Ship Gates always ask, project overrides are shown ----------
 
 test('seed 5 052a035: the incident Playbook makes every Ship Gate a form whatever the settings say', () => {
   const text = fs.readFileSync(path.join(realRoot, 'skills', 'incident', 'SKILL.md'), 'utf8');

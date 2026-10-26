@@ -19,7 +19,7 @@ const FILES = {
 const PILOT = 'skills/handoff/references/pilot.md';
 const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
 
-// Byte budget (CEO, Fix round 4): pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
+// Byte budget: pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
 const PRE = {
   'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 1899,
   'skills/standards/SKILL.md': 1230, 'agents/code-reviewer.md': 1950, 'agents/senior-engineer.md': 2365,

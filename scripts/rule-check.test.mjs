@@ -421,7 +421,7 @@ test('run handoff-lint: rows for a bad Handoff; tool failed without --handoff', 
   assert.equal(escape.status, 2);
 });
 
-// ---------- slice files (Fix round 4, rule-check v1 "Slice files") ----------
+// ---------- slice files (rule-check v1 "Slice files") ----------
 
 const SF_REL = '.company/work/s/04-senior-engineer.md';
 const SF_SEC = 'security: proj.M-SEC1, nodetest.M-SEC1';

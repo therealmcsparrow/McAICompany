@@ -1,4 +1,4 @@
-// QA net for part M (AC35-AC49): criteria that the mod and script suites only pin from the inside.
+// QA net for the mods: criteria that the mod and script suites only pin from the inside.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -99,7 +99,7 @@ test('AC49 the docs name the four mods, the shell tools, the cache clock, no kee
   assert.match(read('docs/contracts/aico-mods.md'), /## Status line/);
 });
 
-// AC37/AC48: the constants are pinned as literals here, so editing them in blast.mjs cannot also edit the check.
+// The constants are pinned as literals here, so editing them in blast.mjs cannot also edit the check.
 test('AC48 the refusal text and the 600 character cap are the ones the brief names', async () => {
   const { NOBODY, MAX_REASON, buildReason, hitsFromDepth } = await import('../mods/lib/blast.mjs');
   assert.equal(NOBODY, 'nobody can be asked; commit refused');

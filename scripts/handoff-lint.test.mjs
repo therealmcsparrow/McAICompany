@@ -394,7 +394,7 @@ test('CLI: exit codes, --require-top and --findings', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-// ---- Fix round 4: a handover Handoff needs its findings ledger (AC23) ----
+// ---- a handover Handoff needs its findings ledger ----
 const HANDOVER = make().replaceAll('status: blocked', 'status: handover');
 const FULL_LEDGER = `${LEDGER}- R-3 | open | [nit] | src/y.ts:9 | unclear name | readability | rename\n`;
 
@@ -495,15 +495,15 @@ test('lint() stays pure: a handover text alone raises no ledger error', () => {
   assert.deepEqual(lint(HANDOVER, { requireTop: true }).errors, []);
 });
 
-test('read_next pointers: path, R-n, or path#heading with spaces only after the # (T11d)', () => {
+test('read_next pointers: path, R-n, or path#heading with spaces only after the #', () => {
   const ok = v => assert.deepEqual(lint(make({ top: swap('read_next', v) })).errors, [], v);
   const bad = v => assert.match(errs(make({ top: swap('read_next', v) })), /read_next/, v);
   ok('[docs/contracts/handoff.md#v1.1 part 3: the findings ledger]');
   ok('[R-21]');
   ok('[src/x.ts]');
-  // shapes of the two natural code-reviewer Handoffs from T15c
+  // shapes of the two natural code-reviewer read_next lists
   ok('[docs/contracts/handoff.md#v1.1 part 3: the findings ledger, R-1, scripts/handoff-lint.mjs]');
-  ok('[skills/review/SKILL.md#Review depth, .company/work/x/02-architect-plan.md#Fix round 5: lighter pipeline Steps]');
+  ok('[skills/review/SKILL.md#Review depth, .company/work/x/02-architect-plan.md#Lighter pipeline Steps]');
   bad('[copied text here]');
   bad('[a b.md#x]');
   bad('[R-1 and R-2]');
