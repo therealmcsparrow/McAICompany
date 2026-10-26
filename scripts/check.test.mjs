@@ -114,14 +114,22 @@ const manifestRoot = m => {
 
 test('dispatch block with Company profile: but no Language: is an error', () => {
   const bad = skill('a', 'See below.\n\n```\nCompany profile: x\nGoal: y\n```');
-  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
+  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
   const r = check(fixture({ skills: { a: bad, b: good } }));
   assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Language:')), r.errors.join('\n'));
   assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
 });
 
+test('dispatch block without Name: is an error', () => {
+  const bad = skill('a', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
+  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
+  const r = check(fixture({ skills: { a: bad, b: good } }));
+  assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Name:')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
+});
+
 test('a longer fence is closed only by an equal or longer fence', () => {
-  const nested = skill('a', '````\nCompany profile: x\n```\ninner\n```\nLanguage: en\n````');
+  const nested = skill('a', '````\nCompany profile: x\n```\ninner\n```\nLanguage: en\nName: Ava\n````');
   assert.deepEqual(check(fixture({ skills: { a: nested } })).errors, []);
 });
 
@@ -272,9 +280,9 @@ const realPlaybooks = readdirSync(join(REPO, 'skills')).filter(d => {
 });
 
 for (const name of realPlaybooks) {
-  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language:`, () => {
+  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language: and Name:`, () => {
     const r = check(REPO);
-    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:'))), r.errors.join('\n'));
+    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:') || e.includes('no Name:'))), r.errors.join('\n'));
   });
 }
 

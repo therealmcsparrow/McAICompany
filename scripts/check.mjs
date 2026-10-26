@@ -206,12 +206,17 @@ export function check(root) {
         errors.push(`ERROR ${rel}: version ${m[1]} != plugin.json ${version}`);
     }
   }
-  // Language rule (dispatch-prompt v2): every dispatch block and every Playbook resolves and passes the language.
+  // Language rule (dispatch-prompt v2) and Name rule (v3): every dispatch block passes the language and the Role's name,
+  // and every Playbook resolves the language.
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir)]) {
     const rel = relative(root, file).split(sep).join('/');
-    for (const b of fencedBlocks(readFileSync(file, 'utf8')))
-      if (b.text.includes('Company profile:') && !b.text.includes('Language:'))
+    for (const b of fencedBlocks(readFileSync(file, 'utf8'))) {
+      if (!b.text.includes('Company profile:')) continue;
+      if (!b.text.includes('Language:'))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Language:`);
+      if (!/^Name:/m.test(b.text))
+        errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Name:`);
+    }
   }
   for (const p of playbooks)
     if (!LANGUAGE_EXEMPT.has(p.name) && !p.text.includes('aico:pipeline') && !p.text.includes('§1.6'))

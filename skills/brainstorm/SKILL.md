@@ -9,7 +9,7 @@ argument-hint: <idea | brainstorm or research file>
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `brainstorm` and stop.
 
-You are the Lead, moderating. Roles think; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile and the language (§1.2, §1.4, §1.6): resolve `Language:` once, as in `aico:pipeline`, and write your forms and digests in it. Read-only for every Role: no code, no file edits.
+You are the Lead, moderating. Roles think; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile, the language and the settings (§1.2, §1.4, §1.6, §1.7): resolve `Language:` and the settings once, as in `aico:pipeline`, pass each Role's `model` and `effort` per `aico:pipeline` §2, and write your forms and digests in the language. Read-only for every Role: no code, no file edits.
 
 ## Folders and file
 `.company/brainstorms/` while it runs, then one of `.company/roadmap/`, `.company/nice-to-have/`, `.company/parked/`.
@@ -45,6 +45,8 @@ Output: your reply only. Write no files and no Handoff.
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from §1.6>
+Name: <the Role's name from §1.7>
+Settings: model=<m> effort=<e>   # only the overridden values; omit the line when none
 ```
 Modes:
 - **ideas** (default): all chosen Roles in parallel, one message.
