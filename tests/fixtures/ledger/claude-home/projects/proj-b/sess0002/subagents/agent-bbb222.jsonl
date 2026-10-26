@@ -1,0 +1,1 @@
+{"type":"assistant","uuid":"b1","message":{"id":"mb1","model":"Evil Model With Spaces","usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":3,"output_tokens":4}}}
