@@ -1,7 +1,8 @@
 # Contract: token-ledger v1
 
-Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, the Cache Tax keep-warm and Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), `aico:feedback` (the next 3 runs), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
+Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), `aico:feedback` (the next 3 runs), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
 Rationale for the two sources: `docs/adr/0011-token-counts-from-transcripts.md` (Spike S1/S2, `.company/work/optimize-brainstorm/03-spike-ai-data-engineer.md`).
+Part M, Fix round 6 (CEO, after SP-M3 `62-spike-ai-data-engineer.md`; still unshipped): keep-warm is cut, so the `keepwarm` kind and its `W<n>` ids are gone; `src: mod` stays for Reflect `model` mode.
 
 ## Storage
 - `.company/ledger/<run>.jsonl`, one JSON object per line. `<run>` = the task slug, or `brainstorm-<YYYYMMDD-HHMM>` for a brainstorm, `replay-<name>` for a replay, `baseline-<name>` for an imported baseline. Committed with the run's Finish when the product tracks `.company/`; otherwise it stays local. Readers only need the local file.
@@ -13,7 +14,7 @@ Rationale for the two sources: `docs/adr/0011-token-counts-from-transcripts.md` 
 |---|---|---|
 | `notification` | the `<usage><subagent_tokens>N</subagent_tokens>…` block of the task notification, written live by the Lead | one number: the context size at the end of the dispatch (input + cache write + cache read + output of the last request, up to +2%). **Not spend, never summed as cost**, cache not split |
 | `transcript` | `reconcile` (host subagent transcript) or `import` (frozen baseline) | the four counts summed over every request of the dispatch: real processed volume |
-| `mod` (part M) | `add-mod`, from the `usage` the engine returns for a mod's own model call (`$.model.fork` or `$.model.complete`) | the four counts of that one call, exactly as returned |
+| `mod` (part M) | `add-mod`, from the `usage` the engine returns for a mod's own model call (`$.model.complete`, Reflect `model` mode only) | the four counts of that one call, exactly as returned |
 
 Caching gives no saving across dispatches (Spike S2: the prompt sits before the Role block, with no cache breakpoint after it). Savings are measured as reading less, on `transcript` counts only.
 
@@ -22,10 +23,10 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 |---|---|
 | `v` | `1` |
 | `run` | `^[a-z0-9][a-z0-9-]{0,63}$` |
-| `kind` | `step \| round \| crossfire \| replay \| total \| ship \| keepwarm \| reflect` (the last two: part M, `src: mod` only) |
-| `id` | Step `^\d{2}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `keepwarm` `^W\d{1,5}$` (sequence per run); `reflect` a Step `^\d{2}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
-| `role` | an `agents/*.md` name, or `lead` (not on `ship`; always `lead` on `keepwarm` and `reflect`) |
-| `agent` | the Agent result's `agentId`, `^[A-Za-z0-9_-]{1,64}$`; required on `step`, `round`, `crossfire`, `replay`; the key `reconcile` uses; refused on `keepwarm` and `reflect` |
+| `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect` (`reflect`: part M, `src: mod` only) |
+| `id` | Step `^\d{2}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `reflect` a Step `^\d{2}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
+| `role` | an `agents/*.md` name, or `lead` (not on `ship`; always `lead` on `reflect`) |
+| `agent` | the Agent result's `agentId`, `^[A-Za-z0-9_-]{1,64}$`; required on `step`, `round`, `crossfire`, `replay`; the key `reconcile` uses; refused on `reflect` |
 | `src` | `notification \| transcript \| mod` (not on `ship`) |
 | `ctx_end` | integer 0–10000000; required when `src` is `notification`, optional on `transcript`, refused on `mod` |
 | `tokens` | object with exactly `in`, `cache_write`, `cache_read`, `out`, each an integer 0–1000000000; required when `src` is `transcript` or `mod`, refused on `notification` |
@@ -41,7 +42,7 @@ Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a
 | Command | Result |
 |---|---|
 | `add <run> <kind> <id> <role> <agent> <ctx_end> [tool_uses] [ms]` | appends one `notification` record (the only live write by the Lead; the Lead never types the four counts); `refused: <reason>` exit 2 on any invalid field |
-| `add-mod <run> <keepwarm\|reflect> <id> <in> <cache_write> <cache_read> <out> [model] [ms]` | part M: appends one `src: mod` record with `role: lead`; the only write a mod makes to the ledger. `<id>` `next` for `keepwarm` takes the next `W<n>`. Refused like `add` |
+| `add-mod <run> reflect <id> <in> <cache_write> <cache_read> <out> [model] [ms]` | part M: appends one `src: mod` record with `role: lead`; the only write a mod makes to the ledger. Any kind other than `reflect` (including the cut `keepwarm`) is refused. Refused like `add` |
 | `reconcile <run>` | for every `notification` record with no `transcript` record for the same `agent`, reads `<claude-home>/projects/*/*/subagents/agent-<agent>.jsonl` and appends a `transcript` record with the same `run`, `kind`, `id`, `role`, `agent`. `<claude-home>` = `CLAUDE_CONFIG_DIR`, else `<home>/.claude` (tests point it at a temp dir, proj.M8). Prints `reconciled: <n>, not reconciled: <m>`; exit 0 |
 | `import <file> <key> <run> <acs>` | reads one entry of a counts-only baseline file (shape of `spike/baseline-counts.json`) and writes `<run>.jsonl` with one `total` record (`src: transcript`) and one `ship` record; refuses when `<run>.jsonl` exists |
 | `ship <run> <acs> [fix_rounds] [high_blockers]` | appends the ship record |
@@ -54,7 +55,7 @@ One JSON object, the same numbers as the text report:
 { "v": 1, "run": "x", "rows": [{ "kind": "step", "id": "05", "role": "backend-engineer", "agent": "a1",
   "state": "reconciled|unreconciled|live", "tokens": { "in": 0, "cache_write": 0, "cache_read": 0, "out": 0 } | null,
   "spend": 0 | null, "ctx_end": 0 | null, "ms": 0 | null, "model": "…" | null }],
-  "totals": { "spend": 0, "cache_read": 0, "cache_write": 0, "cache_write_share": 0.0, "by_kind": { "keepwarm": 0, "reflect": 0 } },
+  "totals": { "spend": 0, "cache_read": 0, "cache_write": 0, "cache_write_share": 0.0, "by_kind": { "reflect": 0 } },
   "per_ac": { "spend": 0 | null, "cache_read": 0 | null }, "not_reconciled": 0, "warnings": [] }
 ```
 One row per dispatch record (a re-dispatch is its own row), in file order; `cache_write_share` = `cache_write / spend` over the counted rows, `0` when spend is 0.
