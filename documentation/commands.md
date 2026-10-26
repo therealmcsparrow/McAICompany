@@ -376,7 +376,7 @@ Effective language: the project override, else your default, else English. An un
 ### `/aico:settings`
 `/aico:settings [help]`
 
-**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, optional lanes, brainstorm debate style and film script); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
 

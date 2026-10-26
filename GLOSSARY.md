@@ -75,7 +75,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Handoff Contract** — the machine-readable shape of a Handoff: frontmatter fields (`status`, `round`, `base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) plus a `contract|spec|security|test` blocking taxonomy, so the Lead routes and resumes from fields rather than prose.
 
-**Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only. Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
+**Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only, and only with `pipeline.review_format: pilot` (default `plain`). Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
 
 **Context cap** — `context_cap`: the max context a Role gets, set in Settings (global and per Role). Default 150000, floor 60000. A Role hands over at 80%; high-risk work is never below the default. A soft limit passed in the dispatch.
 
