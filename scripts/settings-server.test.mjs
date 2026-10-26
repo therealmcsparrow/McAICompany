@@ -259,6 +259,23 @@ test('stale revision → 409', async (t) => {
   assert.equal(read(s.config), files);
 });
 
+test('stale revision → 409 when project.md changed between load and save', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const stale = (await state()).resolved.revision;
+  const first = await post('/api/save', { revision: stale, profile: { audience: 'tab B' } });
+  assert.equal(first.status, 200);
+  const md = read(s.projectMd);
+  const second = await post('/api/save', { revision: stale, profile: { audience: 'tab A' } });
+  assert.equal(second.status, 409);
+  assert.equal((await second.json()).state.resolved.profile.fields.audience, 'tab B');
+  assert.equal(read(s.projectMd), md);
+  // An edit to project.md made outside the page also counts.
+  const fresh = (await state()).resolved.revision;
+  fs.writeFileSync(s.projectMd, md.replace('voice: clear', 'voice: bold'));
+  assert.equal((await post('/api/save', { revision: fresh, language: { project: 'nl' } })).status, 409);
+});
+
 test('no .company → project save refused, user save works, hasProject false', async (t) => {
   const s = sandbox(t, { company: false });
   const { post, state } = await start(t, s);

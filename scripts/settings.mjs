@@ -396,7 +396,16 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     }
   }
 
-  const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).digest('hex');
+  // The revision also covers project.md (profile and project language), so a stale page can't overwrite it.
+  let md;
+  try {
+    md = readBounded(projectFile(cwd)) ?? '';
+  } catch (error) {
+    if (!(error instanceof Refusal)) throw error;
+    const stat = fs.statSync(projectFile(cwd));
+    md = `too large:${stat.size}:${stat.mtimeMs}`;
+  }
+  const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).update('\0').update(md).digest('hex');
   const language = resolveLanguage({ home, cwd });
   const profile = { ...readProfile({ cwd }), options: templateOptions(pluginRoot) };
   return { revision, roles, pipeline, gates, unlocked: [...unlocked], ignored, warnings, language, profile };
