@@ -40,3 +40,19 @@ test('dispatch-prompt is v3 and lists Name: and Settings:', () => {
   assert.match(pipeline, /^Name: /m);
   assert.match(pipeline, /^Settings: /m);
 });
+
+test('handoff skill documents the By: line', () => {
+  const doc = read('skills/handoff/SKILL.md');
+  assert.match(doc, /By: <Name> \(<role>\)/);
+});
+
+test('cooler cues use names', () => {
+  assert.ok(read('skills/cooler/SKILL.md').includes('<NAME> (<ROLE>)'));
+});
+
+test('roles.md lists every default name', () => {
+  const names = JSON.parse(read('company/names.json'));
+  const doc = read('documentation/roles.md');
+  for (const [role, name] of Object.entries(names))
+    assert.ok(doc.includes(`| ${name} |`), `roles.md lacks ${name} (${role})`);
+});

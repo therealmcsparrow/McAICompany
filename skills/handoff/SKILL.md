@@ -43,6 +43,7 @@ risk-tier: medium   # from the Brief; see the forced-high list below. Builders/Q
 acceptance-ids: [AC1, AC3]   # the Brief's acceptance-criterion IDs this Step delivers (builders, QA)
 files-touched: [src/x.ts]    # files this Step changed, for affected-only tests and the smoke test
 ---
+By: <Name> (<role>)
 ## Did
 - What changed, as facts, with file paths. No narrative.
 ## Decisions
@@ -54,6 +55,8 @@ files-touched: [src/x.ts]    # files this Step changed, for affected-only tests 
 ## Next
 - What the next Step needs to know or do. Name the Role if obvious.
 ```
+
+**By line.** `By: <Name> (<role>)` goes directly under the frontmatter, from your dispatch's `Name:` line; with no `Name:`, use the Role title. Display only; machine reading ignores it.
 
 **Fields are the contract.** Later Steps and the Lead read these frontmatter fields, not the prose: fill every one that applies. `base-commit`, `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed. A Role that only reasons (reviewer, PM) omits `files-touched`.
 

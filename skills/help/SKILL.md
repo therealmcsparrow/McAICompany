@@ -15,7 +15,7 @@ Read-only: change no file, dispatch no Role, start nothing. Plugin root = two fo
    - **Options:** each argument and value from the syntax line, one line each on its effect: required `<…>` vs optional `[…]`, the default when it's left out, and what each named option (e.g. `full`, `listen`, `turns=N`) changes. Take the effects from the entry; where the entry is silent, read that command's `SKILL.md`; never invent one.
    - **What it does:** the entry's "What it does" and "How it runs" in at most 6 lines, Gates marked, and whether it changes code or is read-only.
    - **You get** and **Example**, as in the entry.
-3. **Unknown name** → say so and show the closest matches from the list in step 1. A Role name (e.g. `security`) → say it's a Role, not a command, give its one line from `documentation/roles.md`, and show how to summon it ("use the aico security agent on …").
+3. **Unknown name** → say so and show the closest matches from the list in step 1. A Role name or person name (e.g. `security`, or `Sam`) → say it's a Role, not a command, give its person name and one line from `documentation/roles.md`, and show how to summon it ("use the aico security agent on …").
 
 **Language (§1.6):** resolve it as in `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; invalid or failing → `en`) and write your reply in it. Command names, options, flags and example commands stay as written. With `en` nothing changes.
 

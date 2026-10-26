@@ -53,7 +53,7 @@ Modes:
 - **debate:** as ideas, then a second parallel pass where each Role also gets the others' replies (pasted under `Other Roles:`) and agrees, challenges or builds on them, max 100 words.
 - **moderated:** one Role at a time. You pick who speaks next from what was just said; each gets the replies so far this round. 3–5 turns per round.
 
-After each round append a **digest** to the file (max 250 words): strongest ideas (with the Role), disagreements, risks, and the open questions for the CEO. Show it to the CEO, then ask in one form (`aico:pipeline`): up to 3 of the digest's open questions, each with the Roles' positions as options, plus **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Steering text comes through "Other".
+After each round append a **digest** to the file (max 250 words): strongest ideas (with the Role as `Name (role)`), disagreements, risks, and the open questions for the CEO. Show it to the CEO, then ask in one form (`aico:pipeline`): up to 3 of the digest's open questions, each with the Roles' positions as options, plus **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Steering text comes through "Other".
 Append the CEO's answers verbatim under the digest, apply any mode or Role change, and run the next round on it. Never end on your own and never cap the rounds; only the CEO's "done" (or "stop", "wrap up", "that's it") ends it.
 
 ## 3. Close
