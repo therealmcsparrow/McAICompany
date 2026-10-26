@@ -60,6 +60,17 @@ Blast Radius checks what a `git commit` touches before it happens.
 - **It never says yes for you.** The hook never answers `allow` and never changes your permission settings.
 - **Before a code review.** When the Lead dispatches a code reviewer, Blast Radius lists the same facts first. This never blocks the dispatch.
 
+#### What Blast Radius does not see
+
+Blast Radius only sees commits that Claude makes through its `Bash` and `PowerShell` tools. A commit made any other way never reaches it, and nothing warns you:
+
+- a commit you type yourself with `!git commit` in the prompt
+- a commit made in another terminal
+- a commit made from an IDE or a git GUI
+- a commit made by a script file that Claude did not write out in the command itself
+
+If you need a guard on those, use a git hook in the repository. Blast Radius also reads `.company/project.md` from the folder Claude was started in. Started from another folder, it finds no Core list and cannot tell which files are Core.
+
 ## The status line
 
 The four mods share one status line. They cannot overwrite each other. Claude Code prints `⚠ aico: ` before it, and the mods supply only the text after that. The text is in compact form:
@@ -127,6 +138,44 @@ Three rules keep a cloned repo or a careless click from weakening a safety check
 3. **Security stays asked unless unlocked.** `mods.blast_radius.security: warn` and switching Blast Radius off both need the `security` unlock in your user settings. Without it they resolve to `ask` and on. `core` and `contract` may be `warn` at user level without an unlock.
 
 If a project settings file is broken, Blast Radius and Reflect `mode` stay at their plugin defaults.
+
+## Check that the mods are on
+
+With no run active, the status line shows only the part `aico idle`. Use one of these to check that the mods loaded:
+
+1. Start a session and look for the toast `aico mods ready`. It shows once, at the start.
+2. Look at the status line. With no run it shows the part `aico idle`.
+3. Run `/aico-cost`. The Cache Tax pane opens; with no run it says "No aico run is active".
+
+If none of these appear, the mods are not loaded. In a folder you have never trusted, Claude Code loads no mods until you accept "Yes, I trust this folder".
+
+## Test a local copy
+
+To try the plugin from a checkout instead of the installed version, start Claude Code with the folder, in quotes:
+
+```
+claude --plugin-dir "Z:/projects/aicompany"
+```
+
+Use your own path. Keep the quotes. In Git Bash, an unquoted path with backslashes (`Z:\projects\aicompany`) loses the backslashes and becomes `Z:projectsaicompany`. Claude Code then skips the missing folder without an error and starts on the installed version, so you see no mods from your copy. Forward slashes in quotes work in PowerShell, cmd and Git Bash.
+
+The local copy replaces the installed plugin of the same name for that session. Claude Code also writes an untracked `tsconfig.json` into the plugin folder on each start. It is not part of the plugin.
+
+### Confirm the load in the debug log
+
+Add `--debug-file` to write a log:
+
+```
+claude --plugin-dir "Z:/projects/aicompany" --debug-file "C:/temp/c.log"
+```
+
+Search the log for this line:
+
+```
+hooks module aico@inline loaded
+```
+
+If it is there, the mods loaded. If the log says `Plugin path does not exist` instead, the path was wrong; check the quotes and slashes above.
 
 ## Related
 
