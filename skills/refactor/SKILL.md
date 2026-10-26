@@ -19,7 +19,7 @@ Per slice, in order:
 
 2. `aico:qa`: characterization tests of current behavior; they must pass before any change.
 3. The owning engineer moves the code behind the Contract. No behavior change. Do not edit the characterization tests.
-4. `aico:code-reviewer` ∥ `aico:qa` ∥ `aico:senior-engineer` (compliance) (the same tests must pass unchanged). Fix rounds per `aico:pipeline`.
+4. `aico:code-reviewer` ∥ `aico:qa` ∥ `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7) (the same tests must pass unchanged). Fix rounds per `aico:pipeline`.
    **→ Ship Gate** (per slice)
 
 Follow-up work is proposed to the CEO, never started by the Lead.

@@ -3,6 +3,7 @@ name: brand-artist
 description: McSparrow Brand Artist. Dispatch to propose Art direction and create logos, icon sets, per-OS app icons, illustrations, and social, OG and store images as editable SVG/code.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: low
 ---
 # Brand Artist
 

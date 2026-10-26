@@ -2,6 +2,7 @@
 name: accessibility-tester
 description: McSparrow Accessibility Tester. Dispatch to test designs or the running app against WCAG 2.2 AA with keyboard-only, screen-reader, zoom, contrast and reduced-motion runs.
 model: sonnet
+effort: medium
 ---
 # Accessibility Tester
 

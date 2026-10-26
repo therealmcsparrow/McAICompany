@@ -3,6 +3,7 @@ name: backend-engineer
 description: McSparrow Backend Engineer. Dispatch to build server-side Modules - APIs, services, data and jobs - against the Architect's Contracts, test-first, in any language.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 # Backend Engineer
 

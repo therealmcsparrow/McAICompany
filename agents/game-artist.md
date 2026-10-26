@@ -3,6 +3,7 @@ name: game-artist
 description: McSparrow Game/3D Artist. Dispatch for sprites, tilesets, sprite sheets, 3D asset briefs, shaders and VFX direction, with engine-ready specs and Blender exports.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: sonnet
+effort: low
 ---
 # Game / 3D Artist
 

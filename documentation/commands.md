@@ -366,6 +366,22 @@ Effective language: the project override, else your default, else English. An un
 
 **Example.** `/aico:language nl` · `/aico:language pt-BR project` · `/aico:language clear project`
 
+### `/aico:settings`
+`/aico:settings [help]`
+
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, optional lanes); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+
+**When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
+
+**How it runs.** One local server, no Roles, no Gates, no branch or commit.
+- **Two levels:** your user default (`config.json` under `~/.mcsparrow/`, or the folder in `MCSPARROW_HOME`) and a project override (`.company/settings.json`, with the profile in `.company/project.md`). The project wins.
+- The page is reachable only through the link with its token, which is printed in the terminal. The browser opens by itself.
+- The server stops when you press Done, or after 30 minutes idle. Changes apply from the next aico run.
+
+**You get.** The full link to the page in the terminal, and the settings saved to the level you chose.
+
+**Example.** `/aico:settings`
+
 ### `/aico:help`
 `/aico:help [command]`
 

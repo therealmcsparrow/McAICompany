@@ -2,6 +2,23 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [0.10.0] - 2026-10-26
+
+A settings page, a name for every Role, and an effort level per Role. The pipeline now applies your settings when it dispatches.
+
+After updating, run `/reload-plugins`. Settings are optional: nothing changes until you save something.
+
+### Added
+- **`/aico:settings`** — opens a local page (a small server on 127.0.0.1, protected by a token in the link) to set each Role's name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential dispatch, optional lanes); and the Gates (ask or auto). Set it as your default (`~/.mcsparrow/config.json`) or as a project override (`.company/settings.json`); the project wins. Ship, installs and the security lanes can only be unlocked from your default. The page stops when you press Done, or after 30 minutes idle. `node scripts/settings.mjs get <key>` prints a resolved value.
+- **Role names.** Every Role has a person name (`company/names.json`, for example Ava for the architect), which you can change per level in the settings page.
+- **Contracts and decision:** `aico-settings` v1, `role-names` v1 and ADR 0006 (settings resolve in a script and travel in the dispatch).
+
+### Changed
+- **The pipeline reads settings.** Setup resolves them once per run; each dispatch passes `model` and `effort` to the Role and carries `Name:` and `Settings:` lines (`dispatch-prompt` v3). Gates, Fix rounds, dispatch mode and optional lanes follow your settings. With nothing set, behaviour is as before.
+- **Names are shown.** Scripts, the cooler and brainstorm, Handoffs, Gates and `/aico:help` show a Role's name with the Role. The Lead routes by name only when the name is used as a person.
+- Every Role now sets an `effort` level. **High:** architect, code-reviewer, security, pentester. **Low:** writing, art, lookup and support Roles. **Medium:** the rest. `scripts/check.mjs` fails an agent with no `effort` or an invalid one.
+- Model changes: writer haiku → sonnet, because user-facing docs need it. vuln-scanner and design-researcher opus → sonnet, because their work is lookup against fixed checklists.
+
 ## [0.9.0] - 2026-10-22
 
 Research before you build: three researcher Roles look a topic up online before work starts, and the Product Manager turns the findings into one sourced report. Also a language setting for aico's own output.

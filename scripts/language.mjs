@@ -108,7 +108,7 @@ function userValue(home) {
 }
 
 // The header block is everything before the first `## ` heading.
-function headerEnd(lines) {
+export function headerEnd(lines) {
   const at = lines.findIndex((line) => line.startsWith('## '));
   return at === -1 ? lines.length : at;
 }
@@ -136,6 +136,11 @@ function projectValue(cwd) {
     return checked.tag;
   }
   return null;
+}
+
+// The stored tag at each level (canonical, or null when unset or invalid), for the settings page.
+export function stored({ home, cwd } = {}) {
+  return { user: userValue(home), project: projectValue(cwd) };
 }
 
 export function resolve({ home, cwd, ignoreProject = false } = {}) {

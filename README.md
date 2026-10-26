@@ -38,6 +38,7 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:version` | Shows which aico version is installed and its latest changelog entry |
 | `/aico:language [<tag> [project] \| clear [project]]` | Shows or sets the language aico writes in (reports, forms, Handoff prose). Your default applies everywhere; `project` overrides it for one product. Machine-read parts stay English |
 | `/aico:vulnscan` | On demand: the Vulnerability Scanner checks your dependencies and code against CVE/NVD, OSV, GitHub Advisories and CISA KEV; Critical/High come to you, safe fixes come as a ready upgrade set |
+| `/aico:settings` | Opens a local page to set each Role's name, model and effort, the language and profile, the pipeline (Fix rounds, parallel or sequential, optional lanes) and the Gates, as your default or per project. Nothing changes until you save |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
 
@@ -71,7 +72,11 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, pentester, vuln-scanner, product-manager, tech-researcher, design-researcher | account-manager, marketer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher | writer, localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, vuln-scanner | localizer, prompt-artist |
+
+Each Role has a person name (for example Ava for the architect), shown next to the Role in Handoffs, Gates and help. Change names, models and effort in `/aico:settings`.
+
+Each Role also sets an `effort` level. **High:** architect, code-reviewer, security, pentester, where a miss is expensive. **Low:** writing, art, lookup and support Roles. **Medium:** everyone else. See the roster in `docs/spec.md`.
 
 Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all three researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 

@@ -3,6 +3,7 @@ name: support
 description: McSparrow Support. Dispatch to turn user reports, tickets and feedback into triaged, de-duplicated work the company can act on, with draft replies.
 tools: Read, Grep, Glob, Skill, Write
 model: sonnet
+effort: low
 ---
 # Support
 

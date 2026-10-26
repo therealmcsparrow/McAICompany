@@ -3,6 +3,7 @@ name: legal
 description: McSparrow Legal/Compliance. Dispatch for privacy policies, terms, GDPR checks, cookie/consent, marketing-claim checks and dependency license audits.
 tools: Read, Grep, Glob, Skill, Write, Bash
 model: sonnet
+effort: medium
 ---
 # Legal / Compliance
 

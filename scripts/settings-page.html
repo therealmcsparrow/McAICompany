@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="aico-token" content="__AICO_TOKEN__">
+<title>aico settings</title>
+<style>
+:root {
+  --bg: #f7f7f5; --surface: #ffffff; --text: #1b1b1f; --muted: #5d5d66; --line: #d9d9de;
+  --accent: #2557c7; --accent-text: #ffffff; --head: #eeeef1; --warn-bg: #fff4d6; --warn: #7a5200;
+  --err-bg: #fde7e7; --err: #a01d1d; --ok: #1d6b35; --focus: #2557c7;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141417; --surface: #1d1d22; --text: #ececf1; --muted: #a3a3ad; --line: #34343c;
+    --accent: #7ea2ff; --accent-text: #0d0d10; --head: #26262d; --warn-bg: #3a2f12; --warn: #f2cf7a;
+    --err-bg: #3d1c1c; --err: #ff9c9c; --ok: #8fdca5; --focus: #7ea2ff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+header h1 { font-size: 1.3rem; margin: 20px 0 4px; }
+header p { margin: 0 0 12px; color: var(--muted); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[role="tablist"] { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 8px 0 16px; }
+[role="tab"] { background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 8px 12px; font: inherit; cursor: pointer; }
+[role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.notice { border-radius: 6px; padding: 8px 12px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.notice ul { margin: 4px 0 0; padding-left: 20px; }
+.notice.warn { background: var(--warn-bg); color: var(--warn); }
+.notice.err { background: var(--err-bg); color: var(--err); }
+.notice.info { background: var(--head); color: var(--muted); }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); margin-bottom: 16px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+thead th { background: var(--head); font-size: .85rem; color: var(--muted); font-weight: 600; position: sticky; top: 0; }
+tr.dept th { background: var(--head); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+tbody th { font-weight: 500; white-space: nowrap; }
+td.plugin, td.effect { white-space: nowrap; }
+td.effect { font-weight: 600; }
+td.effect.text { white-space: normal; min-width: 12rem; overflow-wrap: anywhere; }
+.src { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 4px; }
+.held { display: block; font-weight: 400; color: var(--warn); font-size: .8rem; }
+.cell { display: flex; gap: 4px; flex-wrap: nowrap; }
+select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; }
+input[type="text"] { width: 9rem; }
+input.wide { width: 16rem; }
+select:disabled, input:disabled { opacity: .5; }
+select.set, input.set { border-color: var(--accent); }
+.lock::before { content: "\1F512"; margin-right: 4px; font-size: .85em; }
+.ro { color: var(--muted); font-size: .85rem; }
+.bulk { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.bulk label { display: flex; gap: 4px; align-items: center; color: var(--muted); font-size: .9rem; }
+button { font: inherit; border-radius: 4px; padding: 5px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+h2 { font-size: 1rem; margin: 16px 0 8px; }
+.hint { color: var(--muted); font-size: .85rem; margin: 0 0 8px; }
+footer { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); margin-top: 24px; }
+footer .inner { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#count { font-weight: 600; margin-right: auto; }
+#status { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+#status:empty { display: none; }
+dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); max-width: 440px; width: calc(100% - 32px); }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
+dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>aico settings</h1>
+  <p>Project wins over User, and both win over the Plugin default. <strong>—</strong> means not set at that level. Changes apply from the next aico run.</p>
+</header>
+<main>
+  <div id="notices"></div>
+  <div role="tablist" aria-label="Settings">
+    <button role="tab" id="tab-roles" aria-controls="panel-roles" aria-selected="true">Roles</button>
+    <button role="tab" id="tab-language" aria-controls="panel-language" aria-selected="false" tabindex="-1">Language &amp; profile</button>
+    <button role="tab" id="tab-pipeline" aria-controls="panel-pipeline" aria-selected="false" tabindex="-1">Pipeline</button>
+    <button role="tab" id="tab-gates" aria-controls="panel-gates" aria-selected="false" tabindex="-1">Gates</button>
+  </div>
+  <section role="tabpanel" id="panel-roles" aria-labelledby="tab-roles"></section>
+  <section role="tabpanel" id="panel-language" aria-labelledby="tab-language" hidden></section>
+  <section role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden></section>
+  <section role="tabpanel" id="panel-gates" aria-labelledby="tab-gates" hidden></section>
+</main>
+<footer>
+  <div id="status" role="status" aria-live="polite"></div>
+  <div class="inner">
+    <span id="count">0 unsaved changes</span>
+    <button type="button" id="clear-user">Clear User on this tab</button>
+    <button type="button" id="clear-project">Clear Project on this tab</button>
+    <button type="button" id="save" class="primary" disabled>Save</button>
+    <button type="button" id="done">Done</button>
+  </div>
+</footer>
+<dialog id="unlock" aria-labelledby="unlock-title">
+  <h2 id="unlock-title">Unlock</h2>
+  <p id="unlock-text"></p>
+  <p class="hint">This adds the unlock to your user settings. Must exceptions and Blocking security findings always ask you.</p>
+  <div class="actions">
+    <button type="button" id="unlock-cancel">Keep it locked</button>
+    <button type="button" id="unlock-ok" class="primary">Unlock</button>
+  </div>
+</dialog>
+<script>
+'use strict';
+const TOKEN = document.querySelector('meta[name="aico-token"]').content;
+const MODELS = ['opus', 'sonnet', 'haiku', 'fable', 'inherit'];
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const LANES = ['security', 'compliance', 'legal', 'persona', 'hands_on', 'accessibility'];
+const GATES = ['brief', 'plan', 'ship', 'installs'];
+const PROFILE_FIELDS = ['product_type', 'engagement', 'client', 'audience', 'goal', 'stack', 'languages', 'voice', 'license', 'jurisdiction'];
+const DEPARTMENTS = [
+  ['Product', ['product-manager', 'account-manager']],
+  ['Market & tech research', ['market-researcher', 'tech-researcher', 'design-researcher']],
+  ['Engineering', ['architect', 'senior-engineer', 'backend-engineer', 'frontend-engineer', 'desktop-engineer', 'ai-data-engineer', 'game-engineer', 'devops']],
+  ['Design & art', ['ui-ux-designer', 'brand-artist', 'motion-artist', 'game-artist', 'prompt-artist']],
+  ['Quality & security', ['code-reviewer', 'qa', 'security', 'pentester', 'vuln-scanner']],
+  ['User research & testing', ['ux-researcher', 'persona-tester', 'hands-on-tester', 'accessibility-tester']],
+  ['Content', ['writer', 'marketer', 'localizer']],
+  ['Support & legal', ['support', 'legal']]
+];
+// Lockable settings: the unlock key, what it guards, and the dialog text.
+const LOCKS = {
+  ship: { title: 'Unlock the Ship Gate', text: 'aico will push the branch and open a PR without asking you. It never merges.' },
+  installs: { title: 'Unlock installs', text: 'aico will run design-skill and dependency installs without asking you for approval first.' },
+  security: { title: 'Unlock the security lanes', text: 'aico will skip the security and compliance lanes wherever you turn them off. Nobody checks that code for vulnerabilities or legal problems before it ships.' }
+};
+const LOCKED_GATES = ['ship', 'installs'];
+const LOCKED_LANES = ['security', 'compliance'];
+const LANE_LABELS = { security: 'Security', compliance: 'Compliance', legal: 'Legal', persona: 'Persona testing', hands_on: 'Hands-on testing', accessibility: 'Accessibility' };
+const GATE_LABELS = { brief: 'Brief', plan: 'Plan', ship: 'Ship', installs: 'Installs' };
+
+let state = null;   // last state from the server
+let draft = null;   // { user, project, profile, language: { user, project } }
+let syncers = [];   // functions that push draft values into the controls and recompute "In effect"
+let activeTab = 'roles';
+
+// ---------- small helpers ----------
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === 'class') node.className = v;
+    else if (k.startsWith('aria-') || k === 'role' || k === 'for' || k === 'list' || k === 'colspan' || k === 'scope') node.setAttribute(k, String(v));
+    else node[k] = v;
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return node;
+}
+const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+const has = (o, k) => o !== null && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
+function getIn(obj, path) {
+  let at = obj;
+  for (const p of path) { if (!has(at, p)) return undefined; at = at[p]; }
+  return at;
+}
+// Sets a value; undefined deletes it and prunes objects left empty.
+function setIn(obj, path, value) {
+  const chain = [obj];
+  let at = obj;
+  for (const p of path.slice(0, -1)) {
+    if (!has(at, p) || typeof at[p] !== 'object') { if (value === undefined) return; at[p] = {}; }
+    at = at[p];
+    chain.push(at);
+  }
+  const last = path[path.length - 1];
+  if (value === undefined) delete at[last]; else at[last] = value;
+  for (let i = path.length - 1; i > 0; i--) {
+    if (Object.keys(chain[i]).length === 0) delete chain[i - 1][path[i - 1]]; else break;
+  }
+}
+// Flattens a layer into "path" -> JSON value, unlock entries as "unlocked:<key>".
+function flatten(obj, prefix = '', out = {}) {
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    if (k === 'version') continue;
+    if (k === 'unlocked' && Array.isArray(v)) { for (const u of v) out[`unlocked:${u}`] = true; continue; }
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) flatten(v, `${prefix}${k}.`, out);
+    else out[prefix + k] = JSON.stringify(v);
+  }
+  return out;
+}
+function diffCount(a, b) {
+  const fa = flatten(a), fb = flatten(b);
+  let n = 0;
+  for (const k of new Set([...Object.keys(fa), ...Object.keys(fb)])) if (fa[k] !== fb[k]) n++;
+  return n;
+}
+const projectOn = () => state.hasProject;
+const profileOn = () => state.resolved.profile.hasProject;
+const userUnlocked = (key) => (draft.user.unlocked ?? []).includes(key);
+function setUnlock(key, on) {
+  const list = (draft.user.unlocked ?? []).filter((k) => k !== key);
+  if (on) list.push(key);
+  if (list.length) draft.user.unlocked = list; else delete draft.user.unlocked;
+}
+
+// ---------- draft ----------
+// The stored tag at each level; '' means not set.
+function initialLanguage() {
+  return { user: state.language.user ?? '', project: state.language.project ?? '' };
+}
+function resetDraft() {
+  draft = {
+    user: clone(state.user),
+    project: clone(state.project),
+    profile: clone(state.resolved.profile.fields),
+    language: initialLanguage()
+  };
+}
+function changedProfile() {
+  const stored = state.resolved.profile.fields;
+  const out = {};
+  for (const f of PROFILE_FIELDS) {
+    const now = draft.profile[f] ?? '';
+    if (now !== (stored[f] ?? '')) out[f] = now;
+  }
+  return out;
+}
+function changedLanguage() {
+  const start = initialLanguage();
+  const out = {};
+  for (const scope of ['user', 'project']) {
+    const now = draft.language[scope].trim();
+    if (now !== start[scope]) out[scope] = now === '' ? null : now;
+  }
+  return out;
+}
+function unsavedCount() {
+  return diffCount(draft.user, state.user) + diffCount(draft.project, state.project)
+    + Object.keys(changedProfile()).length + Object.keys(changedLanguage()).length;
+}
+
+// ---------- effective values (mirrors settings.mjs resolve) ----------
+function pickSource(path, pluginValue) {
+  const p = getIn(draft.project, path);
+  if (p !== undefined) return [p, 'project'];
+  const u = getIn(draft.user, path);
+  if (u !== undefined) return [u, 'user'];
+  return [pluginValue, 'plugin'];
+}
+const dirty = (path) => JSON.stringify(getIn(draft.user, path)) !== JSON.stringify(getIn(state.user, path))
+  || JSON.stringify(getIn(draft.project, path)) !== JSON.stringify(getIn(state.project, path));
+const anyUnlockDirty = () => JSON.stringify([...(draft.user.unlocked ?? [])].sort()) !== JSON.stringify([...(state.user.unlocked ?? [])].sort());
+
+// Returns { value, source, held } where held explains why a locked value did not apply.
+function effective(path, pluginValue) {
+  const [value, source] = pickSource(path, pluginValue);
+  const [area, , key] = path;
+  if (area === 'gates' && LOCKED_GATES.includes(path[1]) && value === 'auto' && !userUnlocked(path[1])) {
+    return { value: pluginValue, source: 'locked', held: `auto from ${source} needs your ${path[1]} unlock` };
+  }
+  if (area === 'pipeline' && path[1] === 'lanes' && LOCKED_LANES.includes(key) && value === false && !userUnlocked('security')) {
+    return { value: pluginValue, source: 'locked', held: `off from ${source} needs your security unlock` };
+  }
+  return { value, source };
+}
+function showEffect(cell, path, pluginValue, format, resolvedValue) {
+  let eff = effective(path, pluginValue);
+  // Unchanged rows show what the server resolved, so the page matches what dispatch will use.
+  if (!dirty(path) && !anyUnlockDirty() && resolvedValue !== undefined && resolvedValue !== eff.value) eff = { value: resolvedValue, source: 'resolved' };
+  cell.replaceChildren(format(eff.value), el('span', { class: 'src' }, `(${eff.source})`));
+  if (eff.held) cell.append(el('span', { class: 'held' }, eff.held));
+}
+
+// ---------- controls ----------
+function selectFor(options, label, labels = {}) {
+  const sel = el('select', { 'aria-label': label });
+  sel.append(el('option', { value: '' }, '—'));
+  for (const o of options) sel.append(el('option', { value: String(o) }, labels[o] ?? String(o)));
+  return sel;
+}
+const encode = (v) => (v === undefined ? '' : String(v));
+// Binds a select or text input to a path in a layer. `decode` turns the control value back into a setting.
+function bindLayer(control, level, path, decode = (s) => s, guard = null) {
+  const disabled = level === 'project' && !projectOn();
+  control.disabled = disabled;
+  const sync = () => {
+    const want = encode(getIn(draft[level], path));
+    if (control.value !== want) control.value = want;
+    control.classList.toggle('set', want !== '');
+  };
+  const apply = async () => {
+    // Text is stored as typed (the server validates it), so syncing never fights the caret.
+    const raw = control.value;
+    const value = raw.trim() === '' ? undefined : decode(raw);
+    if (guard && !(await guard(value))) { refresh(); return; }
+    setIn(draft[level], path, value);
+    refresh();
+  };
+  control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', apply);
+  syncers.push(sync);
+  return control;
+}
+// For locked settings at user level: opens the dialog before a value that needs the unlock.
+function lockGuard(lockKey, needsUnlock) {
+  return async (value) => {
+    if (!needsUnlock(value) || userUnlocked(lockKey)) return true;
+    if (!(await confirmUnlock(lockKey))) return false;
+    setUnlock(lockKey, true);
+    return true;
+  };
+}
+function confirmUnlock(key) {
+  const dialog = document.getElementById('unlock');
+  document.getElementById('unlock-title').textContent = LOCKS[key].title;
+  document.getElementById('unlock-text').textContent = LOCKS[key].text;
+  return new Promise((resolve) => {
+    const ok = document.getElementById('unlock-ok');
+    const cancel = document.getElementById('unlock-cancel');
+    const finish = (result) => {
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      dialog.removeEventListener('close', onClose);
+      if (dialog.open) dialog.close();
+      resolve(result);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onClose = () => finish(false);
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    dialog.addEventListener('close', onClose);
+    dialog.showModal();
+    cancel.focus();
+  });
+}
+
+function table(headers) {
+  const thead = el('thead', {}, el('tr', {}, headers.map((h) => el('th', { scope: 'col' }, h))));
+  const tbody = el('tbody');
+  const t = el('table', {}, thead, tbody);
+  return { wrap: el('div', { class: 'scroll' }, t), tbody };
+}
+const COLUMNS = ['Setting', 'Plugin', 'User', 'Project', 'In effect'];
+
+// ---------- Roles tab ----------
+function roleGroups() {
+  const roles = Object.keys(state.plugin.roles);
+  const placed = new Set();
+  const groups = [];
+  for (const [dept, list] of DEPARTMENTS) {
+    const present = list.filter((r) => roles.includes(r));
+    present.forEach((r) => placed.add(r));
+    if (present.length) groups.push([dept, present]);
+  }
+  const other = roles.filter((r) => !placed.has(r));
+  if (other.length) groups.push(['Other', other]);
+  return groups;
+}
+function roleCell(level, role) {
+  const name = bindLayer(el('input', { type: 'text', placeholder: '—', maxLength: 30, 'aria-label': `${role} name, ${level}` }), level, ['roles', role, 'name']);
+  const model = bindLayer(selectFor(MODELS, `${role} model, ${level}`), level, ['roles', role, 'model']);
+  const effort = bindLayer(selectFor(EFFORTS, `${role} effort, ${level}`), level, ['roles', role, 'effort']);
+  return el('td', {}, el('div', { class: 'cell' }, name, model, effort));
+}
+function renderRoles(panel) {
+  const groups = roleGroups();
+  const dept = el('select', { 'aria-label': 'Bulk: Roles' }, el('option', { value: '*' }, 'All Roles'), groups.map(([d]) => el('option', { value: d }, d)));
+  const level = el('select', { 'aria-label': 'Bulk: level' }, el('option', { value: 'user' }, 'User'), el('option', { value: 'project', disabled: !projectOn() }, 'Project'));
+  const keep = (label, opts) => el('select', { 'aria-label': label }, el('option', { value: 'keep' }, 'keep'), el('option', { value: 'clear' }, '— clear'), opts.map((o) => el('option', { value: o }, o)));
+  const model = keep('Bulk: model', MODELS);
+  const effort = keep('Bulk: effort', EFFORTS);
+  const apply = el('button', { type: 'button' }, 'Apply');
+  apply.addEventListener('click', () => {
+    const roles = dept.value === '*' ? groups.flatMap(([, r]) => r) : (groups.find(([d]) => d === dept.value)?.[1] ?? []);
+    for (const role of roles) {
+      for (const [field, sel] of [['model', model], ['effort', effort]]) {
+        if (sel.value === 'keep') continue;
+        setIn(draft[level.value], ['roles', role, field], sel.value === 'clear' ? undefined : sel.value);
+      }
+    }
+    refresh();
+  });
+  panel.append(el('div', { class: 'bulk' },
+    el('label', {}, 'Apply to', dept), el('label', {}, 'at', level), el('label', {}, 'model', model), el('label', {}, 'effort', effort), apply));
+  panel.append(el('p', { class: 'hint' }, 'Each cell holds name, model and effort. Names are for display only.'));
+
+  const { wrap, tbody } = table(['Role', 'Plugin', 'User', 'Project', 'In effect']);
+  for (const [d, roles] of groups) {
+    tbody.append(el('tr', { class: 'dept' }, el('th', { colspan: 5, scope: 'colgroup' }, d)));
+    for (const role of roles) {
+      const base = state.plugin.roles[role];
+      const effect = el('td', { class: 'effect' });
+      tbody.append(el('tr', {},
+        el('th', { scope: 'row' }, role),
+        el('td', { class: 'plugin' }, `${base.name} · ${base.model ?? '—'} · ${base.effort ?? '—'}`),
+        roleCell('user', role), roleCell('project', role), effect));
+      syncers.push(() => {
+        effect.replaceChildren();
+        const resolved = state.resolved.roles[role] ?? {};
+        const parts = ['name', 'model', 'effort'].map((f) => {
+          const path = ['roles', role, f];
+          if (!dirty(path) && resolved[f] !== undefined) return [resolved[f], resolved.source?.[f] ?? 'plugin'];
+          return pickSource(path, base[f]);
+        });
+        effect.append(parts.map(([v]) => v ?? '—').join(' · '));
+        const sources = [...new Set(parts.map(([, s]) => s))];
+        effect.append(el('span', { class: 'src' }, `(${sources.join(', ')})`));
+      });
+    }
+  }
+  panel.append(wrap);
+}
+
+// ---------- Language & profile tab ----------
+function renderLanguage(panel) {
+  if (!profileOn()) panel.append(el('p', { class: 'notice info' }, 'No .company/project.md here, so the profile and the project language are off. Open the page from a product repo to edit them.'));
+  const { wrap, tbody } = table(COLUMNS);
+  // Language row: user and project scopes go through language.mjs on save.
+  const lang = state.resolved.language;
+  const langInput = (scope) => {
+    const input = el('input', { type: 'text', placeholder: '—', 'aria-label': `Language, ${scope}` });
+    input.disabled = scope === 'project' && !profileOn();
+    input.addEventListener('input', () => { draft.language[scope] = input.value; refresh(); });
+    syncers.push(() => {
+      if (input.value !== draft.language[scope]) input.value = draft.language[scope];
+      input.classList.toggle('set', draft.language[scope].trim() !== '');
+    });
+    return input;
+  };
+  const langEffect = el('td', { class: 'effect' });
+  tbody.append(el('tr', {}, el('th', { scope: 'row' }, 'Language'), el('td', { class: 'plugin' }, 'en'),
+    el('td', {}, langInput('user')), el('td', {}, langInput('project')), langEffect));
+  syncers.push(() => {
+    const changed = changedLanguage();
+    // Unchanged: what the server resolved. Changed: project > user > en (plugin default).
+    let tag = lang.tag, source = lang.source;
+    if (Object.keys(changed).length) {
+      const p = draft.language.project.trim(), u = draft.language.user.trim();
+      if (p) [tag, source] = [p, 'project'];
+      else if (u) [tag, source] = [u, 'user'];
+      else [tag, source] = ['en', 'plugin'];
+    }
+    langEffect.replaceChildren(tag, el('span', { class: 'src' }, `(${source === 'default' ? 'plugin' : source})`));
+  });
+
+  const options = state.resolved.profile.options ?? {};
+  const stored = state.resolved.profile.fields;
+  const datalist = el('datalist', { id: 'voice-options' }, (options.voice ?? []).map((v) => el('option', { value: v })));
+  panel.append(datalist);
+  for (const field of PROFILE_FIELDS) {
+    let control;
+    if (field === 'product_type' || field === 'engagement') {
+      const opts = [...(options[field] ?? [])];
+      if (stored[field] && !opts.includes(stored[field])) opts.unshift(stored[field]);
+      control = selectFor(opts, `${field}, project`);
+    } else {
+      control = el('input', { type: 'text', class: 'wide', maxLength: 200, placeholder: '—', 'aria-label': `${field}, project` });
+      if (field === 'voice') control.setAttribute('list', 'voice-options');
+    }
+    control.disabled = !profileOn();
+    control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => { draft.profile[field] = control.value; refresh(); });
+    const effect = el('td', { class: 'effect text' });
+    syncers.push(() => {
+      const v = draft.profile[field] ?? '';
+      if (control.value !== v) control.value = v;
+      control.classList.toggle('set', v !== '');
+      effect.replaceChildren(v || '—');
+    });
+    const label = el('th', { scope: 'row' }, field);
+    if (field === 'stack') label.append(el('span', { class: 'held' }, 'aico:stack-detect may overwrite this'));
+    tbody.append(el('tr', {}, label, el('td', { class: 'plugin' }, '—'), el('td', { class: 'ro' }, 'project only'), el('td', {}, control), effect));
+  }
+  panel.append(wrap);
+  panel.append(el('p', { class: 'hint' }, 'Language takes a BCP 47 tag such as en, nl or pt-BR. Profile fields live in .company/project.md.'));
+}
+
+// ---------- Pipeline tab ----------
+function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, format, opts = {}) {
+  const effect = el('td', { class: 'effect' });
+  const cells = ['user', 'project'].map((level) => {
+    const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock) : null;
+    return el('td', {}, bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard));
+  });
+  const head = el('th', { scope: 'row', class: opts.lock ? 'lock' : '' }, label);
+  tbody.append(el('tr', {}, head, el('td', { class: 'plugin' }, format(pluginValue)), cells, effect));
+  syncers.push(() => showEffect(effect, path, pluginValue, format, getIn(state.resolved, path)));
+}
+const onOff = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
+function renderPipeline(panel) {
+  const defaults = state.plugin.pipeline;
+  const { wrap, tbody } = table(COLUMNS);
+  pipelineRow(tbody, 'Fix rounds', ['pipeline', 'fix_rounds'], defaults.fix_rounds,
+    (l) => selectFor([0, 1, 2, 3, 4, 5], l), Number, String);
+  pipelineRow(tbody, 'Dispatch', ['pipeline', 'dispatch'], defaults.dispatch,
+    (l) => selectFor(['parallel', 'sequential'], l), String, String);
+  panel.append(wrap);
+  panel.append(el('h2', {}, 'Optional lanes'));
+  panel.append(el('p', { class: 'hint' }, 'Turning off Security or Compliance needs your security unlock. A project can always turn a lane back on.'));
+  const lanes = table(COLUMNS);
+  for (const lane of LANES) {
+    const path = ['pipeline', 'lanes', lane];
+    if (lane === 'legal') {
+      pipelineRow(lanes.tbody, LANE_LABELS[lane], path, defaults.lanes[lane], (l) => selectFor(['auto', 'on', 'off'], l), String, String);
+    } else {
+      const lock = LOCKED_LANES.includes(lane) ? { lock: 'security', needsUnlock: (v) => v === false } : {};
+      pipelineRow(lanes.tbody, LANE_LABELS[lane], path, defaults.lanes[lane],
+        (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' }), (s) => s === 'true', onOff, lock);
+    }
+  }
+  panel.append(lanes.wrap);
+}
+
+// ---------- Gates tab ----------
+function renderGates(panel) {
+  const defaults = state.plugin.gates;
+  panel.append(el('p', { class: 'hint' }, 'ask shows you a form; auto writes the Gate summary and carries on. Ship and Installs need your unlock before auto applies.'));
+  const { wrap, tbody } = table(COLUMNS);
+  for (const gate of GATES) {
+    const lock = LOCKED_GATES.includes(gate) ? { lock: gate, needsUnlock: (v) => v === 'auto' } : {};
+    pipelineRow(tbody, GATE_LABELS[gate], ['gates', gate], defaults[gate], (l) => selectFor(['ask', 'auto'], l), String, String, lock);
+  }
+  panel.append(wrap);
+
+  panel.append(el('h2', {}, 'Unlocks'));
+  const unlocks = table(COLUMNS);
+  for (const key of ['ship', 'installs', 'security']) {
+    const label = key === 'security' ? 'Security (security and compliance lanes)' : GATE_LABELS[key];
+    const sel = el('select', { 'aria-label': `${label} unlock, user` }, el('option', { value: '' }, '— locked'), el('option', { value: 'on' }, 'unlocked'));
+    sel.addEventListener('change', async () => {
+      if (sel.value === 'on' && !userUnlocked(key) && !(await confirmUnlock(key))) { refresh(); return; }
+      setUnlock(key, sel.value === 'on');
+      refresh();
+    });
+    const projectList = state.project.unlocked ?? [];
+    const projectCell = el('td', { class: 'ro' }, projectList.includes(key) ? `${key} (ignored): ` : '', 'unlocks only count from your user settings');
+    const effect = el('td', { class: 'effect' });
+    syncers.push(() => {
+      const on = userUnlocked(key);
+      sel.value = on ? 'on' : '';
+      sel.classList.toggle('set', on);
+      effect.replaceChildren(on ? 'unlocked' : 'locked', el('span', { class: 'src' }, on ? '(user)' : '(plugin)'));
+    });
+    unlocks.tbody.append(el('tr', {}, el('th', { scope: 'row', class: 'lock' }, label), el('td', { class: 'plugin' }, 'locked'), el('td', {}, sel), projectCell, effect));
+  }
+  panel.append(unlocks.wrap);
+
+  panel.append(el('h2', {}, 'Ignored settings'));
+  const ignored = state.resolved.ignored;
+  panel.append(ignored.length
+    ? el('ul', {}, ignored.map((i) => el('li', {}, i)))
+    : el('p', { class: 'hint' }, 'None. Every stored setting applies.'));
+}
+
+// ---------- page ----------
+function renderNotices() {
+  const box = document.getElementById('notices');
+  box.replaceChildren();
+  if (!projectOn()) box.append(el('p', { class: 'notice info' }, 'No .company/ folder here, so the Project column is off. User settings still save.'));
+  const { warnings, ignored } = state.resolved;
+  if (warnings.length) box.append(el('div', { class: 'notice warn' }, el('strong', {}, 'Warnings'), el('ul', {}, warnings.map((w) => el('li', {}, w)))));
+  if (ignored.length) box.append(el('div', { class: 'notice warn' }, el('strong', {}, 'Ignored (stored, but not applied)'), el('ul', {}, ignored.map((w) => el('li', {}, w)))));
+}
+function render() {
+  syncers = [];
+  renderNotices();
+  const renderers = { roles: renderRoles, language: renderLanguage, pipeline: renderPipeline, gates: renderGates };
+  for (const [name, fn] of Object.entries(renderers)) {
+    const panel = document.getElementById(`panel-${name}`);
+    panel.replaceChildren();
+    fn(panel);
+  }
+  document.getElementById('clear-project').disabled = !projectOn();
+  refresh();
+}
+function refresh() {
+  for (const s of syncers) s();
+  const n = unsavedCount();
+  document.getElementById('count').textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`;
+  document.getElementById('save').disabled = n === 0;
+}
+function status(kind, title, lines = []) {
+  const box = document.getElementById('status');
+  box.replaceChildren();
+  if (!title) return;
+  box.append(el('div', { class: `notice ${kind}` }, title, lines.length ? el('ul', {}, lines.map((l) => el('li', {}, l))) : null));
+}
+function load(newState) {
+  state = newState;
+  resetDraft();
+  render();
+}
+
+async function api(path, body) {
+  const init = { headers: { 'X-Aico-Token': TOKEN }, cache: 'no-store' };
+  if (body !== undefined) {
+    init.method = 'POST';
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, init);
+  let data = {};
+  try { data = await res.json(); } catch { /* empty or not JSON */ }
+  return { status: res.status, data };
+}
+const unreachable = () => status('err', 'Can\'t reach the settings server. It stops after 30 minutes idle or when you press Done; run /aico:settings again.');
+
+async function save() {
+  const body = { revision: state.resolved.revision };
+  if (diffCount(draft.user, state.user)) body.user = draft.user;
+  if (projectOn() && diffCount(draft.project, state.project)) body.project = draft.project;
+  const profile = changedProfile();
+  if (profileOn() && Object.keys(profile).length) body.profile = profile;
+  const language = changedLanguage();
+  if (Object.keys(language).length) body.language = language;
+  const button = document.getElementById('save');
+  button.disabled = true;
+  let res;
+  try {
+    res = await api('/api/save', body);
+  } catch {
+    unreachable();
+    refresh();
+    return;
+  }
+  if (res.status === 200 && res.data.state) {
+    load(res.data.state);
+    status('info', 'Saved. Changes apply from the next aico run.');
+  } else if (res.status === 409 && res.data.state) {
+    load(res.data.state);
+    status('err', 'Your view was stale: the settings changed somewhere else since this page loaded. The page now shows the current values, and your edits were not saved. Make them again and press Save.');
+  } else {
+    refresh();
+    status('err', 'Nothing was saved. Fix these and press Save again:', res.data.refused ?? [`the server answered ${res.status}`]);
+  }
+}
+
+function clearLevel(level) {
+  if (activeTab === 'roles') delete draft[level].roles;
+  else if (activeTab === 'pipeline') delete draft[level].pipeline;
+  else if (activeTab === 'gates') { delete draft[level].gates; if (level === 'user') delete draft.user.unlocked; }
+  else if (activeTab === 'language') {
+    draft.language[level] = '';
+    if (level === 'project') status('info', 'Profile fields can\'t be cleared, only changed. The project language is cleared.');
+  }
+  refresh();
+}
+
+async function done() {
+  if (unsavedCount() > 0 && !window.confirm('You have unsaved changes. Close without saving?')) return;
+  try {
+    await api('/api/done', {});
+  } catch { /* the server may already be gone */ }
+  draft = null;
+  document.querySelector('main').replaceChildren(el('p', { class: 'notice info' }, 'Settings server stopped. You can close this tab.'));
+  document.querySelector('footer').hidden = true;
+}
+
+function selectTab(name, focus = false) {
+  activeTab = name;
+  for (const tab of document.querySelectorAll('[role="tab"]')) {
+    const on = tab.id === `tab-${name}`;
+    tab.setAttribute('aria-selected', String(on));
+    tab.tabIndex = on ? 0 : -1;
+    document.getElementById(tab.getAttribute('aria-controls')).hidden = !on;
+    if (on && focus) tab.focus();
+  }
+}
+const TAB_NAMES = ['roles', 'language', 'pipeline', 'gates'];
+for (const tab of document.querySelectorAll('[role="tab"]')) {
+  tab.addEventListener('click', () => selectTab(tab.id.slice(4)));
+  tab.addEventListener('keydown', (e) => {
+    const i = TAB_NAMES.indexOf(activeTab);
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TAB_NAMES.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    selectTab(TAB_NAMES[(next + TAB_NAMES.length) % TAB_NAMES.length], true);
+  });
+}
+document.getElementById('save').addEventListener('click', save);
+document.getElementById('done').addEventListener('click', done);
+document.getElementById('clear-user').addEventListener('click', () => clearLevel('user'));
+document.getElementById('clear-project').addEventListener('click', () => clearLevel('project'));
+window.addEventListener('beforeunload', (e) => { if (draft && unsavedCount() > 0) e.preventDefault(); });
+
+(async () => {
+  try {
+    const res = await api('/api/state');
+    if (res.status !== 200) { status('err', 'The server refused to load settings:', res.data.refused ?? [String(res.status)]); return; }
+    load(res.data);
+  } catch {
+    unreachable();
+  }
+})();
+</script>
+</body>
+</html>

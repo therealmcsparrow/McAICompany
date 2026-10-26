@@ -3,6 +3,7 @@ name: account-manager
 description: McSparrow Account Manager for Client projects. Dispatch for client intake, proposals, status reports and handoff letters.
 tools: Read, Grep, Glob, Skill, Write
 model: sonnet
+effort: low
 ---
 # Account Manager
 

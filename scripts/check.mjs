@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
+const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 function frontmatter(text) {
   const lines = text.split(/\r?\n/);
@@ -31,8 +32,8 @@ function mdFiles(dir) {
 }
 
 // Playbooks that dispatch no Role and only print or run a CLI: they need no language resolution.
-export const LANGUAGE_EXEMPT = new Set(['setup', 'language']);
-const NAME_RE =/^[a-z0-9][a-z0-9-]{0,63}\*?$/;
+export const LANGUAGE_EXEMPT = new Set(['setup', 'language', 'settings']);
+const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -81,7 +82,7 @@ function checkManifest(root, errors) {
       if (e === null || typeof e !== 'object') { errors.push(`ERROR ${at}: entry must be an object`); return; }
       const isInclude = Object.hasOwn(e, 'include');
       if (!isInclude) {
-        if (typeof e.name !== 'string' || !NAME_RE.test(e.name)) errors.push(`ERROR ${at}: name fails the agentsec.M-SEC7 pattern`);
+        if (typeof e.name !== 'string' || !MANIFEST_NAME_RE.test(e.name)) errors.push(`ERROR ${at}: name fails the agentsec.M-SEC7 pattern`);
         if (Object.hasOwn(e, 'source')) {
           const src = e.source;
           if (typeof src !== 'string' || !REPO_RE.test(src) || src.endsWith('/.') || src.endsWith('/..'))
@@ -96,8 +97,30 @@ function checkManifest(root, errors) {
   }
 }
 
+// 1-30 characters: starts with a letter; letters, combining marks, hyphens and apostrophes,
+// single spaces between words, no space at either end.
+export const NAME_RE = /^(?=.{1,30}$)\p{L}[\p{L}\p{M}'\-]*(?: [\p{L}'\-][\p{L}\p{M}'\-]*)*$/u;
+
+// company/names.json: exactly one valid, unique (case-insensitive) name per agent. Skipped when absent.
+export function checkNames(root, agentNames, errors) {
+  const f = join(root, 'company', 'names.json');
+  if (!existsSync(f)) return;
+  let names;
+  try { names = JSON.parse(readFileSync(f, 'utf8')); } catch (e) { errors.push(`ERROR company/names.json: not valid JSON (${e.message})`); return; }
+  if (!names || typeof names !== 'object' || Array.isArray(names)) { errors.push('ERROR company/names.json: must be an object of role to name'); return; }
+  for (const role of agentNames) if (!(role in names)) errors.push(`ERROR company/names.json: ${role} has no name`);
+  const seen = new Map();
+  for (const [role, name] of Object.entries(names)) {
+    if (!agentNames.has(role)) { errors.push(`ERROR company/names.json: ${role} is not a Role`); continue; }
+    if (typeof name !== 'string' || !NAME_RE.test(name)) { errors.push(`ERROR company/names.json: ${role}: invalid name ${JSON.stringify(name)}`); continue; }
+    const key = name.toLowerCase();
+    if (seen.has(key)) errors.push(`ERROR company/names.json: duplicate name ${key} (${seen.get(key)}, ${role})`);
+    else seen.set(key, role);
+  }
+}
+
 // Role count in the plugin description and docs, and every agent listed in roles.md and the spec roster.
-function checkRoleCounts(root, roleNames, errors) {
+function checkRoleCounts(root, roleNames, errors, roleFm = new Map()) {
   if (!roleNames.size) return;
   const n = roleNames.size;
   const files = ['.claude-plugin/plugin.json', 'README.md', 'documentation/README.md', 'documentation/roles.md', 'docs/spec.md'];
@@ -113,6 +136,13 @@ function checkRoleCounts(root, roleNames, errors) {
   if (existsSync(rolesDoc)) {
     const t = readFileSync(rolesDoc, 'utf8');
     for (const a of roleNames) if (!t.includes(`**${a}**`)) errors.push(`ERROR documentation/roles.md: Role ${a} missing`);
+    for (const line of t.split(/\r?\n/)) {
+      const m = line.match(/^\|\s*\*\*([a-z-]+)\*\*[^|]*\|\s*(\w+)\s*\|\s*(\w+)\s*\|/);
+      const fm = m && roleFm.get(m[1]);
+      if (!fm) continue;
+      if (fm.model && m[2] !== fm.model) errors.push(`ERROR documentation/roles.md: ${m[1]} model ${m[2]} != ${fm.model}`);
+      if (fm.effort && m[3] !== fm.effort) errors.push(`ERROR documentation/roles.md: ${m[1]} effort ${m[3]} != ${fm.effort}`);
+    }
   }
   const spec = join(root, 'docs', 'spec.md');
   if (existsSync(spec)) {
@@ -123,7 +153,7 @@ function checkRoleCounts(root, roleNames, errors) {
 
 export function check(root) {
   const errors = [], warnings = [], names = new Set(), units = [], playbooks = [];
-  const skillNames = new Set(), agentNames = new Set();
+  const skillNames = new Set(), agentNames = new Set(), agentFm = new Map();
   const skillsDir = join(root, 'skills'), agentsDir = join(root, 'agents');
 
   if (existsSync(skillsDir)) for (const dir of readdirSync(skillsDir)) {
@@ -140,11 +170,14 @@ export function check(root) {
     names.add(u.expected);
     (u.kind === 'skill' ? skillNames : agentNames).add(u.expected);
     if (!fm) { errors.push(`ERROR ${rel}: missing frontmatter`); continue; }
+    if (u.kind === 'agent') agentFm.set(u.expected, { model: fm.model, effort: fm.effort });
     if (u.kind === 'skill' && fm['disable-model-invocation'] === 'true') playbooks.push({ rel, name: u.expected, text });
     if (fm.name !== u.expected) errors.push(`ERROR ${rel}: name mismatch (${fm.name} vs ${u.expected})`);
     if (!fm.description) errors.push(`ERROR ${rel}: missing description`);
     else if (fm.description.length > LIMITS.description) errors.push(`ERROR ${rel}: description too long (${fm.description.length} > ${LIMITS.description})`);
     if (u.kind === 'agent' && fm.model && !MODELS.has(fm.model)) errors.push(`ERROR ${rel}: invalid model ${fm.model}`);
+    if (u.kind === 'agent' && !fm.effort) errors.push(`ERROR ${rel}: missing effort`);
+    else if (u.kind === 'agent' && !EFFORTS.has(fm.effort)) errors.push(`ERROR ${rel}: invalid effort ${fm.effort}`);
     const n = lineCount(text), max = LIMITS[u.kind];
     if (n > max) warnings.push(`WARN ${rel}: ${u.kind} ${n} > ${max} lines`);
   }
@@ -175,12 +208,17 @@ export function check(root) {
         errors.push(`ERROR ${rel}: version ${m[1]} != plugin.json ${version}`);
     }
   }
-  // Language rule (dispatch-prompt v2): every dispatch block and every Playbook resolves and passes the language.
+  // Language rule (dispatch-prompt v2) and Name rule (v3): every dispatch block passes the language and the Role's name,
+  // and every Playbook resolves the language.
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir)]) {
     const rel = relative(root, file).split(sep).join('/');
-    for (const b of fencedBlocks(readFileSync(file, 'utf8')))
-      if (b.text.includes('Company profile:') && !b.text.includes('Language:'))
+    for (const b of fencedBlocks(readFileSync(file, 'utf8'))) {
+      if (!b.text.includes('Company profile:')) continue;
+      if (!b.text.includes('Language:'))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Language:`);
+      if (!/^Name:/m.test(b.text))
+        errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Name:`);
+    }
   }
   for (const p of playbooks)
     if (!LANGUAGE_EXEMPT.has(p.name) && !p.text.includes('aico:pipeline') && !p.text.includes('§1.6'))
@@ -194,7 +232,8 @@ export function check(root) {
         errors.push(`ERROR documentation/commands.md: Playbook ${p.name} has no ### /aico:${p.name} entry`);
   }
   checkManifest(root, errors);
-  checkRoleCounts(root, agentNames, errors);
+  checkRoleCounts(root, agentNames, errors, agentFm);
+  checkNames(root, agentNames, errors);
   return { errors: [...new Set(errors)], warnings };
 }
 

@@ -165,7 +165,7 @@ test('AC10 docs agree: GLOSSARY terms, README department, commands entries, spec
   has(spec, 'market-researcher', 'tech-researcher', 'design-researcher', 'sourcing');
   has(read('CHANGELOG.md'), '0.9.0');
   const v = JSON.parse(read('.claude-plugin/plugin.json')).version;
-  assert.equal(v, '0.9.0');
+  assert.match(v, /^\d+\.\d+\.\d+$/);
 });
 
 test('AC11 size limits: agents <= 50 lines, skills <= 125 lines', () => {

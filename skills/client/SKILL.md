@@ -10,6 +10,7 @@ argument-hint: intake <client request> | handoff
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `client` and stop.
 
 Run with `aico:pipeline`. Set `engagement: client` in `.company/project.md`, and the client's license and jurisdiction.
+Anything sent to the client always asks at the Ship Gate, whatever the settings say (`aico:pipeline` §4).
 
 ## intake
 1. `aico:account-manager`: intake (goals, constraints, budget, deadline, open questions for the client).

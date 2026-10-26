@@ -9,7 +9,7 @@ import { check } from './check.mjs';
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
 
-function fixture({ skills = {}, agents = {} }) {
+function fixture({ skills = {}, agents = {}, names }) {
   const root = mkdtempSync(join(tmpdir(), 'aico-'));
   tempDirs.push(root);
   for (const [dir, text] of Object.entries(skills)) {
@@ -18,10 +18,15 @@ function fixture({ skills = {}, agents = {} }) {
   }
   mkdirSync(join(root, 'agents'), { recursive: true });
   for (const [name, text] of Object.entries(agents)) writeFileSync(join(root, 'agents', `${name}.md`), text);
+  if (names) {
+    mkdirSync(join(root, 'company'), { recursive: true });
+    writeFileSync(join(root, 'company', 'names.json'), JSON.stringify(names));
+  }
   return root;
 }
 const skill = (name, body = 'Body.', desc = 'Use when testing.') => `---\nname: ${name}\ndescription: ${desc}\n---\n${body}\n`;
-const agent = (name, body = 'Body.', model = 'sonnet') => `---\nname: ${name}\ndescription: Dispatch when testing.\ntools: Read\nmodel: ${model}\n---\n${body}\n`;
+const agent = (name, body = 'Body.', model = 'sonnet', effort = 'medium') =>
+  `---\nname: ${name}\ndescription: Dispatch when testing.\ntools: Read\nmodel: ${model}\n${effort ? `effort: ${effort}\n` : ''}---\n${body}\n`;
 
 test('good fixture has no errors', () => {
   const r = check(fixture({ skills: { a: skill('a', 'See aico:b and aico:qa.') , b: skill('b') }, agents: { qa: agent('qa') } }));
@@ -50,7 +55,7 @@ test('unknown aico reference is an error', () => {
 
 test('oversized agent and skill are warnings, not errors', () => {
   const long = n => Array.from({ length: n }, (_, i) => `line ${i}`).join('\n');
-  const r = check(fixture({ skills: { a: skill('a', long(122)) }, agents: { qa: agent('qa', long(45)) } }));
+  const r = check(fixture({ skills: { a: skill('a', long(122)) }, agents: { qa: agent('qa', long(44)) } }));
   assert.ok(r.warnings.some(w => w.includes('agent 51 > 50 lines')), r.warnings.join('\n'));
   assert.ok(r.warnings.some(w => w.includes('skill 126 > 125 lines')), r.warnings.join('\n'));
   assert.deepEqual(r.errors, []);
@@ -59,6 +64,16 @@ test('oversized agent and skill are warnings, not errors', () => {
 test('invalid model is an error', () => {
   const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'gpt4') } }));
   assert.ok(r.errors.some(e => e.includes('invalid model')));
+});
+
+test('invalid effort is an error', () => {
+  const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', 'extreme') } }));
+  assert.ok(r.errors.some(e => e.includes('invalid effort extreme')));
+});
+
+test('missing effort is an error', () => {
+  const r = check(fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', '') } }));
+  assert.ok(r.errors.some(e => e.includes('missing effort')));
 });
 
 test('skill and agent with the same name is an error', () => {
@@ -99,14 +114,22 @@ const manifestRoot = m => {
 
 test('dispatch block with Company profile: but no Language: is an error', () => {
   const bad = skill('a', 'See below.\n\n```\nCompany profile: x\nGoal: y\n```');
-  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
+  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
   const r = check(fixture({ skills: { a: bad, b: good } }));
   assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Language:')), r.errors.join('\n'));
   assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
 });
 
+test('dispatch block without Name: is an error', () => {
+  const bad = skill('a', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
+  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
+  const r = check(fixture({ skills: { a: bad, b: good } }));
+  assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Name:')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
+});
+
 test('a longer fence is closed only by an equal or longer fence', () => {
-  const nested = skill('a', '````\nCompany profile: x\n```\ninner\n```\nLanguage: en\n````');
+  const nested = skill('a', '````\nCompany profile: x\n```\ninner\n```\nLanguage: en\nName: Ava\n````');
   assert.deepEqual(check(fixture({ skills: { a: nested } })).errors, []);
 });
 
@@ -214,6 +237,19 @@ test('an agent missing from roles.md or the spec roster is an error', () => {
   assert.ok(r.errors.some(e => e.includes('spec.md: Role support missing')), r.errors.join('\n'));
 });
 
+test('roles.md model or effort that differs from frontmatter is an error', () => {
+  const root = fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', 'medium') } });
+  write(root, 'documentation/roles.md', '| **qa** | opus | medium | x |');
+  let r = check(root);
+  assert.ok(r.errors.some(e => e.includes('documentation/roles.md: qa model opus != sonnet')), r.errors.join('\n'));
+  write(root, 'documentation/roles.md', '| **qa** (lead) | sonnet | high | x |');
+  r = check(root);
+  assert.ok(r.errors.some(e => e.includes('documentation/roles.md: qa effort high != medium')), r.errors.join('\n'));
+  write(root, 'documentation/roles.md', '| **qa** | sonnet | medium | x |');
+  r = check(root);
+  assert.ok(!r.errors.some(e => e.includes('roles.md')), r.errors.join('\n'));
+});
+
 test('package.json test script is a glob, not a list of files', () => {
   const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
   const args = pkg.scripts.test.split(/\s+/).slice(2).map(a => a.replace(/^"|"$/g, ''));
@@ -244,8 +280,44 @@ const realPlaybooks = readdirSync(join(REPO, 'skills')).filter(d => {
 });
 
 for (const name of realPlaybooks) {
-  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language:`, () => {
+  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language: and Name:`, () => {
     const r = check(REPO);
-    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:'))), r.errors.join('\n'));
+    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:') || e.includes('no Name:'))), r.errors.join('\n'));
   });
 }
+
+const nameAgents = { qa: agent('qa'), support: agent('support') };
+
+test('names.json missing a Role is an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { support: 'Sofia' } }));
+  assert.ok(r.errors.some(e => e.includes('company/names.json: qa has no name')), r.errors.join(', '));
+});
+
+test('duplicate names (case-insensitive) are an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Sam', support: 'sam' } }));
+  assert.ok(r.errors.some(e => e.includes('duplicate name sam')), r.errors.join(', '));
+});
+
+test('invalid name is an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Sam!', support: 'Sofia' } }));
+  assert.ok(r.errors.some(e => e.includes('invalid name')), r.errors.join(', '));
+});
+
+test('a name for an unknown Role is an error', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Quinn', support: 'Sofia', ghost: 'Gus' } }));
+  assert.ok(r.errors.some(e => e.includes('ghost is not a Role')), r.errors.join(', '));
+});
+
+test('valid names.json has no errors', () => {
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Quinn', support: 'Lucía' } }));
+  assert.deepEqual(r.errors, []);
+});
+
+test('names with edge or double spaces are errors; combining marks are fine', () => {
+  for (const bad of ['Sam ', ' Sam', 'Sam  Lee']) {
+    const r = check(fixture({ agents: nameAgents, names: { qa: bad, support: 'Sofia' } }));
+    assert.ok(r.errors.some(e => e.includes('invalid name')), JSON.stringify(bad));
+  }
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Zoé', support: 'Sofia Lee' } }));
+  assert.deepEqual(r.errors, []);
+});

@@ -10,6 +10,7 @@ argument-hint: <product or release to launch>
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `launch` and stop.
 
 Run with `aico:pipeline`. No Plan Gate unless step 4 builds a landing page with Core/Contract changes.
+Publishing and deploying always ask at the Ship Gate, whatever the settings say (`aico:pipeline` §4).
 
 1. `aico:product-manager`: launch brief (audience, key message, channels, success metric).
    **→ Brief Gate**

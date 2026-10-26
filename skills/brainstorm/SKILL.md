@@ -9,7 +9,7 @@ argument-hint: <idea | brainstorm or research file>
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `brainstorm` and stop.
 
-You are the Lead, moderating. Roles think; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile and the language (§1.2, §1.4, §1.6): resolve `Language:` once, as in `aico:pipeline`, and write your forms and digests in it. Read-only for every Role: no code, no file edits.
+You are the Lead, moderating. Roles think; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile, the language and the settings (§1.2, §1.4, §1.6, §1.7): resolve `Language:` and the settings once, as in `aico:pipeline`, pass each Role's `model` and `effort` per `aico:pipeline` §2, and write your forms and digests in the language. Read-only for every Role: no code, no file edits.
 
 ## Folders and file
 `.company/brainstorms/` while it runs, then one of `.company/roadmap/`, `.company/nice-to-have/`, `.company/parked/`.
@@ -45,13 +45,15 @@ Output: your reply only. Write no files and no Handoff.
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from §1.6>
+Name: <the Role's name from §1.7>
+Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 ```
 Modes:
 - **ideas** (default): all chosen Roles in parallel, one message.
 - **debate:** as ideas, then a second parallel pass where each Role also gets the others' replies (pasted under `Other Roles:`) and agrees, challenges or builds on them, max 100 words.
 - **moderated:** one Role at a time. You pick who speaks next from what was just said; each gets the replies so far this round. 3–5 turns per round.
 
-After each round append a **digest** to the file (max 250 words): strongest ideas (with the Role), disagreements, risks, and the open questions for the CEO. Show it to the CEO, then ask in one form (`aico:pipeline`): up to 3 of the digest's open questions, each with the Roles' positions as options, plus **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Steering text comes through "Other".
+After each round append a **digest** to the file (max 250 words): strongest ideas (with the Role as `Name (role)`), disagreements, risks, and the open questions for the CEO. Show it to the CEO, then ask in one form (`aico:pipeline`): up to 3 of the digest's open questions, each with the Roles' positions as options, plus **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Steering text comes through "Other".
 Append the CEO's answers verbatim under the digest, apply any mode or Role change, and run the next round on it. Never end on your own and never cap the rounds; only the CEO's "done" (or "stop", "wrap up", "that's it") ends it.
 
 ## 3. Close

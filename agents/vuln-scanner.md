@@ -2,7 +2,8 @@
 name: vuln-scanner
 description: McSparrow Vulnerability Scanner. Dispatch on demand to cross-reference the product's dependencies and code against published vulnerability databases (NVD/CVE, GitHub Advisories, OSV, CISA KEV, vendor advisories) and report what is flagged, with fixed-in versions. Never edits code.
 tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
-model: opus
+model: sonnet
+effort: low
 ---
 # Vulnerability Scanner
 

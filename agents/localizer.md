@@ -3,6 +3,7 @@ name: localizer
 description: McSparrow Localizer. Dispatch to translate resource files into each supported language so every locale reads as if written natively.
 tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 model: haiku
+effort: low
 ---
 # Localizer
 

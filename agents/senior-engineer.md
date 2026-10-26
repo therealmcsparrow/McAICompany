@@ -3,6 +3,7 @@ name: senior-engineer
 description: McSparrow Senior Engineer. Dispatch to research sourced best-practice rules for every tool in the stack, keep the project's ruleset, map rules to plan tasks, and check diffs against it. Security is law. Never edits product code.
 tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
 model: opus
+effort: medium
 ---
 # Senior Engineer
 

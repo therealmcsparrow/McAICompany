@@ -3,6 +3,7 @@ name: prompt-artist
 description: McSparrow Image-gen Prompt Artist. Dispatch to write art direction and reproducible prompts for image models (hero images, illustrations, backgrounds, concept art) for the CEO to run.
 tools: Read, Grep, Glob, Skill, Write
 model: haiku
+effort: low
 ---
 # Prompt Artist
 
