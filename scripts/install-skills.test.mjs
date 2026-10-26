@@ -431,3 +431,57 @@ test('runAll continues after a failing command and reports it', () => {
   assert.equal(res.failed[0].cmd, 'b');
   assert.match(res.failed[0].error, /boom/);
 });
+
+// ---- optional commit on a design line: pinned install; v1 lines unchanged ----
+const SHA = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+const pinned = (o = {}) => {
+  const f = { name: 'hallmark', source: 'nutlope/hallmark', license: 'MIT', vetted: '2026-10-22', commit: SHA, why: 'good', approved: '2026-10-22', ...o };
+  return `- name: ${f.name}; source: ${f.source}; license: ${f.license}; vetted: ${f.vetted}; commit: ${f.commit}; why: ${f.why}; approved: ${f.approved}`;
+};
+
+test('a v1 design line installs exactly the v1 command and argv, with no commit token', () => {
+  const s = sandbox();
+  try {
+    const exec = [];
+    const res = s.run(['design', '--project', s.projectFile], doc(line()), { exec: (c, cwd, argv) => exec.push([c, cwd, argv]) });
+    assert.equal(res.code, 0);
+    assert.deepEqual(exec.at(-1), ['npx -y skills@1.7.4 add nutlope/hallmark -s hallmark -a claude-code -y', s.root, ['-y', 'skills@1.7.4', 'add', 'nutlope/hallmark', '-s', 'hallmark', '-a', 'claude-code', '-y']]);
+    assert.deepEqual(parseDesignSkills(doc(line()), manifest, TODAY)[0].commit, undefined);
+  } finally { s.done(); }
+});
+
+test('a design line with commit installs <owner>/<repo>#<commit> as a string and as argv', () => {
+  const s = sandbox();
+  try {
+    const exec = [];
+    const res = s.run(['design', '--project', s.projectFile], doc(pinned()), { exec: (c, cwd, argv) => exec.push([c, cwd, argv]) });
+    assert.equal(res.code, 0);
+    assert.deepEqual(exec, [[`npx -y skills@1.7.4 add nutlope/hallmark#${SHA} -s hallmark -a claude-code -y`, s.root, ['-y', 'skills@1.7.4', 'add', `nutlope/hallmark#${SHA}`, '-s', 'hallmark', '-a', 'claude-code', '-y']]]);
+    const win = main(['design', '--project', s.projectFile, '--dry-run'], { manifest, home: join(s.base, 'home'), cwd: s.base, today: TODAY, platform: 'win32', log: (x) => exec.push(x), exec: () => assert.fail('dry run') });
+    assert.equal(win, 0);
+    assert.equal(exec.at(-1), `[dry-run] (in ${s.root}) npx -y skills@1.7.4 add nutlope/hallmark#${SHA} -s hallmark -a claude-code -y`);
+  } finally { s.done(); }
+});
+
+for (const [label, text, re] of [
+  ['dash on a repo source', pinned({ commit: '-' }), /commit invalid/],
+  ['short sha', pinned({ commit: 'a1b2c3d' }), /commit invalid/],
+  ['uppercase sha', pinned({ commit: SHA.toUpperCase() }), /commit invalid/],
+  ['branch name', pinned({ commit: 'main' }), /commit invalid/],
+  ['shell tail', pinned({ commit: `${SHA}&&calc` }), /commit invalid/],
+  ['on a command source', pinned({ name: 'impeccable', source: '`npx -y impeccable skills install`' }), /commit invalid/],
+  ['on a plugin source', pinned({ name: 'aico:ui-design', source: 'plugin aico', license: '-', vetted: '-' }), /commit invalid/],
+  ['after why (wrong order)', `- name: hallmark; source: nutlope/hallmark; license: MIT; vetted: 2026-10-22; why: good; commit: ${SHA}; approved: 2026-10-22`, /malformed/],
+  ['twice', `- name: hallmark; source: nutlope/hallmark; license: MIT; vetted: 2026-10-22; commit: ${SHA}; commit: ${SHA}; why: good; approved: 2026-10-22`, /malformed/],
+]) {
+  test(`design line with commit ${label} errors and installs nothing`, () => {
+    assert.throws(() => parseDesignSkills(doc(text), manifest, TODAY), re);
+    const s = sandbox();
+    try {
+      const res = s.run(['design', '--project', s.projectFile], doc(text));
+      assert.equal(res.code, 1);
+      assert.match(res.out, /ERROR design skill line \d+: /);
+      assert.equal(res.calls.length, 0);
+    } finally { s.done(); }
+  });
+}

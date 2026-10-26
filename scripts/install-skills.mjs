@@ -20,13 +20,14 @@ const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
 const PLUGIN_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const LINE_RE = /^- name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); why: ([^;]+); approved: ([^;]+)$/;
+const SHA_RE = /^[0-9a-f]{40}$/;
+const LINE_RE = /^- name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); (?:commit: ([^;]+); )?why: ([^;]+); approved: ([^;]+)$/;
 const WHY_BAD_RE = /[`<>\u0000-\u001f\u007f]/;
-const SKILLS_LINE_RE = /^- area: (stack|product-type|company-type); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); why: ([^;]+); approved: ([^;]+)$/;
+const SKILLS_LINE_RE = /^- area: (stack|product-type|company-type); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: ([^;]+)$/;
 const MAX_SKILLS_TOTAL = 15;
 const PROJECT_GROUPS = ['design', 'skills'];
-const DESIGN_SECTION = { heading: '## Design skills', label: 'design skill', none: '- (none yet; the design-researcher proposes them)', re: LINE_RE, areas: false, plugins: true };
-const SKILLS_SECTION = { heading: '## Skills', label: 'skills', none: '- (none yet; the skill-researcher proposes them)', re: SKILLS_LINE_RE, areas: true, plugins: false };
+const DESIGN_SECTION = { heading: '## Design skills', label: 'design skill', none: '- (none yet; the design-researcher proposes them)', re: LINE_RE, keys: ['name', 'source', 'license', 'vetted', 'commit', 'why', 'approved'], areas: false, plugins: true, commitRequired: false };
+const SKILLS_SECTION = { heading: '## Skills', label: 'skills', none: '- (none yet; the skill-researcher proposes them)', re: SKILLS_LINE_RE, keys: ['area', 'name', 'source', 'license', 'vetted', 'commit', 'why', 'approved'], areas: true, plugins: false, commitRequired: true };
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_LINE_CHARS = 500;
 const MAX_ENTRIES = 5;
@@ -88,9 +89,9 @@ function parseSection(markdown, manifest, today, cfg) {
     if (out.length >= (cfg.areas ? MAX_SKILLS_TOTAL : MAX_ENTRIES)) fail(n, 'entries', 'too many entries');
     const m = cfg.re.exec(text);
     if (!m) fail(n, 'line', 'malformed');
-    const fields = m.slice(1);
-    const area = cfg.areas ? fields.shift() : undefined;
-    const [name, source, license, vetted, why, approved] = fields;
+    const f = Object.create(null);
+    cfg.keys.forEach((k, i) => { f[k] = m[i + 1]; });
+    const { area, name, source, license, vetted, commit, why, approved } = f;
     if (area) {
       perArea[area] = (perArea[area] ?? 0) + 1;
       if (perArea[area] > MAX_ENTRIES) fail(n, 'entries', 'too many entries');
@@ -111,6 +112,8 @@ function parseSection(markdown, manifest, today, cfg) {
       if (!validRepo(source)) fail(n, 'source', 'invalid');
       if (!NAME_RE.test(name)) fail(n, 'name', 'invalid');
     }
+    // A repo line pins a 40-hex commit (required in `## Skills`); a command or plugin line has none (`-` in `## Skills`).
+    if (kind === 'repo' ? (commit === undefined ? cfg.commitRequired : !SHA_RE.test(commit)) : commit !== (cfg.commitRequired && kind === 'command' ? '-' : undefined)) fail(n, 'commit', 'invalid');
     if (license === 'NONE' || license === 'NOASSERTION' || !LICENSE_RE.test(license)) fail(n, 'license', 'invalid');
     if (license === '-' && kind !== 'plugin') fail(n, 'license', 'invalid');
     if (vetted === '-' ? kind !== 'plugin' : !validDate(vetted, today)) fail(n, 'vetted', 'invalid');
@@ -121,6 +124,7 @@ function parseSection(markdown, manifest, today, cfg) {
     if (kind === 'repo') entry.source = source;
     else if (kind === 'command') entry.install = cmd;
     else entry.plugin = plugin;
+    if (kind === 'repo' && commit !== undefined) entry.commit = commit;
     out.push(entry);
   }
   return out;
@@ -176,13 +180,20 @@ function commandFor(e, platform) {
   }
   const star = platform === 'win32' ? '"*"' : "'*'";
   const skill = e.name.endsWith('*') ? star : e.name;
-  return `npx -y ${SKILLS_CLI} add ${e.source} -s ${skill}${e.scope === 'project' ? '' : ' -g'} -a claude-code -y`;
+  return `npx -y ${SKILLS_CLI} add ${sourceToken(e)} -s ${skill}${e.scope === 'project' ? '' : ' -g'} -a claude-code -y`;
+}
+
+// A project entry with a commit installs exactly that commit; the skills CLI reads `#<ref>`.
+function sourceToken(e) {
+  if (e.commit === undefined || e.scope !== 'project') return e.source;
+  if (typeof e.commit !== 'string' || !SHA_RE.test(e.commit)) throw new Error('invalid manifest entry');
+  return `${e.source}#${e.commit}`;
 }
 
 // Off Windows the same command runs as argv with no shell (node.M-SEC1); the wildcard is a bare `*`.
 function argvFor(e) {
   const skill = e.name.endsWith('*') ? '*' : e.name;
-  return ['-y', SKILLS_CLI, 'add', e.source, '-s', skill, ...(e.scope === 'project' ? [] : ['-g']), '-a', 'claude-code', '-y'];
+  return ['-y', SKILLS_CLI, 'add', sourceToken(e), '-s', skill, ...(e.scope === 'project' ? [] : ['-g']), '-a', 'claude-code', '-y'];
 }
 
 // Groups `design` and `skills` exist only when --project supplied them: { root, design, skills }.

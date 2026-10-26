@@ -7,10 +7,12 @@ import { parseSkillsSection, parseDesignSkills, main } from './install-skills.mj
 
 const TODAY = new Date('2026-10-26T12:00:00Z');
 const manifest = { core: [{ name: 'impeccable', install: 'npx -y impeccable skills install' }] };
+const SHA = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
 
 const line = (o = {}) => {
-  const f = { area: 'stack', name: 'golang-testing', source: 'samber/cc-skills-golang', license: 'MIT', vetted: '2026-10-26', why: 'tests', approved: '2026-10-26', ...o };
-  return `- area: ${f.area}; name: ${f.name}; source: ${f.source}; license: ${f.license}; vetted: ${f.vetted}; why: ${f.why}; approved: ${f.approved}`;
+  const f = { area: 'stack', name: 'golang-testing', source: 'samber/cc-skills-golang', license: 'MIT', vetted: '2026-10-26', commit: SHA, why: 'tests', approved: '2026-10-26', ...o };
+  const commit = f.commit === null ? '' : `commit: ${f.commit}; `;
+  return `- area: ${f.area}; name: ${f.name}; source: ${f.source}; license: ${f.license}; vetted: ${f.vetted}; ${commit}why: ${f.why}; approved: ${f.approved}`;
 };
 const doc = (...lines) => `# P\n\n## Skills\n<!-- approved -->\n${lines.join('\n')}\n\n## Next\nx\n`;
 
@@ -39,7 +41,7 @@ const HOSTILE = {
   'name with colon': [line({ name: 'aico:ui-design' }), /line 2: name invalid/],
   'source with &&': [line({ source: 'owner/repo&&calc' }), /line 2: source invalid/],
   'source dot-dot repo': [line({ source: 'owner/..' }), /line 2: source invalid/],
-  'plugin source is not allowed': [line({ name: 'aico:x', source: 'plugin aico', license: '-', vetted: '-' }), /line 2: source invalid/],
+  'plugin source is not allowed': [line({ name: 'aico:x', source: 'plugin aico', license: '-', vetted: '-', commit: '-' }), /line 2: source invalid/],
   'unlisted command': [line({ name: 'impeccable', source: '`npx -y impeccable skills install && calc`' }), /line 2: source not a manifest command/],
   'license NONE': [line({ license: 'NONE' }), /line 2: license invalid/],
   'license dash': [line({ license: '-' }), /line 2: license invalid/],
@@ -48,6 +50,16 @@ const HOSTILE = {
   'why with backtick': [line({ why: 'a`b' }), /line 2: why invalid/],
   'why with angle': [line({ why: '<b>' }), /line 2: why invalid/],
   'not a list line': ['rm -rf /', /line 2: line malformed/],
+  'repo line without a commit field': [line({ commit: null }), /line 2: line malformed/],
+  'repo line with commit dash': [line({ commit: '-' }), /line 2: commit invalid/],
+  'repo line with a short sha': [line({ commit: 'a1b2c3d' }), /line 2: commit invalid/],
+  'repo line with an uppercase sha': [line({ commit: SHA.toUpperCase() }), /line 2: commit invalid/],
+  'repo line with a branch name': [line({ commit: 'main' }), /line 2: commit invalid/],
+  'repo line with a 41-hex commit': [line({ commit: `${SHA}0` }), /line 2: commit invalid/],
+  'repo line with a flag as commit': [line({ commit: '--upload-pack=x' }), /line 2: commit invalid/],
+  'repo line with a shell tail in commit': [line({ commit: `${SHA}&&calc` }), /line 2: commit invalid/],
+  'command line with a sha': [line({ name: 'impeccable', source: '`npx -y impeccable skills install`', commit: SHA }), /line 2: commit invalid/],
+  'command line with a branch': [line({ name: 'impeccable', source: '`npx -y impeccable skills install`', commit: 'main' }), /line 2: commit invalid/],
   'design line shape': ['- name: a; source: o/r; license: MIT; vetted: 2026-10-26; why: x; approved: 2026-10-26', /line 2: line malformed/]
 };
 
@@ -95,11 +107,13 @@ test('hostile: a 100k ; line is refused fast', () => {
 test('parseSkillsSection accepts repo and manifest command lines and keeps the area', () => {
   const got = parseSkillsSection(doc(
     line(),
-    line({ area: 'company-type', name: 'impeccable', source: '`npx -y impeccable skills install`' })
+    line({ area: 'company-type', name: 'impeccable', source: '`npx -y impeccable skills install`', commit: '-' })
   ), manifest, TODAY);
   assert.deepEqual(got.map(e => e.area), ['stack', 'company-type']);
   assert.equal(got[0].source, 'samber/cc-skills-golang');
   assert.equal(got[1].install, 'npx -y impeccable skills install');
+  assert.equal(got[0].commit, SHA);
+  assert.equal(got[1].commit, undefined);
 });
 
 test('empty section, missing section, CRLF and section end', () => {
@@ -122,11 +136,35 @@ test('group skills installs into the product root, no -g, with exact argv', () =
     const res = s.run(['skills', '--project', s.projectFile], doc(line()));
     assert.equal(res.code, 0);
     assert.deepEqual(res.calls, [[
-      'npx -y skills@1.7.4 add samber/cc-skills-golang -s golang-testing -a claude-code -y',
+      `npx -y skills@1.7.4 add samber/cc-skills-golang#${SHA} -s golang-testing -a claude-code -y`,
       s.root,
-      ['-y', 'skills@1.7.4', 'add', 'samber/cc-skills-golang', '-s', 'golang-testing', '-a', 'claude-code', '-y']
+      ['-y', 'skills@1.7.4', 'add', `samber/cc-skills-golang#${SHA}`, '-s', 'golang-testing', '-a', 'claude-code', '-y']
     ]]);
     assert.match(res.out, /\(in .+product\) npx -y skills@1\.7\.4 add/);
+  } finally { s.done(); }
+});
+
+test('group skills on Windows is one string with the pinned source', () => {
+  const s = sandbox();
+  try {
+    writeFileSync(s.projectFile, doc(line()));
+    const calls = [];
+    const code = main(['skills', '--project', s.projectFile], { manifest, home: join(s.base, 'home'), cwd: s.base, today: TODAY, platform: 'win32', log: () => {}, exec: (c, cwd, argv) => calls.push([c, cwd, argv]) });
+    assert.equal(code, 0);
+    assert.deepEqual(calls, [[`npx -y skills@1.7.4 add samber/cc-skills-golang#${SHA} -s golang-testing -a claude-code -y`, s.root, undefined]]);
+  } finally { s.done(); }
+});
+
+test('each repo line pins its own commit', () => {
+  const s = sandbox();
+  try {
+    const other = 'f'.repeat(40);
+    const res = s.run(['skills', '--project', s.projectFile], doc(line(), line({ name: 'second', source: 'o/second', commit: other })));
+    assert.equal(res.code, 0);
+    assert.deepEqual(res.calls.map(c => c[0]), [
+      `npx -y skills@1.7.4 add samber/cc-skills-golang#${SHA} -s golang-testing -a claude-code -y`,
+      `npx -y skills@1.7.4 add o/second#${other} -s second -a claude-code -y`
+    ]);
   } finally { s.done(); }
 });
 
