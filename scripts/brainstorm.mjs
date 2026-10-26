@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Provider CLI for brainstorm-file v2 and brainstorm-reply v1. Node built-ins only; every
 // mutation is parsed, rebuilt and re-validated with checkBrainstorm before an atomic write.
-import { readFileSync, writeFileSync, renameSync, rmSync, statSync, readSync } from 'node:fs';
-import { dirname, basename, join, resolve } from 'node:path';
+import { readFileSync, writeFileSync, renameSync, rmSync, rmdirSync, statSync, lstatSync, readdirSync, mkdirSync, readSync } from 'node:fs';
+import { dirname, basename, join, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBrainstorm } from './check.mjs';
 
@@ -12,7 +12,7 @@ const MAX_REPLY_INPUT = 64 * 1024;
 const MAX_REPLY = 4096;
 const MAX_LINE = 1000;
 const MAX_LEAD = 3500;
-const WORD_LIMIT = { ideas: 150, full: 100, crossfire: 80 };
+export const WORD_LIMIT = { ideas: 150, full: 100, crossfire: 80 };
 const PASSES = ['ideas', 'full', 'crossfire'];
 const MODES = ['ideas', 'moderated', 'debate:crossfire', 'debate:full_pass'];
 const FILE_MODES = ['ideas', 'debate', 'moderated'];
@@ -64,12 +64,16 @@ function parseQuestion(line, n, reasons) {
   return { tag: m[1], text, options, default: def };
 }
 
-function parseRe(line, n, round, known, reasons) {
+function parseRe(line, n, round, known, role, reasons) {
   const m = /^Re: @([a-z][a-z0-9-]{0,39}) on I-([1-9]\d{0,5})\.([1-9]\d{0,5}): ([a-z-]{1,20}) — (.*)$/.exec(line);
   if (!m) { reasons.push(`line ${n}: Re line is not a template line`); return null; }
   const idea = `I-${m[2]}.${m[3]}`;
   if (!['agree', 'challenge', 'build-on'].includes(m[4])) { reasons.push(`line ${n}: unknown stance ${short(m[4])}`); return null; }
   if (Number(m[2]) > round || (known && !known.has(idea))) { reasons.push(`line ${n}: Re names ${idea}, which does not exist`); return null; }
+  if (known instanceof Map) {
+    if (role && m[1] === role) { reasons.push(`line ${n}: Re: names your own Role`); return null; }
+    if (known.get(idea) !== m[1]) { reasons.push(`line ${n}: Re: ${idea} is not an idea of @${m[1]}`); return null; }
+  }
   const text = m[5].trim();
   if (!text) { reasons.push(`line ${n}: Re needs a text`); return null; }
   if (wordCount(text) > 25) { reasons.push(`line ${n}: Re text is longer than 25 words`); return null; }
@@ -84,7 +88,8 @@ function parseEstimate(line, n, reasons) {
   return { size: m[1], low, high };
 }
 
-// Returns { ok: true, reply } or { ok: false, reasons }. `known` is the set of existing idea IDs (or null to skip that check).
+// Returns { ok: true, reply } or { ok: false, reasons }. `known` is the set of existing idea IDs, or a Map of idea ID to
+// author role (adds the owner and own-Role checks), or null to skip those checks.
 export function parseReply(input, { pass = 'ideas', role = '', round = 1, known = null } = {}) {
   const bad = reasons => ({ ok: false, reasons });
   if (typeof input !== 'string') return bad(['reply is not text']);
@@ -110,7 +115,7 @@ export function parseReply(input, { pass = 'ideas', role = '', round = 1, known 
       const q = parseQuestion(line, n, reasons);
       if (q) questions.push(q);
     } else if (line.startsWith('Re: ')) {
-      const r = parseRe(line, n, round, known, reasons);
+      const r = parseRe(line, n, round, known, role, reasons);
       if (r) res.push(r);
     } else if (line.startsWith('Estimate: ')) {
       const e = parseEstimate(line, n, reasons);
@@ -229,7 +234,7 @@ function loadDoc(text, file = 'brainstorm') {
   const errors = checkBrainstorm(lf, { file });
   if (errors.length) throw new Refused(`the file fails the check: ${errors.join('; ')}`);
   const roster = front.fm.get('roles').split(',').map(s => s.trim());
-  return { L, roster, ...readRounds(L) };
+  return { L, roster, topic: front.fm.get('topic') ?? '', ...readRounds(L) };
 }
 
 const finish = (L, file) => {
@@ -262,6 +267,8 @@ function removeFromPart(L, part, pred) {
   for (let i = h + 1; i < e; i++) if (L[i].startsWith('### ')) { end = i; break; }
   for (let i = end - 1; i > h; i--) if (pred(L[i])) L.splice(i, 1);
 }
+
+const ownerMap = doc => new Map([...doc.owners].map(([id, rep]) => [id, rep.role]));
 
 const nextId = (L, prefix) => {
   const [s, e] = secRange(L, 'Digest');
@@ -327,12 +334,17 @@ const qId = s => {
   return Number(m[1]);
 };
 
+// Open questions in the order they are asked: blocking first, then votes, then oldest (CEO, Brief Gate Q2).
+const openQuestions = L => questionsOf(L).map(x => x.q).filter(q => q.status === 'open')
+  .sort((a, b) => (a.tag === b.tag ? 0 : a.tag === 'blocking' ? -1 : 1) || b.votes - a.votes || a.id - b.id);
+
 export function queue(text) {
   const { L } = loadDoc(text);
-  const open = questionsOf(L).map(x => x.q).filter(q => q.status === 'open')
-    .sort((a, b) => (a.tag === b.tag ? 0 : a.tag === 'blocking' ? -1 : 1) || b.votes - a.votes || a.id - b.id)
+  const open = openQuestions(L)
     .map(q => ({ id: `Q-${q.id}`, tag: q.tag, votes: q.votes, text: q.text, options: q.options, default: q.default }));
-  return { ask: open.slice(0, 3), next_up: open[3] ?? null };
+  const answered = questionsOf(L).map(x => x.q).filter(q => q.status === 'answered').sort((a, b) => a.id - b.id)
+    .map(q => ({ id: `Q-${q.id}`, text: q.text }));
+  return { ask: open.slice(0, 3), next_up: open[3] ?? null, answered };
 }
 
 export function askQuestion(text, input, { file } = {}) {
@@ -350,7 +362,8 @@ export function mergeQuestions(text, keep, drop, { file } = {}) {
   const a = all.find(x => x.q.id === k), b = all.find(x => x.q.id === d);
   if (!a) throw new Refused(`no such question Q-${k}`);
   if (!b) throw new Refused(`no such question Q-${d}`);
-  for (const x of [a, b]) if (x.q.status !== 'open') throw new Refused(`Q-${x.q.id} is not open`);
+  if (a.q.status !== 'open' && a.q.status !== 'answered') throw new Refused(`Q-${k} is not open or answered`);
+  if (b.q.status !== 'open') throw new Refused(`Q-${d} is not open`);
   a.q.votes = Math.min(a.q.votes + b.q.votes, 999999);
   b.q.votes = 0; b.q.status = 'parked'; b.q.text = `merged into Q-${k} (${b.q.text})`;
   doc.L[a.i] = fmtQ(a.q); doc.L[b.i] = fmtQ(b.q);
@@ -525,7 +538,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
       throw new Refused(`${resolved.get(role).key} already replied in pass ${pass} of round ${round}`);
   }
 
-  const known = new Set(doc.owners.keys());
+  const known = ownerMap(doc);
   let counter = existing?.ideaCount ?? 0;
   const added = [], malformed = [], ideaIds = [];
   const block = [];
@@ -552,7 +565,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
     L.splice(at, 0, `### Round ${round} — ${roundMode}`, ...block);
   }
 
-  const allIdeas = new Set([...known, ...ideaIds]);
+  const allIdeas = new Set([...known.keys(), ...ideaIds]);
   for (const a of added) {
     if (!a.parsed || a.parsed.skip) continue;
     for (const re of a.parsed.replies_to) addToPart(L, 'Threads', `- ${re.idea} ← ${a.who.key} ${re.stance}: "${re.text}" — src: R${round}`);
@@ -575,54 +588,236 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
   return { text: finish(L, file), malformed, ideas: ideaIds };
 }
 
-// ---- prompts ----
-function digestOf(L) {
-  const [s, e] = secRange(L, 'Digest');
-  const d = L.slice(s, e);
-  while (d.length && d.at(-1) === '') d.pop();
-  return d.join('\n');
+// ---- round input (brainstorm-file v2, "Round input") ----
+const FOLDERS = ['brainstorms', 'roadmap', 'nice-to-have', 'parked'];
+const INPUT_DIR = 'brainstorm-input';
+const ENTRY_RE = /^(?:[a-z][a-z0-9-]*\.md|\.[a-z][a-z0-9-]*\.md\.\d+\.tmp)$/;
+const ANSWERED_CAP = 12, OPEN_CAP = 8, TEXT_CAP = 120, QUOTE_CAP = 300, MAL_CAP = 1000, REASON_CAP = 10;
+const DIGEST_KEEP = new Map([['Open threads', 10], ['Dissent', 5], ['Estimate', Infinity]]);
+
+// At most `n` characters, cut on a word boundary, then an ellipsis.
+function cut(s, n) {
+  if (s.length <= n) return s;
+  let c = s.slice(0, n);
+  const sp = c.lastIndexOf(' ');
+  if (s[n] !== ' ' && sp > 0) c = c.slice(0, sp);
+  return `${c.trimEnd()}…`;
+}
+const quoted = s => s.split('\n').map(l => `> ${l}`).join('\n');
+const headingOf = rep => `#### ${rep.key}${rep.pass === 'full' ? ' — full pass' : rep.pass === 'crossfire' ? ' — crossfire' : ''}`;
+
+// Shown form of a reply: `I: <idea>` becomes `I-<r>.<k>: <idea>`; the IDs exist only in this view.
+function shownLines(rep) {
+  if (rep.status === 'malformed') return ['(malformed)'];
+  if (rep.status === 'skip') return ['skip'];
+  let k = 0;
+  return rep.body.split('\n').map(l => l.trimEnd()).filter(Boolean).map(l => (l.startsWith('I: ') ? `${rep.ids[k++]}: ${l.slice(3)}` : l));
 }
 
-const headingOf = rep => `#### ${rep.key}${rep.pass === 'full' ? ' — full pass' : rep.pass === 'crossfire' ? ' — crossfire' : ''}`;
-const shown = rep => (rep.status === 'malformed' ? '(malformed)' : rep.body);
+function summaryOf(L) {
+  const [s, e] = secRange(L, 'Summary');
+  const text = L.slice(s, e).join('\n').trim();
+  return text && text !== '(written at close)' ? text : '';
+}
 
-export function promptFor(text, role, { pass, round, file = '' } = {}) {
-  const doc = loadDoc(text, file || undefined);
-  if (typeof role !== 'string' || !doc.roster.includes(role)) throw new Refused(`${short(String(role))} is not in the roster`);
-  const head = `Digest:\n${digestOf(doc.L)}\n`;
-  const tail = `Full file: ${file}\n`;
-  if (pass === undefined || pass === 'ideas') {
-    let own = '(none)';
-    const mine = doc.rounds.flatMap(r => r.replies).filter(r => r.role === role);
-    if (mine.length) own = mine.at(-1).body;
-    const heads = [];
-    for (const other of doc.roster.filter(r => r !== role)) {
-      const rep = doc.rounds.flatMap(r => r.replies).filter(r => r.role === other && r.status === 'ok' && r.parsed.ideas.length).at(-1);
-      if (rep && heads.length < 5) heads.push(`- ${rep.key}: ${rep.parsed.ideas[0].slice(0, 120)}`);
-    }
-    return `${head}Your last reply:\n${own}\nOthers said:\n${heads.join('\n') || '(none)'}\n${tail}`;
+function digestLines(L) {
+  const [s, e] = secRange(L, 'Digest');
+  const secs = [];
+  for (let i = s; i < e; i++) {
+    if (L[i].startsWith('### ')) secs.push({ name: L[i].slice(4).trim(), items: [] });
+    else if (secs.length && L[i].trim()) secs.at(-1).items.push(L[i].startsWith('- ') ? L[i] : `> ${L[i]}`);
   }
+  const out = [];
+  for (const sec of secs) {
+    if (!DIGEST_KEEP.has(sec.name)) continue;
+    out.push(`### ${sec.name}`, ...sec.items.slice(-DIGEST_KEEP.get(sec.name)));
+  }
+  return out.length ? out : ['(none)'];
+}
+
+function questionLines(L) {
+  const [s, e] = secRange(L, 'Digest');
+  const decisions = new Map();
+  let inDecisions = false;
+  for (let i = s; i < e; i++) {
+    if (L[i].startsWith('### ')) inDecisions = L[i] === '### Decisions';
+    else if (inDecisions) {
+      const m = /^- D-\d+ — Q-(\d+) — (.*) — src: R\d+$/.exec(L[i]);
+      if (m) decisions.set(Number(m[1]), m[2]);
+    }
+  }
+  const all = questionsOf(L).map(x => x.q);
+  const done = all.filter(q => q.status === 'answered').sort((a, b) => a.id - b.id).slice(-ANSWERED_CAP).map(q => {
+    const d = decisions.get(q.id);
+    let tail = '';
+    if (d !== undefined) {
+      const quote = d.startsWith('"') && d.endsWith('"') && d.length >= 2 ? d.slice(1, -1) : null;
+      tail = quote === null ? ` → ${d}` : ` → "${quote.length > QUOTE_CAP ? `${quote.slice(0, QUOTE_CAP)}…` : quote}"`;
+    }
+    return `- Q-${q.id} answered: ${cut(q.text, TEXT_CAP)}${tail}`;
+  });
+  const open = openQuestions(L).slice(0, OPEN_CAP).map(q => `- Q-${q.id} open: ${cut(q.text, TEXT_CAP)}`);
+  const both = [...done, ...open];
+  return both.length ? both : ['(none)'];
+}
+
+function stageRound(doc, round, pass) {
+  const last = doc.rounds.at(-1);
+  const cannot = n => new Refused(`round ${n} cannot be staged`);
+  if (pass === 'ideas') {
+    const next = (last?.n ?? 0) + 1;
+    const open = last && !last.closed;
+    const n = round ?? (open ? last.n : next);
+    if (n !== (open ? last.n : next)) throw cannot(n);
+    return n;
+  }
+  const n = round ?? last?.n;
+  if (!last || n !== last.n || last.closed) throw cannot(n);
+  if (pass === 'full' ? last.mode !== 'debate: full_pass' : !last.mode.startsWith('debate:')) throw cannot(n);
+  return n;
+}
+
+function reaskParts(doc, role, round) {
   const r = doc.rounds.find(x => x.n === round);
-  if (!r) throw new Refused(`no round ${round}`);
-  if (pass === 'full') {
-    if (r.mode !== 'debate: full_pass') throw new Refused(`pass full not allowed in round ${round}`);
-    const ideasOf = who => r.replies.filter(x => x.role === who && x.pass === 'ideas').at(-1);
-    const mine = ideasOf(role);
-    const blocks = [];
-    for (const other of doc.roster.filter(x => x !== role)) {
-      const rep = ideasOf(other);
-      if (rep && rep.status !== 'skip') blocks.push(`#### ${rep.key}\n${shown(rep)}`);
+  const mine = r?.replies.filter(x => x.role === role).at(-1);
+  if (!mine || mine.pass !== 'ideas' || mine.status !== 'malformed') throw new Refused(`${role} has no malformed reply in round ${round}`);
+  if (r.closed) throw new Refused(`round ${round} cannot be staged`);
+  const stored = mine.lines.join('\n').trim().split('\n').slice(1).join('\n');
+  const again = parseReply(stored, { pass: 'ideas', role, round, known: ownerMap(doc) });
+  const reasons = again.ok ? ['the reply was malformed'] : again.reasons.slice(0, REASON_CAP);
+  return { reasons: reasons.join('; '), reply: stored.slice(0, MAL_CAP) };
+}
+
+// Pure: the text of one Role's round input file for a loaded document.
+function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectFile = null } = {}) {
+  if (typeof role !== 'string' || !doc.roster.includes(role)) throw new Refused(`${short(String(role))} is not in the roster`);
+  if (!PASSES.includes(pass)) throw new Refused('pass must be ideas, full or crossfire');
+  if (projectFile !== null && (typeof projectFile !== 'string' || /[\n\r]/.test(projectFile))) throw new Refused('project file must be a one-line path');
+  let n, re = null;
+  if (reask) {
+    if (pass !== 'ideas') throw new Refused('re-ask works in the ideas pass only');
+    n = round ?? doc.rounds.at(-1)?.n;
+    re = reaskParts(doc, role, n);
+  } else n = stageRound(doc, round, pass);
+  const all = doc.rounds.flatMap(r => r.replies);
+  const out = [`Round: ${n}`, `Pass: ${pass}`, 'Topic:', quoted(doc.topic)];
+  if (projectFile && !all.some(r => r.role === role)) out.push(`Read also: ${projectFile}`);
+  const summary = summaryOf(doc.L);
+  if (summary) out.push('Summary:', quoted(summary));
+  if (re) out.push('Re-ask:', quoted(re.reasons), 'Your malformed reply:', quoted(re.reply));
+  out.push('Questions:', ...questionLines(doc.L), 'Digest:', ...digestLines(doc.L));
+
+  const others = doc.roster.filter(r => r !== role);
+  if (pass === 'ideas') {
+    const own = all.filter(r => r.role === role && r.status === 'ok')
+      .map(r => shownLines(r).filter(l => /^(?:I-\d+\.\d+: |Risk: |Estimate: )/.test(l))).filter(l => l.length).at(-1) ?? [];
+    out.push('Your last reply:', ...(own.length ? own : ['(none)']));
+    const said = [];
+    for (const other of others) {
+      const rep = all.filter(r => r.role === other && r.status === 'ok' && r.parsed.ideas.length).at(-1);
+      if (rep) rep.parsed.ideas.forEach((idea, k) => said.push(`- ${rep.ids[k]} ${rep.key}: ${cut(idea, TEXT_CAP)}`));
     }
-    return `${head}Your ideas-pass reply of round ${round}:\n${mine ? shown(mine) : '(none)'}\nOther Roles:\n${blocks.join('\n') || '(none)'}\n${tail}`;
+    out.push('Others said:', ...(said.length ? said : ['(none)']));
+  } else {
+    const r = doc.rounds.find(x => x.n === n);
+    if (pass === 'full') {
+      const ideasOf = who => r.replies.filter(x => x.role === who && x.pass === 'ideas').at(-1);
+      const mine = ideasOf(role);
+      out.push(`Your ideas-pass reply of round ${n}:`, ...(mine ? shownLines(mine) : ['(none)']));
+      const blocks = [];
+      for (const other of others) {
+        const rep = ideasOf(other);
+        if (rep && rep.status !== 'skip') blocks.push(headingOf(rep), ...shownLines(rep));
+      }
+      out.push('Other Roles:', ...(blocks.length ? blocks : ['(none)']));
+    } else {
+      const pair = r.replies.some(x => x.pass === 'crossfire') ? null : rawPair(doc, n);
+      if (!pair) throw new Refused(`no crossfire pair in round ${n}`);
+      if (!pair.includes(role)) throw new Refused(`${role} is not in the crossfire pair of round ${n}`);
+      const render = who => {
+        const l = r.replies.filter(x => x.role === who).flatMap(x => [headingOf(x), ...shownLines(x)]);
+        return l.length ? l : ['(none)'];
+      };
+      out.push(`Your replies of round ${n}:`, ...render(role), 'Opponent:', ...render(pair.find(x => x !== role)));
+    }
   }
-  if (pass !== 'crossfire') throw new Refused('pass must be ideas, full or crossfire');
-  if (!r.mode.startsWith('debate:')) throw new Refused(`pass crossfire not allowed in round ${round}`);
-  const pair = rawPair(doc, round);
-  if (!pair) throw new Refused(`no crossfire pair in round ${round}`);
-  if (!pair.includes(role)) throw new Refused(`${role} is not in the crossfire pair of round ${round}`);
-  const opponent = pair.find(x => x !== role);
-  const render = who => r.replies.filter(x => x.role === who).map(x => `${headingOf(x)}\n${shown(x)}`).join('\n') || '(none)';
-  return `${head}Your replies of round ${round}:\n${render(role)}\nOpponent:\n${render(opponent)}\n${tail}`;
+  return `${out.join('\n')}\n`;
+}
+
+export function inputFor(text, role, opts = {}) {
+  return renderInput(loadDoc(text, opts.file), role, opts);
+}
+
+// ---- stage and clean: the files on disk ----
+const lst = p => { try { return lstatSync(p); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } };
+
+function inputLocation(file) {
+  const abs = resolve(file);
+  const folder = dirname(abs);
+  if (!FOLDERS.includes(basename(folder))) throw new Refused(`${short(file)} is not in a brainstorm folder`);
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2}) - /.exec(basename(abs));
+  if (!m) throw new Refused('no time stamp in the file name');
+  const company = dirname(folder);
+  const run = `brainstorm-${m[1]}${m[2]}${m[3]}-${m[4]}${m[5]}`;
+  return { company, base: join(company, INPUT_DIR), dir: join(company, INPUT_DIR, run), run, projectFile: join(company, 'project.md') };
+}
+
+const projectFileOf = loc => (lst(loc.projectFile)?.isFile() ? loc.projectFile : null);
+
+// Validates the input folders and returns the run folder's entry names; refuses links and strangers.
+function runEntries(loc) {
+  const base = lst(loc.base);
+  if (base && (base.isSymbolicLink() || !base.isDirectory())) throw new Refused(`unexpected entry in ${INPUT_DIR}`);
+  const dir = lst(loc.dir);
+  if (!dir) return [];
+  if (dir.isSymbolicLink() || !dir.isDirectory()) throw new Refused(`unexpected entry in ${loc.run}`);
+  const names = readdirSync(loc.dir);
+  for (const name of names) {
+    const p = join(loc.dir, name);
+    const rel = relative(loc.base, p);
+    if (!ENTRY_RE.test(name) || rel.startsWith('..') || isAbsolute(rel) || !lst(p)?.isFile()) throw new Refused(`unexpected entry in ${loc.run}`);
+  }
+  return names;
+}
+
+export function stageFiles(file, text, { round, pass = 'ideas', roles, reask } = {}) {
+  const loc = inputLocation(file);
+  const doc = loadDoc(text, file);
+  let who;
+  if (reask !== undefined) who = [reask];
+  else if (pass === 'crossfire') {
+    if (roles !== undefined) throw new Refused('--roles is not allowed with --pass crossfire');
+    const n = stageRound(doc, round, pass);
+    const r = doc.rounds.find(x => x.n === n);
+    who = r.replies.some(x => x.pass === 'crossfire') ? null : rawPair(doc, n);
+    if (!who) throw new Refused(`no crossfire pair in round ${n}`);
+  } else {
+    for (const slug of roles ?? []) if (!doc.roster.includes(slug)) throw new Refused(`${short(slug)} is not in the roster`);
+    who = roles === undefined ? doc.roster : doc.roster.filter(r => roles.includes(r));
+  }
+  const projectFile = projectFileOf(loc);
+  const texts = who.map(role => [role, renderInput(doc, role, { round, pass, reask: reask !== undefined, projectFile })]);
+  const names = runEntries(loc);
+  mkdirSync(loc.dir, { recursive: true });
+  const ignore = join(loc.base, '.gitignore');
+  const ig = lst(ignore);
+  if (!ig) writeAtomic(ignore, '*\n');
+  else if (!ig.isFile()) throw new Refused(`unexpected entry in ${INPUT_DIR}`);
+  for (const name of names) rmSync(join(loc.dir, name), { force: true });
+  const files = {};
+  for (const [role, body] of texts) {
+    files[role] = join(loc.dir, `${role}.md`);
+    writeAtomic(files[role], body);
+  }
+  return { run: loc.run, files };
+}
+
+export function cleanRun(file) {
+  const loc = inputLocation(file);
+  const names = runEntries(loc);
+  for (const name of names) rmSync(join(loc.dir, name), { force: true });
+  if (lst(loc.dir)) rmdirSync(loc.dir);
+  return `cleaned ${loc.run}`;
 }
 
 // ---- film script ----
@@ -690,7 +885,7 @@ function writeAtomic(file, text) {
   try { writeFileSync(tmp, text); renameSync(tmp, file); } finally { rmSync(tmp, { force: true }); }
 }
 
-const FLAGS = new Map([['--pass', true], ['--mode', true], ['--file', true], ['--skip', false]]);
+const FLAGS = new Map([['--pass', true], ['--mode', true], ['--file', true], ['--roles', true], ['--reask', true], ['--skip', false]]);
 function parseArgs(argv) {
   const pos = [], flags = new Map();
   for (let i = 0; i < argv.length; i++) {
@@ -742,7 +937,7 @@ export function run(argv) {
       arity(pos, 2, 2, 'parse <round> <role> [--pass ideas|full|crossfire] [--file <file>]');
       const round = intArg(f, 'round'), role = roleArg(pos[1]);
       const pass = flags.has('--pass') ? oneOf(flags.get('--pass'), PASSES, '--pass') : 'ideas';
-      const known = flags.has('--file') ? new Set(loadDoc(readFileText(flags.get('--file'))).owners.keys()) : null;
+      const known = flags.has('--file') ? ownerMap(loadDoc(readFileText(flags.get('--file')))) : null;
       const r = parseReply(readStdin(), { pass, role, round, known });
       if (!r.ok) return { code: 1, out: `malformed: ${r.reasons.join('; ')}\n`, err: '' };
       out.push(JSON.stringify(r.reply));
@@ -790,8 +985,24 @@ export function run(argv) {
       const pass = flags.has('--pass') ? oneOf(flags.get('--pass'), ['full', 'crossfire'], '--pass') : undefined;
       if ((pass === undefined) !== (pos[2] === undefined)) throw new Usage('--pass and <round> go together');
       const round = pos[2] === undefined ? undefined : intArg(pos[2], 'round');
-      return { code: 0, out: promptFor(readFileText(f), roleArg(pos[1]), { pass, round, file: resolve(f) }), err: '' };
+      let projectFile = null;
+      try { projectFile = projectFileOf(inputLocation(f)); } catch (e) { if (e.name !== 'Refused') throw e; }
+      return { code: 0, out: inputFor(readFileText(f), roleArg(pos[1]), { pass, round, file: f, projectFile }), err: '' };
     }
+    case 'stage': {
+      arity(pos, 2, 2, 'stage <file> <round> [--pass ideas|full|crossfire] [--roles <slug>,<slug>] [--reask <role>]');
+      const round = intArg(pos[1], 'round');
+      const pass = flags.has('--pass') ? oneOf(flags.get('--pass'), PASSES, '--pass') : 'ideas';
+      const roles = flags.has('--roles') ? flags.get('--roles').split(',').map(roleArg) : undefined;
+      const reask = flags.has('--reask') ? roleArg(flags.get('--reask')) : undefined;
+      if (reask !== undefined && (roles !== undefined || pass !== 'ideas')) throw new Usage('--reask goes with the ideas pass alone, without --roles');
+      out.push(JSON.stringify(stageFiles(f, readFileText(f), { round, pass, roles, reask })));
+      break;
+    }
+    case 'clean':
+      arity(pos, 1, 1, 'clean <file>');
+      out.push(cleanRun(f));
+      break;
     case 'crossfire':
       arity(pos, 2, 2, 'crossfire <file> <round>');
       out.push(JSON.stringify(crossfirePair(readFileText(f), intArg(pos[1], 'round'))));
@@ -812,7 +1023,7 @@ export function run(argv) {
       break;
     }
     default:
-      throw new Usage('usage: brainstorm.mjs new|parse|apply|answer|ask|merge|queue|prompt|crossfire|film|check');
+      throw new Usage('usage: brainstorm.mjs new|parse|apply|answer|ask|merge|queue|stage|prompt|clean|crossfire|film|check');
   }
   return { code: 0, out: `${out.join('\n')}\n`, err: '' };
 }
