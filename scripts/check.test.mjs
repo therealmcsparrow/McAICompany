@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { check } from './check.mjs';
+import { spawnSync } from 'node:child_process';
+import { check, checkBrainstorm, checkPack, checkPacks } from './check.mjs';
 
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
@@ -320,4 +321,357 @@ test('names with edge or double spaces are errors; combining marks are fine', ()
   }
   const r = check(fixture({ agents: nameAgents, names: { qa: 'Zoé', support: 'Sofia Lee' } }));
   assert.deepEqual(r.errors, []);
+});
+
+// ---- brainstorm-file v2 and rule-pack v1.1 (T1) ----
+const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'fixtures');
+const bs = name => readFileSync(join(FIX, 'brainstorm', name), 'utf8');
+const pk = name => readFileSync(join(FIX, 'packs', name), 'utf8');
+const CHECK = join(dirname(fileURLToPath(import.meta.url)), 'check.mjs');
+const TODAY = '2026-10-26';
+
+// Replaces `from` with `to` and fails loudly when the fixture no longer contains `from`.
+function swap(text, from, to) {
+  assert.ok(text.includes(from), `fixture lacks ${JSON.stringify(from)}`);
+  return text.replace(from, () => to);
+}
+const has = (errs, ...parts) => errs.some(e => parts.every(p => e.includes(p)));
+
+test('brainstorm: v1 files pass and are not asked for v2 sections', () => {
+  for (const f of ['v1-open.md', 'v1-built.md', 'v1-summary-only.md']) assert.deepEqual(checkBrainstorm(bs(f)), [], f);
+});
+
+test('brainstorm: v1 needs frontmatter with topic, started, status and roles', () => {
+  assert.ok(has(checkBrainstorm('## Summary\nx\n'), 'rule 1', 'frontmatter'));
+  assert.ok(has(checkBrainstorm(swap(bs('v1-open.md'), 'status: open', 'status: done')), 'rule 1', 'status'));
+  assert.ok(has(checkBrainstorm(swap(bs('v1-open.md'), 'roles: product-manager, architect\n', '')), 'rule 1', 'roles'));
+});
+
+test('brainstorm: both v2 fixtures pass, with CRLF too', () => {
+  for (const f of ['v2-crossfire.md', 'v2-full-pass.md']) {
+    assert.deepEqual(checkBrainstorm(bs(f)), [], f);
+    assert.deepEqual(checkBrainstorm(bs(f).replace(/\n/g, '\r\n')), [], `${f} CRLF`);
+  }
+});
+
+test('brainstorm: errors name the file and the rule', () => {
+  const e = checkBrainstorm(swap(bs('v2-crossfire.md'), 'format: 2', 'format: 3'), { file: 'x.md' });
+  assert.ok(e[0].startsWith('ERROR x.md: rule 2'), e[0]);
+  assert.ok(e[0].includes('unknown brainstorm format'));
+});
+
+test('brainstorm rule 3: sections, order and Digest parts', () => {
+  const t = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(t, '## Questions', '## Extras')), 'rule 3'));
+  assert.ok(has(checkBrainstorm(t + '## Appendix\nx\n'), 'rule 3'));
+  assert.ok(has(checkBrainstorm(swap(t, '### Dissent', '### Dissent2')), 'rule 3'));
+  const swapped = swap(swap(t, '## Digest', '## TMP'), '## Questions', '## Digest').replace('## TMP', '## Questions');
+  assert.ok(has(checkBrainstorm(swapped), 'rule 3'));
+});
+
+test('brainstorm rule 3: Estimate is required with an architect and takes two shapes', () => {
+  const t = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(t, '### Estimate\n- M, 3–5 d — src: R2\n', '')), 'rule 3', 'Estimate'));
+  assert.ok(has(checkBrainstorm(swap(t, '- M, 3–5 d — src: R2', '- about a week — src: R2')), 'rule 3', 'Estimate'));
+  assert.deepEqual(checkBrainstorm(swap(t, '- M, 3–5 d — src: R2', '- not estimated')), []);
+  const noArch = swap(swap(t, 'roles: architect, writer, product-manager', 'roles: writer, product-manager'), '### Estimate\n- M, 3–5 d — src: R2\n', '');
+  assert.deepEqual(checkBrainstorm(noArch).filter(e => e.includes('Estimate')), []);
+});
+
+test('brainstorm rule 4: question lines', () => {
+  const t = bs('v2-crossfire.md');
+  const q2 = '- Q-2 [nice-to-have] votes:1 status:open — Follow the system theme? — options: follow | manual — default: follow — src: R2';
+  assert.ok(has(checkBrainstorm(swap(t, q2, q2.replace('default: follow', 'default: never'))), 'rule 4', 'default'));
+  assert.ok(has(checkBrainstorm(swap(t, q2, q2.replace('[nice-to-have]', '[urgent]'))), 'rule 4'));
+  assert.ok(has(checkBrainstorm(swap(t, q2, q2.replace('options: follow | manual', 'options: follow'))), 'rule 4'));
+  assert.ok(has(checkBrainstorm(swap(t, q2, q2.replace('Q-2', 'Q-1'))), 'rule 4', 'duplicate'));
+  assert.deepEqual(checkBrainstorm(swap(t, q2, q2.replace('src: R2', 'src: R2 CEO'))), []);
+});
+
+test('brainstorm rule 5: Digest items end with a src that names an existing round', () => {
+  const t = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(t, '— src: R2\n### Dissent', '\n### Dissent')), 'rule 5'));
+  assert.ok(has(checkBrainstorm(swap(t, '— ideas: I-1.1, I-1.2 — src: R2', '— ideas: I-1.1, I-1.2 — src: R9')), 'rule 5', 'R9'));
+});
+
+test('brainstorm rule 6: a Decision quote is byte for byte in the CEO line of its round', () => {
+  const t = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(t, '"Yes, ship dark mode first, light stays the default."', '"Yes, ship dark mode first, light stays default."')), 'rule 6'));
+  assert.ok(has(checkBrainstorm(swap(t, 'light stays the default." — src: R1', 'light stays the default." — src: R2')), 'rule 6'));
+  assert.deepEqual(checkBrainstorm(swap(t, '"Yes, ship dark mode first, light stays the default."', '"light stays the default."')), []);
+});
+
+test('brainstorm rule 6: a Dissent quote comes from a non-skip reply of that Role in that round, any pass', () => {
+  const t = bs('v2-crossfire.md');
+  const q = '"A theme switch touches every component, so it is not small."';
+  assert.deepEqual(checkBrainstorm(t), []); // quote from a crossfire reply
+  assert.ok(has(checkBrainstorm(swap(t, q, '"Nobody said this."')), 'rule 6', 'Dissent'));
+  assert.ok(has(checkBrainstorm(swap(t, q + ' — src: R2', q + ' — src: R1')), 'rule 6'));
+  const fp = bs('v2-full-pass.md');
+  assert.deepEqual(checkBrainstorm(fp), []); // quote from a full-pass reply
+  assert.ok(has(checkBrainstorm(swap(fp, '- Ren (writer) — "Users read', '- Ava (architect) — "Users read')), 'rule 6'));
+});
+
+test('brainstorm rule 6: a Role whose replies in a round are all skip has no Digest entry from it', () => {
+  const t = bs('v2-crossfire.md');
+  const withThread = swap(t, '- I-1.2 ← Ren (writer) challenge: "Copy must survive both themes." — src: R2', '- I-1.2 ← Ren (writer) challenge: "x" — src: R1');
+  assert.ok(has(checkBrainstorm(withThread), 'rule 6', 'skip'));
+  const dissent = swap(t, '- Ava (architect) — "A theme switch', '- Ren (writer) — "skip" — src: R1\n- Ava (architect) — "A theme switch');
+  assert.ok(has(checkBrainstorm(dissent), 'rule 6'));
+});
+
+test('brainstorm rule 7: answered questions and decisions match one to one', () => {
+  const t = bs('v2-crossfire.md');
+  const d1 = '- D-1 — Q-1 — "Yes, ship dark mode first, light stays the default." — src: R1';
+  assert.ok(has(checkBrainstorm(swap(t, d1 + '\n', '')), 'rule 7', 'Q-1'));
+  assert.ok(has(checkBrainstorm(swap(t, d1, d1 + '\n' + d1.replace('D-1', 'D-2'))), 'rule 7', 'Q-1'));
+  assert.ok(has(checkBrainstorm(swap(t, d1, d1.replace('Q-1', 'Q-9'))), 'rule 7', 'Q-9'));
+});
+
+test('brainstorm rule 8: round headings', () => {
+  const t = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(t, 'Round 2 — debate: crossfire', 'Round 2 — debate')), 'rule 8', 'debate round needs a style'));
+  assert.ok(has(checkBrainstorm(swap(t, 'Round 2 — debate: crossfire', 'Round 2 — debate:')), 'rule 8', 'debate round needs a style'));
+  assert.ok(has(checkBrainstorm(swap(t, 'Round 2 — debate: crossfire', 'Round 2 — debate: broadcast')), 'rule 8', 'unknown debate style'));
+  assert.ok(has(checkBrainstorm(swap(t, 'Round 2 — debate: crossfire', 'Round 2 — shouting')), 'rule 8', 'round'));
+  assert.ok(has(checkBrainstorm(swap(t, '### Round 1 — ideas', '### Round 2 — ideas')), 'rule 8', 'duplicate'));
+  assert.deepEqual(checkBrainstorm(swap(t, 'Round 1 — ideas', 'Round 1 — moderated')), []);
+});
+
+test('brainstorm rule 8: reply headings', () => {
+  const t = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(t, '#### Pat (product-manager)\nIdea: ask', '#### Pat\nIdea: ask')), 'rule 8', 'reply heading'));
+  assert.ok(has(checkBrainstorm(swap(t, '#### Ren (writer) — crossfire', '#### Ren (writer) — rebuttal')), 'rule 8', 'reply heading'));
+});
+
+test('brainstorm rule 8: pass kinds belong to their style', () => {
+  const cf = bs('v2-crossfire.md');
+  assert.ok(has(checkBrainstorm(swap(cf, '#### Pat (product-manager)\nIdea: ship', '#### Pat (product-manager) — full pass\nIdea: ship')), 'rule 8', 'full pass'));
+  assert.ok(has(checkBrainstorm(swap(cf, 'Round 2 — debate: crossfire', 'Round 2 — ideas')), 'rule 8', 'crossfire'));
+  assert.deepEqual(checkBrainstorm(swap(cf, 'Round 2 — debate: crossfire', 'Round 2 — debate: full_pass')), []);
+});
+
+test('brainstorm rule 8: zero or two crossfire replies, never one or three', () => {
+  const cf = bs('v2-crossfire.md');
+  const ava = '#### Ava (architect) — crossfire\nRe: Ren. A theme switch touches every component, so it is not small.\n';
+  const ren = '#### Ren (writer) — crossfire\nRe: Ava. Copy must survive both themes.\n';
+  assert.ok(has(checkBrainstorm(swap(cf, ava, '')), 'rule 8', 'crossfire'));
+  assert.ok(has(checkBrainstorm(swap(cf, '**Lead:** Tokens', '#### Pat (product-manager) — crossfire\nRe: Ava. Fine.\n**Lead:** Tokens')), 'rule 8', 'crossfire'));
+  const none = swap(swap(cf, ava, ''), ren, '');
+  const noDissent = swap(swap(none, '- Ava (architect) — "A theme switch touches every component, so it is not small." — src: R2\n', ''), '- I-1.2 ← Ren (writer) challenge: "Copy must survive both themes." — src: R2\n', '');
+  assert.deepEqual(checkBrainstorm(noDissent), []);
+});
+
+test('brainstorm rule 8: passes keep their order, and one full pass per Role', () => {
+  const fp = bs('v2-full-pass.md');
+  const pair = '#### Ava (architect) — crossfire\nRe: Ren. Print the URL with one line of help.\n#### Ren (writer) — crossfire\nRe: Ava. One line of help is enough.\n';
+  const crossFirst = swap(swap(fp, pair, ''), '#### Ava (architect) — full pass', pair + '#### Ava (architect) — full pass');
+  assert.ok(has(checkBrainstorm(crossFirst), 'rule 8', 'pass out of order'));
+  assert.ok(has(checkBrainstorm(swap(fp, '**Lead:** Local', '#### Ava (architect)\nLate idea.\n**Lead:** Local')), 'rule 8', 'pass out of order'));
+  assert.ok(has(checkBrainstorm(swap(fp, '#### Ren (writer) — full pass', '#### Ava (architect) — full pass\nRe: Ren. Again.\n#### Ren (writer) — full pass')), 'rule 8', 'full pass'));
+  assert.ok(has(checkBrainstorm(fp + '#### Ava (architect)\nToo late.\n'), 'rule 8', 'pass out of order'));
+});
+
+test('brainstorm: film files are skipped except for their frontmatter', () => {
+  const film = '---\nkind: film\nsource: a.md\nlabel: rendered from stored replies; no invented lines\n---\nAny body\n## here\n';
+  assert.deepEqual(checkBrainstorm(film), []);
+  assert.ok(has(checkBrainstorm(film.replace('source: a.md\n', '')), 'film', 'source'));
+});
+
+test('brainstorm: size limits and hostile frontmatter keys', () => {
+  assert.ok(has(checkBrainstorm(bs('v1-open.md') + 'x'.repeat(1024 * 1024)), 'rule', '1 MiB'));
+  assert.ok(has(checkBrainstorm(bs('v1-open.md') + 'x'.repeat(4001) + '\n'), 'rule', '4000'));
+  const t = swap(bs('v2-crossfire.md'), 'format: 2\n', 'format: 2\n__proto__: polluted\nconstructor: x\n');
+  assert.deepEqual(checkBrainstorm(t), []);
+  assert.equal({}.polluted, undefined);
+  const evil = ('- Q-1 [blocking] votes:1 status:open — ' + ' — options: '.repeat(300)).slice(0, 3900);
+  const start = Date.now();
+  checkBrainstorm(swap(bs('v2-crossfire.md'), '- Q-2 [nice-to-have]', evil + '\n- Q-2 [nice-to-have]'));
+  assert.ok(Date.now() - start < 1000);
+});
+
+// ---- checkPack ----
+const nsrv = () => pk('nodejs-server@2026.md');
+const ccp = () => pk('claude-code-plugins@2026.md');
+const day = n => new Date(Date.UTC(2026, 9, 26) - n * 86400000).toISOString().slice(0, 10);
+const cp = (text, o = {}) => checkPack(text, { file: 'nodejs-server@2026.md', today: TODAY, ...o });
+const mini = (body, fm = {}) => `---\ntool: ${fm.tool ?? 'react'}\nversions: "${fm.versions ?? '>=19 <20'}"\nresearched: ${fm.researched ?? '2026-10-20'}\n---\n${body}`;
+const rp = (text, o = {}) => checkPack(text, { file: 'react@19.md', today: TODAY, ...o });
+const SRC = '— source: https://a.example/x';
+
+test('pack: the two committed copies pass (prefix differs from tool, why optional, enforced-by)', () => {
+  assert.deepEqual(cp(nsrv()), []);
+  assert.deepEqual(checkPack(ccp(), { file: 'claude-code-plugins@2026.md', today: TODAY }), []);
+  assert.deepEqual(cp(nsrv().replace(/\n/g, '\r\n')), []);
+});
+
+test('pack: frontmatter and file name', () => {
+  assert.ok(has(rp(mini('## Must\n', { tool: 'vue' })), 'tool', 'react@19.md'));
+  assert.ok(has(rp(mini('## Must\n', { versions: '' })), 'versions'));
+  assert.ok(has(rp(mini('## Must\n', { researched: '2026-02-30' })), 'researched'));
+  assert.ok(has(rp(mini('## Must\n', { researched: '2026-11-02' })), 'researched', 'future'));
+  assert.ok(has(rp('## Must\n'), 'frontmatter'));
+  assert.ok(has(checkPack(mini('## Must\n'), { file: 'react.md', today: TODAY }), 'file name'));
+});
+
+test('pack: sections are the four, once each; HTML comments hide rule-like lines', () => {
+  assert.ok(has(rp(mini('## Must\n## Must\n')), 'section', 'Must'));
+  assert.ok(has(rp(mini('## Notes\n')), 'section', 'Notes'));
+  const hidden = mini(`<!-- ## Notes\n- bad line without structure\n-->\n## Must\n- react.M1 — rule ${SRC}\n`);
+  assert.deepEqual(rp(hidden), []);
+});
+
+test('pack: rule line shape, tier letters and ids', () => {
+  const must = line => mini(`## Must\n${line}\n`);
+  assert.deepEqual(rp(must(`- react.M1 — plain rule ${SRC}`)), []);
+  assert.ok(has(rp(must(`- react.S4 — rule ${SRC}`)), 'react.S4', '## Must', 'tier letter'));
+  assert.ok(has(rp(must('- not a rule')), 'rule line'));
+  assert.ok(has(rp(must(`- react.M1 — a ${SRC}\n- react.M1 — b ${SRC}`)), 'react.M1', 'duplicate'));
+  assert.ok(has(rp(mini(`## Security\n- react.M1 — rule ${SRC}\n`)), 'react.M1', '## Security'));
+  assert.deepEqual(rp(mini(`## Security\n- react.M-SEC1 — rule ${SRC}\n## Should\n- react.S1 — s\n## May\n- react.Y1 — y\n`)), []);
+  assert.ok(has(rp(must('- react.M1 — rule — source: http://a.example/x')), 'react.M1', 'https'));
+  assert.ok(has(rp(must('- react.M1 — rule')), 'react.M1', 'https'));
+});
+
+test('pack: prefix is free but one per pack, and proj is reserved', () => {
+  assert.deepEqual(rp(mini(`## Must\n- rx.M1 — a ${SRC}\n`)), []);
+  assert.ok(has(rp(mini(`## Must\n- rx.M1 — a ${SRC}\n- ry.M2 — b ${SRC}\n`)), 'prefix ry differs from rx', 'one prefix per pack'));
+  assert.ok(has(rp(mini(`## Must\n- proj.M1 — a ${SRC}\n`)), 'proj', 'reserved'));
+  assert.ok(has(rp(mini(`## Must\n- Rx.M1 — a ${SRC}\n`)), 'rule line'));
+});
+
+test('pack: markers split only at the keyed markers, each once and in order', () => {
+  const ok = mini('## Must\n- rx.M1 — a — b, still the rule — why: w — x — source: https://a.example/x , https://b.example/y — enforced-by: eslint/foo\n');
+  assert.deepEqual(rp(ok), []);
+  assert.ok(has(rp(mini(`## Must\n- rx.M1 — a — why: w — why: v ${SRC}\n`)), 'rx.M1', 'why'));
+  assert.ok(has(rp(mini(`## Must\n- rx.M1 — a ${SRC} — why: w\n`)), 'rx.M1', 'order'));
+  assert.ok(has(rp(mini(`## Must\n- rx.M1 —  ${SRC}\n`)), 'rx.M1', 'empty'));
+});
+
+test('pack: check: is refused in packs, in any position', () => {
+  assert.ok(has(rp(mini(`## Must\n- rx.M1 — a ${SRC} — check: lf\n`)), 'rx.M1', 'check:', 'checks.json'));
+  assert.ok(has(rp(mini('## Should\n- rx.S1 — a — check: judgment\n')), 'rx.S1', 'check:'));
+});
+
+test('pack: size cap, 256 KiB', () => {
+  assert.ok(has(rp(mini('<!-- ' + 'x'.repeat(256 * 1024) + ' -->\n## Must\n')), 'too large'));
+});
+
+test('pack: freshness is 180 days by default and 90 days in library mode', () => {
+  const old = n => nsrv().replace('researched: 2026-10-21', `researched: ${day(n)}`);
+  assert.deepEqual(cp(old(100)), []);
+  assert.deepEqual(cp(old(180)), []);
+  assert.ok(has(cp(old(181)), 'stale', '180-day'));
+  assert.deepEqual(cp(old(90), { maxAgeDays: 90 }), []);
+  assert.ok(has(cp(old(91), { maxAgeDays: 90 }), 'stale', '90-day', day(91)));
+});
+
+test('pack: an advisory dated after researched is an error for that tool only', () => {
+  const adv = [{ tool: 'nodejs-server', date: '2026-10-25', id: 'CVE-2026-1234', source: 'https://nodejs.org/x' }, { tool: 'npm', date: '2026-10-25', id: 'CVE-1', source: 'https://a.example/x' }];
+  const e = cp(nsrv(), { advisories: adv });
+  assert.equal(e.length, 1, e.join('\n'));
+  assert.ok(has(e, 'advisory CVE-2026-1234 (2026-10-25) after researched 2026-10-21'));
+  assert.deepEqual(cp(nsrv(), { advisories: [{ ...adv[0], date: '2026-10-21' }] }), []);
+});
+
+// ---- checkPacks (a folder), --packs and repo mode ----
+function packDir(files, extra = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-packs-'));
+  tempDirs.push(dir);
+  for (const [n, t] of Object.entries({ ...files, ...extra })) writeFileSync(join(dir, n), t);
+  return dir;
+}
+
+test('checkPacks library mode: 90 days, advisories.json, no cross-pack id rule', () => {
+  const dir = packDir({ 'nodejs-server@2026.md': nsrv(), 'claude-code-plugins@2026.md': ccp() });
+  assert.deepEqual(checkPacks(dir, { today: TODAY, maxAgeDays: 90 }), []);
+  assert.ok(has(checkPacks(dir, { today: '2027-02-01', maxAgeDays: 90 }), 'nodejs-server@2026.md', 'stale'));
+  const adv = packDir({ 'nodejs-server@2026.md': nsrv() }, { 'advisories.json': JSON.stringify([{ tool: 'nodejs-server', date: '2026-10-25', id: 'CVE-9', source: 'https://a.example/x' }]) });
+  assert.ok(has(checkPacks(adv, { today: TODAY, maxAgeDays: 90 }), 'advisory CVE-9'));
+  const dup = packDir({ 'nodejs-server@2026.md': nsrv(), 'nodejs-server@2027.md': nsrv() });
+  assert.deepEqual(checkPacks(dup, { today: TODAY, maxAgeDays: 90 }), []);
+});
+
+test('checkPacks: a malformed or hostile advisories.json is an error, not a crash', () => {
+  const bodies = ['not json', '{"a":1}', '[{"tool":"x"}]',
+    '[{"__proto__":{"x":1},"tool":"nodejs-server","date":"2026-10-25","id":"A","source":"http://a"}]',
+    '[{"tool":"nodejs-server","date":"nope","id":"A","source":"https://a.example/x"}]'];
+  for (const body of bodies) {
+    const dir = packDir({ 'nodejs-server@2026.md': nsrv() }, { 'advisories.json': body });
+    assert.ok(has(checkPacks(dir, { today: TODAY, maxAgeDays: 90 }), 'advisories.json'), body);
+  }
+  const big = packDir({ 'nodejs-server@2026.md': nsrv() }, { 'advisories.json': ' '.repeat(256 * 1024 + 1) });
+  assert.ok(has(checkPacks(big, { today: TODAY, maxAgeDays: 90 }), 'advisories.json', 'too large'));
+});
+
+test('checkPacks repo mode: a rule id used in two committed packs is an error', () => {
+  const twin = nsrv().replace('tool: nodejs-server', 'tool: nodejs-twin');
+  const dir = packDir({ 'nodejs-server@2026.md': nsrv(), 'nodejs-twin@2026.md': twin });
+  const e = checkPacks(dir, { today: TODAY, maxAgeDays: 180, repo: true });
+  assert.ok(has(e, 'nsrv.M1', 'nodejs-server@2026.md', 'nodejs-twin@2026.md'), e.join('\n'));
+  assert.deepEqual(checkPacks(packDir({ 'nodejs-server@2026.md': nsrv() }), { today: TODAY, maxAgeDays: 180, repo: true }), []);
+});
+
+function repoRoot(files = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'aico-repo-'));
+  tempDirs.push(root);
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), text);
+  }
+  return root;
+}
+const run = args => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8' });
+
+test('repo mode: no .company means "no ruleset", no error', () => {
+  const r = check(repoRoot({ 'agents/.keep': '' }), { today: TODAY });
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.notes, ['no ruleset']);
+  const out = run([repoRoot()]);
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  assert.equal(out.stdout.split('no ruleset').length - 1, 1);
+});
+
+test('repo mode: committed copies are checked at 180 days and across packs', () => {
+  const ok = repoRoot({ '.company/standards/nodejs-server@2026.md': nsrv() });
+  const r = check(ok, { today: TODAY });
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.notes, []);
+  const stale = check(ok, { today: '2027-06-01' });
+  assert.ok(has(stale.errors, 'standards/nodejs-server@2026.md', 'stale'));
+  const twin = repoRoot({ '.company/standards/nodejs-server@2026.md': nsrv(), '.company/standards/other@1.md': nsrv().replace('tool: nodejs-server', 'tool: other') });
+  assert.ok(has(check(twin, { today: TODAY }).errors, 'nsrv.M1'));
+});
+
+test('repo mode: brainstorm folders are scanned, errors carry the relative path', () => {
+  const good = bs('v2-crossfire.md'), bad = swap(good, 'format: 2', 'format: 9');
+  const root = repoRoot({
+    '.company/brainstorms/2026-10-20 10.00 - Good.md': good,
+    '.company/roadmap/2026-10-20 10.01 - Old.md': bs('v1-built.md'),
+    '.company/parked/2026-10-20 10.02 - Bad.md': bad,
+    '.company/nice-to-have/2026-10-20 10.03 - Other.md': bs('v1-open.md'),
+    '.company/work/x/notes.md': 'not scanned, not a brainstorm',
+  });
+  const r = check(root, { today: TODAY });
+  assert.equal(r.errors.length, 1, r.errors.join('\n'));
+  assert.ok(r.errors[0].includes('.company/parked/2026-10-20 10.02 - Bad.md'), r.errors[0]);
+  assert.ok(r.notes.includes('no ruleset'));
+});
+
+test('--packs: exit 0 on fresh packs, 1 on a stale one, 1 on a missing folder, 2 without a folder', () => {
+  const t = new Date().toISOString().slice(0, 10);
+  const fresh = packDir({ 'nodejs-server@2026.md': nsrv().replace('researched: 2026-10-21', `researched: ${t}`) });
+  const ok = run(['--packs', fresh]);
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  const stale = packDir({ 'nodejs-server@2026.md': nsrv().replace('researched: 2026-10-21', 'researched: 2020-01-01') });
+  const bad = run(['--packs', stale]);
+  assert.equal(bad.status, 1);
+  assert.ok(bad.stdout.includes('stale'), bad.stdout);
+  assert.equal(run(['--packs', join(fresh, 'missing')]).status, 1);
+  assert.equal(run(['--packs']).status, 2);
+});
+
+test('the fixtures folder holds only LF text (proj.M11)', () => {
+  const walk = d => readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]);
+  for (const f of walk(FIX)) assert.ok(!readFileSync(f, 'utf8').includes('\r'), f);
 });
