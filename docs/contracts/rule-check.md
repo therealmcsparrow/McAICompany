@@ -40,7 +40,7 @@ Only full absence is quiet; a half-present ruleset fails closed.
 
 ## Flow (AC22)
 1. Tool checks run first: the Lead runs `run` with the pre-filter and passes the rows (and `list`) to the reviewer.
-2. A `T-` row blocks only after the reviewer confirms it: confirmed → a Blocking row with the same `T-` ID (`handoff` v1.1); rejected → a Nit `T-<n> not confirmed — <why>`.
+2. A `T-` row blocks only after the reviewer confirms it: confirmed → a Blocking row with the same `T-` ID (`handoff` v1.1); rejected → a Nit row `T-<n> | <file>[:<line>] | not confirmed | <why> | none` (the `handoff` v1.1 part 2 Nit form, same `T-` ID).
 3. A tool that cannot run, crashes or times out is a `T-` row `tool failed: <check-id>`, never silence. `check.mjs` exiting 1 on `ERROR` lines is not a crash.
 4. `drift` runs in `npm test` (`scripts/rule-check.test.mjs`): on fixtures always, and on the real `<root>` when `.company/standards.md` exists (the test is skipped with `no ruleset` otherwise, as in CI). The Lead also runs `drift` after each ruleset sign-off and before the Ship Gate, where the real files exist.
 5. Drift routing (below).

@@ -42,6 +42,7 @@ base-commit: <sha>
 - R-1 | open | [spec] | scripts/x.mjs:12 | <problem> | <why> | <fix>
 ```
 - Status: `open | fixed | withdrawn`. Rows are appended or have their status changed, never deleted. A handover link and a Fix-round reviewer continue the same file (same IDs). `## Checked` lists every file already reviewed.
+- Tag: one of the four Blocking tags (part 2), or `[nit]` for a Nit (`- R-3 | open | [nit] | scripts/x.mjs:3 | <problem> | <why> | <fix>`). The Nit's Handoff row (part 2) drops the tag.
 - The final Handoff's rows are the `open` ledger rows; the Lead commits the ledger with the Step.
 
 ## Validator (`scripts/handoff-lint.mjs`)
