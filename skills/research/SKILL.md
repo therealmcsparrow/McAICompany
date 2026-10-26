@@ -44,7 +44,7 @@ Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag>
 Name: <the Role's name from §1.7>
-Settings: model=<m> effort=<e>   # only the overridden values; omit the line when none
+Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 Follow aico:handoff.
 ```
 Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7). The design-researcher gets the Goal "judge the installed design skills and recommend at most 5, each as a DS line with `approved: pending`" and no other input. A `blocked` researcher does not stop the run: the report notes it (RR error cases). `needs-ceo` → ask the CEO in a form, then re-dispatch that Role.

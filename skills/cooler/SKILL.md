@@ -89,7 +89,7 @@ Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from §1.6>
 Name: <the Role's name from §1.7>
-Settings: model=<m> effort=<e>   # only the overridden values; omit the line when none
+Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 ```
 Append each turn to the file right away, following the script rules: the cue, then the line verbatim. A PASS is an action line instead and still counts as a turn. Show nothing of the chat on screen while it runs.
 

@@ -49,10 +49,10 @@ Warnings also go to stderr as `warning: <text>`.
 
 ## How the pipeline uses it (`aico:pipeline`)
 - Setup §1.7 runs `get` once per run (fixed command) and keeps the JSON; never re-resolved mid-run.
-- Model and effort: passed on the Agent call only when they differ from the agent frontmatter; `inherit` is never passed. Recorded in the `Settings:` dispatch line (`dispatch-prompt` v3).
+- Model and effort: passed on the Agent call only when they differ from the agent frontmatter. `inherit` means the Lead's session model: the Lead passes its session model family (`opus | sonnet | haiku | fable`), never the literal `inherit` and never an omitted `model` (that falls back to the frontmatter). Recorded in the `Settings:` dispatch line (`dispatch-prompt` v3).
 - `pipeline.fix_rounds` is the Fix-round limit; at 0 the first blocking review goes to the CEO. `sequential` dispatches the ∥ Steps one at a time.
 - Lanes gate the optional lanes in `feature`, `fix`, `maintain` and `refactor`; lanes a Playbook always runs are unaffected.
-- `auto` Gates write their summary to the run folder and continue. Never auto, whatever the settings: `needs-ceo`, Blocking security findings, picks, escalations, design-skill set approval, client sends, publishing, authority reports, production deploys. An auto Ship Gate opens a PR and never merges.
+- `auto` Gates write their summary to the run folder and continue. Never auto, whatever the settings: `needs-ceo`, Blocking security findings, picks, escalations, design-skill set approval, client sends, publishing, authority reports, production deploys. An auto Ship Gate first runs the Finish writes and commits (summary, Debt, Lessons), then pushes the branch and opens a PR, then stops; it never merges.
 
 ## Error cases
 - `get` exits non-zero or prints invalid JSON → the pipeline uses plugin defaults and says so in the first Gate summary.

@@ -13,7 +13,7 @@ v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: 
 | Line | When | Value |
 |---|---|---|
 | `Name: <name>` | every dispatch, every Playbook, directly after `Language:` | the Role's effective name, `roles.<role>.name` from `aico-settings` v1 `get`, resolved **once** per run in pipeline Setup §1.7 (`role-names` v1 defaults) |
-| `Settings: model=<m> effort=<e>` | only when the Lead passes `model` and/or `effort` on the Agent call, directly after `Name:`; omitted when nothing is overridden | exactly the values passed: `model=<m>`, `effort=<e>` or both. Passed only when the resolved value differs from the agent frontmatter; `model: inherit` is never passed (the parameter is omitted) |
+| `Settings: model=<m> effort=<e>` | only when the Lead passes `model` and/or `effort` on the Agent call, directly after `Name:`; omitted when nothing is overridden | exactly the values passed: `model=<m>`, `effort=<e>` or both. Passed only when the resolved value differs from the agent frontmatter. A resolved `inherit` is passed as the Lead's session model family (`opus | sonnet | haiku | fable`), never as the literal `inherit` and never by omitting `model`; `<m>` is that concrete family |
 
 Lead-only Playbooks that dispatch no Role (`aico:triage`, `aico:help`, `aico:version`, `aico:language`, `aico:settings`) resolve the language the same way and use it for their own forms and replies.
 
