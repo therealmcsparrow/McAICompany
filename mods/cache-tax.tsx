@@ -3,7 +3,7 @@ import type { EngineInterface, On, RenderInput } from 'claude-code'
 
 import { EMPTY_CLOCK, cacheClock, clockLines, clockStatus, noteRequest, wrap } from './lib/cache-clock.mjs'
 import { arr, guardRunActive, int, obj, oneOf, opt, pattern, str } from './lib/guard.mjs'
-import { fit, fmtInt, UNKNOWN } from './lib/format.mjs'
+import { fit, fmtCompact, fmtInt, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
 import { setStatusPart } from './shared/status'
@@ -186,11 +186,11 @@ async function drawPane($: EngineInterface, e: RenderInput) {
   )
 }
 
-// The status text for the cost part: `spend <n> tax <p>%` and the cache clock, only while a run is active.
+// The status text for the cost part: `<n> tax <clock>`, only while a run is active; the pane has the details.
 function partOf(isOn: boolean, cost: { cost: Cost }, clock: CacheClockState, nowMs: number): string {
   if (!isOn || cost.cost.slug === null) return ''
-  const spend = cost.cost.data === null ? 'spend ? tax ?%' : `spend ${fmtInt(cost.cost.data.totals.spend)} tax ${pct(cost.cost.data)}%`
-  return `${spend} ${clockStatus(cacheClock(clock, nowMs))}`
+  const tax = cost.cost.data === null ? UNKNOWN : fmtCompact(cost.cost.data.totals.cache_write)
+  return `${tax} tax ${clockStatus(cacheClock(clock, nowMs))}`
 }
 
 // The status part is set on every tick: the composer writes the line only when it changes.

@@ -59,11 +59,11 @@ export function clockLines(clock) {
   return lines;
 }
 
-// The status text: `cache 42m`, `cache expired` or `cache ?`.
+// The status text: `42m`, `exp` or `?`.
 export function clockStatus(clock) {
-  if (clock && clock.kind === 'valid') return `cache ${clock.minutesLeft}m`;
-  if (clock && clock.kind === 'expired') return 'cache expired';
-  return 'cache ?';
+  if (clock && clock.kind === 'valid') return `${clock.minutesLeft}m`;
+  if (clock && clock.kind === 'expired') return 'exp';
+  return '?';
 }
 
 // Breaks text at spaces into rows of at most `width` cells; a word wider than a row is cut with an ellipsis.

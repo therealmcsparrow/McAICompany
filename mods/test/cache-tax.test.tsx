@@ -197,11 +197,11 @@ test('cache writes carry the [tax] marker as text and no colour', async ($, on) 
 test('the status part carries spend, tax share and the cache clock', async ($, on) => {
   const w = makeWorld()
   const clock = await boot($, on, w)
-  expect(last(w)).toContain('spend 100003524 tax 99% cache ?')
+  expect(last(w)).toContain('98.8M tax ?')
   await request($)
   await clock.advance(2100)
-  expect(last(w)).toContain('spend 100003524 tax 99% cache 60m')
-  expect((last(w) ?? '').length).toBeLessThanOrEqual(160)
+  expect(last(w)).toContain('98.8M tax 60m')
+  expect(cellWidth(last(w) ?? '')).toBeLessThanOrEqual(46)
 })
 
 test('Lead cache: unknown until a main-loop request, then expires with the time and minutes left', async ($, on) => {
@@ -231,10 +231,10 @@ test('a request restarts the clock; a subagent request does not touch it', async
   await clock.advance(30 * MIN)
   await request($, 'a9')
   await clock.advance(2100)
-  expect(last(w)).toMatch(/cache (29|30)m/)
+  expect(last(w)).toMatch(/ (29|30)m$/)
   await request($)
   await clock.advance(2100)
-  expect(last(w)).toContain('cache 60m')
+  expect(last(w)).toContain('tax 60m')
 })
 
 test('after 60 minutes the clock reads expired, in the pane and on the status line', async ($, on) => {
@@ -242,7 +242,7 @@ test('after 60 minutes the clock reads expired, in the pane and on the status li
   const clock = await boot($, on, w)
   await request($)
   await clock.advance(61 * MIN)
-  expect(last(w)).toContain('cache expired')
+  expect(last(w)).toContain('tax exp')
   const ui = await $.ui.mount(pane('terminal', 120))
   const rows = await lines(ui)
   expect(rows.some(r => r.startsWith(`Lead cache: expired ${fmtClock(NOW + 2500 + 60 * MIN)}; the next turn rewrites it`))).toBe(true)
@@ -330,7 +330,7 @@ test('below 110 columns the pane is not placed and the status line holds the sum
   w.settings = SETTINGS({ enabled: true, pane: 'auto' })
   await boot($, on, w)
   expect(w.opened).toContain('aico-cost')
-  expect(last(w)).toContain('spend 100003524 tax 99% cache ?')
+  expect(last(w)).toContain('98.8M tax ?')
 })
 
 test('the ledger is read again when its file changes, and not while nothing changed', async ($, on) => {
@@ -343,7 +343,7 @@ test('the ledger is read again when its file changes, and not while nothing chan
   w.ledgerMtime = 2
   await clock.advance(4000)
   expect(w.ledgerCalls.length).toBe(before + 1)
-  expect(last(w)).toContain('spend 5 tax 20%')
+  expect(last(w)).toContain('1 tax')
 })
 
 // Hostile and broken answers show unknown and still draw.
@@ -370,7 +370,7 @@ for (const [name, answer] of BREAKS) {
       expect(all.some(r => r.startsWith('Lead cache: expires'))).toBe(true)
       for (const row of all) expect(cellWidth(row)).toBeLessThanOrEqual(39)
       await ui.unmount()
-      expect(last(w)).toContain('spend ? tax ?%')
+      expect(last(w)).toContain('? tax')
     })
   }
 }

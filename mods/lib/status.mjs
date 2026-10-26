@@ -1,9 +1,9 @@
 // The one status line of the plugin: `aico · <savvy> · <blast> · <cost> · <reflect>`.
 import { cellWidth, fit } from './format.mjs';
 
-export const STATUS_MAX = 160;
-// Per-part caps in terminal cells: 7 + 142 + 3 * 3 = 158, so all four parts always fit.
-export const STATUS_CAPS = Object.freeze({ savvy: 52, blast: 24, cost: 46, reflect: 20 });
+export const STATUS_MAX = 80;
+// Per-part caps in terminal cells: 7 + 64 + 3 * 3 = 80, so all four parts always fit on one line.
+export const STATUS_CAPS = Object.freeze({ savvy: 24, blast: 10, cost: 20, reflect: 10 });
 const PREFIX = 'aico · ';
 const SEP = ' · ';
 const ORDER = ['savvy', 'blast', 'cost', 'reflect'];

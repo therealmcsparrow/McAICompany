@@ -16,7 +16,6 @@ const POLL_MS = 10000
 const MAX_AGENTS = 40
 const SHOWN_AGENTS = 10
 const DEFAULT_WIDTH = 39
-const SLUG_CELLS = 24
 const PROMPT_HEAD = 65536
 
 // The validator reads a state key from an atom declared in the file that uses it.
@@ -61,6 +60,14 @@ function roleOf(type: string, row: AgentRow): string | null {
   return ROLE.test(bare) ? bare : null
 }
 
+// Two letters for each leading word and three for the last: `backend-engineer` becomes `ba-eng`.
+function shortRole(role: string | null): string {
+  if (role === null) return ''
+  const words = role.split('-')
+  const last = words.length - 1
+  return `${words.map((w, i) => w.slice(0, i === last ? 3 : 2)).join('-')} `
+}
+
 function whoLabel(step: string | null, role: string | null, name: string): string {
   return `${step ?? UNKNOWN} ${role ?? UNKNOWN} (${name})`
 }
@@ -74,7 +81,7 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   }
   const slug = state.slug
   if (view === null) {
-    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, elapsed: UNKNOWN, agents: [], status: `run ${fit(slug, SLUG_CELLS)} w${UNKNOWN} S${UNKNOWN} r${UNKNOWN} ${UNKNOWN}` }
+    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, elapsed: UNKNOWN, agents: [], status: `W${UNKNOWN} S${UNKNOWN} ${UNKNOWN}` }
   }
   const wave = typeof view.wave === 'number' ? String(view.wave) : UNKNOWN
   const round = typeof view.round === 'number' ? String(view.round) : UNKNOWN
@@ -103,12 +110,11 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const stepNumber = current === undefined ? UNKNOWN : current.step
   const label = isEnded ? `ended (${view.outcome ?? UNKNOWN})` : view.state
   const minutes = fmtMinutes((isEnded && !Number.isNaN(endedMs) ? endedMs : nowMs) - startedMs)
-  const shortSlug = fit(slug, SLUG_CELLS)
   const status = isEnded
-    ? `run ${shortSlug} ended ${view.outcome ?? UNKNOWN} ${minutes}`
+    ? `ended ${view.outcome ?? UNKNOWN} ${minutes}`
     : view.state === 'running'
-      ? `run ${shortSlug} w${wave} S${stepNumber} r${round} ${minutes}`
-      : `run ${shortSlug} ${view.state}`
+      ? `W${wave} S${stepNumber} ${shortRole(current?.role ?? null)}${minutes}`
+      : view.state
   return { slug, state: label, wave, step, round, gates, elapsed, agents: lines, status }
 }
 

@@ -100,14 +100,14 @@ async function boot($: Env[0], on: Env[1], w: World, surface: 'terminal' | 'desk
 
 const last = (w: World) => w.statuses[w.statuses.length - 1]
 const commit = ($: Env[0]) => $.tool.check({ tool: 'Bash', input: { command: 'git commit -m x' } } as never)
-const SAVVY = 'run demo w\\d+ S[\\d?]+ r\\d+ \\d+m'
-const COST = 'spend \\d+ tax \\d+% cache (\\d+m|expired|\\?)'
+const SAVVY = 'W\\d+ S[\\d?]+ ([a-z-]+ )?\\d+m'
+const COST = '[\\d.]+[kMG]? tax (\\d+m|exp|\\?)'
 
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`Savvy and Cache Tax share one line in order for 60 seconds (${surface})`, async ($, on) => {
     const w = makeWorld()
     const clock = await boot($, on, w, surface)
-    const first = w.statuses.findIndex(s => s !== undefined && s.includes('spend '))
+    const first = w.statuses.findIndex(s => s !== undefined && s.includes(' tax '))
     expect(first).toBeGreaterThan(-1)
     for (let i = 0; i < 30; i++) await clock.advance(2000)
     const shape = new RegExp(`^aico · ${SAVVY} · ${COST}$`)
@@ -121,7 +121,7 @@ test('a Contract commit puts the blast part second, and it leaves after 60 secon
   const r = await commit($)
   expect(r.decision).toBe('allow')
   await clock.advance(0)
-  expect(last(w)).toMatch(new RegExp(`^aico · ${SAVVY} · blast warn contract 1 · ${COST}$`))
+  expect(last(w)).toMatch(new RegExp(`^aico · ${SAVVY} · ⚠ contract · ${COST}$`))
   await clock.advance(60_000)
   expect(last(w)).toMatch(new RegExp(`^aico · ${SAVVY} · ${COST}$`))
   expect(w.statuses.includes(undefined)).toBe(false)
@@ -151,7 +151,7 @@ test('with Savvy off and no placed pane the Cache Tax summary stands alone on th
   expect(last(w)).toMatch(new RegExp(`^aico · ${COST}$`))
 })
 
-test('the longest slug, the largest spend and a warning all fit in 160 cells', async ($, on) => {
+test('the longest slug, the largest spend and a warning all fit in 80 cells', async ($, on) => {
   const w = makeWorld()
   w.slug = 'a'.repeat(64)
   w.spend = 9007199254740991
@@ -159,8 +159,8 @@ test('the longest slug, the largest spend and a warning all fit in 160 cells', a
   await commit($)
   await clock.advance(0)
   const line = last(w) ?? ''
-  expect(cellWidth(line)).toBeLessThanOrEqual(160)
-  for (const part of ['run aaaa', ' w2 ', ' r0 ', 'm · ', 'spend 9007199254740991', 'blast warn']) expect(line).toContain(part)
+  expect(cellWidth(line)).toBeLessThanOrEqual(80)
+  for (const part of ['W2 ', 'm · ', ' tax ', '⚠ contract']) expect(line).toContain(part)
 })
 
 test('a quiet run within one minute writes nothing new', async ($, on) => {
@@ -189,5 +189,5 @@ test('a refused ui.status raises no error and the line is written on the next se
   const clock = await boot($, on, w)
   await clock.advance(4100)
   expect(w.statusCalls).toBeGreaterThan(1)
-  expect(last(w)).toMatch(/^aico · run demo/)
+  expect(last(w)).toMatch(/^aico · W2 /)
 })

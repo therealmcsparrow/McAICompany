@@ -96,3 +96,18 @@ export function fmtClock(ms) {
 export function colorEnabled(noColor) {
   return typeof noColor !== 'string' || noColor === '';
 }
+
+// A count in at most 7 cells for the status line: `999`, `12.4k`, `98.8M`.
+export function fmtCompact(n) {
+  if (!Number.isSafeInteger(n) || n < 0) return UNKNOWN;
+  const units = ['', 'k', 'M', 'G', 'T'];
+  let i = 0;
+  while (i < units.length - 1 && n >= 1000 ** (i + 1)) i++;
+  let v = n / 1000 ** i;
+  if (i > 0 && Math.round(v) >= 1000 && i < units.length - 1) {
+    i++;
+    v = n / 1000 ** i;
+  }
+  const text = v < 100 ? v.toFixed(1).replace(/\.0$/, '') : String(Math.round(v));
+  return text + units[i];
+}
