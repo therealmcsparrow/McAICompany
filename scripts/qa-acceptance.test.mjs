@@ -1,4 +1,4 @@
-// QA net for acceptance criteria that no other suite pins from the outside (AC31, AC33, AC34).
+// QA net for acceptance criteria that no other suite pins from the outside.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,10 +9,25 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 
-test('AC33 every text file this branch added or changed is LF only', () => {
-  const files = execFileSync('git', ['diff', '--name-only', '-z', '--diff-filter=AM', 'bea3242', 'HEAD'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
+function git(...args) {
+  return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+// The files this branch changed against the merge base with origin/main, or null when no such base exists
+// (a shallow CI checkout): older files may predate the LF rule, so without a base the check is skipped, not widened.
+function changedFiles() {
+  try {
+    const base = git('merge-base', 'origin/main', 'HEAD').trim();
+    return git('diff', '--name-only', '-z', '--diff-filter=AM', base, 'HEAD').split('\0').filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+const changed = changedFiles();
+test('AC33 every text file this branch added or changed is LF only', { skip: changed === null && 'no merge base with origin/main (shallow checkout)' }, () => {
   const text = /\.(md|mjs|json|html|txt|yml|yaml)$/;
-  const bad = files.filter(f => text.test(f) && fs.existsSync(path.join(root, f)) && read(f).includes('\r'));
+  const bad = changed.filter(f => text.test(f) && fs.existsSync(path.join(root, f)) && read(f).includes('\r'));
   assert.deepEqual(bad, []);
 });
 

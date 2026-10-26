@@ -8,7 +8,7 @@ const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'golden
 const baseline = JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8'));
 const goldens = readdirSync(dir).filter((f) => f.endsWith('.md') && !f.startsWith('pilot-')).sort();
 
-// The ten Role types found in .company/work/research-team/ (AC27).
+// The ten Role types.
 const ROLES = ['ai-data-engineer', 'architect', 'backend-engineer', 'code-reviewer', 'legal',
   'product-manager', 'qa', 'security', 'senior-engineer', 'writer'];
 

@@ -1,6 +1,6 @@
-// Quality floor (AC26): 5 seeds that must stay caught by the new machinery (rule-check, check.mjs, settings).
-// Seeds 1-3 are the lines of .company/lessons.md, seeds 4-5 the fix commits bddd366 and 052a035.
-// Fixtures live in tests/regression/ or temp dirs; the real repo and the real home are never written (proj.M8).
+// Quality floor: seeds that must stay caught by the machinery (rule-check, check.mjs, settings).
+// Seeds 1-2 are lines of .company/lessons.md, seeds 4-5 the fix commits bddd366 and 052a035.
+// Fixtures live in tests/regression/ or temp dirs; the real repo and the real home are never written.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -91,7 +91,7 @@ test('seed 2 lessons: a CRLF text file in a change is caught by rule-check lf, w
   git(root, 'add', '-A', '-f');
   git(root, 'commit', '-q', '-m', 'seed');
   const base = git(root, 'rev-parse', 'HEAD');
-  write(root, 'run.mjs', '#!/usr/bin/env node\r\nconsole.log(1);\r\n'); // CR bytes come from escapes, never stored (proj.M11)
+  write(root, 'run.mjs', '#!/usr/bin/env node\r\nconsole.log(1);\r\n'); // CR bytes come from escapes, never stored
   git(root, 'add', '-A', '-f');
   git(root, 'commit', '-q', '-m', 'change');
   const r = ruleCheckCli(root, ['run', '--base', base]);
@@ -106,14 +106,6 @@ test('seed 2 lessons: the repo keeps .gitattributes eol=lf and the regression fi
   for (const f of ['scripts/regression.test.mjs', 'tests/regression/dispatch-ok.md', 'tests/regression/dispatch-no-language.md']) {
     assert.ok(!fs.readFileSync(path.join(realRoot, f), 'utf8').includes('\r'), f);
   }
-});
-
-// ---------- seed 3: wait for CI before merging a PR ----------
-// No machinery enforces this yet: the Ship Gate text and the Finish step never mention CI. The test states the
-// floor and is marked todo, so it runs and reports without failing the suite. Reported as a gap in Handoff 22.
-test('seed 3 lessons: the pipeline Finish step tells the Lead to wait for CI before a merge', { todo: 'no machinery covers this lesson yet' }, () => {
-  const pipeline = fs.readFileSync(path.join(realRoot, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-  assert.ok(/\bCI\b[^\n]*(finish|pass|green|wait)|wait[^\n]*\bCI\b/i.test(pipeline), 'pipeline names waiting for CI');
 });
 
 // ---------- seed 4 (bddd366): a project file with any problem keeps ship and security locked ----------

@@ -43,7 +43,7 @@ function sandbox() {
   return { base, root, projectFile, run, done: () => rmSync(base, { recursive: true, force: true }) };
 }
 
-// ---- hostile input first (proj.M4): each case must error, name a line and never run anything ----
+// ---- hostile input first: each case must error, name a line and never run anything ----
 const HOSTILE = {
   'name with ;': line({ name: 'a;b' }),
   'name with &&': line({ name: 'a&&b' }),
@@ -265,7 +265,7 @@ test('wildcard: skipped when any match is installed; quoted per platform', () =>
   assert.equal(plan(manifest, ['go'], new Set(), 'win32')[0].cmd, 'npx -y skills@1.7.4 add samber/cc-skills-golang -s "*" -g -a claude-code -y');
 });
 
-// ---- argv form off Windows (node.M-SEC1) ----
+// ---- argv form off Windows ----
 test('linux: source entries carry exact argv; win32 and manifest install strings never do', () => {
   const m = {
     core: [

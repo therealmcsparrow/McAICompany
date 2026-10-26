@@ -11,7 +11,7 @@ const script = path.join(import.meta.dirname, 'rule-check.mjs');
 const realRoot = path.join(import.meta.dirname, '..');
 const MiB = 1024 * 1024;
 
-// Every test builds its own fixture root in a temp dir; the real home and the real repo are never touched (proj.M8).
+// Every test builds its own fixture root in a temp dir; the real home and the real repo are never touched.
 const made = [];
 function tmp(name = 'rule-check-test-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), name));

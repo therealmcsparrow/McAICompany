@@ -207,7 +207,7 @@ test('broken config.json falls back to defaults with a warning', (t) => {
   assert.equal(r.warnings.length, 1);
   assert.match(r.warnings[0], /not valid JSON/);
 
-  // Wrong types and a deleted agent's Role key: only the bad parts drop.
+  // Wrong types: only the bad parts drop.
   s.user({ roles: { qa: { model: 'opus', effort: 7 }, ghost: { model: 'haiku' } }, pipeline: { fix_rounds: 'two', dispatch: 'sequential' } });
   s.project({ gates: 'auto' });
   r = resolveSettings(s.ctx);

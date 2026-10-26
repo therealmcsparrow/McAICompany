@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// T11 pipeline-core. Drift test for the canonical dispatch line order (dispatch-prompt v3.1) plus one
+// Drift test for the canonical dispatch line order (dispatch-prompt v3.1) plus one
 // assertion per wiring rule of skills/pipeline. The order is for reading only: no cache claim anywhere.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');

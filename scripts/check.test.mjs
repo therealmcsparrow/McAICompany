@@ -323,7 +323,7 @@ test('names with edge or double spaces are errors; combining marks are fine', ()
   assert.deepEqual(r.errors, []);
 });
 
-// ---- brainstorm-file v2 and rule-pack v1.1 (T1) ----
+// ---- brainstorm-file v2 and rule-pack v1.1 ----
 const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'fixtures');
 const bs = name => readFileSync(join(FIX, 'brainstorm', name), 'utf8');
 const pk = name => readFileSync(join(FIX, 'packs', name), 'utf8');
@@ -676,7 +676,7 @@ test('the fixtures folder holds only LF text (proj.M11)', () => {
   for (const f of walk(FIX)) assert.ok(!readFileSync(f, 'utf8').includes('\r'), f);
 });
 
-// ---- T11: dispatch rule, Context cap: (dispatch-prompt v3.1) ----
+// ---- dispatch rule, Context cap: (dispatch-prompt v3.1) ----
 const stepBlock = (extra = '', dir = 's') => '```\nProject profile: p\nCompany profile: x\nLanguage: en\nName: Ava\n' + extra + 'Output: .company/work/' + dir + '/01-r.md\nGoal: y\n```';
 
 test('dispatch block with Output: .company/work/ but no Context cap: is an error', () => {
