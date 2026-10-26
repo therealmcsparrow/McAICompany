@@ -25,8 +25,8 @@ The savings come from reading less: shorter prompts, fewer file reads, fewer dis
 
 ## Tool checks, slices and review depth
 - **Tool checks.** A rule can carry `check: <tool>` or `check: judgment`. Checks bind to a rule by its ID in `.company/checks.json` and run before review. A failure becomes a finding that the reviewer must confirm before it blocks. Compliance stays a separate lane.
-- **Rule slices.** Each task gets only its mapped rules, and always every security Must. `rule-check slices` verifies this.
-- **Findings ledger.** A reviewer writes each finding and each checked file to `<NN>-code-reviewer.findings.md`, so a handover in the middle of a review loses nothing.
+- **Rule slices.** Each task gets only its mapped rules, and always every security Must. The Senior Engineer renders them into one small file per task, `.company/work/<slug>/rules/<task>.md`, with the rule text included. Builders get that file instead of the full ruleset map. `rule-check slices` verifies the files and flags missing, stale or extra ones.
+- **Findings ledger.** A reviewer writes its findings and checked files to `<NN>-code-reviewer.findings.md` only when a handover is near (at 75% of the max context, or once it decides to hand over). A handover without a ledger fails the lint, so nothing is lost; a review that finishes normally needs none.
 - **Review depth** follows the paths touched (`scripts/review-depth.mjs`), not the builder's own label. Contract, Core and security paths always get a full review.
 - **Golden Handoffs and the regression set.** Reference Handoffs and past high-tier defects run under `npm test`, so a change that loosens a Gate or the Handoff shape fails a test.
 

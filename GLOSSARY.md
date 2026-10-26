@@ -83,9 +83,9 @@ _Avoid_: orchestrator (use Lead).
 
 **Tool check** — a rule tagged `check: <tool>`, bound to its rule ID in `.company/checks.json`. It runs before review; a failure is a finding the reviewer confirms before it blocks.
 
-**Rule slice** — the rules mapped to one task, always including every security Must.
+**Rule slice** — the rules mapped to one task, always including every security Must. Builders read them from a per-task file in `rules/` that holds the rule text.
 
-**Findings ledger** — the reviewer's file listing every finding and checked file, so a handover mid-review loses nothing.
+**Findings ledger** — the reviewer's file listing every finding and checked file. Written only near a handover, so a handover mid-review loses nothing.
 
 **Review depth** — how much a review covers, set by the touched paths, not the builder's label. Contract, Core and security paths always get a full review.
 
@@ -93,7 +93,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Digest** — the part of a format 2 brainstorm file that quotes your answers word for word, lists open threads, keeps a dissent line and links each item to its round.
 
-**Crossfire** — in debate mode, one pair of Roles answers the round's sharpest clash, about 50 words each. The setting `brainstorm.debate` is `crossfire` (default) or `full_pass`.
+**Crossfire** — in debate mode, the round's sharpest clash. By default it is folded into the next round: the challenged Role answers it in its next ideas pass ("Challenge to you"), with no extra dispatch. The setting `brainstorm.debate` is `crossfire` (default) or `full_pass`, which keeps the live pair (about 50 words each).
 
 **Round input** — the small per-Role file in `.company/brainstorm-input/` that holds what changes each brainstorm round (digest, questions, "Others said" with idea IDs). The Role's dispatch prompt stays constant for the whole run. The script writes the file and removes it at Close.
 
