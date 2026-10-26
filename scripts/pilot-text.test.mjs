@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Pins what the pilot agent and skill text must say (AC20-AC24, AC26) and their size limits.
+// Pins what the pilot agent and skill text must say and their size limits.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const has = (text, ...needles) => {
@@ -33,7 +33,8 @@ test('AC20 reviewers write rows and the aico-top block', () => {
 
 test('AC22 reviewers read rule-check list and confirm T- rows, tools never block alone', () => {
   for (const f of ['agents/code-reviewer.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md']) has(read(f), /rule-check\.mjs/, 'list');
-  has(read('skills/review/SKILL.md'), 'Confirm each `T-` row', 'never blocks on its own', 'T-<n> not confirmed');
+  has(read('skills/review/SKILL.md'), 'Confirm each `T-` row', 'never blocks on its own', 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
+  has(read('agents/code-reviewer.md'), 'T-<n> | <file>[:<line>] | not confirmed | <why> | none');
   has(read('agents/code-reviewer.md'), 'never blocks on its own');
 });
 
@@ -57,4 +58,12 @@ test('kept rules: reviewer never edits, Must never softened, old rules still pre
   has(read('agents/code-reviewer.md'), 'You never change code', 'never softened to a Nit', 'spike/', 'aico:i18n', 'aico:performance', 'previous Blocking items');
   has(read('agents/senior-engineer.md'), 'accept a Must without a primary source', 'edit product code', 'Debt');
   has(read('skills/review/SKILL.md'), 'block-list', 'Handoffs, Steps, Roles');
+});
+
+test('handoff skill: context budget follows the Context cap line, lint runs from the plugin root', () => {
+  const t = read('skills/handoff/SKILL.md');
+  has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '150000', '120000', 'never compute');
+  assert.doesNotMatch(t, /around 130k/);
+  assert.doesNotMatch(t, /node scripts\/handoff-lint\.mjs/);
+  has(t, '${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs');
 });

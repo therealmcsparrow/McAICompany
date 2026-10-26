@@ -81,8 +81,13 @@ test('release bumps every version field, rolls the changelog, commits and tags l
   assert.ok(log.includes(`## [Unreleased]\n\n## [0.11.0] - ${today}\n\n### Added\n- A new thing.\n\n## [0.10.0]`), log);
   assert.equal(git(s.root, 'tag', '--list', 'v0.11.0'), 'v0.11.0');
   assert.equal(git(s.root, 'status', '--porcelain'), '');
-  assert.equal(git(s.root, 'log', '-1', '--format=%s'), 'release: v0.11.0');
+  assert.equal(git(s.root, 'log', '-1', '--format=%s'), 'chore: release v0.11.0');
   assert.equal(git(s.root, 'rev-list', '-n', '1', 'v0.11.0'), git(s.root, 'rev-parse', 'HEAD'));
+});
+
+test('release runs npm test without a shell', () => {
+  const src = fs.readFileSync(script, 'utf8');
+  assert.ok(!/shell:\s*true/.test(src), 'release.mjs must not use shell: true');
 });
 
 test('release never pushes', (t) => {

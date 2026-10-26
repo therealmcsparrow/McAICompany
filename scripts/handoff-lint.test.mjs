@@ -284,6 +284,29 @@ test('findings ledger: valid, ids and status listed', () => {
   assert.deepEqual(r.ledger.checked, ['scripts/x.mjs']);
 });
 
+test('findings ledger: a Nit row carries the [nit] marker and keeps its ID', () => {
+  const r = lintFindings(LEDGER + '- R-3 | open | [nit] | scripts/x.mjs:3 | vague name | readability | rename\n');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.ledger.findings.at(-1), { id: 'R-3', status: 'open' });
+  assert.match(lintFindings(LEDGER.replace('[spec]', '[nitpick]')).errors.join('\n'), /tag/);
+});
+
+test('a rejected tool-check Nit row passes --require-top', () => {
+  const doc = [
+    '---', 'step: 05', 'role: code-reviewer', 'task: t', 'status: blocked', 'round: 0', 'base-commit: abc1234', 'risk-tier: high',
+    'acceptance-ids: [AC1]', 'files-touched: []', '---',
+    'By: Rin (code-reviewer)',
+    '```aico-top', 'status: blocked', 'files: []', 'ac_ids: [AC1]', 'rule_ids: []', 'risks: []', 'read_next: []', 'tokens_used: unknown', '```',
+    '## Did', '- Reviewed.',
+    '## Blocking', '- [spec] R-1 | src/x.ts:12 | problem | proj.M1 | fix',
+    '## Nits', '- T-2 | scripts/x.mjs:5 | not confirmed | the tool matched a comment | none',
+    '## Next', '- Builder.', ''
+  ].join('\n');
+  const r = lint(doc, { requireTop: true });
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.routing.findings, ['R-1', 'T-2']);
+});
+
 test('findings ledger: bad status, tag, ID, duplicate, empty why, missing heading or key', () => {
   const e = x => lintFindings(x).errors.join('\n');
   assert.match(e(LEDGER.replace('| open |', '| closed |')), /line \d+: status/);

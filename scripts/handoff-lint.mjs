@@ -281,7 +281,7 @@ export function lintFindings(text) {
     if (!ID_RE.test(id)) { errors.push(`line ${n}: ${ID_ERR}`); continue; }
     if (!LEDGER_STATUS.has(status)) { errors.push(`line ${n}: status must be open|fixed|withdrawn`); continue; }
     const t = /^\[([^\]\s]{1,40})\]$/.exec(tag);
-    if (!t || !TAGS.has(t[1])) { errors.push(`line ${n}: row needs a [contract|spec|security|test] tag`); continue; }
+    if (!t || !(TAGS.has(t[1]) || t[1] === 'nit')) { errors.push(`line ${n}: row needs a [contract|spec|security|test] tag, or [nit] for a Nit`); continue; }
     const bad = checkRow([id, ...rest], true);
     if (bad) { errors.push(`line ${n}: ${bad}`); continue; }
     if (seen.has(id)) { errors.push(`line ${n}: duplicate finding ID ${id}`); continue; }

@@ -6,6 +6,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+// npm ships as npm.cmd on Windows, which cannot start without a shell. Run its JS entry point with this node instead.
+function npmTest() {
+  if (process.platform !== 'win32') return ['npm', ['test']];
+  const cli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  if (!fs.existsSync(cli)) return null;
+  return [process.execPath, [cli, 'test']];
+}
+
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function fail(msg) {
@@ -83,12 +91,13 @@ const restore = () => {
 };
 for (const [k, text] of next) fs.writeFileSync(abs(k), text);
 
+const npm = npmTest();
 const checks = [
-  ['check', process.execPath, ['scripts/check.mjs'], false],
-  ['npm test', 'npm', ['test'], true] // shell only so Windows finds npm.cmd; constant arguments
+  ['check', process.execPath, ['scripts/check.mjs']],
+  ['npm test', ...(npm ?? ['npm', ['test']])]
 ];
-for (const [name, cmd, args, shell] of checks) {
-  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell });
+for (const [name, cmd, args] of checks) {
+  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: false });
   if (r.status !== 0) {
     restore();
     fail(`${name} failed; files restored, no commit, no tag`);
@@ -98,6 +107,6 @@ for (const [name, cmd, args, shell] of checks) {
 // The checks may write files; the release commit takes only the files this script changed.
 const files = [...next.keys()].map((k) => rel[k]);
 git(root, ['add', '--', ...files]);
-git(root, ['commit', '-q', '-m', `release: v${version}`, '--', ...files]);
+git(root, ['commit', '-q', '-m', `chore: release v${version}`, '--', ...files]);
 git(root, ['tag', '-a', `v${version}`, '-m', `v${version}`]);
 console.log(`released v${version}: commit and tag made locally, nothing was sent to any remote.`);

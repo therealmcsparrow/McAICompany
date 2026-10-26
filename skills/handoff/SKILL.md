@@ -19,11 +19,13 @@ Rules:
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`, and leave it to the Lead to re-dispatch. Never reconstruct context by guessing. The only exception is a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 
-## Context budget: 150k tokens
+## Context budget: the `Context cap:` line
 
-No Role's context may go over **150k tokens**. Past that, quality drops and compaction loses detail, so hand over to a clean Step instead of pushing on.
+Your dispatch carries `Context cap: <cap> handover <n>`. Treat `<cap>` as the most context you may use and `<n>` as the handover point. The Lead computes both (per-Role cap, high-risk floor, 80%); you never compute them. Past the cap, quality drops and compaction loses detail, so hand over to a clean Step instead of pushing on.
+- `Context cap:` absent → cap 150000, handover at 120000 (150k tokens).
+- `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 150000, handover at 120000, and add a Nit `invalid Context cap` (echo at most 35 characters of the value).
 - Watch it as you work: big file reads, long diffs, test logs and tool output add up fast. Read slices, not whole files; grep before reading.
-- When you're near the budget (around 130k, or you can't tell and have done a lot of reading and tool calls), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
+- When you're near `<n>` (or you can't tell and have done a lot of reading and tool calls), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
 - Write your Handoff with `status: handover`. `## Did` lists what's finished; `## Next` lists exactly what's left, in order, with file paths, so a fresh Role of the same type can pick it up without re-reading what you read. Commit-ready work only; never leave the tree broken.
 - A handover is not a failure and not a blocker. Don't cut scope or skip checks to squeeze under the budget.
 
@@ -69,7 +71,7 @@ By: <Name> (<role>)
 - Your final reply to the Lead is one line: `<status> — <output path>`.
 
 ## Handoff v1.1 (pilot)
-Contract: `docs/contracts/handoff.md`. A v1.0 Handoff stays valid; v1.1 only adds. The Lead runs `node scripts/handoff-lint.mjs <file>` after each Step, with `--require-top` for `code-reviewer` and `senior-engineer` compliance-pass Handoffs. A malformed top block blocks the Step: you are re-dispatched with the lint errors; it costs no Fix round.
+Contract: `docs/contracts/handoff.md`. A v1.0 Handoff stays valid; v1.1 only adds. The Lead runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs" <file>` after each Step, with `--require-top` for `code-reviewer` and `senior-engineer` compliance-pass Handoffs. A malformed top block blocks the Step: you are re-dispatched with the lint errors; it costs no Fix round.
 
 **Top block.** Directly after the `By:` line, before `## Did`, one fence with info string `aico-top`. Exactly these keys, in this order, one line each, nothing else:
 
@@ -96,7 +98,7 @@ tokens_used: unknown
 - `<ID>` is `R-<n>` (review), `C-<n>` (compliance pass) or `T-<n>` (tool check). IDs are stable across Fix rounds and never reused. `why` is never empty. Builders cite IDs in `## Did` (`fixed R-2`).
 - No `|` inside a field.
 
-**Findings ledger.** A pilot reviewer keeps `<NN>-<role>.findings.md` while working (frontmatter `step`, `role`, `base-commit`; `## Checked` file list; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, status `open|fixed|withdrawn`). Rows are appended or change status, never deleted. A handover or Fix-round reviewer continues the same file. Check it with `node scripts/handoff-lint.mjs --findings <file>`.
+**Findings ledger.** A pilot reviewer keeps `<NN>-<role>.findings.md` while working (frontmatter `step`, `role`, `base-commit`; `## Checked` file list; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, status `open|fixed|withdrawn`). Rows are appended or change status, never deleted. A handover or Fix-round reviewer continues the same file. A Nit is stored with the tag `[nit]` (`- R-3 | open | [nit] | file:line | problem | why | fix`) and its Handoff row drops the tag. Check it with `node "${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs" --findings <file>`.
 
 ## Language
 Your dispatch carries `Language: <tag>`. Write the prose in `<tag>`: Handoff text, forms, Gate summaries, digests, reports, lessons, cooler lines, brainstorm replies. Commit subjects are `<type>: <summary in tag>`.

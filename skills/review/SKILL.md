@@ -9,7 +9,7 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 **Pre-filter findings** may arrive in your input (from `aico:pipeline`'s deterministic pre-run). They are advisory and additive: confirm each against the diff before you keep it, and add your own. The pre-filter never closes a review — only you do.
 
-**Tool checks (AC22).** `T-` rows from `rule-check.mjs run` and the `list` of tool-checked rules come first. Read `list` so you don't re-judge those rules by hand. Confirm each `T-` row against the diff: confirmed → `## Blocking` row with the same `T-` ID; rejected → Nit `T-<n> not confirmed — <why>`. A tool never blocks on its own, and a missing or failed tool (`tool failed: <id>`) is a row you report, never silence. Compliance stays a separate lane.
+**Tool checks (AC22).** `T-` rows from `rule-check.mjs run` and the `list` of tool-checked rules come first. Read `list` so you don't re-judge those rules by hand. Confirm each `T-` row against the diff: confirmed → `## Blocking` row with the same `T-` ID; rejected → a Nit row `T-<n> | <file>[:<line>] | not confirmed | <why> | none`. A tool never blocks on its own, and a missing or failed tool (`tool failed: <id>`) is a row you report, never silence. Compliance stays a separate lane.
 
 **Depth (AC24).** The dispatch `Review depth:` comes from `review-depth.mjs` over the touched paths, not the builder's label. `full`: every touched line plus its callers and Contracts. `standard`: the scope above. Raise `standard` to `full` when you see a Contract, Core or security path; never lower it. Absent or invalid → `full`.
 
