@@ -96,6 +96,7 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 - Company facts and the three Voice presets (clear, bold, technical): `company/PROFILE.md`
 - Missing stack skills: `find-skills`, then add a group to `deps/skills.json`.
 - Language aico writes in: `/aico:language` sets your default; `/aico:language <tag> project` overrides it for one product (`aico_language:` in `.company/project.md`). Product UI strings follow `languages:` instead.
+- Mods: four add-ons that show run progress (Savvy), cost and the Lead's cache clock (Cache Tax), suggested Lessons (Reflect), and check risky `git commit`s before they run (Blast Radius). All on by default; switch them in `/aico:settings`. Terminal is proven, desktop is unverified. See `documentation/mods.md`.
 - Rule library shared by all projects on this machine: `~/.mcsparrow/standards/` (make it a git repo to sync it). Each product commits copies of the packs it uses in `.company/standards/`.
 
 ## Maintain

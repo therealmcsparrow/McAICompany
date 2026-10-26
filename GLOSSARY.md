@@ -127,6 +127,20 @@ _Avoid_: orchestrator (use Lead).
 
 **Role name** — the person name a Role shows in cooler chats, brainstorms, Gate summaries and Handoff bylines (e.g. Ava for the architect). Display only: `aico:<role>` IDs, file names and routing never change. Defaults live in `company/names.json`.
 
+**Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are four: Savvy, Cache Tax, Reflect and Blast Radius. They add no tokens to a prompt, apart from Reflect `model` mode and Blast Radius's refusal reason. Switched in `/aico:settings`.
+
+**Savvy** — the mod that shows the progress of the current run: wave, Step, Gates passed, Fix round and elapsed time.
+
+**Cache Tax** — the mod that shows spend per Step, with cache writes marked `[tax]`, and the cache clock.
+
+**Reflect** — the mod that checks each finished Step and the finished run, and suggests Lessons. Each is `suggested` until the CEO presses Accept; Decline writes nothing.
+
+**Blast Radius** — the mod that checks what a `git commit` touches (Core, Contract or security paths) before it runs, through both the `Bash` and `PowerShell` tools. Each category is `ask` or `warn`. With nobody to ask it refuses; turning it off needs the `security` unlock.
+
+**Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
+
+**Cache clock** — the time when the Lead's prompt cache expires (last Lead request plus its lifetime, measured as 1 hour), shown by Cache Tax. It only shows the time; nothing keeps the cache warm.
+
 **Settings** — the CEO's choices for Role name, model and effort, language and profile, Fix-round limit, dispatch mode, review lanes and Gates, changed on the `/aico:settings` page. Three levels: plugin default, user default (`~/.mcsparrow/config.json`) and project override (`.company/settings.json`); project wins over user, user over plugin.
 
 **Auto Gate** — a Gate set to `auto` in Settings: the Lead writes the Gate summary to the run folder and continues without a form. An auto Ship Gate pushes the branch and opens a PR, and never merges.
