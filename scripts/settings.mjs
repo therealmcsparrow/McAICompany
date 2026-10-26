@@ -314,7 +314,8 @@ function profileProblem(field, value, options) {
 }
 
 // Rewrites only the edited header lines of .company/project.md. Unchanged values are not re-validated.
-export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
+// With dryRun it validates only and writes nothing.
+export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, dryRun = false } = {}) {
   const file = projectFile(cwd);
   const bytes = readBounded(file);
   if (bytes === null) throw new Refusal('no .company/project.md');
@@ -336,7 +337,7 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     else edits.push(field);
   }
   if (reasons.length) throw new Refusal(reasons.join('; '));
-  if (edits.length === 0) return;
+  if (edits.length === 0 || dryRun) return;
   const lines = Array.from({ length: count }, (_, i) => lineAt(i));
   const end = headerEnd(lines);
   for (const field of edits) {
@@ -401,13 +402,37 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   return { revision, roles, pipeline, gates, unlocked: [...unlocked], ignored, warnings, language, profile };
 }
 
-export function writeLayer(level, layer, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
+// Checks a user and a project layer together, as they would be stored. Returns all reasons.
+export function checkLayers(user, project, { pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
+  const defaults = pluginDefaults(pluginRoot);
+  const roleNames = new Set(Object.keys(defaults.roles));
+  const u = sanitize(user, roleNames);
+  const p = sanitize(project, roleNames);
+  const reasons = [...u.reasons.map((r) => `user ${r}`), ...p.reasons.map((r) => `project ${r}`)];
+  if (reasons.length === 0) reasons.push(...nameClashes(resolveRoles(defaults, u.clean, p.clean)));
+  return reasons;
+}
+
+// Returns why the layer file can't be written over (invalid JSON, too large), or null.
+export function layerFileProblem(level, { home, cwd } = {}) {
+  try {
+    readConfig(layerPath(level, { home, cwd }));
+    return null;
+  } catch (error) {
+    if (error instanceof Refusal) return error.message;
+    throw error;
+  }
+}
+
+// `other` is the other level's layer to check names against; it defaults to the stored one.
+export function writeLayer(level, layer, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, other } = {}) {
   const file = layerPath(level, { home, cwd });
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
   const { clean, reasons } = sanitize(layer, roleNames);
   if (reasons.length) throw new Refusal(reasons.join('; '));
-  const other = loadLayer(level === 'user' ? 'project' : 'user', { home, cwd }, roleNames).layer;
+  if (other === undefined) other = loadLayer(level === 'user' ? 'project' : 'user', { home, cwd }, roleNames).layer;
+  else other = sanitize(other, roleNames).clean;
   const roles = level === 'user' ? resolveRoles(defaults, clean, other) : resolveRoles(defaults, other, clean);
   const clashes = nameClashes(roles);
   if (clashes.length) throw new Refusal(clashes.join('; '));
@@ -432,7 +457,7 @@ function lookup(value, dotted) {
   return at;
 }
 
-// Returns { code, out }.
+// Returns { code, out }, or { code: 0, serve: { open } } for the CLI to start the server.
 export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
   try {
     const [command, ...rest] = args;
@@ -447,6 +472,9 @@ export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) 
       }
       return { code: 0, out: typeof value === 'string' ? value : JSON.stringify(value) };
     }
+    if (command === 'serve' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--no-open'))) {
+      return { code: 0, serve: { open: rest.length === 0 } };
+    }
     throw new Refusal(USAGE);
   } catch (error) {
     if (error instanceof Refusal) return { code: 2, out: `refused: ${error.message}` };
@@ -455,7 +483,15 @@ export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) 
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const { code, out } = run(process.argv.slice(2));
-  process.stdout.write(`${out}\n`);
-  process.exitCode = code;
+  const { code, out, serve } = run(process.argv.slice(2));
+  if (serve) {
+    // Not a top-level await: settings-server.mjs imports this module, which must finish evaluating first.
+    import('./settings-server.mjs').then(({ startServer }) => startServer({ open: serve.open })).catch((error) => {
+      process.stderr.write(`aico settings: ${error.message}\n`);
+      process.exitCode = 1;
+    });
+  } else {
+    process.stdout.write(`${out}\n`);
+    process.exitCode = code;
+  }
 }

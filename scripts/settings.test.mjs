@@ -292,9 +292,11 @@ test('get roles.qa.model prints sonnet', (t) => {
 test('unknown commands print usage and exit 2', (t) => {
   const s = sandbox(t);
   const usage = 'refused: usage: settings.mjs get [key] | serve [--no-open]';
-  for (const args of [[], ['bogus'], ['serve'], ['get', 'a', 'b']]) {
+  for (const args of [[], ['bogus'], ['serve', '--bogus'], ['serve', '--no-open', 'x'], ['get', 'a', 'b']]) {
     assert.deepEqual(run(args, s.ctx), { code: 2, out: usage }, args.join(' '));
   }
+  assert.deepEqual(run(['serve'], s.ctx), { code: 0, serve: { open: true } });
+  assert.deepEqual(run(['serve', '--no-open'], s.ctx), { code: 0, serve: { open: false } });
 });
 
 const PROJECT_MD = [
