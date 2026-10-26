@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { clearLanguage, setLanguage, validate as validateLanguage } from './language.mjs';
+import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
 import {
   Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
@@ -49,6 +49,7 @@ function state(ctx) {
     user: readLayer('user', ctx).layer,
     project: readLayer('project', ctx).layer,
     resolved: resolveSettings(ctx),
+    language: storedLanguage(ctx),
     hasProject: hasCompany(ctx.cwd)
   };
 }

@@ -138,6 +138,11 @@ function projectValue(cwd) {
   return null;
 }
 
+// The stored tag at each level (canonical, or null when unset or invalid), for the settings page.
+export function stored({ home, cwd } = {}) {
+  return { user: userValue(home), project: projectValue(cwd) };
+}
+
 export function resolve({ home, cwd, ignoreProject = false } = {}) {
   if (!ignoreProject) {
     const fromProject = projectValue(cwd);

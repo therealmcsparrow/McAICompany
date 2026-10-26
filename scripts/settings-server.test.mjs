@@ -156,16 +156,17 @@ test("GET / injects the token and has no http(s) URL except the server's own", a
   assert.equal((await api('/elsewhere')).status, 404);
 });
 
-test('GET /api/state returns plugin defaults, raw layers, resolved and hasProject', async (t) => {
+test('GET /api/state returns plugin defaults, raw layers, resolved, stored language and hasProject', async (t) => {
   const s = sandbox(t);
   fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { model: 'haiku' } } } }));
   const { state } = await start(t, s);
   const st = await state();
-  assert.deepEqual(Object.keys(st).sort(), ['hasProject', 'plugin', 'project', 'resolved', 'user']);
+  assert.deepEqual(Object.keys(st).sort(), ['hasProject', 'language', 'plugin', 'project', 'resolved', 'user']);
   assert.equal(st.plugin.roles.qa.model, 'sonnet');
   assert.deepEqual(st.user, { version: 1, roles: { qa: { model: 'haiku' } } });
   assert.deepEqual(st.project, { version: 1 });
   assert.equal(st.resolved.roles.qa.model, 'haiku');
+  assert.deepEqual(st.language, { user: null, project: null });
   assert.equal(st.hasProject, true);
 });
 
@@ -190,6 +191,7 @@ test('save writes user and project layers and returns new state', async (t) => {
   assert.equal(after.resolved.gates.ship, 'auto');
   assert.equal(after.resolved.profile.fields.audience, 'developers');
   assert.deepEqual(after.resolved.language, { tag: 'de', source: 'project' });
+  assert.deepEqual(after.language, { user: 'nl', project: 'de' }, 'the user value stays visible while the project wins');
   const config = JSON.parse(read(s.config));
   assert.equal(config.other, 1);
   assert.equal(config.aico_language, 'nl');
@@ -201,6 +203,7 @@ test('save writes user and project layers and returns new state', async (t) => {
   assert.equal(res2.status, 200);
   const { state: again } = await res2.json();
   assert.deepEqual(again.resolved.language, { tag: 'nl', source: 'user' });
+  assert.deepEqual(again.language, { user: 'nl', project: null });
   assert.equal(again.resolved.roles.qa.model, 'haiku');
   assert.ok(!read(s.projectMd).includes('aico_language'));
 });

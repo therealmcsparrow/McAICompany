@@ -201,12 +201,9 @@ function setUnlock(key, on) {
 }
 
 // ---------- draft ----------
+// The stored tag at each level; '' means not set.
 function initialLanguage() {
-  const lang = state.resolved.language;
-  return {
-    user: lang.source === 'user' ? lang.tag : '',
-    project: lang.source === 'project' ? lang.tag : ''
-  };
+  return { user: state.language.user ?? '', project: state.language.project ?? '' };
 }
 function resetDraft() {
   draft = {
@@ -419,7 +416,6 @@ function renderLanguage(panel) {
   const lang = state.resolved.language;
   const langInput = (scope) => {
     const input = el('input', { type: 'text', placeholder: '—', 'aria-label': `Language, ${scope}` });
-    if (scope === 'user' && lang.source === 'project') input.placeholder = '— (hidden while the project sets one)';
     input.disabled = scope === 'project' && !profileOn();
     input.addEventListener('input', () => { draft.language[scope] = input.value; refresh(); });
     syncers.push(() => {
@@ -433,12 +429,12 @@ function renderLanguage(panel) {
     el('td', {}, langInput('user')), el('td', {}, langInput('project')), langEffect));
   syncers.push(() => {
     const changed = changedLanguage();
+    // Unchanged: what the server resolved. Changed: project > user > en (plugin default).
     let tag = lang.tag, source = lang.source;
     if (Object.keys(changed).length) {
       const p = draft.language.project.trim(), u = draft.language.user.trim();
       if (p) [tag, source] = [p, 'project'];
       else if (u) [tag, source] = [u, 'user'];
-      else if (lang.source === 'project') [tag, source] = ['your user language, or en', 'after save'];
       else [tag, source] = ['en', 'plugin'];
     }
     langEffect.replaceChildren(tag, el('span', { class: 'src' }, `(${source === 'default' ? 'plugin' : source})`));
