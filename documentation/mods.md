@@ -38,7 +38,7 @@ Reflect looks at each finished Step and suggests what to remember.
 
 - **Step check.** For each new or changed Step file, it writes at most five lines: what was done, what went wrong, what to remember, and up to three suggested Lessons. The lines go to a notice in the transcript (which the model never reads) and to the `aico-reflect` pane.
 - **Retrospective.** When the run ends, it shows the top three costs and the top three times, what caused Fix rounds, and suggested Lessons.
-- **Lessons.** Each suggestion is labelled `suggested` and has its own Accept and Decline buttons. Accept writes that one line to `.company/lessons.md`. Decline, no answer, or ending the session writes nothing.
+- **Lessons.** Each suggestion is labelled `suggested` and has its own Accept and Decline buttons. Accept writes that one line to `.company/lessons.md`. Lesson text may hold only letters, digits, spaces and these marks: `. , ; : ! ? ' " ( ) - _ / %`. It cannot start with `-`. A suggestion with any other character, such as `$` or a backtick, is dropped. Decline, no answer, or ending the session writes nothing.
 - **When it starts.** Reflect starts at the first Step the run dispatches, not at session start. If you resume a run, it stays idle until the next Step is dispatched.
 - **Never in the way.** No hook waits for Reflect. It does not edit Handoffs, block a Step or delay a dispatch.
 
@@ -49,10 +49,11 @@ By default it works from fixed rules and spends no tokens (`mode: deterministic`
 Blast Radius checks what a `git commit` touches before it happens.
 
 - **What it gates.** A `git commit` run through the `Bash` tool **or** the `PowerShell` tool. On Windows without Git Bash, the shell tool is `PowerShell`, so both are covered. Other tools are not gated.
-- **What it checks.** It lists the files, Modules, Contracts and Core items the commit touches, plus the risk tier and review depth, using the same answer as `review-depth`. A commit is a hit when it touches Core, a Contract, or a security path.
+- **What counts as a commit.** Anything not known to be safe. Blast Radius clears only a command made of `cd`, plain text tools such as `echo` or `cat`, and `git` with a known non-commit subcommand such as `status`, `log` or `diff`. Any other command is treated as a commit: a variable or glob in place of `git`, an alias, `git -c` overrides, or another program in a command that mentions `git` and `commit`. A script file that commits, or a command that builds `git` and `commit` from pieces, is not caught.
+- **What it checks.** It lists the files, Modules, Contracts and Core items the commit touches, plus the risk tier and review depth, using the same answer as `review-depth`. That covers staged files, changed files in the work tree and untracked files, since `git commit -a` or a preceding `git add` can bring any of them in. A commit is a hit when it touches Core, a Contract, or a security path. If the command points git at another directory or index (`--git-dir`, `--work-tree`, `GIT_DIR` and similar), Blast Radius cannot tell what is committed and counts it as a security hit.
 - **What it does with a hit.** Each category is set to `ask` or `warn`:
   - `ask`: you get one question that lists every hit, and the commit goes ahead only if you say yes.
-  - `warn`: a toast and a `blast warn` part on the status line for 60 seconds, and the commit goes ahead.
+  - `warn`: a toast and a `⚠ <category>` part on the status line for 60 seconds, and the commit goes ahead.
 - **Defaults.** `core: ask`, `security: ask`, `contract: warn`. So a commit that touches only a Contract is never asked or refused unless you change that.
 - **Nobody to ask.** In plain `claude -p` there is nobody to answer, so an `ask` hit refuses the commit with a reason that says `nobody can be asked; commit refused`. A background loop is the same. If the commit comes from a subagent, the reason starts with `From subagent <Step> <role>:`. A run driven by a host permission prompt tool is asked, but sees no reason text.
 - **Fails closed.** If the check cannot run (the script fails, or the surface cannot run scripts, as on the unverified desktop app), that counts as a security hit, so the commit is asked or refused. An error inside the hook refuses a commit and lets every other shell call through.
@@ -61,22 +62,22 @@ Blast Radius checks what a `git commit` touches before it happens.
 
 ## The status line
 
-The four mods share one status line. They cannot overwrite each other. It reads:
+The four mods share one status line. They cannot overwrite each other. Claude Code prints `⚠ aico: ` before it, and the mods supply only the text after that. The text is in compact form:
 
 ```
-aico · <savvy> · <blast> · <cost> · <reflect>
+<savvy> · <blast> · <cost> · <reflect>
 ```
 
 Only the parts that have something to say appear, always in this order:
 
-1. `savvy`: `run <slug> w<wave> S<step> r<round> <minutes>`, for example `run demo w2 S14 r1 12m`. Elapsed time is in whole minutes. An unknown field shows `?`.
-2. `blast`: `blast warn <category> <n>`, for 60 seconds after a warning.
-3. `cost`: `spend <n> tax <p>% cache <m>m` (or `cache expired`, or `cache ?`).
-4. `reflect`: `reflect <n> suggested`, while suggestions wait for you.
+1. `savvy`: `W<wave> S<step> <role> <elapsed>`, for example `W3 S12 ba-eng 14m`. The role is cut to two letters per leading word and three for the last. After the run ends it reads `ended <outcome> <elapsed>`. Elapsed time is in whole minutes. An unknown field shows `?`.
+2. `blast`: `⚠ <category>` for 60 seconds after a warning. Before a code review it reads `rev <depth>`.
+3. `cost`: `<n> tax <m>m`, for example `12.4k tax 60m`. `n` is the run's cache write count. The clock shows `exp` when the cache has expired and `?` when unknown.
+4. `reflect`: `<n> lessons` (`1 lesson`), the suggestions waiting for you.
 
-Each part is cut to a fixed width, so all four fit together on a line of up to 160 cells. If a narrow terminal cuts the line at the right edge, the last parts are lost first. Whether the host clips or wraps a long line at 80 columns is still to be recorded.
+Each part has a fixed width, so the text is at most 70 cells. With the host's `⚠ aico: ` in front, the line fits one 80-column terminal row. If the host still cuts it, the last parts are lost first.
 
-Where a pane does not open on its own (under 110 columns, or `claude -p`), the status line carries that mod's full one-line summary.
+The compact form leaves out the slug, Fix round, Gates, Names, spend, exact counts, expiry time and blast paths. Those are in the panes. Where a pane does not open on its own (under 110 columns, or `claude -p`), the status line is all you see of that mod.
 
 ## The cache clock
 
