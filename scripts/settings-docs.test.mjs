@@ -72,9 +72,9 @@ test('roles.md lists every default name', () => {
     assert.ok(doc.includes(`| ${name} |`), `roles.md lacks ${name} (${role})`);
 });
 
-test('aico-settings v1.1 names the cap range, the brainstorm keys and their defaults', () => {
+test('aico-settings v1.2 keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.match(doc, /^# Contract: aico-settings v1\.1$/m);
+  assert.match(doc, /^# Contract: aico-settings v1\.2$/m);
   assert.equal(PIPELINE_DEFAULTS.context_cap, 150000);
   assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 150000/);
   assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
