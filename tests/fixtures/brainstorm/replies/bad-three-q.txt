@@ -1,0 +1,5 @@
+I: Ship it.
+Risk: None worth naming.
+Q [blocking]: One? | options: a / b | default: a
+Q [blocking]: Two? | options: a / b | default: a
+Q [nice-to-have]: Three? | options: a / b | default: a

@@ -1,0 +1,4 @@
+I: Bind to 127.0.0.1 only and refuse other hosts.
+Risk: Loopback-only blocks remote-desktop users.
+Re: @writer on I-1.3: challenge — A hint under the URL is noise for people who know the tool.
+Estimate: L, 4-6 d

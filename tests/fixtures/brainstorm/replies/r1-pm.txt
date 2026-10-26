@@ -1,0 +1,2 @@
+I: Ask five new users to open the page first.
+Risk: Five users is a small sample.
