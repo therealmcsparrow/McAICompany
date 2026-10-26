@@ -16,7 +16,7 @@ Use the `aico:pipeline` §2 prompt, so the block carries `Name:`, `Language:` an
 5. Nothing installs unless the approve form and the Install / Skip form (or `gates.installs: auto`) say yes (AC5).
 
 ## 4. Post-install scan and checks
-After each skill installs, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/skillspector.mjs" scan --scope project --skill <name> --json` with `<name>` from the `vet` output. Scan mode comes from settings (`skillspector.mode`), never from the Role. Run these for each approved repo pick, after the install commands ran, whatever their exit code.
+Scan mode comes from settings (`skillspector.mode`), never from the Role. Run these for each approved repo pick, after the install commands ran, whatever their exit code.
 1. `node "${CLAUDE_PLUGIN_ROOT}/scripts/skill-picks.mjs" check-install --name <name> --hash <hash> --json`, with `<name>` (`picks[].name`) and `<hash>` (`picks[].hash`) from the `vet` output only.
 2. `node "${CLAUDE_PLUGIN_ROOT}/scripts/skillspector.mjs" scan --scope project --skill <name> --json`.
 

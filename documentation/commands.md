@@ -186,7 +186,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **How it runs.**
 1. Checks that the tool is installed. If not, it shows an install form with the pinned release (v2.13.1), the two exact commands, and the rollback. The install changes your user-scope Claude config, so it always asks, even when your Gates are set to auto. Skip runs nothing. aico never installs `uv`; without it, the command stops and says so.
-2. Before it scans, it says in one line how many skills it will scan, a time estimate and that package names, versions and ecosystems go to OSV.dev. Then it scans each skill in scope. The mode comes from the `skillspector.mode` setting (default `no-llm`: static rules on this machine; no skill text leaves it; package names, versions and ecosystems from a skill's dependency files go to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found); `--no-llm` or `--claude-cli` overrides it for one run.
+2. Before it scans, it says in one line how many skills it will scan, a time estimate and that package names, versions and ecosystems, plus the ids of any vulnerabilities found, go to OSV.dev. Then it scans each skill in scope. The mode comes from the `skillspector.mode` setting (default `no-llm`: static rules on this machine; no skill text leaves it; package names, versions and ecosystems from a skill's dependency files go to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found); `--no-llm` or `--claude-cli` overrides it for one run.
 3. Reports per skill: pass, findings or error. An error is never shown as safe. For a skill with blocking findings it suggests removal commands for you to run; it runs none.
 
 **Install commands.** Run in this order, only after you choose Install:
@@ -208,7 +208,7 @@ Both install commands change your user-scope configuration, not just this projec
 **Skill picks (the skill-researcher).** When the Lead vets a third-party skill before you see it, these checks apply:
 - The Lead scans only the folder the skills CLI will install, not the whole repo.
 - It refuses a commit that is not in the repo (for example a fork commit), and a candidate that contains a symbolic link or a submodule.
-- After the install it computes the hash of the installed files and compares it with the hash of the scanned folder. A mismatch, or a missing result, stops the run. It then shows you the removal command and removes nothing itself.
+- After the install it compares the hash the skills CLI recorded for the skill folder it installed with the hash of the scanned folder. A mismatch, or a missing result, stops the run. It then shows you the removal command and removes nothing itself.
 - A pick that has only a command source cannot be pinned to a commit, so it cannot be approved. When a skill has both a repo source and a command source, the repo source is recommended.
 
 **Example.** `/aico:skillspector --project`
