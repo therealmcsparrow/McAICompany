@@ -537,6 +537,317 @@ test('brainstorm-report with no ledger or no rounds exits 0', () => {
   assert.match(r2.out, /no rounds from round 2 on/);
 });
 
+// ---------- mod records (add-mod) ----------
+
+const goodMod = {
+  v: 1, run: 'demo', kind: 'reflect', id: '05', role: 'lead', src: 'mod', tokens: { in: 100, cache_write: 10, cache_read: 1000, out: 50 }
+};
+
+test('validateRecord refuses every hostile mod record before it accepts the good one', () => {
+  const bad = [
+    { ...goodMod, agent: 'a1' },
+    { ...goodMod, ctx_end: 5 },
+    { ...goodMod, ctx_end: 0 },
+    { ...goodMod, kind: 'keepwarm', id: 'W1' },
+    { ...goodMod, kind: 'step' },
+    { ...goodMod, kind: 'round', id: 'R1' },
+    { ...goodMod, kind: 'total', id: 'aaaaaaaa', dispatches: 1 },
+    { ...goodMod, kind: 'ship' },
+    { ...goodMod, id: '5' },
+    { ...goodMod, id: 'W1' },
+    { ...goodMod, id: 'R1' },
+    { ...goodMod, id: 'RT2' },
+    { ...goodMod, id: 'rt' },
+    { ...goodMod, role: 'architect' },
+    { ...goodMod, role: undefined },
+    { ...goodMod, tokens: undefined },
+    { ...goodMod, tokens: { in: 1, cache_write: 1, cache_read: 1 } },
+    { ...goodMod, tokens: { in: 1, cache_write: 1, cache_read: 1, out: 1, extra: 1 } },
+    { ...goodMod, tokens: { in: 1, cache_write: 1, cache_read: 1, out: -1 } },
+    { ...goodMod, tokens: { in: 1, cache_write: 1, cache_read: 1, out: 1000000001 } },
+    { ...goodMod, tokens: { in: '1', cache_write: 1, cache_read: 1, out: 1 } },
+    { ...goodMod, prompt: 'hello' },
+    { ...goodMod, model: 'Has Spaces' },
+    { ...goodMod, ms: 86400001 },
+    { ...goodNotification, src: 'mod' },
+    { ...goodNotification, kind: 'reflect', id: '05', role: 'lead', agent: undefined }
+  ];
+  for (const rec of bad) assert.equal(validateRecord(rec).ok, false, JSON.stringify(rec));
+  assert.equal(validateRecord(goodMod).ok, true);
+  assert.equal(validateRecord({ ...goodMod, id: 'RT', model: 'claude-sonnet-5-5', ms: 900, reqs: 1 }).ok, true);
+});
+
+test('add-mod appends exactly one src mod record with role lead and the four counts', () => {
+  const sb = sandbox();
+  const r = run(sb, ['add-mod', 'demo', 'reflect', '05', '100', '10', '1000', '50', 'claude-sonnet-5-5', '800']);
+  assert.equal(r.status, 0, r.all);
+  assert.deepEqual(readLines(sb, 'demo'), [{
+    v: 1, run: 'demo', kind: 'reflect', id: '05', role: 'lead', src: 'mod',
+    tokens: { in: 100, cache_write: 10, cache_read: 1000, out: 50 }, ms: 800, model: 'claude-sonnet-5-5'
+  }]);
+  assert.equal(run(sb, ['add-mod', 'demo', 'reflect', 'RT', '1', '2', '3', '4']).status, 0);
+  assert.equal(readLines(sb, 'demo').length, 2);
+  assert.equal(Object.hasOwn(readLines(sb, 'demo')[1], 'model'), false);
+});
+
+test('add-mod refuses every other kind, bad ids and bad numbers with exit 2 and writes nothing', () => {
+  const sb = sandbox();
+  const cases = [
+    ['add-mod', 'demo', 'keepwarm', 'W1', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'keepwarm', '05', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'agent', '05', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'ctx_end', '05', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'step', '05', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'total', 'aaaaaaaa', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'ship', '05', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', '5', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', 'R1', '1', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', '05', '-1', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', '05', '1.5', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', '05', 'x', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', '05', '1000000001', '1', '1', '1'],
+    ['add-mod', 'demo', 'reflect', '05', '1', '1', '1', '1', 'Bad Model'],
+    ['add-mod', 'demo', 'reflect', '05', '1', '1', '1', '1', 'ok-model', '86400001'],
+    ['add-mod', 'demo', 'reflect', '05', '1', '1', '1', '1', 'ok-model', '1', 'extra'],
+    ['add-mod', 'demo', 'reflect', '05', '1', '1', '1'],
+    ['add-mod', '../x', 'reflect', '05', '1', '1', '1', '1'],
+    ['add-mod', 'UPPER', 'reflect', '05', '1', '1', '1', '1'],
+    ['add-mod']
+  ];
+  for (const args of cases) {
+    const r = run(sb, args);
+    assert.equal(r.status, 2, args.join(' '));
+    assert.match(r.out, /^refused: /, args.join(' '));
+  }
+  assert.equal(fs.existsSync(ledgerFile(sb, 'demo')), false);
+});
+
+test('add refuses kind reflect: the Lead write path cannot write a mod record', () => {
+  const sb = sandbox();
+  assert.equal(run(sb, ['add', 'demo', 'reflect', '05', 'lead', 'a1', '10']).status, 2);
+  assert.equal(fs.existsSync(ledgerFile(sb, 'demo')), false);
+});
+
+test('a hand-written mod line with an agent, a ctx_end or kind keepwarm is skipped on read', () => {
+  const sb = sandbox();
+  writeLedger(
+    sb, 'demo',
+    [{ ...goodMod, agent: 'a1' }, { ...goodMod, ctx_end: 5 }, { ...goodMod, kind: 'keepwarm', id: 'W1' }, goodMod]
+      .map((x) => JSON.stringify(x)).join('\n') + '\n'
+  );
+  const r = run(sb, ['report', 'demo']);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.out, /warning: line 1 skipped/);
+  assert.match(r.out, /warning: line 2 skipped/);
+  assert.match(r.out, /warning: line 3 skipped/);
+  assert.equal(/warning: line 4/.test(r.out), false);
+  assert.match(r.out, /spend: 160 total/);
+});
+
+test('src mod counts in the text report totals, listed under its own kind', () => {
+  const sb = sandbox();
+  seed(sb);
+  run(sb, ['reconcile', 'demo']);
+  run(sb, ['add-mod', 'demo', 'reflect', '05', '100', '10', '1000', '50']);
+  run(sb, ['ship', 'demo', '4']);
+  const r = run(sb, ['report', 'demo']);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.out, /reflect 05 lead .*spend 160 .*cache read 1000/);
+  assert.match(r.out, /spend: 412 total, 103 per AC/); // 252 + 160
+  assert.match(r.out, /cache read: 3203 total/); // 2203 + 1000
+  assert.match(r.out, /not reconciled: 1/);
+});
+
+// ---------- report --json ----------
+
+const json = (sb, args, opts) => {
+  const r = run(sb, ['report', 'demo', ...args], opts);
+  assert.equal(r.status, 0, r.all);
+  return { text: r.out, data: JSON.parse(r.out) };
+};
+
+function mixed(sb) {
+  seed(sb);
+  run(sb, ['reconcile', 'demo']);
+  run(sb, ['add-mod', 'demo', 'reflect', '05', '100', '10', '1000', '50', 'claude-sonnet-5-5', '800']);
+  run(sb, ['ship', 'demo', '4']);
+}
+
+test('report --json prints one JSON object with the contract shape', () => {
+  const sb = sandbox();
+  mixed(sb);
+  const { text, data } = json(sb, ['--json']);
+  assert.equal(text.trim().split('\n').length, 1);
+  assert.deepEqual(Object.keys(data), ['v', 'run', 'rows', 'totals', 'per_ac', 'not_reconciled', 'warnings']);
+  assert.equal(data.v, 1);
+  assert.equal(data.run, 'demo');
+  assert.deepEqual(data.rows.map((x) => [x.kind, x.id, x.state]), [
+    ['step', '01', 'reconciled'], ['step', '02', 'reconciled'], ['step', '03', 'unreconciled'], ['reflect', '05', 'reconciled']
+  ]);
+  assert.deepEqual(data.rows[0], {
+    kind: 'step', id: '01', role: 'architect', agent: 'aaa111', state: 'reconciled',
+    tokens: { in: 15, cache_write: 120, cache_read: 2200, out: 110 }, spend: 245, ctx_end: 1255, ms: 1000, model: 'claude-sonnet-5-5'
+  });
+  assert.deepEqual(data.rows[2], {
+    kind: 'step', id: '03', role: 'qa', agent: 'ccc333', state: 'unreconciled', tokens: null, spend: null, ctx_end: null, ms: null, model: null
+  });
+  assert.deepEqual(data.rows[3], {
+    kind: 'reflect', id: '05', role: 'lead', agent: null, state: 'reconciled',
+    tokens: { in: 100, cache_write: 10, cache_read: 1000, out: 50 }, spend: 160, ctx_end: null, ms: 800, model: 'claude-sonnet-5-5'
+  });
+  assert.deepEqual(data.totals, {
+    spend: 412, cache_read: 3203, cache_write: 132, cache_write_share: Math.round((132 / 412) * 10000) / 10000,
+    by_kind: { step: 252, reflect: 160 }
+  });
+  assert.deepEqual(data.per_ac, { spend: 103, cache_read: 801 });
+  assert.equal(data.not_reconciled, 1);
+  assert.deepEqual(data.warnings, []);
+});
+
+test('report --json numbers equal the text report numbers', () => {
+  const sb = sandbox();
+  mixed(sb);
+  const text = run(sb, ['report', 'demo']).out;
+  const { data } = json(sb, ['--json']);
+  const num = (re) => Number(text.match(re)[1]);
+  assert.equal(num(/^spend: (\d+) total/m), data.totals.spend);
+  assert.equal(num(/^cache read: (\d+) total/m), data.totals.cache_read);
+  assert.equal(num(/^spend: \d+ total, (\d+) per AC/m), data.per_ac.spend);
+  assert.equal(num(/^cache read: \d+ total, (\d+) per AC/m), data.per_ac.cache_read);
+  assert.equal(num(/^not reconciled: (\d+)/m), data.not_reconciled);
+  for (const row of data.rows.filter((x) => x.spend !== null)) {
+    const line = text.split('\n').find((l) => l.startsWith(`${row.kind} ${row.id} ${row.role} `));
+    assert.ok(line, row.id);
+    assert.equal(Number(line.match(/spend (\d+)/)[1]), row.spend);
+    assert.equal(Number(line.match(/cache read (\d+)/)[1]), row.tokens.cache_read);
+  }
+  assert.equal(data.rows.reduce((s, x) => s + (x.spend ?? 0), 0), data.totals.spend);
+  assert.equal(data.rows.reduce((s, x) => s + (x.tokens?.cache_write ?? 0), 0), data.totals.cache_write);
+});
+
+test('report --json with nothing reconciled and no shipped ACs gives nulls and zeros', () => {
+  const sb = sandbox();
+  seed(sb);
+  const { data } = json(sb, ['--json']);
+  assert.deepEqual(data.per_ac, { spend: null, cache_read: null });
+  assert.deepEqual(data.totals, { spend: 0, cache_read: 0, cache_write: 0, cache_write_share: 0, by_kind: {} });
+  assert.equal(data.not_reconciled, 3);
+  assert.equal(data.rows.length, 3);
+  assert.ok(data.rows.every((x) => x.state === 'unreconciled' && x.tokens === null && x.spend === null));
+  assert.equal(data.rows[0].ctx_end, 1255);
+  assert.equal(data.rows[2].ctx_end, null); // a 0 is unknown, never zero context
+});
+
+test('report --json with no ledger gives rows [] and the no ledger warning, exit 0', () => {
+  const sb = sandbox();
+  const { data } = json(sb, ['--json']);
+  assert.deepEqual(data.rows, []);
+  assert.deepEqual(data.warnings, ['no ledger']);
+  assert.equal(data.not_reconciled, 0);
+  assert.equal(data.totals.spend, 0);
+});
+
+test('report --json carries bad-line warnings and never prints skipped content', () => {
+  const sb = sandbox();
+  writeLedger(sb, 'demo', 'not json\n' + JSON.stringify({ ...goodNotification, run: 'demo', prompt: 'SECRET' }) + '\n' + JSON.stringify({ ...goodNotification, run: 'demo' }) + '\n');
+  const r = run(sb, ['report', 'demo', '--json']);
+  assert.equal(r.status, 0, r.all);
+  const data = JSON.parse(r.out);
+  assert.deepEqual(data.warnings, ['warning: line 1 skipped', 'warning: line 2 skipped']);
+  assert.equal(r.all.includes('SECRET'), false);
+  assert.equal(data.rows.length, 1);
+});
+
+test('report refuses a repeated flag, --json with --baseline, and --baseline without a list', () => {
+  const sb = sandbox();
+  seed(sb);
+  for (const flags of [['--json', '--json'], ['--live', '--live'], ['--json', '--baseline', 'a'], ['--baseline'], ['--live', '--bogus']]) {
+    assert.equal(run(sb, ['report', 'demo', ...flags]).status, 2, flags.join(' '));
+  }
+});
+
+// ---------- report --live ----------
+
+const listing = (dir) => {
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  return walk(dir).sort().map((f) => `${path.relative(dir, f)}:${fs.statSync(f).size}`);
+};
+
+test('report --live writes nothing and shows unreconciled agents as live', () => {
+  const sb = sandbox();
+  seed(sb);
+  run(sb, ['add-mod', 'demo', 'reflect', '05', '100', '10', '1000', '50']);
+  const before = { ledger: fs.readFileSync(ledgerFile(sb, 'demo'), 'utf8'), files: listing(sb.dir) };
+  const { data } = json(sb, ['--json', '--live']);
+  assert.deepEqual(data.rows.map((x) => [x.id, x.state]), [['01', 'live'], ['02', 'live'], ['03', 'unreconciled'], ['05', 'reconciled']]);
+  assert.equal(data.rows[0].spend, 245);
+  assert.equal(data.rows[2].tokens, null);
+  assert.equal(data.not_reconciled, 1);
+  assert.equal(data.totals.spend, 252 + 160);
+  run(sb, ['report', 'demo', '--live']);
+  assert.equal(fs.readFileSync(ledgerFile(sb, 'demo'), 'utf8'), before.ledger);
+  assert.deepEqual(listing(sb.dir), before.files);
+});
+
+test('report --live equals reconcile then report, text and json', () => {
+  const sb = sandbox();
+  seed(sb);
+  run(sb, ['ship', 'demo', '5']);
+  run(sb, ['add-mod', 'demo', 'reflect', 'RT', '7', '8', '9', '10']);
+  const liveText = run(sb, ['report', 'demo', '--live']).out;
+  const liveJson = json(sb, ['--json', '--live']).data;
+  assert.equal(run(sb, ['reconcile', 'demo']).status, 0);
+  const afterText = run(sb, ['report', 'demo']).out;
+  const afterJson = json(sb, ['--json']).data;
+  assert.equal(liveText, afterText);
+  const norm = (d) => ({ ...d, rows: d.rows.map((x) => ({ ...x, state: x.state === 'live' ? 'reconciled' : x.state })) });
+  assert.deepEqual(norm(liveJson), afterJson);
+  assert.match(liveText, /spend: 277 total, 55 per AC/);
+});
+
+test('report --live with an unreadable claude home leaves everything unreconciled, exit 0', () => {
+  const sb = sandbox();
+  seed(sb);
+  const { data } = json(sb, ['--json', '--live'], { claude: path.join(sb.dir, 'none') });
+  assert.equal(data.not_reconciled, 3);
+  assert.ok(data.rows.every((x) => x.state === 'unreconciled'));
+});
+
+test('report --live after reconcile has no live rows and never reads a reconciled agent again', () => {
+  const sb = sandbox();
+  seed(sb);
+  run(sb, ['reconcile', 'demo']);
+  const { data } = json(sb, ['--json', '--live'], { claude: path.join(sb.dir, 'none') });
+  assert.ok(data.rows.every((x) => x.state !== 'live'));
+  assert.equal(data.totals.spend, 252);
+});
+
+test('report --live never echoes transcript text (Art. 5(1)(c))', () => {
+  const sb = sandbox();
+  seed(sb);
+  const r = run(sb, ['report', 'demo', '--live', '--json']);
+  for (const needle of ['SECRET', 'ignore previous', 'polluted']) assert.equal(r.all.includes(needle), false, needle);
+});
+
+test('report --live skips a transcript over the line limit with a size warning and writes nothing', () => {
+  const sb = sandbox();
+  const claude = path.join(sb.dir, 'claude');
+  const dir = path.join(claude, 'projects', 'p', 's', 'subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  const fd = fs.openSync(path.join(dir, 'agent-aaa111.jsonl'), 'w');
+  const chunk = Buffer.alloc(MiB, 97);
+  for (let i = 0; i < 9; i += 1) fs.writeSync(fd, chunk);
+  fs.writeSync(fd, '\n');
+  fs.closeSync(fd);
+  run(sb, ['add', 'demo', 'step', '01', 'architect', 'aaa111', '10']);
+  const before = fs.readFileSync(ledgerFile(sb, 'demo'), 'utf8');
+  const { data } = json(sb, ['--json', '--live'], { claude });
+  assert.deepEqual(data.warnings, ['warning: aaa111 skipped (size)']);
+  assert.equal(data.rows[0].state, 'unreconciled');
+  assert.equal(data.not_reconciled, 1);
+  assert.equal(fs.readFileSync(ledgerFile(sb, 'demo'), 'utf8'), before);
+});
+
 // ---------- end to end and LF ----------
 
 test('whole flow: add, reconcile, ship, report', () => {

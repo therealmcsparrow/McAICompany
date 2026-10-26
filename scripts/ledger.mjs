@@ -16,6 +16,7 @@ const MAX_TRANSCRIPT_BYTES = 64 * MiB;
 const MAX_TRANSCRIPT_LINE = 8 * MiB;
 const MAX_BASELINE_BYTES = MiB;
 const MAX_REQUESTS = 100000;
+const MAX_LIVE_AGENTS = 500;
 const MAX_COUNT = 1000000000;
 
 const RUN = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -23,7 +24,7 @@ const AGENT = /^[A-Za-z0-9_-]{1,64}$/;
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 const BASELINE_KEY = /^[0-9a-f]{8} [A-Za-z0-9._/-]{1,100}$/;
-const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship'];
+const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect'];
 const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
@@ -36,10 +37,11 @@ const BASELINE_FIELDS = ['first', 'dispatches', 'requests', 'in', 'cache_write',
 const USAGE = [
   'usage: ledger.mjs <command>',
   '  add <run> <kind> <id> <role> <agent> <ctx_end> [tool_uses] [ms]',
+  '  add-mod <run> reflect <id> <in> <cache_write> <cache_read> <out> [model] [ms]',
   '  reconcile <run>',
   '  import <file> <key> <run> <acs>',
   '  ship <run> <acs> [fix_rounds] [high_blockers]',
-  '  report <run> [--baseline <run>,<run>,<run>]',
+  '  report <run> [--baseline <run>,<run>,<run>] [--json] [--live]',
   '  brainstorm-report <run> [--against <run>]'
 ].join('\n');
 
@@ -92,23 +94,27 @@ export function validateRecord(input) {
     round: /^R\d{1,3}$/,
     crossfire: /^R\d{1,3}$/,
     replay: /^(\d{2}|R\d{1,3})$/,
-    total: /^[0-9a-f]{8}$/
+    total: /^[0-9a-f]{8}$/,
+    reflect: /^(\d{2}|RT)$/
   }[rec.kind];
   if (typeof rec.id !== 'string' || !idOk.test(rec.id)) return fail('invalid id');
   if (typeof rec.role !== 'string' || !ROLE.test(rec.role)) return fail('invalid role');
   if (Object.hasOwn(rec, 'agent') && (typeof rec.agent !== 'string' || !AGENT.test(rec.agent))) return fail('invalid agent');
-  if (rec.kind !== 'total' && !(Object.hasOwn(rec, 'agent'))) return fail('agent required');
+  if (rec.kind === 'reflect' && (rec.role !== 'lead' || Object.hasOwn(rec, 'agent'))) return fail('reflect needs role lead and no agent');
+  if (rec.kind !== 'total' && rec.kind !== 'reflect' && !(Object.hasOwn(rec, 'agent'))) return fail('agent required');
   if (rec.kind === 'total' && !isInt(rec.dispatches, MAX_REQUESTS)) return fail('dispatches must be an integer 0-100000');
   if (rec.kind !== 'total' && Object.hasOwn(rec, 'dispatches')) return fail('dispatches only on total');
-  if (rec.src !== 'notification' && rec.src !== 'transcript') return fail('invalid src');
+  if (rec.src !== 'notification' && rec.src !== 'transcript' && rec.src !== 'mod') return fail('invalid src');
+  if ((rec.kind === 'reflect') !== (rec.src === 'mod')) return fail('src mod goes with kind reflect only');
   if (rec.kind === 'total' && rec.src !== 'transcript') return fail('total needs src transcript');
   if (rec.src === 'notification') {
     if (!isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
     if (Object.hasOwn(rec, 'tokens')) return fail('tokens not allowed on a notification');
   } else {
+    if (rec.src === 'mod' && Object.hasOwn(rec, 'ctx_end')) return fail('ctx_end not allowed on a mod record');
     if (Object.hasOwn(rec, 'ctx_end') && !isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
     const t = rec.tokens;
-    if (!isObject(t)) return fail('tokens required on a transcript record');
+    if (!isObject(t)) return fail('tokens required on a transcript or mod record');
     const keys = Object.keys(t);
     if (keys.length !== 4 || !TOKEN_KEYS.every((k) => keys.includes(k))) return fail('tokens needs exactly in, cache_write, cache_read, out');
     if (!TOKEN_KEYS.every((k) => isInt(t[k], MAX_COUNT))) return fail('token counts must be integers 0-1000000000');
@@ -258,6 +264,29 @@ export function readTranscript(file) {
   return { tokens, reqs: byRequest.size, model, ctx_end: ctx <= 10000000 ? ctx : undefined };
 }
 
+const claudeHomeDir = () => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+
+// Builds the transcript record for one notification record. Returns { rec } or { warning } or {} when
+// the transcript is missing, empty or not a valid record. Writes nothing.
+function transcriptFor(note, claudeHome) {
+  const file = findTranscript(claudeHome, note.agent);
+  if (!file) return {};
+  let result;
+  try {
+    result = readTranscript(file);
+  } catch (error) {
+    if (!(error instanceof SizeError)) throw error;
+    return { warning: `warning: ${note.agent} skipped (size)` };
+  }
+  if (!result) return {};
+  const rec = JSON.parse(JSON.stringify({
+    v: 1, run: note.run, kind: note.kind, id: note.id, role: note.role, agent: note.agent, src: 'transcript',
+    ctx_end: result.ctx_end, tokens: result.tokens, reqs: result.reqs, tool_uses: note.tool_uses, ms: note.ms,
+    model: result.model
+  }));
+  return { rec };
+}
+
 function cmdReconcile(args) {
   if (args.length !== 1) throw new Refusal('usage: reconcile <run>');
   const run = checkRun(args[0]);
@@ -265,30 +294,17 @@ function cmdReconcile(args) {
   if (!exists) return [`no ledger for ${run}`];
   const out = [...warnings];
   const done = new Set(records.filter((r) => r.src === 'transcript' && r.agent).map((r) => r.agent));
-  const claudeHome = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+  const claudeHome = claudeHomeDir();
   let reconciled = 0;
   const pending = new Set();
   for (const note of records.filter((r) => r.src === 'notification' && r.kind !== 'total')) {
     if (done.has(note.agent)) continue;
     done.add(note.agent); // one transcript record per agent
     pending.add(note.agent);
-    const file = findTranscript(claudeHome, note.agent);
-    if (!file) continue;
-    let result;
-    try {
-      result = readTranscript(file);
-    } catch (error) {
-      if (!(error instanceof SizeError)) throw error;
-      out.push(`warning: ${note.agent} skipped (size)`);
-      continue;
-    }
-    if (!result) continue;
-    const rec = {
-      v: 1, run, kind: note.kind, id: note.id, role: note.role, agent: note.agent, src: 'transcript',
-      ctx_end: result.ctx_end, tokens: result.tokens, reqs: result.reqs, tool_uses: note.tool_uses, ms: note.ms,
-      model: result.model
-    };
-    appendRecord(JSON.parse(JSON.stringify(rec)));
+    const found = transcriptFor(note, claudeHome);
+    if (found.warning) out.push(found.warning);
+    if (!found.rec) continue;
+    appendRecord(found.rec);
     pending.delete(note.agent);
     reconciled += 1;
   }
@@ -306,6 +322,24 @@ function cmdAdd(args) {
     v: 1, run: checkRun(run), kind, id, role, agent, src: 'notification', ctx_end: parseCount(ctxEnd, 'ctx_end', 10000000),
     tool_uses: toolUses === undefined ? undefined : parseCount(toolUses, 'tool_uses'),
     ms: ms === undefined ? undefined : parseCount(ms, 'ms', 86400000)
+  };
+  appendRecord(JSON.parse(JSON.stringify(rec)));
+  return [];
+}
+
+function cmdAddMod(args) {
+  const usage = 'usage: add-mod <run> reflect <id> <in> <cache_write> <cache_read> <out> [model] [ms]';
+  if (args.length < 7 || args.length > 9) throw new Refusal(usage);
+  const [run, kind, id, inT, cacheWrite, cacheRead, out, model, ms] = args;
+  if (kind !== 'reflect') throw new Refusal('kind must be reflect');
+  const rec = {
+    v: 1, run: checkRun(run), kind, id, role: 'lead', src: 'mod',
+    tokens: {
+      in: parseCount(inT, 'in', MAX_COUNT), cache_write: parseCount(cacheWrite, 'cache_write', MAX_COUNT),
+      cache_read: parseCount(cacheRead, 'cache_read', MAX_COUNT), out: parseCount(out, 'out', MAX_COUNT)
+    },
+    ms: ms === undefined ? undefined : parseCount(ms, 'ms', 86400000),
+    model
   };
   appendRecord(JSON.parse(JSON.stringify(rec)));
   return [];
@@ -383,8 +417,11 @@ function median(list) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
+// A record with counts: a host transcript, an imported baseline, or a mod's own call.
+const hasCounts = (r) => r.src === 'transcript' || r.src === 'mod';
+
 function summarize(records) {
-  const transcripts = records.filter((r) => r.src === 'transcript');
+  const transcripts = records.filter(hasCounts);
   const spend = transcripts.reduce((s, r) => s + spendOf(r.tokens), 0);
   const cacheRead = transcripts.reduce((s, r) => s + r.tokens.cache_read, 0);
   const matched = new Set(transcripts.map((r) => r.agent).filter(Boolean));
@@ -406,26 +443,111 @@ function describe(rec, transcript) {
     (ctx ? `  context at end ${ctx}` : '');
 }
 
+// One entry per dispatch, in file order: a notification joined with its transcript record, or a
+// counted record on its own. A transcript whose agent has a notification is shown on that row.
+function dispatchRows(records, live) {
+  const byAgent = new Map(records.filter((r) => r.src === 'transcript' && r.agent).map((r) => [r.agent, r]));
+  const noted = new Set(records.filter((r) => r.src === 'notification').map((r) => r.agent));
+  const rows = [];
+  for (const rec of records) {
+    if (rec.src === 'notification') rows.push({ rec, t: byAgent.get(rec.agent) });
+    else if (hasCounts(rec) && !(rec.src === 'transcript' && noted.has(rec.agent))) rows.push({ rec, t: rec });
+  }
+  return rows.map(({ rec, t }) => ({
+    rec,
+    t,
+    json: {
+      kind: rec.kind, id: rec.id, role: rec.role, agent: rec.agent ?? null,
+      state: t ? (live.has(t) ? 'live' : 'reconciled') : 'unreconciled',
+      tokens: t ? t.tokens : null,
+      spend: t ? spendOf(t.tokens) : null,
+      ctx_end: (t ? t.ctx_end ?? rec.ctx_end : rec.ctx_end) || null,
+      ms: (t ? t.ms ?? rec.ms : rec.ms) ?? null,
+      model: t?.model ?? null
+    }
+  }));
+}
+
+// Reads the transcripts of notified agents that have no transcript record, in memory only.
+function liveRecords(records, warnings) {
+  const done = new Set(records.filter((r) => r.src === 'transcript' && r.agent).map((r) => r.agent));
+  const claudeHome = claudeHomeDir();
+  const live = [];
+  let limited = false;
+  for (const note of records.filter((r) => r.src === 'notification' && r.kind !== 'total')) {
+    if (done.has(note.agent)) continue;
+    if (done.size >= MAX_LIVE_AGENTS) {
+      limited = true;
+      continue;
+    }
+    done.add(note.agent);
+    const found = transcriptFor(note, claudeHome);
+    if (found.warning) warnings.push(found.warning);
+    if (found.rec && validateRecord(found.rec).ok) live.push(found.rec);
+  }
+  if (limited) warnings.push('warning: live limit reached, the rest stay unreconciled');
+  return live;
+}
+
+function parseReportFlags(flags) {
+  const usage = 'usage: report <run> [--baseline <run>,<run>,<run>] [--json] [--live]';
+  const opts = { baselineRuns: [], json: false, live: false };
+  let baseline = false;
+  for (let i = 0; i < flags.length; i += 1) {
+    const flag = flags[i];
+    if ((flag === '--json' || flag === '--live') && !opts[flag.slice(2)]) {
+      opts[flag.slice(2)] = true;
+    } else if (flag === '--baseline' && !baseline && i + 1 < flags.length) {
+      baseline = true;
+      i += 1;
+      opts.baselineRuns = checkRunList(flags[i]);
+    } else {
+      throw new Refusal(usage);
+    }
+  }
+  if (opts.json && baseline) throw new Refusal(usage);
+  return opts;
+}
+
+function reportJson(run, records, warnings, live) {
+  const sum = summarize(records);
+  const rows = dispatchRows(records, live).map((r) => r.json);
+  const cacheWrite = sum.transcripts.reduce((n, r) => n + r.tokens.cache_write, 0);
+  const byKind = {};
+  for (const r of sum.transcripts) byKind[r.kind] = (byKind[r.kind] ?? 0) + spendOf(r.tokens);
+  const ac = sum.any && sum.acs > 0;
+  return JSON.stringify({
+    v: 1, run, rows,
+    totals: {
+      spend: sum.spend, cache_read: sum.cacheRead, cache_write: cacheWrite,
+      cache_write_share: sum.spend === 0 ? 0 : Math.round((cacheWrite / sum.spend) * 10000) / 10000,
+      by_kind: byKind
+    },
+    per_ac: { spend: ac ? perAc(sum.spend, sum.acs) : null, cache_read: ac ? perAc(sum.cacheRead, sum.acs) : null },
+    not_reconciled: sum.unreconciled.length,
+    warnings
+  });
+}
+
 function cmdReport(args) {
   const [runName, ...flags] = args;
   const run = checkRun(runName);
-  let baselineRuns = [];
-  if (flags.length) {
-    if (flags[0] !== '--baseline' || flags.length !== 2) throw new Refusal('usage: report <run> [--baseline <run>,<run>,<run>]');
-    baselineRuns = checkRunList(flags[1]);
+  const { baselineRuns, json, live } = parseReportFlags(flags);
+  const { exists, records: stored, warnings } = readLedger(run);
+  if (!exists) {
+    if (!json) return [`no ledger for ${run}`];
+    return [JSON.stringify({
+      v: 1, run, rows: [],
+      totals: { spend: 0, cache_read: 0, cache_write: 0, cache_write_share: 0, by_kind: {} },
+      per_ac: { spend: null, cache_read: null }, not_reconciled: 0, warnings: ['no ledger']
+    })];
   }
-  const { exists, records, warnings } = readLedger(run);
-  if (!exists) return [`no ledger for ${run}`];
+  const liveRecs = live ? liveRecords(stored, warnings) : [];
+  const records = [...stored, ...liveRecs];
+  if (json) return [reportJson(run, records, warnings, new Set(liveRecs))];
   const out = [...warnings, `run ${run}`];
   const sum = summarize(records);
-  const byAgent = new Map(sum.transcripts.filter((t) => t.agent).map((t) => [t.agent, t]));
-  const used = new Set();
-  for (const rec of records.filter((r) => r.src === 'notification')) {
-    const t = byAgent.get(rec.agent);
-    if (t) used.add(t);
-    out.push(describe(rec, t));
-  }
-  for (const t of sum.transcripts.filter((x) => !used.has(x))) out.push(describe(t, t));
+  for (const row of dispatchRows(records, new Set(liveRecs))) out.push(describe(row.rec, row.t));
   const acsNote = sum.acs > 0 ? ` (${sum.acs} ACs)` : '';
   const line = (label, value) => `${label}: ${value} total, ${sum.acs > 0 ? `${perAc(value, sum.acs)} per AC${acsNote}` : 'per AC n/a (no shipped ACs recorded)'}`;
   if (sum.any) {
@@ -527,7 +649,7 @@ export function main(args) {
   const [command, ...rest] = args;
   try {
     const handlers = {
-      add: cmdAdd, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, report: cmdReport,
+      add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, report: cmdReport,
       'brainstorm-report': cmdBrainstormReport
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
