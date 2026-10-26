@@ -910,10 +910,10 @@ test('wrap keeps every row within the width, in cells, and loses no word', () =>
   assert.deepEqual(wrap('a b', 0), ['']);
 });
 
-// ---- git-commit.mjs: cases pinned by aico-mods M4 (Step 112), one test per exact string
+// ---- git-commit.mjs: cases pinned by aico-mods M4, one test per exact string
 
 const PINNED_COMMIT = [
-  // the three probes of 111-code-reviewer.md
+  // stash then merge, run through a runner option, an env variable and diff.external
   String.raw`git ls-remote --upload-pack='git stash -q; git merge -q --no-edit refs/stash;:' .`,
   String.raw`GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:' git diff`,
   String.raw`git config diff.external 'git stash -q; git merge -q --no-edit refs/stash;:'; git diff`,
@@ -991,7 +991,7 @@ test('M4 pinned case counts: 31 commit + 2 PowerShell commit + 18 not a commit',
   assert.equal(PINNED_NOT_COMMIT.length, 18);
 });
 
-test('M4: the reviewer payloads (program-name nesting, hyphen word ends, oversize) are commits', () => {
+test('M4: program-name nesting, hyphen word ends and oversize payloads are commits', () => {
   for (const c of [
     String.raw`bash -c "git stash -q; git merge -q --no-edit refs/stash"`,
     String.raw`echo -q --no-edit refs/stash | (git stash -q; xargs git merge)`,
