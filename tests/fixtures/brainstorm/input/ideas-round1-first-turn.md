@@ -5,12 +5,7 @@ Topic:
 Read also: /project/.company/project.md
 Questions:
 (none)
-Digest:
-### Open threads
-### Dissent
-### Estimate
-- not estimated
-Your last reply:
+Your last ideas:
 (none)
 Others said:
 (none)

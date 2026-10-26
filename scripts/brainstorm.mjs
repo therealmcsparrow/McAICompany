@@ -42,7 +42,19 @@ const normQ = s => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+
 
 // ---- brainstorm-reply v1 ----
 function skipReply(pass) {
-  return { pass, skip: true, ideas: [], risk: null, questions: [], reply_to: null, replies_to: [], estimate: null };
+  return { pass, skip: true, ideas: [], risk: null, questions: [], reply_to: null, replies_to: [], estimate: null, lenient: [] };
+}
+
+// Lenient labels (brainstorm-reply v1): a stray `I-<r>.<k>: ` reads as `I: `, and a `- ` or `* ` before a template label is
+// dropped. Anchored patterns of bounded length only. `found` collects the entries used.
+const BULLET_RE = /^[-*] (?=(?:I: |I-\d{1,3}\.\d{1,3}: |Risk: |Q \[|Re: |Estimate: ))/;
+const STRAY_RE = /^I-\d{1,3}\.\d{1,3}: /;
+const LENIENT_ORDER = ['idea label', 'bullet'];
+function lenientLine(line, found = new Set()) {
+  let l = line;
+  if (BULLET_RE.test(l)) { l = l.slice(2); found.add('bullet'); }
+  if (STRAY_RE.test(l)) { l = `I: ${l.replace(STRAY_RE, '')}`; found.add('idea label'); }
+  return l;
 }
 
 function parseQuestion(line, n, reasons) {
@@ -100,11 +112,13 @@ export function parseReply(input, { pass = 'ideas', role = '', round = 1, known 
   if (!text.trim()) return bad(['empty reply']);
   if (/^skip$/i.test(text.trim())) return { ok: true, reply: skipReply(pass) };
 
-  const reasons = [], ideas = [], questions = [], res = [], risks = [], estimates = [];
+  const reasons = [], ideas = [], questions = [], res = [], risks = [], estimates = [], found = new Set(), read = [];
   text.split('\n').forEach((raw, i) => {
-    const line = raw.trimEnd(), n = i + 1;
-    if (!line) return;
-    if (line.length > MAX_LINE) { reasons.push(`line ${n}: longer than ${MAX_LINE} characters`); return; }
+    const trimmed = raw.trimEnd(), n = i + 1;
+    if (!trimmed) return;
+    if (trimmed.length > MAX_LINE) { reasons.push(`line ${n}: longer than ${MAX_LINE} characters`); return; }
+    const line = lenientLine(trimmed, found);
+    read.push(line);
     if (line.startsWith('I: ')) {
       const t = line.slice(3).trim();
       if (t) ideas.push(t); else reasons.push(`line ${n}: empty idea`);
@@ -135,12 +149,12 @@ export function parseReply(input, { pass = 'ideas', role = '', round = 1, known 
   if (estimates.length > 1) reasons.push('more than one Estimate line');
   if (estimates.length && !mustEstimate) reasons.push(`Estimate is not allowed for ${role || 'this Role'} in the ${pass} pass`);
   if (!estimates.length && mustEstimate) reasons.push('the architect needs an Estimate line');
-  const words = wordCount(text);
+  const words = wordCount(read.join('\n'));
   if (words > WORD_LIMIT[pass]) reasons.push(`reply has ${words} words, the limit for the ${pass} pass is ${WORD_LIMIT[pass]}`);
   if (reasons.length) return bad(reasons);
   return {
     ok: true,
-    reply: { pass, skip: false, ideas, risk: risks[0] ?? null, questions, reply_to: res[0] ?? null, replies_to: res, estimate: estimates[0] ?? null },
+    reply: { pass, skip: false, ideas, risk: risks[0] ?? null, questions, reply_to: res[0] ?? null, replies_to: res, estimate: estimates[0] ?? null, lenient: LENIENT_ORDER.filter(x => found.has(x)) },
   };
 }
 
@@ -402,14 +416,14 @@ export function answerQuestion(text, qid, answer, { file } = {}) {
 }
 
 // ---- crossfire ----
-function rawPair(doc, n) {
+function rawChallenge(doc, n) {
   const r = doc.rounds.find(x => x.n === n);
   if (!r || !r.mode.startsWith('debate:')) return null;
   const votes = new Map(), challenges = [];
   for (const rep of r.replies) {
     if (rep.pass === 'crossfire' || rep.status !== 'ok') continue;
     for (const re of rep.parsed.replies_to) {
-      if (re.stance === 'challenge') challenges.push({ by: rep, idea: re.idea });
+      if (re.stance === 'challenge') challenges.push({ by: rep, idea: re.idea, text: re.text });
       else {
         if (!votes.has(re.idea)) votes.set(re.idea, new Set());
         votes.get(re.idea).add(rep.key);
@@ -421,10 +435,11 @@ function rawPair(doc, n) {
     const owner = doc.owners.get(c.idea);
     if (!owner || owner.role === c.by.role) continue;
     const score = votes.get(c.idea)?.size ?? 0;
-    if (!best || score > best.score) best = { score, pair: [c.by.role, owner.role] };
+    if (!best || score > best.score) best = { score, pair: [c.by.role, owner.role], idea: c.idea, text: c.text };
   }
-  return best ? best.pair : null;
+  return best;
 }
+const rawPair = (doc, n) => rawChallenge(doc, n)?.pair ?? null;
 
 export function crossfirePair(text, round, { file } = {}) {
   const doc = loadDoc(text, file);
@@ -514,7 +529,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
     if (last && !last.closed) throw new Refused(`round ${last.n} is still open (no **Lead:** line)`);
     roundMode = heading;
   }
-  const allowed = pass === 'ideas' || (existing && (pass === 'full' ? roundMode === 'debate: full_pass' : roundMode.startsWith('debate:')));
+  const allowed = pass === 'ideas' || (existing && roundMode === 'debate: full_pass');
   if (!allowed) throw new Refused(`pass ${pass} not allowed in round ${round}`);
   const entries = Object.entries(inp.replies);
   if (!entries.length && !inp.lead) throw new Refused('nothing to apply');
@@ -573,7 +588,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
     if (a.parsed.estimate) {
       const { size, low, high } = a.parsed.estimate;
       removeFromPart(L, 'Estimate', l => l === '- not estimated' || l.endsWith(` — src: R${round}`));
-      addToPart(L, 'Estimate', `- ${size}, ${low === high ? low : `${low}–${high}`} d — src: R${round}`);
+      addToPart(L, 'Estimate', `- ${fmtEstimate({ size, low, high })} — src: R${round}`);
     }
   }
   for (const d of inp.dissent) {
@@ -592,8 +607,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
 const FOLDERS = ['brainstorms', 'roadmap', 'nice-to-have', 'parked'];
 const INPUT_DIR = 'brainstorm-input';
 const ENTRY_RE = /^(?:[a-z][a-z0-9-]*\.md|\.[a-z][a-z0-9-]*\.md\.\d+\.tmp)$/;
-const ANSWERED_CAP = 12, OPEN_CAP = 8, TEXT_CAP = 120, QUOTE_CAP = 300, MAL_CAP = 1000, REASON_CAP = 10;
-const DIGEST_KEEP = new Map([['Open threads', 10], ['Dissent', 5], ['Estimate', Infinity]]);
+const ANSWERED_CAP = 4, OPEN_CAP = 4, TEXT_CAP = 100, QUOTE_CAP = 160, IDEA_CAP = 100, MAL_CAP = 1000, REASON_CAP = 10;
 
 // At most `n` characters, cut on a word boundary, then an ellipsis.
 function cut(s, n) {
@@ -611,28 +625,13 @@ function shownLines(rep) {
   if (rep.status === 'malformed') return ['(malformed)'];
   if (rep.status === 'skip') return ['skip'];
   let k = 0;
-  return rep.body.split('\n').map(l => l.trimEnd()).filter(Boolean).map(l => (l.startsWith('I: ') ? `${rep.ids[k++]}: ${l.slice(3)}` : l));
+  return rep.body.split('\n').map(l => l.trimEnd()).filter(Boolean).map(l => lenientLine(l)).map(l => (l.startsWith('I: ') ? `${rep.ids[k++]}: ${l.slice(3)}` : l));
 }
 
 function summaryOf(L) {
   const [s, e] = secRange(L, 'Summary');
   const text = L.slice(s, e).join('\n').trim();
   return text && text !== '(written at close)' ? text : '';
-}
-
-function digestLines(L) {
-  const [s, e] = secRange(L, 'Digest');
-  const secs = [];
-  for (let i = s; i < e; i++) {
-    if (L[i].startsWith('### ')) secs.push({ name: L[i].slice(4).trim(), items: [] });
-    else if (secs.length && L[i].trim()) secs.at(-1).items.push(L[i].startsWith('- ') ? L[i] : `> ${L[i]}`);
-  }
-  const out = [];
-  for (const sec of secs) {
-    if (!DIGEST_KEEP.has(sec.name)) continue;
-    out.push(`### ${sec.name}`, ...sec.items.slice(-DIGEST_KEEP.get(sec.name)));
-  }
-  return out.length ? out : ['(none)'];
 }
 
 function questionLines(L) {
@@ -652,7 +651,7 @@ function questionLines(L) {
     let tail = '';
     if (d !== undefined) {
       const quote = d.startsWith('"') && d.endsWith('"') && d.length >= 2 ? d.slice(1, -1) : null;
-      tail = quote === null ? ` → ${d}` : ` → "${quote.length > QUOTE_CAP ? `${quote.slice(0, QUOTE_CAP)}…` : quote}"`;
+      tail = quote === null ? ` → ${d}` : ` → "${cut(quote, QUOTE_CAP)}"`;
     }
     return `- Q-${q.id} answered: ${cut(q.text, TEXT_CAP)}${tail}`;
   });
@@ -673,7 +672,7 @@ function stageRound(doc, round, pass) {
   }
   const n = round ?? last?.n;
   if (!last || n !== last.n || last.closed) throw cannot(n);
-  if (pass === 'full' ? last.mode !== 'debate: full_pass' : !last.mode.startsWith('debate:')) throw cannot(n);
+  if (last.mode !== 'debate: full_pass') throw cannot(n);
   return n;
 }
 
@@ -686,6 +685,17 @@ function reaskParts(doc, role, round) {
   const again = parseReply(stored, { pass: 'ideas', role, round, known: ownerMap(doc) });
   const reasons = again.ok ? ['the reply was malformed'] : again.reasons.slice(0, REASON_CAP);
   return { reasons: reasons.join('; '), reply: stored.slice(0, MAL_CAP) };
+}
+
+const fmtEstimate = ({ size, low, high }) => `${size}, ${low === high ? low : `${low}–${high}`} d`;
+
+// "Challenge to you:" (FR4): in the round after a closed `debate: crossfire` round, for the author of its challenged idea.
+function challengeLines(doc, role, n) {
+  const prev = doc.rounds.find(x => x.n === n - 1);
+  if (!prev || !prev.closed || prev.mode !== 'debate: crossfire') return [];
+  const c = rawChallenge(doc, prev.n);
+  if (!c || c.pair[1] !== role) return [];
+  return ['Challenge to you:', `- your idea: ${cut(doc.texts.get(c.idea) ?? '', IDEA_CAP)}`, `- @${c.pair[0]} (challenge): ${c.text}`];
 }
 
 // Pure: the text of one Role's round input file for a loaded document.
@@ -705,17 +715,17 @@ function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectF
   const summary = summaryOf(doc.L);
   if (summary) out.push('Summary:', quoted(summary));
   if (re) out.push('Re-ask:', quoted(re.reasons), 'Your malformed reply:', quoted(re.reply));
-  out.push('Questions:', ...questionLines(doc.L), 'Digest:', ...digestLines(doc.L));
+  out.push('Questions:', ...questionLines(doc.L));
 
   const others = doc.roster.filter(r => r !== role);
   if (pass === 'ideas') {
-    const own = all.filter(r => r.role === role && r.status === 'ok')
-      .map(r => shownLines(r).filter(l => /^(?:I-\d+\.\d+: |Risk: |Estimate: )/.test(l))).filter(l => l.length).at(-1) ?? [];
-    out.push('Your last reply:', ...(own.length ? own : ['(none)']));
+    const mine = all.filter(r => r.role === role && r.status === 'ok' && (r.parsed.ideas.length || r.parsed.estimate)).at(-1);
+    const own = mine ? [...mine.parsed.ideas.map(i => `- ${cut(i, IDEA_CAP)}`), ...(mine.parsed.estimate ? [`- your estimate was ${fmtEstimate(mine.parsed.estimate)}`] : [])] : [];
+    out.push('Your last ideas:', ...(own.length ? own : ['(none)']), ...challengeLines(doc, role, n));
     const said = [];
     for (const other of others) {
       const rep = all.filter(r => r.role === other && r.status === 'ok' && r.parsed.ideas.length).at(-1);
-      if (rep) rep.parsed.ideas.forEach((idea, k) => said.push(`- ${rep.ids[k]} ${rep.key}: ${cut(idea, TEXT_CAP)}`));
+      if (rep) rep.parsed.ideas.forEach((idea, k) => said.push(`- ${rep.ids[k]} (${rep.role}): ${cut(idea, IDEA_CAP)}`));
     }
     out.push('Others said:', ...(said.length ? said : ['(none)']));
   } else {
