@@ -62,7 +62,7 @@ export function parseDesignSkills(markdown, manifest = {}, today = new Date()) {
     if (text.startsWith('## ')) break;
     section.push({ n: i + 1, text });
   }
-  // Size caps first, before any pattern runs (proj.M3).
+  // Size caps first, before any pattern runs.
   for (const { n, text } of section) if (text.length > MAX_LINE_CHARS) fail(n, 'line', 'too long');
   const body = section.filter(({ text }) => {
     const t = text.trim();

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Records a run's wave, Gates and end (run-state v1) and prints the run view.
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
-// symlink, and read with the handoff-lint parser (proj.M1 to M4).
+// symlink, and read with the handoff-lint parser.
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

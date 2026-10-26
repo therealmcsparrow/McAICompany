@@ -348,7 +348,7 @@ const qId = s => {
   return Number(m[1]);
 };
 
-// Open questions in the order they are asked: blocking first, then votes, then oldest (CEO, Brief Gate Q2).
+// Open questions in the order they are asked: blocking first, then votes, then oldest.
 const openQuestions = L => questionsOf(L).map(x => x.q).filter(q => q.status === 'open')
   .sort((a, b) => (a.tag === b.tag ? 0 : a.tag === 'blocking' ? -1 : 1) || b.votes - a.votes || a.id - b.id);
 

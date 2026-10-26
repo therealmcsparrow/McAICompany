@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Lints a Handoff file (handoff v1.1): machine-read parts stay English whatever `Language:` is (dispatch-prompt v2).
-// The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only (proj.M1 to M4).
+// The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { lstatSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -181,7 +181,7 @@ export function lint(text, opts = {}) {
   for (const k of LIST_KEYS) if (k in fm && list(fm[k]) === null) errors.push(`frontmatter: ${k} must be a [list]`);
 
   // One pass: sections, bullets of ## Blocking and ## Nits, and aico-top fences. Text inside any other fence is
-  // data, so a quoted aico-top block is not a block (parse like the reader, proj.M2).
+  // data, so a quoted aico-top block is not a block (parse like the reader).
   const headings = new Set();
   const items = []; // { i, section, body }
   const blocks = [];
@@ -299,7 +299,7 @@ export function lintFindings(text) {
   return { errors, ledger: { checked, findings } };
 }
 
-// A handover Handoff needs its sibling ledger <NN>-<role>.findings.md (handoff v1.1 part 3, AC23).
+// A handover Handoff needs its sibling ledger <NN>-<role>.findings.md (handoff v1.1 part 3).
 // The ledger path is built from the checked file name only, inside the Handoff's own folder.
 const HANDOFF_NAME = /^(\d{2,3}-[a-z][a-z0-9-]{0,40})\.md$/;
 
