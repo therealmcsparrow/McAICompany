@@ -2,7 +2,7 @@
   "skill": {
     "name": "hostile-c",
     "source": "FIXTURE\\skills\\hostile-c",
-    "scanned_at": "2026-10-26T17:42:24.441354+00:00"
+    "scanned_at": "2026-10-26T18:51:17.990950+00:00"
   },
   "risk_assessment": {
     "score": 40,
@@ -26,7 +26,7 @@
   "issues": [
     {
       "id": "SC2",
-      "finding_id": "finding-88b463ee74e947f0940cbbc6c8401f87",
+      "finding_id": "finding-0d6576ab4af441fb8ba0279266850f75",
       "category": "Supply Chain",
       "pattern": "External Script Fetching",
       "severity": "HIGH",
@@ -58,7 +58,7 @@
     },
     {
       "id": "TM2",
-      "finding_id": "finding-7429237175de4f3dbca5fc61d804e6d2",
+      "finding_id": "finding-458a306d829f46ab8f91aef04b33ed66",
       "category": "Tool Misuse",
       "pattern": "Chaining Abuse",
       "severity": "HIGH",
@@ -93,7 +93,7 @@
   "suppressed": [],
   "metadata": {
     "has_executable_scripts": false,
-    "skillspector_version": "2.12.0",
+    "skillspector_version": "2.13.1",
     "llm_requested": false,
     "llm_available": false,
     "meta_analysis_applied": false,
@@ -119,10 +119,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -132,10 +132,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -145,10 +145,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -158,10 +158,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -171,10 +171,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }

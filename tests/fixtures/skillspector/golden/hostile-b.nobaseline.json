@@ -2,7 +2,7 @@
   "skill": {
     "name": "hostile-b",
     "source": "FIXTURE\\skills\\hostile-b",
-    "scanned_at": "2026-10-26T17:42:15.422469+00:00"
+    "scanned_at": "2026-10-26T18:51:13.410163+00:00"
   },
   "risk_assessment": {
     "score": 100,
@@ -36,7 +36,7 @@
   "issues": [
     {
       "id": "AST8",
-      "finding_id": "finding-d6753e81ccbf4d83a0e112db2a6f5f33",
+      "finding_id": "finding-3ce0014646354fe880129b5f3ab799b7",
       "category": "Dangerous Code Execution",
       "pattern": "Dangerous chain: exec() wrapping base64.b64decode",
       "severity": "CRITICAL",
@@ -70,7 +70,7 @@
     },
     {
       "id": "E2",
-      "finding_id": "finding-a68e57cdc06e46c7ab6b3a19d72acf28",
+      "finding_id": "finding-6dfbe646b1d24e6a964783b14097a1e5",
       "category": "Data Exfiltration",
       "pattern": "Env Variable Harvesting",
       "severity": "HIGH",
@@ -102,7 +102,7 @@
     },
     {
       "id": "PE3",
-      "finding_id": "finding-b4dd99e103f9412d9b2a6058ffef6dd3",
+      "finding_id": "finding-07eb723f35af46f6a7ba02b689bf98b7",
       "category": "Privilege Escalation",
       "pattern": "Credential Access",
       "severity": "HIGH",
@@ -134,7 +134,7 @@
     },
     {
       "id": "TT4",
-      "finding_id": "finding-9dd2694a32f04df7a1a63dfbfa144974",
+      "finding_id": "finding-85c443361ca440209a0fbc0a6f5a42e2",
       "category": "Data Flow",
       "pattern": "Tainted flow: 'data' from open (line 2, file read) \u2192 urllib.request.urlopen (network output)",
       "severity": "HIGH",
@@ -168,7 +168,7 @@
     },
     {
       "id": "AST1",
-      "finding_id": "finding-2551b6e5ad864f938a9610d66321ae79",
+      "finding_id": "finding-dc7f9864d0df4304a2ab096f42eb0931",
       "category": "Dangerous Code Execution",
       "pattern": "exec() call detected",
       "severity": "HIGH",
@@ -202,7 +202,7 @@
     },
     {
       "id": "SC3",
-      "finding_id": "finding-f45e9891519044ec83ad196dc185efb0",
+      "finding_id": "finding-52fc045962c14575837c316ff106e724",
       "category": "Supply Chain",
       "pattern": "Obfuscated Code",
       "severity": "HIGH",
@@ -234,7 +234,7 @@
     },
     {
       "id": "SC2",
-      "finding_id": "finding-9fdf51f00c1345f2913ca8db0576f3b3",
+      "finding_id": "finding-3bfed7bcc0bb43c697ac2394cf596f26",
       "category": "Supply Chain",
       "pattern": "External Script Fetching",
       "severity": "HIGH",
@@ -266,7 +266,7 @@
     },
     {
       "id": "TM1",
-      "finding_id": "finding-3a2c1247c71345a689fcdec5be5b0cf1",
+      "finding_id": "finding-47182a802e6a4e90a12f84b552e6b29e",
       "category": "Tool Misuse",
       "pattern": "Tool Parameter Abuse",
       "severity": "HIGH",
@@ -298,9 +298,9 @@
     },
     {
       "id": "LP3",
-      "finding_id": "finding-b9a1b5c26fa54d139ab2ad92adbc7594",
+      "finding_id": "finding-5523e88f7ab344a8b761c61a66894b68",
       "category": "MCP Least Privilege",
-      "pattern": "Skill declares no tool scope ('permissions' or 'allowed-tools') but code capabilities were detected: env, file_write, network, shell.",
+      "pattern": null,
       "severity": "MEDIUM",
       "confidence": 0.7,
       "location": {
@@ -308,9 +308,9 @@
         "start_line": 1,
         "end_line": null
       },
-      "finding": "Skill declares no tool scope ('permissions' or 'allowed-tools') but code capabilities were detected: env, file_write, network, shell.",
+      "finding": null,
       "explanation": "Without declared permissions the skill's intent is opaque and cannot be validated.",
-      "remediation": "Clarify the skill's intended tool scope and review how the host runtime enforces it; runtime permissions are unknown unless separately verified. For Claude Code / Agent Skills SKILL.md, 'allowed-tools' records preapproved tools, not a permission ceiling; add a tool only when it is independently approved as necessary, not to silence this finding. For MCP server manifests, use a 'permissions' list naming the required capabilities.",
+      "remediation": "Declare the skill's tool scope: for Claude Code / Agent Skills SKILL.md, list the tools the skill may invoke in the 'allowed-tools' frontmatter field; for MCP server manifests, add a 'permissions' list naming the required capabilities.",
       "code_snippet": null,
       "intent": null,
       "tags": [
@@ -328,7 +328,7 @@
     },
     {
       "id": "E1",
-      "finding_id": "finding-eb59ac52265143d48db78465c2f7cf2f",
+      "finding_id": "finding-fbc30e596a8640bab15efd4b8b968d37",
       "category": "Data Exfiltration",
       "pattern": "External Transmission",
       "severity": "MEDIUM",
@@ -360,7 +360,7 @@
     },
     {
       "id": "AST4",
-      "finding_id": "finding-8cf6b83efa774ae9918c0842055e6c0b",
+      "finding_id": "finding-f9adc7c349f24bcaabb09372ddc1d5f0",
       "category": "Dangerous Code Execution",
       "pattern": "subprocess module call",
       "severity": "MEDIUM",
@@ -397,7 +397,7 @@
   "suppressed": [],
   "metadata": {
     "has_executable_scripts": true,
-    "skillspector_version": "2.12.0",
+    "skillspector_version": "2.13.1",
     "llm_requested": false,
     "llm_available": false,
     "meta_analysis_applied": false,
@@ -423,10 +423,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -436,10 +436,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -449,10 +449,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -462,10 +462,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
@@ -475,10 +475,10 @@
           "model": "z-ai/glm-5.3",
           "model_source": "resolved_configuration",
           "analyzer_revision": {
-            "value": "2.12.0",
+            "value": "2.13.1",
             "source": "skillspector_package",
             "source_revision": {
-              "value": "d7338f58200a9ae2a24810cee08911ab68b107a7",
+              "value": "f3b25697d76256998ca9d42c198d256258d4c035",
               "source": "package_vcs_metadata"
             }
           }
