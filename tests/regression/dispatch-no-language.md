@@ -1,0 +1,13 @@
+---
+name: demo
+description: Fixture skill whose fix round dropped the Language line.
+---
+# Demo
+
+```
+Dispatch the Role with this prompt:
+Goal: do the work, fixed in round 1
+Company profile: C:/x/PROFILE.md
+Name: Quinn
+Output: .company/work/demo/01-qa.md
+```
