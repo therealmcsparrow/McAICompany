@@ -442,3 +442,22 @@ test('status done with no ledger stays valid; status blocked too', () => withDir
 test('lint() stays pure: a handover text alone raises no ledger error', () => {
   assert.deepEqual(lint(HANDOVER, { requireTop: true }).errors, []);
 });
+
+test('read_next pointers: path, R-n, or path#heading with spaces only after the # (T11d)', () => {
+  const ok = v => assert.deepEqual(lint(make({ top: swap('read_next', v) })).errors, [], v);
+  const bad = v => assert.match(errs(make({ top: swap('read_next', v) })), /read_next/, v);
+  ok('[docs/contracts/handoff.md#v1.1 part 3: the findings ledger]');
+  ok('[R-21]');
+  ok('[src/x.ts]');
+  // shapes of the two natural code-reviewer Handoffs from T15c
+  ok('[docs/contracts/handoff.md#v1.1 part 3: the findings ledger, R-1, scripts/handoff-lint.mjs]');
+  ok('[skills/review/SKILL.md#Review depth, .company/work/x/02-architect-plan.md#Fix round 5: lighter pipeline Steps]');
+  bad('[copied text here]');
+  bad('[a b.md#x]');
+  bad('[R-1 and R-2]');
+  bad('[a.md#x, b c]');
+  bad(`[a.md#${'x'.repeat(200)}]`);
+  ok(`[a.md#${'x'.repeat(194)}]`);
+  assert.match(errs(make({ top: swap('read_next', '[a.md#x\ty]') })), /read_next/);
+  assert.match(errs(make({ top: swap('read_next', '[a.md#]') })), /read_next/);
+});

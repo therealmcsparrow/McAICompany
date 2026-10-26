@@ -23,7 +23,8 @@ const ID_RE = /^[RCT]-\d{1,4}$/;
 const RULE_RE = /^[a-z][a-z0-9-]{0,30}\.(M|S|Y)(-SEC)?\d{1,3}$/;
 const AC_RE = /^[A-Za-z0-9._-]{1,40}$/;
 const PATH_RE = /^[^\s\x00-\x1f\x7f,]{1,260}$/;
-const POINTER_RE = /^[^\s\x00-\x1f\x7f,]{1,200}$/;
+// path or R-n: no whitespace; path#heading: only the heading may hold spaces. No commas, no control characters, 200 at most.
+const POINTER_RE = /^(?=[^\x00-\x1f\x7f]{1,200}$)[^\s\x00-\x1f\x7f,#]+(?:#[^\x00-\x1f\x7f,]+)?$/;
 const LOC_RE = /^([^\s:]{1,260})(?::(\d{1,6})(?:-(\d{1,6}))?)?$/;
 const NONE_RE = /^(none|\(none[^)]{0,100}\))\.?$/i;
 const ROW_SHAPED_RE = /^(\[[^\]\s]{1,40}\] )?[A-Za-z]{1,3}-[A-Za-z0-9]{1,6} \|/;
