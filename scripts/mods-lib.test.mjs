@@ -7,6 +7,9 @@ import {
 import { composeStatus, STATUS_MAX } from '../mods/lib/status.mjs';
 import { commitIntent } from '../mods/lib/git-commit.mjs';
 import { cut, cellWidth, fit, fmtInt, fmtPct, fmtDuration, fmtClock, colorEnabled } from '../mods/lib/format.mjs';
+import {
+  MAIN_LIFETIME_MS, SUBAGENT_LIFETIME_MS, LIFETIME_LABEL, SUBAGENT_LINE, EMPTY_CLOCK, noteRequest, cacheClock, clockLines, clockStatus, wrap
+} from '../mods/lib/cache-clock.mjs';
 import { MODS_DEFAULTS as SETTINGS_DEFAULTS } from './settings.mjs';
 
 // ---- guard.mjs: hostile input first
@@ -448,4 +451,108 @@ test('colorEnabled follows NO_COLOR', () => {
   assert.equal(colorEnabled(''), true);
   assert.equal(colorEnabled('1'), false);
   assert.equal(colorEnabled(null), true);
+});
+
+// ---- cache-clock.mjs: hostile input first
+
+const T0 = Date.UTC(2026, 9, 26, 10, 0, 0);
+const MIN = 60000;
+
+test('no main-loop request seen is unknown, whatever the time', () => {
+  assert.deepEqual(cacheClock(EMPTY_CLOCK, T0), { kind: 'unknown' });
+  assert.deepEqual(cacheClock(undefined, T0), { kind: 'unknown' });
+  assert.deepEqual(cacheClock(null, T0), { kind: 'unknown' });
+  assert.deepEqual(cacheClock('x', T0), { kind: 'unknown' });
+  assert.deepEqual(cacheClock({ lastRequestMs: null, lifetimeMs: null, source: null }, T0), { kind: 'unknown' });
+  assert.equal(clockStatus({ kind: 'unknown' }), 'cache ?');
+});
+
+test('a clock before the request is unknown, not a negative time left', () => {
+  const state = noteRequest(EMPTY_CLOCK, T0);
+  assert.deepEqual(cacheClock(state, T0 - 1), { kind: 'unknown' });
+  assert.deepEqual(cacheClock(state, T0 - 3600000), { kind: 'unknown' });
+});
+
+test('bad times never throw and never become a request', () => {
+  for (const bad of [NaN, Infinity, -Infinity, -1, '5', null, undefined, {}, 1e300]) {
+    assert.deepEqual(noteRequest(EMPTY_CLOCK, bad), EMPTY_CLOCK);
+    assert.deepEqual(cacheClock(noteRequest(EMPTY_CLOCK, T0), bad), { kind: 'unknown' });
+  }
+  for (const bad of [{ lastRequestMs: NaN }, { lastRequestMs: '1' }, { lastRequestMs: -5 }, { lastRequestMs: Infinity }, { lastRequestMs: 1e300 }]) {
+    assert.deepEqual(cacheClock(bad, T0), { kind: 'unknown' });
+  }
+  assert.deepEqual(cacheClock(JSON.parse('{"__proto__":{"lastRequestMs":5},"lastRequestMs":null}'), T0), { kind: 'unknown' });
+});
+
+test('the main loop lifetime is the measured 60 minutes, one source, named', () => {
+  assert.equal(MAIN_LIFETIME_MS, 60 * MIN);
+  assert.equal(SUBAGENT_LIFETIME_MS, 5 * MIN);
+  assert.equal(LIFETIME_LABEL, '1 h (measured)');
+  const state = noteRequest(EMPTY_CLOCK, T0);
+  assert.deepEqual(state, { lastRequestMs: T0, lifetimeMs: 60 * MIN, source: 'measured' });
+});
+
+test('the 1 hour entry expires at the request plus 60 minutes', () => {
+  const state = noteRequest(EMPTY_CLOCK, T0);
+  const fresh = cacheClock(state, T0);
+  assert.deepEqual(fresh, { kind: 'valid', expiresMs: T0 + 60 * MIN, minutesLeft: 60 });
+  assert.equal(cacheClock(state, T0 + 18 * MIN).minutesLeft, 42);
+  assert.equal(cacheClock(state, T0 + 18 * MIN + 1).minutesLeft, 42);
+  assert.equal(cacheClock(state, T0 + 59 * MIN + 1).minutesLeft, 1);
+  assert.equal(clockStatus(cacheClock(state, T0 + 18 * MIN)), 'cache 42m');
+});
+
+test('a request at the boundary: the entry has expired at exactly the expiry time', () => {
+  const state = noteRequest(EMPTY_CLOCK, T0);
+  assert.equal(cacheClock(state, T0 + 60 * MIN - 1).kind, 'valid');
+  assert.deepEqual(cacheClock(state, T0 + 60 * MIN), { kind: 'expired', expiresMs: T0 + 60 * MIN });
+  assert.equal(cacheClock(state, T0 + 61 * MIN).kind, 'expired');
+  assert.equal(clockStatus(cacheClock(state, T0 + 61 * MIN)), 'cache expired');
+  // A request at that moment restarts it.
+  const again = noteRequest(state, T0 + 60 * MIN);
+  assert.deepEqual(cacheClock(again, T0 + 60 * MIN), { kind: 'valid', expiresMs: T0 + 120 * MIN, minutesLeft: 60 });
+});
+
+test('every new request restarts the clock; an older time never moves it back', () => {
+  let state = noteRequest(EMPTY_CLOCK, T0);
+  state = noteRequest(state, T0 + 30 * MIN);
+  assert.equal(cacheClock(state, T0 + 30 * MIN).expiresMs, T0 + 90 * MIN);
+  const kept = noteRequest(state, T0 + 10 * MIN);
+  assert.equal(kept.lastRequestMs, T0 + 30 * MIN);
+});
+
+test('the 5 minute subagent lifetime is a sentence, never a clock', () => {
+  const lines = clockLines(cacheClock(noteRequest(EMPTY_CLOCK, T0), T0 + 18 * MIN));
+  assert.equal(lines[lines.length - 1], 'Subagent caches last 5 minutes; nothing keeps them warm.');
+  assert.equal(SUBAGENT_LINE, lines[lines.length - 1]);
+  assert.deepEqual(clockLines({ kind: 'unknown' }), ['Lead cache: unknown', SUBAGENT_LINE]);
+});
+
+test('clock lines name the time and the minutes left, or the expiry', () => {
+  const state = noteRequest(EMPTY_CLOCK, T0);
+  const hhmm = (ms) => fmtClock(ms);
+  assert.deepEqual(clockLines(cacheClock(state, T0 + 18 * MIN)), [
+    `Lead cache: expires ${hhmm(T0 + 60 * MIN)} (in 42 min)`,
+    `Lifetime: ${LIFETIME_LABEL}`,
+    SUBAGENT_LINE
+  ]);
+  assert.deepEqual(clockLines(cacheClock(state, T0 + 70 * MIN)), [
+    `Lead cache: expired ${hhmm(T0 + 60 * MIN)}; the next turn rewrites it`,
+    `Lifetime: ${LIFETIME_LABEL}`,
+    SUBAGENT_LINE
+  ]);
+});
+
+test('wrap keeps every row within the width, in cells, and loses no word', () => {
+  const text = 'Lead cache: expired 11:00; the next turn rewrites it';
+  for (const width of [10, 20, 39, 63]) {
+    const rows = wrap(text, width);
+    for (const row of rows) assert.ok(cellWidth(row) <= width, `${row} at ${width}`);
+    if (width >= 12) assert.equal(rows.join(' '), text);
+  }
+  assert.deepEqual(wrap('', 39), ['']);
+  assert.deepEqual(wrap('漢字'.repeat(30), 39).every((r) => cellWidth(r) <= 39), true);
+  assert.deepEqual(wrap(7, 39), ['']);
+  assert.ok(wrap('x'.repeat(10 * 1024 * 1024), 39).length <= 8);
+  assert.deepEqual(wrap('a b', 0), ['']);
 });

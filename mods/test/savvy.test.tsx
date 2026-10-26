@@ -5,7 +5,7 @@ import { cellWidth } from '../lib/format.mjs'
 const START = Date.parse('2026-10-26T10:00:00Z')
 const MODS = (savvy: { enabled: boolean; pane: string }) => ({
   savvy,
-  cache_tax: { enabled: true, pane: 'command' },
+  cache_tax: { enabled: false, pane: 'command' },
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
   blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 })
