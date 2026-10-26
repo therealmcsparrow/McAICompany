@@ -88,12 +88,12 @@ Today aico's behaviour is fixed in files the CEO can't safely edit. Role models 
 - **Gates:** `auto` means the Lead writes the Gate summary into the run's Handoff folder and continues without a form, and says so in its next message. Gate settings cover only the Brief, Plan and Ship Gates and the install forms. Every other CEO ask stays a form: `needs-ceo` Must exceptions, Blocking security findings, picks from a report, escalations after the Fix-round limit, and design-skill set approval.
 - **Auto Plan Gate:** still stops with a form when Must exception requests or a rejected ruleset rule are pending.
 - **Auto Ship Gate:** runs the Finish writes and commits first, then pushes the branch and opens a PR (`gh pr create`), then stops; `finishing-a-development-branch` is skipped. It never merges. Anything sent outside the machine other than that PR always asks, whatever the settings: messages or handoffs to a client (`/aico:client`), publishing (`/aico:launch`), reports to authorities (`/aico:incident`) and production deploys.
-- **Which Playbooks:** every Playbook that runs through `aico:pipeline` reads model, effort, Fix rounds, dispatch mode and Gates. Lane settings apply wherever that lane is optional today (`feature`, `fix`, `maintain`, `audit`, `refactor`). A lane a Playbook always runs (for example security in `/aico:audit`) isn't affected.
+- **Which Playbooks:** every Playbook that runs through `aico:pipeline` reads model, effort, Fix rounds, dispatch mode and Gates. Lane settings apply wherever that lane is optional today (`feature`, `fix`, `maintain`, `refactor`). A lane a Playbook always runs isn't affected: `/aico:audit` is read-only and always runs all its lanes.
 
 ### Lock and unlock (Lead's call on the details)
 - Locked rows on the Gates tab show a lock icon. Unlocking opens a confirm dialog that names what will no longer ask (for example "aico will push and merge without asking you"). Only after confirming can the CEO set the Gate to `auto`.
 - The **security** and **compliance** lanes count as locked ("security is law", and Must includes all security in `aico:ruleset`). Turning either off needs the `security` unlock. *Lead's call.*
-- **Unlocks count only from the user level** (`~/.mcsparrow/config.json`). An `unlocked` list in `.company/settings.json` is ignored, and the page shows it as ignored, because a cloned or client repo must never unlock push or skip security on this machine. A project can still lock again: setting a Gate to `ask` or a lane on at project level always wins. *Lead's call.*
+- **Unlocks count only from the user level** (`~/.mcsparrow/config.json`). An `unlocked` list in `.company/settings.json` is ignored, and the page shows it as ignored, because a cloned or client repo must never unlock push or skip security on this machine. A project can still lock again: setting a Gate to `ask` or a lane on at project level always wins. *Lead's call.* A project file with any problem (invalid JSON, a wrong version or value, unreadable) could hide such a re-lock, so then ship and installs stay `ask` and security and compliance stay on, with a warning.
 - `.company/settings.json` follows the repo's `.company/` policy. The page makes no commits.
 - Pentest production authorization and incident reporting stay CEO asks no matter what. They live in their own Playbooks, which don't read Gate settings.
 
@@ -119,7 +119,7 @@ Today aico's behaviour is fixed in files the CEO can't safely edit. Role models 
   | market-researcher | Mateo | tech-researcher | Tariq | design-researcher | Daria | support | Sofia |
 
 - **Settings:** `roles.<role>.name` at user and project level, shown as a **Name** column on the Roles tab (plugin, user and project layers, like model and effort).
-- **Validation:** 1–30 characters of Unicode letters, spaces, hyphens and apostrophes. Effective names must be unique across Roles, case-insensitive, and Save refuses duplicates with the clashing Role named.
+- **Validation:** 1–30 characters matching `^(?=.{1,30}$)\p{L}[\p{L}\p{M}'\-]*(?: [\p{L}'\-][\p{L}\p{M}'\-]*)*$`u: it starts with a letter; then Unicode letters, combining marks, hyphens and apostrophes, with single spaces between words and no space at either end. Effective names must be unique across Roles, case-insensitive, and Save refuses duplicates with the clashing Role named.
 - **Where names show** (from the queued follow-up):
   - cooler scripts (speaker names)
   - brainstorm rounds
