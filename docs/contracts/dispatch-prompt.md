@@ -18,17 +18,22 @@ v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: 
 ## Lines added in v3.1
 | Line | When | Value |
 |---|---|---|
-| `Context cap: <cap> handover <n>` | every pipeline Step dispatch (Output under `.company/work/`), directly after `Settings:` (or after `Name:` when `Settings:` is omitted); not in brainstorm, cooler or research Role prompts | `<cap>` = `roles.<role>.context_cap` from `aico-settings` v1.1 `get`; when the Risk tier is `high`, `<cap>` = max(that value, 150000). `<n>` = floor(`<cap>` × 0.8). Both computed **only** in pipeline Core (Setup §1.7), once per run per Role. Integers, 5 to 7 digits |
+| `Context cap: <cap> handover <n>` | every dispatch whose Output is a Handoff under `.company/work/`: every pipeline Step, and the `aico:research` researcher and product-manager Steps. Directly after `Settings:` (or after `Name:` when `Settings:` is omitted). Not in brainstorm or cooler Role prompts: their Output is a reply, with no Handoff and no handover | `<cap>` = `roles.<role>.context_cap` from `aico-settings` v1.1 `get`; when the Risk tier is `high`, `<cap>` = max(that value, 150000). `<n>` = floor(`<cap>` × 0.8). Both computed **only** in pipeline Core (Setup §1.7, item 8), once per run per Role. `aico:research` runs that same item, with no formula of its own. Integers, 5 to 7 digits |
 | `Review depth: full \| standard` | only for `code-reviewer`, directly after `Round:` | output of `review-depth` v1 over the Step's diff; never taken from a builder's label. Risk tier `high` is always `full` |
+
+**Enforcement:** `scripts/check.mjs` reports an `ERROR` for any fenced dispatch block that has an `Output: .company/work/` line and no `Context cap:` line. No Playbook is exempt.
 
 ## Canonical line order (v3.1)
 One fixed order, so a Role always finds a line in the same place and the drift test can compare prompts. It gives **no cache saving** across dispatches: the host puts the prompt before the Role block, with no cache breakpoint after the prompt (Spike S2, `docs/adr/0011-token-counts-from-transcripts.md`). Token savings come from shorter prompts and fewer reads, never from this order. A drift test (`scripts/prompt-order.test.mjs`) compares the dispatch blocks in `skills/pipeline/SKILL.md` and `skills/brainstorm/SKILL.md` with these lists.
 - **Pipeline Step:** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Input Handoffs:`, `Output:`, `Goal:`, then the closing `Follow aico:handoff.`
 - **Brainstorm round 1:** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Input:`, `Output:`, `Goal:`.
 - **Brainstorm round 2 and later** (`brainstorm-file` v2): `Digest:` (identical for every Role in the round, read first), then `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Your last reply:`, `Others said:`, `Full file:`, `Output:`, `Goal:`.
-- Cooler and research prompts keep their v3 order.
+- Cooler prompts keep their v3 order. Research prompts keep their v3 order and add one line: `Context cap:` directly after `Settings:` (after `Name:` when `Settings:` is omitted), just before the closing `Follow aico:handoff.`
 
 Lead-only Playbooks that dispatch no Role (`aico:triage`, `aico:help`, `aico:version`, `aico:language`, `aico:settings`) resolve the language the same way and use it for their own forms and replies.
+
+## Lead-side rule for `status: handover`
+Any Step that carries `Context cap:` can return `status: handover`. The Lead then dispatches a fresh Step of the same Role (next `NN`) with the same Round, Base commit and Risk tier. Its Input is the original Input plus the handover Handoff, and its Goal is "continue from `<handover path>` `## Next`". It never counts as `blocked` or as a Fix round. In `aico:research`, the synthesis Step gets **every** link of a researcher's chain as Input, because the sources of the earlier links stay in their own Handoffs.
 
 ## Role-side rules (written into `aico:handoff`)
 - **Prose in `<tag>`:** Handoff prose, forms, Gate summaries, digests, reports, lessons, cooler lines, brainstorm replies.
@@ -49,6 +54,6 @@ Lead-only Playbooks that dispatch no Role (`aico:triage`, `aico:help`, `aico:ver
 - `Design skills:` absent for a UI Role → behave as `none`.
 - `Name:` absent (v1/v2 prompt, old resume state) → the Role uses its Role title.
 - `Settings:` absent → nothing was overridden.
-- `Context cap:` absent (v3 prompt, old resume state) → cap 150000, handover at 120000.
+- `Context cap:` absent (v3 prompt, old resume state, a research prompt from before v3.1) → cap 150000, handover at 120000.
 - `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 150000, handover at 120000, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
 - `Review depth:` absent or not `full | standard` → `full`.

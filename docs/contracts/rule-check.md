@@ -1,6 +1,6 @@
 # Contract: rule-check v1
 
-Provider: `scripts/rule-check.mjs`. Bindings: `.company/checks.json` (written by `aico:senior-engineer`; CEO, Brief Gate Q6). Consumers: the pre-filter in `aico:pipeline` §2 (runs before the Code Reviewer and in the audit lane), the Code Reviewer and the compliance pass, `aico:senior-engineer` (rule slices).
+Provider: `scripts/rule-check.mjs`. Bindings: `.company/checks.json` (written by `aico:senior-engineer`; CEO, Brief Gate Q6). Consumers: the pre-filter in `aico:pipeline` §2 (runs before the Code Reviewer and in the audit lane), the Code Reviewer and the compliance pass, `aico:senior-engineer` (rule slices, drift fixes).
 Rationale: `docs/adr/0010-tool-checks-by-id.md`, `docs/adr/0012-ruleset-stays-local.md`. Compliance stays a separate lane.
 
 ## Bindings file `.company/checks.json`
@@ -43,6 +43,16 @@ Only full absence is quiet; a half-present ruleset fails closed.
 2. A `T-` row blocks only after the reviewer confirms it: confirmed → a Blocking row with the same `T-` ID (`handoff` v1.1); rejected → a Nit `T-<n> not confirmed — <why>`.
 3. A tool that cannot run, crashes or times out is a `T-` row `tool failed: <check-id>`, never silence. `check.mjs` exiting 1 on `ERROR` lines is not a crash.
 4. `drift` runs in `npm test` (`scripts/rule-check.test.mjs`): on fixtures always, and on the real `<root>` when `.company/standards.md` exists (the test is skipped with `no ruleset` otherwise, as in CI). The Lead also runs `drift` after each ruleset sign-off and before the Ship Gate, where the real files exist.
+5. Drift routing (below).
+
+## Drift routing (Lead)
+A stale binding is a ruleset bookkeeping fault, not a builder's fault, so it never goes to a builder or a reviewer.
+- **`drift` exit 1** (after a sign-off, before the Ship Gate, or a red drift test in `npm test`, shown by a pre-filter `node-test` row that names a `rule-check` test) → the Lead dispatches `aico:senior-engineer` as a normal Step with the `drift` output in its Goal. It is **not a Fix round**: it never counts toward `pipeline.fix_rounds`, the same as a `slices` gap. The builder whose Step surfaced the red drift test is not sent back for it.
+- **What the Senior Engineer may fix alone:** `.company/checks.json` only. That means pointing a binding at the right rule ID, adding a missing binding for a `check:` ID, removing a binding whose rule was removed with a sign-off, or rehashing `text`. A rehash is allowed only when the changed rule text was signed off in this run (the Architect's `ruleset signed off` Decision). Otherwise it would launder an unsigned rule change.
+- **What needs a sign-off first:** any fix that changes `.company/standards.md`, such as editing a Must's text or dropping or changing its `check:`, and any rehash of rule text nobody signed off. These go to the Architect for sign-off (`aico:ruleset`) and then back through this route.
+- After the Senior Engineer's Step the Lead runs `drift` again. If it still exits 1 after that **one** Step, the Lead asks the CEO in a form with the `drift` output. There is no second automatic round.
+- **The Ship Gate never opens on a red `drift`.** Its summary states `drift: clean` or `drift: no ruleset`.
+- **`drift` exit 2** with a malformed `checks.json` takes the same route. `refused: bad root` is the Lead's own working-directory error: the Lead fixes it and reruns, with no dispatch.
 
 ## Error cases
 - `base` not `^[0-9a-f]{7,40}$` → `refused: bad base`, exit 2.
