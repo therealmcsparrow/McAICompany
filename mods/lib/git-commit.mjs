@@ -14,7 +14,7 @@ const CD = new Set(['cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location
 // Programs that only print, search or list, or shell words that run nothing: their text may name git and commit.
 const HARMLESS = new Set([
   'echo', 'printf', 'write-output', 'write-host', 'write-error', 'write-warning', 'write-verbose', 'write-information',
-  'grep', 'egrep', 'fgrep', 'rg', 'select-string', 'sls', 'cat', 'type', 'get-content', 'gc', 'ls', 'dir', 'gci', 'get-childitem',
+  'grep', 'egrep', 'fgrep', 'select-string', 'sls', 'cat', 'type', 'get-content', 'gc', 'ls', 'dir', 'gci', 'get-childitem',
   'head', 'tail', 'wc', 'sort', 'uniq', 'pwd', 'true', 'false', 'fi', 'done', 'esac', 'test', 'sleep', 'which', 'where', 'date',
   'get-date', 'mkdir', 'touch', 'export', 'unset', 'exit', 'set'
 ]);
@@ -28,6 +28,9 @@ const ALLOWED = new Set([
   'archive', 'format-patch', 'symbolic-ref', 'check-ignore', 'check-attr', 'var', 'commit-graph', 'range-diff', 'verify-commit',
   'verify-tag', 'apply', 'sparse-checkout', 'maintenance', 'prune', 'pack-refs', 'repack'
 ]);
+// Subcommands that take options which run a program (git accepts abbreviated and clustered options, and clone has its own -c):
+// when the command names a commit they are never cleared, whatever their options.
+const RUNS_PROGRAMS = new Set(['clone', 'fetch', 'push', 'ls-remote', 'archive', 'grep']);
 const GLOBAL_PLAIN = new Set([
   '-p', '--paginate', '-P', '--no-pager', '--no-replace-objects', '--bare', '--literal-pathspecs', '--glob-pathspecs',
   '--noglob-pathspecs', '--icase-pathspecs', '--no-optional-locks', '--no-advice', '--version', '--help', '-h', '-v'
@@ -180,8 +183,21 @@ function runsProgram(toks, from, sub) {
   return false;
 }
 
+// `git add` that overrides the ignore rules: -f, a short cluster holding f, or a prefix of --force.
+function forcesAdd(toks, from) {
+  for (let j = from; j < toks.length; j++) {
+    const t = toks[j];
+    if (t === '--') return false;
+    if (t.startsWith('--')) {
+      if (t.length >= 3 && '--force'.startsWith(t.split('=')[0])) return true;
+    } else if (t.startsWith('-') && t.slice(1).includes('f')) return true;
+  }
+  return false;
+}
+
 // A `git` statement: a commit (or doubt) unless the subcommand is a literal one that never commits.
-function analyseGit(toks, cwd, mentionsCommit) {
+function analyseGit(toks, cwd, ctx) {
+  const mentionsCommit = ctx.mentionsCommit;
   let repo = null;
   let sure = false;
   let override = false;
@@ -213,12 +229,13 @@ function analyseGit(toks, cwd, mentionsCommit) {
     }
   }
   const sub = toks[i];
-  if (mentionsCommit && (sub === 'config' || runsProgram(toks, i + 1, sub))) sure = true;
+  if (mentionsCommit && (sub === 'config' || RUNS_PROGRAMS.has(sub) || runsProgram(toks, i + 1, sub))) sure = true;
+  if ((sub === 'add' || sub === 'stage') && forcesAdd(toks, i + 1)) ctx.force = true;
   if (!sure && (sub === undefined || (isLiteral(sub) && ALLOWED.has(sub)))) return { kind: 'git' };
   return { kind: 'commit', override, repo: repo === null ? cwd : isAbsolute(repo) ? repo : joinRepo(cwd, repo) };
 }
 
-// ctx: { mentionsCommit, env, git } filled while the statements are read.
+// ctx: { mentionsCommit, env, git, force } filled while the statements are read.
 function analyse(statement, ps, cwd, ctx) {
   const toks = statement.tokens.slice();
   for (;;) {
@@ -252,10 +269,11 @@ function analyse(statement, ps, cwd, ctx) {
   }
   if (prog === 'git' || prog === 'git.exe') {
     ctx.git = true;
-    return analyseGit(toks, cwd, ctx.mentionsCommit);
+    return analyseGit(toks, cwd, ctx);
   }
   if (/^git[.-]/.test(prog)) return { kind: 'commit', override: TEXT_REDIRECT.test(statement.raw), repo: cwd };
-  if ((prog === 'export' || prog === 'set') && toks.some((t) => t.includes('='))) ctx.env = true;
+  if ((prog === 'export' || prog === 'set') && toks.length > 1) ctx.env = true;
+  if (prog === 'printf' && toks.some((t) => t === '-v' || (t.startsWith('-v') && t.length > 2))) ctx.env = true;
   return HARMLESS.has(prog) ? { kind: 'none' } : { kind: 'foreign' };
 }
 
@@ -273,7 +291,7 @@ function intent(command, ps) {
   let found = null;
   let foreign = false;
   let dynamic = false;
-  const ctx = { mentionsCommit: /commit/i.test(command), env: false, git: false };
+  const ctx = { mentionsCommit: /commit/i.test(command), env: false, git: false, force: false };
   for (const st of statements) {
     const r = analyse(st, ps, cwd, ctx);
     if (r.kind === 'cd') cwd = joinRepo(cwd, r.target);
@@ -281,16 +299,16 @@ function intent(command, ps) {
     else if (r.kind === 'foreign') foreign = true;
     else if (r.kind === 'dynamic') dynamic = true;
   }
-  if (found !== null) return commit(found.repo, ENV_REDIRECT.test(command) || found.override);
+  if (found !== null) return commit(found.repo, ENV_REDIRECT.test(command) || found.override || ctx.force);
   // An environment variable can make git run a program (GIT_EXTERNAL_DIFF, GIT_CONFIG_*, GIT_SSH_COMMAND, ...).
-  if (ctx.env && ctx.git && ctx.mentionsCommit) return commit(cwd, ENV_REDIRECT.test(command));
+  if (ctx.env && ctx.git && ctx.mentionsCommit) return commit(cwd, ENV_REDIRECT.test(command) || ctx.force);
   const substitution = ps ? command.includes('$(') : command.includes('$(') || command.includes('`');
   const doubt =
     (dynamic && /git|commit/i.test(command)) ||
     (foreign && namesGitAndCommit(command)) ||
     ((unterminated || substitution) && namesGitAndCommit(command));
   if (!doubt) return { ...NOT };
-  return commit(cwd, TEXT_REDIRECT.test(command) || DASH_C.test(command));
+  return commit(cwd, TEXT_REDIRECT.test(command) || DASH_C.test(command) || ctx.force);
 }
 
 // shell: 'bash' or 'powershell'. Returns { isCommit, repo: string | null, unknown }.

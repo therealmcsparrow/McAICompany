@@ -429,6 +429,57 @@ test('bash: options, settings and variables that make an allowed git run a commi
   }
 });
 
+test('bash: a network or search subcommand next to the word commit is a commit, whatever its options', () => {
+  for (const c of [
+    "git push --e='git commit -qam x;:' .",
+    "git ls-remote --u='git commit -qam x;:' .",
+    "git clone --no-local --u='git commit -qam x;:' . ../y",
+    "git grep -iO'git commit -qam x;:' kk",
+    "git clone -c core.sshCommand='git -C r commit -qam x;:' ssh://h/x y",
+    "git fetch --up='git commit -qam x;:' .",
+    "git archive --ex='git commit -qam x;:' HEAD",
+    "git archive --remote=. HEAD; echo commit",
+    'git push origin main; echo commit'
+  ]) {
+    assert.equal(BASH(c).isCommit, true, c);
+  }
+  for (const c of ['git push -u origin main', 'git clone https://example.com/r.git out', 'git grep -n foo', 'git fetch --all', 'git archive HEAD', 'git ls-remote origin']) {
+    assert.equal(BASH(c).isCommit, false, c);
+  }
+});
+
+test('bash: printf -v, a bare export and set -a set the environment for git', () => {
+  for (const c of [
+    "printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; export GIT_EXTERNAL_DIFF; git diff",
+    "set -a; printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; git diff",
+    "printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; git diff",
+    'export GIT_EXTERNAL_DIFF; git diff; echo commit',
+    'set -a; git diff; echo commit'
+  ]) {
+    assert.equal(BASH(c).isCommit, true, c);
+  }
+  for (const c of ['export GIT_EXTERNAL_DIFF; git diff', 'set -a; git diff', "printf '%s' x; git diff", 'printf -v X y; git status']) {
+    assert.equal(BASH(c).isCommit, false, c);
+  }
+});
+
+test('bash: rg is not harmless: --pre runs a program', () => {
+  assert.equal(BASH('touch commit; GIT_EDITOR="echo m >" rg --pre git x commit').isCommit, true);
+  assert.equal(BASH('git status; rg --pre git x commit').isCommit, true);
+  assert.equal(BASH('rg foo src').isCommit, false);
+});
+
+test('bash: git add -f in a commit command is an unknown-scope commit', () => {
+  for (const c of ['git add -f core.mjs && git commit -m x', 'git add --force core.mjs && git commit -m x', 'git add -fA && git commit -m x', 'git stage -f a; git commit -m x',
+    'git add --forc a && git commit -m x']) {
+    const r = BASH(c);
+    assert.equal(r.isCommit, true, c);
+    assert.equal(r.unknown, true, c);
+  }
+  assert.equal(BASH('git add a && git commit -m x').unknown, false);
+  assert.equal(BASH('git add -f a').isCommit, false);
+});
+
 test('powershell: an environment variable that makes git run a program is a commit', () => {
   for (const c of [
     "$env:GIT_EXTERNAL_DIFF='git commit -am x'; git diff",
