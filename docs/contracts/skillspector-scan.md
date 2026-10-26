@@ -100,9 +100,9 @@ GDPR Art. 5(1)(c): names, verdicts, counts and issue ids only, never skill text.
 - Skills = folders up to depth 4 holding a regular `SKILL.md` whose folder name passes the allow-list. Nothing in a quarantine is ever executed, imported or installed (AC4).
 
 ## Install (AC10; the Lead runs these after the CEO picks Install, never a Role)
-- Install, byte-identical, in this order: `uv tool install 'skillspector[mcp] @ git+https://github.com/NVIDIA/skillspector.git'` then `claude mcp add --scope user skillspector -- skillspector mcp`.
+- Install, byte-identical, in this order: `uv tool install 'skillspector[mcp] @ git+https://github.com/NVIDIA/skillspector.git@v2.13.1'` then `claude mcp add --scope user skillspector -- skillspector mcp`.
 - Rollback: `uv tool uninstall skillspector`, `claude mcp remove --scope user skillspector`.
-- The form says both change user-scope config, gives the rollback, and names the supply-chain risk of an unpinned git main (CRA). Proposed pin (Plan Gate P2, not the default): `…skillspector.git@v2.13.1'`. One constant in `skillspector.mjs`; a test pins the Playbook text, this Contract and the constant byte for byte. If P2 is approved, the recorded golden outputs are re-recorded on the pinned version before T4 is done.
+- The form says both change user-scope config, gives the rollback, and names the pinned release v2.13.1 (CRA supply-chain due diligence; CEO approved the pin at the Plan Gate P2, 2026-10-26). One constant in `skillspector.mjs`; a test pins the Playbook text, this Contract and the constant byte for byte. If P2 is approved, the recorded golden outputs are re-recorded on the pinned version before T4 is done.
 - Always asked, whatever `gates.installs` says (it changes user-scope Claude config). `detect` says `uv: false` → say so and run nothing; aico never installs `uv`. After install, `detect` again; still missing (often the uv bin dir is not on `PATH` yet) → say so, no retry.
 - **MCP:** aico never calls the SkillSpector MCP tool; the registration is for the CEO's own use. Any aico text that shows `scan_skill` passes `use_llm: false` explicitly (its default is `true`); no agent lists an `mcp__skillspector` tool (pinned tests).
 

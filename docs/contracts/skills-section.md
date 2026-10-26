@@ -1,6 +1,6 @@
-# Contract: skills-section v1 (proposed: Plan Gate P1)
+# Contract: skills-section v1
 
-Status: **proposed**. It changes the Project profile template `skills/lead/references/project-template.md`, which is Core, so it takes effect only when the CEO approves P1 at the Plan Gate. Without P1, nothing here is built and `skill-recommendation` v1 step 3 uses its fallback.
+Status: **approved** by the CEO at the Plan Gate (P1, 2026-10-26). It changes the Project profile template `skills/lead/references/project-template.md`, which is Core.
 
 The project-scope skill inventory for the areas `stack`, `product-type` and `company-type` (agentsec.M-SEC6). Design skills stay in `## Design skills` (`design-skills-section` v1, unchanged), so the design freshness rule in `aico:feature` is untouched.
 Writer: the Lead, after the CEO approves a set the `skill-researcher` recommended (`skill-recommendation` v1). Readers: `install-skills.mjs --project` (group `skills`, `skills-manifest` v2.1), the `skill-researcher` (judges the current set).
