@@ -407,3 +407,104 @@ test('resolveSettings returns language and profile', (t) => {
   const bare = sandbox(t, { company: false });
   assert.equal(resolveSettings(bare.ctx).profile.hasProject, false);
 });
+
+// A broken project layer must not drop its re-locks: the locked Gates stay ask and the locked lanes on.
+const RELOCK_USER = { unlocked: ['ship', 'security'], gates: { ship: 'auto' }, pipeline: { lanes: { security: false } } };
+const RELOCK = { gates: { ship: 'ask' }, pipeline: { lanes: { security: true } } };
+
+function assertHeld(r) {
+  assert.equal(r.gates.ship, 'ask');
+  assert.equal(r.gates.installs, 'ask');
+  assert.equal(r.pipeline.lanes.security, true);
+  assert.equal(r.pipeline.lanes.compliance, true);
+  assert.ok(r.warnings.some((w) => /held/.test(w) && w.includes('ship')), JSON.stringify(r.warnings));
+}
+
+test('a valid project layer without re-locks keeps the user unlocks', (t) => {
+  const s = sandbox(t);
+  s.user(RELOCK_USER);
+  s.project({ roles: { qa: { effort: 'low' } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.gates.ship, 'auto');
+  assert.equal(r.pipeline.lanes.security, false);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('project version 2 holds the locks', (t) => {
+  const s = sandbox(t);
+  s.user(RELOCK_USER);
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 2, ...RELOCK } }));
+  assertHeld(resolveSettings(s.ctx));
+});
+
+test('an invalid project lock value holds the locks', (t) => {
+  const s = sandbox(t);
+  s.user(RELOCK_USER);
+  s.project({ gates: { ship: 'Ask' }, pipeline: { lanes: { security: 'on' } } });
+  assertHeld(resolveSettings(s.ctx));
+});
+
+test('invalid project JSON holds the locks', (t) => {
+  const s = sandbox(t);
+  s.user(RELOCK_USER);
+  fs.writeFileSync(s.projectFile, '{"aico_settings": {"version": 1, "gates": {"ship": "ask"');
+  assertHeld(resolveSettings(s.ctx));
+});
+
+test('an unreadable project layer warns and holds the locks', (t) => {
+  const s = sandbox(t);
+  s.user(RELOCK_USER);
+  s.project(RELOCK);
+  const statSync = fs.statSync;
+  t.mock.method(fs, 'statSync', (p, ...rest) => {
+    if (path.resolve(String(p)) === path.resolve(s.projectFile)) throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    return statSync(p, ...rest);
+  });
+  const r = resolveSettings(s.ctx);
+  assertHeld(r);
+  assert.ok(r.warnings.some((w) => w.includes('EACCES')), JSON.stringify(r.warnings));
+});
+
+test('the temp file name is not predictable and never overwrites what is there', (t) => {
+  const s = sandbox(t);
+  const old = `${s.config}.${process.pid}.tmp`;
+  fs.writeFileSync(old, 'keep');
+  writeLayer('user', { version: 1, gates: { brief: 'auto' } }, s.ctx);
+  assert.equal(fs.readFileSync(old, 'utf8'), 'keep');
+  assert.equal(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.gates.brief, 'auto');
+  assert.deepEqual(fs.readdirSync(s.home).filter((f) => f.endsWith('.tmp')), [path.basename(old)]);
+});
+
+test('writeProfile inserts into a header without key lines', (t) => {
+  const s = sandbox(t);
+  const file = projectMd(s, ['# Project profile', '', '## Personas', '- (none)', ''].join('\n'));
+  writeProfile({ goal: 'ship it' }, s.ctx);
+  assert.equal(fs.readFileSync(file, 'utf8'), ['# Project profile', '', 'goal: ship it', '## Personas', '- (none)', ''].join('\n'));
+  assert.equal(readProfile(s.ctx).fields.goal, 'ship it');
+});
+
+test('writeProfile inserts two missing fields in order', (t) => {
+  const s = sandbox(t);
+  const file = projectMd(s, ['# Project profile', '', '## Personas', '- (none)', ''].join('\n'));
+  writeProfile({ goal: 'ship it', license: 'MIT' }, s.ctx);
+  assert.equal(fs.readFileSync(file, 'utf8'), ['# Project profile', '', 'goal: ship it', 'license: MIT', '## Personas', '- (none)', ''].join('\n'));
+  const keyed = sandbox(t);
+  const keyedFile = projectMd(keyed);
+  writeProfile({ goal: 'ship it', license: 'MIT' }, keyed.ctx);
+  const want = PROJECT_MD.split('\r\n');
+  want.splice(want.indexOf('standards: .company/standards.md') + 1, 0, 'goal: ship it', 'license: MIT');
+  assert.equal(fs.readFileSync(keyedFile, 'utf8'), want.join('\r\n'));
+});
+
+test('names refuse edge spaces and double spaces, allow combining marks, clash case-insensitively', (t) => {
+  for (const name of [' Ava', 'Ava ', 'Ava  Lee', 'Ava\tLee']) {
+    assert.equal(validateLayer({ version: 1, roles: { qa: { name } } }, roleSet).length, 1, JSON.stringify(name));
+  }
+  for (const name of ['Ava Lee', 'Zoé', "D'Arcy Lee-Ann", 'Lucía']) {
+    assert.deepEqual(validateLayer({ version: 1, roles: { qa: { name } } }, roleSet), [], JSON.stringify(name));
+  }
+  assert.equal(validateLayer({ version: 1, roles: { qa: { name: '́Ava' } } }, roleSet).length, 1);
+  const s = sandbox(t);
+  s.user({ roles: { qa: { name: 'Zed' }, security: { name: 'ZED' } } });
+  assert.ok(resolveSettings(s.ctx).warnings.some((w) => w.includes('qa') && w.includes('security')));
+});

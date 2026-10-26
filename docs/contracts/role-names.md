@@ -7,7 +7,7 @@ Every Role has a person's name, shown next to its title: "Ava (architect)". Name
 `company/names.json` is `{ "<role>": "<name>" }` with exactly one entry per `agents/*.md`. It lives outside agent frontmatter, because frontmatter allows only documented keys. `scripts/check.mjs` checks it.
 
 ## Rules
-- A name is 1–30 characters matching `^[\p{L}][\p{L} '\-]{0,29}$`u: Unicode letters, spaces, hyphens and apostrophes, starting with a letter.
+- A name is 1–30 characters matching `^(?=.{1,30}$)\p{L}[\p{L}\p{M}'\-]*(?: [\p{L}'\-][\p{L}\p{M}'\-]*)*$`u: it starts with a letter; then Unicode letters, combining marks, hyphens and apostrophes, with single spaces between words and no space at either end.
 - Effective names (after project > user > plugin) are unique across Roles, case-insensitive. A save that would clash is refused, naming both Roles.
 - Never route, file or match on a name. `aico:<role>` IDs, file names, frontmatter and every machine-read part stay unchanged. The one exception is the Lead's rule: a name in the CEO's request that matches exactly one effective name routes to that Role.
 - A Role that gets no `Name:` uses its Role title.

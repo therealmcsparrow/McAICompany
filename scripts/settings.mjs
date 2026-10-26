@@ -3,7 +3,7 @@
 // pipeline behaviour and Gates. Precedence per field: project > user > plugin.
 // User layer: <home>/config.json key aico_settings. Project layer: .company/settings.json key aico_settings.
 // Unlocks count only from the user layer.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -56,16 +56,32 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 // Shows a key from a file only when it is plainly safe to print.
 const label = (k) => (/^[A-Za-z0-9_-]{1,40}$/.test(k) ? k : JSON.stringify(String(k).slice(0, 40)));
 
+// Returns the file's bytes, or null when it doesn't exist. Too large or unreadable throws Refusal.
 function readBounded(file) {
   let stat;
   try {
     stat = fs.statSync(file);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw new Refusal(`${file} cannot be read (${error.code ?? 'error'})`);
   }
   if (!stat.isFile()) return null;
   if (stat.size > MAX_FILE_BYTES) throw new Refusal(`${file} is too large`);
-  return fs.readFileSync(file);
+  try {
+    return fs.readFileSync(file);
+  } catch (error) {
+    throw new Refusal(`${file} cannot be read (${error.code ?? 'error'})`);
+  }
+}
+
+// A revision input for a file readBounded refused: size and time when known, else the reason.
+function refusedRaw(file, error) {
+  try {
+    const stat = fs.statSync(file);
+    return `refused:${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return `refused:${error.message}`;
+  }
 }
 
 function parseConfig(file, bytes) {
@@ -87,12 +103,21 @@ function readConfig(file) {
 
 function writeAtomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
+  // A random name opened with 'wx' never follows or reuses something already at that path.
+  const tmp = `${file}.${randomBytes(8).toString('hex')}.tmp`;
+  let created = false;
   try {
-    fs.writeFileSync(tmp, text);
+    const fd = fs.openSync(tmp, 'wx');
+    created = true;
+    try {
+      fs.writeFileSync(fd, text);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, file);
   } catch (error) {
-    fs.rmSync(tmp, { force: true });
+    // Only remove the temp file this call created, never one that was already there.
+    if (created) fs.rmSync(tmp, { force: true });
     throw error;
   }
 }
@@ -128,7 +153,7 @@ function oneOf(values) {
 }
 const BOOLEAN = { ok: (v) => typeof v === 'boolean', why: 'must be true or false' };
 const ROLE_RULES = {
-  name: { ok: (v) => typeof v === 'string' && NAME_RE.test(v), why: "must be 1-30 letters, spaces, hyphens or apostrophes, starting with a letter" },
+  name: { ok: (v) => typeof v === 'string' && NAME_RE.test(v), why: "must be 1-30 letters, single spaces, hyphens or apostrophes, starting with a letter" },
   model: oneOf(MODELS),
   effort: oneOf(EFFORTS)
 };
@@ -215,8 +240,7 @@ function loadLayer(level, ctx, roleNames) {
     bytes = readBounded(file);
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
-    const stat = fs.statSync(file);
-    return { raw: `too large:${stat.size}:${stat.mtimeMs}`, layer: empty, warnings: [error.message] };
+    return { raw: refusedRaw(file, error), layer: empty, warnings: [error.message] };
   }
   if (bytes === null) return { raw: '', layer: empty, warnings: [] };
   let data;
@@ -258,7 +282,7 @@ function nameClashes(roles) {
   const seen = new Map();
   const clashes = [];
   for (const [role, { name }] of Object.entries(roles)) {
-    const key = name.toLocaleLowerCase();
+    const key = name.toLowerCase();
     if (seen.has(key)) clashes.push(`name ${name} is used by both ${seen.get(key)} and ${role}`);
     else seen.set(key, role);
   }
@@ -339,7 +363,7 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
   if (reasons.length) throw new Refusal(reasons.join('; '));
   if (edits.length === 0 || dryRun) return;
   const lines = Array.from({ length: count }, (_, i) => lineAt(i));
-  const end = headerEnd(lines);
+  let end = headerEnd(lines);
   for (const field of edits) {
     const line = `${field}: ${changes[field]}`;
     const at = lines.findIndex((l, i) => i < end && l.startsWith(`${field}:`));
@@ -347,10 +371,14 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
       parts[2 * at] = line;
       continue;
     }
+    // A new field goes after the last key line of the header, or at its end when it has none.
     let last = -1;
-    for (let i = 0; i < end; i++) if (/^[a-z_]+:/.test(parts[2 * i])) last = i;
-    parts.splice(2 * last + 1, 0, eol, line);
-    lines.splice(last + 1, 0, line);
+    for (let i = 0; i < end; i++) if (/^[a-z_]+:/.test(lines[i])) last = i;
+    const index = last === -1 ? end : last + 1;
+    if (index < lines.length) parts.splice(2 * index, 0, line, eol);
+    else parts.push(eol, line);
+    lines.splice(index, 0, line);
+    end = headerEnd(lines);
   }
   writeAtomic(file, parts.join(''));
 }
@@ -366,6 +394,10 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const ignored = [];
   const unlocked = user.unlocked ?? [];
   for (const k of project.unlocked ?? []) ignored.push(`project unlocked: ${k}`);
+  // A project layer with any problem may have lost a re-lock, so the unlocks don't count (fail closed).
+  const held = p.warnings.length > 0 && unlocked.length > 0;
+  if (held) warnings.push('project settings have problems: ship and installs Gates held at ask, security and compliance lanes held on');
+  const isUnlocked = (k) => !held && unlocked.includes(k);
 
   const roles = resolveRoles(defaults, user, project);
   warnings.push(...nameClashes(roles));
@@ -377,9 +409,9 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   };
   for (const lane of LANES) {
     const [value, source] = pick(project.pipeline?.lanes?.[lane], user.pipeline?.lanes?.[lane], PIPELINE_DEFAULTS.lanes[lane]);
-    if (LOCKED_LANES.includes(lane) && value === false && !unlocked.includes('security')) {
+    if (LOCKED_LANES.includes(lane) && value === false && !isUnlocked('security')) {
       pipeline.lanes[lane] = PIPELINE_DEFAULTS.lanes[lane];
-      ignored.push(`pipeline.lanes.${lane}: off from ${source} needs the user unlock security`);
+      ignored.push(`pipeline.lanes.${lane}: off from ${source} ${held ? 'held on' : 'needs the user unlock security'}`);
     } else {
       pipeline.lanes[lane] = value;
     }
@@ -388,9 +420,9 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const gates = {};
   for (const gate of GATES) {
     const [value, source] = pick(project.gates?.[gate], user.gates?.[gate], GATE_DEFAULTS[gate]);
-    if (LOCKED_GATES.includes(gate) && value === 'auto' && !unlocked.includes(gate)) {
+    if (LOCKED_GATES.includes(gate) && value === 'auto' && !isUnlocked(gate)) {
       gates[gate] = GATE_DEFAULTS[gate];
-      ignored.push(`gates.${gate}: auto from ${source} needs the user unlock ${gate}`);
+      ignored.push(`gates.${gate}: auto from ${source} ${held ? 'held at ask' : `needs the user unlock ${gate}`}`);
     } else {
       gates[gate] = value;
     }
@@ -402,8 +434,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     md = readBounded(projectFile(cwd)) ?? '';
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
-    const stat = fs.statSync(projectFile(cwd));
-    md = `too large:${stat.size}:${stat.mtimeMs}`;
+    md = refusedRaw(projectFile(cwd), error);
   }
   const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).update('\0').update(md).digest('hex');
   const language = resolveLanguage({ home, cwd });

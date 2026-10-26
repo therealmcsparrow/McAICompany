@@ -312,3 +312,12 @@ test('valid names.json has no errors', () => {
   const r = check(fixture({ agents: nameAgents, names: { qa: 'Quinn', support: 'Lucía' } }));
   assert.deepEqual(r.errors, []);
 });
+
+test('names with edge or double spaces are errors; combining marks are fine', () => {
+  for (const bad of ['Sam ', ' Sam', 'Sam  Lee']) {
+    const r = check(fixture({ agents: nameAgents, names: { qa: bad, support: 'Sofia' } }));
+    assert.ok(r.errors.some(e => e.includes('invalid name')), JSON.stringify(bad));
+  }
+  const r = check(fixture({ agents: nameAgents, names: { qa: 'Zoé', support: 'Sofia Lee' } }));
+  assert.deepEqual(r.errors, []);
+});

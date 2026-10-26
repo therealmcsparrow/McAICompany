@@ -23,7 +23,8 @@ Per field: project, else user, else plugin. Then the locks:
 - `unlocked` counts **only from the user level**. A project `unlocked` is ignored and listed in `ignored`.
 - `gates.ship` and `gates.installs` resolve to `auto` only with that key in the user `unlocked`; otherwise `ask`, listed in `ignored`.
 - `lanes.security` and `lanes.compliance` resolve to off only with `security` in the user `unlocked`; otherwise on, listed in `ignored`.
-- A broken layer (invalid JSON, wrong type, unknown Role) falls back to the level below for the bad parts, with a `warnings` line.
+- A broken layer (invalid JSON, wrong type, unknown Role, unreadable or too large) falls back to the level below for the bad parts, with a `warnings` line.
+- A project layer with any such problem may have lost a re-lock, so it fails closed: `gates.ship` and `gates.installs` are held at `ask` and `lanes.security` and `lanes.compliance` on, whatever the user `unlocked` says, with a `warnings` line.
 
 ## Schema (allow-list; unknown keys are refused)
 | Key | Values |
@@ -55,7 +56,7 @@ Warnings also go to stderr as `warning: <text>`.
 - `auto` Gates write their summary to the run folder and continue. Never auto, whatever the settings: `needs-ceo`, Blocking security findings, picks, escalations, design-skill set approval, client sends, publishing, authority reports, production deploys. An auto Ship Gate first runs the Finish writes and commits (summary, Debt, Lessons), then pushes the branch and opens a PR, then stops; it never merges.
 
 ## Error cases
-- `get` exits non-zero or prints invalid JSON → the pipeline uses plugin defaults and says so in the first Gate summary.
+- `get` exits non-zero or prints invalid JSON → the pipeline uses plugin defaults and says so in the first Gate summary and in its first chat message.
 - Invalid value, unknown key or a stale `revision` on save: `refused: <reason>` (exit 2 on the CLI, 4xx from the server), nothing written.
 - Unknown subcommand or extra arguments: `refused: usage: settings.mjs get [key] | serve [--no-open]` (exit 2).
 - `get <key>` for a missing key: `refused: no setting <key>` (exit 2).

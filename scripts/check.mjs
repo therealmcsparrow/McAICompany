@@ -97,7 +97,9 @@ function checkManifest(root, errors) {
   }
 }
 
-export const NAME_RE = /^[\p{L}][\p{L} '\-]{0,29}$/u;
+// 1-30 characters: starts with a letter; letters, combining marks, hyphens and apostrophes,
+// single spaces between words, no space at either end.
+export const NAME_RE = /^(?=.{1,30}$)\p{L}[\p{L}\p{M}'\-]*(?: [\p{L}'\-][\p{L}\p{M}'\-]*)*$/u;
 
 // company/names.json: exactly one valid, unique (case-insensitive) name per agent. Skipped when absent.
 export function checkNames(root, agentNames, errors) {
