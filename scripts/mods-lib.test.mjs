@@ -909,3 +909,100 @@ test('wrap keeps every row within the width, in cells, and loses no word', () =>
   assert.ok(wrap('x'.repeat(10 * 1024 * 1024), 39).length <= 8);
   assert.deepEqual(wrap('a b', 0), ['']);
 });
+
+// ---- git-commit.mjs: cases pinned by aico-mods M4 (Step 112), one test per exact string
+
+const PINNED_COMMIT = [
+  // the three probes of 111-code-reviewer.md
+  String.raw`git ls-remote --upload-pack='git stash -q; git merge -q --no-edit refs/stash;:' .`,
+  String.raw`GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:' git diff`,
+  String.raw`git config diff.external 'git stash -q; git merge -q --no-edit refs/stash;:'; git diff`,
+  // nested git with no commit word
+  String.raw`git ls-remote --upload-pack='git branch -f main x;:' .`,
+  String.raw`GIT_EXTERNAL_DIFF='/usr/bin/git branch -f main x;:' git diff`,
+  String.raw`git config diff.external 'git branch -f main x;:'; git diff`,
+  String.raw`git fetch --u='git.exe branch -f main x;:' .`,
+  // each history word alone
+  ...['merge', 'pull', 'cherry-pick', 'revert', 'am', 'rebase', 'stash', 'reset', 'update-ref', 'commit-tree'].map((w) => `git push --e=./x.sh . ${w}`),
+  // history word with the environment rule
+  String.raw`export GIT_EXTERNAL_DIFF; git diff --stat merge`,
+  String.raw`GIT_EXTERNAL_DIFF=./x.sh git diff --stat rebase`,
+  // 3-character runner prefix
+  String.raw`git diff --e commit`,
+  String.raw`git log --e commit`,
+  String.raw`git log --o stash`,
+  String.raw`git show --u=./x.sh reset`,
+  String.raw`git diff --r=./x.sh revert`,
+  // other programs, not-literal programs, doubt with a history word
+  String.raw`bash -c "git merge x"`,
+  String.raw`find . -exec git cherry-pick x \;`,
+  String.raw`echo am | xargs git`,
+  String.raw`node -e "require('child_process').execSync('git stash; git merge refs/stash')"`,
+  String.raw`g=gi""t; $g merge x`,
+  String.raw`echo "git pull`,
+  String.raw`echo "$(git merge x)"`
+];
+
+const PINNED_PS_COMMIT = [
+  String.raw`$env:GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:'; git diff`,
+  String.raw`git ls-remote --upload-pack='git branch -f main x;:' .`
+];
+
+const PINNED_NOT_COMMIT = [
+  'git push origin main',
+  'git fetch origin main && git status',
+  'GIT_PAGER=cat git log -1',
+  'git ls-remote --upload-pack=git-upload-pack .',
+  'git ls-remote --upload-pack=./x.sh .',
+  'git push --e=./x.sh . merges',
+  'git diff -- commit',
+  'git log --no-merges',
+  'git merge-base HEAD main',
+  'git stash',
+  'git stash list',
+  'git reset HEAD mods/a.ts',
+  'git log --grep git',
+  'cd git && git status',
+  'echo I am here; git status',
+  'bash -c "git status"',
+  'npm run git-hooks',
+  'git clone https://h/x.git y && cd y && git status'
+];
+
+for (const c of PINNED_COMMIT) {
+  test(`M4 pinned commit (bash): ${c}`, () => {
+    assert.equal(BASH(c).isCommit, true, c);
+  });
+}
+for (const c of PINNED_PS_COMMIT) {
+  test(`M4 pinned commit (powershell): ${c}`, () => {
+    assert.equal(PS(c).isCommit, true, c);
+  });
+}
+for (const c of PINNED_NOT_COMMIT) {
+  test(`M4 pinned not a commit: ${c}`, () => {
+    assert.equal(BASH(c).isCommit, false, c);
+  });
+}
+
+test('M4 pinned case counts: 31 commit + 2 PowerShell commit + 18 not a commit', () => {
+  assert.equal(PINNED_COMMIT.length, 31);
+  assert.equal(PINNED_PS_COMMIT.length, 2);
+  assert.equal(PINNED_NOT_COMMIT.length, 18);
+});
+
+test('M4: the reviewer payloads (program-name nesting, hyphen word ends, oversize) are commits', () => {
+  for (const c of [
+    String.raw`bash -c "git stash -q; git merge -q --no-edit refs/stash"`,
+    String.raw`echo -q --no-edit refs/stash | (git stash -q; xargs git merge)`,
+    String.raw`echo "$(git stash -q; git merge -q --no-edit refs/stash)"`,
+    String.raw`GIT_EXTERNAL_DIFF='/mingw64/bin/git add -A; c=comm; /mingw64/bin/git ${'$'}{c}it -qm x;:' git diff`,
+    String.raw`git ls-remote --upload-pack='git.exe add -A; c=comm; git.exe ${'$'}{c}it -qm x;:' .`,
+    String.raw`git ls-remote --upload-pack='s=-stash; m=-merge; gi""t ${'$'}{s#-} -q; gi""t ${'$'}{m#-} -q --no-edit refs/sta""sh;:' .`,
+    String.raw`git ls-remote --upload-pack='C:\Git\bin\git.exe x' .`,
+    'x '.repeat(40000) + 'git stash; git merge refs/stash'
+  ]) {
+    assert.equal(BASH(c).isCommit, true, c.slice(0, 80));
+  }
+  assert.equal(BASH('x '.repeat(40000)).isCommit, false);
+});

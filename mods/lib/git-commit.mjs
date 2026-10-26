@@ -2,7 +2,7 @@
 // Detection is an allow-list. A command is not a commit only when every statement is a cd, a harmless text tool,
 // or `git` with a literal subcommand from ALLOWED. Anything else that could commit counts as a commit, and the
 // gate then asks: a program name or subcommand the parser cannot read, an alias, another program whose text
-// names git and commit, a repository or index override. The gate always reads worktree, staged and untracked
+// names git and a commit word (commit or a history word), a repository or index override. The gate always reads worktree, staged and untracked
 // files, so a result carries no scope.
 
 const MAX_PARSE = 65536;
@@ -41,8 +41,11 @@ const NON_LITERAL = /[$@*?[\]`%!<>]/;
 const ENV_REDIRECT = /GIT_(?:DIR|WORK_TREE|INDEX_FILE)\b/i;
 const TEXT_REDIRECT = /--git-dir|--work-tree|core\.worktree|GIT_(?:DIR|WORK_TREE|INDEX_FILE)\b/i;
 // Subcommands that can put work on a branch without naming commit; their word in the text widens the strict rules.
-const LANDS_WORK = /(?<![A-Za-z0-9_-])(?:merge|pull|cherry-pick|revert|am|rebase|stash|reset|update-ref|commit-tree)(?![A-Za-z0-9_-])/i;
-const GIT_WORD = /(?<![A-Za-z0-9_./\-])git(?![A-Za-z0-9_.\/-])/i;
+// A word is a run of letters and digits: a hyphen or underscore ends it (`--merge` and `-stash` name merge and stash).
+const LANDS_WORK = /(?<![A-Za-z0-9])(?:merge|pull|cherry-pick|revert|am|rebase|stash|reset|update-ref|commit-tree)(?![A-Za-z0-9])/i;
+const GIT_NAMED = /(?<![A-Za-z0-9])git(?![A-Za-z0-9])/i;
+const COMMIT_NAMED = /(?<![A-Za-z0-9])commit(?![A-Za-z0-9])/i;
+const PIECE_SPLIT = /[\s=;&|(){}<>'"`]+/;
 const DASH_C = /(?:^|\s)-C\s/;
 
 function isAbsolute(p) {
@@ -58,8 +61,13 @@ function cap(p) {
   return p.length > MAX_REPO ? p.slice(0, MAX_REPO) : p;
 }
 
-function namesGitAndCommit(text) {
-  return /(?<![A-Za-z0-9])git(?![A-Za-z0-9])/i.test(text) && /(?<![A-Za-z0-9])commit(?![A-Za-z0-9])/i.test(text);
+function namesCommitWord(text) {
+  return COMMIT_NAMED.test(text) || LANDS_WORK.test(text);
+}
+
+// "Names git and names a commit word": the test for every program that is not git itself.
+function namesGitAndCommitWord(text) {
+  return GIT_NAMED.test(text) && namesCommitWord(text);
 }
 
 // Splits a command line into statements of unquoted tokens.
@@ -159,7 +167,17 @@ function parse(src, ps) {
   return { statements, unterminated };
 }
 
-// A `git` word in any token outside a statement's program position: a payload that calls git from inside an option, a value or a variable.
+// A piece of the token whose base name is git or git.exe (after quote resolution), e.g. /mingw64/bin/git.
+function holdsGit(token) {
+  for (const piece of token.split(PIECE_SPLIT)) {
+    if (piece === '') continue;
+    const b = baseName(piece);
+    if (b === 'git' || b === 'git.exe') return true;
+  }
+  return false;
+}
+
+// A nested git in any token outside a statement's program position: a payload that calls git from inside an option, a value or a variable.
 function nestsGit(statements, ps) {
   for (const st of statements) {
     let k = 0;
@@ -167,10 +185,10 @@ function nestsGit(statements, ps) {
       const t = st.tokens[k];
       const assign = (!ps && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) || (ps && /^\$env:[^=]*=/i.test(t));
       if (assign) {
-        if (GIT_WORD.test(t)) return true;
+        if (holdsGit(t)) return true;
       } else if (!KEYWORDS.has(t)) break;
     }
-    for (let j = k + 1; j < st.tokens.length; j++) if (GIT_WORD.test(st.tokens[j])) return true;
+    for (let j = k + 1; j < st.tokens.length; j++) if (holdsGit(st.tokens[j])) return true;
   }
   return false;
 }
@@ -184,7 +202,7 @@ function isLiteral(token) {
   return token !== '.' && token !== '&' && !NON_LITERAL.test(token);
 }
 
-// Long options that run a program; git accepts any unambiguous prefix, so any prefix of one letter or more (three characters with the dashes) counts.
+// Long options that run a program; git accepts any unambiguous prefix, so any prefix of three characters or more, the two dashes included, counts.
 const RUNNERS = ['--upload-pack', '--receive-pack', '--exec', '--ext-diff', '--open-files-in-pager'];
 
 function runsProgram(toks, from, sub) {
@@ -303,7 +321,7 @@ function commit(repo, unknown) {
 
 function intent(command, ps) {
   if (typeof command !== 'string') return { ...NOT };
-  if (command.length > MAX_PARSE) return namesGitAndCommit(command) ? commit(null, false) : { ...NOT };
+  if (command.length > MAX_PARSE) return namesGitAndCommitWord(command) ? commit(null, false) : { ...NOT };
   const { statements, unterminated } = parse(command, ps);
   let cwd = null;
   let found = null;
@@ -322,9 +340,9 @@ function intent(command, ps) {
   if (ctx.env && ctx.git && ctx.mentionsCommit) return commit(cwd, ENV_REDIRECT.test(command) || ctx.force);
   const substitution = ps ? command.includes('$(') : command.includes('$(') || command.includes('`');
   const doubt =
-    (dynamic && /git|commit/i.test(command)) ||
-    (foreign && namesGitAndCommit(command)) ||
-    ((unterminated || substitution) && namesGitAndCommit(command));
+    (dynamic && (/git|commit/i.test(command) || LANDS_WORK.test(command))) ||
+    (foreign && namesGitAndCommitWord(command)) ||
+    ((unterminated || substitution) && namesGitAndCommitWord(command));
   if (!doubt) return { ...NOT };
   return commit(cwd, TEXT_REDIRECT.test(command) || DASH_C.test(command) || ctx.force);
 }
