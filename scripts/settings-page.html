@@ -279,6 +279,10 @@ function effective(path, pluginValue) {
   const [area, , key] = path;
   if (area === 'mods') return modsEffective(path, pluginValue);
   const [value, source] = pickSource(path, pluginValue);
+  if (area === 'skillspector' && getIn(draft.project, path) === 'claude_cli') {
+    const fromUser = getIn(draft.user, path);
+    return { value: fromUser ?? pluginValue, source: 'locked', held: 'claude_cli from project counts only from your user settings' };
+  }
   if (area === 'gates' && LOCKED_GATES.includes(path[1]) && value === 'auto' && !userUnlocked(path[1])) {
     return { value: pluginValue, source: 'locked', held: `auto from ${source} needs your ${path[1]} unlock` };
   }
@@ -634,6 +638,12 @@ function renderMods(panel) {
     panel.append(wrap);
   }
   panel.append(el('p', { class: 'hint' }, 'Pane auto: the pane opens by itself when a run starts, where the surface docks it. Reflect model mode spends tokens and is written to the token ledger.'));
+  panel.append(el('h2', {}, 'SkillSpector'));
+  const ss = table(COLUMNS);
+  pipelineRow(ss.tbody, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm',
+    (l) => selectFor(['no-llm', 'claude_cli'], l), String, String);
+  panel.append(ss.wrap);
+  panel.append(el('p', { class: 'hint' }, 'No-LLM: static rules only; nothing leaves this machine. Claude CLI: the text of each scanned skill goes to Claude (Anthropic) under your login and counts toward your usage. Set it for yourself only; a project setting cannot turn it on.'));
 }
 
 // ---------- page ----------
@@ -722,7 +732,7 @@ async function save() {
 function clearLevel(level) {
   if (activeTab === 'roles') delete draft[level].roles;
   else if (activeTab === 'pipeline') delete draft[level].pipeline;
-  else if (activeTab === 'mods') delete draft[level].mods;
+  else if (activeTab === 'mods') { delete draft[level].mods; delete draft[level].skillspector; }
   else if (activeTab === 'gates') { delete draft[level].gates; if (level === 'user') delete draft.user.unlocked; }
   else if (activeTab === 'language') {
     draft.language[level] = '';
