@@ -1,0 +1,3 @@
+# Token spend comes from host transcripts, not the task notification
+
+The task notification's `<subagent_tokens>` is the context size at the end of a dispatch, not its spend (Spike S1: it understates processed volume about 11x), so the ledger stores it only as `ctx_end` and takes the four real counts from the host's subagent transcript (`ledger.mjs reconcile`), reading numeric usage fields only. The transcript layout is undocumented and expires after about 30 days, so reconcile is best effort, runs before the Ship Gate, and never blocks. Caching gives no saving across dispatches (Spike S2), so savings are measured as reading less.

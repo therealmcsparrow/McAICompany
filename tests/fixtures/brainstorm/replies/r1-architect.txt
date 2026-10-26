@@ -1,0 +1,5 @@
+I: Serve the page on loopback with a one-time token.
+I: Print the URL once at start-up.
+Risk: A leaked token gives write access to settings.
+Q [blocking]: Where does the settings server run? | options: local / hosted | default: local
+Estimate: M, 3–5 d

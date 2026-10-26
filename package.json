@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node --test \"scripts/*.test.mjs\"",
     "check": "node scripts/check.mjs",
+    "release": "node scripts/release.mjs",
     "setup": "node scripts/install-skills.mjs"
   }
 }

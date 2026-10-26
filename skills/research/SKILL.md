@@ -9,7 +9,7 @@ argument-hint: <topic | project | file> [quick|deep]
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `research` and stop.
 
-You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language and the settings (§1.2, §1.4, §1.6, §1.7); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v1 (RR), `skills-manifest` v2 (SM), `design-skills-section` v1 (DS), `dispatch-prompt` v3 (DP), all in `docs/contracts/`.
+You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language, the settings and the Context cap (§1.2, §1.4, §1.6, §1.7 with Setup item 8); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v1 (RR), `skills-manifest` v2 (SM), `design-skills-section` v1 (DS), `dispatch-prompt` v3.1 (DP), all in `docs/contracts/`.
 
 ## 1. Start
 1. Argument: a topic (text), `project` (the topic is this product: read `.company/project.md`), or a file path (a brainstorm, cooler or earlier report: its idea or `## Summary` is the topic). A trailing `quick` or `deep` sets the depth; default `deep`.
@@ -45,12 +45,13 @@ Company profile: <absolute path to PROFILE.md>
 Language: <tag>
 Name: <the Role's name from §1.7>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
+Context cap: <cap> handover <n>   # per Role, from aico:pipeline Setup item 8
 Follow aico:handoff.
 ```
-Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7). The design-researcher gets the Goal "judge the installed design skills and recommend at most 5, each as a DS line with `approved: pending`" and no other input. A `blocked` researcher does not stop the run: the report notes it (RR error cases). `needs-ceo` → ask the CEO in a form, then re-dispatch that Role.
+Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7), and each Role's Context cap (Setup item 8, high-tier floor included). The design-researcher gets the Goal "judge the installed design skills and recommend at most 5, each as a DS line with `approved: pending`" and no other input. A `blocked` researcher does not stop the run: the report notes it (RR error cases). `needs-ceo` → ask the CEO in a form, then re-dispatch that Role. `handover` → dispatch a fresh Step of the same Role (next `NN`) with the same fields, Input = the original Input plus the handover Handoff, Goal "continue from `<path>` `## Next`"; it is not `blocked`.
 
 ## 4. Synthesis
-Dispatch `product-manager` with Output `.company/work/research-<slug>/<NN>-product-manager.md` and the researcher Handoffs as Input. Goal: write the report per RR at `.company/research/YYYY-MM-DD HH.MM - <Short Topic>.md` (local start time; Short Topic per the RR `## Short Topic` rule: allow-list regex, at most 60 characters and 5 words, Title Case; a failing topic becomes the run slug, never repaired). Cite that rule in the dispatch. Pass `topic`, `question`, `depth`, `roles`, `started` and `degraded:` for the frontmatter. `outcome: open`, `label: AI-generated research`. The same dispatch fields, `Language:`, `Name:` and `Settings:` as §3.
+Dispatch `product-manager` with Output `.company/work/research-<slug>/<NN>-product-manager.md` and every researcher Handoff as Input, each link of a handover chain included. Goal: write the report per RR at `.company/research/YYYY-MM-DD HH.MM - <Short Topic>.md` (local start time; Short Topic per the RR `## Short Topic` rule: allow-list regex, at most 60 characters and 5 words, Title Case; a failing topic becomes the run slug, never repaired). Cite that rule in the dispatch. Pass `topic`, `question`, `depth`, `roles`, `started` and `degraded:` for the frontmatter. `outcome: open`, `label: AI-generated research`. The same dispatch fields, `Language:`, `Name:`, `Settings:` and `Context cap:` as §3.
 
 ## 5. Check the tree (AC2)
 Run `git status --porcelain` and compare with the baseline. New entries must lie only under `.company/research/` and `.company/work/research-<slug>/`. Anything else → stop, name the paths, change nothing, and ask the CEO in a form how to proceed. Then check the report has the six RR headings in order and a `verdict:`; if not, send the product-manager back once.

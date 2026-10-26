@@ -1,0 +1,2 @@
+Risk: Strict binding hides the tool from hosted editors.
+Re: @architect on I-2.1: challenge — Offer an opt-in flag instead.

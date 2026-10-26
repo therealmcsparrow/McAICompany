@@ -75,7 +75,31 @@ _Avoid_: orchestrator (use Lead).
 
 **Handoff Contract** — the machine-readable shape of a Handoff: frontmatter fields (`status`, `round`, `base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) plus a `contract|spec|security|test` blocking taxonomy, so the Lead routes and resumes from fields rather than prose.
 
-**Context budget** — no agent (Role or Lead) goes over 150k tokens of context. A Role near it stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
+**Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only, and only with `pipeline.review_format: pilot` (default `plain`). Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
+
+**Context cap** — `context_cap`: the max context a Role gets, set in Settings (global and per Role). Default 150000, floor 60000. A Role hands over at 80%; high-risk work is never below the default. A soft limit passed in the dispatch.
+
+**Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
+
+**Tool check** — a rule tagged `check: <tool>`, bound to its rule ID in `.company/checks.json`. It runs before review; a failure is a finding the reviewer confirms before it blocks.
+
+**Rule slice** — the rules mapped to one task, always including every security Must. Builders read them from a per-task file in `rules/` that holds the rule text.
+
+**Findings ledger** — the reviewer's file listing every finding and checked file. Written only near a handover, so a handover mid-review loses nothing.
+
+**Review depth** — how much a review covers, set by the touched paths, not the builder's label. Contract, Core and security paths always get a full review.
+
+**Golden Handoff** — a reference Handoff run under `npm test` as a regression net; its size is the token baseline.
+
+**Digest** — the part of a format 2 brainstorm file that quotes your answers word for word, lists open threads, keeps a dissent line and links each item to its round.
+
+**Crossfire** — in debate mode, the round's sharpest clash. By default it is folded into the next round: the challenged Role answers it in its next ideas pass ("Challenge to you"), with no extra dispatch. The setting `brainstorm.debate` is `crossfire` (default) or `full_pass`, which keeps the live pair (about 50 words each).
+
+**Round input** — the small per-Role file in `.company/brainstorm-input/` that holds what changes each brainstorm round (digest, questions, "Others said" with idea IDs). The Role's dispatch prompt stays constant for the whole run. The script writes the file and removes it at Close.
+
+**Film script** — an optional separate file (`brainstorm.film_script`, off by default) where every line quotes a stored brainstorm reply. No model call.
+
+**Context budget** — no agent (Role or Lead) goes over 150k tokens of context by default. A Role near it stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
 
 **Risk tier** — `low | medium | high`, set in the Brief and carried in every dispatch; forced high for auth, payments, personal data, migrations or a Contract change. Drives test depth, rule scope and routing. A Role may raise it, never lower it.
 
@@ -102,6 +126,20 @@ _Avoid_: orchestrator (use Lead).
 **Effort** — how long a Role thinks before acting: `low | medium | high | xhigh | max`. Each Role's default is in its agent file; the CEO can change it in Settings.
 
 **Role name** — the person name a Role shows in cooler chats, brainstorms, Gate summaries and Handoff bylines (e.g. Ava for the architect). Display only: `aico:<role>` IDs, file names and routing never change. Defaults live in `company/names.json`.
+
+**Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are four: Savvy, Cache Tax, Reflect and Blast Radius. They add no tokens to a prompt, apart from Reflect `model` mode and Blast Radius's refusal reason. Switched in `/aico:settings`.
+
+**Savvy** — the mod that shows the progress of the current run: wave, Step, Gates passed, Fix round and elapsed time.
+
+**Cache Tax** — the mod that shows spend per Step, with cache writes marked `[tax]`, and the cache clock.
+
+**Reflect** — the mod that checks each finished Step and the finished run, and suggests Lessons. Each is `suggested` until the CEO presses Accept; Decline writes nothing.
+
+**Blast Radius** — the mod that checks what a `git commit` touches (Core, Contract or security paths) before it runs, through both the `Bash` and `PowerShell` tools. Each category is `ask` or `warn`. With nobody to ask it refuses; turning it off needs the `security` unlock.
+
+**Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
+
+**Cache clock** — the time when the Lead's prompt cache expires (last Lead request plus its lifetime, measured as 1 hour), shown by Cache Tax. It only shows the time; nothing keeps the cache warm.
 
 **Settings** — the CEO's choices for Role name, model and effort, language and profile, Fix-round limit, dispatch mode, review lanes and Gates, changed on the `/aico:settings` page. Three levels: plugin default, user default (`~/.mcsparrow/config.json`) and project override (`.company/settings.json`); project wins over user, user over plugin.
 

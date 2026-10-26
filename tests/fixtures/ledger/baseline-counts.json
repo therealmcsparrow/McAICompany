@@ -1,0 +1,8 @@
+{
+ "aaaaaaaa aico/alpha": {"first": "2026-10-16T10:23:39.180Z", "dispatches": 20, "requests": 60, "in": 100, "cache_write": 9000, "cache_read": 100000, "out": 10900, "notif_total": 500000, "roles": {"aico:qa": 1}},
+ "bbbbbbbb aico/beta": {"first": "2026-10-17T10:23:39.180Z", "dispatches": 20, "requests": 60, "in": 200, "cache_write": 19000, "cache_read": 200000, "out": 10800, "notif_total": 600000, "roles": {"aico:qa": 1}},
+ "cccccccc feat/gamma": {"first": "2026-10-18T10:23:39.180Z", "dispatches": 10, "requests": 30, "in": 300, "cache_write": 29000, "cache_read": 300000, "out": 10700, "notif_total": 700000, "roles": {}},
+ "dddddddd aico/extra": {"first": "2026-10-18T10:23:39.180Z", "dispatches": 1, "requests": 1, "in": 1, "cache_write": 1, "cache_read": 1, "out": 1, "prompt": "SECRET-BASELINE-TEXT"},
+ "eeeeeeee aico/proto": {"__proto__": {"in": 1}, "dispatches": 1, "requests": 1, "in": 1, "cache_write": 1, "cache_read": 1, "out": 1},
+ "ffffffff aico/float": {"dispatches": 1, "requests": 1, "in": 1.5, "cache_write": 1, "cache_read": 1, "out": 1}
+}

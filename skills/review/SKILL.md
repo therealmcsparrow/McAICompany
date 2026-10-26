@@ -5,18 +5,16 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Scope: the diff against `base-commit`** from your dispatch (`git diff <base-commit>...HEAD`), added and changed lines only — never `HEAD~1`, never older code (that is Debt). **Use the checklist** from `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, applied by you to that diff. You are a subagent and can't dispatch other agents, so skip any step in those skills that dispatches a reviewer.
+**Scope: `git diff <base-commit>...HEAD`** (the dispatch `base-commit`, never `HEAD~1`), added and changed lines only; older code is Debt. Use the checklist of `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, minus reviewer-dispatch steps. Pre-filter findings are advisory: confirm each; only you close a review.
 
-**Pre-filter findings** may arrive in your input (from `aico:pipeline`'s deterministic pre-run). They are advisory and additive: confirm each against the diff before you keep it, and add your own. The pre-filter never closes a review — only you do.
+**Tool checks.** Read `rule-check.mjs list`; don't re-judge or restate those rules. Confirm each `T-` row: confirmed → `## Blocking`, same ID; rejected → Nit `T-<n> | <file>[:<line>] | not confirmed | <why> | none`. A tool never blocks on its own; report `tool failed: <id>` as a row. Compliance stays a separate lane.
 
-**Always also check** the review blockers in `aico:contracts`.
+**Depth.** `Review depth:` comes from `review-depth.mjs`, not the builder's label. `full`: every touched line plus callers and Contracts; `standard`: the scope. Raise to `full` for a Contract, Core or security path, never lower it. Absent or invalid → `full`.
 
-**Fallback:** (1) Does the diff do what the input Handoff/brief asked, no more, no less? (2) Correctness: edge cases, error paths, concurrency. (3) Readability and the repo's conventions. (4) Tests cover the behavior.
+**Also check** `aico:contracts` review blockers; then the brief (no more, no less), correctness, conventions, tests. **Ruleset:** `aico:ruleset` Tiers on added or changed lines.
 
-**Ruleset:** apply `aico:ruleset` Tiers to added or changed lines; a Must break is `## Blocking`.
+**Untrusted input** (`aico:security-check`): a block-list, a check blind to how the consumer recovers from malformed input (unclosed strings, escapes), or an unbounded/backtracking pattern is `## Blocking` even if known attacks are covered.
 
-**Untrusted input:** validation built as a block-list of bad patterns, a check that ignores how the consumer recovers from malformed input (unclosed strings, escapes), or an unbounded/backtracking pattern is `## Blocking`, even if every known attack is covered (see `aico:security-check`).
+A code comment about Handoffs, Steps, Roles, AI or company process is `## Blocking` `spec` (`aico:tdd`).
 
-**Comments:** a code comment about Handoffs, Steps, Roles, AI or company process (not about the code itself) is `## Blocking` `spec` (see `aico:tdd`).
-
-**Sort:** a bug, spec miss, Contract violation, missing test or security risk → `## Blocking`. Style or preference → `## Nits`. You never edit code; the finding is your output.
+**Sort:** bug, spec miss, Contract violation, missing test, security risk → `## Blocking`; style → `## Nits`.

@@ -11,8 +11,24 @@ A Role never keeps work in its head for the next Role. Each one writes a **Hando
 ## The Handoff Contract
 Handoffs aren't just prose — each carries machine-readable frontmatter the Lead and later Roles read as fields: `status`, `round`, `base-commit` (what reviewers diff against), `risk-tier`, `acceptance-ids` (which of the brief's criteria this Step delivers) and `files-touched`. Blockers are tagged `contract`, `spec`, `security` or `test` so the Lead routes a Fix round precisely. Because the fields are structured, independent Steps run **in parallel by default**, reviewers scope to `base-commit` instead of re-reading history, and a run can resume from any Step after a restart.
 
+**v1.1 (pilot, off by default).** With the setting `pipeline.review_format: pilot` (default `plain`, see [Settings](#settings)), the code-reviewer and the compliance Step of the senior-engineer also write a short `aico-top` block right under the By line, with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Their findings are rows: `ID | file:line | problem | why | fix`. The IDs are stable, so a Fix round cites `R-3` instead of retyping the finding, and "why" is never empty. A malformed block blocks that Step. With `plain`, they write ordinary findings and no block. Other Roles write Handoffs as before; the body stays plain English for Gate summaries, exceptions, Debt and security risks. The block is widened to more Roles only after the token numbers support it.
+
 ## Context budget
-No agent works with more than **150k tokens** of context, the Lead included. Long contexts get sloppy and compaction drops detail, so a Role that gets close stops at a clean point (tests green, nothing half-edited) and writes its Handoff with `status: handover`, listing exactly what's left under `## Next`. The Lead then dispatches a fresh Step of the same Role to carry on from there. A handover isn't a failure and doesn't use up a Fix round. If the Lead itself gets close, it saves the run state to `00-lead-state.md` and asks you to continue in a fresh session with "resume <slug>".
+No agent works with more than **150k tokens** of context by default, the Lead included. Long contexts get sloppy and compaction drops detail, so a Role that gets close stops at a clean point (tests green, nothing half-edited) and writes its Handoff with `status: handover`, listing exactly what's left under `## Next`. The Lead then dispatches a fresh Step of the same Role to carry on from there. A handover isn't a failure and doesn't use up a Fix round. If the Lead itself gets close, it saves the run state to `00-lead-state.md` and asks you to continue in a fresh session with "resume <slug>".
+
+You can change the limit for Roles in [settings](#settings) as **max context** (`context_cap`): one global value, with an override per Role. The default is 150000 and the floor is 60000; lower values are refused. A Role hands over at 80% of its cap. High-risk work never gets less than the default, whatever you set. The cap is a soft limit that the Lead passes in each dispatch; it is not enforced by the model.
+
+## Token cost
+aico records how many tokens each Step used in a ledger at `.company/ledger/<run>.jsonl`. The ledger stores **counts only**: no prompts, no replies. At the Ship Gate the Lead shows one cost line, with spend (input, cache write and output) and cache read kept apart. `/aico:feedback` compares the last three runs.
+
+The savings come from reading less: shorter prompts, fewer file reads, fewer dispatches, a digest in place of a full transcript. Brainstorm Roles also keep one constant prompt for the whole run, with changing content in a per-round input file. aico claims no saving percentage for this yet. Prompts keep one fixed order so they stay readable and testable.
+
+## Tool checks, slices and review depth
+- **Tool checks.** A rule can carry `check: <tool>` or `check: judgment`. Checks bind to a rule by its ID in `.company/checks.json` and run before review. A failure becomes a finding that the reviewer must confirm before it blocks. Compliance stays a separate lane.
+- **Rule slices.** These stay on whatever the review format is. Each task gets only its mapped rules, and always every security Must. The Senior Engineer renders them into one small file per task, `.company/work/<slug>/rules/<task>.md`, with the rule text included. Builders get that file instead of the full ruleset map. `rule-check slices` verifies the files and flags missing, stale or extra ones.
+- **Findings ledger** (only with `pipeline.review_format: pilot`). A reviewer writes its findings and checked files to `<NN>-code-reviewer.findings.md` only when a handover is near (at 75% of the max context, or once it decides to hand over). A handover without a ledger fails the lint, so nothing is lost; a review that finishes normally needs none.
+- **Review depth** follows the paths touched (`scripts/review-depth.mjs`), not the builder's own label. Contract, Core and security paths always get a full review.
+- **Golden Handoffs and the regression set.** Reference Handoffs and past high-tier defects run under `npm test`, so a change that loosens a Gate or the Handoff shape fails a test.
 
 ## Risk tier
 Every piece of work gets a tier — `low`, `medium` or `high` — set in the brief and confirmed by you at the Brief Gate, then carried in every dispatch. It's forced **high** for anything touching auth, payments, personal data, migrations or a Contract. The tier drives how deep QA tests, how much of the ruleset applies, and how short a route triage may recommend. A Role can raise a tier but never lower it, and no tier ever removes a criterion's single test or skips the Ship Gate's full suite.
@@ -38,6 +54,7 @@ This keeps Modules independent and swappable, and keeps the risky surface (Core)
 A product's binding engineering rules, kept by the **Senior Engineer** and signed off by the Architect. Built and maintained with [`/aico:standards`](commands.md#aicostandards).
 
 - **Rule packs** hold the rules for one tool and major version (`<tool>@<major>.md`), each rule with its source URL. They live in a shared library on your machine (`~/.mcsparrow/standards/`) and are copied into each product under `.company/standards/`; the product's own rules and the pack list live in `.company/standards.md`.
+- **Freshness.** `node scripts/check.mjs --packs <dir>` fails a library pack that is older than 90 days or has a new advisory in its `advisories.json` since its date. CI checks the committed copies and fails only after 180 days, so CI doesn't go red just because a copy aged. The checker never goes online.
 - **Tiers:** **Must** (always followed; a break blocks a run — all security rules are Must), **Should** (followed, or a written reason) and **May** (advice).
 - **Sources:** Must rules come only from primary sources — official docs, style guides, linter defaults, and security bodies (OWASP, CWE, CISA KEV, vendor advisories). Should/May may also cite well-known community guides. Blogs, forums and AI-generated content are never a source.
 - **Exception:** only you (the CEO) can approve not following a Must, in a stated scope. It's recorded with its date.
@@ -74,21 +91,24 @@ A UI product can have approved design skills. The set lives in `.company/project
 Every Role runs on a **model** (opus, sonnet or haiku) and an **effort** level (`low`, `medium`, `high`, `xhigh`, `max`). The model is how capable the Role is; effort is how long it thinks before acting. The plugin's defaults put the deepest thinking where a miss is expensive (architect, code-reviewer, security, pentester on high) and keep writing, art, lookup and support work on low. Every Role also has a person name for display, such as Ava the architect or Quinn the QA tester. Names show in cooler chats, brainstorms, Gate summaries and Handoff bylines (`By: Ava (architect)`). You can ask for a Role by name ("ask Ava to check the Contracts"). Internal IDs like `aico:architect` never change. The full list is in [Roles](roles.md).
 
 ## Settings
-[`/aico:settings`](commands.md#aicosettings) opens a page in your browser where you change how the company works. It has four tabs:
+[`/aico:settings`](commands.md#aicosettings) opens a page in your browser where you change how the company works. It has five sections:
 
 - **Roles** — name, model and effort for each Role, with a bulk change per department.
 - **Language & profile** — the aico language and the `.company/project.md` profile fields.
-- **Pipeline** — the Fix-round limit, parallel or one-at-a-time dispatch, and which optional review lanes run (security, compliance, legal, persona, hands-on and accessibility testing).
+- **Pipeline** — the Fix-round limit, parallel or one-at-a-time dispatch, the max context (`context_cap`, global and per Role), the review format (`pipeline.review_format`, below), which optional review lanes run (security, compliance, legal, persona, hands-on and accessibility testing), and the brainstorm options: debate style (`brainstorm.debate`) and the film script (`brainstorm.film_script`).
 - **Gates** — ask or auto for the Brief, Plan and Ship Gates and for installs.
+- **Mods** — on or off and the options for the four [mods](mods.md), including the Blast Radius commit gate.
 
 Each setting has three levels, shown side by side: the **plugin** default, your **user** default (`~/.mcsparrow/config.json`) and a **project** override (`.company/settings.json`; profile fields stay in `.company/project.md`). The project wins over the user, and the user wins over the plugin. Changes apply from the next aico run. With nothing set, aico behaves exactly as before.
 
 `inherit` as a model means "use the model of the session you run aico in".
 
+**Review format** (`pipeline.review_format`: `plain` or `pilot`, default `plain`). With `plain`, the Code Reviewer and the compliance pass write ordinary findings. With `pilot`, they also write the `aico-top` block, findings as `ID | file:line | problem | why | fix` rows, and a findings ledger when a review hands over; the Lead then checks those Handoffs with `--require-top`. It is not a lock. What we measured, counts only: in a first test (6 re-reviews each way), 4 of 6 pilot Handoffs failed the lint and 2 of 6 wrote a ledger on a finished review. Those were fixed and tested again (3 re-reviews each way, plus 3 forced handovers and a continuation). Both modes pass: with `pilot`, every Handoff passed the lint on the first try, and with `plain` there is no `aico-top` block and no findings ledger. The one part not exercised is appending to a findings ledger, because no new finding came up. `pilot` cost about 5.7k more tokens per re-review than `plain` (about 27.2k against 21.5k). So `pilot` is an opt-in that costs more and is not shown to save anything. Rule slices for builders and search-then-read stay on with either value.
+
 The page runs only on your own machine (127.0.0.1) behind a one-time link, and closes when you press Done or after 30 minutes idle. At the start of every run the Lead tells you which project-level overrides are active, so a cloned or client repo can't quietly change how its Roles work.
 
 ## Locks
-Some settings could skip a safety check, so they start **locked**: auto for the Ship Gate, auto for installs, and switching off the security or compliance review lanes. You unlock each one on the settings page behind a warning that says what will no longer ask you. Unlocks count **only from your user settings**: a project file can lock things again but never unlock them, so a repo you clone can't turn on auto-push or skip security review on your machine. If a project's settings file is broken, its locks hold anyway.
+Some settings could skip a safety check, so they start **locked**: auto for the Ship Gate, auto for installs, and switching off the security or compliance review lanes. Two mod settings are locked the same way: Blast Radius `security: warn` and switching Blast Radius off (see [Mods](mods.md#locks)). You unlock each one on the settings page behind a warning that says what will no longer ask you. Unlocks count **only from your user settings**: a project file can lock things again but never unlock them, so a repo you clone can't turn on auto-push or skip security review on your machine. If a project's settings file is broken, its locks hold anyway.
 
 ## The `.company/` folder
 Everything a job produces lands here, in your product's repo, in plain files you can read:
@@ -98,6 +118,7 @@ Everything a job produces lands here, in your product's repo, in plain files you
 - `.company/work/<task>/` — the Handoffs and reports for each job
 - `.company/standards.md` and `.company/standards/` — the Ruleset and its rule-pack copies
 - `.company/lessons.md` — the running list of Lessons
+- `.company/ledger/` — the token ledger, counts only
 - `.company/brainstorms/`, `.company/roadmap/`, `.company/nice-to-have/`, `.company/parked/` — ideas from [`/aico:brainstorm`](commands.md#aicobrainstorm) at each stage
 - `.company/cooler/` — recorded chats from [`/aico:cooler`](commands.md#aicocooler)
 - `.company/research/` — reports from [`/aico:research`](commands.md#aicoresearch); `outcome:` records your pick

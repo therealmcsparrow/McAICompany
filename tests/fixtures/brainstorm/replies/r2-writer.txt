@@ -1,0 +1,3 @@
+I: Add one help line that links the guide.
+Risk: The guide link may rot.
+Re: @architect on I-1.1: agree — The token keeps other local users out.

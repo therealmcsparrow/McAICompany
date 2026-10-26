@@ -1,6 +1,6 @@
 ---
 name: standards
-description: Playbook. Research or refresh the product's ruleset - sourced best-practice rules per tool, with security as law.
+description: Playbook. Research or refresh the ruleset: sourced best-practice rules per tool, security as law.
 disable-model-invocation: true
 argument-hint: [tool | refresh]
 ---
@@ -9,13 +9,13 @@ argument-hint: [tool | refresh]
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `standards` and stop.
 
-Run with `aico:pipeline`. No Brief or Plan Gate (this Playbook's own skip); the Ship Gate stays. Rules work per `aico:ruleset`.
+Run with `aico:pipeline`; no Brief or Plan Gate, the Ship Gate stays. Rules per `aico:ruleset`.
 
 1. `aico:senior-engineer`:
-   - `<tool>` given → mode **research** for that tool.
-   - `refresh` or nothing → mode **refresh**. Show its report to the CEO, ask in a form (`multiSelect`) which changes to take, then dispatch **research** for those.
-2. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. One rejection → one Senior Engineer revision; still rejected → the CEO decides.
-3. Exception requests and new `## Debt` lines go to the CEO in one form. Offer `/aico:fix` or `/aico:refactor` runs for Debt; never start them.
-   **→ Ship Gate** (merge the `.company/standards.md` and `.company/standards/` change)
+   - `<tool>` → mode **research** for it. `refresh` or nothing → mode **refresh**: the CEO picks from its report in a `multiSelect` form, then **research** those.
+   - In `research` and `map`, `rule-check.mjs slices <Handoff> --write` runs before `done`.
+2. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. One rejection → one revision; still rejected → the CEO decides. Then `rule-check.mjs drift`; exit 1 → rebind the check or restore the rule.
+3. Exception requests and new `## Debt` go to the CEO in one form; offer `/aico:fix` or `/aico:refactor` runs, never start them.
+   **→ Ship Gate** (merge the ruleset change)
 
-Library files under `~/.mcsparrow/standards/` are never committed by the run; tell the CEO which ones changed.
+Never commit `~/.mcsparrow/standards/`; report its changes.

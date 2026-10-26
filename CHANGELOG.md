@@ -2,6 +2,37 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [Unreleased]
+
+## [0.11.0] - 2026-10-26
+
+Cheaper brainstorms and cheaper runs. The savings come from reading less (shorter prompts, fewer reads, fewer dispatches). Brainstorm Roles now keep one constant prompt, so it can be cached. No saving percentage is claimed yet.
+
+### Added
+- **Mods.** Four add-ons inside Claude Code, all on by default and switched in `/aico:settings` (Mods section); see `documentation/mods.md`. **Savvy** shows run progress. **Cache Tax** shows spend per Step and the cache clock: when the Lead's cache expires, with a note that subagent caches last 5 minutes. **Reflect** checks each Step and the finished run and suggests Lessons; each needs your Accept, and `model` mode (off by default, user level only) spends tokens that are ledgered as `reflect`. **Blast Radius** checks a `git commit` before it runs, through both the `Bash` and `PowerShell` tools: `core: ask`, `security: ask`, `contract: warn` by default; with nobody to ask (plain `claude -p`) it refuses the commit with a reason. The mods share one status line. Terminal is proven; desktop is unverified and shows `unknown` where scripts cannot run.
+- **Run-state** (`scripts/run-state.mjs`): the Lead records each run's wave, Gates and end. It never blocks a Step or a Gate.
+- **Mod settings** (`mods.*`) with three locks: Reflect `model` is user-level only; a project can only tighten Blast Radius; `security: warn` and switching Blast Radius off need the `security` unlock. There is no keep-warm key.
+- **Contracts:** `aico-mods` v1, `run-state` v1, `reflect` v1, `lessons` v1; additive changes to `token-ledger`, `review-depth` and `aico-settings`. ADRs 0015 to 0017.
+- **Brainstorm format 2.** New files have `## Summary`, `## Digest`, `## Questions` and `## Rounds`. The digest quotes your answers word for word, lists open threads and keeps a dissent line in the Role's own words. Questions are queued: duplicates merged with votes summed, answered ones never asked again, blocking first. A skipped question records its default as "CEO skipped". Roles can reply to an idea (`@Role on I-2.1: agree | challenge | build-on`), may skip a round, and answer in about 100 words. Each Role gets one constant dispatch prompt for the whole run plus a per-round input file in `.company/brainstorm-input/` (written by the script, removed at Close) with the digest, the questions already asked and answered, and up to five "Others said" headlines with idea IDs. Answered questions are merged, not asked again. The Architect adds an S/M/L estimate per round. Files without `format` open and continue as before and are never rewritten.
+- **Crossfire.** In debate mode the sharpest clash is folded into the next round: the challenged Role answers it in its next ideas pass, with no extra dispatch. `brainstorm.debate` is `crossfire` (default) or `full_pass`, which keeps the live pair and the full second pass.
+- **Shorter brainstorm replies and input files.** The Lead asks for at most 80, 55 and 40 words (ideas, full, crossfire). The input file drops the digest and shows "Your last ideas" as plain lines without IDs or labels. A reply with a copied idea ID or bullet before a label is accepted, not re-asked.
+- **Builder rule slices.** Builders get a per-task file with their rules in `.company/work/<slug>/rules/<task>.md` (`rule-check slices --write`) instead of the full ruleset map.
+- **CEO rulings without a question.** A ruling that answers no asked question is stored word for word as its own decision (`decide`), no longer attached to a nearby question. A brainstorm Lead summary that says `Open:` must name a question or open thread, or say `Open: none`.
+- **Review Handoffs.** A `read_next` pointer may be `path#heading` with spaces in the heading, and a continued review appends its new findings to the findings file.
+- **Film script** (`brainstorm.film_script`, off by default): a separate file written by the script with no model call, every line quoting a stored reply.
+- **Max context** (`context_cap`) in `/aico:settings`: global plus per Role, default 150000, minimum 60000. Roles hand over at 80%. High-risk work is never below the default.
+- **Token ledger** (`scripts/ledger.mjs`): counts only, per Step and per run, in `.company/ledger/`. One cost line at the Ship Gate; `/aico:feedback` compares the last three runs.
+- **Review format** (`pipeline.review_format`: `plain` or `pilot`, default `plain`) in `/aico:settings`. With `pilot`, the code-reviewer and compliance Steps write an `aico-top` block, findings as `ID | file:line | problem | why | fix` rows with stable IDs, and a findings ledger on handover, checked by `scripts/handoff-lint.mjs`. Other Roles are unchanged. Tested on 3 re-reviews each way, both modes pass; `pilot` cost about 5.7k more tokens per re-review than `plain`, and no saving is claimed. Rule slices for builders and search-then-read stay on with `plain`.
+- **Tool checks bound by rule ID** (`scripts/rule-check.mjs`, `.company/checks.json`): a failing check becomes a finding the reviewer confirms before it blocks. Rule slices always include every security Must. With `pipeline.review_format: pilot`, a findings ledger, written only near a handover, survives a handover mid-review. Review depth follows the touched paths (`scripts/review-depth.mjs`).
+- **Golden Handoffs and a regression set** of past high-tier fixes, both under `npm test`.
+- **`npm run release <x.y.z>`**: bumps every version field, rolls this section, runs the checks, makes one local commit and tag. It never pushes.
+- **Rule-pack checks** in `scripts/check.mjs --packs <dir>`: a bad format, a pack older than 90 days or a new advisory fails. CI on committed copies fails at 180 days.
+- **Contracts:** `handoff` v1.1, `dispatch-prompt` v3.1 (`Context cap:`, `Review depth:`), `aico-settings` v1.1, `brainstorm-file` v2, `brainstorm-reply` v1, `token-ledger` v1, `rule-pack` v1.1, `rule-check` v1, `review-depth` v1. ADRs 0007 to 0012.
+
+### Changed
+- **Pipeline dispatches** carry `Context cap:` and, for the code-reviewer, `Review depth:`. `scripts/check.mjs` fails a dispatch block without `Context cap:`. No Playbook is exempt: research prompts carry it too; only brainstorm and cooler, which write no Handoff, have no such line.
+- The commit lines in the pipeline and brainstorm Playbooks check paths and names before any shell command.
+
 ## [0.10.0] - 2026-10-26
 
 A settings page, a name for every Role, and an effort level per Role. The pipeline now applies your settings when it dispatches.

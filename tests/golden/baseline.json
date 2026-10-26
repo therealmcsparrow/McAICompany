@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "note": "counts only; sizes are the AC26 baseline",
+  "files": {
+    "ai-data-engineer.md": {
+      "bytes": 1561,
+      "lines": 21
+    },
+    "architect.md": {
+      "bytes": 4054,
+      "lines": 31
+    },
+    "backend-engineer.md": {
+      "bytes": 2324,
+      "lines": 29
+    },
+    "code-reviewer.md": {
+      "bytes": 4229,
+      "lines": 37
+    },
+    "legal.md": {
+      "bytes": 5666,
+      "lines": 48
+    },
+    "product-manager.md": {
+      "bytes": 10077,
+      "lines": 55
+    },
+    "qa.md": {
+      "bytes": 1607,
+      "lines": 30
+    },
+    "security.md": {
+      "bytes": 4741,
+      "lines": 34
+    },
+    "senior-engineer.md": {
+      "bytes": 5528,
+      "lines": 36
+    },
+    "writer.md": {
+      "bytes": 2335,
+      "lines": 28
+    }
+  }
+}

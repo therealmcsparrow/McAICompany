@@ -40,7 +40,7 @@ The first time the company works in a repository, it creates `.company/project.m
 2. **The Lead routes.** It picks only the Roles the job needs and sequences them, running independent Roles in parallel.
 3. **Roles work in turn.** Each Role starts fresh, reads the Handoff files it needs, does its part, and writes its own Handoff for the next Role. Work is committed one step at a time on a branch named `aico/<task>`.
 4. **You approve at Gates.** The run pauses at each Gate (below) until you approve, ask for a change, or stop.
-5. **Ship.** After the Ship Gate, release happens as you approved, and the Lead writes a short summary and records any Lessons for next time.
+5. **Ship.** After the Ship Gate, release happens as you approved, and the Lead writes a short summary, shows one cost line (tokens used, counts only) and records any Lessons for next time.
 
 Nothing is pushed or released before you approve it at the Ship Gate (unless you unlock an auto Ship Gate in settings, which pushes and opens a PR but never merges).
 
@@ -62,6 +62,8 @@ Run `/aico:settings` to open the settings page in your browser. There you can:
 - rename Roles
 - move a Role to another model or effort level
 - change how many Fix rounds run before aico asks you
+- set the max context per Role (default 150000, minimum 60000)
+- pick the brainstorm debate style, or turn on the film script
 - choose which review lanes run
 - let the Brief or Plan Gate continue on its own
 

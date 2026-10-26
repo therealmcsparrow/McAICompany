@@ -1,0 +1,4 @@
+I: Show a one-line hint under the URL.
+Risk: Users read a loopback URL as a bug.
+Q [nice-to-have]: Should the hint be translated? | options: yes / no | default: yes
+Q [blocking]: where does the settings server run? | options: local / hosted | default: local

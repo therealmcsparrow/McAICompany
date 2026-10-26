@@ -1,0 +1,3 @@
+I: Ship it.
+Risk: None worth naming.
+Q [blocking]: Run it? — src: R1 | options: a / b | default: a

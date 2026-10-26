@@ -1,0 +1,3 @@
+I: Test the hint with five new users.
+Risk: Five users is a small sample.
+Re: @architect on I-1.1: build-on — Add a token timeout.
