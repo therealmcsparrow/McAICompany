@@ -1,8 +1,8 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 32 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 33 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 32 Roles, and the concepts the company runs on.
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 33 Roles, and the concepts the company runs on.
 
 ## Install
 ```
@@ -62,7 +62,7 @@ flowchart TD
   Arch --> SE["senior-engineer"] & BE["backend-engineer"] & FE["frontend-engineer"] & DE["desktop-engineer"] & AI["ai-data-engineer"] & GE["game-engineer"] & DO["devops"]
   Design --> UX["ui-ux-designer"] & BA["brand-artist"] & MA["motion-artist"] & GA["game-artist"] & PA["prompt-artist"]
   Quality --> CR["code-reviewer"] & QA["qa"] & SEC["security"] & PEN["pentester (on demand)"] & VSC["vuln-scanner (on demand)"]
-  MTR --> MR["market-researcher"] & TR["tech-researcher"] & DR["design-researcher"]
+  MTR --> MR["market-researcher"] & TR["tech-researcher"] & DR["design-researcher"] & SR["skill-researcher"]
   Research --> UR["ux-researcher"] & PT["persona-tester"] & HT["hands-on-tester"] & AT["accessibility-tester"]
   Content --> WR["writer"] & MK["marketer"] & LO["localizer"]
   Support --> SU["support"]
@@ -72,13 +72,13 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, vuln-scanner | localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, skill-researcher, vuln-scanner | localizer, prompt-artist |
 
 Each Role has a person name (for example Ava for the architect), shown next to the Role in Handoffs, Gates and help. Change names, models and effort in `/aico:settings`.
 
 Each Role also sets an `effort` level. **High:** architect, code-reviewer, security, pentester, where a miss is expensive. **Low:** writing, art, lookup and support Roles. **Medium:** everyone else. See the roster in `docs/spec.md`.
 
-Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all three researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all four researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).

@@ -1,5 +1,5 @@
 // T2: text pins for the skill-researcher Role, the /aico:skillspector Playbook and the install constants.
-// Cases that need files T4 or T7 build are `todo` until then (npm test stays green, proj.M12); the
+// Cases that need files T4 build are `todo` until then (npm test stays green, proj.M12); the
 // owning Step removes the `todo` option as each case passes. Cases that already hold are live guards.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,6 @@ import { dirname, join, relative } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const T4 = { todo: 'T4' };
-const T7 = { todo: 'T7' };
 const frontmatter = (text) => {
   const lines = text.split(/\r?\n/);
   return Object.fromEntries(lines.slice(1, lines.indexOf('---', 1)).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
@@ -107,7 +106,7 @@ test('AC10 the Contract holds the pinned install and rollback commands byte for 
   assert.ok(text.includes('@v2.13.1'));
   assert.ok(!/@v2\.12\.0/.test(INSTALL.join('')), 'sanity: the pin is not the spike version');
 });
-test('AC10 the Playbook holds the same commands byte for byte and names v2.13.1', T7, () => {
+test('AC10 the Playbook holds the same commands byte for byte and names v2.13.1', () => {
   const text = read('skills/skillspector/SKILL.md');
   for (const c of [...INSTALL, ...ROLLBACK]) assert.ok(text.includes(c), c);
   assert.ok(text.includes('v2.13.1'));
@@ -121,7 +120,7 @@ test('AC10 the script constant prints the same commands (install-commands --json
   assert.deepEqual(j.rollback, ROLLBACK);
   assert.ok(read('scripts/skillspector.mjs').includes('v2.13.1'));
 });
-test('AC10 no other file in agents/ or skills/ carries an install command for skillspector', T7, () => {
+test('AC10 no other file in agents/ or skills/ carries an install command for skillspector', () => {
   for (const f of ['agents', 'skills'].flatMap((d) => walk(join(root, d)))) {
     const rel = relative(root, f).replace(/\\/g, '/');
     if (rel === 'skills/skillspector/SKILL.md') continue;
@@ -130,30 +129,30 @@ test('AC10 no other file in agents/ or skills/ carries an install command for sk
 });
 
 // ---------- the Playbook (AC8, AC10, AC11) ----------
-test('AC8 Playbook skills/skillspector/SKILL.md: frontmatter, disable-model-invocation, at most 125 lines', T7, () => {
+test('AC8 Playbook skills/skillspector/SKILL.md: frontmatter, disable-model-invocation, at most 125 lines', () => {
   const text = read('skills/skillspector/SKILL.md');
   const fm = frontmatter(text);
   assert.equal(fm.name, 'skillspector');
   assert.equal(fm['disable-model-invocation'], 'true');
   assert.ok(text.split(/\r?\n/).length <= 126, 'proj.M5: at most 125 lines');
 });
-test('AC8 Playbook never puts user text on a command line: argument matched against list output', T7, () => {
+test('AC8 Playbook never puts user text on a command line: argument matched against list output', () => {
   const text = read('skills/skillspector/SKILL.md');
   assert.match(text, /string equality/i);
   assert.match(text, /\blist\b/);
   assert.match(text, /aico:pipeline/);
 });
-test('AC11 Playbook maps --no-llm / --claude-cli to fixed --mode tokens and discloses claude_cli', T7, () => {
+test('AC11 Playbook maps --no-llm / --claude-cli to fixed --mode tokens and discloses claude_cli', () => {
   const text = read('skills/skillspector/SKILL.md');
   assert.match(text, /--mode no-llm/);
   assert.match(text, /--mode claude_cli/);
   assert.match(text, /error not-successful/, 'discloses what happens when claude is unavailable');
 });
-test('AC14 Playbook reports findings with suggested removal commands and runs none', T7, () => {
+test('AC14 Playbook reports findings with suggested removal commands and runs none', () => {
   const text = read('skills/skillspector/SKILL.md');
   assert.match(text, /never run|do not run|runs none|none (is|are) run/i);
 });
-test('AC8 the command is documented in documentation/commands.md', T7, () => {
+test('AC8 the command is documented in documentation/commands.md', () => {
   assert.match(read('documentation/commands.md'), /\/aico:skillspector/);
 });
 

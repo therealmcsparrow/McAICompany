@@ -1,6 +1,6 @@
 ---
 name: sourcing
-description: Use when an aico researcher (market-researcher, tech-researcher, design-researcher) searches the web, cites sources, vets a third-party skill or writes its research Handoff. Defines source tiers, caps, untrusted-page rules, legal limits and the Handoff extension.
+description: Use when an aico researcher (market-researcher, tech-researcher, design-researcher, skill-researcher) searches the web, cites sources, vets a third-party skill or writes its research Handoff. Defines source tiers, caps, untrusted-page rules, legal limits and the Handoff extension.
 ---
 
 # Sourcing
@@ -56,4 +56,5 @@ A recommended `source` is `owner/repo` matching `^[A-Za-z0-9][A-Za-z0-9-]{0,38}/
 - `## Sources`: `[S#] <title> — <URL> — checked YYYY-MM-DD — primary | secondary | blog | ai`.
 - `## Open questions` for what you could not find. Headings and frontmatter values stay English; prose follows `Language:`.
 - design-researcher also writes `## Candidates` (table: name, source repo, license, last commit, installs/stars, API key y/n, vetted y/n, fit, verdict), `## Recommended set` (at most 5 lines, `design-skills-section` v1 format with `approved: pending`, overlap with `aico:ui-design` named) and `## Rejected` (each reason). Every table row appears in the set or in `## Rejected`; nothing exists only in the table.
+- skill-researcher writes the same three sections in the `skill-recommendation` v1 format (`area`, `scan-mode`, a scan verdict per candidate, a commit per recommended repo skill) and scans every repo candidate in a quarantine before recommending it (`agents/skill-researcher.md`).
 - Status `blocked` when the question cannot be answered within the caps; the PM still writes the report (RR error cases).
