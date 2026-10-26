@@ -75,7 +75,29 @@ _Avoid_: orchestrator (use Lead).
 
 **Handoff Contract** — the machine-readable shape of a Handoff: frontmatter fields (`status`, `round`, `base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) plus a `contract|spec|security|test` blocking taxonomy, so the Lead routes and resumes from fields rather than prose.
 
-**Context budget** — no agent (Role or Lead) goes over 150k tokens of context. A Role near it stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
+**Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only. Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
+
+**Context cap** — `context_cap`: the max context a Role gets, set in Settings (global and per Role). Default 150000, floor 60000. A Role hands over at 80%; high-risk work is never below the default. A soft limit passed in the dispatch.
+
+**Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Caching gives no saving; savings come from reading less.
+
+**Tool check** — a rule tagged `check: <tool>`, bound to its rule ID in `.company/checks.json`. It runs before review; a failure is a finding the reviewer confirms before it blocks.
+
+**Rule slice** — the rules mapped to one task, always including every security Must.
+
+**Findings ledger** — the reviewer's file listing every finding and checked file, so a handover mid-review loses nothing.
+
+**Review depth** — how much a review covers, set by the touched paths, not the builder's label. Contract, Core and security paths always get a full review.
+
+**Golden Handoff** — a reference Handoff run under `npm test` as a regression net; its size is the token baseline.
+
+**Digest** — the part of a format 2 brainstorm file that quotes your answers word for word, lists open threads, keeps a dissent line and links each item to its round.
+
+**Crossfire** — in debate mode, one pair of Roles answers the round's sharpest clash, about 50 words each. The setting `brainstorm.debate` is `crossfire` (default) or `full_pass`.
+
+**Film script** — an optional separate file (`brainstorm.film_script`, off by default) where every line quotes a stored brainstorm reply. No model call.
+
+**Context budget** — no agent (Role or Lead) goes over 150k tokens of context by default. A Role near it stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
 
 **Risk tier** — `low | medium | high`, set in the Brief and carried in every dispatch; forced high for auth, payments, personal data, migrations or a Contract change. Drives test depth, rule scope and routing. A Role may raise it, never lower it.
 

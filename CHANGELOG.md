@@ -2,6 +2,27 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [Unreleased]
+
+Cheaper brainstorms and cheaper runs. The savings come from reading less (shorter prompts, fewer reads, fewer dispatches). Prompt caching gives no saving and none is claimed.
+
+### Added
+- **Brainstorm format 2.** New files have `## Summary`, `## Digest`, `## Questions` and `## Rounds`. The digest quotes your answers word for word, lists open threads and keeps a dissent line in the Role's own words. Questions are queued: duplicates merged with votes summed, answered ones never asked again, blocking first. A skipped question records its default as "CEO skipped". Roles can reply to an idea (`@Role on I-2.1: agree | challenge | build-on`), may skip a round, and from round 2 get the digest, their own last reply and up to five "Others said" headlines. The Architect adds an S/M/L estimate per round. Files without `format` open and continue as before and are never rewritten.
+- **Crossfire.** Debate mode runs the ideas pass and one crossfire pair (about 50 words each). `brainstorm.debate` is `crossfire` (default) or `full_pass`, which keeps the full second pass.
+- **Film script** (`brainstorm.film_script`, off by default): a separate file written by the script with no model call, every line quoting a stored reply.
+- **Max context** (`context_cap`) in `/aico:settings`: global plus per Role, default 150000, minimum 60000. Roles hand over at 80%. High-risk work is never below the default.
+- **Token ledger** (`scripts/ledger.mjs`): counts only, per Step and per run, in `.company/ledger/`. One cost line at the Ship Gate; `/aico:feedback` compares the last three runs.
+- **Handoff v1.1 pilot.** The code-reviewer and compliance Steps write an `aico-top` block and findings as `ID | file:line | problem | why | fix` rows with stable IDs, checked by `scripts/handoff-lint.mjs`. Other Roles are unchanged.
+- **Tool checks bound by rule ID** (`scripts/rule-check.mjs`, `.company/checks.json`): a failing check becomes a finding the reviewer confirms before it blocks. Rule slices always include every security Must. A findings ledger survives a handover mid-review. Review depth follows the touched paths (`scripts/review-depth.mjs`).
+- **Golden Handoffs and a regression set** of past high-tier fixes, both under `npm test`.
+- **`npm run release <x.y.z>`**: bumps every version field, rolls this section, runs the checks, makes one local commit and tag. It never pushes.
+- **Rule-pack checks** in `scripts/check.mjs --packs <dir>`: a bad format, a pack older than 90 days or a new advisory fails. CI on committed copies fails at 180 days.
+- **Contracts:** `handoff` v1.1, `dispatch-prompt` v3.1 (`Context cap:`, `Review depth:`), `aico-settings` v1.1, `brainstorm-file` v2, `brainstorm-reply` v1, `token-ledger` v1, `rule-pack` v1.1, `rule-check` v1, `review-depth` v1. ADRs 0007 to 0012.
+
+### Changed
+- **Pipeline dispatches** carry `Context cap:` and, for the code-reviewer, `Review depth:`. `scripts/check.mjs` fails a dispatch block without `Context cap:` (research is exempt).
+- The commit lines in the pipeline and brainstorm Playbooks check paths and names before any shell command.
+
 ## [0.10.0] - 2026-10-26
 
 A settings page, a name for every Role, and an effort level per Role. The pipeline now applies your settings when it dispatches.

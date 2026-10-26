@@ -138,6 +138,15 @@ Decisions: `docs/adr/` 0006. Contracts: `docs/contracts/` (`aico-settings`, `rol
 - **Pipeline** Setup §1.7 resolves settings once per run; every dispatch carries `Name:` and `Settings:` lines (`dispatch-prompt` v3) and passes `model` and `effort` as Agent-call parameters. Agent files are never edited. With nothing set, behaviour is unchanged.
 - **Roles:** each Role sets an `effort` level; writer, vuln-scanner and design-researcher moved to sonnet.
 
+## Unreleased additions
+Decisions: `docs/adr/` 0007 to 0012. Contracts: `docs/contracts/` (`handoff` v1.1, `dispatch-prompt` v3.1, `aico-settings` v1.1, `brainstorm-file` v2, `brainstorm-reply` v1, `token-ledger` v1, `rule-pack` v1.1, `rule-check` v1, `review-depth` v1). The version number is set by `npm run release <x.y.z>`.
+- **Brainstorm format 2** (`scripts/brainstorm.mjs`): `## Summary`, `## Digest`, `## Questions`, `## Rounds`; question queue with IDs, tags, votes and status; dissent line; reply-to lines; "Others said" (≤ 5 headlines) and the digest first from round 2; Role skips; defaults assumed; S/M/L from the Architect. Debate = ideas pass plus one crossfire (`brainstorm.debate`: `crossfire` | `full_pass`). Film script off by default (`brainstorm.film_script`). `checkBrainstorm` in `scripts/check.mjs` validates format 2; files without `format` are read as before and never rewritten.
+- **Settings:** `context_cap` global and per Role (60000–1000000, default 150000). Pipeline Core alone applies the high-risk floor and the handover at 80%, and passes `Context cap:` in the dispatch.
+- **Token ledger** (`scripts/ledger.mjs`): counts only, allow-list schema, `add`, `reconcile`, `ship`, `import`, `report`; cost line at the Ship Gate. No saving is attributed to caching.
+- **Handoff v1.1:** `aico-top` block and finding rows, validated by `scripts/handoff-lint.mjs` (`--require-top` for code-reviewer and compliance). Pilot only.
+- **Rules:** `check:` tags on Project rules, bound by ID in `.company/checks.json` (`scripts/rule-check.mjs`: `run`, `list`, `slices`, `drift`); the reviewer confirms failures. `scripts/review-depth.mjs` sets review depth from paths. Rule-pack checks: 90 days in library mode, 180 days for committed copies.
+- **Tests:** golden Handoffs, a quality-floor regression set and prompt-order drift tests. `scripts/release.mjs` bumps versions, rolls the changelog, makes a local commit and tag, and never pushes.
+
 ## Budgets (guideline, warn not fail)
 Agent files ≤ 50 lines, skill files ≤ 125 lines, description ≤ 1024 chars (hard). `scripts/check.mjs` reports every structural overrun.
 

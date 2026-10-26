@@ -178,7 +178,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **When to use it.** You have a pile of user input and want it triaged into a short list of things worth doing.
 
 **How it runs.**
-1. **Support** clusters the reports (and stops to suggest `/aico:incident` if a cluster looks security-related).
+1. **Support** clusters the reports (and stops to suggest `/aico:incident` if a cluster looks security-related). If runs have a token ledger, the report also compares the cost of the last three runs under `## Cost`.
 2. **Product Manager** ranks the top 5 against your success metric and proposes a fix or feature for each. **→ Brief Gate** (you pick).
 3. The Lead tells you which `/aico:fix` and `/aico:feature` runs to start — it never starts them itself.
 
@@ -271,10 +271,16 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **How it runs.**
 1. The Lead picks the 4–8 Roles whose angle matters and opens a notes file in `.company/brainstorms/`.
-2. **Rounds** in one of three modes — **ideas** (Roles answer in parallel, the default), **debate** (Roles respond to each other), **moderated** (one at a time). After each round you get a digest; your reply steers the next. You can switch mode or add/drop Roles anytime. It runs until you say **done**.
-3. At the close, you choose: **plan and implement** (continues as `/aico:feature` from the notes), **roadmap**, **nice to have**, or **park**. The file moves to the matching folder; `/aico:brainstorm "<file>"` reopens it later.
+2. **Rounds** in one of three modes — **ideas** (Roles answer in parallel, the default), **debate** (Roles respond to each other), **moderated** (one at a time). You can switch mode or add/drop Roles anytime. It runs until you say **done**.
+   - From round 2, each Role gets the digest first, its own last reply, and up to five one-line headlines under "Others said". It does not re-read the whole file unless asked.
+   - A Role may **skip** a round when it has nothing to add. That is recorded and is not an error.
+   - **Debate** runs the ideas pass, then one **crossfire**: the sharpest clash of the round, one pair, about 50 words each. Set `brainstorm.debate` to `full_pass` in `/aico:settings` for the older full second pass, which reads more and saves nothing.
+3. **After each round** you get a form. Open questions are merged, ranked (blocking first, then by votes) and never repeat an answered one. Each has options and a default; skip a question and the default is recorded as "CEO skipped". The form shows three questions, then Next, with a fourth shown as "up next". Unanswered defaults are assumed.
+4. At the close, you choose: **plan and implement** (continues as `/aico:feature` from the notes), **roadmap**, **nice to have**, or **park**. The file moves to the matching folder; `/aico:brainstorm "<file>"` reopens it later.
 
-**You get.** `.company/brainstorms/YYYY-MM-DD HH.MM - Topic.md` with the summary and every round. Builds nothing until you choose to.
+**You get.** `.company/brainstorms/YYYY-MM-DD HH.MM - Topic.md` (format 2) with `## Summary`, `## Digest`, `## Questions` and `## Rounds`. The digest quotes your answers word for word, lists open threads, keeps a dissent line in the dissenting Role's own words, and links each item to its round. Roles can reply to an idea (`@Role on I-2.1: agree | challenge | build-on`), and the replies show up as threads. With an Architect in the room, each round has an S/M/L estimate. Files from earlier versions open and continue as before; they are never rewritten. Builds nothing until you choose to.
+
+**Film script.** Off by default. Turn on `brainstorm.film_script` in `/aico:settings` and the script writes a separate file, labelled as rendered from stored replies, where every line quotes a stored reply. No model is called and the brainstorm file is not changed.
 
 **Example.** `/aico:brainstorm debate how should we onboard first-time users`
 
@@ -369,7 +375,7 @@ Effective language: the project override, else your default, else English. An un
 ### `/aico:settings`
 `/aico:settings [help]`
 
-**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, optional lanes); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, optional lanes, brainstorm debate style and film script); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
 
@@ -377,6 +383,7 @@ Effective language: the project override, else your default, else English. An un
 - **Two levels:** your user default (`config.json` under `~/.mcsparrow/`, or the folder in `MCSPARROW_HOME`) and a project override (`.company/settings.json`, with the profile in `.company/project.md`). The project wins.
 - The page is reachable only through the link with its token, which is printed in the terminal. The browser opens by itself.
 - The server stops when you press Done, or after 30 minutes idle. Changes apply from the next aico run.
+- **Max context** (`context_cap`): a global value plus an override per Role. Default 150000, minimum 60000. Roles hand over at 80% of it, and high-risk work never gets less than the default.
 
 **You get.** The full link to the page in the terminal, and the settings saved to the level you chose.
 
