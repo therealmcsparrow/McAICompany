@@ -15,11 +15,23 @@ Estimate: S|M|L, <low>–<high> d           (architect: required every round; ot
 - At most 150 words in total (crossfire replies: about 50).
 - The Role gives no IDs; `apply` numbers ideas `I-<round>.<n>` across the round in roster order.
 
+## Passes (`parse --pass`, default `ideas`)
+The template above is the **ideas** pass (also moderated turns). Two debate passes differ only here:
+| Pass | When | Differs from the ideas pass |
+|---|---|---|
+| `full` | `debate: full_pass` rounds, after the ideas pass is applied | `Risk:` 0 or 1; `Re:` 1 to 3 lines (each on an idea of this round or earlier); no `Estimate:`; at most 100 words |
+| `crossfire` | debate rounds of either style | no `Estimate:`; about 50 words (hard limit 80) |
+`Skip` is allowed in every pass. The architect's round estimate comes from its ideas-pass reply only.
+
 ## Parse result (`parse` stdout)
-`{ skip, ideas: [text], risk, questions: [{ tag, text, options: [..], default }], reply_to: { role, idea, stance, text } | null, estimate: { size, low, high } | null }`
+`{ pass, skip, ideas: [text], risk, questions: [{ tag, text, options: [..], default }], reply_to: { role, idea, stance, text } | null, replies_to: [{ role, idea, stance, text }], estimate: { size, low, high } | null }`
+`replies_to` lists every `Re:` line; `reply_to` is its first entry or `null` (kept for the ideas and crossfire passes).
 
 ## Malformed (exit 1, `malformed: <reasons>`)
-Missing `Risk:`, more than 3 ideas, more than 2 questions, a question without options or with a default not among them, more than one `Re:` line, an unknown stance, `Re:` naming an idea ID that doesn't exist, an architect reply without `Estimate:`, a non-architect `Estimate:`, any other line, or more than 4 KiB. Lines are matched with anchored linear patterns only.
+Missing `Risk:` (ideas and crossfire passes), more than 3 ideas, more than 2 questions, a question without options or with a default not among them, more `Re:` lines than the pass allows (or none in a non-skip full-pass reply), an unknown stance, `Re:` naming an idea ID that doesn't exist, an ideas-pass architect reply without `Estimate:`, any `Estimate:` in a full or crossfire pass, a non-architect `Estimate:`, any other line, too many words for the pass, or more than 4 KiB. Lines are matched with anchored linear patterns only.
 
-## Crossfire (debate mode only, AC10)
-`crossfire` picks one pair per round: the `challenge` reply-to on the idea with the most votes (ideas get a vote per `agree` or `build-on`), earliest on a tie; the pair is the challenger and the idea's author. Each gets one extra dispatch with the other's reply and answers in about 50 words, same template minus `Estimate:`. No `challenge` this round → no crossfire. Debate mode no longer runs a full second pass.
+## Crossfire (debate rounds only, AC10)
+`crossfire` picks one pair per round: the `challenge` reply-to on the idea with the most votes (ideas get a vote per `agree` or `build-on`), earliest on a tie; the pair is the challenger and the idea's author. Votes and challenges count every `Re:` line of the round's ideas pass and, in `debate: full_pass`, of its full pass too. Each pair member gets one extra dispatch with the other's replies and answers in the `crossfire` pass. No `challenge` this round → no crossfire.
+The style comes from `brainstorm.debate` (`aico-settings` v1.1, default `crossfire`):
+- `crossfire`: ideas pass plus the crossfire pair; no full second pass.
+- `full_pass`: ideas pass, then the full pass (every Role answers the others' ideas-pass replies), then the crossfire pair on top.
