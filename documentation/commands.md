@@ -425,9 +425,9 @@ These four commands belong to the research, marketing and design companies. In a
 
 **How it runs.**
 1. **Product Manager** writes the campaign brief (with the Account Manager first, if there is a client). **→ Brief Gate.**
-2. **Marketer** writes the plan: positioning, channel plan and the list of deliverables. **→ Plan Gate:** you approve the positioning, the channels and the deliverables before anything is produced.
-3. **Market Researcher** gathers the audience and competitor facts, each with an `[S#]`.
-4. **Marketer** writes messaging, SEO and post and ad copy. In parallel, **Brand Artist**, **Prompt Artist** and **Motion Artist** produce visuals, prompts and storyboards. Each asset is listed with its source, tool and licence, and AI-generated ones are marked.
+2. **Market Researcher** gathers the audience and competitor facts, each with an `[S#]`.
+3. **Marketer** writes the plan from the brief and the research: positioning, messaging, channel plan and the list of deliverables (no copy yet). **→ Plan Gate:** you approve the positioning, the channels and the deliverables before anything is produced.
+4. After the Plan Gate, **Marketer** writes SEO, post and ad copy from the approved plan. In parallel, **Brand Artist**, **Prompt Artist** and **Motion Artist** produce visuals, prompts and storyboards. Each asset is listed with its source, tool and licence, and AI-generated ones are marked.
 5. **Writer** writes the long-form pieces and landing copy; **Localizer** translates when your project lists more than one language.
 6. In parallel: **Editor** (claims cited), **Legal**, **Accessibility Tester** (alt text, captions, transcripts, contrast, reading level) and **Persona Tester** (is the message understood, does the call to action work; the personas are fictional and never appear in copy as real customers). Legal reviews:
    - advertising claims, price and discount claims, and green claims (Directive (EU) 2024/825, applying from 27 September 2026);
