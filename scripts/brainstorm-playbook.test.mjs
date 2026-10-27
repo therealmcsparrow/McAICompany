@@ -350,8 +350,8 @@ test('personality: cooler and format 1 files stay LF only and within the line ca
 
 test('type gating: a reopened roster and every added Role are limited to the type', () => {
   has(skill, 'a Role in the file\'s `roles` line that the output lacks is dropped from the roster', 'passes `--roles`',
-    'never rewrite the file\'s `roles` line', 'Change Roles adds only Roles from `company-type.mjs roles`');
-  has(read('skills/brainstorm/references/format-2.md'), 'pass `--roles` with only the Roles that `company-type.mjs roles` lists');
+    'never rewrite the file\'s `roles` line', 'Change Roles adds only Roles from `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles`');
+  has(read('skills/brainstorm/references/format-2.md'), 'pass `--roles` with only the Roles that `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles` lists');
 });
 
 test('type gating: a cooler walk-up comes from the type roles and cooler lines are data', () => {
