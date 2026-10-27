@@ -1,8 +1,9 @@
-# Contract: brainstorm-file v2
+# Contract: brainstorm-file v2.1
 
 Provider: `aico:brainstorm` (the Lead) through `scripts/brainstorm.mjs`. Validator: `checkBrainstorm(text)` exported by `scripts/check.mjs` (Core). Consumers: `aico:brainstorm`, `aico:feature` (a built brainstorm's `## Summary` starts the brief), `aico:research`, `check.mjs` CI.
 - **v1** = a brainstorm file without `format:` in its frontmatter (the shape in `skills/brainstorm/SKILL.md` at 0.10.0). It is read start to finish, passes `check.mjs`, and is **never rewritten or converted** (CEO, Brief Gate Q1). A reopened v1 file continues in v1.
 - **v2** = `format: 2`. New major version because the body layout changes; approved by the CEO in the brainstorm Summary and at the Brief Gate. Rationale: `docs/adr/0009-brainstorm-format-2.md`; constant prompt and input files: `docs/adr/0013-brainstorm-constant-prompt.md`; crossfire folded into the next round (Fix round 4): `docs/adr/0014-crossfire-folded-into-next-round.md`.
+- **v2.1** (additive, minor bump, task personalities-company-types): only the round input file changes. It gains the optional `Personality:` block ("Round input"), written by `stage` from `personality.mjs` (`role-names` v1.1). The brainstorm file, `checkBrainstorm`, the prompt and the constant Goal are unchanged; every v2 file is a v2.1 file. Rationale: `docs/adr/0021-personality-social-only.md`.
 
 ## Files
 - Brainstorm: `.company/<brainstorms|roadmap|nice-to-have|parked>/YYYY-MM-DD HH.MM - <Short Topic>.md` (name rule unchanged).
@@ -100,6 +101,7 @@ Fix round 4: the input file is written to the cache on every dispatch, so it is 
 |---|---|
 | `Round: <n>` | the round being played |
 | `Pass: ideas \| full \| crossfire` | the pass (`ideas` also for a moderated turn) |
+| `Personality:` (optional, v2.1) | the `role-names` v1.1 rendered block of this Role, byte for byte (its first line is this label), from `personalityBlock(role)` of `scripts/personality.mjs`, resolved at each `stage`; left out when the Role has no valid personality. In every pass, re-ask and moderated turn. The script never puts it anywhere else: not in the brainstorm file, the Digest, `apply` output, `queue`, `film` or the ledger |
 | `Topic:` | the frontmatter `topic`, one line |
 | `Read also:` (optional) | the absolute path of `.company/project.md`, only when that file exists and this Role has no stored reply in the file yet (its first turn) |
 | `Summary:` (optional) | the stored `## Summary` paragraph, only when one was written (a reopened file) |
@@ -117,8 +119,9 @@ Fix round 4: the input file is written to the cache on every dispatch, so it is 
 
 - **Shown form** of a valid reply: each `I: <idea>` line is shown as `I-<r>.<k>: <idea>` with the ID `apply` gave it; a line read through "Lenient labels" (`brainstorm-reply` v1) is shown the same way, without its stray ID or bullet; other lines as stored. Another Role's malformed reply is shown only as `(malformed)`; `skip` replies are left out. There is no `Full file:` line: the Role reads only its input file and `Read also:`. The shown form is used only in the full and crossfire pass blocks (FR4); the ideas pass shows ideas only as list lines.
 - Free text that is not a list or reply line, the content of `Topic:`, `Summary:`, `Re-ask:` and `Your malformed reply:`, has `> ` before every line, so nothing in the file can pass for a label.
-- Content of other Roles and the CEO is data (agentsec.M-SEC1); the constant Goal says so.
-- Size (FR4): a replay-like input (6 Roles, 2 ideas each, 11 questions, 3 answered) is at most 3 KiB; the worst case (8 Roles × 3 ideas at 1000 characters, 30 questions, a 25-word challenge) at most 16 KiB.
+- (v2.1) The `Personality:` block cannot pass for another label either: its note line starts with `> `, its text values sit inside `"…"` and can hold no quote mark, colon, newline or markup (`role-names` v1.1 rule T), and its levels are a closed set.
+- Content of other Roles and the CEO is data (agentsec.M-SEC1); the constant Goal says so. The personality block is data from the settings and says so in its own note line; the constant Goal is unchanged (Spike S1 checks that this is enough).
+- Size (FR4, v2.1): a replay-like input (6 Roles, 2 ideas each, 11 questions, 3 answered) is at most 3.5 KiB with a personality block (3 KiB without); the worst case (8 Roles × 3 ideas at 1000 characters, 30 questions, a 25-word challenge, a personality block of five maximum-length values) at most 16.5 KiB.
 
 ## Provider CLI (`scripts/brainstorm.mjs`, Node built-ins only, exit 2 on usage errors)
 | Command | Does |
@@ -132,7 +135,7 @@ Fix round 4: the input file is written to the cache on every dispatch, so it is 
 | `merge <file> <Q-keep> <Q-drop>` | `Q-drop` must be open; `Q-keep` must be open or answered (a restatement of an answered question is merged into it, so it never returns). Votes summed into `Q-keep`, its status unchanged; the dropped line becomes `votes:0 status:parked — merged into Q-<keep> (<old text>)` |
 | `queue <file>` | JSON `{ ask: [3 questions], next_up: question \| null, answered: [{ id, text }] }`: `ask`/`next_up` open only, blocking before nice-to-have, then votes, then oldest (CEO, Brief Gate Q2); `answered` lists every answered question in ID order, for the Lead's duplicate check |
 | `stage <file> <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | writes the round input files ("Round input") and prints JSON `{ run, files: { "<role>": "<absolute path>" } }`. Staged Roles: ideas pass → `--roles` or every roster Role; full pass → `--roles` or every roster Role; crossfire → exactly the computed pair (`--roles` refused), `debate: full_pass` rounds only (FR4). `--reask <role>` → ideas pass, that Role only. Never changes the brainstorm file |
-| `prompt <file> <role> [--pass full\|crossfire <round>]` | prints the input file text `stage` would write for that Role (ideas pass: for the latest round while it is open, else the next round); writes nothing |
+| `prompt <file> <role> [--pass full\|crossfire <round>]` | prints the input file text `stage` would write for that Role (ideas pass: for the latest round while it is open, else the next round); writes nothing. A debugging preview: the Lead does not run it during a brainstorm (it would print the personality block) |
 | `clean <file>` | removes `.company/brainstorm-input/<run>/` of that file; prints `cleaned <run>` (also when there was nothing to remove) |
 | `crossfire <file> <round>` | JSON pair `[roleA, roleB]` or `null` (debate rounds only, either style; see `brainstorm-reply` v1). `roleA` is the challenger, `roleB` the idea's author (role slugs). Also `null` when the round does not exist, already has crossfire replies, or is closed, so a played pass is never dealt twice. In a `debate: crossfire` round the Lead uses it only for the `dissent` entry (FR4); `stage` computes the same selection on the closed previous round for `Challenge to you:`, without these `null` rules |
 | `film <file>` | writes the film script file; no model call; every line quotes a stored reply word for word |
@@ -144,6 +147,7 @@ Fix round 4: the input file is written to the cache on every dispatch, so it is 
 - `--reask <role>`: the Role's latest reply in round `<round>` must be a malformed ideas-pass reply, else `refused: <role> has no malformed reply in round <n>`. The reasons come from parsing the stored text again (`parse --file` rules).
 - A `--roles` slug outside the roster → `refused: <slug> is not in the roster`. `--pass crossfire` with no pair → `refused: no crossfire pair in round <n>`.
 - File system: the run folder and `.gitignore` are created when missing; a symlink or any entry other than `<slug>.md` and the script's own temp files in `<run>/` → `refused: unexpected entry in <run>`, nothing written. Paths are built from the checked stamp and roster slugs only, and must resolve inside `.company/brainstorm-input/`.
+- (v2.1) Personality: `stage` calls `personalityBlock(role, { cwd })` once per staged Role; a throw or `''` → no `Personality:` block for that Role, and `stage` goes on (a personality never blocks a round). `stage`'s stdout is unchanged: it never prints the block.
 - `clean` deletes only `<slug>.md` files and the script's temp files in `<run>/`, then the folder; any other entry or a symlink → `refused: unexpected entry in <run>`, nothing deleted. It never touches `.gitignore` or other runs.
 
 ### apply input and output

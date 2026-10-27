@@ -1,6 +1,7 @@
 # Project profile
 
 <!-- Created by aico:pipeline on first run. Keep each value on one line. -->
+<!-- company_type: software | research | marketing | design. Written once by /aico:setup as its own line here; absent = software (company-type v1). -->
 
 product_type: web | desktop | game
 engagement: own | client
