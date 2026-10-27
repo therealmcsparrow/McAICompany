@@ -580,9 +580,9 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   const softwarePlaybooks = manifest('software').playbooks;
   assert.deepEqual(nowSet.filter(f => !baseSet.includes(f)).map(f => f.split('/')[1]).filter(n => softwarePlaybooks.includes(n)), [], 'a Playbook the software type offers is new');
   for (const name of soft) assertV012Playbook(name);
-  // The pipeline gained lines only, so the software Ship Gate text is the one it was.
+  // The pipeline only gained lines, except four lines reworded in place for the run scorecard (ledger add times, run-state ask, report --acs, five run-state commands); the Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
-  assert.equal(Number(removedFromPipeline), 0);
+  assert.equal(Number(removedFromPipeline), 4);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 
