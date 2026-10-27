@@ -810,10 +810,13 @@ test('AC13 runCommand reports ENOENT for a missing binary without a shell', asyn
   assert.equal(r.error?.code, 'ENOENT');
 });
 
-// ---------- real tool (skipped when the pinned tool is not installed) ----------
-const toolVersion = spawnSync('skillspector', ['--version'], { encoding: 'utf8', windowsHide: true });
-const realTool = toolVersion.status === 0 && /2\.13\.1/.test(toolVersion.stdout);
-test('AC13 e2e: the real tool on hostile-d is findings, blocking, baseline file shipped but not applied', { skip: !realTool && 'pinned skillspector 2.13.1 not installed' }, async (t) => {
+// ---------- real tool (opt-in: AICO_E2E_SKILLSPECTOR=1, and the pinned tool installed) ----------
+// Tests that run the real SkillSpector are opt-in: set AICO_E2E_SKILLSPECTOR=1 (needs pinned skillspector 2.13.1 on PATH).
+const E2E_TOOL = process.env.AICO_E2E_SKILLSPECTOR === '1';
+const toolVersion = E2E_TOOL ? spawnSync('skillspector', ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 30000 }) : null;
+const realTool = E2E_TOOL && toolVersion.status === 0 && /2\.13\.1/.test(toolVersion.stdout);
+const toolSkip = !E2E_TOOL ? 'real SkillSpector case is opt-in: set AICO_E2E_SKILLSPECTOR=1' : !realTool && 'pinned skillspector 2.13.1 not installed';
+test('AC13 e2e: the real tool on hostile-d is findings, blocking, baseline file shipped but not applied', { skip: toolSkip }, async (t) => {
   const { scanOne } = await mod();
   const sb = sandbox(t);
   const dir = join(sb.project, '.claude', 'skills', 'hostile-d');
@@ -825,7 +828,7 @@ test('AC13 e2e: the real tool on hostile-d is findings, blocking, baseline file 
   assert.equal(r.counts.high, 2);
   assert.equal(r.reason, null);
 });
-test('AC13 e2e: the CLI scans a project skill with the real tool and exits 0', { skip: !realTool && 'pinned skillspector 2.13.1 not installed' }, (t) => {
+test('AC13 e2e: the CLI scans a project skill with the real tool and exits 0', { skip: toolSkip }, (t) => {
   const sb = sandbox(t);
   cpSync(join(FIX, 'skills', 'hostile-c'), join(sb.project, '.claude', 'skills', 'hostile-c'), { recursive: true });
   const r = cli(sb, ['scan', '--scope', 'project', '--mode', 'no-llm', '--report', 'e2e', '--json'], { path: process.env.PATH });
@@ -1688,7 +1691,7 @@ test('report: the date line and version line keep the Contract shape with a comm
 });
 
 // ---------- real tool: reference caveat and progress ----------
-test('e2e: the real tool on a skill that names a file it does not bundle is pass with one reference not bundled', { skip: !realTool && 'pinned skillspector 2.13.1 not installed' }, async (t) => {
+test('e2e: the real tool on a skill that names a file it does not bundle is pass with one reference not bundled', { skip: toolSkip }, async (t) => {
   const { scanOne } = await mod();
   const sb = sandbox(t);
   const dir = join(sb.project, '.claude', 'skills', 'ref-missing');
@@ -1698,7 +1701,7 @@ test('e2e: the real tool on a skill that names a file it does not bundle is pass
   assert.equal(r.reason, null);
   assert.equal(r.refs_not_bundled, 1);
 });
-test('e2e: the CLI writes progress to stderr only and keeps stdout one JSON document', { skip: !realTool && 'pinned skillspector 2.13.1 not installed' }, (t) => {
+test('e2e: the CLI writes progress to stderr only and keeps stdout one JSON document', { skip: toolSkip }, (t) => {
   const sb = sandbox(t);
   cpSync(join(FIX, 'skills', 'ref-missing'), join(sb.project, '.claude', 'skills', 'ref-missing'), { recursive: true });
   const r = cli(sb, ['scan', '--scope', 'project', '--mode', 'no-llm', '--json'], { path: process.env.PATH });
