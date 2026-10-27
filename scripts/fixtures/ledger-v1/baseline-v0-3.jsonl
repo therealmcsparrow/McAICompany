@@ -1,0 +1,2 @@
+{"v":1,"run":"baseline-v0-3","kind":"total","id":"d02be665","role":"lead","src":"transcript","reqs":153,"dispatches":22,"tokens":{"in":322,"cache_write":773854,"cache_read":7526819,"out":120455}}
+{"v":1,"run":"baseline-v0-3","kind":"ship","acs":8}

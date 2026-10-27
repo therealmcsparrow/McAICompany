@@ -1,0 +1,2 @@
+{"v":1,"run":"baseline-role-effort","kind":"total","id":"bdeca87d","role":"lead","src":"transcript","reqs":358,"dispatches":28,"tokens":{"in":724,"cache_write":1678097,"cache_read":26567919,"out":292814}}
+{"v":1,"run":"baseline-role-effort","kind":"ship","acs":10}

@@ -1,0 +1,5 @@
+run baseline-research-team
+total 628bda21 lead  spend 2839347  cache read 25838149
+spend: 2839347 total, 123450 per AC (23 ACs)
+cache read: 25838149 total, 1123398 per AC (23 ACs)
+not reconciled: 0

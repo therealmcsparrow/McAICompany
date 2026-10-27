@@ -1,0 +1,6 @@
+brainstorm brainstorm-20261027-1140 (rounds 2 and later)
+R2  spend 18609  cache read 286014
+spend: 18609 total
+cache read: 286014 total
+crossfire share: 0% of spend
+not reconciled: 0

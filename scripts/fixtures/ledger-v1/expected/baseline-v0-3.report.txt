@@ -1,0 +1,5 @@
+run baseline-v0-3
+total d02be665 lead  spend 894631  cache read 7526819
+spend: 894631 total, 111829 per AC (8 ACs)
+cache read: 7526819 total, 940852 per AC (8 ACs)
+not reconciled: 0
