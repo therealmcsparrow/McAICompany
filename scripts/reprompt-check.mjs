@@ -467,6 +467,9 @@ function readText(file, max) {
   return { text };
 }
 
+// A triage line (ASCII or full-width colon) in the prompt body or the brief, code fences included.
+const TRIAGE_RE = /triage[ \t]*[:：]/i;
+
 function checkPrompt(file, treeChanged, assumed) {
   if (!treeChanged) return { reason: 'prompt.md not rewritten' };
   const r = readText(file, MAX_PROMPT);
@@ -488,6 +491,7 @@ function checkPrompt(file, treeChanged, assumed) {
   if (heads.length !== 6) return { reason: 'not six parts' };
   if (/^en(-|$)/i.test(m[1]) && heads.some((h, i) => h !== SIX_EN[i])) return { reason: 'parts out of order' };
   if (hiddenMarkup(lines, 5)) return { reason: 'hidden markup' };
+  if (TRIAGE_RE.test(lines.slice(5).join('\n'))) return { reason: 'triage line' };
   return { kind: 'prompt', fence: fenceFor(lines.slice(5).join('\n'), assumed) };
 }
 
@@ -539,6 +543,7 @@ function checkReply(runDir, slug, nn, asks, promptChanged) {
   const n = [...text].length;
   if (!brief || n < 1 || n > 300) return { reason: 'no prompt and no brief' };
   if (hiddenLine(text)) return { reason: 'hidden markup' };
+  if (TRIAGE_RE.test(text)) return { reason: 'triage line' };
   return { kind: 'image', brief: text, fence: fenceFor(text, assumptions) };
 }
 
