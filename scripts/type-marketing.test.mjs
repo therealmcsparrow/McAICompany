@@ -72,7 +72,11 @@ for (const name of ['campaign', 'content']) {
     for (const needle of ['claims-cited', 'ai-disclosure', 'asset-licences', 'aico:editor', 'aico:legal', 'aico:accessibility-tester', 'Ship Gate', 'Ship means']) {
       assert.ok(t.includes(needle), needle);
     }
-    assert.match(t, /art\. 50/);
+    assert.match(t, /art\. 50 duty that applies and how it is met, or why none applies/);
+    assert.match(t, /\*\*→ Plan Gate\*\*/);
+    assert.ok(t.indexOf('Brief Gate**') < t.indexOf('Plan Gate**'));
+    assert.ok(!/No Plan Gate/.test(t));
+    for (const n of ['testimonials or reviews', 'sponsored-content labels', 'price and green claims', '2024/825', 'comparative advertising']) assert.ok(t.includes(n), n);
     const used = new Set([...t.matchAll(/`aico:([a-z-]+)`/g)].map((m) => m[1]));
     const allowed = new Set([...manifest.roles, ...manifest.playbooks, 'pipeline', 'writing', 'eu-compliance', 'art-direction', 'help']);
     for (const u of used) assert.ok(allowed.has(u), `${name} dispatches ${u}, not in the marketing company`);
@@ -80,7 +84,7 @@ for (const name of ['campaign', 'content']) {
 }
 
 test('resolve for a marketing project returns the manifest data', () => {
-  const r = cli(marketingProject(), 'resolve');
+  const r = cli(marketingProject(), 'resolve', '--json');
   assert.equal(r.status, 0, r.stdout);
   const j = JSON.parse(r.stdout);
   assert.equal(j.id, 'marketing');

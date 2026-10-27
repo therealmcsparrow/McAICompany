@@ -47,7 +47,7 @@ test('the registry accepts the manifest', () => {
 
 test('a design project resolves to the design company', () => {
   const cwd = projectWith('# Project profile\n\ncompany_type: design\nproduct_type: web\n');
-  const res = exec(['resolve'], cwd);
+  const res = exec(['resolve', '--json'], cwd);
   assert.equal(res.code, 0);
   const out = JSON.parse(res.out);
   assert.equal(out.id, 'design');
@@ -106,6 +106,9 @@ test('SKILL.md: pipeline, stages in order, checks and review lanes', () => {
   assert.match(review, /aico:code-reviewer/);
   assert.match(review, /aico:security/);
   assert.match(skill, /Ship means: <ship\.meaning>/);
+  const legal = skill.slice(skill.indexOf('## 6. Legal'), skill.indexOf('## 7. Handoff package'));
+  assert.match(legal, /art\. 50 duty that applies and how it is met, or why none applies/);
+  assert.match(skill.slice(skill.indexOf('## 7. Handoff package')), /AI flag[^\n]*tool, prompt and date[^\n]*copyright/);
 });
 
 test('files are LF only', () => {

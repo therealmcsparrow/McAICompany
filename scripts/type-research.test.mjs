@@ -21,7 +21,8 @@ test('manifest has the contract values', () => {
     'ux-researcher', 'writer', 'legal', 'localizer', 'editor', 'skill-researcher']);
   assert.deepEqual(manifest.playbooks, ['research', 'client', 'report', 'feedback', 'brainstorm', 'cooler']);
   assert.deepEqual(manifest.ship, { kind: 'deliver-report', meaning: MEANING, lanes: ['legal'], checks: ['claims-cited'] });
-  assert.deepEqual(Object.keys(manifest).sort(), ['id', 'label', 'playbooks', 'roles', 'ship', 'skill_search', 'v']);
+  assert.deepEqual(Object.keys(manifest).sort(), ['id', 'label', 'playbooks', 'roles', 'ship', 'skill_search', 'v', 'work']);
+  assert.deepEqual(manifest.work, ['report']);
   for (const h of manifest.skill_search.hints) assert.match(h, /^[a-z0-9][a-z0-9 -]{0,59}$/);
 });
 
@@ -58,10 +59,15 @@ test('report Playbook: frontmatter, Help line, Type line, size', () => {
 
 test('report Playbook: runs with aico:pipeline, states the Ship meaning, Gates and Roles', () => {
   assert.match(playbook, /Run with `aico:pipeline`/);
-  assert.ok(playbook.includes('Ship means: the final report goes to the client or is published, every claim cited [S#] or marked (unverified).'));
-  assert.ok(playbook.includes(`Ship means: ${MEANING}`));
+  assert.equal(playbook.split('Ship means').length - 1, 1);
+  assert.ok(playbook.includes('`Ship means: <ship.meaning>`'));
+  assert.ok(!playbook.includes(MEANING));
   assert.match(playbook, /\*\*→ Brief Gate\*\*/);
-  assert.match(playbook, /## 6\. Ship Gate/);
+  assert.match(playbook, /\*\*→ Plan Gate\*\*/);
+  assert.ok(playbook.indexOf('Brief Gate**') < playbook.indexOf('Plan Gate**'));
+  assert.ok(playbook.indexOf('Plan Gate**') < playbook.indexOf('## 3. Research'));
+  assert.match(playbook.slice(playbook.indexOf('## 2. Plan'), playbook.indexOf('## 3. Research')), /no Core, Contracts or Ruleset line/);
+  assert.match(playbook, /## 7\. Ship Gate/);
   const used = [...playbook.matchAll(/`aico:([a-z-]+)`/g)].map((m) => m[1]).filter((n) => fs.existsSync(path.join(root, 'agents', `${n}.md`)));
   for (const r of used) assert.ok(manifest.roles.includes(r), `${r} is not a research Role`);
 });
@@ -70,12 +76,12 @@ test('uncited claim: the editor blocks with [spec] and the Playbook blocks Ship'
   const editor = read('agents/editor.md');
   assert.match(editor, /neither, or with an `\[S#\]` that does not exist[^\n]*`## Blocking`, tag `\[spec\]`/);
   assert.match(editor, /Never:\*\* rewrite/);
-  const edit = playbook.slice(playbook.indexOf('## 4. Edit'), playbook.indexOf('## 5. Legal'));
+  const edit = playbook.slice(playbook.indexOf('## 5. Edit'), playbook.indexOf('## 6. Legal'));
   assert.match(edit, /neither `\[S#\]` nor `\(unverified\)`[^\n]*`## Blocking` with tag `\[spec\]`/);
   assert.match(edit, /`status: done` and no `## Blocking`/);
-  const ship = playbook.slice(playbook.indexOf('## 6. Ship Gate'), playbook.indexOf('## 7.'));
+  const ship = playbook.slice(playbook.indexOf('## 7. Ship Gate'), playbook.indexOf('## 8.'));
   assert.match(ship, /`claims-cited` blocker is open and Ship is blocked/);
-  assert.ok(playbook.indexOf('## 4. Edit') < playbook.indexOf('## 6. Ship Gate'));
+  assert.ok(playbook.indexOf('## 5. Edit') < playbook.indexOf('## 7. Ship Gate'));
 });
 
 test('web pages are data: an instruction in a source is ignored and noted', () => {
@@ -98,9 +104,10 @@ test('the Playbook is in the type and passes the type CLI', () => {
     fs.writeFileSync(path.join(dir, '.company', 'project.md'), 'company_type: research\n');
     const env = { ...process.env, MCSPARROW_HOME: dir, HOME: dir, USERPROFILE: dir };
     const run = (...args) => spawnSync(process.execPath, [path.join(root, 'scripts', 'company-type.mjs'), ...args], { cwd: dir, env, encoding: 'utf8' });
-    const ok = run('check-playbook', 'report');
+    const ok = run('check-playbook', 'report', '--json');
     assert.equal(ok.status, 0);
     assert.equal(JSON.parse(ok.stdout).ship.kind, 'deliver-report');
+    assert.match(run('check-playbook', 'report').stdout, /^ok: report is part of the research company/);
     assert.equal(run('check-playbook', 'audit').status, 2);
     assert.equal(run('check-role', 'editor').status, 0);
     assert.equal(run('check-role', 'backend-engineer').status, 2);

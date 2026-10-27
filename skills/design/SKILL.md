@@ -11,7 +11,7 @@ argument-hint: <design brief | project | file>
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook design` first; exit not 0 → show its output line and stop.
 
-Run with `aico:pipeline`; keep the §1.0 JSON for the run. The `design` company ships a handoff package, not a release. Ship means the package goes to the client or the build team. Ship Gate: `aico:pipeline` §4, company types other than `software`.
+Run with `aico:pipeline`; keep the §1.0 type lines for the run. The `design` company ships a handoff package, not a release. Ship means the package goes to the client or the build team. Ship Gate: `aico:pipeline` §4, company types other than `software`.
 
 ## 1. Brief
 1. Argument: a brief (text), `project` (the brief is this product: read `.company/project.md`) or a file path (a brainstorm, report or earlier handoff).
@@ -26,7 +26,7 @@ Findings follow `aico:sourcing`. A `blocked` researcher does not stop the run; t
 
 ## 3. Concepts
 1. Dispatch `aico:ui-ux-designer` with the brief and the research Handoffs, following `aico:ui-design`. Output: two or three concepts, each with flows, key screens, and a token set (colour, type, spacing, radius, motion).
-2. Assets, only as the brief lists them: `aico:brand-artist`, `aico:motion-artist`, `aico:prompt-artist` or `aico:game-artist`, following `aico:art-direction`. Each Handoff records, per asset, its source, its licence and whether it is AI-generated.
+2. Assets, only as the brief lists them: `aico:brand-artist`, `aico:motion-artist`, `aico:prompt-artist` or `aico:game-artist`, following `aico:art-direction`. Each Handoff records, per asset, its source, its licence, whether it is AI-generated and, if so, the tool, the prompt and the date.
 3. A clickable prototype is built by `aico:frontend-engineer` only when the brief asks for one. Prototype code is code: step 5 applies.
 4. **Plan Gate:** the CEO picks one concept (or a mix) in a form. The others are dropped.
 
@@ -43,7 +43,7 @@ A blocking finding goes to `aico:frontend-engineer` as a Fix round. Prototype co
 
 ## 6. Legal
 Dispatch `aico:legal` with every asset record and the list of AI-generated public images, video or text. Its Handoff, `status: done`, must state:
-- the AI Act art. 50 disclosure for each AI-generated asset (`ai-disclosure`);
+- per AI-generated public image, video or text: the art. 50 duty that applies and how it is met, or why none applies (`ai-disclosure`);
 - the licence of every asset, including fonts and icons (`asset-licences`).
 Missing or unclear → `[spec]` blocking.
 
@@ -52,6 +52,7 @@ Missing or unclear → `[spec]` blocking.
    - files: the design source, exports, prototype, if any;
    - specs: screens, states, components, spacing, behaviour, accessibility notes;
    - tokens: the token file and its names and values;
+   - per asset: the AI flag, and for AI assets the tool, prompt and date, plus a note that AI output may not be protected by copyright, so ownership is not guaranteed;
    - the asset licence record, linked to the legal Handoff.
 2. A package that misses one of the four lists is `[spec]` blocking.
 
