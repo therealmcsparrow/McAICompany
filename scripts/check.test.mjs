@@ -876,10 +876,10 @@ const hidden = (name, body) => `${playbookFm(name)}**Help:** x\n\n${body}\nSee Â
 function typeFixture({ typeLine = true, manifest = {} } = {}) {
   const root = fixture({
     skills: { fix: hidden('fix', typeLine === true ? TYPE_LINE('fix') : typeLine), audit: hidden('audit', TYPE_LINE('audit')) },
-    agents: { qa: agent('qa'), 'skill-researcher': agent('skill-researcher'), editor: agent('editor') }
+    agents: { qa: agent('qa'), 'skill-researcher': agent('skill-researcher'), reprompter: agent('reprompter'), editor: agent('editor') }
   });
   const sw = {
-    v: 1, id: 'software', label: 'Software company', roles: ['qa', 'skill-researcher'], playbooks: ['fix', 'audit'], work: ['fix'],
+    v: 1, id: 'software', label: 'Software company', roles: ['qa', 'skill-researcher', 'reprompter'], playbooks: ['fix', 'audit'], work: ['fix'],
     ship: { kind: 'release', meaning: 'Push.', lanes: [], checks: [] }, skill_search: { hints: [] }, ...manifest
   };
   mkdirSync(join(root, 'company', 'types'), { recursive: true });
@@ -914,7 +914,7 @@ test('company types: software must be every agent but editor and the 16 Playbook
   const errors = check(typeFixture()).errors;
   assert.ok(errors.some(e => e.includes('software.json') && e.includes('playbooks must be the 16')), errors.join('\n'));
   assert.ok(!errors.some(e => e.includes('roles must be every agent except editor')));
-  const withEditor = check(typeFixture({ manifest: { roles: ['qa', 'skill-researcher', 'editor'] } })).errors;
+  const withEditor = check(typeFixture({ manifest: { roles: ['qa', 'skill-researcher', 'reprompter', 'editor'] } })).errors;
   assert.ok(withEditor.some(e => e.includes('roles must be every agent except editor')));
   const orphan = typeFixture();
   mkdirSync(join(orphan, 'skills', 'report'), { recursive: true });

@@ -46,9 +46,9 @@ test('every lane key appears in a Playbook', () => {
     assert.ok(skills.some(t => t.includes(`lanes.${key}\``)), `no Playbook mentions \`lanes.${key}\``);
 });
 
-test('dispatch-prompt is v3.2 and lists Name:, Settings: and Context cap:', () => {
+test('dispatch-prompt is v3.2 or later and lists Name:, Settings: and Context cap:', () => {
   const doc = read('docs/contracts/dispatch-prompt.md');
-  assert.match(doc, /^# Contract: dispatch-prompt v3\.2$/m);
+  assert.match(doc, /^# Contract: dispatch-prompt v3\.(?:[2-9]|\d{2,})$/m);
   assert.match(doc, /`Context cap: <cap> handover <n>`/);
   assert.match(doc, /`Name: <name>`/);
   assert.match(doc, /`Settings: model=<m> effort=<e>`/);
@@ -72,9 +72,9 @@ test('roles.md lists every default name', () => {
     assert.ok(doc.includes(`| ${name} |`), `roles.md lacks ${name} (${role})`);
 });
 
-test('aico-settings v1.3 keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
+test('aico-settings v1.3 or later keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.match(doc, /^# Contract: aico-settings v1\.3$/m);
+  assert.match(doc, /^# Contract: aico-settings v1\.(?:[3-9]|\d{2,})$/m);
   assert.equal(PIPELINE_DEFAULTS.context_cap, 150000);
   assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 150000/);
   assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
@@ -107,10 +107,10 @@ test('aico-settings v1.1 names the mods keys, defaults, three locks and refusal 
   assert.ok(!/^\| `mods\..*keep/m.test(doc), 'no keep-warm row in the Contract schema');
 });
 
-test('aico-settings v1.3 names skillspector.mode, its default, the user-level lock and refusal text', () => {
+test('aico-settings v1.3 or later names skillspector.mode, its default, the user-level lock and refusal text', () => {
   const doc = read('docs/contracts/aico-settings.md');
   assert.deepEqual(SKILLSPECTOR_DEFAULTS, { mode: 'no-llm' });
-  assert.match(doc, /^# Contract: aico-settings v1\.3$/m);
+  assert.match(doc, /^# Contract: aico-settings v1\.(?:[3-9]|\d{2,})$/m);
   assert.match(doc, /`skillspector\.mode` \| `no-llm \\| claude_cli`; default `no-llm`; `claude_cli` user level only/);
   assert.match(doc, /\*the scan's data switch is user-level only\.\*/);
   assert.match(doc, /skillspector\.mode: claude_cli from project needs the user level/);

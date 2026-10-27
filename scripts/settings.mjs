@@ -39,6 +39,7 @@ export const MODS_DEFAULTS = {
 };
 export const SKILLSPECTOR_MODES = ['no-llm', 'claude_cli'];
 export const SKILLSPECTOR_DEFAULTS = { mode: 'no-llm' };
+export const REPROMPT_DEFAULTS = { question_rounds: 1 };
 
 export const PROFILE_FIELDS = ['product_type', 'engagement', 'client', 'audience', 'goal', 'stack', 'languages', 'voice', 'license', 'jurisdiction'];
 
@@ -162,7 +163,7 @@ export function pluginDefaults(pluginRoot = DEFAULT_PLUGIN_ROOT) {
     const name = typeof names[role] === 'string' && Object.hasOwn(names, role) ? names[role] : role;
     roles[role] = { name, model, effort };
   }
-  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS }, mods: structuredClone(MODS_DEFAULTS), skillspector: { ...SKILLSPECTOR_DEFAULTS } };
+  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS }, mods: structuredClone(MODS_DEFAULTS), skillspector: { ...SKILLSPECTOR_DEFAULTS }, reprompt: { ...REPROMPT_DEFAULTS } };
 }
 
 function oneOf(values) {
@@ -210,6 +211,9 @@ const MOD_RULES = {
 };
 const SKILLSPECTOR_RULES = {
   mode: { ok: (v) => SKILLSPECTOR_MODES.includes(v), msg: `skillspector.mode must be ${SKILLSPECTOR_MODES.join(' or ')}` }
+};
+const REPROMPT_RULES = {
+  question_rounds: { ok: (v) => Number.isInteger(v) && v >= 0 && v <= 3, msg: 'reprompt.question_rounds must be a whole number from 0 to 3' }
 };
 const LANE_RULES = Object.fromEntries(LANES.map((l) => [l, l === 'legal' ? oneOf(LEGAL) : BOOLEAN]));
 const GATE_RULES = Object.fromEntries(GATES.map((g) => [g, oneOf(GATE_VALUES)]));
@@ -300,6 +304,10 @@ function sanitize(layer, roleNames) {
       if (!isObject(value)) { reasons.push('skillspector: must be an object'); continue; }
       const skillspector = Object.assign(Object.create(null), checkFields(value, SKILLSPECTOR_RULES, 'skillspector', reasons));
       if (notEmpty(skillspector)) clean.skillspector = skillspector;
+    } else if (key === 'reprompt') {
+      if (!isObject(value)) { reasons.push('reprompt: must be an object'); continue; }
+      const reprompt = Object.assign(Object.create(null), checkFields(value, REPROMPT_RULES, 'reprompt', reasons));
+      if (notEmpty(reprompt)) clean.reprompt = reprompt;
     } else if (key === 'unlocked') {
       if (!Array.isArray(value)) { reasons.push('unlocked: must be a list'); continue; }
       const unlocked = [];
@@ -580,6 +588,9 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   if (project.skillspector?.mode === 'claude_cli') ignored.push('skillspector.mode: claude_cli from project needs the user level');
   else if (project.skillspector?.mode !== undefined) skillspector.mode = project.skillspector.mode;
 
+  // Not a lock: a project value counts, and a fail-closed project layer does not change it.
+  const reprompt = { question_rounds: pick(project.reprompt?.question_rounds, user.reprompt?.question_rounds, REPROMPT_DEFAULTS.question_rounds)[0] };
+
   const mods = resolveMods(user, project, { isUnlocked, broken: p.warnings.length > 0, ignored, warnings });
 
   // The revision also covers project.md (profile and project language), so a stale page can't overwrite it.
@@ -593,7 +604,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const revision = createHash('sha256').update(u.raw).update('\0').update(p.raw).update('\0').update(md).digest('hex');
   const language = resolveLanguage({ home, cwd });
   const profile = { ...readProfile({ cwd }), options: templateOptions(pluginRoot) };
-  return { revision, roles, pipeline, gates, brainstorm, mods, skillspector, unlocked: [...unlocked], ignored, warnings, language, profile };
+  return { revision, roles, pipeline, gates, brainstorm, mods, skillspector, reprompt, unlocked: [...unlocked], ignored, warnings, language, profile };
 }
 
 const own = (o, k) => (o !== null && typeof o === 'object' && Object.hasOwn(o, k) ? o[k] : undefined);

@@ -164,7 +164,7 @@ test('only brainstorm.mjs imports personality.mjs', () => {
 });
 
 test('the text rule is written once, in check.mjs', () => {
-  const offenders = codeFiles().filter((f) => rel(f) !== 'scripts/check.mjs' && /\\p\{L\}\\p\{M\}\\p\{N\}/.test(fs.readFileSync(f, 'utf8'))).map(rel);
+  const offenders = codeFiles().filter((f) => rel(f) !== 'scripts/check.mjs' && /\\p\{L\}\\p\{M\}\\p\{N\},\.'!\?-/.test(fs.readFileSync(f, 'utf8'))).map(rel);
   assert.deepEqual(offenders, []);
 });
 
@@ -261,7 +261,7 @@ test('get has exactly the documented top-level and per-Role keys', (t) => {
   const got = s.get();
   assert.equal(got.code, 0);
   const data = JSON.parse(got.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings'].sort());
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings'].sort());
   for (const entry of Object.values(data.roles)) assert.deepEqual(Object.keys(entry).sort(), ['context_cap', 'effort', 'model', 'name', 'source']);
 });
 

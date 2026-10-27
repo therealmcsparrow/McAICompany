@@ -13,7 +13,7 @@ const manifest = JSON.parse(read('company/types/marketing.json'));
 const script = path.join(root, 'scripts', 'company-type.mjs');
 
 const ROLES = ['product-manager', 'account-manager', 'marketer', 'writer', 'brand-artist', 'prompt-artist',
-  'motion-artist', 'localizer', 'market-researcher', 'persona-tester', 'accessibility-tester', 'legal', 'editor', 'skill-researcher'];
+  'motion-artist', 'localizer', 'market-researcher', 'persona-tester', 'accessibility-tester', 'legal', 'editor', 'skill-researcher', 'reprompter'];
 const PLAYBOOKS = ['campaign', 'content', 'research', 'client', 'feedback', 'brainstorm', 'cooler'];
 
 const temps = [];
