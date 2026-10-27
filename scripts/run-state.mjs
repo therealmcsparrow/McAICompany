@@ -28,6 +28,7 @@ const PICKS = new Set(['use', 'edit', 'keep', 'stop']);
 const ASKED_RE = /^[0-3]$/;
 const OUTCOMES = new Set(['ship', 'abort']);
 const STATUSES = new Set(['done', 'blocked', 'needs-ceo', 'handover']);
+const REQUEST_FRESH_MS = 10 * 60 * 1000;
 export const TRIAGE_TTL_MS = 30 * 60 * 1000;
 const HEX64_RE = /^[0-9a-f]{64}$/;
 const NONCE_RE = /^[0-9a-f]{32}$/;
@@ -47,9 +48,17 @@ function paths(root, slug) {
   return { dir, file: join(dir, 'run-state.jsonl') };
 }
 
-function readCapped(file, max) {
+// True when the opened handle is a regular file with one hard link and, when an lstat is given, the same dev and ino.
+export function verifyOpened(fd, st) {
+  const f = fstatSync(fd);
+  return f.isFile() && f.nlink === 1 && (!st || (f.dev === st.dev && f.ino === st.ino));
+}
+
+// `expect` (an lstat taken just before) turns on the re-check of the opened handle.
+function readCapped(file, max, expect) {
   const fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
+    if (expect && !verifyOpened(fd, expect)) throw new Error('file changed');
     const size = fstatSync(fd).size;
     const buf = Buffer.alloc(Math.min(size, max));
     let off = 0;
@@ -285,7 +294,7 @@ function triageFolder(root) {
   if (ist && !isPlain(ist)) refuse('triage folder is a link');
   let same = false;
   if (ist) {
-    try { same = readCapped(ig, 16).toString('utf8') === '*\n'; } catch { refuse('triage folder is a link'); }
+    try { same = readCapped(ig, 16, ist).toString('utf8') === '*\n'; } catch { refuse('triage folder is a link'); }
   }
   if (!same) writeFileSync(ig, '*\n', { flag: constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | (constants.O_NOFOLLOW ?? 0) });
   return dir;
@@ -298,7 +307,7 @@ function takeRequest(dir) {
   if (!st) return null;
   try {
     if (!isPlain(st) || st.size > MAX_FILE) return null;
-    return new TextDecoder('utf-8', { fatal: true }).decode(readCapped(file, MAX_FILE));
+    return new TextDecoder('utf-8', { fatal: true }).decode(readCapped(file, MAX_FILE, st));
   } catch { return null; } finally {
     try { unlinkSync(file); } catch { /* already gone */ }
   }
@@ -310,7 +319,7 @@ function readTriageRecords(file) {
   if (!st) return { records: [], raw: '' };
   if (!isPlain(st) || st.size > MAX_FILE) refuse('triage record unreadable');
   let raw;
-  try { raw = readCapped(file, MAX_FILE).toString('utf8'); } catch { refuse('triage record unreadable'); }
+  try { raw = readCapped(file, MAX_FILE, st).toString('utf8'); } catch { refuse('triage record unreadable'); }
   const records = [];
   for (const line of raw.split('\n')) {
     if (line === '' || line.includes('\r') || Buffer.byteLength(line, 'utf8') > MAX_LINE || records.length >= MAX_LINES) continue;
@@ -340,8 +349,22 @@ function pruneTriage(dir, file, recs, raw, now) {
 function appendTriage(file, kept, record, now) {
   const line = `${JSON.stringify({ v: 1, at: iso(now), ...record })}\n`;
   if (kept.count >= MAX_LINES || kept.size + Buffer.byteLength(line, 'utf8') > MAX_FILE) refuse('triage record full');
+  const before = lstatOrNull(file);
+  if (before && !isPlain(before)) refuse('triage record unreadable');
   const fd = openSync(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
-  try { writeSync(fd, line); } finally { closeSync(fd); }
+  try {
+    if (!verifyOpened(fd, before)) refuse('triage record unreadable');
+    writeSync(fd, line);
+  } finally { closeSync(fd); }
+}
+
+// On a refusal in the folder check, request.txt is unlinked by name (the name is resolved through any link in the path, the
+// file is never read), and only when it is a single-link regular file written in the last 10 minutes; else it is left.
+function dropRefusedRequest(root, now) {
+  const file = join(root, '.company', 'triage', 'request.txt');
+  const st = lstatOrNull(file);
+  if (!st || !isPlain(st) || now - st.mtimeMs < -1000 || now - st.mtimeMs > REQUEST_FRESH_MS) return;
+  try { unlinkSync(file); } catch { /* already gone */ }
 }
 
 // `issue` records an approved direct-route request; `check` spends that record once. Returns the JSON text to print.
@@ -351,8 +374,7 @@ export function triage(root, args, { now = Date.now() } = {}) {
   if (isCheck && !NONCE_RE.test(args[1])) refuse('bad nonce');
   let dir;
   try { dir = triageFolder(root); } catch (e) {
-    // Only the name request.txt is unlinked (never followed, never read), so a link in the path cannot leave CEO text behind.
-    try { unlinkSync(join(root, '.company', 'triage', 'request.txt')); } catch { /* none */ }
+    dropRefusedRequest(root, now);
     throw e;
   }
   const request = takeRequest(dir);
@@ -366,14 +388,17 @@ export function triage(root, args, { now = Date.now() } = {}) {
   const { records, raw } = readTriageRecords(file);
   const k = isCheck ? sha(args[1]) : null;
   let reason = null;
+  let live = false; // a record found, unused and unexpired: the check spends it whatever the result
   if (isCheck) {
     const issue = records.find(r => r.ev === 'issue' && r.k === k);
     const age = issue ? now - Date.parse(issue.at) : 0;
+    const used = issue && records.some(r => r.ev === 'used' && r.k === k);
+    live = Boolean(issue) && !used && age >= 0 && age <= TRIAGE_TTL_MS;
     if (request === null) reason = 'no request';
     else if (!match) reason = 'no triage line';
     else if (!issue) reason = 'no record';
-    else if (records.some(r => r.ev === 'used' && r.k === k)) reason = 'used';
-    else if (age < 0 || age > TRIAGE_TTL_MS) reason = 'expired';
+    else if (used) reason = 'used';
+    else if (!live) reason = 'expired';
     else if (issue.h !== bind(args[1], normalized)) reason = 'request changed';
   }
   const kept = pruneTriage(dir, file, records, raw, now);
@@ -382,8 +407,8 @@ export function triage(root, args, { now = Date.now() } = {}) {
     appendTriage(file, kept, { ev: 'issue', h: bind(nonce, normalized), k: sha(nonce) }, now);
     return JSON.stringify({ nonce, type: match[1] });
   }
+  if (live) appendTriage(file, kept, { ev: 'used', k }, now);
   if (reason) return JSON.stringify({ trusted: false, reason });
-  appendTriage(file, kept, { ev: 'used', k }, now);
   return JSON.stringify({ trusted: true, type: match[1] });
 }
 

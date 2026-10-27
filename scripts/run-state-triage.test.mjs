@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { run, show, active, TRIAGE_TTL_MS } from './run-state.mjs';
+import { run, show, active, verifyOpened, TRIAGE_TTL_MS } from './run-state.mjs';
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-triage-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
@@ -57,11 +57,11 @@ test('30 minutes is still live, 30 minutes and 1 second is expired', () => {
   assert.deepEqual(check(root, b.nonce, REQ, NOW + TRIAGE_TTL_MS + 1000), { trusted: false, reason: 'expired' });
 });
 
-test('a changed request gives request changed, and the record stays usable', () => {
+test('a changed request gives request changed, and the record is spent', () => {
   const root = repo();
   const { nonce } = issue(root);
   assert.deepEqual(check(root, nonce, `other text ${LINE}`), { trusted: false, reason: 'request changed' });
-  assert.equal(check(root, nonce).trusted, true);
+  assert.deepEqual(check(root, nonce), { trusted: false, reason: 'used' });
 });
 
 test('a route other than direct is refused at issue and has no triage line at check', () => {
@@ -296,9 +296,10 @@ test('trailing whitespace after the triage line and on the line before it hash t
 
 test('spaces between the request and the triage line on the same line stay significant', () => {
   const root = repo();
-  const { nonce } = issue(root, `fix it  ${LINE}`);
-  assert.deepEqual(check(root, nonce, `fix it ${LINE}`), { trusted: false, reason: 'request changed' });
-  assert.equal(check(root, nonce, `fix it  ${LINE}`).trusted, true);
+  const a = issue(root, `fix it  ${LINE}`);
+  assert.deepEqual(check(root, a.nonce, `fix it ${LINE}`), { trusted: false, reason: 'request changed' });
+  const b = issue(root, `fix it  ${LINE}`);
+  assert.equal(check(root, b.nonce, `fix it  ${LINE}`).trusted, true);
 });
 
 test('the triage line needs a space before it: a line glued to the text or alone is not a triage line', () => {
@@ -309,22 +310,43 @@ test('the triage line needs a space before it: a line glued to the text or alone
   }
 });
 
-test('a refused issue and a failed check write no record and a failed check does not consume the nonce', () => {
+test('a refused issue writes no record and a failed check spends the nonce', () => {
   const root = repo();
   put(root, 'x (triage: XS, risk low, bug, route feature)');
   call(root, ['issue']);
   assert.ok(!fs.existsSync(recFile(root)) || records(root).length === 0);
   const { nonce } = issue(root);
-  check(root, nonce, 'garbage');
-  check(root, nonce, `changed ${LINE}`);
-  assert.deepEqual(records(root).map(r => r.ev), ['issue']);
+  assert.deepEqual(check(root, nonce, `changed ${LINE}`), { trusted: false, reason: 'request changed' });
+  assert.deepEqual(records(root).map(r => r.ev), ['issue', 'used']);
+  assert.deepEqual(check(root, nonce), { trusted: false, reason: 'used' });
+});
+
+test('a check that finds a live record spends it whatever the result', () => {
+  for (const [text, reason] of [['garbage', 'no triage line'], [`other ${LINE}`, 'request changed']]) {
+    const root = repo();
+    const { nonce } = issue(root);
+    assert.deepEqual(check(root, nonce, text), { trusted: false, reason });
+    assert.deepEqual(records(root).map(r => r.ev), ['issue', 'used']);
+    assert.deepEqual(check(root, nonce), { trusted: false, reason: 'used' });
+  }
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.equal(call(root, ['check', nonce]).out, JSON.stringify({ trusted: false, reason: 'no request' }));
+  assert.deepEqual(check(root, nonce), { trusted: false, reason: 'used' });
+});
+
+test('a check that finds no live record appends nothing', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(check(root, 'b'.repeat(32)), { trusted: false, reason: 'no record' });
+  assert.deepEqual(check(root, nonce, REQ, NOW + TRIAGE_TTL_MS + 1000), { trusted: false, reason: 'expired' });
+  assert.ok(!fs.existsSync(recFile(root)) || records(root).every(r => r.ev !== 'used'));
 });
 
 test('a copied line on another request fails, and a replay after use fails', () => {
   const root = repo();
   const { nonce } = issue(root, `request A ${LINE}`);
   assert.deepEqual(check(root, nonce, `request B ${LINE}`), { trusted: false, reason: 'request changed' });
-  assert.equal(check(root, nonce, `request A ${LINE}`).trusted, true);
   assert.deepEqual(check(root, nonce, `request A ${LINE}`), { trusted: false, reason: 'used' });
 });
 
@@ -334,7 +356,7 @@ test('a nonce for one record does not unlock another: two live records stay inde
   const b = issue(root, `B ${LINE}`);
   assert.deepEqual(check(root, a.nonce, `B ${LINE}`), { trusted: false, reason: 'request changed' });
   assert.equal(check(root, b.nonce, `B ${LINE}`).trusted, true);
-  assert.equal(check(root, a.nonce, `A ${LINE}`).trusted, true);
+  assert.deepEqual(check(root, a.nonce, `A ${LINE}`), { trusted: false, reason: 'used' });
 });
 
 test('a used record that has also expired reports used (documented residual)', () => {
@@ -385,7 +407,7 @@ test('records dated in the future are pruned', () => {
   assert.equal(records(root).length, 1);
 });
 
-test('a hand-written used line for an unknown nonce does not make anything trusted', () => {
+test('a check with an unknown nonce is no record and leaves the real nonce usable', () => {
   const root = repo();
   const { nonce } = issue(root);
   assert.deepEqual(check(root, 'b'.repeat(32)), { trusted: false, reason: 'no record' });
@@ -444,7 +466,7 @@ test('a hard-linked .gitignore is refused and left alone', (t) => {
   fs.writeFileSync(outside, 'keep\n');
   if (!hardlink(t, outside, path.join(tdir(root), '.gitignore'))) return;
   put(root, REQ);
-  assert.equal(call(root, ['issue']).out, 'refused: triage folder is a link');
+  assert.equal(call(root, ['issue'], Date.now()).out, 'refused: triage folder is a link');
   assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n');
   assert.equal(fs.existsSync(reqFile(root)), false);
 });
@@ -472,12 +494,57 @@ test('a hard-linked request.txt counts as missing and its name is deleted', (t) 
   assert.equal(fs.readFileSync(outside, 'utf8'), REQ);
 });
 
-test('a link at the triage folder is refused and request.txt behind it is still deleted', (t) => {
-  const outside = path.join(base, 'outside-del');
+// Refusal through a linked folder: request.txt is unlinked by name only when it is a single-link regular file written in the last 10 minutes.
+function linkedTriage(t, name) {
+  const outside = path.join(base, name);
   fs.mkdirSync(outside, { recursive: true });
   const root = repo();
-  try { fs.symlinkSync(outside, tdir(root), 'junction'); } catch { t.skip('links not permitted here'); return; }
-  fs.writeFileSync(path.join(outside, 'request.txt'), REQ);
-  assert.equal(call(root, ['issue']).out, 'refused: triage folder is a link');
-  assert.deepEqual(fs.readdirSync(outside), []);
+  try { fs.symlinkSync(outside, tdir(root), 'junction'); } catch { t.skip('links not permitted here'); return null; }
+  return { root, outside };
+}
+const issueNow = root => run(['triage', 'issue'], { root, now: Date.now() }).out;
+
+test('a link at the triage folder is refused and a fresh request.txt behind it is deleted', (t) => {
+  const l = linkedTriage(t, 'outside-del');
+  if (!l) return;
+  fs.writeFileSync(path.join(l.outside, 'request.txt'), REQ);
+  fs.writeFileSync(path.join(l.outside, 'other.txt'), 'keep');
+  assert.equal(issueNow(l.root), 'refused: triage folder is a link');
+  assert.deepEqual(fs.readdirSync(l.outside), ['other.txt']);
+});
+
+test('a link at the triage folder is refused and an old request.txt behind it is left', (t) => {
+  const l = linkedTriage(t, 'outside-old');
+  if (!l) return;
+  const f = path.join(l.outside, 'request.txt');
+  fs.writeFileSync(f, 'mine');
+  const old = new Date(Date.now() - 11 * 60 * 1000);
+  fs.utimesSync(f, old, old);
+  assert.equal(issueNow(l.root), 'refused: triage folder is a link');
+  assert.equal(fs.readFileSync(f, 'utf8'), 'mine');
+});
+
+test('a request.txt with a second hard link behind a link is left', (t) => {
+  const l = linkedTriage(t, 'outside-hl');
+  if (!l) return;
+  const f = path.join(l.outside, 'request.txt');
+  fs.writeFileSync(path.join(base, 'hl-keep.txt'), 'mine');
+  if (!hardlink(t, path.join(base, 'hl-keep.txt'), f)) return;
+  assert.equal(issueNow(l.root), 'refused: triage folder is a link');
+  assert.equal(fs.readFileSync(f, 'utf8'), 'mine');
+});
+
+// The opened handle is checked again: regular file, one link, same dev and ino as the lstat.
+test('verifyOpened accepts the same plain file and refuses another file or a second link', (t) => {
+  const a = path.join(base, 'vo-a.txt');
+  const b = path.join(base, 'vo-b.txt');
+  fs.writeFileSync(a, 'a');
+  fs.writeFileSync(b, 'b');
+  const fda = fs.openSync(a, 'r');
+  try {
+    assert.equal(verifyOpened(fda, fs.lstatSync(a)), true);
+    assert.equal(verifyOpened(fda, fs.lstatSync(b)), false);
+    assert.equal(verifyOpened(fda, null), true);
+    if (hardlink(t, a, path.join(base, 'vo-c.txt'))) assert.equal(verifyOpened(fda, null), false);
+  } finally { fs.closeSync(fda); }
 });
