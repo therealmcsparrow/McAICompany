@@ -131,7 +131,7 @@ function readSteps(dir, warnings) {
       step,
       role,
       status: STATUSES.has(routing.status) ? routing.status : 'unknown',
-      round: /^\d{1,3}$/.test(routing.round ?? '') ? Number(routing.round) : 'unknown',
+      round: /^\d{1,2}$/.test(routing.round ?? '') ? Number(routing.round) : 'unknown',
       tier: Object.hasOwn(TIER_RANK, routing['risk-tier']) ? routing['risk-tier'] : 'unknown',
       file: name,
       mtime: iso(st.mtimeMs),

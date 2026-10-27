@@ -9,3 +9,6 @@ node_modules/
 !/tests/*
 # the host writes this into the plugin root on every --plugin-dir start
 /tsconfig.json
+
+# per-run reprompt folders hold CEO text and stay local
+.company/work/

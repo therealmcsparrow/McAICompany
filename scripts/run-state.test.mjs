@@ -525,3 +525,19 @@ test('the script and its test are LF only', () => {
     assert.equal(fs.readFileSync(f).includes(13), false, f);
   }
 });
+
+test('show: a step round is a whole number 0 to 99, anything else reads as unknown', () => {
+  const root = repo();
+  const rounds = { '00': 0, 0: 0, 7: 7, 99: 99, 100: 'unknown', 999: 'unknown', '007': 'unknown', '-1': 'unknown', '1.5': 'unknown' };
+  let i = 1;
+  const expected = new Map();
+  for (const [round, want] of Object.entries(rounds)) {
+    const name = `${String(i).padStart(2, '0')}-backend-engineer.md`;
+    step(root, 'x', name, { ...FM, step: String(i).padStart(2, '0'), round });
+    expected.set(name, want);
+    i++;
+  }
+  const v = show(root, 'x');
+  for (const s of v.steps) assert.equal(s.round, expected.get(s.file), s.file);
+  assert.equal(v.round, 99);
+});
