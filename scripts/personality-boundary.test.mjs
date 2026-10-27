@@ -391,7 +391,7 @@ test('length limits count code points and refuse empty and over-long text with t
 
 test('character problems get the one-line reason', () => {
   for (const value of [`${MARK}\n${MARK}`, `${MARK}"${MARK}`, `${MARK}:${MARK}`, `<${MARK}>`, ` ${MARK}`, `${MARK}  ${MARK}`]) {
-    assert.deepEqual(settings.validateLayer(layerWith('talk', value), ROLE_SET), ["roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?"], JSON.stringify(value));
+    assert.deepEqual(settings.validateLayer(layerWith('talk', value), ROLE_SET), ["roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit"], JSON.stringify(value));
   }
 });
 

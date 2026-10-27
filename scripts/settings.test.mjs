@@ -924,7 +924,7 @@ function withPersonalities(s, entries = Object.fromEntries(Object.keys(AGENTS).m
   return entries;
 }
 
-const CHARSET_REASON = "must be one line of letters, digits, single spaces and , . ' - ! ?";
+const CHARSET_REASON = "must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit";
 const LENGTH_REASON = 'must be 1 to 80 characters';
 const LEVEL_REASON = 'must be low, medium or high';
 

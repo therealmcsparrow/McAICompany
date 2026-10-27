@@ -409,7 +409,7 @@ test('AC6 the settings page refuses each bad personality value with a path-first
   await withServer(sb, async ({ post, state }) => {
     const revision = (await state()).resolved.revision;
     const cases = [
-      [{ talk: 'say "hi"' }, "user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?"],
+      [{ talk: 'say "hi"' }, "user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit"],
       [{ topic: 'a'.repeat(81) }, 'user roles.qa.personality.topic: must be 1 to 80 characters'],
       [{ intelligence: 'extreme' }, 'user roles.qa.personality.intelligence: must be low, medium or high']
     ];

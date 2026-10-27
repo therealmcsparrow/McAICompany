@@ -171,7 +171,7 @@ const PERSONALITY_TEXT_KEYS = new Set(['temperament', 'talk', 'topic']);
 export const PERSONALITY_MAX = 80;
 export const PERSONALITY_REASONS = {
   length: `must be 1 to ${PERSONALITY_MAX} characters`,
-  charset: "must be one line of letters, digits, single spaces and , . ' - ! ?",
+  charset: "must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit",
   level: `must be ${PERSONALITY_LEVELS.slice(0, -1).join(', ')} or ${PERSONALITY_LEVELS.at(-1)}`
 };
 

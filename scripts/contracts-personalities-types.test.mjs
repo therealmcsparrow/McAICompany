@@ -227,7 +227,7 @@ test('aico-settings: the refusal lines are the Contract lines, path first, and t
   for (const key of ['temperament', 'talk', 'topic']) {
     assert.deepEqual(lines({ [key]: 'a'.repeat(81) }), [`roles.qa.personality.${key}: must be 1 to 80 characters`]);
     assert.deepEqual(lines({ [key]: '' }), [`roles.qa.personality.${key}: must be 1 to 80 characters`]);
-    assert.deepEqual(lines({ [key]: 'two\nlines' }), [`roles.qa.personality.${key}: must be one line of letters, digits, single spaces and , . ' - ! ?`]);
+    assert.deepEqual(lines({ [key]: 'two\nlines' }), [`roles.qa.personality.${key}: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit`]);
   }
   for (const key of ['intelligence', 'creativity']) assert.deepEqual(lines({ [key]: 'huge' }), [`roles.qa.personality.${key}: must be low, medium or high`]);
   assert.deepEqual(lines({ temperament: 'ok', talk: 'fine', topic: 'tea', intelligence: 'low', creativity: 'high' }), []);

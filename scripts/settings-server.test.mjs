@@ -528,7 +528,7 @@ test('the Save refusal for a bad personality value is path-first with the level 
   const res = await post('/api/save', { revision, user: { version: 1, roles: { qa: { personality: { talk: 'say "hi"' } } } } });
   assert.equal(res.status, 400);
   const { refused } = await res.json();
-  assert.deepEqual(refused, ["user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?"]);
+  assert.deepEqual(refused, ["user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit"]);
   assert.equal(read(s.config), null);
 });
 
@@ -839,7 +839,7 @@ test('a Save with a bad value sends nothing, marks the field and puts the error 
 });
 
 test('a server refusal is mapped by its path to the field, the text comes from the page, nothing else is marked', async () => {
-  const refused = ["user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?", 'user roles.qa.personality: must be an object'];
+  const refused = ["user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit", 'user roles.qa.personality: must be an object'];
   const page = loadPage(pageState(), { saveReply: { status: 400, body: { refused } } });
   await settle();
   const talk = field(page, 'qa', 'user', 'talk');
@@ -1143,7 +1143,7 @@ test('layout: a summary link selects the Personality tab, clears a filter that h
 });
 
 test('layout: a server line that maps to no field is plain text in the summary', async () => {
-  const lines = ['revision is stale', "user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?"];
+  const lines = ['revision is stale', "user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit"];
   const page = loadPage(namedState(), { saveReply: { status: 400, body: { refused: lines } } });
   await settle();
   await type(field(page, 'qa', 'user', 'talk'), 'fine');
