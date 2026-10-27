@@ -68,7 +68,13 @@ test('AC31 every new Contract has a docs file and an ADR exists for the minor-ve
 const exists = f => fs.existsSync(path.join(root, f));
 const NODE = process.execPath;
 const BASE = 'c312355';
-const AC9_LINE = 'refused: company_type is not valid; allowed: software, research, marketing, design';
+const ALLOWED = 'software, research, marketing, design';
+// The refusal lines of the company-type Contract for a bad project value; the number is the line in project.md.
+const invalidLine = n => `refused: company_type on line ${n} of .company/project.md is not valid; allowed: ${ALLOWED}`;
+const lookAlikeLine = n => `refused: line ${n} of .company/project.md looks like a company_type line but is not "company_type: <id>" at the start of the line; allowed: ${ALLOWED}`;
+const manyLine = (count, lines) => `refused: .company/project.md has ${count} company_type lines (lines ${lines}); keep one; allowed: ${ALLOWED}`;
+const cannotReadLine = reason => `refused: cannot read .company/project.md (${reason}), so the company type is unknown; fix the file and run again`;
+const LINK_LINE = 'refused: .company/project.md is a link; set writes only a regular file in a real .company folder';
 
 const temps = [];
 after(() => { for (const d of temps) fs.rmSync(d, { recursive: true, force: true }); });
@@ -91,6 +97,12 @@ function sandbox({ projectMd = null } = {}) {
     project: layer => fs.writeFileSync(path.join(repo, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, ...layer } })),
     // The exported entry the CLI wraps: same output and exit code, without a process per call.
     type: args => { const r = runCompanyType(args, { cwd: repo }); return { code: r.code, out: r.out }; },
+    // The command line with --json, parsed.
+    typeJson: args => {
+      const r = spawnSync(NODE, [path.join(root, 'scripts', 'company-type.mjs'), ...args, '--json'], { cwd: repo, encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stdout);
+      return JSON.parse(r.stdout);
+    },
     run(script, args, input) {
       const r = spawnSync(NODE, [path.join(root, 'scripts', script), ...args], {
         cwd: repo, input, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home, HOME: home, USERPROFILE: home }
@@ -423,34 +435,44 @@ test('AC6 the page builds labelled, described, focusable personality fields that
   assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
   assert.match(html, /:focus-visible \{ outline: 2px solid/);
   assert.match(html, /input\[aria-invalid="true"\]/);
-  // Visible labels tied to the field, native details for each Role, errors tied with aria-describedby, first bad field focused.
+  // Visible labels tied to the field, native details for each Role, errors tied with aria-describedby.
   assert.match(html, /el\('label', \{ for: id \}, P_LABELS\[key\]\)/);
   assert.match(html, /el\('details', \{ class: 'pcard' \}\)/);
   assert.match(html, /setAttribute\('aria-invalid', 'true'\)/);
   assert.match(html, /setAttribute\('aria-describedby'/);
-  assert.match(html, /first\.control\.focus\(\)/);
+  // A refused Save focuses the error summary heading; each summary link opens the card and focuses its field.
+  assert.match(html, /tabIndex: -1 \}, `Nothing was saved\. Fix /);
+  assert.match(html, /heading\.focus\(\)/);
+  assert.match(html, /function jumpTo\(rec\) \{[\s\S]*?selectTab\('personality'\);[\s\S]*?openRole\(rec\.role\);[\s\S]*?rec\.control\.focus\(\)/);
+  // The personality section sits on its own tab, apart from the Roles table.
+  assert.match(html, /<button role="tab" id="tab-personality" aria-controls="panel-personality"[^>]*>Personality<\/button>/);
+  assert.match(html, /<section role="tabpanel" id="panel-personality" aria-labelledby="tab-personality" hidden><\/section>/);
   assert.ok(!html.includes('innerHTML'), 'hostile text is never parsed as markup');
   assert.ok(!/<script[^>]+src=|<link[^>]+href="http/.test(html), 'no remote files');
   // The rendered behaviour is driven in the page-script suite; the names below must stay.
   const dom = read('scripts/settings-server.test.mjs');
   assert.ok(dom.includes("test('the page builds one labelled personality card per Role"));
-  assert.ok(dom.includes("test('a Save with a bad value sends nothing, marks and focuses the field"));
+  assert.ok(dom.includes("test('a Save with a bad value sends nothing, marks the field and puts the error summary in the status"));
+  assert.ok(dom.includes("test('layout: a refused Save puts an error summary in the status and focuses its heading"));
+  assert.ok(dom.includes("test('layout: a summary link selects the Personality tab, clears a filter that hides the Role, opens the card and focuses the field"));
+  assert.ok(dom.includes("test('layout: the page never scrolls sideways"));
 });
 
 // ----- company types ------------------------------------------------------------------------
 
 test('AC7 with no company_type line every Playbook is the v0.12.0 one', { skip: skipNoBase }, () => {
   for (const sb of [sandbox(), sandbox({ projectMd: '# Project\nproduct_type: web\n' })]) {
-    const r = sb.run('company-type.mjs', ['resolve']);
-    assert.equal(r.code, 0, r.out);
-    const t = JSON.parse(r.out);
+    const t = sb.typeJson(['resolve']);
     assert.deepEqual([t.id, t.source], ['software', 'default']);
     assert.deepEqual(t.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
+    // The readable default starts with the type line that says it is a default.
+    const lines = sb.run('company-type.mjs', ['resolve']).out.split('\n');
+    assert.equal(lines[0], `company type: software (${manifest('software').label}), default: no company_type line`);
   }
   // The golden Handoffs and their baseline did not move.
   assert.equal(git('diff', '--name-only', BASE, 'HEAD', '--', 'tests/golden').trim(), '');
-  // A software Playbook gained only its Type line (one empty line and the line); nothing of it was removed or reworded.
-  for (const name of ['audit', 'client', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan']) {
+  // A software-only Playbook gained only its Type line (one empty line and the line); nothing of it was removed or reworded.
+  for (const name of ['audit', 'feature', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'standards', 'usability-test', 'vulnscan']) {
     const [added, removed] = git('diff', '--numstat', BASE, 'HEAD', '--', `skills/${name}/SKILL.md`).trim().split(/\s+/);
     assert.deepEqual([Number(added), Number(removed)], [2, 0], name);
   }
@@ -460,6 +482,122 @@ test('AC7 with no company_type line every Playbook is the v0.12.0 one', { skip: 
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 
+test('AC7 the shared Playbooks pick the same Roles and hand over to the same Playbooks in a software company', () => {
+  const sb = sandbox();
+  const pick = args => sb.run('company-type.mjs', ['pick', ...args]).out.trim().split('\n');
+  assert.deepEqual(pick(['architect', 'product-manager']), ['architect']);
+  assert.deepEqual(pick(['support', 'account-manager', 'product-manager']), ['support']);
+  assert.deepEqual(pick(['devops']), ['devops']);
+  assert.deepEqual(pick(['design-researcher']), ['design-researcher']);
+  assert.deepEqual(pick(['--max', '2', 'market-researcher', 'tech-researcher', 'design-researcher', 'ux-researcher']), ['market-researcher', 'tech-researcher']);
+  assert.deepEqual(sb.typeJson(['resolve']).work, ['feature', 'fix']);
+  assert.ok(sb.run('company-type.mjs', ['resolve']).out.split('\n').includes('work: feature, fix'));
+  for (const name of ['client', 'feedback', 'research']) assert.equal(sb.run('company-type.mjs', ['check-playbook', name]).code, 0, name);
+});
+
+// A repo whose .company folder or project.md is a link. The caller skips when links cannot be made here.
+function linked(profile, what) {
+  const sb = sandbox();
+  const store = path.join(sb.dir, 'store');
+  fs.mkdirSync(store);
+  fs.writeFileSync(path.join(store, 'project.md'), profile);
+  if (what === 'folder') {
+    fs.rmSync(path.join(sb.repo, '.company'), { recursive: true });
+    fs.symlinkSync(store, path.join(sb.repo, '.company'), 'junction');
+  } else {
+    fs.symlinkSync(path.join(store, 'project.md'), sb.profile);
+  }
+  return { sb, stored: path.join(store, 'project.md') };
+}
+
+for (const what of ['folder', 'file']) {
+  test(`AC7 a ${what === 'folder' ? '.company folder' : 'project.md'} that is a link is read like the real one, and set never writes through it`, t => {
+    let made;
+    try {
+      made = linked('# P\ncompany_type: research\nproduct_type: web\n', what);
+    } catch {
+      t.skip('links are not available here');
+      return;
+    }
+    const { sb, stored } = made;
+    const r = sb.typeJson(['resolve']);
+    assert.deepEqual([r.id, r.source], ['research', 'project']);
+    assert.equal(sb.run('company-type.mjs', ['check-role', 'editor']).code, 0);
+    const before = fs.readFileSync(stored);
+    const set = sb.run('company-type.mjs', ['set', 'design']);
+    assert.deepEqual([set.code, set.out.trim()], [2, LINK_LINE]);
+    assert.ok(fs.readFileSync(stored).equals(before), 'the stored file did not change');
+    // A bad value behind a link is refused like any other, and the value is not echoed.
+    fs.writeFileSync(stored, '# P\ncompany_type: ZQXbad\n');
+    const bad = sb.run('company-type.mjs', ['resolve']);
+    assert.deepEqual([bad.code, bad.out.trim()], [2, invalidLine(2)]);
+    assert.ok(!bad.out.includes('ZQXbad'));
+    // No type line behind a link is the default.
+    fs.writeFileSync(stored, '# P\nproduct_type: web\n');
+    assert.deepEqual([sb.typeJson(['resolve']).id, sb.typeJson(['resolve']).source], ['software', 'default']);
+  });
+}
+
+test('AC7 a link that leads nowhere is no profile: the default type, and set writes nothing', t => {
+  const file = sandbox();
+  const folder = sandbox();
+  const made = [];
+  try {
+    fs.symlinkSync(path.join(file.dir, 'gone.md'), file.profile);
+    made.push([file, path.join(file.dir, 'gone.md')]);
+  } catch { /* file links need a privilege on some systems */ }
+  try {
+    fs.rmSync(path.join(folder.repo, '.company'), { recursive: true });
+    fs.symlinkSync(path.join(folder.dir, 'gone'), path.join(folder.repo, '.company'), 'junction');
+    made.push([folder, path.join(folder.dir, 'gone')]);
+  } catch { /* directory links are not available */ }
+  if (made.length === 0) {
+    t.skip('links are not available here');
+    return;
+  }
+  for (const [sb, target] of made) {
+    const r = sb.typeJson(['resolve']);
+    assert.deepEqual([r.id, r.source], ['software', 'default']);
+    assert.equal(sb.run('company-type.mjs', ['set', 'research']).code, 2);
+    assert.equal(fs.existsSync(target), false, 'nothing was created behind the link');
+  }
+});
+
+test('AC7 a profile that cannot be read is refused as unreadable, never as an invalid value, and nothing is written', () => {
+  const resolveOf = sb => { const r = sb.run('company-type.mjs', ['resolve']); return [r.code, r.out.trim()]; };
+  // Too big: one byte over 256 KiB is refused, exactly 256 KiB is read.
+  const head = 'company_type: research\n';
+  const edge = sandbox({ projectMd: head + 'x'.repeat(256 * 1024 - head.length) });
+  assert.equal(fs.statSync(edge.profile).size, 256 * 1024);
+  assert.deepEqual([edge.typeJson(['resolve']).id, edge.typeJson(['resolve']).source], ['research', 'project']);
+  const big = sandbox({ projectMd: head + 'x'.repeat(256 * 1024 - head.length + 1) });
+  assert.deepEqual(resolveOf(big), [2, cannotReadLine('larger than 256 KiB')]);
+  assert.equal(big.run('company-type.mjs', ['set', 'design']).code, 2);
+  // Not a file: a folder where project.md should be.
+  const dir = sandbox();
+  fs.mkdirSync(dir.profile);
+  assert.deepEqual(resolveOf(dir), [2, cannotReadLine('not a regular file')]);
+  assert.equal(dir.run('company-type.mjs', ['set', 'design']).code, 2);
+  assert.deepEqual(fs.readdirSync(dir.profile), []);
+  // .company itself is a file.
+  const odd = sandbox();
+  fs.rmSync(path.join(odd.repo, '.company'), { recursive: true });
+  fs.writeFileSync(path.join(odd.repo, '.company'), 'x');
+  assert.deepEqual(resolveOf(odd), [2, 'refused: .company is not a folder, so the company type is unknown']);
+  assert.equal(fs.readFileSync(path.join(odd.repo, '.company'), 'utf8'), 'x');
+});
+
+test('AC7 a profile without read permission is refused as unreadable', { skip: (process.platform === 'win32' || process.getuid?.() === 0) && 'file modes are not enforced here' }, () => {
+  const sb = sandbox({ projectMd: 'company_type: research\n' });
+  fs.chmodSync(sb.profile, 0);
+  try {
+    const r = sb.run('company-type.mjs', ['resolve']);
+    assert.deepEqual([r.code, r.out.trim()], [2, cannotReadLine('no permission')]);
+  } finally {
+    fs.chmodSync(sb.profile, 0o600);
+  }
+});
+
 test('AC8 the software manifest has the v0.12.0 Roles, Playbooks and ship meaning', () => {
   const m = manifest('software');
   const expectedPlaybooks = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
@@ -467,10 +605,12 @@ test('AC8 the software manifest has the v0.12.0 Roles, Playbooks and ship meanin
   assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
   assert.equal(m.roles.length, 33);
   assert.deepEqual(m.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
+  assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
-  const t = JSON.parse(sb.run('company-type.mjs', ['resolve']).out);
+  const t = sb.typeJson(['resolve']);
   assert.equal(t.playbooks.length, 24);
   assert.deepEqual([...t.playbooks].sort(), [...expectedPlaybooks, ...ALWAYS].sort());
+  assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
     const baseAgents = git('ls-tree', '--name-only', BASE, 'agents/').split('\n').filter(Boolean).map(f => path.basename(f, '.md')).sort();
     assert.deepEqual([...m.roles].sort(), baseAgents);
@@ -489,23 +629,70 @@ test('AC9 an unknown or malformed company_type stops every type check with one l
     const before = fs.readFileSync(sb.profile);
     const tree = () => fs.readdirSync(sb.repo, { recursive: true }).sort().join('|');
     const treeBefore = tree();
-    for (const args of [['resolve'], ['roles'], ['check-role', 'qa'], ...allPlaybooks.map(p => ['check-playbook', p])]) {
-      const r = sb.type(args);
-      assert.equal(r.code, 2, `${value} ${args}`);
-      assert.equal(r.out.trim(), AC9_LINE);
+    for (const args of [['resolve'], ['roles'], ['check-role', 'qa'], ['pick', 'architect'], ...allPlaybooks.map(p => ['check-playbook', p])]) {
+      for (const flags of [[], ['--json']]) {
+        const r = sb.type([...args, ...flags]);
+        assert.equal(r.code, 2, `${value} ${args}`);
+        assert.equal(r.out.trim(), invalidLine(2), `${value} ${args}`);
+        assert.ok(!r.out.includes(value), `${value} is not echoed`);
+      }
     }
     assert.equal(sb.type(['set', 'research']).code, 2);
-    assert.equal(sb.run('company-type.mjs', ['resolve']).out.trim(), AC9_LINE, 'the command line agrees');
+    const cli = sb.run('company-type.mjs', ['resolve']);
+    assert.equal(cli.code, 2);
+    assert.equal(cli.out, `${invalidLine(2)}\n`, 'the command line prints the one line');
     assert.ok(fs.readFileSync(sb.profile).equals(before), value);
     assert.equal(tree(), treeBefore, value);
   }
-  // Two lines, even two valid ones, are refused as well.
-  const twice = sandbox({ projectMd: 'company_type: research\ncompany_type: research\n' });
-  assert.equal(twice.run('company-type.mjs', ['resolve']).out.trim(), AC9_LINE);
-  // The pipeline runs this check before it creates or writes anything.
-  const pipeline = read('skills/pipeline/SKILL.md');
-  assert.ok(pipeline.indexOf('Company type (§1.0)') < pipeline.indexOf('1. **Task slug**'));
-  assert.match(pipeline, /nothing is created or written/);
+  // The refusal names the line of the bad value, wherever it is.
+  assert.equal(sandbox({ projectMd: '# P\n\n\nstack: x\ncompany_type: nope\n' }).type(['resolve']).out, invalidLine(5));
+});
+
+test('AC9 more than one company_type line is refused with the line numbers, even when all are valid', () => {
+  const cases = [
+    ['company_type: research\ncompany_type: research\n', manyLine(2, '1, 2')],
+    ['# P\ncompany_type: research\nx: y\ncompany_type: design\ncompany_type: nope\n', manyLine(3, '2, 4, 5')]
+  ];
+  for (const [text, line] of cases) {
+    const sb = sandbox({ projectMd: text });
+    for (const args of [['resolve'], ['roles'], ['check-role', 'writer'], ['check-playbook', 'report'], ['set', 'design']]) {
+      const r = sb.type(args);
+      assert.equal(r.code, 2, `${args}`);
+      assert.equal(r.out.trim(), args[0] === 'set' ? 'refused: company_type already set; switching types is not supported' : line, `${args}`);
+    }
+    assert.equal(sb.run('company-type.mjs', ['resolve']).out.trim(), line, 'the command line agrees');
+    assert.equal(fs.readFileSync(sb.profile, 'utf8'), text);
+  }
+});
+
+test('AC9 a line that looks like company_type but is not the exact form is refused, never ignored', () => {
+  const cases = [
+    ['# P\nCompany_Type: zqxvalue\n', 2],
+    ['# P\ncompany_type : zqxvalue\n', 2],
+    ['# P\ncompany_type\t: zqxvalue\n', 2],
+    ['# P\n company_type: zqxvalue\n', 2],
+    ['# P\n\tcompany_type: zqxvalue\n', 2],
+    ['# P\nCOMPANY_TYPE:zqxvalue\n', 2],
+    ['﻿company_type: zqxvalue\n', 1],
+    ['# P\n\n\ncompany_type\t : zqxvalue\n', 4],
+    ['company_type: research\nCompany_Type: zqxvalue\n', 2]
+  ];
+  for (const [text, n] of cases) {
+    const sb = sandbox({ projectMd: text });
+    for (const args of [['resolve'], ['roles'], ['check-role', 'writer'], ['check-playbook', 'report'], ['set', 'design']]) {
+      const r = sb.type(args);
+      assert.equal(r.code, 2, `${JSON.stringify(text)} ${args}`);
+      assert.equal(r.out.trim(), args[0] === 'set' ? 'refused: company_type already set; switching types is not supported' : lookAlikeLine(n), `${JSON.stringify(text)} ${args}`);
+      assert.ok(!r.out.includes('zqxvalue'));
+    }
+    assert.equal(sb.run('company-type.mjs', ['resolve']).out.trim(), lookAlikeLine(n), 'the command line agrees');
+    assert.equal(fs.readFileSync(sb.profile, 'utf8'), text, 'nothing was written');
+  }
+  // Text that only resembles the key, or sits in a comment, is not a line.
+  for (const text of ['# P\ncompany_types: research\n', '# P\nmy company_type: research\n', '<!-- company_type: research -->\n', '<!--\nCompany_Type : x\n-->\nproduct_type: web\n']) {
+    const r = sandbox({ projectMd: text }).typeJson(['resolve']);
+    assert.deepEqual([r.id, r.source], ['software', 'default'], JSON.stringify(text));
+  }
 });
 
 test('AC10 a Playbook or Role outside the type is refused with the allowed list; help lists only the type', () => {
@@ -520,10 +707,21 @@ test('AC10 a Playbook or Role outside the type is refused with the allowed list;
       assert.ok(r.out.startsWith(`refused: ${name} is not part of the ${id} company; allowed: `), r.out);
       for (const a of allowed) assert.ok(r.out.includes(a), `${id}: ${a} missing from the list`);
     }
-    for (const name of allowed) assert.equal(sb.type(['check-playbook', name]).code, 0, `${id} ${name}`);
+    for (const name of allowed) {
+      const r = sb.type(['check-playbook', name]);
+      assert.equal(r.code, 0, `${id} ${name}`);
+      // The ok line comes first, then the type lines.
+      const lines = r.out.split('\n');
+      assert.equal(lines[0], `ok: ${name} is part of the ${id} company`);
+      assert.equal(lines[1], `company type: ${id} (${m.label}), from .company/project.md`);
+      assert.deepEqual(lines.slice(2).map(l => l.slice(0, l.indexOf(':'))), ['roles', 'playbooks', 'work', 'ship', 'ship lanes', 'ship checks', 'skill search hints']);
+      assert.equal(lines.find(l => l.startsWith('work: ')), `work: ${m.work.join(', ')}`);
+    }
     for (const role of AGENTS) {
       const r = sb.type(['check-role', role]);
       assert.equal(r.code, m.roles.includes(role) ? 0 : 2, `${id} ${role}`);
+      if (r.code === 0) assert.equal(r.out.split('\n')[0], `ok: ${role} is part of the ${id} company`);
+      else assert.equal(r.out, `refused: ${role} is not part of the ${id} company; allowed: ${m.roles.join(', ')}`);
     }
     assert.deepEqual(sb.type(['roles']).out.trim().split('\n'), m.roles);
     assert.equal(sb.run('company-type.mjs', ['check-role', 'editor']).code, m.roles.includes('editor') ? 0 : 2, 'the command line agrees');
@@ -538,17 +736,88 @@ test('AC10 a Playbook or Role outside the type is refused with the allowed list;
   for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/SKILL.md']) assert.match(read(rel), /company-type\.mjs" roles/, rel);
 });
 
+test('AC10 pick gives a shared Playbook a stand-in Role, and work names the Playbooks that hand-overs go to', () => {
+  const standIns = [
+    // [candidates, max, the Role each type gets or null when the type has none]
+    [['architect', 'product-manager'], 1, { software: ['architect'], research: ['product-manager'], marketing: ['product-manager'], design: ['product-manager'] }],
+    [['support', 'account-manager', 'product-manager'], 1, { software: ['support'], research: ['account-manager'], marketing: ['account-manager'], design: ['account-manager'] }],
+    [['devops'], 1, { software: ['devops'], research: null, marketing: null, design: null }],
+    [['design-researcher'], 1, { software: ['design-researcher'], research: null, marketing: null, design: ['design-researcher'] }],
+    [['market-researcher', 'tech-researcher', 'design-researcher', 'ux-researcher'], 2, {
+      software: ['market-researcher', 'tech-researcher'], research: ['market-researcher', 'tech-researcher'],
+      marketing: ['market-researcher'], design: ['design-researcher', 'ux-researcher']
+    }]
+  ];
+  for (const id of TYPES) {
+    const m = manifest(id);
+    const sb = typed(id);
+    for (const [candidates, max, want] of standIns) {
+      const r = sb.type(['pick', '--max', String(max), ...candidates]);
+      if (want[id] === null) {
+        assert.equal(r.code, 2, `${id} ${candidates}`);
+        assert.equal(r.out, `refused: none of ${candidates.join(', ')} is part of the ${id} company; allowed: ${m.roles.join(', ')}`);
+      } else {
+        assert.equal(r.code, 0, `${id} ${candidates}: ${r.out}`);
+        assert.deepEqual(r.out.split('\n'), want[id], `${id} ${candidates}`);
+        assert.deepEqual(JSON.parse(sb.type(['pick', '--max', String(max), ...candidates, '--json']).out), want[id]);
+      }
+    }
+    // The hand-over Playbooks exist in the type, in order, and the readable line carries them.
+    assert.deepEqual(sb.typeJson(['resolve']).work, m.work);
+    assert.ok(m.work.length >= 1 && m.work.length <= 3 && m.work.every(w => m.playbooks.includes(w)), id);
+    assert.ok(sb.type(['resolve']).out.split('\n').includes(`work: ${m.work.join(', ')}`), id);
+  }
+  // The shared Playbooks use pick with a fallback rather than naming a Role that only some types have.
+  assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick architect product-manager/);
+  assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick devops/);
+  assert.match(read('skills/feedback/SKILL.md'), /company-type\.mjs" pick support account-manager product-manager/);
+  assert.match(read('skills/research/SKILL.md'), /company-type\.mjs" pick --max 2 market-researcher tech-researcher design-researcher ux-researcher/);
+  assert.match(read('skills/research/SKILL.md'), /pick design-researcher/);
+  for (const name of ['client', 'feedback', 'research', 'brainstorm', 'cooler']) {
+    assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /\baico:(architect|devops|support)\b/, `${name} names a Role that only some types have`);
+  }
+});
+
+test('AC10 an argument that is not a name is refused, and the refusal shows it only in a safe form', () => {
+  const sb = typed('marketing');
+  const name = 'Playbook name';
+  const rule = 'is not valid: use a-z, 0-9 and -, start with a letter, at most 32 characters';
+  const cases = [
+    [['check-playbook', 'Feature'], `refused: ${name} "Feature" ${rule}`],
+    [['check-playbook', '../x'], `refused: ${name} "../x" ${rule}`],
+    [['check-role', ''], `refused: Role name (0 characters, not shown) ${rule}`],
+    [['check-role', 'a`b'], `refused: Role name (3 characters, not shown) ${rule}`],
+    [['check-playbook', 'a'.repeat(41)], `refused: ${name} (41 characters, not shown) ${rule}`],
+    [['check-playbook'], 'refused: check-playbook needs one Playbook name; '],
+    [['roles', 'x'], 'refused: roles needs no arguments; '],
+    [['pick'], 'refused: pick needs 1 to 8 Role names; '],
+    [['pick', '--max', '5', 'writer'], 'refused: --max must be a whole number from 1 to 4'],
+    [['pick', 'writer', 'writer'], 'refused: "writer" is given twice'],
+    [['resolve', '--json', '--json'], 'refused: "--json" is given twice'],
+    [['nope'], 'refused: unknown command "nope"; '],
+    [['set', 'bakery'], 'refused: "bakery" is not a company type; allowed: software, research, marketing, design']
+  ];
+  for (const [args, line] of cases) {
+    const r = sb.type(args);
+    assert.equal(r.code, 2, JSON.stringify(args));
+    assert.ok(r.out.startsWith(line), `${JSON.stringify(args)}: ${r.out}`);
+    assert.equal(r.out.includes('\n'), false, 'one line');
+  }
+  assert.equal(sb.type([]).out.startsWith('refused: no command; usage: company-type.mjs resolve | check-playbook <name> | check-role <role> | roles | pick [--max <n>] <role>... | list | set <id> [--json]'), true);
+});
+
 test('AC11 each new Playbook runs in its own company, with Gates and the type\'s ship meaning', () => {
   const own = { research: ['report'], marketing: ['campaign', 'content'], design: ['design'] };
-  const hasPlan = { report: false, campaign: false, content: false, design: true };
   for (const [id, names] of Object.entries(own)) {
     const m = manifest(id);
     const sb = typed(id);
     for (const name of names) {
       assert.ok(m.playbooks.includes(name), `${id} lists ${name}`);
+      assert.ok(m.work.includes(name), `${id} hands work over to ${name}`);
       const ok = sb.run('company-type.mjs', ['check-playbook', name]);
       assert.equal(ok.code, 0, ok.out);
-      assert.equal(JSON.parse(ok.out).ship.meaning, m.ship.meaning);
+      assert.ok(ok.out.split('\n').includes(`ship: ${m.ship.kind}. ${m.ship.meaning}`), 'the readable type lines carry the ship meaning');
+      assert.equal(sb.typeJson(['check-playbook', name]).ship.meaning, m.ship.meaning);
       assert.equal(typed('software').run('company-type.mjs', ['check-playbook', name]).code, 2, `${name} is refused in a software company`);
       const text = read(`skills/${name}/SKILL.md`);
       assert.equal(frontmatter(text)['disable-model-invocation'], 'true');
@@ -556,12 +825,43 @@ test('AC11 each new Playbook runs in its own company, with Gates and the type\'s
       assert.match(text, /\*\*→ Brief Gate\*\*|Brief Gate:/);
       assert.match(text, /Ship Gate/);
       assert.match(text, /Ship means/);
-      assert.equal(/Plan Gate:/.test(text), hasPlan[name], `${name} Plan Gate`);
       // Only Roles of the type are dispatched.
       for (const [, role] of text.matchAll(/`aico:([a-z-]+)`/g)) if (AGENTS.includes(role)) assert.ok(m.roles.includes(role), `${name} dispatches ${role}`);
     }
     assert.ok(m.ship.meaning.length > 20 && m.ship.meaning.length <= 240);
   }
+  // Report, campaign and content each plan first: a named Role writes the plan, the CEO approves it at a Plan Gate
+  // that shows no Core, Contracts or Ruleset line, and only then do research, production or drafting start.
+  const planned = {
+    report: { role: 'product-manager', after: /Research starts after it\./, planSkips: /This type has no Core, Contracts or Ruleset line to show\./ },
+    campaign: { role: 'marketer', after: /Production starts after it\./, planSkips: /The Plan Gate shows no Core, Contracts or Ruleset line\./ },
+    content: { role: 'writer', after: /Research and drafting start after it\./, planSkips: /the Plan Gate shows no Core, Contracts or Ruleset line\./ }
+  };
+  for (const [name, rule] of Object.entries(planned)) {
+    const text = read(`skills/${name}/SKILL.md`);
+    assert.equal(text.match(/\*\*→ Plan Gate\*\*/g)?.length, 1, `${name} has one Plan Gate`);
+    const [before, after] = text.split('**→ Plan Gate**');
+    assert.ok(before.includes('Brief Gate'), `${name}: the Brief Gate comes first`);
+    assert.ok(!before.slice(before.indexOf('Brief Gate')).includes('Ship Gate'), `${name}: the Plan Gate comes before the Ship Gate`);
+    assert.ok(after.includes('Ship Gate'), `${name}: the Ship Gate comes after`);
+    assert.match(before.slice(before.lastIndexOf('Brief Gate')), new RegExp(`\`aico:${rule.role}\``), `${name}: ${rule.role} writes the plan`);
+    assert.match(after.split('\n')[0], rule.after, `${name}: the work waits for the approval`);
+    assert.match(text, rule.planSkips, `${name}: no Core, Contracts or Ruleset line`);
+  }
+  // Report: sections 1 to 8 in order, Plan before Research, Ship Gate as section 7, and the ship meaning written once.
+  const report = read('skills/report/SKILL.md');
+  assert.deepEqual([...report.matchAll(/^## (\d+)\. (.+)$/gm)].map(m => `${m[1]} ${m[2]}`),
+    ['1 Intake', '2 Plan', '3 Research', '4 Write', '5 Edit (the claims-cited check)', '6 Legal', '7 Ship Gate', '8 Finish']);
+  assert.equal(report.match(/Ship means/g).length, 1, 'the report names the ship meaning in one place');
+  assert.match(report.split('## 7. Ship Gate')[1], /^\nThe summary's first line is `Ship means: <ship\.meaning>`/);
+  assert.ok(report.indexOf('Brief Gate') < report.indexOf('## 2. Plan') && report.indexOf('## 2. Plan') < report.indexOf('## 3. Research'));
+  // Campaign: the copy and the asset artists start after the Plan Gate.
+  const campaign = read('skills/campaign/SKILL.md');
+  const planAt = campaign.indexOf('**→ Plan Gate**');
+  assert.ok(campaign.indexOf('`aico:marketer`: positioning') < planAt, 'positioning, channels and deliverables are planned first');
+  for (const later of ['3a. `aico:marketer`: SEO, post and ad copy', '3b. In parallel with step 3a, after the Plan Gate: `aico:brand-artist`']) assert.ok(campaign.indexOf(later) > planAt, later);
+  // Design keeps its Plan Gate, where the CEO picks a concept.
+  assert.match(read('skills/design/SKILL.md'), /\*\*Plan Gate:\*\* the CEO picks one concept/);
   // The pipeline puts the meaning first in the Ship Gate summary of any non-software type.
   assert.match(read('skills/pipeline/SKILL.md'), /the summary's first line is `Ship means: <ship\.meaning>`/);
   assert.equal(new Set(TYPES.map(id => manifest(id).ship.meaning)).size, 4, 'each type states its own meaning');
@@ -572,11 +872,13 @@ test('AC12 setup writes company_type only after the choice, and only once', () =
   const original = fs.readFileSync(sb.profile, 'utf8');
   assert.doesNotMatch(original.replace(/<!--[\s\S]*?-->/g, ''), /^company_type:/m, 'the template line is only a comment');
   // Looking and listing write nothing; the form is built from the list.
-  const resolved = JSON.parse(sb.run('company-type.mjs', ['resolve']).out);
+  const resolved = sb.typeJson(['resolve']);
   assert.deepEqual([resolved.id, resolved.source], ['software', 'default']);
-  const list = JSON.parse(sb.run('company-type.mjs', ['list']).out);
+  const list = sb.typeJson(['list']);
   assert.deepEqual(list.map(e => e.id), TYPES);
   assert.ok(list.every(e => e.label && e.ship_meaning));
+  // The readable list is what the setup form is built from: one line per type, in the fixed order.
+  assert.deepEqual(sb.run('company-type.mjs', ['list']).out.split('\n').filter(Boolean), list.map(e => `${e.id}: ${e.label}. Ship means: ${e.ship_meaning}`));
   assert.equal(fs.readFileSync(sb.profile, 'utf8'), original, 'a cancelled form leaves the file as it was');
   // The answer is written as one line and nothing else changes.
   const set = sb.run('company-type.mjs', ['set', 'marketing']);
@@ -584,8 +886,9 @@ test('AC12 setup writes company_type only after the choice, and only once', () =
   const after = fs.readFileSync(sb.profile, 'utf8');
   assert.equal(after.split('\n').length, original.split('\n').length + 1);
   assert.equal(after.replace('company_type: marketing\n', ''), original);
-  const now = JSON.parse(sb.run('company-type.mjs', ['resolve']).out);
+  const now = sb.typeJson(['resolve']);
   assert.deepEqual([now.id, now.source], ['marketing', 'project']);
+  assert.equal(sb.run('company-type.mjs', ['resolve']).out.split('\n')[0], `company type: marketing (${manifest('marketing').label}), from .company/project.md`);
   assert.equal(sb.run('company-type.mjs', ['set', 'design']).code, 2, 'a second choice is refused');
   assert.equal(fs.readFileSync(sb.profile, 'utf8'), after);
   // No project file: nothing is created.
@@ -597,6 +900,13 @@ test('AC12 setup writes company_type only after the choice, and only once', () =
   assert.ok(setup.indexOf('company-type.mjs" list') < setup.indexOf('company-type.mjs" set <id>'));
   assert.match(setup, /Cancel, no answer or any other text → run nothing, write nothing/);
   assert.match(setup, /`<id>` taken from the `list` output and never from free text/);
+  // Setup reads the readable lines: the source from the first line, the form from the list lines, the hints from their own line.
+  assert.match(setup, /A first line that starts with `refused: ` → show it and stop; nothing is written\./);
+  assert.match(setup, /The first line ends with `from \.company\/project\.md` → the type is already set/);
+  assert.match(setup, /The first line ends with `default: no company_type line` → run/);
+  assert.match(setup, /\(`<id>: <label>\. Ship means: <ship_meaning>`\)/);
+  assert.match(setup, /The `skill search hints:` line of the `resolve` output/);
+  assert.doesNotMatch(setup.split('## Company type and skill search')[1], /JSON/, 'setup parses no JSON');
 });
 
 test('AC13 setup searches skills for the type, at most 5, each vetted, nothing installed without the Install answer', () => {
@@ -693,14 +1003,16 @@ test('AC16 marketing and design Ship needs legal to state the AI disclosure and 
   assert.ok(manifest('design').ship.checks.includes('handoff-package'));
   for (const name of ['campaign', 'content', 'design']) {
     const text = read(`skills/${name}/SKILL.md`);
-    assert.match(text, /AI Act art\. 50/, name);
+    assert.match(text, /art\. 50 duty that applies and how it is met, or why none applies/, name);
     assert.match(text, /ai-disclosure/, name);
     assert.match(text, /asset-licences/, name);
     assert.match(text, /aico:legal/, name);
   }
   // The Contract says which Handoff satisfies each check.
   const contract = read('docs/contracts/company-type.md');
-  assert.match(contract, /\| `ai-disclosure` \| a `legal` Handoff in the run, `status: done`, stating the AI Act art\. 50 disclosure/);
+  assert.match(contract, /\| `ai-disclosure` \| a `legal` Handoff in the run, `status: done`, that states for each AI-generated public image, video or text: the AI Act art\. 50 duty that applies and how it is met, or the reason none applies/);
+  assert.match(contract, /plus `deepfake: yes` or `deepfake: no` \(a realistic person, place or event\)\. A run with no AI-generated asset states `ai-disclosure: none \(no AI-generated assets\)`/);
+  assert.match(contract, /A passed check records Legal's statement; it is not legal clearance/);
   assert.match(contract, /\| `asset-licences` \| the same `legal` Handoff, stating the licence of every asset/);
   assert.match(read('skills/pipeline/SKILL.md'), /every lane in `ship\.lanes` runs whatever `pipeline\.lanes` says/);
   // Research ships text only and does not need the asset checks.
