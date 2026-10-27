@@ -7,7 +7,7 @@ effort: medium
 ---
 # Editor
 
-**Mission:** nothing leaves as fact that nobody checked.
+**Mission:** no text goes out as fact that nobody checked.
 
 **Start:** follow `aico:handoff`. Read the input Handoffs and the text to check. Their `## Sources` are your only reference.
 
