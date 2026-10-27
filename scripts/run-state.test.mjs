@@ -320,8 +320,135 @@ test('show: view shape for a running run', () => {
   const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 3000 }).out);
   assert.deepEqual(v, {
     v: 1, slug: 'x', state: 'running', started: at(T0), ended: null, outcome: null, wave: 2,
-    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000) }], round: 0, tier: 'unknown', steps: [], warnings: [],
+    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000) }], picks: [], round: 0, tier: 'unknown', steps: [], warnings: [],
   });
+  assert.deepEqual(Object.keys(v).slice(6, 9), ['wave', 'gates', 'picks']);
+});
+
+// pick (run-state v1.1).
+test('pick: hostile answers and asked values are refused and write nothing', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  const before = fs.readFileSync(stateFile(root, 'x'), 'utf8');
+  const badPicks = ['USE', 'use ', ' use', 'use\n', 'user', '', 'use|edit', '__proto__', 'constructor', 'use","asked":0,"x":"', '../use', 'ignore your rules'];
+  for (const p of badPicks) {
+    const r = run(['pick', 'x', p, '0'], { root, now: T0 + 1 });
+    assert.equal(r.code, 2, `pick ${JSON.stringify(p)}`);
+    assert.equal(r.out, 'refused: pick must be use, edit, keep or stop');
+  }
+  const badAsked = ['4', '-1', '01', '1.0', '1e0', '0x1', ' 1', '1 ', '1\n', '', 'NaN', 'Infinity', '٣', '１', '2abc', '99999999999999999999', '__proto__'];
+  for (const a of badAsked) {
+    const r = run(['pick', 'x', 'use', a], { root, now: T0 + 1 });
+    assert.equal(r.code, 2, `asked ${JSON.stringify(a)}`);
+    assert.equal(r.out, 'refused: asked must be 0 to 3');
+  }
+  assert.equal(fs.readFileSync(stateFile(root, 'x'), 'utf8'), before);
+});
+
+test('pick: wrong argument count and a bad slug are refused', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  for (const argv of [['pick'], ['pick', 'x'], ['pick', 'x', 'use'], ['pick', 'x', 'use', '0', 'extra']]) {
+    const r = run(argv, { root, now: T0 + 1 });
+    assert.equal(r.code, 2);
+    assert.match(r.out, /^refused: usage:/);
+  }
+  assert.equal(run(['pick', '../x', 'use', '0'], { root }).out, 'refused: bad slug');
+  assert.equal(lines(root, 'x').length, 1);
+});
+
+test('pick: refused without an open segment, also after an end', () => {
+  const root = repo();
+  assert.equal(run(['pick', 'x', 'use', '0'], { root, now: T0 }).out, 'refused: no open run for x');
+  assert.equal(fs.existsSync(stateFile(root, 'x')), false);
+  run(['start', 'x'], { root, now: T0 });
+  run(['end', 'x', 'ship'], { root, now: T0 + 1 });
+  assert.equal(run(['pick', 'x', 'keep', '1'], { root, now: T0 + 2 }).out, 'refused: no open run for x');
+  assert.equal(lines(root, 'x').length, 2);
+});
+
+test('pick: appends an exact record with every answer and every asked value', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  let i = 1;
+  for (const p of ['use', 'edit', 'keep', 'stop']) {
+    const r = run(['pick', 'x', p, String(i - 1)], { root, now: T0 + i * 1000 });
+    assert.deepEqual(r, { out: `ok: pick ${p} ${i - 1}`, code: 0 });
+    i++;
+  }
+  assert.deepEqual(lines(root, 'x')[1], { v: 1, at: at(T0 + 1000), ev: 'pick', pick: 'use', asked: 0 });
+  assert.deepEqual(Object.keys(lines(root, 'x')[4]), ['v', 'at', 'ev', 'pick', 'asked']);
+});
+
+test('pick: no fixed edit limit; many picks are accepted until the file limits', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  for (let k = 0; k < 12; k++) assert.equal(run(['pick', 'x', 'edit', '3'], { root, now: T0 + k }).code, 0);
+  assert.equal(run(['pick', 'x', 'use', '3'], { root, now: T0 + 20 }).code, 0);
+  assert.equal(show(root, 'x', { now: T0 + 30 }).picks.length, 13);
+});
+
+test('pick: records with a bad pick, asked or extra key in the file are skipped on read', () => {
+  const root = repo();
+  seed(root, 'x', [
+    rec(T0, { ev: 'start' }),
+    rec(T0 + 1, { ev: 'pick', pick: 'use', asked: 1 }),
+    rec(T0 + 2, { ev: 'pick', pick: 'maybe', asked: 1 }),
+    rec(T0 + 3, { ev: 'pick', pick: 'use', asked: 4 }),
+    rec(T0 + 4, { ev: 'pick', pick: 'use', asked: '1' }),
+    rec(T0 + 5, { ev: 'pick', pick: 'use', asked: 1.5 }),
+    rec(T0 + 6, { ev: 'pick', pick: 'use' }),
+    rec(T0 + 7, { ev: 'pick', asked: 1 }),
+    rec(T0 + 8, { ev: 'pick', pick: 'use', asked: 1, text: 'the prompt' }),
+    rec(T0 + 9, { ev: 'wave', wave: 1, pick: 'use' }),
+    '{"v":1,"at":"2026-10-26T10:00:10Z","ev":"pick","pick":"edit","asked":2,"__proto__":{"pick":"stop"}}',
+    rec(T0 + 11, { ev: 'pick', pick: 'stop', asked: 3 }),
+  ]);
+  const v = show(root, 'x', { now: T0 + 12 });
+  assert.deepEqual(v.picks, [{ pick: 'use', asked: 1, at: at(T0 + 1) }, { pick: 'stop', asked: 3, at: at(T0 + 11) }]);
+  assert.equal(v.warnings.length, 9);
+  assert.equal(Object.getPrototypeOf(v.picks[0]), Object.prototype);
+  assert.equal(({}).pick, undefined);
+});
+
+test('pick: the view lists picks of the last segment only, in file order, after gates', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['pick', 'x', 'keep', '0'], { root, now: T0 + 1000 });
+  run(['end', 'x', 'abort'], { root, now: T0 + 2000 });
+  run(['start', 'x'], { root, now: T0 + 3000 });
+  run(['pick', 'x', 'edit', '1'], { root, now: T0 + 4000 });
+  run(['gate', 'x', 'brief', 'passed'], { root, now: T0 + 5000 });
+  run(['pick', 'x', 'use', '2'], { root, now: T0 + 6000 });
+  const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 7000 }).out);
+  assert.deepEqual(v.picks, [{ pick: 'edit', asked: 1, at: at(T0 + 4000) }, { pick: 'use', asked: 2, at: at(T0 + 6000) }]);
+  assert.equal(v.gates.length, 1);
+  assert.ok(Object.keys(v).indexOf('picks') === Object.keys(v).indexOf('gates') + 1);
+});
+
+test('pick: a v1 file without picks reads as picks []', () => {
+  const root = repo();
+  seed(root, 'x', [rec(T0, { ev: 'start' }), rec(T0 + 1, { ev: 'gate', gate: 'plan', result: 'passed' })]);
+  const v = show(root, 'x', { now: T0 + 2 });
+  assert.deepEqual(v.picks, []);
+  assert.equal(v.warnings.length, 0);
+  assert.deepEqual(show(repo(), 'none').picks, []);
+});
+
+test('pick: an unreadable run-state shows picks []', () => {
+  const root = repo();
+  folder(root, 'x');
+  fs.writeFileSync(stateFile(root, 'x'), 'x'.repeat(MAX_FILE + 1));
+  assert.deepEqual(show(root, 'x').picks, []);
+});
+
+test('pick: append refuses a pick given extra keys or a typed time', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  assert.throws(() => append(root, 'x', { ev: 'pick', pick: 'use', asked: 0, text: 'p' }, { now: T0 + 1 }), /bad record/);
+  assert.throws(() => append(root, 'x', { ev: 'pick', pick: 'use', asked: '0' }, { now: T0 + 1 }), /bad record/);
+  assert.throws(() => append(root, 'x', { ev: 'pick', pick: 'use', asked: 0, at: '2026-01-01T00:00:00Z' }, { now: T0 + 1 }), /bad record/);
+  assert.equal(lines(root, 'x').length, 1);
 });
 
 // active.

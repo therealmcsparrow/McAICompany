@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end (run-state v1) and prints the run view.
+// Records a run's wave, Gates and end (run-state v1.1) and prints the run view.
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
 // symlink, and read with the handoff-lint parser.
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeSync } from 'node:fs';
@@ -22,11 +22,13 @@ const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const WAVE_RE = /^[1-9]\d?$/;
 const GATES = new Set(['brief', 'plan', 'ship']);
 const RESULTS = new Set(['passed', 'changed', 'stopped']);
+const PICKS = new Set(['use', 'edit', 'keep', 'stop']);
+const ASKED_RE = /^[0-3]$/;
 const OUTCOMES = new Set(['ship', 'abort']);
 const STATUSES = new Set(['done', 'blocked', 'needs-ceo', 'handover']);
 const TIER_RANK = { low: 1, medium: 2, high: 3 };
 // Allowed keys per event, beyond `v`, `at` and `ev`.
-const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], end: ['outcome'] };
+const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], pick: ['pick', 'asked'], end: ['outcome'] };
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
@@ -63,6 +65,7 @@ function validRecord(o) {
   if (keys.length !== allowed.size || !keys.every(k => allowed.has(k))) return false;
   if (o.ev === 'wave') return Number.isInteger(o.wave) && o.wave >= 1 && o.wave <= 99;
   if (o.ev === 'gate') return typeof o.gate === 'string' && GATES.has(o.gate) && typeof o.result === 'string' && RESULTS.has(o.result);
+  if (o.ev === 'pick') return typeof o.pick === 'string' && PICKS.has(o.pick) && Number.isInteger(o.asked) && o.asked >= 0 && o.asked <= 3;
   if (o.ev === 'end') return typeof o.outcome === 'string' && OUTCOMES.has(o.outcome);
   return true;
 }
@@ -140,7 +143,7 @@ function readSteps(dir, warnings) {
 function load(root, slug, now) {
   const { dir, file } = paths(root, slug);
   const view = {
-    v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [],
+    v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [], picks: [],
     round: 0, tier: 'unknown', steps: [], warnings: [],
   };
   const dst = lstatOrNull(dir);
@@ -168,6 +171,7 @@ function load(root, slug, now) {
     for (const r of seg) {
       if (r.ev === 'wave') view.wave = r.wave;
       else if (r.ev === 'gate') view.gates.push({ gate: r.gate, result: r.result, at: r.at });
+      else if (r.ev === 'pick') view.picks.push({ pick: r.pick, asked: r.asked, at: r.at });
       else if (r.ev === 'end') { view.ended = r.at; view.outcome = r.outcome; }
     }
     if (!segmentOpen(seg)) view.state = 'ended';
@@ -242,7 +246,7 @@ function endsWithNewline(file, size) {
 }
 
 function usage() {
-  return 'usage: start <slug> | wave <slug> <n> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | end <slug> <ship|abort> | show <slug> --json | active --json';
+  return 'usage: start <slug> | wave <slug> <n> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json';
 }
 
 // Returns { out, code }.
@@ -266,6 +270,12 @@ export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
         if (!RESULTS.has(rest[2])) refuse('result must be passed, changed or stopped');
         append(root, rest[0], { ev: 'gate', gate: rest[1], result: rest[2] }, opts);
         return { out: `ok: gate ${rest[1]} ${rest[2]}`, code: 0 };
+      case 'pick':
+        if (rest.length !== 3) refuse(usage());
+        if (!PICKS.has(rest[1])) refuse('pick must be use, edit, keep or stop');
+        if (!ASKED_RE.test(rest[2])) refuse('asked must be 0 to 3');
+        append(root, rest[0], { ev: 'pick', pick: rest[1], asked: Number(rest[2]) }, opts);
+        return { out: `ok: pick ${rest[1]} ${rest[2]}`, code: 0 };
       case 'end':
         if (rest.length !== 2) refuse(usage());
         if (!OUTCOMES.has(rest[1])) refuse('outcome must be ship or abort');
