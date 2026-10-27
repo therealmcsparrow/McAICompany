@@ -1021,6 +1021,23 @@ test('hidden markup: a definition after a closed fence is refused', () => {
   expectBad(reply(p, hex), 'hidden markup');
 });
 
+test('hidden markup: a backtick line with a backtick in its info string opens no fence', () => {
+  for (const text of ['``` x`y\n\n[a]: b', '```x`\n\n[a]: b']) {
+    const p = project();
+    const hex = good(p, { prompt: promptWith(text) });
+    expectBad(reply(p, hex), 'hidden markup');
+  }
+});
+
+test('hidden markup: a real info-string fence still skips its content; a tilde info string may hold a backtick', () => {
+  for (const text of ['``` js\n[a]: b\n```', '~~~ x`y\n[a]: b\n~~~']) {
+    const p = project();
+    const hex = good(p, { prompt: promptWith(text) });
+    const r = reply(p, hex);
+    assert.equal(r.code, 0, `${text}: ${r.out}`);
+  }
+});
+
 test('hidden markup: an image brief that is a link definition is refused', () => {
   for (const brief of ['[//]: # (x)', '[a]: http://example.com']) {
     const p = project();

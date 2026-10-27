@@ -318,8 +318,9 @@ function shownPaths(loc, list) {
 
 // ---------- section scan (fence-aware, like the Handoff linter) ----------
 function openFence(line) {
-  const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-  return f ? { ch: f[1][0], len: f[1].length } : null;
+  const f = /^ {0,3}(`{3,}|~{3,})(.*)/.exec(line);
+  if (!f || (f[1][0] === '`' && f[2].includes('`'))) return null;
+  return { ch: f[1][0], len: f[1].length };
 }
 function closesFence(line, fence) {
   const c = /^ {0,3}([`~]{3,})[ \t]*$/.exec(line);
@@ -393,7 +394,7 @@ export function hiddenMarkup(lines, from) {
     }
     const opened = openFence(line);
     if (opened) { fence = opened; open = false; continue; }
-    if (/^[ 	>]*$/.test(line)) { open = false; continue; }
+    if (/^[ \t>]*$/.test(line)) { open = false; continue; }
     const at = prefixEnd(line);
     if (line[at] === '[') {
       if (line.indexOf(']:', at) >= 0) return true;
