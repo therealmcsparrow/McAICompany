@@ -61,6 +61,17 @@ test('body: first-Step line, reads only the Request files and project.md, quotat
   assert.match(t, /`role: reprompter`, `task:` = the run folder name from `Output:`, `round` and `base-commit` from the dispatch, `By: <Name> \(reprompter\)` from `Name:`/);
 });
 
+test('body: the write gate enforces the Write, Read and Skill scope', () => {
+  const t = read(AGENT);
+  assert.doesNotMatch(t, /Residual risk/);
+  assert.match(t, /The write gate enforces this, so a call outside it is refused/);
+  assert.match(t, /Write only to those two files/);
+  assert.match(t, /Read only the Request files, your earlier Handoffs and `prompt\.md` in the run folder, `\.company\/project\.md`, the plugin's `company\/PROFILE\.md` and `aico:handoff` files/);
+  assert.match(t, /Skill only `aico:handoff`/);
+  assert.match(t, /Never retry a refused call or work around it/);
+  assert.match(t, /`Write` is the one tool that changes files\. Write only `prompt\.md` and your own Handoff/);
+});
+
 test('body: image target goes to prompt-artist with no card', () => {
   const t = read(AGENT);
   assert.match(t, /prompt-artist/);

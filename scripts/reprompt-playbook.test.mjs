@@ -128,6 +128,49 @@ test('Use it routes exactly the body shown, byte for byte', () => {
   assert.ok(s.includes('nothing added'));
 });
 
+test('body, assumptions and brief are shown in the checker fence; Use it sends the bytes inside it', () => {
+  const s5 = section('5. Show and pick');
+  assert.ok(s5.includes("a line of the checker's `fence` value followed by `text`"));
+  assert.ok(s5.includes('a line break if it does not end with one'));
+  assert.ok(s5.indexOf('`fence` value') < s5.indexOf('AI-written prompt'), 'the fence comes before the AI line');
+  const use = s5.split('\n').find((l) => l.startsWith('- **Use it**'));
+  assert.ok(use.includes('exactly the bytes between the two fence lines, without the line break you added'));
+  assert.ok(use.includes('the fence lines are not part of it'));
+  assert.ok(use.includes('nothing added, nothing removed'));
+  const s6 = section('6. Image prompt');
+  assert.ok(s6.includes("fenced block built from the checker's `fence` value"));
+  assert.ok(s6.includes('the bytes between the two fence lines, without the line break you added'));
+  assert.ok(s6.includes('exactly the brief shown, byte for byte'));
+});
+
+test('exit 3 shows paths and the git line; exit 2 says the files stay changed; the gate arms itself', () => {
+  const s3 = section('3. Read the reply');
+  assert.ok(s3.includes('When the JSON has `paths`, show them first'));
+  assert.ok(s3.includes('Git can run a program from them: check them before you run any git command in this folder.'));
+  assert.ok(s3.includes('These files changed during the run and stay changed. Check them before your next session.'));
+  assert.ok(s3.includes('**Stop** (Recommended) / **Go on**'));
+  const s2 = section('2. Dispatch (reprompter)');
+  assert.ok(s2.includes('arms every reprompter dispatch itself (`arm`); you never run it'));
+  assert.ok(s2.includes('`aico reprompt gate:`'));
+  assert.doesNotMatch(text, /reprompt-check\.mjs" arm/, 'the Lead never calls arm');
+});
+
+test('commands.md: step 3 names the AI notice, the framed text and the gate', () => {
+  const doc = readFileSync(join(root, 'documentation/commands.md'), 'utf8');
+  assert.ok(!doc.includes('\r'));
+  const step3 = doc.split('\n').find((l) => l.startsWith('3. The Lead shows the full prompt'));
+  assert.ok(step3.includes('one line saying the prompt is AI-written and to check it before you use it'));
+  assert.ok(step3.includes('**Use it** / **Edit** / **Keep only** / **Stop**'));
+  assert.match(doc, /exactly the text inside the frame/);
+  assert.match(doc, /they stay changed|which files and that they stay changed/);
+  assert.match(doc, /own `\.gitignore`, so a later `git add -A` skips it/);
+});
+
+test('handover is capped at 2 per Round', () => {
+  const s3 = section('3. Read the reply');
+  assert.match(s3, /`handover` → continue per `dispatch-prompt` v3\.1[^\n]*at most 2 handovers per `Round:`; a third → show the Handoff path, `end '<slug>' abort`, stop/);
+});
+
 test('Edit has no fixed cap and re-dispatches with Asks left 0', () => {
   const s = section('5. Show and pick');
   assert.ok(s.includes('Edits have no fixed cap'));
