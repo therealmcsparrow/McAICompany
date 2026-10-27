@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end (run-state v1.1) and prints the run view.
+// Records a run's wave, Gates and end and prints the run view (run-state v1.2). Also keeps the direct-route triage record:
+// `triage issue` and `triage check` write hashes and times only to .company/triage.
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
 // symlink, and read with the handoff-lint parser.
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeSync } from 'node:fs';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lint } from './handoff-lint.mjs';
@@ -26,6 +28,11 @@ const PICKS = new Set(['use', 'edit', 'keep', 'stop']);
 const ASKED_RE = /^[0-3]$/;
 const OUTCOMES = new Set(['ship', 'abort']);
 const STATUSES = new Set(['done', 'blocked', 'needs-ceo', 'handover']);
+const REQUEST_FRESH_MS = 10 * 60 * 1000;
+export const TRIAGE_TTL_MS = 30 * 60 * 1000;
+const HEX64_RE = /^[0-9a-f]{64}$/;
+const NONCE_RE = /^[0-9a-f]{32}$/;
+const TRIAGE_LINE_RE = / \(triage: XS, risk low, (feature|bug|refactor|launch|audit|incident|upkeep|content|research), route direct\)$/;
 const TIER_RANK = { low: 1, medium: 2, high: 3 };
 // Allowed keys per event, beyond `v`, `at` and `ev`.
 const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], pick: ['pick', 'asked'], end: ['outcome'] };
@@ -41,9 +48,17 @@ function paths(root, slug) {
   return { dir, file: join(dir, 'run-state.jsonl') };
 }
 
-function readCapped(file, max) {
+// True when the opened handle is a regular file with one hard link and, when an lstat is given, the same dev and ino.
+export function verifyOpened(fd, st) {
+  const f = fstatSync(fd);
+  return f.isFile() && f.nlink === 1 && (!st || (f.dev === st.dev && f.ino === st.ino));
+}
+
+// `expect` (an lstat taken just before) turns on the re-check of the opened handle.
+function readCapped(file, max, expect) {
   const fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
+    if (expect && !verifyOpened(fd, expect)) throw new Error('file changed');
     const size = fstatSync(fd).size;
     const buf = Buffer.alloc(Math.min(size, max));
     let off = 0;
@@ -245,8 +260,160 @@ function endsWithNewline(file, size) {
   } finally { closeSync(fd); }
 }
 
+const sha = text => createHash('sha256').update(text).digest('hex');
+// The request hash is keyed by the nonce, so a record line cannot be pointed at another request without the nonce.
+const bind = (nonce, text) => createHmac('sha256', nonce).update(text).digest('hex');
+// NFC, any line ending to LF, trailing spaces and tabs off each line, both ends trimmed, then one pair of enclosing quotes off.
+function normalizeRequest(text) {
+  const t = text.normalize('NFC').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/, '')).join('\n').trim();
+  return t.length >= 2 && t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1).trim() : t;
+}
+// A plain file: a regular file with exactly one hard link.
+const isPlain = st => st.isFile() && st.nlink === 1;
+
+function validTriageRecord(o) {
+  if (o === null || typeof o !== 'object' || Array.isArray(o)) return false;
+  if (o.v !== 1 || typeof o.at !== 'string' || !AT_RE.test(o.at) || typeof o.k !== 'string' || !HEX64_RE.test(o.k)) return false;
+  const keys = Object.keys(o);
+  if (o.ev === 'issue') return keys.length === 5 && typeof o.h === 'string' && HEX64_RE.test(o.h);
+  if (o.ev === 'used') return keys.length === 4;
+  return false;
+}
+
+// Makes sure .company/triage is a plain folder that ignores itself. Returns the folder path.
+function triageFolder(root) {
+  const company = join(root, '.company');
+  const dir = join(company, 'triage');
+  for (const p of [company, dir]) {
+    const st = lstatOrNull(p);
+    if (st && !st.isDirectory()) refuse('triage folder is a link');
+  }
+  mkdirSync(dir, { recursive: true });
+  const ig = join(dir, '.gitignore');
+  const ist = lstatOrNull(ig);
+  if (ist && !isPlain(ist)) refuse('triage folder is a link');
+  let same = false;
+  if (ist) {
+    try { same = readCapped(ig, 16, ist).toString('utf8') === '*\n'; } catch { refuse('triage folder is a link'); }
+  }
+  if (!same) writeFileSync(ig, '*\n', { flag: constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | (constants.O_NOFOLLOW ?? 0) });
+  return dir;
+}
+
+// Reads and always deletes request.txt. Returns the text, or null when missing or unreadable.
+function takeRequest(dir) {
+  const file = join(dir, 'request.txt');
+  const st = lstatOrNull(file);
+  if (!st) return null;
+  try {
+    if (!isPlain(st) || st.size > MAX_FILE) return null;
+    return new TextDecoder('utf-8', { fatal: true }).decode(readCapped(file, MAX_FILE, st));
+  } catch { return null; } finally {
+    try { unlinkSync(file); } catch { /* already gone */ }
+  }
+}
+
+// Returns the valid records of records.jsonl; a link or an oversize file is refused.
+function readTriageRecords(file) {
+  const st = lstatOrNull(file);
+  if (!st) return { records: [], raw: '' };
+  if (!isPlain(st) || st.size > MAX_FILE) refuse('triage record unreadable');
+  let raw;
+  try { raw = readCapped(file, MAX_FILE, st).toString('utf8'); } catch { refuse('triage record unreadable'); }
+  const records = [];
+  for (const line of raw.split('\n')) {
+    if (line === '' || line.includes('\r') || Buffer.byteLength(line, 'utf8') > MAX_LINE || records.length >= MAX_LINES) continue;
+    let o;
+    try { o = JSON.parse(line); } catch { continue; }
+    if (validTriageRecord(o)) records.push(o);
+  }
+  return { records, raw };
+}
+
+// Drops expired and future-dated issues, orphan used lines and bad lines. Rewrites through a temp file when the content changes.
+function pruneTriage(dir, file, recs, raw, now) {
+  const live = new Set(recs.filter(r => r.ev === 'issue' && now - Date.parse(r.at) <= TRIAGE_TTL_MS && Date.parse(r.at) <= now).map(r => r.k));
+  const kept = recs.filter(r => live.has(r.k));
+  const text = kept.map(r => `${JSON.stringify(r)}\n`).join('');
+  if (text !== raw) {
+    const tmp = join(dir, `records.${randomBytes(6).toString('hex')}.tmp`);
+    writeFileSync(tmp, text, { flag: 'wx', mode: 0o600 });
+    try { renameSync(tmp, file); } catch (e) {
+      try { unlinkSync(tmp); } catch { /* ignore */ }
+      throw e;
+    }
+  }
+  return { count: kept.length, size: Buffer.byteLength(text, 'utf8') };
+}
+
+function appendTriage(file, kept, record, now) {
+  const line = `${JSON.stringify({ v: 1, at: iso(now), ...record })}\n`;
+  if (kept.count >= MAX_LINES || kept.size + Buffer.byteLength(line, 'utf8') > MAX_FILE) refuse('triage record full');
+  const before = lstatOrNull(file);
+  if (before && !isPlain(before)) refuse('triage record unreadable');
+  const fd = openSync(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
+  try {
+    if (!verifyOpened(fd, before)) refuse('triage record unreadable');
+    writeSync(fd, line);
+  } finally { closeSync(fd); }
+}
+
+// On a refusal in the folder check, request.txt is unlinked by name (the name is resolved through any link in the path, the
+// file is never read), and only when it is a single-link regular file written in the last 10 minutes; else it is left.
+function dropRefusedRequest(root, now) {
+  const file = join(root, '.company', 'triage', 'request.txt');
+  const st = lstatOrNull(file);
+  if (!st || !isPlain(st) || now - st.mtimeMs < -1000 || now - st.mtimeMs > REQUEST_FRESH_MS) return;
+  try { unlinkSync(file); } catch { /* already gone */ }
+}
+
+// `issue` records an approved direct-route request; `check` spends that record once. Returns the JSON text to print.
+export function triage(root, args, { now = Date.now() } = {}) {
+  const isCheck = args[0] === 'check';
+  if (!(args[0] === 'issue' && args.length === 1) && !(isCheck && args.length === 2)) refuse(usage());
+  if (isCheck && !NONCE_RE.test(args[1])) refuse('bad nonce');
+  let dir;
+  try { dir = triageFolder(root); } catch (e) {
+    dropRefusedRequest(root, now);
+    throw e;
+  }
+  const request = takeRequest(dir);
+  const normalized = request === null ? null : normalizeRequest(request);
+  const match = normalized === null ? null : TRIAGE_LINE_RE.exec(normalized);
+  if (!isCheck) {
+    if (request === null) refuse('no request');
+    if (!match) refuse('no direct triage line');
+  }
+  const file = join(dir, 'records.jsonl');
+  const { records, raw } = readTriageRecords(file);
+  const k = isCheck ? sha(args[1]) : null;
+  let reason = null;
+  let live = false; // a record found, unused and unexpired: the check spends it whatever the result
+  if (isCheck) {
+    const issue = records.find(r => r.ev === 'issue' && r.k === k);
+    const age = issue ? now - Date.parse(issue.at) : 0;
+    const used = issue && records.some(r => r.ev === 'used' && r.k === k);
+    live = Boolean(issue) && !used && age >= 0 && age <= TRIAGE_TTL_MS;
+    if (request === null) reason = 'no request';
+    else if (!match) reason = 'no triage line';
+    else if (!issue) reason = 'no record';
+    else if (used) reason = 'used';
+    else if (!live) reason = 'expired';
+    else if (issue.h !== bind(args[1], normalized)) reason = 'request changed';
+  }
+  const kept = pruneTriage(dir, file, records, raw, now);
+  if (!isCheck) {
+    const nonce = randomBytes(16).toString('hex');
+    appendTriage(file, kept, { ev: 'issue', h: bind(nonce, normalized), k: sha(nonce) }, now);
+    return JSON.stringify({ nonce, type: match[1] });
+  }
+  if (live) appendTriage(file, kept, { ev: 'used', k }, now);
+  if (reason) return JSON.stringify({ trusted: false, reason });
+  return JSON.stringify({ trusted: true, type: match[1] });
+}
+
 function usage() {
-  return 'usage: start <slug> | wave <slug> <n> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json';
+  return 'usage: start <slug> | wave <slug> <n> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce>';
 }
 
 // Returns { out, code }.
@@ -287,6 +454,8 @@ export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
       case 'active':
         if (rest.length !== 1 || rest[0] !== '--json') refuse(usage());
         return { out: JSON.stringify(active(root, opts)), code: 0 };
+      case 'triage':
+        return { out: triage(root, rest, opts), code: 0 };
       default:
         refuse(usage());
     }

@@ -513,7 +513,7 @@ test('triage line: the checker Contract lists the reason and the Role file names
   const agent = read('agents/reprompter.md');
   const never = agent.split('\n').find((l) => l.startsWith('**Never:**'));
   assert.ok(never, 'the Never line');
-  assert.match(never, /the word triage directly followed by a colon in `prompt\.md` or the brief/);
+  assert.match(never, /the word triage followed by a colon in `prompt\.md` or the brief/);
   assert.match(never, /"triage result" or "triage step"/);
   const playbook = read('skills/reprompt/SKILL.md');
   assert.equal(playbook.split('a triage line in it never counts').length - 1, 2, 'Use it and the image hand-over both say a triage line in it never counts');
