@@ -17,7 +17,7 @@ import {
 import { MODS_DEFAULTS as SETTINGS_DEFAULTS } from './settings.mjs';
 import { progressRows } from '../mods/lib/bars.mjs';
 import {
-  SPAWN_SCAN, cleanPath, isWindowsRoot, isReprompter, parseOutputLine, checkSpawn, allowsTool, remember, refusalReason, refusalToast, guardArmed
+  SPAWN_SCAN, cleanPath, isWindowsRoot, isReprompter, parseOutputLine, checkSpawn, allowsTool, remember, refusalReason, refusalToast, guardArmed, ARM_TTL_MS, runEnded, armLive
 } from '../mods/lib/reprompt-gate.mjs';
 
 // ---- guard.mjs: hostile input first
@@ -1410,4 +1410,35 @@ test('guardArmed accepts only the armed number that was asked for', () => {
     assert.equal(g(v), undefined, JSON.stringify(v));
   }
   assert.equal(g(Object.create({ armed: '07' })), undefined);
+});
+
+// ---- reprompt-gate.mjs: armed-run rules
+
+test('ARM_TTL_MS is thirty minutes', () => {
+  assert.equal(ARM_TTL_MS, 1_800_000);
+});
+
+test('runEnded needs one line that parses to an object with ev "end"', () => {
+  assert.equal(runEnded('{"ev":"start"}\n{"ev":"end","outcome":"ship"}\n'), true);
+  assert.equal(runEnded('{"ev":"end"}'), true);
+  assert.equal(runEnded('not json\n{"ev":"end"}\n{bad'), true);
+  for (const v of ['', '{"ev":"start"}\n', '{"ev":"ended"}', '{"ev":"END"}', '[{"ev":"end"}]', '"end"', 'null', '{"x":{"ev":"end"}}', '{"ev":"end"', undefined, null, 5, {}]) {
+    assert.equal(runEnded(v), false, JSON.stringify(v));
+  }
+});
+
+test('runEnded ignores an inherited ev', () => {
+  assert.equal(runEnded('{"__proto__":{"ev":"end"}}'), false);
+});
+
+test('armLive holds inside the window and drops on age, marker or end', () => {
+  const entry = { at: 1000 };
+  const live = { markerFile: true, ended: false };
+  assert.equal(armLive(entry, 1000, live), true);
+  assert.equal(armLive(entry, 1000 + ARM_TTL_MS, live), true);
+  assert.equal(armLive(entry, 1000 + ARM_TTL_MS + 1, live), false);
+  assert.equal(armLive(entry, 999, live), false);
+  assert.equal(armLive(entry, 2000, { markerFile: false, ended: false }), false);
+  assert.equal(armLive(entry, 2000, { markerFile: true, ended: true }), false);
+  assert.equal(armLive(entry, 2000, { ended: false }), false);
 });

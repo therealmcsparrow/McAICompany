@@ -5,6 +5,7 @@ import { cleanText } from './guard.mjs';
 
 export const SPAWN_SCAN = 65536;
 export const MAX_PATH = 4096;
+export const ARM_TTL_MS = 1_800_000;
 
 const REPROMPTER = /^(aico:)?reprompter$/;
 const OUTPUT = /^Output: \.company\/work\/(reprompt-\d{8}-\d{4}(?:-[2-9])?)\/(\d{2,3})-reprompter\.md$/;
@@ -104,6 +105,28 @@ export function allowsTool(tool, input, rec, pluginRoot) {
   const plugin = cleanPath(pluginRoot, ci);
   if (plugin === null) return false;
   return path === `${plugin}/${fold('company/PROFILE.md', ci)}` || path.startsWith(`${plugin}/skills/handoff/`);
+}
+
+// Whether a run-state text holds an end line: one LF-split line that parses to an object with ev "end".
+export function runEnded(text) {
+  if (typeof text !== 'string') return false;
+  for (const line of text.split('\n')) {
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (row !== null && typeof row === 'object' && !Array.isArray(row) && Object.hasOwn(row, 'ev') && row.ev === 'end') return true;
+  }
+  return false;
+}
+
+// Whether an armed-run entry still holds: inside the time window, marker a plain file, run not ended.
+export function armLive(entry, now, { markerFile, ended } = {}) {
+  const age = now - entry.at;
+  if (!(age >= 0) || age > ARM_TTL_MS) return false;
+  return markerFile === true && ended !== true;
 }
 
 // A bounded record map: the oldest record goes first.

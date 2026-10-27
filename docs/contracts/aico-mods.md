@@ -28,7 +28,7 @@ v1.2 (task reprompter-role, additive): the reprompt write gate (`mods/reprompt-g
 | Handoffs of the active run | `reflect.mjs` (below), `run-state.mjs` | Reflect, Savvy |
 | Touched paths, tier, depth (`review-depth` v1) | `review-depth.mjs … --json` | Blast Radius |
 | Lessons (`lessons` v1) | `lessons.mjs accept` (write only) | Reflect |
-| Reprompt run folder (write only: `.gate-<NN>`) | `reprompt-check.mjs arm <slug> <NN>` | Reprompt gate |
+| Reprompt run folder (writes `.gate-<NN>` through `arm`; reads only to disarm an armed run: `.gate-<NN>` stat and `run-state.jsonl`, at most 64 KiB) | `reprompt-check.mjs arm <slug> <NN>`; `$.fs.stat`, `$.fs.read` | Reprompt gate |
 | Running subagents | the `agent.spawn` hook's `prompt` (only the `Output:`, `Name:`, `Base commit:`, `Risk tier:` lines, matched by the regexes below, from the first 64 KiB) and `$.agent.list()` | Savvy, Blast Radius, Reprompt gate (`Output:` line by its own regex in `reprompt` v1; `$.agent.list()` for an unrecorded agent) |
 | Main-loop request times (and the cache-lifetime split of their usage, when the event carries it) | `turn.start`, `turn.step`, `turn.complete` hooks (main loop only: no `agentId`) | Cache Tax (cache clock) |
 `project.md` and `docs/contracts/` are read only inside `review-depth.mjs`. File-change detection uses `$.fs.stat` on the run folder, its `run-state.jsonl` and `.company/ledger/<run>.jsonl` (no reads).

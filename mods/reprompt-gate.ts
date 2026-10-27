@@ -1,10 +1,11 @@
 import type { EngineInterface, On } from 'claude-code'
 
-import { allowsTool, checkSpawn, guardArmed, isReprompter, refusalReason, refusalToast, remember } from './lib/reprompt-gate.mjs'
+import { allowsTool, armLive, checkSpawn, guardArmed, isReprompter, refusalReason, refusalToast, remember, runEnded } from './lib/reprompt-gate.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 
 const MAX_REPROMPTERS = 50
 const MAX_OTHERS = 200
+const RUN_STATE_MAX = 65536
 
 // The validator wants a matcher where more than one hook stands on one event; this one matches every value.
 const ANY = /^/
@@ -13,7 +14,7 @@ const BAD_DISPATCH = 'aico reprompt gate: bad reprompter dispatch'
 const NOT_ARMED = 'aico reprompt gate: cannot arm the gate; reprompt refused'
 const FAILED = 'aico reprompt gate failed; reprompt refused'
 const NOT_STARTED = 'aico reprompt gate: this reprompter was not started through the gate'
-const UNKNOWN_AGENT = 'aico reprompt gate: agent not recognised; refused'
+const UNKNOWN_AGENT = 'aico reprompt gate: unknown agent during a reprompt run; refused'
 
 type Armed = { slug: string; nn: string; root: string }
 type Check = { tool: string; input: unknown; agentId?: string; isReadOnly?: true }
@@ -22,6 +23,13 @@ type Verdict = { decision: 'deny'; reason: string }
 // Reprompters this session started through the gate, and other agents seen at their spawn. Bookkeeping only: no view draws from it.
 const reprompters = new Map<string, Armed>()
 const others = new Map<string, true>()
+// Runs armed by this gate in this session, by slug. Never filled from disk: a marker file arms nothing.
+const armedRuns = new Map<string, Armed & { at: number }>()
+
+// After an error: only a recorded reprompter, or an unrecorded agent while a run is armed, is refused.
+function passesOnError(id: string | undefined): boolean {
+  return id === undefined || others.has(id) || (!reprompters.has(id) && armedRuns.size === 0)
+}
 
 function deny(reason: string): Verdict {
   return { decision: 'deny', reason }
@@ -53,6 +61,43 @@ async function judgeUnrecorded($: EngineInterface, id: string): Promise<'repromp
   }
 }
 
+// Whether a reprompt run is armed. An empty map costs no file read; disk is read only to disarm a run.
+async function isArmed($: EngineInterface): Promise<boolean> {
+  if (armedRuns.size === 0) return false
+  const now = await $.clock.now()
+  for (const [slug, entry] of [...armedRuns]) {
+    try {
+      const dir = `${entry.root}/.company/work/${entry.slug}`
+      const markerFile = await isPlainFile($, `${dir}/.gate-${entry.nn}`)
+      const ended = markerFile && (await runStateEnded($, `${dir}/run-state.jsonl`))
+      if (!armLive(entry, now, { markerFile, ended })) armedRuns.delete(slug)
+    } catch {
+      // An unexpected error keeps the entry; the timeout still bounds it.
+    }
+  }
+  return armedRuns.size > 0
+}
+
+async function isPlainFile($: EngineInterface, path: string): Promise<boolean> {
+  try {
+    const s = await $.fs.stat(path)
+    return !s.isLink && s.kind === 'file'
+  } catch {
+    return false
+  }
+}
+
+// Unreadable, missing, linked or too large all read as "not ended".
+async function runStateEnded($: EngineInterface, path: string): Promise<boolean> {
+  try {
+    const s = await $.fs.stat(path)
+    if (s.isLink || s.kind !== 'file' || s.size > RUN_STATE_MAX) return false
+    return runEnded(await $.fs.read(path))
+  } catch {
+    return false
+  }
+}
+
 // null = the call goes on to `next`; a verdict = refused here. Nothing in here calls `next`.
 async function judge($: EngineInterface, e: Check): Promise<Verdict | null> {
   const id = e.agentId
@@ -69,7 +114,7 @@ async function judge($: EngineInterface, e: Check): Promise<Verdict | null> {
     remember(others, id, true, MAX_OTHERS)
     return null
   }
-  if (kind === 'unknown' && e.isReadOnly === true) return null
+  if (kind === 'unknown' && (e.isReadOnly === true || !(await isArmed($)))) return null
   tell($, refusalToast(e.tool, e.input))
   return deny(kind === 'reprompter' ? NOT_STARTED : UNKNOWN_AGENT)
 }
@@ -81,6 +126,7 @@ async function admit($: EngineInterface, e: Parameters<typeof checkSpawn>[0]): P
     const spec = checkSpawn(e, root)
     if (spec === null) return { deny: BAD_DISPATCH }
     if (!(await arm($, spec))) return { deny: NOT_ARMED }
+    remember(armedRuns, spec.slug, { slug: spec.slug, nn: spec.nn, root, at: await $.clock.now() }, MAX_REPROMPTERS)
     return { slug: spec.slug, nn: spec.nn, root }
   } catch {
     return { deny: FAILED }
@@ -108,8 +154,8 @@ export function registerRepromptGate(on: On): void {
     try {
       verdict = await judge($, e)
     } catch {
-      verdict = e.agentId === undefined || others.has(e.agentId) ? null : deny(FAILED)
+      verdict = passesOnError(e.agentId) ? null : deny(FAILED)
     }
     return verdict ?? next(e)
-  }).catch(($, e, next) => (e.agentId === undefined || others.has(e.agentId) ? next(e) : deny(FAILED)))
+  }).catch(($, e, next) => (passesOnError(e.agentId) ? next(e) : deny(FAILED)))
 }

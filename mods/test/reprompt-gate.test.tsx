@@ -20,6 +20,10 @@ const DENY_BAD = 'aico reprompt gate: bad reprompter dispatch'
 const DENY_ARM = 'aico reprompt gate: cannot arm the gate; reprompt refused'
 const DENY_FAILED = 'aico reprompt gate failed; reprompt refused'
 const DENY_NOT_STARTED = 'aico reprompt gate: this reprompter was not started through the gate'
+const DENY_UNKNOWN = 'aico reprompt gate: unknown agent during a reprompt run; refused'
+const FILE = { kind: 'file', size: 10, mtimeMs: 1, isLink: false }
+const TTL = 1_800_000
+const OTHER_SLUG = 'reprompt-20260102-1000'
 
 type Env = Parameters<Parameters<typeof test>[1]>
 type Run = { argv: string[]; init: { cwd: string; timeoutMs: number } }
@@ -32,6 +36,8 @@ type Opts = {
   bottom?: 'allow' | 'ask'
   noProcess?: boolean
   modsOff?: boolean
+  marker?: 'file' | 'link' | 'dir' | 'gone'
+  runState?: string | 'link' | 'big' | 'gone' | 'unreadable'
 }
 
 async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o: Opts = {}) {
@@ -40,6 +46,8 @@ async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o
   const logs: string[] = []
   const arms: Run[] = []
   const bottom = { spawns: 0, checks: 0, lists: 0 }
+  const fsCalls: string[] = []
+  const world = { marker: o.marker ?? 'file', runState: o.runState ?? '{"ev":"start"}\n' }
   const ids = [...(o.ids ?? [])]
   const flags = { rootFails: false }
   on('session.root', () => {
@@ -70,6 +78,27 @@ async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o
     if (o.rows === 'reject') throw new Error('no list')
     return { value: o.rows ?? [] }
   }) as never)
+  // The engine hands paths over in the platform's own form; the test compares them as POSIX paths.
+  const posix = (path: string) => path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
+  on('fs.stat', ((_: unknown, raw: { path: string }) => {
+    const e = { path: posix(raw.path) }
+    fsCalls.push(`stat ${e.path}`)
+    if (e.path.startsWith(`${RUN}/.gate-`)) {
+      if (world.marker === 'gone') throw new Error('ENOENT')
+      return { value: { ...FILE, isLink: world.marker === 'link', kind: world.marker === 'dir' ? 'dir' : 'file' } }
+    }
+    if (e.path === `${RUN}/run-state.jsonl`) {
+      if (world.runState === 'gone') throw new Error('ENOENT')
+      return { value: { ...FILE, isLink: world.runState === 'link', size: world.runState === 'big' ? 65537 : 10 } }
+    }
+    if (e.path.startsWith(`${ROOT}/.company/work/${OTHER_SLUG}/.gate-`)) return { value: FILE }
+    throw new Error('ENOENT')
+  }) as never)
+  on('fs.read', ((_: unknown, raw: { path: string }) => {
+    fsCalls.push(`read ${posix(raw.path)}`)
+    if (world.runState === 'unreadable') throw new Error('EACCES')
+    return { value: world.runState }
+  }) as never)
   on('process.run', ((_: unknown, e: Run) => {
     if (o.noProcess) return { deny: 'no process here' }
     if (e.argv[1].endsWith('settings.mjs')) return ok(o.modsOff ? OFF : SETTINGS)
@@ -95,7 +124,7 @@ async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o
       return true
     }
   }
-  return { toasts, logs, arms, bottom, flags, spawn, check, rejected }
+  return { toasts, logs, arms, bottom, flags, spawn, check, rejected, clock, fsCalls, world }
 }
 
 for (const surface of SURFACES) {
@@ -291,18 +320,120 @@ for (const surface of SURFACES) {
     expect(t.bottom.lists).toBe(1)
   })
 
-  test(`an agent the list does not know is denied unless the call is read-only (${surface})`, async ($, on) => {
-    const t = await boot($, on, surface, { rows: [] })
-    expect((await t.check('ghost', 'Bash', { command: 'ls' })).decision).toBe('deny')
+  test(`an agent the list does not know is denied while a run is armed, unless the call is read-only (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1'] })
+    await t.spawn()
+    const r = await t.check('ghost', 'Bash', { command: 'ls' })
+    expect(r.decision).toBe('deny')
+    expect(r.reason).toBe(DENY_UNKNOWN)
     expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
     expect((await t.check('ghost', 'Read', { file_path: '/x' }, { isReadOnly: true })).decision).toBe('allow')
   })
 
-  test(`a rejected list is denied unless the call is read-only (${surface})`, async ($, on) => {
-    const t = await boot($, on, surface, { rows: 'reject' })
+  test(`a rejected list is denied while a run is armed, unless the call is read-only (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: 'reject', ids: ['rp1'] })
+    await t.spawn()
     expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
     expect((await t.check('ghost', 'Bash', { command: 'ls' })).decision).toBe('deny')
     expect((await t.check('ghost', 'Read', { file_path: '/x' }, { isReadOnly: true })).decision).toBe('allow')
+  })
+
+  for (const rows of [[], 'reject'] as const) {
+    test(`an unknown agent passes when no run is armed, with no file read (list ${rows === 'reject' ? 'rejected' : 'empty'}, ${surface})`, async ($, on) => {
+      const t = await boot($, on, surface, { rows })
+      expect((await t.check('ghost', 'Bash', { command: 'ls' })).decision).toBe('allow')
+      expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+      expect(t.fsCalls.length).toBe(0)
+      expect(t.toasts.length).toBe(0)
+    })
+  }
+
+  test(`a marker on disk that no arm call made arms nothing (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], marker: 'file', runState: '{"ev":"start"}\n' })
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+    expect(t.fsCalls.length).toBe(0)
+  })
+
+  test(`a failed arm arms nothing (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], arm: { value: { exitCode: 3, stdout: '{"refused":"x"}', stderr: '' } } })
+    expect((await t.spawn()).deny).toBe(DENY_ARM)
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+  })
+
+  test(`a read-only unknown call costs no file read, armed or not (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1'] })
+    await t.spawn()
+    expect((await t.check('ghost', 'Read', { file_path: '/x' }, { isReadOnly: true })).decision).toBe('allow')
+    expect(t.fsCalls.length).toBe(0)
+  })
+
+  test(`an armed run keeps refusing while the marker stands, the run has not ended and the timeout holds (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1'] })
+    await t.spawn()
+    await t.clock.advance(TTL)
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
+    expect(t.fsCalls).toEqual([`stat ${RUN}/.gate-01`, `stat ${RUN}/run-state.jsonl`, `read ${RUN}/run-state.jsonl`])
+  })
+
+  test(`an armed run disarms after the timeout, then reads nothing (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1'] })
+    await t.spawn()
+    await t.clock.advance(TTL + 1)
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+    t.fsCalls.length = 0
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+    expect(t.fsCalls.length).toBe(0)
+  })
+
+  test(`a new dispatch of the same run refreshes the timeout (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1', 'rp2'] })
+    await t.spawn()
+    await t.clock.advance(TTL - 1000)
+    await t.spawn({ prompt: `Output: .company/work/${SLUG}/02-reprompter.md\n` })
+    await t.clock.advance(TTL - 1000)
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
+  })
+
+  test(`one expired run does not disarm another armed run (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1', 'rp2'] })
+    await t.spawn()
+    await t.clock.advance(TTL - 1000)
+    await t.spawn({ prompt: `Output: .company/work/${OTHER_SLUG}/03-reprompter.md\n` })
+    await t.clock.advance(2000)
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
+  })
+
+  for (const marker of ['gone', 'link', 'dir'] as const) {
+    test(`an armed run disarms when the marker is ${marker} (${surface})`, async ($, on) => {
+      const t = await boot($, on, surface, { rows: [], ids: ['rp1'], marker })
+      await t.spawn()
+      expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+    })
+  }
+
+  test(`an armed run disarms on an end line (${surface})`, async ($, on) => {
+    const t = await boot($, on, surface, { rows: [], ids: ['rp1'], runState: '{"ev":"start"}\nnot json\n{"ev":"end","outcome":"ship"}\n' })
+    await t.spawn()
+    expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('allow')
+  })
+
+  for (const runState of ['gone', 'link', 'big', 'unreadable', '{"ev":"ended"}\n', 'garbage']) {
+    test(`a run-state that is ${JSON.stringify(runState)} does not end the run (${surface})`, async ($, on) => {
+      const t = await boot($, on, surface, { rows: [], ids: ['rp1'], runState })
+      await t.spawn()
+      expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
+    })
+  }
+
+  test(`after disarm the recorded reprompter keeps its allow-list and an unrecorded one is still refused (${surface})`, async ($, on) => {
+    const rows = [{ id: 'old', type: 'aico:reprompter', description: 'd', status: 'running' }]
+    const t = await boot($, on, surface, { rows, ids: ['rp1'] })
+    await t.spawn()
+    await t.clock.advance(TTL + 1)
+    expect((await t.check('ghost', 'Bash', { command: 'ls' })).decision).toBe('allow')
+    expect((await t.check('rp1', 'Write', { file_path: `${RUN}/prompt.md` })).decision).toBe('allow')
+    expect((await t.check('rp1', 'Bash', { command: 'ls' })).decision).toBe('deny')
+    expect((await t.check('old', 'Write', { file_path: `${RUN}/prompt.md` })).reason).toBe(DENY_NOT_STARTED)
   })
 
   test(`a reprompter evicted from the 50 records is denied through the list (${surface})`, async ($, on) => {
