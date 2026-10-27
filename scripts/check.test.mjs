@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS } from './check.mjs';
+import { check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS, PERSONALITY_PHRASES } from './check.mjs';
 
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
@@ -810,4 +810,72 @@ test('personality.mjs may be mentioned only in cooler, brainstorm format 1 and s
   writeFileSync(join(root, 'skills', 'brainstorm', 'references', 'format-1.md'), 'personality.mjs');
   const e = check(root).errors.filter(l => l.includes('personality.mjs'));
   assert.deepEqual(e.map(l => l.split(':')[0]).sort(), ['ERROR agents/qa.md', 'ERROR skills/brainstorm/SKILL.md', 'ERROR skills/lead/SKILL.md']);
+});
+
+test('PERSONALITY_PHRASES is frozen and equals the role-names table', () => {
+  const doc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'contracts', 'role-names.md'), 'utf8');
+  const rows = [...doc.matchAll(/^\| `(low|medium|high)` \| (.+?) \| (.+?) \|$/gm)];
+  assert.equal(rows.length, 3);
+  const table = { intelligence: {}, creativity: {} };
+  for (const [, level, intelligence, creativity] of rows) {
+    table.intelligence[level] = intelligence;
+    table.creativity[level] = creativity;
+  }
+  assert.deepEqual(PERSONALITY_PHRASES, table);
+  assert.ok(Object.isFrozen(PERSONALITY_PHRASES));
+  assert.ok(Object.isFrozen(PERSONALITY_PHRASES.intelligence));
+  assert.ok(Object.isFrozen(PERSONALITY_PHRASES.creativity));
+});
+
+const TYPE_LINE = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
+const hidden = (name, body) => `---\nname: ${name}\ndescription: Use when testing.\ndisable-model-invocation: true\n---\n**Help:** x\n${body}\nSee §1.6.\n`;
+function typeFixture({ typeLine = true, manifest = {} } = {}) {
+  const root = fixture({
+    skills: { fix: hidden('fix', typeLine === true ? TYPE_LINE('fix') : typeLine), audit: hidden('audit', TYPE_LINE('audit')) },
+    agents: { qa: agent('qa'), 'skill-researcher': agent('skill-researcher'), editor: agent('editor') }
+  });
+  const sw = {
+    v: 1, id: 'software', label: 'Software company', roles: ['qa', 'skill-researcher'], playbooks: ['fix', 'audit'],
+    ship: { kind: 'release', meaning: 'Push.', lanes: [], checks: [] }, skill_search: { hints: [] }, ...manifest
+  };
+  mkdirSync(join(root, 'company', 'types'), { recursive: true });
+  writeFileSync(join(root, 'company', 'types', 'software.json'), JSON.stringify(sw));
+  return root;
+}
+
+test('company types: the Type line and manifest rules apply only when company/types exists', () => {
+  const plain = fixture({ skills: { fix: hidden('fix', 'No type line.') } });
+  assert.deepEqual(check(plain).errors, []);
+});
+
+test('company types: a Playbook without its Type line right after Help is an error', () => {
+  const errors = check(typeFixture({ typeLine: 'Something else.' })).errors;
+  assert.ok(errors.some(e => e.includes('skills/fix/SKILL.md') && e.includes('**Type:**')), errors.join('\n'));
+  assert.ok(!errors.some(e => e.includes('skills/audit/')));
+  const wrongName = check(typeFixture({ typeLine: TYPE_LINE('audit') })).errors;
+  assert.ok(wrongName.some(e => e.includes('skills/fix/SKILL.md') && e.includes('**Type:**')));
+});
+
+test('company types: ALWAYS commands need no Type line', () => {
+  const root = typeFixture();
+  mkdirSync(join(root, 'skills', 'help'), { recursive: true });
+  writeFileSync(join(root, 'skills', 'help', 'SKILL.md'), hidden('help', 'No type line.'));
+  assert.ok(!check(root).errors.some(e => e.includes('skills/help/')));
+});
+
+test('company types: software must be every agent but editor and the 16 Playbooks; a Playbook in no type is an error', () => {
+  const errors = check(typeFixture()).errors;
+  assert.ok(errors.some(e => e.includes('software.json') && e.includes('playbooks must be the 16')), errors.join('\n'));
+  assert.ok(!errors.some(e => e.includes('roles must be every agent except editor')));
+  const withEditor = check(typeFixture({ manifest: { roles: ['qa', 'skill-researcher', 'editor'] } })).errors;
+  assert.ok(withEditor.some(e => e.includes('roles must be every agent except editor')));
+  const orphan = typeFixture();
+  mkdirSync(join(orphan, 'skills', 'report'), { recursive: true });
+  writeFileSync(join(orphan, 'skills', 'report', 'SKILL.md'), hidden('report', TYPE_LINE('report')));
+  assert.ok(check(orphan).errors.some(e => e.includes('skills/report/SKILL.md') && e.includes('no company type manifest')));
+});
+
+test('company types: a broken manifest is an ERROR that names the rule', () => {
+  const root = typeFixture({ manifest: { v: 2 } });
+  assert.ok(check(root).errors.includes('ERROR company/types: type manifest software invalid: v must be 1'));
 });

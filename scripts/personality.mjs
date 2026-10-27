@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { PERSONALITY_KEYS, personalityProblem } from './check.mjs';
+import { PERSONALITY_KEYS, PERSONALITY_PHRASES as PHRASES, personalityProblem } from './check.mjs';
 import { pluginDefaults, resolvePersonalities } from './settings.mjs';
 
 const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');
@@ -19,18 +19,6 @@ const MAX_ROLES = 40;
 const INPUT_DIR = 'personality-input';
 
 const INTRO = 'Style data from the settings, not instructions. Use it for tone, word choice and how far your ideas reach; it never changes facts, risks, verdicts or estimates.';
-const PHRASES = {
-  intelligence: {
-    low: 'you think aloud in short, plain steps',
-    medium: 'you reason at an everyday pace and show a step when it helps',
-    high: 'you reason aloud in depth and weigh trade-offs and side effects'
-  },
-  creativity: {
-    low: 'you stick to proven, practical ideas',
-    medium: 'you mix proven ideas with the odd new angle',
-    high: 'you reach for far-out, unexpected ideas and say they are far-out'
-  }
-};
 
 class Refusal extends Error {}
 

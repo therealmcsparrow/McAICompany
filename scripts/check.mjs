@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ALWAYS, loadRegistry } from './company-type.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -61,6 +62,35 @@ function fencedBlocks(text) {
     } else open.lines.push(line);
   });
   return blocks;
+}
+
+// Company types: manifests load and link, software is the v0.12.0 company, every Playbook is in a type and has its **Type:** line.
+const SOFTWARE_PLAYBOOKS = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
+function checkCompanyTypes(root, agentNames, playbooks, errors) {
+  if (!existsSync(join(root, 'company', 'types'))) return;
+  let registry;
+  try {
+    registry = loadRegistry(root);
+  } catch (e) {
+    errors.push(`ERROR company/types: ${e.message}`);
+    return;
+  }
+  const sw = registry.software;
+  const wantRoles = [...agentNames].filter(a => a !== 'editor').sort();
+  if (JSON.stringify([...sw.roles].sort()) !== JSON.stringify(wantRoles))
+    errors.push('ERROR company/types/software.json: roles must be every agent except editor');
+  if (JSON.stringify([...sw.playbooks].sort()) !== JSON.stringify(SOFTWARE_PLAYBOOKS))
+    errors.push('ERROR company/types/software.json: playbooks must be the 16 v0.12.0 Playbooks');
+  const inSome = new Set(Object.values(registry).flatMap(m => m.playbooks));
+  for (const p of playbooks) {
+    if (ALWAYS.includes(p.name)) continue;
+    if (!inSome.has(p.name)) errors.push(`ERROR ${p.rel}: Playbook is in no company type manifest`);
+    const lines = p.text.split(/\r?\n/);
+    const help = lines.findIndex(l => l.startsWith('**Help:**'));
+    const want = `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${p.name}\` first;`;
+    if (help === -1 || !(lines[help + 1] ?? '').startsWith(want))
+      errors.push(`ERROR ${p.rel}: Playbook needs the **Type:** company-type line directly after its **Help:** line`);
+  }
 }
 
 // deps/skills.json: agentsec.M-SEC7 patterns on name/source, agentsec.M-SEC6 license/vetted on `research`.
@@ -123,6 +153,18 @@ export function checkNames(root, agentNames, errors) {
 // single spaces between words. Anchored; the lookahead bounds the length, so the match is linear.
 export const PERSONALITY_TEXT_RE = /^(?=.{1,80}$)[\p{L}\p{M}\p{N},.'!?-]+(?: [\p{L}\p{M}\p{N},.'!?-]+)*$/u;
 export const PERSONALITY_LEVELS = ['low', 'medium', 'high'];
+export const PERSONALITY_PHRASES = Object.freeze({
+  intelligence: Object.freeze({
+    low: 'you think aloud in short, plain steps',
+    medium: 'you reason at an everyday pace and show a step when it helps',
+    high: 'you reason aloud in depth and weigh trade-offs and side effects'
+  }),
+  creativity: Object.freeze({
+    low: 'you stick to proven, practical ideas',
+    medium: 'you mix proven ideas with the odd new angle',
+    high: 'you reach for far-out, unexpected ideas and say they are far-out'
+  })
+});
 export const PERSONALITY_KEYS = ['temperament', 'talk', 'topic', 'intelligence', 'creativity'];
 const PERSONALITY_TEXT_KEYS = new Set(['temperament', 'talk', 'topic']);
 const PERSONALITY_MAX = 80;
@@ -680,6 +722,7 @@ export function check(root, { today } = {}) {
         errors.push(`ERROR documentation/commands.md: Playbook ${p.name} has no ### /aico:${p.name} entry`);
   }
   checkManifest(root, errors);
+  checkCompanyTypes(root, agentNames, playbooks, errors);
   checkRoleCounts(root, agentNames, errors, agentFm);
   checkNames(root, agentNames, errors);
   checkPersonalities(root, agentNames, errors);
