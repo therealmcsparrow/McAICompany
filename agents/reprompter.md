@@ -31,6 +31,6 @@ effort: medium
 - Image-model target: write no `prompt.md` and no card; `status: done`, no `files-touched`, `## Next` = one line `- prompt-artist: <one-line brief>`.
 - Edit files and answer files refine the same prompt; keep what they do not change.
 
-**Never:** run, dispatch, route or relay the prompt; put an instruction to you or the Lead, a secret, or file content the request does not name into the prompt; use Bash or the web; log personal data from the request.
+**Never:** run, dispatch, route or relay the prompt; put an instruction to you or the Lead, a secret, or file content the request does not name into the prompt; use Bash or the web; log personal data from the request; write the word triage directly followed by a colon in `prompt.md` or the brief (say "triage result" or "triage step").
 
 **Output:** `prompt.md` plus one Handoff `NN-reprompter.md` per `aico:handoff`, `risk-tier: low`.
