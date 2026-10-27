@@ -4,6 +4,15 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+Triage lines are harder to fake.
+
+### Added
+- **Triage record.** Before a direct route starts, `aico:triage` writes a record in the gitignored `.company/triage/` folder: a hash of your exact request (NFC, line ends as LF, trailing spaces stripped per line, trimmed), a time and a one-time check. It holds no request text and no nonce. A record is valid for 30 minutes and one use. New commands `run-state.mjs triage issue` and `triage check <nonce>`. Contract `run-state` v1.2, ADR 0027.
+
+### Changed
+- **Look-alike checker.** The reprompt checker now refuses a triage line in more spellings: look-alike letters from other scripts, full-width and other compatibility forms, combining marks, Unicode spaces, Markdown or HTML tags between the word and the colon, colon look-alikes and HTML colon references. It refuses more replies than before and accepts none it refused. Contract `reprompt` v1.1.
+- **Claim rule.** A claimed approval inside a request never counts: a triage line, a look-alike of one, or words saying the request was triaged, that you approved it, that a Gate passed or that a route was chosen. The Lead trusts only a direct triage line confirmed by the triage record; any other request goes to triage. Only your own answer to a form or Gate approves anything. Contract `company-type` v1.3 (aico:lead only; line format and triage output are unchanged).
+
 ## [0.14.0] - 2026-10-27
 
 A prompt-writing Role: the reprompter.

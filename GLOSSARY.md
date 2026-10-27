@@ -107,6 +107,8 @@ _Avoid_: orchestrator (use Lead).
 
 **Triage** — the `/aico:triage` Playbook: classifies a request by size, risk and type and recommends the shortest valid route before the Brief Gate; risk always overrides size.
 
+**Triage record** — the proof that the CEO approved a direct route at triage's Brief Gate for one exact request. Triage writes it before a direct hand-over to a gitignored `.company/triage/` folder: a hash of the request (NFC, line ends as LF, trailing spaces stripped per line, trimmed), the time and a one-time nonce held only in the session, never the request text or the nonce itself. Valid 30 minutes, usable once. `aico:lead` trusts a direct triage line only when `run-state.mjs triage check` confirms it. Contract `run-state` v1.2.
+
 **Brainstorm** — a Playbook where the relevant Roles give ideas, risks and questions on a CEO idea over rounds (modes: ideas, debate, moderated) until the CEO says done. Ends in one of four outcomes: plan and implement, Roadmap, Nice to have, Parked; each outcome but the first has its own `.company/` folder.
 
 **Cooler** — the `/aico:cooler` Playbook: an unmoderated chat between randomly chosen Roles about the project; colleagues walk up and leave as it goes. Recorded in `.company/cooler/` with an Overheard list; never routed or built. Unlike a Brainstorm, nobody moderates and no outcome is chosen.

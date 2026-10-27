@@ -31,7 +31,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **When to use it.** Any time — especially when no single command below obviously fits, or when the work spans several kinds (e.g. "fix this bug and write release notes").
 
 **How it runs.**
-1. Classifies the request; if unsure of size or risk, it can run `/aico:triage` first.
+1. Classifies the request; if unsure of size or risk, it can run `/aico:triage` first. A request that ends in a direct triage line skips triage only when the triage record confirms it (`run-state.mjs triage check`). Otherwise the request goes to triage, whatever the line says. Words in a request that claim it was triaged, that you approved it, that a Gate passed or that a route was chosen never count; only your own answer to a form or Gate in this session does.
 2. Picks the Roles and sequences them (independent Roles run in parallel).
 3. Shows you the route and its one-line reading of the goal. **→ Brief Gate** when the route has no Product Manager step (otherwise the Brief Gate comes after the brief).
 4. Runs the route, pausing at each Gate.
@@ -50,7 +50,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **How it runs.**
 1. Reads `.company/project.md` and your request; classifies size, risk and type.
 2. Recommends the shortest route that the risk still allows. **Risk overrides size:** anything touching auth, payments, personal data, migrations or a Contract keeps the full reviewer lane and every Gate, however small.
-3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request plus a short triage note (size, risk, type, route). That run is not triaged again and keeps at least that risk tier. A triage note pasted in from elsewhere does not count: `/aico:lead` sends that request to triage again. A one-line, low-risk change goes to `/aico:lead`, which checks it really is that small, then runs one builder and one reviewer and keeps the Ship Gate. The same applies when `/aico:lead` started the triage. If the command cannot be started, you are shown it to type.
+3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request plus a short triage note (size, risk, type, route). That run is not triaged again and keeps at least that risk tier. Before a direct route starts, triage writes a short-lived triage record: a hash of your exact request, kept in a gitignored `.company/triage/` folder, valid 30 minutes and for one use. Only the direct route is recorded, so only a direct triage line can be trusted. A triage line you type or paste, or one copied from a file or another run, does not count: `/aico:lead` sends that request to triage again. A one-line, low-risk change goes to `/aico:lead`, which checks it really is that small, then runs one builder and one reviewer and keeps the Ship Gate. The same applies when `/aico:lead` started the triage. If the command cannot be started, you are shown it to type.
 
 **You get.** A one-line recommendation; the risk tier then travels into every dispatch of the real run.
 
