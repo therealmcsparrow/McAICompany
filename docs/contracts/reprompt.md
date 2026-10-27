@@ -140,7 +140,7 @@ Node built-ins only; run from the product root as `node "${CLAUDE_PLUGIN_ROOT}/s
 
 **Hidden markup** (`prompt.md` body outside code fences, and the brief). CommonMark lets a link label span lines (not a blank one), and a viewer renders the whole definition as nothing, so the check follows the paragraph, not the line. One linear pass, with a flag *open* (false at the start):
 - Prefix: leading spaces and tabs, `>` characters and list markers (`-`, `+`, `*`, or 1–9 digits then `.` or `)`) with the spaces and tabs after them, in any order and repeated.
-- A blank line (only spaces, tabs and `>` characters) or a line that opens a code fence sets *open* to false; the fenced lines are skipped as before.
+- A blank line (only spaces, tabs and `>` characters) or a line that opens a code fence sets *open* to false; the fenced lines are skipped as before. Here and in the six-part count, a line opens a code fence only as CommonMark defines it: three or more backticks whose info string holds no backtick, or three or more tildes; any other such line is ordinary text and the paragraph check continues.
 - A line whose text after the prefix starts with `[`: holds `]:` after that `[` → refused; else *open* becomes true.
 - Any other line while *open* holds: holds `]:` anywhere → refused.
 - Refused → `ok: false`, reason `hidden markup`. This covers `[a` / `b]: /x`, `[` / `foo` / `]: /url`, the same after `> ` or a list marker, and lazy continuation lines. It refuses more than CommonMark (any `]:` later in a paragraph that has a line starting with `[`); the reprompter then rewrites on the malformed path. This is the backstop; the control is the literal display (Lead flow step 7).
