@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **reprompter (Lynn) and `/aico:reprompt <prompt>`.** A new Role that turns a rough prompt into a complete one: goal, context, inputs, constraints, output format and a done-check. She asks at most 3 questions when a gap would change the result, then states her assumptions. She never runs the prompt; you choose Use it, Edit, Keep only or Stop. Your text is treated as content to rewrite, not as orders. The files stay in `.company/work/<slug>/` on your machine and are never committed or pushed. The prompt is AI-written; check it before you use it.
+
 ## [0.12.0] - 2026-10-27
 
 Skill picks you can trust, a scanner for the skills you already have, and progress bars in the Savvy pane.

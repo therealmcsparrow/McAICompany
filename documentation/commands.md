@@ -61,11 +61,13 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **How it runs.**
 1. The Lead saves your text verbatim in a new run folder and dispatches the reprompter.
-2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. The Lead asks them in one form. The number of question rounds defaults to 1; a setting for it comes later (Phase B). After the last round the reprompter goes on with stated assumptions and does not ask again.
+2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. The Lead asks them in one form. The number of question rounds defaults to 1; a setting for it comes later. After the last round the reprompter goes on with stated assumptions and does not ask again.
 3. The Lead shows the full prompt and its assumptions, then asks: **Use it** / **Edit** / **Keep only** / **Stop**. Edit has no fixed cap on rounds.
 4. **Use it** hands the prompt to the Lead as a new request, and the normal route check applies. Nothing runs without Use it.
 
-**You get.** `.company/work/<slug>/prompt.md` and the Handoff. These files stay local and are never committed.
+**You get.** `.company/work/<slug>/prompt.md` and the Handoff. These files stay on your machine; the command never commits or pushes them. The prompt is written by an AI and may contain mistakes or wrong assumptions. Read it before you use it; the assumptions are listed under it.
+
+**Your data.** Your text is processed like any other request to the company: the Claude model you have configured reads it to write the new prompt. The command adds no other recipient and no web access. Do not put personal data or secrets in a prompt unless you need them. If you do, the copies in `.company/work/<slug>/` are yours to keep out of git or delete; they are also saved there when you pick "Keep only".
 
 **Example.** `/aico:reprompt make the signup page better`
 
