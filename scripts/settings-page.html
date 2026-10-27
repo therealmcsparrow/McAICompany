@@ -33,7 +33,7 @@ header, main { max-width: 1200px; margin: 0 auto; padding: 0 var(--s3); }
 header h1 { font-size: var(--fs-xl); font-weight: 650; line-height: 1.2; margin: var(--s5) 0 var(--s1); }
 header p { margin: 0 0 var(--s3); color: var(--muted); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-[role="tablist"] { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin: var(--s4) 0 var(--s5); overflow-x: auto; overflow-y: hidden; }
+[role="tablist"] { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--line); margin: var(--s4) 0 var(--s5); }
 [role="tab"] { background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; color: var(--muted); padding: 0 var(--s4); min-height: 40px; font: inherit; cursor: pointer; white-space: nowrap; flex: none; }
 [role="tab"]:hover { color: var(--text); background: var(--head); border-radius: var(--r1) var(--r1) 0 0; }
 [role="tab"]:focus-visible { outline-offset: -2px; }
@@ -43,28 +43,27 @@ header p { margin: 0 0 var(--s3); color: var(--muted); }
 .notice.warn { background: var(--warn-bg); color: var(--warn); }
 .notice.err { background: var(--err-bg); color: var(--err); }
 .notice.info { background: var(--info-bg); color: var(--info); }
-.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow); margin-bottom: var(--s5); }
-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 640px; }
+.tbox { container-type: inline-size; border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow); margin-bottom: var(--s5); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; }
+.vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 th, td { text-align: left; padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); vertical-align: middle; }
 tbody tr:last-child > th, tbody tr:last-child > td { border-bottom: 0; }
 thead th { background: var(--head); font-size: var(--fs-sm); color: var(--muted); font-weight: 600; }
 tr.dept th { background: var(--head); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 tbody th { font-weight: 500; overflow-wrap: anywhere; }
-tbody th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 8rem; max-width: 16rem; box-shadow: 1px 0 0 var(--line); }
-table.roles tbody th[scope="row"] { min-width: 10rem; }
+tbody th[scope="row"] { background: var(--surface); }
 td.plugin { color: var(--muted); }
 td.effect { font-weight: 600; overflow-wrap: anywhere; }
-td.effect.text { min-width: 12rem; }
 @media (prefers-reduced-motion: no-preference) {
   tbody tr > td, tbody tr > th[scope="row"], button, [role="tab"] { transition: background-color 100ms; }
 }
 tbody tr:hover > td, tbody tr:hover > th[scope="row"] { background: var(--head); }
-table.roles td.plugin { min-width: 11rem; }
-table.roles td.effect { min-width: 11rem; }
 .src { font-weight: 400; color: var(--muted); font-size: var(--fs-sm); margin-left: var(--s1); }
 .held { display: block; font-weight: 400; color: var(--warn); font-size: var(--fs-sm); margin-top: 2px; }
-.cell { display: grid; grid-template-columns: repeat(3, minmax(4.5rem, 1fr)); gap: var(--s1); min-width: 14rem; }
+.cell { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1) var(--s2); }
 .cell > :first-child { grid-column: 1 / -1; }
+.cf { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cf > label { font-size: var(--fs-xs); color: var(--muted); }
 .cell select, .cell input[type="text"] { width: 100%; min-width: 0; }
 select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--r1); padding: 4px 8px; min-height: 32px; }
 select:hover:not(:disabled), input[type="text"]:hover:not(:disabled) { border-color: var(--text); }
@@ -116,20 +115,28 @@ h2 { font-size: var(--fs-lg); font-weight: 600; line-height: 1.3; margin: var(--
 .pfield .hint.held { color: var(--warn); }
 .plevel button { margin-top: var(--s3); }
 .peff { margin-top: var(--s4); background: var(--head); border-radius: var(--r1); padding: var(--s3); }
-.peff h3 { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
+.peff h4 { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
 .peff dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--s4); margin: 0; }
 .peff dt { color: var(--muted); font-size: var(--fs-sm); }
 .peff dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-.dept-label { margin: var(--s4) 0 var(--s2); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.pfilter { max-width: 26rem; margin-bottom: var(--s3); }
+.pfilter label { display: block; font-size: var(--fs-sm); color: var(--muted); margin-bottom: 2px; }
+.pfilter input[type="text"] { width: 100%; }
+.pfilter .hint { margin: var(--s1) 0 0; }
+#pcount { margin: 0 0 var(--s3); color: var(--muted); font-size: var(--fs-sm); }
+h3.dept-label { margin: var(--s4) 0 var(--s2); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 footer { position: sticky; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); box-shadow: var(--shadow-up); margin-top: var(--s5); }
 footer .inner { max-width: 1200px; margin: 0 auto; padding: var(--s3); display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; }
 #count { font-weight: 600; margin-right: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 #count.dirty { color: var(--text); }
 #count.dirty::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: var(--s2); }
-#status { max-width: 1200px; margin: 0 auto; padding: var(--s3) var(--s3) 0; max-height: 40vh; overflow: auto; }
+#status { max-width: 1200px; margin: 0 auto; padding: var(--s3) var(--s3) 0; }
 @media (min-width: 601px) { #status { padding: var(--s3) var(--s5) 0; } footer .inner { padding: var(--s3) var(--s5); } }
 #status:empty { display: none; }
 #status .notice { margin-bottom: 0; }
+#status .notice:focus-visible, .sum-title:focus-visible { outline-offset: 2px; }
+.sum-title { font-size: var(--fs-md); font-weight: 650; margin: 0; }
+.notice a { color: inherit; text-decoration: underline; }
 dialog { border: 1px solid var(--line); border-radius: var(--r2); padding: var(--s5); background: var(--surface); color: var(--text); max-width: 440px; width: calc(100% - 32px); box-shadow: 0 10px 30px rgba(0, 0, 0, .25); }
 dialog::backdrop { background: rgba(0, 0, 0, .5); }
 dialog h2 { margin-top: 0; }
@@ -137,6 +144,26 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
 [hidden] { display: none !important; }
 @media (forced-colors: active) {
   select.set, input.set { border-width: 2px; }
+}
+/* A table that no longer fits its box becomes a stack of cards; nothing on the page scrolls sideways. */
+@container (max-width: 1100px) {
+  table.roles, table.roles thead, table.roles tbody, table.roles tr, table.roles th, table.roles td { display: block; }
+  table.roles thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table.roles td::before { content: attr(data-label); display: block; font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 2px; }
+  table.roles tr:not(.dept) { border-bottom: 1px solid var(--line); padding: var(--s2) 0; }
+  table.roles tbody tr:last-child { border-bottom: 0; }
+  table.roles th, table.roles td { border-bottom: 0; padding: var(--s1) var(--s3); }
+  table.roles tr:hover > td, table.roles tr:hover > th[scope="row"] { background: transparent; }
+}
+@container (max-width: 760px) {
+  table:not(.roles), table:not(.roles) thead, table:not(.roles) tbody, table:not(.roles) tr, table:not(.roles) th, table:not(.roles) td { display: block; }
+  table:not(.roles) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table:not(.roles) td::before { content: attr(data-label); display: block; font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 2px; }
+  table:not(.roles) tr:not(.dept) { border-bottom: 1px solid var(--line); padding: var(--s2) 0; }
+  table:not(.roles) tbody tr:last-child { border-bottom: 0; }
+  table:not(.roles) th, table:not(.roles) td { border-bottom: 0; padding: var(--s1) var(--s3); }
+  table:not(.roles) tr:hover > td, table:not(.roles) tr:hover > th[scope="row"] { background: transparent; }
+  table:not(.roles) input[type="text"], table:not(.roles) select { width: 100%; max-width: 100%; }
 }
 @media (max-width: 600px), (max-height: 500px) {
   footer { position: static; }
@@ -154,10 +181,12 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
   <h1>aico settings</h1>
   <p>Project wins over User, and both win over the Plugin default. <strong>—</strong> means not set at that level. Changes apply from the next aico run.</p>
 </header>
+<div id="status" role="status" aria-live="polite"></div>
 <main>
   <div id="notices"></div>
   <div role="tablist" aria-label="Settings">
     <button role="tab" id="tab-roles" aria-controls="panel-roles" aria-selected="true">Roles</button>
+    <button role="tab" id="tab-personality" aria-controls="panel-personality" aria-selected="false" tabindex="-1">Personality</button>
     <button role="tab" id="tab-language" aria-controls="panel-language" aria-selected="false" tabindex="-1">Language &amp; profile</button>
     <button role="tab" id="tab-pipeline" aria-controls="panel-pipeline" aria-selected="false" tabindex="-1">Pipeline</button>
     <button role="tab" id="tab-gates" aria-controls="panel-gates" aria-selected="false" tabindex="-1">Gates</button>
@@ -165,6 +194,7 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
     <button role="tab" id="tab-mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button>
   </div>
   <section role="tabpanel" id="panel-roles" aria-labelledby="tab-roles"></section>
+  <section role="tabpanel" id="panel-personality" aria-labelledby="tab-personality" hidden></section>
   <section role="tabpanel" id="panel-language" aria-labelledby="tab-language" hidden></section>
   <section role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden></section>
   <section role="tabpanel" id="panel-gates" aria-labelledby="tab-gates" hidden></section>
@@ -172,7 +202,6 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
   <section role="tabpanel" id="panel-mods" aria-labelledby="tab-mods" hidden></section>
 </main>
 <footer>
-  <div id="status" role="status" aria-live="polite"></div>
   <div class="inner">
     <span id="count">0 unsaved changes</span>
     <button type="button" id="clear-user">Clear User on this tab</button>
@@ -227,6 +256,8 @@ let state = null;   // last state from the server
 let draft = null;   // { user, project, profile, language: { user, project } }
 let syncers = [];   // functions that push draft values into the controls and recompute "In effect"
 let activeTab = 'roles';
+let filterText = ''; // the Role filter on the Personality tab; never saved or sent
+let filterUI = null;
 let touched = new Set(); // "level|path" of ignored personality values the user cleared or replaced
 const openRoles = new Set(); // Roles whose personality details are open; survives a re-render
 
@@ -236,7 +267,7 @@ function el(tag, props = {}, ...children) {
   for (const [k, v] of Object.entries(props)) {
     if (v === undefined || v === null || v === false) continue;
     if (k === 'class') node.className = v;
-    else if (k.startsWith('aria-') || k === 'role' || k === 'for' || k === 'list' || k === 'colspan' || k === 'scope') node.setAttribute(k, String(v));
+    else if (k.startsWith('aria-') || k === 'role' || k === 'for' || k === 'list' || k === 'colspan' || k === 'scope' || k === 'href') node.setAttribute(k, String(v));
     else node[k] = v;
   }
   for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)));
@@ -416,7 +447,7 @@ function showEffect(cell, path, pluginValue, format, resolvedValue) {
 
 // ---------- controls ----------
 function selectFor(options, label, labels = {}) {
-  const sel = el('select', { 'aria-label': label });
+  const sel = el('select', label ? { 'aria-label': label } : {});
   sel.append(el('option', { value: '' }, '—'));
   for (const o of options) sel.append(el('option', { value: String(o) }, labels[o] ?? String(o)));
   return sel;
@@ -477,11 +508,22 @@ function confirmUnlock(key) {
   });
 }
 
+// Cells get their column header as data-label, which the stacked layout shows above each value.
+function labelCells(node) {
+  for (const c of node.children ?? []) {
+    if (c.tagName !== 'TABLE') { labelCells(c); continue; }
+    const heads = [...(c.children[0]?.children[0]?.children ?? [])].map((th) => th.textContent);
+    for (const tr of c.children[1]?.children ?? []) {
+      if (tr.className === 'dept') continue;
+      [...tr.children].forEach((cell, i) => cell.setAttribute('data-label', heads[i] ?? ''));
+    }
+  }
+}
 function table(headers, cls) {
   const thead = el('thead', {}, el('tr', {}, headers.map((h) => el('th', { scope: 'col' }, h))));
   const tbody = el('tbody');
   const t = el('table', { class: cls }, thead, tbody);
-  return { wrap: el('div', { class: 'scroll' }, t), tbody };
+  return { wrap: el('div', { class: 'tbox' }, t), tbody };
 }
 const COLUMNS = ['Setting', 'Plugin', 'User', 'Project', 'In effect'];
 
@@ -501,22 +543,35 @@ function roleGroups() {
 }
 // A whole-number text field; the server holds the 60000-1000000 range and refuses anything else.
 function capInput(label) {
-  return el('input', { type: 'text', inputMode: 'numeric', placeholder: 'cap', maxLength: 7, 'aria-label': label });
+  return el('input', { type: 'text', inputMode: 'numeric', placeholder: '—', maxLength: 7, 'aria-label': label });
+}
+// "Ava (architect)", or just the slug when the Role has no other name.
+function roleLabel(role) {
+  const name = state.resolved?.roles?.[role]?.name ?? state.plugin?.roles?.[role]?.name;
+  return typeof name === 'string' && name !== '' && name !== role ? `${name} (${role})` : role;
+}
+// A visible label that starts with the field word, then hidden context, so the name contains the visible text.
+function roleField(level, role, field, word, control) {
+  const id = `rf-${role}-${level}-${field}`;
+  control.id = id;
+  return el('div', { class: 'cf' }, el('label', { for: id }, word, el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), control);
 }
 function roleCell(level, role) {
-  const name = bindLayer(el('input', { type: 'text', placeholder: '—', maxLength: 30, 'aria-label': `${role} name, ${level}` }), level, ['roles', role, 'name']);
-  const model = bindLayer(selectFor(MODELS, `${role} model, ${level}`), level, ['roles', role, 'model']);
-  const effort = bindLayer(selectFor(EFFORTS, `${role} effort, ${level}`), level, ['roles', role, 'effort']);
-  const cap = bindLayer(capInput(`${role} context cap, ${level}`), level, ['roles', role, 'context_cap'], Number);
-  return el('td', {}, el('div', { class: 'cell' }, name, model, effort, cap));
+  const name = bindLayer(el('input', { type: 'text', placeholder: '—', maxLength: 30 }), level, ['roles', role, 'name']);
+  const model = bindLayer(selectFor(MODELS, null), level, ['roles', role, 'model']);
+  const effort = bindLayer(selectFor(EFFORTS, null), level, ['roles', role, 'effort']);
+  const cap = bindLayer(el('input', { type: 'text', inputMode: 'numeric', placeholder: '—', maxLength: 7 }), level, ['roles', role, 'context_cap'], Number);
+  return el('td', {}, el('div', { class: 'cell' },
+    roleField(level, role, 'name', 'Name', name), roleField(level, role, 'model', 'Model', model),
+    roleField(level, role, 'effort', 'Effort', effort), roleField(level, role, 'cap', 'Cap', cap)));
 }
 function renderRoles(panel) {
   const groups = roleGroups();
-  const dept = el('select', { 'aria-label': 'Bulk: Roles' }, el('option', { value: '*' }, 'All Roles'), groups.map(([d]) => el('option', { value: d }, d)));
-  const level = el('select', { 'aria-label': 'Bulk: level' }, el('option', { value: 'user' }, 'User'), el('option', { value: 'project', disabled: !projectOn() }, 'Project'));
-  const keep = (label, opts) => el('select', { 'aria-label': label }, el('option', { value: 'keep' }, 'keep'), el('option', { value: 'clear' }, '— clear'), opts.map((o) => el('option', { value: o }, o)));
-  const model = keep('Bulk: model', MODELS);
-  const effort = keep('Bulk: effort', EFFORTS);
+  const dept = el('select', {}, el('option', { value: '*' }, 'All Roles'), groups.map(([d]) => el('option', { value: d }, d)));
+  const level = el('select', {}, el('option', { value: 'user' }, 'User'), el('option', { value: 'project', disabled: !projectOn() }, 'Project'));
+  const keep = (opts) => el('select', {}, el('option', { value: 'keep' }, 'keep'), el('option', { value: 'clear' }, '— clear'), opts.map((o) => el('option', { value: o }, o)));
+  const model = keep(MODELS);
+  const effort = keep(EFFORTS);
   const apply = el('button', { type: 'button' }, 'Apply');
   apply.addEventListener('click', () => {
     const roles = dept.value === '*' ? groups.flatMap(([, r]) => r) : (groups.find(([d]) => d === dept.value)?.[1] ?? []);
@@ -566,7 +621,6 @@ function renderRoles(panel) {
     }
   }
   panel.append(wrap);
-  renderPersonality(panel, groups);
 }
 
 // ---------- Personality ----------
@@ -734,7 +788,7 @@ function personalityField(role, level, key, rule, ignoredPaths, off) {
 
 function levelFieldset(role, level, rule, ignoredPaths) {
   const off = level === 'project' && !projectOn();
-  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${levelWord(level)} level`));
+  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
   if (level === 'project') box.append(el('p', { class: 'hint' }, PROJECT_HINT));
   for (const key of P_KEYS) box.append(personalityField(role, level, key, rule, ignoredPaths, off));
   const reset = el('button', { type: 'button', class: 'small' }, `Use plugin default for ${role}, ${level}`);
@@ -755,7 +809,7 @@ function roleCard(role, rule, ignoredPaths) {
   pRoles[role] = reg;
   details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
   const grid = el('div', { class: 'pgrid' }, ['user', 'project'].map((level) => levelFieldset(role, level, rule, ignoredPaths)));
-  details.append(el('div', { class: 'pbody' }, grid, el('div', { class: 'peff' }, el('h3', {}, `In effect for ${role}`), reg.eff)));
+  details.append(el('div', { class: 'pbody' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
   return details;
 }
 
@@ -785,7 +839,7 @@ function syncPersonality() {
     if (!ignoredNow && rec.ignoredOption && rec.ignoredOption.parentNode) rec.ignoredOption.remove();
     if (rec.countEl) {
       const n = [...c.value.trim()].length;
-      const text = `${n} of ${rule.max}`;
+      const text = `${n} of ${rule.max} characters`;
       if (rec.countEl.textContent !== text) rec.countEl.textContent = text;
       rec.countEl.classList.toggle('over', n > rule.max);
     }
@@ -827,24 +881,55 @@ function syncPersonality() {
   }
 }
 
-function renderPersonality(panel, groups) {
+function renderPersonality(panel) {
   pRecs = [];
   pRoles = {};
+  filterUI = null;
   const data = state.personalities;
-  if (data === null || typeof data !== 'object') return;
+  panel.append(el('h2', {}, 'Personality'));
+  if (data === null || typeof data !== 'object') {
+    panel.append(el('p', { class: 'hint' }, 'The settings server sent no personality data.'));
+    return;
+  }
   const rule = personalityRule();
   const entries = Array.isArray(data.ignored) ? data.ignored.filter(isIgnoredEntry) : [];
   const ignoredPaths = new Set(entries.map((e) => `${e.level}|${e.path}`));
-  panel.append(el('h2', {}, 'Personality'));
   panel.append(el('p', { class: 'hint' }, PERSONALITY_HINT));
-  for (const [dept, roles] of groups) {
-    panel.append(el('p', { class: 'dept-label' }, dept));
+  const input = el('input', { type: 'text', id: 'pfilter', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
+  input.value = filterText;
+  input.addEventListener('input', () => { filterText = input.value; applyFilter(); });
+  filterUI = { input, count: el('p', { id: 'pcount', role: 'status' }), labels: [] };
+  panel.append(el('div', { class: 'pfilter' }, el('label', { for: 'pfilter' }, 'Filter Roles'), input,
+    el('p', { class: 'hint', id: 'pfilter-hint' }, 'Name, Role or department')), filterUI.count);
+  for (const [dept, roles] of roleGroups()) {
+    const label = el('h3', { class: 'dept-label' }, dept);
+    panel.append(label);
+    const regs = [];
     for (const role of roles) {
       panel.append(roleCard(role, rule, ignoredPaths));
       pRoles[role].objectIgnored = entries.some((e) => e.path === `roles.${role}.personality`);
+      pRoles[role].dept = dept;
+      regs.push(pRoles[role]);
     }
+    filterUI.labels.push({ label, regs });
   }
   syncers.push(syncPersonality);
+  applyFilter();
+}
+// Hides the cards that do not match; hidden cards keep their drafts and errors and are saved with the rest.
+function applyFilter() {
+  if (!filterUI) return;
+  const q = filterText.trim().toLowerCase();
+  const total = Object.keys(pRoles).length;
+  let shown = 0;
+  for (const reg of Object.values(pRoles)) {
+    const name = state.resolved?.roles?.[reg.role]?.name ?? state.plugin?.roles?.[reg.role]?.name ?? '';
+    const match = q === '' || [reg.role, name, reg.dept].some((s) => String(s).toLowerCase().includes(q));
+    reg.details.hidden = !match;
+    if (match) shown++;
+  }
+  for (const { label, regs } of filterUI.labels) label.hidden = regs.every((r) => r.details.hidden);
+  filterUI.count.textContent = shown === 0 ? 'No Role matches the filter.' : `Showing ${shown} of ${total} Roles`;
 }
 const isIgnoredEntry = (e) => e !== null && typeof e === 'object' && (e.level === 'user' || e.level === 'project')
   && typeof e.path === 'string' && typeof e.reason === 'string';
@@ -879,12 +964,39 @@ function mapRefusals(lines) {
   }
   return { rest, marked };
 }
-const refusalLine = (rec) => `${rec.role}, ${rec.level} level: ${rec.error.replace(/^Error: /, '')}`;
-function focusFirstRefused(marked) {
-  const first = [...marked].sort((a, b) => pRecs.indexOf(a) - pRecs.indexOf(b))[0];
-  if (!first) return;
-  openRole(first.role);
-  first.control.focus();
+// "Ava (architect), user level, Way of talking: can't contain a colon. ..."
+function refusalText(rec) {
+  const label = P_LABELS[rec.key];
+  const problem = rec.error.replace(/^Error: /, '');
+  const rest = (problem.startsWith(`${label} `) ? problem.slice(label.length + 1) : problem).replace(/^was refused\./, 'the server refused it.');
+  return `${roleLabel(rec.role)}, ${rec.level} level, ${label}: ${rest}`;
+}
+// Selects the field's tab, clears a filter that hides its Role, opens the card, then focuses the field.
+function jumpTo(rec) {
+  selectTab('personality');
+  if (filterText !== '' && pRoles[rec.role].details.hidden) {
+    filterText = '';
+    if (filterUI) filterUI.input.value = '';
+    applyFilter();
+  }
+  openRole(rec.role);
+  rec.control.focus();
+  if (typeof rec.control.scrollIntoView === 'function') rec.control.scrollIntoView({ block: 'center' });
+}
+function fieldLink(rec) {
+  const link = el('a', { href: `#${rec.id}` }, refusalText(rec));
+  link.addEventListener('click', (e) => { e.preventDefault(); jumpTo(rec); });
+  return link;
+}
+// The error summary: a heading that takes focus, then one item per refused line.
+function refusedStatus(marked, rest) {
+  const fields = [...marked].sort((a, b) => pRecs.indexOf(a) - pRecs.indexOf(b));
+  const n = fields.length + rest.length;
+  const heading = el('h2', { class: 'sum-title', id: 'status-heading', tabIndex: -1 }, `Nothing was saved. Fix ${n} ${n === 1 ? 'field' : 'fields'}:`);
+  const list = el('ul', {}, fields.map((rec) => el('li', {}, fieldLink(rec))), rest.map((line) => el('li', {}, line)));
+  const box = document.getElementById('status');
+  box.replaceChildren(el('div', { class: 'notice err' }, heading, list));
+  heading.focus();
 }
 
 // ---------- Language & profile tab ----------
@@ -1111,11 +1223,12 @@ function render() {
   pRecs = [];
   pRoles = {};
   renderNotices();
-  const renderers = { roles: renderRoles, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
+  const renderers = { roles: renderRoles, personality: renderPersonality, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
   for (const [name, fn] of Object.entries(renderers)) {
     const panel = document.getElementById(`panel-${name}`);
     panel.replaceChildren();
     fn(panel);
+    labelCells(panel);
   }
   document.getElementById('clear-project').disabled = !projectOn();
   refresh();
@@ -1131,8 +1244,23 @@ function refresh() {
 function status(kind, title, lines = []) {
   const box = document.getElementById('status');
   box.replaceChildren();
-  if (!title) return;
-  box.append(el('div', { class: `notice ${kind}` }, title, lines.length ? el('ul', {}, lines.map((l) => el('li', {}, l))) : null));
+  if (!title) return null;
+  const message = el('div', { class: `notice ${kind}`, id: 'status-message', tabIndex: -1 }, title, lines.length ? el('ul', {}, lines.map((l) => el('li', {}, l))) : null);
+  box.append(message);
+  return message;
+}
+// A control the user can reach now: not hidden, not in a hidden panel, not in a closed card, and enabled.
+function isShown(node) {
+  for (let n = node; n; n = n.parentNode) {
+    if (n.hidden) return false;
+    if (n.tagName === 'DETAILS' && !n.open && n !== node) return false;
+  }
+  return !node.disabled;
+}
+// After a rebuild: the control with the same id when it still works, else the status message.
+function restoreFocus(previousId, message) {
+  const same = previousId ? document.getElementById(previousId) : null;
+  if (same && isShown(same)) same.focus(); else if (message) message.focus();
 }
 function load(newState) {
   state = newState;
@@ -1155,11 +1283,11 @@ async function api(path, body) {
 const unreachable = () => status('err', 'Can\'t reach the settings server. It stops after 30 minutes idle or when you press Done; run /aico:settings again.');
 
 async function save() {
+  const previousId = document.activeElement?.id ?? '';
   const bad = personalityProblems();
   if (bad.length) {
     refresh();
-    status('err', 'Nothing was saved. Fix these and press Save again:', bad.map(refusalLine));
-    focusFirstRefused(bad);
+    refusedStatus(bad, []);
     return;
   }
   const body = { revision: state.resolved.revision };
@@ -1181,21 +1309,37 @@ async function save() {
   }
   if (res.status === 200 && res.data.state) {
     load(res.data.state);
-    status('info', 'Saved. Changes apply from the next aico run.');
+    restoreFocus(previousId, status('info', 'Saved. Changes apply from the next aico run.'));
   } else if (res.status === 409 && res.data.state) {
     load(res.data.state);
-    status('err', 'Your view was stale: the settings changed somewhere else since this page loaded. The page now shows the current values, and your edits were not saved. Make them again and press Save.');
+    restoreFocus(previousId, status('err', 'Your view was stale: the settings changed somewhere else since this page loaded. The page now shows the current values, and your edits were not saved. Make them again and press Save.'));
   } else {
     refresh();
     const { rest, marked } = mapRefusals(res.data.refused ?? [`the server answered ${res.status}`]);
     refresh();
-    status('err', 'Nothing was saved. Fix these and press Save again:', [...marked.map(refusalLine), ...rest]);
-    focusFirstRefused(marked);
+    refusedStatus(marked, rest);
   }
 }
 
+// The Roles tab clears every Role key except personality; the Personality tab clears only personality.
+function clearRoles(level) {
+  for (const [role, entry] of Object.entries(draft[level].roles ?? {})) {
+    for (const key of Object.keys(entry)) if (key !== 'personality') delete entry[key];
+    if (Object.keys(entry).length === 0) delete draft[level].roles[role];
+  }
+  if (draft[level].roles && Object.keys(draft[level].roles).length === 0) delete draft[level].roles;
+}
+function clearPersonality(level) {
+  touchIgnored(level);
+  for (const [role, entry] of Object.entries(draft[level].roles ?? {})) {
+    delete entry.personality;
+    if (Object.keys(entry).length === 0) delete draft[level].roles[role];
+  }
+  if (draft[level].roles && Object.keys(draft[level].roles).length === 0) delete draft[level].roles;
+}
 function clearLevel(level) {
-  if (activeTab === 'roles') { delete draft[level].roles; touchIgnored(level); }
+  if (activeTab === 'roles') clearRoles(level);
+  else if (activeTab === 'personality') clearPersonality(level);
   else if (activeTab === 'pipeline') delete draft[level].pipeline;
   else if (activeTab === 'mods') delete draft[level].mods;
   else if (activeTab === 'scan') delete draft[level].skillspector;
@@ -1213,8 +1357,11 @@ async function done() {
     await api('/api/done', {});
   } catch { /* the server may already be gone */ }
   draft = null;
-  document.querySelector('main').replaceChildren(el('p', { class: 'notice info' }, 'Settings server stopped. You can close this tab.'));
+  status('', '');
+  const stopped = el('p', { class: 'notice info', id: 'stopped', tabIndex: -1 }, 'Settings server stopped. You can close this tab.');
+  document.querySelector('main').replaceChildren(stopped);
   document.querySelector('footer').hidden = true;
+  stopped.focus();
 }
 
 function selectTab(name, focus = false) {
@@ -1227,7 +1374,7 @@ function selectTab(name, focus = false) {
     if (on && focus) tab.focus();
   }
 }
-const TAB_NAMES = ['roles', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+const TAB_NAMES = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
 for (const tab of document.querySelectorAll('[role="tab"]')) {
   tab.addEventListener('click', () => selectTab(tab.id.slice(4)));
   tab.addEventListener('keydown', (e) => {

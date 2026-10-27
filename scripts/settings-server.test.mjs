@@ -328,9 +328,9 @@ test('startServer prints the URL', async (t) => {
   assert.deepEqual(lines, [`aico settings: ${server.url}`]);
 });
 
-test('page has the six tabs, a lock dialog, and no external resources', () => {
+test('page has the seven tabs, a lock dialog, and no external resources', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const tab of ['Roles', 'Language &amp; profile', 'Pipeline', 'Gates', 'Skill scan', 'Mods']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
+  for (const tab of ['Roles', 'Personality', 'Language &amp; profile', 'Pipeline', 'Gates', 'Skill scan', 'Mods']) assert.ok(html.includes(`>${tab}<`), `tab ${tab}`);
   assert.ok(html.includes('<dialog'));
   assert.ok(html.includes('<meta name="aico-token" content="__AICO_TOKEN__">'));
   assert.ok(!/<script[^>]*\ssrc=/i.test(html));
@@ -430,7 +430,7 @@ test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row
   const at = (needle) => html.indexOf(needle);
   assert.ok(at('id="tab-gates"') < at('id="tab-scan"') && at('id="tab-scan"') < at('id="tab-mods"'));
   assert.ok(at('id="panel-gates"') < at('id="panel-scan"') && at('id="panel-scan"') < at('id="panel-mods"'));
-  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
+  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
   const mods = html.slice(at('function renderMods'), at('const SCAN_NOTE'));
   assert.ok(!mods.includes('skillspector') && !mods.includes('SkillSpector'));
   const scan = html.slice(at('const SCAN_NOTE'), at('// ---------- page'));
@@ -476,10 +476,8 @@ test('select and text-input borders have 3:1 contrast in light and dark', () => 
   assert.ok(/select, input\[type="text"\] \{[^}]*border: 1px solid var\(--control-border\)/.test(html));
 });
 
-test('the In effect text is a polite live region and row headers stay in view', () => {
-  const html = pageHtml();
-  assert.ok(html.includes("'aria-live': 'polite'"));
-  assert.ok(/tbody th\[scope="row"\] \{[^}]*position: sticky/.test(html));
+test('the In effect text is a polite live region', () => {
+  assert.ok(pageHtml().includes("'aria-live': 'polite'"));
 });
 
 test('the mods tabpanel has a space before aria-labelledby', () => {
@@ -616,7 +614,7 @@ function loadPage(initialState, { saveReply } = {}) {
   doc.documentElement = make('html');
   for (const id of ['notices', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
   ids.save.disabled = true;
-  const names = ['roles', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+  const names = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
     ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
@@ -628,7 +626,7 @@ function loadPage(initialState, { saveReply } = {}) {
   Object.assign(doc, {
     createElement: (tag) => make(tag),
     createTextNode: (text) => new FakeText(text),
-    getElementById: (id) => ids[id] ?? null,
+    getElementById: (id) => ids[id] ?? names.map((n) => walk(ids[`panel-${n}`], (x) => x.id === id)).find(Boolean) ?? walk(ids.status, (x) => x.id === id),
     querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : null),
     querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : [])
   });
@@ -649,7 +647,8 @@ function loadPage(initialState, { saveReply } = {}) {
   return {
     document: doc, ids, calls,
     find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
-    all: (pred) => walkAll(ids['panel-roles'], pred)
+    all: (pred) => walkAll(ids['panel-personality'], pred),
+    allRoles: (pred) => walkAll(ids['panel-roles'], pred)
   };
 }
 function walk(node, pred) {
@@ -700,7 +699,7 @@ test('the page builds one labelled personality card per Role, with the counter a
     assert.equal(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id).textContent, label);
   }
   assert.deepEqual(field(page, 'qa', 'user', 'intelligence').options.map((o) => o.textContent), ['Not set', 'Low', 'Medium', 'High']);
-  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '0 of 80');
+  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '0 of 80 characters');
   assert.ok(field(page, 'qa', 'user', 'talk').getAttribute('aria-describedby').includes('pf-qa-user-talk-count'));
 });
 
@@ -739,7 +738,7 @@ test('a too long value gets an error text tied to the field, counted in code poi
   await type(talk, '\u{10400}'.repeat(80));
   await talk.fire('change');
   assert.equal(talk.getAttribute('aria-invalid'), null);
-  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '80 of 80');
+  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '80 of 80 characters');
   await type(talk, 'a'.repeat(96));
   await talk.fire('change');
   assert.equal(talk.getAttribute('aria-invalid'), 'true');
@@ -766,7 +765,7 @@ test('the error names the first bad character in words, and the value is trimmed
   assert.equal(page.ids.count.textContent, '1 unsaved change');
 });
 
-test('a Save with a bad value sends nothing, marks and focuses the field, opens its card and says so in the status', async () => {
+test('a Save with a bad value sends nothing, marks the field and puts the error summary in the status', async () => {
   const page = loadPage(pageState());
   await settle();
   const talk = field(page, 'architect', 'user', 'talk');
@@ -774,10 +773,9 @@ test('a Save with a bad value sends nothing, marks and focuses the field, opens 
   await page.ids.save.fire('click');
   assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
   assert.equal(talk.getAttribute('aria-invalid'), 'true');
-  assert.equal(page.document.activeElement, talk);
-  assert.equal(closest(talk, 'DETAILS').open, true);
-  assert.match(page.ids.status.textContent, /Nothing was saved\. Fix these and press Save again:/);
-  assert.match(page.ids.status.textContent, /architect, user level: Way of talking can.t contain a colon/);
+  assert.equal(page.document.activeElement, walk(page.ids.status, (n) => n.id === 'status-heading'), 'focus goes to the summary heading');
+  assert.match(page.ids.status.textContent, /Nothing was saved\. Fix 1 field:/);
+  assert.match(page.ids.status.textContent, /architect, user level, Way of talking: can.t contain a colon/);
 });
 
 test('a server refusal is mapped by its path to the field, the text comes from the page, nothing else is marked', async () => {
@@ -792,10 +790,9 @@ test('a server refusal is mapped by its path to the field, the text comes from t
   assert.equal(sent.body.user.roles.qa.personality.talk, 'fine value');
   assert.equal(talk.getAttribute('aria-invalid'), 'true');
   assert.equal(field(page, 'qa', 'user', 'topic').getAttribute('aria-invalid'), null);
-  assert.equal(page.document.activeElement, talk);
-  assert.equal(closest(talk, 'DETAILS').open, true);
+  assert.equal(page.document.activeElement, walk(page.ids.status, (n) => n.id === 'status-heading'));
   const text = page.ids.status.textContent;
-  assert.ok(text.includes('qa, user level: Way of talking was refused.'));
+  assert.ok(text.includes('qa, user level, Way of talking: the server refused it.'));
   assert.ok(text.includes('user roles.qa.personality: must be an object'), 'an unmappable line is listed as received');
   assert.ok(!text.includes('user roles.qa.personality.talk'), 'the mapped line is not repeated raw');
   assert.ok(byId(page, 'pf-qa-user-talk-err').textContent.startsWith('Error: Way of talking was refused.'));
@@ -924,4 +921,235 @@ test('every colour pair the visual spec names passes its contrast floor in both 
     assert.ok(ratio(t('control-border'), t('set')) >= 3, `${scheme} border on set`);
     assert.ok(ratio(t('focus'), t('bg')) >= 3, `${scheme} focus`);
   }
+});
+
+// ---- page layout (aico-settings v1.3, "Page layout") ----
+
+const namedState = () => {
+  const st = pageState();
+  st.resolved.roles.architect.name = 'Ava';
+  return st;
+};
+const idOf = (n) => n.id;
+
+test('layout: the tabs come in the Contract order and each has its panel', () => {
+  const html = pageHtml();
+  const tabs = [...html.matchAll(/<button role="tab" id="tab-([a-z]+)" aria-controls="panel-([a-z]+)"/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(tabs.map(([a]) => a), ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods']);
+  for (const [tab, panel] of tabs) assert.equal(tab, panel);
+  const panels = [...html.matchAll(/<section role="tabpanel" id="panel-([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(panels, tabs.map(([a]) => a));
+});
+
+test('layout: #status sits under the header and before the tab list, and the footer no longer holds it', () => {
+  const html = pageHtml();
+  const at = (s) => html.indexOf(s);
+  assert.ok(at('</header>') < at('id="status"') && at('id="status"') < at('<div role="tablist"'));
+  assert.ok(/id="status" role="status" aria-live="polite"/.test(html));
+  const footer = html.slice(at('<footer>'), at('</footer>'));
+  assert.ok(!footer.includes('id="status"'));
+});
+
+test('layout: the page never scrolls sideways: no overflow scrollers, no table min-width, no sticky cells', () => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(pageHtml())[1];
+  assert.ok(!/overflow-x:\s*(auto|scroll)/.test(css));
+  assert.ok(!/overflow:\s*(auto|scroll)/.test(css));
+  assert.ok(!/(^|\n)\s*table[^{]*\{[^}]*min-width/.test(css));
+  assert.ok(!/\bt[hd][^{]*\{[^}]*position:\s*sticky/.test(css));
+  assert.ok(/\[role="tablist"\] \{[^}]*flex-wrap: wrap/.test(css));
+  assert.ok(/@container \(max-width: \d+px\)/.test(css), 'a table that does not fit becomes stacked cards');
+  assert.ok(/td::before \{[^}]*content: attr\(data-label\)/.test(css));
+  assert.ok(/overflow-wrap: anywhere/.test(css));
+});
+
+test('layout: the personality section is on the Personality tab, not on the Roles tab', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  assert.equal(page.all((n) => n.tagName === 'DETAILS').length, 2);
+  assert.equal(page.allRoles((n) => n.tagName === 'DETAILS').length, 0);
+  assert.ok(page.allRoles((n) => n.tagName === 'TABLE').length >= 1);
+  assert.ok(page.all((n) => n.tagName === 'H3' && n.className === 'dept-label').length >= 1);
+  const legend = page.all((n) => n.tagName === 'LEGEND').map((n) => n.textContent);
+  assert.ok(legend.includes('Ava (architect), User level'));
+  assert.ok(legend.includes('qa, Project level'));
+});
+
+test('layout: the Role filter has its label and hint, hides cards, counts them, and never changes the Save body', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  const input = byId(page, 'pfilter');
+  assert.equal(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === 'pfilter').textContent, 'Filter Roles');
+  assert.equal(byId(page, 'pfilter-hint').textContent, 'Name, Role or department');
+  assert.equal(input.getAttribute('aria-describedby'), 'pfilter-hint');
+  const count = byId(page, 'pcount');
+  assert.equal(count.getAttribute('role'), 'status');
+  assert.equal(count.textContent, 'Showing 2 of 2 Roles');
+  const cards = () => page.all((n) => n.tagName === 'DETAILS');
+  await type(input, 'AVA');
+  assert.deepEqual(cards().map((c) => c.hidden), [false, true], 'the effective name matches, case-insensitively');
+  assert.equal(count.textContent, 'Showing 1 of 2 Roles');
+  await type(input, 'qa');
+  assert.deepEqual(cards().map((c) => c.hidden), [true, false], 'the slug matches');
+  await type(input, 'engineering');
+  assert.deepEqual(cards().map((c) => c.hidden), [false, true], 'the department matches');
+  await type(input, 'zzz');
+  assert.equal(count.textContent, 'No Role matches the filter.');
+  await type(field(page, 'qa', 'user', 'talk'), 'calm');
+  await page.ids.save.fire('click');
+  await settle();
+  const body = page.calls.find((c) => c.url === '/api/save').body;
+  assert.deepEqual(body.user.roles.qa.personality, { talk: 'calm' });
+  assert.ok(!JSON.stringify(body).includes('zzz'), 'the filter text is never sent');
+});
+
+test('layout: every Roles-table control has a visible label that starts with its field word, and no aria-label', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  const controls = page.allRoles((n) => /^rf-/.test(idOf(n)) && (n.tagName === 'INPUT' || n.tagName === 'SELECT'));
+  assert.equal(controls.length, 2 * 2 * 4, 'two Roles, two levels, four fields');
+  for (const control of controls) {
+    assert.equal(control.getAttribute('aria-label'), null, control.id);
+    const label = page.allRoles((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id)[0];
+    assert.ok(label, control.id);
+    const [, role, level, key] = /^rf-([a-z-]+?)-(user|project)-(name|model|effort|cap)$/.exec(control.id);
+    const word = { name: 'Name', model: 'Model', effort: 'Effort', cap: 'Cap' }[key];
+    assert.equal(label.children[0].textContent, word, 'the visible text is the field word');
+    assert.equal(label.textContent, `${word}, ${role === 'architect' ? 'Ava (architect)' : role}, ${level} level`);
+    assert.ok(label.children[1].className.split(' ').includes('vh'), 'the context is visually hidden');
+  }
+});
+
+test('layout: the Bulk bar controls are named by their wrapping labels only', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  const bulk = page.allRoles((n) => n.tagName === 'DIV' && n.className === 'bulk')[0];
+  const selects = walkAll(bulk, (n) => n.tagName === 'SELECT');
+  assert.equal(selects.length, 4);
+  for (const s of selects) {
+    assert.equal(s.getAttribute('aria-label'), null);
+    assert.equal(closest(s, 'LABEL').parentNode, bulk);
+  }
+  assert.deepEqual(walkAll(bulk, (n) => n.tagName === 'LABEL').map((l) => l.children[0].textContent), ['Apply to', 'at', 'model', 'effort']);
+});
+
+test('layout: table cells carry their column header for the stacked layout', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  const cells = page.allRoles((n) => n.tagName === 'TD');
+  assert.deepEqual([...new Set(cells.map((c) => c.getAttribute('data-label')))], ['Plugin', 'User', 'Project', 'In effect']);
+});
+
+test('layout: a refused Save puts an error summary in the status and focuses its heading', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  await type(field(page, 'architect', 'user', 'talk'), 'bad: value');
+  await type(field(page, 'qa', 'project', 'topic'), 'x<y');
+  page.document.activeElement = page.ids.save;
+  await page.ids.save.fire('click');
+  assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
+  const heading = walk(page.ids.status, (n) => n.id === 'status-heading');
+  assert.equal(heading.tagName, 'H2');
+  assert.equal(heading.getAttribute('tabindex'), '-1');
+  assert.equal(heading.textContent, 'Nothing was saved. Fix 2 fields:');
+  assert.equal(page.document.activeElement, heading);
+  const links = walkAll(page.ids.status, (n) => n.tagName === 'A');
+  assert.equal(links.length, 2);
+  for (const link of links) {
+    const target = link.getAttribute('href').slice(1);
+    assert.ok(byId(page, target), `href ${link.getAttribute('href')} names an existing field`);
+  }
+  assert.ok(links[0].textContent.startsWith('Ava (architect), user level, Way of talking: can'));
+  assert.ok(links[1].textContent.startsWith('qa, project level, Pet topic: can'));
+});
+
+test('layout: a summary link selects the Personality tab, clears a filter that hides the Role, opens the card and focuses the field', async () => {
+  const page = loadPage(namedState());
+  await settle();
+  await type(field(page, 'architect', 'user', 'talk'), 'bad: value');
+  await page.ids.save.fire('click');
+  await type(byId(page, 'pfilter'), 'zzz');
+  await page.ids['tab-pipeline'].fire('click');
+  assert.equal(page.ids['panel-personality'].hidden, true);
+  const link = walk(page.ids.status, (n) => n.tagName === 'A');
+  let prevented = false;
+  for (const fn of link.listeners.click) fn({ preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(page.ids['panel-personality'].hidden, false);
+  assert.equal(page.ids['tab-personality'].getAttribute('aria-selected'), 'true');
+  assert.equal(byId(page, 'pfilter').value, '');
+  assert.equal(page.all((n) => n.tagName === 'DETAILS')[0].hidden, false);
+  assert.equal(closest(field(page, 'architect', 'user', 'talk'), 'DETAILS').open, true);
+  assert.equal(page.document.activeElement, field(page, 'architect', 'user', 'talk'));
+});
+
+test('layout: a server line that maps to no field is plain text in the summary', async () => {
+  const lines = ['revision is stale', "user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?"];
+  const page = loadPage(namedState(), { saveReply: { status: 400, body: { refused: lines } } });
+  await settle();
+  await type(field(page, 'qa', 'user', 'talk'), 'fine');
+  await page.ids.save.fire('click');
+  await settle();
+  const items = walkAll(page.ids.status, (n) => n.tagName === 'LI');
+  assert.equal(items.length, 2);
+  assert.equal(walkAll(page.ids.status, (n) => n.tagName === 'A').length, 1);
+  assert.ok(items.some((li) => li.textContent === 'revision is stale' && walkAll(li, (n) => n.tagName === 'A').length === 0));
+  assert.equal(walk(page.ids.status, (n) => n.id === 'status-heading').textContent, 'Nothing was saved. Fix 2 fields:');
+});
+
+test('layout: after a successful Save focus is not on body: the same control when it still works, else the status message', async () => {
+  const page = loadPage(namedState(), { saveReply: { status: 200, body: { state: namedState() } } });
+  await settle();
+  await type(field(page, 'qa', 'user', 'talk'), 'calm');
+  page.document.activeElement = page.ids.save;
+  await page.ids.save.fire('click');
+  await settle();
+  const message = walk(page.ids.status, (n) => n.id === 'status-message');
+  assert.equal(message.getAttribute('tabindex'), '-1');
+  assert.equal(page.document.activeElement, message, 'the Save button is disabled after a reload');
+  const card = page.all((n) => n.tagName === 'DETAILS')[1];
+  card.open = true;
+  await card.fire('toggle');
+  await type(field(page, 'qa', 'user', 'topic'), 'tea');
+  page.document.activeElement = field(page, 'qa', 'user', 'topic');
+  await page.ids.save.fire('click');
+  await settle();
+  assert.equal(page.document.activeElement, field(page, 'qa', 'user', 'topic'), 'the rebuilt control with the same id');
+});
+
+test('layout: a stale-revision reload and Done also keep focus on a real element', async () => {
+  const stale = loadPage(namedState(), { saveReply: { status: 409, body: { state: namedState() } } });
+  await settle();
+  await type(field(stale, 'qa', 'user', 'talk'), 'calm');
+  stale.document.activeElement = stale.ids.save;
+  await stale.ids.save.fire('click');
+  await settle();
+  assert.equal(stale.document.activeElement.id, 'status-message');
+  assert.match(stale.ids.status.textContent, /Your view was stale/);
+  const page = loadPage(namedState());
+  await settle();
+  page.document.activeElement = page.ids.done;
+  await page.ids.done.fire('click');
+  await settle();
+  assert.equal(page.document.activeElement.id, 'stopped');
+  assert.equal(page.document.activeElement.textContent, 'Settings server stopped. You can close this tab.');
+});
+
+test('layout: Clear on the Personality tab clears only personality, and on the Roles tab everything but personality', async () => {
+  const st = namedState();
+  st.user = { version: 1, roles: { qa: { model: 'haiku', personality: { talk: 'dry' } } } };
+  st.personalities.roles.qa.user = { talk: 'dry' };
+  const page = loadPage(st, { saveReply: { status: 200, body: { state: st } } });
+  await settle();
+  await page.ids['tab-personality'].fire('click');
+  await page.ids['clear-user'].fire('click');
+  assert.equal(page.ids.count.textContent, '1 unsaved change');
+  await page.ids.save.fire('click');
+  await settle();
+  assert.deepEqual(page.calls.find((c) => c.url === '/api/save').body.user, { version: 1, roles: { qa: { model: 'haiku' } } });
+  const other = loadPage(st);
+  await settle();
+  await other.ids['clear-user'].fire('click');
+  await other.ids.save.fire('click');
+  await settle();
+  assert.deepEqual(other.calls.find((c) => c.url === '/api/save').body.user, { version: 1, roles: { qa: { personality: { talk: 'dry' } } } });
 });
