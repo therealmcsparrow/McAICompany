@@ -197,8 +197,11 @@ function walkControl(loc, paths, budget) {
   const m = new Manifest(null, budget);
   const dotGit = key(join(loc.root, '.git'));
   for (const p of paths) {
-    if (p === dotGit) m.entry(p);
-    else m.walk(p);
+    if (p === dotGit) {
+      // A plain .git folder changes on every git command, so only its type counts; the files in it that can run a program are control paths of their own.
+      const st = lstatOrNull(p);
+      if (st) m.set(p, st.isDirectory() && !st.isSymbolicLink() ? 'd' : fingerprint(st));
+    } else m.walk(p);
   }
   return m.map;
 }
@@ -362,7 +365,7 @@ const nonBlank = lines => lines.filter(l => l.trim() !== '');
 // After leading spaces, quote marks and list markers, a line that starts with `[` and holds `]:` can be a link
 // definition, which renders as nothing.
 const PREFIX_RE = /[-+*][ \t]+|\d{1,9}[.)][ \t]+|[ \t>]+/y;
-export function hiddenLine(line) {
+function prefixEnd(line) {
   let i = 0;
   for (;;) {
     PREFIX_RE.lastIndex = i;
@@ -370,11 +373,18 @@ export function hiddenLine(line) {
     if (!m) break;
     i += m[0].length;
   }
-  return line[i] === '[' && line.indexOf(']:', i) >= 0;
+  return i;
 }
 
-function hiddenMarkup(lines, from) {
+export function hiddenLine(line) {
+  const at = prefixEnd(line);
+  return line[at] === '[' && line.indexOf(']:', at) >= 0;
+}
+
+// A label can span lines inside one paragraph, so a line that opens with `[` keeps the paragraph open until a blank line or a fence.
+export function hiddenMarkup(lines, from) {
   let fence = null;
+  let open = false;
   for (let i = from; i < lines.length; i++) {
     const line = lines[i];
     if (fence) {
@@ -382,8 +392,13 @@ function hiddenMarkup(lines, from) {
       continue;
     }
     const opened = openFence(line);
-    if (opened) { fence = opened; continue; }
-    if (hiddenLine(line)) return true;
+    if (opened) { fence = opened; open = false; continue; }
+    if (/^[ 	>]*$/.test(line)) { open = false; continue; }
+    const at = prefixEnd(line);
+    if (line[at] === '[') {
+      if (line.indexOf(']:', at) >= 0) return true;
+      open = true;
+    } else if (open && line.includes(']:')) return true;
   }
   return false;
 }
