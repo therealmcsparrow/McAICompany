@@ -88,8 +88,8 @@ function checkCompanyTypes(root, agentNames, playbooks, errors) {
     const lines = p.text.split(/\r?\n/);
     const help = lines.findIndex(l => l.startsWith('**Help:**'));
     const want = `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${p.name}\` first;`;
-    if (help === -1 || !(lines[help + 1] ?? '').startsWith(want))
-      errors.push(`ERROR ${p.rel}: Playbook needs the **Type:** company-type line directly after its **Help:** line`);
+    if (help === -1 || lines[help + 1] !== '' || !(lines[help + 2] ?? '').startsWith(want))
+      errors.push(`ERROR ${p.rel}: Playbook needs one empty line after its **Help:** line, then the **Type:** company-type line`);
   }
 }
 

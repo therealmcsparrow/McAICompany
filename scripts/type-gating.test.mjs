@@ -23,7 +23,7 @@ const SHIP_GATE = '- **Ship Gate** comes before any push, merge, deploy, publish
 const typeLine = (name) => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 
 for (const name of SOFTWARE) {
-  test(`${name}: Type line directly after the Help line`, () => {
+  test(`${name}: Type line one empty line after the Help line`, () => {
     const lines = read(`skills/${name}/SKILL.md`).split('\n');
     const i = lines.findIndex((l) => l.startsWith('**Help:**'));
     assert.ok(i > 0);

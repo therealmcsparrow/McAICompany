@@ -828,7 +828,7 @@ test('PERSONALITY_PHRASES is frozen and equals the role-names table', () => {
 });
 
 const TYPE_LINE = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
-const hidden = (name, body) => `---\nname: ${name}\ndescription: Use when testing.\ndisable-model-invocation: true\n---\n**Help:** x\n${body}\nSee §1.6.\n`;
+const hidden = (name, body) => `---\nname: ${name}\ndescription: Use when testing.\ndisable-model-invocation: true\n---\n**Help:** x\n\n${body}\nSee §1.6.\n`;
 function typeFixture({ typeLine = true, manifest = {} } = {}) {
   const root = fixture({
     skills: { fix: hidden('fix', typeLine === true ? TYPE_LINE('fix') : typeLine), audit: hidden('audit', TYPE_LINE('audit')) },
@@ -848,12 +848,15 @@ test('company types: the Type line and manifest rules apply only when company/ty
   assert.deepEqual(check(plain).errors, []);
 });
 
-test('company types: a Playbook without its Type line right after Help is an error', () => {
+test('company types: a Playbook without one empty line then its Type line after Help is an error', () => {
   const errors = check(typeFixture({ typeLine: 'Something else.' })).errors;
   assert.ok(errors.some(e => e.includes('skills/fix/SKILL.md') && e.includes('**Type:**')), errors.join('\n'));
   assert.ok(!errors.some(e => e.includes('skills/audit/')));
   const wrongName = check(typeFixture({ typeLine: TYPE_LINE('audit') })).errors;
   assert.ok(wrongName.some(e => e.includes('skills/fix/SKILL.md') && e.includes('**Type:**')));
+  const noGap = typeFixture();
+  writeFileSync(join(noGap, 'skills', 'fix', 'SKILL.md'), hidden('fix', '').replace('**Help:** x\n\n', `**Help:** x\n${TYPE_LINE('fix')}\n`));
+  assert.ok(check(noGap).errors.some(e => e.includes('skills/fix/SKILL.md') && e.includes('**Type:**')));
 });
 
 test('company types: ALWAYS commands need no Type line', () => {

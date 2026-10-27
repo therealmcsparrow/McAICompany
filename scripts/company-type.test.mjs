@@ -282,10 +282,10 @@ test('software is the v0.12.0 company: 33 Roles, 16 Playbooks, 24 commands with 
   assert.deepEqual(out.skill_search, { hints: [] });
 });
 
-test('software playbooks plus ALWAYS are exactly the model-hidden commands of the plugin', () => {
-  const out = JSON.parse(exec(['resolve'], project(null)).out);
+test("all manifests' playbooks plus ALWAYS are exactly the model-hidden commands of the plugin", () => {
+  const union = new Set([...ALWAYS, ...Object.values(loadRegistry(REAL_ROOT)).flatMap(m => m.playbooks)]);
   const hidden = fs.readdirSync(path.join(REAL_ROOT, 'skills')).filter(d => /^disable-model-invocation: true$/m.test(fs.readFileSync(path.join(REAL_ROOT, 'skills', d, 'SKILL.md'), 'utf8')));
-  assert.deepEqual([...out.playbooks].sort(), hidden.sort());
+  assert.deepEqual([...union].sort(), hidden.sort());
 });
 
 test('an explicit company_type: software line resolves from the project', () => {
