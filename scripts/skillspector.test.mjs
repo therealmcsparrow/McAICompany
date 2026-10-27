@@ -770,12 +770,24 @@ test('AC9 a bad slug is refused by writeReport itself (defence in depth)', async
 });
 
 // ---------- real process handling ----------
-test('AC13 runCommand times out, reports the pid, and killTree ends that process', async () => {
-  const { runCommand, killTree } = await mod();
-  const r = await runCommand([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { env: process.env, cwd: tmpdir(), timeoutMs: 400 });
-  assert.equal(r.timedOut, true);
-  assert.ok(Number.isInteger(r.pid));
+// Always kill the child's tree and wait (bounded) for its pipes to close, so a failed assertion never leaks a node child.
+async function reap(r) {
+  if (!r || !Number.isInteger(r.pid)) return;
+  const { killTree } = await mod();
   await killTree(r.pid);
+  let timer;
+  await Promise.race([r.closed, new Promise((res) => { timer = setTimeout(res, 10000); })]);
+  clearTimeout(timer);
+}
+test('AC13 runCommand times out, reports the pid, and killTree ends that process', async () => {
+  const { runCommand } = await mod();
+  const r = await runCommand([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { env: process.env, cwd: tmpdir(), timeoutMs: 400 });
+  try {
+    assert.equal(r.timedOut, true);
+    assert.ok(Number.isInteger(r.pid));
+  } finally {
+    await reap(r);
+  }
   let alive = true;
   for (let i = 0; i < 50 && alive; i++) {
     try { process.kill(r.pid, 0); await new Promise((res) => setTimeout(res, 100)); } catch { alive = false; }
@@ -783,11 +795,14 @@ test('AC13 runCommand times out, reports the pid, and killTree ends that process
   assert.equal(alive, false, 'process tree is gone');
 });
 test('AC13 runCommand stops reading at the stdout cap and flags oversize', async () => {
-  const { runCommand, killTree } = await mod();
+  const { runCommand } = await mod();
   const r = await runCommand([process.execPath, '-e', "process.stdout.write('x'.repeat(200000)); setInterval(() => {}, 1000)"],
     { env: process.env, cwd: tmpdir(), timeoutMs: 20000, maxBytes: 1000 });
-  assert.equal(r.oversize, true);
-  await killTree(r.pid);
+  try {
+    assert.equal(r.oversize, true);
+  } finally {
+    await reap(r);
+  }
 });
 test('AC13 runCommand reports ENOENT for a missing binary without a shell', async () => {
   const { runCommand } = await mod();
@@ -937,6 +952,10 @@ test('project root: global roots stay trusted even when linked', async (t) => {
 });
 
 // ---------- the child is killed before its cwd is removed ----------
+async function reapPids(pids) {
+  const { killTree } = await mod();
+  for (const pid of pids) if (Number.isInteger(pid)) await killTree(pid);
+}
 const hold = (pids, cwds, extra = {}) => async (argv, opts) => {
   const { runCommand } = await mod();
   cwds.push(opts.cwd);
@@ -951,10 +970,14 @@ test('scanOne kills a real oversize child before its temp cwd is removed and ret
   const dir = makeSkill(join(sb.project, '.claude', 'skills', 'fixture'));
   const pids = [];
   const cwds = [];
-  const r = await scanOne(dir, { mode: 'no-llm', runTool: hold(pids, cwds) });
-  asError(r, 'oversize');
-  assert.equal(await waitGone(pids[0]), true, 'the child process is gone');
-  assert.equal(existsSync(cwds[0]), false, 'the temp cwd is gone');
+  try {
+    const r = await scanOne(dir, { mode: 'no-llm', runTool: hold(pids, cwds) });
+    asError(r, 'oversize');
+    assert.equal(await waitGone(pids[0]), true, 'the child process is gone');
+    assert.equal(existsSync(cwds[0]), false, 'the temp cwd is gone');
+  } finally {
+    await reapPids(pids);
+  }
 });
 test('scanOne kills a real timed-out child before its temp cwd is removed', async (t) => {
   const { scanOne, runCommand } = await mod();
@@ -968,10 +991,14 @@ test('scanOne kills a real timed-out child before its temp cwd is removed', asyn
     pids.push(r.pid);
     return r;
   };
-  const r = await scanOne(dir, { mode: 'no-llm', runTool });
-  asError(r, 'timeout');
-  assert.equal(await waitGone(pids[0]), true);
-  assert.equal(existsSync(cwds[0]), false);
+  try {
+    const r = await scanOne(dir, { mode: 'no-llm', runTool });
+    asError(r, 'timeout');
+    assert.equal(await waitGone(pids[0]), true);
+    assert.equal(existsSync(cwds[0]), false);
+  } finally {
+    await reapPids(pids);
+  }
 });
 test('scanOne ignores a temp cwd that cannot be removed: the skill still gets its verdict and the run goes on', async (t) => {
   const { scanOne, killTree } = await mod();
@@ -979,11 +1006,15 @@ test('scanOne ignores a temp cwd that cannot be removed: the skill still gets it
   const dir = makeSkill(join(sb.project, '.claude', 'skills', 'fixture'));
   const pids = [];
   const cwds = [];
-  const r = await scanOne(dir, { mode: 'no-llm', runTool: hold(pids, cwds), killTree: async () => {} });
-  asError(r, 'oversize');
-  await killTree(pids[0]);
-  assert.equal(await waitGone(pids[0]), true);
-  rmSync(cwds[0], { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  try {
+    const r = await scanOne(dir, { mode: 'no-llm', runTool: hold(pids, cwds), killTree: async () => {} });
+    asError(r, 'oversize');
+    await killTree(pids[0]);
+    assert.equal(await waitGone(pids[0]), true);
+  } finally {
+    await reapPids(pids);
+    for (const c of cwds) rmSync(c, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
 });
 
 // ---------- the walk never stops early ----------
@@ -2052,12 +2083,10 @@ test('bound folder: a lower-case skill.md that declares the name is counted', as
   const alone = await bound(t, { 'skills/find-skills/skill.md': FM('find-skills') });
   assert.equal(alone.refused, 'skill not bound (name differs from folder)', 'not exactly SKILL.md');
 });
-test('bound folder: a name that lower-cases to the target (U+212A KELVIN SIGN) is counted', async (t) => {
+test('bound folder: a name that lower-cases to the target (U+212A KELVIN SIGN) is unreadable, not counted', async (t) => {
   assert.equal('Kit'.toLowerCase(), 'kit');
   const r = await bound(t, { 'skills/kit/SKILL.md': FM('kit'), 'skills/other/SKILL.md': FM('Kit') }, 'kit');
-  assert.equal(r.refused, 'skill not bound (same name twice)');
-  const alone = await bound(t, { 'skills/kit/SKILL.md': FM('Kit') }, 'kit');
-  assert.equal(alone.refused, 'skill not bound (name differs from folder)', 'the declared name is not the folder name');
+  assert.equal(r.refused, 'skill not bound (unreadable name)');
 });
 test('bound folder: any SKILL.md with an unreadable name refuses, even one that has nothing to do with the target', async (t) => {
   const hostile = ['---\n"name": find-skills\n---\n', '---\n{name: find-skills}\n---\n', '---\nname: a\nname: find-skills\n---\n', '---\nname: x\n\tdescription: y\n---\n', '---\nname: x\n  continued\n---\n'];
@@ -2065,6 +2094,42 @@ test('bound folder: any SKILL.md with an unreadable name refuses, even one that 
     const r = await bound(t, { 'skills/find-skills/SKILL.md': FM('find-skills'), 'skills/evil/SKILL.md': text });
     assert.equal(r.refused, 'skill not bound (unreadable name)', JSON.stringify(text));
   }
+});
+async function decoyRefused(t, text) {
+  const r = await bound(t, { 'skills/aaa/SKILL.md': text, 'skills/foo/SKILL.md': FM('foo') }, 'foo');
+  assert.equal(r.refused, 'skill not bound (unreadable name)', JSON.stringify(text));
+}
+test('attack: an indented frontmatter right after the opening line is unreadable', async (t) => {
+  await decoyRefused(t, '---\n name: foo\n description: x\n---\n');
+});
+test('attack: an indented frontmatter after a comment line is unreadable', async (t) => {
+  await decoyRefused(t, '---\n# c\n name: foo\n description: x\n---\n');
+});
+test('attack: an indented frontmatter after a blank line is unreadable', async (t) => {
+  await decoyRefused(t, '---\n\n name: foo\n description: x\n---\n');
+});
+for (const [label, ch] of [['U+00A0', ' '], ['U+3000', '　'], ['U+FEFF', '﻿']]) {
+  test(`attack: a plain name padded with ${label} is unreadable`, async (t) => {
+    await decoyRefused(t, `---\nname: foo${ch}\n---\n`);
+    await decoyRefused(t, `---\nname: ${ch}foo\n---\n`);
+  });
+  test(`attack: a quoted name padded with ${label} is unreadable`, async (t) => {
+    await decoyRefused(t, `---\nname: 'foo${ch}'\n---\n`);
+    await decoyRefused(t, `---\nname: "${ch}foo"\n---\n`);
+  });
+}
+test('attack: a quoted name padded with spaces is unreadable', async (t) => {
+  await decoyRefused(t, "---\nname: 'foo '\n---\n");
+  await decoyRefused(t, '---\nname: " foo"\n---\n');
+});
+test('attack: a frontmatter line holding only U+00A0 is unreadable', async (t) => {
+  await decoyRefused(t, '---\n \nname: foo\n---\n');
+  await decoyRefused(t, '---\nname: foo\n \n---\n');
+});
+test('name reader: a blank line of spaces still skips, and a non-ASCII name is unreadable', async (t) => {
+  const { UNREADABLE } = await mod();
+  assert.equal(await nameOf(t, '---\n   \nname: foo\n  \ndescription: x\n---\n'), 'foo');
+  assert.equal(await nameOf(t, '---\nname: foö\n---\n'), UNREADABLE);
 });
 test('bound folder: a SKILL.md without frontmatter or without a name is ignored', async (t) => {
   const r = await bound(t, { 'skills/find-skills/SKILL.md': FM('find-skills'), 'docs/a/SKILL.md': '# notes\n', 'docs/b/SKILL.md': '---\ndescription: x\n---\n' });
