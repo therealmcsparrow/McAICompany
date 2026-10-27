@@ -2,7 +2,7 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
-## [Unreleased]
+## [0.15.0] - 2026-10-28
 
 Runs get a scorecard, and releases get a safe rollback ref.
 
