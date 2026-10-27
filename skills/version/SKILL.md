@@ -2,11 +2,12 @@
 name: version
 description: Show which version of the aico plugin is installed, with its latest changelog entry.
 disable-model-invocation: true
+argument-hint: (no arguments)
 ---
 
 # Version
 
-**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `version` and stop.
+**Help:** argument is exactly `help` or `--help` → read the `### /aico:version` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 Plugin root = two folders above this skill's base directory.
 

@@ -41,14 +41,14 @@ test('every lane key appears in a Playbook', () => {
     .map(d => path.join(root, 'skills', d, 'SKILL.md'))
     .filter(f => fs.existsSync(f))
     .map(f => fs.readFileSync(f, 'utf8'))
-    .filter(t => /^disable-model-invocation:\s*true\s*$/m.test(t));
+    .filter(t => /^argument-hint:[ \t]*\S/m.test(t));
   for (const key of LANES)
     assert.ok(skills.some(t => t.includes(`lanes.${key}\``)), `no Playbook mentions \`lanes.${key}\``);
 });
 
-test('dispatch-prompt is v3.1 and lists Name:, Settings: and Context cap:', () => {
+test('dispatch-prompt is v3.2 and lists Name:, Settings: and Context cap:', () => {
   const doc = read('docs/contracts/dispatch-prompt.md');
-  assert.match(doc, /^# Contract: dispatch-prompt v3\.1$/m);
+  assert.match(doc, /^# Contract: dispatch-prompt v3\.2$/m);
   assert.match(doc, /`Context cap: <cap> handover <n>`/);
   assert.match(doc, /`Name: <name>`/);
   assert.match(doc, /`Settings: model=<m> effort=<e>`/);
@@ -72,9 +72,9 @@ test('roles.md lists every default name', () => {
     assert.ok(doc.includes(`| ${name} |`), `roles.md lacks ${name} (${role})`);
 });
 
-test('aico-settings v1.2 keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
+test('aico-settings v1.3 keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.match(doc, /^# Contract: aico-settings v1\.2$/m);
+  assert.match(doc, /^# Contract: aico-settings v1\.3$/m);
   assert.equal(PIPELINE_DEFAULTS.context_cap, 150000);
   assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 150000/);
   assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
@@ -107,14 +107,44 @@ test('aico-settings v1.1 names the mods keys, defaults, three locks and refusal 
   assert.ok(!/^\| `mods\..*keep/m.test(doc), 'no keep-warm row in the Contract schema');
 });
 
-test('aico-settings v1.2 names skillspector.mode, its default, the user-level lock and refusal text', () => {
+test('aico-settings v1.3 names skillspector.mode, its default, the user-level lock and refusal text', () => {
   const doc = read('docs/contracts/aico-settings.md');
   assert.deepEqual(SKILLSPECTOR_DEFAULTS, { mode: 'no-llm' });
-  assert.match(doc, /^# Contract: aico-settings v1\.2$/m);
+  assert.match(doc, /^# Contract: aico-settings v1\.3$/m);
   assert.match(doc, /`skillspector\.mode` \| `no-llm \\| claude_cli`; default `no-llm`; `claude_cli` user level only/);
   assert.match(doc, /\*the scan's data switch is user-level only\.\*/);
   assert.match(doc, /skillspector\.mode: claude_cli from project needs the user level/);
   assert.match(doc, /refused: skillspector\.mode must be no-llm or claude_cli/);
   assert.match(doc, /skillspector\.<key>: unknown key/);
   assert.match(doc, /`SKILLSPECTOR_DEFAULTS` \(v1\.2\)/);
+});
+
+test('user docs describe the Personality tab, the Plan Gates and the Legal disclaimer', () => {
+  const concepts = read('documentation/concepts.md');
+  const commands = read('documentation/commands.md');
+  const readme = read('README.md');
+  assert.match(concepts, /It has seven tabs, in this order/);
+  assert.match(concepts, /\*\*Personality\*\* — one collapsible card per Role/);
+  assert.match(concepts, /Filter Roles/);
+  assert.match(commands, /on the Personality tab/);
+  assert.match(readme, /Personality \(one collapsible card per Role/);
+  for (const t of ['concepts.md', 'commands.md'])
+    assert.ok(!/Personality\*\* section has one collapsible card/.test(read('documentation/' + t)), t);
+  const section = (name) => commands.split(new RegExp('^### `/aico:' + name + '`', 'm'))[1].split(/^### /m)[0];
+  for (const p of ['report', 'campaign', 'content']) assert.match(section(p), /Plan Gate/, p);
+  assert.match(concepts, /not legal advice or a compliance certificate/);
+  assert.match(readme, /not legal advice or a compliance certificate/);
+  assert.match(concepts, /deepfake: yes/);
+  assert.match(commands, /Directive \(EU\) 2024\/825/);
+  assert.match(concepts, /`--json`/);
+});
+
+test('aico-settings v1.3 names the personality payload, the phrases, the ignored rule and the page text sources', () => {
+  const doc = read('docs/contracts/aico-settings.md');
+  assert.match(doc, /`personalities: \{ rule: \{ text_re, flags, max, levels, phrases \}, roles: /);
+  assert.match(doc, /`PERSONALITY_PHRASES` is a frozen/);
+  assert.match(doc, /Untouched ignored values stay out of a Save/);
+  assert.match(doc, /`roles\.<role>\.personality\.<temperament\\\|talk\\\|topic>`/);
+  const page = read('scripts/settings-page.html');
+  assert.ok(page.includes("'Personality'"), 'the page has the Personality section');
 });

@@ -7,6 +7,36 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ### Added
 - **reprompter (Lynn) and `/aico:reprompt <prompt>`.** A new Role that turns a rough prompt into a complete one: goal, context, inputs, constraints, output format and a done-check. She asks at most 3 questions when a gap would change the result, then states her assumptions. She never runs the prompt; you choose Use it, Edit, Keep only or Stop. Your text is treated as content to rewrite, not as orders. The files stay in `.company/work/<slug>/` on your machine and are never committed or pushed. The prompt is AI-written; check it before you use it.
 
+## [0.13.1] - 2026-10-27
+
+Playbooks can start the next Playbook for you.
+
+### Changed
+- **Playbook hand-offs.** 21 Playbooks are visible to the model, so a finished Playbook can start the next one through the Skill tool and falls back to telling you the command (brainstorm, research, lead, triage). The 7 CEO-only commands stay hidden: help, version, language, settings, setup, skillspector, pentest. A shared guard sentence opens every Playbook description, and Roles never start a Playbook. ADR 0026, contract company-type v1.1.
+- **Triage** always starts exactly one Playbook and never lowers the risk tier. **Refactor** asks before the audit, then ends. **Incident** hands /aico:fix to you. Every Playbook answers help from documentation/commands.md.
+
+### Known risk
+- The guard is text only. Injected text could start fix or standards (a local branch and commits); with a Ship Gate you unlocked, an unasked run could push and open a PR. A hard guard hook was declined and is recorded as Debt.
+
+## [0.13.0] - 2026-10-27
+
+Company types, personalities, a new editor Role and a redesigned settings page.
+
+### Added
+- **Company types.** A project has one type: `software` (default, unchanged), `research`, `marketing` or `design`. The type sets which Roles and Playbooks the project has and what "ship" means. `/aico:setup` (argument `type`, or no arguments) asks which type, saves `company_type:` in `.company/project.md` only after you answer, and then offers a skill search for the type (at most 5 picks, each scanned first; nothing installs without your answer). Switching a type later is not supported. For types other than `software`, the Ship Gate summary starts with `Ship means: …` and checks must pass: `claims-cited`, `ai-disclosure`, `asset-licences`, `handoff-package`. Lanes are forced on: legal for research; legal and accessibility for marketing; legal, accessibility and security for design. A command or Role outside the type is refused with the allowed list, and `/aico:help` lists only the type's commands. Contract `company-type` v1, ADR 0022.
+- **New Playbooks:** `/aico:report` (research), `/aico:campaign` and `/aico:content` (marketing), `/aico:design` (design).
+- **editor (Edith).** A new Role, the 34th. It checks every claim is cited `[S#]` or marked `(unverified)` and blocks with `[spec]`; it never rewrites. It has no Bash and no web access.
+- **Personalities.** Each Role has a temperament, a way of talking, a pet topic, and an Intelligence and a Creativity level (`low`, `medium` or `high`). They colour a Role's voice in `/aico:cooler` and `/aico:brainstorm` only, as quoted style data, and never change a verdict, review, Gate or other dispatch. Project values count without an unlock. Text is 1 to 80 characters of letters, digits, spaces and `, . ' - ! ?`; a bad value is ignored with a warning that does not repeat it. Personalities are not in `settings.mjs get`. In a first test the block changed the tone of brainstorm replies without lowering the parse rate; Creativity showed in how far ideas reached, and Intelligence showed little under the 80-word cap. Contracts: `role-names` v1.1, `aico-settings` v1.3, `dispatch-prompt` v3.2, `brainstorm-file` v2.1. ADR 0021.
+- **Settings page.** A Personality tab (after Roles), one collapsible card per Role with User and Project fields, an "n of 80 characters" counter, and the sentence the Role is told for each level. A Filter Roles box hides cards by name, Role or department; it never changes what is saved. A refused Save shows "Nothing was saved. Fix n field(s):" at the top with a link to each field.
+- **Plan Gates for `/aico:report`, `/aico:campaign` and `/aico:content`.** Report: outline, researcher questions and source plan. Campaign: positioning, channel plan and deliverables. Content: the outline. Each is approved before research or production.
+- **Readable company-type output.** `company-type.mjs` prints plain lines by default (`company type:`, `roles:`, `playbooks:`, `work:`, `ship:` and more); `--json` gives JSON. Refusals name the bad input. New `work` key per type and a `pick` command so shared Playbooks reach a stand-in Role. `.company/` and `project.md` are read through links. Contract `company-type` v1, ADR 0023.
+
+### Changed
+- **`ai-disclosure` wording (marketing and design).** Legal now states, for each AI-generated public image, video or text, which AI Act art. 50 duty applies and how it is met, or why none applies, plus `deepfake: yes` or `no`; a run with no AI assets states `none`. The legal lane for campaigns and content now also covers testimonials and reviews, advertising labels, price and green claims (Directive (EU) 2024/825, from 27 September 2026) and comparison limits (Directive 2006/114/EC). The design package carries each asset's AI flag, tool, prompt and date, and an ownership note. These checks record Legal's statement; they are not legal advice or a compliance certificate.
+- **Personality text rule.** Each word starts with a letter or digit; invisible characters and modifier letters are refused. `role-names` v1.1.
+- **Settings page redesign.** New layout, type scale, colours for light and dark mode, tabs, tables and focus styles. Tabs, labels and settings are as before. A refused Save saves nothing and focuses the error summary.
+- Role count is 34 in the README, the documentation and `plugin.json`.
+
 ## [0.12.0] - 2026-10-27
 
 Skill picks you can trust, a scanner for the skills you already have, and progress bars in the Savvy pane.

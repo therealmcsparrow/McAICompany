@@ -54,6 +54,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Tech Researcher | tech-researcher | Tariq | opus | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
 | Design Researcher | design-researcher | Daria | sonnet | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write; never installs |
 | Skill Researcher | skill-researcher | Selin | sonnet | medium | read-only + WebSearch/WebFetch + Write; no Bash; the Lead scans its picks; never installs |
+| Editor | editor | Edith | sonnet | medium | Read, Grep, Glob, Write (own Handoff only); no Bash, no web; blocks, never rewrites |
 
 "read-only + Write" = Read, Grep, Glob, Skill, Write; Write is for its Handoff only. Exceptions: the Architect also writes ADRs and Contract definition files (interfaces/schemas, no implementation); Code Reviewer, Security and Legal also have Bash for read-only commands (git diff, audits).
 "full" = Read, Grep, Glob, Skill, Write, Edit, Bash.

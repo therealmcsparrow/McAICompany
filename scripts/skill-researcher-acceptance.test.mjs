@@ -106,7 +106,10 @@ test('aico-mods v1.1: only the pane draws bars; the status part and the off swit
 
 // ---------- aico-settings v1.2 ----------
 test('aico-settings v1.2: Contract version, plugin default and the page row are in place', () => {
-  assert.match(read('docs/contracts/aico-settings.md'), /^# Contract: aico-settings v1\.2/);
+  // v1.2 or later (later versions are additive)
+  const m = read('docs/contracts/aico-settings.md').match(/^# Contract: aico-settings v(\d+)\.(\d+)/);
+  assert.ok(m, 'Contract header present');
+  assert.ok(Number(m[1]) > 1 || Number(m[2]) >= 2, `Contract is v1.2 or later, got v${m && m[1]}.${m && m[2]}`);
   assert.match(read('scripts/settings.mjs'), /SKILLSPECTOR_DEFAULTS/);
   assert.match(read('scripts/settings-page.html'), /Scan mode/);
 });

@@ -1,6 +1,6 @@
 ---
 name: help
-description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does. Also what `/aico:<command> help` runs.
+description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does.
 disable-model-invocation: true
 argument-hint: [command]
 ---
@@ -9,7 +9,8 @@ argument-hint: [command]
 
 Read-only: change no file, dispatch no Role, start nothing. Plugin root = two folders above this skill's base directory. The source is `<plugin root>/documentation/commands.md`; each command's `argument-hint` in `<plugin root>/skills/<name>/SKILL.md` is the authority on its options.
 
-1. **No argument** → list every command from `commands.md`, grouped by its `##` sections: `` `/aico:<name> <options>` `` and one line on what it does. End with: "`/aico:help <command>` or `/aico:<command> help` for details."
+0. **Company type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" resolve` from the product root. Exit not 0 or no output → show its output line and stop. Keep the id from the first line (`company type: <id> (<label>)…`) and the `playbooks:` line (a comma list); list and explain only commands in `playbooks`. Any other command (also a Playbook name, `aico:` form or not) → "`<name>` is not part of your `<id>` company" and the allowed list from `playbooks`.
+1. **No argument** → list every command in `playbooks` from `commands.md`, grouped by its `##` sections: `` `/aico:<name> <options>` `` and one line on what it does. End with: "`/aico:help <command>` or `/aico:<command> help` for details."
 2. **A command** (`feature`, `/aico:feature` and `aico:feature` all match) → find its `### /aico:<name>` entry and answer with:
    - **Usage:** the syntax line.
    - **Options:** each argument and value from the syntax line, one line each on its effect: required `<…>` vs optional `[…]`, the default when it's left out, and what each named option (e.g. `full`, `listen`, `turns=N`) changes. Take the effects from the entry; where the entry is silent, read that command's `SKILL.md`; never invent one.

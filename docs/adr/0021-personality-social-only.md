@@ -1,0 +1,3 @@
+# Personality travels script to file to social Role, never through the Lead
+
+Personality text is untrusted settings data (a cloned repo can ship a project layer), so it is validated to a closed character set (no quote, colon, newline or markup; intelligence and creativity are closed levels mapped to plugin phrases) and kept out of `settings.mjs get`, the JSON the Lead builds every other prompt from. Only `scripts/personality.mjs` and `brainstorm.mjs stage` render it, into a file that only a cooler turn or brainstorm round reads, so its absence from every other dispatch is a static check plus a byte-identity test rather than a promise about Lead behaviour (`role-names` v1.1, `dispatch-prompt` v3.2, `brainstorm-file` v2.1, `aico-settings` v1.3).
