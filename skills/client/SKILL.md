@@ -9,21 +9,23 @@ argument-hint: intake <client request> | handoff
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `client` and stop.
 
-Run with `aico:pipeline`. Set `engagement: client` in `.company/project.md`, and the client's license and jurisdiction.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook client` first; exit not 0 → show its output line and stop.
+
+Run with `aico:pipeline`; run `check-role <role>` before each dispatch (§2). Set `engagement: client` in `.company/project.md`, and the client's license and jurisdiction.
 Anything sent to the client always asks at the Ship Gate, whatever the settings say (`aico:pipeline` §4).
 
 ## intake
 1. `aico:account-manager`: intake (goals, constraints, budget, deadline, open questions for the client).
 2. `aico:product-manager`: brief and acceptance criteria.
-3. `aico:architect`: proposed Core/Modules and an effort estimate per Module (S/M/L plus a range in days).
+3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" pick architect product-manager`; the Role it prints gives the proposed Core/Modules (or the parts of the work) and an effort estimate per Module (S/M/L plus a range in days). Refused → show its line and stop.
    **→ Brief Gate**
 4. `aico:account-manager`: proposal (scope, phases, estimate, assumptions, what's excluded) in the client's voice preset.
    **→ Ship Gate** (before sending anything to the client)
 
-Building then runs through `aico:feature`, started by the CEO.
+The work then runs through the first Playbook of the `work:` type line (`feature` for software), started by the CEO.
 
 ## handoff
-1. `aico:writer` ∥ `aico:devops`: user/admin docs, plus deployment/runbook, environment and credentials checklist (no secrets in files).
+1. `aico:writer`: user/admin docs. In parallel, when `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" pick devops` prints `devops`: deployment/runbook, environment and credentials checklist (no secrets in files). `pick` refused → skip that part and say so.
 2. `aico:legal`: license and IP transfer check against the proposal.
 3. `aico:account-manager`: handoff letter with what was delivered vs. scope, and known issues.
    **→ Ship Gate**

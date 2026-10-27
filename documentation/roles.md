@@ -1,10 +1,12 @@
 # Roles
 
-The company has **33 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
+The company has **34 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
 
 Each Role runs on a model and an effort level matched to its work. The model is how capable the Role is: **Opus** for the Roles that reason hardest (architecture, review, security, product strategy), **Sonnet** for most building, testing and writing, **Haiku** for mechanical content work. The effort is how much thinking it does before it answers: **high** for the architect, code-reviewer, security and pentester; **low** for writing, art, lookup and support Roles; **medium** for the rest.
 
-Every Role has a person name for display (change them in `/aico:settings`). You can also ask for a Role by name; the Lead routes it.
+Every Role has a person name for display (change them in `/aico:settings`). You can also ask for a Role by name; the Lead routes it. The default names are the ones in the Name column of the tables below, for example Ava for the architect, Wen for the writer and Edith for the editor. Names are unique across Roles, ignoring case. Each Role also has a [personality](concepts.md#personalities) that colours how it talks in cooler chats and brainstorms, and nowhere else.
+
+Which Roles a project has depends on its [company type](concepts.md#company-types). A software company has 33 of the 34; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
 
 ## Product
 | Role | Model | Effort | Name | What it's for |
@@ -66,6 +68,7 @@ The first three researchers run in parallel inside [`/aico:research`](commands.m
 | **writer** | sonnet | low | Wen | User docs, getting-started guides, UX copy, release notes, READMEs, client handoff docs. |
 | **marketer** | sonnet | low | Maya | Positioning, messaging, landing and store-page copy, SEO, launch plans, announcement posts. |
 | **localizer** | haiku | low | Lucía | Translates resource files into each supported language. Edits only string resource files. |
+| **editor** | sonnet | medium | Edith | Checks that every claim in a report or public text is cited `[S#]` or marked `(unverified)`, and flags unclear or inconsistent wording. Blocks with a `[spec]` finding; never rewrites. Its passing Handoff is what satisfies the `claims-cited` check at the Ship Gate. |
 
 ## Support & Legal
 | Role | Model | Effort | Name | What it's for |
@@ -75,7 +78,7 @@ The first three researchers run in parallel inside [`/aico:research`](commands.m
 
 ## Who may edit code
 
-Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
+Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The editor has no Bash and no web access, and writes only its own Handoff. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
 
 ## Review Roles and the Handoff block
 The **code-reviewer** and the **senior-engineer** (compliance) are the pilot for [Handoff v1.1](concepts.md#the-handoff-contract). By default (`pipeline.review_format: plain`) they write ordinary findings. With `pilot` set in [settings](concepts.md#settings), they write a top block and findings as `ID | file:line | problem | why | fix` rows, and keep a findings ledger so a handover mid-review loses nothing. With either value they confirm tool-check failures before those block, and the reviewer's depth follows the touched paths. All other Roles write Handoffs as before. In a brainstorm, a Role may skip a round, and the Architect adds an S/M/L estimate.

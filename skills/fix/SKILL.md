@@ -9,6 +9,8 @@ argument-hint: <bug description or issue link>
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `fix` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook fix` first; exit not 0 → show its output line and stop.
+
 Run with `aico:pipeline`. No Brief or Plan Gate: the bug report is the brief. **Exception:** if the fix needs a Core or Contract change, pause for a Plan Gate.
 
 1. `aico:qa`: reproduce the bug, write a failing regression test, and name the suspected Module.

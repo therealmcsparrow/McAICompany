@@ -9,6 +9,8 @@ argument-hint: <feature description>
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `feature` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook feature` first; exit not 0 → show its output line and stop.
+
 Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):
 
 1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.

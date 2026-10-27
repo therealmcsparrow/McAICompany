@@ -9,6 +9,8 @@ argument-hint: [tool | refresh]
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `standards` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook standards` first; exit not 0 → show its output line and stop.
+
 Run with `aico:pipeline`; no Brief or Plan Gate, the Ship Gate stays. Rules per `aico:ruleset`.
 
 1. `aico:senior-engineer`:

@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ALWAYS, loadRegistry } from './company-type.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -63,6 +64,35 @@ function fencedBlocks(text) {
   return blocks;
 }
 
+// Company types: manifests load and link, software is the v0.12.0 company, every Playbook is in a type and has its **Type:** line.
+const SOFTWARE_PLAYBOOKS = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
+function checkCompanyTypes(root, agentNames, playbooks, errors) {
+  if (!existsSync(join(root, 'company', 'types'))) return;
+  let registry;
+  try {
+    registry = loadRegistry(root);
+  } catch (e) {
+    errors.push(`ERROR company/types: ${e.message}`);
+    return;
+  }
+  const sw = registry.software;
+  const wantRoles = [...agentNames].filter(a => a !== 'editor').sort();
+  if (JSON.stringify([...sw.roles].sort()) !== JSON.stringify(wantRoles))
+    errors.push('ERROR company/types/software.json: roles must be every agent except editor');
+  if (JSON.stringify([...sw.playbooks].sort()) !== JSON.stringify(SOFTWARE_PLAYBOOKS))
+    errors.push('ERROR company/types/software.json: playbooks must be the 16 v0.12.0 Playbooks');
+  const inSome = new Set(Object.values(registry).flatMap(m => m.playbooks));
+  for (const p of playbooks) {
+    if (ALWAYS.includes(p.name)) continue;
+    if (!inSome.has(p.name)) errors.push(`ERROR ${p.rel}: Playbook is in no company type manifest`);
+    const lines = p.text.split(/\r?\n/);
+    const help = lines.findIndex(l => l.startsWith('**Help:**'));
+    const want = `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${p.name}\` first;`;
+    if (help === -1 || lines[help + 1] !== '' || !(lines[help + 2] ?? '').startsWith(want))
+      errors.push(`ERROR ${p.rel}: Playbook needs one empty line after its **Help:** line, then the **Type:** company-type line`);
+  }
+}
+
 // deps/skills.json: agentsec.M-SEC7 patterns on name/source, agentsec.M-SEC6 license/vetted on `research`.
 function checkManifest(root, errors) {
   const file = join(root, 'deps', 'skills.json');
@@ -118,6 +148,77 @@ export function checkNames(root, agentNames, errors) {
     else seen.set(key, role);
   }
 }
+
+// Personality text (role-names v1.1, rule T): 1-80 code points; words of letters, digits, combining marks and , . ' - ! ?,
+// each word starting with a letter or digit, single spaces between words. No default-ignorable code point and no
+// spacing modifier letter (U+02B0-U+02FF, the quote and colon lookalikes). Anchored and linear.
+export const PERSONALITY_TEXT_RE = /^(?=.{1,80}$)(?!.*[\p{Default_Ignorable_Code_Point}ʰ-˿])[\p{L}\p{N}][\p{L}\p{M}\p{N},.'!?-]*(?: [\p{L}\p{N}][\p{L}\p{M}\p{N},.'!?-]*)*$/u;
+export const PERSONALITY_LEVELS = ['low', 'medium', 'high'];
+export const PERSONALITY_PHRASES = Object.freeze({
+  intelligence: Object.freeze({
+    low: 'you think aloud in short, plain steps',
+    medium: 'you reason at an everyday pace and show a step when it helps',
+    high: 'you reason aloud in depth and weigh trade-offs and side effects'
+  }),
+  creativity: Object.freeze({
+    low: 'you stick to proven, practical ideas',
+    medium: 'you mix proven ideas with the odd new angle',
+    high: 'you reach for far-out, unexpected ideas and say they are far-out'
+  })
+});
+export const PERSONALITY_KEYS = ['temperament', 'talk', 'topic', 'intelligence', 'creativity'];
+const PERSONALITY_TEXT_KEYS = new Set(['temperament', 'talk', 'topic']);
+export const PERSONALITY_MAX = 80;
+export const PERSONALITY_REASONS = {
+  length: `must be 1 to ${PERSONALITY_MAX} characters`,
+  charset: "must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit",
+  level: `must be ${PERSONALITY_LEVELS.slice(0, -1).join(', ')} or ${PERSONALITY_LEVELS.at(-1)}`
+};
+
+// Why `value` is not acceptable for personality `key`, or null. Never includes the value.
+export function personalityProblem(key, value) {
+  if (!PERSONALITY_KEYS.includes(key)) return 'unknown key';
+  if (!PERSONALITY_TEXT_KEYS.has(key)) {
+    return typeof value === 'string' && PERSONALITY_LEVELS.includes(value) ? null : PERSONALITY_REASONS.level;
+  }
+  if (typeof value !== 'string') return PERSONALITY_REASONS.charset;
+  // 80 code points are at most 160 UTF-16 units: anything longer is refused without being scanned.
+  if (value.length === 0 || value.length > PERSONALITY_MAX * 2) return PERSONALITY_REASONS.length;
+  let points = 0;
+  for (const _ of value) points++;
+  if (points > PERSONALITY_MAX) return PERSONALITY_REASONS.length;
+  return PERSONALITY_TEXT_RE.test(value) ? null : PERSONALITY_REASONS.charset;
+}
+
+const safeLabel = (k) => (/^[A-Za-z0-9_-]{1,40}$/.test(k) ? k : '?');
+
+// company/personalities.json: exactly one entry per agent, all five keys, each valid. Skipped when absent.
+export function checkPersonalities(root, agentNames, errors) {
+  const f = join(root, 'company', 'personalities.json');
+  if (!existsSync(f)) return;
+  const at = 'company/personalities.json';
+  let data;
+  try { data = JSON.parse(readFileSync(f, 'utf8')); } catch { errors.push(`ERROR ${at}: not valid JSON`); return; }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) { errors.push(`ERROR ${at}: must be an object of role to personality`); return; }
+  for (const role of agentNames) if (!Object.hasOwn(data, role)) errors.push(`ERROR ${at}: ${role} has no personality`);
+  for (const role of Object.keys(data)) {
+    if (!agentNames.has(role)) { errors.push(`ERROR ${at}: ${safeLabel(role)} is not a Role`); continue; }
+    const entry = data[role];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) { errors.push(`ERROR ${at}: ${role}: must be an object`); continue; }
+    for (const key of Object.keys(entry)) {
+      if (!PERSONALITY_KEYS.includes(key)) errors.push(`ERROR ${at}: ${role}.${safeLabel(key)}: unknown key`);
+    }
+    for (const key of PERSONALITY_KEYS) {
+      if (!Object.hasOwn(entry, key)) { errors.push(`ERROR ${at}: ${role}.${key}: missing`); continue; }
+      const problem = personalityProblem(key, entry[key]);
+      if (problem) errors.push(`ERROR ${at}: ${role}.${key}: ${problem}`);
+    }
+  }
+}
+
+// Where personality may appear (dispatch-prompt v3.2): a Personality: line in a dispatch block, and the script name.
+const PERSONALITY_LINE_FILES = new Set(['skills/cooler/SKILL.md', 'skills/brainstorm/references/format-1.md']);
+const PERSONALITY_SCRIPT_FILES = new Set([...PERSONALITY_LINE_FILES, 'skills/settings/SKILL.md']);
 
 // Role count in the plugin description and docs, and every agent listed in roles.md and the spec roster.
 function checkRoleCounts(root, roleNames, errors, roleFm = new Map()) {
@@ -595,10 +696,14 @@ export function check(root, { today } = {}) {
   // and every Playbook resolves the language.
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir)]) {
     const rel = relative(root, file).split(sep).join('/');
+    if (!PERSONALITY_SCRIPT_FILES.has(rel) && readFileSync(file, 'utf8').includes('personality.mjs'))
+      errors.push(`ERROR ${rel}: mentions personality.mjs (only cooler, brainstorm format 1 and settings may)`);
     // Context cap rule (dispatch-prompt v3.1): a Step dispatch (Output under .company/work/) carries Context cap:.
     for (const b of fencedBlocks(readFileSync(file, 'utf8'))) {
       if (/^Output: \.company\/work\//m.test(b.text) && !/^Context cap:/m.test(b.text))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Output: .company/work/ but no Context cap:`);
+      if (!PERSONALITY_LINE_FILES.has(rel) && /^[ \t]*Personality:/m.test(b.text) && /^(?:Company profile|Project profile|Output):/m.test(b.text))
+        errors.push(`ERROR ${rel}:${b.line}: dispatch block has a Personality: line (only cooler and brainstorm format 1 may)`);
       if (!b.text.includes('Company profile:')) continue;
       if (!b.text.includes('Language:'))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Language:`);
@@ -618,8 +723,10 @@ export function check(root, { today } = {}) {
         errors.push(`ERROR documentation/commands.md: Playbook ${p.name} has no ### /aico:${p.name} entry`);
   }
   checkManifest(root, errors);
+  checkCompanyTypes(root, agentNames, playbooks, errors);
   checkRoleCounts(root, agentNames, errors, agentFm);
   checkNames(root, agentNames, errors);
+  checkPersonalities(root, agentNames, errors);
   checkLocalCompany(root, todayString(today), errors, notes);
   return { errors: [...new Set(errors)], warnings, notes };
 }

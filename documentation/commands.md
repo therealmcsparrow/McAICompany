@@ -9,6 +9,8 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
 - **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, skillspector, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
+**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage` and `skillspector`. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards` and `launch`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
+
 **Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` or `/aico:<command> help` (also `--help`) explains one command's options and what it does, without running it.
 
 Each entry below gives what the command does, when to reach for it, how it runs (Gates marked), what you get, and an example.
@@ -326,6 +328,8 @@ Both install commands change your user-scope configuration, not just this projec
 
 **Film script.** Off by default. Turn on `brainstorm.film_script` in `/aico:settings` and the script writes a separate file, labelled as rendered from stored replies, where every line quotes a stored reply. No model is called and the brainstorm file is not changed.
 
+**Personality.** Roles answer in their [personality](concepts.md#personalities). It changes tone, word choice and how far the ideas reach, never facts, risks, verdicts or estimates.
+
 **Example.** `/aico:brainstorm debate how should we onboard first-time users`
 
 ### `/aico:cooler`
@@ -341,6 +345,8 @@ Both install commands change your user-scope configuration, not just this projec
 3. It ends in one of three ways: **natural** (default — when nobody has anything new to say, or after 20 turns), **`turns=N`** (after N turns), or **`listen`** (every 4 turns you're asked: keep listening, chime in, or stop). No Gates.
 
 **You get.** `.company/cooler/YYYYMMDD-HHMM-topic.md`: an **Overheard** list (ideas, problems, worries and questions, each with who raised it), then the chat written as a movie script: scenes per subject, stage directions for who walks up or leaves, each speaker's name in capitals above their line, ending in FADE OUT. The terminal shows only the file path and who was there. Nothing is built or routed; take anything further with `/aico:brainstorm "<file>"` or `/aico:lead`.
+
+**Personality.** Each colleague talks in its own [personality](concepts.md#personalities): a temperament, a way of talking, a pet topic, and an intelligence and creativity level.
 
 **Example.** `/aico:cooler` · `/aico:cooler our flaky CI listen` · `/aico:cooler pricing turns=12`
 
@@ -382,20 +388,123 @@ Both install commands change your user-scope configuration, not just this projec
 
 ---
 
+## Other company types
+
+These four commands belong to the research, marketing and design companies. In a software company they stop with "not part of your `software` company". Each one runs through the shared pipeline, so the conventions at the top of this page apply. For these types the Ship Gate summary starts with a line `Ship means: …`, and the type's checks must pass before you can approve. A passed check records that Legal stated its position. It is not legal advice or a compliance certificate, so have a qualified lawyer review before you publish.
+
+### `/aico:report`
+`/aico:report <client question | brief file> [quick|deep]`
+
+**Help.** `/aico:report help` (or `--help`) explains the command without running it.
+
+**What it does.** Turns a client question into a sourced report in which every claim is cited `[S#]` or marked `(unverified)`, then delivers or publishes it after the Ship Gate. Research company only.
+
+**When to use it.** You run a research consultancy and a client has a question to answer.
+
+**How it runs.**
+1. **Account Manager** takes the intake; **Product Manager** writes the report brief with the depth (`quick` or `deep`, default `deep`). **→ Brief Gate.**
+2. **Product Manager** writes the plan: the report outline, the questions each researcher answers and the source plan. **→ Plan Gate:** you approve the outline, the questions and the sources before any research starts. This plan has no Core, Contracts or Ruleset item to approve.
+3. In parallel, as the plan needs: **Market Researcher**, **Tech Researcher**, **UX Researcher**. A researcher that is blocked does not stop the run. The report names the gap and marks the affected claims `(unverified)`.
+4. **Writer** drafts `.company/work/<slug>/report.md` with `## Summary`, `## Findings`, `## Recommendations`, `## Limits` and `## Sources`, from the researcher Handoffs only.
+5. **Editor** checks every claim against `## Sources`. An uncited claim, an `[S#]` that does not exist or does not say that, or two places that disagree is a blocking `[spec]` finding. The Writer fixes it, then the Editor checks again.
+6. **Legal** checks the AI-generated label, personal data, copyright and licences of quoted sources, and any client confidentiality terms.
+7. **→ Ship Gate.** Without an Editor Handoff that is done and has no blocking finding, Ship is blocked. You then choose Deliver to the client, Publish or Hold. aico sends nothing itself.
+
+**You get.** The report at `.company/work/<slug>/report.md`, labelled `AI-generated research`, plus the Handoff trail.
+
+**Example.** `/aico:report what do dental clinics in the Netherlands use for patient reminders quick`
+
+### `/aico:campaign`
+`/aico:campaign <campaign goal, client brief or audience>`
+
+**Help.** `/aico:campaign help` (or `--help`) explains the command without running it.
+
+**What it does.** Plans and produces a multi-channel campaign: positioning, copy, images, video storyboards and translations. It checks claims, AI disclosure, asset licences and accessibility, and stops at the Ship Gate before anything is published or handed to the client. Marketing company only. Nothing is built or deployed.
+
+**When to use it.** One effort with several deliverables across channels. For one piece, use `/aico:content`.
+
+**How it runs.**
+1. **Product Manager** writes the campaign brief (with the Account Manager first, if there is a client). **→ Brief Gate.**
+2. **Market Researcher** gathers the audience and competitor facts, each with an `[S#]`.
+3. **Marketer** writes the plan from the brief and the research: positioning, messaging, channel plan and the list of deliverables (no copy yet). **→ Plan Gate:** you approve the positioning, the channels and the deliverables before anything is produced.
+4. After the Plan Gate, **Marketer** writes SEO, post and ad copy from the approved plan. In parallel, **Brand Artist**, **Prompt Artist** and **Motion Artist** produce visuals, prompts and storyboards. Each asset is listed with its source, tool and licence, and AI-generated ones are marked.
+5. **Writer** writes the long-form pieces and landing copy; **Localizer** translates when your project lists more than one language.
+6. In parallel: **Editor** (claims cited), **Legal**, **Accessibility Tester** (alt text, captions, transcripts, contrast, reading level) and **Persona Tester** (is the message understood, does the call to action work; the personas are fictional and never appear in copy as real customers). Legal reviews:
+   - advertising claims, price and discount claims, and green claims (Directive (EU) 2024/825, applying from 27 September 2026);
+   - comparison claims, against the limits of Directive 2006/114/EC;
+   - testimonials and reviews: none may be invented or AI-written;
+   - labelling of advertising and sponsored content;
+   - consent wording;
+   - for each AI-generated public image, video or text, the AI Act art. 50 duty that applies and how it is met, or the reason none applies, plus whether it is a deepfake;
+   - the licence of every asset.
+7. Blocking findings go back to the Role that wrote the text, then the checks repeat for what changed. **→ Ship Gate.**
+
+**You get.** The final files under `.company/work/<slug>/` and a Ship summary that lists five open checks: `claims-cited`, `ai-disclosure`, `asset-licences`, the legal lane and the accessibility lane. Any open one blocks Ship. Publishing always asks at the Ship Gate, whatever your Gate settings say, and the Lead publishes nothing itself.
+
+**Example.** `/aico:campaign launch campaign for a booking app aimed at independent hairdressers`
+
+### `/aico:content`
+`/aico:content <topic, brief or existing draft to improve>`
+
+**Help.** `/aico:content help` (or `--help`) explains the command without running it.
+
+**What it does.** Produces one piece of content (article, post, newsletter, script or page copy) with sources, images and disclosures, checks it, and stops at the Ship Gate before it is published or handed to the client. Marketing company only.
+
+**When to use it.** One piece. For a multi-channel effort, use `/aico:campaign`.
+
+**How it runs.**
+1. **Product Manager** writes the content brief (audience, purpose, format, length, channel, voice, one call to action). With a draft as the argument, the brief states what to improve. **→ Brief Gate.**
+2. **Writer** writes the outline (or **Marketer** for SEO-led or conversion copy). **→ Plan Gate:** you approve the outline before any research or drafting.
+3. **Market Researcher** gathers the facts when the piece states facts, numbers or comparisons. A piece with no factual claims skips this, and the Ship summary says so.
+4. **Writer** drafts the piece (or **Marketer**). Brand, prompt and motion artists produce images or video only if the piece needs them. **Localizer** translates when you support more than one language.
+5. In parallel: **Editor**, **Legal** and **Accessibility Tester**, as in `/aico:campaign`. Legal covers the same list, including testimonials, advertising labels, price and green claims, comparison limits and the AI Act art. 50 statement per AI-generated asset.
+6. Fix rounds for blocking items, then **→ Ship Gate.** Any open check or lane blocks.
+
+**You get.** The piece and its asset list under `.company/work/<slug>/`. You publish or send it; the Lead does not.
+
+**Example.** `/aico:content a newsletter about our new opening hours`
+
+### `/aico:design`
+`/aico:design <design brief | project | file>`
+
+**Help.** `/aico:design help` (or `--help`) explains the command without running it.
+
+**What it does.** Takes a design brief through research, concepts, critique and usability testing to a design handoff package for the client or the build team. Design company only.
+
+**When to use it.** You run a design studio. The argument is a brief, `project` (the brief is this product) or a file such as a brainstorm, a report or an earlier handoff.
+
+**How it runs.**
+1. **Product Manager** writes the design brief, including which assets may be AI-generated, and proposes 2 to 4 Personas if there are none. **→ Brief Gate.**
+2. **Design Researcher** and **UX Researcher** run in parallel, as the brief needs.
+3. **UI/UX Designer** produces two or three concepts, each with flows, key screens and a token set. Artists produce only the assets the brief lists, each with its source, licence and AI-generated flag. **Frontend Engineer** builds a clickable prototype only if the brief asks. **→ Plan Gate:** you pick a concept.
+4. **Persona Tester**, **Hands-on Tester** (running prototype only) and **Accessibility Tester** test per Persona. The designer fixes every S1 finding and the S2 findings you pick. **Writer** supplies the UX copy. This company has no Localizer; a localisation need goes in the package as a note.
+5. With prototype code in the run, **Code Reviewer** and **Security** both review it before Ship, whatever your lane settings say.
+6. **Legal** states, for each AI-generated asset, the AI Act art. 50 duty that applies and how it is met (or the reason none applies), whether it is a deepfake (`deepfake: yes` or `no`), and the licence of every asset, including fonts and icons. With no AI-generated asset it states `none`.
+7. **UI/UX Designer** writes the package: files, specs, tokens and the asset licence record. For each asset it also carries the AI-generated flag, the tool, prompt and date, and an ownership note: AI output may have no copyright protection, and the generator's terms must allow commercial use. A package missing one of these is blocked. **→ Ship Gate.**
+
+**You get.** The handoff package and the Handoff trail under `.company/work/<slug>/`. The Ship summary shows the three lanes (legal, accessibility, security), the three checks (`ai-disclosure`, `asset-licences`, `handoff-package`) and the package path. Nothing goes to the client or the build team before you approve.
+
+**Example.** `/aico:design a mobile onboarding flow for a savings app`
+
+---
+
 ## Setup and help
 
 ### `/aico:setup`
-`/aico:setup [core] [go] [react] [tanstack] [auth]`
+`/aico:setup [core] [research] [go] [react] [tanstack] [auth] [type]`
 
-**What it does.** Installs the standalone skills the Roles rely on (no arguments → the `core` group), or adds optional stack skill groups. The `core` group includes `research` (`find-skills`, used for guidance only).
+**What it does.** Installs the standalone skills the Roles rely on (no arguments → the `core` group), or adds optional stack skill groups. The `core` group includes `research` (`find-skills`, used for guidance only). It also sets your project's [company type](concepts.md#company-types) and can search for skills that fit it.
 
-**When to use it.** Once after installing the plugin, and again whenever you start working in a stack whose skills you haven't added yet.
+**When to use it.** Once after installing the plugin, and again whenever you start working in a stack whose skills you haven't added yet. Use `type` to set the company type on its own.
 
-**How it runs.** It shows you the install commands first (they download third-party code) and asks once to approve; on approval it installs, then tells you to reload so the new skills appear.
+**How it runs.**
+1. It shows you the install commands first (they download third-party code) and asks once to approve; on approval it installs, then tells you to reload so the new skills appear. With only `type` as the argument, this step is skipped.
+2. **Company type** (with `type`, or with no arguments at all). If `.company/project.md` does not exist yet, the project profile form runs first. If the type is already set, setup says so and never switches it. Otherwise a form asks "What kind of company is this project?" with the four types: software company, research consultancy, marketing and content agency, and design studio. Each option shows what "ship" means for that type, taken from the plain `list` lines of the plugin's `company-type.mjs` script (one line per type: `<id>: <label>. Ship means: …`). Nothing is preselected and nothing is written until you pick one. Cancel or no answer leaves the project a software company. The choice is saved as `company_type:` in `.company/project.md`, and switching afterwards is not supported.
+3. **Skill search.** One question: Search or Skip. Search follows the [skill picks](concepts.md#skill-picks) steps for the area `company-type`, with the `skill search hints:` line of your type, and asks for at most 5 picks. Every pick is scanned before you see it, you approve the set, and a second form shows the exact install commands. Nothing installs without your answer.
 
-**You get.** The standalone and stack skills available to the Roles.
+**You get.** The standalone and stack skills available to the Roles, the company type in your project profile, and, if you approved any, recorded skill picks.
 
-**Example.** `/aico:setup go react`
+**Example.** `/aico:setup go react` · `/aico:setup type`
 
 ### `/aico:language`
 `/aico:language [<tag> [project] | clear [project]]`
@@ -419,7 +528,7 @@ Effective language: the project override, else your default, else English. An un
 ### `/aico:settings`
 `/aico:settings [help]`
 
-**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
 

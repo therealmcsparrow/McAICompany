@@ -127,6 +127,12 @@ _Avoid_: orchestrator (use Lead).
 
 **Role name** — the person name a Role shows in cooler chats, brainstorms, Gate summaries and Handoff bylines (e.g. Ava for the architect). Display only: `aico:<role>` IDs, file names and routing never change. Defaults live in `company/names.json`.
 
+**Company type** — the kind of company a project is: `software` (the default, and the only one before this version), `research`, `marketing` or `design`. It sets which Roles and Playbooks the project has and what "ship" means. One per project, set by `/aico:setup` as `company_type:` in `.company/project.md`; switching is not supported. Defined in `company/types/<id>.json`.
+
+**Personality** — a Role's style data: temperament, way of talking and pet topic (short text), plus Intelligence and Creativity (`low | medium | high`). Used only in `/aico:cooler` chats and `/aico:brainstorm` rounds, and passed as quoted data, never as an instruction. It never changes a verdict, a review, a Gate or any other dispatch. Defaults live in `company/personalities.json`; set it in Settings at user or project level.
+
+**Editor** — the Role (Edith) that checks every claim in a report or public text is cited `[S#]` or marked `(unverified)`. It blocks with a `[spec]` finding and never rewrites. Its passing Handoff satisfies the `claims-cited` check.
+
 **Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are four: Savvy, Cache Tax, Reflect and Blast Radius. They add no tokens to a prompt, apart from Reflect `model` mode and Blast Radius's refusal reason. Switched in `/aico:settings`.
 
 **Savvy** — the mod that shows the progress of the current run: wave, Step, Gates passed, Fix round and elapsed time.

@@ -6,9 +6,10 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import * as check from './check.mjs';
 import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
 import {
-  Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolveSettings, writeLayer, writeProfile
+  Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
 
 const MAX_BODY = 65536;
@@ -43,14 +44,68 @@ function hasCompany(cwd) {
   }
 }
 
-function state(ctx) {
+const ownObject = (o, k) => (isObject(o) && Object.hasOwn(o, k) && isObject(o[k]) ? o[k] : undefined);
+
+// The valid keys of one personality object, as plain strings. A value that fails its rule is left out.
+function validPersonality(source) {
+  const out = {};
+  if (!isObject(source)) return out;
+  for (const key of check.PERSONALITY_KEYS) {
+    if (Object.hasOwn(source, key) && typeof source[key] === 'string' && !check.personalityProblem(key, source[key])) out[key] = source[key];
+  }
+  return out;
+}
+
+function pluginPersonalities(ctx) {
+  try {
+    const root = ctx.pluginRoot ?? path.join(import.meta.dirname, '..');
+    const data = JSON.parse(fs.readFileSync(path.join(root, 'company', 'personalities.json'), 'utf8'));
+    return isObject(data) ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+// What the page needs for the Personality section (aico-settings v1.3). Stored values that fail their rule are
+// not in the layers; they come back as `ignored` entries (level, path, reason), never with the value.
+function personalitiesState(ctx, plugin, user, project) {
+  const resolved = resolvePersonalities(ctx);
+  const defaults = pluginPersonalities(ctx);
+  const roles = {};
+  for (const role of Object.keys(plugin.roles)) {
+    const own = (layer) => validPersonality(ownObject(ownObject(layer.roles, role), 'personality'));
+    const effective = {};
+    for (const key of check.PERSONALITY_KEYS) {
+      const hit = Object.hasOwn(resolved.roles, role) && Object.hasOwn(resolved.roles[role], key) ? resolved.roles[role][key] : undefined;
+      if (hit) effective[key] = { value: hit.value, source: hit.source };
+    }
+    roles[role] = { plugin: validPersonality(ownObject(defaults, role)), user: own(user), project: own(project), effective };
+  }
   return {
-    plugin: pluginDefaults(ctx.pluginRoot),
-    user: readLayer('user', ctx).layer,
-    project: readLayer('project', ctx).layer,
+    rule: {
+      text_re: check.PERSONALITY_TEXT_RE.source,
+      flags: check.PERSONALITY_TEXT_RE.flags,
+      max: check.PERSONALITY_MAX,
+      levels: [...check.PERSONALITY_LEVELS],
+      phrases: check.PERSONALITY_PHRASES
+    },
+    roles,
+    ignored: resolved.ignored.map(({ level, path: at, reason }) => ({ level, path: at, reason }))
+  };
+}
+
+function state(ctx) {
+  const plugin = pluginDefaults(ctx.pluginRoot);
+  const user = readLayer('user', ctx).layer;
+  const project = readLayer('project', ctx).layer;
+  return {
+    plugin,
+    user,
+    project,
     resolved: resolveSettings(ctx),
     language: storedLanguage(ctx),
-    hasProject: hasCompany(ctx.cwd)
+    hasProject: hasCompany(ctx.cwd),
+    personalities: personalitiesState(ctx, plugin, user, project)
   };
 }
 

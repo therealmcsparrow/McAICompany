@@ -44,7 +44,7 @@ test('AC4 every claim has a dated source, unverified claims cannot back a verdic
 });
 
 test('AC5 pick form offers Start / Brainstorm / Roadmap / Park; only the report is committed, never pushed', () => {
-  has(research, 'Start `/aico:feature` / Brainstorm / Roadmap / Park', 'Nothing starts without the pick',
+  has(research, 'Start the main work / Brainstorm / Roadmap / Park', 'Nothing starts without the pick',
     'Commit **only the report**', 'Never `git add -A`', 'Never push');
   has(research, "git add '<report path>' && git commit -m 'docs: research <Short Topic>'", 'RR `## Short Topic` rule', 'in single quotes');
   assert.ok(!research.includes('git commit -m "'), 'the commit summary is never double-quoted');
@@ -179,4 +179,31 @@ test('AC11 size limits: agents <= 50 lines, skills <= 125 lines', () => {
 
 test('research Playbook never edits product code and writes no lessons', () => {
   has(research, 'Write nothing to `.company/lessons.md`', 'Nothing is built, no Gates, no branch, no push');
+});
+
+test('type gating: research picks its Roles through the company type and checks each before dispatch', () => {
+  has(research, 'company-type.mjs" pick --max 2 market-researcher tech-researcher ux-researcher',
+    'pick design-researcher', 'check-role <role>', 'check-role product-manager', 'first Playbook of the `work:` type line');
+  assert.ok(!/aico:feature/.test(research), 'research names no Playbook outside the type');
+  assert.ok(!/pick --max 2[^`]*design-researcher/.test(research), 'design-researcher is not a default pick');
+});
+
+test('type gating: default research picks per type (design-researcher never default)', () => {
+  const want = { software: ['market-researcher', 'tech-researcher'], marketing: ['market-researcher'], design: ['ux-researcher'], research: ['market-researcher', 'tech-researcher'] };
+  for (const [type, expected] of Object.entries(want)) {
+    const roles = JSON.parse(read(`company/types/${type}.json`)).roles;
+    const picked = ['market-researcher', 'tech-researcher', 'ux-researcher'].filter((r) => roles.includes(r)).slice(0, 2);
+    assert.deepEqual(picked, expected, type);
+    assert.ok(!picked.includes('design-researcher'), type);
+  }
+  has(research, 'The design-researcher is never a default pick', 'skipped when already chosen');
+});
+
+test('type gating: feedback and client reach missing Roles through pick', () => {
+  const feedback = skill('feedback');
+  const client = skill('client');
+  has(feedback, 'pick support account-manager product-manager', 'check-role', '`work:` type line');
+  has(client, 'pick architect product-manager', 'pick devops', 'check-role', '`work:` type line');
+  for (const [n, t] of [['feedback', feedback], ['client', client]])
+    assert.ok(!/aico:(support|architect|devops|fix|feature|incident)\b/.test(t), `${n} names no Role or Playbook outside the types`);
 });

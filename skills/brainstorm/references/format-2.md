@@ -13,7 +13,7 @@ From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <comman
 | `decide '<file>' < ruling` | a CEO ruling that answers no asked question, verbatim, as a Decision with link `none`; no question changes status |
 | `ask '<file>' < json` | queues a question for the next round; JSON `{ "text": "<one line>", "options": ["<a>", "<b>"], "default": "<a>", "tag": "blocking\|nice-to-have", "ceo": true }` (`ceo` optional) |
 | `queue '<file>'` | `{ ask: [3 questions], next_up, answered: [{ id, text }] }` |
-| `stage '<file>' <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | writes the round input files, prints `{ run, files: { "<role>": "<absolute path>" } }`; never changes the brainstorm file |
+| `stage '<file>' <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | on a reopened file pass `--roles` with only the Roles that `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles` lists; writes the round input files, prints `{ run, files: { "<role>": "<absolute path>" } }`; never changes the brainstorm file |
 | `clean '<file>'` | removes this run's input files; run at Close |
 | `merge '<file>' Q-<keep> Q-<drop>` | merges a restatement into `Q-keep`, open or answered |
 | `prompt '<file>' <role> [--pass full\|crossfire <round>]` | preview only of the input file `stage` would write; writes nothing |

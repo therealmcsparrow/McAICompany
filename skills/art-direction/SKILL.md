@@ -25,7 +25,7 @@ Put files in `assets/<type>/` in the product repo, or wherever the Handoff names
 
 ## 4. Licensing (blocking if unclear)
 - Fonts, stock material and third-party art: record the license per item. Anything not cleared for commercial use → `## Blocking`.
-- AI-generated images: record model, prompt and date. Flag for `aico:legal` when used in a trademark/logo, since such images may not be protectable.
+- Any AI-generated asset: record model, prompt and date, and flag it for `aico:legal`: AI output may not be protected by copyright, which matters most for a trademark or logo.
 - Never imitate a living artist's style by name, or another company's brand.
 
 ## 5. Accessibility

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { NAME_RE } from './check.mjs';
+import { NAME_RE, PERSONALITY_KEYS, personalityProblem } from './check.mjs';
 import { headerEnd, resolve as resolveLanguage, validate as validateLanguage } from './language.mjs';
 
 export const MODELS = ['opus', 'sonnet', 'haiku', 'fable', 'inherit'];
@@ -228,6 +228,22 @@ function checkFields(obj, rules, at, reasons, nested = []) {
 
 const notEmpty = (o) => Object.keys(o).length > 0;
 
+// A personality key is shown in a refusal only when it is plainly safe to print.
+const personalityLabel = (k) => (/^[a-z_]{1,20}$/.test(k) ? k : '?');
+
+// Path-first reasons that never echo a value. Only the five allowed keys are ever copied into the result.
+function sanitizePersonality(value, at, reasons) {
+  const clean = {};
+  if (!isObject(value)) { reasons.push(`${at}: must be an object`); return clean; }
+  for (const key of Object.keys(value)) {
+    if (!PERSONALITY_KEYS.includes(key)) { reasons.push(`${at}.${personalityLabel(key)}: unknown key`); continue; }
+    const problem = personalityProblem(key, value[key]);
+    if (problem) reasons.push(`${at}.${key}: ${problem}`);
+    else clean[key] = value[key];
+  }
+  return clean;
+}
+
 // Walks a layer against the schema. Returns { clean, reasons }: clean keeps only valid parts.
 function sanitize(layer, roleNames) {
   const reasons = [];
@@ -243,7 +259,11 @@ function sanitize(layer, roleNames) {
       for (const role of Object.keys(value)) {
         if (!roleNames.has(role)) { reasons.push(`roles.${label(role)}: unknown Role`); continue; }
         if (!isObject(value[role])) { reasons.push(`roles.${role}: must be an object`); continue; }
-        const fields = checkFields(value[role], ROLE_RULES, `roles.${role}`, reasons);
+        const fields = checkFields(value[role], ROLE_RULES, `roles.${role}`, reasons, ['personality']);
+        if (Object.hasOwn(value[role], 'personality')) {
+          const personality = sanitizePersonality(value[role].personality, `roles.${role}.personality`, reasons);
+          if (notEmpty(personality)) fields.personality = personality;
+        }
         if (notEmpty(fields)) roles[role] = fields;
       }
       if (notEmpty(roles)) clean.roles = roles;
@@ -308,19 +328,19 @@ function loadLayer(level, ctx, roleNames) {
     bytes = readBounded(file);
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
-    return { raw: refusedRaw(file, error), layer: empty, warnings: [error.message] };
+    return { raw: refusedRaw(file, error), layer: empty, warnings: [error.message], reasons: [] };
   }
-  if (bytes === null) return { raw: '', layer: empty, warnings: [] };
+  if (bytes === null) return { raw: '', layer: empty, warnings: [], reasons: [] };
   let data;
   try {
     data = parseConfig(file, bytes);
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
-    return { raw: bytes, layer: empty, warnings: [error.message] };
+    return { raw: bytes, layer: empty, warnings: [error.message], reasons: [] };
   }
-  if (!Object.hasOwn(data, KEY)) return { raw: bytes, layer: empty, warnings: [] };
+  if (!Object.hasOwn(data, KEY)) return { raw: bytes, layer: empty, warnings: [], reasons: [] };
   const { clean, reasons } = sanitize(data[KEY], roleNames);
-  return { raw: bytes, layer: clean, warnings: reasons.map((r) => `${file}: ignoring ${r}`) };
+  return { raw: bytes, layer: clean, warnings: reasons.map((r) => `${file}: ignoring ${r}`), reasons };
 }
 
 const roleNamesOf = (pluginRoot) => new Set(Object.keys(pluginDefaults(pluginRoot).roles));
@@ -574,6 +594,74 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const language = resolveLanguage({ home, cwd });
   const profile = { ...readProfile({ cwd }), options: templateOptions(pluginRoot) };
   return { revision, roles, pipeline, gates, brainstorm, mods, skillspector, unlocked: [...unlocked], ignored, warnings, language, profile };
+}
+
+const own = (o, k) => (o !== null && typeof o === 'object' && Object.hasOwn(o, k) ? o[k] : undefined);
+const PERSONALITY_REASON_RE = /^(roles\.[a-z0-9-]+\.personality(?:\.[a-z_?]{1,20})?): (.+)$/;
+const DEFAULTS_AT = 'company/personalities.json';
+const safeName = (k) => (/^[A-Za-z0-9_-]{1,40}$/.test(k) ? k : '?');
+
+// The plugin's default personalities as { role: { key: value } } for valid entries only. Never throws.
+function personalityDefaults(pluginRoot, roleNames, warnings) {
+  const out = Object.create(null);
+  let data;
+  try {
+    const bytes = readBounded(path.join(pluginRoot, 'company', 'personalities.json'));
+    if (bytes === null) return out;
+    data = JSON.parse(bytes.toString('utf8'));
+  } catch (error) {
+    warnings.push(`${DEFAULTS_AT}: ${error instanceof Refusal ? 'cannot be read' : 'is not valid JSON'}`);
+    return out;
+  }
+  if (!isObject(data)) { warnings.push(`${DEFAULTS_AT}: must be an object of role to personality`); return out; }
+  for (const role of Object.keys(data)) {
+    if (!roleNames.has(role)) { warnings.push(`${DEFAULTS_AT}: ${safeName(role)} is not a Role`); continue; }
+    if (!isObject(data[role])) { warnings.push(`${DEFAULTS_AT}: ${role}: must be an object`); continue; }
+    const entry = Object.create(null);
+    for (const key of Object.keys(data[role])) {
+      if (!PERSONALITY_KEYS.includes(key)) { warnings.push(`${DEFAULTS_AT}: ${role}.${safeName(key)}: unknown key`); continue; }
+      const problem = personalityProblem(key, data[role][key]);
+      if (problem) warnings.push(`${DEFAULTS_AT}: ${role}.${key}: ignored, ${problem}`);
+      else entry[key] = data[role][key];
+    }
+    out[role] = entry;
+  }
+  return out;
+}
+
+// Resolved personality per Role and key (aico-settings v1.3): project, else user, else plugin default.
+// Only scripts/personality.mjs and scripts/settings-server.mjs may import this. `ignored` lists the stored
+// values that failed their rule, with their level, for the settings page; it never holds a value.
+export function resolvePersonalities({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
+  const roleNames = roleNamesOf(pluginRoot);
+  const layers = [['user', loadLayer('user', { home, cwd }, roleNames)], ['project', loadLayer('project', { home, cwd }, roleNames)]];
+  const warnings = [];
+  const ignored = [];
+  const defaults = personalityDefaults(pluginRoot, roleNames, warnings);
+  for (const [level, loaded] of layers) {
+    for (const reason of loaded.reasons) {
+      const m = PERSONALITY_REASON_RE.exec(reason);
+      if (!m) continue;
+      const line = `${m[1]}: ignored, ${m[2]}`;
+      if (!warnings.includes(line)) warnings.push(line);
+      ignored.push({ level, path: m[1], reason: m[2] });
+    }
+  }
+  const [user, project] = [layers[0][1].layer, layers[1][1].layer];
+  const roles = Object.create(null);
+  for (const role of roleNames) {
+    const entry = Object.create(null);
+    for (const key of PERSONALITY_KEYS) {
+      const [value, source] = pick(
+        own(own(own(project.roles, role), 'personality'), key),
+        own(own(own(user.roles, role), 'personality'), key),
+        own(defaults[role], key)
+      );
+      if (value !== undefined) entry[key] = { value, source };
+    }
+    roles[role] = entry;
+  }
+  return { roles, warnings, ignored };
 }
 
 // Checks a user and a project layer together, as they would be stored. Returns all reasons.
