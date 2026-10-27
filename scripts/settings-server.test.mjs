@@ -398,6 +398,20 @@ test('page has a Reprompt table with a Question rounds row, 0 to 3, hint tied to
   }
 });
 
+test('Reprompt hint equals the Contract text byte for byte and sits between the context-cap hint and Brainstorm', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = /the hint "(How often \/aico:reprompt[^"]*)"/.exec(contract);
+  assert.ok(m, 'Contract hint not found');
+  const hintCall = `el('p', { class: 'hint', id: 'reprompt-hint' }, '${m[1]}')`;
+  assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
+  const cap = html.indexOf('The context cap is a whole number from 60000 to 1000000.');
+  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  const hint = html.indexOf(hintCall);
+  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  assert.ok(cap > 0 && cap < h2 && h2 < hint && hint < brainstorm, `order ${cap} ${h2} ${hint} ${brainstorm}`);
+});
+
 test('page has a Review format row built like the Dispatch row, with the Contract sentence', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   for (const needle of ["'Review format'", "['pipeline', 'review_format']", "['plain', 'pilot']",

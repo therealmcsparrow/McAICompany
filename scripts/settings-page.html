@@ -1124,6 +1124,13 @@ function renderPipeline(panel) {
   panel.append(wrap);
   panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
   panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
+  panel.append(el('h2', {}, 'Reprompt'));
+  const rp = table(COLUMNS);
+  const rpDefaults = state.plugin.reprompt;
+  pipelineRow(rp.tbody, 'Question rounds', ['reprompt', 'question_rounds'], rpDefaults.question_rounds,
+    (l) => selectFor([0, 1, 2, 3], l), Number, String, { describedBy: 'reprompt-hint' });
+  panel.append(rp.wrap);
+  panel.append(el('p', { class: 'hint', id: 'reprompt-hint' }, 'How often /aico:reprompt may come back with questions before it writes the prompt on stated assumptions. 0: it never asks.'));
   panel.append(el('h2', {}, 'Brainstorm'));
   const bs = table(COLUMNS);
   const bsDefaults = state.plugin.brainstorm;
@@ -1133,13 +1140,6 @@ function renderPipeline(panel) {
     (l) => selectFor(['crossfire', 'full_pass'], l), String, String);
   panel.append(bs.wrap);
   panel.append(el('p', { class: 'hint' }, 'Debate rounds: crossfire is one pair answering each other; full_pass adds a pass where every Role answers the others, then the crossfire.'));
-  panel.append(el('h2', {}, 'Reprompt'));
-  const rp = table(COLUMNS);
-  const rpDefaults = state.plugin.reprompt;
-  pipelineRow(rp.tbody, 'Question rounds', ['reprompt', 'question_rounds'], rpDefaults.question_rounds,
-    (l) => selectFor([0, 1, 2, 3], l), Number, String, { describedBy: 'reprompt-hint' });
-  panel.append(rp.wrap);
-  panel.append(el('p', { class: 'hint', id: 'reprompt-hint' }, 'Question rounds is a whole number from 0 to 3: how many times /aico:reprompt may ask you questions before it writes the prompt. 0 means no questions. A project value wins over your user value.'));
   panel.append(el('h2', {}, 'Optional lanes'));
   panel.append(el('p', { class: 'hint' }, 'Turning off Security or Compliance needs your security unlock. A project can always turn a lane back on.'));
   const lanes = table(COLUMNS);
