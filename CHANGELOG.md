@@ -2,6 +2,19 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [Unreleased]
+
+Runs get a scorecard, and releases get a safe rollback ref.
+
+### Added
+- **Run scorecard.** After you approve the Ship Gate, one line shows the run's time to Ship Gate, your wait at Gates, spend tokens per shipped AC, Fix rounds, high blockers and Gate rejects, each beside the median of the last 5 shipped runs. Brainstorm, replay, baseline and untimed runs are left out and counted. It only reports and never blocks a Step or Gate. Times are UTC and counts only; the ledger stays local. Contracts `token-ledger` v1.1 and `run-state` v1.3 (additive; v1 ledgers read the same), ADR 0028.
+- **`stable` branch.** `npm run stable -- <x.y.z>` moves `stable` to a merged, annotated release tag. Getting started shows how to follow `stable` or install one earlier tag. ADR 0029.
+- **CI plugin check.** CI runs `claude plugin validate --strict` and fails on an error. `claude plugin eval` is report-only and is skipped while the repository has no eval suite.
+
+### Changed
+- **Release.** `npm run release` also runs `claude plugin validate --strict` and makes no commit or tag if it fails.
+- **`ship` record.** The Lead writes it after the Ship Gate is approved, not before.
+
 ## [0.14.1] - 2026-10-27
 
 Triage lines are harder to fake.
