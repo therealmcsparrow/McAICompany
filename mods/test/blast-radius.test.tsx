@@ -47,6 +47,8 @@ async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o
   on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }))
   on('tool.check', () => ({ decision: (o.core ?? 'allow') as 'allow' }))
   on('agent.spawn', () => ({ model: 'm', agentId: 'r1' }))
+  // An agent the session lists but the gate did not see spawn: the write gate asks the list once.
+  on('agent.list', () => ({ value: [{ id: 'a1b2', type: 'general-purpose', description: 'd', status: 'running' }] }) as never)
   on('process.run', ((_: unknown, e: Run) => {
     calls.push(e.argv.slice(1))
     if (o.noProcess) return { deny: 'no process here' }
