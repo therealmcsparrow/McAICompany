@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.2). Also keeps the direct-route triage record:
+// Records a run's wave, Gates and end and prints the run view (run-state v1.3). Also keeps the direct-route triage record:
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
+// `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
+// Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
 // symlink, and read with the handoff-lint parser.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
@@ -35,7 +37,7 @@ const NONCE_RE = /^[0-9a-f]{32}$/;
 const TRIAGE_LINE_RE = / \(triage: XS, risk low, (feature|bug|refactor|launch|audit|incident|upkeep|content|research), route direct\)$/;
 const TIER_RANK = { low: 1, medium: 2, high: 3 };
 // Allowed keys per event, beyond `v`, `at` and `ev`.
-const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], pick: ['pick', 'asked'], end: ['outcome'] };
+const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], ask: ['gate'], pick: ['pick', 'asked'], end: ['outcome'] };
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
@@ -80,6 +82,7 @@ function validRecord(o) {
   if (keys.length !== allowed.size || !keys.every(k => allowed.has(k))) return false;
   if (o.ev === 'wave') return Number.isInteger(o.wave) && o.wave >= 1 && o.wave <= 99;
   if (o.ev === 'gate') return typeof o.gate === 'string' && GATES.has(o.gate) && typeof o.result === 'string' && RESULTS.has(o.result);
+  if (o.ev === 'ask') return typeof o.gate === 'string' && GATES.has(o.gate);
   if (o.ev === 'pick') return typeof o.pick === 'string' && PICKS.has(o.pick) && Number.isInteger(o.asked) && o.asked >= 0 && o.asked <= 3;
   if (o.ev === 'end') return typeof o.outcome === 'string' && OUTCOMES.has(o.outcome);
   return true;
@@ -183,9 +186,17 @@ function load(root, slug, now) {
   if (seg.length > 0) {
     activity = Math.max(Date.parse(seg[seg.length - 1].at), newestStep);
     view.started = seg[0].at;
+    // Latest ask per Gate since that Gate's previous entry (or the segment start).
+    const asked = new Map();
     for (const r of seg) {
       if (r.ev === 'wave') view.wave = r.wave;
-      else if (r.ev === 'gate') view.gates.push({ gate: r.gate, result: r.result, at: r.at });
+      else if (r.ev === 'ask') asked.set(r.gate, Date.parse(r.at));
+      else if (r.ev === 'gate') {
+        const from = asked.get(r.gate);
+        asked.delete(r.gate);
+        const wait = from === undefined ? null : Math.floor((Date.parse(r.at) - from) / 1000);
+        view.gates.push({ gate: r.gate, result: r.result, at: r.at, wait: wait === null || wait < 0 ? null : wait });
+      }
       else if (r.ev === 'pick') view.picks.push({ pick: r.pick, asked: r.asked, at: r.at });
       else if (r.ev === 'end') { view.ended = r.at; view.outcome = r.outcome; }
     }
@@ -413,7 +424,7 @@ export function triage(root, args, { now = Date.now() } = {}) {
 }
 
 function usage() {
-  return 'usage: start <slug> | wave <slug> <n> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce>';
+  return 'usage: start <slug> | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce>';
 }
 
 // Returns { out, code }.
@@ -431,6 +442,11 @@ export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
         if (!WAVE_RE.test(rest[1])) refuse('wave must be a number from 1 to 99');
         append(root, rest[0], { ev: 'wave', wave: Number(rest[1]) }, opts);
         return { out: `ok: wave ${rest[1]}`, code: 0 };
+      case 'ask':
+        if (rest.length !== 2) refuse(usage());
+        if (!GATES.has(rest[1])) refuse('gate must be brief, plan or ship');
+        append(root, rest[0], { ev: 'ask', gate: rest[1] }, opts);
+        return { out: `ok: ask ${rest[1]}`, code: 0 };
       case 'gate':
         if (rest.length !== 3) refuse(usage());
         if (!GATES.has(rest[1])) refuse('gate must be brief, plan or ship');
