@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "id": "research",
+  "label": "Research consultancy",
+  "roles": [
+    "product-manager",
+    "account-manager",
+    "market-researcher",
+    "tech-researcher",
+    "ux-researcher",
+    "writer",
+    "legal",
+    "localizer",
+    "editor",
+    "skill-researcher"
+  ],
+  "playbooks": [
+    "research",
+    "client",
+    "report",
+    "feedback",
+    "brainstorm",
+    "cooler"
+  ],
+  "ship": {
+    "kind": "deliver-report",
+    "meaning": "The final report goes to the client or is published, with every claim cited [S#] or marked (unverified).",
+    "lanes": [
+      "legal"
+    ],
+    "checks": [
+      "claims-cited"
+    ]
+  },
+  "skill_search": {
+    "hints": [
+      "research report writing",
+      "citation and source checking"
+    ]
+  }
+}
