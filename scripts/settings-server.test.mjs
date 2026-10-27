@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
 import { pluginDefaults } from './settings.mjs';
+import { PERSONALITY_TEXT_RE } from './check.mjs';
 import { startServer } from './settings-server.mjs';
 
 const AGENTS = {
@@ -678,7 +679,7 @@ function pageState(overrides = {}) {
       ignored: [], warnings: [], language: { tag: 'en', source: 'default' }, profile: { hasProject: true, fields: {}, options: {} }
     },
     personalities: {
-      rule: { text_re: "^(?=.{1,80}$)[\\p{L}\\p{M}\\p{N},.'!?-]+(?: [\\p{L}\\p{M}\\p{N},.'!?-]+)*$", flags: 'u', max: 80, levels: ['low', 'medium', 'high'], phrases: PHRASES },
+      rule: { text_re: PERSONALITY_TEXT_RE.source, flags: PERSONALITY_TEXT_RE.flags, max: 80, levels: ['low', 'medium', 'high'], phrases: PHRASES },
       roles: Object.fromEntries(roles.map((r) => [r, { plugin: { temperament: 'calm', talk: 'dry', topic: 'tea', intelligence: 'medium', creativity: 'low' }, user: {}, project: {}, effective: {} }])),
       ignored: []
     },
@@ -763,6 +764,65 @@ test('the error names the first bad character in words, and the value is trimmed
   await topic.fire('change');
   assert.equal(topic.getAttribute('aria-invalid'), null);
   assert.equal(page.ids.count.textContent, '1 unsaved change');
+});
+
+test('a hyphen is allowed inside a word, and a word that starts with punctuation gets the word-start text', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const topic = field(page, 'qa', 'project', 'topic');
+  const errOf = async (text) => {
+    await type(topic, text);
+    await topic.fire('change');
+    return byId(page, 'pf-qa-project-topic-err').textContent;
+  };
+  const start = (c) => `Error: Pet topic has a word that starts with the character ${c}. Each word must start with a letter or digit.`;
+  assert.equal(await errOf('-calm'), start('-'));
+  assert.equal(await errOf('Hi ,there'), start(','));
+  assert.equal(await errOf('calm -ish'), start('-'));
+  assert.ok(!(await errOf('calm -ish')).includes("can't contain"));
+  assert.equal(await errOf('x-ray, well-known'), '');
+  assert.equal(topic.getAttribute('aria-invalid'), null);
+});
+
+test('an invisible or lookalike character is named by kind with its code point', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const topic = field(page, 'qa', 'project', 'topic');
+  const errOf = async (text) => {
+    await type(topic, text);
+    await topic.fire('change');
+    return byId(page, 'pf-qa-project-topic-err').textContent;
+  };
+  assert.ok((await errOf('tea️')).includes("can't contain an invisible character (U+FE0F)."), 'variation selector');
+  assert.ok((await errOf('a​b')).includes('an invisible character (U+200B)'), 'zero width space');
+  assert.ok((await errOf('a b')).includes('an invisible character (U+00A0)'), 'no-break space');
+  assert.ok((await errOf('a˸b')).includes('a lookalike of a punctuation mark (U+02F8)'), 'modifier colon');
+});
+
+test('the cap and name inputs never cut input off; an over-long or out-of-range entry gets a field-linked error', async () => {
+  const html = pageHtml();
+  assert.ok(!/maxLength: (7|30)\b/.test(html));
+  const page = loadPage(pageState());
+  await settle();
+  const cap = page.allRoles((n) => n.tagName === 'INPUT' && n.id === 'rf-qa-user-cap')[0];
+  const name = page.allRoles((n) => n.tagName === 'INPUT' && n.id === 'rf-qa-user-name')[0];
+  assert.equal(cap.maxLength, undefined);
+  assert.equal(name.maxLength, undefined);
+  await type(cap, '10000000');
+  assert.equal(cap.value, '10000000', 'the typed value is kept whole');
+  assert.equal(cap.getAttribute('aria-invalid'), 'true');
+  const capErr = page.allRoles((n) => n.id === cap.getAttribute('aria-describedby'))[0];
+  assert.equal(capErr.textContent, 'Error: Cap is out of range. Use a whole number from 60000 to 1000000.');
+  await type(cap, 'abc');
+  assert.equal(capErr.textContent, 'Error: Cap must be a whole number from 60000 to 1000000.');
+  await type(cap, '120000');
+  assert.equal(cap.getAttribute('aria-invalid'), null);
+  assert.equal(cap.getAttribute('aria-describedby'), null);
+  await type(name, 'n'.repeat(35));
+  assert.equal(name.value.length, 35);
+  assert.equal(page.allRoles((n) => n.id === name.getAttribute('aria-describedby'))[0].textContent, 'Error: Name is 35 characters. The limit is 30. Remove 5.');
+  await type(name, 'Quinn');
+  assert.equal(name.getAttribute('aria-invalid'), null);
 });
 
 test('a Save with a bad value sends nothing, marks the field and puts the error summary in the status', async () => {

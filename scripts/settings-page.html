@@ -541,9 +541,35 @@ function roleGroups() {
   if (other.length) groups.push(['Other', other]);
   return groups;
 }
-// A whole-number text field; the server holds the 60000-1000000 range and refuses anything else.
+// A whole-number text field; the server holds the 60000-1000000 range. Nothing is cut off: an over-long or out-of-range entry gets an error text.
 function capInput(label) {
-  return el('input', { type: 'text', inputMode: 'numeric', placeholder: '—', maxLength: 7, 'aria-label': label });
+  return el('input', { type: 'text', inputMode: 'numeric', placeholder: '—', 'aria-label': label });
+}
+const NAME_LIMIT = 30;
+const nameProblem = (label, raw) => {
+  const n = [...raw.trim()].length;
+  return n > NAME_LIMIT ? `Error: ${label} is ${n} characters. The limit is ${NAME_LIMIT}. Remove ${n - NAME_LIMIT}.` : '';
+};
+const capProblem = (label, raw) => {
+  const t = raw.trim();
+  if (t === '') return '';
+  const n = Number(t);
+  if (!Number.isInteger(n)) return `Error: ${label} must be a whole number from 60000 to 1000000.`;
+  return n < 60000 || n > 1000000 ? `Error: ${label} is out of range. Use a whole number from 60000 to 1000000.` : '';
+};
+let checkSeq = 0;
+// Shows a field-linked error under a bound control after every refresh. The caller places control.errEl next to it.
+function withProblem(control, label, problem) {
+  const err = el('p', { class: 'perr', id: `rc-${++checkSeq}-err`, hidden: true });
+  control.errEl = err;
+  syncers.push(() => {
+    const message = problem(label, control.value);
+    err.textContent = message;
+    err.hidden = message === '';
+    if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', err.id); }
+    else { control.removeAttribute('aria-invalid'); control.removeAttribute('aria-describedby'); }
+  });
+  return control;
 }
 // "Ava (architect)", or just the slug when the Role has no other name.
 function roleLabel(role) {
@@ -554,13 +580,13 @@ function roleLabel(role) {
 function roleField(level, role, field, word, control) {
   const id = `rf-${role}-${level}-${field}`;
   control.id = id;
-  return el('div', { class: 'cf' }, el('label', { for: id }, word, el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), control);
+  return el('div', { class: 'cf' }, el('label', { for: id }, word, el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), control, control.errEl);
 }
 function roleCell(level, role) {
-  const name = bindLayer(el('input', { type: 'text', placeholder: '—', maxLength: 30 }), level, ['roles', role, 'name']);
+  const name = withProblem(bindLayer(el('input', { type: 'text', placeholder: '—' }), level, ['roles', role, 'name']), 'Name', nameProblem);
   const model = bindLayer(selectFor(MODELS, null), level, ['roles', role, 'model']);
   const effort = bindLayer(selectFor(EFFORTS, null), level, ['roles', role, 'effort']);
-  const cap = bindLayer(el('input', { type: 'text', inputMode: 'numeric', placeholder: '—', maxLength: 7 }), level, ['roles', role, 'context_cap'], Number);
+  const cap = withProblem(bindLayer(el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), level, ['roles', role, 'context_cap'], Number), 'Cap', capProblem);
   return el('td', {}, el('div', { class: 'cell' },
     roleField(level, role, 'name', 'Name', name), roleField(level, role, 'model', 'Model', model),
     roleField(level, role, 'effort', 'Effort', effort), roleField(level, role, 'cap', 'Cap', cap)));
@@ -633,7 +659,7 @@ const PROJECT_HINT = 'Project values are stored in .company/ and may come from a
 const NOT_SET_HINT = 'Not set at this level. The level below decides.';
 const IGNORED_TEXT_HINT = 'Ignored: this stored value breaks the rule, so the level below is used. It stays in the file until you save a change at this level, and that save removes it. To remove it now, press the reset button below or type a new value, and save.';
 const IGNORED_LEVEL_HINT = 'Ignored: this stored value is not Low, Medium or High, so the level below is used. It stays in the file until you save a change at this level, and that save removes it. To remove it now, choose Not set and save.';
-const CHARSET_COPY = "Use letters, digits, single spaces and , . ' - ! ?";
+const CHARSET_COPY = "Use letters, digits, single spaces and , . ' - ! ? Each word must start with a letter or digit.";
 const capital = (word) => word.charAt(0).toUpperCase() + word.slice(1);
 const levelWord = (level) => (level === 'user' ? 'User' : 'Project');
 
@@ -670,13 +696,15 @@ function phraseTable(r) {
   }
   return out;
 }
+const codePoint = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 function describeChar(ch) {
   if (/[\n\r\u2028\u2029]/.test(ch)) return 'a line break';
   if (ch === '\t') return 'a tab';
   if (ch === '"') return 'a double quote';
   if (ch === ':') return 'a colon';
   if (ch === '`' || /[\u2018-\u201F\u00AB\u00BB]/.test(ch)) return 'a quote mark';
-  if (/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(ch)) return 'an invisible character';
+  if (/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u.test(ch)) return `an invisible character (${codePoint(ch)})`;
+  if (/[ʰ-˿]/.test(ch)) return `a lookalike of a punctuation mark (${codePoint(ch)})`;
   return `the character ${ch}`;
 }
 // The error text for a typed value, built from the page's own copy. '' means fine (empty is not set).
@@ -695,7 +723,12 @@ function fieldProblem(key, raw) {
   if (n > rule.max) return `Error: ${label} is ${n} characters. The limit is ${rule.max}. Remove ${n - rule.max}.`;
   if (rule.re.test(v)) return '';
   if (/ {2}/.test(v)) return `Error: ${label} has two spaces in a row. Use one.`;
-  for (const ch of v) if (ch !== ' ' && !rule.re.test(ch)) return `Error: ${label} can't contain ${describeChar(ch)}. ${CHARSET_COPY}`;
+  // Each character is tried after a letter, so a hyphen or a mark is judged as part of a word, not as a word start.
+  for (const ch of v) if (ch !== ' ' && !rule.re.test(`a${ch}`)) return `Error: ${label} can't contain ${describeChar(ch)}. ${CHARSET_COPY}`;
+  for (const word of v.split(' ')) {
+    const first = [...word][0];
+    if (!rule.re.test(first)) return `Error: ${label} has a word that starts with ${describeChar(first)}. Each word must start with a letter or digit.`;
+  }
   return `Error: ${label} must be one line. ${CHARSET_COPY}`;
 }
 const draftAt = (rec) => getIn(draft[rec.level], ['roles', rec.role, 'personality', rec.key]);
@@ -1067,7 +1100,9 @@ function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, forma
   const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
   const cells = ['user', 'project'].map((level) => {
     const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock, opts.dialog) : null;
-    return el('td', {}, bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard));
+    const control = bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard);
+    if (opts.problem) withProblem(control, label, opts.problem);
+    return el('td', {}, control, control.errEl);
   });
   const head = el('th', { scope: 'row', class: opts.lock ? 'lock' : '' }, label);
   tbody.append(el('tr', {}, head, el('td', { class: 'plugin' }, format(pluginValue)), cells, effect));
@@ -1084,7 +1119,7 @@ function renderPipeline(panel) {
   pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
     (l) => selectFor(['plain', 'pilot'], l), String, String);
   pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
-    (l) => capInput(l), Number, String);
+    (l) => capInput(l), Number, String, { problem: capProblem });
   panel.append(wrap);
   panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
   panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
