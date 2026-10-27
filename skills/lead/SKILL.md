@@ -52,6 +52,7 @@ Unsure of the size or risk, or whether a request even needs a full Playbook? Run
 | Find and vet UI/UX design skills | `aico:design-researcher` |
 | Find and vet third-party skills for the stack, product type, company type or design; the Lead scans each pick (online research; picks per `references/skill-picks.md`) | `aico:skill-researcher` |
 | Privacy, terms, licenses, GDPR | `aico:legal` |
+| Check that every claim in a report or public text is cited; blocks, never rewrites | `aico:editor` |
 
 Anything that changes code ends with code-reviewer ∥ qa ∥ security (parallel, as in `aico:feature`) before the Ship Gate. Content-only work ends with legal if it makes claims, collects data or states terms.
 
