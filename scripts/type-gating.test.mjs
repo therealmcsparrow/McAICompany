@@ -47,7 +47,7 @@ test('pipeline: type check first, Role check before dispatch, Ship Gate text unc
   const one = t.indexOf('1. **Task slug**');
   assert.ok(setup < zero && zero < one);
   assert.match(t.slice(zero, one), /company-type\.mjs" resolve/);
-  assert.match(t.slice(zero, one), /Exit not 0, no output or output that is not JSON/);
+  assert.match(t.slice(zero, one), /Exit not 0, no output or a first line that starts with neither `ok: ` nor `company type: `/);
   assert.match(t, /company-type\.mjs" check-role <role>/);
   assert.ok(t.includes(SHIP_GATE));
   const ship = t.split('\n').find((l) => l.startsWith('- **Ship Gate, company types other than `software`**'));
@@ -55,12 +55,16 @@ test('pipeline: type check first, Role check before dispatch, Ship Gate text unc
   assert.match(ship, /first line is `Ship means: <ship\.meaning>`/);
   assert.match(ship, /`ship\.lanes` runs whatever `pipeline\.lanes` says|in `ship\.lanes` runs whatever `pipeline\.lanes` says/);
   assert.match(ship, /open blocker/);
+  assert.match(ship, /§1\.0 type lines/);
+  assert.doesNotMatch(t.slice(zero, one), /JSON/);
 });
 
 test('help lists only the type\'s Playbooks and names the allowed ones on refusal', () => {
   const t = read('skills/help/SKILL.md');
   assert.match(t, /company-type\.mjs" resolve/);
   assert.match(t, /only commands in `playbooks`/);
+  assert.match(t, /`playbooks:` line/);
+  assert.doesNotMatch(t.split('\n').find((l) => l.includes('Company type:')), /JSON/);
   assert.match(t, /is not part of your `<id>` company/);
 });
 
@@ -101,6 +105,9 @@ test('software company allows exactly the 16 Playbooks (needs company-type.mjs)'
     }
     assert.equal(run('check-role', 'editor').status, 2);
     assert.equal(run('check-role', 'backend-engineer').status, 0);
+    assert.match(run('check-playbook', 'fix').stdout, /^ok: fix is part of the software company\ncompany type: software \(Software company\), default: no company_type line\n/);
+    assert.equal(JSON.parse(run('check-playbook', 'fix', '--json').stdout).id, 'software');
+    assert.equal(run('pick', 'architect', 'product-manager').stdout, 'architect\n');
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

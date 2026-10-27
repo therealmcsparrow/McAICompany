@@ -30,6 +30,7 @@
     "brainstorm",
     "cooler"
   ],
+  "work": ["design"],
   "ship": {
     "kind": "design-handoff",
     "meaning": "The design handoff package (files, specs, tokens and the asset licence record) goes to the client or the build team.",

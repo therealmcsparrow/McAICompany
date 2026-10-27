@@ -22,6 +22,7 @@
     "brainstorm",
     "cooler"
   ],
+  "work": ["report"],
   "ship": {
     "kind": "deliver-report",
     "meaning": "The final report goes to the client or is published, with every claim cited [S#] or marked (unverified).",

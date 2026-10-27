@@ -35,8 +35,15 @@ test('skill file is within the size limit and has valid frontmatter', () => {
 });
 
 test('AC12 the form is built from list and set follows the answer', () => {
-  const list = JSON.parse(ct(product(), 'list').stdout);
-  assert.deepEqual(list.map((e) => e.id), ['software', 'research', 'marketing', 'design']);
+  const lines = ct(product(), 'list').stdout.trim().split('\n');
+  assert.deepEqual(lines.map((l) => l.split(':')[0]), ['software', 'research', 'marketing', 'design']);
+  for (const l of lines) assert.match(l, /^[a-z]+: [A-Za-z -]+\. Ship means: .+$/);
+  const listed = JSON.parse(ct(product(), 'list', '--json').stdout);
+  assert.deepEqual(listed.map((e) => e.id), ['software', 'research', 'marketing', 'design']);
+  assert.match(skill, /first line ends with `default: no company_type line`/);
+  assert.match(skill, /first line ends with `from \.company\/project\.md`/);
+  assert.match(skill, /`skill search hints:` line/);
+  assert.doesNotMatch(skill.slice(skill.indexOf('## Company type')), /JSON/);
   assert.match(skill, /company-type\.mjs" list/);
   assert.match(skill, /no pre-selected option/);
   const iList = skill.indexOf('company-type.mjs" list');
@@ -51,8 +58,7 @@ test('AC12 cancel writes nothing and the project stays software', () => {
   const before = profile(d);
   assert.equal(ct(d, 'list').status, 0);
   const r = ct(d, 'resolve');
-  assert.equal(JSON.parse(r.stdout).id, 'software');
-  assert.equal(JSON.parse(r.stdout).source, 'default');
+  assert.match(r.stdout, /^company type: software \(Software company\), default: no company_type line\n/);
   assert.equal(profile(d), before);
 });
 
@@ -66,7 +72,9 @@ test('AC12 set writes the line after an answer and a second set is refused', () 
   const again = ct(d, 'set', 'design');
   assert.equal(again.status, 2);
   assert.match(again.stdout, /^refused: company_type already set/);
-  assert.equal(JSON.parse(ct(d, 'resolve').stdout).skill_search.hints.length > 0, true);
+  assert.match(ct(d, 'resolve').stdout, /^company type: research \(.+\), from \.company\/project\.md\n/);
+  assert.match(ct(d, 'resolve').stdout, /\nskill search hints: [a-z]/);
+  assert.equal(JSON.parse(ct(d, 'resolve', '--json').stdout).skill_search.hints.length > 0, true);
 });
 
 test('free text is refused with the allowed list and writes nothing', () => {
@@ -75,6 +83,7 @@ test('free text is refused with the allowed list and writes nothing', () => {
   const r = ct(d, 'set', 'banking');
   assert.equal(r.status, 2);
   assert.match(r.stdout, /allowed: software, research, marketing, design/);
+  assert.match(r.stdout, /^refused: "banking" is not a company type;/);
   assert.equal(profile(d), before);
 });
 

@@ -27,6 +27,7 @@
     "brainstorm",
     "cooler"
   ],
+  "work": ["content", "campaign"],
   "ship": {
     "kind": "publish",
     "meaning": "The work is published or handed to the client after the legal and accessibility lanes, with every claim cited or marked unverified.",

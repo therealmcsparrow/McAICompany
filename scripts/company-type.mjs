@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Resolves the company type of a project from the plugin's type manifests.
-//   resolve | check-playbook <name> | check-role <role> | roles | list | set <id>
-// The registry is built from a readdir of company/types/. A value from the project is only ever compared
-// with registry keys (Object.hasOwn); it is never joined into a path. Refusals echo no project value.
+//   resolve | check-playbook <name> | check-role <role> | roles | pick [--max <n>] <role>... | list | set <id> [--json]
+// Output is readable lines; --json prints the machine form. The registry is built from a readdir of
+// company/types/. A value from the project is only ever compared with registry keys (Object.hasOwn); it is
+// never joined into a path. Refusals name a bad argument only in a safe form and echo no project value.
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,8 +26,16 @@ const MANIFEST_MAX = 64 * 1024;
 const PROJECT_MAX = 256 * 1024;
 const SKILL_MAX = 256 * 1024;
 
-const AC9 = `company_type is not valid; allowed: ${TYPE_ORDER.join(', ')}`;
-const USAGE = 'usage: company-type.mjs resolve | check-playbook <name> | check-role <role> | roles | list | set <id>';
+const ALLOWED = TYPE_ORDER.join(', ');
+const USAGE = 'usage: company-type.mjs resolve | check-playbook <name> | check-role <role> | roles | pick [--max <n>] <role>... | list | set <id> [--json]';
+const NAME_RULE = 'use a-z, 0-9 and -, start with a letter, at most 32 characters';
+const SHOWN_RE = /^[\x21-\x7E]{1,40}$/;
+
+// An argument in a form that is safe to print.
+const shown = arg => {
+  const text = String(arg);
+  return SHOWN_RE.test(text) && !/["`]/.test(text) ? `"${text}"` : `(${[...text].length} characters, not shown)`;
+};
 
 class Refusal extends Error {
   constructor(message, code = 2) {
@@ -98,13 +107,14 @@ function validateManifest(id, m, { agents, playbooks }) {
     for (const key of Object.keys(obj)) if (!keys.includes(key)) throw invalid(id, 'unknown key');
     for (const key of keys) if (!Object.hasOwn(obj, key)) throw invalid(id, `${key} missing`);
   };
-  only(m, ['v', 'id', 'label', 'roles', 'playbooks', 'ship', 'skill_search']);
+  only(m, ['v', 'id', 'label', 'roles', 'playbooks', 'work', 'ship', 'skill_search']);
   if (m.v !== 1) throw invalid(id, 'v must be 1');
   if (m.id !== id) throw invalid(id, 'id must equal the file name');
   if (typeof m.label !== 'string' || !LABEL_RE.test(m.label)) throw invalid(id, 'label');
   if (!uniqueList(m.roles, 1, 40, r => typeof r === 'string' && SLUG_RE.test(r) && agents.has(r))) throw invalid(id, 'roles');
   if (!m.roles.includes('skill-researcher')) throw invalid(id, 'roles must include skill-researcher');
   if (!uniqueList(m.playbooks, 1, 40, p => typeof p === 'string' && SLUG_RE.test(p) && !ALWAYS.includes(p) && playbooks.has(p))) throw invalid(id, 'playbooks');
+  if (!uniqueList(m.work, 1, 3, w => typeof w === 'string' && m.playbooks.includes(w))) throw invalid(id, 'work');
   if (!isPlain(m.ship)) throw invalid(id, 'ship');
   only(m.ship, ['kind', 'meaning', 'lanes', 'checks']);
   if (!SHIP_KINDS.includes(m.ship.kind)) throw invalid(id, 'ship.kind');
@@ -157,48 +167,101 @@ function commentSpans(text) {
   }
 }
 
-// Lines that start outside a comment: { start, end (before the line feed), text (a trailing CR dropped) }.
+// Lines that start outside a comment: { no (from 1), start, end (before the line feed), text (a trailing CR dropped) }.
 function visibleLines(text) {
   const spans = commentSpans(text);
   const lines = [];
   let i = 0;
   let start = 0;
+  let no = 0;
   while (start <= text.length) {
+    no += 1;
     let end = text.indexOf('\n', start);
     if (end === -1) end = text.length;
     while (i < spans.length && spans[i][1] <= start) i += 1;
     const hidden = i < spans.length && spans[i][0] <= start;
-    if (!hidden && (end > start || start < text.length)) lines.push({ start, end, text: text.slice(start, end).replace(/\r$/, '') });
+    if (!hidden && (end > start || start < text.length)) lines.push({ no, start, end, text: text.slice(start, end).replace(/\r$/, '') });
     start = end + 1;
   }
   return lines;
 }
 
-const typeLines = text => visibleLines(text).filter(l => l.text.startsWith('company_type:'));
+const EXACT = 'company_type:';
+// The text is read as latin1, so a UTF-8 byte order mark shows as three characters.
+const lookAlike = t => /^company_type[ \t]*:/.test(t.replace(/^(?:[ \t]|ï»¿|﻿)+/, '').replace(/[A-Z]/g, c => c.toLowerCase()));
 
-// The project value, or null when no .company/project.md or no line. Throws the AC9 refusal for anything unsafe.
-function readProject(cwd) {
-  const dir = lstat(path.join(cwd, '.company'));
-  if (dir === null) return null;
-  if (!dir.isDirectory() || dir.isSymbolicLink()) throw new Refusal(AC9);
-  let file;
-  try {
-    file = readRegularFile(path.join(cwd, '.company', 'project.md'), PROJECT_MAX);
-  } catch {
-    throw new Refusal(AC9);
-  }
-  if (file === null) return null;
-  if (file.problem) throw new Refusal(AC9);
-  return file.text;
+// Lines that read as a company_type line: the exact form, and the near misses.
+function typeLines(text) {
+  const lines = visibleLines(text);
+  return {
+    exact: lines.filter(l => l.text.startsWith(EXACT)),
+    odd: lines.filter(l => !l.text.startsWith(EXACT) && lookAlike(l.text))
+  };
 }
+
+const cannotRead = reason => new Refusal(`cannot read .company/project.md (${reason}), so the company type is unknown; fix the file and run again`);
+const noAccess = error => cannotRead(error.code === 'EACCES' || error.code === 'EPERM' ? 'no permission' : 'read error');
+
+// Opens read-only, checks the opened descriptor, and reads at most PROJECT_MAX bytes. Null when there is no file.
+function readOpened(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+    if (error.code === 'EISDIR') throw cannotRead('not a regular file');
+    let other = null;
+    try {
+      other = fs.statSync(file);
+    } catch { /* keep the open error */ }
+    if (other !== null && !other.isFile()) throw cannotRead('not a regular file');
+    throw noAccess(error);
+  }
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) throw cannotRead('not a regular file');
+    if (st.size > PROJECT_MAX) throw cannotRead('larger than 256 KiB');
+    const buf = Buffer.alloc(PROJECT_MAX + 1);
+    let got = 0;
+    while (got < buf.length) {
+      const n = fs.readSync(fd, buf, got, buf.length - got, null);
+      if (n === 0) break;
+      got += n;
+    }
+    if (got > PROJECT_MAX) throw cannotRead('larger than 256 KiB');
+    return buf.toString('latin1', 0, got);
+  } catch (error) {
+    if (error instanceof Refusal) throw error;
+    throw noAccess(error);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// The project text, or null when there is no .company/project.md. Links are followed: the value read is only
+// compared with registry keys, so a link adds nothing a committed file could not.
+function readProject(cwd) {
+  let dir;
+  try {
+    dir = fs.statSync(path.join(cwd, '.company'));
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+    throw new Refusal('cannot read .company, so the company type is unknown; fix the folder and run again');
+  }
+  if (!dir.isDirectory()) throw new Refusal('.company is not a folder, so the company type is unknown');
+  return readOpened(path.join(cwd, '.company', 'project.md'));
+}
+
+const lineList = lines => `${lines.slice(0, -1).map(l => l.no).join(', ')}, ${lines.at(-1).no}`;
 
 function projectType(text, registry) {
   if (text === null) return null;
-  const lines = typeLines(text);
-  if (lines.length === 0) return null;
-  if (lines.length > 1) throw new Refusal(AC9);
-  const value = lines[0].text.slice('company_type:'.length).replace(/^[ \t]+|[ \t]+$/g, '');
-  if (!ID_RE.test(value) || !Object.hasOwn(registry, value)) throw new Refusal(AC9);
+  const { exact, odd } = typeLines(text);
+  if (odd.length > 0) throw new Refusal(`line ${odd[0].no} of .company/project.md looks like a company_type line but is not "company_type: <id>" at the start of the line; allowed: ${ALLOWED}`);
+  if (exact.length === 0) return null;
+  if (exact.length > 1) throw new Refusal(`.company/project.md has ${exact.length} company_type lines (lines ${lineList(exact)}); keep one; allowed: ${ALLOWED}`);
+  const value = exact[0].text.slice(EXACT.length).replace(/^[ \t]+|[ \t]+$/g, '');
+  if (!ID_RE.test(value) || !Object.hasOwn(registry, value)) throw new Refusal(`company_type on line ${exact[0].no} of .company/project.md is not valid; allowed: ${ALLOWED}`);
   return value;
 }
 
@@ -214,22 +277,48 @@ function resolve({ cwd, pluginRoot }) {
     label: m.label,
     roles: [...m.roles],
     playbooks: [...m.playbooks, ...ALWAYS],
+    work: [...m.work],
     ship: { kind: m.ship.kind, meaning: m.ship.meaning, lanes: [...m.ship.lanes], checks: [...m.ship.checks] },
     skill_search: { hints: [...m.skill_search.hints] }
   };
 }
 
-function checkMember(kind, name, ctx) {
-  if (typeof name !== 'string' || !ID_RE.test(name)) throw new Refusal(USAGE);
-  const r = resolve(ctx);
-  const list = kind === 'playbook' ? r.playbooks : r.roles;
-  if (!list.includes(name)) throw new Refusal(`${name} is not part of the ${r.id} company; allowed: ${list.join(', ')}`);
-  return JSON.stringify(r);
+const orNone = (items, sep = ', ') => (items.length === 0 ? 'none' : items.join(sep));
+
+function typeLinesOf(r) {
+  const first = r.source === 'project'
+    ? `company type: ${r.id} (${r.label}), from .company/project.md`
+    : `company type: ${r.id} (${r.label}), default: no company_type line`;
+  return [
+    first,
+    `roles: ${orNone(r.roles)}`,
+    `playbooks: ${orNone(r.playbooks)}`,
+    `work: ${orNone(r.work)}`,
+    `ship: ${r.ship.kind}. ${r.ship.meaning}`,
+    `ship lanes: ${orNone(r.ship.lanes)}`,
+    `ship checks: ${orNone(r.ship.checks)}`,
+    `skill search hints: ${orNone(r.skill_search.hints, '; ')}`
+  ];
 }
 
-function list(ctx) {
+function checkMember(kind, name, ctx, json) {
+  const r = resolve(ctx);
+  const members = kind === 'playbook' ? r.playbooks : r.roles;
+  if (!members.includes(name)) throw new Refusal(`${name} is not part of the ${r.id} company; allowed: ${members.join(', ')}`);
+  return json ? JSON.stringify(r) : [`ok: ${name} is part of the ${r.id} company`, ...typeLinesOf(r)].join('\n');
+}
+
+function pick({ max, names }, ctx, json) {
+  const r = resolve(ctx);
+  const got = names.filter(n => r.roles.includes(n)).slice(0, max);
+  if (got.length === 0) throw new Refusal(`none of ${names.join(', ')} is part of the ${r.id} company; allowed: ${r.roles.join(', ')}`);
+  return json ? JSON.stringify(got) : got.join('\n');
+}
+
+function list(ctx, json) {
   const registry = loadRegistry(ctx.pluginRoot);
-  return JSON.stringify(TYPE_ORDER.filter(id => Object.hasOwn(registry, id)).map(id => ({ id, label: registry[id].label, ship_meaning: registry[id].ship.meaning })));
+  const rows = TYPE_ORDER.filter(id => Object.hasOwn(registry, id)).map(id => ({ id, label: registry[id].label, ship_meaning: registry[id].ship.meaning }));
+  return json ? JSON.stringify(rows) : rows.map(r => `${r.id}: ${r.label}. Ship means: ${r.ship_meaning}`).join('\n');
 }
 
 function writeAtomic(file, text) {
@@ -263,31 +352,95 @@ function insertLine(text, id) {
   return text.slice(0, feed + 1) + line + text.slice(feed + 1);
 }
 
-function setType(id, { cwd, pluginRoot }) {
+// Writes never follow links: the folder and the file must be what lstat says they are.
+function setType(id, { cwd, pluginRoot }, json) {
   const registry = loadRegistry(pluginRoot);
-  if (typeof id !== 'string' || !ID_RE.test(id) || !Object.hasOwn(registry, id)) throw new Refusal(AC9);
-  const text = readProject(cwd);
+  if (!ID_RE.test(id) || !Object.hasOwn(registry, id)) throw new Refusal(`${shown(id)} is not a company type; allowed: ${ALLOWED}`);
+  const link = () => new Refusal('.company/project.md is a link; set writes only a regular file in a real .company folder');
+  const dir = lstat(path.join(cwd, '.company'));
+  if (dir === null) throw new Refusal('no .company/project.md');
+  if (dir.isSymbolicLink()) throw link();
+  if (!dir.isDirectory()) throw new Refusal('.company is not a folder, so the company type is unknown');
+  const file = path.join(cwd, '.company', 'project.md');
+  const st = lstat(file);
+  if (st === null) throw new Refusal('no .company/project.md');
+  if (st.isSymbolicLink()) throw link();
+  const text = readOpened(file);
   if (text === null) throw new Refusal('no .company/project.md');
-  if (typeLines(text).length > 0) throw new Refusal('company_type already set; switching types is not supported');
+  const before = typeLines(text);
+  if (before.exact.length + before.odd.length > 0) throw new Refusal('company_type already set; switching types is not supported');
   const next = insertLine(text, id);
-  const lines = typeLines(next);
-  if (lines.length !== 1 || lines[0].text !== `company_type: ${id}`) throw new Refusal('cannot place the company_type line');
-  writeAtomic(path.join(cwd, '.company', 'project.md'), next);
-  return `set ${id}`;
+  const after = typeLines(next);
+  if (after.odd.length !== 0 || after.exact.length !== 1 || after.exact[0].text !== `company_type: ${id}`) throw new Refusal('cannot place the company_type line');
+  writeAtomic(file, next);
+  return json ? JSON.stringify({ v: 1, set: id }) : `set ${id}`;
+}
+
+const NEEDS = Object.freeze({
+  __proto__: null,
+  resolve: 'no arguments',
+  roles: 'no arguments',
+  list: 'no arguments',
+  'check-playbook': 'one Playbook name',
+  'check-role': 'one Role name',
+  set: 'one company type',
+  pick: '1 to 8 Role names'
+});
+
+function checkName(kind, name) {
+  if (!ID_RE.test(name)) throw new Refusal(`${kind} name ${shown(name)} is not valid: ${NAME_RULE}`);
+  return name;
+}
+
+function parsePick(rest) {
+  let max = null;
+  const names = [];
+  for (let i = 0; i < rest.length; i += 1) {
+    if (rest[i] === '--max') {
+      if (max !== null) throw new Refusal('"--max" is given twice');
+      const value = rest[i + 1];
+      if (typeof value !== 'string' || !/^[1-4]$/.test(value)) throw new Refusal('--max must be a whole number from 1 to 4');
+      max = Number(value);
+      i += 1;
+    } else {
+      names.push(rest[i]);
+    }
+  }
+  if (names.length < 1 || names.length > 8) throw new Refusal(`pick needs ${NEEDS.pick}; ${USAGE}`);
+  const seen = new Set();
+  for (const name of names) {
+    checkName('Role', name);
+    if (seen.has(name)) throw new Refusal(`${shown(name)} is given twice`);
+    seen.add(name);
+  }
+  return { max: max ?? 1, names };
 }
 
 // Returns { code, out }.
 export function run(args, { cwd = process.cwd(), pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
   try {
-    const [command, ...rest] = args;
+    if (!Array.isArray(args) || args.length === 0) throw new Refusal(`no command; ${USAGE}`);
+    const [command, ...all] = args.map(String);
+    if (!(command in NEEDS)) throw new Refusal(`unknown command ${shown(command)}; ${USAGE}`);
+    const flags = all.filter(a => a === '--json').length;
+    if (flags > 1) throw new Refusal('"--json" is given twice');
+    const json = flags === 1;
+    const rest = all.filter(a => a !== '--json');
     const ctx = { cwd, pluginRoot };
-    if (command === 'resolve' && rest.length === 0) return { code: 0, out: JSON.stringify(resolve(ctx)) };
-    if (command === 'check-playbook' && rest.length === 1) return { code: 0, out: checkMember('playbook', rest[0], ctx) };
-    if (command === 'check-role' && rest.length === 1) return { code: 0, out: checkMember('role', rest[0], ctx) };
-    if (command === 'roles' && rest.length === 0) return { code: 0, out: resolve(ctx).roles.join('\n') };
-    if (command === 'list' && rest.length === 0) return { code: 0, out: list(ctx) };
-    if (command === 'set' && rest.length === 1) return { code: 0, out: setType(rest[0], ctx) };
-    throw new Refusal(USAGE);
+    let out;
+    if (command === 'pick') {
+      out = pick(parsePick(rest), ctx, json);
+    } else {
+      const want = NEEDS[command].startsWith('no ') ? 0 : 1;
+      if (rest.length !== want) throw new Refusal(`${command} needs ${NEEDS[command]}; ${USAGE}`);
+      if (command === 'resolve') out = json ? JSON.stringify(resolve(ctx)) : typeLinesOf(resolve(ctx)).join('\n');
+      else if (command === 'check-playbook') out = checkMember('playbook', checkName('Playbook', rest[0]), ctx, json);
+      else if (command === 'check-role') out = checkMember('role', checkName('Role', rest[0]), ctx, json);
+      else if (command === 'roles') out = json ? JSON.stringify(resolve(ctx).roles) : resolve(ctx).roles.join('\n');
+      else if (command === 'list') out = list(ctx, json);
+      else out = setType(rest[0], ctx, json);
+    }
+    return { code: 0, out };
   } catch (error) {
     if (error instanceof Refusal) return { code: error.code, out: `refused: ${error.message}` };
     return { code: 2, out: 'refused: could not read the company type' };

@@ -55,6 +55,7 @@
     "usability-test",
     "vulnscan"
   ],
+  "work": ["feature", "fix"],
   "ship": {
     "kind": "release",
     "meaning": "Push, merge, release or deploy.",
