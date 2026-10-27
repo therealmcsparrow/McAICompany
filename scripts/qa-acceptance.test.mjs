@@ -771,7 +771,7 @@ test('AC10 pick gives a shared Playbook a stand-in Role, and work names the Play
   assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick architect product-manager/);
   assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick devops/);
   assert.match(read('skills/feedback/SKILL.md'), /company-type\.mjs" pick support account-manager product-manager/);
-  assert.match(read('skills/research/SKILL.md'), /company-type\.mjs" pick --max 2 market-researcher tech-researcher design-researcher ux-researcher/);
+  assert.match(read('skills/research/SKILL.md'), /company-type\.mjs" pick --max 2 market-researcher tech-researcher ux-researcher/);
   assert.match(read('skills/research/SKILL.md'), /pick design-researcher/);
   for (const name of ['client', 'feedback', 'research', 'brainstorm', 'cooler']) {
     assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /\baico:(architect|devops|support)\b/, `${name} names a Role that only some types have`);

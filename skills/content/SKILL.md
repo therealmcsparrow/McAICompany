@@ -23,7 +23,7 @@ Run with `aico:pipeline`; keep the §1.0 type lines for the run. Use this for on
 5. `aico:localizer` when `languages:` lists more than one language.
 6. Checks, in parallel, on the final text and asset list:
    - `aico:editor`: claims cited or marked `(unverified)` (`claims-cited`).
-   - `aico:legal`: states, per AI-generated public image, video or text, the art. 50 duty that applies and how it is met, or why none applies (`ai-disclosure`), and the licence of every asset (`asset-licences`); also no invented or AI-written testimonials or reviews, ad and sponsored-content labels, price and green claims (Directive (EU) 2024/825), comparative advertising (Directive 2006/114/EC) and data-use wording.
+   - `aico:legal`: states, per AI-generated public image, video or text, the art. 50 duty that applies and how it is met, or why none applies (`ai-disclosure`), plus `deepfake: yes` or `deepfake: no` (a realistic person, place or event); a run with no AI-generated asset states `ai-disclosure: none (no AI-generated assets)`. It also states the licence of every asset (`asset-licences`); also no invented or AI-written testimonials or reviews, ad and sponsored-content labels, price and green claims (Directive (EU) 2024/825), comparative advertising (Directive 2006/114/EC) and data-use wording.
    - `aico:accessibility-tester`: headings, alt text, captions, transcripts, contrast, reading level. Forced on by the type.
 7. Fix round per `aico:pipeline` §3 for each Blocking item, then the checks repeat for what changed.
    **→ Ship Gate** (first line `Ship means: …`, `aico:pipeline` §4). Any open check or lane blocks.

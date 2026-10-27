@@ -73,6 +73,8 @@ for (const name of ['campaign', 'content']) {
       assert.ok(t.includes(needle), needle);
     }
     assert.match(t, /art\. 50 duty that applies and how it is met, or why none applies/);
+    assert.match(t, /`deepfake: yes` or `deepfake: no`/);
+    assert.ok(t.includes('ai-disclosure: none (no AI-generated assets)'));
     assert.match(t, /\*\*→ Plan Gate\*\*/);
     assert.ok(t.indexOf('Brief Gate**') < t.indexOf('Plan Gate**'));
     assert.ok(!/No Plan Gate/.test(t));

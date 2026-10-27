@@ -102,6 +102,8 @@ test('SKILL.md: pipeline, stages in order, checks and review lanes', () => {
   }
   assert.match(skill, /usability/);
   for (const c of ['handoff-package', 'ai-disclosure', 'asset-licences']) assert.ok(skill.includes(c), c);
+  assert.match(skill, /`deepfake: yes` or `deepfake: no`/);
+  assert.ok(skill.includes('ai-disclosure: none (no AI-generated assets)'));
   const review = skill.slice(skill.indexOf('## 5. Prototype review'), skill.indexOf('## 6. Legal'));
   assert.match(review, /aico:code-reviewer/);
   assert.match(review, /aico:security/);

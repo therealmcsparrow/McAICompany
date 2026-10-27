@@ -43,7 +43,7 @@ A blocking finding goes to `aico:frontend-engineer` as a Fix round. Prototype co
 
 ## 6. Legal
 Dispatch `aico:legal` with every asset record and the list of AI-generated public images, video or text. Its Handoff, `status: done`, must state:
-- per AI-generated public image, video or text: the art. 50 duty that applies and how it is met, or why none applies (`ai-disclosure`);
+- per AI-generated public image, video or text: the art. 50 duty that applies and how it is met, or why none applies (`ai-disclosure`), plus `deepfake: yes` or `deepfake: no` (a realistic person, place or event); a run with no AI-generated asset states `ai-disclosure: none (no AI-generated assets)`;
 - the licence of every asset, including fonts and icons (`asset-licences`).
 Missing or unclear → `[spec]` blocking.
 
