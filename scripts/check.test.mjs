@@ -874,7 +874,7 @@ function typeFixture({ typeLine = true, manifest = {} } = {}) {
     agents: { qa: agent('qa'), 'skill-researcher': agent('skill-researcher'), editor: agent('editor') }
   });
   const sw = {
-    v: 1, id: 'software', label: 'Software company', roles: ['qa', 'skill-researcher'], playbooks: ['fix', 'audit'],
+    v: 1, id: 'software', label: 'Software company', roles: ['qa', 'skill-researcher'], playbooks: ['fix', 'audit'], work: ['fix'],
     ship: { kind: 'release', meaning: 'Push.', lanes: [], checks: [] }, skill_search: { hints: [] }, ...manifest
   };
   mkdirSync(join(root, 'company', 'types'), { recursive: true });
