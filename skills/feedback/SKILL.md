@@ -9,6 +9,8 @@ argument-hint: <reports: path, paste or export>
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `feedback` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook feedback` first; exit not 0 → show its output line and stop.
+
 Run with `aico:pipeline`. No Plan or Ship Gate: nothing is built or shipped. Read-only: no builders.
 
 1. `aico:support`: triage the reports into clusters in `.company/work/<slug>/feedback-report.md`. If a cluster looks security-related, stop and ask the CEO in a form whether to start `/aico:incident`.

@@ -9,6 +9,8 @@ argument-hint: intake <client request> | handoff
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `client` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook client` first; exit not 0 → show its output line and stop.
+
 Run with `aico:pipeline`. Set `engagement: client` in `.company/project.md`, and the client's license and jurisdiction.
 Anything sent to the client always asks at the Ship Gate, whatever the settings say (`aico:pipeline` §4).
 

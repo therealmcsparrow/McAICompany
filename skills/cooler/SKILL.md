@@ -9,6 +9,8 @@ argument-hint: [topic] [turns=N | listen]
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `cooler` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook cooler` first; exit not 0 → show its output line and stop.
+
 An unmanaged chat. You are the Lead, but you only set the scene, pass the turns and take the minutes; you never steer, summarize mid-chat or pick a winner. Roles think aloud; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile, the language and the settings (§1.2, §1.4, §1.6, §1.7); pass each Role's `model` and `effort` per `aico:pipeline` §2. Read-only for every Role: no code, no file edits.
 
 ## File
@@ -72,7 +74,7 @@ people: backend-engineer, ui-ux-designer, …   # everyone who was there at any 
 ## 1. Scene
 1. Parse the arguments: `turns=N` → **turns** mode (end after N turns); `listen` → **listen** mode; neither → **natural**. The rest is the topic (may be empty).
 2. Read `.company/project.md`, `.company/lessons.md` and the latest few files in `.company/roadmap/` and `.company/cooler/` (any that exist), so you can brief the colleagues on what's going on.
-3. Pick **2–3 Roles at random** from the agent names in `<plugin root>/agents/` (plugin root = two folders above this skill's base directory). Use real randomness, e.g. `node -e "const a=process.argv.slice(1);console.log(a.sort(()=>Math.random()-.5).slice(0,3).join(' '))" <names…>`; never choose by relevance.
+3. Pick **2–3 Roles at random** from the output of `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles` (the company type's Roles, one slug per line; refused → show its line and stop). Use real randomness, e.g. `node -e "const a=process.argv.slice(1);console.log(a.sort(()=>Math.random()-.5).slice(0,3).join(' '))" <names…>`; never choose by relevance.
 4. Resolve the language once per `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; anything invalid or failing → `en`). Everything you write in the file and to the CEO (logline, action lines, Overheard, summary) uses it; the file's frontmatter keys, `##` headings, `SCENE`/`INT.`/`FADE OUT.` script words stay English. Names come from the §1.7 settings. Resolve the settings once per §1.7 too.
 5. Stage personalities (`dispatch-prompt` v3.2): `node "${CLAUDE_PLUGIN_ROOT}/scripts/personality.mjs" stage cooler-<YYYYMMDD-HHMM of the file name> <role>,<role>[,<role>]` with the slugs at the cooler, run from the repo root. It prints `{ "run", "files": { "<role>": "<path>" } }`; keep the paths per Role. Never open, read or quote a file or print a block. Refused or no path for a Role → no `Personality:` line for it, and say so once in your first message to the CEO.
 6. Create the file with the title, logline and Scene 1 (heading and opening action line). Tell the CEO in one line: who's there, the topic (or "open chat"), the mode, and the file path.

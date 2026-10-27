@@ -9,6 +9,8 @@ argument-hint: <topic | project | file> [quick|deep]
 
 **Help:** argument is exactly `help` or `--help` → follow `aico:help` for `research` and stop.
 
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook research` first; exit not 0 → show its output line and stop.
+
 You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language, the settings and the Context cap (§1.2, §1.4, §1.6, §1.7 with Setup item 8); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v1 (RR), `skills-manifest` v2 (SM), `design-skills-section` v1 (DS), `dispatch-prompt` v3.1 (DP), all in `docs/contracts/`.
 
 ## 1. Start
