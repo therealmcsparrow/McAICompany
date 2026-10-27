@@ -1,4 +1,4 @@
-// Acceptance net for the reprompter Role on the merged tree (company types, settings, personalities, ADR 0026).
+// Acceptance net for the reprompter Role across company types, settings and personalities (ADR 0026).
 // Everything runs against the shipped plugin files and the real scripts; the CLI scripts run as child processes in
 // temp projects with their own home folder, so no user setting and no real project is read or changed.
 import { test, after } from 'node:test';
@@ -54,7 +54,7 @@ const frontmatter = (text) => {
   return lines.slice(1, lines.indexOf('---', 1));
 };
 
-// ---------- AC10: the reprompter and /aico:reprompt exist in every company type ----------
+// ---------- the reprompter and /aico:reprompt exist in every company type ----------
 
 test('AC10: four shipped types, in the documented order', () => {
   assert.deepEqual(TYPE_ORDER, ['software', 'research', 'marketing', 'design']);
@@ -137,12 +137,12 @@ test('AC10: a manifest without reprompter is refused, end to end, before any Rol
   assert.match(out, /^refused: .*roles must include reprompter/);
 });
 
-test('AC10: the plugin check passes on the merged tree, so counts, names and Playbook rules agree', () => {
+test('AC10: the plugin check passes, so counts, names and Playbook rules agree', () => {
   const { errors } = check(root);
   assert.deepEqual(errors, []);
 });
 
-// ---------- AC12: 35 Roles, unique default names, Lynn last ----------
+// ---------- 35 Roles, unique default names, Lynn last ----------
 
 test('AC12: 35 agents, one default name each, names.json has no extra and no missing Role', () => {
   assert.equal(agents.length, 35);
@@ -333,10 +333,17 @@ test('settings page: the served page has the Reprompt table and the Question rou
   for (const needle of ["'Reprompt'", "'Question rounds'", "['reprompt', 'question_rounds']", 'selectFor([0, 1, 2, 3], l)', "describedBy: 'reprompt-hint'", "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
     assert.ok(html.includes(needle), needle);
   }
-  assert.match(html, /Question rounds is a whole number from 0 to 3/);
-  assert.match(html, /0 means no questions/);
-  assert.match(html, /A project value wins over your user value/);
-  assert.ok(html.indexOf("'Reprompt'") > html.indexOf("'Fix rounds'"), 'the Reprompt table follows the pipeline table');
+  // The hint is the exact text of the aico-settings Contract, read from it, with nothing added.
+  const hint = /Under it the hint "([^"]+)"/.exec(read('docs/contracts/aico-settings.md'))?.[1];
+  assert.ok(hint && hint.startsWith('How often /aico:reprompt may come back with questions'), `the Contract gives the hint text: ${hint}`);
+  assert.ok(html.includes(`'${hint}'`), `the page shows the Contract hint exactly: ${hint}`);
+  assert.ok(!/Question rounds is a whole number from 0 to 3/.test(html), 'the old hint wording is gone');
+  // Directly under the pipeline table: after the context cap hint, before the Brainstorm heading.
+  const capHint = html.indexOf('The context cap is a whole number from 60000 to 1000000');
+  const reprompt = html.indexOf("el('h2', {}, 'Reprompt')");
+  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  assert.ok(capHint > 0 && reprompt > capHint && brainstorm > reprompt, 'order: context cap hint, Reprompt heading, Brainstorm heading');
+  assert.ok(html.indexOf(`'${hint}'`) > reprompt && html.indexOf(`'${hint}'`) < brainstorm, 'the hint sits between the Reprompt and Brainstorm headings');
   assert.ok(!/<script[^>]*\ssrc=/i.test(html), 'the page loads no outside script');
 });
 
@@ -495,4 +502,19 @@ test('reprompt Playbook: the Role file handles a bad Asks left and a missing Req
   assert.match(agent, /`Request:` absent, or a file it names missing → `status: blocked`/);
   assert.match(agent, /blocked — missing handoff/);
   assert.ok(agent.split('\n').length <= 50);
+});
+
+test('triage line: the checker Contract lists the reason and the Role file names the triage colon rule', () => {
+  const contract = read('docs/contracts/reprompt.md');
+  const reasons = contract.split('\n').find((l) => l.startsWith('- Anything else → `ok: false`. Reasons:'));
+  assert.ok(reasons, 'the Reasons line in the Contract');
+  assert.ok(reasons.includes('`triage line`'), `triage line is among the reasons: ${reasons}`);
+  assert.match(contract, /Triage line\*\*/);
+  const agent = read('agents/reprompter.md');
+  const never = agent.split('\n').find((l) => l.startsWith('**Never:**'));
+  assert.ok(never, 'the Never line');
+  assert.match(never, /the word triage directly followed by a colon in `prompt\.md` or the brief/);
+  assert.match(never, /"triage result" or "triage step"/);
+  const playbook = read('skills/reprompt/SKILL.md');
+  assert.equal(playbook.split('a triage line in it never counts').length - 1, 2, 'Use it and the image hand-over both say a triage line in it never counts');
 });
