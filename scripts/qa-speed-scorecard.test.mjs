@@ -294,7 +294,7 @@ test('AC7 files with an invalid run name are ignored by the comparison set', (t)
   assert.match(r.lines[0], /all tiers n=1 \| excluded: 0/);
 });
 
-// ---------- AC1: Step times ----------
+// ---------- Step times ----------
 
 test('AC1 add stamps t1 = now and t0 = t1 - floor(ms / 1000)', (t) => {
   const root = mkRoot();
@@ -369,7 +369,7 @@ test('AC1 a malformed time on read is skipped, not trusted', (t) => {
   assert.ok(r.lines.includes('warning: line 1 skipped'));
 });
 
-// ---------- AC2: ship record ----------
+// ---------- ship record ----------
 
 test('AC2 ship holds tier, run start, Ship Gate time, CEO wait and Gate rejects from run-state', (t) => {
   const root = mkRoot();
@@ -474,7 +474,7 @@ test('AC2 a v1 ship command (acs only) still works', (t) => {
   assert.equal(readJsonl(root, 'solo').at(-1).acs, 2);
 });
 
-// ---------- AC3: the one line ----------
+// ---------- the one line ----------
 
 const FIVE_LINE = 'scorecard feat-now (tier high): time 2h15m (median 2h00m) | CEO wait 11m (median 15m) | spend/AC 500 (median 600) | ' +
   'fix rounds 1 (median 1) | high blockers 2 (median 1) | gate rejects 2 (median 2) | all tiers | excluded: 0';
@@ -541,7 +541,7 @@ test('AC3 durations read <h>h<mm>m, or <m>m under one hour', (t) => {
   }
 });
 
-// ---------- AC4: medians from fewer than 5 runs ----------
+// ---------- medians from fewer than 5 runs ----------
 
 test('AC4 no earlier shipped run reads no baseline and leaves the label out', (t) => {
   const root = mkRoot();
@@ -643,7 +643,7 @@ test('AC4 a run with no tier reads tier unknown and uses all tiers', (t) => {
   assert.ok(!('tier' in readJsonl(root, 'feat-now').at(-1)));
 });
 
-// ---------- AC5: excluded runs ----------
+// ---------- excluded runs ----------
 
 test('AC5 brainstorm, replay, baseline and untimed runs are left out of the medians and counted', (t) => {
   const root = mkRoot();
@@ -684,7 +684,7 @@ test('AC5 exit is 0 when every other file is excluded', (t) => {
   assert.match(r.stdout, /excluded: 5\n$/);
 });
 
-// ---------- AC6: v1 files read as before ----------
+// ---------- v1 files read as before ----------
 
 const GOLDEN = [
   ['triage-hardening', ['report', 'triage-hardening'], 'triage-hardening.report.txt'],
@@ -757,7 +757,7 @@ test('AC6 a v1.1 ship record does not change the spend numbers of the v1 steps',
   assert.deepEqual(after2, before);
 });
 
-// ---------- AC8: never blocks ----------
+// ---------- never blocks ----------
 
 test('AC8 scorecard and ship exit 0 on damaged ledgers, run-state and an empty ledger folder', (t) => {
   const root = mkRoot();
@@ -815,7 +815,7 @@ test('AC8 the scorecard writes nothing to the ledger folder', (t) => {
   assert.deepEqual(snapshot(), before);
 });
 
-// ---------- AC13: the 30% target ----------
+// ---------- the 30% target ----------
 
 const BASE_NAMES = ['base-a', 'base-b', 'base-c'];
 // Baseline spend per AC 1000, 2000, 3000 (median 2000); quality medians fix 2, high 3.
@@ -953,7 +953,7 @@ test('AC2 run-state view: a v1.2 file reads wait null on every Gate entry', (t) 
   assert.deepEqual(show(root, 'demo', { now: epoch(T(9, 6)) }).gates, [{ gate: 'brief', result: 'passed', at: T(9, 5), wait: null }]);
 });
 
-// ---------- AC9, AC10: CI ----------
+// ---------- CI ----------
 
 const ciText = () => fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
 const stepsOf = (text) => text.split(/\n(?=\s*- (?:name|run|uses|id|if|env|shell|with):)/);
@@ -1044,7 +1044,7 @@ test('AC10 v0.15 adds no eval suite', () => {
   assert.equal(fs.existsSync(path.join(repoRoot, 'evals')), false);
 });
 
-// ---------- AC11: release validates before it tags ----------
+// ---------- release validates before it tags ----------
 
 const GIT_ENV_FILE_TEXT = '[user]\n\tname = T\n\temail = t@example.com\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n[init]\n\tdefaultBranch = main\n[core]\n\tautocrlf = false\n';
 
@@ -1171,7 +1171,7 @@ test('AC11 release never pushes and uses no shell, with validate in the source',
   assert.match(src, /AICO_CLAUDE_BIN/);
 });
 
-// ---------- AC12: stable ----------
+// ---------- stable ----------
 
 function stableBox(t) {
   const dir = fs.mkdtempSync(path.join(base, 'stable-'));
