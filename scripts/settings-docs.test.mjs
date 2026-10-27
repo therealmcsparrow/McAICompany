@@ -119,6 +119,26 @@ test('aico-settings v1.3 names skillspector.mode, its default, the user-level lo
   assert.match(doc, /`SKILLSPECTOR_DEFAULTS` \(v1\.2\)/);
 });
 
+test('user docs describe the Personality tab, the Plan Gates and the Legal disclaimer', () => {
+  const concepts = read('documentation/concepts.md');
+  const commands = read('documentation/commands.md');
+  const readme = read('README.md');
+  assert.match(concepts, /It has seven tabs, in this order/);
+  assert.match(concepts, /\*\*Personality\*\* — one collapsible card per Role/);
+  assert.match(concepts, /Filter Roles/);
+  assert.match(commands, /on the Personality tab/);
+  assert.match(readme, /Personality \(one collapsible card per Role/);
+  for (const t of ['concepts.md', 'commands.md'])
+    assert.ok(!/Personality\*\* section has one collapsible card/.test(read('documentation/' + t)), t);
+  const section = (name) => commands.split(new RegExp('^### `/aico:' + name + '`', 'm'))[1].split(/^### /m)[0];
+  for (const p of ['report', 'campaign', 'content']) assert.match(section(p), /Plan Gate/, p);
+  assert.match(concepts, /not legal advice or a compliance certificate/);
+  assert.match(readme, /not legal advice or a compliance certificate/);
+  assert.match(concepts, /deepfake: yes/);
+  assert.match(commands, /Directive \(EU\) 2024\/825/);
+  assert.match(concepts, /`--json`/);
+});
+
 test('aico-settings v1.3 names the personality payload, the phrases, the ignored rule and the page text sources', () => {
   const doc = read('docs/contracts/aico-settings.md');
   assert.match(doc, /`personalities: \{ rule: \{ text_re, flags, max, levels, phrases \}, roles: /);

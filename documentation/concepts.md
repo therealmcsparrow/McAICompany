@@ -100,7 +100,7 @@ A project has one company type. It decides which Roles and Playbooks the company
 |---|---|---|---|
 | `software` (Software company) | the 33 Roles of v0.12.0, every Role except the editor | audit, brainstorm, client, cooler, feature, feedback, fix, incident, launch, maintain, pentest, refactor, research, standards, usability-test, vulnscan | Push, merge, release or deploy. Unchanged. |
 | `research` (Research consultancy) | 10 | research, client, report, feedback, brainstorm, cooler | The final report goes to the client or is published, with every claim cited `[S#]` or marked `(unverified)`. |
-| `marketing` (Marketing and content agency) | 14 | campaign, content, research, client, feedback, brainstorm, cooler | The work is published or handed to the client. |
+| `marketing` (Marketing and content agency) | 14 | campaign, content, research, client, feedback, brainstorm, cooler | The work is published or handed to the client after the legal and accessibility lanes, with every claim cited or marked unverified. |
 | `design` (Design studio) | 18 | design, research, client, feedback, brainstorm, cooler | The design handoff package (files, specs, tokens and the asset licence record) goes to the client or the build team. |
 
 Every type also has `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage` and `skillspector`. The Lead and `/aico:triage` route only to the type's own Playbooks and Roles, and `/aico:cooler` and `/aico:brainstorm` pick Roles only from it. A Role or command outside the type is refused with the list of allowed ones, and nothing is dispatched.
@@ -115,14 +115,31 @@ For types other than `software`, the Ship Gate summary starts with `Ship means: 
 
 A check with no matching Handoff is an open blocker:
 - **`claims-cited`**: an editor Handoff in the run with `status: done` and no blocking finding. Every claim is cited `[S#]` or marked `(unverified)`.
-- **`ai-disclosure`**: a legal Handoff that states the AI Act art. 50 disclosure for each AI-generated public image, video or text.
+- **`ai-disclosure`**: a legal Handoff that states, for each AI-generated public image, video or text, which AI Act art. 50 duty applies and how it is met, or the reason none applies (for example: not a deepfake; a human reviewed it and holds editorial responsibility; not text published to inform the public on matters of public interest). It also says `deepfake: yes` or `deepfake: no`, where a deepfake is a realistic person, place or event. A run with no AI-generated assets states `ai-disclosure: none (no AI-generated assets)`.
 - **`asset-licences`**: the same legal Handoff, stating the licence of every asset.
 - **`handoff-package`**: a UI/UX designer Handoff that lists the files, specs, tokens and the asset licence record.
+
+A passed check records that Legal stated its position. These checks are a process check, not legal advice or a compliance certificate. Have a qualified lawyer review before you publish. In particular, the timing of the AI Act art. 50 duties may still change, so confirm the dates with a lawyer. Personas used in testing are fictional, and copy must never present one as a real customer.
+
+To see which type a project has, and what it allows, the plugin script `company-type.mjs` prints plain lines by default:
+
+```
+company type: research (Research consultancy), from .company/project.md
+roles: product-manager, account-manager, …
+playbooks: research, client, report, …
+work: report
+ship: deliver-report. The final report goes to the client or is published, …
+ship lanes: legal
+ship checks: claims-cited
+skill search hints: …
+```
+
+A project with no `company_type:` line shows `company type: software (Software company), default: no company_type line`. `work` lists the Playbooks that do the type's main work. When a brainstorm, a research run or a feedback run hands an idea over, it goes to the first of them. Tools that parse the output pass `--json` to get JSON instead. A refusal is one line starting with `refused:` that names the bad input, never a value from your project file.
 
 The `design` company has two Roles that the brief did not list, `code-reviewer` and `security`, because a clickable prototype is code and the security lane is always on. The software Ship Gate is unchanged. If the type setting is broken, for example an unknown value or two `company_type:` lines, a Playbook stops with a refusal and changes nothing.
 
 ## Personalities
-Every Role has a personality that colours how it comes across in [`/aico:cooler`](commands.md#aicocooler) chats and [`/aico:brainstorm`](commands.md#aicobrainstorm) rounds. It is used there and nowhere else. It never changes a model, an effort, a verdict, a review, a Gate, a Handoff or any other dispatch.
+Every Role has a personality that colours how it comes across in [`/aico:cooler`](commands.md#aicocooler) chats and [`/aico:brainstorm`](commands.md#aicobrainstorm) rounds. It is social-only style data, used there and nowhere else. It never changes a model, an effort, a verdict, a review, a Gate, a Handoff or any other dispatch.
 
 A personality has five fields:
 - **Temperament**, **Way of talking** and **Pet topic**: short text, 1 to 80 characters. Letters of any language, digits, single spaces and the marks `, . ' - ! ?` are allowed. Quotes, colons, brackets, line breaks and other symbols are refused.
@@ -130,12 +147,13 @@ A personality has five fields:
 
 Every Role ships with a default. You can change each field at user level (all projects) or project level. Per field, the project value wins over the user value, which wins over the default. A project value counts without an unlock, so a cloned repo can set a personality. It is passed to the Role only as quoted style data, never as an instruction, and it can only reach cooler chats and brainstorms. A value that breaks the rules is ignored, the level below is used, and the settings page and `settings.mjs get` warnings say which field. The warning does not repeat the value.
 
-Personalities are not part of `settings.mjs get` and are never printed by a command. Personality is about Roles, not real people, so keep real names out of it. In a first test, a personality changed the tone of brainstorm replies and did not lower the share of replies that pass the parser. A pet topic colours a reply only now and then.
+Personalities are not part of `settings.mjs get` and are never printed by a command. Personality is about Roles, not real people, so keep real names out of it. Each word of a text field starts with a letter or a digit, and invisible characters are refused. In a first test, a personality changed the tone of brainstorm replies and did not lower the share of replies that pass the parser. A pet topic colours a reply only now and then.
 
 ## Settings
-[`/aico:settings`](commands.md#aicosettings) opens a page in your browser where you change how the company works. It has six sections:
+[`/aico:settings`](commands.md#aicosettings) opens a page in your browser where you change how the company works. It has seven tabs, in this order. Messages ("Saved.", or a refused Save) show at the top, under the page header, so you see them on every tab.
 
-- **Roles** — name, model and effort for each Role, with a bulk change per department. Under the table, a **Personality** section has one collapsible card per Role with a User and a Project column of fields: three text boxes with an "n of 80" counter, and two lists for Intelligence and Creativity. Under each list you see what the Role is told for the level you pick. A blank box means "not set at this level". A refused Save marks the field, puts focus on it and saves nothing.
+- **Roles** — name, model and effort for each Role, with a bulk change per department. Every field has a visible label.
+- **Personality** — one collapsible card per Role, grouped by department, with a User and a Project group of fields. Each group names its Role and level, for example "Ava (architect), User level". The fields are three text boxes with an "n of 80 characters" counter, and two lists for Intelligence and Creativity. Under each list you see what the Role is told for the level you pick. A blank box means "not set at this level". Above the cards, **Filter Roles** narrows them by name, Role or department, and a line says "Showing n of N Roles". The filter only hides cards: hidden cards are still saved, and the filter text is never saved. A refused Save puts "Nothing was saved. Fix n field(s):" at the top, with one link per problem. A link opens the right tab and card and puts focus on the field. Nothing is saved from a refused Save.
 - **Language & profile** — the aico language and the `.company/project.md` profile fields.
 - **Pipeline** — the Fix-round limit, parallel or one-at-a-time dispatch, the max context (`context_cap`, global and per Role), the review format (`pipeline.review_format`, below), which optional review lanes run (security, compliance, legal, persona, hands-on and accessibility testing), and the brainstorm options: debate style (`brainstorm.debate`) and the film script (`brainstorm.film_script`).
 - **Gates** — ask or auto for the Brief, Plan and Ship Gates and for installs.
