@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-27
+
 Playbooks can start the next Playbook for you.
 
 ### Changed
