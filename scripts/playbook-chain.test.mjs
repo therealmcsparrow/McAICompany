@@ -240,23 +240,36 @@ test('AC-chain-3f: lead starts the Playbook it picked with the Skill tool, tells
   for (const n of only) assert.ok(new RegExp(`(^|[^\\w-])${n}(?![\\w-])`).test(p), `the Starting-a-Playbook paragraph names the CEO-only skill ${n}`);
 });
 
-test('AC-chain-3g: triage hands the CEO the command of the recommended route; whoever started triage starts the route', () => {
+test('AC-chain-3g: triage hands the CEO the command of the recommended route; whoever started triage starts the route; the triage line carries size, risk and route; the direct route runs in the Lead', () => {
   const t = read('skills/triage/SKILL.md');
   const l = lineStarting(t, /^3\. Present one line to the CEO/, 'triage step 3');
   assert.ok(cmdOf(l), `triage step 3 must show the exact /aico:<route> command: ${l}`);
   assert.ok(SKILL_TOOL.test(l), `triage step 3 starts the route with the Skill tool: ${l}`);
   assert.ok(!/hand straight to/i.test(l), 'triage does not hand to a Playbook itself');
-  assert.ok(/whoever started triage/i.test(l) && /never falls back/i.test(l) && !/§2/.test(l), `triage step 3 starts the Playbook whoever started triage: ${l}`);
-  assert.ok(/triage line/i.test(read('skills/lead/SKILL.md')), 'lead does not triage a request that already carries a triage line');
+  assert.ok(/whoever started triage/i.test(l) && /never falls back/i.test(l), `triage step 3 starts the Playbook whoever started triage: ${l}`);
+  const TRIAGE_LINE = '`(triage: <size>, risk <tier>, <type>, route <route>)`';
+  assert.ok(l.includes(TRIAGE_LINE), `triage step 3 gives the triage line format: ${l}`);
+  assert.ok(bare('lead').test(l) && l.includes('`route direct`'), `triage step 3 starts aico:lead with route direct for the direct route: ${l}`);
+  const lead = read('skills/lead/SKILL.md');
+  const route = lineStarting(lead, /^Unsure of the size or risk/, 'lead routing line');
+  assert.ok(route.includes(TRIAGE_LINE), `the lead routing line gives the triage line format: ${route}`);
+  assert.ok(route.includes('is not triaged again'), `the lead routing line does not triage again: ${route}`);
+  assert.ok(route.includes('/aico:triage "<request>"'), `the lead routing line gives the CEO the /aico:triage fallback: ${route}`);
+  const direct = lineStarting(lead, /^\*\*Direct route\*\*/, 'lead direct route');
+  for (const w of ['aico:code-reviewer', 'Ship Gate', 'no §3 form']) assert.ok(direct.includes(w), `the lead direct route names "${w}": ${direct}`);
 });
 
-test('AC-chain-3h: refactor without an audit report starts aico:audit with the Skill tool and falls back to the command', () => {
+test('AC-chain-3h: refactor without an audit report starts aico:audit with the Skill tool and falls back to the command, ends the refactor run and tells the CEO to rerun /aico:refactor', () => {
   const l = lineStarting(read('skills/refactor/SKILL.md'), /^Run with `aico:pipeline`\. No Brief Gate/, 'refactor start line');
   assert.ok(SKILL_TOOL.test(l), `refactor must start the Playbook with the Skill tool: ${l}`);
   assert.ok(bare('audit').test(l), `refactor must name aico:audit: ${l}`);
   assert.ok(/`\/aico:audit[^`\n]*`/.test(l), `refactor must give the fallback command /aico:audit: ${l}`);
   assert.ok(CEO.test(l), 'refactor must address the CEO for the fallback');
   assert.ok(/Run audit first \(Recommended\)\*\* \/ \*\*Skip audit/.test(l), `refactor asks the CEO in a form before the audit: ${l}`);
+  assert.ok(l.includes('end this run'), `refactor ends its run after starting the audit: ${l}`);
+  assert.ok(l.includes('`/aico:refactor "<scope>"`'), `refactor tells the CEO to rerun /aico:refactor: ${l}`);
+  assert.ok(l.includes('before pipeline Setup'), `refactor asks before pipeline Setup: ${l}`);
+  assert.ok(!/continue here/.test(l), `refactor does not continue in the same run: ${l}`);
 });
 
 test('AC-chain-3i: incident ends after mitigation, reports and postmortem; the CEO runs /aico:fix; the reporting deadlines stay', () => {

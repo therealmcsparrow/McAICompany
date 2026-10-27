@@ -488,7 +488,7 @@ const HAND_OVER_CHANGES = {
   },
   refactor: {
     removed: ['Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise run `aico:audit` steps 1–2 first.'],
-    added: [/^Run with `aico:pipeline`\. No Brief Gate: the audit report is the brief\. Start from an existing audit report if there is one; otherwise ask the CEO in a form: \*\*Run audit first \(Recommended\)\*\* \/ \*\*Skip audit\*\*\. Only on the first choice start `aico:audit` with the Skill tool, .*`\/aico:audit "<scope>"` and stop\.$/],
+    added: [/^Run with `aico:pipeline`\. No Brief Gate: the audit report is the brief\. Start from an existing audit report if there is one; otherwise, before pipeline Setup, ask the CEO in a form: \*\*Run audit first \(Recommended\)\*\* \/ \*\*Skip audit\*\*\. Run audit first → .*end this run here.*`\/aico:refactor "<scope>"`, and stop\.$/],
   },
   'usability-test': {
     removed: ['5. **Present** the report. S1 findings (Blocking) are fixed before Ship; the CEO picks which S2/S3 to fix in a form (`multiSelect`). The fixes then run as a new `aico:feature` or `aico:fix` run, which the CEO starts.'],
