@@ -19,11 +19,18 @@ function git(cwd, ...args) {
   assert.equal(r.status, 0, r.stderr);
 }
 
+// The runner may export XDG_CONFIG_HOME or GIT_CONFIG_*; the checker would watch those, not the temp HOME.
+function hermetic(env) {
+  const out = { ...env };
+  for (const k of Object.keys(out)) if (k === 'XDG_CONFIG_HOME' || k.startsWith('GIT_CONFIG')) delete out[k];
+  return out;
+}
+
 // Every directory the checker watches outside the product root lives under the temp base.
 function envFor(root) {
   const home = path.join(root, '..', `${path.basename(root)}-home`);
   return {
-    ...process.env,
+    ...hermetic(process.env),
     HOME: home,
     USERPROFILE: home,
     CLAUDE_CONFIG_DIR: path.join(home, '.claude'),

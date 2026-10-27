@@ -82,11 +82,18 @@ function gitIn(dir, env, ...args) {
   const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: dir, encoding: 'utf8', env });
   assert.equal(r.status, 0, r.stderr);
 }
+// The runner may export XDG_CONFIG_HOME or GIT_CONFIG_*; the checker would watch those, not the temp HOME.
+function hermetic(env) {
+  const out = { ...env };
+  for (const k of Object.keys(out)) if (k === 'XDG_CONFIG_HOME' || k.startsWith('GIT_CONFIG')) delete out[k];
+  return out;
+}
+
 function project({ git = false } = {}) {
   const dir = path.join(base, `p${counter++}`);
   const home = `${dir}-home`;
   const env = {
-    ...process.env,
+    ...hermetic(process.env),
     HOME: home,
     USERPROFILE: home,
     CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
