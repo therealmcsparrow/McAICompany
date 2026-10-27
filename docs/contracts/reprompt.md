@@ -1,7 +1,7 @@
 # Contract: reprompt v1
 
 Provider: `skills/reprompt/SKILL.md` (the Playbook behind `/aico:reprompt`, run by the Lead), `agents/reprompter.md` (Role 35, after `editor`), `scripts/reprompt-check.mjs` (the checker the Playbook runs) and `mods/reprompt-gate.ts` with `mods/lib/reprompt-gate.mjs` (the write gate in the plugin's hooks module). Consumers: the CEO, `aico:lead` (routes "improve, rewrite or sharpen this prompt" here; takes the prompt on "Use it"), `aico:help` (through `documentation/commands.md`), `scripts/run-state.mjs` (`run-state` v1.1 `pick`), `scripts/settings.mjs` (`reprompt.question_rounds`, `aico-settings` v1.4), `scripts/company-type.mjs` (`ALWAYS`, `company-type` v1.1), `aico-mods` v1.2 (the gate's place in the hooks module). Rationale: `docs/adr/0024-reprompt-playbook-owns-the-flow.md`, `docs/adr/0025-reprompter-write-gate.md`.
-Revised after review (Fix round 2, `20-code-reviewer.md`, `21-security.md`; unshipped, no version change): the reprompter's tool calls pass a deterministic allow-list gate (Write gate); the checker compares the git control set before any git call and refuses on a change (exit 3); the watch set grows; the character rule is `Default_Ignorable_Code_Point`; the body, assumptions and brief are shown literally in a fence, and link-definition lines are refused.
+Revised after review (Fix round 2, `20-code-reviewer.md`, `21-security.md`; unshipped, no version change): the reprompter's tool calls pass a deterministic allow-list gate (Write gate); the checker compares the git control set before any git call and refuses on a change (exit 3); the watch set grows; the character rule is `Default_Ignorable_Code_Point`; the body, assumptions and brief are shown literally in a fence, and link-definition lines are refused. Step 28 (CEO decision, still v1): an unknown agent is refused only while a reprompt run is armed (Write gate, "Armed run"); known reprompters stay fully gated.
 The reprompter turns a rough CEO prompt into one complete, ready-to-use prompt. It asks only when a gap would change the result, and it never runs the prompt. Nothing in pipeline Core changes: the Playbook runs the pipeline Setup items it needs, the way `aico:research` does.
 
 ## Command
@@ -78,27 +78,39 @@ language: <BCP 47 tag of the prompt>
 - The reprompter never runs, dispatches or routes the prompt, even when the request says "and run it" (AC6, AC7). Tools: Read, Skill, Write; no Bash, no web (AC7). It reads only the Request files, its earlier Handoffs and `.company/project.md`; any other file it names by path only. The write gate enforces the Write, Read and Skill scope (Write gate); the prose rule is no longer the control.
 
 ## Write gate `mods/reprompt-gate.ts`
-A hook set in the aico hooks module (`aico-mods` v1.2). Pure rules (path match, prompt-line parse, decision) live in `mods/lib/reprompt-gate.mjs` with no `$`, so `npm test` covers them. **Always on**: no setting, no view, no status part; the mods' "Off" rule does not apply. It never answers `allow`: an allowed call goes to `next(e)`, so the session's own rules still decide it.
+A hook set in the aico hooks module (`aico-mods` v1.2). Pure rules (path match, prompt-line parse, decision, armed-run rules) live in `mods/lib/reprompt-gate.mjs` with no `$`, so `npm test` covers them. **Always on**: no setting, no view, no status part; the mods' "Off" rule does not apply. It never answers `allow`: an allowed call goes to `next(e)`, so the session's own rules still decide it.
 
-**Reprompter** = an agent whose `subagentType` matches `^(aico:)?reprompter$`.
+**Reprompter** = an agent whose `subagentType` matches `^(aico:)?reprompter$`. **Unknown agent** = an agent that is not recorded and has no row in `$.agent.list()`, or whose list call rejects. A workflow's agents and the engine's own forks (compaction, memory) carry ids no list names, so they are unknown agents.
 
 **`agent.spawn`**
 - Reprompter spawn: the first 64 KiB of `e.prompt` hold exactly one line matching `^Output: \.company/work/(reprompt-\d{8}-\d{4}(?:-[2-9])?)/(\d{2,3})-reprompter\.md$`; `e.cwd` is absent or equal to `$.session.root()`; `e.fork` is false and `e.isTeammate` absent. Else → `{ deny: 'aico reprompt gate: bad reprompter dispatch' }`.
 - Then, before `next(e)`: `node <plugin root>/scripts/reprompt-check.mjs arm <slug> <NN>` through the script caller (5000 ms). Anything but exit 0 with `{"armed":"<NN>"}` → `{ deny: 'aico reprompt gate: cannot arm the gate; reprompt refused' }`.
+- On that exit 0, still before `next(e)`: the run is armed (Armed run, below).
 - Then `next(e)`; its `agentId` is recorded as `{ slug, nn, root }` (root = `$.session.root()`, at most 50 records, the oldest dropped).
 - Every other spawn: `next(e)`, then its `agentId` is recorded with its type (at most 200, oldest dropped), so `tool.check` rarely needs a list call. The result is returned unchanged.
 - `.catch`: reprompter spawn → `{ deny: 'aico reprompt gate failed; reprompt refused' }`; else `next(e)`.
 
 **`tool.check`** (every tool; `e.agentId` absent → `next(e)`):
-- Recorded reprompter → the allow-list below. Recorded other type → `next(e)`.
-- Not recorded → `$.agent.list()`, the row whose `id` is `e.agentId`: reprompter type → deny (`aico reprompt gate: this reprompter was not started through the gate`); other type → `next(e)`; list rejects or no such row → deny unless `e.isReadOnly`, else `next(e)`.
+- Recorded reprompter → the allow-list below, armed run or not. Recorded other type → `next(e)`.
+- Not recorded → `$.agent.list()`, the row whose `id` is `e.agentId`: reprompter type → deny (`aico reprompt gate: this reprompter was not started through the gate`), armed run or not; other type → `next(e)`.
+- Unknown agent → `next(e)` when `e.isReadOnly`, or when no reprompt run is armed. Else deny (`aico reprompt gate: unknown agent during a reprompt run; refused`). `e.isReadOnly` is tested first, so a read-only call never costs a file read.
 - Allow-list for a recorded reprompter (`<run>` = `<root>/.company/work/<slug>`; `<plugin>` = `$.plugin.root`). Anything not listed is denied, every other tool included:
   - `Write` with `file_path` equal to `<run>/prompt.md` or `<run>/<nn>-reprompter.md`.
   - `Read` with `file_path` equal to `<root>/.company/project.md`, `<plugin>/company/PROFILE.md`, or `<run>/<name>` with `<name>` matching `^(request|answers-\d+|edit-\d+|prompt|\d{2,3}-reprompter)\.md$`; or a path under `<plugin>/skills/handoff/`.
   - `Skill` with `skill` exactly `aico:handoff`.
 - Path match: the input is a string of at most 4096 characters and absolute; `\` reads as `/`; on Windows the comparison ignores case. A path with a `.` or `..` segment, an empty segment, a `:` other than the drive colon, a control character, or a segment ending in `.` or a space matches nothing. No other normalization and no link resolution: `snap` guarantees the run folder is not reached through a link and holds only plain files.
 - Deny reason (to the model): `aico reprompt gate: <tool> refused; the reprompter may write only prompt.md and its Handoff in its run folder`. The CEO sees `$.ui.toast('aico: reprompter <tool> refused: <path>')` (path cleaned of control characters, cut to 80 characters) and a `$.ui.log` line.
-- `.catch`: deny when `e.agentId` is a recorded reprompter or has no record; else `next(e)`.
+- `.catch` (and an error inside the hook): deny when `e.agentId` is a recorded reprompter, or has no record while at least one armed-run entry is held in memory (no file read on this path); else `next(e)`.
+
+**Armed run** (gate memory only; the CEO's rule: unknown agents are refused only while a reprompt run is armed):
+- Arming: only the gate's own `arm` call arms a run. On its exit 0 the gate stores `{ root, slug, nn, at }` (`at` = `Date.now()`) under `<slug>`, one entry per run: a later dispatch of the same run replaces the entry (new `nn`, new `at`). At most 50 entries, the oldest dropped. The entry stays when the following `next(e)` fails; the rules below end it.
+- Never armed from disk: the gate does not look for `.gate-*` files to arm. A marker left by a crashed run or an earlier session, or one any agent writes, arms nothing. A new session and a reload of the hooks module start with no armed run.
+- Disarming is checked only when an unknown agent makes a call that is not read-only and at least one entry is held. Each entry is dropped at the first rule that holds, in this order:
+  1. Timeout: `Date.now() − at` is below 0 or above 30 minutes (`ARM_TTL_MS` = 1 800 000). One entry is refreshed on every dispatch, so the window is one reprompter Step plus the Lead's checks and form; a run left open unlocks after 30 minutes at most.
+  2. Marker gone: `<run>/.gate-<nn>` is not a plain file (`$.fs.stat` rejects, `isLink`, or `kind` is not `file`).
+  3. Ended (end or abort): `<run>/run-state.jsonl` is a plain file of at most 64 KiB and one of its LF-split lines parses as a JSON object with `ev` equal to `"end"` (`run-state` v1.1 `end <slug> ship|abort`). Lines that do not parse are skipped.
+- A run-state file that is missing, a link, too large or unreadable means "not ended"; any other error while checking an entry keeps that entry. Both fail closed, and the timeout bounds both: a stale or broken run cannot keep the session locked past 30 minutes.
+- Armed = at least one entry left after these checks.
 
 ## Checker `scripts/reprompt-check.mjs`
 Node built-ins only; run from the product root as `node "${CLAUDE_PLUGIN_ROOT}/scripts/reprompt-check.mjs" …`. Every argument is a Lead-made or gate-made token: `<slug>` matches `^reprompt-\d{8}-\d{4}(-[2-9])?$`, `<NN>` `^\d{2,3}$`, `<hex>` `^[0-9a-f]{64}$`, `<asks>` `^[0-3]$`. Anything else, an extra argument, or a run folder that is missing or a symlink → exit 3. It prints one JSON line (at most 64 KiB, at most 20 paths plus `"more": <count>`) and never prints file content except the parsed question, label and brief text of a valid reply.
@@ -136,12 +148,15 @@ Node built-ins only; run from the product root as `node "${CLAUDE_PLUGIN_ROOT}/s
 - `prompt` and `image` also carry `"fence"`: backticks, as many as the longest backtick run in the body, the `- Assumed:` lines and the brief, plus one, and at least three.
 - Anything else → `ok: false`. Reasons: `handoff missing`, `handoff invalid`, `wrong step`, `too large`, `bad characters`, `hidden markup`, `writes outside the run folder`, `needs-ceo without asks`, `needs 1 to 3 questions`, `bad question line`, `assumptions not listed`, `prompt.md not rewritten`, `bad frontmatter`, `not six parts`, `parts out of order`, `no prompt and no brief`.
 
-**Residual risk.** The write gate prevents; the checker is the backstop and detects only.
-- The gate needs the aico hooks module. Without it `arm` never runs and `reply` refuses (`write gate not active`), so reprompt does not run. A reprompter steered to write `.gate-<NN>` itself while the hooks are off passes that check; then only the tree check stands, and it misses ignored folders outside the watch set (`node_modules/`) and shell profiles.
-- Another plugin's `tool.check` hook above aico can turn the gate's deny into an allow (the engine takes the last word up the chain).
-- On a surface without `$.process` (desktop, unverified) `arm` cannot run, so reprompt is refused there.
-- After a refused run (`git config changed`), the next `snap` of a new run, like any git command of the CEO's, runs git under the changed config; the Lead tells the CEO to check the listed files first.
-- The tree check compares metadata (type, size, mtime, ctime), not content, except the `.claude.json` keys; a change made through a link outside the walked paths is not seen. System git config (needs admin rights) is listed only when `--show-origin` names it.
+**Residual risk.** The write gate prevents; the checker is the backstop and detects only. This list is the known risk the Lead states at Ship.
+- Hooks off: the gate needs the aico hooks module. Without it `arm` never runs and `reply` refuses (`write gate not active`), so reprompt does not run. A reprompter steered to write `.gate-<NN>` itself while the hooks are off passes that check; then only the tree check stands, and it misses ignored folders outside the watch set (`node_modules/`) and shell profiles.
+- A plugin above aico: another plugin's `tool.check` hook above aico can turn the gate's deny into an allow (the engine takes the last word up the chain).
+- No `$.process`: on a surface without it (desktop, unverified) `arm` cannot run, so reprompt is refused there.
+- The next run after a refused one: nothing carries a `git config changed` refusal forward. A later `snap` (run by hand, or the first `snap` of the next `/aico:reprompt`) builds a fresh baseline, exits 0 and runs git under the changed config, so a planted clean filter runs (measured by QA, Step 27). The same holds for any git command of the CEO's. The only control is the Lead's line telling the CEO to check the listed files first.
+- Metadata only: the tree check compares type, size, mtime and ctime, not content, except the `.claude.json` keys; a change made through a link outside the walked paths is not seen. System git config (needs admin rights) is listed only when `--show-origin` names it.
+- Outside the watch set: `~/.bashrc` and other shell profiles, `node_modules/` and a new `CLAUDE.md` in an ignored folder are not seen by the checker at all. The gate's allow-list alone keeps the reprompter from writing them.
+- Unknown agents: outside an armed run their calls are not gated. Inside one, every call that is not read-only is refused, a memory fork's write included (that write is lost). A reload of the hooks module mid-run forgets the armed run and the records: the reprompter in flight is then judged by `$.agent.list()` and still refused when the list names it; if the list also fails, it passes as an unknown agent and only the tree check stands.
+- Paths: a UNC session root (`\\server\share`) matches nothing, so every reprompter call is refused there (fail closed). `$.plugin.root` must be the folder `Company profile:` points into, or the PROFILE.md read is refused.
 - The question text and labels are shown in a form, not in a fence; they reach the reprompter only as the CEO's chosen label in `answers-<r>.md`.
 
 ## Lead flow (the Playbook)
@@ -174,6 +189,6 @@ The architect writes these into the named files before the merged-tree code. Tex
 - **`aico-mods` v1.2** (additive, minor bump per ADR 0007). Into `docs/contracts/aico-mods.md`, verbatim:
   - Title `# Contract: aico-mods v1.2`; after the v1.1 line: "v1.2 (task reprompter-role, additive): the reprompt write gate (`mods/reprompt-gate.ts`, rules in `mods/lib/reprompt-gate.mjs`) joins the hooks module. It is specified in `reprompt` v1 "Write gate": always on, no setting, no view, no status part; "Off" does not apply to it. It is the only hook that answers `agent.spawn` with `deny` and the only one that gates tools other than the shell tools. Every v1.1 row stays as it was."
   - Shape, first bullet: append "The write gate is `mods/reprompt-gate.ts` with `mods/lib/reprompt-gate.mjs`."
-  - Sources table, new row: `| Reprompt run folder (write only: `.gate-<NN>`) | `reprompt-check.mjs arm <slug> <NN>` | Reprompt gate |`; the "Running subagents" row's "Used by" adds "Reprompt gate (`Output:` line by its own regex in `reprompt` v1; `$.agent.list()` for an unrecorded agent)".
+  - Sources table, new row: `| Reprompt run folder (writes `.gate-<NN>` through `arm`; reads only to disarm an armed run: `.gate-<NN>` stat and `run-state.jsonl`, at most 64 KiB) | `reprompt-check.mjs arm <slug> <NN>`; `$.fs.stat`, `$.fs.read` | Reprompt gate |`; the "Running subagents" row's "Used by" adds "Reprompt gate (`Output:` line by its own regex in `reprompt` v1; `$.agent.list()` for an unrecorded agent)".
   - Calling a script, `timeoutMs` list: add "5000 for the reprompt gate's `reprompt-check.mjs arm`". The "only hooks that await a script" sentence adds "and the reprompt gate's `agent.spawn` (`arm`, 5 s cap)".
   - `mods/shared/run-script.ts` `ScriptName` adds `reprompt-check`; `TIMEOUT_MS` adds `arm: 5000`.
