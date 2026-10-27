@@ -44,9 +44,9 @@ test('manifest: roles, playbooks and Ship definition', () => {
   for (const h of manifest.skill_search.hints) assert.match(h, /^[a-z0-9][a-z0-9 -]{0,59}$/);
 });
 
-test('manifest: every Role and Playbook exists, Playbooks are user-started', () => {
+test('manifest: every Role and Playbook exists, Playbooks carry an argument hint', () => {
   for (const r of manifest.roles) assert.ok(fs.existsSync(path.join(root, 'agents', `${r}.md`)), r);
-  for (const p of manifest.playbooks) assert.match(read(`skills/${p}/SKILL.md`), /^disable-model-invocation: true$/m, p);
+  for (const p of manifest.playbooks) assert.match(read(`skills/${p}/SKILL.md`), /^argument-hint:[ \t]*\S/m, p);
 });
 
 for (const name of ['campaign', 'content']) {
@@ -58,7 +58,8 @@ for (const name of ['campaign', 'content']) {
     assert.equal(lines[0], '---');
     assert.match(t, new RegExp(`^name: ${name}$`, 'm'));
     assert.match(t, /^description: .+/m);
-    assert.match(t, /^disable-model-invocation: true$/m);
+    assert.match(t, /^argument-hint:[ \t]*\S/m);
+    assert.doesNotMatch(t, /^disable-model-invocation:/m);
     assert.ok(!/^allowed-tools:/m.test(t));
     const i = lines.findIndex((l) => l.startsWith('**Help:**'));
     assert.ok(i > 0);
