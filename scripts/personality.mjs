@@ -126,15 +126,18 @@ function stage(run, list, { home, cwd, pluginRoot }) {
   const root = path.join(cwd, '.company', INPUT_DIR);
   realDir(root, INPUT_DIR);
   const dir = path.join(root, run);
-  checkRunFolder(dir, run);
+  const names = checkRunFolder(dir, run);
   const blocks = new Map();
   for (const slug of new Set(slugs)) {
     const block = personalityBlock(slug, { home, cwd, pluginRoot });
     if (block !== '') blocks.set(slug, block);
   }
-  fs.mkdirSync(dir, { recursive: true });
   const ignore = path.join(root, '.gitignore');
-  if (lstat(ignore) === null) writeAtomic(ignore, '*\n');
+  const ig = lstat(ignore);
+  if (ig !== null && ig.isDirectory()) throw new Refusal(`unexpected entry in ${INPUT_DIR}`);
+  fs.mkdirSync(dir, { recursive: true });
+  if (ig === null || ig.isSymbolicLink() || !ig.isFile() || fs.readFileSync(ignore, 'utf8') !== '*\n') writeAtomic(ignore, '*\n');
+  for (const name of names) fs.rmSync(path.join(dir, name), { force: true });
   const files = {};
   for (const [slug, block] of blocks) {
     const file = path.join(dir, `${slug}.md`);

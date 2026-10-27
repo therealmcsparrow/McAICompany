@@ -191,14 +191,53 @@ test('stage: files hold LF only and no temp files stay behind', (t) => {
   assert.ok(!fs.readFileSync(path.join(s.folder(RUN), 'qa.md'), 'utf8').includes('\r'));
 });
 
-test('stage twice overwrites; an existing .gitignore is left alone', (t) => {
+test('stage removes a Role file left by an earlier call of the same run', (t) => {
+  const s = sandbox(t);
+  run(['stage', RUN, 'qa,architect'], s.ctx);
+  assert.deepEqual(files(s), ['architect.md', 'qa.md']);
+  const r = run(['stage', RUN, 'qa'], s.ctx);
+  assert.equal(r.code, 0);
+  assert.deepEqual(files(s), ['qa.md']);
+});
+
+test('stage keeps the old files when it refuses', (t) => {
+  const s = sandbox(t);
+  run(['stage', RUN, 'qa'], s.ctx);
+  fs.writeFileSync(path.join(s.folder(RUN), 'notes.txt'), 'foreign');
+  assert.equal(run(['stage', RUN, 'architect'], s.ctx).code, 2);
+  assert.deepEqual(files(s), ['notes.txt', 'qa.md']);
+});
+
+test('stage rewrites a .gitignore that is a link and never writes through it', (t) => {
+  const s = sandbox(t);
+  const root = path.join(s.cwd, '.company', 'personality-input');
+  fs.mkdirSync(root, { recursive: true });
+  const target = path.join(s.cwd, 'target.txt');
+  fs.writeFileSync(target, 'keep');
+  try { fs.symlinkSync(target, path.join(root, '.gitignore')); } catch { return; }
+  assert.equal(run(['stage', RUN, 'qa'], s.ctx).code, 0);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'keep');
+  assert.equal(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), '*\n');
+});
+
+test('stage refuses a .gitignore that is a folder and writes nothing', (t) => {
+  const s = sandbox(t);
+  const root = path.join(s.cwd, '.company', 'personality-input');
+  fs.mkdirSync(path.join(root, '.gitignore'), { recursive: true });
+  const r = run(['stage', RUN, 'qa'], s.ctx);
+  assert.equal(r.code, 2);
+  assert.match(r.out, /^refused: /);
+  assert.ok(!fs.existsSync(s.folder(RUN)));
+});
+
+test('stage twice overwrites; a .gitignore with other bytes is rewritten to exactly one star', (t) => {
   const s = sandbox(t);
   run(['stage', RUN, 'qa'], s.ctx);
   fs.writeFileSync(path.join(s.cwd, '.company', 'personality-input', '.gitignore'), '*\n!keep\n');
   s.project({ roles: { qa: { personality: { topic: 'new topic' } } } });
   assert.equal(run(['stage', RUN, 'qa'], s.ctx).code, 0);
   assert.ok(fs.readFileSync(path.join(s.folder(RUN), 'qa.md'), 'utf8').includes('"new topic"'));
-  assert.equal(fs.readFileSync(path.join(s.cwd, '.company', 'personality-input', '.gitignore'), 'utf8'), '*\n!keep\n');
+  assert.equal(fs.readFileSync(path.join(s.cwd, '.company', 'personality-input', '.gitignore'), 'utf8'), '*\n');
 });
 
 test('stage uses settings: a hostile project value falls back to the default', (t) => {

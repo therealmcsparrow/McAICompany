@@ -1206,6 +1206,29 @@ test('clean removes the run folder and nothing else; running it twice is fine', 
   assert.equal(readFileSync(p.file, 'utf8'), fresh(), 'the brainstorm file is untouched');
 });
 
+test('stage rewrites a .gitignore whose bytes differ and removes a stale Role file', () => {
+  const p = proj();
+  p.put(fresh());
+  assert.equal(stage(p.file, '1').code, 0);
+  const ignore = join(p.company, 'brainstorm-input', '.gitignore');
+  writeFileSync(ignore, '*\n!keep\n');
+  assert.equal(stage(p.file, '1', '--roles', 'writer').code, 0);
+  assert.equal(readFileSync(ignore, 'utf8'), '*\n');
+  assert.deepEqual(readdirSync(inputDir(p)), ['writer.md']);
+});
+
+test('stage replaces a .gitignore that is a symlink and never writes through it', () => {
+  const p = proj();
+  p.put(fresh());
+  mkdirSync(join(p.company, 'brainstorm-input'), { recursive: true });
+  const target = join(p.root, 'target.txt');
+  writeFileSync(target, 'keep');
+  try { symlinkSync(target, join(p.company, 'brainstorm-input', '.gitignore')); } catch { return; }
+  assert.equal(stage(p.file, '1').code, 0);
+  assert.equal(readFileSync(target, 'utf8'), 'keep');
+  assert.equal(readFileSync(join(p.company, 'brainstorm-input', '.gitignore'), 'utf8'), '*\n');
+});
+
 test('a foreign file or a symlink in the run folder makes stage and clean refuse and leave everything as it was', () => {
   const p = proj();
   p.put(fresh());
@@ -1274,11 +1297,13 @@ test('prompt prints the input file text and writes nothing', () => {
   p.put(answered());
   const r = cli(['prompt', p.file, 'writer']);
   assert.equal(r.code, 0, r.err);
-  assert.equal(r.out, inputFor(answered(), 'writer', { round: 2, personality: personalityBlock('writer', { home: cliHome, cwd: p.root }) }));
-  assert.ok(r.out.includes('\nPersonality:\n'), 'the preview shows the default block');
+  assert.equal(r.out, inputFor(answered(), 'writer', { round: 2, personality: '' }));
+  assert.ok(!r.out.includes('Personality:'), 'the preview prints no block');
   assert.equal(existsSync(join(p.company, 'brainstorm-input')), false);
   stage(p.file, '2');
-  assert.equal(readFileSync(join(inputDir(p), 'writer.md'), 'utf8'), r.out);
+  const staged = readFileSync(join(inputDir(p), 'writer.md'), 'utf8');
+  assert.equal(staged, inputFor(answered(), 'writer', { round: 2, personality: personalityBlock('writer', { home: cliHome, cwd: p.root }) }));
+  assert.ok(staged.includes('\nPersonality:\n'), 'the staged file carries the block');
   const q = cli(['prompt', p.file, 'writer', '--pass', 'full', '2']);
   assert.equal(q.code, 1);
   assert.match(q.err, /^refused: round 2 cannot be staged/);

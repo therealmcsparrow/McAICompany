@@ -623,3 +623,30 @@ test('stage refuses a folder that holds a link or a foreign entry, and writes no
   assert.equal(c.code, 2);
   assert.ok(fs.existsSync(path.join(folder, 'notes.txt')), 'a foreign file is never removed');
 });
+
+test('no subcommand of brainstorm.mjs or personality.mjs prints a personality block or value', (t) => {
+  const s = sandbox(t);
+  const defaults = JSON.parse(read('company/personalities.json'));
+  const values = Object.values(defaults.architect).filter((v) => !['low', 'medium', 'high'].includes(v));
+  const seen = [];
+  const note = (name, r) => {
+    seen.push(name);
+    for (const stream of [r.out, r.err]) {
+      assert.doesNotMatch(stream, /Personality:|Style data/, name);
+      for (const v of values) assert.ok(!stream.includes(v), `${name} printed a value`);
+    }
+  };
+  const file = path.join(s.cwd, '.company', 'brainstorms', 'brainstorm-20261027-1200.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const made = spawnSync(process.execPath, [path.join(root, 'scripts', 'brainstorm.mjs'), 'new', file], {
+    cwd: s.cwd, encoding: 'utf8', input: JSON.stringify({ topic: 'A topic', roles: ['architect', 'qa'] }), env: { ...process.env, MCSPARROW_HOME: s.home }
+  });
+  assert.equal(made.status, 0, made.stderr);
+  const calls = [
+    ['prompt', file, 'architect'], ['prompt', file, 'architect', '--pass', 'full', '2'], ['prompt', file, 'nobody'], ['stage', file, '1'],
+    ['stage', file, '1', '--roles', 'qa'], ['queue', file], ['check', file], ['film', file], ['crossfire', file, '2'], ['clean', file], ['parse'], ['apply'], [], ['bogus']
+  ];
+  for (const args of calls) note(`brainstorm ${args.join(' ')}`, s.cli('brainstorm.mjs', ...args));
+  for (const args of [['stage', RUN_ID, 'architect'], ['clean', RUN_ID], ['stage'], ['show', 'architect']]) note(`personality ${args.join(' ')}`, s.cli('personality.mjs', ...args));
+  assert.ok(seen.length >= 18);
+});

@@ -149,9 +149,10 @@ export function checkNames(root, agentNames, errors) {
   }
 }
 
-// Personality text (role-names v1.1, rule T): 1-80 code points of letters, combining marks, digits and , . ' - ! ?,
-// single spaces between words. Anchored; the lookahead bounds the length, so the match is linear.
-export const PERSONALITY_TEXT_RE = /^(?=.{1,80}$)[\p{L}\p{M}\p{N},.'!?-]+(?: [\p{L}\p{M}\p{N},.'!?-]+)*$/u;
+// Personality text (role-names v1.1, rule T): 1-80 code points; words of letters, digits, combining marks and , . ' - ! ?,
+// each word starting with a letter or digit, single spaces between words. No default-ignorable code point and no
+// spacing modifier letter (U+02B0-U+02FF, the quote and colon lookalikes). Anchored and linear.
+export const PERSONALITY_TEXT_RE = /^(?=.{1,80}$)(?!.*[\p{Default_Ignorable_Code_Point}ʰ-˿])[\p{L}\p{N}][\p{L}\p{M}\p{N},.'!?-]*(?: [\p{L}\p{N}][\p{L}\p{M}\p{N},.'!?-]*)*$/u;
 export const PERSONALITY_LEVELS = ['low', 'medium', 'high'];
 export const PERSONALITY_PHRASES = Object.freeze({
   intelligence: Object.freeze({
@@ -167,7 +168,7 @@ export const PERSONALITY_PHRASES = Object.freeze({
 });
 export const PERSONALITY_KEYS = ['temperament', 'talk', 'topic', 'intelligence', 'creativity'];
 const PERSONALITY_TEXT_KEYS = new Set(['temperament', 'talk', 'topic']);
-const PERSONALITY_MAX = 80;
+export const PERSONALITY_MAX = 80;
 export const PERSONALITY_REASONS = {
   length: `must be 1 to ${PERSONALITY_MAX} characters`,
   charset: "must be one line of letters, digits, single spaces and , . ' - ! ?",

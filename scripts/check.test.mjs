@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS, PERSONALITY_PHRASES } from './check.mjs';
+import { check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS, PERSONALITY_PHRASES, PERSONALITY_MAX, personalityProblem } from './check.mjs';
 
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
@@ -730,6 +730,45 @@ test('personality exports: regex anchored, levels closed', () => {
   assert.ok(!PERSONALITY_TEXT_RE.test('a"b'));
   assert.ok(!PERSONALITY_TEXT_RE.test('x'.repeat(81)));
   assert.deepEqual(PERSONALITY_LEVELS, ['low', 'medium', 'high']);
+});
+
+const lookalikes = {
+  'variation selector': 'calm️', 'variation selector inside': 'ca️lm', 'combining grapheme joiner': 'ca͏lm',
+  'mongolian free variation selector': 'calm᠋', 'hangul filler': 'calmㅤ', 'halfwidth hangul filler': 'calmﾠ',
+  'soft hyphen': 'ca­lm', 'word joiner': 'ca⁠lm', 'zero-width space': 'ca​lm', 'tag character': 'calm\u{E0041}',
+  'variation selector supplement': 'calm\u{E0100}', 'modifier letter double prime': 'aʺb', 'modifier letter double apostrophe': 'aˮb',
+  'modifier letter triangular colon': 'aːb', 'spacing modifier at the start': 'ʺcalm', 'range start': 'aʰb', 'range end': 'a˿b',
+  'leading hyphen': '-calm', 'leading apostrophe': "'calm", 'leading comma': ',calm', 'leading bang': '!calm', 'leading question mark': '?calm',
+  'second word leading hyphen': 'very -calm', 'leading combining mark': '́calm', 'second word leading mark': 'very ́calm',
+  'lone punctuation': '...', 'lone hyphen': '-', 'empty': '', 'only space': ' ', 'double space': 'a  b', 'trailing space': 'a ', 'leading space': ' a',
+  'newline': 'a\nb', 'trailing newline': 'a\n', 'tab': 'a\tb', 'quote': 'a"b', 'colon': 'a:b', 'no-break space': 'a b', 'ideographic space': 'a　b'
+};
+test('personality rule T refuses invisible and lookalike characters and a word that starts with a mark', () => {
+  for (const [name, value] of Object.entries(lookalikes)) {
+    assert.ok(!PERSONALITY_TEXT_RE.test(value), name);
+    assert.ok(personalityProblem('talk', value), name);
+  }
+});
+
+test('personality rule T keeps ordinary text, other scripts and combining marks inside a word', () => {
+  for (const value of ['calm', 'calm, patient!', "o'neil-smith", '3 dry jokes', 'x'.repeat(80), 'é', 'éclair', 'Ünïcode', '日本語 のテスト', 'Привет мир', 'a.b?c!d', '2-3 steps']) {
+    assert.ok(PERSONALITY_TEXT_RE.test(value), value);
+    assert.equal(personalityProblem('topic', value), null, value);
+  }
+  assert.ok(!PERSONALITY_TEXT_RE.test('x'.repeat(81)));
+  assert.ok(PERSONALITY_TEXT_RE.test('\u{1D400}'.repeat(80)), '80 code points in two code units each');
+  assert.ok(!PERSONALITY_TEXT_RE.test('\u{1D400}'.repeat(81)));
+});
+
+test('personality rule T is exported with its limit and matches long hostile input in linear time', () => {
+  assert.equal(PERSONALITY_MAX, 80);
+  assert.equal(PERSONALITY_TEXT_RE.flags, 'u');
+  for (const value of ['a '.repeat(40) + 'ㅤ', 'a'.repeat(79) + '-' + ' ', ('a ').repeat(5000), '-'.repeat(100000), 'a-'.repeat(50000) + '\n']) {
+    const start = process.hrtime.bigint();
+    for (let i = 0; i < 20; i++) PERSONALITY_TEXT_RE.test(value);
+    personalityProblem('talk', value);
+    assert.ok(Number(process.hrtime.bigint() - start) / 1e6 < 500, 'took too long');
+  }
 });
 
 test('valid personalities.json has no errors', () => {

@@ -44,15 +44,13 @@ function hasCompany(cwd) {
   }
 }
 
-const PERSONALITY_KEYS = ['temperament', 'talk', 'topic', 'intelligence', 'creativity'];
-const PERSONALITY_MAX = 80;
 const ownObject = (o, k) => (isObject(o) && Object.hasOwn(o, k) && isObject(o[k]) ? o[k] : undefined);
 
 // The valid keys of one personality object, as plain strings. A value that fails its rule is left out.
 function validPersonality(source) {
   const out = {};
   if (!isObject(source)) return out;
-  for (const key of PERSONALITY_KEYS) {
+  for (const key of check.PERSONALITY_KEYS) {
     if (Object.hasOwn(source, key) && typeof source[key] === 'string' && !check.personalityProblem(key, source[key])) out[key] = source[key];
   }
   return out;
@@ -77,7 +75,7 @@ function personalitiesState(ctx, plugin, user, project) {
   for (const role of Object.keys(plugin.roles)) {
     const own = (layer) => validPersonality(ownObject(ownObject(layer.roles, role), 'personality'));
     const effective = {};
-    for (const key of PERSONALITY_KEYS) {
+    for (const key of check.PERSONALITY_KEYS) {
       const hit = Object.hasOwn(resolved.roles, role) && Object.hasOwn(resolved.roles[role], key) ? resolved.roles[role][key] : undefined;
       if (hit) effective[key] = { value: hit.value, source: hit.source };
     }
@@ -87,7 +85,7 @@ function personalitiesState(ctx, plugin, user, project) {
     rule: {
       text_re: check.PERSONALITY_TEXT_RE.source,
       flags: check.PERSONALITY_TEXT_RE.flags,
-      max: PERSONALITY_MAX,
+      max: check.PERSONALITY_MAX,
       levels: [...check.PERSONALITY_LEVELS],
       phrases: check.PERSONALITY_PHRASES
     },

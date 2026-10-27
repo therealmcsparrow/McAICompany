@@ -859,8 +859,8 @@ export function stageFiles(file, text, { round, pass = 'ideas', roles, reask, bl
   mkdirSync(loc.dir, { recursive: true });
   const ignore = join(loc.base, '.gitignore');
   const ig = lst(ignore);
-  if (!ig) writeAtomic(ignore, '*\n');
-  else if (!ig.isFile()) throw new Refused(`unexpected entry in ${INPUT_DIR}`);
+  if (ig && ig.isDirectory()) throw new Refused(`unexpected entry in ${INPUT_DIR}`);
+  if (!ig || ig.isSymbolicLink() || !ig.isFile() || readFileSync(ignore, 'utf8') !== '*\n') writeAtomic(ignore, '*\n');
   for (const name of names) rmSync(join(loc.dir, name), { force: true });
   const files = {};
   for (const [role, body] of texts) {
@@ -1048,10 +1048,10 @@ export function run(argv) {
       const pass = flags.has('--pass') ? oneOf(flags.get('--pass'), ['full', 'crossfire'], '--pass') : undefined;
       if ((pass === undefined) !== (pos[2] === undefined)) throw new Usage('--pass and <round> go together');
       const round = pos[2] === undefined ? undefined : intArg(pos[2], 'round');
-      let projectFile = null, personality = '';
+      let projectFile = null;
       const role = roleArg(pos[1]);
-      try { const loc = inputLocation(f); projectFile = projectFileOf(loc); personality = blockFor(loc, role); } catch (e) { if (e.name !== 'Refused') throw e; }
-      return { code: 0, out: inputFor(readFileText(f), role, { pass, round, file: f, projectFile, personality }), err: '' };
+      try { projectFile = projectFileOf(inputLocation(f)); } catch (e) { if (e.name !== 'Refused') throw e; }
+      return { code: 0, out: inputFor(readFileText(f), role, { pass, round, file: f, projectFile, personality: '' }), err: '' };
     }
     case 'stage': {
       arity(pos, 2, 2, 'stage <file> <round> [--pass ideas|full|crossfire] [--roles <slug>,<slug>] [--reask <role>]');
