@@ -1,13 +1,13 @@
-# Contract: skills-manifest v2
+# Contract: skills-manifest v2.1
 
-Provider: `deps/skills.json` (plugin groups, user scope) and `.company/project.md` `## Design skills` (group `design`, project scope, see `design-skills-section` v1). Consumer: `scripts/install-skills.mjs`, called by `aico:setup`, `aico:research`, `aico:feature`.
-v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2.
+Provider: `deps/skills.json` (plugin groups, user scope) `.company/project.md` `## Design skills` (group `design`, project scope, see `design-skills-section` v1.1) and `## Skills` (group `skills`, project scope, see `skills-section` v1). Consumer: `scripts/install-skills.mjs`, called by `aico:setup`, `aico:research`, `aico:feature`, and the Lead's skill picks (`skill-recommendation` v1).
+v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2. v2.1 is additive with `skills-section` v1: group `skills` and `parseSkillsSection`; every v2 manifest is valid v2.1. Fix round 1 (task skill-researcher-scan, unreleased, additive): a project line with `commit` installs that commit.
 
 ## Group entries
 - `{ "name", "source" }` → `npx -y skills@1.7.4 add <source> -s <name> -g -a claude-code -y` (user scope; the CLI pin is one constant, bumped in a change of its own, agentsec.S1).
 - `{ "name", "install" }` → the literal install command (unchanged).
 - `{ "include": "<group>" }` → new: expands to that group's entries. `core` contains `{ "include": "research" }`, so `/aico:setup` (default `core`) also installs `research`.
-- Optional on any entry: `"license"` (SPDX), `"vetted"` (YYYY-MM-DD), `"commit"` (the SHA read when vetting, agentsec.S2). `license` and `vetted` are **required** on every entry of the `research` group (checked by `scripts/check.mjs`).
+- Optional on any entry: `"license"` (SPDX), `"vetted"` (YYYY-MM-DD), `"commit"` (the SHA read when vetting, agentsec.S2). `license` and `vetted` are **required** on every entry of the `research` group (checked by `scripts/check.mjs`). A `deps/skills.json` `commit` is a record only and does not change the command.
 - Commands from `deps/skills.json` are repo-owned. `name` and `source` of every entry still match the agentsec.M-SEC7 patterns (`name` may end in `*`); `check.mjs` reports any that do not.
 
 ## `research` group (AC7, Spike S1)
@@ -22,12 +22,12 @@ v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2.
 |---|---|
 | `--dry-run` | unchanged: `[dry-run] <cmd>` per missing skill, or `All skills already installed.`; group `design` lines read `[dry-run] (in <product root>) <cmd>` |
 | `--missing` | prints `missing <name>` per missing skill (no commands), exit 0; nothing missing → no output |
-| `--project <path>` | adds group `design` parsed from that file's `## Design skills`. `<path>` must end in `.company/project.md`; product root = its grandparent. Group `design` without `--project` is `unknown group design` |
+| `--project <path>` | adds group `design` parsed from that file's `## Design skills` and group `skills` parsed from its `## Skills`. `<path>` must end in `.company/project.md`; product root = its grandparent. Groups `design` and `skills` without `--project` are `unknown group design` / `unknown group skills` |
 
-- Group `design` repo entries → `npx -y skills@1.7.4 add <source> -s <name> -a claude-code -y` (**no `-g`**), run with `cwd` = product root. Command entries → the manifest's `install` string. Plugin entries and names containing `:` are skipped.
-- Every command is one string built only from allow-listed tokens and run through `execSync(cmd, { cwd, stdio })`; never an `args` array with `shell: true` (node.M-SEC5, DEP0190).
+- Groups `design` and `skills` repo entries → `npx -y skills@1.7.4 add <source> -s <name> -a claude-code -y` (**no `-g`**), run with `cwd` = product root. **With a `commit` on the line, `<source>` is `<owner>/<repo>#<commit>`** (the skills CLI 1.7.4 reads `#<ref>` as the ref and clones a 40-hex ref at that sha; `parseFragmentRef`, `cloneRepo` → `cloneAtSha`). Off Windows the argv form carries the same token. Command entries → the manifest's `install` string. Plugin entries and names containing `:` are skipped.
+- Every command is one string built only from allow-listed tokens and run through `execSync(cmd, { cwd, stdio })` on Windows, or the argv form with no shell elsewhere; never an `args` array with `shell: true` (node.M-SEC5, DEP0190). `#` is not special to `cmd.exe` and no shell is used off Windows.
 - Installed detection adds `<product root>/.claude/skills` and `<product root>/.agents/skills` when `--project` is given.
-- Exports for tests: `plan`, `runAll`, `expand(manifest, groups)`, `missing(manifest, groups, installed)`, `parseDesignSkills(markdown, manifest)` (the manifest is needed for the byte-identical command check).
+- Exports for tests: `plan`, `runAll`, `expand(manifest, groups)`, `missing(manifest, groups, installed)`, `parseDesignSkills(markdown, manifest)` and `parseSkillsSection(markdown, manifest)` (the manifest is needed for the byte-identical command check). Parsed repo entries carry `commit` when the line has one.
 
 ## Presence check (AC8), run by the Playbook at run start
 1. `node install-skills.mjs <groups> [--project .company/project.md] --dry-run`. No command printed → present.
@@ -37,5 +37,7 @@ v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2.
 ## Error cases
 - `include` of an unknown group or an include cycle → throws `unknown group <g>` / `include cycle <a> -> <b>`, exit 1, nothing installed.
 - `--project` path not ending in `.company/project.md` → `ERROR --project must point to <root>/.company/project.md`, exit 1.
-- `--project` file missing or no `## Design skills` section → group `design` is empty (not an error).
-- A `## Design skills` line that fails `design-skills-section` v1 → `ERROR design skill line <n>: <field> <reason>`, exit 1, nothing installed in any group.
+- `--project` file missing or no `## Design skills` / `## Skills` section → that group is empty (not an error).
+- A `## Design skills` line that fails `design-skills-section` v1.1 → `ERROR design skill line <n>: <field> <reason>`, exit 1, nothing installed in any group.
+- A `## Skills` line that fails `skills-section` v1 → `ERROR skills line <n>: <field> <reason>`, exit 1, nothing installed in any group. `plugin <p>` sources are not allowed in group `skills`; at most 5 lines per area and 15 in all.
+- A pinned install whose clone at the sha fails → the skills CLI exits non-zero; `install-skills.mjs` reports `FAILED <cmd>` as for any failure and never retries without the pin.

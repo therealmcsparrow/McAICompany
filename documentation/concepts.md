@@ -84,6 +84,9 @@ Before Ship, the company checks the EU obligations that apply: GDPR, the Cyber R
 ## Design skills
 A UI product can have approved design skills. The set lives in `.company/project.md` under `## Design skills`: one line per skill with its source, license, vetted date and approval date, at most five. A design-researcher proposes the set from your stack, product type, Personas and Art direction. You approve it in a form, and installs run only after a second form shows the exact commands. `/aico:feature` refreshes the set for a UI product when it is empty or its newest approval is older than 180 days. The UI Roles load the approved skills from their dispatch.
 
+## Skill picks
+The skill-researcher (Selin) proposes third-party skills for four areas: `stack`, `product-type`, `company-type` and `design`. It has no Bash, so it runs no scanner. It vets each candidate against its sources, then the Lead scans every pick with SkillSpector in a new quarantine folder before you see it. A critical or high finding, a failed scan or a timeout means the pick is rejected, and with no scanner installed nothing is recommended. You approve the set (at most 5 per area) in one form, then see the exact install commands in a second; nothing installs unless you answer yes to both. The install pins the commit that was scanned. After it, the Lead scans the installed skill again; a bad result stops the run and shows you the removal command, which only you run. Approved `stack`, `product-type` and `company-type` skills are recorded in `.company/project.md` under `## Skills`, one line each, and design skills stay under `## Design skills`. To scan skills you already have, use [`/aico:skillspector`](commands.md#aicoskillspector).
+
 ## The aico language
 `aico_language` sets the language aico writes in: Handoff prose, forms, reports and summaries. It is separate from `languages:`, which covers the product's UI strings. Your default lives in `~/.mcsparrow/config.json`; a product can override it with `aico_language:` in `.company/project.md`. Set it with [`/aico:language`](commands.md#aicolanguage). Machine-read parts stay English in every language.
 
@@ -91,13 +94,14 @@ A UI product can have approved design skills. The set lives in `.company/project
 Every Role runs on a **model** (opus, sonnet or haiku) and an **effort** level (`low`, `medium`, `high`, `xhigh`, `max`). The model is how capable the Role is; effort is how long it thinks before acting. The plugin's defaults put the deepest thinking where a miss is expensive (architect, code-reviewer, security, pentester on high) and keep writing, art, lookup and support work on low. Every Role also has a person name for display, such as Ava the architect or Quinn the QA tester. Names show in cooler chats, brainstorms, Gate summaries and Handoff bylines (`By: Ava (architect)`). You can ask for a Role by name ("ask Ava to check the Contracts"). Internal IDs like `aico:architect` never change. The full list is in [Roles](roles.md).
 
 ## Settings
-[`/aico:settings`](commands.md#aicosettings) opens a page in your browser where you change how the company works. It has five sections:
+[`/aico:settings`](commands.md#aicosettings) opens a page in your browser where you change how the company works. It has six sections:
 
 - **Roles** — name, model and effort for each Role, with a bulk change per department.
 - **Language & profile** — the aico language and the `.company/project.md` profile fields.
 - **Pipeline** — the Fix-round limit, parallel or one-at-a-time dispatch, the max context (`context_cap`, global and per Role), the review format (`pipeline.review_format`, below), which optional review lanes run (security, compliance, legal, persona, hands-on and accessibility testing), and the brainstorm options: debate style (`brainstorm.debate`) and the film script (`brainstorm.film_script`).
 - **Gates** — ask or auto for the Brief, Plan and Ship Gates and for installs.
 - **Mods** — on or off and the options for the four [mods](mods.md), including the Blast Radius commit gate.
+- **Skill scan** — the SkillSpector scan mode (`skillspector.mode`: `no-llm` or `claude_cli`, default `no-llm`). `no-llm` sends no skill text anywhere, but package names, versions and ecosystems from a skill's dependency files go to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found. `claude_cli` also sends skill text to Anthropic and counts only from your user settings.
 
 Each setting has three levels, shown side by side: the **plugin** default, your **user** default (`~/.mcsparrow/config.json`) and a **project** override (`.company/settings.json`; profile fields stay in `.company/project.md`). The project wins over the user, and the user wins over the plugin. Changes apply from the next aico run. With nothing set, aico behaves exactly as before.
 

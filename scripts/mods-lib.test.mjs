@@ -15,6 +15,7 @@ import {
   MAIN_LIFETIME_MS, SUBAGENT_LIFETIME_MS, LIFETIME_LABEL, SUBAGENT_LINE, EMPTY_CLOCK, noteRequest, cacheClock, clockLines, clockStatus, wrap
 } from '../mods/lib/cache-clock.mjs';
 import { MODS_DEFAULTS as SETTINGS_DEFAULTS } from './settings.mjs';
+import { progressRows } from '../mods/lib/bars.mjs';
 
 // ---- guard.mjs: hostile input first
 
@@ -1051,4 +1052,104 @@ test('M4: program-name nesting, hyphen word ends and oversize payloads are commi
     assert.equal(BASH(c).isCommit, true, c.slice(0, 80));
   }
   assert.equal(BASH('x '.repeat(40000)).isCommit, false);
+});
+
+// ---- bars.mjs: Gates and Steps progress rows
+
+const gate = (g, result = 'passed', at = '2026-01-01T10:00:00Z') => ({ gate: g, result, at });
+const stepRow = (n, status) => ({ step: String(n).padStart(2, '0'), role: 'architect', status, round: 0, file: `${String(n).padStart(2, '0')}-architect.md`, mtime: '2026-01-01T10:00:00Z' });
+const barView = (over = {}) => ({
+  v: 1, slug: 'demo', state: 'running', started: '2026-01-01T10:00:00Z', ended: null, outcome: null, wave: 1,
+  gates: [], round: 0, tier: 'medium', steps: [], warnings: [], ...over
+});
+const eightSteps = (done) => Array.from({ length: 8 }, (_, i) => stepRow(i + 1, i < done ? 'done' : 'unknown'));
+
+test('progressRows draws the count first, then the bar', () => {
+  const rows = progressRows(barView({ gates: [gate('brief')], steps: eightSteps(5) }), 32);
+  assert.equal(rows[0], 'Gates 1/3 [###-----] last: brief');
+  assert.equal(rows[1], 'Steps 5/8 [#####---]');
+});
+
+test('progressRows caps the bar at 20 cells', () => {
+  const rows = progressRows(barView({ gates: [gate('brief'), gate('plan')], steps: eightSteps(4) }), 400);
+  assert.equal(rows[0], `Gates 2/3 [${'#'.repeat(13)}${'-'.repeat(7)}] last: plan`);
+  assert.equal(rows[1], `Steps 4/8 [${'#'.repeat(10)}${'-'.repeat(10)}]`);
+});
+
+test('progressRows counts only passed gates and names the latest', () => {
+  const view = barView({ gates: [gate('brief', 'changed'), gate('brief'), gate('plan', 'stopped'), gate('plan', 'passed', '2026-01-01T11:00:00Z')] });
+  assert.match(progressRows(view, 60)[0], /^Gates 2\/3 \[.*\] last: plan$/);
+  assert.match(progressRows(barView({ gates: [gate('plan', 'stopped')] }), 60)[0], /^Gates 0\/3 \[-+\] last: none$/);
+});
+
+test('progressRows: no steps is Steps 0/0 with no bar', () => {
+  const rows = progressRows(barView(), 40);
+  assert.equal(rows[1], 'Steps 0/0');
+  assert.match(rows[0], /^Gates 0\/3 \[-+\] last: none$/);
+});
+
+test('progressRows keeps the bar full only at the full count and empty only at zero', () => {
+  const many = (done) => Array.from({ length: 200 }, (_, i) => stepRow((i % 99) + 1, i < done ? 'done' : 'unknown'));
+  assert.match(progressRows(barView({ steps: many(199) }), 40)[1], /^Steps 199\/200 \[#+-\]$/);
+  assert.match(progressRows(barView({ steps: many(1) }), 40)[1], /^Steps 1\/200 \[#-+\]$/);
+  const at4 = (done) => progressRows(barView({ gates: [gate('brief')], steps: Array.from({ length: 20 }, (_, i) => stepRow(i + 1, i < done ? 'done' : 'unknown')) }), 28)[1];
+  assert.equal(at4(1), 'Steps 1/20 [#---]');
+  assert.equal(at4(19), 'Steps 19/20 [###-]');
+});
+
+test('progressRows: an ended ship run is full, an ended abort shows the real counts', () => {
+  const ended = { state: 'ended', ended: '2026-01-01T12:00:00Z', steps: eightSteps(3), gates: [gate('brief')] };
+  assert.deepEqual(progressRows(barView({ ...ended, outcome: 'ship' }), 31), [`Gates 3/3 [${'#'.repeat(8)}] last: ship`, `Steps 8/8 [${'#'.repeat(8)}]`]);
+  assert.deepEqual(progressRows(barView({ ...ended, outcome: 'abort' }), 32), ['Gates 1/3 [###-----] last: brief', 'Steps 3/8 [###-----]']);
+});
+
+test('progressRows: unknown input shows ? and no bar', () => {
+  for (const view of [null, undefined, barView({ state: 'none' }), { state: 'unknown' }, { state: 'running', gates: 'x', steps: null }]) {
+    assert.deepEqual(progressRows(view, 39), ['Gates ?', 'Steps ?']);
+  }
+});
+
+test('progressRows is ASCII, fits every width from 10 to 400, shares one cell count and puts the count first', () => {
+  const full = Array.from({ length: 200 }, (_, i) => stepRow((i % 99) + 1, 'done'));
+  const views = [
+    null,
+    barView(),
+    barView({ gates: [gate('brief'), gate('plan'), gate('ship')], steps: eightSteps(8) }),
+    barView({ gates: [gate('plan')], steps: full }),
+    barView({ state: 'ended', outcome: 'ship', steps: eightSteps(2) })
+  ];
+  for (const view of views) {
+    for (let width = 10; width <= 400; width++) {
+      const rows = progressRows(view, width);
+      const cells = rows.map((row) => (row.match(/\[([#-]+)\]/) ?? [])[1]?.length);
+      for (const row of rows) {
+        assert.ok(row.length <= width, `${row} at ${width}`);
+        assert.match(row, /^[\x20-\x7e]+$/);
+        assert.match(row, /\?|\d+\/\d+/);
+        if (row.includes('[')) assert.ok(row.indexOf('/') < row.indexOf('['), `${row} count before bar`);
+      }
+      const drawn = cells.filter((c) => c !== undefined);
+      if (drawn.length === 2) assert.equal(drawn[0], drawn[1], `same cells at ${width}`);
+      if (drawn.length) assert.ok(drawn[0] >= 4 && drawn[0] <= 20);
+    }
+  }
+});
+
+test('progressRows drops the last gate, then shortens the label, never the count', () => {
+  const full = Array.from({ length: 200 }, (_, i) => stepRow((i % 99) + 1, 'done'));
+  const view = barView({ gates: [gate('brief')], steps: full });
+  assert.equal(progressRows(view, 14)[0], 'Gates 1/3');
+  assert.deepEqual(progressRows(view, 10), ['Gates 1/3', 'S 200/200']);
+  assert.equal(progressRows(view, 22)[0], 'Gates 1/3 last: brief');
+  assert.equal(progressRows(view, 20)[0], 'Gates 1/3');
+});
+
+test('progressRows: a hostile view gives question marks or plain zero counts', () => {
+  const hostile = JSON.parse('{"state":"running","gates":[{"__proto__":{"gate":"brief"},"gate":"__proto__","result":"passed"}],"steps":[{"__proto__":{"status":"done"}}]}');
+  const rows = progressRows(hostile, 40);
+  assert.match(rows[0], /^Gates 0\/3/);
+  assert.match(rows[1], /^Steps 0\/1/);
+  for (const view of ['x', 5, [], { state: 'running', gates: {}, steps: 1 }, { state: 'bogus', gates: [], steps: [] }]) {
+    assert.deepEqual(progressRows(view, 39), ['Gates ?', 'Steps ?']);
+  }
 });

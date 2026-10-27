@@ -2,6 +2,7 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
 import { guardRunActive } from './lib/guard.mjs'
+import { progressRows } from './lib/bars.mjs'
 import { fit, fmtDuration, fmtMinutes, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
@@ -44,6 +45,7 @@ type Model = {
   step: string
   round: string
   gates: string
+  view: RunView | null
   elapsed: string
   agents: AgentLine[]
   status: string | undefined
@@ -77,11 +79,11 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const view: RunView | null = state.view
   if (state.slug === null) {
     if (state.known) return undefined
-    return { slug: UNKNOWN, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, elapsed: UNKNOWN, agents: [], status: undefined }
+    return { slug: UNKNOWN, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], status: undefined }
   }
   const slug = state.slug
   if (view === null) {
-    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, elapsed: UNKNOWN, agents: [], status: `W${UNKNOWN} S${UNKNOWN} ${UNKNOWN}` }
+    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], status: `W${UNKNOWN} S${UNKNOWN} ${UNKNOWN}` }
   }
   const wave = typeof view.wave === 'number' ? String(view.wave) : UNKNOWN
   const round = typeof view.round === 'number' ? String(view.round) : UNKNOWN
@@ -115,7 +117,7 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
     : view.state === 'running'
       ? `W${wave} S${stepNumber} ${shortRole(current?.role ?? null)}${minutes}`
       : view.state
-  return { slug, state: label, wave, step, round, gates, elapsed, agents: lines, status }
+  return { slug, state: label, wave, step, round, gates, view, elapsed, agents: lines, status }
 }
 
 function labelled(label: string, value: string): string {
@@ -131,6 +133,7 @@ function renderRows(model: Model, width: number): string[] {
     labelled('Gates', model.gates),
     labelled('Fix round', model.round),
     labelled('Elapsed', model.elapsed),
+    ...progressRows(model.view, width),
   ]
   if (model.agents.length === 0) {
     rows.push('No subagent running.')

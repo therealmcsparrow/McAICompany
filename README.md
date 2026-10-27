@@ -1,18 +1,35 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 32 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 33 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 32 Roles, and the concepts the company runs on.
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 33 Roles, and the concepts the company runs on.
 
 ## Install
-```
-/plugin marketplace add therealmcsparrow/McAICompany
-/plugin install aico@aico
-/aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
-/aico:setup go react        # optional stack groups: go, react, tanstack, auth
-```
-`superpowers` and `mattpocock-skills` install automatically as plugin dependencies.
-The repo is private: your git must be able to clone it (e.g. `gh auth login`). Update later with `/plugin marketplace update aico`.
+**Before you start**
+- Claude Code.
+- Git access to the private repo: your git must be able to clone it (for example, run `gh auth login` once).
+- Node.js 24 or newer (`engines` in `package.json`, `.nvmrc`), for the helper scripts such as `scripts/settings.mjs`.
+- Optional: `uv`, only for `/aico:skillspector`. aico never installs it for you.
+
+**Steps** (in Claude Code)
+1. Add the marketplace and install the plugin:
+   ```
+   /plugin marketplace add therealmcsparrow/McAICompany
+   /plugin install aico@aico
+   ```
+   `superpowers` and `mattpocock-skills` install automatically as plugin dependencies.
+2. Optional: install the standalone and stack skills the Roles use:
+   ```
+   /aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
+   /aico:setup go react        # optional stack groups: go, react, tanstack, auth
+   ```
+3. Check it worked: `/aico:version` shows the installed version and its latest changelog entry. `/aico:help` lists every command.
+
+**Update:** `/plugin marketplace update aico`, then `/reload-plugins`. Run `/aico:version` to confirm.
+
+**Uninstall:** `claude plugin uninstall aico@aico` in a terminal (or `/plugin` in Claude Code). Skills added by `/aico:setup` or a skill pick are not removed with it; see `documentation/commands.md` for their removal commands.
+
+Details: [`documentation/getting-started.md`](documentation/getting-started.md).
 
 ## Use
 | Command | What it does |
@@ -38,9 +55,24 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:version` | Shows which aico version is installed and its latest changelog entry |
 | `/aico:language [<tag> [project] \| clear [project]]` | Shows or sets the language aico writes in (reports, forms, Handoff prose). Your default applies everywhere; `project` overrides it for one product. Machine-read parts stay English |
 | `/aico:vulnscan` | On demand: the Vulnerability Scanner checks your dependencies and code against CVE/NVD, OSV, GitHub Advisories and CISA KEV; Critical/High come to you, safe fixes come as a ready upgrade set |
+| `/aico:skillspector [--project\|--global\|--all\|<skill-name>] [--no-llm\|--claude-cli] [install]` | On demand: scans the agent skills installed in this project or your user folder with NVIDIA SkillSpector (pinned v2.13.1) and reports pass, findings or error per skill. Read-only; it suggests removals and runs none. The install changes your user-scope Claude config, so it always asks first |
 | `/aico:settings` | Opens a local page to set each Role's name, model and effort, the language and profile, the pipeline (Fix rounds, parallel or sequential, optional lanes) and the Gates, as your default or per project. Nothing changes until you save |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
+
+## Settings
+Run `/aico:settings`. It opens a local page (127.0.0.1) in your browser. Nothing changes until you save.
+
+- **Tabs:** Roles (name, model, effort, context cap), Language & profile, Pipeline (Fix rounds, dispatch, review format, optional lanes), Gates, Skill scan, Mods.
+- **User default or project override.** A project value wins over your user value, which wins over the plugin default.
+  - User default, all projects: `~/.mcsparrow/config.json`, key `aico_settings` (or under `MCSPARROW_HOME` if set). Other keys in that file are kept.
+  - Project override: `.company/settings.json` in the product repo, holding `{ "aico_settings": … }`.
+- **Locks.** `gates.ship`, `gates.installs` and the `security` and `compliance` lanes stay on `ask` / on unless you unlock them at the user level. A project cannot unlock what you locked; its `unlocked` list is ignored. `skillspector.mode: claude_cli` and `mods.reflect.mode: model` count only at user level. The page shows a lock and its reason.
+- **When it applies.** A run reads the settings once at its start, so a change applies from the next run. The mods re-read them each turn.
+- **See what is in effect:** from the product repo, run `node "<plugin root>/scripts/settings.mjs" get`. It prints the resolved JSON, including `ignored` and `warnings`; `get <key>` prints one value, for example `get pipeline.fix_rounds`. The plugin root is the installed version's folder, such as `~/.claude/plugins/cache/aico/aico/0.12.0`.
+- **Reset:** a key that is absent at a level counts as not set, so the level below applies. To reset a project, remove the key (or delete `.company/settings.json`). To reset your default, remove the key from `aico_settings` in `~/.mcsparrow/config.json`. An invalid value is refused on save and nothing is written.
+
+Language has its own command: `/aico:language`. Full rules and every key: [`docs/contracts/aico-settings.md`](docs/contracts/aico-settings.md); user guide: [`documentation/concepts.md`](documentation/concepts.md#settings).
 
 ## Company hierarchy
 Reporting lines show who signs off; the Lead dispatches every Role.
@@ -62,7 +94,7 @@ flowchart TD
   Arch --> SE["senior-engineer"] & BE["backend-engineer"] & FE["frontend-engineer"] & DE["desktop-engineer"] & AI["ai-data-engineer"] & GE["game-engineer"] & DO["devops"]
   Design --> UX["ui-ux-designer"] & BA["brand-artist"] & MA["motion-artist"] & GA["game-artist"] & PA["prompt-artist"]
   Quality --> CR["code-reviewer"] & QA["qa"] & SEC["security"] & PEN["pentester (on demand)"] & VSC["vuln-scanner (on demand)"]
-  MTR --> MR["market-researcher"] & TR["tech-researcher"] & DR["design-researcher"]
+  MTR --> MR["market-researcher"] & TR["tech-researcher"] & DR["design-researcher"] & SR["skill-researcher"]
   Research --> UR["ux-researcher"] & PT["persona-tester"] & HT["hands-on-tester"] & AT["accessibility-tester"]
   Content --> WR["writer"] & MK["marketer"] & LO["localizer"]
   Support --> SU["support"]
@@ -72,13 +104,13 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, vuln-scanner | localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, skill-researcher, vuln-scanner | localizer, prompt-artist |
 
 Each Role has a person name (for example Ava for the architect), shown next to the Role in Handoffs, Gates and help. Change names, models and effort in `/aico:settings`.
 
 Each Role also sets an `effort` level. **High:** architect, code-reviewer, security, pentester, where a miss is expensive. **Low:** writing, art, lookup and support Roles. **Medium:** everyone else. See the roster in `docs/spec.md`.
 
-Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all three researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all four researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the skill-researcher has no Bash and never runs or installs a skill (the Lead scans each candidate in a quarantine folder); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
@@ -95,8 +127,9 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 ## Customize
 - Company facts and the three Voice presets (clear, bold, technical): `company/PROFILE.md`
 - Missing stack skills: `find-skills`, then add a group to `deps/skills.json`.
+- Skill picks: the skill-researcher (Selin) finds and vets third-party skills for your stack, product type or company type, and the Lead scans every pick before you see it. You approve the set, then confirm the exact install commands in a second form. The install pins the scanned commit, and a bad scan after the install stops the run. Approved skills go in the `## Skills` section of `.company/project.md` (design skills stay in `## Design skills`). Scan mode (`no-llm` or `claude_cli`) is in `/aico:settings` (Skill scan tab). Both modes send package names, versions and ecosystems to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found; `claude_cli` also sends skill text to Anthropic.
 - Language aico writes in: `/aico:language` sets your default; `/aico:language <tag> project` overrides it for one product (`aico_language:` in `.company/project.md`). Product UI strings follow `languages:` instead.
-- Mods: four add-ons that show run progress (Savvy), cost and the Lead's cache clock (Cache Tax), suggested Lessons (Reflect), and check risky `git commit`s before they run (Blast Radius). All on by default; switch them in `/aico:settings`. Terminal is proven, desktop is unverified. Blast Radius only sees commits Claude makes through its Bash and PowerShell tools, not `!git commit`, another terminal or an IDE. See `documentation/mods.md`.
+- Mods: four add-ons that show run progress (Savvy, with a Gates bar and a Steps bar in text, such as `Gates 1/3 [###-----] last: brief`), cost and the Lead's cache clock (Cache Tax), suggested Lessons (Reflect), and check risky `git commit`s before they run (Blast Radius). All on by default; switch them in `/aico:settings`. Terminal is proven, desktop is unverified. Blast Radius only sees commits Claude makes through its Bash and PowerShell tools, not `!git commit`, another terminal or an IDE. See `documentation/mods.md`.
 - Rule library shared by all projects on this machine: `~/.mcsparrow/standards/` (make it a git repo to sync it). Each product commits copies of the packs it uses in `.company/standards/`.
 
 ## Maintain

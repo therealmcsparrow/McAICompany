@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, MODS_DEFAULTS, PIPELINE_DEFAULTS, Refusal, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, MODS_DEFAULTS, PIPELINE_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -277,8 +277,8 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'revision', 'roles', 'unlocked', 'warnings']);
-  assert.equal(Object.keys(data.roles).length, 32);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
+  assert.equal(Object.keys(data.roles).length, fs.readdirSync(path.join(import.meta.dirname, '..', 'agents')).filter((f) => f.endsWith('.md')).length);
   assert.equal(data.roles.architect.name, 'Ava');
 });
 
@@ -813,4 +813,105 @@ test('a hostile config file cannot reach Object.prototype through mods', (t) => 
   assert.equal({}.x, undefined);
   assert.equal(r.mods.savvy.enabled, true);
   assert.equal(r.warnings.length, 3, r.warnings.join(' | '));
+});
+
+// ---------- skillspector.mode (aico-settings v1.2) ----------
+const SS_MSG = 'skillspector.mode must be no-llm or claude_cli';
+const modeOf = (s) => resolveSettings(s.ctx).skillspector.mode;
+
+test('SKILLSPECTOR_DEFAULTS is no-llm and a fresh install resolves it through get and get <key>', (t) => {
+  assert.deepEqual(plain(SKILLSPECTOR_DEFAULTS), { mode: 'no-llm' });
+  const s = sandbox(t);
+  assert.deepEqual(plain(pluginDefaults(s.pluginRoot).skillspector), { mode: 'no-llm' });
+  assert.deepEqual(plain(resolveSettings(s.ctx).skillspector), { mode: 'no-llm' });
+  assert.deepEqual(JSON.parse(s.cli('get').out).skillspector, { mode: 'no-llm' });
+  assert.equal(s.cli('get', 'skillspector.mode').out, 'no-llm\n');
+});
+
+test('skillspector.mode refuses anything but no-llm and claude_cli, with the Contract text and no echo', () => {
+  const hostile = ['__proto__', 'NO-LLM', 'Claude_CLI', 'claude', 'no_llm', 7, null, true, ['no-llm'], { a: 1 }, 'x'.repeat(10240), ''];
+  for (const bad of hostile) {
+    assert.deepEqual(validateLayer({ version: 1, skillspector: { mode: bad } }, roleSet), [SS_MSG], String(bad).slice(0, 12));
+  }
+  for (const ok of ['no-llm', 'claude_cli']) assert.deepEqual(validateLayer({ version: 1, skillspector: { mode: ok } }, roleSet), []);
+});
+
+test('skillspector refuses unknown keys and wrong shapes', () => {
+  assert.deepEqual(validateLayer({ version: 1, skillspector: { model: 'x' } }, roleSet), ['skillspector.model: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, skillspector: JSON.parse('{"__proto__":{"mode":"claude_cli"}}') }, roleSet), ['skillspector.__proto__: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, skillspector: JSON.parse('{"mode":"no-llm","constructor":1}') }, roleSet), ['skillspector.constructor: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, skillspector: 'no-llm' }, roleSet), ['skillspector: must be an object']);
+  assert.deepEqual(validateLayer({ version: 1, skillspector: [] }, roleSet), ['skillspector: must be an object']);
+  assert.deepEqual(validateLayer({ version: 1, skillspector: null }, roleSet), ['skillspector: must be an object']);
+});
+
+test('writeLayer refuses a bad skillspector.mode and writes nothing; a good one round-trips', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, skillspector: { mode: 'free' } }, s.ctx), (e) => e instanceof Refusal && e.message === SS_MSG);
+  assert.ok(!fs.existsSync(s.config));
+  writeLayer('user', { version: 1, skillspector: { mode: 'claude_cli' } }, s.ctx);
+  assert.equal(modeOf(s), 'claude_cli');
+  assert.equal(s.cli('get', 'skillspector.mode').out, 'claude_cli\n');
+});
+
+test('claude_cli counts from the user level; a project claude_cli is ignored and listed', (t) => {
+  const s = sandbox(t);
+  s.project({ skillspector: { mode: 'claude_cli' } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.skillspector.mode, 'no-llm');
+  assert.ok(r.ignored.includes('skillspector.mode: claude_cli from project needs the user level'), r.ignored.join(' | '));
+  s.user({ skillspector: { mode: 'claude_cli' } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.skillspector.mode, 'claude_cli', 'the user level decides');
+  assert.ok(r.ignored.some((i) => i.startsWith('skillspector.mode: claude_cli from project')));
+  assert.equal(JSON.parse(s.cli('get').out).skillspector.mode, 'claude_cli');
+});
+
+test('a project no-llm counts and tightens a user claude_cli, without an ignored line', (t) => {
+  const s = sandbox(t);
+  s.user({ skillspector: { mode: 'claude_cli' } });
+  s.project({ skillspector: { mode: 'no-llm' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.skillspector.mode, 'no-llm');
+  assert.ok(!r.ignored.some((i) => i.startsWith('skillspector')));
+});
+
+test('a project unlocked entry never turns claude_cli on', (t) => {
+  const s = sandbox(t);
+  s.project({ unlocked: ['security', 'ship', 'installs'], skillspector: { mode: 'claude_cli' } });
+  assert.equal(modeOf(s), 'no-llm');
+});
+
+test('a bad skillspector.mode falls back to the level below, ending at no-llm, with a warning', (t) => {
+  const s = sandbox(t);
+  s.user({ skillspector: { mode: 'claude_cli' } });
+  s.project({ skillspector: { mode: 'CLAUDE_CLI' } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.skillspector.mode, 'claude_cli', 'the project value is dropped, the user value stays');
+  assert.equal(r.warnings.filter((w) => w.includes(SS_MSG)).length, 1);
+  s.user({ skillspector: { mode: 'sure' } });
+  s.project({ skillspector: { mode: 'sure' } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.skillspector.mode, 'no-llm', 'fails closed');
+  assert.equal(r.warnings.filter((w) => w.includes(SS_MSG)).length, 2);
+  assert.ok(!r.warnings.join('|').includes('sure'), 'a refused value is never echoed');
+});
+
+test('a broken user file falls back to no-llm', (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(s.config, '{ not json');
+  assert.equal(modeOf(s), 'no-llm');
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, skillspector: 'claude_cli' } }));
+  assert.equal(modeOf(s), 'no-llm');
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 2, skillspector: { mode: 'claude_cli' } } }));
+  assert.equal(modeOf(s), 'no-llm');
+});
+
+test('a hostile config file cannot reach Object.prototype through skillspector', (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(s.config, '{"aico_settings":{"version":1,"skillspector":{"__proto__":{"mode":"claude_cli"},"constructor":{"prototype":{"x":1}}}}}');
+  const r = resolveSettings(s.ctx);
+  assert.equal({}.mode, undefined);
+  assert.equal({}.x, undefined);
+  assert.equal(r.skillspector.mode, 'no-llm');
 });

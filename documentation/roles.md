@@ -1,6 +1,6 @@
 # Roles
 
-The company has **32 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
+The company has **33 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
 
 Each Role runs on a model and an effort level matched to its work. The model is how capable the Role is: **Opus** for the Roles that reason hardest (architecture, review, security, product strategy), **Sonnet** for most building, testing and writing, **Haiku** for mechanical content work. The effort is how much thinking it does before it answers: **high** for the architect, code-reviewer, security and pentester; **low** for writing, art, lookup and support Roles; **medium** for the rest.
 
@@ -18,8 +18,9 @@ Every Role has a person name for display (change them in `/aico:settings`). You 
 | **market-researcher** | sonnet | low | Mateo | Researches demand, competitors, target users, pricing signals and EU flags for an idea, from public sources with a URL and date for each claim. |
 | **tech-researcher** | opus | medium | Tariq | Checks feasibility: libraries and APIs, their licenses and maintenance, fit with the repo, effort and risk. Reports facts; never picks the stack. |
 | **design-researcher** | sonnet | medium | Daria | Finds and vets UI/UX and design skills that fit your stack, product type, Personas and Art direction, judges the installed ones, and recommends at most 5. Never installs. |
+| **skill-researcher** | sonnet | medium | Selin | Finds and vets third-party skills for your stack, product type, company type or design, and recommends at most 5. Has no Bash: the Lead scans every pick in a quarantine before you see it. Never adds a skill; the Lead does that after your approval, pinned to the scanned commit. |
 
-The three researchers run in parallel inside [`/aico:research`](commands.md#aicoresearch). The Product Manager writes the report from their Handoffs. The design-researcher also runs in [`/aico:feature`](commands.md#aicofeature) for UI products whose design skills are missing or stale.
+The first three researchers run in parallel inside [`/aico:research`](commands.md#aicoresearch). The Product Manager writes the report from their Handoffs. The design-researcher also runs in [`/aico:feature`](commands.md#aicofeature) for UI products whose design skills are missing or stale. The skill-researcher runs when you ask for skill picks.
 
 ## Engineering
 | Role | Model | Effort | Name | What it's for |
@@ -74,7 +75,7 @@ The three researchers run in parallel inside [`/aico:research`](commands.md#aico
 
 ## Who may edit code
 
-Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the three researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
+Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
 
 ## Review Roles and the Handoff block
 The **code-reviewer** and the **senior-engineer** (compliance) are the pilot for [Handoff v1.1](concepts.md#the-handoff-contract). By default (`pipeline.review_format: plain`) they write ordinary findings. With `pilot` set in [settings](concepts.md#settings), they write a top block and findings as `ID | file:line | problem | why | fix` rows, and keep a findings ledger so a handover mid-review loses nothing. With either value they confirm tool-check failures before those block, and the reviewer's depth follows the touched paths. All other Roles write Handoffs as before. In a brainstorm, a Role may skip a round, and the Architect adds an S/M/L estimate.

@@ -1,14 +1,15 @@
-# Contract: aico-settings v1.1
+# Contract: aico-settings v1.2
 
-Provider: `scripts/settings.mjs` (and `scripts/settings-server.mjs` for the page). Consumers: `aico:pipeline` Setup §1.7, the Playbooks that run through it, `aico:brainstorm`, `aico:cooler`, `aico:research`, `aico:settings` (command) and, from part M, the four mods (`aico-mods` v1).
+Provider: `scripts/settings.mjs` (and `scripts/settings-server.mjs` for the page). Consumers: `aico:pipeline` Setup §1.7, the Playbooks that run through it, `aico:brainstorm`, `aico:cooler`, `aico:research`, `aico:settings` (command), from part M the four mods (`aico-mods` v1), and from v1.2 `scripts/skillspector.mjs` (`skillspector-scan` v1).
 Settings say how the company works: each Role's name, model and effort, the pipeline (Fix rounds, dispatch mode, review format, optional lanes), the Gates and the mods. The writing language stays in `aico-language` v1; profile fields stay in `.company/project.md`.
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`): it adds `context_cap` (global and per Role), `brainstorm.film_script`, `brainstorm.debate`, `pipeline.review_format` (Fix round 6) and (part M) `mods.*`. Every v1 file is a valid v1.1 file and resolves exactly as before; the stored `"version"` stays `1`.
+v1.2 is additive: it adds `skillspector.mode` (task skill-researcher-scan, CEO at the Brief Gate). Every v1.1 file is a valid v1.2 file and resolves exactly as before; the stored `"version"` stays `1`.
 Fix round 6 (CEO, after T15d `67-ai-data-engineer.md`; still unshipped, no version change): the pilot review format becomes `pipeline.review_format`, default `plain`; part M's keep-warm is cut (no `keep_warm` keys); Blast Radius defaults to `warn` for Contracts.
 
 ## Storage
 - **User:** `<MCSPARROW_HOME or ~/.mcsparrow>/config.json`, key `aico_settings`. Other keys, including `aico_language`, are preserved on write.
 - **Project:** `.company/settings.json`, holding `{ "aico_settings": … }`.
-- **Plugin:** model and effort from `agents/*.md` frontmatter, names from `company/names.json` (`role-names` v1), `PIPELINE_DEFAULTS`, `GATE_DEFAULTS`, `BRAINSTORM_DEFAULTS` and `MODS_DEFAULTS` in `settings.mjs`.
+- **Plugin:** model and effort from `agents/*.md` frontmatter, names from `company/names.json` (`role-names` v1), `PIPELINE_DEFAULTS`, `GATE_DEFAULTS`, `BRAINSTORM_DEFAULTS`, `MODS_DEFAULTS` and `SKILLSPECTOR_DEFAULTS` (v1.2) in `settings.mjs`.
 - Shape (any key may be absent, meaning not set at that level):
   ```json
   { "aico_settings": { "version": 1,
@@ -21,6 +22,7 @@ Fix round 6 (CEO, after T15d `67-ai-data-engineer.md`; still unshipped, no versi
                 "cache_tax": { "enabled": true, "pane": "command" },
                 "reflect": { "enabled": true, "step_check": true, "retrospective": true, "mode": "deterministic" },
                 "blast_radius": { "enabled": true, "core": "ask", "contract": "warn", "security": "ask" } },
+      "skillspector": { "mode": "no-llm" },
       "unlocked": [] } }
   ```
 - Every write is atomic (temp file, then rename).
@@ -40,6 +42,7 @@ Per field: project, else user, else plugin. Then the locks:
   2. *The commit gate only tightens from a project.* A project layer may set `mods.blast_radius.enabled: true` or a category to `ask`; a project `enabled: false` or `warn` is ignored and listed in `ignored`.
   3. *Security stays asked unless unlocked.* `mods.blast_radius.security: warn` and `mods.blast_radius.enabled: false` resolve only with `security` in the user `unlocked`; otherwise `ask` and `true`, listed in `ignored`. `core` and `contract` may be `warn` at the user level without an unlock.
   Plugin defaults for Blast Radius (CEO, part M): `core: ask`, `contract: warn`, `security: ask`. Every other `mods.*` key (each mod's `enabled` except Blast Radius, `pane`, `step_check`, `retrospective`) resolves freely.
+- **SkillSpector mode (v1.2):** *the scan's data switch is user-level only.* `skillspector.mode: claude_cli` counts only from the user level; a project `claude_cli` is ignored and listed in `ignored` (`skillspector.mode: claude_cli from project needs the user level`), so a cloned repo never sends skill text to Claude on the CEO's account. A project `no-llm` counts (it only tightens). No `unlocked` entry is involved. Plugin default `no-llm`: no skill text leaves the machine and it costs nothing; package names, versions and ecosystems from a skill's dependency files go to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found (`skillspector-scan` v1 "Network").
 
 ## Schema (allow-list; unknown keys are refused)
 | Key | Values |
@@ -63,12 +66,14 @@ Per field: project, else user, else plugin. Then the locks:
 | `mods.reflect.retrospective` | boolean; default `true` |
 | `mods.reflect.mode` | `deterministic \| model`; default `deterministic`; `model` user level only |
 | `mods.blast_radius.<core\|contract\|security>` | `ask \| warn`; default `ask` for `core` and `security`, `warn` for `contract` |
+| `skillspector.mode` | `no-llm \| claude_cli`; default `no-llm`; `claude_cli` user level only (v1.2) |
 | `unlocked` | list of `ship`, `security`, `installs` |
 
 A `context_cap` below 60000 (the floor), above 1000000, or not a whole number is refused: `refused: context_cap must be a whole number from 60000 to 1000000`, nothing written.
 Any other `brainstorm.debate` value is refused: `refused: brainstorm.debate must be crossfire or full_pass`, nothing written.
 Any other `pipeline.review_format` value is refused: `refused: pipeline.review_format must be plain or pilot`, nothing written.
 A bad `mods.*` value is refused with `refused: mods.<path> must be <allowed values>`, nothing written.
+Any other `skillspector.mode` value, or any other key under `skillspector`, is refused: `refused: skillspector.mode must be no-llm or claude_cli` / `skillspector.<key>: unknown key`, nothing written (v1.2).
 
 `brainstorm.debate` picks how a **debate** round runs (`brainstorm-file` v2, `brainstorm-reply` v1):
 - `crossfire`: the ideas pass only; the strongest challenge (the crossfire pair) is answered by the idea's author in the next round's ideas pass, with no extra dispatch (Fix round 4, `docs/adr/0014-crossfire-folded-into-next-round.md`; before: one extra dispatch per pair member in the same round).
@@ -78,14 +83,15 @@ It has no effect on `ideas` or `moderated` rounds. Values and default are unchan
 ## CLI (Node ESM, no dependencies, cwd = product repo)
 | Command | stdout (exit 0) |
 |---|---|
-| `node settings.mjs get` | the resolved JSON: `{ revision, roles: {<role>: {name, model, effort, context_cap, source}}, pipeline: {fix_rounds, dispatch, context_cap, review_format, lanes}, gates, brainstorm: {film_script, debate}, mods: {savvy, cache_tax, reflect, blast_radius}, unlocked, ignored, warnings, language, profile }` |
-| `node settings.mjs get <key>` | one value (dotted path, e.g. `pipeline.fix_rounds`, `pipeline.review_format`, `roles.architect.context_cap`, `brainstorm.debate`, `mods.blast_radius.security`); strings raw, others as JSON |
+| `node settings.mjs get` | the resolved JSON: `{ revision, roles: {<role>: {name, model, effort, context_cap, source}}, pipeline: {fix_rounds, dispatch, context_cap, review_format, lanes}, gates, brainstorm: {film_script, debate}, mods: {savvy, cache_tax, reflect, blast_radius}, skillspector: {mode}, unlocked, ignored, warnings, language, profile }` |
+| `node settings.mjs get <key>` | one value (dotted path, e.g. `pipeline.fix_rounds`, `pipeline.review_format`, `roles.architect.context_cap`, `brainstorm.debate`, `mods.blast_radius.security`, `skillspector.mode`); strings raw, others as JSON |
 | `node settings.mjs serve [--no-open]` | `aico settings: <url>` (127.0.0.1, token in the URL) |
 
 Warnings also go to stderr as `warning: <text>`.
 The page shows the global cap, a per-Role cap field, the film-script toggle and a debate-style choice (`crossfire` / `full_pass`, the same row control the page uses for `pipeline.dispatch`), using the page's existing controls; it saves through the same validation.
 Fix round 6: the page's pipeline section has a **Review format** row (`plain` / `pilot`, the same row control as `pipeline.dispatch`) with the sentence "Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d)."
 Part M: the page has a **Mods** section with one row per mod: its on/off switch, then its options, built from the page's existing controls (switch, row choice). A value held by a lock shows the lock and its reason (the same way the page shows `gates.ship`). Switching a mod off keeps its options.
+v1.2: the page has a **Skill scan** tab (after Gates, before Mods; `tab-scan` / `panel-scan`) with a **SkillSpector** section holding one **Scan mode** row (`no-llm` / `claude_cli`, the same row control as `pipeline.dispatch`) and the sentence "No-LLM: SkillSpector's static rules run on this machine and no skill text leaves it; package names, versions and ecosystems from a skill's dependency files go to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found. Claude CLI: the text of each scanned skill also goes to Claude (Anthropic) under your login and counts toward your usage. Set it for yourself only; a project setting cannot turn it on." The sentence is tied to both selects with `aria-describedby`. The Project column offers only "not set" and `no-llm`; a project file that already holds `claude_cli` shows that value with the lock and its reason, as for `mods.reflect.mode`. The Mods tab no longer holds the row.
 
 ## How the pipeline uses it (`aico:pipeline`)
 - Setup §1.7 runs `get` once per run (fixed command) and keeps the JSON; never re-resolved mid-run.
@@ -98,10 +104,11 @@ Part M: the page has a **Mods** section with one row per mod: its on/off switch,
 - `brainstorm.film_script` is read by `aico:brainstorm` (`brainstorm-file` v2); `true` renders the film script file at each round.
 - `brainstorm.debate` is read by `aico:brainstorm` from the run's `get` JSON (never re-resolved mid-run) and written into each debate round's heading (`brainstorm-file` v2), so the file records which style ran.
 - `mods.*` is never read by the pipeline. The mods run `get` themselves at session start and at each main-loop turn start (`aico-mods` v1), so a change takes effect by the next turn.
+- `skillspector.mode` is never read by the pipeline. `scripts/skillspector.mjs` runs `get skillspector.mode` itself when no `--mode` flag is given (`skillspector-scan` v1); any failure means `no-llm`.
 
 ## Error cases
-- `get` exits non-zero or prints invalid JSON → the pipeline uses plugin defaults and says so in the first Gate summary and in its first chat message. Plugin defaults include `context_cap` 150000, `review_format` `plain`, `film_script` false and `debate` `crossfire`. The mods use `MODS_DEFAULTS` (all on, Reflect deterministic, Blast Radius `core: ask`, `contract: warn`, `security: ask`) and show `settings unknown` in their status line.
+- `get` exits non-zero or prints invalid JSON → the pipeline uses plugin defaults and says so in the first Gate summary and in its first chat message. Plugin defaults include `context_cap` 150000, `review_format` `plain`, `film_script` false and `debate` `crossfire`. The mods use `MODS_DEFAULTS` (all on, Reflect deterministic, Blast Radius `core: ask`, `contract: warn`, `security: ask`) and show `settings unknown` in their status line. `skillspector.mjs` uses `no-llm`.
 - Invalid value, unknown key or a stale `revision` on save: `refused: <reason>` (exit 2 on the CLI, 4xx from the server), nothing written.
 - Unknown subcommand or extra arguments: `refused: usage: settings.mjs get [key] | serve [--no-open]` (exit 2).
 - `get <key>` for a missing key: `refused: no setting <key>` (exit 2).
-- A layer with a bad `context_cap`, `brainstorm.debate`, `pipeline.review_format` or `mods.*` value → that field falls back to the level below, with a `warnings` line (broken-layer rule above).
+- A layer with a bad `context_cap`, `brainstorm.debate`, `pipeline.review_format`, `mods.*` or `skillspector.mode` value → that field falls back to the level below, with a `warnings` line (broken-layer rule above).

@@ -1,6 +1,6 @@
 # aico documentation
 
-**aico** is a Claude Code plugin that runs a small software company for you. You are the **CEO**: you ask for work and approve it at a few checkpoints. A **Lead** turns your request into a route and dispatches 32 specialist **Role** agents, who pass work to one another through files and never skip your approvals.
+**aico** is a Claude Code plugin that runs a small software company for you. You are the **CEO**: you ask for work and approve it at a few checkpoints. A **Lead** turns your request into a route and dispatches 33 specialist **Role** agents, who pass work to one another through files and never skip your approvals.
 
 Start here:
 
@@ -8,7 +8,7 @@ Start here:
 |---|---|
 | [Getting started](getting-started.md) | Install, your first run, how a job flows, and the three Gates where you approve |
 | [Commands](commands.md) | Every `/aico:*` command (the Playbooks), what it does and when to reach for it |
-| [Roles](roles.md) | All 32 Role agents, grouped by department, and what each one is for |
+| [Roles](roles.md) | All 33 Role agents, grouped by department, and what each one is for |
 | [Mods](mods.md) | The four mods (Savvy, Cache Tax, Reflect, Blast Radius): what each shows, the shared status line, the cache clock, every `mods.*` setting and the three locks |
 | [Concepts](concepts.md) | The ideas the company runs on: Handoffs, Gates, Core/Modules/Contracts, the Ruleset, Debt, Lessons, settings and locks, EU compliance and Git conventions |
 
@@ -23,7 +23,7 @@ Reference material lives alongside these guides:
 
 ## Version
 
-**Current: 0.11.0** (32 Role agents).
+**Current: 0.12.0** (33 Role agents).
 
 Update an installed copy with:
 
@@ -34,7 +34,7 @@ Update an installed copy with:
 
 ### What's new
 
-- **Unreleased** — Cheaper brainstorms (a [format 2](commands.md#aicobrainstorm) digest, a question queue, crossfire debate) and cheaper runs: a [max context](concepts.md#context-budget) setting, a counts-only [token ledger](concepts.md#token-cost) with a cost line at Ship, an opt-in Handoff v1.1 pilot (`pipeline.review_format: pilot`, default `plain`, about 5.7k more tokens per re-review), four [mods](mods.md) (Savvy run progress, Cache Tax with a cache clock, Reflect suggested Lessons, and a Blast Radius check before risky commits), tool checks bound to rule IDs, and a release script (`npm run release <x.y.z>`, never pushes). Savings come from reading less; brainstorm Roles keep one constant prompt per run. No saving percentage is claimed yet.
+- **Unreleased** — A new Role, the skill-researcher (Selin), which finds and vets third-party skills (the Lead scans each pick, installs pin the scanned commit, and a bad scan after the install stops the run) and records approved ones under `## Skills` in `.company/project.md` (see [skill picks](concepts.md#skill-picks)); [`/aico:skillspector`](commands.md#aicoskillspector), which scans installed skills with SkillSpector (`--project`, `--global` or `--all`; pinned v2.13.1; the install changes your user-scope config and always asks; scan mode `no-llm` by default, set in `/aico:settings` under Skill scan; both modes send dependency names and versions to OSV.dev); and Gates and Steps bars in the [Savvy](mods.md#savvy) pane. Also: cheaper brainstorms (a [format 2](commands.md#aicobrainstorm) digest, a question queue, crossfire debate) and cheaper runs: a [max context](concepts.md#context-budget) setting, a counts-only [token ledger](concepts.md#token-cost) with a cost line at Ship, an opt-in Handoff v1.1 pilot (`pipeline.review_format: pilot`, default `plain`, about 5.7k more tokens per re-review), four [mods](mods.md) (Savvy run progress, Cache Tax with a cache clock, Reflect suggested Lessons, and a Blast Radius check before risky commits), tool checks bound to rule IDs, and a release script (`npm run release <x.y.z>`, never pushes). Savings come from reading less; brainstorm Roles keep one constant prompt per run. No saving percentage is claimed yet.
 
 - **0.10.0** — [`/aico:settings`](commands.md#aicosettings): a local page to change each Role's name, model and effort, the language and profile, the Fix-round limit, review lanes and Gates. Settings are saved as a user default or per project. Risky changes are [locked](concepts.md#locks) until you unlock them in your user settings. Every Role now has a person name and an [effort level](concepts.md#models-effort-and-names).
 - **0.9.0** — [`/aico:research`](commands.md#aicoresearch): before you build, three researchers look the topic up online and the Product Manager writes one sourced report with a verdict, ranked actions and low-hanging fruit; you then pick feature, brainstorm, roadmap or park. Plus [`/aico:language`](commands.md#aicolanguage) to set the language aico writes in, and approved [design skills](concepts.md#design-skills) for UI work.

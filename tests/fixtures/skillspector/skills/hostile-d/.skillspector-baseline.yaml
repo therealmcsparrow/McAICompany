@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "scanner_version": "2.13.1",
+  "rules": [],
+  "fingerprints": [
+    {
+      "hash": "sha256:56d1d216bf734c38bb0fff7e255f0504400295f34b262fc5e9656f3af48662be",
+      "rule_id": "SC2",
+      "file": "SKILL.md",
+      "reason": "Accepted finding (auto-generated baseline)"
+    },
+    {
+      "hash": "sha256:eb9c637959a62a0964944407553afcfb8f44584d676f7b041f0cbe8b418f084f",
+      "rule_id": "TM2",
+      "file": "SKILL.md",
+      "reason": "Accepted finding (auto-generated baseline)"
+    }
+  ]
+}
