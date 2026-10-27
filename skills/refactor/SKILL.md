@@ -10,7 +10,7 @@ argument-hint: <scope>
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook refactor` first; exit not 0 → show its output line and stop.
 
-Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise start `aico:audit` with the Skill tool, argument the scope (its own run), and continue here with its report as the brief; the Skill tool refuses it → tell the CEO to run `/aico:audit "<scope>"` and stop.
+Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise ask the CEO in a form: **Run audit first (Recommended)** / **Skip audit**. Only on the first choice start `aico:audit` with the Skill tool, argument the scope (one Playbook at a time: continue here after it wrote its last file and commit, with its report as the brief). Skip → stop and tell the CEO to bring an audit report. The Skill tool refuses it → tell the CEO to run `/aico:audit "<scope>"` and stop.
 
 1. `aico:architect`: target Core list, Module map, Contracts, and slices (each slice moves one Module out).
 1b. `aico:senior-engineer` (research or map) then `aico:architect` ruleset sign-off if Must rules changed, as in `aico:feature` 2c–2d. Existing violations go to Debt. Slices never fix Debt (no behavior change); the CEO picks `/aico:fix` runs for it.
