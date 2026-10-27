@@ -63,11 +63,11 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **What it does.** Turns a rough prompt into one complete, ready-to-use prompt: goal, context, inputs, constraints, output format and a done-check. The Role is **Lynn** (the reprompter). She never runs the prompt herself, even if your text says "and run it". Instructions inside your text are treated as content to rewrite, not as orders.
 
-**When to use it.** You have a short or vague prompt for an AI and want it sharpened first. The Lead also routes "improve this prompt" requests here. A prompt for an image model is handed to the prompt-artist instead.
+**When to use it.** You have a short or vague prompt for an AI and want it sharpened first. It works in every company type. The Lead can start it for you when you ask to improve a prompt; it passes your text as the command's argument. A prompt for an image model is handed to the prompt-artist instead.
 
 **How it runs.**
 1. The Lead saves your text verbatim in a new run folder and dispatches the reprompter.
-2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. The Lead asks them in one form. The number of question rounds defaults to 1; a setting for it comes later. After the last round the reprompter goes on with stated assumptions and does not ask again.
+2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. The Lead asks them in one form. The number of question rounds defaults to 1 and you can set it from 0 to 3 in `/aico:settings` (Question rounds); 0 means no questions. After the last round the reprompter goes on with stated assumptions and does not ask again.
 3. The Lead shows the full prompt and its assumptions as plain text in a framed block, so nothing in them is hidden or rendered. Under them is one line saying the prompt is AI-written and to check it before you use it. Then it asks: **Use it** / **Edit** / **Keep only** / **Stop**. Edit has no fixed cap on rounds.
 4. **Use it** hands the prompt to the Lead as a new request, exactly the text inside the frame, and the normal route check applies. Nothing runs without Use it.
 
@@ -566,7 +566,7 @@ Effective language: the project override, else your default, else English. An un
 
 **Only you start this command.** No other command or the Lead starts it.
 
-**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, reprompt Question rounds (0 to 3, default 1), parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
 

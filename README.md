@@ -1,8 +1,8 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 34 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 35 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 34 Roles, and the concepts the company runs on.
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 35 Roles, and the concepts the company runs on.
 
 ## Install
 **Before you start**

@@ -1,12 +1,12 @@
 # Roles
 
-The company has **34 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
+The company has **35 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
 
 Each Role runs on a model and an effort level matched to its work. The model is how capable the Role is: **Opus** for the Roles that reason hardest (architecture, review, security, product strategy), **Sonnet** for most building, testing and writing, **Haiku** for mechanical content work. The effort is how much thinking it does before it answers: **high** for the architect, code-reviewer, security and pentester; **low** for writing, art, lookup and support Roles; **medium** for the rest.
 
 Every Role has a person name for display (change them in `/aico:settings`). You can also ask for a Role by name; the Lead routes it. The default names are the ones in the Name column of the tables below, for example Ava for the architect, Wen for the writer and Edith for the editor. Names are unique across Roles, ignoring case. Each Role also has a [personality](concepts.md#personalities) that colours how it talks in cooler chats and brainstorms, and nowhere else.
 
-Which Roles a project has depends on its [company type](concepts.md#company-types). A software company has 33 of the 34; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
+Which Roles a project has depends on its [company type](concepts.md#company-types). A software company has 34 of the 35; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
 
 ## Product
 | Role | Model | Effort | Name | What it's for |
