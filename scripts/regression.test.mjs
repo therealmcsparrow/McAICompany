@@ -171,7 +171,10 @@ test('seed 4 bddd366: an unlocked list in the project file never unlocks anythin
 test('seed 5 052a035: the incident Playbook makes every Ship Gate a form whatever the settings say', () => {
   const text = fs.readFileSync(path.join(realRoot, 'skills', 'incident', 'SKILL.md'), 'utf8');
   assert.match(text, /Every Ship Gate in this Playbook is a form, whatever the settings say/);
-  for (const part of ['mitigation', 'each report', 'final fix']) assert.ok(text.includes(part), part);
+  for (const part of ['mitigation', 'each report']) assert.ok(text.includes(part), part);
+  // the run ends after mitigation, reports and postmortem: no Gate for a final fix, the CEO gets /aico:fix
+  assert.ok(!/final fix/i.test(text), 'incident has no final-fix Gate');
+  assert.ok(text.includes('/aico:fix'), 'incident hands /aico:fix to the CEO');
   assert.ok(!/gates\.ship|gates\.[a-z]+\s*[:=]\s*auto/.test(text), 'incident reads no Gate setting');
 });
 
