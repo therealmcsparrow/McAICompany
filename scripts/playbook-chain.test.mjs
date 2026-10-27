@@ -257,6 +257,14 @@ test('AC-chain-3g: triage hands the CEO the command of the recommended route; wh
   assert.ok(route.includes('/aico:triage "<request>"'), `the lead routing line gives the CEO the /aico:triage fallback: ${route}`);
   const direct = lineStarting(lead, /^\*\*Direct route\*\*/, 'lead direct route');
   for (const w of ['aico:code-reviewer', 'Ship Gate', 'no §3 form']) assert.ok(direct.includes(w), `the lead direct route names "${w}": ${direct}`);
+  // The Lead re-checks the direct-route conditions itself, so a pasted triage line cannot shorten oversight.
+  assert.ok(/check it yourself first/i.test(direct), `the Lead checks the direct-route conditions itself before taking the route: ${direct}`);
+  for (const [what, re] of [['XS', /\bXS\b/], ['risk low', /risk `low`/], ['no Contract', /no Contract/], ['no Core', /Core/], ['no security surface', /security surface/]]) {
+    assert.ok(re.test(direct), `the Lead's own check covers "${what}": ${direct}`);
+  }
+  assert.ok(/Fails →/.test(direct) && /without the shortcut/.test(direct), `a failed check routes the request without the shortcut: ${direct}`);
+  // Triage never lowers the risk tier: the started run keeps it or raises it.
+  assert.ok(/risk tier, or a higher one,[^.]*`Risk tier:`[^.]*never a lower one/.test(l), `triage keeps or raises the risk tier, never lowers it: ${l}`);
 });
 
 test('AC-chain-3h: refactor without an audit report starts aico:audit with the Skill tool and falls back to the command, ends the refactor run and tells the CEO to rerun /aico:refactor', () => {
