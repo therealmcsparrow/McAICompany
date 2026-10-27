@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "id": "design",
+  "label": "Design studio",
+  "roles": [
+    "product-manager",
+    "account-manager",
+    "ui-ux-designer",
+    "design-researcher",
+    "ux-researcher",
+    "brand-artist",
+    "motion-artist",
+    "prompt-artist",
+    "game-artist",
+    "persona-tester",
+    "hands-on-tester",
+    "accessibility-tester",
+    "frontend-engineer",
+    "code-reviewer",
+    "security",
+    "writer",
+    "legal",
+    "skill-researcher"
+  ],
+  "playbooks": [
+    "design",
+    "research",
+    "client",
+    "feedback",
+    "brainstorm",
+    "cooler"
+  ],
+  "ship": {
+    "kind": "design-handoff",
+    "meaning": "The design handoff package (files, specs, tokens and the asset licence record) goes to the client or the build team.",
+    "lanes": ["legal", "accessibility", "security"],
+    "checks": ["ai-disclosure", "asset-licences", "handoff-package"]
+  },
+  "skill_search": {
+    "hints": [
+      "design system tokens",
+      "ui design critique",
+      "design handoff specs"
+    ]
+  }
+}
