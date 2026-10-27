@@ -2,13 +2,13 @@
 
 Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
-v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; task reprompter-role): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric). Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
+v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0024-reprompt-playbook-owns-the-flow.md`): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric), and it bounds the view's `round` to what the mods accept. Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
 
 ## Storage
 - `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`.
 - Counts, enums and times only. No prompt, reply, Handoff or CEO text (GDPR Art. 5(1)(c)).
 - Limits: a line ≤ 256 bytes, a file ≤ 64 KiB, at most 1000 lines. The file and the run folder are opened with `lstat`; a symlink is refused.
-- Committed with the run's Handoffs (it sits in the run folder). A reprompt run folder is not committed (`reprompt` v1).
+- Committed with the run's Handoffs (it sits in the run folder). A reprompt run folder is not committed: it carries its own `.gitignore` (`reprompt` v1).
 
 ## Record (allow-list; unknown keys refused)
 | Key | Value |
@@ -46,8 +46,8 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
   "warnings": ["line 7 skipped"] }
 ```
 - `picks` (v1.1): every `pick` of the last segment, in file order; `[]` when none. Placed directly after `gates`.
-- `steps`: every `^\d{2}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`.
-- `round` = highest `round:` among `steps`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
+- `steps`: every `^\d{2}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`; a step's `round` is allowed as a whole number 0–99 (v1.1; a reprompt run's edits have no cap, so its rounds can pass 99).
+- `round` = highest numeric `round:` among `steps` (so 0–99), else `0`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
 - Times and order come from the file; the view uses only the last segment (from the last `start`).
 
 ## Active run
@@ -60,7 +60,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - Ship done, or the CEO stops the run: `end <slug> ship|abort`.
 - A run resumed with "resume <slug>" after an `end` runs `start <slug>` again.
 - The Lead never edits the file by hand; a refused command is reported in the next Gate summary and the run goes on (run-state never blocks a Step or a Gate).
-- (v1.1) The pipeline never writes `pick`; only `aico:reprompt` does (`reprompt` v1, Lead flow step 6).
+- (v1.1) The pipeline never writes `pick`; only `aico:reprompt` does (`reprompt` v1, Lead flow step 7).
 
 ## Error cases
 - Missing file → `state: none`, empty `gates` and `picks`, `steps` still listed.
