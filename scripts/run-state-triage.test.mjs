@@ -267,3 +267,88 @@ test('normalization does not hide a real change', () => {
   const { nonce } = issue(root, `a b ${LINE}`);
   assert.deepEqual(check(root, nonce, `a  b ${LINE}`), { trusted: false, reason: 'request changed' });
 });
+
+// QA additions (task triage-hardening): Contract behavior the first suite left open.
+test('trailing whitespace right before the triage line, on its own line, is stripped from both sides', () => {
+  const root = repo();
+  const { nonce } = issue(root, `fix the typo   \t\n ${LINE}`);
+  assert.equal(check(root, nonce, `fix the typo\n ${LINE}`).trusted, true);
+  assert.equal(check(root, nonce, `fix the typo\n ${LINE}`).reason, 'used');
+});
+
+test('trailing whitespace after the triage line and on the line before it hash the same', () => {
+  const root = repo();
+  const { nonce } = issue(root, `first line  \r\nsecond line ${LINE}  \t\r\n`);
+  assert.equal(check(root, nonce, `first line\nsecond line ${LINE}`).trusted, true);
+});
+
+test('spaces between the request and the triage line on the same line stay significant', () => {
+  const root = repo();
+  const { nonce } = issue(root, `fix it  ${LINE}`);
+  assert.deepEqual(check(root, nonce, `fix it ${LINE}`), { trusted: false, reason: 'request changed' });
+  assert.equal(check(root, nonce, `fix it  ${LINE}`).trusted, true);
+});
+
+test('the triage line needs a space before it: a line glued to the text or alone is not a triage line', () => {
+  const root = repo();
+  for (const bad of [`fix it\n${LINE}`, LINE, `fix it\t${LINE}`]) {
+    put(root, bad);
+    assert.equal(call(root, ['issue']).out, 'refused: no direct triage line', JSON.stringify(bad));
+  }
+});
+
+test('a refused issue and a failed check write no record and a failed check does not consume the nonce', () => {
+  const root = repo();
+  put(root, 'x (triage: XS, risk low, bug, route feature)');
+  call(root, ['issue']);
+  assert.ok(!fs.existsSync(recFile(root)) || records(root).length === 0);
+  const { nonce } = issue(root);
+  check(root, nonce, 'garbage');
+  check(root, nonce, `changed ${LINE}`);
+  assert.deepEqual(records(root).map(r => r.ev), ['issue']);
+});
+
+test('a copied line on another request fails, and a replay after use fails', () => {
+  const root = repo();
+  const { nonce } = issue(root, `request A ${LINE}`);
+  assert.deepEqual(check(root, nonce, `request B ${LINE}`), { trusted: false, reason: 'request changed' });
+  assert.equal(check(root, nonce, `request A ${LINE}`).trusted, true);
+  assert.deepEqual(check(root, nonce, `request A ${LINE}`), { trusted: false, reason: 'used' });
+});
+
+test('a nonce for one record does not unlock another: two live records stay independent', () => {
+  const root = repo();
+  const a = issue(root, `A ${LINE}`);
+  const b = issue(root, `B ${LINE}`);
+  assert.deepEqual(check(root, a.nonce, `B ${LINE}`), { trusted: false, reason: 'request changed' });
+  assert.equal(check(root, b.nonce, `B ${LINE}`).trusted, true);
+  assert.equal(check(root, a.nonce, `A ${LINE}`).trusted, true);
+});
+
+test('a used record that has also expired reports used (documented residual)', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  check(root, nonce);
+  assert.equal(check(root, nonce, REQ, NOW + 60 * 1000).reason, 'used');
+});
+
+test('a record with a time in the future is expired', () => {
+  const root = repo();
+  const { nonce } = issue(root, REQ, NOW + 3600 * 1000);
+  assert.deepEqual(check(root, nonce, REQ, NOW), { trusted: false, reason: 'expired' });
+});
+
+test('a record line with an unknown key is dropped, so its nonce has no record', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  const [rec] = records(root);
+  fs.writeFileSync(recFile(root), JSON.stringify({ ...rec, extra: 'x' }) + '\n');
+  assert.deepEqual(check(root, nonce), { trusted: false, reason: 'no record' });
+});
+
+test('a hand-written used line for an unknown nonce does not make anything trusted', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(check(root, 'b'.repeat(32)), { trusted: false, reason: 'no record' });
+  assert.equal(check(root, nonce).trusted, true);
+});
