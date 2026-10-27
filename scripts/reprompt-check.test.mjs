@@ -1595,8 +1595,16 @@ const FOLD_CASES = [
 ];
 
 test('triage line: the fold table holds exactly the 25 look-alikes', () => {
-  assert.equal(TRIAGE_FOLD.size, 25);
+  assert.equal(Object.keys(TRIAGE_FOLD).length, 25);
   assert.ok(Object.isFrozen(TRIAGE_FOLD));
+});
+
+test('triage line: the fold table cannot be changed, so a look-alike cannot be un-folded', () => {
+  assert.throws(() => { TRIAGE_FOLD[0x0442] = 'x'; }, TypeError);
+  assert.throws(() => { delete TRIAGE_FOLD[0x0442]; }, TypeError);
+  assert.throws(() => { TRIAGE_FOLD[0x1234] = 'a'; }, TypeError);
+  assert.equal(TRIAGE_FOLD[0x0442], 't');
+  assert.equal(triageLine('тriage:'), true);
 });
 
 for (const [to, cps] of FOLD_CASES) {

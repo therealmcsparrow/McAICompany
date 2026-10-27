@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end (run-state v1.1) and prints the run view.
+// Records a run's wave, Gates and end and prints the run view (run-state v1.2). Also keeps the direct-route triage record:
+// `triage issue` and `triage check` write hashes and times only to .company/triage.
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
 // symlink, and read with the handoff-lint parser.
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -251,6 +252,8 @@ function endsWithNewline(file, size) {
 }
 
 const sha = text => createHash('sha256').update(text).digest('hex');
+// The request hash is keyed by the nonce, so a record line cannot be pointed at another request without the nonce.
+const bind = (nonce, text) => createHmac('sha256', nonce).update(text).digest('hex');
 // NFC, any line ending to LF, trailing spaces and tabs off each line, then both ends trimmed.
 const normalizeRequest = text => text.normalize('NFC').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/, '')).join('\n').trim();
 
@@ -313,9 +316,9 @@ function readTriageRecords(file) {
   return { records, raw };
 }
 
-// Drops expired issues, orphan used lines and bad lines. Rewrites through a temp file when the content changes.
+// Drops expired and future-dated issues, orphan used lines and bad lines. Rewrites through a temp file when the content changes.
 function pruneTriage(dir, file, recs, raw, now) {
-  const live = new Set(recs.filter(r => r.ev === 'issue' && now - Date.parse(r.at) <= TRIAGE_TTL_MS).map(r => r.k));
+  const live = new Set(recs.filter(r => r.ev === 'issue' && now - Date.parse(r.at) <= TRIAGE_TTL_MS && Date.parse(r.at) <= now).map(r => r.k));
   const kept = recs.filter(r => live.has(r.k));
   const text = kept.map(r => `${JSON.stringify(r)}\n`).join('');
   if (text !== raw) {
@@ -361,12 +364,12 @@ export function triage(root, args, { now = Date.now() } = {}) {
     else if (!issue) reason = 'no record';
     else if (records.some(r => r.ev === 'used' && r.k === k)) reason = 'used';
     else if (age < 0 || age > TRIAGE_TTL_MS) reason = 'expired';
-    else if (issue.h !== sha(normalized)) reason = 'request changed';
+    else if (issue.h !== bind(args[1], normalized)) reason = 'request changed';
   }
   const kept = pruneTriage(dir, file, records, raw, now);
   if (!isCheck) {
     const nonce = randomBytes(16).toString('hex');
-    appendTriage(file, kept, { ev: 'issue', h: sha(normalized), k: sha(nonce) }, now);
+    appendTriage(file, kept, { ev: 'issue', h: bind(nonce, normalized), k: sha(nonce) }, now);
     return JSON.stringify({ nonce, type: match[1] });
   }
   if (reason) return JSON.stringify({ trusted: false, reason });

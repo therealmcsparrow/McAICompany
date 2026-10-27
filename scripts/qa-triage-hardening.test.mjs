@@ -1,4 +1,3 @@
-// QA regression tests for the triage hardening (reprompt-check.mjs TRIAGE_RE).
 // Look-alike triage lines must be refused with reason 'triage line' in the prompt body and in the image brief;
 // ordinary prose that only mentions the word triage must still pass.
 import { test, after } from 'node:test';

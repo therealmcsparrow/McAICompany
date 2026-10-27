@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { run, show, active, TRIAGE_TTL_MS } from './run-state.mjs';
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-triage-'));
@@ -150,7 +151,7 @@ test('links at .company, .company/triage, records.jsonl and request.txt are refu
 
   const r3 = repo();
   fs.mkdirSync(tdir(r3));
-  try { link(path.join(outside, 'f.txt'), recFile(r3), 'file'); } catch { return; }
+  try { link(path.join(outside, 'f.txt'), recFile(r3), 'file'); } catch { t.skip('file links not permitted here'); return; }
   put(r3, REQ);
   const out = call(r3, ['issue']);
   assert.equal(out.code, 2);
@@ -158,7 +159,7 @@ test('links at .company, .company/triage, records.jsonl and request.txt are refu
 
   const r4 = repo();
   fs.mkdirSync(tdir(r4));
-  try { link(path.join(outside, 'f.txt'), reqFile(r4), 'file'); } catch { return; }
+  try { link(path.join(outside, 'f.txt'), reqFile(r4), 'file'); } catch { t.skip('file links not permitted here'); return; }
   assert.equal(call(r4, ['issue']).out, 'refused: no request');
   assert.ok(fs.existsSync(path.join(outside, 'f.txt')));
 });
@@ -245,22 +246,33 @@ test('show and active are unchanged by the triage folder', () => {
   assert.equal(active(root, { now: NOW }).slug, 'x');
 });
 
-// Shapes of requests the main session rewrites when it writes them to request.txt.
+// Each pair is one request before and after the normalization steps: NFC, line endings, per-line trailing blanks, edge trim.
+const BS = String.fromCharCode(92);
 const SHAPES = {
-  trailingSpaces: ['trailing spaces here   \nand a tab\t\nlast line   ', 'trailing spaces here\nand a tab\nlast line'],
-  crlf: ['CRLF line one\r\nCRLF line two\r\n\r\nline four\r\n', 'CRLF line one\nCRLF line two\n\nline four'],
-  mixedEndings: ['mixed\r\nendings\nhere\r\nand lone cr\rend\n', 'mixed\nendings\nhere\nand lone cr\nend'],
-  leadingBlank: ['\n\n  leading blank lines and indent\n    nested  \n\n\n', '  leading blank lines and indent\n    nested'],
-  special: ['Special: <tag> & "dq" \'sq\' `bt` $HOME %PATH% \n literal \ backslash {{x}} ${y}\n---\n# heading\n* a\n', 'Special: <tag> & "dq" \'sq\' `bt` $HOME %PATH%\n literal \ backslash {{x}} ${y}\n---\n# heading\n* a'],
-  decomposed: ['caf\u0065\u0301 au lait', 'caf\u00e9 au lait'],
+  nfc: [`El ni\u006e\u0303o y \u0041\u030angstrom ${LINE}`, `El ni\u00f1o y \u00c5ngstrom ${LINE}`],
+  crlf: [`alpha\r\nbeta\r\n\r\ngamma ${LINE}`, `alpha\nbeta\n\ngamma ${LINE}`],
+  loneCr: [`one\rtwo\rthree ${LINE}`, `one\ntwo\nthree ${LINE}`],
+  lineTrailing: [`first \t \nsecond\t\n\nthird  \nfourth ${LINE}`, `first\nsecond\n\nthird\nfourth ${LINE}`],
+  edges: [`\n\t \n  open with blanks ${LINE} \t\r\n\n`, `open with blanks ${LINE}`],
+  backslash: [`copy C:${BS}temp${BS}new 
+end with a slash${BS} 
+regex ${BS}d+${BS}s ${LINE}`, `copy C:${BS}temp${BS}new
+end with a slash${BS}
+regex ${BS}d+${BS}s ${LINE}`],
 };
-for (const [name, [raw, rewritten]] of Object.entries(SHAPES)) {
-  test(`normalization: ${name} hashes the same before and after the rewrite`, () => {
+for (const [name, [raw, same]] of Object.entries(SHAPES)) {
+  test(`normalization: ${name} hashes the same before and after`, () => {
     const root = repo();
-    const { nonce } = issue(root, `${raw.trimEnd()} ${LINE}`);
-    assert.equal(check(root, nonce, `${rewritten.trimEnd()} ${LINE}`).trusted, true);
+    const { nonce } = issue(root, raw);
+    assert.equal(check(root, nonce, same).trusted, true);
   });
 }
+
+test('a backslash is kept: removing it is a real change', () => {
+  const root = repo();
+  const { nonce } = issue(root, `open C:${BS}temp ${LINE}`);
+  assert.deepEqual(check(root, nonce, `open C:temp ${LINE}`), { trusted: false, reason: 'request changed' });
+});
 
 test('normalization does not hide a real change', () => {
   const root = repo();
@@ -268,7 +280,7 @@ test('normalization does not hide a real change', () => {
   assert.deepEqual(check(root, nonce, `a  b ${LINE}`), { trusted: false, reason: 'request changed' });
 });
 
-// QA additions (task triage-hardening): Contract behavior the first suite left open.
+// Whitespace edges, record independence and expiry.
 test('trailing whitespace right before the triage line, on its own line, is stripped from both sides', () => {
   const root = repo();
   const { nonce } = issue(root, `fix the typo   \t\n ${LINE}`);
@@ -344,6 +356,33 @@ test('a record line with an unknown key is dropped, so its nonce has no record',
   const [rec] = records(root);
   fs.writeFileSync(recFile(root), JSON.stringify({ ...rec, extra: 'x' }) + '\n');
   assert.deepEqual(check(root, nonce), { trusted: false, reason: 'no record' });
+});
+
+test('a rewritten record that points an old key at another request is refused', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.equal(check(root, nonce).trusted, true);
+  const forged = `delete everything ${LINE}`;
+  const [rec] = records(root);
+  const plain = crypto.createHash('sha256').update(forged).digest('hex');
+  fs.writeFileSync(recFile(root), JSON.stringify({ ...rec, h: plain, at: '2026-10-27T10:00:00Z' }) + '\n');
+  assert.deepEqual(check(root, nonce, forged, NOW), { trusted: false, reason: 'request changed' });
+});
+
+test('the stored hash is not the plain hash of the request', () => {
+  const root = repo();
+  issue(root);
+  const plain = crypto.createHash('sha256').update(REQ).digest('hex');
+  assert.notEqual(records(root)[0].h, plain);
+});
+
+test('records dated in the future are pruned', () => {
+  const root = repo();
+  fs.mkdirSync(tdir(root), { recursive: true });
+  const future = JSON.stringify({ v: 1, at: '2099-01-01T00:00:00Z', ev: 'issue', h: 'c'.repeat(64), k: 'b'.repeat(64) }) + '\n';
+  fs.writeFileSync(recFile(root), future.repeat(50));
+  issue(root);
+  assert.equal(records(root).length, 1);
 });
 
 test('a hand-written used line for an unknown nonce does not make anything trusted', () => {

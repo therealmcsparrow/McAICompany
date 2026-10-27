@@ -477,15 +477,16 @@ const FOLD_SETS = {
   r: [0x0433, 0x1D26],
   t: [0x0442, 0x0422, 0x03A4],
 };
-export const TRIAGE_FOLD = new Map(Object.entries(FOLD_SETS).flatMap(([to, cps]) => cps.map(cp => [cp, to])));
-Object.freeze(TRIAGE_FOLD);
+// Frozen object keyed by code point, so the exported table cannot be changed.
+export const TRIAGE_FOLD = Object.freeze(Object.assign(Object.create(null),
+  Object.fromEntries(Object.entries(FOLD_SETS).flatMap(([to, cps]) => cps.map(cp => [cp, to])))));
 const MARK_RE = /\p{M}/gu;
 const TRIAGE_RE = /triage(?:[\p{Zs}\t*_`~\\]|<\/?[a-z][a-z0-9]{0,9}>)*(?:[:\u{2236}\u{A789}\u{02F8}\u{05C3}\u{0589}\u{1804}\u{205A}]|&(?:amp;)*(?:#0*58;?|#x0*3a;?|colon;))/iu;
 
 export function triageLine(text) {
-  let copy = text.normalize('NFKD').replace(MARK_RE, '');
+  const copy = text.normalize('NFKD').replace(MARK_RE, '');
   let out = '';
-  for (const ch of copy) out += TRIAGE_FOLD.get(ch.codePointAt(0)) ?? ch;
+  for (const ch of copy) out += TRIAGE_FOLD[ch.codePointAt(0)] ?? ch;
   return TRIAGE_RE.test(out);
 }
 
