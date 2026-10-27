@@ -5,14 +5,31 @@ A Claude Code plugin that runs a small software company. You are the **CEO**. A 
 **New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 33 Roles, and the concepts the company runs on.
 
 ## Install
-```
-/plugin marketplace add therealmcsparrow/McAICompany
-/plugin install aico@aico
-/aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
-/aico:setup go react        # optional stack groups: go, react, tanstack, auth
-```
-`superpowers` and `mattpocock-skills` install automatically as plugin dependencies.
-The repo is private: your git must be able to clone it (e.g. `gh auth login`). Update later with `/plugin marketplace update aico`.
+**Before you start**
+- Claude Code.
+- Git access to the private repo: your git must be able to clone it (for example, run `gh auth login` once).
+- Node.js 24 or newer (`engines` in `package.json`, `.nvmrc`), for the helper scripts such as `scripts/settings.mjs`.
+- Optional: `uv`, only for `/aico:skillspector`. aico never installs it for you.
+
+**Steps** (in Claude Code)
+1. Add the marketplace and install the plugin:
+   ```
+   /plugin marketplace add therealmcsparrow/McAICompany
+   /plugin install aico@aico
+   ```
+   `superpowers` and `mattpocock-skills` install automatically as plugin dependencies.
+2. Optional: install the standalone and stack skills the Roles use:
+   ```
+   /aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
+   /aico:setup go react        # optional stack groups: go, react, tanstack, auth
+   ```
+3. Check it worked: `/aico:version` shows the installed version and its latest changelog entry. `/aico:help` lists every command.
+
+**Update:** `/plugin marketplace update aico`, then `/reload-plugins`. Run `/aico:version` to confirm.
+
+**Uninstall:** `claude plugin uninstall aico@aico` in a terminal (or `/plugin` in Claude Code). Skills added by `/aico:setup` or a skill pick are not removed with it; see `documentation/commands.md` for their removal commands.
+
+Details: [`documentation/getting-started.md`](documentation/getting-started.md).
 
 ## Use
 | Command | What it does |
@@ -42,6 +59,20 @@ The repo is private: your git must be able to clone it (e.g. `gh auth login`). U
 | `/aico:settings` | Opens a local page to set each Role's name, model and effort, the language and profile, the pipeline (Fix rounds, parallel or sequential, optional lanes) and the Gates, as your default or per project. Nothing changes until you save |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
+
+## Settings
+Run `/aico:settings`. It opens a local page (127.0.0.1) in your browser. Nothing changes until you save.
+
+- **Tabs:** Roles (name, model, effort, context cap), Language & profile, Pipeline (Fix rounds, dispatch, review format, optional lanes), Gates, Skill scan, Mods.
+- **User default or project override.** A project value wins over your user value, which wins over the plugin default.
+  - User default, all projects: `~/.mcsparrow/config.json`, key `aico_settings` (or under `MCSPARROW_HOME` if set). Other keys in that file are kept.
+  - Project override: `.company/settings.json` in the product repo, holding `{ "aico_settings": … }`.
+- **Locks.** `gates.ship`, `gates.installs` and the `security` and `compliance` lanes stay on `ask` / on unless you unlock them at the user level. A project cannot unlock what you locked; its `unlocked` list is ignored. `skillspector.mode: claude_cli` and `mods.reflect.mode: model` count only at user level. The page shows a lock and its reason.
+- **When it applies.** A run reads the settings once at its start, so a change applies from the next run. The mods re-read them each turn.
+- **See what is in effect:** from the product repo, run `node "<plugin root>/scripts/settings.mjs" get`. It prints the resolved JSON, including `ignored` and `warnings`; `get <key>` prints one value, for example `get pipeline.fix_rounds`. The plugin root is the installed version's folder, such as `~/.claude/plugins/cache/aico/aico/0.12.0`.
+- **Reset:** a key that is absent at a level counts as not set, so the level below applies. To reset a project, remove the key (or delete `.company/settings.json`). To reset your default, remove the key from `aico_settings` in `~/.mcsparrow/config.json`. An invalid value is refused on save and nothing is written.
+
+Language has its own command: `/aico:language`. Full rules and every key: [`docs/contracts/aico-settings.md`](docs/contracts/aico-settings.md); user guide: [`documentation/concepts.md`](documentation/concepts.md#settings).
 
 ## Company hierarchy
 Reporting lines show who signs off; the Lead dispatches every Role.

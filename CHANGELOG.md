@@ -16,6 +16,7 @@ Skill picks you can trust, a scanner for the skills you already have, and progre
 - **`## Skills` project section.** Approved `stack`, `product-type` and `company-type` skills are recorded in `.company/project.md` under `## Skills`, one line each. Design skills stay under `## Design skills`. The project template has the new section.
 - **Savvy progress bars.** The pane shows `Gates 1/3 [###-----] last: brief` and `Steps 5/8 [#####---]`, with the count first. They are plain ASCII, always show the numbers and fit panes from 10 to 400 columns wide. An unreadable value shows `?` with no bar. A shipped run shows both bars full. The status line is unchanged.
 - **Contracts:** `skillspector-scan` v1, `skill-recommendation` v1 and `skills-section` v1 (new); `aico-settings` v1.2 and `aico-mods` v1.1 (additive). ADR 0018.
+- README: installation steps and how to change settings.
 
 ## [0.11.0] - 2026-10-26
 
