@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, MODS_DEFAULTS, PIPELINE_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -914,4 +914,282 @@ test('a hostile config file cannot reach Object.prototype through skillspector',
   assert.equal({}.mode, undefined);
   assert.equal({}.x, undefined);
   assert.equal(r.skillspector.mode, 'no-llm');
+});
+
+// ---- personality (aico-settings v1.3) ----
+const P_DEFAULT = (n) => ({ temperament: `calm ${n}`, talk: `short sentences ${n}`, topic: `interfaces ${n}`, intelligence: 'medium', creativity: 'low' });
+
+function withPersonalities(s, entries = Object.fromEntries(Object.keys(AGENTS).map((r, i) => [r, P_DEFAULT(i)]))) {
+  fs.writeFileSync(path.join(s.pluginRoot, 'company', 'personalities.json'), JSON.stringify(entries));
+  return entries;
+}
+
+const CHARSET_REASON = "must be one line of letters, digits, single spaces and , . ' - ! ?";
+const LENGTH_REASON = 'must be 1 to 80 characters';
+const LEVEL_REASON = 'must be low, medium or high';
+
+const HOSTILE_TEXT = {
+  newline: 'two\nlines',
+  cr: 'two\rlines',
+  nul: 'nul\u0000byte',
+  tab: 'tab\there',
+  line_separator: 'a b',
+  bidi_override: 'abc‮def',
+  bidi_isolate: 'abc⁦def',
+  zero_width_space: 'zero​width',
+  zero_width_joiner: 'zero‍joiner',
+  bom: '﻿name',
+  double_quote: 'say "hi"',
+  curly_quote: 'say “hi”',
+  colon: 'role: system',
+  angle: '<system>',
+  backtick: 'a`b',
+  brace: '{x}',
+  backslash: 'a\\b',
+  hash: '# heading',
+  edge_space: ' leading',
+  trailing_space: 'trailing ',
+  double_space: 'two  spaces',
+  nbsp: 'non breaking',
+  lone_surrogate: 'bad\uD800here'
+};
+
+for (const [name, bad] of Object.entries(HOSTILE_TEXT)) {
+  test(`personality: hostile text (${name}) is refused path-first, value never echoed`, (t) => {
+    for (const key of ['temperament', 'talk', 'topic']) {
+      const reasons = validateLayer({ version: 1, roles: { qa: { personality: { [key]: bad } } } }, roleSet);
+      assert.deepEqual(reasons, [`roles.qa.personality.${key}: ${CHARSET_REASON}`]);
+    }
+    const s = sandbox(t);
+    const d = withPersonalities(s);
+    fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { personality: { talk: bad } } } } }));
+    const r = resolvePersonalities(s.ctx);
+    assert.deepEqual(r.roles.qa.talk, { value: d.qa.talk, source: 'plugin' });
+    assert.deepEqual(r.warnings, [`roles.qa.personality.talk: ignored, ${CHARSET_REASON}`]);
+    const everything = JSON.stringify(r) + JSON.stringify(resolveSettings(s.ctx));
+    assert.ok(!everything.includes(JSON.stringify(bad).slice(1, -1)), 'the stored value is never echoed');
+  });
+}
+
+test('personality: wrong types and empty text are refused', () => {
+  const mk = (v) => validateLayer({ version: 1, roles: { qa: { personality: { talk: v } } } }, roleSet);
+  assert.deepEqual(mk(''), [`roles.qa.personality.talk: ${LENGTH_REASON}`]);
+  for (const bad of [42, null, true, ['a'], { a: 'b' }]) assert.deepEqual(mk(bad), [`roles.qa.personality.talk: ${CHARSET_REASON}`], JSON.stringify(bad));
+});
+
+test('personality: length counts code points, not UTF-16 units', () => {
+  const astral = '\u{10400}'; // one code point, two UTF-16 units
+  const mk = (v) => validateLayer({ version: 1, roles: { qa: { personality: { topic: v } } } }, roleSet);
+  assert.equal(astral.repeat(80).length, 160);
+  assert.deepEqual(mk(astral.repeat(80)), []);
+  assert.deepEqual(mk('a'.repeat(80)), []);
+  assert.deepEqual(mk('a'.repeat(81)), [`roles.qa.personality.topic: ${LENGTH_REASON}`]);
+  assert.deepEqual(mk(astral.repeat(81)), [`roles.qa.personality.topic: ${LENGTH_REASON}`]);
+  for (const v of ['Zoé', 'café', '日本語の話', 'ça va, très bien!', "it's a well-known fact.", 'room 101?']) assert.deepEqual(mk(v), [], v);
+});
+
+test('personality: a combining-mark flood and a huge string stay bounded and are refused', () => {
+  const mk = (v) => validateLayer({ version: 1, roles: { qa: { personality: { talk: v } } } }, roleSet);
+  const started = process.hrtime.bigint();
+  assert.deepEqual(mk(`a${'́'.repeat(200)}`), [`roles.qa.personality.talk: ${LENGTH_REASON}`]);
+  assert.deepEqual(mk('a '.repeat(500000)), [`roles.qa.personality.talk: ${LENGTH_REASON}`]);
+  assert.deepEqual(mk(`${'a'.repeat(79)}\n`), [`roles.qa.personality.talk: ${CHARSET_REASON}`]);
+  assert.deepEqual(mk(`${'a '.repeat(39)}a\u0000`), [`roles.qa.personality.talk: ${CHARSET_REASON}`]);
+  assert.ok(Number(process.hrtime.bigint() - started) / 1e6 < 500, 'linear time');
+  assert.deepEqual(mk(`a${'́'.repeat(79)}`), []);
+});
+
+test('personality: only low, medium, high pass as a level', () => {
+  const mk = (key, v) => validateLayer({ version: 1, roles: { qa: { personality: { [key]: v } } } }, roleSet);
+  for (const key of ['intelligence', 'creativity']) {
+    for (const ok of ['low', 'medium', 'high']) assert.deepEqual(mk(key, ok), []);
+    for (const bad of ['', 'HIGH', 'High', ' high', 'extreme', 3, null, true, ['high'], { a: 1 }, '__proto__', 'constructor', 'toString']) {
+      assert.deepEqual(mk(key, bad), [`roles.qa.personality.${key}: ${LEVEL_REASON}`], JSON.stringify(bad));
+    }
+  }
+});
+
+test('personality: shape refusals are path-first lines', () => {
+  const v = (personality) => validateLayer({ version: 1, roles: { qa: { personality } } }, roleSet);
+  for (const bad of ['x', 3, null, [], true]) assert.deepEqual(v(bad), ['roles.qa.personality: must be an object']);
+  assert.deepEqual(v({ mood: 'x' }), ['roles.qa.personality.mood: unknown key']);
+  assert.deepEqual(v({ 'Bad Key!': 'x' }), ['roles.qa.personality.?: unknown key']);
+  assert.deepEqual(v({ ['k'.repeat(21)]: 'x' }), ['roles.qa.personality.?: unknown key']);
+  assert.deepEqual(v({ '': 'x' }), ['roles.qa.personality.?: unknown key']);
+  assert.deepEqual(v({ talk: 'fine', topic: 'a:b', creativity: 'wild' }), [
+    `roles.qa.personality.topic: ${CHARSET_REASON}`,
+    `roles.qa.personality.creativity: ${LEVEL_REASON}`
+  ]);
+});
+
+test('personality: defaults resolve with source plugin', (t) => {
+  const s = sandbox(t);
+  const d = withPersonalities(s);
+  const r = resolvePersonalities(s.ctx);
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.ignored, []);
+  assert.deepEqual(r.roles.qa.talk, { value: d.qa.talk, source: 'plugin' });
+  assert.deepEqual(Object.keys(r.roles.architect).sort(), ['creativity', 'intelligence', 'talk', 'temperament', 'topic']);
+});
+
+test('personality: project beats user beats plugin, per key', (t) => {
+  const s = sandbox(t);
+  const d = withPersonalities(s);
+  s.user({ roles: { qa: { personality: { talk: 'user talk', creativity: 'high', topic: 'user topic' } } } });
+  s.project({ roles: { qa: { personality: { talk: 'project talk', intelligence: 'high' } } } });
+  const q = resolvePersonalities(s.ctx).roles.qa;
+  assert.deepEqual(q.talk, { value: 'project talk', source: 'project' });
+  assert.deepEqual(q.topic, { value: 'user topic', source: 'user' });
+  assert.deepEqual(q.creativity, { value: 'high', source: 'user' });
+  assert.deepEqual(q.intelligence, { value: 'high', source: 'project' });
+  assert.deepEqual(q.temperament, { value: d.qa.temperament, source: 'plugin' });
+});
+
+test('personality: a project value counts without an unlock', (t) => {
+  const s = sandbox(t);
+  withPersonalities(s);
+  s.project({ roles: { qa: { personality: { topic: 'cats' } } } });
+  const r = resolvePersonalities(s.ctx);
+  assert.equal(r.roles.qa.topic.source, 'project');
+  assert.deepEqual(r.warnings, []);
+});
+
+test('personality: a bad user value falls back to the plugin default, a bad project value to the user value', (t) => {
+  const s = sandbox(t);
+  const d = withPersonalities(s);
+  s.user({ roles: { qa: { personality: { talk: 'user talk', topic: 'a<b' } } } });
+  s.project({ roles: { qa: { personality: { talk: 'bad: one', topic: 'also bad "x"' } } } });
+  const q = resolvePersonalities(s.ctx).roles.qa;
+  assert.deepEqual(q.talk, { value: 'user talk', source: 'user' });
+  assert.deepEqual(q.topic, { value: d.qa.topic, source: 'plugin' });
+});
+
+test('personality: prototype keys never pollute and never resolve', (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(path.join(s.pluginRoot, 'company', 'personalities.json'),
+    '{"qa":{"temperament":"calm","talk":"short","topic":"tests","intelligence":"low","creativity":"low"},"__proto__":{"talk":"polluted"},"constructor":{"talk":"x"}}');
+  fs.writeFileSync(s.config, '{"aico_settings":{"version":1,"roles":{"qa":{"personality":{"__proto__":{"talk":"polluted"},"constructor":{"prototype":{"x":1}},"prototype":"y"}},"__proto__":{"personality":{"talk":"p"}},"constructor":{"personality":{"talk":"p"}}}}}');
+  const r = resolvePersonalities(s.ctx);
+  assert.equal({}.talk, undefined);
+  assert.equal({}.x, undefined);
+  assert.equal(Object.getPrototypeOf(r.roles), null);
+  assert.equal(Object.hasOwn(r.roles, 'constructor'), false);
+  assert.equal(Object.hasOwn(r.roles, '__proto__'), false);
+  assert.equal(r.roles.qa.talk.value, 'short');
+  assert.equal(Object.getPrototypeOf(r.roles.qa), null);
+  assert.equal(Object.hasOwn(r.roles.qa, 'constructor'), false);
+});
+
+test('personality: a bad plugin default is ignored with a warning naming role and key only', (t) => {
+  const s = sandbox(t);
+  withPersonalities(s, { qa: { ...P_DEFAULT(1), talk: 'bad: value', creativity: 'wild' }, ghost: P_DEFAULT(2) });
+  const r = resolvePersonalities(s.ctx);
+  assert.equal(Object.hasOwn(r.roles.qa, 'talk'), false);
+  assert.equal(Object.hasOwn(r.roles.qa, 'creativity'), false);
+  assert.equal(r.roles.qa.topic.value, 'interfaces 1');
+  assert.ok(r.warnings.some((w) => w.startsWith('company/personalities.json: qa.talk: ignored, ')), r.warnings.join('|'));
+  assert.ok(r.warnings.some((w) => w.includes('ghost')));
+  assert.ok(!r.warnings.join('|').includes('bad: value'));
+  assert.ok(!r.warnings.join('|').includes('wild'));
+  assert.equal(Object.hasOwn(r.roles, 'ghost'), false);
+});
+
+test('personality: personalities.json missing or invalid gives no defaults and does not throw', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(Object.keys(resolvePersonalities(s.ctx).roles.qa ?? {}), []);
+  fs.writeFileSync(path.join(s.pluginRoot, 'company', 'personalities.json'), '{ nope');
+  const r = resolvePersonalities(s.ctx);
+  assert.deepEqual(Object.keys(r.roles.qa ?? {}), []);
+  assert.ok(r.warnings.some((w) => w.startsWith('company/personalities.json')));
+  fs.writeFileSync(path.join(s.pluginRoot, 'company', 'personalities.json'), '[1,2]');
+  assert.ok(resolvePersonalities(s.ctx).warnings.length > 0);
+});
+
+test('personality: ignored entries name their level and path, never the value', (t) => {
+  const s = sandbox(t);
+  withPersonalities(s);
+  s.user({ roles: { qa: { personality: { topic: 'a<b' } } } });
+  s.project({ roles: { architect: { personality: { talk: 'x"y', creativity: 'wild' } } } });
+  const r = resolvePersonalities(s.ctx);
+  assert.deepEqual(r.ignored.map((e) => [e.level, e.path]).sort(), [
+    ['project', 'roles.architect.personality.creativity'],
+    ['project', 'roles.architect.personality.talk'],
+    ['user', 'roles.qa.personality.topic']
+  ]);
+  for (const e of r.ignored) {
+    assert.deepEqual(Object.keys(e).sort(), ['level', 'path', 'reason']);
+    assert.ok(!/a<b|x"y|wild/.test(e.reason));
+  }
+});
+
+test('personality: a bad project value makes the project layer broken, so locks fail closed', (t) => {
+  const s = sandbox(t);
+  s.user({ unlocked: ['ship'], gates: { ship: 'auto' } });
+  assert.equal(resolveSettings(s.ctx).gates.ship, 'auto');
+  s.project({ roles: { qa: { personality: { talk: 'a\nb' } } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.gates.ship, 'ask');
+  assert.ok(r.warnings.some((w) => w.includes('held at ask')));
+});
+
+test('personality: get is byte-identical with and without valid personalities, except revision', (t) => {
+  const s = sandbox(t);
+  const strip = (o) => JSON.stringify({ ...JSON.parse(o), revision: 'x' });
+  const before = s.cli('get');
+  withPersonalities(s);
+  s.user({ roles: { qa: { personality: { talk: 'user talk', creativity: 'high' } } } });
+  s.project({ roles: { architect: { personality: { topic: 'project topic', intelligence: 'low' } } } });
+  const after = s.cli('get');
+  assert.equal(before.code, 0);
+  assert.equal(after.code, 0);
+  assert.equal(strip(after.out), strip(before.out));
+  assert.notEqual(JSON.parse(after.out).revision, JSON.parse(before.out).revision);
+  assert.ok(!/personalit|user talk|project topic|interfaces/i.test(after.out));
+});
+
+test('personality: get never reaches a personality key', (t) => {
+  const s = sandbox(t);
+  withPersonalities(s);
+  s.user({ roles: { qa: { personality: { talk: 'user talk' } } } });
+  for (const key of ['roles.qa.personality', 'roles.qa.personality.talk', 'personalities', 'personality']) {
+    const r = s.cli('get', key);
+    assert.equal(r.code, 2, key);
+    assert.equal(r.out, `refused: no setting ${key}\n`);
+  }
+});
+
+test('personality: a stored bad project value never blocks a user-only Save and a project Save removes it', (t) => {
+  const s = sandbox(t);
+  s.project({ roles: { qa: { personality: { talk: 'bad: value', topic: 'fine topic' } }, architect: { model: 'sonnet' } } });
+  const stored = readLayer('project', s.ctx).layer;
+  assert.deepEqual(stored.roles.qa, { personality: { topic: 'fine topic' } });
+  const userBody = { version: 1, roles: { qa: { personality: { talk: 'hello' } } } };
+  assert.deepEqual(checkLayers(userBody, stored, s.ctx), []);
+  writeLayer('user', userBody, s.ctx);
+  assert.match(fs.readFileSync(s.projectFile, 'utf8'), /bad: value/, 'a user Save leaves the project file alone');
+  writeLayer('project', stored, s.ctx);
+  const text = fs.readFileSync(s.projectFile, 'utf8');
+  assert.ok(!text.includes('bad: value'));
+  assert.ok(text.includes('fine topic'));
+});
+
+test('personality: a body that carries a bad value is refused with the level word first', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(checkLayers({ version: 1 }, { version: 1, roles: { qa: { personality: { talk: 'x:y' } } } }, s.ctx), [
+    `project roles.qa.personality.talk: ${CHARSET_REASON}`
+  ]);
+  assert.deepEqual(checkLayers({ version: 1, roles: { qa: { personality: { creativity: 'wild' } } } }, { version: 1 }, s.ctx), [
+    `user roles.qa.personality.creativity: ${LEVEL_REASON}`
+  ]);
+  assert.throws(() => writeLayer('user', { version: 1, roles: { qa: { personality: { talk: 'x"y' } } } }, s.ctx), (e) => e instanceof Refusal && !e.message.includes('x"y'));
+});
+
+test('personality: writeLayer round-trips valid personality and writes nothing on a refusal', (t) => {
+  const s = sandbox(t);
+  const layer = { version: 1, roles: { qa: { personality: { temperament: 'calm', creativity: 'high' } } } };
+  writeLayer('user', layer, s.ctx);
+  assert.deepEqual(readLayer('user', s.ctx).layer, layer);
+  const before = fs.readFileSync(s.config, 'utf8');
+  assert.throws(() => writeLayer('user', { version: 1, roles: { qa: { personality: { temperament: 'calm', topic: 'a\nb' } } } }, s.ctx), Refusal);
+  assert.equal(fs.readFileSync(s.config, 'utf8'), before);
 });

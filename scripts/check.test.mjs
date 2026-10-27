@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { check, checkBrainstorm, checkPack, checkPacks } from './check.mjs';
+import { check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS } from './check.mjs';
 
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
@@ -712,4 +712,102 @@ test('the research Playbook is not exempt from the Context cap: rule', () => {
 test('this repo passes the Context cap: rule', () => {
   const r = check(REPO);
   assert.ok(!r.errors.some(e => e.includes('Context cap')), r.errors.join('\n'));
+});
+
+// ---- personalities.json and where personality may appear (role-names v1.1, dispatch-prompt v3.2) ----
+const goodPersonality = { temperament: 'calm', talk: 'short sentences', topic: 'tests', intelligence: 'high', creativity: 'low' };
+function withPersonalities(data, extra = {}) {
+  const root = fixture({ agents: nameAgents, ...extra });
+  mkdirSync(join(root, 'company'), { recursive: true });
+  writeFileSync(join(root, 'company', 'personalities.json'), typeof data === 'string' ? data : JSON.stringify(data));
+  return root;
+}
+const pErrors = r => r.errors.filter(e => e.includes('personalities.json'));
+
+test('personality exports: regex anchored, levels closed', () => {
+  assert.ok(PERSONALITY_TEXT_RE.test('calm, patient!'));
+  assert.ok(!PERSONALITY_TEXT_RE.test('a\nb'));
+  assert.ok(!PERSONALITY_TEXT_RE.test('a"b'));
+  assert.ok(!PERSONALITY_TEXT_RE.test('x'.repeat(81)));
+  assert.deepEqual(PERSONALITY_LEVELS, ['low', 'medium', 'high']);
+});
+
+test('valid personalities.json has no errors', () => {
+  assert.deepEqual(pErrors(check(withPersonalities({ qa: goodPersonality, support: goodPersonality }))), []);
+});
+
+test('no personalities.json is skipped', () => {
+  assert.deepEqual(pErrors(check(fixture({ agents: nameAgents }))), []);
+});
+
+test('personalities.json: invalid JSON, non-object', () => {
+  assert.ok(pErrors(check(withPersonalities('{ nope'))).some(e => e.includes('not valid JSON')));
+  assert.ok(pErrors(check(withPersonalities('[1]'))).some(e => e.includes('must be an object')));
+  assert.ok(pErrors(check(withPersonalities('null'))).some(e => e.includes('must be an object')));
+});
+
+test('personalities.json: a Role without an entry, an unknown Role, a prototype key', () => {
+  const r = check(withPersonalities('{"qa":' + JSON.stringify(goodPersonality) + ',"ghost":{},"__proto__":{"talk":"x"}}'));
+  const e = pErrors(r).join('\n');
+  assert.ok(e.includes('support has no personality'), e);
+  assert.ok(e.includes('ghost is not a Role'), e);
+  assert.ok(e.includes('__proto__ is not a Role') || e.includes('? is not a Role'), e);
+});
+
+test('personalities.json: missing key, unknown key, bad value name role.key and never echo the value', () => {
+  const bad = { ...goodPersonality, talk: 'SECRETVALUE: x', creativity: 'wildcard', mood: 'x' };
+  delete bad.topic;
+  const e = pErrors(check(withPersonalities({ qa: bad, support: goodPersonality }))).join('\n');
+  assert.ok(e.includes('qa.topic: missing'), e);
+  assert.ok(e.includes('qa.mood: unknown key'), e);
+  assert.ok(e.includes('qa.talk: must be one line'), e);
+  assert.ok(e.includes('qa.creativity: must be low, medium or high'), e);
+  assert.ok(!e.includes('SECRETVALUE') && !e.includes('wildcard'), e);
+});
+
+test('personalities.json: hostile text values are errors', () => {
+  for (const v of ['a\nb', 'a\rb', 'a"b', 'a:b', 'a<b', 'a‮b', 'a​b', ' a', 'a ', 'a  b', '', 'x'.repeat(81), 7, null]) {
+    const e = pErrors(check(withPersonalities({ qa: { ...goodPersonality, topic: v }, support: goodPersonality })));
+    assert.ok(e.some(l => l.includes('qa.topic')), JSON.stringify(v));
+  }
+  const ok = pErrors(check(withPersonalities({ qa: { ...goodPersonality, topic: '\u{10400}'.repeat(80) }, support: goodPersonality })));
+  assert.deepEqual(ok, []);
+});
+
+const dispatchWith = line => '```\nProject profile: x\nCompany profile: y\nLanguage: en\nName: Ava\n' + line + '\nOutput: z\n```';
+
+test('a Personality: line in a dispatch block outside the two allowed files is an error', () => {
+  const root = fixture({ skills: {
+    cooler: skill('cooler', dispatchWith('Personality: /abs/p.md')),
+    pipeline: skill('pipeline', dispatchWith('Personality: /abs/p.md')),
+    other: skill('other', 'aico:pipeline\n' + dispatchWith('  Personality: /abs/p.md'))
+  } });
+  mkdirSync(join(root, 'skills', 'brainstorm', 'references'), { recursive: true });
+  writeFileSync(join(root, 'skills', 'brainstorm', 'SKILL.md'), skill('brainstorm', 'ok'));
+  writeFileSync(join(root, 'skills', 'brainstorm', 'references', 'format-1.md'), dispatchWith('Personality: /abs/p.md'));
+  writeFileSync(join(root, 'skills', 'brainstorm', 'references', 'format-2.md'), dispatchWith('Personality: /abs/p.md'));
+  const e = check(root).errors.filter(l => l.includes('Personality:'));
+  assert.ok(e.some(l => l.includes('skills/pipeline/SKILL.md')), e.join('\n'));
+  assert.ok(e.some(l => l.includes('skills/other/SKILL.md')), e.join('\n'));
+  assert.ok(e.some(l => l.includes('format-2.md')), e.join('\n'));
+  assert.ok(!e.some(l => l.includes('skills/cooler/SKILL.md')), e.join('\n'));
+  assert.ok(!e.some(l => l.includes('format-1.md')), e.join('\n'));
+});
+
+test('a Personality: line outside a dispatch block or in prose is not an error', () => {
+  const root = fixture({ skills: { a: skill('a', 'Personality: is described here.\n```\nPersonality:\n> style\n```') } });
+  assert.ok(!check(root).errors.some(l => l.includes('Personality:')));
+});
+
+test('personality.mjs may be mentioned only in cooler, brainstorm format 1 and settings', () => {
+  const root = fixture({ skills: {
+    cooler: skill('cooler', 'node personality.mjs stage'),
+    settings: skill('settings', 'see personality.mjs'),
+    lead: skill('lead', 'run personality.mjs'),
+  }, agents: { qa: agent('qa', 'personality.mjs') } });
+  mkdirSync(join(root, 'skills', 'brainstorm', 'references'), { recursive: true });
+  writeFileSync(join(root, 'skills', 'brainstorm', 'SKILL.md'), skill('brainstorm', 'personality.mjs'));
+  writeFileSync(join(root, 'skills', 'brainstorm', 'references', 'format-1.md'), 'personality.mjs');
+  const e = check(root).errors.filter(l => l.includes('personality.mjs'));
+  assert.deepEqual(e.map(l => l.split(':')[0]).sort(), ['ERROR agents/qa.md', 'ERROR skills/brainstorm/SKILL.md', 'ERROR skills/lead/SKILL.md']);
 });
