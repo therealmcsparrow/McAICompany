@@ -254,8 +254,13 @@ function endsWithNewline(file, size) {
 const sha = text => createHash('sha256').update(text).digest('hex');
 // The request hash is keyed by the nonce, so a record line cannot be pointed at another request without the nonce.
 const bind = (nonce, text) => createHmac('sha256', nonce).update(text).digest('hex');
-// NFC, any line ending to LF, trailing spaces and tabs off each line, then both ends trimmed.
-const normalizeRequest = text => text.normalize('NFC').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/, '')).join('\n').trim();
+// NFC, any line ending to LF, trailing spaces and tabs off each line, both ends trimmed, then one pair of enclosing quotes off.
+function normalizeRequest(text) {
+  const t = text.normalize('NFC').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/, '')).join('\n').trim();
+  return t.length >= 2 && t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1).trim() : t;
+}
+// A plain file: a regular file with exactly one hard link.
+const isPlain = st => st.isFile() && st.nlink === 1;
 
 function validTriageRecord(o) {
   if (o === null || typeof o !== 'object' || Array.isArray(o)) return false;
@@ -277,7 +282,7 @@ function triageFolder(root) {
   mkdirSync(dir, { recursive: true });
   const ig = join(dir, '.gitignore');
   const ist = lstatOrNull(ig);
-  if (ist && !ist.isFile()) refuse('triage folder is a link');
+  if (ist && !isPlain(ist)) refuse('triage folder is a link');
   let same = false;
   if (ist) {
     try { same = readCapped(ig, 16).toString('utf8') === '*\n'; } catch { refuse('triage folder is a link'); }
@@ -292,7 +297,7 @@ function takeRequest(dir) {
   const st = lstatOrNull(file);
   if (!st) return null;
   try {
-    if (!st.isFile() || st.size > MAX_FILE) return null;
+    if (!isPlain(st) || st.size > MAX_FILE) return null;
     return new TextDecoder('utf-8', { fatal: true }).decode(readCapped(file, MAX_FILE));
   } catch { return null; } finally {
     try { unlinkSync(file); } catch { /* already gone */ }
@@ -303,7 +308,7 @@ function takeRequest(dir) {
 function readTriageRecords(file) {
   const st = lstatOrNull(file);
   if (!st) return { records: [], raw: '' };
-  if (!st.isFile() || st.size > MAX_FILE) refuse('triage record unreadable');
+  if (!isPlain(st) || st.size > MAX_FILE) refuse('triage record unreadable');
   let raw;
   try { raw = readCapped(file, MAX_FILE).toString('utf8'); } catch { refuse('triage record unreadable'); }
   const records = [];
@@ -344,7 +349,12 @@ export function triage(root, args, { now = Date.now() } = {}) {
   const isCheck = args[0] === 'check';
   if (!(args[0] === 'issue' && args.length === 1) && !(isCheck && args.length === 2)) refuse(usage());
   if (isCheck && !NONCE_RE.test(args[1])) refuse('bad nonce');
-  const dir = triageFolder(root);
+  let dir;
+  try { dir = triageFolder(root); } catch (e) {
+    // Only the name request.txt is unlinked (never followed, never read), so a link in the path cannot leave CEO text behind.
+    try { unlinkSync(join(root, '.company', 'triage', 'request.txt')); } catch { /* none */ }
+    throw e;
+  }
   const request = takeRequest(dir);
   const normalized = request === null ? null : normalizeRequest(request);
   const match = normalized === null ? null : TRIAGE_LINE_RE.exec(normalized);

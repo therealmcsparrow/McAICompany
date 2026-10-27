@@ -391,3 +391,93 @@ test('a hand-written used line for an unknown nonce does not make anything trust
   assert.deepEqual(check(root, 'b'.repeat(32)), { trusted: false, reason: 'no record' });
   assert.equal(check(root, nonce).trusted, true);
 });
+
+// Enclosing quotes (the CEO's /aico:lead "<request> (triage: ...)" fallback).
+test('one pair of enclosing quotes is dropped at check', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(check(root, nonce, `"${REQ}"`), { trusted: true, type: 'bug' });
+});
+
+test('enclosing quotes with surrounding spaces and CRLF are dropped', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(check(root, nonce, `  "${REQ}"  \r\n`), { trusted: true, type: 'bug' });
+});
+
+test('a request that starts with a quote of its own, wrapped once more, is trusted', () => {
+  const root = repo();
+  const own = `"fix it" now ${LINE}`;
+  const { nonce } = issue(root, own);
+  assert.deepEqual(check(root, nonce, `"${own}"`), { trusted: true, type: 'bug' });
+});
+
+test('two pairs of quotes are not dropped twice: no triage line', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(check(root, nonce, `""${REQ}""`), { trusted: false, reason: 'no triage line' });
+});
+
+test('a leading quote only is a changed request', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(check(root, nonce, `"${REQ}`), { trusted: false, reason: 'request changed' });
+});
+
+test('the stored h is the HMAC of the normalized request under the printed nonce', () => {
+  const root = repo();
+  const { nonce } = issue(root, `  ${REQ}  \r\n`);
+  const want = crypto.createHmac('sha256', nonce).update(REQ).digest('hex');
+  assert.equal(records(root)[0].h, want);
+  assert.equal(records(root)[0].k, crypto.createHash('sha256').update(nonce).digest('hex'));
+});
+
+// Hard links: a file with more than one link is not a plain file.
+function hardlink(t, from, to) {
+  try { fs.linkSync(from, to); return true; } catch { t.skip('hard links not permitted here'); return false; }
+}
+
+test('a hard-linked .gitignore is refused and left alone', (t) => {
+  const root = repo();
+  fs.mkdirSync(tdir(root), { recursive: true });
+  const outside = path.join(base, 'hl-ig.txt');
+  fs.writeFileSync(outside, 'keep\n');
+  if (!hardlink(t, outside, path.join(tdir(root), '.gitignore'))) return;
+  put(root, REQ);
+  assert.equal(call(root, ['issue']).out, 'refused: triage folder is a link');
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n');
+  assert.equal(fs.existsSync(reqFile(root)), false);
+});
+
+test('a hard-linked records.jsonl is refused and left alone', (t) => {
+  const root = repo();
+  fs.mkdirSync(tdir(root), { recursive: true });
+  const outside = path.join(base, 'hl-rec.txt');
+  fs.writeFileSync(outside, 'keep\n');
+  if (!hardlink(t, outside, recFile(root))) return;
+  put(root, REQ);
+  assert.equal(call(root, ['issue']).out, 'refused: triage record unreadable');
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n');
+  assert.equal(fs.existsSync(reqFile(root)), false);
+});
+
+test('a hard-linked request.txt counts as missing and its name is deleted', (t) => {
+  const root = repo();
+  fs.mkdirSync(tdir(root), { recursive: true });
+  const outside = path.join(base, 'hl-req.txt');
+  fs.writeFileSync(outside, REQ);
+  if (!hardlink(t, outside, reqFile(root))) return;
+  assert.equal(call(root, ['issue']).out, 'refused: no request');
+  assert.equal(fs.existsSync(reqFile(root)), false);
+  assert.equal(fs.readFileSync(outside, 'utf8'), REQ);
+});
+
+test('a link at the triage folder is refused and request.txt behind it is still deleted', (t) => {
+  const outside = path.join(base, 'outside-del');
+  fs.mkdirSync(outside, { recursive: true });
+  const root = repo();
+  try { fs.symlinkSync(outside, tdir(root), 'junction'); } catch { t.skip('links not permitted here'); return; }
+  fs.writeFileSync(path.join(outside, 'request.txt'), REQ);
+  assert.equal(call(root, ['issue']).out, 'refused: triage folder is a link');
+  assert.deepEqual(fs.readdirSync(outside), []);
+});
