@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Usage: node scripts/release.mjs <x.y.z>
-// Bumps every version field, rolls the CHANGELOG [Unreleased] section, runs the checks,
-// then makes one release commit and a local tag v<x.y.z>. It never contacts a remote.
+// Bumps every version field, rolls the CHANGELOG [Unreleased] section, runs the checks
+// (including `claude plugin validate --strict .`, which fails closed), then makes one release commit and a local tag v<x.y.z>. It never contacts a remote.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -12,6 +12,26 @@ function npmTest() {
   const cli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
   if (!fs.existsSync(cli)) return null;
   return [process.execPath, [cli, 'test']];
+}
+
+// The validate binary: AICO_CLAUDE_BIN (absolute path), else claude.exe on Windows, else claude.
+// A .cmd or .bat shim cannot start without a shell, so it is refused. A script file runs through this node.
+function claudeCommand() {
+  const bin = process.env.AICO_CLAUDE_BIN;
+  if (bin === undefined || bin === '') {
+    return [process.platform === 'win32' ? 'claude.exe' : 'claude', []];
+  }
+  if (!path.isAbsolute(bin)) fail('AICO_CLAUDE_BIN must be an absolute path');
+  if (/.(cmd|bat)$/i.test(bin)) fail('AICO_CLAUDE_BIN must not be a .cmd or .bat shim; point it at claude.exe or the CLI script');
+  let stat = null;
+  try {
+    stat = fs.statSync(bin);
+  } catch {
+    // reported below
+  }
+  if (!stat || !stat.isFile()) fail('AICO_CLAUDE_BIN is not an existing file');
+  if (/.(c|m)?js$/i.test(bin)) return [process.execPath, [bin]];
+  return [bin, []];
 }
 
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -39,6 +59,8 @@ const argv = process.argv.slice(2);
 if (argv.length !== 1) fail('usage: node scripts/release.mjs <x.y.z>');
 const version = argv[0];
 if (!SEMVER.test(version)) fail(`${JSON.stringify(version.slice(0, 40))} is not plain semver (x.y.z)`);
+
+const [claudeBin, claudeArgs] = claudeCommand();
 
 const root = process.cwd();
 if (git(root, ['status', '--porcelain']) !== '') fail('working tree is dirty; commit or stash first');
@@ -96,12 +118,31 @@ const checks = [
   ['check', process.execPath, ['scripts/check.mjs']],
   ['npm test', ...(npm ?? ['npm', ['test']])]
 ];
+const VALIDATE_LIMIT = { timeout: 120000, maxBuffer: 1024 * 1024 };
+function validate() {
+  const r = spawnSync(claudeBin, [...claudeArgs, 'plugin', 'validate', '--strict', '.'], {
+    cwd: root,
+    encoding: 'utf8',
+    shell: false,
+    ...VALIDATE_LIMIT
+  });
+  process.stdout.write((r.stdout ?? '').slice(0, 20000));
+  process.stderr.write((r.stderr ?? '').slice(0, 20000));
+  if (r.error) console.error(`release: could not run the claude CLI (${r.error.code ?? 'error'})`);
+  return r.status === 0 && !r.error;
+}
+
 for (const [name, cmd, args] of checks) {
   const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: false });
   if (r.status !== 0) {
     restore();
     fail(`${name} failed; files restored, no commit, no tag`);
   }
+}
+
+if (!validate()) {
+  restore();
+  fail('claude plugin validate failed; files restored, no commit, no tag');
 }
 
 // The checks may write files; the release commit takes only the files this script changed.
