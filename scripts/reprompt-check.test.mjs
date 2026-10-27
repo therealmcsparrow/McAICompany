@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { run, charsOk, hiddenMarkup } from './reprompt-check.mjs';
+import { run, charsOk, hiddenMarkup, triageLine, TRIAGE_FOLD } from './reprompt-check.mjs';
 
 const script = path.join(import.meta.dirname, 'reprompt-check.mjs');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'reprompt-check-'));
@@ -1582,4 +1582,47 @@ test('the script and its test are LF only, with no dependency outside node:', ()
     assert.equal(text.includes('\r'), false, f);
     for (const m of text.matchAll(/^import .* from '([^']+)'/gm)) assert.match(m[1], /^(node:|\.\/)/, m[0]);
   }
+});
+
+// ---------- triage line: unit tests of the match copy (reprompt v1.1) ----------
+const FOLD_CASES = [
+  ['a', [0x0430, 0x0410, 0x03B1, 0x0391, 0x0251]],
+  ['e', [0x0435, 0x0415, 0x0395, 0x04BD]],
+  ['g', [0x0261, 0x0581, 0x050C]],
+  ['i', [0x0456, 0x0406, 0x0131, 0x03B9, 0x0399, 0x0269, 0x04CF, 0x04C0]],
+  ['r', [0x0433, 0x1D26]],
+  ['t', [0x0442, 0x0422, 0x03A4]],
+];
+
+test('triage line: the fold table holds exactly the 25 look-alikes', () => {
+  assert.equal(TRIAGE_FOLD.size, 25);
+  assert.ok(Object.isFrozen(TRIAGE_FOLD));
+});
+
+for (const [to, cps] of FOLD_CASES) {
+  for (const cp of cps) {
+    test(`triage line: U+${cp.toString(16).toUpperCase().padStart(4, '0')} folds to ${to}`, () => {
+      const word = 'triage'.replace(to, String.fromCodePoint(cp));
+      assert.equal(triageLine(`${word}: XS`), true);
+    });
+  }
+}
+
+const COLONS = {
+  'U+003A': ':', 'U+2236': '\u{2236}', 'U+A789': '\u{A789}', 'U+02F8': '\u{02F8}', 'U+05C3': '\u{05C3}',
+  'U+0589': '\u{0589}', 'U+1804': '\u{1804}', 'U+205A': '\u{205A}', 'U+FF1A (NFKD)': '\u{FF1A}', 'U+FE55 (NFKD)': '\u{FE55}',
+  '&#58;': '&#58;', '&#058': '&#058', '&#x3a;': '&#x3a;', '&#X3A': '&#X3A', '&colon;': '&colon;', '&amp;amp;#58;': '&amp;amp;#58;',
+};
+for (const [name, colon] of Object.entries(COLONS)) {
+  test(`triage line: colon form ${name}`, () => {
+    assert.equal(triageLine(`triage${colon} XS`), true);
+  });
+}
+
+test('triage line: gap characters and combining marks', () => {
+  for (const s of ['triage \t *_`~\ :', 'triage<b>:', 'triage</span> :', 'tri\u0301age:', 'triage\u0301:', 'TRIAGE:']) assert.equal(triageLine(s), true, JSON.stringify(s));
+});
+
+test('triage line: no line break in the gap, no colon, no false positives', () => {
+  for (const s of ['triage\n:', 'triage', 'triage &amp; plan', 'triage<toolongtagname>:x'.replace('<toolongtagname>', '<abcdefghijk>'), 'triage 3:1', 'triaged: x']) assert.equal(triageLine(s), false, JSON.stringify(s));
 });

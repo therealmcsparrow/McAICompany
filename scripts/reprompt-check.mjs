@@ -467,8 +467,27 @@ function readText(file, max) {
   return { text };
 }
 
-// A triage line (ASCII or full-width colon) in the prompt body or the brief, code fences included.
-const TRIAGE_RE = /triage[ \t]*[:：]/i;
+// A triage line in the prompt body or the brief, code fences included, in any spelling (reprompt v1.1).
+// The test runs on a match copy that is never shown or returned: NFKD, marks removed, look-alike letters folded.
+const FOLD_SETS = {
+  a: [0x0430, 0x0410, 0x03B1, 0x0391, 0x0251],
+  e: [0x0435, 0x0415, 0x0395, 0x04BD],
+  g: [0x0261, 0x0581, 0x050C],
+  i: [0x0456, 0x0406, 0x0131, 0x03B9, 0x0399, 0x0269, 0x04CF, 0x04C0],
+  r: [0x0433, 0x1D26],
+  t: [0x0442, 0x0422, 0x03A4],
+};
+export const TRIAGE_FOLD = new Map(Object.entries(FOLD_SETS).flatMap(([to, cps]) => cps.map(cp => [cp, to])));
+Object.freeze(TRIAGE_FOLD);
+const MARK_RE = /\p{M}/gu;
+const TRIAGE_RE = /triage(?:[\p{Zs}\t*_`~\\]|<\/?[a-z][a-z0-9]{0,9}>)*(?:[:\u{2236}\u{A789}\u{02F8}\u{05C3}\u{0589}\u{1804}\u{205A}]|&(?:amp;)*(?:#0*58;?|#x0*3a;?|colon;))/iu;
+
+export function triageLine(text) {
+  let copy = text.normalize('NFKD').replace(MARK_RE, '');
+  let out = '';
+  for (const ch of copy) out += TRIAGE_FOLD.get(ch.codePointAt(0)) ?? ch;
+  return TRIAGE_RE.test(out);
+}
 
 function checkPrompt(file, treeChanged, assumed) {
   if (!treeChanged) return { reason: 'prompt.md not rewritten' };
@@ -491,7 +510,7 @@ function checkPrompt(file, treeChanged, assumed) {
   if (heads.length !== 6) return { reason: 'not six parts' };
   if (/^en(-|$)/i.test(m[1]) && heads.some((h, i) => h !== SIX_EN[i])) return { reason: 'parts out of order' };
   if (hiddenMarkup(lines, 5)) return { reason: 'hidden markup' };
-  if (TRIAGE_RE.test(lines.slice(5).join('\n'))) return { reason: 'triage line' };
+  if (triageLine(lines.slice(5).join('\n'))) return { reason: 'triage line' };
   return { kind: 'prompt', fence: fenceFor(lines.slice(5).join('\n'), assumed) };
 }
 
@@ -543,7 +562,7 @@ function checkReply(runDir, slug, nn, asks, promptChanged) {
   const n = [...text].length;
   if (!brief || n < 1 || n > 300) return { reason: 'no prompt and no brief' };
   if (hiddenLine(text)) return { reason: 'hidden markup' };
-  if (TRIAGE_RE.test(text)) return { reason: 'triage line' };
+  if (triageLine(text)) return { reason: 'triage line' };
   return { kind: 'image', brief: text, fence: fenceFor(text, assumptions) };
 }
 
