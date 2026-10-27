@@ -1,9 +1,10 @@
-# Contract: role-names v1.1
+# Contract: role-names v1.2
 
-Provider: `company/names.json` (defaults) and `roles.<role>.name` in `aico-settings` v1 (overrides). Consumers: `aico:pipeline` (the `Name:` dispatch line, `dispatch-prompt` v3), `aico:brainstorm`, `aico:cooler`, `aico:research`, the settings page.
+Provider: `company/names.json` (defaults) and `roles.<role>.name` in `aico-settings` v1 (overrides). Consumers: `aico:pipeline` (the `Name:` dispatch line, `dispatch-prompt` v3), `aico:brainstorm`, `aico:cooler`, `aico:research`, `aico:reprompt` (v1.2), the settings page.
 Every Role has a person's name, shown next to its title: "Ava (architect)". Names are display only.
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; task personalities-company-types): it adds each Role's **personality** (part "Personality") and the 34th Role, `editor` (CEO, Brief Gate). Every v1 consumer behaves as before; nothing in "Defaults" and "Rules" for names changes.
 Fix round 1 (task personalities-company-types, CEO form 2026-10-27; v1.1 is still unshipped, so no version change): rule T is tightened. Invisible (default-ignorable) code points and the spacing modifier letters U+02B0–U+02FF are refused, and each word starts with a letter or digit (security finding: invisible text and quote lookalikes passed). The refusal reason lines are unchanged.
+v1.2 is additive (task reprompter-role, CEO at the Plan Gate): it adds the 35th Role, `reprompter`, after `editor`, with the default name `Lynn` in `company/names.json` and one `company/personalities.json` entry: temperament "patient, precise, quietly curious", way of talking "plain words, one question at a time", pet topic "turning vague asks into clear goals", intelligence `high`, creativity `medium`. No rule, field, phrase or surface changes; every v1.1 consumer behaves as before.
 
 ## Defaults
 `company/names.json` is `{ "<role>": "<name>" }` with exactly one entry per `agents/*.md`. It lives outside agent frontmatter, because frontmatter allows only documented keys. `scripts/check.mjs` checks it.
@@ -61,7 +62,7 @@ The phrases are plugin text and change only with a minor bump of this Contract. 
 1. `aico:cooler` turns: the `Personality:` dispatch line names a file holding the block (`personality.mjs stage`).
 2. `aico:brainstorm` format 1 rounds: the same line and file.
 3. `aico:brainstorm` format 2 rounds: the block inside the Role's round input file, written by `brainstorm.mjs stage` (`brainstorm-file` v2.1).
-Nowhere else: not `settings.mjs get` (CLI), not `brainstorm.mjs prompt` (Fix round 1), not any other dispatch, Handoff, Gate summary, review, commit, ledger, brainstorm file, film script or cooler file.
+Nowhere else: not `settings.mjs get` (CLI), not `brainstorm.mjs prompt` (Fix round 1), not any other dispatch, Handoff, Gate summary, review, commit, ledger, brainstorm file, film script or cooler file. (v1.2) The `reprompter` dispatch of `aico:reprompt` is not a surface: it carries `Name:` like every Step and never a `Personality:` line; the Role's personality shows only when a cooler or brainstorm picks it.
 
 ## Error cases
 - `names.json` missing a Role, an invalid name or a duplicate → `check.mjs` error.
