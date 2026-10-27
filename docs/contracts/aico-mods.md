@@ -1,6 +1,6 @@
 # Contract: aico-mods v1.2
 
-Provider: the aico plugin's hooks module (`hooks/hooks.json` → `./register.tsx`, which imports the four mods from `mods/`). Consumers: the CEO (views, the commit question), `/aico:settings` (switches). API: the Claude Code function-hooks API of the installed build (`plugin-authoring`); `claude plugin validate` is the authority on what it accepts.
+Provider: the aico plugin's hooks module (`hooks/hooks.json` → `./register.tsx`, which imports each mod and the reprompt write gate from `mods/`). Consumers: the CEO (views, the commit question), `/aico:settings` (switches). API: the Claude Code function-hooks API of the installed build (`plugin-authoring`); `claude plugin validate` is the authority on what it accepts.
 Rationale: `docs/adr/0015-mods-thin-hooks-over-scripts.md`, `0016-run-state-record.md`, `0017-blast-radius-fail-closed.md`.
 Revised after the spikes (CEO, Fix round 6; still unshipped, no version change): SP-M1 `60-spike-frontend-engineer.md` (surfaces, widths, spawn cost), SP-M2 `61-spike-backend-engineer.md` (commit gate), SP-M3 `62-spike-ai-data-engineer.md` (cache lifetimes). Keep-warm is cut; Cache Tax shows when the Lead's 1-hour cache expires instead.
 Revised after M9 (Step 89; still unshipped, additive, no version change): one status composer in the shell owns the plugin's single `$.ui.status` call; every mod registers its part there ("Status line" below). Reason: a plugin's hooks do not see its own `$.ui.status` calls, so mods that each wrote the whole line erased each other (`88-frontend-engineer.md`).
