@@ -4,6 +4,19 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+Company types, personalities, a new editor Role and a redesigned settings page.
+
+### Added
+- **Company types.** A project has one type: `software` (default, unchanged), `research`, `marketing` or `design`. The type sets which Roles and Playbooks the project has and what "ship" means. `/aico:setup` (argument `type`, or no arguments) asks which type, saves `company_type:` in `.company/project.md` only after you answer, and then offers a skill search for the type (at most 5 picks, each scanned first; nothing installs without your answer). Switching a type later is not supported. For types other than `software`, the Ship Gate summary starts with `Ship means: …` and checks must pass: `claims-cited`, `ai-disclosure`, `asset-licences`, `handoff-package`. Lanes are forced on: legal for research; legal and accessibility for marketing; legal, accessibility and security for design. A command or Role outside the type is refused with the allowed list, and `/aico:help` lists only the type's commands. Contract `company-type` v1, ADR 0022.
+- **New Playbooks:** `/aico:report` (research), `/aico:campaign` and `/aico:content` (marketing), `/aico:design` (design).
+- **editor (Edith).** A new Role, the 34th. It checks every claim is cited `[S#]` or marked `(unverified)` and blocks with `[spec]`; it never rewrites. It has no Bash and no web access.
+- **Personalities.** Each Role has a temperament, a way of talking, a pet topic, and an Intelligence and a Creativity level (`low`, `medium` or `high`). They colour a Role's voice in `/aico:cooler` and `/aico:brainstorm` only, as quoted style data, and never change a verdict, review, Gate or other dispatch. Project values count without an unlock. Text is 1 to 80 characters of letters, digits, spaces and `, . ' - ! ?`; a bad value is ignored with a warning that does not repeat it. Personalities are not in `settings.mjs get`. In a first test the block changed the tone of brainstorm replies without lowering the parse rate; Creativity showed in how far ideas reached, and Intelligence showed little under the 80-word cap. Contracts: `role-names` v1.1, `aico-settings` v1.3, `dispatch-prompt` v3.2, `brainstorm-file` v2.1. ADR 0021.
+- **Settings page.** A Personality section on the Roles tab, one collapsible card per Role with User and Project fields, an "n of 80" counter, and the sentence the Role is told for each level.
+
+### Changed
+- **Settings page redesign.** New layout, type scale, colours for light and dark mode, tabs, tables and focus styles. Tabs, labels and settings are as before. A refused Save marks the field, focuses it and saves nothing.
+- Role count is 34 in the README, the documentation and `plugin.json`.
+
 ## [0.12.0] - 2026-10-27
 
 Skill picks you can trust, a scanner for the skills you already have, and progress bars in the Savvy pane.

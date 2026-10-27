@@ -1,8 +1,8 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 33 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 34 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 33 Roles, and the concepts the company runs on.
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 34 Roles, and the concepts the company runs on.
 
 ## Install
 **Before you start**
@@ -56,14 +56,25 @@ Details: [`documentation/getting-started.md`](documentation/getting-started.md).
 | `/aico:language [<tag> [project] \| clear [project]]` | Shows or sets the language aico writes in (reports, forms, Handoff prose). Your default applies everywhere; `project` overrides it for one product. Machine-read parts stay English |
 | `/aico:vulnscan` | On demand: the Vulnerability Scanner checks your dependencies and code against CVE/NVD, OSV, GitHub Advisories and CISA KEV; Critical/High come to you, safe fixes come as a ready upgrade set |
 | `/aico:skillspector [--project\|--global\|--all\|<skill-name>] [--no-llm\|--claude-cli] [install]` | On demand: scans the agent skills installed in this project or your user folder with NVIDIA SkillSpector (pinned v2.13.1) and reports pass, findings or error per skill. Read-only; it suggests removals and runs none. The install changes your user-scope Claude config, so it always asks first |
-| `/aico:settings` | Opens a local page to set each Role's name, model and effort, the language and profile, the pipeline (Fix rounds, parallel or sequential, optional lanes) and the Gates, as your default or per project. Nothing changes until you save |
+| `/aico:settings` | Opens a local page to set each Role's name, model, effort and personality, the language and profile, the pipeline (Fix rounds, parallel or sequential, optional lanes) and the Gates, as your default or per project. Nothing changes until you save |
+| `/aico:setup [core] [research] [go] [react] [tanstack] [auth] [type]` | Installs the standalone and stack skills. With `type` (or no arguments) it also sets the project's company type and offers a search for up to 5 skills that fit it. Nothing installs without your answer |
+
+The next four commands belong to the non-software company types (see Customize). In a software company they are refused.
+
+| Command | What it does |
+|---|---|
+| `/aico:report <question\|file> [quick\|deep]` | Research company: a client question becomes a sourced report. The editor checks that every claim is cited `[S#]` or marked `(unverified)`, and Ship is blocked until it passes |
+| `/aico:campaign <goal\|brief>` | Marketing company: a multi-channel campaign with copy, images and storyboards. Checks claims, AI disclosure, asset licences and accessibility before the Ship Gate |
+| `/aico:content <topic\|brief\|draft>` | Marketing company: one piece of content with sources and disclosures, checked before the Ship Gate |
+| `/aico:design <brief\|project\|file>` | Design company: brief, research, concepts, critique and testing, ending in a design handoff package (files, specs, tokens, asset licence record) |
 
 You can also ask for any Role directly, e.g. "use the aico security agent on src/auth".
 
 ## Settings
 Run `/aico:settings`. It opens a local page (127.0.0.1) in your browser. Nothing changes until you save.
 
-- **Tabs:** Roles (name, model, effort, context cap), Language & profile, Pipeline (Fix rounds, dispatch, review format, optional lanes), Gates, Skill scan, Mods.
+- **Tabs:** Roles (name, model, effort, context cap, and a Personality section with one collapsible card per Role), Language & profile, Pipeline (Fix rounds, dispatch, review format, optional lanes), Gates, Skill scan, Mods.
+- **New look.** The page has a new layout with clearer tabs, tables and controls, and colours for both light and dark mode. The tabs and what each setting does are as before.
 - **User default or project override.** A project value wins over your user value, which wins over the plugin default.
   - User default, all projects: `~/.mcsparrow/config.json`, key `aico_settings` (or under `MCSPARROW_HOME` if set). Other keys in that file are kept.
   - Project override: `.company/settings.json` in the product repo, holding `{ "aico_settings": … }`.
@@ -96,7 +107,7 @@ flowchart TD
   Quality --> CR["code-reviewer"] & QA["qa"] & SEC["security"] & PEN["pentester (on demand)"] & VSC["vuln-scanner (on demand)"]
   MTR --> MR["market-researcher"] & TR["tech-researcher"] & DR["design-researcher"] & SR["skill-researcher"]
   Research --> UR["ux-researcher"] & PT["persona-tester"] & HT["hands-on-tester"] & AT["accessibility-tester"]
-  Content --> WR["writer"] & MK["marketer"] & LO["localizer"]
+  Content --> WR["writer"] & MK["marketer"] & LO["localizer"] & ED["editor"]
   Support --> SU["support"]
   Legal --> LG["legal"]
 ```
@@ -104,13 +115,13 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, skill-researcher, vuln-scanner | localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, editor, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, skill-researcher, vuln-scanner | localizer, prompt-artist |
 
 Each Role has a person name (for example Ava for the architect), shown next to the Role in Handoffs, Gates and help. Change names, models and effort in `/aico:settings`.
 
 Each Role also sets an `effort` level. **High:** architect, code-reviewer, security, pentester, where a miss is expensive. **Low:** writing, art, lookup and support Roles. **Medium:** everyone else. See the roster in `docs/spec.md`.
 
-Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all four researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the skill-researcher has no Bash and never runs or installs a skill (the Lead scans each candidate in a quarantine folder); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
+Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, account manager, support and all four researchers never edit source. Researchers write only their own Handoff and never install anything. The pentester and vuln-scanner run on demand only (`/aico:pentest`, `/aico:vulnscan`); the skill-researcher has no Bash and never runs or installs a skill (the Lead scans each candidate in a quarantine folder); the pentester attacks only the company's own local/staging builds, with authorization, and never runs destructive or persistent payloads. The editor has no Bash and no web access and only blocks: it never rewrites a claim. The localizer edits only string resource files. The architect writes only ADRs and Contract definitions (interfaces/schemas); its ruleset sign-off goes in its Handoff. The senior-engineer writes only rule packs and the ruleset. QA edits tests only. Testers never edit; hands-on- and accessibility-tester use your browser/computer-use tools.
 
 ## Rules everything follows
 - **Core + Modules + Contracts** for every product: backend, frontend, desktop and game. Only CEO-approved items go in Core (`skills/contracts`).
@@ -128,6 +139,8 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 - Company facts and the three Voice presets (clear, bold, technical): `company/PROFILE.md`
 - Missing stack skills: `find-skills`, then add a group to `deps/skills.json`.
 - Skill picks: the skill-researcher (Selin) finds and vets third-party skills for your stack, product type or company type, and the Lead scans every pick before you see it. You approve the set, then confirm the exact install commands in a second form. The install pins the scanned commit, and a bad scan after the install stops the run. Approved skills go in the `## Skills` section of `.company/project.md` (design skills stay in `## Design skills`). Scan mode (`no-llm` or `claude_cli`) is in `/aico:settings` (Skill scan tab). Both modes send package names, versions and ecosystems to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found; `claude_cli` also sends skill text to Anthropic.
+- Company type: one per project, set with `/aico:setup` and saved as `company_type:` in `.company/project.md`. `software` is the default and works as before. `research` (Research consultancy), `marketing` (Marketing and content agency) and `design` (Design studio) each have their own Roles and Playbooks and their own meaning of "ship". For these three the Ship Gate summary starts with `Ship means: …`, and checks such as `claims-cited` (every claim cited or marked unverified, checked by the editor) must pass first. Switching a type later is not supported. Details: `documentation/concepts.md#company-types`.
+- Personalities: every Role has a personality (temperament, way of talking, pet topic, and an Intelligence and a Creativity level of low, medium or high) that only colours its voice in `/aico:cooler` chats and `/aico:brainstorm` rounds. Change it in `/aico:settings` (Roles tab), as your default or per project. A project value counts, and is passed only as quoted style data. A personality never changes a model, a verdict, a review, a Gate or any other dispatch. Details: `documentation/concepts.md#personalities`.
 - Language aico writes in: `/aico:language` sets your default; `/aico:language <tag> project` overrides it for one product (`aico_language:` in `.company/project.md`). Product UI strings follow `languages:` instead.
 - Mods: four add-ons that show run progress (Savvy, with a Gates bar and a Steps bar in text, such as `Gates 1/3 [###-----] last: brief`), cost and the Lead's cache clock (Cache Tax), suggested Lessons (Reflect), and check risky `git commit`s before they run (Blast Radius). All on by default; switch them in `/aico:settings`. Terminal is proven, desktop is unverified. Blast Radius only sees commits Claude makes through its Bash and PowerShell tools, not `!git commit`, another terminal or an IDE. See `documentation/mods.md`.
 - Rule library shared by all projects on this machine: `~/.mcsparrow/standards/` (make it a git repo to sync it). Each product commits copies of the packs it uses in `.company/standards/`.
