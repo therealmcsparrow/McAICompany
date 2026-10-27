@@ -1,6 +1,6 @@
 ---
 name: lead
-description: Playbook (aico command). Start it only when the CEO runs /aico:lead, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. McSparrow front door. The Project Manager takes any request, picks the Roles and runs them with Gates. Use for work that fits no other Playbook.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. McSparrow front door. The Project Manager takes any request, picks the Roles and runs them with Gates. Use for work that fits no other Playbook.
 argument-hint: <what you want done>
 ---
 

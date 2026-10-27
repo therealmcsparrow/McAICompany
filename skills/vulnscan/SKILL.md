@@ -1,6 +1,6 @@
 ---
 name: vulnscan
-description: Playbook (aico command). Start it only when the CEO runs /aico:vulnscan, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. On-demand scan of the product's dependencies and code against published vulnerability databases. Reports Critical/High for the CEO to pick, and a ready upgrade set for the rest. Changes no code.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. On-demand scan of the product's dependencies and code against published vulnerability databases. Reports Critical/High for the CEO to pick, and a ready upgrade set for the rest. Changes no code.
 argument-hint: (no arguments)
 ---
 

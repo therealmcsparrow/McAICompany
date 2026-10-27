@@ -1,6 +1,6 @@
 ---
 name: feedback
-description: Playbook (aico command). Start it only when the CEO runs /aico:feedback, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Turn user feedback, reviews and support reports into ranked fix and feature proposals the CEO picks from.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Turn user feedback, reviews and support reports into ranked fix and feature proposals the CEO picks from.
 argument-hint: <reports: path, paste or export>
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: design
-description: Playbook (aico command). Start it only when the CEO runs /aico:design, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. For a design studio. Take a design brief through research, concepts, critique and usability testing to a design handoff package (files, specs, tokens, asset licence record) for the client or the build team.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. For a design studio. Take a design brief through research, concepts, critique and usability testing to a design handoff package (files, specs, tokens, asset licence record) for the client or the build team.
 argument-hint: <design brief | project | file>
 ---
 

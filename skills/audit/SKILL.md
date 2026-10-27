@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Playbook (aico command). Start it only when the CEO runs /aico:audit, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Assess an existing codebase for quality, tests, security, licenses and architecture, and produce one prioritized report. Changes no code.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Assess an existing codebase for quality, tests, security, licenses and architecture, and produce one prioritized report. Changes no code.
 argument-hint: [path or scope]
 ---
 

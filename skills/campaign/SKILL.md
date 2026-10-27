@@ -1,6 +1,6 @@
 ---
 name: campaign
-description: Playbook (aico command). Start it only when the CEO runs /aico:campaign, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. For a marketing or content agency. Plan and produce a multi-channel campaign (positioning, copy, images, video storyboards, translations), check claims, AI disclosure, asset licences and accessibility, and end at the Ship Gate before anything is published or handed to the client.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. For a marketing or content agency. Plan and produce a multi-channel campaign (positioning, copy, images, video storyboards, translations), check claims, AI disclosure, asset licences and accessibility, and end at the Ship Gate before anything is published or handed to the client.
 argument-hint: <campaign goal, client brief or audience>
 ---
 

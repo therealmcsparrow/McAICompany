@@ -1,6 +1,6 @@
 ---
 name: cooler
-description: Playbook (aico command). Start it only when the CEO runs /aico:cooler, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Random colleagues chat at the water cooler about the project, unmoderated, swapping thoughts, ideas and problems; others walk up or leave. Recorded, nothing built.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Random colleagues chat at the water cooler about the project, unmoderated, swapping thoughts, ideas and problems; others walk up or leave. Recorded, nothing built.
 argument-hint: [topic] [turns=N | listen]
 ---
 

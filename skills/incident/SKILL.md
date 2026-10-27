@@ -1,6 +1,6 @@
 ---
 name: incident
-description: Playbook (aico command). Start it only when the CEO runs /aico:incident, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Handle a production incident fast. Mitigate, check EU reporting duties, draft the reports, then write the postmortem and hand the CEO the command for the follow-up. Urgency allowed; the Ship Gate stays.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Handle a production incident fast. Mitigate, check EU reporting duties, draft the reports, then write the postmortem and hand the CEO the command for the follow-up. Urgency allowed; the Ship Gate stays.
 argument-hint: <what happened>
 ---
 

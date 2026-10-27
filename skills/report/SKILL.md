@@ -1,6 +1,6 @@
 ---
 name: report
-description: Playbook (aico command). Start it only when the CEO runs /aico:report, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. For a research consultancy. Turn a client question into a sourced report, edited so every claim is cited [S#] or marked (unverified), then delivered to the client or published after the Ship Gate.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. For a research consultancy. Turn a client question into a sourced report, edited so every claim is cited [S#] or marked (unverified), then delivered to the client or published after the Ship Gate.
 argument-hint: <client question | brief file> [quick|deep]
 ---
 

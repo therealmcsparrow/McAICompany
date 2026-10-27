@@ -1,6 +1,6 @@
 ---
 name: feature
-description: Playbook (aico command). Start it only when the CEO runs /aico:feature, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Build a feature or new product end to end, from brief to shipped, with Brief, Plan and Ship Gates.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Build a feature or new product end to end, from brief to shipped, with Brief, Plan and Ship Gates.
 argument-hint: <feature description>
 ---
 

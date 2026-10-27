@@ -1,6 +1,6 @@
 ---
 name: content
-description: Playbook (aico command). Start it only when the CEO runs /aico:content, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. For a marketing or content agency. Produce one piece of content (article, post, newsletter, script, page copy) with sources, images and disclosures, check claims, licences and accessibility, and end at the Ship Gate before it is published or handed to the client.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. For a marketing or content agency. Produce one piece of content (article, post, newsletter, script, page copy) with sources, images and disclosures, check claims, licences and accessibility, and end at the Ship Gate before it is published or handed to the client.
 argument-hint: <topic, brief or existing draft to improve>
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: research
-description: Playbook (aico command). Start it only when the CEO runs /aico:research, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Researchers look a topic up online (market, tech, design skills), the Product Manager writes one sourced report with a verdict, and the CEO picks what happens next. Read-only, nothing is built.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Researchers look a topic up online (market, tech, design skills), the Product Manager writes one sourced report with a verdict, and the CEO picks what happens next. Read-only, nothing is built.
 argument-hint: <topic | project | file> [quick|deep]
 ---
 

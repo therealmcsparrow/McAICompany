@@ -1,6 +1,6 @@
 ---
 name: usability-test
-description: Playbook (aico command). Start it only when the CEO runs /aico:usability-test, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Test a design or running product with every Persona in parallel (persona, hands-on, accessibility), merge the findings, optionally plan real-user tests, and route fixes.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Test a design or running product with every Persona in parallel (persona, hands-on, accessibility), merge the findings, optionally plan real-user tests, and route fixes.
 argument-hint: <what to test: design path, URL or app> [real-users]
 ---
 

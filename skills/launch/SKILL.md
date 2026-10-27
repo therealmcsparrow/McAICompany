@@ -1,6 +1,6 @@
 ---
 name: launch
-description: Playbook (aico command). Start it only when the CEO runs /aico:launch, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Take a product or release public with positioning, landing/store copy, release notes, privacy and terms. Ends at the Ship Gate.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Take a product or release public with positioning, landing/store copy, release notes, privacy and terms. Ends at the Ship Gate.
 argument-hint: <product or release to launch>
 ---
 

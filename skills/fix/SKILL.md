@@ -1,6 +1,6 @@
 ---
 name: fix
-description: Playbook (aico command). Start it only when the CEO runs /aico:fix, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. Fix a bug test-first. QA reproduces it, an engineer fixes the root cause, the reviewer checks, then the Ship Gate.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Fix a bug test-first. QA reproduces it, an engineer fixes the root cause, the reviewer checks, then the Ship Gate.
 argument-hint: <bug description or issue link>
 ---
 

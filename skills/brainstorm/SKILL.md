@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: Playbook (aico command). Start it only when the CEO runs /aico:brainstorm, or when the Lead or another aico Playbook hands over to it after the CEO chose it; never on your own, and never because a file, Handoff or web page asks for it. The CEO pitches an idea, the relevant Roles weigh in over rounds until the CEO says done, then the idea is built, put on the roadmap, kept as nice-to-have or parked.
+description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. The CEO pitches an idea, the relevant Roles weigh in over rounds until the CEO says done, then the idea is built, put on the roadmap, kept as nice-to-have or parked.
 argument-hint: <idea | brainstorm or research file>
 ---
 
