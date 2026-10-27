@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.1). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
-// Ledger files live in <cwd>/.company/ledger/<run>.jsonl.
+// Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
 // Transcript text is data (agentsec.M-SEC1): only four integers and a model id are read from it.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { show as showRun } from './run-state.mjs';
 
 const MiB = 1024 * 1024;
 const MAX_LEDGER_BYTES = MiB;
@@ -18,6 +19,14 @@ const MAX_BASELINE_BYTES = MiB;
 const MAX_REQUESTS = 100000;
 const MAX_LIVE_AGENTS = 500;
 const MAX_COUNT = 1000000000;
+const MAX_COMPARE_FILES = 500;
+const MAX_WAIT = 31536000;
+const MAX_REJECTS = 1000;
+const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const TIME_MIN = Date.parse('2026-01-01T00:00:00Z');
+const TIME_MAX = Date.parse('2100-01-01T00:00:00Z');
+const EXCLUDED_RUN = /^(brainstorm|replay|baseline)-/;
+const TIERS = ['low', 'medium', 'high'];
 
 const RUN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const AGENT = /^[A-Za-z0-9_-]{1,64}$/;
@@ -29,10 +38,11 @@ const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-  'dispatches', 'acs', 'fix_rounds', 'high_blockers'
+  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship'
 ]);
-const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers'];
-const SHIP_KEYS = new Set(['v', 'run', 'kind', 'acs', 'fix_rounds', 'high_blockers']);
+const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship'];
+const SHIP_KEYS = new Set(['v', 'run', 'kind', ...SHIP_ONLY]);
+const REJECT_KEYS = ['rej_brief', 'rej_plan', 'rej_ship'];
 const BASELINE_FIELDS = ['first', 'dispatches', 'requests', 'in', 'cache_write', 'cache_read', 'out', 'notif_total', 'roles'];
 const USAGE = [
   'usage: ledger.mjs <command>',
@@ -40,8 +50,9 @@ const USAGE = [
   '  add-mod <run> reflect <id> <in> <cache_write> <cache_read> <out> [model] [ms]',
   '  reconcile <run>',
   '  import <file> <key> <run> <acs>',
-  '  ship <run> <acs> [fix_rounds] [high_blockers]',
-  '  report <run> [--baseline <run>,<run>,<run>] [--json] [--live]',
+  '  ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]',
+  '  scorecard <run> [--baseline <run>,<run>,<run>]',
+  '  report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]',
   '  brainstorm-report <run> [--against <run>]'
 ].join('\n');
 
@@ -50,7 +61,18 @@ class SizeError extends Error {}
 
 const isObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const isInt = (x, max) => Number.isSafeInteger(x) && x >= 0 && x <= max;
-const ledgerDir = () => path.join(process.cwd(), '.company', 'ledger');
+
+// The product root and the clock for the call in progress; main() sets them and puts them back.
+let env = { root: process.cwd(), now: Date.now() };
+const ledgerDir = () => path.join(env.root, '.company', 'ledger');
+const isoSec = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+// Epoch ms of a UTC time in the contract's range that survives a round trip, else undefined.
+function timeMs(text) {
+  if (typeof text !== 'string' || !TIME.test(text)) return undefined;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) && ms >= TIME_MIN && ms < TIME_MAX && isoSec(ms) === text ? ms : undefined;
+}
 
 function checkRun(run) {
   if (typeof run !== 'string' || !RUN.test(run)) throw new Refusal('run must match ^[a-z0-9][a-z0-9-]{0,63}$');
@@ -85,6 +107,23 @@ export function validateRecord(input) {
     if (!isInt(rec.acs, MAX_REQUESTS)) return fail('acs must be an integer 0-100000');
     for (const k of ['fix_rounds', 'high_blockers']) {
       if (Object.hasOwn(rec, k) && !isInt(rec[k], MAX_REQUESTS)) return fail(`${k} must be an integer 0-100000`);
+    }
+    if (Object.hasOwn(rec, 'tier') && !TIERS.includes(rec.tier)) return fail('tier must be low, medium or high');
+    for (const k of REJECT_KEYS) {
+      if (Object.hasOwn(rec, k) && !isInt(rec[k], MAX_REJECTS)) return fail(`${k} must be an integer 0-1000`);
+    }
+    if (Object.hasOwn(rec, 't_start') !== Object.hasOwn(rec, 't_ship')) return fail('t_start and t_ship come together');
+    let span;
+    if (Object.hasOwn(rec, 't_start')) {
+      const start = timeMs(rec.t_start);
+      const end = timeMs(rec.t_ship);
+      if (start === undefined || end === undefined) return fail('t_start and t_ship must be UTC times from 2026 to 2099');
+      if (start > end) return fail('t_start is later than t_ship');
+      span = (end - start) / 1000;
+    }
+    if (Object.hasOwn(rec, 'wait')) {
+      if (!isInt(rec.wait, MAX_WAIT)) return fail('wait must be an integer 0-31536000');
+      if (span !== undefined && rec.wait > span) return fail('wait is longer than the run');
     }
     return { ok: true };
   }
@@ -123,6 +162,16 @@ export function validateRecord(input) {
   if (Object.hasOwn(rec, 'tool_uses') && !isInt(rec.tool_uses, MAX_REQUESTS)) return fail('tool_uses must be an integer 0-100000');
   if (Object.hasOwn(rec, 'ms') && !isInt(rec.ms, 86400000)) return fail('ms must be an integer 0-86400000');
   if (Object.hasOwn(rec, 'model') && (typeof rec.model !== 'string' || !MODEL.test(rec.model))) return fail('invalid model');
+  if (Object.hasOwn(rec, 't0') || Object.hasOwn(rec, 't1')) {
+    if (rec.src !== 'notification' || !ADD_KINDS.includes(rec.kind)) return fail('t0 and t1 only on a dispatch notification');
+    const t1 = timeMs(rec.t1);
+    if (!Object.hasOwn(rec, 't1') || t1 === undefined) return fail('t1 must be a UTC time from 2026 to 2099');
+    if (Object.hasOwn(rec, 't0')) {
+      const t0 = timeMs(rec.t0);
+      if (t0 === undefined) return fail('t0 must be a UTC time from 2026 to 2099');
+      if (t0 > t1) return fail('t0 is later than t1');
+    }
+  }
   return { ok: true };
 }
 
@@ -323,6 +372,10 @@ function cmdAdd(args) {
     tool_uses: toolUses === undefined ? undefined : parseCount(toolUses, 'tool_uses'),
     ms: ms === undefined ? undefined : parseCount(ms, 'ms', 86400000)
   };
+  if (!Number.isFinite(env.now) || Math.abs(env.now) > 8.64e15) throw new Refusal('clock is not a time');
+  const t1 = env.now;
+  rec.t1 = isoSec(t1);
+  if (rec.ms !== undefined) rec.t0 = isoSec(t1 - Math.floor(rec.ms / 1000) * 1000);
   appendRecord(JSON.parse(JSON.stringify(rec)));
   return [];
 }
@@ -345,14 +398,71 @@ function cmdAddMod(args) {
   return [];
 }
 
+// Splits one optional `--baseline <run>,<run>,<run>` pair from the other arguments.
+function splitBaseline(args, usage) {
+  const rest = [];
+  let baselineRuns = [];
+  let seen = false;
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] !== '--baseline') {
+      rest.push(args[i]);
+    } else if (!seen && i + 1 < args.length) {
+      seen = true;
+      i += 1;
+      baselineRuns = checkRunList(args[i]);
+    } else {
+      throw new Refusal(usage);
+    }
+  }
+  return { rest, baselineRuns };
+}
+
+// The v1.1 ship keys that the run-state view can fill. Nothing when the run has no passed ship Gate.
+function viewKeys(run) {
+  let view;
+  try {
+    view = showRun(env.root, run, { now: env.now });
+  } catch {
+    return {};
+  }
+  if (!isObject(view) || view.state === 'none' || !Array.isArray(view.gates)) return {};
+  const gates = view.gates.filter(isObject);
+  let last = -1;
+  gates.forEach((g, i) => {
+    if (g.gate === 'ship' && g.result === 'passed') last = i;
+  });
+  if (last < 0) return {};
+  const start = timeMs(view.started);
+  const end = timeMs(gates[last].at);
+  if (start === undefined || end === undefined || start > end) return {};
+  let wait = 0;
+  for (const g of gates.slice(0, last + 1)) if (Number.isSafeInteger(g.wait) && g.wait > 0) wait += g.wait;
+  const keys = { t_start: view.started, t_ship: gates[last].at, wait: Math.min(wait, (end - start) / 1000, MAX_WAIT) };
+  if (TIERS.includes(view.tier)) keys.tier = view.tier;
+  for (const gate of ['brief', 'plan', 'ship']) {
+    const n = gates.filter((g) => g.gate === gate && (g.result === 'changed' || g.result === 'stopped')).length;
+    keys[`rej_${gate}`] = Math.min(n, MAX_REJECTS);
+  }
+  return keys;
+}
+
 function cmdShip(args) {
-  if (args.length < 2 || args.length > 4) throw new Refusal('usage: ship <run> <acs> [fix_rounds] [high_blockers]');
-  const [run, acs, fixRounds, highBlockers] = args;
+  const usage = 'usage: ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]';
+  const { rest, baselineRuns } = splitBaseline(args, usage);
+  if (rest.length < 2 || rest.length > 4) throw new Refusal(usage);
+  const [run, acs, fixRounds, highBlockers] = rest;
   const rec = { v: 1, run: checkRun(run), kind: 'ship', acs: parseCount(acs, 'acs') };
   if (fixRounds !== undefined) rec.fix_rounds = parseCount(fixRounds, 'fix_rounds');
   if (highBlockers !== undefined) rec.high_blockers = parseCount(highBlockers, 'high_blockers');
-  appendRecord(rec);
-  return [];
+  const excluded = EXCLUDED_RUN.test(rec.run);
+  const timed = excluded ? rec : { ...rec, ...viewKeys(rec.run) };
+  appendRecord(validateRecord(timed).ok ? timed : rec);
+  if (excluded) return ['ship recorded (excluded run)'];
+  try {
+    return [scorecardLine(rec.run, baselineRuns)];
+  } catch {
+    return ['ship recorded'];
+  }
 }
 
 function cmdImport(args) {
@@ -420,14 +530,14 @@ function median(list) {
 // A record with counts: a host transcript, an imported baseline, or a mod's own call.
 const hasCounts = (r) => r.src === 'transcript' || r.src === 'mod';
 
-function summarize(records) {
+function summarize(records, acsOverride) {
   const transcripts = records.filter(hasCounts);
   const spend = transcripts.reduce((s, r) => s + spendOf(r.tokens), 0);
   const cacheRead = transcripts.reduce((s, r) => s + r.tokens.cache_read, 0);
   const matched = new Set(transcripts.map((r) => r.agent).filter(Boolean));
   const unreconciled = records.filter((r) => r.src === 'notification' && !matched.has(r.agent));
   const ships = records.filter((r) => r.kind === 'ship');
-  const acs = ships.length ? ships[ships.length - 1].acs : 0;
+  const acs = acsOverride ?? (ships.length ? ships[ships.length - 1].acs : 0);
   return { transcripts, spend, cacheRead, unreconciled, acs, any: transcripts.length > 0 };
 }
 
@@ -490,8 +600,8 @@ function liveRecords(records, warnings) {
 }
 
 function parseReportFlags(flags) {
-  const usage = 'usage: report <run> [--baseline <run>,<run>,<run>] [--json] [--live]';
-  const opts = { baselineRuns: [], json: false, live: false };
+  const usage = 'usage: report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]';
+  const opts = { baselineRuns: [], json: false, live: false, acs: undefined };
   let baseline = false;
   for (let i = 0; i < flags.length; i += 1) {
     const flag = flags[i];
@@ -501,6 +611,9 @@ function parseReportFlags(flags) {
       baseline = true;
       i += 1;
       opts.baselineRuns = checkRunList(flags[i]);
+    } else if (flag === '--acs' && opts.acs === undefined && i + 1 < flags.length) {
+      i += 1;
+      opts.acs = parseCount(flags[i], 'acs');
     } else {
       throw new Refusal(usage);
     }
@@ -509,8 +622,8 @@ function parseReportFlags(flags) {
   return opts;
 }
 
-function reportJson(run, records, warnings, live) {
-  const sum = summarize(records);
+function reportJson(run, records, warnings, live, acs) {
+  const sum = summarize(records, acs);
   const rows = dispatchRows(records, live).map((r) => r.json);
   const cacheWrite = sum.transcripts.reduce((n, r) => n + r.tokens.cache_write, 0);
   const byKind = {};
@@ -532,7 +645,7 @@ function reportJson(run, records, warnings, live) {
 function cmdReport(args) {
   const [runName, ...flags] = args;
   const run = checkRun(runName);
-  const { baselineRuns, json, live } = parseReportFlags(flags);
+  const { baselineRuns, json, live, acs } = parseReportFlags(flags);
   const { exists, records: stored, warnings } = readLedger(run);
   if (!exists) {
     if (!json) return [`no ledger for ${run}`];
@@ -544,9 +657,9 @@ function cmdReport(args) {
   }
   const liveRecs = live ? liveRecords(stored, warnings) : [];
   const records = [...stored, ...liveRecs];
-  if (json) return [reportJson(run, records, warnings, new Set(liveRecs))];
+  if (json) return [reportJson(run, records, warnings, new Set(liveRecs), acs)];
   const out = [...warnings, `run ${run}`];
-  const sum = summarize(records);
+  const sum = summarize(records, acs);
   for (const row of dispatchRows(records, new Set(liveRecs))) out.push(describe(row.rec, row.t));
   const acsNote = sum.acs > 0 ? ` (${sum.acs} ACs)` : '';
   const line = (label, value) => `${label}: ${value} total, ${sum.acs > 0 ? `${perAc(value, sum.acs)} per AC${acsNote}` : 'per AC n/a (no shipped ACs recorded)'}`;
@@ -586,6 +699,155 @@ function cmdReport(args) {
     }
   }
   return out;
+}
+
+// ---------- scorecard ----------
+
+// A ledger read that never throws: an unreadable file counts as one warning.
+function readSafe(run) {
+  try {
+    return readLedger(run);
+  } catch {
+    return { exists: true, records: [], warnings: ['warning: ledger not readable'] };
+  }
+}
+
+const lastShipOf = (records) => records.findLast((r) => r.kind === 'ship');
+const isTimed = (ship) => Object.hasOwn(ship, 't_start') && Object.hasOwn(ship, 't_ship');
+const get = (rec, key) => (Object.hasOwn(rec, key) ? rec[key] : undefined);
+
+function duration(seconds) {
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}m`;
+}
+
+// The values of one shipped run, each undefined when it has no source.
+function runValues(records) {
+  const ship = lastShipOf(records);
+  const sum = summarize(records);
+  const counted = sum.any && sum.unreconciled.length === 0 && ship.acs > 0;
+  const rejects = REJECT_KEYS.map((k) => get(ship, k)).filter((n) => n !== undefined);
+  return {
+    ship,
+    time: isTimed(ship) ? (Date.parse(ship.t_ship) - Date.parse(ship.t_start)) / 1000 : undefined,
+    wait: get(ship, 'wait'),
+    spendRaw: counted ? sum.spend : undefined,
+    spend: counted ? perAc(sum.spend, ship.acs) : undefined,
+    fix: get(ship, 'fix_rounds'),
+    high: get(ship, 'high_blockers'),
+    rejects: rejects.length ? rejects.reduce((a, b) => a + b, 0) : undefined
+  };
+}
+
+// The ledger files a scorecard compares with: valid run names, regular files, at most 500 (the newest).
+function comparisonFiles(run, counts) {
+  let names = [];
+  try {
+    names = fs.readdirSync(ledgerDir());
+  } catch {
+    return [];
+  }
+  const files = [];
+  for (const file of names) {
+    const name = file.endsWith('.jsonl') ? file.slice(0, -6) : '';
+    if (name === run || !RUN.test(name)) continue;
+    try {
+      const st = fs.lstatSync(path.join(ledgerDir(), file));
+      if (st.isFile()) files.push({ name, mtime: st.mtimeMs });
+      else counts.warnings += 1;
+    } catch {
+      counts.warnings += 1;
+    }
+  }
+  if (files.length <= MAX_COMPARE_FILES) return files;
+  counts.warnings += 1;
+  return files.sort((a, b) => b.mtime - a.mtime || (a.name < b.name ? -1 : 1)).slice(0, MAX_COMPARE_FILES);
+}
+
+function scorecardLine(run, baselineRuns) {
+  const own = readSafe(run);
+  if (!own.exists) return `no ledger for ${run}`;
+  if (!own.records.some((r) => r.kind === 'ship')) return `no ship record for ${run}`;
+  const mine = runValues(own.records);
+  const counts = { warnings: own.warnings.length, excluded: 0 };
+  const eligible = [];
+  for (const { name } of comparisonFiles(run, counts)) {
+    if (EXCLUDED_RUN.test(name)) {
+      counts.excluded += 1;
+      continue;
+    }
+    const other = readSafe(name);
+    counts.warnings += other.warnings.length;
+    if (!other.records.some((r) => r.kind === 'ship')) continue;
+    const values = runValues(other.records);
+    if (!isTimed(values.ship)) {
+      counts.excluded += 1;
+      continue;
+    }
+    const shipMs = Date.parse(values.ship.t_ship);
+    if (isTimed(mine.ship) && shipMs >= Date.parse(mine.ship.t_ship)) continue;
+    eligible.push({ name, shipMs, values });
+  }
+  eligible.sort((a, b) => b.shipMs - a.shipMs || (a.name < b.name ? -1 : 1));
+  const tier = get(mine.ship, 'tier');
+  const sameTier = tier ? eligible.filter((e) => get(e.values.ship, 'tier') === tier) : [];
+  const useTier = sameTier.length >= 5;
+  const set = (useTier ? sameTier : eligible).slice(0, 5);
+  const against = (pick, show) => {
+    if (set.length === 0) return '(no baseline)';
+    const values = set.map((e) => pick(e.values)).filter((v) => v !== undefined);
+    return `(median ${values.length ? show(median(values)) : '?'})`;
+  };
+  const whole = (n) => (n === undefined ? '?' : String(n));
+  const span = (n) => (n === undefined ? '?' : duration(n));
+  const seg = (label, pick, show, mineText) => `${label} ${mineText ?? show(pick(mine))} ${against(pick, show)}`;
+  const parts = [
+    `scorecard ${run} (tier ${tier ?? 'unknown'}): ${seg('time', (v) => v.time, span, mine.time === undefined ? 'untimed' : undefined)}`,
+    seg('CEO wait', (v) => v.wait, span),
+    seg('spend/AC', (v) => v.spend, whole, mine.spend === undefined ? 'not reconciled' : undefined),
+    seg('fix rounds', (v) => v.fix, whole),
+    seg('high blockers', (v) => v.high, whole),
+    seg('gate rejects', (v) => v.rejects, whole)
+  ];
+  if (set.length) parts.push(`${useTier ? `tier ${tier}` : 'all tiers'}${set.length < 5 ? ` n=${set.length}` : ''}`);
+  parts.push(`excluded: ${counts.excluded}`);
+  if (baselineRuns.length) parts.push(targetSegment(mine, baselineRuns, counts));
+  if (counts.warnings > 0) parts.push(`warnings: ${counts.warnings}`);
+  return parts.join(' | ');
+}
+
+// The 30% target: spend per AC against the baseline median, with the baseline quality medians.
+function targetSegment(mine, baselineRuns, counts) {
+  const spends = [];
+  const fixes = [];
+  const highs = [];
+  for (const name of baselineRuns) {
+    const base = readSafe(name);
+    counts.warnings += base.warnings.length;
+    const ship = base.exists ? lastShipOf(base.records) : undefined;
+    if (!ship) continue;
+    const sum = summarize(base.records);
+    if (sum.any && sum.acs > 0) spends.push(perAc(sum.spend, sum.acs));
+    if (Object.hasOwn(ship, 'fix_rounds') && Object.hasOwn(ship, 'high_blockers')) {
+      fixes.push(ship.fix_rounds);
+      highs.push(ship.high_blockers);
+    }
+  }
+  const b = spends.length ? median(spends) : undefined;
+  const delta = mine.spend === undefined || b === undefined ? 'n/a' : pct(mine.spend, b);
+  let verdict = 'not reconciled';
+  if (mine.spendRaw !== undefined && b !== undefined && fixes.length && mine.fix !== undefined && mine.high !== undefined) {
+    const lean = mine.spendRaw * 10 <= 7 * b * mine.ship.acs;
+    verdict = lean && mine.fix <= median(fixes) && mine.high <= median(highs) ? 'met' : 'missed';
+  }
+  return `30% target: ${delta} vs ${b ?? '?'}/AC, ${verdict}`;
+}
+
+function cmdScorecard(args) {
+  const usage = 'usage: scorecard <run> [--baseline <run>,<run>,<run>]';
+  const { rest, baselineRuns } = splitBaseline(args, usage);
+  if (rest.length !== 1) throw new Refusal(usage);
+  return [scorecardLine(checkRun(rest[0]), baselineRuns)];
 }
 
 // Totals for rounds from round 2 on: spend, cache read, crossfire spend, per round, unreconciled count.
@@ -645,19 +907,27 @@ function cmdBrainstormReport(args) {
 
 // ---------- CLI ----------
 
-export function main(args) {
+// `now` (epoch ms) and `root` (the product root) are for callers that inject them; the CLI uses the defaults.
+export function main(args, { now, root } = {}) {
   const [command, ...rest] = args;
+  const before = env;
+  env = {
+    root: typeof root === 'string' && root !== '' ? root : process.cwd(),
+    now: typeof now === 'number' ? now : Date.now()
+  };
   try {
     const handlers = {
-      add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, report: cmdReport,
-      'brainstorm-report': cmdBrainstormReport
+      add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard,
+      report: cmdReport, 'brainstorm-report': cmdBrainstormReport
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
-    if ((command === 'report' || command === 'brainstorm-report') && rest.length === 0) throw new Refusal(USAGE);
+    if (['report', 'brainstorm-report', 'scorecard'].includes(command) && rest.length === 0) throw new Refusal(USAGE);
     return { code: 0, lines: handlers[command](rest) };
   } catch (error) {
     if (error instanceof Refusal) return { code: 2, lines: [`refused: ${error.message}`] };
     throw error;
+  } finally {
+    env = before;
   }
 }
 
