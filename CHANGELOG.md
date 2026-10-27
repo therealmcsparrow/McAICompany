@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-27
+
 Skill picks you can trust, a scanner for the skills you already have, and progress bars in the Savvy pane.
 
 ### Added
