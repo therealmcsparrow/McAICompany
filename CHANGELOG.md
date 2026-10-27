@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-27
+
 Company types, personalities, a new editor Role and a redesigned settings page.
 
 ### Added
