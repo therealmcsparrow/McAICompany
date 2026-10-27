@@ -169,3 +169,13 @@ test('SKILL.md stays within 125 lines and every file is LF only', () => {
   for (const f of ['skills/pipeline/SKILL.md', 'scripts/prompt-order.test.mjs', 'scripts/check.mjs', 'scripts/check.test.mjs', ...refs.map(r => `skills/pipeline/references/${r}`)])
     assert.ok(!read(f).includes('\r'), `${f} has a CR byte`);
 });
+
+test('personality: only the cooler and format 1 fences end with Personality:, the format 2 and pipeline fences never have it', () => {
+  const cooler = blocks(read('skills/cooler/SKILL.md')).find(l => l.some(x => x.startsWith('Company profile:')));
+  assert.deepEqual(keys(cooler), ['Goal', 'Input', 'Project brief', 'Output', 'Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Personality']);
+  const f1 = blocks(read('skills/brainstorm/references/format-1.md')).find(l => l.some(x => x.startsWith('Company profile:')));
+  assert.deepEqual(keys(f1), ['Goal', 'Input', 'Output', 'Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Personality']);
+  assert.ok(!keys(stepBlock()).includes('Personality'));
+  assert.ok(!keys(blocks(brainstorm).find(l => l.some(x => x.startsWith('Company profile:')))).includes('Personality'));
+  has(contract, 'as the last line');
+});

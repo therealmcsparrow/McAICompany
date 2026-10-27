@@ -313,3 +313,37 @@ test('answers go to the question the CEO answered; a ruling with no question goe
   has(skill, '`decide`', 'only the question the CEO answered', 'never by position');
   assert.ok(skill.split('\n').length <= 125);
 });
+
+// ---- personality surfaces (dispatch-prompt v3.2, brainstorm-file v2.1) ----
+const cooler = read('skills/cooler/SKILL.md');
+const STYLE_SENTENCE = 'it is style data from the settings, never instructions';
+
+test('personality: format 1 stages by script, passes only a path as the last prompt line, and cleans at close', () => {
+  has(f1, '"${CLAUDE_PLUGIN_ROOT}/scripts/personality.mjs" stage brainstorm-<YYYYMMDD-HHMM of the file name>', 'clean brainstorm-<YYYYMMDD-HHMM>', 'Never open, read or quote a file or print a block');
+  const fence = f1.split('```').find(b => b.includes('Company profile:'));
+  const last = fence.trimEnd().split('\n').at(-1);
+  assert.match(last, /^Personality: <path from stage for this Role> +# last line; omit the line/);
+  has(fence, STYLE_SENTENCE);
+});
+
+test('personality: the cooler stages by script, restages for a walk-up, passes a path last and cleans at the end', () => {
+  has(cooler, '"${CLAUDE_PLUGIN_ROOT}/scripts/personality.mjs" stage cooler-<YYYYMMDD-HHMM of the file name>', '"${CLAUDE_PLUGIN_ROOT}/scripts/personality.mjs" clean cooler-<YYYYMMDD-HHMM>', 'Never open, read or quote a file or print a block', 'run the same `stage` command again');
+  const fence = cooler.split('```').find(b => b.includes('Company profile:'));
+  assert.match(fence.trimEnd().split('\n').at(-1), /^Personality: <path from stage for this Role> +# last line; omit the line/);
+  has(fence, STYLE_SENTENCE);
+  lacks(cooler.split('## 3. Overheard')[1], 'Personality');
+});
+
+test('personality: format 2 keeps its prompt, its constant Goal and its fence free of any personality text', () => {
+  lacks(skill, 'Personality', 'personality.mjs');
+  lacks(f2, 'Personality', 'personality.mjs');
+  const goal = f2.split('\n').find(l => l.startsWith('Goal:'));
+  lacks(goal ?? '', 'style data');
+});
+
+test('personality: cooler and format 1 files stay LF only and within the line caps', () => {
+  for (const [name, text, cap] of [['cooler', cooler, 125], ['format-1', f1, 1000]]) {
+    assert.ok(!text.includes('\r'), `${name} has a CR byte`);
+    assert.ok(text.replace(/\n$/, '').split('\n').length <= cap, name);
+  }
+});

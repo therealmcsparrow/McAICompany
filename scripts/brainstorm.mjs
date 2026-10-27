@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, renameSync, rmSync, rmdirSync, statSync, l
 import { dirname, basename, join, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBrainstorm } from './check.mjs';
+import { personalityBlock } from './personality.mjs';
 
 const MAX_FILE = 1024 * 1024;
 const MAX_INPUT = 256 * 1024;
@@ -734,7 +735,14 @@ function challengeLines(doc, role, n) {
 }
 
 // Pure: the text of one Role's round input file for a loaded document.
-function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectFile = null } = {}) {
+// A block is kept only if its first line is the label and every other line is a "> " note or a "- " item.
+function blockLines(block) {
+  if (typeof block !== 'string' || /[\r\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(block)) return [];
+  const l = block.replace(/\n+$/, '').split('\n');
+  return l[0] === 'Personality:' && l.length > 1 && l.slice(1).every(x => x.startsWith('> ') || x.startsWith('- ')) ? l : [];
+}
+
+function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectFile = null, personality = '' } = {}) {
   if (typeof role !== 'string' || !doc.roster.includes(role)) throw new Refused(`${short(String(role))} is not in the roster`);
   if (!PASSES.includes(pass)) throw new Refused('pass must be ideas, full or crossfire');
   if (projectFile !== null && (typeof projectFile !== 'string' || /[\n\r]/.test(projectFile))) throw new Refused('project file must be a one-line path');
@@ -745,7 +753,7 @@ function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectF
     re = reaskParts(doc, role, n);
   } else n = stageRound(doc, round, pass);
   const all = doc.rounds.flatMap(r => r.replies);
-  const out = [`Round: ${n}`, `Pass: ${pass}`, 'Topic:', quoted(doc.topic)];
+  const out = [`Round: ${n}`, `Pass: ${pass}`, ...blockLines(personality), 'Topic:', quoted(doc.topic)];
   if (projectFile && !all.some(r => r.role === role)) out.push(`Read also: ${projectFile}`);
   const summary = summaryOf(doc.L);
   if (summary) out.push('Summary:', quoted(summary));
@@ -807,6 +815,11 @@ function inputLocation(file) {
   return { company, base: join(company, INPUT_DIR), dir: join(company, INPUT_DIR, run), run, projectFile: join(company, 'project.md') };
 }
 
+// The Role's block from the settings, or '' when it has none or cannot be built.
+function blockFor(loc, role) {
+  try { return personalityBlock(role, { cwd: dirname(loc.company) }); } catch { return ''; }
+}
+
 const projectFileOf = loc => (lst(loc.projectFile)?.isFile() ? loc.projectFile : null);
 
 // Validates the input folders and returns the run folder's entry names; refuses links and strangers.
@@ -825,7 +838,7 @@ function runEntries(loc) {
   return names;
 }
 
-export function stageFiles(file, text, { round, pass = 'ideas', roles, reask } = {}) {
+export function stageFiles(file, text, { round, pass = 'ideas', roles, reask, blockOf } = {}) {
   const loc = inputLocation(file);
   const doc = loadDoc(text, file);
   let who;
@@ -841,7 +854,7 @@ export function stageFiles(file, text, { round, pass = 'ideas', roles, reask } =
     who = roles === undefined ? doc.roster : doc.roster.filter(r => roles.includes(r));
   }
   const projectFile = projectFileOf(loc);
-  const texts = who.map(role => [role, renderInput(doc, role, { round, pass, reask: reask !== undefined, projectFile })]);
+  const texts = who.map(role => [role, renderInput(doc, role, { round, pass, reask: reask !== undefined, projectFile, personality: (blockOf ?? (r => blockFor(loc, r)))(role) })]);
   const names = runEntries(loc);
   mkdirSync(loc.dir, { recursive: true });
   const ignore = join(loc.base, '.gitignore');
@@ -1035,9 +1048,10 @@ export function run(argv) {
       const pass = flags.has('--pass') ? oneOf(flags.get('--pass'), ['full', 'crossfire'], '--pass') : undefined;
       if ((pass === undefined) !== (pos[2] === undefined)) throw new Usage('--pass and <round> go together');
       const round = pos[2] === undefined ? undefined : intArg(pos[2], 'round');
-      let projectFile = null;
-      try { projectFile = projectFileOf(inputLocation(f)); } catch (e) { if (e.name !== 'Refused') throw e; }
-      return { code: 0, out: inputFor(readFileText(f), roleArg(pos[1]), { pass, round, file: f, projectFile }), err: '' };
+      let projectFile = null, personality = '';
+      const role = roleArg(pos[1]);
+      try { const loc = inputLocation(f); projectFile = projectFileOf(loc); personality = blockFor(loc, role); } catch (e) { if (e.name !== 'Refused') throw e; }
+      return { code: 0, out: inputFor(readFileText(f), role, { pass, round, file: f, projectFile, personality }), err: '' };
     }
     case 'stage': {
       arity(pos, 2, 2, 'stage <file> <round> [--pass ideas|full|crossfire] [--roles <slug>,<slug>] [--reask <role>]');
