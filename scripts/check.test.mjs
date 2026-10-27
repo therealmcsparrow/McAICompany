@@ -276,7 +276,10 @@ test('ci.yml is hardened: read-only token, SHA pins with tag comments, no persis
   for (const l of uses) assert.match(l, /uses: [\w.-]+\/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/, l);
   assert.match(ci, /persist-credentials: false/);
   assert.match(ci, /node-version-file: \.nvmrc/);
-  assert.doesNotMatch(ci, /pull_request_target|workflow_run|npm (install|ci)/);
+  assert.doesNotMatch(ci, /pull_request_target|workflow_run|npm install/);
+  // No ${{ }} expression on a run: line (script injection); the plugin job sets its own read-only token.
+  assert.deepEqual(ci.split(/\r?\n/).filter(l => /^\s*(- )?run:/.test(l) && l.includes('${{')), []);
+  assert.match(ci, /^ {4}permissions:\r?\n {6}contents: read\r?$/m);
 });
 
 // One case per Playbook of this repo: the Language rule (dispatch-prompt v2).
