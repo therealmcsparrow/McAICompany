@@ -15,7 +15,7 @@ The settings page is a small local server, `${CLAUDE_PLUGIN_ROOT}/scripts/settin
 2. Read the background output for the line `aico settings: <url>`. If it does not appear, or the process exits, show what it printed and stop.
 3. Give the CEO the complete `<url>`, including the `?token=…` part; never shorten it. The server opens the browser itself, so say the link is there in case it did not open.
 4. Tell the CEO, in a few lines:
-   - The page covers Role name, model and effort; language and profile; pipeline (Fix-round limit, parallel or sequential, optional lanes); and Gates (ask or auto). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+   - The page covers Role name, model and effort; language and profile; pipeline (Fix-round limit, parallel or sequential, optional lanes); Gates (ask or auto); and each Role's personality (used only in cooler and brainstorm). Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
    - There are two levels: your user default (`~/.mcsparrow/config.json`) and a project override (`.company/settings.json`, profile in `.company/project.md`). The project wins.
    - The page stops when Done is pressed, or after 30 minutes idle. Changes apply from the next aico run.
 

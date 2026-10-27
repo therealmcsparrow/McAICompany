@@ -2,8 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
+import vm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
+import { pluginDefaults } from './settings.mjs';
 import { startServer } from './settings-server.mjs';
 
 const AGENTS = {
@@ -161,7 +163,7 @@ test('GET /api/state returns plugin defaults, raw layers, resolved, stored langu
   fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { model: 'haiku' } } } }));
   const { state } = await start(t, s);
   const st = await state();
-  assert.deepEqual(Object.keys(st).sort(), ['hasProject', 'language', 'plugin', 'project', 'resolved', 'user']);
+  assert.deepEqual(Object.keys(st).sort(), ['hasProject', 'language', 'personalities', 'plugin', 'project', 'resolved', 'user']);
   assert.equal(st.plugin.roles.qa.model, 'sonnet');
   assert.deepEqual(st.user, { version: 1, roles: { qa: { model: 'haiku' } } });
   assert.deepEqual(st.project, { version: 1 });
@@ -482,4 +484,444 @@ test('the In effect text is a polite live region and row headers stay in view', 
 
 test('the mods tabpanel has a space before aria-labelledby', () => {
   assert.ok(pageHtml().includes('id="panel-mods" aria-labelledby="tab-mods"'));
+});
+
+// ---- personality section (aico-settings v1.3) ----
+
+const PHRASES = (() => {
+  const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'role-names.md'), 'utf8');
+  const out = { intelligence: {}, creativity: {} };
+  for (const m of text.matchAll(/^\| `(low|medium|high)` \| ([^|]+) \| ([^|]+) \|$/gm)) {
+    out.intelligence[m[1]] = m[2].trim();
+    out.creativity[m[1]] = m[3].trim();
+  }
+  return out;
+})();
+
+test('the state payload carries the personality rule, phrases, per-level values and ignored entries', async (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(path.join(s.pluginRoot, 'company', 'personalities.json'), JSON.stringify({
+    architect: { temperament: 'calm', talk: 'dry', topic: 'tea', intelligence: 'high', creativity: 'low' },
+    qa: { temperament: 'blunt', talk: 'short', topic: 'bugs', intelligence: 'medium', creativity: 'medium' }
+  }));
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { personality: { talk: 'user talk', creativity: 'high' } } } } }));
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { personality: { topic: 'a:b' } } } } }));
+  const { state } = await start(t, s);
+  const p = (await state()).personalities;
+  assert.deepEqual(Object.keys(p).sort(), ['ignored', 'roles', 'rule']);
+  assert.equal(p.rule.max, 80);
+  assert.deepEqual(p.rule.levels, ['low', 'medium', 'high']);
+  assert.ok(new RegExp(p.rule.text_re, p.rule.flags).test('calm and dry'));
+  assert.deepEqual(p.rule.phrases, PHRASES);
+  assert.equal(p.roles.qa.plugin.talk, 'short');
+  assert.deepEqual(p.roles.qa.user, { talk: 'user talk', creativity: 'high' });
+  assert.deepEqual(p.roles.qa.project, {});
+  assert.deepEqual(p.roles.qa.effective.talk, { value: 'user talk', source: 'user' });
+  assert.deepEqual(p.roles.qa.effective.topic, { value: 'bugs', source: 'plugin' });
+  assert.deepEqual(p.ignored.map((e) => [e.level, e.path]), [['project', 'roles.qa.personality.topic']]);
+  assert.ok(!JSON.stringify(p).includes('a:b'), 'a stored bad value is never in the payload');
+});
+
+test('the Save refusal for a bad personality value is path-first with the level word and no value', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const revision = (await state()).resolved.revision;
+  const res = await post('/api/save', { revision, user: { version: 1, roles: { qa: { personality: { talk: 'say "hi"' } } } } });
+  assert.equal(res.status, 400);
+  const { refused } = await res.json();
+  assert.deepEqual(refused, ["user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?"]);
+  assert.equal(read(s.config), null);
+});
+
+test('a fresh install shows no ignored notice, and saving an unrelated user change adds no skillspector to the project', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.deepEqual(before.resolved.ignored, []);
+  assert.deepEqual(before.project, { version: 1 });
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { model: 'haiku' } } } });
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).state.resolved.ignored, []);
+  assert.equal(read(s.projectFile), null);
+});
+
+// A small DOM, enough to run the page script and drive its controls.
+class FakeText {
+  constructor(text) { this.textContent = text; this.parentNode = null; }
+}
+class FakeNode {
+  constructor(tag, doc) {
+    this.tagName = tag.toUpperCase();
+    this.ownerDoc = doc;
+    this.children = [];
+    this.attrs = new Map();
+    this.listeners = {};
+    this.parentNode = null;
+    this.dataset = {};
+    this.style = { setProperty() {} };
+    this.own = '';
+    this.hidden = false;
+    this.disabled = false;
+    this.open = false;
+    this.id = '';
+    this.className = '';
+    this.selected = '';
+    const self = this;
+    this.classList = {
+      toggle(name, on) {
+        const set = new Set(self.className.split(/\s+/).filter(Boolean));
+        if (on === undefined ? !set.has(name) : on) set.add(name); else set.delete(name);
+        self.className = [...set].join(' ');
+      },
+      contains: (name) => self.className.split(/\s+/).includes(name)
+    };
+    if (tag === 'option') {
+      let optionValue = '';
+      Object.defineProperty(this, 'value', { get: () => optionValue, set: (v) => { optionValue = String(v); } });
+    }
+  }
+  append(...kids) { for (const k of kids) { const n = typeof k === 'string' ? new FakeText(k) : k; n.parentNode = this; this.children.push(n); } }
+  replaceChildren(...kids) { for (const c of this.children) c.parentNode = null; this.children = []; this.append(...kids); }
+  remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this); this.parentNode = null; }
+  setAttribute(k, v) { this.attrs.set(k, String(v)); if (k === 'id') this.id = String(v); }
+  getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; }
+  removeAttribute(k) { this.attrs.delete(k); }
+  addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
+  removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); }
+  async fire(type) { for (const fn of this.listeners[type] ?? []) await fn({ type, key: '', preventDefault() {} }); }
+  focus() { this.ownerDoc.activeElement = this; }
+  getBoundingClientRect() { return { height: 0 }; }
+  get textContent() { return this.children.map((c) => c.textContent).join('') + this.own; }
+  set textContent(v) { this.children = []; this.own = String(v); }
+  get options() { return this.children.filter((c) => c.tagName === 'OPTION'); }
+  get value() { return this.selected; }
+  set value(v) {
+    v = String(v);
+    if (this.tagName !== 'SELECT') { this.selected = v; return; }
+    this.selected = this.options.some((o) => o.value === v) ? v : (this.options[0]?.value ?? '');
+  }
+  set tabIndex(v) { this.attrs.set('tabindex', String(v)); }
+  showModal() { this.open = true; }
+  close() { this.open = false; }
+}
+
+function loadPage(initialState, { saveReply } = {}) {
+  const ids = {};
+  const doc = { activeElement: null };
+  const make = (tag, props = {}) => {
+    const n = new FakeNode(tag, doc);
+    for (const [k, v] of Object.entries(props)) n.setAttribute(k, v);
+    return n;
+  };
+  doc.documentElement = make('html');
+  for (const id of ['notices', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
+  ids.save.disabled = true;
+  const names = ['roles', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+  const tabs = names.map((name) => {
+    ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
+    ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
+    return ids[`tab-${name}`];
+  });
+  const footer = make('footer');
+  const main = make('main');
+  const calls = [];
+  Object.assign(doc, {
+    createElement: (tag) => make(tag),
+    createTextNode: (text) => new FakeText(text),
+    getElementById: (id) => ids[id] ?? null,
+    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : null),
+    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : [])
+  });
+  const fakeFetch = async (url, init = {}) => {
+    calls.push({ url, body: init.body ? JSON.parse(init.body) : undefined });
+    if (url === '/api/save') {
+      const reply = saveReply ?? { status: 200, body: { state: initialState } };
+      return { status: reply.status, json: async () => structuredClone(reply.body) };
+    }
+    return { status: 200, json: async () => structuredClone(initialState) };
+  };
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  const script = /<script>([\s\S]*)<\/script>/.exec(html)[1];
+  const NodeLike = class { static [Symbol.hasInstance](v) { return v instanceof FakeNode || v instanceof FakeText; } };
+  const context = vm.createContext({ document: doc, window: { addEventListener() {}, confirm: () => true }, fetch: fakeFetch, Node: NodeLike });
+  vm.runInContext(script, context);
+  const panels = names.map((n) => ids[`panel-${n}`]);
+  return {
+    document: doc, ids, calls,
+    find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
+    all: (pred) => walkAll(ids['panel-roles'], pred)
+  };
+}
+function walk(node, pred) {
+  for (const c of node.children ?? []) {
+    if (pred(c)) return c;
+    const r = walk(c, pred);
+    if (r) return r;
+  }
+  return null;
+}
+function walkAll(node, pred, out = []) {
+  for (const c of node.children ?? []) { if (pred(c)) out.push(c); walkAll(c, pred, out); }
+  return out;
+}
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const closest = (node, tag) => { let n = node; while (n && n.tagName !== tag) n = n.parentNode; return n; };
+
+function pageState(overrides = {}) {
+  const roles = ['architect', 'qa'];
+  const defaults = pluginDefaults();
+  const plugin = { ...defaults, roles: Object.fromEntries(roles.map((r) => [r, { name: r, model: 'sonnet', effort: 'medium' }])) };
+  return {
+    plugin, user: { version: 1 }, project: { version: 1 }, hasProject: true,
+    language: { user: null, project: null },
+    resolved: {
+      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: r, model: 'sonnet', effort: 'medium', context_cap: 150000, source: {} }])),
+      ignored: [], warnings: [], language: { tag: 'en', source: 'default' }, profile: { hasProject: true, fields: {}, options: {} }
+    },
+    personalities: {
+      rule: { text_re: "^(?=.{1,80}$)[\\p{L}\\p{M}\\p{N},.'!?-]+(?: [\\p{L}\\p{M}\\p{N},.'!?-]+)*$", flags: 'u', max: 80, levels: ['low', 'medium', 'high'], phrases: PHRASES },
+      roles: Object.fromEntries(roles.map((r) => [r, { plugin: { temperament: 'calm', talk: 'dry', topic: 'tea', intelligence: 'medium', creativity: 'low' }, user: {}, project: {}, effective: {} }])),
+      ignored: []
+    },
+    ...overrides
+  };
+}
+const field = (page, role, level, key) => page.find((n) => n.id === `pf-${role}-${level}-${key}`);
+const byId = (page, id) => page.find((n) => n.id === id);
+const type = async (node, text) => { node.value = text; await node.fire('input'); };
+
+test('the page builds one labelled personality card per Role, with the counter and level choices from the payload', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  assert.equal(page.all((n) => n.tagName === 'DETAILS').length, 2);
+  for (const [key, label] of [['temperament', 'Temperament'], ['talk', 'Way of talking'], ['topic', 'Pet topic'], ['intelligence', 'Intelligence'], ['creativity', 'Creativity']]) {
+    const control = field(page, 'qa', 'user', key);
+    assert.ok(control, key);
+    assert.equal(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id).textContent, label);
+  }
+  assert.deepEqual(field(page, 'qa', 'user', 'intelligence').options.map((o) => o.textContent), ['Not set', 'Low', 'Medium', 'High']);
+  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '0 of 80');
+  assert.ok(field(page, 'qa', 'user', 'talk').getAttribute('aria-describedby').includes('pf-qa-user-talk-count'));
+});
+
+test('under each level select the page shows the payload phrase, and no phrase is copied into the page', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const select = field(page, 'qa', 'user', 'creativity');
+  const hint = byId(page, 'pf-qa-user-creativity-hint');
+  assert.equal(hint.textContent, 'Not set at this level. The level below decides.');
+  for (const level of ['low', 'medium', 'high']) {
+    select.value = level;
+    await select.fire('change');
+    assert.equal(hint.textContent, `The Role is told: ${PHRASES.creativity[level]}`);
+    assert.ok(select.getAttribute('aria-describedby').includes(hint.id));
+  }
+  const html = pageHtml();
+  for (const group of Object.values(PHRASES)) for (const phrase of Object.values(group)) assert.ok(!html.includes(phrase), phrase);
+});
+
+test('without phrases in the payload the page shows no phrase line and nothing else changes', async () => {
+  const st = pageState();
+  delete st.personalities.rule.phrases;
+  const page = loadPage(st);
+  await settle();
+  const select = field(page, 'qa', 'user', 'creativity');
+  select.value = 'high';
+  await select.fire('change');
+  assert.equal(byId(page, 'pf-qa-user-creativity-hint').hidden, true);
+  assert.equal(page.ids.count.textContent, '1 unsaved change');
+});
+
+test('a too long value gets an error text tied to the field, counted in code points, on blur', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const talk = field(page, 'qa', 'user', 'talk');
+  await type(talk, '\u{10400}'.repeat(80));
+  await talk.fire('change');
+  assert.equal(talk.getAttribute('aria-invalid'), null);
+  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '80 of 80');
+  await type(talk, 'a'.repeat(96));
+  await talk.fire('change');
+  assert.equal(talk.getAttribute('aria-invalid'), 'true');
+  const err = byId(page, 'pf-qa-user-talk-err');
+  assert.equal(err.textContent, 'Error: Way of talking is 96 characters. The limit is 80. Remove 16.');
+  assert.ok(talk.getAttribute('aria-describedby').split(' ').includes(err.id));
+  await type(talk, 'fine');
+  assert.equal(talk.getAttribute('aria-invalid'), null);
+});
+
+test('the error names the first bad character in words, and the value is trimmed before it counts', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const topic = field(page, 'qa', 'project', 'topic');
+  for (const [text, words] of [['a:b', 'a colon'], ['say "hi"', 'a double quote'], ['a\tb', 'a tab'], ['x<y', 'the character <'], ['a  b', null]]) {
+    await type(topic, text);
+    await topic.fire('change');
+    const err = byId(page, 'pf-qa-project-topic-err').textContent;
+    if (words) assert.ok(err.includes(`can't contain ${words}`), err); else assert.equal(err, 'Error: Pet topic has two spaces in a row. Use one.');
+  }
+  await type(topic, '  tea  ');
+  await topic.fire('change');
+  assert.equal(topic.getAttribute('aria-invalid'), null);
+  assert.equal(page.ids.count.textContent, '1 unsaved change');
+});
+
+test('a Save with a bad value sends nothing, marks and focuses the field, opens its card and says so in the status', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const talk = field(page, 'architect', 'user', 'talk');
+  await type(talk, 'bad: value');
+  await page.ids.save.fire('click');
+  assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
+  assert.equal(talk.getAttribute('aria-invalid'), 'true');
+  assert.equal(page.document.activeElement, talk);
+  assert.equal(closest(talk, 'DETAILS').open, true);
+  assert.match(page.ids.status.textContent, /Nothing was saved\. Fix these and press Save again:/);
+  assert.match(page.ids.status.textContent, /architect, user level: Way of talking can.t contain a colon/);
+});
+
+test('a server refusal is mapped by its path to the field, the text comes from the page, nothing else is marked', async () => {
+  const refused = ["user roles.qa.personality.talk: must be one line of letters, digits, single spaces and , . ' - ! ?", 'user roles.qa.personality: must be an object'];
+  const page = loadPage(pageState(), { saveReply: { status: 400, body: { refused } } });
+  await settle();
+  const talk = field(page, 'qa', 'user', 'talk');
+  await type(talk, 'fine value');
+  await page.ids.save.fire('click');
+  await settle();
+  const sent = page.calls.find((c) => c.url === '/api/save');
+  assert.equal(sent.body.user.roles.qa.personality.talk, 'fine value');
+  assert.equal(talk.getAttribute('aria-invalid'), 'true');
+  assert.equal(field(page, 'qa', 'user', 'topic').getAttribute('aria-invalid'), null);
+  assert.equal(page.document.activeElement, talk);
+  assert.equal(closest(talk, 'DETAILS').open, true);
+  const text = page.ids.status.textContent;
+  assert.ok(text.includes('qa, user level: Way of talking was refused.'));
+  assert.ok(text.includes('user roles.qa.personality: must be an object'), 'an unmappable line is listed as received');
+  assert.ok(!text.includes('user roles.qa.personality.talk'), 'the mapped line is not repeated raw');
+  assert.ok(byId(page, 'pf-qa-user-talk-err').textContent.startsWith('Error: Way of talking was refused.'));
+});
+
+test('a card keeps its open state over a refresh and over a reload of the state', async () => {
+  const page = loadPage(pageState(), { saveReply: { status: 200, body: { state: pageState() } } });
+  await settle();
+  const card = () => page.all((n) => n.tagName === 'DETAILS')[1];
+  card().open = true;
+  await card().fire('toggle');
+  await type(field(page, 'qa', 'user', 'talk'), 'calm');
+  assert.equal(card().open, true, 'refresh');
+  await page.ids.save.fire('click');
+  await settle();
+  assert.equal(card().open, true, 'a re-render after Save');
+  assert.equal(page.all((n) => n.tagName === 'DETAILS')[0].open, false);
+});
+
+test('a cleared or replaced ignored value is one unsaved change, and an untouched one is none', async () => {
+  const st = pageState();
+  st.personalities.ignored = [
+    { level: 'user', path: 'roles.qa.personality.creativity', reason: 'must be low, medium or high' },
+    { level: 'project', path: 'roles.qa.personality.topic', reason: 'must be 1 to 80 characters' }
+  ];
+  const page = loadPage(st);
+  await settle();
+  assert.equal(page.ids.count.textContent, '0 unsaved changes');
+  assert.equal(page.ids.save.disabled, true);
+  assert.match(page.ids.notices.textContent, /user roles\.qa\.personality\.creativity: must be low, medium or high/);
+  const select = field(page, 'qa', 'user', 'creativity');
+  assert.equal(select.value, '__ignored__');
+  assert.ok(select.options.some((o) => o.textContent === 'Ignored stored value'));
+  assert.match(byId(page, 'pf-qa-user-creativity-hint').textContent, /^Ignored: this stored value is not Low, Medium or High/);
+  assert.match(byId(page, 'pf-qa-project-topic-hint').textContent, /^Ignored: this stored value breaks the rule/);
+  select.value = '';
+  await select.fire('change');
+  assert.equal(page.ids.count.textContent, '1 unsaved change');
+  assert.equal(select.options.some((o) => o.textContent === 'Ignored stored value'), false);
+  await type(field(page, 'qa', 'project', 'topic'), 'cats');
+  assert.equal(page.ids.count.textContent, '2 unsaved changes');
+  await page.ids.save.fire('click');
+  await settle();
+  const sent = page.calls.find((c) => c.url === '/api/save').body;
+  assert.deepEqual(sent.project.roles.qa.personality, { topic: 'cats' });
+  assert.deepEqual(sent.user, { version: 1 }, 'the user layer is sent without the ignored path, so the Save removes it');
+});
+
+test('the reset button clears a level for one Role, counts it and keeps focus in the card', async () => {
+  const st = pageState();
+  st.user = { version: 1, roles: { qa: { personality: { talk: 'dry', intelligence: 'high' } } } };
+  st.personalities.roles.qa.user = { talk: 'dry', intelligence: 'high' };
+  const page = loadPage(st);
+  await settle();
+  const reset = page.find((n) => n.tagName === 'BUTTON' && n.textContent === 'Use plugin default for qa, user');
+  assert.equal(reset.disabled, false);
+  assert.equal(page.find((n) => n.textContent === 'Use plugin default for qa, project').disabled, true);
+  await reset.fire('click');
+  assert.equal(field(page, 'qa', 'user', 'talk').value, '');
+  assert.equal(field(page, 'qa', 'user', 'intelligence').value, '');
+  assert.equal(page.ids.count.textContent, '2 unsaved changes');
+  assert.equal(page.document.activeElement, field(page, 'qa', 'user', 'temperament'));
+});
+
+test('without a .company folder the Project personality controls are off and say why', async () => {
+  const page = loadPage(pageState({ hasProject: false }));
+  await settle();
+  assert.equal(field(page, 'qa', 'project', 'talk').disabled, true);
+  assert.equal(field(page, 'qa', 'user', 'talk').disabled, false);
+  assert.ok(page.find((n) => n.textContent === 'Needs a .company/ folder'));
+});
+
+test('a payload without personalities draws no section, and a rule that does not parse checks nothing on the page', async () => {
+  const none = pageState();
+  delete none.personalities;
+  const a = loadPage(none);
+  await settle();
+  assert.equal(a.all((n) => n.tagName === 'DETAILS').length, 0);
+  const broken = pageState();
+  broken.personalities.rule.text_re = '(';
+  const b = loadPage(broken);
+  await settle();
+  const talk = field(b, 'qa', 'user', 'talk');
+  await type(talk, 'bad: value');
+  await talk.fire('change');
+  assert.equal(talk.getAttribute('aria-invalid'), null);
+  assert.equal(byId(b, 'pf-qa-user-talk-count'), null);
+});
+
+test('stored plugin text with markup is shown as text and never becomes an element', async () => {
+  const st = pageState();
+  st.personalities.roles.qa.plugin.talk = '<img src=x onerror=alert(1)>';
+  const page = loadPage(st);
+  await settle();
+  assert.ok(page.all((n) => n.tagName === 'DL')[1].textContent.includes('<img src=x onerror=alert(1)>'));
+  assert.equal(page.all((n) => n.tagName === 'IMG').length, 0);
+});
+
+test('the page keeps the layout fixes: the Roles table fits, and the footer sits above sticky row headers', () => {
+  const html = pageHtml();
+  assert.ok(/\.cell \{[^}]*display: grid/.test(html));
+  assert.ok(/\.cell > :first-child \{[^}]*grid-column: 1 \/ -1/.test(html));
+  assert.ok(/footer \{[^}]*z-index: 10/.test(html));
+  assert.ok(!html.includes('1F512'), 'the lock emoji is gone');
+  assert.ok(/\.lock::after \{[^}]*content: "needs unlock"/.test(html));
+  assert.ok(/@media \(prefers-reduced-motion: no-preference\)/.test(html));
+  assert.ok(/@media \(forced-colors: active\)/.test(html));
+  assert.ok(!/\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write/.test(html));
+});
+
+test('every colour pair the visual spec names passes its contrast floor in both schemes', () => {
+  const html = pageHtml();
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  const light = html.slice(html.indexOf(':root {'), html.indexOf('@media (prefers-color-scheme: dark)'));
+  const dark = html.slice(html.indexOf('@media (prefers-color-scheme: dark)'), html.indexOf('* { box-sizing'));
+  for (const [scheme, css] of [['light', light], ['dark', dark]]) {
+    const t = (name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)?.[1];
+    for (const [fg, bg] of [['text', 'surface'], ['muted', 'surface'], ['muted', 'head'], ['accent', 'surface'], ['warn', 'warn-bg'], ['err', 'err-bg'], ['info', 'info-bg'], ['ok', 'ok-bg'], ['err', 'surface'], ['warn', 'surface']]) {
+      assert.ok(ratio(t(fg), t(bg)) >= 4.5, `${scheme} ${fg} on ${bg}: ${ratio(t(fg), t(bg)).toFixed(2)}`);
+    }
+    assert.ok(ratio(t('accent-text'), t('accent')) >= 4.5, `${scheme} accent-text on accent`);
+    assert.ok(ratio(t('control-border'), t('set')) >= 3, `${scheme} border on set`);
+    assert.ok(ratio(t('focus'), t('bg')) >= 3, `${scheme} focus`);
+  }
 });

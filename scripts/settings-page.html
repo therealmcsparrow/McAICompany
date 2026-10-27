@@ -7,72 +7,145 @@
 <title>aico settings</title>
 <style>
 :root {
-  --bg: #f7f7f5; --surface: #ffffff; --text: #1b1b1f; --muted: #5d5d66; --line: #d9d9de;
-  --accent: #2557c7; --accent-text: #ffffff; --head: #eeeef1; --warn-bg: #fff4d6; --warn: #7a5200;
-  --err-bg: #fde7e7; --err: #a01d1d; --ok: #1d6b35; --focus: #2557c7; --control-border: #767680;
+  --bg: #f4f5f7; --surface: #ffffff; --head: #eceef2; --text: #16181d; --muted: #4b5160; --line: #d3d7de;
+  --control-border: #6b7280; --accent: #1f4fbf; --accent-hover: #183f9c; --accent-text: #ffffff; --set: #eef3ff;
+  --focus: #1f4fbf; --warn-bg: #fff4d6; --warn: #6b4700; --err-bg: #fdecec; --err: #9b1c1c;
+  --ok-bg: #e8f5ec; --ok: #17612f; --info-bg: #e9eefb; --info: #2a3a66;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06); --shadow-up: 0 -1px 2px rgba(0, 0, 0, .06);
+  --fs-xs: .75rem; --fs-sm: .8125rem; --fs-md: .9375rem; --fs-lg: 1.0625rem; --fs-xl: 1.375rem;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --r1: 4px; --r2: 8px;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #141417; --surface: #1d1d22; --text: #ececf1; --muted: #a3a3ad; --line: #34343c;
-    --accent: #7ea2ff; --accent-text: #0d0d10; --head: #26262d; --warn-bg: #3a2f12; --warn: #f2cf7a;
-    --err-bg: #3d1c1c; --err: #ff9c9c; --ok: #8fdca5; --focus: #7ea2ff; --control-border: #8a8a96;
+    --bg: #101216; --surface: #181b21; --head: #20242c; --text: #e8eaf0; --muted: #a1a8b6; --line: #323843;
+    --control-border: #8a92a3; --accent: #8aaaff; --accent-hover: #a9c0ff; --accent-text: #0b0f1a; --set: #1c2540;
+    --focus: #8aaaff; --warn-bg: #33290f; --warn: #f2cf7a; --err-bg: #3a1b1d; --err: #ffa3a3;
+    --ok-bg: #16301f; --ok: #8fdca5; --info-bg: #1d2740; --info: #c3cff0;
+    --shadow: none; --shadow-up: none;
   }
 }
 * { box-sizing: border-box; }
 html { scroll-padding-bottom: calc(var(--footer-h, 0px) + 8px); }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header, main { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
-header h1 { font-size: 1.3rem; margin: 20px 0 4px; }
-header p { margin: 0 0 12px; color: var(--muted); }
+body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-md)/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+header, main { max-width: 1200px; margin: 0 auto; padding: 0 var(--s3); }
+@media (min-width: 601px) { header, main { padding: 0 var(--s5); } }
+header h1 { font-size: var(--fs-xl); font-weight: 650; line-height: 1.2; margin: var(--s5) 0 var(--s1); }
+header p { margin: 0 0 var(--s3); color: var(--muted); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-[role="tablist"] { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 8px 0 16px; }
-[role="tab"] { background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 8px 12px; font: inherit; cursor: pointer; }
+[role="tablist"] { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin: var(--s4) 0 var(--s5); overflow-x: auto; overflow-y: hidden; }
+[role="tab"] { background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; color: var(--muted); padding: 0 var(--s4); min-height: 40px; font: inherit; cursor: pointer; white-space: nowrap; flex: none; }
+[role="tab"]:hover { color: var(--text); background: var(--head); border-radius: var(--r1) var(--r1) 0 0; }
+[role="tab"]:focus-visible { outline-offset: -2px; }
 [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-.notice { border-radius: 6px; padding: 8px 12px; margin: 0 0 12px; overflow-wrap: anywhere; }
-.notice ul { margin: 4px 0 0; padding-left: 20px; }
+.notice { border-radius: var(--r2); border-left: 4px solid currentColor; padding: var(--s3) var(--s4); margin: 0 0 var(--s3); overflow-wrap: anywhere; font-size: var(--fs-md); }
+.notice ul { margin: var(--s1) 0 0; padding-left: 20px; }
 .notice.warn { background: var(--warn-bg); color: var(--warn); }
 .notice.err { background: var(--err-bg); color: var(--err); }
-.notice.info { background: var(--head); color: var(--muted); }
-.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); margin-bottom: 16px; }
-table { border-collapse: collapse; width: 100%; min-width: 640px; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-thead th { background: var(--head); font-size: .85rem; color: var(--muted); font-weight: 600; position: sticky; top: 0; }
-tr.dept th { background: var(--head); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-tbody th { font-weight: 500; white-space: nowrap; }
-tbody th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--surface); }
-td.plugin, td.effect { white-space: nowrap; }
-td.effect { font-weight: 600; }
-td.effect.text { white-space: normal; min-width: 12rem; overflow-wrap: anywhere; }
-.src { font-weight: 400; color: var(--muted); font-size: .8rem; margin-left: 4px; }
-.held { display: block; font-weight: 400; color: var(--warn); font-size: .8rem; }
-.cell { display: flex; gap: 4px; flex-wrap: nowrap; }
-select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--control-border); border-radius: 4px; padding: 3px 6px; }
+.notice.info { background: var(--info-bg); color: var(--info); }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow); margin-bottom: var(--s5); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 640px; }
+th, td { text-align: left; padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr:last-child > th, tbody tr:last-child > td { border-bottom: 0; }
+thead th { background: var(--head); font-size: var(--fs-sm); color: var(--muted); font-weight: 600; }
+tr.dept th { background: var(--head); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+tbody th { font-weight: 500; overflow-wrap: anywhere; }
+tbody th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 8rem; max-width: 16rem; box-shadow: 1px 0 0 var(--line); }
+table.roles tbody th[scope="row"] { min-width: 10rem; }
+td.plugin { color: var(--muted); }
+td.effect { font-weight: 600; overflow-wrap: anywhere; }
+td.effect.text { min-width: 12rem; }
+@media (prefers-reduced-motion: no-preference) {
+  tbody tr > td, tbody tr > th[scope="row"], button, [role="tab"] { transition: background-color 100ms; }
+}
+tbody tr:hover > td, tbody tr:hover > th[scope="row"] { background: var(--head); }
+table.roles td.plugin { min-width: 11rem; }
+table.roles td.effect { min-width: 11rem; }
+.src { font-weight: 400; color: var(--muted); font-size: var(--fs-sm); margin-left: var(--s1); }
+.held { display: block; font-weight: 400; color: var(--warn); font-size: var(--fs-sm); margin-top: 2px; }
+.cell { display: grid; grid-template-columns: repeat(3, minmax(4.5rem, 1fr)); gap: var(--s1); min-width: 14rem; }
+.cell > :first-child { grid-column: 1 / -1; }
+.cell select, .cell input[type="text"] { width: 100%; min-width: 0; }
+select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--r1); padding: 4px 8px; min-height: 32px; }
+select:hover:not(:disabled), input[type="text"]:hover:not(:disabled) { border-color: var(--text); }
 input[type="text"] { width: 9rem; }
-input.wide { width: 16rem; }
-select:disabled, input:disabled { opacity: .5; }
-select.set, input.set { border-color: var(--accent); }
-.lock::before { content: "\1F512"; margin-right: 4px; font-size: .85em; }
-.ro { color: var(--muted); font-size: .85rem; }
-.bulk { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-.bulk label { display: flex; gap: 4px; align-items: center; color: var(--muted); font-size: .9rem; }
-button { font: inherit; border-radius: 4px; padding: 5px 12px; border: 1px solid var(--control-border); background: var(--surface); color: var(--text); cursor: pointer; }
-button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-button:disabled { opacity: .5; cursor: default; }
-h2 { font-size: 1rem; margin: 16px 0 8px; }
-.hint { color: var(--muted); font-size: .85rem; margin: 0 0 8px; }
-footer { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); margin-top: 24px; }
-footer .inner { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-#count { font-weight: 600; margin-right: auto; }
-#status { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+input[type="text"]::placeholder { color: var(--muted); opacity: 1; }
+input.wide { width: 100%; max-width: 24rem; }
+select:disabled, input:disabled { opacity: .55; cursor: not-allowed; background: var(--head); }
+select.set, input.set { border-color: var(--accent); background: var(--set); }
+select[aria-invalid="true"], input[aria-invalid="true"] { border: 2px solid var(--err); background: var(--err-bg); }
+.lock::after { content: "needs unlock"; margin-left: var(--s2); font-size: var(--fs-sm); font-weight: 400; color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 0 var(--s2); white-space: nowrap; }
+.ro { color: var(--muted); font-size: var(--fs-sm); }
+.bulk { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: center; margin-bottom: var(--s3); background: var(--head); border-radius: var(--r2); padding: var(--s3); }
+.bulk label { display: flex; gap: var(--s1); align-items: center; color: var(--muted); font-size: var(--fs-sm); }
+button { font: inherit; border-radius: var(--r1); padding: 0 var(--s4); min-height: 36px; border: 1px solid var(--control-border); background: var(--surface); color: var(--text); cursor: pointer; }
+button:hover:not(:disabled) { background: var(--head); }
+button:active:not(:disabled) { background: var(--line); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button.primary:disabled { opacity: 1; background: var(--head); border-color: var(--line); color: var(--muted); }
+button.small { min-height: 32px; font-size: var(--fs-sm); }
+h2 { font-size: var(--fs-lg); font-weight: 600; line-height: 1.3; margin: var(--s5) 0 var(--s1); }
+.hint { color: var(--muted); font-size: var(--fs-sm); line-height: 1.4; margin: 0 0 var(--s3); }
+.pcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r2); margin-bottom: var(--s2); }
+.pcard summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s3); min-height: 44px; padding: var(--s2) var(--s4) var(--s2) 40px; cursor: pointer; list-style: none; position: relative; border-radius: var(--r2); }
+.pcard summary::-webkit-details-marker { display: none; }
+.pcard summary::before { content: ""; position: absolute; left: var(--s4); top: 50%; width: 6px; height: 6px; margin-top: -5px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); }
+.pcard[open] > summary::before { transform: rotate(45deg); margin-top: -7px; }
+.pcard summary:hover { background: var(--head); }
+.pcard summary:focus-visible { outline-offset: -2px; }
+.pname { font-weight: 600; }
+.psum { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pill { font-size: var(--fs-xs); border: 1px solid currentColor; border-radius: 999px; padding: 0 var(--s2); white-space: nowrap; }
+.pill.changed { color: var(--accent); }
+.pill.refused { color: var(--err); }
+.pill.ign { color: var(--warn); }
+.pbody { padding: var(--s4); border-top: 1px solid var(--line); }
+.pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); }
+.plevel { border: 0; padding: 0; margin: 0; min-width: 0; }
+.plevel legend { width: 100%; padding: 0 0 var(--s1); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.plevel > .hint { margin-top: var(--s3); }
+.pfield { max-width: 26rem; }
+.plabel { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s2); margin: var(--s3) 0 2px; font-size: var(--fs-sm); color: var(--muted); }
+.pcount { font-variant-numeric: tabular-nums; }
+.pcount.over { color: var(--err); font-weight: 600; }
+.pfield input[type="text"], .pfield select { width: 100%; }
+.perr { margin: var(--s1) 0 0; color: var(--err); font-size: var(--fs-sm); }
+.pfield .hint { margin: var(--s1) 0 0; }
+.pfield .hint.held { color: var(--warn); }
+.plevel button { margin-top: var(--s3); }
+.peff { margin-top: var(--s4); background: var(--head); border-radius: var(--r1); padding: var(--s3); }
+.peff h3 { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
+.peff dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--s4); margin: 0; }
+.peff dt { color: var(--muted); font-size: var(--fs-sm); }
+.peff dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.dept-label { margin: var(--s4) 0 var(--s2); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+footer { position: sticky; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); box-shadow: var(--shadow-up); margin-top: var(--s5); }
+footer .inner { max-width: 1200px; margin: 0 auto; padding: var(--s3); display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; }
+#count { font-weight: 600; margin-right: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+#count.dirty { color: var(--text); }
+#count.dirty::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: var(--s2); }
+#status { max-width: 1200px; margin: 0 auto; padding: var(--s3) var(--s3) 0; max-height: 40vh; overflow: auto; }
+@media (min-width: 601px) { #status { padding: var(--s3) var(--s5) 0; } footer .inner { padding: var(--s3) var(--s5); } }
 #status:empty { display: none; }
-dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); max-width: 440px; width: calc(100% - 32px); }
-dialog::backdrop { background: rgba(0, 0, 0, .45); }
-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+#status .notice { margin-bottom: 0; }
+dialog { border: 1px solid var(--line); border-radius: var(--r2); padding: var(--s5); background: var(--surface); color: var(--text); max-width: 440px; width: calc(100% - 32px); box-shadow: 0 10px 30px rgba(0, 0, 0, .25); }
+dialog::backdrop { background: rgba(0, 0, 0, .5); }
+dialog h2 { margin-top: 0; }
+dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; margin-top: var(--s4); }
 [hidden] { display: none !important; }
+@media (forced-colors: active) {
+  select.set, input.set { border-width: 2px; }
+}
 @media (max-width: 600px), (max-height: 500px) {
-  html { scroll-padding-bottom: 8px; }
   footer { position: static; }
+  html { scroll-padding-bottom: 8px; }
+  #save { flex: 1 1 100%; }
+}
+@media (max-width: 600px) {
+  .pgrid { grid-template-columns: 1fr; }
+  .pfield, input.wide { max-width: none; }
 }
 </style>
 </head>
@@ -154,6 +227,8 @@ let state = null;   // last state from the server
 let draft = null;   // { user, project, profile, language: { user, project } }
 let syncers = [];   // functions that push draft values into the controls and recompute "In effect"
 let activeTab = 'roles';
+let touched = new Set(); // "level|path" of ignored personality values the user cleared or replaced
+const openRoles = new Set(); // Roles whose personality details are open; survives a re-render
 
 // ---------- small helpers ----------
 function el(tag, props = {}, ...children) {
@@ -220,6 +295,7 @@ function initialLanguage() {
   return { user: state.language.user ?? '', project: state.language.project ?? '' };
 }
 function resetDraft() {
+  touched = new Set();
   draft = {
     user: clone(state.user),
     project: clone(state.project),
@@ -245,8 +321,35 @@ function changedLanguage() {
   }
   return out;
 }
+// The layer as it is sent: personality text is trimmed and an empty text means not set.
+function outgoing(level) {
+  const layer = clone(draft[level]);
+  for (const [role, entry] of Object.entries(layer.roles ?? {})) {
+    const p = entry.personality;
+    if (p === null || typeof p !== 'object') continue;
+    for (const key of P_TEXT) {
+      if (typeof p[key] !== 'string') continue;
+      const t = p[key].trim();
+      if (t === '') delete p[key]; else p[key] = t;
+    }
+    if (Object.keys(p).length === 0) delete entry.personality;
+    if (Object.keys(entry).length === 0) delete layer.roles[role];
+  }
+  if (layer.roles && Object.keys(layer.roles).length === 0) delete layer.roles;
+  return layer;
+}
+// An ignored stored value is kept out of the draft; clearing it (or replacing it, which diffCount sees) is one change.
+function clearedIgnored(level) {
+  let n = 0;
+  for (const key of touched) {
+    const cut = key.indexOf('|');
+    if (key.slice(0, cut) === level && getIn(draft[level], key.slice(cut + 1).split('.')) === undefined) n++;
+  }
+  return n;
+}
+const levelChanges = (level) => diffCount(outgoing(level), state[level]) + clearedIgnored(level);
 function unsavedCount() {
-  return diffCount(draft.user, state.user) + diffCount(draft.project, state.project)
+  return levelChanges('user') + levelChanges('project')
     + Object.keys(changedProfile()).length + Object.keys(changedLanguage()).length;
 }
 
@@ -374,10 +477,10 @@ function confirmUnlock(key) {
   });
 }
 
-function table(headers) {
+function table(headers, cls) {
   const thead = el('thead', {}, el('tr', {}, headers.map((h) => el('th', { scope: 'col' }, h))));
   const tbody = el('tbody');
-  const t = el('table', {}, thead, tbody);
+  const t = el('table', { class: cls }, thead, tbody);
   return { wrap: el('div', { class: 'scroll' }, t), tbody };
 }
 const COLUMNS = ['Setting', 'Plugin', 'User', 'Project', 'In effect'];
@@ -429,7 +532,7 @@ function renderRoles(panel) {
     el('label', {}, 'Apply to', dept), el('label', {}, 'at', level), el('label', {}, 'model', model), el('label', {}, 'effort', effort), apply));
   panel.append(el('p', { class: 'hint' }, 'Each cell holds name, model and effort. Names are for display only.'));
 
-  const { wrap, tbody } = table(['Role', 'Plugin', 'User', 'Project', 'In effect']);
+  const { wrap, tbody } = table(['Role', 'Plugin', 'User', 'Project', 'In effect'], 'roles');
   for (const [d, roles] of groups) {
     tbody.append(el('tr', { class: 'dept' }, el('th', { colspan: 5, scope: 'colgroup' }, d)));
     for (const role of roles) {
@@ -463,6 +566,325 @@ function renderRoles(panel) {
     }
   }
   panel.append(wrap);
+  renderPersonality(panel, groups);
+}
+
+// ---------- Personality ----------
+const P_KEYS = ['temperament', 'talk', 'topic', 'intelligence', 'creativity'];
+const P_TEXT = ['temperament', 'talk', 'topic'];
+const P_LABELS = { temperament: 'Temperament', talk: 'Way of talking', topic: 'Pet topic', intelligence: 'Intelligence', creativity: 'Creativity' };
+const IGNORED_OPTION = '__ignored__';
+const PERSONALITY_HINT = 'Used only in /aico:cooler turns and /aico:brainstorm rounds. Never in reviews, Handoffs, Gate summaries, findings or commits. It cannot change a model, effort or verdict.';
+const PROJECT_HINT = 'Project values are stored in .company/ and may come from a cloned repo. They are used only as style data in cooler and brainstorm.';
+const NOT_SET_HINT = 'Not set at this level. The level below decides.';
+const IGNORED_TEXT_HINT = 'Ignored: this stored value breaks the rule, so the level below is used. It stays in the file until you save a change at this level, and that save removes it. To remove it now, press the reset button below or type a new value, and save.';
+const IGNORED_LEVEL_HINT = 'Ignored: this stored value is not Low, Medium or High, so the level below is used. It stays in the file until you save a change at this level, and that save removes it. To remove it now, choose Not set and save.';
+const CHARSET_COPY = "Use letters, digits, single spaces and , . ' - ! ?";
+const capital = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+const levelWord = (level) => (level === 'user' ? 'User' : 'Project');
+
+let pRecs = [];     // one record per personality control, in page order
+let pRoles = {};    // per Role: its details, summary parts and records
+let ruleCache = { source: undefined, value: null };
+
+// The server's rule (aico-settings v1.3): the page holds no copy of the pattern, the levels or the phrases.
+function personalityRule() {
+  const r = state?.personalities?.rule;
+  if (ruleCache.source === r) return ruleCache.value;
+  let value = null;
+  if (r !== null && typeof r === 'object' && typeof r.text_re === 'string' && typeof r.flags === 'string'
+    && Number.isInteger(r.max) && r.max > 0 && Array.isArray(r.levels) && r.levels.length > 0
+    && r.levels.every((l) => typeof l === 'string' && l !== '')) {
+    try {
+      // g and y make test() remember a position between calls.
+      value = { re: new RegExp(r.text_re, r.flags.replace(/[gy]/g, '')), max: r.max, levels: [...r.levels], phrases: phraseTable(r) };
+    } catch { value = null; }
+  }
+  ruleCache = { source: r, value };
+  return value;
+}
+function phraseTable(r) {
+  const out = {};
+  for (const key of ['intelligence', 'creativity']) {
+    const row = r.phrases?.[key];
+    if (row === null || typeof row !== 'object') return null;
+    out[key] = {};
+    for (const level of r.levels) {
+      if (!has(row, level) || typeof row[level] !== 'string' || row[level] === '') return null;
+      out[key][level] = row[level];
+    }
+  }
+  return out;
+}
+function describeChar(ch) {
+  if (/[\n\r\u2028\u2029]/.test(ch)) return 'a line break';
+  if (ch === '\t') return 'a tab';
+  if (ch === '"') return 'a double quote';
+  if (ch === ':') return 'a colon';
+  if (ch === '`' || /[\u2018-\u201F\u00AB\u00BB]/.test(ch)) return 'a quote mark';
+  if (/[\p{Cc}\p{Cf}\p{Cs}\p{Zs}\p{Zl}\p{Zp}]/u.test(ch)) return 'an invisible character';
+  return `the character ${ch}`;
+}
+// The error text for a typed value, built from the page's own copy. '' means fine (empty is not set).
+function fieldProblem(key, raw) {
+  const rule = personalityRule();
+  if (!rule || typeof raw !== 'string') return '';
+  const label = P_LABELS[key];
+  if (!P_TEXT.includes(key)) {
+    if (raw === '' || rule.levels.includes(raw)) return '';
+    const names = rule.levels.map(capital);
+    return `Error: ${label} must be ${names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : names[0]}. Choose one, or Not set.`;
+  }
+  const v = raw.trim();
+  if (v === '') return '';
+  const n = [...v].length;
+  if (n > rule.max) return `Error: ${label} is ${n} characters. The limit is ${rule.max}. Remove ${n - rule.max}.`;
+  if (rule.re.test(v)) return '';
+  if (/ {2}/.test(v)) return `Error: ${label} has two spaces in a row. Use one.`;
+  for (const ch of v) if (ch !== ' ' && !rule.re.test(ch)) return `Error: ${label} can't contain ${describeChar(ch)}. ${CHARSET_COPY}`;
+  return `Error: ${label} must be one line. ${CHARSET_COPY}`;
+}
+const draftAt = (rec) => getIn(draft[rec.level], ['roles', rec.role, 'personality', rec.key]);
+const touchKey = (rec) => `${rec.level}|${rec.path}`;
+const ignoredUntouched = (rec) => rec.ignored && !touched.has(touchKey(rec));
+
+function setError(rec, message) {
+  rec.error = message;
+  if (message) rec.control.setAttribute('aria-invalid', 'true'); else rec.control.removeAttribute('aria-invalid');
+  rec.errEl.textContent = message;
+  rec.errEl.hidden = message === '';
+  describe(rec);
+}
+// Ties the count, the error and the hint to the control, whichever of them is showing.
+function describe(rec) {
+  const ids = [];
+  if (rec.countEl) ids.push(rec.countEl.id);
+  if (rec.error) ids.push(rec.errEl.id);
+  if (!rec.hintEl.hidden) ids.push(rec.hintEl.id);
+  if (ids.length) rec.control.setAttribute('aria-describedby', ids.join(' ')); else rec.control.removeAttribute('aria-describedby');
+}
+function editRecord(rec) {
+  if (rec.ignored) touched.add(touchKey(rec));
+  const raw = rec.control.value;
+  setIn(draft[rec.level], ['roles', rec.role, 'personality', rec.key], raw.trim() === '' || raw === IGNORED_OPTION ? undefined : raw);
+  rec.refused = false;
+  rec.sticky = false;
+  if (rec.error) setError(rec, fieldProblem(rec.key, raw));
+  refresh();
+}
+function checkRecord(rec) {
+  setError(rec, fieldProblem(rec.key, rec.control.value));
+  refresh();
+}
+function resetLevel(role, level) {
+  const reg = pRoles[role];
+  for (const rec of reg.recs.filter((r) => r.level === level)) {
+    if (rec.ignored) touched.add(touchKey(rec));
+    setIn(draft[level], ['roles', role, 'personality', rec.key], undefined);
+    rec.refused = false;
+    rec.sticky = false;
+    setError(rec, '');
+  }
+  refresh();
+  reg.recs.find((r) => r.level === level).control.focus();
+}
+function touchIgnored(level) {
+  for (const rec of pRecs) if (rec.level === level && rec.ignored) touched.add(touchKey(rec));
+}
+function openRole(role) {
+  pRoles[role].details.open = true;
+  openRoles.add(role);
+}
+
+function personalityField(role, level, key, rule, ignoredPaths, off) {
+  const id = `pf-${role}-${level}-${key}`;
+  const isText = P_TEXT.includes(key);
+  const control = isText
+    ? el('input', { type: 'text', id, autocomplete: 'off', placeholder: '-' })
+    : el('select', { id });
+  const rec = {
+    role, level, key, id, isText, control, error: '', refused: false,
+    path: `roles.${role}.personality.${key}`,
+    errEl: el('p', { class: 'perr', id: `${id}-err`, hidden: true }),
+    hintEl: el('p', { class: 'hint', id: `${id}-hint`, hidden: true }),
+    countEl: isText && rule ? el('span', { class: 'pcount', id: `${id}-count` }) : null
+  };
+  rec.ignored = ignoredPaths.has(`${level}|${rec.path}`);
+  control.disabled = off;
+  if (!isText) {
+    control.append(el('option', { value: '' }, 'Not set'));
+    for (const l of rule?.levels ?? []) control.append(el('option', { value: l }, capital(l)));
+    if (rec.ignored) {
+      rec.ignoredOption = el('option', { value: IGNORED_OPTION, disabled: true }, 'Ignored stored value');
+      control.append(rec.ignoredOption);
+    }
+  }
+  if (isText) {
+    control.addEventListener('input', () => editRecord(rec));
+    control.addEventListener('change', () => checkRecord(rec));
+  } else {
+    control.addEventListener('change', () => editRecord(rec));
+  }
+  pRecs.push(rec);
+  pRoles[role].recs.push(rec);
+  return el('div', { class: 'pfield' },
+    el('div', { class: 'plabel' }, el('label', { for: id }, P_LABELS[key]), rec.countEl),
+    control, rec.errEl, rec.hintEl);
+}
+
+function levelFieldset(role, level, rule, ignoredPaths) {
+  const off = level === 'project' && !projectOn();
+  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${levelWord(level)} level`));
+  if (level === 'project') box.append(el('p', { class: 'hint' }, PROJECT_HINT));
+  for (const key of P_KEYS) box.append(personalityField(role, level, key, rule, ignoredPaths, off));
+  const reset = el('button', { type: 'button', class: 'small' }, `Use plugin default for ${role}, ${level}`);
+  reset.addEventListener('click', () => resetLevel(role, level));
+  pRoles[role].reset[level] = reset;
+  box.append(reset);
+  if (off) box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder'));
+  return box;
+}
+
+function roleCard(role, rule, ignoredPaths) {
+  const details = el('details', { class: 'pcard' });
+  details.open = openRoles.has(role);
+  details.addEventListener('toggle', () => { if (details.open) openRoles.add(role); else openRoles.delete(role); });
+  const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
+  const reg = { role, details, sum: el('span', { class: 'psum' }), eff: el('dl'), recs: [], reset: {},
+    pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
+  pRoles[role] = reg;
+  details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
+  const grid = el('div', { class: 'pgrid' }, ['user', 'project'].map((level) => levelFieldset(role, level, rule, ignoredPaths)));
+  details.append(el('div', { class: 'pbody' }, grid, el('div', { class: 'peff' }, el('h3', {}, `In effect for ${role}`), reg.eff)));
+  return details;
+}
+
+const typedValue = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+// project, else user, else the plugin default; a typed value that fails its rule does not count yet.
+function personalityEffective(role, key) {
+  for (const level of ['project', 'user']) {
+    const v = getIn(draft[level], ['roles', role, 'personality', key]);
+    if (typedValue(v) !== undefined && !fieldProblem(key, v)) return [typedValue(v), level];
+  }
+  const plugin = state.personalities.roles?.[role]?.plugin;
+  return plugin && has(plugin, key) && typeof plugin[key] === 'string' ? [plugin[key], 'plugin'] : [undefined, 'plugin'];
+}
+const showValue = (key, v) => (P_TEXT.includes(key) ? v : capital(v));
+
+function syncPersonality() {
+  const rule = personalityRule();
+  for (const rec of pRecs) {
+    const c = rec.control;
+    const value = draftAt(rec);
+    const ignoredNow = ignoredUntouched(rec);
+    let want = value === undefined ? '' : String(value);
+    if (!rec.isText && ignoredNow) want = IGNORED_OPTION;
+    // A text control keeps what is typed while the draft only differs by spaces, so the caret is never moved.
+    if (c.value !== want && (!rec.isText || c.value.trim() !== want.trim())) c.value = want;
+    c.classList.toggle('set', want !== '' && want !== IGNORED_OPTION);
+    if (!ignoredNow && rec.ignoredOption && rec.ignoredOption.parentNode) rec.ignoredOption.remove();
+    if (rec.countEl) {
+      const n = [...c.value.trim()].length;
+      const text = `${n} of ${rule.max}`;
+      if (rec.countEl.textContent !== text) rec.countEl.textContent = text;
+      rec.countEl.classList.toggle('over', n > rule.max);
+    }
+    if (rec.error && !rec.sticky && !fieldProblem(rec.key, c.value)) setError(rec, '');
+    let hint = '';
+    if (ignoredNow) hint = rec.isText ? IGNORED_TEXT_HINT : IGNORED_LEVEL_HINT;
+    else if (!rec.isText && rule?.phrases) {
+      if (want === '') hint = NOT_SET_HINT;
+      else if (has(rule.phrases[rec.key], want)) hint = `The Role is told: ${rule.phrases[rec.key][want]}`;
+    }
+    if (rec.hintEl.textContent !== hint) rec.hintEl.textContent = hint;
+    rec.hintEl.hidden = hint === '';
+    rec.hintEl.classList.toggle('held', ignoredNow);
+    describe(rec);
+  }
+  for (const reg of Object.values(pRoles)) {
+    const eff = P_KEYS.map((key) => [key, ...personalityEffective(reg.role, key)]);
+    const parts = eff.filter(([, v]) => v !== undefined).map(([key, v]) => (P_TEXT.includes(key) ? v : `${P_LABELS[key]} ${v}`));
+    const sumText = parts.join(', ') || 'nothing set';
+    if (reg.sum.textContent !== sumText) reg.sum.textContent = sumText;
+    const signature = JSON.stringify(eff);
+    if (reg.eff.dataset.signature !== signature) {
+      reg.eff.dataset.signature = signature;
+      reg.eff.replaceChildren(...eff.flatMap(([key, v, source]) => [
+        el('dt', {}, P_LABELS[key]),
+        el('dd', {}, v === undefined ? '—' : showValue(key, v), v === undefined ? null : el('span', { class: 'src' }, `(${source})`))
+      ]));
+    }
+    const changed = reg.recs.some((rec) => typedValue(draftAt(rec)) !== getIn(state[rec.level], ['roles', rec.role, 'personality', rec.key])
+      || (touched.has(touchKey(rec)) && draftAt(rec) === undefined));
+    reg.pills.changed.hidden = !changed;
+    reg.pills.refused.hidden = !reg.recs.some((rec) => rec.refused);
+    reg.pills.ign.hidden = !(reg.recs.some((rec) => ignoredUntouched(rec)) || reg.objectIgnored);
+    for (const level of ['user', 'project']) {
+      const here = reg.recs.filter((rec) => rec.level === level);
+      reg.reset[level].disabled = (level === 'project' && !projectOn())
+        || !here.some((rec) => draftAt(rec) !== undefined || ignoredUntouched(rec));
+    }
+  }
+}
+
+function renderPersonality(panel, groups) {
+  pRecs = [];
+  pRoles = {};
+  const data = state.personalities;
+  if (data === null || typeof data !== 'object') return;
+  const rule = personalityRule();
+  const entries = Array.isArray(data.ignored) ? data.ignored.filter(isIgnoredEntry) : [];
+  const ignoredPaths = new Set(entries.map((e) => `${e.level}|${e.path}`));
+  panel.append(el('h2', {}, 'Personality'));
+  panel.append(el('p', { class: 'hint' }, PERSONALITY_HINT));
+  for (const [dept, roles] of groups) {
+    panel.append(el('p', { class: 'dept-label' }, dept));
+    for (const role of roles) {
+      panel.append(roleCard(role, rule, ignoredPaths));
+      pRoles[role].objectIgnored = entries.some((e) => e.path === `roles.${role}.personality`);
+    }
+  }
+  syncers.push(syncPersonality);
+}
+const isIgnoredEntry = (e) => e !== null && typeof e === 'object' && (e.level === 'user' || e.level === 'project')
+  && typeof e.path === 'string' && typeof e.reason === 'string';
+
+// Checks every typed value before a Save, so the errors match what a server refusal would show.
+function personalityProblems() {
+  const bad = [];
+  for (const rec of pRecs) {
+    if (rec.control.disabled) continue;
+    const message = fieldProblem(rec.key, draftAt(rec) ?? '');
+    if (!message) continue;
+    setError(rec, message);
+    rec.refused = true;
+    bad.push(rec);
+  }
+  return bad;
+}
+const REFUSED_PERSONALITY = /^(user|project) roles\.([a-z0-9-]+)\.personality\.([a-z_]+): /;
+// Maps server refusal lines to fields by their leading path. The text comes from the page, never from the line.
+function mapRefusals(lines) {
+  const rest = [];
+  const marked = [];
+  for (const line of lines) {
+    const m = REFUSED_PERSONALITY.exec(line);
+    const rec = m && pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]);
+    if (!rec) { rest.push(line); continue; }
+    const own = fieldProblem(rec.key, draftAt(rec) ?? '');
+    setError(rec, own || `Error: ${P_LABELS[rec.key]} was refused. ${rec.isText ? CHARSET_COPY : 'Choose one of the levels, or Not set.'}`);
+    rec.sticky = own === '';
+    rec.refused = true;
+    marked.push(rec);
+  }
+  return { rest, marked };
+}
+const refusalLine = (rec) => `${rec.role}, ${rec.level} level: ${rec.error.replace(/^Error: /, '')}`;
+function focusFirstRefused(marked) {
+  const first = [...marked].sort((a, b) => pRecs.indexOf(a) - pRecs.indexOf(b))[0];
+  if (!first) return;
+  openRole(first.role);
+  first.control.focus();
 }
 
 // ---------- Language & profile tab ----------
@@ -678,12 +1100,16 @@ function renderNotices() {
   const box = document.getElementById('notices');
   box.replaceChildren();
   if (!projectOn()) box.append(el('p', { class: 'notice info' }, 'No .company/ folder here, so the Project column is off. User settings still save.'));
-  const { warnings, ignored } = state.resolved;
+  const { warnings } = state.resolved;
+  const personal = (Array.isArray(state.personalities?.ignored) ? state.personalities.ignored : []).filter(isIgnoredEntry).map((e) => `${e.level} ${e.path}: ${e.reason}`);
+  const ignored = [...state.resolved.ignored, ...personal.filter((l) => !state.resolved.ignored.includes(l))];
   if (warnings.length) box.append(el('div', { class: 'notice warn' }, el('strong', {}, 'Warnings'), el('ul', {}, warnings.map((w) => el('li', {}, w)))));
   if (ignored.length) box.append(el('div', { class: 'notice warn' }, el('strong', {}, 'Ignored (stored, but not applied)'), el('ul', {}, ignored.map((w) => el('li', {}, w)))));
 }
 function render() {
   syncers = [];
+  pRecs = [];
+  pRoles = {};
   renderNotices();
   const renderers = { roles: renderRoles, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
   for (const [name, fn] of Object.entries(renderers)) {
@@ -697,7 +1123,9 @@ function render() {
 function refresh() {
   for (const s of syncers) s();
   const n = unsavedCount();
-  document.getElementById('count').textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`;
+  const count = document.getElementById('count');
+  count.textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`;
+  count.classList.toggle('dirty', n > 0);
   document.getElementById('save').disabled = n === 0;
 }
 function status(kind, title, lines = []) {
@@ -727,9 +1155,16 @@ async function api(path, body) {
 const unreachable = () => status('err', 'Can\'t reach the settings server. It stops after 30 minutes idle or when you press Done; run /aico:settings again.');
 
 async function save() {
+  const bad = personalityProblems();
+  if (bad.length) {
+    refresh();
+    status('err', 'Nothing was saved. Fix these and press Save again:', bad.map(refusalLine));
+    focusFirstRefused(bad);
+    return;
+  }
   const body = { revision: state.resolved.revision };
-  if (diffCount(draft.user, state.user)) body.user = draft.user;
-  if (projectOn() && diffCount(draft.project, state.project)) body.project = draft.project;
+  if (levelChanges('user')) body.user = outgoing('user');
+  if (projectOn() && levelChanges('project')) body.project = outgoing('project');
   const profile = changedProfile();
   if (profileOn() && Object.keys(profile).length) body.profile = profile;
   const language = changedLanguage();
@@ -752,12 +1187,15 @@ async function save() {
     status('err', 'Your view was stale: the settings changed somewhere else since this page loaded. The page now shows the current values, and your edits were not saved. Make them again and press Save.');
   } else {
     refresh();
-    status('err', 'Nothing was saved. Fix these and press Save again:', res.data.refused ?? [`the server answered ${res.status}`]);
+    const { rest, marked } = mapRefusals(res.data.refused ?? [`the server answered ${res.status}`]);
+    refresh();
+    status('err', 'Nothing was saved. Fix these and press Save again:', [...marked.map(refusalLine), ...rest]);
+    focusFirstRefused(marked);
   }
 }
 
 function clearLevel(level) {
-  if (activeTab === 'roles') delete draft[level].roles;
+  if (activeTab === 'roles') { delete draft[level].roles; touchIgnored(level); }
   else if (activeTab === 'pipeline') delete draft[level].pipeline;
   else if (activeTab === 'mods') delete draft[level].mods;
   else if (activeTab === 'scan') delete draft[level].skillspector;
