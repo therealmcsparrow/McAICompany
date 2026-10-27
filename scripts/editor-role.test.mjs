@@ -22,9 +22,9 @@ function lintFindings(handoff) {
   return blocking;
 }
 
-test('names.json has 34 entries and editor is named Edith', () => {
+test('names.json has 35 entries and editor is named Edith', () => {
   const names = JSON.parse(read('company/names.json'));
-  assert.equal(Object.keys(names).length, 34);
+  assert.equal(Object.keys(names).length, 35);
   assert.equal(names.editor, 'Edith');
   const lower = Object.values(names).map((n) => n.toLowerCase());
   assert.equal(new Set(lower).size, lower.length);

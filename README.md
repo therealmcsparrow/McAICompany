@@ -1,8 +1,8 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 34 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 35 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 34 Roles, and the concepts the company runs on.
+**New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 35 Roles, and the concepts the company runs on.
 
 ## Install
 **Before you start**
@@ -36,6 +36,7 @@ Details: [`documentation/getting-started.md`](documentation/getting-started.md).
 |---|---|
 | `/aico:lead <request>` | Front door. Picks the Roles and the route, then runs it |
 | `/aico:triage <request>` | Classifies a request by size, risk and type and recommends the shortest valid route before you commit to a Playbook |
+| `/aico:reprompt <prompt>` | Turns a rough prompt into a complete one. It never runs it; you choose Use it, Edit, Keep only or Stop |
 | `/aico:feature <desc>` | Brief → Plan (Core + Contracts) → build per Module → review, QA, security → Ship |
 | `/aico:fix <bug>` | QA reproduces → engineer fixes test-first → review → Ship |
 | `/aico:launch <product>` | Positioning, copy, release notes, privacy/terms → Ship |
@@ -100,7 +101,7 @@ flowchart TD
   Lead --> Content["Content & Growth"]
   Lead --> Support
   Lead --> Legal
-  Product --> PM["product-manager"] & AM["account-manager"]
+  Product --> PM["product-manager"] & AM["account-manager"] & RP["reprompter"]
   Eng --> Arch["architect (CTO)"]
   Arch --> SE["senior-engineer"] & BE["backend-engineer"] & FE["frontend-engineer"] & DE["desktop-engineer"] & AI["ai-data-engineer"] & GE["game-engineer"] & DO["devops"]
   Design --> UX["ui-ux-designer"] & BA["brand-artist"] & MA["motion-artist"] & GA["game-artist"] & PA["prompt-artist"]
@@ -115,7 +116,7 @@ flowchart TD
 ## Roles
 | Opus | Sonnet | Haiku |
 |---|---|---|
-| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, editor, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, skill-researcher, vuln-scanner | localizer, prompt-artist |
+| architect, senior-engineer, code-reviewer, security, pentester, product-manager, tech-researcher | account-manager, marketer, writer, editor, reprompter, support, legal, backend-, frontend-, desktop-, game-, ai-data-engineer, devops, ui-ux-designer, qa, brand-, motion-, game-artist, persona-, hands-on-, accessibility-tester, ux-researcher, market-researcher, design-researcher, skill-researcher, vuln-scanner | localizer, prompt-artist |
 
 Each Role has a person name (for example Ava for the architect), shown next to the Role in Handoffs, Gates and help. Change names, models and effort in `/aico:settings`.
 

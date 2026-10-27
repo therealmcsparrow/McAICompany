@@ -32,7 +32,7 @@ function manifest(over = {}) {
     v: 1,
     id: 'software',
     label: 'Software company',
-    roles: ['skill-researcher', 'qa'],
+    roles: ['skill-researcher', 'qa', 'reprompter'],
     playbooks: ['fix', 'audit'],
     ship: { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] },
     work: ['fix'],
@@ -41,11 +41,11 @@ function manifest(over = {}) {
   };
 }
 
-// A small plugin root: agents qa and skill-researcher, Playbooks fix, audit and report, a plain skill tdd.
+// A small plugin root: agents qa, skill-researcher and reprompter, Playbooks fix, audit and report, a plain skill tdd.
 function pluginRoot(types = { software: manifest() }) {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'agents'));
-  for (const a of ['qa', 'skill-researcher', 'editor']) fs.writeFileSync(path.join(root, 'agents', `${a}.md`), '---\nname: a\n---\n');
+  for (const a of ['qa', 'skill-researcher', 'reprompter', 'editor']) fs.writeFileSync(path.join(root, 'agents', `${a}.md`), '---\nname: a\n---\n');
   for (const [name, text] of Object.entries({ fix: PLAYBOOK_FM, audit: PLAYBOOK_FM, report: PLAYBOOK_FM, tdd: SKILL_FM })) {
     fs.mkdirSync(path.join(root, 'skills', name), { recursive: true });
     fs.writeFileSync(path.join(root, 'skills', name, 'SKILL.md'), text);
@@ -295,7 +295,7 @@ test('pick returns the first n candidates that are in the type, in the given ord
   assert.deepEqual(exec(['pick', 'qa', 'skill-researcher', '--max', '1'], cwd, root), { code: 0, out: 'qa' });
   assert.deepEqual(exec(['pick', '--max', '4', 'qa', '--json'], cwd, root), { code: 0, out: '["qa"]' });
   assert.deepEqual(exec(['pick', 'qa', 'skill-researcher', '--json', '--max', '2'], cwd, root), { code: 0, out: '["qa","skill-researcher"]' });
-  assert.deepEqual(exec(['pick', 'ghost', 'phantom'], cwd, root), { code: 2, out: 'refused: none of ghost, phantom is part of the software company; allowed: skill-researcher, qa' });
+  assert.deepEqual(exec(['pick', 'ghost', 'phantom'], cwd, root), { code: 2, out: 'refused: none of ghost, phantom is part of the software company; allowed: skill-researcher, qa, reprompter' });
   const real = exec(['pick', '--max', '2', 'architect', 'product-manager'], cwd);
   assert.deepEqual(real, { code: 0, out: 'architect\nproduct-manager' });
 });
@@ -357,6 +357,7 @@ test('manifest rules refuse with exit 3 and name the rule', () => {
     [manifest({ roles: ['skill-researcher', 'ghost'] }), 'roles'],
     [manifest({ roles: ['skill-researcher', '../agents/qa'] }), 'roles'],
     [manifest({ roles: ['qa'] }), 'roles must include skill-researcher'],
+    [manifest({ roles: ['skill-researcher', 'qa'] }), 'roles must include reprompter'],
     [manifest({ roles: 'qa' }), 'roles'],
     [manifest({ playbooks: [] }), 'playbooks'],
     [manifest({ playbooks: ['fix', 'fix'] }), 'playbooks'],
@@ -418,7 +419,7 @@ test('registry lookup never touches the file system with the project value', () 
 
 // Behaviour.
 
-test('software is the v0.12.0 company: 33 Roles, 16 Playbooks, 24 commands with ALWAYS', () => {
+test('software is every agent but the editor: 34 Roles, 16 Playbooks, 25 commands with ALWAYS', () => {
   const r = json(['resolve'], project(null));
   assert.equal(r.code, 0);
   const out = JSON.parse(r.out);
@@ -426,12 +427,12 @@ test('software is the v0.12.0 company: 33 Roles, 16 Playbooks, 24 commands with 
   assert.equal(out.id, 'software');
   assert.equal(out.source, 'default');
   assert.equal(out.label, 'Software company');
-  assert.equal(out.roles.length, 33);
+  assert.equal(out.roles.length, 34);
   assert.ok(!out.roles.includes('editor'));
   const agents = fs.readdirSync(path.join(REAL_ROOT, 'agents')).map(f => f.slice(0, -3));
   assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor').sort());
-  assert.equal(ALWAYS.length, 8);
-  assert.equal(out.playbooks.length, 24);
+  assert.equal(ALWAYS.length, 9);
+  assert.equal(out.playbooks.length, 25);
   assert.deepEqual(out.playbooks.slice(16), ALWAYS);
   assert.deepEqual(out.playbooks.slice(0, 16), ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan']);
   assert.deepEqual(out.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
@@ -471,21 +472,21 @@ test('check-playbook and check-role pass inside the type and refuse outside', ()
   assert.equal(exec(['check-role', 'qa'], cwd).code, 0);
   const root = pluginRoot();
   const no = exec(['check-playbook', 'report'], cwd, root);
-  assert.deepEqual(no, { code: 2, out: 'refused: report is not part of the software company; allowed: fix, audit, help, version, language, settings, setup, lead, triage, skillspector' });
-  assert.deepEqual(exec(['check-role', 'editor'], cwd, root), { code: 2, out: 'refused: editor is not part of the software company; allowed: skill-researcher, qa' });
+  assert.deepEqual(no, { code: 2, out: 'refused: report is not part of the software company; allowed: fix, audit, help, version, language, settings, setup, lead, triage, skillspector, reprompt' });
+  assert.deepEqual(exec(['check-role', 'editor'], cwd, root), { code: 2, out: 'refused: editor is not part of the software company; allowed: skill-researcher, qa, reprompter' });
 });
 
 test('roles prints one slug per line, and a JSON array with --json', () => {
-  assert.deepEqual(exec(['roles'], project(null), pluginRoot()), { code: 0, out: 'skill-researcher\nqa' });
-  assert.deepEqual(json(['roles'], project(null), pluginRoot()), { code: 0, out: '["skill-researcher","qa"]' });
+  assert.deepEqual(exec(['roles'], project(null), pluginRoot()), { code: 0, out: 'skill-researcher\nqa\nreprompter' });
+  assert.deepEqual(json(['roles'], project(null), pluginRoot()), { code: 0, out: '["skill-researcher","qa","reprompter"]' });
 });
 
 test('the default output is the type lines, and the check commands put an ok line first', () => {
   const ship = { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: ['legal', 'security'], checks: [] };
   const root = pluginRoot({ software: manifest({ ship, skill_search: { hints: ['alpha beta', 'gamma'] } }), research: manifest({ id: 'research', label: 'Research firm' }) });
   const rest = [
-    'roles: skill-researcher, qa',
-    'playbooks: fix, audit, help, version, language, settings, setup, lead, triage, skillspector',
+    'roles: skill-researcher, qa, reprompter',
+    'playbooks: fix, audit, help, version, language, settings, setup, lead, triage, skillspector, reprompt',
     'work: fix',
     'ship: release. Push, merge, release or deploy.',
     'ship lanes: legal, security',

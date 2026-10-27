@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');
 
 export const TYPE_ORDER = Object.freeze(['software', 'research', 'marketing', 'design']);
-export const ALWAYS = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector']);
+export const ALWAYS = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'reprompt']);
 export const CEO_ONLY = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest']);
 
 const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
@@ -115,6 +115,7 @@ function validateManifest(id, m, { agents, playbooks }) {
   if (typeof m.label !== 'string' || !LABEL_RE.test(m.label)) throw invalid(id, 'label');
   if (!uniqueList(m.roles, 1, 40, r => typeof r === 'string' && SLUG_RE.test(r) && agents.has(r))) throw invalid(id, 'roles');
   if (!m.roles.includes('skill-researcher')) throw invalid(id, 'roles must include skill-researcher');
+  if (!m.roles.includes('reprompter')) throw invalid(id, 'roles must include reprompter');
   if (!uniqueList(m.playbooks, 1, 40, p => typeof p === 'string' && SLUG_RE.test(p) && !ALWAYS.includes(p) && playbooks.has(p))) throw invalid(id, 'playbooks');
   if (!uniqueList(m.work, 1, 3, w => typeof w === 'string' && m.playbooks.includes(w))) throw invalid(id, 'work');
   if (!isPlain(m.ship)) throw invalid(id, 'ship');

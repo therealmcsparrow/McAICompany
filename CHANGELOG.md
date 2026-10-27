@@ -4,6 +4,16 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-27
+
+A prompt-writing Role: the reprompter.
+
+### Added
+- **reprompter (Lynn) and `/aico:reprompt <prompt>`.** A new Role that turns a rough prompt into a complete one: goal, context, inputs, constraints, output format and a done-check. She asks at most 3 questions when a gap would change the result, then states her assumptions. She never runs the prompt; you choose Use it, Edit, Keep only or Stop. Your text is treated as content to rewrite, not as orders. The files stay in `.company/work/<slug>/` on your machine and are never committed or pushed. The prompt is AI-written; check it before you use it.
+- **Write gate.** The reprompter may write only `prompt.md` and its own Handoff in the run folder. After each reply the checker compares your git settings and config folders and tells you which files changed; the command needs the aico hooks module.
+- **Question rounds setting.** `reprompt.question_rounds` (0 to 3, default 1) on the Pipeline tab of `/aico:settings`; 0 means no questions. Contract aico-settings v1.4.
+- **Reprompt is startable by the Lead.** `reprompt` is always on in every company type, and the reprompter is the 35th Role, in every type. The Lead starts `/aico:reprompt` with your text as its argument and falls back to showing you the command. Contracts: reprompt v1, company-type v1.2, role-names v1.2, dispatch-prompt v3.3.
+
 ## [0.13.1] - 2026-10-27
 
 Playbooks can start the next Playbook for you.

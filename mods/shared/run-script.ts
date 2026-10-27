@@ -12,9 +12,10 @@ export const TIMEOUT_MS = {
   depthPre: 5000,
   depthGate: 10000,
   retro: 10000,
+  arm: 5000,
 } as const
 
-export type ScriptName = 'settings' | 'run-state' | 'ledger' | 'reflect' | 'lessons' | 'review-depth'
+export type ScriptName = 'settings' | 'run-state' | 'ledger' | 'reflect' | 'lessons' | 'review-depth' | 'reprompt-check'
 export type ScriptResult<T> = { ok: true; value: T } | { ok: false; reason: string }
 type Guard<T> = (value: unknown) => T | undefined
 

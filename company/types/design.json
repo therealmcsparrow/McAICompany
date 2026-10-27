@@ -20,7 +20,8 @@
     "security",
     "writer",
     "legal",
-    "skill-researcher"
+    "skill-researcher",
+    "reprompter"
   ],
   "playbooks": [
     "design",

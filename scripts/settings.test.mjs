@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -277,7 +277,7 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
   assert.equal(Object.keys(data.roles).length, fs.readdirSync(path.join(import.meta.dirname, '..', 'agents')).filter((f) => f.endsWith('.md')).length);
   assert.equal(data.roles.architect.name, 'Ava');
 });
@@ -1192,4 +1192,75 @@ test('personality: writeLayer round-trips valid personality and writes nothing o
   const before = fs.readFileSync(s.config, 'utf8');
   assert.throws(() => writeLayer('user', { version: 1, roles: { qa: { personality: { temperament: 'calm', topic: 'a\nb' } } } }, s.ctx), Refusal);
   assert.equal(fs.readFileSync(s.config, 'utf8'), before);
+});
+
+// ---------- reprompt.question_rounds (aico-settings v1.4) ----------
+const RP_MSG = 'reprompt.question_rounds must be a whole number from 0 to 3';
+const roundsOf = (s) => resolveSettings(s.ctx).reprompt.question_rounds;
+
+test('hostile reprompt.question_rounds values are refused with the Contract text and no echo', () => {
+  const hostile = [-1, 4, 1.5, NaN, Infinity, '1', '', null, true, [1], { a: 1 }, 1e21, '__proto__', 'x'.repeat(10240)];
+  for (const bad of hostile) {
+    assert.deepEqual(validateLayer({ version: 1, reprompt: { question_rounds: bad } }, roleSet), [RP_MSG], String(bad).slice(0, 12));
+  }
+  for (const ok of [0, 1, 2, 3]) assert.deepEqual(validateLayer({ version: 1, reprompt: { question_rounds: ok } }, roleSet), []);
+});
+
+test('reprompt refuses unknown keys and wrong shapes', () => {
+  assert.deepEqual(validateLayer({ version: 1, reprompt: { rounds: 1 } }, roleSet), ['reprompt.rounds: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, reprompt: JSON.parse('{"__proto__":{"question_rounds":3}}') }, roleSet), ['reprompt.__proto__: unknown key']);
+  for (const bad of ['1', [], null, 1]) assert.deepEqual(validateLayer({ version: 1, reprompt: bad }, roleSet), ['reprompt: must be an object']);
+});
+
+test('REPROMPT_DEFAULTS is 1 and a fresh install resolves it through get and get <key>', (t) => {
+  assert.deepEqual(plain(REPROMPT_DEFAULTS), { question_rounds: 1 });
+  const s = sandbox(t);
+  assert.deepEqual(plain(pluginDefaults(s.pluginRoot).reprompt), { question_rounds: 1 });
+  assert.deepEqual(plain(resolveSettings(s.ctx).reprompt), { question_rounds: 1 });
+  assert.deepEqual(JSON.parse(s.cli('get').out).reprompt, { question_rounds: 1 });
+  assert.equal(s.cli('get', 'reprompt.question_rounds').out, '1\n');
+});
+
+test('reprompt.question_rounds resolves project, else user, else default, and 0 counts as set', (t) => {
+  const s = sandbox(t);
+  s.user({ reprompt: { question_rounds: 3 } });
+  assert.equal(roundsOf(s), 3);
+  s.project({ reprompt: { question_rounds: 0 } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.reprompt.question_rounds, 0);
+  assert.deepEqual(r.ignored, [], 'not a lock: a project value counts without an unlock');
+  assert.equal(s.cli('get', 'reprompt.question_rounds').out, '0\n');
+});
+
+test('a broken project layer does not change reprompt.question_rounds from a valid project value', (t) => {
+  const s = sandbox(t);
+  s.user({ unlocked: ['ship'] });
+  s.project({ reprompt: { question_rounds: 2 }, gates: { ship: 'nope' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.reprompt.question_rounds, 2);
+  assert.ok(r.warnings.length > 0);
+});
+
+test('a bad reprompt.question_rounds falls back to the level below, ending at 1, with a warning', (t) => {
+  const s = sandbox(t);
+  s.user({ reprompt: { question_rounds: 2 } });
+  s.project({ reprompt: { question_rounds: 9 } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.reprompt.question_rounds, 2, 'the project value is dropped, the user value stays');
+  assert.equal(r.warnings.filter((w) => w.includes(RP_MSG)).length, 1);
+  s.user({ reprompt: { question_rounds: '2' } });
+  s.project({ reprompt: { question_rounds: 'many' } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.reprompt.question_rounds, 1);
+  assert.equal(r.warnings.filter((w) => w.includes(RP_MSG)).length, 2);
+  assert.ok(!r.warnings.join('|').includes('many'), 'a refused value is never echoed');
+});
+
+test('writeLayer refuses a bad reprompt.question_rounds and writes nothing; a good one round-trips', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, reprompt: { question_rounds: 4 } }, s.ctx), (e) => e instanceof Refusal && e.message === RP_MSG);
+  assert.ok(!fs.existsSync(s.config));
+  writeLayer('user', { version: 1, reprompt: { question_rounds: 3 } }, s.ctx);
+  assert.equal(roundsOf(s), 3);
+  assert.equal(s.cli('get', 'reprompt.question_rounds').out, '3\n');
 });

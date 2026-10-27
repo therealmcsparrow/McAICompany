@@ -162,7 +162,7 @@ const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(tex
 // Every Playbook: a skill whose frontmatter has an argument-hint line.
 const PLAYBOOK_SKILLS = fs.readdirSync(path.join(root, 'skills'))
   .filter(n => exists(`skills/${n}/SKILL.md`) && frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint']).sort();
-const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector'];
+const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'reprompt'];
 const TYPES = ['software', 'research', 'marketing', 'design'];
 const manifest = id => json(`company/types/${id}.json`);
 
@@ -198,7 +198,7 @@ async function staticCheckWith(rel, mutate) {
 // ----- personalities ------------------------------------------------------------------------
 
 test('AC1 a Role with no personality set gets its shipped default, for every Role, in a cooler turn', () => {
-  assert.equal(AGENTS.length, 34);
+  assert.equal(AGENTS.length, 35);
   assert.deepEqual(Object.keys(DEFAULTS).sort(), AGENTS);
   const sb = sandbox();
   const { result, text } = stage(sb, AGENTS);
@@ -286,7 +286,7 @@ test('AC4 the settings every other prompt is built from are identical whatever t
   const strip = out => out.replace(/"revision":"[0-9a-f]{64}"/, '"revision":"R"');
   const base = sb.run('settings.mjs', ['get']);
   assert.equal(base.code, 0, base.err);
-  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 34);
+  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 35);
   const variants = [
     () => sb.user({ roles: { architect: { personality: { temperament: 'loud and brave', talk: 'big words', topic: 'ZQXtopicZQX', intelligence: 'low', creativity: 'high' } } } }),
     () => { fs.rmSync(sb.userFile); sb.project({ roles: { qa: { personality: { intelligence: 'high', creativity: 'low' } }, writer: { personality: { topic: 'tea' } } } }); },
@@ -702,26 +702,26 @@ test('AC7 a profile without read permission is refused as unreadable', { skip: (
   }
 });
 
-test('AC8 the software manifest has the v0.12.0 Roles, Playbooks and ship meaning', () => {
+test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the reprompter and ship meaning', () => {
   const m = manifest('software');
   const expectedPlaybooks = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
   assert.deepEqual([...m.playbooks].sort(), expectedPlaybooks);
   assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
-  assert.equal(m.roles.length, 33);
+  assert.equal(m.roles.length, 34);
   assert.deepEqual(m.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
   const t = sb.typeJson(['resolve']);
-  assert.equal(t.playbooks.length, 24);
+  assert.equal(t.playbooks.length, 25);
   assert.deepEqual([...t.playbooks].sort(), [...expectedPlaybooks, ...ALWAYS].sort());
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
     const baseAgents = git('ls-tree', '--name-only', BASE, 'agents/').split('\n').filter(Boolean).map(f => path.basename(f, '.md')).sort();
-    assert.deepEqual([...m.roles].sort(), baseAgents);
+    assert.deepEqual([...m.roles].sort(), [...baseAgents, 'reprompter'].sort());
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();
-    assert.deepEqual([...t.playbooks].sort(), basePlaybooks);
+    assert.deepEqual([...t.playbooks].filter(n => n !== 'reprompt').sort(), basePlaybooks);
   }
 });
 

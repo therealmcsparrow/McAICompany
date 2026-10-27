@@ -16,7 +16,8 @@
     "accessibility-tester",
     "legal",
     "editor",
-    "skill-researcher"
+    "skill-researcher",
+    "reprompter"
   ],
   "playbooks": [
     "campaign",

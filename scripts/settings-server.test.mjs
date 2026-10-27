@@ -372,6 +372,46 @@ test('page has the cap, film-script and debate rows built from the existing cont
   assert.ok(!html.includes('type="range"') && !/<script[^>]*\ssrc=/i.test(html));
 });
 
+test('state carries reprompt defaults; save round-trips question_rounds, refuses bad values and writes nothing', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.deepEqual(before.plugin.reprompt, { question_rounds: 1 });
+  assert.deepEqual(before.resolved.reprompt, { question_rounds: 1 });
+  for (const bad of [4, -1, 1.5, '2']) {
+    const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, reprompt: { question_rounds: bad } } });
+    assert.equal(res.status, 400);
+    const { refused } = await res.json();
+    assert.ok(refused.some((r) => r.includes('reprompt.question_rounds must be a whole number from 0 to 3')), refused.join(' | '));
+  }
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, reprompt: { question_rounds: 0 } }, project: { version: 1, reprompt: { question_rounds: 3 } } });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  assert.deepEqual(after.resolved.reprompt, { question_rounds: 3 });
+});
+
+test('page has a Reprompt table with a Question rounds row, 0 to 3, hint tied to the field', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ["'Reprompt'", "'Question rounds'", "['reprompt', 'question_rounds']", 'selectFor([0, 1, 2, 3], l)', "describedBy: 'reprompt-hint'", "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
+    assert.ok(html.includes(needle), needle);
+  }
+});
+
+test('Reprompt hint equals the Contract text byte for byte and sits between the context-cap hint and Brainstorm', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = /the hint "(How often \/aico:reprompt[^"]*)"/.exec(contract);
+  assert.ok(m, 'Contract hint not found');
+  const hintCall = `el('p', { class: 'hint', id: 'reprompt-hint' }, '${m[1]}')`;
+  assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
+  const cap = html.indexOf('The context cap is a whole number from 60000 to 1000000.');
+  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  const hint = html.indexOf(hintCall);
+  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  assert.ok(cap > 0 && cap < h2 && h2 < hint && hint < brainstorm, `order ${cap} ${h2} ${hint} ${brainstorm}`);
+});
+
 test('page has a Review format row built like the Dispatch row, with the Contract sentence', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   for (const needle of ["'Review format'", "['pipeline', 'review_format']", "['plain', 'pilot']",

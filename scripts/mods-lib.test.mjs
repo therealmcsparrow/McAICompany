@@ -16,6 +16,9 @@ import {
 } from '../mods/lib/cache-clock.mjs';
 import { MODS_DEFAULTS as SETTINGS_DEFAULTS } from './settings.mjs';
 import { progressRows } from '../mods/lib/bars.mjs';
+import {
+  SPAWN_SCAN, cleanPath, isWindowsRoot, isReprompter, parseOutputLine, checkSpawn, allowsTool, remember, refusalReason, refusalToast, guardArmed, ARM_TTL_MS, runEnded, armLive
+} from '../mods/lib/reprompt-gate.mjs';
 
 // ---- guard.mjs: hostile input first
 
@@ -1152,4 +1155,290 @@ test('progressRows: a hostile view gives question marks or plain zero counts', (
   for (const view of ['x', 5, [], { state: 'running', gates: {}, steps: 1 }, { state: 'bogus', gates: [], steps: [] }]) {
     assert.deepEqual(progressRows(view, 39), ['Gates ?', 'Steps ?']);
   }
+});
+
+// ---- reprompt-gate.mjs: hostile input first
+
+const GATE_ROOT = '/work/proj';
+const WIN_ROOT = 'C:\\Users\\me\\proj';
+const GATE_PLUGIN = '/plug/aico';
+const GATE_SLUG = 'reprompt-20260101-0930';
+const gateRec = (root = GATE_ROOT) => ({ slug: GATE_SLUG, nn: '01', root });
+const RUN = `${GATE_ROOT}/.company/work/${GATE_SLUG}`;
+const wr = (path) => allowsTool('Write', { file_path: path, content: 'x' }, gateRec(), GATE_PLUGIN);
+const rd = (path, root = GATE_ROOT, plugin = GATE_PLUGIN) => allowsTool('Read', { file_path: path }, gateRec(root), plugin);
+const spawn = (over = {}) => ({
+  prompt: `Name: Lynn\nOutput: .company/work/${GATE_SLUG}/01-reprompter.md\nGoal: x\n`,
+  ...over
+});
+
+test('cleanPath accepts absolute POSIX and drive paths and folds separators', () => {
+  assert.equal(cleanPath('/a/b/c.md', false), '/a/b/c.md');
+  assert.equal(cleanPath('C:\\a\\b.md', true), 'c:/a/b.md');
+  assert.equal(cleanPath('C:/a/B.md', false), 'C:/a/B.md');
+});
+
+test('cleanPath refuses everything that is not a plain absolute path', () => {
+  const bad = [
+    '', 'relative/x.md', './x.md', '../x.md', '/a/../b', '/a/./b', '/a//b', '//a/b', '\\\\srv\\share\\x', '/a/b/', '/', 'C:', 'C:/', 'C:x/y',
+    '/a/prompt.md:x', '/a/prompt.md::$DATA', 'C:/a/b:c', '/a/b.', '/a/b ', '/a/b./c', '/a /c', '/a/b\u0000.md', '/a/b\n.md', '/a/\u007fb',
+    '/a/\u0085b', 'D:\\a\\..\\b', '/a/b\\..\\c', '/a\\.\\b'
+  ];
+  for (const p of bad) assert.equal(cleanPath(p, false), null, JSON.stringify(p));
+  for (const v of [undefined, null, 5, {}, ['/a/b'], true]) assert.equal(cleanPath(v, false), null);
+});
+
+test('cleanPath bounds the input at 4096 characters', () => {
+  const edge = '/' + 'a'.repeat(4095);
+  assert.equal(cleanPath(edge, false), edge);
+  assert.equal(cleanPath(edge + 'a', false), null);
+  const t0 = Date.now();
+  assert.equal(cleanPath('/' + 'a/'.repeat(5_000_000), false), null);
+  assert.ok(Date.now() - t0 < 500);
+});
+
+test('cleanPath folds only ASCII letters when case is ignored', () => {
+  assert.equal(cleanPath('C:/Work/PROMPT.md', true), 'c:/work/prompt.md');
+  assert.notEqual(cleanPath('c:/wor\u212A/x', true), cleanPath('c:/work/x', true));
+  assert.notEqual(cleanPath('c:/\u0130/x', true), cleanPath('c:/i/x', true));
+});
+
+test('isWindowsRoot reads a drive letter', () => {
+  assert.equal(isWindowsRoot('C:\\x'), true);
+  assert.equal(isWindowsRoot('c:/x'), true);
+  assert.equal(isWindowsRoot('/x'), false);
+  assert.equal(isWindowsRoot(undefined), false);
+});
+
+test('isReprompter matches the bare and the plugin-qualified name only', () => {
+  for (const t of ['reprompter', 'aico:reprompter']) assert.equal(isReprompter(t), true);
+  for (const t of ['Reprompter', 'x:reprompter', 'reprompter ', ' reprompter', 'reprompter\n', 'aico:reprompter2', 'aico:aico:reprompter', 'editor', '', undefined, 5, null]) {
+    assert.equal(isReprompter(t), false, String(t));
+  }
+});
+
+test('parseOutputLine takes exactly one well-formed Output line', () => {
+  assert.deepEqual(parseOutputLine(spawn().prompt), { slug: GATE_SLUG, nn: '01' });
+  assert.deepEqual(parseOutputLine('Output: .company/work/reprompt-20260101-0930-9/123-reprompter.md'), { slug: 'reprompt-20260101-0930-9', nn: '123' });
+});
+
+test('parseOutputLine refuses every near miss', () => {
+  const good = `Output: .company/work/${GATE_SLUG}/01-reprompter.md`;
+  const bad = [
+    '', 'x', good + '\r\n', good + ' ', ' ' + good, good + '\nOutput: .company/work/reprompt-20260101-0930/02-reprompter.md', good + '\nOutput: x',
+    `Output: .company/work/${GATE_SLUG}/1-reprompter.md`, `Output: .company/work/${GATE_SLUG}/1234-reprompter.md`,
+    `Output: .company/work/${GATE_SLUG}/01-reprompter.md.evil`, `Output: .company/work/${GATE_SLUG}/../x/01-reprompter.md`,
+    `Output: /.company/work/${GATE_SLUG}/01-reprompter.md`, `Output: .company/work/reprompt-20260101-0930-1/01-reprompter.md`,
+    `Output: .company/work/reprompt-20260101-0930-10/01-reprompter.md`, `Output: .company/work/reprompt-2026010-0930/01-reprompter.md`,
+    `Output: .company/work/other/01-reprompter.md`, `Output: .company/work/${GATE_SLUG}/01-editor.md`, `Output:.company/work/${GATE_SLUG}/01-reprompter.md`,
+    `Output:  .company/work/${GATE_SLUG}/01-reprompter.md`, `Output: .company/work/${GATE_SLUG}\\01-reprompter.md`
+  ];
+  for (const p of bad) assert.equal(parseOutputLine(p), null, JSON.stringify(p));
+  for (const v of [undefined, null, 5, {}]) assert.equal(parseOutputLine(v), null);
+});
+
+test('parseOutputLine ignores a line cut by the 64 KiB scan window', () => {
+  const line = `Output: .company/work/${GATE_SLUG}/01-reprompter.md`;
+  // the line ends exactly at the window edge and goes on: not a complete line
+  const pad = 'y'.repeat(SPAWN_SCAN - line.length - 1) + '\n';
+  assert.equal(pad.length + line.length, SPAWN_SCAN);
+  assert.equal(parseOutputLine(pad + line + '.evil\n'), null);
+  // complete only when its line break is inside the window as well; otherwise refused
+  assert.equal(parseOutputLine(pad + line + '\n'), null);
+  const inside = 'y'.repeat(SPAWN_SCAN - line.length - 2) + '\n';
+  assert.deepEqual(parseOutputLine(inside + line + '\n'), { slug: GATE_SLUG, nn: '01' });
+  // a second Output line past the window is not seen: the first 64 KiB decide
+  assert.deepEqual(parseOutputLine(inside + line + '\n' + 'z\n'.repeat(40000) + 'Output: bad\n'), { slug: GATE_SLUG, nn: '01' });
+});
+
+test('parseOutputLine stays linear on a 10 MiB prompt', () => {
+  const t0 = Date.now();
+  assert.equal(parseOutputLine('Output: ' + 'a'.repeat(10 * 1024 * 1024)), null);
+  assert.ok(Date.now() - t0 < 500);
+});
+
+test('checkSpawn passes a plain dispatch, with no cwd or the session root', () => {
+  assert.deepEqual(checkSpawn(spawn(), GATE_ROOT), { slug: GATE_SLUG, nn: '01' });
+  assert.deepEqual(checkSpawn(spawn({ cwd: GATE_ROOT, fork: false }), GATE_ROOT), { slug: GATE_SLUG, nn: '01' });
+  assert.deepEqual(checkSpawn(spawn({ cwd: 'c:/users/me/PROJ' }), WIN_ROOT), { slug: GATE_SLUG, nn: '01' });
+});
+
+test('checkSpawn refuses a fork, a teammate, a workflow agent, a resume, a foreign cwd and a bad root', () => {
+  const refused = [
+    spawn({ fork: true }), spawn({ isTeammate: true }), spawn({ workflow: { runId: 'wf_1', agentIndex: 1 } }), spawn({ resume: { agentId: 'a' } }),
+    spawn({ cwd: '/elsewhere' }), spawn({ cwd: '' }), spawn({ cwd: null }), spawn({ cwd: GATE_ROOT + '/sub' }), spawn({ cwd: '/work/PROJ' }),
+    spawn({ cwd: GATE_ROOT + '/' }), spawn({ cwd: '/work/proj/..' }), spawn({ prompt: 'Goal: no output line' })
+  ];
+  for (const e of refused) assert.equal(checkSpawn(e, GATE_ROOT), null, JSON.stringify(e));
+  assert.equal(checkSpawn(spawn(), '/'), null);
+  assert.equal(checkSpawn(spawn(), 'relative'), null);
+  assert.equal(checkSpawn(spawn(), undefined), null);
+  assert.equal(checkSpawn(null, GATE_ROOT), null);
+});
+
+test('Write is allowed only on prompt.md and this dispatch Handoff in the run folder', () => {
+  assert.equal(wr(`${RUN}/prompt.md`), true);
+  assert.equal(wr(`${RUN}/01-reprompter.md`), true);
+  const refused = [
+    `${RUN}/02-reprompter.md`, `${RUN}/1-reprompter.md`, `${RUN}/001-reprompter.md`, `${RUN}/request.md`, `${RUN}/.gate-01`, `${RUN}/.tree.json`, `${RUN}/.gitignore`,
+    `${RUN}/prompt.md:x`, `${RUN}/prompt.md.`, `${RUN}/prompt.md `, `${RUN}/Prompt.md`, `${RUN}/sub/prompt.md`, `${RUN}/../prompt.md`, `${RUN}/./prompt.md`,
+    `${RUN}//prompt.md`, `${RUN}/prompt.md\u0000`, `${RUN}/prompt.md/`, RUN, `${GATE_ROOT}/.company/work/reprompt-20260101-0931/prompt.md`,
+    `${GATE_ROOT}/prompt.md`, `${GATE_ROOT}/node_modules/x.js`, `${GATE_ROOT}/.claude/settings.json`, '/root/.bashrc', '~/.bashrc', 'prompt.md', '', 'x'.repeat(5000)
+  ];
+  for (const p of refused) assert.equal(wr(p), false, JSON.stringify(p));
+  for (const v of [undefined, null, 5, {}, [`${RUN}/prompt.md`]]) assert.equal(wr(v), false);
+});
+
+test('Write ignores keys that are not an own file_path and refuses a bad input shape', () => {
+  assert.equal(allowsTool('Write', { path: `${RUN}/prompt.md` }, gateRec(), GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', {}, gateRec(), GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', Object.create({ file_path: `${RUN}/prompt.md` }), gateRec(), GATE_PLUGIN), false);
+  for (const v of [null, undefined, 'x', 5, []]) assert.equal(allowsTool('Write', v, gateRec(), GATE_PLUGIN), false);
+});
+
+test('Read is allowed on project.md, PROFILE.md, the run folder files and the handoff skill', () => {
+  const ok = [
+    `${GATE_ROOT}/.company/project.md`, `${GATE_PLUGIN}/company/PROFILE.md`, `${RUN}/request.md`, `${RUN}/answers-1.md`, `${RUN}/answers-12.md`, `${RUN}/edit-3.md`,
+    `${RUN}/prompt.md`, `${RUN}/01-reprompter.md`, `${RUN}/02-reprompter.md`, `${RUN}/123-reprompter.md`, `${GATE_PLUGIN}/skills/handoff/SKILL.md`,
+    `${GATE_PLUGIN}/skills/handoff/ref/deep/x.md`
+  ];
+  for (const p of ok) assert.equal(rd(p), true, p);
+});
+
+test('Read refuses secrets, other runs, the gate marker and every near miss', () => {
+  const refused = [
+    `${GATE_ROOT}/.env`, `${GATE_ROOT}/.company/work/other/request.md`, `${GATE_ROOT}/.company/work/reprompt-20260101-0931/request.md`, `${RUN}/.gate-01`,
+    `${RUN}/.tree.json`, `${RUN}/run-state.jsonl`, `${RUN}/answers-.md`, `${RUN}/answers-x.md`, `${RUN}/edit-1.md.`, `${RUN}/request.md:x`, `${RUN}/Request.md`,
+    `${RUN}/1-reprompter.md`, `${RUN}/1234-reprompter.md`, `${RUN}/sub/request.md`, `${RUN}/../request.md`, `${GATE_ROOT}/.company/project.md.`, `${GATE_ROOT}/.company/Project.md`,
+    `${GATE_PLUGIN}/company/profile.md`, `${GATE_PLUGIN}/company/PROFILE.md.`, `${GATE_PLUGIN}/company/personalities.json`, `${GATE_PLUGIN}/skills/handoff`,
+    `${GATE_PLUGIN}/skills/handoff/`, `${GATE_PLUGIN}/skills/handoffx/SKILL.md`, `${GATE_PLUGIN}/skills/handoff/../writing/SKILL.md`, `${GATE_PLUGIN}/skills/writing/SKILL.md`,
+    `${GATE_PLUGIN}/scripts/reprompt-check.mjs`, '/home/me/.ssh/id_rsa', '/etc/passwd', 'C:/Users/me/.claude.json', ''
+  ];
+  for (const p of refused) assert.equal(rd(p), false, JSON.stringify(p));
+});
+
+test('Read of the plugin files needs a usable plugin root', () => {
+  for (const plugin of [undefined, '', 'relative', '/plug/../aico', '/']) {
+    assert.equal(allowsTool('Read', { file_path: `${GATE_PLUGIN}/company/PROFILE.md` }, gateRec(), plugin), false, String(plugin));
+  }
+  assert.equal(allowsTool('Read', { file_path: `${RUN}/request.md` }, gateRec(), undefined), true);
+});
+
+test('On Windows the path match ignores ASCII case and reads backslashes', () => {
+  const run = 'C:\\Users\\me\\proj\\.company\\work\\' + GATE_SLUG;
+  const rec = gateRec(WIN_ROOT);
+  const plugin = 'C:\\Users\\me\\.claude\\plugins\\aico';
+  assert.equal(allowsTool('Write', { file_path: run + '\\PROMPT.MD' }, rec, plugin), true);
+  assert.equal(allowsTool('Write', { file_path: 'c:/users/ME/proj/.company/work/' + GATE_SLUG + '/01-Reprompter.md' }, rec, plugin), true);
+  assert.equal(allowsTool('Read', { file_path: 'C:/Users/me/.claude/plugins/aico/company/profile.MD' }, rec, plugin), true);
+  assert.equal(allowsTool('Read', { file_path: 'C:/Users/me/proj/.COMPANY/Project.md' }, rec, plugin), true);
+  assert.equal(allowsTool('Write', { file_path: run + '\\prompt.md::$DATA' }, rec, plugin), false);
+  assert.equal(allowsTool('Write', { file_path: run + '\\prompt.md.' }, rec, plugin), false);
+  assert.equal(allowsTool('Write', { file_path: run + '\\prompt.md ' }, rec, plugin), false);
+  assert.equal(allowsTool('Write', { file_path: run.replace('work', 'wor\u212A') + '\\prompt.md' }, rec, plugin), false);
+  assert.equal(allowsTool('Write', { file_path: 'D:\\Users\\me\\proj\\.company\\work\\' + GATE_SLUG + '\\prompt.md' }, rec, plugin), false);
+  assert.equal(allowsTool('Write', { file_path: '\\\\srv\\share\\prompt.md' }, rec, plugin), false);
+  assert.equal(allowsTool('Write', { file_path: '/c/Users/me/proj/.company/work/' + GATE_SLUG + '/prompt.md' }, rec, plugin), false);
+});
+
+test('On POSIX the path match is case sensitive', () => {
+  assert.equal(wr(`${GATE_ROOT}/.company/work/${GATE_SLUG}/PROMPT.md`), false);
+  assert.equal(wr(`/WORK/proj/.company/work/${GATE_SLUG}/prompt.md`), false);
+});
+
+test('Skill is allowed only as exactly aico:handoff', () => {
+  const sk = (input) => allowsTool('Skill', input, gateRec(), GATE_PLUGIN);
+  assert.equal(sk({ skill: 'aico:handoff' }), true);
+  assert.equal(sk({ skill: 'aico:handoff', args: 'x' }), true);
+  for (const s of ['aico:writing', 'handoff', 'AICO:handoff', 'aico:handoff ', ' aico:handoff', 'aico:handoff\n', 'aico:handoff2', 'aico:reprompt', 'plugin-authoring', '', undefined, 5, null, ['aico:handoff']]) {
+    assert.equal(sk({ skill: s }), false, JSON.stringify(s));
+  }
+  assert.equal(sk({}), false);
+  assert.equal(sk(Object.create({ skill: 'aico:handoff' })), false);
+  assert.equal(sk(null), false);
+});
+
+test('Every other tool is refused, MCP and look-alike names included', () => {
+  const args = { file_path: `${RUN}/prompt.md`, command: 'ls', skill: 'aico:handoff', path: RUN, notebook_path: `${RUN}/prompt.md` };
+  const names = [
+    'Edit', 'MultiEdit', 'NotebookEdit', 'Bash', 'PowerShell', 'Glob', 'Grep', 'LS', 'WebFetch', 'WebSearch', 'Task', 'Agent', 'TodoWrite', 'SendMessage', 'Workflow',
+    'mcp__srv__write', 'mcp__srv__Read', 'write', 'read', 'skill', 'Write ', ' Write', 'Write\n', 'Writer', 'Reader', 'Skills', 'WRITE', '', undefined, null, 5, {}
+  ];
+  for (const n of names) assert.equal(allowsTool(n, args, gateRec(), GATE_PLUGIN), false, String(n));
+});
+
+test('allowsTool fails closed on a record or root it cannot use', () => {
+  const input = { file_path: `${RUN}/prompt.md` };
+  assert.equal(allowsTool('Write', input, undefined, GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', input, null, GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', input, { slug: GATE_SLUG, nn: '01', root: '/' }, GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', input, { slug: GATE_SLUG, nn: '01', root: 'rel' }, GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', input, { slug: '../x', nn: '01', root: GATE_ROOT }, GATE_PLUGIN), false);
+  assert.equal(allowsTool('Write', input, { slug: GATE_SLUG, nn: '../1', root: GATE_ROOT }, GATE_PLUGIN), false);
+});
+
+test('allowsTool answers a boolean for any input', () => {
+  for (const v of [wr(`${RUN}/prompt.md`), wr('/etc/passwd'), allowsTool(undefined, undefined, undefined, undefined)]) assert.equal(typeof v, 'boolean');
+});
+
+test('remember keeps at most max records and drops the oldest', () => {
+  const m = new Map();
+  for (let i = 0; i < 5; i++) remember(m, `a${i}`, { i }, 3);
+  assert.deepEqual([...m.keys()], ['a2', 'a3', 'a4']);
+  remember(m, 'a3', { i: 9 }, 3);
+  assert.deepEqual([...m.keys()], ['a2', 'a4', 'a3']);
+  assert.deepEqual(m.get('a3'), { i: 9 });
+});
+
+test('refusalReason and refusalToast clean the tool name and the path', () => {
+  assert.equal(refusalReason('Edit'), 'aico reprompt gate: Edit refused; the reprompter may write only prompt.md and its Handoff in its run folder');
+  assert.ok(!/[\u0000-\u001f]/.test(refusalReason('Ba\u001b[2Jsh\nx')));
+  assert.ok(refusalReason('x'.repeat(5000)).length < 200);
+  assert.equal(refusalToast('Write', { file_path: '/etc/passwd' }), 'aico: reprompter Write refused: /etc/passwd');
+  const long = refusalToast('Write', { file_path: '/a\u001b[31m\n' + 'b'.repeat(500) });
+  assert.ok(!/[\u0000-\u001f]/.test(long));
+  assert.ok(long.length <= 'aico: reprompter Write refused: '.length + 80);
+  assert.equal(refusalToast('Bash', { command: 'rm -rf /' }), 'aico: reprompter Bash refused: ');
+  assert.equal(refusalToast('Bash', null), 'aico: reprompter Bash refused: ');
+  assert.equal(refusalToast(undefined, undefined), 'aico: reprompter ? refused: ');
+});
+
+test('guardArmed accepts only the armed number that was asked for', () => {
+  const g = guardArmed('07');
+  assert.equal(g({ armed: '07' }), '07');
+  for (const v of [{ armed: '08' }, { armed: 7 }, { armed: '07', extra: 1 }, {}, null, undefined, 'armed', [], { armed: ['07'] }, { refused: 'x' }]) {
+    assert.equal(g(v), undefined, JSON.stringify(v));
+  }
+  assert.equal(g(Object.create({ armed: '07' })), undefined);
+});
+
+// ---- reprompt-gate.mjs: armed-run rules
+
+test('ARM_TTL_MS is thirty minutes', () => {
+  assert.equal(ARM_TTL_MS, 1_800_000);
+});
+
+test('runEnded needs one line that parses to an object with ev "end"', () => {
+  assert.equal(runEnded('{"ev":"start"}\n{"ev":"end","outcome":"ship"}\n'), true);
+  assert.equal(runEnded('{"ev":"end"}'), true);
+  assert.equal(runEnded('not json\n{"ev":"end"}\n{bad'), true);
+  for (const v of ['', '{"ev":"start"}\n', '{"ev":"ended"}', '{"ev":"END"}', '[{"ev":"end"}]', '"end"', 'null', '{"x":{"ev":"end"}}', '{"ev":"end"', undefined, null, 5, {}]) {
+    assert.equal(runEnded(v), false, JSON.stringify(v));
+  }
+});
+
+test('runEnded ignores an inherited ev', () => {
+  assert.equal(runEnded('{"__proto__":{"ev":"end"}}'), false);
+});
+
+test('armLive holds inside the window and drops on age, marker or end', () => {
+  const entry = { at: 1000 };
+  const live = { markerFile: true, ended: false };
+  assert.equal(armLive(entry, 1000, live), true);
+  assert.equal(armLive(entry, 1000 + ARM_TTL_MS, live), true);
+  assert.equal(armLive(entry, 1000 + ARM_TTL_MS + 1, live), false);
+  assert.equal(armLive(entry, 999, live), false);
+  assert.equal(armLive(entry, 2000, { markerFile: false, ended: false }), false);
+  assert.equal(armLive(entry, 2000, { markerFile: true, ended: true }), false);
+  assert.equal(armLive(entry, 2000, { ended: false }), false);
 });

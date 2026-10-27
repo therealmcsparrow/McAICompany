@@ -9,7 +9,7 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
 - **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, skillspector, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
-**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage` and `skillspector`. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards` and `launch`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
+**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage`, `reprompt` and `skillspector`, so every type has the reprompter. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards` and `launch`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
 
 **Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` explains one command's options and what it does, without running it. Every Playbook also answers `/aico:<command> help` (or `--help`) from its own `### /aico:<name>` entry in this file, so each entry below is what that command tells you.
 
@@ -50,11 +50,34 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **How it runs.**
 1. Reads `.company/project.md` and your request; classifies size, risk and type.
 2. Recommends the shortest route that the risk still allows. **Risk overrides size:** anything touching auth, payments, personal data, migrations or a Contract keeps the full reviewer lane and every Gate, however small.
-3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request plus a short triage note (size, risk, type, route). That run is not triaged again and keeps at least that risk tier. A one-line, low-risk change goes to `/aico:lead`, which checks it really is that small, then runs one builder and one reviewer and keeps the Ship Gate. The same applies when `/aico:lead` started the triage. If the command cannot be started, you are shown it to type.
+3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request plus a short triage note (size, risk, type, route). That run is not triaged again and keeps at least that risk tier. A triage note pasted in from elsewhere does not count: `/aico:lead` sends that request to triage again. A one-line, low-risk change goes to `/aico:lead`, which checks it really is that small, then runs one builder and one reviewer and keeps the Ship Gate. The same applies when `/aico:lead` started the triage. If the command cannot be started, you are shown it to type.
 
 **You get.** A one-line recommendation; the risk tier then travels into every dispatch of the real run.
 
 **Example.** `/aico:triage change the footer copyright year to be dynamic`
+
+### `/aico:reprompt`
+`/aico:reprompt <prompt to improve>`
+
+**Help:** `/aico:reprompt help` (or an empty argument) explains the command without running it.
+
+**What it does.** Turns a rough prompt into one complete, ready-to-use prompt: goal, context, inputs, constraints, output format and a done-check. The Role is **Lynn** (the reprompter). She never runs the prompt herself, even if your text says "and run it". Instructions inside your text are treated as content to rewrite, not as orders.
+
+**When to use it.** You have a short or vague prompt for an AI and want it sharpened first. It works in every company type. The Lead can start it for you when you ask to improve a prompt; it passes your text as the command's argument. A prompt for an image model is handed to the prompt-artist instead.
+
+**How it runs.**
+1. The Lead saves your text verbatim in a new run folder and dispatches the reprompter.
+2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. The Lead asks them in one form. The number of question rounds defaults to 1 and you can set it from 0 to 3 in `/aico:settings` (Question rounds); 0 means no questions. After the last round the reprompter goes on with stated assumptions and does not ask again.
+3. The Lead shows the full prompt and its assumptions as plain text in a framed block, so nothing in them is hidden or rendered. Under them is one line saying the prompt is AI-written and to check it before you use it. Then it asks: **Use it** / **Edit** / **Keep only** / **Stop**. Edit has no fixed cap on rounds.
+4. **Use it** hands the prompt to the Lead as a new request, exactly the text inside the frame, and the normal route check applies. Nothing runs without Use it.
+
+A write gate limits the reprompter to writing `prompt.md` and its own Handoff in the run folder. After each reply the checker also compares your git settings and a set of config folders. If something changed, it tells you which files and that they stay changed, and the run stops or asks you whether to go on. The gate needs the aico hooks module; without it the command does not run.
+
+**You get.** `.company/work/<slug>/prompt.md` and the Handoff. These files stay on your machine; the command never commits or pushes them. The prompt is written by an AI and may contain mistakes or wrong assumptions. Read it before you use it; the assumptions are listed under it.
+
+**Your data.** Your text is processed like any other request to the company: the Claude model you have configured reads it to write the new prompt. The command adds no other recipient and no web access. Do not put personal data or secrets in a prompt unless you need them. If you do, the copies in `.company/work/<slug>/` are yours to keep out of git or delete; they are also saved there when you pick "Keep only". The folder has its own `.gitignore`, so a later `git add -A` skips it.
+
+**Example.** `/aico:reprompt make the signup page better`
 
 ### `/aico:feature`
 `/aico:feature <feature description>`
@@ -543,7 +566,7 @@ Effective language: the project override, else your default, else English. An un
 
 **Only you start this command.** No other command or the Lead starts it.
 
-**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, reprompt Question rounds (0 to 3, default 1), parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
 

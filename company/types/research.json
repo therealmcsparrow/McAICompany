@@ -12,7 +12,8 @@
     "legal",
     "localizer",
     "editor",
-    "skill-researcher"
+    "skill-researcher",
+    "reprompter"
   ],
   "playbooks": [
     "research",

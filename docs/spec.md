@@ -21,6 +21,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Role | file | Name | model | effort | tools |
 |---|---|---|---|---|---|
 | Product Manager | product-manager | Nora | opus | medium | read-only + Write |
+| Reprompter | reprompter | Lynn | sonnet | medium | Read, Skill, Write |
 | Account Manager | account-manager | Carmen | sonnet | low | read-only + Write |
 | Architect | architect | Ava | opus | high | read-only + Write |
 | Legal/Compliance | legal | Leila | sonnet | medium | read-only + Write |
