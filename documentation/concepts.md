@@ -36,7 +36,7 @@ Reading the line:
 - With a token baseline, a `30% target` segment compares spend per AC with that baseline and reads `met`, `missed` or `not reconciled`. `met` also needs fix rounds and high blockers no higher than the baseline's.
 - Older ledger files still work. They count as untimed and appear under `excluded`.
 
-The scorecard only reports. It never blocks a Step or a Gate. It stores times, counts and tier, never prompts, replies or names, and the ledger stays in the repository. It is committed with the run only when the product tracks `.company/`, otherwise it stays local, and aico sends it nowhere. The numbers are a baseline to measure changes against; aico makes no speed or cost claim from them yet.
+The scorecard only reports. It never blocks a Step or a Gate. It stores times, counts and tier, never prompts, replies or names, and the ledger stays in the repository. It is committed with the run only when the product tracks `.company/`, otherwise it stays local. It leaves your machine only when a branch that holds it is pushed. The numbers are a baseline to measure changes against; aico makes no speed or cost claim from them yet.
 
 The savings come from reading less: shorter prompts, fewer file reads, fewer dispatches, a digest in place of a full transcript. Brainstorm Roles also keep one constant prompt for the whole run, with changing content in a per-round input file. aico claims no saving percentage for this yet. Prompts keep one fixed order so they stay readable and testable.
 
