@@ -470,7 +470,7 @@ function minusLines(a, b) {
   for (const l of b) left.set(l, (left.get(l) || 0) + 1);
   return a.filter(l => (left.get(l) || 0) > 0 ? (left.set(l, left.get(l) - 1), false) : true);
 }
-// Lines the CEO-approved un-hide changed in a software Playbook besides the shared ones, by Playbook. Each is the exact old line
+// Lines the ADR 0026 hand-over changed in a software Playbook besides the shared ones, by Playbook. Each is the exact old line
 // (removed) or a pattern for the new line (added); nothing else may differ.
 const HAND_OVER_CHANGES = {
   incident: {
@@ -488,7 +488,7 @@ const HAND_OVER_CHANGES = {
   },
   refactor: {
     removed: ['Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise run `aico:audit` steps 1–2 first.'],
-    added: [/^Run with `aico:pipeline`\. No Brief Gate: the audit report is the brief\. Start from an existing audit report if there is one; otherwise start `aico:audit` with the Skill tool, .*`\/aico:audit "<scope>"` and stop\.$/],
+    added: [/^Run with `aico:pipeline`\. No Brief Gate: the audit report is the brief\. Start from an existing audit report if there is one; otherwise ask the CEO in a form: \*\*Run audit first \(Recommended\)\*\* \/ \*\*Skip audit\*\*\. Only on the first choice start `aico:audit` with the Skill tool, .*`\/aico:audit "<scope>"` and stop\.$/],
   },
   'usability-test': {
     removed: ['5. **Present** the report. S1 findings (Blocking) are fixed before Ship; the CEO picks which S2/S3 to fix in a form (`multiSelect`). The fixes then run as a new `aico:feature` or `aico:fix` run, which the CEO starts.'],
@@ -556,7 +556,7 @@ test('AC7 the incident Playbook keeps its mitigation and report Ship Gates and e
   for (const d of ['early warning (24 h)', 'notification (72 h)', 'GDPR breach notice to the authority (72 h)', '14 days', '1 month']) assert.ok(text.includes(d), d);
 });
 
-test('AC7 with no company_type line every Playbook is the v0.12.0 one', { skip: skipNoBase }, () => {
+test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates', { skip: skipNoBase }, () => {
   for (const sb of [sandbox(), sandbox({ projectMd: '# Project\nproduct_type: web\n' })]) {
     const t = sb.typeJson(['resolve']);
     assert.deepEqual([t.id, t.source], ['software', 'default']);

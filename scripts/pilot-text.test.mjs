@@ -22,11 +22,11 @@ const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
 // Byte budget: pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
 const PRE = {
   'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 1899,
-  // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (CEO decision, playbook-chain-handoff).
+  // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
   'skills/standards/SKILL.md': 1680, 'agents/code-reviewer.md': 1950, 'agents/senior-engineer.md': 2365,
 };
 // Extra bytes a load may carry over the PRE sum. The handoff skill grew 110 B (Starting a Step item 5: Roles never start a Playbook,
-// playbook-chain-handoff): code-reviewer is 14 B over its PRE sum, senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
+// ADR 0026): code-reviewer is 14 B over its PRE sum, senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
 const LOAD_EXTRA = { 'agents/senior-engineer.md': 132, 'agents/code-reviewer.md': 14 };
 const LOAD = {
   'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
