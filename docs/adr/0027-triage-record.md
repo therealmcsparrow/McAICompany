@@ -1,0 +1,5 @@
+# 0027: The Lead trusts a direct-route triage line only through a plugin-written record
+
+Status: proposed (task triage-hardening, Plan Gate)
+
+A triage line in a request is low-entropy text that anyone can copy or forge, and "this session approved this request" was a model comparison, so the Lead now skips triage only when `run-state.mjs triage check` finds a record that triage's Approve branch wrote for the SHA-256 of that exact request, under a nonce that only the main session's own `triage issue` output holds, used once and live for 30 minutes (`run-state` v1.2, `company-type` v1.3). We extend `run-state.mjs` instead of adding a script because it already has the lstat, append and size-limit code, and only the direct route is recorded because no other Playbook skips anything for a triage line. Hard to reverse: the triage line's trust now depends on the folder `.company/triage/` and the nonce rule, and a later move to a hook-held secret would change both.

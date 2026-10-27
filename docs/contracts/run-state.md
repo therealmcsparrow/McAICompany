@@ -1,8 +1,9 @@
-# Contract: run-state v1.1
+# Contract: run-state v1.2
 
-Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only.
+Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2).
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0024-reprompt-playbook-owns-the-flow.md`): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric), and it bounds the view's `round` to what the mods accept. Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
+v1.2 is additive (task triage-hardening; rationale `docs/adr/0027-triage-record.md`): it adds the triage record ("Triage record"), the commands `triage issue` and `triage check <nonce>`, and the folder `.company/triage/`. Run files, records, the run view, `show` and `active` are unchanged; `active` never reads `.company/triage/`.
 
 ## Storage
 - `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`.
@@ -33,6 +34,8 @@ v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; ration
 | `end <slug> <ship\|abort>` | appends `end`, closing the segment. Refused without an open segment. |
 | `show <slug> --json` | prints the run view (below), exit 0 even for a missing or damaged file |
 | `active --json` | prints `{ "slug": <slug or null>, "view": <run view or null> }` for the active run, exit 0 |
+| `triage issue` | (v1.2) reads and deletes `request.txt`, appends an `issue` record, prints `{"nonce":"<32 hex>","type":"<type>"}` (Triage record) |
+| `triage check <nonce>` | (v1.2) reads and deletes `request.txt`, prints `{"trusted":true,"type":"<type>"}` and appends `used`, or `{"trusted":false,"reason":"<reason>"}`; exit 0 both (Triage record) |
 
 Writes are append with `O_APPEND`; the script checks the size limit before writing.
 
@@ -61,9 +64,42 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - A run resumed with "resume <slug>" after an `end` runs `start <slug>` again.
 - The Lead never edits the file by hand; a refused command is reported in the next Gate summary and the run goes on (run-state never blocks a Step or a Gate).
 - (v1.1) The pipeline never writes `pick`; only `aico:reprompt` does (`reprompt` v1, Lead flow step 7).
+- (v1.2) The pipeline never runs `triage`; only `aico:triage` (`issue`) and `aico:lead` (`check`) do (`company-type` v1.3 "Triage line").
+
+## Triage record (v1.2)
+The proof that the CEO approved a direct route at triage's Brief Gate for one exact request, in this session. Plugin-written; the Lead trusts a direct-route triage line only through `triage check` (`company-type` v1.3 trust rule).
+
+**Folder `.company/triage/`**, never committed. Every `triage` call first checks that `.company` and `.company/triage` are plain folders (lstat; a link → refused `triage folder is a link`), makes the folder when missing, and writes `.gitignore` = exactly `*` and LF when it is missing or differs. It is not a run folder: no slug, no Handoffs, and `active` and the `aico:pipeline` Setup never read it. The reprompt checker's watch set covers it as part of `.company/`; no `triage` command runs during a reprompt run (one Playbook at a time).
+
+**`request.txt`**: written only by the main session (triage's Approve branch, or `aico:lead`) with the Write tool, never by a Role and never through a shell: the exact text the Playbook passes or received as its argument, the request followed by one space and the triage line. Every `triage` call reads it (lstat, plain file, at most 64 KiB, valid UTF-8) and then deletes it, on success, refusal or `trusted:false` alike; CEO text sits on disk only between that Write and that call. Missing or unreadable → `issue` refused `no request`; `check` → `trusted:false`, reason `no request`.
+
+**Key `h`** = SHA-256 (lowercase hex) of the UTF-8 bytes of the request text after exactly this normalization: CRLF → LF, then leading and trailing spaces, tabs and LFs removed. Nothing else changes; no Unicode normalization (the exact request is the key).
+
+**Triage line** at the end of the normalized text, ASCII, byte-exact: `/ \(triage: XS, risk low, (feature|bug|refactor|launch|audit|incident|upkeep|content|research), route direct\)$/`. Only the direct route is recorded: every other route is started by triage itself and no Playbook but `aico:lead` checks a line. No match → `issue` refused `no direct triage line`; `check` → `trusted:false`, reason `no triage line`.
+
+**Nonce**: 16 bytes from `crypto.randomBytes`, printed by `issue` as 32 lowercase hex characters, never written to disk. The file holds only `k` = SHA-256 of the 32-character nonce string. The main session keeps the nonce in its own context; it is never put in a file, Handoff, dispatch, hand-over argument or command shown to the CEO.
+
+**`records.jsonl`**: append-only (`O_APPEND`, `O_NOFOLLOW`), LF, one JSON object per line; a line ≤ 256 bytes, the file ≤ 64 KiB and at most 1000 lines; lstat, a link → refused. Allow-list, unknown keys refused, bad lines skipped:
+| Key | Value |
+|---|---|
+| `v` | `1` |
+| `at` | as in Record, written by the script |
+| `ev` | `issue \| used` |
+| `h` | `issue` only: 64 lowercase hex |
+| `k` | 64 lowercase hex |
+No request text, no route or tier, no names: hashes, an event and a time only.
+
+**Expiry**: an `issue` is live for 30 minutes (`TRIAGE_TTL_MS` = 1 800 000) from its `at`; `now − at` below 0 or above the TTL → expired. Before it appends, every `triage` call drops each line older than the TTL (and each `used` whose `issue` is gone) by writing the rest to a temporary file in the folder and renaming it over `records.jsonl` (GDPR Art. 5(1)(e)). Still at a limit after that → `issue` refused `triage record full`.
+
+**`triage issue`** (no arguments; any argument → refused with the usage): read and delete `request.txt`, match the line, append `{"v":1,"at":…,"ev":"issue","h":…,"k":…}`, print `{"nonce":"<32 hex>","type":"<type>"}`, exit 0.
+
+**`triage check <nonce>`**: `<nonce>` must match `^[0-9a-f]{32}$` (else refused `bad nonce`; nothing read or deleted). Read and delete `request.txt`. The first rule that holds gives `{"trusted":false,"reason":…}`, in this order: `no request`; `no triage line`; `no record` (no live or expired `issue` with this `k`); `used` (a `used` line with this `k`); `expired`; `request changed` (`h` differs). Else append `{"v":1,"at":…,"ev":"used","k":…}` and print `{"trusted":true,"type":"<type>"}`. A record is used once: a second check of the same nonce gets `used`. Exit 0 for both results; the Lead treats anything but exit 0 with `"trusted":true` as untrusted.
+
+**What cannot forge it.** Text (a request, a reprompt body, a hand-over argument, a pasted line, a file, a web page) mints no record: only `issue` writes one, and only the main session's triage Approve branch runs it. A real line copied onto another request fails `h`. Replaying the exact approved request fails `used` once the Lead consumed it, and `expired` after 30 minutes. A record written by a Role or by hand carries a nonce the main session never got from its own `issue` output, and the Lead takes a nonce from nowhere else; triage dispatches no Role, so no Role runs between `issue` and `check`. Residual: a process running as the CEO's user can do anything the script does; the nonce rule is a model rule (`company-type` v1.3).
 
 ## Error cases
 - Missing file → `state: none`, empty `gates` and `picks`, `steps` still listed.
 - Bad line (invalid JSON, unknown key, over 256 bytes, CR byte) → skipped, `warnings: ["line <n> skipped"]`.
 - File over 64 KiB or a symlink → `state: none`, `warnings: ["run-state unreadable"]`; writes refused.
 - Bad `<slug>`, unknown gate, result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3 → `refused`, nothing written.
+- (v1.2) `triage`: a link in the path, `records.jsonl` unreadable or over 64 KiB after pruning, a bad nonce, or any other error → `refused: <reason>`, exit 2, nothing appended. `request.txt` is still deleted once read. A refused `issue` means no direct route (`company-type` v1.3); a refused `check` means untrusted. The rest of run-state is unaffected.
