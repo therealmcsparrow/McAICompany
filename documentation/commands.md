@@ -50,7 +50,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **How it runs.**
 1. Reads `.company/project.md` and your request; classifies size, risk and type.
 2. Recommends the shortest route that the risk still allows. **Risk overrides size:** anything touching auth, payments, personal data, migrations or a Contract keeps the full reviewer lane and every Gate, however small.
-3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request (when `/aico:lead` started the triage, it simply continues with the route). If the command cannot be started, you are shown it to type.
+3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request plus a short triage note (size, risk, type, route). That run is not triaged again and keeps at least that risk tier. A one-line, low-risk change goes to `/aico:lead`, which checks it really is that small, then runs one builder and one reviewer and keeps the Ship Gate. The same applies when `/aico:lead` started the triage. If the command cannot be started, you are shown it to type.
 
 **You get.** A one-line recommendation; the risk tier then travels into every dispatch of the real run.
 
@@ -100,7 +100,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **When to use it.** The code works but is hard to change — tangled Modules, leaky boundaries, missing Contracts. Not for adding behavior (use `/aico:feature`) or fixing bugs (use `/aico:fix`).
 
 **How it runs.**
-0. With no audit report to start from, `/aico:audit` runs first as its own run, and `refactor` continues with that report as the brief. If `/aico:audit` cannot be started this way, you are shown the command to type.
+0. With no audit report to start from, you are asked **Run audit first (Recommended)** or **Skip audit**. Run audit first: `refactor` tells you to run `/aico:refactor "<scope>"` again once the audit report is written, then starts `/aico:audit` as its own run and ends. The second `refactor` run starts from that report. Skip audit: it stops and asks you to bring an audit report. If `/aico:audit` cannot be started, you are shown both commands to type.
 1. **Architect** defines the target Core, Module map, Contracts and the slices (each slice moves one Module out). The **Senior Engineer** maps the ruleset and the Architect signs off if Must rules changed. **→ Plan Gate.**
 2. Per slice, in order: **QA** writes characterization tests of current behavior (they must pass first) → the owning **engineer** moves the code behind the Contract with no behavior change → **Code Reviewer** ∥ **QA** ∥ **Senior Engineer** confirm the same tests still pass. **→ Ship Gate** (per slice).
 
