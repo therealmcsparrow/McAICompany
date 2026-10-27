@@ -147,6 +147,7 @@ test('AC24 depth comes from review-depth and is never lowered', () => {
 
 test('AC26 feedback reads ledger report for the last 3 runs, spend and cache read apart', () => {
   has(read('skills/feedback/SKILL.md'), 'ledger.mjs', 'report', 'last 3 runs', '**spend**', '**cache read**', 'Never add them');
+  has(read('skills/feedback/SKILL.md'), 'ledger.mjs" scorecard <run>', '## Speed', 'never stops the run');
 });
 
 test('kept rules: reviewer never edits, Must never softened, old rules still present', () => {

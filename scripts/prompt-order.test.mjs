@@ -95,12 +95,14 @@ test('review depth is computed per dispatch from the diff, for the code-reviewer
 
 test('each Step is linted, then recorded in the ledger from the notification integers only', () => {
   has(pipeline, 'handoff-lint.mjs', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
-  has(pipeline, 'ledger.mjs" add <slug> step <NN> <role> <agentId> <ctx_end>', '<subagent_tokens>', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
+  has(pipeline, 'ledger.mjs" add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
   has(pipeline, /integers only/i);
 });
 
 test('the ledger is reconciled and the cost line built before the Ship Gate, shown at Ship only', () => {
-  has(pipeline, 'ledger.mjs" reconcile <slug>', 'ledger.mjs" ship <slug>', 'ledger.mjs" report <slug>');
+  has(pipeline, 'ledger.mjs" reconcile <slug>', 'ledger.mjs" ship <slug> <acs> <fix_rounds> <high_blockers>', 'ledger.mjs" report <slug> --acs <acs>');
+  assert.ok(pipeline.indexOf('ledger.mjs" report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
+  has(pipeline, 'After the Ship Gate is approved', 'scorecard line', '00-summary.md', 'never stops the run');
   has(pipeline, 'spend', 'cache read', 'per shipped AC', 'context at end (not cost)', 'at the Ship Gate only');
 });
 
