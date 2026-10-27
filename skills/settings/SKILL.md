@@ -7,7 +7,7 @@ argument-hint: "[help]"
 
 # Settings
 
-**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `settings` and stop.
+**Help:** argument is exactly `help` or `--help` → read the `### /aico:settings` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 The settings page is a small local server, `${CLAUDE_PLUGIN_ROOT}/scripts/settings.mjs`. It owns all validation and all file changes. Never edit `config.json`, `settings.json` or `.company/project.md` yourself. Run it from the product repo (the current directory).
 

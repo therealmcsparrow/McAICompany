@@ -56,7 +56,7 @@ function sandbox({ projectMd = null } = {}) {
 const AGENTS = fs.readdirSync(path.join(root, 'agents')).filter(f => f.endsWith('.md')).map(f => f.slice(0, -3)).sort();
 const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? '').split('\n').map(l => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
 const PLAYBOOKS = fs.readdirSync(path.join(root, 'skills'))
-  .filter(n => exists(`skills/${n}/SKILL.md`) && frontmatter(read(`skills/${n}/SKILL.md`))['disable-model-invocation'] === 'true').sort();
+  .filter(n => exists(`skills/${n}/SKILL.md`) && Boolean(frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint'])).sort();
 const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector'];
 const TYPES = ['software', 'research', 'marketing', 'design'];
 const manifest = id => json(`company/types/${id}.json`);
@@ -604,7 +604,7 @@ test('company-type: the manifests and the always-on commands cover every Playboo
   assert.equal(t.playbooks.length, 24);
   assert.deepEqual(t.playbooks.slice(-8), ALWAYS);
   // A Playbook that no manifest lists is an error for the static check.
-  const orphan = checkWith('skills/zz-orphan/SKILL.md', () => '---\nname: zz-orphan\ndescription: Use when testing the orphan rule.\ndisable-model-invocation: true\n---\n# Orphan\n');
+  const orphan = checkWith('skills/zz-orphan/SKILL.md', () => '---\nname: zz-orphan\ndescription: Use when testing the orphan rule.\nargument-hint: (no arguments)\n---\n# Orphan\n');
   assert.ok(orphan.some(e => e.includes('zz-orphan')), String(orphan));
 });
 

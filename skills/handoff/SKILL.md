@@ -14,6 +14,7 @@ Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the 
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`; the Lead re-dispatches. Never guess the context. Exception: a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`.
+5. Never start an aico Playbook with the Skill tool; name the Playbook you need under `## Next` for the Lead.
 
 ## Context budget: the `Context cap:` line
 

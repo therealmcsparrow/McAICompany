@@ -13,8 +13,10 @@ const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');
 
 export const TYPE_ORDER = Object.freeze(['software', 'research', 'marketing', 'design']);
 export const ALWAYS = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector']);
+export const CEO_ONLY = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest']);
 
 const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+const HINT_LINE_RE = /^argument-hint:[ 	]*\S/;
 const SLUG_RE = /^[a-z][a-z0-9-]{0,63}$/;
 const LABEL_RE = /^[A-Za-z0-9 -]{1,40}$/;
 const HINT_RE = /^[a-z0-9][a-z0-9 -]{0,59}$/;
@@ -83,7 +85,7 @@ function playbookNames(pluginRoot) {
     const lines = file.text.split('\n').map(l => l.replace(/\r$/, ''));
     if (lines[0] !== '---') continue;
     const end = lines.indexOf('---', 1);
-    if (end > 0 && lines.slice(1, end).includes('disable-model-invocation: true')) out.add(name);
+    if (end > 0 && lines.slice(1, end).some(l => HINT_LINE_RE.test(l))) out.add(name);
   }
   return out;
 }

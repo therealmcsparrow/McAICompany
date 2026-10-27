@@ -81,7 +81,8 @@ test('SKILL.md: frontmatter, size, Help and Type lines', () => {
   assert.equal(lines[0], '---');
   assert.ok(lines.length <= 126, `${lines.length} lines`);
   assert.match(skill, /^name: design$/m);
-  assert.match(skill, /^disable-model-invocation: true$/m);
+  assert.match(skill, /^argument-hint:[ \t]*\S/m);
+  assert.doesNotMatch(skill, /^disable-model-invocation:/m);
   const desc = skill.match(/^description: (.*)$/m)[1];
   assert.ok(desc.length > 0 && desc.length <= 1024);
   const i = lines.findIndex((l) => l.startsWith('**Help:**'));

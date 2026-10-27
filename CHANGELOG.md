@@ -4,6 +4,17 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-27
+
+Playbooks can start the next Playbook for you.
+
+### Changed
+- **Playbook hand-offs.** 21 Playbooks are visible to the model, so a finished Playbook can start the next one through the Skill tool and falls back to telling you the command (brainstorm, research, lead, triage). The 7 CEO-only commands stay hidden: help, version, language, settings, setup, skillspector, pentest. A shared guard sentence opens every Playbook description, and Roles never start a Playbook. ADR 0026, contract company-type v1.1.
+- **Triage** always starts exactly one Playbook and never lowers the risk tier. **Refactor** asks before the audit, then ends. **Incident** hands /aico:fix to you. Every Playbook answers help from documentation/commands.md.
+
+### Known risk
+- The guard is text only. Injected text could start fix or standards (a local branch and commits); with a Ship Gate you unlocked, an unasked run could push and open a PR. A hard guard hook was declined and is recorded as Debt.
+
 ## [0.13.0] - 2026-10-27
 
 Company types, personalities, a new editor Role and a redesigned settings page.

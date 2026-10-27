@@ -30,7 +30,7 @@ test('manifest links: every Role and Playbook exists, none from ALWAYS', () => {
   for (const r of manifest.roles) assert.ok(fs.existsSync(path.join(root, 'agents', `${r}.md`)), r);
   for (const p of manifest.playbooks) {
     assert.ok(!ALWAYS.includes(p), p);
-    assert.match(read(`skills/${p}/SKILL.md`), /^disable-model-invocation: true$/m, p);
+    assert.match(read(`skills/${p}/SKILL.md`), /^argument-hint:[ \t]*\S/m, p);
   }
   assert.ok(manifest.roles.includes('skill-researcher'));
   assert.ok(manifest.ship.meaning.length <= 240 && !/[`<>]/.test(manifest.ship.meaning));
@@ -47,11 +47,12 @@ test('report Playbook: frontmatter, Help line, Type line, size', () => {
   assert.equal(lines[0], '---');
   assert.ok(lines.length <= 126);
   assert.match(playbook, /^name: report$/m);
-  assert.match(playbook, /^disable-model-invocation: true$/m);
+  assert.match(playbook, /^argument-hint:[ \t]*\S/m);
+  assert.doesNotMatch(playbook, /^disable-model-invocation:/m);
   const desc = playbook.match(/^description: (.+)$/m)[1];
   assert.ok(desc.length <= 1024);
   const i = lines.findIndex((l) => l.startsWith('**Help:**'));
-  assert.equal(lines[i], '**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `report` and stop.');
+  assert.equal(lines[i], "**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:report` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
   assert.equal(lines[i + 1], '');
   assert.equal(lines[i + 2], '**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook report` first; exit not 0 → show its output line and stop.');
   assert.ok(!playbook.includes('\r'));

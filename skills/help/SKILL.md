@@ -1,6 +1,6 @@
 ---
 name: help
-description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does. Also what `/aico:<command> help` runs.
+description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does.
 disable-model-invocation: true
 argument-hint: [command]
 ---

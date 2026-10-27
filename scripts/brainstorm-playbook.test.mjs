@@ -26,8 +26,8 @@ const section = (text, from, to) => {
 };
 
 // ---- every rule of the 0.10.0 Playbook still holds ----
-test('AC14 help: the argument help or --help follows aico:help and stops', () => {
-  has(skill, 'argument is exactly `help` or `--help` → follow `aico:help` for `brainstorm` and stop');
+test('AC14 help: the argument help or --help is answered from commands.md and stops', () => {
+  has(skill, 'argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:brainstorm` entry of `documentation/commands.md`', 'change nothing, start nothing, and stop');
 });
 
 test('AC14 Roles think, nobody builds, and every Role is read-only', () => {
@@ -69,8 +69,8 @@ test('AC14 the close form offers the four options and the set-aside form', () =>
 });
 
 test('AC14 close choices: built, research and set aside behave as before', () => {
-  has(skill, '`status: built`', 'follow the first Playbook of the `work:` type line (`feature` for software) in place', "the product-manager's brief starts from its Summary", 'All its Gates apply');
-  has(skill, 'keep `status: open`', 'Follow `aico:research` in place', '`/aico:brainstorm "<path>"` reopens the idea later');
+  has(skill, '`status: built`', 'start the first Playbook of the `work:` type line (`feature` for software) with the Skill tool', "the product-manager's brief starts from its Summary", 'all its Gates apply');
+  has(skill, 'keep `status: open`', 'Start `aico:research` with the Skill tool', '`/aico:brainstorm "<path>"` reopens the idea later');
   has(skill, '`status: roadmap | nice-to-have | parked`', '`.company/roadmap/`, `.company/nice-to-have/` or `.company/parked/`');
 });
 
@@ -294,7 +294,8 @@ test('AC32 skill is at most 125 lines, references are linked with a load rule, n
   assert.ok(skill.split('\n').length <= 125, `SKILL.md has ${skill.split('\n').length} lines`);
   has(skill, '(references/format-2.md)', '(references/format-1.md)');
   lacks(skill, 'allowed-tools');
-  has(skill, 'disable-model-invocation: true', 'argument-hint:');
+  has(skill, 'argument-hint:');
+  lacks(skill, 'disable-model-invocation');
   for (const p of ['SKILL.md', 'references/format-1.md', 'references/format-2.md']) assert.ok(existsSync(join(root, 'skills/brainstorm', p)));
 });
 

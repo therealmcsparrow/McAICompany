@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ALWAYS, loadRegistry, run } from './company-type.mjs';
+import { ALWAYS, CEO_ONLY, loadRegistry, run } from './company-type.mjs';
 
 const REAL_ROOT = path.join(import.meta.dirname, '..');
 const SCRIPT = path.join(import.meta.dirname, 'company-type.mjs');
@@ -24,7 +24,7 @@ function tmp() {
   return d;
 }
 
-const PLAYBOOK_FM = '---\nname: x\ndescription: Use when testing.\ndisable-model-invocation: true\n---\nBody.\n';
+const PLAYBOOK_FM = '---\nname: x\ndescription: Use when testing.\nargument-hint: (no arguments)\n---\nBody.\n';
 const SKILL_FM = '---\nname: x\ndescription: Use when testing.\n---\nBody.\n';
 
 function manifest(over = {}) {
@@ -446,9 +446,9 @@ test('every shipped type names its work Playbooks', () => {
   for (const [id, work] of Object.entries(want)) assert.deepEqual(reg[id].work, work, id);
 });
 
-test("all manifests' playbooks plus ALWAYS are exactly the model-hidden commands of the plugin", () => {
+test("all manifests' playbooks plus ALWAYS are exactly the Playbooks (skills with an argument-hint) of the plugin", () => {
   const union = new Set([...ALWAYS, ...Object.values(loadRegistry(REAL_ROOT)).flatMap(m => m.playbooks)]);
-  const hidden = fs.readdirSync(path.join(REAL_ROOT, 'skills')).filter(d => /^disable-model-invocation: true$/m.test(fs.readFileSync(path.join(REAL_ROOT, 'skills', d, 'SKILL.md'), 'utf8')));
+  const hidden = fs.readdirSync(path.join(REAL_ROOT, 'skills')).filter(d => /^argument-hint:[ \t]*\S/m.test(fs.readFileSync(path.join(REAL_ROOT, 'skills', d, 'SKILL.md'), 'utf8')));
   assert.deepEqual([...union].sort(), hidden.sort());
 });
 
@@ -615,4 +615,36 @@ test('the manifest files and script use LF only', () => {
   for (const file of [SCRIPT, path.join(REAL_ROOT, 'company', 'types', 'software.json')]) {
     assert.ok(!fs.readFileSync(file).includes(13), file);
   }
+});
+
+test('CEO_ONLY is frozen and equals the contract list', () => {
+  assert.ok(Object.isFrozen(CEO_ONLY));
+  assert.deepEqual([...CEO_ONLY], ['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest']);
+  const contract = fs.readFileSync(path.join(REAL_ROOT, 'docs', 'contracts', 'company-type.md'), 'utf8');
+  const line = contract.split('\n').find(l => l.startsWith('- **`CEO_ONLY`**'));
+  assert.deepEqual([...line.matchAll(/`([a-z]+)`/g)].map(m => m[1]).slice(0, 7), [...CEO_ONLY]);
+});
+
+test('a skill is a Playbook by an argument-hint line inside its frontmatter, not by the flag', () => {
+  const variants = {
+    flagOnly: '---\nname: x\ndescription: d\ndisable-model-invocation: true\n---\nBody.\n',
+    emptyHint: '---\nname: x\ndescription: d\nargument-hint:\n---\nBody.\n',
+    hintInBody: '---\nname: x\ndescription: d\n---\nargument-hint: [file]\n',
+    indented: '---\nname: x\ndescription: d\n  argument-hint: [file]\n---\nBody.\n',
+    noFrontmatter: 'argument-hint: [file]\n',
+    hintAndFlag: '---\nname: x\ndescription: d\nargument-hint: [file]\ndisable-model-invocation: true\n---\nBody.\n'
+  };
+  for (const [label, text] of Object.entries(variants)) {
+    const root = pluginRoot({ software: manifest({ playbooks: ['fix'] }) });
+    fs.writeFileSync(path.join(root, 'skills', 'fix', 'SKILL.md'), text);
+    const r = exec(['list'], project(null), root);
+    assert.equal(r.code === 0, label === 'hintAndFlag', label);
+  }
+});
+
+test('a manifest naming a library skill (no argument-hint) is refused as playbooks', () => {
+  const root = pluginRoot({ software: manifest({ playbooks: ['fix', 'tdd'] }) });
+  const r = exec(['list'], project(null), root);
+  assert.equal(r.code, 3);
+  assert.equal(r.out, 'refused: type manifest software invalid: playbooks');
 });

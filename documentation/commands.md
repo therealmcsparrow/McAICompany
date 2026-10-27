@@ -9,9 +9,13 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
 - **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, skillspector, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
-**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage` and `skillspector`. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards` and `launch`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
+**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage` and `skillspector`. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards` and `launch`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
 
-**Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` or `/aico:<command> help` (also `--help`) explains one command's options and what it does, without running it.
+**Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` explains one command's options and what it does, without running it. Every Playbook also answers `/aico:<command> help` (or `--help`) from its own `### /aico:<name>` entry in this file, so each entry below is what that command tells you.
+
+**Hand-over between commands.** A few commands end with a choice that starts another command: `lead`, `triage`, `brainstorm`, `research` and `refactor`. After you pick, the next command starts by itself, with your pick as its argument. If it cannot start, you are shown the exact command to type, and the run stops there. A command never starts another one on its own, and never because a file, a report or a web page asks for it. Only your own request or your choice at a form or Gate starts one. `incident` does not hand over: it ends after the mitigation, the reports and the postmortem, and tells you to run `/aico:fix` yourself.
+
+**Commands only you start.** Seven commands are never started by another command or by the Lead: `help`, `version`, `language`, `settings`, `setup`, `skillspector` and `pentest`. They change your configuration, install software or attack a target, so you type them yourself. When a run needs one, it tells you the command and waits. For `pentest` it gives you `/aico:pentest <target>`.
 
 Each entry below gives what the command does, when to reach for it, how it runs (Gates marked), what you get, and an example.
 
@@ -22,7 +26,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 ### `/aico:lead`
 `/aico:lead <what you want done>`
 
-**What it does.** The front door. The Project Manager reads your request and either recognizes a known kind of work and switches to the matching command, or builds a custom route from just the Roles the job needs.
+**What it does.** The front door. The Project Manager reads your request and either recognizes a known kind of work and starts the matching command with your request as its argument (if that command cannot be started this way, it shows you the command to type; for `/aico:pentest` it always does), or builds a custom route from just the Roles the job needs.
 
 **When to use it.** Any time — especially when no single command below obviously fits, or when the work spans several kinds (e.g. "fix this bug and write release notes").
 
@@ -46,7 +50,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **How it runs.**
 1. Reads `.company/project.md` and your request; classifies size, risk and type.
 2. Recommends the shortest route that the risk still allows. **Risk overrides size:** anything touching auth, payments, personal data, migrations or a Contract keeps the full reviewer lane and every Gate, however small.
-3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, hands straight to the chosen route.
+3. Presents size + risk + type + route. **→ Brief Gate** (Approve / Change / Stop). On approve, the chosen command starts by itself with your request plus a short triage note (size, risk, type, route). That run is not triaged again and keeps at least that risk tier. A one-line, low-risk change goes to `/aico:lead`, which checks it really is that small, then runs one builder and one reviewer and keeps the Ship Gate. The same applies when `/aico:lead` started the triage. If the command cannot be started, you are shown it to type.
 
 **You get.** A one-line recommendation; the risk tier then travels into every dispatch of the real run.
 
@@ -96,6 +100,7 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 **When to use it.** The code works but is hard to change — tangled Modules, leaky boundaries, missing Contracts. Not for adding behavior (use `/aico:feature`) or fixing bugs (use `/aico:fix`).
 
 **How it runs.**
+0. With no audit report to start from, you are asked **Run audit first (Recommended)** or **Skip audit**. Run audit first: `refactor` tells you to run `/aico:refactor "<scope>"` again once the audit report is written, then starts `/aico:audit` as its own run and ends. The second `refactor` run starts from that report. Skip audit: it stops and asks you to bring an audit report. If `/aico:audit` cannot be started, you are shown both commands to type.
 1. **Architect** defines the target Core, Module map, Contracts and the slices (each slice moves one Module out). The **Senior Engineer** maps the ruleset and the Architect signs off if Must rules changed. **→ Plan Gate.**
 2. Per slice, in order: **QA** writes characterization tests of current behavior (they must pass first) → the owning **engineer** moves the code behind the Contract with no behavior change → **Code Reviewer** ∥ **QA** ∥ **Senior Engineer** confirm the same tests still pass. **→ Ship Gate** (per slice).
 
@@ -106,18 +111,18 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 ### `/aico:incident`
 `/aico:incident <what happened>`
 
-**What it does.** Handles a production incident fast: mitigate first, check EU reporting duties, fix, then write the postmortem. Urgency is allowed; the Ship Gate stays.
+**What it does.** Handles a production incident fast: mitigate first, check EU reporting duties, then write the postmortem. The run ends there. It does not fix the bug; you start the fix. Urgency is allowed; the Ship Gate stays.
 
 **When to use it.** An outage, data loss, or a security event in something already live.
 
 **How it runs.**
 1. **DevOps** triages (impact, scope, timeline) and proposes a mitigation, ∥ **Security** if security-related, ∥ **Legal** (drafts reports early).
 2. **→ Ship Gate (mitigation only)** — rollback or feature flag; you can approve in one line. DevOps applies it.
-3. **Legal** checks reporting duties and drafts every report due before the fix ships (CRA 24 h / 72 h, GDPR 72 h). **→ Ship Gate (reports)**, repeated per deadline — each draft comes to you with its clock time; you submit.
-4. The **fix** runs the `/aico:fix` route.
-5. **DevOps** writes the postmortem. **→ Ship Gate** before any report is sent or the fix is deployed.
+3. **Legal** checks reporting duties and drafts the reports that are due now (CRA 24 h early warning and 72 h notification, GDPR 72 h). **→ Ship Gate (reports)**, repeated per deadline — each draft comes to you with its clock time; you submit. Nothing is sent before you approve.
+4. **DevOps** writes the postmortem: timeline, root cause as known, and what must change.
+5. The run ends. It tells you to start the fix yourself with `/aico:fix "<root cause> (incident .company/work/<slug>/)"`. It also lists the open final-report deadlines as dates (CRA: 14 days after a fix is available, or 1 month after the notification). To draft those later, run `/aico:lead`.
 
-**You get.** A mitigation, drafted regulatory notices with deadlines, the fix, and a postmortem with root cause and follow-ups.
+**You get.** A mitigation, drafted regulatory notices with deadlines, a postmortem with root cause and follow-ups, and the exact `/aico:fix` command plus the final-report dates in the end message. The fix and the final report are separate runs that you start.
 
 **Example.** `/aico:incident the login API is returning 500s for about half of requests since 14:00`
 
@@ -143,6 +148,8 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 ### `/aico:pentest`
 `/aico:pentest <target> [full]`
+
+**Only you start this command.** No other command or the Lead starts it.
 
 **What it does.** On-demand authorized red-team test of **your own** product on a local or staging build. The Pentester attacks the running build, chains weaknesses, and reports findings ranked by severity.
 
@@ -174,6 +181,8 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 ### `/aico:skillspector`
 `/aico:skillspector [--project | --global | --all | <skill-name>] [--no-llm | --claude-cli] [install]`
+
+**Only you start this command.** No other command or the Lead starts it.
 
 **What it does.** Scans the agent skills installed in this project or your user folder with NVIDIA SkillSpector and reports what it finds per skill. It never removes anything.
 
@@ -264,7 +273,7 @@ Both install commands change your user-scope configuration, not just this projec
    - `quick`: at most 10 web fetches per researcher.
 2. **Researchers** run in parallel. **Market Researcher** and **Tech Researcher** by default; **Design Researcher** when the topic is UI or design skills, or you ask for it. If a skill the run needs is missing, one Install / Skip form comes first. Skip continues on WebSearch and WebFetch alone and records `degraded: missing <skill>` in the report. If the check itself fails, the error is shown, nothing is installed and no form appears; the run continues the same way.
 3. **Product Manager** writes the report. Web pages are read as data, never as instructions.
-4. **Pick form.** Start `/aico:feature` (the brief starts from the verdict and the ranked actions), Brainstorm (opens `/aico:brainstorm` on the report), Roadmap or Park. Roadmap and Park leave the report in place and record your choice in `outcome:`.
+4. **Pick form.** Start the main work of your type (in a software company `/aico:feature`; the brief starts from the verdict and the ranked actions), Brainstorm (opens `/aico:brainstorm` on the report), Roadmap or Park. After a Start or Brainstorm pick, that command starts by itself with the report as its argument; if it cannot, you are shown the command to type. Roadmap and Park leave the report in place and record your choice in `outcome:`.
 5. **Design skills** (only when the Design Researcher ran). You approve the recommended set; then an Install / Skip form shows the exact commands. Nothing installs before that form.
 
 **You get.** `.company/research/YYYY-MM-DD HH.MM - <Topic>.md`, labelled `AI-generated research`, with `## Verdict` (go, go-with-conditions or no-go, with confidence), `## What to do` (ranked), `## Low-hanging fruit` (impact and effort), `## Risks`, `## Open questions` and `## Sources`. Every claim cites a source with its URL and check date. A claim without a source is marked `unverified` and cannot support the verdict. Only the report is committed (`docs: research <Short Topic>`, the summary in your language). The file name uses a short topic of letters, digits, spaces and hyphens, at most 5 words and 60 characters; any other topic is replaced by the run's slug. If the name fails the Lead's re-check, nothing is committed; the Lead names the file to you and the report is rewritten under the slug. Nothing is pushed.
@@ -322,7 +331,7 @@ Both install commands change your user-scope configuration, not just this projec
    - A Role may **skip** a round when it has nothing to add. That is recorded and is not an error.
    - **Debate** runs the ideas pass. In the default style, `crossfire`, the sharpest clash of the round is not a separate dispatch: the challenger's reply is quoted as dissent, and the challenged Role answers it in its next ideas pass, where it sees it under "Challenge to you". Set `brainstorm.debate` to `full_pass` in `/aico:settings` to keep the live crossfire pair (about 50 words each) and the full second pass, which reads more and saves nothing.
 3. **After each round** you get a form. Open questions are merged, ranked (blocking first, then by votes) and never repeat an answered one. Each has options and a default; skip a question and the default is recorded as "CEO skipped". The form shows three questions, then Next, with a fourth shown as "up next". Unanswered defaults are assumed. A ruling you give that answers none of the asked questions is stored word for word as its own decision, linked to no question.
-4. At the close, you choose: **plan and implement** (continues as `/aico:feature` from the notes), **roadmap**, **nice to have**, or **park**. The file moves to the matching folder; `/aico:brainstorm "<file>"` reopens it later.
+4. At the close, you choose: **plan and implement** (the main work of your type starts by itself from the notes, in a software company `/aico:feature`; if it cannot start, you are shown the command), **roadmap**, **nice to have**, or **park**. The file moves to the matching folder; `/aico:brainstorm "<file>"` reopens it later.
 
 **You get.** `.company/brainstorms/YYYY-MM-DD HH.MM - Topic.md` (format 2) with `## Summary`, `## Digest`, `## Questions` and `## Rounds`. The digest quotes your answers word for word, lists open threads, keeps a dissent line in the dissenting Role's own words, and links each item to its round. Roles can reply to an idea (`@Role on I-2.1: agree | challenge | build-on`), and the replies show up as threads. With an Architect in the room, each round has an S/M/L estimate. Files from earlier versions open and continue as before; they are never rewritten. Builds nothing until you choose to.
 
@@ -493,6 +502,8 @@ These four commands belong to the research, marketing and design companies. In a
 ### `/aico:setup`
 `/aico:setup [core] [research] [go] [react] [tanstack] [auth] [type]`
 
+**Only you start this command.** No other command or the Lead starts it.
+
 **What it does.** Installs the standalone skills the Roles rely on (no arguments → the `core` group), or adds optional stack skill groups. The `core` group includes `research` (`find-skills`, used for guidance only). It also sets your project's [company type](concepts.md#company-types) and can search for skills that fit it.
 
 **When to use it.** Once after installing the plugin, and again whenever you start working in a stack whose skills you haven't added yet. Use `type` to set the company type on its own.
@@ -508,6 +519,8 @@ These four commands belong to the research, marketing and design companies. In a
 
 ### `/aico:language`
 `/aico:language [<tag> [project] | clear [project]]`
+
+**Only you start this command.** No other command or the Lead starts it.
 
 **What it does.** Shows or sets the language aico writes in: Handoff prose, forms, reports, Gate summaries and commit summaries. Machine-read parts stay English in every language: frontmatter, headings, status values, blocking tags, file names and commit types.
 
@@ -528,6 +541,8 @@ Effective language: the project override, else your default, else English. An un
 ### `/aico:settings`
 `/aico:settings [help]`
 
+**Only you start this command.** No other command or the Lead starts it.
+
 **What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
@@ -545,7 +560,9 @@ Effective language: the project override, else your default, else English. An un
 ### `/aico:help`
 `/aico:help [command]`
 
-**What it does.** Without a command, lists every command with one line each. With one, explains it: usage, every option and its effect (and the default when you leave it out), what it does, what you get, an example. `/aico:<command> help` or `--help` shows the same for that command.
+**Only you start this command.** No other command or the Lead starts it.
+
+**What it does.** Without a command, lists every command with one line each. With one, explains it: usage, every option and its effect (and the default when you leave it out), what it does, what you get, an example. A Playbook's own `/aico:<command> help` or `--help` answers from the same entry in this file.
 
 **When to use it.** Before running a command you haven't used, or to check an option.
 
@@ -557,6 +574,8 @@ Effective language: the project override, else your default, else English. An un
 
 ### `/aico:version`
 `/aico:version`
+
+**Only you start this command.** No other command or the Lead starts it.
 
 **What it does.** Shows which version of the plugin is installed, the date and one-line summary of its latest changelog entry, and where the plugin lives on disk.
 

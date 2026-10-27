@@ -7,7 +7,7 @@ argument-hint: [core] [research] [go] [react] [tanstack] [auth] [type]
 
 # Setup
 
-**Help:** argument is exactly `help` or `--help` → follow `aico:help` for `setup` and stop.
+**Help:** argument is exactly `help` or `--help` → read the `### /aico:setup` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 The plugin dependencies (`superpowers`, `mattpocock-skills`) install automatically with aico. This skill adds the **standalone skills** listed in `${CLAUDE_PLUGIN_ROOT}/deps/skills.json`.
 
