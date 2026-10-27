@@ -159,9 +159,9 @@ const skillFiles = () => fs.readdirSync(path.join(root, 'skills'), { recursive: 
   .map(f => f.split(path.sep).join('/')).filter(f => f.endsWith('.md')).map(f => `skills/${f}`);
 const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? '').split('\n').map(l => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
 
-// Every skill that only the CEO can start.
+// Every Playbook: a skill whose frontmatter has an argument-hint line.
 const PLAYBOOK_SKILLS = fs.readdirSync(path.join(root, 'skills'))
-  .filter(n => exists(`skills/${n}/SKILL.md`) && frontmatter(read(`skills/${n}/SKILL.md`))['disable-model-invocation'] === 'true').sort();
+  .filter(n => exists(`skills/${n}/SKILL.md`) && frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint']).sort();
 const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector'];
 const TYPES = ['software', 'research', 'marketing', 'design'];
 const manifest = id => json(`company/types/${id}.json`);
@@ -820,7 +820,7 @@ test('AC11 each new Playbook runs in its own company, with Gates and the type\'s
       assert.equal(sb.typeJson(['check-playbook', name]).ship.meaning, m.ship.meaning);
       assert.equal(typed('software').run('company-type.mjs', ['check-playbook', name]).code, 2, `${name} is refused in a software company`);
       const text = read(`skills/${name}/SKILL.md`);
-      assert.equal(frontmatter(text)['disable-model-invocation'], 'true');
+      assert.equal(frontmatter(text)['disable-model-invocation'], undefined, `${name} is visible to the model`);
       assert.match(text, /Run with `aico:pipeline`/);
       assert.match(text, /\*\*→ Brief Gate\*\*|Brief Gate:/);
       assert.match(text, /Ship Gate/);

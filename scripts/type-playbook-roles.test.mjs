@@ -15,7 +15,7 @@ const manifests = readdirSync(join(root, 'company', 'types')).filter((f) => f.en
   .map((f) => JSON.parse(read(`company/types/${f}`)));
 const agents = new Set(readdirSync(join(root, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)));
 const isPlaybook = (n) => existsSync(join(root, 'skills', n, 'SKILL.md'))
-  && /^disable-model-invocation:\s*true\s*$/m.test(read(`skills/${n}/SKILL.md`));
+  && /^argument-hint:[ \t]*\S/m.test(read(`skills/${n}/SKILL.md`));
 
 function files(playbook) {
   const dir = join(root, 'skills', playbook, 'references');

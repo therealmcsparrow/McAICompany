@@ -41,7 +41,7 @@ test('every lane key appears in a Playbook', () => {
     .map(d => path.join(root, 'skills', d, 'SKILL.md'))
     .filter(f => fs.existsSync(f))
     .map(f => fs.readFileSync(f, 'utf8'))
-    .filter(t => /^disable-model-invocation:\s*true\s*$/m.test(t));
+    .filter(t => /^argument-hint:[ \t]*\S/m.test(t));
   for (const key of LANES)
     assert.ok(skills.some(t => t.includes(`lanes.${key}\``)), `no Playbook mentions \`lanes.${key}\``);
 });
