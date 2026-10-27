@@ -17,7 +17,7 @@ test('frontmatter: name, description, exact tools, model, effort', () => {
   const fm = frontmatter(read(AGENT));
   assert.equal(fm.name, 'reprompter');
   assert.ok(fm.description.length > 20);
-  assert.deepEqual(fm.tools.split(',').map((x) => x.trim()), ['Read', 'Grep', 'Glob', 'Skill', 'Write']);
+  assert.deepEqual(fm.tools.split(',').map((x) => x.trim()), ['Read', 'Skill', 'Write']);
   assert.equal(fm.model, 'sonnet');
   assert.equal(fm.effort, 'medium');
   for (const bad of ['hooks', 'mcpServers', 'permissionMode', 'initialPrompt']) assert.equal(fm[bad], undefined);
@@ -44,6 +44,21 @@ test('body: writes only prompt.md and its Handoff in the run folder; names the W
   assert.match(t, /run folder/i);
   assert.match(t, /Write/);
   assert.match(t, /only/i);
+});
+
+test('body: first-Step line, reads only the Request files and project.md, quotation rule, visible characters', () => {
+  const t = read(AGENT);
+  assert.match(t, /CEO's request: the Request files/);
+  assert.match(t, /Read only those files and, where the request needs it, `\.company\/project\.md`/);
+  assert.match(t, /Name any other file by path only; never read it/);
+  assert.match(t, /one line in double quotes, at most 80 characters, never a block/);
+  assert.match(t, /Visible characters only/);
+  assert.match(t, /exactly six `## ` headings/);
+  assert.match(t, /`###` or lower/);
+  assert.match(t, /`step:` = the dispatch `NN`/);
+  assert.match(t, /nothing else there/);
+  assert.match(t, /Load `aico:handoff` with the Skill tool before you write the Handoff/);
+  assert.match(t, /`role: reprompter`, `task:` = the run folder name from `Output:`, `round` and `base-commit` from the dispatch, `By: <Name> \(reprompter\)` from `Name:`/);
 });
 
 test('body: image target goes to prompt-artist with no card', () => {
