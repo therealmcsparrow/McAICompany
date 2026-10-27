@@ -1,6 +1,6 @@
 # aico documentation
 
-**aico** is a Claude Code plugin that runs a small software company for you. You are the **CEO**: you ask for work and approve it at a few checkpoints. A **Lead** turns your request into a route and dispatches 33 specialist **Role** agents, who pass work to one another through files and never skip your approvals.
+**aico** is a Claude Code plugin that runs a small software company for you. You are the **CEO**: you ask for work and approve it at a few checkpoints. A **Lead** turns your request into a route and dispatches 34 specialist **Role** agents, who pass work to one another through files and never skip your approvals.
 
 Start here:
 
@@ -8,7 +8,7 @@ Start here:
 |---|---|
 | [Getting started](getting-started.md) | Install, your first run, how a job flows, and the three Gates where you approve |
 | [Commands](commands.md) | Every `/aico:*` command (the Playbooks), what it does and when to reach for it |
-| [Roles](roles.md) | All 33 Role agents, grouped by department, and what each one is for |
+| [Roles](roles.md) | All 34 Role agents, grouped by department, and what each one is for |
 | [Mods](mods.md) | The four mods (Savvy, Cache Tax, Reflect, Blast Radius): what each shows, the shared status line, the cache clock, every `mods.*` setting and the three locks |
 | [Concepts](concepts.md) | The ideas the company runs on: Handoffs, Gates, Core/Modules/Contracts, the Ruleset, Debt, Lessons, settings and locks, EU compliance and Git conventions |
 
@@ -23,7 +23,7 @@ Reference material lives alongside these guides:
 
 ## Version
 
-**Current: 0.12.0** (33 Role agents).
+**Current: 0.12.0** (34 Role agents).
 
 Update an installed copy with:
 

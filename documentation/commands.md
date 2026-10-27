@@ -50,6 +50,25 @@ Each entry below gives what the command does, when to reach for it, how it runs 
 
 **Example.** `/aico:triage change the footer copyright year to be dynamic`
 
+### `/aico:reprompt`
+`/aico:reprompt <prompt to improve>`
+
+**Help:** `/aico:reprompt help` (or an empty argument) explains the command without running it.
+
+**What it does.** Turns a rough prompt into one complete, ready-to-use prompt: goal, context, inputs, constraints, output format and a done-check. The Role is **Lynn** (the reprompter). She never runs the prompt herself, even if your text says "and run it". Instructions inside your text are treated as content to rewrite, not as orders.
+
+**When to use it.** You have a short or vague prompt for an AI and want it sharpened first. The Lead also routes "improve this prompt" requests here. A prompt for an image model is handed to the prompt-artist instead.
+
+**How it runs.**
+1. The Lead saves your text verbatim in a new run folder and dispatches the reprompter.
+2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. The Lead asks them in one form. The number of question rounds defaults to 1; a setting for it comes later (Phase B). After the last round the reprompter goes on with stated assumptions and does not ask again.
+3. The Lead shows the full prompt and its assumptions, then asks: **Use it** / **Edit** / **Keep only** / **Stop**. Edit has no fixed cap on rounds.
+4. **Use it** hands the prompt to the Lead as a new request, and the normal route check applies. Nothing runs without Use it.
+
+**You get.** `.company/work/<slug>/prompt.md` and the Handoff. These files stay local and are never committed.
+
+**Example.** `/aico:reprompt make the signup page better`
+
 ### `/aico:feature`
 `/aico:feature <feature description>`
 

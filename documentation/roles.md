@@ -1,6 +1,6 @@
 # Roles
 
-The company has **33 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
+The company has **34 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
 
 Each Role runs on a model and an effort level matched to its work. The model is how capable the Role is: **Opus** for the Roles that reason hardest (architecture, review, security, product strategy), **Sonnet** for most building, testing and writing, **Haiku** for mechanical content work. The effort is how much thinking it does before it answers: **high** for the architect, code-reviewer, security and pentester; **low** for writing, art, lookup and support Roles; **medium** for the rest.
 
@@ -10,6 +10,7 @@ Every Role has a person name for display (change them in `/aico:settings`). You 
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
 | **product-manager** | opus | medium | Nora | Turns a request into a brief: problem, users, scope, acceptance criteria. Decides *what* and *why*, never *how*. |
+| **reprompter** | sonnet | medium | Lynn | Turns a rough prompt into a complete one (goal, context, inputs, constraints, output format, done-check). Asks only when a gap would change the result; never runs the prompt. Use it through `/aico:reprompt`. |
 | **account-manager** | sonnet | low | Carmen | Client intake, proposals, estimates, status reports and handoff letters. |
 
 ## Market & tech research
