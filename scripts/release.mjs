@@ -22,7 +22,7 @@ function claudeCommand() {
     return [process.platform === 'win32' ? 'claude.exe' : 'claude', []];
   }
   if (!path.isAbsolute(bin)) fail('AICO_CLAUDE_BIN must be an absolute path');
-  if (/.(cmd|bat)$/i.test(bin)) fail('AICO_CLAUDE_BIN must not be a .cmd or .bat shim; point it at claude.exe or the CLI script');
+  if (/\.(cmd|bat)$/i.test(bin)) fail('AICO_CLAUDE_BIN must not be a .cmd or .bat shim; point it at claude.exe or the CLI script');
   let stat = null;
   try {
     stat = fs.statSync(bin);
@@ -30,7 +30,7 @@ function claudeCommand() {
     // reported below
   }
   if (!stat || !stat.isFile()) fail('AICO_CLAUDE_BIN is not an existing file');
-  if (/.(c|m)?js$/i.test(bin)) return [process.execPath, [bin]];
+  if (/\.(c|m)?js$/i.test(bin)) return [process.execPath, [bin]];
   return [bin, []];
 }
 
