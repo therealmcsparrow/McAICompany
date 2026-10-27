@@ -1,9 +1,10 @@
-# Contract: run-state v1.2
+# Contract: run-state v1.3
 
-Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2).
+Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2); from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0024-reprompt-playbook-owns-the-flow.md`): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric), and it bounds the view's `round` to what the mods accept. Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
 v1.2 is additive (rationale `docs/adr/0027-triage-record.md`): it adds the triage record ("Triage record"), the commands `triage issue` and `triage check <nonce>`, and the folder `.company/triage/`. Run files, records, the run view, `show` and `active` are unchanged; `active` never reads `.company/triage/`.
+v1.3 is additive (rationale `docs/adr/0028-run-timing-from-run-state.md`): it adds the `ask` event (a Gate form shown to the CEO), the command `ask`, and a `wait` key on each entry of the view's `gates`, so the CEO's wait at Gates can be shown apart from run time. Every v1.2 file is a valid v1.3 file and gives the same view with `"wait": null` on each Gate entry. A v1.2 reader skips an `ask` line with its usual `line <n> skipped` warning.
 
 ## Storage
 - `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`.
@@ -16,9 +17,9 @@ v1.2 is additive (rationale `docs/adr/0027-triage-record.md`): it adds the triag
 |---|---|
 | `v` | `1` |
 | `at` | UTC time `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`, written by the script, never typed by the Lead |
-| `ev` | `start \| wave \| gate \| pick \| end` (`pick` v1.1) |
+| `ev` | `start \| wave \| gate \| ask \| pick \| end` (`pick` v1.1, `ask` v1.3) |
 | `wave` | `wave` only: integer 1–99 (the plan's wave number; a Fix round keeps the wave it belongs to) |
-| `gate` | `gate` only: `brief \| plan \| ship` |
+| `gate` | `gate` and `ask` only: `brief \| plan \| ship` |
 | `result` | `gate` only: `passed \| changed \| stopped` |
 | `pick` | `pick` only: `use \| edit \| keep \| stop` (the reprompt form answer, v1.1) |
 | `asked` | `pick` only: integer 0–3, question rounds held before this answer (v1.1) |
@@ -29,6 +30,7 @@ v1.2 is additive (rationale `docs/adr/0027-triage-record.md`): it adds the triag
 |---|---|
 | `start <slug>` | appends `start`. Refused when the file already has a `start` and no `end` (`refused: run <slug> already started`). A new `start` after an `end` begins a new segment (a resumed or reopened run). |
 | `wave <slug> <n>` | appends `wave`. Refused without an open segment. |
+| `ask <slug> <brief\|plan\|ship>` | (v1.3) appends `ask`: the Gate form is about to be shown. Refused without an open segment, or for an unknown Gate. |
 | `gate <slug> <brief\|plan\|ship> <passed\|changed\|stopped>` | appends `gate`. Refused without an open segment. |
 | `pick <slug> <use\|edit\|keep\|stop> <asked>` | (v1.1) appends `pick`. Refused without an open segment, or when `<asked>` is not a whole number 0–3 (`refused: asked must be 0 to 3`) or the answer is not in the list (`refused: pick must be use, edit, keep or stop`). |
 | `end <slug> <ship\|abort>` | appends `end`, closing the segment. Refused without an open segment. |
@@ -42,13 +44,14 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 ## Run view (`show`, `active`)
 ```json
 { "v": 1, "slug": "x", "state": "running|ended|stale|none", "started": "<at>", "ended": "<at>|null",
-  "outcome": "ship|abort|null", "wave": 2, "gates": [{ "gate": "brief", "result": "passed", "at": "<at>" }],
+  "outcome": "ship|abort|null", "wave": 2, "gates": [{ "gate": "brief", "result": "passed", "at": "<at>", "wait": 120 }],
   "picks": [{ "pick": "keep", "asked": 0, "at": "<at>" }],
   "round": 1, "tier": "low|medium|high|unknown",
   "steps": [{ "step": "05", "role": "backend-engineer", "status": "done", "round": 0, "file": "05-backend-engineer.md", "mtime": "<at>" }],
   "warnings": ["line 7 skipped"] }
 ```
 - `picks` (v1.1): every `pick` of the last segment, in file order; `[]` when none. Placed directly after `gates`.
+- `wait` (v1.3): whole seconds from the latest `ask` for the same Gate that comes after the previous `gate` entry for that Gate (or after the segment `start`) to this entry's `at`; `null` when there is no such `ask` (an `auto` Gate, or a v1.2 file) or the result would be negative. `ask` lines appear nowhere else in the view.
 - `steps`: every `^\d{2}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`; a step's `round` is allowed as a whole number 0–99 (v1.1; a reprompt run's edits have no cap, so its rounds can pass 99).
 - `round` = highest numeric `round:` among `steps` (so 0–99), else `0`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
 - Times and order come from the file; the view uses only the last segment (from the last `start`).
@@ -59,6 +62,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 ## How the pipeline uses it (`aico:pipeline`, Core)
 - Setup, once the slug is known: `start <slug>`.
 - Each wave start in the plan: `wave <slug> <n>`.
+- (v1.3) Directly before showing each Brief, Plan and Ship Gate form: `ask <slug> <gate>`. An `auto` Gate shows no form and gets no `ask`.
 - Each Brief, Plan and Ship Gate answer (an `auto` Gate counts as `passed`): `gate <slug> <gate> <result>`.
 - Ship done, or the CEO stops the run: `end <slug> ship|abort`.
 - A run resumed with "resume <slug>" after an `end` runs `start <slug>` again.
@@ -109,5 +113,5 @@ No request text, no route or tier, no names: hashes, an event and a time only.
 - Missing file → `state: none`, empty `gates` and `picks`, `steps` still listed.
 - Bad line (invalid JSON, unknown key, over 256 bytes, CR byte) → skipped, `warnings: ["line <n> skipped"]`.
 - File over 64 KiB or a symlink → `state: none`, `warnings: ["run-state unreadable"]`; writes refused.
-- Bad `<slug>`, unknown gate, result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3 → `refused`, nothing written.
+- Bad `<slug>`, unknown gate (on `gate` or `ask`), result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3 → `refused`, nothing written.
 - (v1.2) `triage`: a link in the path, or `.gitignore` or `records.jsonl` with more than one hard link ("Plain files only"; a hard-linked `request.txt` is not a refusal: it counts as missing, `check` exits 0 with `no request`), `records.jsonl` unreadable or over 64 KiB when read (checked before pruning), a bad nonce, or any other error → `refused: <reason>`, exit 2, nothing appended. `request.txt` is still deleted once read. After a refusal for a link at `.company` or `.company/triage`, the unlink of the name `request.txt` is resolved through that link and reaches the link target; it is never read, and it happens only when it is a regular file with one hard link whose mtime is within the last 10 minutes (the Write just made it), else it is left in place. A refusal for a hard-linked `.gitignore` follows the same rule. A refused `issue` means no direct route (`company-type` v1.3); a refused `check` means untrusted. The rest of run-state is unaffected.

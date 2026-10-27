@@ -1,0 +1,3 @@
+# Run timing comes from run-state and the script clock, not from hooks
+
+Time to Ship Gate needs a run start, Gate answer times and the CEO's wait at each Gate. Run-state already stamps `start` and every Gate answer with a script-written UTC time, so it gains one `ask` event before each Gate form (`run-state` v1.3), and the ledger copies run start, Ship Gate time, wait and rejects into the `ship` record, which now gets written after the Ship Gate is approved so that only shipped runs reach the medians (`token-ledger` v1.1). Hook timestamp fields were not verified and hooks are opt-in mods, so no number depends on them. This is hard to reverse because every later scorecard median compares against records of this shape.
