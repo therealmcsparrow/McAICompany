@@ -1,0 +1,5 @@
+run baseline-role-effort
+total bdeca87d lead  spend 1971635  cache read 26567919
+spend: 1971635 total, 197164 per AC (10 ACs)
+cache read: 26567919 total, 2656792 per AC (10 ACs)
+not reconciled: 0

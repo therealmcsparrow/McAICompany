@@ -39,7 +39,7 @@ const writeLedger = (sb, name, text) => {
 
 const ALLOWED_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-  'dispatches', 'acs', 'fix_rounds', 'high_blockers'
+  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1'
 ]);
 
 // ---------- schema (hostile cases first) ----------
@@ -157,9 +157,11 @@ test('add appends exactly one notification record', () => {
   const sb = sandbox();
   const r = run(sb, ['add', 'demo', 'step', '01', 'architect', 'aaa111', '5000', '12', '34000']);
   assert.equal(r.status, 0, r.all);
-  assert.deepEqual(readLines(sb, 'demo'), [
-    { v: 1, run: 'demo', kind: 'step', id: '01', role: 'architect', agent: 'aaa111', src: 'notification', ctx_end: 5000, tool_uses: 12, ms: 34000 }
-  ]);
+  const [rec] = readLines(sb, 'demo');
+  const { t0, t1, ...rest } = rec;
+  assert.deepEqual(rest, { v: 1, run: 'demo', kind: 'step', id: '01', role: 'architect', agent: 'aaa111', src: 'notification', ctx_end: 5000, tool_uses: 12, ms: 34000 });
+  assert.match(t1, /^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  assert.equal(Date.parse(t1) - Date.parse(t0), 34000);
   run(sb, ['add', 'demo', 'round', 'R2', 'lead', 'bbb222', '0']);
   assert.equal(readLines(sb, 'demo').length, 2);
 });

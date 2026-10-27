@@ -81,6 +81,10 @@ _Avoid_: orchestrator (use Lead).
 
 **Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 
+**Scorecard** — the one line printed after the Ship Gate is approved: time to Ship Gate, CEO wait, spend per shipped AC, Fix rounds, high blockers and Gate rejects, each beside the median of the last 5 shipped runs. Times and counts only; it never blocks a Step or a Gate. Contract `token-ledger` v1.1.
+
+**Stable** — the `stable` branch. It moves only to a release tag (`v<x.y.z>`) that is merged into `main`, through `npm run stable -- <x.y.z>` after the Ship Gate, and it can move back to an earlier tag. Install from it with `#stable` on the marketplace source.
+
 **Tool check** — a rule tagged `check: <tool>`, bound to its rule ID in `.company/checks.json`. It runs before review; a failure is a finding the reviewer confirms before it blocks.
 
 **Rule slice** — the rules mapped to one task, always including every security Must. Builders read them from a per-task file in `rules/` that holds the rule text.

@@ -255,7 +255,7 @@ Both install commands change your user-scope configuration, not just this projec
 **When to use it.** You have a pile of user input and want it triaged into a short list of things worth doing.
 
 **How it runs.**
-1. **Support** clusters the reports (and stops to suggest `/aico:incident` if a cluster looks security-related). If runs have a token ledger, the report also compares the cost of the last three runs under `## Cost`.
+1. **Support** clusters the reports (and stops to suggest `/aico:incident` if a cluster looks security-related). If runs have a token ledger, the report also compares the cost of the last three runs under `## Cost`, and shows the [run scorecard](concepts.md#run-scorecard) medians. The scorecard line itself is printed after the Ship Gate of any build run and never blocks it.
 2. **Product Manager** ranks the top 5 against your success metric and proposes a fix or feature for each. **→ Brief Gate** (you pick).
 3. The Lead tells you which `/aico:fix` and `/aico:feature` runs to start — it never starts them itself.
 

@@ -24,8 +24,37 @@ const CHANGELOG = [
   ''
 ].join('\n');
 
+// Same isolation as stable.test.mjs: empty global config, no system config, fixed identity.
+function envFor(base, extra = {}) {
+  const gitConfig = path.join(base, 'gitconfig');
+  if (!fs.existsSync(gitConfig)) fs.writeFileSync(gitConfig, '');
+  // A fake home too: the real one would add its global ignore file and any installed claude config.
+  const home = path.join(base, 'home');
+  fs.mkdirSync(home, { recursive: true });
+  return {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: gitConfig,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    HOME: home,
+    USERPROFILE: home,
+    APPDATA: home,
+    LOCALAPPDATA: home,
+    XDG_CONFIG_HOME: home,
+    CLAUDE_CONFIG_DIR: home,
+    GIT_AUTHOR_NAME: 'T',
+    GIT_AUTHOR_EMAIL: 't@example.com',
+    GIT_COMMITTER_NAME: 'T',
+    GIT_COMMITTER_EMAIL: 't@example.com',
+    ...extra
+  };
+}
+
+// The sandbox dir is the cwd of the bare/base calls and the parent of the work dir.
+const baseOf = (cwd) => (path.basename(cwd) === 'work' ? path.dirname(cwd) : cwd);
+
 function git(cwd, ...args) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: envFor(baseOf(cwd)) });
   assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
   return r.stdout.trim();
 }
@@ -60,11 +89,36 @@ function sandbox(t, { changelog = CHANGELOG, marketplace = null } = {}) {
   fs.chmodSync(path.join(root, '.git/hooks/pre-push'), 0o755);
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'init');
-  return { root, origin, marker };
+  const claude = path.join(base, 'fake-claude.mjs');
+  const claudeLog = path.join(base, 'claude-args.json');
+  write(base, 'fake-claude.mjs', FAKE_CLAUDE);
+  return { root, origin, marker, claude, claudeLog };
 }
 
+// A stand-in for the claude CLI: records its arguments and exits with FAKE_CLAUDE_EXIT.
+const FAKE_CLAUDE = [
+  "import fs from 'node:fs';",
+  'fs.writeFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify(process.argv.slice(2)));',
+  "console.log(process.env.FAKE_CLAUDE_EXIT === '0' ? 'Validation passed' : 'Validation failed');",
+  "process.exit(Number(process.env.FAKE_CLAUDE_EXIT ?? 0));",
+  ''
+].join('\n');
+
 function run(root, ...args) {
-  return spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: 'utf8' });
+  return runWith(root, {}, ...args);
+}
+
+function runWith(root, env, ...args) {
+  const base = path.dirname(root);
+  const full = { ...envFor(base), AICO_CLAUDE_BIN: path.join(base, 'fake-claude.mjs'), FAKE_CLAUDE_LOG: path.join(base, 'claude-args.json'), FAKE_CLAUDE_EXIT: '0', ...env };
+  for (const k of Object.keys(full)) if (full[k] === undefined) delete full[k];
+  return spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: 'utf8', env: full });
+}
+
+// Directory of the git executable, so a PATH without claude still finds git.
+function gitDir() {
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['git'], { encoding: 'utf8' });
+  return path.dirname(probe.stdout.split('\n')[0].trim());
 }
 
 const read = (root, rel) => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -177,4 +231,79 @@ test('a failing check restores every file and leaves no commit or tag', (t) => {
   assert.equal(git(s.root, 'status', '--porcelain'), '');
   assert.equal(git(s.root, 'rev-parse', 'HEAD'), head);
   assert.equal(git(s.root, 'tag', '--list'), '');
+});
+
+test('release runs claude plugin validate --strict . after the bump', (t) => {
+  const s = sandbox(t);
+  const r = run(s.root, '0.11.0');
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.deepEqual(JSON.parse(fs.readFileSync(s.claudeLog, 'utf8')), ['plugin', 'validate', '--strict', '.']);
+  assert.equal(git(s.root, 'tag', '--list', 'v0.11.0'), 'v0.11.0');
+});
+
+test('a failing validate restores every file and leaves no commit or tag', (t) => {
+  const s = sandbox(t);
+  const head = git(s.root, 'rev-parse', 'HEAD');
+  const r = runWith(s.root, { FAKE_CLAUDE_EXIT: '1' }, '0.11.0');
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /validate failed/);
+  assert.equal(git(s.root, 'status', '--porcelain'), '');
+  assert.equal(git(s.root, 'rev-parse', 'HEAD'), head);
+  assert.equal(git(s.root, 'tag', '--list'), '');
+  assert.match(read(s.root, '.claude-plugin/plugin.json'), /0\.10\.0/);
+});
+
+test('a missing claude CLI fails closed with no commit and no tag', (t) => {
+  const s = sandbox(t);
+  const head = git(s.root, 'rev-parse', 'HEAD');
+  const empty = path.join(path.dirname(s.root), 'empty-bin');
+  fs.mkdirSync(empty);
+  const r = runWith(s.root, {
+    AICO_CLAUDE_BIN: undefined,
+    Path: undefined,
+    PATH: [empty, gitDir(), path.dirname(process.execPath)].join(path.delimiter)
+  }, '0.11.0');
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /validate/);
+  assert.equal(git(s.root, 'status', '--porcelain'), '');
+  assert.equal(git(s.root, 'rev-parse', 'HEAD'), head);
+  assert.equal(git(s.root, 'tag', '--list'), '');
+  assert.match(read(s.root, '.claude-plugin/plugin.json'), /0\.10\.0/);
+});
+
+test('AICO_CLAUDE_BIN must be absolute, existing and not a .cmd or .bat', (t) => {
+  const s = sandbox(t);
+  const base = path.dirname(s.root);
+  write(base, 'shim.cmd', '@echo off\n');
+  write(base, 'shim.bat', '@echo off\n');
+  for (const bin of ['claude', 'fake-claude.mjs', path.join(base, 'shim.cmd'), path.join(base, 'shim.bat'), path.join(base, 'SHIM.CMD'), path.join(base, 'nope.mjs'), base]) {
+    const r = runWith(s.root, { AICO_CLAUDE_BIN: bin }, '0.11.0');
+    assert.notEqual(r.status, 0, `accepted ${bin}`);
+    assert.match(r.stderr, /AICO_CLAUDE_BIN/);
+    assert.equal(git(s.root, 'status', '--porcelain'), '');
+    assert.equal(git(s.root, 'tag', '--list'), '');
+  }
+});
+
+test('a validate that prints far too much output is bounded and fails closed', (t) => {
+  const s = sandbox(t);
+  const base = path.dirname(s.root);
+  write(base, 'noisy.mjs', "process.stdout.write('x'.repeat(50 * 1024 * 1024));\n");
+  const r = runWith(s.root, { AICO_CLAUDE_BIN: path.join(base, 'noisy.mjs') }, '0.11.0');
+  assert.notEqual(r.status, 0);
+  assert.equal(git(s.root, 'tag', '--list'), '');
+  assert.equal(git(s.root, 'status', '--porcelain'), '');
+});
+
+test('test git calls use an isolated config and a fixed committer identity', (t) => {
+  const s = sandbox(t);
+  assert.equal(git(s.root, 'config', '--global', '--list'), '');
+  assert.equal(git(s.root, 'log', '-1', '--format=%ce'), 't@example.com');
+});
+
+test('release.mjs names the validate command in full and has no shell', () => {
+  const src = fs.readFileSync(script, 'utf8');
+  assert.ok(src.includes("'plugin', 'validate', '--strict', '.'"));
+  assert.ok(!/shell:\s*(true|process)/.test(src));
+  assert.ok(!/\bexec(Sync)?\(/.test(src));
 });

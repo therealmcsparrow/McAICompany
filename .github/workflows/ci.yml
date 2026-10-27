@@ -22,3 +22,47 @@ jobs:
       # aico: references, size budgets and version consistency across files.
       - run: npm test
       - run: npm run check
+
+  plugin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      DISABLE_TELEMETRY: "1"
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Install the pinned CLI outside the checkout so validate reads no node_modules.
+      # Scripts stay on: the package postinstall links the platform binary (npm.S2 deviation).
+      - name: Install Claude Code CLI (pinned, lockfile)
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-cli"
+          cp tools/claude-cli/package.json tools/claude-cli/package-lock.json tools/claude-cli/.npmrc "$RUNNER_TEMP/claude-cli/"
+          cd "$RUNNER_TEMP/claude-cli"
+          npm ci
+          npm audit signatures
+          echo "$RUNNER_TEMP/claude-cli/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Show CLI version
+        run: claude --version
+      - name: Validate plugin (blocking)
+        run: claude plugin validate --strict .
+      - name: Eval (report-only)
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ ! -d evals ]; then
+            echo "plugin eval skipped: no suite"
+            exit 0
+          fi
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "plugin eval skipped: no key"
+            exit 0
+          fi
+          claude plugin eval --no-publish --trust-plugin --runs 1 --ablation none --max-cost-usd 2 .

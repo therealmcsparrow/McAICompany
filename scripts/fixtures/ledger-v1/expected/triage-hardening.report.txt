@@ -1,0 +1,23 @@
+run triage-hardening
+step 01 qa  spend 62748  cache read 388827  context at end 55212
+step 02 architect  spend 156937  cache read 1168125  context at end 112145
+step 06 ai-data-engineer  spend 34220  cache read 191936  context at end 34134
+step 05 ai-data-engineer  spend 60298  cache read 1030008  context at end 54767
+step 04 backend-engineer  spend 97049  cache read 1572562  context at end 78205
+step 03 backend-engineer  spend 71375  cache read 1010428  context at end 61361
+step 07 writer  spend 46576  cache read 202077  context at end 43012
+step 08 security  spend 126639  cache read 1362019  context at end 97175
+step 09 qa  spend 45761  cache read 435783  context at end 45363
+step 10 code-reviewer  spend 134224  cache read 1568923  context at end 111168
+step 12 backend-engineer  spend 83937  cache read 1114545  context at end 74150
+step 11 architect  spend 273028  cache read 3682059  context at end 189899
+step 14 writer  spend 32041  cache read 68907  context at end 29620
+step 13 backend-engineer  spend 61594  cache read 628095  context at end 51992
+step 16 security  spend 104451  cache read 775579  context at end 84200
+step 15 code-reviewer  spend 96561  cache read 1000264  context at end 79664
+step 17 backend-engineer  spend 83459  cache read 761398  context at end 64854
+step 18 security  spend 75594  cache read 713723  context at end 61253
+step 19 devops  context at end 23824 (not reconciled)
+spend: 1646492 total, 548831 per AC (3 ACs)
+cache read: 17675258 total, 5891753 per AC (3 ACs)
+not reconciled: 1

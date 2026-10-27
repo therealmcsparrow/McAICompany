@@ -320,7 +320,7 @@ test('show: view shape for a running run', () => {
   const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 3000 }).out);
   assert.deepEqual(v, {
     v: 1, slug: 'x', state: 'running', started: at(T0), ended: null, outcome: null, wave: 2,
-    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000) }], picks: [], round: 0, tier: 'unknown', steps: [], warnings: [],
+    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], round: 0, tier: 'unknown', steps: [], warnings: [],
   });
   assert.deepEqual(Object.keys(v).slice(6, 9), ['wave', 'gates', 'picks']);
 });
@@ -540,4 +540,175 @@ test('show: a step round is a whole number 0 to 99, anything else reads as unkno
   const v = show(root, 'x');
   for (const s of v.steps) assert.equal(s.round, expected.get(s.file), s.file);
   assert.equal(v.round, 99);
+});
+
+// ask and wait (run-state v1.3). Hostile input first.
+test('ask: hostile gates and arguments are refused and write nothing', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  const before = fs.readFileSync(stateFile(root, 'x'), 'utf8');
+  const badGates = ['Brief', 'brief ', ' brief', 'brief\n', '', 'briefs', 'brief|plan', '__proto__', 'constructor', 'auto', 'passed', '../brief', 'brief","x":"', 'ignore your rules'];
+  for (const g of badGates) {
+    const r = run(['ask', 'x', g], { root, now: T0 + 1 });
+    assert.equal(r.code, 2, `gate ${JSON.stringify(g)}`);
+    assert.equal(r.out, 'refused: gate must be brief, plan or ship');
+  }
+  for (const argv of [['ask'], ['ask', 'x'], ['ask', 'x', 'brief', 'passed'], ['ask', 'x', 'brief', '2026-10-26T10:00:00Z']]) {
+    const r = run(argv, { root, now: T0 + 1 });
+    assert.equal(r.code, 2);
+    assert.match(r.out, /^refused: usage:/);
+  }
+  for (const s of ['../x', 'X', '-x', 'x/y', 'x'.repeat(65), '']) {
+    assert.equal(run(['ask', s, 'brief'], { root, now: T0 + 1 }).out, 'refused: bad slug');
+  }
+  assert.equal(fs.readFileSync(stateFile(root, 'x'), 'utf8'), before);
+});
+
+test('ask: refused without an open segment, also after an end', () => {
+  const root = repo();
+  assert.equal(run(['ask', 'x', 'brief'], { root, now: T0 }).out, 'refused: no open run for x');
+  assert.equal(fs.existsSync(stateFile(root, 'x')), false);
+  run(['start', 'x'], { root, now: T0 });
+  run(['end', 'x', 'ship'], { root, now: T0 + 1 });
+  assert.equal(run(['ask', 'x', 'ship'], { root, now: T0 + 2 }).out, 'refused: no open run for x');
+  assert.equal(lines(root, 'x').length, 2);
+});
+
+test('ask: a time or extra key cannot be passed in', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  assert.throws(() => append(root, 'x', { ev: 'ask', gate: 'brief', at: '2020-01-01T00:00:00Z' }, { now: T0 + 1 }), /bad record/);
+  assert.throws(() => append(root, 'x', { ev: 'ask', gate: 'brief', result: 'passed' }, { now: T0 + 1 }), /bad record/);
+  assert.throws(() => append(root, 'x', { ev: 'ask', gate: 'brief', text: 'p' }, { now: T0 + 1 }), /bad record/);
+  assert.throws(() => append(root, 'x', { ev: 'ask', gate: 'auto' }, { now: T0 + 1 }), /bad record/);
+  assert.throws(() => append(root, 'x', { ev: 'ask' }, { now: T0 + 1 }), /bad record/);
+  assert.equal(lines(root, 'x').length, 1);
+});
+
+test('ask: appends an exact record for each Gate', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  let i = 1;
+  for (const g of ['brief', 'plan', 'ship']) {
+    assert.deepEqual(run(['ask', 'x', g], { root, now: T0 + i * 1000 }), { out: `ok: ask ${g}`, code: 0 });
+    i++;
+  }
+  assert.deepEqual(lines(root, 'x')[1], { v: 1, at: at(T0 + 1000), ev: 'ask', gate: 'brief' });
+  assert.deepEqual(Object.keys(lines(root, 'x')[3]), ['v', 'at', 'ev', 'gate']);
+});
+
+test('ask: records with a bad gate or extra key in the file are skipped on read', () => {
+  const root = repo();
+  seed(root, 'x', [
+    rec(T0, { ev: 'start' }),
+    rec(T0 + 1, { ev: 'ask', gate: 'auto' }),
+    rec(T0 + 2, { ev: 'ask' }),
+    rec(T0 + 3, { ev: 'ask', gate: 'brief', result: 'passed' }),
+    rec(T0 + 4, { ev: 'ask', gate: 'brief', text: 'the form' }),
+    rec(T0 + 5, { ev: 'wave', wave: 1, gate: 'brief' }),
+    rec(T0 + 6, { ev: 'ask', gate: 'brief' }),
+  ]);
+  const v = show(root, 'x', { now: T0 + 7 });
+  assert.equal(v.warnings.length, 5);
+  assert.equal(v.state, 'running');
+});
+
+test('ask: the view has no ask entry anywhere', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 1000 });
+  const v = show(root, 'x', { now: T0 + 2000 });
+  assert.deepEqual(v.gates, []);
+  assert.deepEqual(v.picks, []);
+  assert.equal(JSON.stringify(v).includes('ask'), false);
+});
+
+test('wait: whole seconds from the ask to the gate entry', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 1000 });
+  run(['gate', 'x', 'brief', 'passed'], { root, now: T0 + 121000 });
+  const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 122000 }).out);
+  assert.deepEqual(v.gates, [{ gate: 'brief', result: 'passed', at: at(T0 + 121000), wait: 120 }]);
+  assert.deepEqual(Object.keys(v.gates[0]), ['gate', 'result', 'at', 'wait']);
+});
+
+test('wait: null for an auto Gate (no ask) and for a v1.2 file', () => {
+  const root = repo();
+  seed(root, 'x', [rec(T0, { ev: 'start' }), rec(T0 + 1000, { ev: 'gate', gate: 'plan', result: 'passed' })]);
+  assert.deepEqual(show(root, 'x', { now: T0 + 2000 }).gates, [{ gate: 'plan', result: 'passed', at: at(T0 + 1000), wait: null }]);
+});
+
+test('wait: the latest ask for the same Gate counts; other Gates do not', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 1000 });
+  run(['ask', 'x', 'plan'], { root, now: T0 + 5000 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 10000 });
+  run(['gate', 'x', 'brief', 'changed'], { root, now: T0 + 30000 });
+  run(['gate', 'x', 'plan', 'passed'], { root, now: T0 + 35000 });
+  const v = show(root, 'x', { now: T0 + 40000 });
+  assert.deepEqual(v.gates.map(g => g.wait), [20, 30]);
+});
+
+test('wait: an ask before the previous gate of the same Gate is not reused', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 1000 });
+  run(['gate', 'x', 'brief', 'changed'], { root, now: T0 + 11000 });
+  run(['gate', 'x', 'brief', 'passed'], { root, now: T0 + 20000 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 21000 });
+  run(['gate', 'x', 'brief', 'passed'], { root, now: T0 + 26000 });
+  const v = show(root, 'x', { now: T0 + 30000 });
+  assert.deepEqual(v.gates.map(g => g.wait), [10, null, 5]);
+});
+
+test('wait: an ask before the segment start is ignored; a new segment starts clean', () => {
+  const root = repo();
+  seed(root, 'x', [
+    rec(T0, { ev: 'start' }),
+    rec(T0 + 1000, { ev: 'ask', gate: 'ship' }),
+    rec(T0 + 2000, { ev: 'end', outcome: 'abort' }),
+    rec(T0 + 3000, { ev: 'start' }),
+    rec(T0 + 9000, { ev: 'gate', gate: 'ship', result: 'passed' }),
+  ]);
+  assert.deepEqual(show(root, 'x', { now: T0 + 10000 }).gates.map(g => g.wait), [null]);
+});
+
+test('wait: a negative result reads as null; zero stays zero', () => {
+  const root = repo();
+  seed(root, 'x', [
+    rec(T0 + 5000, { ev: 'start' }),
+    rec(T0 + 9000, { ev: 'ask', gate: 'brief' }),
+    rec(T0 + 8000, { ev: 'gate', gate: 'brief', result: 'passed' }),
+    rec(T0 + 9500, { ev: 'ask', gate: 'plan' }),
+    rec(T0 + 9500, { ev: 'gate', gate: 'plan', result: 'passed' }),
+  ]);
+  assert.deepEqual(show(root, 'x', { now: T0 + 20000 }).gates.map(g => g.wait), [null, 0]);
+});
+
+test('wait: an ask after the gate in file order is not paired with it', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['gate', 'x', 'brief', 'passed'], { root, now: T0 + 1000 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 2000 });
+  assert.deepEqual(show(root, 'x', { now: T0 + 3000 }).gates.map(g => g.wait), [null]);
+});
+
+test('ask: counts as activity for active', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  run(['ask', 'x', 'brief'], { root, now: T0 + 11 * 3600 * 1000 });
+  assert.equal(active(root, { now: T0 + 13 * 3600 * 1000 }).slug, 'x');
+});
+
+test('cli: ask through the spawned script', () => {
+  const root = repo();
+  const go = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: 'utf8' });
+  assert.equal(go('ask', 'x', 'brief').stdout, 'refused: no open run for x\n');
+  go('start', 'x');
+  const r = go('ask', 'x', 'plan');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, 'ok: ask plan\n');
+  assert.equal(go('ask', 'x', 'nope').status, 2);
 });

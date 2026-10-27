@@ -1,6 +1,6 @@
 # Format 2 (new files and reopened `format: 2` files)
 
-Load this for every format 2 round. The contracts are `docs/contracts/brainstorm-file.md` v2, `brainstorm-reply.md` v1 and `token-ledger.md` v1; the script enforces them, you drive it.
+Load this for every format 2 round. The contracts are `docs/contracts/brainstorm-file.md` v2, `brainstorm-reply.md` v1 and `token-ledger.md` v1.1; the script enforces them, you drive it.
 
 ## Calling the scripts
 From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <command> …`. The file path is the checked name, in single quotes. All free text goes in only as a file on stdin (`< '<scratch file>'`), never as an argument: replies, the CEO's answer, the `new` topic and the `ask` text and options, whoever wrote them. Write that file with the Write tool.

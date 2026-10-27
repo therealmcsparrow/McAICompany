@@ -24,7 +24,7 @@ v1.2 (task reprompter-role, additive): the reprompt write gate (`mods/reprompt-g
 |---|---|---|
 | Resolved settings (`aico-settings` v1.1 `mods`, `roles.<role>.name`) | `settings.mjs get` | all |
 | Run view (`run-state` v1) | `run-state.mjs active --json` | Savvy, Reflect, Blast Radius (tier), Cache Tax (active run) |
-| Ledger (`token-ledger` v1) | `ledger.mjs report <run> --json --live` | Cache Tax, Reflect retrospective |
+| Ledger (`token-ledger` v1.1) | `ledger.mjs report <run> --json --live` | Cache Tax, Reflect retrospective |
 | Handoffs of the active run | `reflect.mjs` (below), `run-state.mjs` | Reflect, Savvy |
 | Touched paths, tier, depth (`review-depth` v1) | `review-depth.mjs … --json` | Blast Radius |
 | Lessons (`lessons` v1) | `lessons.mjs accept` (write only) | Reflect |

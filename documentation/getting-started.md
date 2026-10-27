@@ -20,6 +20,22 @@ Optionally install the standalone and stack skills the Roles draw on:
 
 Update later with `/plugin marketplace update aico`, then `/reload-plugins`. `/aico:version` shows which version you have.
 
+### Follow `stable` or pin an earlier tag
+
+`stable` is a branch of the repository. It moves only to a release tag (`v<x.y.z>`) that has passed its Ship Gate and is merged into `main`, and it can move back to an earlier tag. It is created the first time the maintainer runs `npm run stable -- <x.y.z>`, so it does not exist before that. Once it exists, install from it by adding `#stable` to the marketplace source:
+
+```
+/plugin marketplace add therealmcsparrow/McAICompany#stable
+```
+
+To install one earlier release instead, add that release's tag. For v0.14.1:
+
+```
+/plugin marketplace add therealmcsparrow/McAICompany#v0.14.1
+```
+
+Then run `/plugin install aico@aico` as above. The tag form was checked with the Claude Code CLI (`claude plugin marketplace add therealmcsparrow/McAICompany#v0.14.1`, then `claude plugin install aico@aico`): it installed version 0.14.1. The `#stable` form has not been run yet, because the branch does not exist yet. The repository is private, so the same git access applies.
+
 Not sure what a command does? `/aico:help` lists them all, and `/aico:help <command>` (or `/aico:<command> help`) explains its options without running it.
 
 ## Your first run
@@ -40,7 +56,7 @@ The first time the company works in a repository, it creates `.company/project.m
 2. **The Lead routes.** It picks only the Roles the job needs and sequences them, running independent Roles in parallel.
 3. **Roles work in turn.** Each Role starts fresh, reads the Handoff files it needs, does its part, and writes its own Handoff for the next Role. Work is committed one step at a time on a branch named `aico/<task>`.
 4. **You approve at Gates.** The run pauses at each Gate (below) until you approve, ask for a change, or stop.
-5. **Ship.** After the Ship Gate, release happens as you approved, and the Lead writes a short summary, shows one cost line (tokens used, counts only) and records any Lessons for next time.
+5. **Ship.** After the Ship Gate, release happens as you approved, and the Lead writes a short summary, shows one cost line (tokens used, counts only), prints a one-line [run scorecard](concepts.md#run-scorecard) and records any Lessons for next time.
 
 Nothing is pushed or released before you approve it at the Ship Gate (unless you unlock an auto Ship Gate in settings, which pushes and opens a PR but never merges).
 

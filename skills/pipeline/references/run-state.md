@@ -1,17 +1,19 @@
 # Run state
 
-The Lead records where a run is in `.company/work/<slug>/run-state.jsonl` through four commands (`run-state` v1, `docs/contracts/run-state.md`). The mods read it; nothing else does. Run each command from the product root.
+The Lead records where a run is in `.company/work/<slug>/run-state.jsonl` through five commands (`run-state` v1.3, `docs/contracts/run-state.md`). The mods read it; nothing else does. Run each command from the product root.
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs" start '<slug>'
 node "${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs" wave '<slug>' '<n>'
 node "${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs" gate '<slug>' '<brief|plan|ship>' '<passed|changed|stopped>'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs" ask '<slug>' '<brief|plan|ship>'
 node "${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs" end '<slug>' '<ship|abort>'
 ```
 
 ## When
 - `start`: in Setup, once the task slug is known. A run resumed with "resume <slug>" after an `end` runs `start` again.
 - `wave`: at the start of each wave of the plan, `<n>` the plan's wave number (1 to 99). A Fix round keeps the wave it belongs to.
+- `ask`: directly before each Brief, Plan and Ship Gate form is shown, so the CEO's wait can be told from run time. An `auto` Gate shows no form and gets no `ask`.
 - `gate`: after each Brief, Plan and Ship Gate answer: Approve is `passed`, Change is `changed`, Stop is `stopped`. An `auto` Gate counts as `passed`.
 - `end`: when the Ship Gate work is done (`ship`) or the CEO stops the run (`abort`).
 

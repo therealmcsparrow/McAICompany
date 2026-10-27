@@ -1,0 +1,22 @@
+run brainstorm-20261027-1140
+round R1 product-manager  spend 19650  cache read 34810  context at end 19492
+round R1 architect  spend 16707  cache read 38340  context at end 20014
+round R1 senior-engineer  spend 22002  cache read 39320  context at end 21842
+round R1 devops  spend 16133  cache read 43029  context at end 21006
+round R1 qa  spend 15166  cache read 43936  context at end 21051
+round R1 market-researcher  spend 21805  cache read 38801  context at end 21598
+round R1 architect  spend 1033  cache read 33680  context at end 17784
+round R1 qa  spend 1202  cache read 36518  context at end 19372
+round R1 marketer  spend 1035  cache read 33670  context at end 17780
+round R1 market-researcher  spend 2672  cache read 37434  context at end 21297
+round R2 product-manager  spend 2298  cache read 33612  context at end 19013
+round R2 devops  spend 2137  cache read 36626  context at end 20361
+round R2 senior-engineer  spend 2495  cache read 37956  context at end 21380
+round R2 qa  spend 2104  cache read 36518  context at end 20274
+round R2 architect  spend 2743  cache read 33680  context at end 19494
+round R2 marketer  spend 1999  cache read 33670  context at end 18744
+round R2 market-researcher  spend 2213  cache read 37434  context at end 20838
+round R2 qa  spend 2620  cache read 36518  context at end 20790
+spend: 136014 total, per AC n/a (no shipped ACs recorded)
+cache read: 665552 total, per AC n/a (no shipped ACs recorded)
+not reconciled: 0
