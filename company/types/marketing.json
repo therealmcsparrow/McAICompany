@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "id": "marketing",
+  "label": "Marketing and content agency",
+  "roles": [
+    "product-manager",
+    "account-manager",
+    "marketer",
+    "writer",
+    "brand-artist",
+    "prompt-artist",
+    "motion-artist",
+    "localizer",
+    "market-researcher",
+    "persona-tester",
+    "accessibility-tester",
+    "legal",
+    "editor",
+    "skill-researcher"
+  ],
+  "playbooks": [
+    "campaign",
+    "content",
+    "research",
+    "client",
+    "feedback",
+    "brainstorm",
+    "cooler"
+  ],
+  "ship": {
+    "kind": "publish",
+    "meaning": "The work is published or handed to the client after the legal and accessibility lanes, with every claim cited or marked unverified.",
+    "lanes": ["legal", "accessibility"],
+    "checks": ["claims-cited", "ai-disclosure", "asset-licences"]
+  },
+  "skill_search": {
+    "hints": [
+      "copywriting and brand voice",
+      "seo and content strategy",
+      "social media content planning"
+    ]
+  }
+}
