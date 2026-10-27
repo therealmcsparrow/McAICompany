@@ -85,7 +85,7 @@ Any other `skillspector.mode` value, or any other key under `skillspector`, is r
 - `roles.<role>.personality: must be an object`
 - `roles.<role>.personality.<key>: unknown key` (the key shown only when it matches `^[a-z_]{1,20}$`, else `?`)
 - `roles.<role>.personality.<temperament|talk|topic>: must be 1 to 80 characters`
-- `roles.<role>.personality.<temperament|talk|topic>: must be one line of letters, digits, single spaces and , . ' - ! ?`
+- `roles.<role>.personality.<temperament|talk|topic>: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit`
 - `roles.<role>.personality.<intelligence|creativity>: must be low, medium or high`
 A save is still all or nothing: any refused line → nothing written. The CLI prints `refused: ` before each line; the server returns them, without that prefix, in its `refused` array (as today). As for every layer refusal today (`checkLayers`), a server line is preceded by its level word and one space (`user ` or `project `), then the path; the page maps level plus path to the field. The page builds the richer field text (character count, the offending character, a word that does not start with a letter or digit, an invisible or lookalike character) from its own copy of the value, never from the server line.
 **Stored bad personality values on Save (v1.3, Step 07):** the server checks personality values only in the layers the Save body carries. A personality value already stored in a layer the body does not carry is a load warning (`ignored`), never a save refusal, so a bad value in a cloned project file never blocks an unrelated Save. Cross-layer checks (name clashes) are unchanged.
