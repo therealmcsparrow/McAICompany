@@ -90,7 +90,7 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 - parallel: yes
 ```
 
-`files:` lists every file the task creates or edits, as repo-relative paths. A directory counts only when the task owns everything under it. Globs, absolute paths and `..` are not valid, and a path part that ends in `.` is refused (Windows). `depends-on:` is `none` or task IDs. `parallel:` is `yes` or `no`.
+`files:` lists every file the task creates or edits, as repo-relative paths. A directory counts only when the task owns everything under it. Globs, absolute paths and `..` are not valid, and a path part that ends in `.` is refused (Windows). `depends-on:` is `none` or task IDs. A dependency on a later task is allowed: tasks run in dependency order, and only a real cycle (a dependency on the task itself included) makes a task run alone. `parallel:` is `yes` or `no`.
 
 **Alone.** A task runs alone, and the Plan Gate shows one warning line with the reason, when it has no `parallel: yes`, has `parallel: no`, or has a missing or invalid field (for example an unknown Role, an invalid `files:` list, an unknown dependency, a cycle or a repeated field). Only a task with `parallel: yes` and valid fields can run beside others.
 
