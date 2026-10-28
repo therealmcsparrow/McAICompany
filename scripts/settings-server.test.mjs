@@ -1540,3 +1540,37 @@ test('a stored project short_path on shows disabled and is described as ignored'
   assert.ok(html.includes("state.project.pipeline?.short_path === 'on'"));
   assert.ok(html.includes('a project can only turn the short path off'));
 });
+
+// Loads the page's own resolver functions into a vm with the given layers and runs them.
+function loadEffective(draft) {
+  const html = pageHtml();
+  const grab = (name) => {
+    const start = html.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, name);
+    return html.slice(start, html.indexOf('\n}\n', start) + 3);
+  };
+  const ctx = vm.createContext({ draft, LOCKED_GATES: [], LOCKED_LANES: [], userUnlocked: () => false });
+  vm.runInContext(html.split('\n').find((l) => l.startsWith('const has = ')) + '\n' + ['getIn', 'pickSource', 'modsEffective', 'effective'].map(grab).join('\n'), ctx);
+  return ctx.effective;
+}
+
+test('effective() on pipeline.short_path: a project on is held and the user value (or on) applies', () => {
+  const p = ['pipeline', 'short_path'];
+  const held = 'on from project is ignored: a project can only turn the short path off';
+  const userOff = loadEffective({ user: { pipeline: { short_path: 'off' } }, project: { pipeline: { short_path: 'on' } } })(p, 'on');
+  assert.deepEqual({ ...userOff }, { value: 'off', source: 'locked', held });
+  const noUser = loadEffective({ user: {}, project: { pipeline: { short_path: 'on' } } })(p, 'on');
+  assert.deepEqual({ ...noUser }, { value: 'on', source: 'locked', held });
+  const projOff = loadEffective({ user: { pipeline: { short_path: 'on' } }, project: { pipeline: { short_path: 'off' } } })(p, 'on');
+  assert.deepEqual({ ...projOff }, { value: 'off', source: 'project' });
+  const none = loadEffective({ user: {}, project: {} })(p, 'on');
+  assert.deepEqual({ ...none }, { value: 'on', source: 'plugin' });
+});
+
+test('a stored project short_path on is styled disabled and its select points at the effect cell', () => {
+  const html = pageHtml();
+  const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
+  assert.ok(row.includes("control.classList.add('ignored')"));
+  assert.ok(row.includes('effectId'));
+  assert.ok(html.includes('select.ignored'));
+});

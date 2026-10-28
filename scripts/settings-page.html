@@ -71,6 +71,7 @@ select:hover:not(:disabled), input[type="text"]:hover:not(:disabled) { border-co
 input[type="text"] { width: 9rem; }
 input[type="text"]::placeholder { color: var(--muted); opacity: 1; }
 input.wide { width: 100%; max-width: 24rem; }
+select.ignored { opacity: .55; background: var(--head); }
 select:disabled, input:disabled { opacity: .55; cursor: not-allowed; background: var(--head); }
 select.set, input.set { border-color: var(--accent); background: var(--set); }
 select[aria-invalid="true"], input[aria-invalid="true"] { border: 2px solid var(--err); background: var(--err-bg); }
@@ -423,7 +424,7 @@ function effective(path, pluginValue) {
   const [area, , key] = path;
   if (area === 'mods') return modsEffective(path, pluginValue);
   const [value, source] = pickSource(path, pluginValue);
-  if (area === 'pipeline' && key === 'short_path' && getIn(draft.project, path) === 'on') {
+  if (area === 'pipeline' && path[1] === 'short_path' && getIn(draft.project, path) === 'on') {
     return { value: getIn(draft.user, path) ?? 'on', source: 'locked', held: 'on from project is ignored: a project can only turn the short path off' };
   }
   if (area === 'skillspector' && getIn(draft.project, path) === 'claude_cli') {
@@ -1244,13 +1245,17 @@ const SHORT_PATH_HINT = 'Short path: a feature you approve as low risk at the Br
 function shortPathRow(tbody, pluginValue) {
   const path = ['pipeline', 'short_path'];
   const label = 'Short path';
-  const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
+  const effectId = 'short-path-effect';
+  const effect = el('td', { class: 'effect', id: effectId, 'aria-live': 'polite' });
   const cells = ['user', 'project'].map((level) => {
     const id = `short-path-${level}`;
     const control = bindLayer(selectFor(level === 'user' ? ['on', 'off'] : ['off'], null), level, path, String);
-    if (level === 'project' && state.project.pipeline?.short_path === 'on') control.append(el('option', { value: 'on', disabled: true }, 'on'));
+    const ignored = level === 'project' && state.project.pipeline?.short_path === 'on';
+    if (ignored) { control.append(el('option', { value: 'on', disabled: true }, 'on')); control.classList.add('ignored'); }
     control.id = id;
     control.setAttribute('aria-describedby', 'short-path-hint');
+    const baseDesc = ignored ? `short-path-hint ${effectId}` : 'short-path-hint';
+    if (ignored) control.setAttribute('aria-describedby', baseDesc);
     const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
     const rec = { key: 'short_path', level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
     const prefix = `${label}, ${level} level: `;
@@ -1266,8 +1271,8 @@ function shortPathRow(tbody, pluginValue) {
       rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
       err.textContent = message;
       err.hidden = message === '';
-      if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `short-path-hint ${err.id}`); }
-      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', 'short-path-hint'); }
+      if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `${baseDesc} ${err.id}`); }
+      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', baseDesc); }
     });
     if (!control.disabled) planRecs.push(rec);
     const tag = el('label', { for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
