@@ -32,6 +32,8 @@ const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*)$/;
 const SECTION_TITLE = /^(?:steps|tasks|wave|phase|fix round|[tm]\d)/i;
 const DECIDED = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided: (\S.*?) because (\S.*)$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+const KEY_ECHO = /^[a-z_]{1,20}$/;
+const echoKey = (key) => (KEY_ECHO.test(key) ? key : '?');
 const POLICIES = ['warn', 'block'];
 const REASONS = ['patterns', 'plan-missing', 'plan-unreadable', 'plan-too-large', 'plan-name'];
 const PATTERN_FILE = path.join(import.meta.dirname, 'plan-check-patterns.json');
@@ -66,7 +68,7 @@ function entryProblem(entry, index, seen) {
   if (!isPlainObject(entry)) return `${label()}: not an object`;
   const fail = (msg) => `${label(entry.id)}: ${msg}`;
   for (const key of Object.keys(entry)) {
-    if (!['id', 're', 'why', 'flags'].includes(key)) return fail(`unknown key ${key.replace(CONTROLS, '').slice(0, 40)}`);
+    if (!['id', 're', 'why', 'flags'].includes(key)) return fail(`unknown key ${echoKey(key)}`);
   }
   for (const key of ['id', 're', 'why']) if (!Object.hasOwn(entry, key)) return fail(`missing key ${key}`);
   if (typeof entry.id !== 'string' || !PATTERN_ID.test(entry.id)) return fail('id is not allowed');
@@ -109,7 +111,7 @@ export function loadPatterns(file = PATTERN_FILE) {
   }
   if (!isPlainObject(data)) throw new PatternError('patterns: not an object');
   for (const key of Object.keys(data)) {
-    if (key !== 'v' && key !== 'patterns') throw new PatternError(`patterns: unknown key ${key.replace(CONTROLS, '').slice(0, 40)}`);
+    if (key !== 'v' && key !== 'patterns') throw new PatternError(`patterns: unknown key ${echoKey(key)}`);
   }
   if (data.v !== 1) throw new PatternError('patterns: v must be 1');
   if (!Array.isArray(data.patterns)) throw new PatternError('patterns: patterns must be an array');
@@ -277,7 +279,7 @@ function recordProblem(rec, scanFindings) {
   if (typeof rec.ev !== 'string' || !Object.hasOwn(EVENTS, rec.ev)) return 'ev is not allowed';
   const spec = EVENTS[rec.ev];
   for (const key of Object.keys(rec)) {
-    if (!spec.required.includes(key) && !spec.optional.includes(key)) return `unknown key ${key.replace(CONTROLS, '').slice(0, 40)}`;
+    if (!spec.required.includes(key) && !spec.optional.includes(key)) return `unknown key ${echoKey(key)}`;
   }
   for (const key of spec.required) if (!Object.hasOwn(rec, key)) return `missing key ${key}`;
   if (typeof rec.at !== 'string' || !TIME.test(rec.at) || Number.isNaN(Date.parse(rec.at)) || new Date(rec.at).toISOString().slice(0, 19) + 'Z' !== rec.at) {

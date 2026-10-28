@@ -2,7 +2,7 @@
 
 At each Plan Gate the Lead runs the plan-check scan and shows its result (`plan-check` v1, `docs/contracts/plan-check.md`). In this version it never blocks a Gate. Run each command from the product root. Pass only checked values in single quotes: the slug, the plan file name, a policy word, a count in digits. Never pass Handoff text or CEO text.
 
-1. **Before the Gate form.** Take the plan file name from `files-touched` of the Architect's Handoff; it must match `^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$`, else skip the scan and say `plan-check: no plan file`. Take `plan_check.policy` from the run's §1.7 `get` JSON (never re-resolved mid-run); absent, or not `off`, `warn` or `block` → `warn`.
+1. **Before the Gate form.** Take the plan file name from `files-touched` of the Architect's Handoff; it must match `^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$`, if it lists two plan files, use the one with the highest number prefix (the latest plan). If it lists no plan file, still run step 2 with the plan name `none`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.mjs" gate '<slug>' 'none' --policy '<policy>'`. That writes an error record (reason `plan-name`) and the Ship Gate marker shows it. Show its stdout as the block. Take `plan_check.policy` from the run's §1.7 `get` JSON (never re-resolved mid-run); absent, or not `off`, `warn` or `block` → `warn`.
 2. **Run it.**
    - `off`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.mjs" off '<slug>'`
    - otherwise: `node "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.mjs" gate '<slug>' '<plan name>' --policy '<warn|block>'`

@@ -49,6 +49,14 @@ test('the reference runs gate or off at the Plan Gate, wave after the form, read
   assert.ok(!/<plugin root>/.test(reference));
 });
 
+test('the reference still runs gate with plan name none when files-touched lists no plan file, and picks one of two', () => {
+  has(reference,
+    'plan-check.mjs" gate \'<slug>\' \'none\' --policy \'<policy>\'',
+    'reason `plan-name`',
+    'two plan files');
+  assert.ok(!reference.includes('skip the scan'));
+});
+
 test('review, planning and feedback texts carry the open-decision wiring', () => {
   const review = read('skills/review/SKILL.md');
   has(review, 'a Nit `[open-decision] <plan file>:<line or section>', 'The tag never appears under `## Blocking`');
