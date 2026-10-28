@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readRecord as readPlanCheck } from './plan-check.mjs';
+import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
 import * as settings from './settings.mjs';
 
@@ -39,14 +40,19 @@ const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 const AICO_VERSION = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const META_KEYS = ['v', 'run', 'kind', 'aico'];
+const PAR_KEYS = ['v', 'run', 'kind', 'cap', 'peak', 'waits', 'out'];
+const PAR_ONLY = ['cap', 'peak', 'waits', 'out'];
+// The `release` of company/model-floor.json at tag v0.17.0: the floor a 0.17.x run without a `floor` key ran on.
+export const FLOOR_RELEASE_V017 = '0.16.0';
+const BUILDER_ROLES = ['backend-engineer', 'frontend-engineer', 'desktop-engineer', 'ai-data-engineer', 'game-engineer'];
 const FAMILIES = ['haiku', 'sonnet', 'opus'];
 const BASELINE_KEY = /^[0-9a-f]{8} [A-Za-z0-9._/-]{1,100}$/;
-const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect', 'meta'];
+const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect', 'meta', 'par'];
 const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico'
+  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico', 'floor', 'cap', 'peak', 'waits', 'out'
 ]);
 const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship'];
 const SHIP_KEYS = new Set(['v', 'run', 'kind', ...SHIP_ONLY]);
@@ -62,7 +68,8 @@ const USAGE = [
   '  scorecard <run> [--baseline <run>,<run>,<run>]',
   '  report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]',
   '  brainstorm-report <run> [--against <run>]',
-  '  model-verdict [--runs <3-50>]'
+  '  model-verdict [--runs <3-50>]',
+  '  parallel-verdict [--runs <3-50>]'
 ].join('\n');
 
 class Refusal extends Error {}
@@ -111,10 +118,24 @@ export function validateRecord(input) {
   if (rec.v !== 1) return fail('v must be 1');
   if (typeof rec.run !== 'string' || !RUN.test(rec.run)) return fail('invalid run');
   if (!KINDS.includes(rec.kind)) return fail('invalid kind');
+  if (rec.kind !== 'par') for (const k of PAR_ONLY) if (Object.hasOwn(rec, k)) return fail(`${k} only on par`);
+  if (rec.kind !== 'meta' && Object.hasOwn(rec, 'floor')) return fail('floor only on meta');
+  if (rec.kind === 'par') {
+    const keys = Object.keys(rec);
+    if (keys.length !== PAR_KEYS.length || !PAR_KEYS.every((k) => keys.includes(k))) return fail('par needs exactly v, run, kind, cap, peak, waits, out');
+    const within = (x, min, max) => Number.isSafeInteger(x) && x >= min && x <= max;
+    if (!within(rec.cap, 1, 5)) return fail('cap must be an integer 1-5');
+    if (!within(rec.peak, 0, 100)) return fail('peak must be an integer 0-100');
+    if (!within(rec.waits, 0, 10000)) return fail('waits must be an integer 0-10000');
+    if (!within(rec.out, 0, 10000)) return fail('out must be an integer 0-10000');
+    return { ok: true };
+  }
   if (rec.kind === 'meta') {
     const keys = Object.keys(rec);
-    if (keys.length !== META_KEYS.length || !META_KEYS.every((k) => keys.includes(k))) return fail('meta needs exactly v, run, kind, aico');
+    const allowed = [...META_KEYS, 'floor'];
+    if (!META_KEYS.every((k) => keys.includes(k)) || !keys.every((k) => allowed.includes(k))) return fail('meta needs exactly v, run, kind, aico and optionally floor');
     if (typeof rec.aico !== 'string' || !AICO_VERSION.test(rec.aico)) return fail('aico must be a version like 0.17.0');
+    if (Object.hasOwn(rec, 'floor') && (typeof rec.floor !== 'string' || !AICO_VERSION.test(rec.floor))) return fail('floor must be a version like 0.16.0');
     return { ok: true };
   }
   if (Object.hasOwn(rec, 'aico')) return fail('aico only on meta');
@@ -476,15 +497,48 @@ function pluginVersion() {
   }
 }
 
+// The release of the model floor in force, or undefined when it cannot be loaded or is not a version.
+function floorRelease() {
+  try {
+    const data = env.loadFloor(env.pluginRoot);
+    const release = isObject(data) && Object.hasOwn(data, 'release') ? data.release : undefined;
+    return typeof release === 'string' && AICO_VERSION.test(release) ? release : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Appends the meta line before the ship record; no line when the version cannot be read.
 function writeMeta(run) {
   const aico = pluginVersion();
   if (aico === undefined) return;
+  const floor = floorRelease();
   try {
-    appendRecord({ v: 1, run, kind: 'meta', aico });
+    appendRecord({ v: 1, run, kind: 'meta', aico, ...(floor === undefined ? {} : { floor }) });
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
   }
+}
+
+// Appends the par line (four integers) from the run's parallel record. Returns the warnings it adds: 1 when the record
+// cannot be read or the line cannot be written, else 0 (no record: no line).
+function writePar(run) {
+  let view;
+  try {
+    view = readParallel(env.root, run);
+  } catch {
+    return 1;
+  }
+  if (!isObject(view) || view.state !== 'on') return 0;
+  const rec = { v: 1, run, kind: 'par', cap: view.effective_cap, peak: view.peak, waits: view.waits, out: view.out };
+  if (!validateRecord(rec).ok) return 1;
+  try {
+    appendRecord(rec);
+  } catch (error) {
+    if (!(error instanceof Refusal)) throw error;
+    return 1;
+  }
+  return 0;
 }
 
 function cmdShip(args) {
@@ -497,11 +551,15 @@ function cmdShip(args) {
   if (highBlockers !== undefined) rec.high_blockers = parseCount(highBlockers, 'high_blockers');
   const excluded = EXCLUDED_RUN.test(rec.run);
   const timed = excluded ? rec : { ...rec, ...viewKeys(rec.run) };
-  if (!excluded) writeMeta(rec.run);
+  let extraWarnings = 0;
+  if (!excluded) {
+    writeMeta(rec.run);
+    extraWarnings = writePar(rec.run);
+  }
   appendRecord(validateRecord(timed).ok ? timed : rec);
   if (excluded) return ['ship recorded (excluded run)'];
   try {
-    return [scorecardLine(rec.run, baselineRuns)];
+    return [scorecardLine(rec.run, baselineRuns, extraWarnings)];
   } catch {
     return ['ship recorded'];
   }
@@ -813,12 +871,12 @@ function comparisonFiles(run, counts) {
   return files.sort((a, b) => b.mtime - a.mtime || (a.name < b.name ? -1 : 1)).slice(0, MAX_COMPARE_FILES);
 }
 
-function scorecardLine(run, baselineRuns) {
+function scorecardLine(run, baselineRuns, extraWarnings = 0) {
   const own = readSafe(run);
   if (!own.exists) return `no ledger for ${run}`;
   if (!own.records.some((r) => r.kind === 'ship')) return `no ship record for ${run}`;
   const mine = runValues(own.records);
-  const counts = { warnings: own.warnings.length, excluded: 0 };
+  const counts = { warnings: own.warnings.length + extraWarnings, excluded: 0 };
   const eligible = [];
   for (const { name } of comparisonFiles(run, counts)) {
     if (EXCLUDED_RUN.test(name)) {
@@ -914,28 +972,25 @@ const familyOf = (model) => {
 
 // The floor data, reduced to what the verdict may print: Role names that are keys of the floor table.
 function floorFor(loadFloor) {
-  const none = { ok: false, downgraded: [], rank: new Map(), warnings: 1 };
+  const none = { ok: false, release: undefined, downgraded: [], rank: new Map(), warnings: 1 };
   try {
     const f = loadFloor(env.pluginRoot);
     if (!isObject(f) || !isObject(f.floor) || !Array.isArray(f.downgraded)) return none;
     const down = [...new Set(f.downgraded.filter((r) => typeof r === 'string' && ROLE.test(r) && Object.hasOwn(f.floor, r) && FAMILIES.includes(f.floor[r])))].sort();
-    return { ok: true, downgraded: down, rank: new Map(down.map((r) => [r, FAMILIES.indexOf(f.floor[r])])), warnings: Array.isArray(f.warnings) ? f.warnings.length : 0 };
+    const release = typeof f.release === 'string' && AICO_VERSION.test(f.release) ? f.release : undefined;
+    return { ok: true, release, downgraded: down, rank: new Map(down.map((r) => [r, FAMILIES.indexOf(f.floor[r])])), warnings: Array.isArray(f.warnings) ? f.warnings.length : 0 };
   } catch {
     return none;
   }
 }
 
-// One run's counted values, or undefined when the run does not count (see the contract).
-function verdictRun(name, records, floor) {
+// The checks both verdicts share (model verdict rule 2): the last ship, the last meta and the plan check key, or undefined.
+function countedBase(name, records) {
   const ship = lastShipOf(records);
   if (!ship || !isTimed(ship) || timeMs(ship.t_ship) === undefined || !(ship.acs > 0)) return undefined;
   if (!Object.hasOwn(ship, 'fix_rounds') || !Object.hasOwn(ship, 'high_blockers')) return undefined;
   if (!records.some((r) => r.src === 'transcript') || summarize(records).unreconciled.length > 0) return undefined;
   const meta = records.findLast((r) => r.kind === 'meta');
-  let side;
-  if (!meta) side = '16';
-  else if (atLeast(meta.aico, [0, 17, 0])) side = '17';
-  else return undefined;
   let view;
   try {
     view = readPlanCheck(env.root, name);
@@ -945,6 +1000,18 @@ function verdictRun(name, records, floor) {
   if (!isObject(view) || view.state === 'error') return undefined;
   const key = view.state === 'on' ? view.policy : view.state;
   if (!['none', 'off', 'warn', 'block'].includes(key)) return undefined;
+  return { ship, meta, key };
+}
+
+// One run's counted values, or undefined when the run does not count (see the contract).
+function verdictRun(name, records, floor) {
+  const base = countedBase(name, records);
+  if (!base) return undefined;
+  const { ship, meta, key } = base;
+  let side;
+  if (!meta) side = '16';
+  else if (atLeast(meta.aico, [0, 17, 0]) && !atLeast(meta.aico, [0, 18, 0])) side = '17';
+  else return undefined;
   const run = { name, side, key, tShip: timeMs(ship.t_ship), acs: ship.acs, fix: ship.fix_rounds, high: ship.high_blockers, spend: 0n, roleSpend: new Map(), lower: 0, ran: 0 };
   for (const r of records.filter(hasCounts)) {
     const n = BigInt(spendOf(r.tokens));
@@ -961,7 +1028,7 @@ function verdictRun(name, records, floor) {
 }
 
 // Newest first, at most 500 files; a file over 1 MiB and files past 32 MiB in total are left unread.
-function verdictRuns(floor, counts) {
+function verdictRuns(floor, counts, build = verdictRun) {
   const files = comparisonFiles('', counts).sort((a, b) => b.mtime - a.mtime || (a.name < b.name ? -1 : 1));
   const runs = [];
   let bytes = 0;
@@ -981,7 +1048,7 @@ function verdictRuns(floor, counts) {
     bytes += size;
     const ledger = readSafe(name);
     counts.warnings += ledger.warnings.length;
-    const run = verdictRun(name, ledger.records, floor);
+    const run = build(name, ledger.records, floor);
     if (run) runs.push(run);
     else counts.notCounted += 1;
   }
@@ -1003,18 +1070,22 @@ function aggregate(set) {
 const ratioLower = (a, b, c, d) => a * d < c * b;
 const ratioNotHigher = (a, b, c, d) => a * d <= c * b;
 
+const newest = (list) => [...list].sort((a, b) => b.tShip - a.tShip || (a.name < b.name ? -1 : 1));
+
+// `[--runs <3-50>]`: digits only, 3 to 50, default 10.
+function parseRunsFlag(args, usage) {
+  if (args.length === 0) return 10;
+  if (args.length !== 2 || args[0] !== '--runs' || !/^\d{1,2}$/.test(args[1])) throw new Refusal(usage);
+  const limit = Number(args[1]);
+  if (limit < 3 || limit > 50) throw new Refusal('--runs must be a whole number from 3 to 50');
+  return limit;
+}
+
 function cmdModelVerdict(args, { loadFloor }) {
-  const usage = 'usage: model-verdict [--runs <3-50>]';
-  let limit = 10;
-  if (args.length > 0) {
-    if (args.length !== 2 || args[0] !== '--runs' || !/^\d{1,2}$/.test(args[1])) throw new Refusal(usage);
-    limit = Number(args[1]);
-    if (limit < 3 || limit > 50) throw new Refusal('--runs must be a whole number from 3 to 50');
-  }
+  const limit = parseRunsFlag(args, 'usage: model-verdict [--runs <3-50>]');
   const floor = floorFor(loadFloor);
   const counts = { warnings: floor.warnings, excluded: 0, notCounted: 0 };
   const counted = verdictRuns(floor, counts);
-  const newest = (list) => [...list].sort((a, b) => b.tShip - a.tShip || (a.name < b.name ? -1 : 1));
   const reference = newest(counted.filter((r) => r.side === '17'))[0]?.key;
   const matching = counted.filter((r) => reference === undefined || r.key === reference);
   const excluded = counted.length - matching.length;
@@ -1060,6 +1131,95 @@ function cmdModelVerdict(args, { loadFloor }) {
     `not counted: ${counts.notCounted}`
   ];
   if (state === 'fail') parts.push(`roll back: ${roll.join(', ')}`);
+  if (counts.warnings > 0) parts.push(`warnings: ${counts.warnings}`);
+  return [parts.join(' | ')];
+}
+
+// ---------- parallel verdict ----------
+
+// One run's counted values for the parallel verdict, or undefined when the run does not count.
+function parallelRun(name, records) {
+  const base = countedBase(name, records);
+  if (!base || !base.meta) return undefined;
+  const { ship, meta, key } = base;
+  const builders = new Set(records.filter((r) => r.kind === 'step' && BUILDER_ROLES.includes(r.role)).map((r) => r.id));
+  if (builders.size < 2) return undefined;
+  let side;
+  let floorKey;
+  let cap;
+  let out;
+  if (atLeast(meta.aico, [0, 18, 0])) {
+    const rec = records.findLast((r) => r.kind === 'par');
+    if (!rec || rec.cap < 2) return undefined;
+    side = '18';
+    floorKey = get(meta, 'floor');
+    cap = rec.cap;
+    out = rec.out;
+  } else if (atLeast(meta.aico, [0, 17, 0])) {
+    side = '17';
+    floorKey = get(meta, 'floor') ?? FLOOR_RELEASE_V017;
+  } else {
+    return undefined;
+  }
+  const rejects = REJECT_KEYS.reduce((n, k) => n + (get(ship, k) ?? 0), 0);
+  const wall = (timeMs(ship.t_ship) - timeMs(ship.t_start)) / 1000;
+  let spend = 0n;
+  for (const r of records.filter(hasCounts)) spend += BigInt(spendOf(r.tokens));
+  return {
+    name, side, key, floorKey, tShip: timeMs(ship.t_ship), acs: ship.acs, fix: ship.fix_rounds, high: ship.high_blockers, rejects,
+    wall, time: wall - (get(ship, 'wait') ?? 0), spend, cap, out
+  };
+}
+
+function parallelSet(set, v18) {
+  const med = (pick) => (set.length ? exactMedian(set.map(pick)) : undefined);
+  return {
+    n: set.length, acs: set.reduce((n, r) => n + BigInt(r.acs), 0n), spend: set.reduce((n, r) => n + r.spend, 0n),
+    time: med((r) => r.time), wall: med((r) => r.wall), fix: med((r) => r.fix), high: med((r) => r.high), rejects: med((r) => r.rejects),
+    out: v18 ? med((r) => r.out) : undefined, cap: v18 ? med((r) => r.cap) : undefined
+  };
+}
+
+function cmdParallelVerdict(args, { loadFloor }) {
+  const limit = parseRunsFlag(args, 'usage: parallel-verdict [--runs <3-50>]');
+  const floor = floorFor(loadFloor);
+  const counts = { warnings: floor.warnings + (floor.ok && floor.release === undefined ? 1 : 0), excluded: 0, notCounted: 0 };
+  const counted = verdictRuns(floor, counts, parallelRun);
+  const reference = newest(counted.filter((r) => r.side === '18'))[0]?.key;
+  const matching = counted.filter((r) => (reference === undefined || r.key === reference) && (floor.release === undefined || r.floorKey === floor.release));
+  const excluded = counted.length - matching.length;
+  const set18 = newest(matching.filter((r) => r.side === '18')).slice(0, limit);
+  const set17 = newest(matching.filter((r) => r.side === '17')).slice(0, limit);
+  const a = parallelSet(set18, true);
+  const b = parallelSet(set17, false);
+
+  let state;
+  if (!floor.ok || floor.release === undefined || a.n < limit || b.n < limit) {
+    state = `insufficient (n=${Math.min(a.n, b.n)})`;
+  } else {
+    const fast = a.time * 4 <= b.time * 3;
+    const quality = a.fix <= b.fix && a.high <= b.high && a.rejects <= b.rejects;
+    const lean = a.spend * 10n * b.acs <= b.spend * 11n * a.acs;
+    state = fast && quality && lean && a.out === 0 ? 'pass' : 'fail';
+  }
+  const dec = (n) => (n === undefined ? '?' : n.toFixed(1));
+  const span = (n) => (n === undefined ? '?' : duration(n));
+  const perAcText = (x) => (x.acs > 0n ? String(Math.round(Number(x.spend) / Number(x.acs))) : '?');
+  const parts = [
+    `parallel verdict: ${state}`,
+    `runs ${a.n} v0.18, ${b.n} v0.17 (plan check ${reference ?? '?'}, floor ${floor.release ?? '?'})`,
+    `time minus CEO wait median ${span(a.time)} (v0.17 ${span(b.time)})`,
+    `wall clock median ${span(a.wall)} (v0.17 ${span(b.wall)})`,
+    `fix rounds median ${dec(a.fix)} (v0.17 ${dec(b.fix)})`,
+    `high blockers median ${dec(a.high)} (v0.17 ${dec(b.high)})`,
+    `gate rejects median ${dec(a.rejects)} (v0.17 ${dec(b.rejects)})`,
+    `spend/AC ${perAcText(a)} (v0.17 ${perAcText(b)})`,
+    `out-of-list median ${dec(a.out)}`,
+    `cap median ${dec(a.cap)}`,
+    `excluded: ${excluded}`,
+    `not counted: ${counts.notCounted}`
+  ];
+  if (state === 'fail') parts.push(a.cap < 5 ? 'next step: set pipeline.parallel_cap to 5' : 'next step: set pipeline.dispatch to sequential');
   if (counts.warnings > 0) parts.push(`warnings: ${counts.warnings}`);
   return [parts.join(' | ')];
 }
@@ -1135,7 +1295,7 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
   try {
     const handlers = {
       add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard,
-      report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict
+      report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
     if (['report', 'brainstorm-report', 'scorecard'].includes(command) && rest.length === 0) throw new Refusal(USAGE);

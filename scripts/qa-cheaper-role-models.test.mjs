@@ -596,7 +596,9 @@ test('ship writes one meta line with the plugin version just before the ship rec
   const recs = readLines(root, 'feat-a');
   const metaAt = recs.findIndex((r) => r.kind === 'meta');
   assert.ok(metaAt > 0);
-  assert.deepEqual(recs[metaAt], { v: 1, run: 'feat-a', kind: 'meta', aico: '0.17.0' });
+  const { floor, ...metaRest } = recs[metaAt];
+  assert.deepEqual(metaRest, { v: 1, run: 'feat-a', kind: 'meta', aico: '0.17.0' });
+  assert.ok(floor === undefined || /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(floor));
   assert.equal(recs[metaAt + 1].kind, 'ship');
   assert.equal(recs.filter((r) => r.kind === 'meta').length, 1);
 });
@@ -781,12 +783,12 @@ test('verdict counts runs it cannot use as not counted, and skips excluded run n
   assert.ok(parts.includes('excluded: 0'), JSON.stringify(parts));
 });
 
-test('verdict newer than 0.17.0 counts on the v0.17 side', () => {
+test('verdict from 0.18.0 on is not on the v0.17 side', () => {
   const root = mkProduct();
   const plugin = mkPlugin({ roles: { ...FIXTURE_ROLES, writer: ['sonnet', 'sonnet'] } });
   fleet(root, { n17: 9 });
   shipped(root, 'later', { side: 17, aico: '0.18.2' });
-  assert.equal(segments(one(verdict(root, plugin)))[0], 'model verdict: pass');
+  assert.equal(segments(one(verdict(root, plugin)))[0], 'model verdict: insufficient (n=9)');
 });
 
 test('verdict line holds only Roles from the floor file, whatever the ledger says', () => {

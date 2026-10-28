@@ -289,7 +289,7 @@ test('the reference plan-check key is the newest counted v0.17 run, and none and
   assert.equal(seg(verdict(off), 'excluded:'), 'excluded: 1');
 });
 
-test('side comes from the last meta line: 0.17.0 or later is v0.17, no meta is v0.16, anything else is not counted', (t) => {
+test('side comes from the last meta line: 0.17.x is v0.17, no meta is v0.16, anything else is not counted', (t) => {
   const sb = sandbox(t);
   mk(sb, 'a-new', { side: '0.17.0', age: 0 });
   mk(sb, 'b-later', { side: '0.18.2', age: 1 });
@@ -297,9 +297,25 @@ test('side comes from the last meta line: 0.17.0 or later is v0.17, no meta is v
   mk(sb, 'd-old', { side: '16', age: 3 });
   mk(sb, 'e-meta16', { side: '0.16.0', age: 4 });
   mk(sb, 'f-meta1610', { side: '0.9.9', age: 5 });
+  mk(sb, 'g-patch', { side: '0.17.9', age: 6 });
   const r = verdict(sb);
-  assert.equal(seg(r, 'runs'), 'runs 3 v0.17, 1 v0.16 (plan check warn)');
-  assert.equal(seg(r, 'not counted:'), 'not counted: 2');
+  assert.equal(seg(r, 'runs'), 'runs 2 v0.17, 1 v0.16 (plan check warn)');
+  assert.equal(seg(r, 'not counted:'), 'not counted: 4');
+});
+
+test('a 0.18.0 run, with or without floor and par lines, is not on the v0.17 side', (t) => {
+  const sb = sandbox(t);
+  passing(sb);
+  const before = verdict(sb);
+  for (let i = 0; i < 3; i += 1) mk(sb, `new18-${i}`, { side: '0.18.0', age: i });
+  const file = path.join(sb.dir, '.company', 'ledger', 'new18-0.jsonl');
+  const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const at = lines.findIndex((l) => l.kind === 'meta');
+  lines.splice(at, 1, { ...lines[at], floor: '0.16.0' }, { v: 1, run: 'new18-0', kind: 'par', cap: 4, peak: 3, waits: 0, out: 0 });
+  fs.writeFileSync(file, jl(...lines));
+  const after = verdict(sb);
+  assert.deepEqual(segments(after).filter((s) => !s.startsWith('not counted:')), segments(before).filter((s) => !s.startsWith('not counted:')));
+  assert.equal(seg(after, 'not counted:'), 'not counted: 3');
 });
 
 test('the last meta line wins when a run shipped twice', (t) => {

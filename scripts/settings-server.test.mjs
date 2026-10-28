@@ -1445,3 +1445,47 @@ test('the page has the live region, no positive tabindex and builds the hint wit
   assert.ok(!html.includes('innerHTML'));
   assert.ok(html.includes('Protected: runs at '));
 });
+
+test('state carries the parallel_cap default; save round-trips 3 to 5 and refuses other values with nothing written', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.equal(before.plugin.pipeline.parallel_cap, 4);
+  assert.equal(before.resolved.pipeline.parallel_cap, 4);
+  for (const bad of [2, 6, 4.5, '4', null, 1e9]) {
+    const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, pipeline: { parallel_cap: bad } } });
+    assert.equal(res.status, 400);
+    const { refused } = await res.json();
+    assert.ok(refused.some((r) => r.includes('pipeline.parallel_cap must be a whole number from 3 to 5')), refused.join(' | '));
+  }
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, pipeline: { parallel_cap: 3 } }, project: { version: 1, pipeline: { parallel_cap: 5 } } });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  assert.equal(after.resolved.pipeline.parallel_cap, 5);
+});
+
+test('page has a Parallel cap row after Dispatch with label-for selects tied to the hint, and a refusal path', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ['parallelCapRow(tbody, defaults.parallel_cap)', "['pipeline', 'parallel_cap']", 'selectFor([3, 4, 5], null)',
+    "el('label', { for: id }", "'aria-describedby', 'parallel-cap-hint'", "id: 'parallel-cap-hint'", 'REFUSED_PARALLEL_CAP', "getElementById('field-live')"]) {
+    assert.ok(html.includes(needle), needle);
+  }
+  const dispatch = html.indexOf("pipelineRow(tbody, 'Dispatch'");
+  const row = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap)');
+  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  assert.ok(dispatch > 0 && dispatch < row && row < review, `order ${dispatch} ${row} ${review}`);
+  assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function parallelCapRow'), html.indexOf('function planCheckRow'))));
+});
+
+test('Parallel cap hint equals the Contract text once and sits after the context-cap hint, before Reprompt', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = /exactly: "(Parallel cap: [^"]*)"/.exec(contract);
+  assert.ok(m, 'Contract hint not found');
+  assert.equal(html.split(`const PARALLEL_CAP_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
+  const cap = html.indexOf('The context cap is a whole number from 60000 to 1000000.');
+  const hint = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
+  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  assert.ok(cap > 0 && cap < hint && hint < h2, `order ${cap} ${hint} ${h2}`);
+});

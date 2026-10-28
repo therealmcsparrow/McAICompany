@@ -28,7 +28,8 @@ const PRE = {
 };
 // Extra bytes a load may carry over the PRE sum. The handoff skill grew 110 B (Starting a Step item 5: Roles never start a Playbook,
 // ADR 0026): code-reviewer is 127 B over its PRE sum (14 B of handoff growth, 113 B of open-decision Nit text, plan-check v1), senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
-const LOAD_EXTRA = { 'agents/senior-engineer.md': 132, 'agents/code-reviewer.md': 127 };
+// Both loads carry 654 B more for the shared-tree rule (Starting a Step item 6, dispatch-prompt v3.5).
+const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654, 'agents/code-reviewer.md': 127 + 654 };
 const LOAD = {
   'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
   'agents/senior-engineer.md': ['agents/senior-engineer.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md', 'skills/standards/SKILL.md'],

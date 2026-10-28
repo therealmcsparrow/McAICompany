@@ -30,9 +30,9 @@ test('feature Fix-round default matches PIPELINE_DEFAULTS.fix_rounds', () => {
   assert.equal(Number(m[1]), PIPELINE_DEFAULTS.fix_rounds);
 });
 
-test('pipeline says parallel by default', () => {
+test('pipeline dispatches in parallel, capped, and lets sequential override the cap', () => {
   assert.equal(PIPELINE_DEFAULTS.dispatch, 'parallel');
-  assert.match(pipeline, /Parallel by default/);
+  assert.match(pipeline, /\*\*Parallel, capped\.\*\*/);
   assert.match(pipeline, /pipeline\.dispatch.*sequential/);
 });
 
@@ -147,4 +147,15 @@ test('aico-settings v1.3 names the personality payload, the phrases, the ignored
   assert.match(doc, /`roles\.<role>\.personality\.<temperament\\\|talk\\\|topic>`/);
   const page = read('scripts/settings-page.html');
   assert.ok(page.includes("'Personality'"), 'the page has the Personality section');
+});
+
+test('aico-settings v1.7 names pipeline.parallel_cap, its range, default, refusal, page hint and pipeline use', () => {
+  const doc = read('docs/contracts/aico-settings.md');
+  assert.match(doc, /^# Contract: aico-settings v1\.(?:[7-9]|\d{2,})$/m);
+  assert.equal(PIPELINE_DEFAULTS.parallel_cap, 4);
+  assert.match(doc, /\| `pipeline\.parallel_cap` \| integer 3-5; default 4 \(v1\.7\) \|/);
+  assert.match(doc, /refused: pipeline\.parallel_cap must be a whole number from 3 to 5, nothing written \(v1\.7\)/);
+  assert.match(doc, /pipeline: \{fix_rounds, dispatch, parallel_cap, context_cap, review_format, lanes\}/);
+  assert.match(doc, /"Parallel cap: at most this many Steps run at once \(builders, reviewers, QA and security\)\. Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn\. Ignored when Dispatch is sequential\."/);
+  assert.match(doc, /`pipeline\.dispatch: sequential` overrides it with 1\. Absent or invalid → 4\./);
 });

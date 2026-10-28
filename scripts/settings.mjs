@@ -25,6 +25,7 @@ export const REVIEW_FORMATS = ['plain', 'pilot'];
 export const PIPELINE_DEFAULTS = {
   fix_rounds: 2,
   dispatch: 'parallel',
+  parallel_cap: 4,
   context_cap: CONTEXT_CAP_DEFAULT,
   review_format: 'plain',
   lanes: { security: true, compliance: true, legal: 'auto', persona: true, hands_on: true, accessibility: true }
@@ -247,6 +248,7 @@ const ROLE_RULES = {
 const PIPELINE_RULES = {
   fix_rounds: { ok: (v) => Number.isInteger(v) && v >= 0 && v <= 5, why: 'must be a whole number from 0 to 5' },
   dispatch: oneOf(DISPATCH),
+  parallel_cap: { ok: (v) => Number.isInteger(v) && v >= 3 && v <= 5, msg: 'pipeline.parallel_cap must be a whole number from 3 to 5' },
   context_cap: CONTEXT_CAP,
   review_format: { ok: (v) => REVIEW_FORMATS.includes(v), msg: `pipeline.review_format must be ${REVIEW_FORMATS.join(' or ')}` }
 };
@@ -635,6 +637,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const pipeline = {
     fix_rounds: pick(project.pipeline?.fix_rounds, user.pipeline?.fix_rounds, PIPELINE_DEFAULTS.fix_rounds)[0],
     dispatch: pick(project.pipeline?.dispatch, user.pipeline?.dispatch, PIPELINE_DEFAULTS.dispatch)[0],
+    parallel_cap: pick(project.pipeline?.parallel_cap, user.pipeline?.parallel_cap, PIPELINE_DEFAULTS.parallel_cap)[0],
     context_cap: pick(project.pipeline?.context_cap, user.pipeline?.context_cap, PIPELINE_DEFAULTS.context_cap)[0],
     review_format: pick(project.pipeline?.review_format, user.pipeline?.review_format, PIPELINE_DEFAULTS.review_format)[0],
     lanes: {}

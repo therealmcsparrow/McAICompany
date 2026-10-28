@@ -221,7 +221,7 @@ test('AC7 the ledger holds only allow-listed keys, enums, numbers and UTC times 
   assert.equal(led(root, ['add', 'feat-now', 'step', '02', 'qa', 'a2', '4000', '7', '95000']).code, 0);
   assert.equal(led(root, ['ship', 'feat-now', '4', '1', '2']).code, 0);
   const allowed = new Set(['v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-    'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico']);
+    'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico', 'floor', 'cap', 'peak', 'waits', 'out']);
   const text = fs.readFileSync(ledgerFile(root, 'feat-now'), 'utf8');
   for (const rec of text.split('\n').filter(Boolean).map((l) => JSON.parse(l))) {
     for (const k of Object.keys(rec)) assert.ok(allowed.has(k), `key ${k}`);
