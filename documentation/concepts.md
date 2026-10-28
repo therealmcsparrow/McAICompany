@@ -69,13 +69,13 @@ At the Plan Gate the Lead runs a text-only check on the plan file. It lists choi
 
 **Waving off a warning.** If there are findings, the Plan Gate form adds the question "Plan check: mark warnings as noise" with the options "None (Recommended)", "All <n>" and a count through Other. The Lead records the number. After you answer Change, the revised plan is checked again at the next Plan Gate.
 
-**What is stored.** One file per run, `.company/work/<slug>/plan-check.jsonl`, with counts, enums, the plan file name and times only. No plan text, no phrase and no CEO text. It is committed with the run's Handoffs. Before the Ship Gate the Lead reads it and shows a line `plan-check marker: <state>` if the check did not run; this never blocks. The ledger and Handoff frontmatter are not changed.
+**What is stored.** One file per run, `.company/work/<slug>/plan-check.jsonl`, with counts, enums, the plan file name and times only. No plan text, no phrase and no CEO text. It stays with the run's Handoffs: committed only where the product tracks `.company/work/`, otherwise local. Before the Ship Gate the Lead reads it and shows a line `plan-check marker: <state>` if the check did not run; this never blocks. The ledger and Handoff frontmatter are not changed.
 
 **The verdict.** `/aico:feedback` compares the median [Fix rounds](#fix-rounds) of the newest check-on runs with the same number of earlier runs (check off, or from before the check). The number of runs is Verdict runs in [settings](#settings), default 5. It says `pass` only when the check-on median is at least 1 lower, `fail` otherwise, and `insufficient (n=<k>)` when either side has too few runs. On `fail` the line adds `default should become off`; nothing changes by itself. It also shows the share of warnings you waved off and adds `retune` above 30%. Until it says `pass`, treat the check as a trial: it is not shown to reduce Fix rounds.
 
 **How a run's Fix rounds are counted.** A Fix round is a builder sent back for a Blocking review or QA finding after the Plan Gate and before your first answer at the Ship Gate. Work after a changed Ship Gate does not count. The number is the `fix_rounds` value in the run's ledger `ship` line, and a run is used only when the highest `round:` in its Step Handoffs up to that Gate gives the same number. Runs where the two differ, or that have no ledger value, are left out and the verdict line shows a warning count.
 
-**History scan.** `plan-check-verdict.mjs history` runs the check over past plans in git and prints findings to the terminal. It writes nothing to the repository or `.company/`. A person supplies true and false labels in a file to get a false-positive rate.
+**History scan.** `plan-check-verdict.mjs history` runs the check over past plans in the working tree and in git history, read-only, and prints findings to the terminal. It writes nothing to the repository or `.company/`. A person supplies true and false labels in a file to get a false-positive rate.
 
 ## Core + Modules + Contracts
 Every product is built the same way:
