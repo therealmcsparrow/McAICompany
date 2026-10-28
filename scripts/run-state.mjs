@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.3). Also keeps the direct-route triage record:
+// Records a run's wave, Gates and end and prints the run view (run-state v1.4). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -35,6 +35,7 @@ export const TRIAGE_TTL_MS = 30 * 60 * 1000;
 const HEX64_RE = /^[0-9a-f]{64}$/;
 const NONCE_RE = /^[0-9a-f]{32}$/;
 const TRIAGE_LINE_RE = / \(triage: XS, risk low, (feature|bug|refactor|launch|audit|incident|upkeep|content|research), route direct\)$/;
+const FIX_LINE_RE = / \(triage: (XS|S|M), risk low, (bug), route fix\)$/;
 const TIER_RANK = { low: 1, medium: 2, high: 3 };
 // Allowed keys per event, beyond `v`, `at` and `ev`.
 const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], ask: ['gate'], pick: ['pick', 'asked'], end: ['outcome'] };
@@ -381,7 +382,8 @@ function dropRefusedRequest(root, now) {
 // `issue` records an approved direct-route request; `check` spends that record once. Returns the JSON text to print.
 export function triage(root, args, { now = Date.now() } = {}) {
   const isCheck = args[0] === 'check';
-  if (!(args[0] === 'issue' && args.length === 1) && !(isCheck && args.length === 2)) refuse(usage());
+  const fixRoute = isCheck && args.length === 4 && args[2] === '--route' && args[3] === 'fix';
+  if (!(args[0] === 'issue' && args.length === 1) && !(isCheck && (args.length === 2 || fixRoute))) refuse(usage());
   if (isCheck && !NONCE_RE.test(args[1])) refuse('bad nonce');
   let dir;
   try { dir = triageFolder(root); } catch (e) {
@@ -390,10 +392,11 @@ export function triage(root, args, { now = Date.now() } = {}) {
   }
   const request = takeRequest(dir);
   const normalized = request === null ? null : normalizeRequest(request);
-  const match = normalized === null ? null : TRIAGE_LINE_RE.exec(normalized);
+  const match = normalized === null ? null : (fixRoute ? FIX_LINE_RE : TRIAGE_LINE_RE).exec(normalized);
+  const issueMatch = normalized === null ? null : (TRIAGE_LINE_RE.exec(normalized) ?? FIX_LINE_RE.exec(normalized));
   if (!isCheck) {
     if (request === null) refuse('no request');
-    if (!match) refuse('no direct triage line');
+    if (!issueMatch) refuse('no direct triage line');
   }
   const file = join(dir, 'records.jsonl');
   const { records, raw } = readTriageRecords(file);
@@ -416,15 +419,15 @@ export function triage(root, args, { now = Date.now() } = {}) {
   if (!isCheck) {
     const nonce = randomBytes(16).toString('hex');
     appendTriage(file, kept, { ev: 'issue', h: bind(nonce, normalized), k: sha(nonce) }, now);
-    return JSON.stringify({ nonce, type: match[1] });
+    return JSON.stringify({ nonce, type: issueMatch[issueMatch.length - 1] });
   }
   if (live) appendTriage(file, kept, { ev: 'used', k }, now);
   if (reason) return JSON.stringify({ trusted: false, reason });
-  return JSON.stringify({ trusted: true, type: match[1] });
+  return JSON.stringify({ trusted: true, type: fixRoute ? match[2] : match[1] });
 }
 
 function usage() {
-  return 'usage: start <slug> | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce>';
+  return 'usage: start <slug> | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce> [--route fix]';
 }
 
 // Returns { out, code }.

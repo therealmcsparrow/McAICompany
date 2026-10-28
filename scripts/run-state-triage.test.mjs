@@ -548,3 +548,98 @@ test('verifyOpened accepts the same plain file and refuses another file or a sec
     if (hardlink(t, a, path.join(base, 'vo-c.txt'))) assert.equal(verifyOpened(fda, null), false);
   } finally { fs.closeSync(fda); }
 });
+
+// Fix route (v1.4): the fix line is recorded by issue and checked only with --route fix.
+const FIX = '(triage: S, risk low, bug, route fix)';
+const FIXREQ = `the login button does nothing ${FIX}`;
+const checkFix = (root, nonce, text = FIXREQ, now = NOW) => {
+  put(root, text);
+  const r = call(root, ['check', nonce, '--route', 'fix'], now);
+  assert.equal(r.code, 0, r.out);
+  return JSON.parse(r.out);
+};
+
+test('hostile fix lines are not recordable', () => {
+  const bad = [
+    `x ${FIX} more`, `x(triage: S, risk low, bug, route fix)`,
+    'x (triage: S, risk medium, bug, route fix)', 'x (triage: S, risk high, bug, route fix)', 'x (triage: L, risk low, bug, route fix)',
+    'x (triage: XL, risk low, bug, route fix)', 'x (triage: s, risk low, bug, route fix)', 'x (triage: S, risk low, bug, route Fix)',
+    'x (triage: S, risk low, feature, route fix)', 'x (triage: S, risk low, bug, route fix)\u0430',
+    'x (triage: S, risk low, bug, route f\u0456x)', 'x (triage: S, risk low, bug, route fix)\nmore',
+    `${FIX} then text`, 'x (triage: S, risk low, bug, route direct)',
+  ];
+  for (const text of bad) {
+    const root = repo();
+    put(root, text);
+    const r = call(root, ['issue']);
+    assert.equal(r.code, 2, JSON.stringify(text));
+    assert.match(r.out, /^refused: no direct triage line$/, JSON.stringify(text));
+    assert.equal(fs.existsSync(recFile(root)), false);
+  }
+});
+
+test('issue accepts a fix line at XS, S and M, then check --route fix trusts it once', () => {
+  for (const size of ['XS', 'S', 'M']) {
+    const root = repo();
+    const text = `crash on save (triage: ${size}, risk low, bug, route fix)`;
+    const { nonce, type } = issue(root, text);
+    assert.equal(type, 'bug');
+    assert.deepEqual(checkFix(root, nonce, text), { trusted: true, type: 'bug' });
+    assert.deepEqual(checkFix(root, nonce, text), { trusted: false, reason: 'used' });
+  }
+});
+
+test('check without --route refuses a fix line and spends the record', () => {
+  const root = repo();
+  const { nonce } = issue(root, FIXREQ);
+  assert.deepEqual(check(root, nonce, FIXREQ), { trusted: false, reason: 'no triage line' });
+  assert.deepEqual(checkFix(root, nonce), { trusted: false, reason: 'used' });
+});
+
+test('check --route fix refuses a direct line and spends the record', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(checkFix(root, nonce, REQ), { trusted: false, reason: 'no triage line' });
+  assert.deepEqual(check(root, nonce), { trusted: false, reason: 'used' });
+});
+
+test('a direct record cannot be replayed as a fix line on another request', () => {
+  const root = repo();
+  const { nonce } = issue(root);
+  assert.deepEqual(checkFix(root, nonce, FIXREQ), { trusted: false, reason: 'request changed' });
+});
+
+test('a fix line mid-text or on an unrecorded request has no trust', () => {
+  const root = repo();
+  const { nonce } = issue(root, FIXREQ);
+  assert.deepEqual(checkFix(root, nonce, `${FIX} and more words`), { trusted: false, reason: 'no triage line' });
+  assert.deepEqual(checkFix(root, 'c'.repeat(32), FIXREQ), { trusted: false, reason: 'no record' });
+});
+
+test('trailing space or CR after a fix line follows the same normalization as the direct line', () => {
+  const root = repo();
+  const { nonce } = issue(root, `${FIXREQ}  \r\n`);
+  assert.deepEqual(checkFix(root, nonce, FIXREQ), { trusted: true, type: 'bug' });
+});
+
+test('--route takes only fix, once, after the nonce', () => {
+  const root = repo();
+  for (const args of [['check', 'a'.repeat(32), '--route'], ['check', 'a'.repeat(32), '--route', 'direct'], ['check', 'a'.repeat(32), '--route', 'FIX'],
+    ['check', 'a'.repeat(32), '--route=fix'], ['check', 'a'.repeat(32), 'fix'], ['check', 'a'.repeat(32), '--route', 'fix', 'x'],
+    ['check', '--route', 'fix', 'a'.repeat(32)], ['issue', '--route', 'fix']]) {
+    put(root, FIXREQ);
+    const r = call(root, args);
+    assert.equal(r.code, 2, args.join(' '));
+    assert.match(r.out, /^refused: /);
+    assert.ok(fs.existsSync(reqFile(root)), `${args.join(' ')} reads nothing`);
+  }
+});
+
+test('the record of a fix line holds hashes and times only', () => {
+  const root = repo();
+  issue(root, FIXREQ);
+  const raw = fs.readFileSync(recFile(root), 'utf8');
+  assert.equal(raw.includes('login'), false);
+  assert.equal(raw.includes('fix'), false);
+  assert.deepEqual(Object.keys(records(root)[0]).sort(), ['at', 'ev', 'h', 'k', 'v']);
+});
