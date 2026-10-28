@@ -819,7 +819,7 @@ function lookup(value, dotted) {
 }
 
 const parseVersion = (text) => {
-  const m = /(\d+)\.(\d+)\.(\d+)/.exec(String(text));
+  const m = /(?<!\d)(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?!\d)/.exec(String(text).slice(0, 256));
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 };
 const atLeast = (v, min) => {
@@ -827,36 +827,85 @@ const atLeast = (v, min) => {
   return true;
 };
 
-// The running Claude Code version as [major, minor, patch], or null. Reads AI_AGENT (no process) and
-// `claude --version` (no shell, 5 s limit); when both answer and differ, the lower one wins. Any failure is null.
-export function readClaudeVersion({ env = process.env, exec = execFileSync } = {}) {
-  const agent = /^claude-code_(\d+)-(\d+)-(\d+)(?:_|$)/.exec(env.AI_AGENT ?? '');
-  const fromEnv = agent ? [Number(agent[1]), Number(agent[2]), Number(agent[3])] : null;
-  let fromCli = null;
-  try {
-    fromCli = parseVersion(exec('claude', ['--version'], { encoding: 'utf8', timeout: VERSION_TIMEOUT_MS, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }));
-  } catch {}
-  if (fromEnv && fromCli) return atLeast(fromEnv, fromCli) ? fromCli : fromEnv;
-  return fromEnv ?? fromCli;
+const samePlace = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+const realOf = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+const insideOrSame = (dir, root) => {
+  const rel = path.relative(root, dir);
+  return samePlace(dir, root) || (rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel));
+};
+
+// The absolute path of `claude` found by walking PATH here, or null. Empty, relative, and current-folder or
+// product-folder entries are skipped, so a program planted in a cloned repo is never found.
+export function resolveClaude({ env = process.env, cwd = process.cwd(), productRoot = cwd } = {}) {
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path');
+  const list = key ? String(env[key] ?? '') : '';
+  const blocked = [realOf(cwd), realOf(productRoot)];
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  for (const entry of list.split(path.delimiter)) {
+    if (!entry || !path.isAbsolute(entry)) continue;
+    const dir = realOf(entry);
+    if (blocked.some((root) => insideOrSame(dir, root))) continue;
+    const file = path.join(dir, name);
+    try {
+      if (!fs.statSync(file).isFile()) continue;
+      if (process.platform !== 'win32') fs.accessSync(file, fs.constants.X_OK);
+      return file;
+    } catch {}
+  }
+  return null;
 }
 
+// What each source says about the Claude Code version: { agent, cli }, each [major, minor, patch] or null.
+// `agent` reads AI_AGENT (no process); `cli` runs the resolved absolute claude with --version from the temp
+// folder (no shell, 5 s limit, small output cap).
+export function readClaudeSources({ env = process.env, exec = execFileSync, cwd = process.cwd(), productRoot = cwd } = {}) {
+  const m = /^claude-code_(\d{1,4})-(\d{1,4})-(\d{1,4})(?:_|$)/.exec(String(env.AI_AGENT ?? '').slice(0, 128));
+  const agent = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  let cli = null;
+  const bin = resolveClaude({ env, cwd, productRoot });
+  if (bin) {
+    try {
+      cli = parseVersion(exec(bin, ['--version'], { encoding: 'utf8', cwd: os.tmpdir(), timeout: VERSION_TIMEOUT_MS, maxBuffer: 4096, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }));
+    } catch {}
+  }
+  return { agent, cli };
+}
+
+const lowerOf = ({ agent, cli }) => (agent && cli ? (atLeast(agent, cli) ? cli : agent) : agent ?? cli);
+
+// The running Claude Code version as [major, minor, patch], or null. When both sources answer and differ the lower one wins.
+export function readClaudeVersion(options = {}) {
+  return lowerOf(readClaudeSources(options));
+}
+
+const sameVersion = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+
 // The `model-env` line, or '' when neither variable is set (aico-settings v1.6). Reads only the two named variables.
-export function modelEnvLine({ env = process.env, readVersion = () => readClaudeVersion({ env }) } = {}) {
+// `readVersion` (one version) counts as confirmed by both sources; `readSources` gives each source separately.
+export function modelEnvLine({ env = process.env, readVersion, readSources = () => readClaudeSources({ env }) } = {}) {
   const raw = env.CLAUDE_CODE_SUBAGENT_MODEL ?? '';
   const rawForce = env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? '';
   const set = raw !== '' && raw !== 'inherit';
   const force = rawForce !== '' && rawForce !== '0';
   if (!set && !force) return '';
   const shown = (v) => (v === '' ? 'unset' : VAR_SHOWN_RE.test(v) ? v : '(hidden)');
-  const version = readVersion();
+  let version;
+  let confirmed;
+  if (readVersion) { version = readVersion(); confirmed = !!version; }
+  else {
+    const sources = readSources();
+    version = lowerOf(sources);
+    confirmed = !!(sources.agent && sources.cli && sameVersion(sources.agent, sources.cli));
+  }
   let effect;
   let kept = false;
   if (!version) effect = "version unknown, may override every Role's model";
   else if (!atLeast(version, [2, 1, 251]) && set) effect = "overrides every Role's model, the Agent model included";
-  else if (atLeast(version, [2, 1, 257]) && force) effect = set ? `forces ${shown(raw)} on every Role` : "forces the main conversation's model on every Role";
+  else if (force && atLeast(version, [2, 1, 257])) effect = set ? `forces ${shown(raw)} on every Role` : "forces the main conversation's model on every Role";
+  else if (force && !confirmed) effect = "version not confirmed by both sources, FORCE may force a model on every Role";
   else if (set) { effect = 'a default only; every aico Role sets model in its frontmatter, so no Role changes'; kept = true; }
   else { effect = 'FORCE needs Claude Code 2.1.257; no Role changes'; kept = true; }
-  const ver = version ? version.join('.') : 'unknown';
+  const ver = version && (confirmed || !force) ? version.join('.') : 'unknown';
   return `model env: CLAUDE_CODE_SUBAGENT_MODEL=${shown(raw)} CLAUDE_CODE_SUBAGENT_MODEL_FORCE=${shown(rawForce)}, Claude Code ${ver}: ${effect}; floor ${kept ? 'kept' : 'bypassed'}`;
 }
 

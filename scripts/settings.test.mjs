@@ -1544,34 +1544,126 @@ test('model-env: a value outside the allow-list prints as (hidden)', () => {
   assert.ok(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'claude-opus-4:1m[x]' }, [2, 1, 300]).includes('=claude-opus-4:1m[x] '));
 });
 
+// A directory holding a fake claude on the search path; the exec stub is injected, so nothing runs.
+function pathWith(t, ...extra) {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-bin-'));
+  t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  fs.writeFileSync(path.join(bin, name), 'x', { mode: 0o755 });
+  return { bin, file: path.join(bin, name), PATH: [bin, ...extra].join(path.delimiter) };
+}
+
 test('readClaudeVersion: AI_AGENT alone answers when claude is not found', () => {
-  const exec = () => { throw Object.assign(new Error('x'), { code: 'ENOENT' }); };
-  assert.deepEqual(readClaudeVersion({ env: { AI_AGENT: 'claude-code_2-1-310_agent' }, exec }), [2, 1, 310]);
+  const exec = () => { throw new Error('must not run'); };
+  assert.deepEqual(readClaudeVersion({ env: { AI_AGENT: 'claude-code_2-1-310_agent', PATH: '' }, exec }), [2, 1, 310]);
 });
 
-test('readClaudeVersion: when AI_AGENT and --version disagree the lower version wins', () => {
-  const env = { AI_AGENT: 'claude-code_2-1-310_agent' };
+test('readClaudeVersion: when AI_AGENT and --version disagree the lower version wins (the 2.1.251 rule)', (t) => {
+  const { PATH } = pathWith(t);
+  const env = { AI_AGENT: 'claude-code_2-1-310_agent', PATH };
   assert.deepEqual(readClaudeVersion({ env, exec: () => '2.1.311 (Claude Code)' }), [2, 1, 310]);
   assert.deepEqual(readClaudeVersion({ env, exec: () => '2.1.250 (Claude Code)' }), [2, 1, 250]);
 });
 
-test('readClaudeVersion: claude --version without a shell, 5 s limit, fixed arguments', (t) => {
+test('readClaudeVersion: runs the absolute path from PATH, from the temp folder, no shell, 5 s, bounded output', (t) => {
+  const { PATH, file } = pathWith(t);
   const exec = t.mock.fn(() => '2.1.311 (Claude Code)\n');
-  assert.deepEqual(readClaudeVersion({ env: { AI_AGENT: 'other' }, exec }), [2, 1, 311]);
-  const [file, args, options] = exec.mock.calls[0].arguments;
-  assert.equal(file, 'claude');
+  assert.deepEqual(readClaudeVersion({ env: { AI_AGENT: 'other', PATH }, exec }), [2, 1, 311]);
+  const [bin, args, options] = exec.mock.calls[0].arguments;
+  assert.equal(bin, file);
+  assert.ok(path.isAbsolute(bin));
   assert.deepEqual(args, ['--version']);
   assert.equal(options.timeout, 5000);
+  assert.equal(options.cwd, os.tmpdir());
+  assert.ok(options.maxBuffer <= 65536);
   assert.ok(!options.shell);
 });
 
-test('readClaudeVersion: ENOENT, EINVAL, timeout, bad exit and garbage are unknown', () => {
+test('readClaudeVersion: a claude planted in the current or product folder is never run', (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'planted-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  fs.writeFileSync(path.join(repo, name), 'x', { mode: 0o755 });
+  fs.mkdirSync(path.join(repo, 'node_modules', '.bin'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'node_modules', '.bin', name), 'x', { mode: 0o755 });
+  const exec = t.mock.fn(() => '2.1.311');
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'cwd-'));
+  t.after(() => fs.rmSync(other, { recursive: true, force: true }));
+  const PATH = ['', '.', 'relative-bin', repo, path.join(repo, 'node_modules', '.bin')].join(path.delimiter);
+  assert.equal(readClaudeVersion({ env: { PATH }, exec, cwd: repo, productRoot: repo }), null);
+  assert.equal(readClaudeVersion({ env: { PATH }, exec, cwd: other, productRoot: repo }), null);
+  assert.equal(readClaudeVersion({ env: { PATH: repo }, exec, cwd: repo, productRoot: other }), null);
+  assert.equal(exec.mock.calls.length, 0);
+});
+
+test('readClaudeVersion: a later trusted PATH entry still answers when a planted one is skipped', (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'planted-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  fs.writeFileSync(path.join(repo, name), 'x', { mode: 0o755 });
+  const { PATH, file } = pathWith(t);
+  const exec = t.mock.fn(() => '2.1.311');
+  assert.deepEqual(readClaudeVersion({ env: { PATH: [repo, PATH].join(path.delimiter) }, exec, cwd: repo, productRoot: repo }), [2, 1, 311]);
+  assert.equal(exec.mock.calls[0].arguments[0], file);
+});
+
+test('readClaudeVersion: the version text is bounded (no quadratic scan of a long digit run)', (t) => {
+  const { PATH } = pathWith(t);
+  const started = Date.now();
+  assert.equal(readClaudeVersion({ env: { PATH }, exec: () => '9'.repeat(200000) }), null);
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(readClaudeVersion({ env: { PATH }, exec: () => '12345.1.1' }), null);
+});
+
+test('readClaudeVersion: no claude on PATH, EINVAL, timeout, bad exit and garbage are unknown', (t) => {
+  assert.equal(readClaudeVersion({ env: { PATH: '' }, exec: () => { throw new Error('must not run'); } }), null);
+  const { PATH } = pathWith(t);
   for (const code of ['ENOENT', 'EINVAL', 'ETIMEDOUT']) {
     const exec = () => { throw Object.assign(new Error(code), { code }); };
-    assert.equal(readClaudeVersion({ env: {}, exec }), null, code);
+    assert.equal(readClaudeVersion({ env: { PATH }, exec }), null, code);
   }
-  assert.equal(readClaudeVersion({ env: {}, exec: () => 'no digits here' }), null);
-  assert.equal(readClaudeVersion({ env: {}, exec: () => '' }), null);
+  assert.equal(readClaudeVersion({ env: { PATH }, exec: () => 'no digits here' }), null);
+  assert.equal(readClaudeVersion({ env: { PATH }, exec: () => '' }), null);
+});
+
+const forceLine = (env, sources) => modelEnvLine({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1', ...env }, readSources: () => sources });
+
+test('model-env FORCE: AI_AGENT 2.1.252 on a newer CLI is floor bypassed, not kept', () => {
+  const out = forceLine({}, { agent: [2, 1, 252], cli: [2, 1, 311] });
+  assert.ok(out.endsWith('floor bypassed'), out);
+});
+
+test('model-env FORCE: only one source, or none, is floor bypassed', () => {
+  assert.ok(forceLine({}, { agent: [2, 1, 252], cli: null }).endsWith('floor bypassed'));
+  assert.ok(forceLine({}, { agent: null, cli: [2, 1, 252] }).endsWith('floor bypassed'));
+  assert.ok(forceLine({}, { agent: null, cli: null }).endsWith('floor bypassed'));
+});
+
+test('model-env FORCE: both sources agree below 2.1.257 keeps the floor; at or above it is bypassed', () => {
+  assert.ok(forceLine({}, { agent: [2, 1, 252], cli: [2, 1, 252] }).endsWith('floor kept'));
+  assert.ok(forceLine({ CLAUDE_CODE_SUBAGENT_MODEL: '' }, { agent: [2, 1, 256], cli: [2, 1, 256] }).endsWith('floor kept'));
+  assert.ok(forceLine({}, { agent: [2, 1, 257], cli: [2, 1, 257] }).endsWith('floor bypassed'));
+});
+
+test('model-env FORCE: a disagreement is bypassed; without FORCE the lower version still decides', () => {
+  assert.ok(forceLine({}, { agent: [2, 1, 311], cli: [2, 1, 252] }).endsWith('floor bypassed'));
+  const noForce = modelEnvLine({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, readSources: () => ({ agent: [2, 1, 252], cli: [2, 1, 311] }) });
+  assert.ok(noForce.endsWith('floor kept'), noForce);
+});
+
+test('model-env CLI: a claude.exe planted in the working folder is not run', (t) => {
+  const s = sandbox(t);
+  const marker = path.join(s.cwd, 'ran.txt');
+  fs.copyFileSync(process.execPath, path.join(s.cwd, process.platform === 'win32' ? 'claude.exe' : 'claude'));
+  fs.writeFileSync(path.join(s.cwd, 'claude.cmd'), `@echo ran> "${marker}"\r\necho 2.1.100\r\n`);
+  const env = { ...process.env, MCSPARROW_HOME: s.home, CLAUDE_CODE_SUBAGENT_MODEL: 'haiku', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' };
+  delete env.AI_AGENT;
+  for (const k of Object.keys(env)) if (k.toLowerCase() === 'path') env[k] = ['', '.', s.cwd].join(path.delimiter);
+  const r = spawnSync(process.execPath, [script, 'model-env'], { cwd: s.cwd, encoding: 'utf8', env });
+  assert.equal(r.status, 0);
+  assert.ok(r.stdout.includes('Claude Code unknown'), r.stdout);
+  assert.ok(r.stdout.includes('floor bypassed'));
+  assert.equal(fs.existsSync(marker), false);
 });
 
 test('model-env CLI: silent without the variables, one line with them', (t) => {
