@@ -1,9 +1,10 @@
 # Contract: plan-check v1
 
 Provider: `scripts/plan-check.mjs` (scanner, pattern file loader, record writer and reader; Node built-ins only) with the pattern file `scripts/plan-check-patterns.json`, and `scripts/plan-check-verdict.mjs` (verdict and history scan; Node built-ins and `git` through `execFile`). Writer of the record: the Lead (`aico:pipeline` Plan Gate and Finish, through `skills/pipeline/references/plan-check.md`), only through the CLI. Consumers: the Plan Gate summary (the `gate` block), `aico:feedback` (the `verdict` line), `scripts/plan-check-verdict.mjs` through the exported `readRecord` and `scanText`, and the later hook-run Gate (block, exit 2), which will reuse `scanText` and `loadPatterns`.
-Uses: `run-state` v1.3 (the exported `show(root, slug)`, for each run's Step Handoffs and Gate entries), `token-ledger` v1.1 read-only (the exported `validateRecord` of `scripts/ledger.mjs`, for each run's recorded `fix_rounds`; nothing is written to the ledger), `aico-settings` v1.5 (`plan_check.policy` and `plan_check.runs`, passed in by the caller as arguments; neither script reads settings itself).
+Uses: `run-state` v1.3 (the exported `show(root, slug)`, for each run's Step Handoffs, their `mtime` and the Gate entries), `token-ledger` v1.1 read-only (the exported `validateRecord` of `scripts/ledger.mjs`, for each run's recorded `fix_rounds`; nothing is written to the ledger), `aico-settings` v1.5 (`plan_check.policy` and `plan_check.runs`, passed in by the caller as arguments; neither script reads settings itself).
 Rationale: `docs/adr/0030-plan-check-own-record.md`. Ledger records (`token-ledger` v1.1) and Handoff frontmatter (`handoff` v1.1) are not changed by this Contract.
 Step 05 (Architect, after Spike S1 `03-spike-ai-data-engineer.md`; v1 is unshipped, no version change): the Fix-round measure is the recorded ledger value, cross-checked against the Handoffs up to the first Ship Gate answer; the `--runs` default is 5.
+Step 12 (Architect, after T3 `08-ai-data-engineer.md`; v1 is unshipped, no version change): `.company/work/` can be git-ignored (it is in this repo), so a Step's time falls back to its file mtime, and `history` scans the plans in the working tree as well as any in git history.
 
 ## Plan file
 - One file in the run folder: `.company/work/<slug>/<name>`. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`; `<name>` matches `^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$` (covers `02-plan.md`, `02-architect-plan.md`, `55-architect-plan-m.md`, `plan.md`). Any other name → `error` record, reason `plan-name`.
@@ -36,7 +37,7 @@ Lines are read top to bottom with this state:
 
 ## Record `.company/work/<slug>/plan-check.jsonl`
 The per-run marker (AC11): its last scan, off or error record says whether the check ran for the run.
-- Append-only (`O_APPEND`), LF, one JSON object per line; a line at most 256 bytes, the file at most 64 KiB and 1000 lines. The run folder and the file are opened with `lstat`; a link is refused. Committed with the run's Handoffs.
+- Append-only (`O_APPEND`), LF, one JSON object per line; a line at most 256 bytes, the file at most 64 KiB and 1000 lines. The run folder and the file are opened with `lstat`; a link is refused. It stays with the run's Handoffs: committed only where the product tracks `.company/work/`, otherwise local (as in this repo).
 - Counts, enums, a file name and times only. No plan text, no phrase, no CEO text (GDPR Art. 5(1)(c)).
 
 | Key | Value | On |
@@ -75,16 +76,18 @@ Exit codes: **0** done; **1** the scan could not run, or `read` met a broken rec
 3. `+<k> more` when more than 5 findings exist (AC7).
 
 ## CLI `scripts/plan-check-verdict.mjs` (read-only; cwd = product root; `main(args, { root })` exported)
-It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `git` runs through `execFile` with a fixed argument list, no shell, cwd = root, 30 s timeout, 8 MiB output cap.
+It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `git` runs through `execFile` with a fixed argument list, no shell, cwd = root, 30 s timeout, 8 MiB output cap. Every file it reads from the working tree is opened with `lstat` (a regular file, not a link, inside a plain run folder).
 
 **Feature runs.** Every `.company/work/<slug>/` (valid slug, a plain folder, at most 200) that holds `00-summary.md` and a file matching the plan name rule. Order: newest first by the committer time of the last commit that touched its `00-summary.md` (`git log -1 --format=%ct -- <path>`); untracked → the file mtime.
 **Side.** `readRecord` state `on` → check-on. State `none` or `off` → baseline (the backfill: runs before v0.16 and runs with the check off). State `error` → left out, one warning. A broken record → the verdict prints `plan-check verdict: error (<reader message>)`, exit 1.
 
 **Fix rounds of a run (frozen definition).** A Fix round is a re-dispatch of a builder for a Blocking review or QA finding after the Plan Gate is approved and before the first Ship Gate answer (`01-product-manager.md` Decisions; Step 05 adds the Ship Gate end: work after a changed Ship Gate follows a Gate reject and does not count). The same two values are read for every run, on both sides:
 1. **Recorded:** `fix_rounds` of the last valid `ship` record in `.company/ledger/<slug>.jsonl`. Each line is parsed and checked with `validateRecord` from `scripts/ledger.mjs`; invalid lines are skipped, a file over 1 MiB or a line over 512 bytes gives no value. Absent key, no `ship` record or no file → no value.
-2. **Cross-check:** the highest numeric `round:` among the run's Step Handoffs (`run-state` v1.3 `show(root, slug).steps`), counting only the Steps whose file was added no later than the `at` of the first `ship` entry in the view's `gates`. A file's add time = the committer time from one `git log --diff-filter=A --format=%ct --name-only -- .company/work/<slug>` call per run; an untracked file, or a view with no `ship` entry, counts every Step. No Step with a numeric `round` → no value.
+2. **Cross-check:** the highest numeric `round:` among the run's Step Handoffs (`run-state` v1.3 `show(root, slug).steps`), counting only the Steps whose **Step time** is no later than the `at` of the first `ship` entry in the view's `gates` (both compared in whole UTC seconds). A view with no `ship` entry counts every Step. No Step with a numeric `round` → no value.
+   - **Step time** (Step 12): when the Step file is tracked in git, the committer time of the commit that added it (one `git log --diff-filter=A --format=%ct --name-only -- .company/work/<slug>` call per run); otherwise the Step's `mtime` from the `show` view, floored to whole seconds. A Step with neither (git failed and no `mtime`) makes the run's cross-check give no value.
+   - Limits of mtime: a Handoff edited after its Step gets a later time, so it can only drop out of the cross-check, never be added. The cross-check decides only whether a run counts; the value used is always the recorded one. A wrong mtime can therefore at worst leave a run out or let one in, never change a run's number.
 - The run counts only when both values exist and are equal; its Fix rounds is that value. Otherwise it is left out with the warning `<slug>: fix rounds <recorded or none> vs handoffs <n or none>`.
-- Backfill on this repo (Spike S1 and Step 05; T3 confirms by running `verdict` once): counted personalities-company-types 2, playbook-chain-handoff 2, skill-researcher-scan 3, speed-scorecard 2, triage-hardening 1 (the cap leaves out the round-2 Steps after its changed Ship Gate). Left out: reprompter-role (recorded 1, Handoffs 3: a two-phase run with no Ship Gate entry), research-team and optimize-brainstorm (no recorded value). Baseline today: 5 runs, median 2.
+- Backfill on this repo (Spike S1, T3 and Step 12): counted personalities-company-types 2, playbook-chain-handoff 2, skill-researcher-scan 3, speed-scorecard 2, triage-hardening 1 (by mtime its round-2 Steps 17-18 come after its changed Ship Gate). Left out: reprompter-role (recorded 1, Handoffs 3: a two-phase run with no Ship Gate entry), research-team and optimize-brainstorm (no recorded value). Baseline today: 5 runs, median 2.
 
 | Command | Output |
 |---|---|
@@ -95,15 +98,18 @@ It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `
 - Medians use the ledger rule (middle value; the mean of the two middle values for an even count); shown with one decimal; an empty side shows `?`.
 - Waved-off share = the sum of `waved` ÷ the sum of `findings` over the check-on side's runs, rounded to a whole percent; `n/a` when the sum of `findings` is 0.
 
-**History scan (AC12).** Lists every plan path ever added under `.company/work/` (`git log --diff-filter=A --format=%H%x09%ct --name-only -- .company/work`), keeps the paths that match `.company/work/<slug>/<plan name>`, takes each path's oldest adding commit, newest first, at most `--limit` (default 50, at most 200), reads each with `git show <sha>:<path>` (over 256 KiB → skipped, one warning) and scans it with the current pattern file.
-- Text: per plan `<path>@<sha7>: <n> findings`, then one row per finding `  <line> | <phrase> | <why> | <fp|tp|unlabeled>`; last line `history: <p> plans, <f> findings, labeled <l>, false positives <fp> (<rate>%)`, or `false-positive rate: no labels` when nothing is labeled. `--json`: the same data as one object.
-- Labels file (read-only, at most 64 KiB, given by the person running it): `{ "v": 1, "labels": [ { "path": "<plan path>", "sha": "<7-40 hex>", "line": <n>, "label": "fp" | "tp" } ] }`; unknown keys or a bad entry → `refused: labels entry <i>: <problem>`, exit 3. A label matches a finding with the same path and line whose commit sha starts with `sha`. Rate = fp ÷ (fp + tp), whole percent.
+**History scan (AC12).** Past plans come from two sources, merged by path (Step 12):
+1. **Working tree:** every `.company/work/<slug>/<plan name>` that exists now (valid slug, plain folder, at most 200 folders; the file a regular file, not a link). Its `rev` = the SHA-256 (lowercase hex) of its bytes.
+2. **Git history:** every plan path ever added under `.company/work/` (`git log --diff-filter=A --format=%H%x09%ct --name-only -- .company/work`) that matches `.company/work/<slug>/<plan name>`, at its oldest adding commit (closest to what the Plan Gate saw), read with `git cat-file blob <sha>:<path>`. Its `rev` = that commit's sha.
+- A path in both uses the git version; a path only in git (deleted since) is still scanned. Newest first: by commit time for git plans, by mtime for working-tree plans. At most `--limit` plans (default 50, at most 200); a plan over 256 KiB is skipped with one warning. Each is scanned with the current pattern file.
+- Text: per plan `<path>@<rev7>: <n> findings`, with ` (working tree)` after `<rev7>` for a working-tree plan, then one row per finding `  <line> | <phrase> | <why> | <fp|tp|unlabeled>`; last line `history: <p> plans, <f> findings, labeled <l>, false positives <fp> (<rate>%)`, or `false-positive rate: no labels` when nothing is labeled. `--json`: the same data as one object, each plan with `source: "git" | "working-tree"` and `rev`.
+- Labels file (read-only, at most 64 KiB, given by the person running it): `{ "v": 1, "labels": [ { "path": "<plan path>", "sha": "<7-64 lowercase hex>", "line": <n>, "label": "fp" | "tp" } ] }`; unknown keys or a bad entry → `refused: labels entry <i>: <problem>`, exit 3. A label matches a finding with the same path and line whose plan `rev` starts with `sha`, so a working-tree plan edited after labeling no longer matches its old labels. Rate = fp ÷ (fp + tp), whole percent.
 
 ## Error cases
 - Pattern file invalid → no scan; `gate` writes an `error` record (reason `patterns`) and exits 1; the Plan Gate shows the line and goes on.
 - Plan missing, unreadable, too large or badly named → `error` record with that reason, exit 1.
 - Record unwritable (a link, over a limit, run folder missing) → `refused: <reason>`, exit 3; the Gate shows the line and goes on.
-- `verdict` with `git` missing or failing → runs are ordered by mtime and the cross-check counts every Step (one warning); `history` → `history: git unavailable`, exit 1.
+- `verdict` with `git` missing or failing → runs are ordered by mtime and every Step time is its `mtime` (one warning). `history` with `git` missing or failing → only the working-tree source, one warning, exit 0; it exits 1 only when neither source can be read.
 - A ledger file that is unreadable → no recorded value for that run (it is left out with the warning above); the ledger is never repaired or written.
 - Nothing here ever blocks a v0.16 Gate. Exit 2 exists for the later hook-run Gate; in v0.16 the Plan Gate treats it as warn.
 
