@@ -21,7 +21,8 @@ function sandbox(t) {
 }
 
 // In-process call with an injected root and clock.
-const call = (sb, args, now = NOW) => main(args, { now, root: sb.dir });
+// The plugin root points at a folder without plugin.json, so ship writes no meta line here.
+const call = (sb, args, now = NOW) => main(args, { now, root: sb.dir, pluginRoot: sb.home });
 
 function cli(sb, args) {
   const r = spawnSync(process.execPath, [script, ...args], {

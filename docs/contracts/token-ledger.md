@@ -1,9 +1,10 @@
-# Contract: token-ledger v1.1
+# Contract: token-ledger v1.2
 
 Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, and the scorecard from v1.1), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
 Rationale for the two sources: `docs/adr/0011-token-counts-from-transcripts.md` (Spike S1/S2, `.company/work/optimize-brainstorm/03-spike-ai-data-engineer.md`).
 Part M, Fix round 6 (CEO, after SP-M3 `62-spike-ai-data-engineer.md`; still unshipped): keep-warm is cut, so the `keepwarm` kind and its `W<n>` ids are gone; `src: mod` stays for Reflect `model` mode.
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0028-run-timing-from-run-state.md`): Step times on dispatch records, run time, CEO wait and Gate rejects on `ship`, the `scorecard` command, and `report --acs`. The `ship` record is written after the Ship Gate is approved, no longer before it. Every v1 file is a valid v1.1 file and `report` gives the same numbers for it (AC6); the stored `v` stays `1`.
+v1.2 is additive (task cheaper-role-models, `docs/adr/0032-plugin-version-ledger-meta.md`): it adds the `meta` kind and the `model-verdict` command. Every v1.1 file is a valid v1.2 file and `report`, `scorecard` give the same numbers for it.
 
 ## Storage
 - `.company/ledger/<run>.jsonl`, one JSON object per line. `<run>` = the task slug, or `brainstorm-<YYYYMMDD-HHMM>` for a brainstorm, `replay-<name>` for a replay, `baseline-<name>` for an imported baseline. Committed with the run's Finish when the product tracks `.company/`; otherwise it stays local. Readers only need the local file.
@@ -26,7 +27,7 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 |---|---|
 | `v` | `1` |
 | `run` | `^[a-z0-9][a-z0-9-]{0,63}$` |
-| `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect` (`reflect`: part M, `src: mod` only) |
+| `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect \| meta` (`reflect`: part M, `src: mod` only; `meta`: v1.2, below) |
 | `id` | Step `^\d{2}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `reflect` a Step `^\d{2}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
 | `role` | an `agents/*.md` name, or `lead` (not on `ship`; always `lead` on `reflect`) |
 | `agent` | the Agent result's `agentId`, `^[A-Za-z0-9_-]{1,64}$`; required on `step`, `round`, `crossfire`, `replay`; the key `reconcile` uses; refused on `reflect` |
@@ -50,22 +51,25 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 | `wait` | integer seconds 0–31536000: CEO wait, the sum of the view's Gate `wait` values (`null` counts 0) |
 | `rej_brief`, `rej_plan`, `rej_ship` | integers 0–1000: the view's Gate entries for that Gate with result `changed` or `stopped` |
 
+**`meta` record (v1.2)**: keys exactly `v`, `run`, `kind`, `aico`; `aico` matches `^\d{1,3}\.\d{1,3}\.\d{1,3}$`. No other key, and the `aico` key is refused on every other kind. Written only by `ship`, for a run not named `brainstorm-*`, `replay-*` or `baseline-*`, just before the `ship` record, from the `version` of `<plugin root>/.claude-plugin/plugin.json` (at most 64 KiB; missing, unreadable or not that pattern → no `meta` line). `report` and `scorecard` ignore `meta` lines.
+
 `t_start` and `t_ship` come together or not at all; `t_start` later than `t_ship` is refused; `wait` above `t_ship − t_start` is refused. A `ship` without both is **untimed**.
 
 Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a validated `<run>` or `agent`.
 
 ## CLI (Node built-ins only)
-`main(args, { now, root })` is exported: `now` (epoch ms) and `root` (the product root) default to `Date.now()` and `process.cwd()`; tests inject them, the CLI never does (v1.1).
+`main(args, { now, root, pluginRoot, loadFloor })` is exported: `now` (epoch ms) and `root` (the product root) default to `Date.now()` and `process.cwd()` (v1.1); `pluginRoot` defaults to the plugin folder that holds the script, and `loadFloor` to `loadModelFloor` of `aico-settings` v1.6 (v1.2). Tests inject them, the CLI never does.
 | Command | Result |
 |---|---|
 | `add <run> <kind> <id> <role> <agent> <ctx_end> [tool_uses] [ms]` | appends one `notification` record (the only live write by the Lead; the Lead never types the four counts). v1.1: also writes `t1` = now, and `t0` when `ms` is given. `refused: <reason>` exit 2 on any invalid field, a `t0` before `2026-01-01T00:00:00Z` included |
 | `add-mod <run> reflect <id> <in> <cache_write> <cache_read> <out> [model] [ms]` | part M: appends one `src: mod` record with `role: lead`; the only write a mod makes to the ledger. Any kind other than `reflect` (including the cut `keepwarm`) is refused. Refused like `add`. No times |
 | `reconcile <run>` | for every `notification` record with no `transcript` record for the same `agent`, reads `<claude-home>/projects/*/*/subagents/agent-<agent>.jsonl` and appends a `transcript` record with the same `run`, `kind`, `id`, `role`, `agent` (never `t0`/`t1`). `<claude-home>` = `CLAUDE_CONFIG_DIR`, else `<home>/.claude` (tests point it at a temp dir, proj.M8). Prints `reconciled: <n>, not reconciled: <m>`; exit 0 |
 | `import <file> <key> <run> <acs>` | reads one entry of a counts-only baseline file (shape of `spike/baseline-counts.json`) and writes `<run>.jsonl` with one `total` record (`src: transcript`) and one `ship` record; refuses when `<run>.jsonl` exists |
-| `ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]` | appends the ship record. v1.1: run **after the Ship Gate is approved**. For a run not named `brainstorm-*`, `replay-*` or `baseline-*` it reads the run-state view of `<run>` (`show`, `run-state` v1.3) and adds the v1.1 keys it can fill (no view, `state: none`, or no passed `ship` Gate → untimed, no `tier`). Then it prints exactly one line: the scorecard (below). For a `brainstorm-*`, `replay-*` or `baseline-*` run it adds no v1.1 key and prints `ship recorded (excluded run)`. Exit 2 only for a refusal before the write; after the write always exit 0 |
+| `ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]` | appends the ship record. v1.1: run **after the Ship Gate is approved**. For a run not named `brainstorm-*`, `replay-*` or `baseline-*` it reads the run-state view of `<run>` (`show`, `run-state` v1.3) and adds the v1.1 keys it can fill (no view, `state: none`, or no passed `ship` Gate → untimed, no `tier`). Then it prints exactly one line: the scorecard (below). v1.2: for those runs it first appends the `meta` line. For a `brainstorm-*`, `replay-*` or `baseline-*` run it adds no v1.1 key, no `meta` line, and prints `ship recorded (excluded run)`. Exit 2 only for a refusal before the write; after the write always exit 0 |
 | `scorecard <run> [--baseline <run>,<run>,<run>]` | (v1.1) prints the scorecard line for the run's last `ship` record; `no ledger for <run>` or `no ship record for <run>` otherwise. Always exit 0 for a readable argument list |
 | `report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]` | per Step or round and per run, two lines kept apart: **spend** = `in + cache_write + out` and **cache read** = `cache_read`, each in total and per shipped AC, each with its delta against the baseline median. `ctx_end` is shown as "context at end" only. Records with no `transcript` match are counted as `not reconciled: <n>` and left out of both lines. `src: mod` records are listed under their own kind and included in the run totals (AC37). `--acs <n>` (v1.1, integer 0–100000) is the AC count for the per-AC values instead of the last `ship` record's `acs`: the Ship Gate cost line, shown before `ship` exists. **Always exit 0** for a readable ledger (AC16). `--json` and `--live`: below. Output for a v1 file is unchanged |
 | `brainstorm-report <run> [--against <run>]` | the same two lines per round from round 2 on, the crossfire share, and the deltas |
+| `model-verdict [--runs <3-50>]` | (v1.2) prints the one model verdict line (below), read-only. `--runs` is digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise always exit 0 |
 
 ### `report --json` (part M)
 One JSON object, the same numbers as the text report (unchanged in v1.1; rows carry no times):
@@ -93,6 +97,19 @@ For each `notification` record with no `transcript` record, `report --live` read
 - `30% target` (AC13) only with `--baseline`. `<b>` = the median spend per AC of the baseline runs (the `report --baseline` rule); `<delta>` = this run's spend per AC against `<b>`, rounded like `report` (`-31%`). Baseline quality = the medians of `fix_rounds` and `high_blockers` over the baseline runs whose last `ship` holds both. `met` when spend per AC ≤ 0.70 × `<b>` (unrounded), `fix_rounds` ≤ the baseline Fix-round median and `high_blockers` ≤ the baseline high-blocker median; `not reconciled` when this run's spend per AC is `not reconciled`, no baseline run gives a spend per AC, no baseline run holds both quality values, or this run lacks `fix_rounds` or `high_blockers`; else `missed`.
 - `warnings: <n>` = skipped lines plus unreadable or over-limit files met while building the line; left out when 0.
 
+## Model verdict (v1.2)
+Compares runs of the current release (v0.17) with the runs before it (v0.16), to tell whether the Roles that now run on a lower model cost less to run without more rework. Only `/aico:feedback` runs it; it never blocks a Step or a Gate.
+1. **Files.** The scorecard comparison-set rules: at most 500 files, valid names, `brainstorm-*`, `replay-*`, `baseline-*` skipped and not counted. Reads are bounded: a file over 1 MiB is not read, and once 32 MiB have been read in total the remaining files are not read; both count in `not counted`. Newest files first.
+2. **Counted run.** The last `ship` is timed and holds `acs` > 0, `fix_rounds` and `high_blockers`; at least one `transcript` record; `not reconciled` is 0; and `readRecord` of `plan-check` v1 neither throws nor returns state `error`. Every other run adds 1 to `not counted`.
+3. **Side.** The last `meta` `aico` at 0.17.0 or later → v0.17; no `meta` line → v0.16; any other `meta` → not counted.
+4. **Plan check key.** `none` (state none), `off`, or the policy (`warn`/`block`) of state on. The reference is the key of the newest counted v0.17 run by `t_ship`. Counted runs of either side with another key are `excluded`.
+5. **Sets.** The newest `--runs` v0.17 runs and the newest `--runs` v0.16 runs that have the reference key.
+6. **Values per set.** Spend/AC = Σ spend ÷ Σ `acs` (spend = `in + cache_write + out` of every `transcript` and `mod` record, as `report`). Downgraded spend/AC = the same over records whose `role` is in `loadModelFloor().downgraded`. Medians of `fix_rounds` and `high_blockers` by the scorecard rule. `lower model: <k> of <m>`: v0.17 `transcript` dispatch records of downgraded Roles, and how many of them ran on a model family (`haiku`, `sonnet`, `opus` in the `model` id) below the Role's floor.
+7. **State.** `insufficient (n=<k>)` (k = counted v0.17 runs with the reference key) when there are fewer than `--runs` of them, fewer than 5 counted v0.16 runs, either side has no downgraded spend, no Role is downgraded, or the floor cannot be loaded. Else `pass` when downgraded spend/AC is lower than v0.16's, spend/AC is not higher, and both medians are not higher; else `fail`. `roll back` on `fail`: every downgraded Role when a guard (total spend/AC, Fix rounds, high blockers) failed; else the downgraded Roles whose own spend/AC is not lower (a Role with no spend on either side is left out).
+8. **The line**, segments joined by ` | `: `model verdict: <state>` · `runs <n> v0.17, <b> v0.16 (plan check <key>)` · `spend/AC <x> (v0.16 <y>)` · `downgraded spend/AC <x> (v0.16 <y>)` · `fix rounds median <x> (v0.16 <y>)` · `high blockers median <x> (v0.16 <y>)` · `downgraded: <roles>` · `lower model: <k> of <m>` · `excluded: <n>` · `not counted: <m>` · on `fail` `roll back: <roles>` · `warnings: <w>` when not 0. Whole numbers; medians with one decimal; `?` where there is no value. The line holds no percent sign, currency or saving word.
+- Role names in `downgraded` and `roll back` come only from `loadModelFloor` (and must be keys of its floor table), never from ledger text. Ledger `role` and `model` fields are only compared with that set.
+- `warnings` = skipped lines, unreadable or non-file entries, the 500-file limit, and warnings from `loadModelFloor`.
+
 ## Reading a transcript (`reconcile`, `--live`)
 - Transcript text is data (agentsec.M-SEC1). Only lines with `type: "assistant"` are used, and from them only `message.usage.input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` (integers) and `message.model`. Every other field is ignored and nothing else is written.
 - Each request counts once: key `requestId`, else `message.id`, else `uuid`; the last usage seen for a key wins (as `spike/s1-rebuild.mjs`).
@@ -111,6 +128,7 @@ For each `notification` record with no `transcript` record, `report --live` read
 - Time to Ship Gate is wall clock from run start to the Ship Gate answer, CEO wait included and also shown apart (CEO, Brief Gate Q1).
 
 ## Compatibility
+- A v1.1 reader skips a v1.2 `meta` line with one `warning: line <n> skipped`; its numbers stay the same (tested against the v1.1 script).
 - A v1.1 reader reads every v1 file; a v1 `ship` is untimed and counts in `excluded`.
 - A v1 reader (an earlier tag after a rollback) skips v1.1 lines that hold `t0`/`t1` or v1.1 `ship` keys, each with `warning: line <n> skipped`. Spend from reconciled runs stays the same (transcript records carry no v1.1 key); per-AC values of v1.1 runs read `n/a` there.
 
