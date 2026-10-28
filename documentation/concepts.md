@@ -94,7 +94,7 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 
 **Alone.** A task runs alone, and the Plan Gate shows one warning line with the reason, when it has no `parallel: yes`, has `parallel: no`, or has a missing or invalid field (for example an unknown Role, an invalid `files:` list, an unknown dependency, a cycle or a repeated field). Only a task with `parallel: yes` and valid fields can run beside others.
 
-**Overlap.** Two tasks that share a path (compared without regard to case or `\` versus `/`, a directory covering the paths under it) never run at the same time. The later one in plan order waits until the earlier one is done.
+**Overlap.** Two tasks that share a path (compared without regard to case or `\` versus `/`, a directory covering the paths under it) never run at the same time. They run in dependency order: a task runs after the tasks it depends on, otherwise in plan order.
 
 **The cap.** At most `pipeline.parallel_cap` Steps of a run run at once. The value is a whole number from 3 to 5; the default is 4, and an invalid stored value falls back to the level below (your user value, else 4) with a warning. Set it in `/aico:settings`. A project value counts and it is not a lock. The cap also limits other parallel Steps in a pipeline run (for example the review lanes). Read-only fan-outs (brainstorm, research, cooler, usability-test Personas) are not capped.
 
