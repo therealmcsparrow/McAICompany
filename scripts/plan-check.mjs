@@ -7,12 +7,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { MAX_LINE_CHARS, readPlanLines } from './plan-markdown.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
 const MAX_PATTERN_BYTES = 16 * KiB;
 const MAX_PATTERNS = 10;
-const MAX_LINE_CHARS = 4000;
 const MAX_RECORD_BYTES = 64 * KiB;
 const MAX_RECORD_LINES = 1000;
 const MAX_RECORD_LINE_BYTES = 256;
@@ -27,8 +27,6 @@ const RESERVED_IDS = new Set(['unclosed-fence', 'long-line']);
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const HASH = /^[0-9a-f]{12}$/;
 const WAVE_COUNT = /^(0|[1-9]\d{0,4})$/;
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
-const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*)$/;
 const SECTION_TITLE = /^(?:steps|tasks|wave|phase|fix round|[tm]\d)/i;
 const DECIDED = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided: (\S.*?) because (\S.*)$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
@@ -176,35 +174,19 @@ export function scanText(text, patterns, { file = '' } = {}) {
   const compiled = patterns.map((p) => ({ ...p, rx: new RegExp(p.re, p.flags ?? '') }));
   const findings = [];
   let decided = 0;
-  let fence = null; // { char, len, line }
   let sectionLevel = 0;
-  const lines = String(text).split(/\r\n|\r|\n/);
-  for (let idx = 0; idx < lines.length; idx++) {
-    const line = lines[idx];
-    const lineNo = idx + 1;
-    if (fence) {
-      const close = /^ *(`+|~+) *$/.exec(line.length <= MAX_LINE_CHARS ? line : '');
-      if (close && close[1][0] === fence.char && close[1].length >= fence.len) fence = null;
-      continue;
-    }
-    if (line.length <= MAX_LINE_CHARS) {
-      const open = FENCE_OPEN.exec(line);
-      if (open) {
-        fence = { char: open[1][0], len: open[1].length, line: lineNo };
+  const { lines, openFence } = readPlanLines(text);
+  for (const { no: lineNo, line, kind, level, title } of lines) {
+    if (kind === 'fence' || kind === 'fenced') continue;
+    if (kind === 'heading') {
+      if (sectionLevel && level <= sectionLevel) sectionLevel = 0;
+      if (!sectionLevel) {
+        if ((level === 2 || level === 3) && SECTION_TITLE.test(title.trim())) sectionLevel = level;
         continue;
-      }
-      const heading = HEADING.exec(line);
-      if (heading) {
-        const level = heading[1].length;
-        if (sectionLevel && level <= sectionLevel) sectionLevel = 0;
-        if (!sectionLevel) {
-          if ((level === 2 || level === 3) && SECTION_TITLE.test(heading[2].trim())) sectionLevel = level;
-          continue;
-        }
       }
     }
     if (!sectionLevel) continue;
-    if (line.length > MAX_LINE_CHARS) {
+    if (kind === 'long') {
       findings.push({ file, line: lineNo, id: 'long-line', phrase: cleanPhrase(line.slice(0, 200)), why: 'line too long to check' });
       continue;
     }
@@ -222,9 +204,9 @@ export function scanText(text, patterns, { file = '' } = {}) {
       }
     }
   }
-  if (fence) {
+  if (openFence) {
     findings.push({
-      file, line: fence.line, id: 'unclosed-fence', phrase: cleanPhrase(lines[fence.line - 1].slice(0, 200)),
+      file, line: openFence.no, id: 'unclosed-fence', phrase: cleanPhrase(lines[openFence.no - 1].line.slice(0, 200)),
       why: 'an unclosed code fence hides the rest of the plan from the check'
     });
   }

@@ -54,6 +54,10 @@ describe('path rule', () => {
     ['scripts/x.mjs.', 'bad character'], ['a/b.', 'bad character'], ['scripts./x.mjs', 'bad character'],
     ['a/b.../c', 'bad character'], ['a/b./', 'bad character'], ['a/b /c', 'bad character'],
     ['.env', 'env'], ['a/.ENV.local', 'env'], ['.envrc', 'env'],
+    ['con', 'device name'], ['CON', 'device name'], ['prn', 'device name'], ['aux', 'device name'], ['nul', 'device name'],
+    ['com1', 'device name'], ['COM9', 'device name'], ['lpt1', 'device name'], ['Lpt9', 'device name'],
+    ['con.txt', 'device name'], ['src/NUL.md', 'device name'], ['a/aux.tar.gz/b', 'device name'], ['com5.x', 'device name'],
+    ['docs/con/', 'device name'], ['con.', 'device name'], ['a/prn.', 'device name'], ['con .txt', 'device name'],
     ['a'.repeat(201), 'too long'],
     ['a b', 'bad character'], ['a//b', 'bad character'], ['', 'bad character'], ['-x', 'bad character'], ['a/-b', 'bad character'],
     ['caf\u00e9', 'bad character'], ['a\nb', 'bad character'], ['ab:c', 'bad character'], ['a\u202eb', 'bad character']
@@ -77,6 +81,18 @@ describe('path rule', () => {
     assert.equal(normalizePath('a'.repeat(200)).ok, true);
     assert.equal(normalizePath('@scope/pkg+x_1.2').ok, true);
     assert.equal(normalizePath('a:b').reason, 'absolute');
+  });
+
+  test('names that only start like a device name stay allowed', () => {
+    for (const p of ['console.js', 'src/connect.mjs', 'com0', 'com10.txt', 'lpt0', 'nulls/x', 'a/auxiliary.md', 'prn-x', 'x.con', 'docs/com.md']) {
+      assert.equal(normalizePath(p).ok, true, p);
+    }
+  });
+
+  test('a device name in a files: item alone-flags the task with a reason', () => {
+    const t = parse(plan(task('T1', { files: 'src/NUL.txt' }))).tasks[0];
+    assert.equal(t.alone, true);
+    assert.deepEqual(t.reasons, ['files item 1: device name']);
   });
 
   test('a long hostile string is judged in linear time', () => {
@@ -998,6 +1014,34 @@ describe('record reader', () => {
     }
     assert.throws(() => readParallel(fx.root, 'demo'), /line 0: record is a link or not a file/);
     assert.equal(fx.run('read', 'demo').code, 1);
+    assert.equal(begin(fx).code, 1);
+  });
+
+  test('a record with a second hard link is refused on read and on append', (t) => {
+    const fx = fixture(six());
+    begin(fx);
+    try {
+      fs.linkSync(fx.record, path.join(fx.dir, 'alias.jsonl'));
+    } catch {
+      t.skip('hard links are not allowed here');
+      return;
+    }
+    const before = fs.readFileSync(fx.record, 'utf8');
+    assert.throws(() => readParallel(fx.root, 'demo'), /line 0: record is a link or not a file/);
+    assert.equal(fx.run('read', 'demo').code, 1);
+    assert.equal(fx.run('start', 'demo', 'T1').code, 1);
+    assert.equal(fs.readFileSync(fx.record, 'utf8'), before);
+  });
+
+  test('a plan with a second hard link is refused as unreadable', (t) => {
+    const fx = fixture(six());
+    try {
+      fs.linkSync(fx.plan, path.join(fx.dir, 'alias.md'));
+    } catch {
+      t.skip('hard links are not allowed here');
+      return;
+    }
+    assert.deepEqual(fx.run('check', 'demo', fx.name, '--cap', '4', '--mode', 'parallel'), { code: 1, lines: ['plan-tasks: error plan-unreadable'] });
     assert.equal(begin(fx).code, 1);
   });
 

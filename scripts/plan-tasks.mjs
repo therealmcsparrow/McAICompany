@@ -8,10 +8,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { readPlanLines } from './plan-markdown.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
-const MAX_LINE_CHARS = 20000;
 const MAX_TASKS = 100;
 const MAX_ITEMS = 40;
 const MAX_PATH_CHARS = 200;
@@ -30,9 +30,7 @@ const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const DEP_ID = /^T\d{1,3}[a-z]?$/;
 const TASK_REC = /^(?:T\d{1,3}[a-z]?(?:-dup\d{1,3})?|U1)$/;
 const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on|parallel):[ \t]*(.*)$/;
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
-const FENCE_CLOSE = /^ *(`+|~+) *$/;
-const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*)$/;
+const DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 const PATH_SHAPE = /^[A-Za-z0-9._@+-]+(\/[A-Za-z0-9._@+-]+)*\/?$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const HASH = /^[0-9a-f]{12}$/;
@@ -82,9 +80,18 @@ function pathReason(p) {
   if (segments.some((s) => s === '.' || s === '..')) return 'dot segment';
   if (segments.some((s) => trimAlias(s).toLowerCase() === '.git')) return 'git';
   if (segments.some((s) => s.toLowerCase().startsWith('.env'))) return 'env';
+  if (segments.some(isDeviceName)) return 'device name';
   if (p.length > MAX_PATH_CHARS) return 'too long';
   if (!PATH_SHAPE.test(p) || segments.some((s) => s.startsWith('-') || s.endsWith('.') || s.endsWith(' '))) return 'bad character';
   return null;
+}
+
+// Windows reads `con`, `NUL.txt` and `com1.tar.gz` as devices: the name up to the first dot, without trailing spaces, is
+// compared after trailing dots and spaces are dropped.
+function isDeviceName(segment) {
+  const name = trimAlias(segment);
+  const dot = name.indexOf('.');
+  return DEVICE.test((dot === -1 ? name : name.slice(0, dot)).replace(/ +$/, '').toLowerCase());
 }
 
 // Windows drops trailing dots and spaces from a name, so `x.mjs.` is the file `x.mjs`.
@@ -137,27 +144,13 @@ function stripTicks(text) {
 
 function readBlocks(text) {
   const blocks = [];
-  let fence = null;
   let current = null;
   let tooMany = false;
-  for (const line of String(text).split(/\r\n|\r|\n/)) {
-    if (fence) {
-      const close = FENCE_CLOSE.exec(line.length <= MAX_LINE_CHARS ? line : '');
-      if (close && close[1][0] === fence.char && close[1].length >= fence.len) fence = null;
-      continue;
-    }
-    if (line.length > MAX_LINE_CHARS) continue;
-    const open = FENCE_OPEN.exec(line);
-    if (open) {
-      fence = { char: open[1][0], len: open[1].length };
-      continue;
-    }
-    const heading = HEADING.exec(line);
-    if (heading) {
-      const level = heading[1].length;
+  for (const { line, kind, level, title } of readPlanLines(text).lines) {
+    if (kind === 'heading') {
       if (current && level <= current.level) current = null;
       if (level >= 2 && level <= 4) {
-        const head = TASK_HEAD.exec(heading[2].trim());
+        const head = TASK_HEAD.exec(title.trim());
         if (head) {
           if (blocks.length >= MAX_TASKS) {
             tooMany = true;
@@ -170,7 +163,7 @@ function readBlocks(text) {
       }
       continue;
     }
-    if (!current) continue;
+    if (kind !== 'text' || !current) continue;
     const field = FIELD.exec(line);
     if (!field) continue;
     if (current.fields.has(field[1])) {
@@ -373,6 +366,33 @@ function lstatOrNull(p) {
   }
 }
 
+// A plain file: a regular file with exactly one hard link.
+const isPlain = (st) => st.isFile() && st.nlink === 1;
+
+// Opens without following a link, checks the opened handle is the file that was inspected, and reads at most max + 1 bytes.
+function readOpened(file, expect, max) {
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    if (!openedMatches(fd, expect)) throw new Error('file changed');
+    const buf = Buffer.alloc(Math.min(fs.fstatSync(fd).size, max + 1));
+    let off = 0;
+    while (off < buf.length) {
+      const n = fs.readSync(fd, buf, off, buf.length - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    return buf.subarray(0, off);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// The handle is a regular file with one hard link and, when an lstat is given, the same dev and ino.
+function openedMatches(fd, expect) {
+  const f = fs.fstatSync(fd);
+  return isPlain(f) && (!expect || (f.dev === expect.dev && f.ino === expect.ino));
+}
+
 // The run folder, with no link in .company, .company/work or the slug folder. Returns null when absent.
 function runDir(root, slug) {
   let dir = root;
@@ -393,11 +413,11 @@ function readPlan(root, slug, name) {
   const file = path.join(dir, name);
   const st = lstatOrNull(file);
   if (!st) throw new PlanProblem('plan-missing');
-  if (!st.isFile()) throw new PlanProblem('plan-unreadable');
+  if (!isPlain(st)) throw new PlanProblem('plan-unreadable');
   if (st.size > MAX_PLAN_BYTES) throw new PlanProblem('plan-too-large');
   let bytes;
   try {
-    bytes = fs.readFileSync(file);
+    bytes = readOpened(file, st, MAX_PLAN_BYTES);
   } catch {
     throw new PlanProblem('plan-unreadable');
   }
@@ -584,9 +604,14 @@ function loadRecord(root, slug) {
   const file = path.join(dir, 'parallel.jsonl');
   const st = lstatOrNull(file);
   if (!st) return { dir, file, text: '', state: null };
-  if (!st.isFile()) throw fail('record is a link or not a file');
+  if (!isPlain(st)) throw fail('record is a link or not a file');
   if (st.size > MAX_RECORD_BYTES) throw fail('file over 1 MiB');
-  const bytes = fs.readFileSync(file);
+  let bytes;
+  try {
+    bytes = readOpened(file, st, MAX_RECORD_BYTES);
+  } catch {
+    throw fail('record is a link or not a file');
+  }
   if (bytes.length > MAX_RECORD_BYTES) throw fail('file over 1 MiB');
   let text;
   try {
@@ -594,7 +619,7 @@ function loadRecord(root, slug) {
   } catch {
     throw fail('not valid UTF-8');
   }
-  return { dir, file, text, state: parseRecordText(slug, text) };
+  return { dir, file, text, state: parseRecordText(slug, text), stat: st };
 }
 
 function viewOf(slug, st) {
@@ -635,6 +660,7 @@ function appendEvent(env, slug, rec) {
   let fd;
   try {
     fd = fs.openSync(cur.file, flags, 0o644);
+    if (!openedMatches(fd, cur.stat)) throw new Error('file changed');
     fs.writeSync(fd, line);
   } catch {
     throw new Refusal('record cannot be written');
