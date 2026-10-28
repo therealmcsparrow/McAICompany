@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-28
+
 ### Added
 - **Capped parallel plan Steps.** The Architect marks each plan task with `role`, `files`, `depends-on` and `parallel` lines. `scripts/plan-tasks.mjs` decides which tasks start: only marked tasks run together, tasks that share a path run in plan order, and any other task runs alone with a warning. At most `pipeline.parallel_cap` Steps run at once. The Plan Gate shows a Parallel plan block that never blocks the Gate. Each plan-task Step gets `Task:` and `Files:` lines; a path edited outside `Files:` is counted, and one that belongs to another running task is not committed. Contracts `plan-tasks` v1 (new), `dispatch-prompt` v3.5 (additive), ADR 0033.
 - **Parallel cap setting.** `pipeline.parallel_cap`, a whole number from 3 to 5, default 4 (a bad stored value falls back to the level below: your user value, else 4), with a row on the settings page. Dispatch `sequential` overrides it with 1. Contract `aico-settings` v1.7 (additive).
