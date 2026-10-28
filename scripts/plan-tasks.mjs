@@ -223,13 +223,15 @@ function parseDeps(value, known) {
 // The visit order: plan order, except that a task comes after the tasks it depends on (a stable
 // topological order, ties by plan position). A flagged task (unknown dependency or on a cycle) waits for
 // every earlier task in plan order. If the flagged edges close a loop, the first flagged task in plan
-// order goes next, so the order always covers every task and every dependency points backwards.
-function scheduleOrder(depIndexes, flagged) {
+// order goes next, so the order always covers every task and every dependency points backwards. A flagged
+// task also keeps its valid dependencies, except those on its own cycle.
+function scheduleOrder(depIndexes, flagged, cyclic) {
   const n = depIndexes.length;
   const placed = new Array(n).fill(false);
+  const depsPlaced = (i) => depIndexes[i].every((d) => placed[d] || (cyclic[i] && cyclic[d]));
   const ready = (i) => (flagged[i]
-    ? placed.slice(0, i).every(Boolean)
-    : depIndexes[i].every((d) => placed[d]));
+    ? placed.slice(0, i).every(Boolean) && depsPlaced(i)
+    : depsPlaced(i));
   const order = [];
   while (order.length < n) {
     let pick = -1;
@@ -288,7 +290,7 @@ export function parsePlan(text, { agents } = {}) {
   });
   const members = cycleMembers(ids, parsed.map((p) => p.deps.deps));
   const flaggedAt = parsed.map((p) => p.deps.unknown.length > 0 || members.has(p.block.id));
-  const order = scheduleOrder(parsed.map((p) => p.deps.deps.map((d) => ids.indexOf(d))), flaggedAt);
+  const order = scheduleOrder(parsed.map((p) => p.deps.deps.map((d) => ids.indexOf(d))), flaggedAt, parsed.map((p) => members.has(p.block.id)));
   return {
     tooMany,
     tasks: order.map((at, position) => {

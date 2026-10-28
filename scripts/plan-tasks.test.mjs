@@ -194,6 +194,13 @@ describe('parsePlan', () => {
     assert.equal(tasks[2].alone, true);
   });
 
+  test('a flagged task keeps its valid later dependencies', () => {
+    const { tasks } = parse(plan(task('T1', { deps: 'T9, T3' }), task('T2'), task('T3')));
+    assert.deepEqual(tasks.map((x) => x.id), ['T2', 'T3', 'T1']);
+    assert.deepEqual(tasks[2].deps, ['T2', 'T3']);
+    assert.equal(tasks[2].alone, true);
+  });
+
   test('cycles and self dependencies run alone; a dependency on a later task is not a cycle', () => {
     const cyc = parse(plan(task('T1', { deps: 'T2' }), task('T2', { deps: 'T1' }), task('T3', { deps: 'T3' }), task('T4', { deps: 'T5' }), task('T5')));
     const t = Object.fromEntries(cyc.tasks.map((x) => [x.id, x]));
