@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-28
+
 ### Added
 - **Model floor.** `company/model-floor.json` holds each Role's v0.16.0 model as its floor and lists the protected Roles: architect, code-reviewer, pentester, security, vuln-scanner. A high-tier run dispatches no Role below its floor, and the `Settings:` line ends with `floor` when the Lead raised the model. A protected Role ignores a lower stored model at every tier, with a warning. Contracts `aico-settings` v1.6, `dispatch-prompt` v3.4 (additive), ADR 0031.
 - **Model environment line.** `settings.mjs model-env` prints one line when `CLAUDE_CODE_SUBAGENT_MODEL` or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, with the Claude Code version and whether the floor is kept or bypassed.
