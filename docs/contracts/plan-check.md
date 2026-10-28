@@ -1,8 +1,9 @@
 # Contract: plan-check v1
 
 Provider: `scripts/plan-check.mjs` (scanner, pattern file loader, record writer and reader; Node built-ins only) with the pattern file `scripts/plan-check-patterns.json`, and `scripts/plan-check-verdict.mjs` (verdict and history scan; Node built-ins and `git` through `execFile`). Writer of the record: the Lead (`aico:pipeline` Plan Gate and Finish, through `skills/pipeline/references/plan-check.md`), only through the CLI. Consumers: the Plan Gate summary (the `gate` block), `aico:feedback` (the `verdict` line), `scripts/plan-check-verdict.mjs` through the exported `readRecord` and `scanText`, and the later hook-run Gate (block, exit 2), which will reuse `scanText` and `loadPatterns`.
-Uses: `run-state` v1.3 (the exported `show(root, slug)`, for each run's Step Handoffs), `aico-settings` v1.5 (`plan_check.policy` and `plan_check.runs`, passed in by the caller as arguments; neither script reads settings itself).
+Uses: `run-state` v1.3 (the exported `show(root, slug)`, for each run's Step Handoffs and Gate entries), `token-ledger` v1.1 read-only (the exported `validateRecord` of `scripts/ledger.mjs`, for each run's recorded `fix_rounds`; nothing is written to the ledger), `aico-settings` v1.5 (`plan_check.policy` and `plan_check.runs`, passed in by the caller as arguments; neither script reads settings itself).
 Rationale: `docs/adr/0030-plan-check-own-record.md`. Ledger records (`token-ledger` v1.1) and Handoff frontmatter (`handoff` v1.1) are not changed by this Contract.
+Step 05 (Architect, after Spike S1 `03-spike-ai-data-engineer.md`; v1 is unshipped, no version change): the Fix-round measure is the recorded ledger value, cross-checked against the Handoffs up to the first Ship Gate answer; the `--runs` default is 5.
 
 ## Plan file
 - One file in the run folder: `.company/work/<slug>/<name>`. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`; `<name>` matches `^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$` (covers `02-plan.md`, `02-architect-plan.md`, `55-architect-plan-m.md`, `plan.md`). Any other name → `error` record, reason `plan-name`.
@@ -78,14 +79,19 @@ It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `
 
 **Feature runs.** Every `.company/work/<slug>/` (valid slug, a plain folder, at most 200) that holds `00-summary.md` and a file matching the plan name rule. Order: newest first by the committer time of the last commit that touched its `00-summary.md` (`git log -1 --format=%ct -- <path>`); untracked → the file mtime.
 **Side.** `readRecord` state `on` → check-on. State `none` or `off` → baseline (the backfill: runs before v0.16 and runs with the check off). State `error` → left out, one warning. A broken record → the verdict prints `plan-check verdict: error (<reader message>)`, exit 1.
-**Fix rounds of a run** (the frozen definition, `01-product-manager.md` Decisions, measured the same way on both sides): the highest numeric `round:` among the run's Step Handoffs, from `run-state` v1.3 `show(root, slug).steps`. A run with no Step whose `round` is a number is left out, one warning.
+
+**Fix rounds of a run (frozen definition).** A Fix round is a re-dispatch of a builder for a Blocking review or QA finding after the Plan Gate is approved and before the first Ship Gate answer (`01-product-manager.md` Decisions; Step 05 adds the Ship Gate end: work after a changed Ship Gate follows a Gate reject and does not count). The same two values are read for every run, on both sides:
+1. **Recorded:** `fix_rounds` of the last valid `ship` record in `.company/ledger/<slug>.jsonl`. Each line is parsed and checked with `validateRecord` from `scripts/ledger.mjs`; invalid lines are skipped, a file over 1 MiB or a line over 512 bytes gives no value. Absent key, no `ship` record or no file → no value.
+2. **Cross-check:** the highest numeric `round:` among the run's Step Handoffs (`run-state` v1.3 `show(root, slug).steps`), counting only the Steps whose file was added no later than the `at` of the first `ship` entry in the view's `gates`. A file's add time = the committer time from one `git log --diff-filter=A --format=%ct --name-only -- .company/work/<slug>` call per run; an untracked file, or a view with no `ship` entry, counts every Step. No Step with a numeric `round` → no value.
+- The run counts only when both values exist and are equal; its Fix rounds is that value. Otherwise it is left out with the warning `<slug>: fix rounds <recorded or none> vs handoffs <n or none>`.
+- Backfill on this repo (Spike S1 and Step 05; T3 confirms by running `verdict` once): counted personalities-company-types 2, playbook-chain-handoff 2, skill-researcher-scan 3, speed-scorecard 2, triage-hardening 1 (the cap leaves out the round-2 Steps after its changed Ship Gate). Left out: reprompter-role (recorded 1, Handoffs 3: a two-phase run with no Ship Gate entry), research-team and optimize-brainstorm (no recorded value). Baseline today: 5 runs, median 2.
 
 | Command | Output |
 |---|---|
-| `verdict [--runs <N>]` | `N` integer 3-50, default 10. Each side = its newest `N` runs. Exactly one line, segments joined by ` \| `: `plan-check verdict: <pass\|fail\|insufficient (n=<k>)>` · `check on: median <m> (n=<a>)` · `baseline: median <b> (n=<c>)` · `waved off <p>%` plus ` retune` when the share is above 30% (AC14), or `waved off n/a` · `default should become off` (only on fail) · `warnings: <w>` (only when not 0) |
+| `verdict [--runs <N>]` | `N` integer 3-50, default 5. Each side = its newest `N` counted runs. Exactly one line, segments joined by ` \| `: `plan-check verdict: <pass\|fail\|insufficient (n=<k>)>` · `check on: median <m> (n=<a>)` · `baseline: median <b> (n=<c>)` · `waved off <p>%` plus ` retune` when the share is above 30% (AC14), or `waved off n/a` · `default should become off` (only on fail) · `warnings: <w>` (only when not 0) |
 | `history [--labels <file>] [--limit <n>] [--json]` | the AC12 scan, below |
 
-- **Verdict rule (AC13):** either side with fewer than `N` runs → `insufficient (n=<k>)`, `k` = the size of the smaller side. Otherwise `pass` when baseline median − check-on median ≥ 1 (unrounded medians), else `fail`. Fail means the check stays and its default should become off; the script changes no setting.
+- **Verdict rule (AC13):** either side with fewer than `N` counted runs → `insufficient (n=<k>)`, `k` = the size of the smaller side. Otherwise `pass` when baseline median − check-on median ≥ 1 (unrounded medians), else `fail`. Fail means the check stays and its default should become off; the script changes no setting.
 - Medians use the ledger rule (middle value; the mean of the two middle values for an even count); shown with one decimal; an empty side shows `?`.
 - Waved-off share = the sum of `waved` ÷ the sum of `findings` over the check-on side's runs, rounded to a whole percent; `n/a` when the sum of `findings` is 0.
 
@@ -97,7 +103,8 @@ It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `
 - Pattern file invalid → no scan; `gate` writes an `error` record (reason `patterns`) and exits 1; the Plan Gate shows the line and goes on.
 - Plan missing, unreadable, too large or badly named → `error` record with that reason, exit 1.
 - Record unwritable (a link, over a limit, run folder missing) → `refused: <reason>`, exit 3; the Gate shows the line and goes on.
-- `verdict` or `history` with `git` missing or failing → files are ordered by mtime (verdict) or `history: git unavailable` (history), exit 0 for verdict, exit 1 for history.
+- `verdict` with `git` missing or failing → runs are ordered by mtime and the cross-check counts every Step (one warning); `history` → `history: git unavailable`, exit 1.
+- A ledger file that is unreadable → no recorded value for that run (it is left out with the warning above); the ledger is never repaired or written.
 - Nothing here ever blocks a v0.16 Gate. Exit 2 exists for the later hook-run Gate; in v0.16 the Plan Gate treats it as warn.
 
 ## Compatibility
