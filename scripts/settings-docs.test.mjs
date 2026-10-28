@@ -51,7 +51,7 @@ test('dispatch-prompt is v3.2 or later and lists Name:, Settings: and Context ca
   assert.match(doc, /^# Contract: dispatch-prompt v3\.(?:[2-9]|\d{2,})$/m);
   assert.match(doc, /`Context cap: <cap> handover <n>`/);
   assert.match(doc, /`Name: <name>`/);
-  assert.match(doc, /`Settings: model=<m> effort=<e>`/);
+  assert.match(doc, /`Settings: model=<m> effort=<e>(?:\[ floor\])?`/);
   assert.match(pipeline, /^Name: /m);
   assert.match(pipeline, /^Settings: /m);
 });

@@ -262,7 +262,7 @@ test('get has exactly the documented top-level and per-Role keys', (t) => {
   assert.equal(got.code, 0);
   const data = JSON.parse(got.out);
   assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings'].sort());
-  for (const entry of Object.values(data.roles)) assert.deepEqual(Object.keys(entry).sort(), ['context_cap', 'effort', 'model', 'name', 'source']);
+  for (const entry of Object.values(data.roles)) assert.deepEqual(Object.keys(entry).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'source']);
 });
 
 test('get output is byte-identical except revision whatever the personalities are', (t) => {

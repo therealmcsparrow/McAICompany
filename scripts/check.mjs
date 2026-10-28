@@ -8,6 +8,11 @@ import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const FLOOR_RANK = Object.freeze({ haiku: 1, sonnet: 2, opus: 3 });
+const FLOOR_FILE_MAX = 16 * 1024;
+const FLOOR_KEYS = ['v', 'release', 'floor', 'protected'];
+export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner']);
+export const DESCRIPTION_BUDGET = Object.freeze({ total: 15000, perRole: 400, perEntry: 4 });
 
 function frontmatter(text) {
   const lines = text.split(/\r?\n/);
@@ -644,9 +649,77 @@ function checkLocalCompany(root, today, errors, notes) {
   errors.push(...checkPacks(std, { today, maxAgeDays: 180, repo: true, label: '.company/standards/' }));
 }
 
+const safeKey = k => (/^[A-Za-z0-9_-]{1,40}$/.test(k) ? k : '?');
+const rankOf = m => (typeof m === 'string' && Object.hasOwn(FLOOR_RANK, m) ? FLOOR_RANK[m] : 0);
+
+// company/model-floor.json (aico-settings v1.6): read with a size cap, keys checked exactly. Skipped when names.json is absent.
+export function checkModelFloor(root, agentFm, errors) {
+  if (!existsSync(join(root, 'company', 'names.json'))) return;
+  const at = 'company/model-floor.json';
+  const f = join(root, at);
+  if (!existsSync(f)) { errors.push(`ERROR ${at}: missing`); return; }
+  if (statSync(f).size > FLOOR_FILE_MAX) { errors.push(`ERROR ${at}: larger than 16 KiB`); return; }
+  let data;
+  try { data = JSON.parse(readFileSync(f, 'utf8')); } catch (e) { errors.push(`ERROR ${at}: not valid JSON (${e.message})`); return; }
+  const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!isObj(data)) { errors.push(`ERROR ${at}: must be an object`); return; }
+  for (const k of Object.keys(data)) if (!FLOOR_KEYS.includes(k)) errors.push(`ERROR ${at}: unexpected key ${safeKey(k)}`);
+  for (const k of FLOOR_KEYS) if (!Object.hasOwn(data, k)) errors.push(`ERROR ${at}: missing key ${k}`);
+  if (Object.hasOwn(data, 'v') && data.v !== 1) errors.push(`ERROR ${at}: v must be 1`);
+  if (Object.hasOwn(data, 'release') && !(typeof data.release === 'string' && /^\d+\.\d+\.\d+$/.test(data.release))) errors.push(`ERROR ${at}: release must look like 1.2.3`);
+  const floor = Object.create(null);
+  if (Object.hasOwn(data, 'floor')) {
+    if (!isObj(data.floor)) errors.push(`ERROR ${at}: floor must be an object`);
+    else {
+      for (const [role, model] of Object.entries(data.floor)) {
+        if (!agentFm.has(role)) { errors.push(`ERROR ${at}: ${safeKey(role)} is not a Role`); continue; }
+        if (!rankOf(model)) { errors.push(`ERROR ${at}: ${role}: floor must be haiku, sonnet or opus`); continue; }
+        floor[role] = model;
+      }
+      for (const role of agentFm.keys()) if (!Object.hasOwn(data.floor, role)) errors.push(`ERROR ${at}: ${role} has no floor`);
+    }
+  }
+  if (Object.hasOwn(data, 'protected')) {
+    const p = data.protected;
+    const same = Array.isArray(p) && p.length === PROTECTED_ROLES.length && PROTECTED_ROLES.every(r => p.includes(r));
+    if (!same) errors.push(`ERROR ${at}: protected must be exactly ${PROTECTED_ROLES.join(', ')}`);
+  }
+  for (const role of PROTECTED_ROLES) {
+    if (!agentFm.has(role) || !Object.hasOwn(floor, role)) continue;
+    const model = agentFm.get(role).model;
+    if (rankOf(model) < rankOf(floor[role])) errors.push(`ERROR agents/${role}.md: model ${safeKey(String(model))} is below its floor ${floor[role]}`);
+  }
+}
+
+// Agent description budget: bytes of "aico:<name>" plus the raw one-line description plus a margin per entry.
+function descriptionEntry(name, text) {
+  const lines = text.split(/\r?\n/);
+  const end = lines.indexOf('---', 1);
+  const i = lines.findIndex((l, n) => n > 0 && n < end && l.startsWith('description:'));
+  if (i < 0) return null;
+  const value = lines[i].slice('description:'.length).trim();
+  const next = lines[i + 1] ?? '';
+  if (/^[|>][-+0-9]*$/.test(value) || (i + 1 < end && /^[ \t]+\S/.test(next))) return { block: true };
+  return { bytes: Buffer.byteLength(`aico:${name}`) + Buffer.byteLength(value) + DESCRIPTION_BUDGET.perEntry };
+}
+
+export function checkDescriptionBudget(entries, errors, notes) {
+  let total = 0;
+  for (const { rel, name, text } of entries) {
+    const e = descriptionEntry(name, text);
+    if (!e) continue;
+    if (e.block) { errors.push(`ERROR ${rel}: description must be one line`); continue; }
+    total += e.bytes;
+    if (e.bytes > DESCRIPTION_BUDGET.perRole) errors.push(`ERROR ${rel}: description budget ~${e.bytes} > ${DESCRIPTION_BUDGET.perRole} tokens`);
+  }
+  if (entries.length === 0) return;
+  if (total >= DESCRIPTION_BUDGET.total) errors.push(`ERROR agents: descriptions ~${total} tokens, at or above the ${DESCRIPTION_BUDGET.total} limit`);
+  notes.push(`agent descriptions: ~${total} of ${DESCRIPTION_BUDGET.total} tokens, headroom ${DESCRIPTION_BUDGET.total - total}`);
+}
+
 export function check(root, { today } = {}) {
   const errors = [], warnings = [], notes = [], names = new Set(), units = [], playbooks = [], skills = [];
-  const skillNames = new Set(), agentNames = new Set(), agentFm = new Map();
+  const skillNames = new Set(), agentDescs = [], agentNames = new Set(), agentFm = new Map();
   const skillsDir = join(root, 'skills'), agentsDir = join(root, 'agents');
 
   if (existsSync(skillsDir)) for (const dir of readdirSync(skillsDir)) {
@@ -663,7 +736,7 @@ export function check(root, { today } = {}) {
     names.add(u.expected);
     (u.kind === 'skill' ? skillNames : agentNames).add(u.expected);
     if (!fm) { errors.push(`ERROR ${rel}: missing frontmatter`); continue; }
-    if (u.kind === 'agent') agentFm.set(u.expected, { model: fm.model, effort: fm.effort });
+    if (u.kind === 'agent') { agentFm.set(u.expected, { model: fm.model, effort: fm.effort }); agentDescs.push({ rel, name: u.expected, text }); }
     if (u.kind === 'skill') skills.push({ rel, name: u.expected, flagged: fm['disable-model-invocation'] === 'true' });
     if (u.kind === 'skill' && fm['argument-hint']) playbooks.push({ rel, name: u.expected, text, description: fm.description ?? '' });
     if (fm.name !== u.expected) errors.push(`ERROR ${rel}: name mismatch (${fm.name} vs ${u.expected})`);
@@ -736,6 +809,8 @@ export function check(root, { today } = {}) {
   checkCompanyTypes(root, agentNames, playbooks, skills, errors);
   checkRoleCounts(root, agentNames, errors, agentFm);
   checkNames(root, agentNames, errors);
+  checkModelFloor(root, agentFm, errors);
+  checkDescriptionBudget(agentDescs, errors, notes);
   checkPersonalities(root, agentNames, errors);
   checkLocalCompany(root, todayString(today), errors, notes);
   return { errors: [...new Set(errors)], warnings, notes };

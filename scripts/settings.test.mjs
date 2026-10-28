@@ -6,10 +6,18 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, PLAN_CHECK_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
-  templateOptions, validateLayer, writeLayer, writeProfile
+  MODEL_RANK, loadModelFloor, modelEnvLine, readClaudeVersion, templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
 const script = path.join(import.meta.dirname, 'settings.mjs');
+
+const PROTECTED_IN_SANDBOX = ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'];
+
+// The sandbox plugin's floor table: each Role's frontmatter model is its floor.
+function writeFloor(pluginRoot, { protectedRoles = PROTECTED_IN_SANDBOX, floor } = {}) {
+  const table = floor ?? Object.fromEntries(Object.entries(AGENTS).map(([r, a]) => [r, a.model]));
+  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor: table, protected: protectedRoles }));
+}
 
 const AGENTS = {
   architect: { model: 'opus', effort: 'high', name: 'Ava' },
@@ -40,6 +48,7 @@ function sandbox(t, { company = true } = {}) {
     names[role] = a.name;
   }
   fs.writeFileSync(path.join(pluginRoot, 'company', 'names.json'), JSON.stringify(names));
+  writeFloor(pluginRoot);
   const ctx = { home, cwd, pluginRoot };
   const config = path.join(home, 'config.json');
   const projectFile = path.join(cwd, '.company', 'settings.json');
@@ -72,7 +81,7 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
   assert.deepEqual(d.brainstorm, { film_script: false, debate: 'crossfire' });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 150000,
+    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 150000, floor: 'sonnet', protected: false,
     source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' }
   });
   assert.deepEqual(r.pipeline, PIPELINE_DEFAULTS);
@@ -91,7 +100,7 @@ test('project beats user beats plugin, per field', (t) => {
   s.project({ roles: { qa: { effort: 'high' } }, pipeline: { fix_rounds: 0, lanes: { legal: 'on' } } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 150000,
+    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 150000, floor: 'sonnet', protected: false,
     source: { name: 'plugin', model: 'user', effort: 'project', context_cap: 'plugin' }
   });
   assert.equal(r.pipeline.fix_rounds, 0);
@@ -296,8 +305,8 @@ test('get roles.qa.model prints sonnet', (t) => {
 
 test('unknown commands print usage and exit 2', (t) => {
   const s = sandbox(t);
-  const usage = 'refused: usage: settings.mjs get [key] | serve [--no-open]';
-  for (const args of [[], ['bogus'], ['serve', '--bogus'], ['serve', '--no-open', 'x'], ['get', 'a', 'b']]) {
+  const usage = 'refused: usage: settings.mjs get [key] | serve [--no-open] | model-env';
+  for (const args of [[], ['bogus'], ['serve', '--bogus'], ['serve', '--no-open', 'x'], ['get', 'a', 'b'], ['model-env', 'x']]) {
     assert.deepEqual(run(args, s.ctx), { code: 2, out: usage }, args.join(' '));
   }
   assert.deepEqual(run(['serve'], s.ctx), { code: 0, serve: { open: true } });
@@ -1347,4 +1356,233 @@ test('writeLayer refuses a bad plan_check value and writes nothing; a good one r
   writeLayer('user', { version: 1, plan_check: { policy: 'block', runs: 50 } }, s.ctx);
   assert.deepEqual(planCheckOf(s), { policy: 'block', runs: 50 });
   assert.equal(s.cli('get', 'plan_check.runs').out, '50\n');
+});
+
+// ---- model floor and model-env (aico-settings v1.6) ----
+
+test('MODEL_RANK ranks haiku < sonnet < opus and nothing else', () => {
+  assert.ok(MODEL_RANK.haiku < MODEL_RANK.sonnet && MODEL_RANK.sonnet < MODEL_RANK.opus);
+  assert.deepEqual(Object.keys(MODEL_RANK), ['haiku', 'sonnet', 'opus']);
+});
+
+test('loadModelFloor reads the table, the protected list and the downgraded Roles', (t) => {
+  const s = sandbox(t);
+  const table = loadModelFloor(s.pluginRoot);
+  assert.equal(table.release, '0.16.0');
+  assert.deepEqual(table.floor, { architect: 'opus', qa: 'sonnet', security: 'opus' });
+  assert.deepEqual(table.protected, ['architect', 'security']);
+  assert.deepEqual(table.downgraded, []);
+  assert.deepEqual(table.warnings, []);
+  writeFloor(s.pluginRoot, { floor: { architect: 'opus', qa: 'opus', security: 'opus' } });
+  assert.deepEqual(loadModelFloor(s.pluginRoot).downgraded, ['qa']);
+});
+
+test('loadModelFloor fails closed: missing, hostile, oversize, unranked or incomplete files hold every Role at opus', (t) => {
+  const s = sandbox(t);
+  const file = path.join(s.pluginRoot, 'company', 'model-floor.json');
+  const good = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const bad = [
+    null,
+    '{nope',
+    JSON.stringify({ ...good, pad: 'x'.repeat(17000) }),
+    JSON.stringify({ ...good, v: 2 }),
+    JSON.stringify({ ...good, release: 'x' }),
+    JSON.stringify({ ...good, floor: { ...good.floor, qa: 'fable' } }),
+    JSON.stringify({ ...good, floor: { architect: 'opus' } }),
+    JSON.stringify({ ...good, protected: 'security' }),
+    '[]'
+  ];
+  for (const text of bad) {
+    if (text === null) fs.rmSync(file); else fs.writeFileSync(file, text);
+    const table = loadModelFloor(s.pluginRoot);
+    assert.equal(table.release, null, String(text).slice(0, 40));
+    assert.deepEqual(table.floor, { architect: 'opus', qa: 'opus', security: 'opus' });
+    assert.deepEqual(table.protected, ['architect', 'qa', 'security']);
+    assert.deepEqual(table.warnings, ['model floor: company/model-floor.json unreadable, every Role held at opus']);
+  }
+});
+
+test('loadModelFloor fails closed on a wrong protected list or an extra key, never fewer protections', (t) => {
+  const s = sandbox(t);
+  const file = path.join(s.pluginRoot, 'company', 'model-floor.json');
+  const good = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const wrong = [
+    { ...good, protected: ['qa'] },
+    { ...good, protected: [] },
+    { ...good, protected: good.protected.slice(1) },
+    { ...good, protected: [...good.protected, 'qa'] },
+    { ...good, extra: 1 }
+  ];
+  for (const data of wrong) {
+    fs.writeFileSync(file, JSON.stringify(data));
+    const table = loadModelFloor(s.pluginRoot);
+    assert.equal(table.release, null, JSON.stringify(data.protected));
+    assert.deepEqual(table.protected, ['architect', 'qa', 'security']);
+    assert.equal(table.warnings.length, 1);
+  }
+  fs.writeFileSync(file, JSON.stringify(good));
+  assert.deepEqual(loadModelFloor(s.pluginRoot).protected, ['architect', 'security']);
+});
+
+test('loadModelFloor never merges a __proto__ key from the file', (t) => {
+  const s = sandbox(t);
+  const file = path.join(s.pluginRoot, 'company', 'model-floor.json');
+  fs.writeFileSync(file, '{"v":1,"release":"0.16.0","floor":{"__proto__":"opus","architect":"opus","qa":"sonnet","security":"opus"},"protected":["architect","code-reviewer","pentester","security","vuln-scanner"]}');
+  const table = loadModelFloor(s.pluginRoot);
+  assert.deepEqual(table.protected, ['architect', 'security']);
+  assert.equal({}.polluted, undefined);
+  assert.deepEqual(Object.keys(table.floor), ['architect', 'qa', 'security']);
+});
+
+test('get shows floor and protected per Role', (t) => {
+  const s = sandbox(t);
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.roles.security.floor, 'opus');
+  assert.equal(r.roles.security.protected, true);
+  assert.equal(r.roles.qa.protected, false);
+  assert.deepEqual(Object.keys(r.roles.qa).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'source']);
+});
+
+test('protected lock: a lower model at any level is not applied, with a warning', (t) => {
+  for (const level of ['user', 'project']) {
+    for (const model of ['haiku', 'sonnet', 'fable']) {
+      const s = sandbox(t);
+      s[level]({ roles: { security: { model } } });
+      const r = resolveSettings(s.ctx);
+      assert.equal(r.roles.security.model, 'opus', `${level} ${model}`);
+      assert.equal(r.roles.security.source.model, 'floor');
+      assert.deepEqual(r.warnings, [`roles.security.model: ${model} is below the protected floor opus, not applied`]);
+    }
+  }
+});
+
+test('protected lock: opus and inherit stay, unprotected Roles may go lower', (t) => {
+  const s = sandbox(t);
+  s.user({ roles: { security: { model: 'inherit' }, architect: { model: 'opus' }, qa: { model: 'haiku' } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.roles.security.model, 'inherit');
+  assert.equal(r.roles.security.source.model, 'user');
+  assert.equal(r.roles.architect.model, 'opus');
+  assert.equal(r.roles.qa.model, 'haiku');
+  assert.deepEqual(r.warnings, []);
+});
+
+test('protected lock: no unlock lifts it and a broken project layer does not change it', (t) => {
+  const s = sandbox(t);
+  s.user({ unlocked: ['ship', 'security', 'installs'], roles: { security: { model: 'sonnet' } } });
+  fs.writeFileSync(s.projectFile, '{broken');
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.roles.security.model, 'opus');
+  assert.ok(r.warnings.some((w) => w.startsWith('roles.security.model: sonnet is below')));
+});
+
+test('protected lock: a plugin default below the floor is raised and an unknown model id is never echoed', (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(path.join(s.pluginRoot, 'agents', 'security.md'), agentFile('security', { model: 'claude-x-9', effort: 'high' }));
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.roles.security.model, 'opus');
+  assert.deepEqual(r.warnings, ['roles.security.model: (other) is below the protected floor opus, not applied']);
+});
+
+test('an unreadable floor file protects every Role at opus with one warning', (t) => {
+  const s = sandbox(t);
+  fs.rmSync(path.join(s.pluginRoot, 'company', 'model-floor.json'));
+  s.user({ roles: { qa: { model: 'haiku' } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(r.warnings, ['model floor: company/model-floor.json unreadable, every Role held at opus']);
+  for (const role of Object.values(r.roles)) {
+    assert.equal(role.model, 'opus');
+    assert.equal(role.floor, 'opus');
+    assert.equal(role.protected, true);
+  }
+});
+
+const ENV_PREFIX = 'model env: CLAUDE_CODE_SUBAGENT_MODEL=';
+const line = (env, version) => modelEnvLine({ env, readVersion: () => version });
+
+test('model-env: neither variable set prints nothing and reads no version', () => {
+  let called = false;
+  const readVersion = () => { called = true; return null; };
+  assert.equal(modelEnvLine({ env: {}, readVersion }), '');
+  assert.equal(modelEnvLine({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'inherit', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '0' }, readVersion }), '');
+  assert.equal(modelEnvLine({ env: { CLAUDE_CODE_SUBAGENT_MODEL: '', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '' }, readVersion }), '');
+  assert.equal(called, false);
+});
+
+test('model-env row 1: version unknown bypasses the floor', () => {
+  assert.equal(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, null),
+    `${ENV_PREFIX}haiku CLAUDE_CODE_SUBAGENT_MODEL_FORCE=unset, Claude Code unknown: version unknown, may override every Role's model; floor bypassed`);
+});
+
+test('model-env row 2: before 2.1.251 the variable overrides the Agent model too', () => {
+  assert.equal(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, [2, 1, 250]),
+    `${ENV_PREFIX}haiku CLAUDE_CODE_SUBAGENT_MODEL_FORCE=unset, Claude Code 2.1.250: overrides every Role's model, the Agent model included; floor bypassed`);
+});
+
+test('model-env row 3: FORCE from 2.1.257 forces the model, with or without the variable', () => {
+  assert.equal(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'haiku', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' }, [2, 1, 257]),
+    `${ENV_PREFIX}haiku CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1, Claude Code 2.1.257: forces haiku on every Role; floor bypassed`);
+  assert.equal(line({ CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' }, [2, 2, 0]),
+    `${ENV_PREFIX}unset CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1, Claude Code 2.2.0: forces the main conversation's model on every Role; floor bypassed`);
+});
+
+test('model-env row 4: from 2.1.251 the variable alone is a default only', () => {
+  assert.equal(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, [2, 1, 251]),
+    `${ENV_PREFIX}haiku CLAUDE_CODE_SUBAGENT_MODEL_FORCE=unset, Claude Code 2.1.251: a default only; every aico Role sets model in its frontmatter, so no Role changes; floor kept`);
+  assert.ok(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'haiku', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' }, [2, 1, 255]).endsWith('so no Role changes; floor kept'));
+});
+
+test('model-env row 5: FORCE only before 2.1.257 changes nothing', () => {
+  assert.equal(line({ CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' }, [2, 1, 256]),
+    `${ENV_PREFIX}unset CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1, Claude Code 2.1.256: FORCE needs Claude Code 2.1.257; no Role changes; floor kept`);
+});
+
+test('model-env: a value outside the allow-list prints as (hidden)', () => {
+  const out = line({ CLAUDE_CODE_SUBAGENT_MODEL: 'sk-secret value\nmore', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: 'x'.repeat(65) }, [2, 1, 300]);
+  assert.ok(out.startsWith(`${ENV_PREFIX}(hidden) CLAUDE_CODE_SUBAGENT_MODEL_FORCE=(hidden),`), out);
+  assert.ok(!out.includes('secret'));
+  assert.ok(line({ CLAUDE_CODE_SUBAGENT_MODEL: 'claude-opus-4:1m[x]' }, [2, 1, 300]).includes('=claude-opus-4:1m[x] '));
+});
+
+test('readClaudeVersion: AI_AGENT alone answers when claude is not found', () => {
+  const exec = () => { throw Object.assign(new Error('x'), { code: 'ENOENT' }); };
+  assert.deepEqual(readClaudeVersion({ env: { AI_AGENT: 'claude-code_2-1-310_agent' }, exec }), [2, 1, 310]);
+});
+
+test('readClaudeVersion: when AI_AGENT and --version disagree the lower version wins', () => {
+  const env = { AI_AGENT: 'claude-code_2-1-310_agent' };
+  assert.deepEqual(readClaudeVersion({ env, exec: () => '2.1.311 (Claude Code)' }), [2, 1, 310]);
+  assert.deepEqual(readClaudeVersion({ env, exec: () => '2.1.250 (Claude Code)' }), [2, 1, 250]);
+});
+
+test('readClaudeVersion: claude --version without a shell, 5 s limit, fixed arguments', (t) => {
+  const exec = t.mock.fn(() => '2.1.311 (Claude Code)\n');
+  assert.deepEqual(readClaudeVersion({ env: { AI_AGENT: 'other' }, exec }), [2, 1, 311]);
+  const [file, args, options] = exec.mock.calls[0].arguments;
+  assert.equal(file, 'claude');
+  assert.deepEqual(args, ['--version']);
+  assert.equal(options.timeout, 5000);
+  assert.ok(!options.shell);
+});
+
+test('readClaudeVersion: ENOENT, EINVAL, timeout, bad exit and garbage are unknown', () => {
+  for (const code of ['ENOENT', 'EINVAL', 'ETIMEDOUT']) {
+    const exec = () => { throw Object.assign(new Error(code), { code }); };
+    assert.equal(readClaudeVersion({ env: {}, exec }), null, code);
+  }
+  assert.equal(readClaudeVersion({ env: {}, exec: () => 'no digits here' }), null);
+  assert.equal(readClaudeVersion({ env: {}, exec: () => '' }), null);
+});
+
+test('model-env CLI: silent without the variables, one line with them', (t) => {
+  const s = sandbox(t);
+  const env = { ...process.env, MCSPARROW_HOME: s.home, AI_AGENT: 'claude-code_2-1-310_agent' };
+  for (const k of Object.keys(env)) if (k.toLowerCase() === 'path') env[k] = '';
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL;
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
+  const quiet = spawnSync(process.execPath, [script, 'model-env'], { cwd: s.cwd, encoding: 'utf8', env });
+  assert.deepEqual([quiet.status, quiet.stdout], [0, '']);
+  const loud = spawnSync(process.execPath, [script, 'model-env'], { cwd: s.cwd, encoding: 'utf8', env: { ...env, CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } });
+  assert.equal(loud.status, 0);
+  assert.equal(loud.stdout, `${ENV_PREFIX}haiku CLAUDE_CODE_SUBAGENT_MODEL_FORCE=unset, Claude Code 2.1.310: a default only; every aico Role sets model in its frontmatter, so no Role changes; floor kept\n`);
 });

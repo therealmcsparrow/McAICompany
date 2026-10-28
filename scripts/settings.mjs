@@ -3,6 +3,7 @@
 // pipeline behaviour and Gates. Precedence per field: project > user > plugin.
 // User layer: <home>/config.json key aico_settings. Project layer: .company/settings.json key aico_settings.
 // Unlocks count only from the user layer.
+import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -57,7 +58,16 @@ const LOCKED_GATES = ['ship', 'installs'];
 const LOCKED_LANES = ['security', 'compliance'];
 const ROLE_FIELDS = ['name', 'model', 'effort'];
 const MAX_FILE_BYTES = 1024 * 1024;
-const USAGE = 'usage: settings.mjs get [key] | serve [--no-open]';
+const USAGE = 'usage: settings.mjs get [key] | serve [--no-open] | model-env';
+const FLOOR_FILE_MAX = 16 * 1024;
+const FLOOR_FAILED = 'model floor: company/model-floor.json unreadable, every Role held at opus';
+const LOCK_ECHO = ['haiku', 'sonnet', 'fable'];
+const VERSION_TIMEOUT_MS = 5000;
+const VAR_SHOWN_RE = /^[A-Za-z0-9._:[\]-]{1,64}$/;
+export const MODEL_RANK = Object.freeze({ haiku: 1, sonnet: 2, opus: 3 });
+export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner']);
+const sameRoles = (list, want) => list.length === want.length && want.every((r) => list.includes(r));
+const rankOf = (m) => (typeof m === 'string' && Object.hasOwn(MODEL_RANK, m) ? MODEL_RANK[m] : 0);
 const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');
 
 export class Refusal extends Error {}
@@ -168,6 +178,55 @@ export function pluginDefaults(pluginRoot = DEFAULT_PLUGIN_ROOT) {
     roles[role] = { name, model, effort };
   }
   return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS }, mods: structuredClone(MODS_DEFAULTS), skillspector: { ...SKILLSPECTOR_DEFAULTS }, reprompt: { ...REPROMPT_DEFAULTS }, plan_check: { ...PLAN_CHECK_DEFAULTS } };
+}
+
+// company/model-floor.json (aico-settings v1.6). Unreadable or invalid fails closed: every Role protected at opus.
+export function loadModelFloor(pluginRoot = DEFAULT_PLUGIN_ROOT) {
+  const roles = pluginDefaults(pluginRoot).roles;
+  const names = Object.keys(roles);
+  const failed = () => ({
+    release: null,
+    floor: Object.fromEntries(names.map((r) => [r, 'opus'])),
+    protected: [...names],
+    downgraded: [],
+    warnings: [FLOOR_FAILED]
+  });
+  let data;
+  try {
+    const file = path.join(pluginRoot, 'company', 'model-floor.json');
+    if (fs.statSync(file).size > FLOOR_FILE_MAX) return failed();
+    data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return failed();
+  }
+  const keys = isObject(data) ? Object.keys(data) : [];
+  if (keys.length !== 4 || !['v', 'release', 'floor', 'protected'].every((k) => keys.includes(k))) return failed();
+  if (!isObject(data) || data.v !== 1 || typeof data.release !== 'string' || !/^\d+\.\d+\.\d+$/.test(data.release)) return failed();
+  if (!isObject(data.floor) || !Array.isArray(data.protected) || !sameRoles(data.protected, PROTECTED_ROLES)) return failed();
+  const floor = Object.create(null);
+  for (const role of names) {
+    if (!Object.hasOwn(data.floor, role) || !rankOf(data.floor[role])) return failed();
+    floor[role] = data.floor[role];
+  }
+  const protectedRoles = names.filter((r) => data.protected.includes(r));
+  const downgraded = names.filter((r) => rankOf(roles[r].model) < rankOf(floor[r]));
+  return { release: data.release, floor: { ...floor }, protected: protectedRoles, downgraded, warnings: [] };
+}
+
+// Protected Roles never run below their floor: a lower stored model is not applied (aico-settings v1.6).
+function applyFloor(roles, table, warnings) {
+  const guarded = new Set(table.protected);
+  for (const [role, entry] of Object.entries(roles)) {
+    entry.floor = table.floor[role];
+    entry.protected = guarded.has(role);
+    if (!entry.protected || entry.model === 'inherit' || rankOf(entry.model) >= rankOf(entry.floor)) continue;
+    if (table.release !== null) {
+      const shown = LOCK_ECHO.includes(entry.model) ? entry.model : '(other)';
+      warnings.push(`roles.${role}.model: ${shown} is below the protected floor ${entry.floor}, not applied`);
+    }
+    entry.model = entry.floor;
+    entry.source.model = 'floor';
+  }
 }
 
 function oneOf(values) {
@@ -568,6 +627,9 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const isUnlocked = (k) => !held && unlocked.includes(k);
 
   const roles = resolveRoles(defaults, user, project);
+  const table = loadModelFloor(pluginRoot);
+  warnings.push(...table.warnings);
+  applyFloor(roles, table, warnings);
   warnings.push(...nameClashes(roles));
 
   const pipeline = {
@@ -756,10 +818,53 @@ function lookup(value, dotted) {
   return at;
 }
 
+const parseVersion = (text) => {
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(String(text));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+const atLeast = (v, min) => {
+  for (let i = 0; i < 3; i++) if (v[i] !== min[i]) return v[i] > min[i];
+  return true;
+};
+
+// The running Claude Code version as [major, minor, patch], or null. Reads AI_AGENT (no process) and
+// `claude --version` (no shell, 5 s limit); when both answer and differ, the lower one wins. Any failure is null.
+export function readClaudeVersion({ env = process.env, exec = execFileSync } = {}) {
+  const agent = /^claude-code_(\d+)-(\d+)-(\d+)(?:_|$)/.exec(env.AI_AGENT ?? '');
+  const fromEnv = agent ? [Number(agent[1]), Number(agent[2]), Number(agent[3])] : null;
+  let fromCli = null;
+  try {
+    fromCli = parseVersion(exec('claude', ['--version'], { encoding: 'utf8', timeout: VERSION_TIMEOUT_MS, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }));
+  } catch {}
+  if (fromEnv && fromCli) return atLeast(fromEnv, fromCli) ? fromCli : fromEnv;
+  return fromEnv ?? fromCli;
+}
+
+// The `model-env` line, or '' when neither variable is set (aico-settings v1.6). Reads only the two named variables.
+export function modelEnvLine({ env = process.env, readVersion = () => readClaudeVersion({ env }) } = {}) {
+  const raw = env.CLAUDE_CODE_SUBAGENT_MODEL ?? '';
+  const rawForce = env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? '';
+  const set = raw !== '' && raw !== 'inherit';
+  const force = rawForce !== '' && rawForce !== '0';
+  if (!set && !force) return '';
+  const shown = (v) => (v === '' ? 'unset' : VAR_SHOWN_RE.test(v) ? v : '(hidden)');
+  const version = readVersion();
+  let effect;
+  let kept = false;
+  if (!version) effect = "version unknown, may override every Role's model";
+  else if (!atLeast(version, [2, 1, 251]) && set) effect = "overrides every Role's model, the Agent model included";
+  else if (atLeast(version, [2, 1, 257]) && force) effect = set ? `forces ${shown(raw)} on every Role` : "forces the main conversation's model on every Role";
+  else if (set) { effect = 'a default only; every aico Role sets model in its frontmatter, so no Role changes'; kept = true; }
+  else { effect = 'FORCE needs Claude Code 2.1.257; no Role changes'; kept = true; }
+  const ver = version ? version.join('.') : 'unknown';
+  return `model env: CLAUDE_CODE_SUBAGENT_MODEL=${shown(raw)} CLAUDE_CODE_SUBAGENT_MODEL_FORCE=${shown(rawForce)}, Claude Code ${ver}: ${effect}; floor ${kept ? 'kept' : 'bypassed'}`;
+}
+
 // Returns { code, out }, or { code: 0, serve: { open } } for the CLI to start the server.
-export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
+export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, env, readVersion } = {}) {
   try {
     const [command, ...rest] = args;
+    if (command === 'model-env' && rest.length === 0) return { code: 0, out: modelEnvLine({ env, readVersion }) };
     if (command === 'get' && rest.length <= 1) {
       const resolved = resolveSettings({ home, cwd, pluginRoot });
       for (const w of resolved.warnings) process.stderr.write(`warning: ${w}\n`);
@@ -790,7 +895,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       process.exitCode = 1;
     });
   } else {
-    process.stdout.write(`${out}\n`);
+    if (out !== '') process.stdout.write(`${out}\n`);
     process.exitCode = code;
   }
 }

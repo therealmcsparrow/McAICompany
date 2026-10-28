@@ -6,12 +6,15 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { CEO_ONLY } from './company-type.mjs';
-import { check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS, PERSONALITY_PHRASES, PERSONALITY_MAX, personalityProblem } from './check.mjs';
+import { DESCRIPTION_BUDGET, check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS, PERSONALITY_PHRASES, PERSONALITY_MAX, personalityProblem } from './check.mjs';
 
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
 
-function fixture({ skills = {}, agents = {}, names }) {
+const PROTECTED = ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'];
+const floorFile = (agents) => ({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.keys(agents).map(a => [a, 'sonnet'])), protected: PROTECTED });
+
+function fixture({ skills = {}, agents = {}, names, floor }) {
   const root = mkdtempSync(join(tmpdir(), 'aico-'));
   tempDirs.push(root);
   for (const [dir, text] of Object.entries(skills)) {
@@ -23,6 +26,7 @@ function fixture({ skills = {}, agents = {}, names }) {
   if (names) {
     mkdirSync(join(root, 'company'), { recursive: true });
     writeFileSync(join(root, 'company', 'names.json'), JSON.stringify(names));
+    if (floor !== false) writeFileSync(join(root, 'company', 'model-floor.json'), typeof floor === 'string' ? floor : JSON.stringify(floor ?? floorFile(agents)));
   }
   return root;
 }
@@ -329,6 +333,114 @@ test('names with edge or double spaces are errors; combining marks are fine', ()
   }
   const r = check(fixture({ agents: nameAgents, names: { qa: 'Zoé', support: 'Sofia Lee' } }));
   assert.deepEqual(r.errors, []);
+});
+
+// ---- model floor file and description budget ----
+const floorErrors = (opts) => check(fixture({ agents: nameAgents, names: { qa: 'Quinn', support: 'Sofia' }, ...opts })).errors.filter(e => e.includes('model-floor'));
+const goodFloor = () => floorFile(nameAgents);
+
+test('floor file: valid file has no floor errors', () => {
+  assert.deepEqual(floorErrors({}), []);
+});
+
+test('floor file: missing file is an error when names.json exists', () => {
+  assert.ok(floorErrors({ floor: false }).some(e => e.includes('missing')));
+});
+
+test('floor file: over 16 KiB is refused before parsing', () => {
+  const big = JSON.stringify({ ...goodFloor(), pad: 'x'.repeat(17000) });
+  assert.ok(floorErrors({ floor: big }).some(e => e.includes('16 KiB')));
+});
+
+test('floor file: not JSON is an error', () => {
+  assert.ok(floorErrors({ floor: '{nope' }).some(e => e.includes('not valid JSON')));
+});
+
+test('floor file: a __proto__ key is refused, not merged', () => {
+  const text = JSON.stringify(goodFloor()).replace('"floor":{', '"floor":{"__proto__":"opus",');
+  assert.ok(floorErrors({ floor: text }).some(e => e.includes('not a Role')));
+  assert.equal({}.opus, undefined);
+  const top = JSON.stringify(goodFloor()).replace('{"v":1', '{"constructor":1,"v":1');
+  assert.ok(floorErrors({ floor: top }).some(e => e.includes('unexpected key')));
+});
+
+test('floor file: exact top-level keys, v 1, release shape', () => {
+  const { release, ...noRelease } = goodFloor();
+  assert.ok(floorErrors({ floor: noRelease }).some(e => e.includes('release')));
+  assert.ok(floorErrors({ floor: { ...goodFloor(), v: 2 } }).some(e => e.includes('v must be 1')));
+  assert.ok(floorErrors({ floor: { ...goodFloor(), release: '0.16' } }).some(e => e.includes('release')));
+  assert.ok(floorErrors({ floor: { ...goodFloor(), extra: 1 } }).some(e => e.includes('unexpected key')));
+});
+
+test('floor file: one ranked floor per agent, no more, no fewer', () => {
+  const f = goodFloor();
+  assert.ok(floorErrors({ floor: { ...f, floor: { qa: 'sonnet' } } }).some(e => e.includes('support has no floor')));
+  assert.ok(floorErrors({ floor: { ...f, floor: { ...f.floor, ghost: 'opus' } } }).some(e => e.includes('ghost is not a Role')));
+  assert.ok(floorErrors({ floor: { ...f, floor: { ...f.floor, qa: 'fable' } } }).some(e => e.includes('qa: floor must be')));
+  assert.ok(floorErrors({ floor: { ...f, floor: { ...f.floor, qa: 'inherit' } } }).some(e => e.includes('qa: floor must be')));
+});
+
+test('floor file: protected is exactly the five names', () => {
+  const f = goodFloor();
+  assert.ok(floorErrors({ floor: { ...f, protected: [...PROTECTED, 'qa'] } }).some(e => e.includes('protected')));
+  assert.ok(floorErrors({ floor: { ...f, protected: PROTECTED.slice(1) } }).some(e => e.includes('protected')));
+  assert.ok(floorErrors({ floor: { ...f, protected: 'security' } }).some(e => e.includes('protected')));
+});
+
+test('floor file: a protected Role below its floor in frontmatter is an error', () => {
+  const agents = { security: agent('security', 'Body.', 'sonnet'), qa: agent('qa') };
+  const floor = { ...floorFile(agents), floor: { security: 'opus', qa: 'sonnet' } };
+  const r = check(fixture({ agents, names: { security: 'Sam', qa: 'Quinn' }, floor }));
+  assert.ok(r.errors.some(e => e.includes('agents/security.md') && e.includes('below its floor')), r.errors.join(', '));
+  const ok = check(fixture({ agents: { security: agent('security', 'Body.', 'opus'), qa: agent('qa') }, names: { security: 'Sam', qa: 'Quinn' }, floor }));
+  assert.deepEqual(ok.errors, []);
+});
+
+test('floor file: not required without names.json', () => {
+  assert.deepEqual(check(fixture({ agents: nameAgents })).errors, []);
+});
+
+const agentWithDesc = (name, desc) => `---\nname: ${name}\ndescription: ${desc}\ntools: Read\nmodel: sonnet\neffort: medium\n---\nBody.\n`;
+const estimate = (name, desc) => Buffer.byteLength(`aico:${name}`) + Buffer.byteLength(desc) + DESCRIPTION_BUDGET.perEntry;
+
+test('description budget: block scalar or multi-line description is an error', () => {
+  for (const text of ['---\nname: qa\ndescription: >\n  Dispatch when testing.\ntools: Read\nmodel: sonnet\neffort: medium\n---\nBody.\n',
+    '---\nname: qa\ndescription: |-\n  Dispatch.\ntools: Read\nmodel: sonnet\neffort: medium\n---\nBody.\n',
+    '---\nname: qa\ndescription: Dispatch when\n  testing.\ntools: Read\nmodel: sonnet\neffort: medium\n---\nBody.\n']) {
+    const r = check(fixture({ agents: { qa: text } }));
+    assert.ok(r.errors.some(e => e.includes('agents/qa.md: description must be one line')), r.errors.join(', '));
+  }
+});
+
+test('description budget: one Role over 400 is named', () => {
+  const name = 'qa';
+  const fit = 'x'.repeat(DESCRIPTION_BUDGET.perRole - estimate(name, ''));
+  assert.deepEqual(check(fixture({ agents: { qa: agentWithDesc(name, fit) } })).errors, []);
+  const r = check(fixture({ agents: { qa: agentWithDesc(name, `${fit}x`) } }));
+  assert.ok(r.errors.some(e => e.includes('agents/qa.md: description budget ~401 > 400 tokens')), r.errors.join(', '));
+});
+
+test('description budget: counts UTF-8 bytes, not characters', () => {
+  const r = check(fixture({ agents: { qa: agentWithDesc('qa', 'é'.repeat(200)) } }));
+  assert.ok(r.errors.some(e => e.includes('description budget ~')), r.errors.join(', '));
+});
+
+test('description budget: total 14999 passes, 15000 fails, note prints total and headroom', () => {
+  const build = (total) => {
+    const agents = {};
+    const count = 40;
+    for (let i = 0; i < count; i++) {
+      const name = `r${String(i).padStart(2, '0')}`;
+      const size = Math.floor(total / count) + (i < total % count ? 1 : 0);
+      agents[name] = agentWithDesc(name, 'x'.repeat(size - estimate(name, '')));
+    }
+    return agents;
+  };
+  const pass = check(fixture({ agents: build(14999) }));
+  assert.deepEqual(pass.errors, []);
+  assert.ok(pass.notes.includes('agent descriptions: ~14999 of 15000 tokens, headroom 1'), pass.notes.join('|'));
+  const fail = check(fixture({ agents: build(15000) }));
+  assert.ok(fail.errors.some(e => e.includes('descriptions ~15000 tokens, at or above the 15000 limit')), fail.errors.join(', '));
 });
 
 // ---- brainstorm-file v2 and rule-pack v1.1 ----
