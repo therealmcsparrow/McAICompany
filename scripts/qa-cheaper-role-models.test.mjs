@@ -418,7 +418,7 @@ test('release notes and the model section state no money, percent or saving', ()
   const next = rest.search(/^## /m);
   const entry = next < 0 ? rest : rest.slice(0, next);
   const concepts = section(read('documentation', 'concepts.md'), 'Which model a Role runs on');
-  const verdictLines = section(read('documentation', 'commands.md'), '/aico:feedback').split('\n').filter((l) => /model verdict/.test(l)).join('\n');
+  const verdictLines = section(read('documentation', 'commands.md'), '/aico:feedback').split('\n').join(' ').split(/(?<=\.)\s+/).filter((l) => /model verdict|model-verdict|## Model/.test(l)).join('\n');
   assert.notEqual(verdictLines, '');
   for (const text of [entry, concepts, verdictLines]) {
     assert.doesNotMatch(text, /cheaper|saving|savings|\bsave[sd]?\b|price|pricing|cost|money|euro|[€$£%]|\bEUR\b|\bUSD\b/i);
