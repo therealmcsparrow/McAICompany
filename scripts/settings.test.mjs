@@ -1737,7 +1737,7 @@ test('parallel_cap defaults to 4, resolves project over user over plugin and is 
   assert.equal(resolveSettings(s.ctx).pipeline.parallel_cap, 4);
   assert.equal(s.cli('get', 'pipeline.parallel_cap').out, '4\n');
   assert.equal(JSON.parse(s.cli('get').out).pipeline.parallel_cap, 4);
-  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline).slice(0, 4), ['fix_rounds', 'dispatch', 'parallel_cap', 'context_cap']);
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline).slice(0, 4), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path']);
   s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { parallel_cap: 3 } });
   assert.equal(resolveSettings(s.ctx).pipeline.parallel_cap, 3);
   s.project({ pipeline: { parallel_cap: 5 } });
@@ -1788,4 +1788,114 @@ test('a v1.6 file without parallel_cap resolves as before, plus the default key'
   s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', review_format: 'pilot' } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.review_format, r.pipeline.parallel_cap], [3, 'sequential', 'pilot', 4]);
+});
+
+// ---- pipeline.short_path (aico-settings v1.8) ----
+
+test('pipeline.short_path rejects hostile values first and accepts only on or off', () => {
+  const msg = ['pipeline.short_path must be on or off'];
+  for (const bad of ['yes', 'ON', 'Off', ' on', 'on\n', true, false, 1, 0, null, ['on'], { a: 'on' }, '__proto__', 'x'.repeat(10 * 1024)]) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { short_path: bad } }, roleSet), msg, String(bad).slice(0, 20));
+  }
+  for (const ok of ['on', 'off']) assert.deepEqual(validateLayer({ version: 1, pipeline: { short_path: ok } }, roleSet), []);
+});
+
+test('short_path defaults to on in get and in get pipeline.short_path', (t) => {
+  const s = sandbox(t);
+  assert.equal(PIPELINE_DEFAULTS.short_path, 'on');
+  assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'on');
+  assert.equal(s.cli('get', 'pipeline.short_path').out, 'on\n');
+  assert.equal(JSON.parse(s.cli('get').out).pipeline.short_path, 'on');
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'context_cap', 'review_format', 'lanes']);
+});
+
+test('short_path off from the user level resolves off', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { short_path: 'off' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.short_path, 'off');
+  assert.deepEqual(r.ignored, []);
+  assert.equal(s.cli('get', 'pipeline.short_path').out, 'off\n');
+});
+
+test('short_path off from the project level resolves off, with the user on or unset', (t) => {
+  const s = sandbox(t);
+  s.project({ pipeline: { short_path: 'off' } });
+  assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'off');
+  s.user({ pipeline: { short_path: 'on' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.short_path, 'off');
+  assert.deepEqual(r.ignored, []);
+});
+
+test('short_path on from the project counts when the user level is on or unset', (t) => {
+  const s = sandbox(t);
+  s.project({ pipeline: { short_path: 'on' } });
+  assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'on');
+  s.user({ pipeline: { short_path: 'on' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.short_path, 'on');
+  assert.deepEqual(r.ignored, []);
+});
+
+test('a project on under a user off is ignored and listed once', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { short_path: 'off' } });
+  s.project({ pipeline: { short_path: 'on' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.short_path, 'off');
+  assert.deepEqual(r.ignored, ['pipeline.short_path: a project can only turn the short path off']);
+  assert.equal(s.cli('get', 'pipeline.short_path').out, 'off\n');
+});
+
+test('a fail-closed project layer holds short_path off and keeps the warning', (t) => {
+  const s = sandbox(t);
+  s.project({ pipeline: { review_format: 'PILOT' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.short_path, 'off');
+  assert.ok(r.warnings.some((w) => /review_format/.test(w)));
+  s.user({ pipeline: { short_path: 'on' } });
+  assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'off');
+  fs.writeFileSync(s.projectFile, '{ not json');
+  const broken = resolveSettings(s.ctx);
+  assert.equal(broken.pipeline.short_path, 'off');
+  assert.equal(broken.warnings.length, 1);
+});
+
+test('a stored short_path other than on or off falls back one level with one warning and no echo', (t) => {
+  const s = sandbox(t);
+  for (const bad of ['yes', true, 1, 'ON', null]) {
+    s.user({ pipeline: { short_path: 'off' } });
+    s.project({ pipeline: { short_path: bad } });
+    const r = resolveSettings(s.ctx);
+    const w = r.warnings.filter((x) => /short_path/.test(x));
+    assert.equal(w.length, 1, String(bad));
+    assert.equal(w[0].replace(/^.*settings\.json: |^.*config\.json: /, ''), 'ignoring pipeline.short_path must be on or off', String(bad));
+    assert.equal(r.pipeline.short_path, 'off', `${bad}: off from the user level`);
+  }
+  s.user({ pipeline: { short_path: 'yes' } });
+  fs.rmSync(s.projectFile);
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.short_path, 'on');
+  assert.equal(r.warnings.filter((x) => /short_path/.test(x)).length, 1);
+  assert.ok(!r.warnings.some((x) => x.includes('yes')));
+});
+
+test('writeLayer refuses a bad short_path with the Contract text and writes nothing', (t) => {
+  const s = sandbox(t);
+  for (const bad of ['yes', true, 1]) {
+    assert.throws(() => writeLayer('user', { version: 1, pipeline: { short_path: bad } }, s.ctx), /pipeline\.short_path must be on or off/);
+  }
+  assert.equal(fs.existsSync(s.config), false);
+  writeLayer('user', { version: 1, pipeline: { short_path: 'off' } }, s.ctx);
+  assert.deepEqual(readLayer('user', s.ctx).layer, { version: 1, pipeline: { short_path: 'off' } });
+});
+
+test('a v1.7 file without short_path resolves as before, plus the default key', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', parallel_cap: 5, review_format: 'pilot' } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.parallel_cap, r.pipeline.review_format, r.pipeline.short_path], [3, 'sequential', 5, 'pilot', 'on']);
+  assert.deepEqual(r.ignored, []);
+  assert.deepEqual(r.warnings, []);
 });
