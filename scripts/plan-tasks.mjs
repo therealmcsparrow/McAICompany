@@ -48,6 +48,7 @@ const USAGE = [
   '  start <slug> <id>',
   '  done <slug> <id>',
   '  lines <slug> <id>',
+  '  brief <slug> <id>',
   '  scope <slug> <id> -- <path>...',
   '  round <slug> <n> [--loose <k>] -- <path>...',
   '  read <slug>'
@@ -893,6 +894,87 @@ function cmdLines(args, env) {
   return { code: 0, lines: [`Task: ${id}`, `Files: ${files.length ? files.join(', ') : 'none'}`] };
 }
 
+// The builder's slice of the plan: its own task block, the plan's Contracts section, every Decided line outside
+// the task blocks, and every other section whose heading names the task. Plan text goes to the file only, never to stdout.
+export function taskBrief(text, id, planName) {
+  const lines = readPlanLines(text).lines;
+  const own = [];
+  const contracts = [];
+  const decided = [];
+  const named = [];
+  const idToken = new RegExp(`(^|[^A-Za-z0-9])${id}(?![0-9a-z])`);
+  let section = null;
+  let inTask = false;
+  for (const entry of lines) {
+    if (entry.kind === 'heading') {
+      if (section && entry.level <= section.level) section = null;
+      if (!section && entry.level >= 2 && entry.level <= 4) {
+        const head = TASK_HEAD.exec(entry.title.trim());
+        if (head) {
+          inTask = true;
+          section = { level: entry.level, into: head[1] === id ? own : null };
+        } else {
+          inTask = false;
+          if (entry.level === 2 && /^Contracts\b/i.test(entry.title.trim())) section = { level: 2, into: contracts };
+          else if (idToken.test(entry.title)) section = { level: entry.level, into: named };
+        }
+      } else if (!section && entry.level < 2) {
+        inTask = false;
+      }
+      if (section?.into) section.into.push(entry.line);
+      continue;
+    }
+    if (section?.into) {
+      section.into.push(entry.line);
+    } else if (!inTask && !section && entry.kind === 'text' && /^\s{0,3}(?:[-*]\s+)?Decided:/.test(entry.line)) {
+      decided.push(entry.line);
+    }
+  }
+  if (own.length === 0) return null;
+  const out = [
+    `# Task brief: ${id} (from ${planName})`,
+    '',
+    'Your slice of the plan. Build from this file, the Contracts it names and the brief; do not open the full plan.',
+    'Missing something you need → return `status: blocked` with `missing plan context: <what>`.',
+    '',
+    ...own
+  ];
+  if (contracts.length) out.push('', ...contracts);
+  if (decided.length) out.push('', '## Decided (plan-wide)', ...decided);
+  if (named.length) out.push('', ...named);
+  return `${out.join('\n')}\n`;
+}
+
+function cmdBrief(args, env) {
+  const [slug, id] = twoArgs(args);
+  const st = needState(env, slug);
+  const tasks = roundTasks(needPlan(env, slug, st, { strict: true }).tasks, st);
+  if (!tasks.some((t) => t.id === id)) throw new Refusal('task is not in this round');
+  if (!DEP_ID.test(id)) throw new Refusal('task has no plan block');
+  const brief = taskBrief(readPlan(env.root, slug, st.plan).text, id, st.plan);
+  if (brief === null) throw new Refusal('task has no plan block');
+  const dir = runDir(env.root, slug);
+  if (dir === null || dir === 'unsafe') throw new Refusal('run folder missing');
+  const tasksDir = path.join(dir, 'tasks');
+  const dst = lstatOrNull(tasksDir);
+  if (dst && !dst.isDirectory()) throw new Refusal('tasks folder is not a folder');
+  if (!dst) fs.mkdirSync(tasksDir);
+  const file = path.join(tasksDir, `${id}.md`);
+  const fst = lstatOrNull(file);
+  if (fst && !isPlain(fst)) throw new Refusal('task brief is not a plain file');
+  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW ?? 0);
+  let fd;
+  try {
+    fd = fs.openSync(file, flags, 0o644);
+    fs.writeSync(fd, brief);
+  } catch {
+    throw new Refusal('task brief cannot be written');
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  return { code: 0, lines: [`Task brief: .company/work/${slug}/tasks/${id}.md`] };
+}
+
 function cmdScope(args, env) {
   const { head, tail } = splitDash(args);
   if (tail === null || head.length !== 2) throw new Refusal(USAGE);
@@ -989,7 +1071,7 @@ function cmdRead(args, env) {
 }
 
 const HANDLERS = {
-  check: cmdCheck, begin: cmdBegin, next: cmdNext, start: cmdStart, done: cmdDone, lines: cmdLines, scope: cmdScope, round: cmdRound, read: cmdRead
+  check: cmdCheck, begin: cmdBegin, next: cmdNext, start: cmdStart, done: cmdDone, lines: cmdLines, brief: cmdBrief, scope: cmdScope, round: cmdRound, read: cmdRead
 };
 
 // `now` (epoch ms) and `root` (the product root) are for callers that inject them; `pluginRoot` locates agents/.

@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **Goldfish builders.** A plan-task builder now gets a task brief instead of the whole plan: `plan-tasks.mjs brief <slug> <id>` writes `.company/work/<slug>/tasks/<id>.md` with the task's own block, the plan's Contracts section, the plan-wide `Decided:` lines and the sections that name the task, and prints one `Task brief:` line for the dispatch. Such a builder no longer gets the Architect's Handoff and never opens the full plan; a gap returns `blocked` with `missing plan context`. `U1` and tasks without a plan block keep the old route. Contracts `plan-tasks` v1.1 and `dispatch-prompt` v3.6 (additive).
+- **Goldfish first pass for reviewers.** The code reviewer and QA first judge the diff against the brief's acceptance criteria, the plan and its Contracts, and write those findings before they read any builder Handoff. They then add or withdraw findings and name each change. A builder's own claim never closes a first-pass finding.
+
 ## [0.19.0] - 2026-10-28
 
 ### Added

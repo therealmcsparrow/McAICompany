@@ -1,6 +1,8 @@
-# Contract: plan-tasks v1
+# Contract: plan-tasks v1.1
 
-Provider: `scripts/plan-tasks.mjs` (plan task parser, scheduler, run record writer and reader; Node built-ins only). Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/parallel.md`), only through the CLI. Consumers: the Plan Gate summary (the `check` block), the Lead's dispatch of plan-task Steps (`next`, `lines`), the commit step (`scope`), Fix rounds (`round`), and `scripts/ledger.mjs` `ship` through the exported `readParallel` (`token-ledger` v1.3 `par` record).
+v1.1 is additive (task goldfish-roles): the `brief` command. The record format is unchanged; a v1 caller that never runs `brief` behaves as before.
+
+Provider: `scripts/plan-tasks.mjs` (plan task parser, scheduler, run record writer and reader; Node built-ins only). Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/parallel.md`), only through the CLI. Consumers: the Plan Gate summary (the `check` block), the Lead's dispatch of plan-task Steps (`next`, `lines`, `brief`), the commit step (`scope`), Fix rounds (`round`), and `scripts/ledger.mjs` `ship` through the exported `readParallel` (`token-ledger` v1.3 `par` record).
 Uses: `aico-settings` v1.7 (`pipeline.parallel_cap`, `pipeline.dispatch`, passed in by the caller as `--cap` and `--mode`; the script reads no settings itself), the plan file name rule of `plan-check` v1 (same regex, same file checks).
 Rationale: `docs/adr/0033-plan-tasks-scheduler.md`. The plan-check scan (`plan-check` v1) is not changed: task fields are plain list lines inside the plan's `## Tasks` section.
 
@@ -76,6 +78,7 @@ Exit codes: **0** done; **1** the plan cannot be read, or the record is broken; 
 | `start <slug> <id>` | appends `start`; refused unless `<id>` is a `start` line of `next` right now |
 | `done <slug> <id>` | appends `done` (after the Step's commit); refused unless `<id>` is running |
 | `lines <slug> <id>` | prints exactly two lines: `Task: <id>` and `Files: <paths joined by ", ">` (the plan's items in their written form with `/`, plus the round's added paths; `none` when empty). Read-only |
+| `brief <slug> <id>` | (v1.1) `<id>` must be a task of the round with a plan block (not `U1`). Writes `.company/work/<slug>/tasks/<id>.md`: a fixed header, the task's own block, the plan's level-2 `Contracts` section, every `Decided:` line outside any task block (under `## Decided (plan-wide)`), and every other level 2-4 section whose heading names `<id>` as a whole token. Fences and headings as in the task syntax. Plan text goes only to that file, never to stdout. The `tasks` folder and the file are checked with `lstat`; a link, a file with more than one hard link or a non-folder is refused; the file is opened with `O_NOFOLLOW` and rewritten. Prints exactly one line: `Task brief: .company/work/<slug>/tasks/<id>.md` |
 | `scope <slug> <id> -- <path>…` | `<id>` must be running. Each path (the Step's commit candidates): under `.company/work/<slug>/` → `in`; overlaps the task's own set (files, earlier `extra` of this task, the round's added paths) → `in`; overlaps the set of another running task → `sibling <other id> <path>`; otherwise (invalid paths included) → `extra <path>`. Appends one `out` event (also when both lists are empty) and prints the lines, then `scope: <e> extra, <s> sibling` |
 | `round <slug> <n> [--loose <k>] -- <path>…` | starts Fix round `<n>` (last round + 1, at most 5; no task running). Each blocker path goes to the first task in visit order whose `files:` overlap it, else the first whose recorded `extra` overlap it; the rest (and `--loose` > 0, the blocker items the Lead could not pass) form task `U1`, alone, last in order, role `?`. The round's tasks are the owners plus `U1` if it exists; dependencies are ignored inside a round. Appends `round`, prints `round <n>: <id> (+<k> paths), …` and `unowned <path>` lines |
 | `read <slug>` | prints the reader view as JSON; broken record → the error line, exit 1 |
@@ -87,7 +90,7 @@ Exit codes: **0** done; **1** the plan cannot be read, or the record is broken; 
 A plan with no task → the single line `plan-tasks: 0 tasks; plan Steps run one at a time`. A plan that cannot be read → `plan-tasks: error <plan-missing|plan-unreadable|plan-too-large|plan-name>`, exit 1.
 
 ## Error cases
-- Plan changed after `begin` → `next`, `start`, `lines` refuse; the Lead dispatches no new plan Step and asks the CEO (run `check` and `begin` again after a Plan Gate, or stop).
+- Plan changed after `begin` → `next`, `start`, `lines`, `brief` refuse; the Lead dispatches no new plan Step and asks the CEO (run `check` and `begin` again after a Plan Gate, or stop).
 - Broken record → exit 1 with the reader line; the Lead dispatches no new plan Step until the CEO decides, and `ship` writes no `par` record.
 - Nothing here ever blocks a Gate.
 

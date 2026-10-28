@@ -724,6 +724,60 @@ describe('lines', () => {
   });
 });
 
+describe('brief', () => {
+  const full = [
+    '# Plan', '', 'Settled choices carry `Decided:` lines.', '',
+    '## Core', '- Decided: the script is a Module.', '',
+    '## Contracts', '| Contract | Version |', '| x | v1 |', '',
+    '## Tasks', '',
+    task('T1', { files: 'a.js' }).trimEnd(), 'Build a.', 'Decided: a stays small.', '#### T1 notes', 'more for T1', '',
+    task('T10', { files: 'b.js' }).trimEnd(), 'Build b.', 'Decided: b is T10 only.', '',
+    '## Delta A (T1 pastes it)', '```', '## not a heading', '```', '',
+    '## Delta B (T10 pastes it)', 'for T10', '',
+    '## Rollback', 'Decided: revert by tag.', ''
+  ].join('\n');
+
+  test('writes only the task slice and prints its path', () => {
+    const fx = fixture(full);
+    begin(fx);
+    assert.deepEqual(fx.run('brief', 'demo', 'T1'), { code: 0, lines: ['Task brief: .company/work/demo/tasks/T1.md'] });
+    const text = fs.readFileSync(path.join(fx.dir, 'tasks', 'T1.md'), 'utf8');
+    for (const want of ['# Task brief: T1 (from 02-plan.md)', '### T1 title of T1', 'Build a.', 'Decided: a stays small.', '#### T1 notes',
+      '## Contracts', '| x | v1 |', '## Decided (plan-wide)', '- Decided: the script is a Module.', 'Decided: revert by tag.',
+      '## Delta A (T1 pastes it)', '## not a heading']) {
+      assert.ok(text.includes(want), want);
+    }
+    for (const unwanted of ['T10 title', 'Build b.', 'Decided: b is T10 only.', 'Delta B', 'for T10', 'Settled choices']) {
+      assert.ok(!text.includes(unwanted), unwanted);
+    }
+  });
+
+  test('never prints plan text and refuses unknown or changed plans', () => {
+    const fx = fixture(full);
+    begin(fx);
+    const r = fx.run('brief', 'demo', 'T10');
+    assert.equal(r.lines.join('\n').includes('Build b.'), false);
+    assert.equal(fx.run('brief', 'demo', 'T9').code, 3);
+    fs.appendFileSync(fx.plan, 'changed\n');
+    assert.equal(fx.run('brief', 'demo', 'T1').code, 3);
+  });
+
+  test('refuses a linked brief file', () => {
+    const fx = fixture(full);
+    begin(fx);
+    fs.mkdirSync(path.join(fx.dir, 'tasks'));
+    const target = path.join(fx.root, 'outside.md');
+    fs.writeFileSync(target, 'keep\n');
+    try {
+      fs.linkSync(target, path.join(fx.dir, 'tasks', 'T1.md'));
+    } catch {
+      return;
+    }
+    assert.equal(fx.run('brief', 'demo', 'T1').code, 3);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'keep\n');
+  });
+});
+
 describe('scope', () => {
   function started() {
     const fx = fixture(plan(task('T1', { files: 'a/one.js, docs/' }), task('T2', { files: 'b/two.js' }), task('T3', { files: 'c.js' })));

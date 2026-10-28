@@ -78,7 +78,9 @@ At the Plan Gate the Lead runs a text-only check on the plan file. It lists choi
 **History scan.** `plan-check-verdict.mjs history` runs the check over past plans in the working tree and in git history, read-only, and prints findings to the terminal. It writes nothing to the repository or `.company/`. A person supplies true and false labels in a file to get a false-positive rate.
 
 ## Parallel Steps
-The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-tasks` v1), not by its own judgment. The script reads the task fields in the plan and says which tasks may start now.
+The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-tasks` v1.1), not by its own judgment. The script reads the task fields in the plan and says which tasks may start now.
+
+**Goldfish builders and reviewers.** Each builder gets a task brief, not the whole plan: `plan-tasks.mjs brief` writes the task's own block, the plan's Contracts, the plan-wide `Decided:` lines and the sections that name the task to `.company/work/<slug>/tasks/<id>.md`. The code reviewer and QA first judge the diff against the brief's acceptance criteria, the plan and its Contracts, and only then read what the builders wrote about their work, so a builder's own account cannot steer the first pass.
 
 **Task syntax.** The Architect writes each task as a heading under `## Tasks` with four list lines:
 
