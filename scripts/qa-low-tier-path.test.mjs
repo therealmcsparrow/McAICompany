@@ -134,6 +134,7 @@ describe('AC1 the data file prints the Roles and lanes per tier', () => {
   test('AC1 the route entries are the Roles and lanes of the v0.18.0 feature and fix skills', (t) => {
     const feature = v018(t, 'skills/feature/SKILL.md');
     const fix = v018(t, 'skills/fix/SKILL.md');
+    if (feature === null || fix === null) return;
     const featureNeedle = {
       'product-manager': 'aico:product-manager', 'design-researcher': 'aico:design-researcher', architect: 'aico:architect',
       'ui-ux-designer': 'aico:ui-ux-designer', 'brand-artist': 'aico:brand-artist', spikes: 'Spikes', 'persona-tester': 'aico:persona-tester',
@@ -715,6 +716,7 @@ describe('AC7 every Gate stops as before and its summary names the path and the 
   test('AC7 the Gates of feature and fix are the v0.18.0 ones, in the same order', (t) => {
     for (const name of ['feature', 'fix']) {
       const old = v018(t, `skills/${name}/SKILL.md`);
+      if (old === null) return;
       const gates = (text) => text.split('\n').filter((l) => /\*\*→ [A-Za-z ]*Gate\*\*/.test(l)).map((l) => l.match(/\*\*→ ([A-Za-z ]*Gate)\*\*/)[1]);
       assert.deepEqual(gates(read(`skills/${name}/SKILL.md`)), gates(old), name);
     }
@@ -739,7 +741,9 @@ describe('AC8 a low run keeps the tests, the pre-filter and handoff-lint', () =>
   });
 
   test('AC8 the pre-filter, handoff-lint and full-suite lines of the pipeline are the v0.18.0 ones', (t) => {
-    const old = v018(t, 'skills/pipeline/SKILL.md').split('\n');
+    const oldText = v018(t, 'skills/pipeline/SKILL.md');
+    if (oldText === null) return;
+    const old = oldText.split('\n');
     const now = new Set(read('skills/pipeline/SKILL.md').split('\n'));
     const wanted = old.filter((l) => /pre-filter|handoff-lint|full test suite/i.test(l));
     assert.ok(wanted.length >= 3);
@@ -864,6 +868,7 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
   // Same fixtures, the v0.18.0 ledger against this one: the numbers must not move.
   test('AC9 report, scorecard, model-verdict and parallel-verdict give the v0.18.0 numbers on every v1.3 fixture', async (t) => {
     const old = v018(t, 'scripts/ledger.mjs');
+    if (old === null) return;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-ltp-old-'));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     const rewritten = old.replace(/from '\.\/([a-z-]+\.mjs)'/g, (_, f) => `from '${pathToFileURL(path.join(import.meta.dirname, f)).href}'`);
