@@ -255,7 +255,7 @@ Both install commands change your user-scope configuration, not just this projec
 **When to use it.** You have a pile of user input and want it triaged into a short list of things worth doing.
 
 **How it runs.**
-1. **Support** clusters the reports (and stops to suggest `/aico:incident` if a cluster looks security-related). If runs have a token ledger, the report also compares the cost of the last three runs under `## Cost`, and shows the [run scorecard](concepts.md#run-scorecard) medians. The scorecard line itself is printed after the Ship Gate of any build run and never blocks it.
+1. **Support** clusters the reports (and stops to suggest `/aico:incident` if a cluster looks security-related). If runs have a token ledger, the report also compares the cost of the last three runs under `## Cost`, and shows the [run scorecard](concepts.md#run-scorecard) medians. The scorecard line itself is printed after the Ship Gate of any build run and never blocks it. The report also gets a `## Plan check` section with one verdict line from `plan-check-verdict.mjs verdict`, quoted unchanged (see [Plan check](concepts.md#plan-check)). If the verdict cannot be read, the error is quoted as it is and the run goes on.
 2. **Product Manager** ranks the top 5 against your success metric and proposes a fix or feature for each. **→ Brief Gate** (you pick).
 3. The Lead tells you which `/aico:fix` and `/aico:feature` runs to start — it never starts them itself.
 
@@ -566,7 +566,7 @@ Effective language: the project override, else your default, else English. An un
 
 **Only you start this command.** No other command or the Lead starts it.
 
-**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, reprompt Question rounds (0 to 3, default 1), parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
+**What it does.** Opens a local settings page in your browser. It covers Role name, model and effort; language and profile; the pipeline (Fix-round limit, reprompt Question rounds (0 to 3, default 1), the [Plan check](concepts.md#plan-check) policy (`plan_check.policy`: `off`, `warn` or `block`, default `warn`) and Verdict runs (`plan_check.runs`, 3 to 50, default 5), parallel or sequential, max context, review format (`plain` or `pilot`, default `plain`), optional lanes, brainstorm debate style and film script); Gates (ask or auto); and each Role's [personality](concepts.md#personalities) on the Personality tab, with a filter for Roles. Locked Gates (Ship, installs, security lanes) can only be unlocked from user settings.
 
 **When to use it.** You want to change how the company works without editing files by hand: a different model for a Role, auto instead of ask on a Gate, a project-specific override.
 

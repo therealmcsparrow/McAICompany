@@ -2,6 +2,20 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [Unreleased]
+
+The Plan Gate lists choices a plan left open.
+
+### Added
+- **Plan check.** At each Plan Gate the Lead scans the plan's Steps and Tasks sections for `TBD`, `TODO`, `decide later` and open either-or questions, and shows up to 5 rows `file:line | phrase | why` plus `+<k> more`. It is text-only, uses no model and in this version never blocks a Gate. Policy `off`, `warn` (default) or `block`; `block` makes the script exit with an error code on a finding, and the Plan Gate still treats it as `warn`. You can mark warnings as noise in the Plan Gate form. Patterns live in a capped file of at most 10 entries. Contract `plan-check` v1, ADR 0030.
+- **`Decided:` lines.** A settled choice gets its own line `Decided: <choice> because <reason>`; the check skips it and counts it. The reviewer tags a finding caused by an open plan choice `[open-decision]` under Nits, never under Blocking.
+- **Per-run record.** `.company/work/<slug>/plan-check.jsonl` holds counts, enums, the plan file name and times only: no plan text, no phrase, no CEO text. It is committed with the run's Handoffs. The ledger and Handoff frontmatter are unchanged.
+- **Verdict and history scan.** `/aico:feedback` quotes one `plan-check verdict` line: `pass`, `fail` or `insufficient (n=<k>)`, comparing median Fix rounds of check-on runs with earlier runs, plus the waved-off share. The check is not shown to reduce Fix rounds until the verdict says `pass`. `plan-check-verdict.mjs history` scans past plans in git and writes nothing.
+- **Settings.** Plan check table on the Pipeline tab: `plan_check.policy` (default `warn`) and `plan_check.runs` (3 to 50, default 5). Contract aico-settings v1.5 (additive).
+
+### Changed
+- **Fix rounds count.** The `fix_rounds` in the `ship` record counts Steps before your first Ship Gate answer.
+
 ## [0.15.0] - 2026-10-28
 
 Runs get a scorecard, and releases get a safe rollback ref.
