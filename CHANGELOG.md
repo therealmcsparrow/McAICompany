@@ -6,9 +6,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ### Added
 - **Capped parallel plan Steps.** The Architect marks each plan task with `role`, `files`, `depends-on` and `parallel` lines. `scripts/plan-tasks.mjs` decides which tasks start: only marked tasks run together, tasks that share a path run in plan order, and any other task runs alone with a warning. At most `pipeline.parallel_cap` Steps run at once. The Plan Gate shows a Parallel plan block that never blocks the Gate. Each plan-task Step gets `Task:` and `Files:` lines; a path edited outside `Files:` is counted, and one that belongs to another running task is not committed. Contracts `plan-tasks` v1 (new), `dispatch-prompt` v3.5 (additive), ADR 0033.
-- **Parallel cap setting.** `pipeline.parallel_cap`, a whole number from 3 to 5, default 4, with a row on the settings page. Dispatch `sequential` overrides it with 1. Contract `aico-settings` v1.7 (additive).
+- **Parallel cap setting.** `pipeline.parallel_cap`, a whole number from 3 to 5, default 4 (a bad stored value falls back to the level below: your user value, else 4), with a row on the settings page. Dispatch `sequential` overrides it with 1. Contract `aico-settings` v1.7 (additive).
 - **Parallel verdict.** `ship` writes one `par` ledger line of four whole numbers (cap, peak, overlap waits, out-of-list paths). `/aico:feedback` quotes one `parallel verdict:` line from `ledger.mjs parallel-verdict`: `pass`, `fail` or `insufficient (n=<k>)`. It never blocks a Step or a Gate. Contract `token-ledger` v1.3 (additive; the model verdict's v0.17 side now ends before 0.18.0).
-- **Run record.** `.company/work/<slug>/parallel.jsonl` holds task IDs and repo paths only and stays with the run's Handoffs.
+- **Run record.** `.company/work/<slug>/parallel.jsonl` holds task IDs, repo paths, the plan file name, a plan hash, the cap, the mode and UTC times, with no Handoff, plan or CEO text, and stays with the run's Handoffs.
 - **Shared-tree rule.** Roles on a plan-task Step change only the paths in `Files:`, never use `git stash`, and never kill processes by name.
 
 ### Changed

@@ -90,13 +90,13 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 - parallel: yes
 ```
 
-`files:` lists every file the task creates or edits, as repo-relative paths. A directory counts only when the task owns everything under it. Globs, absolute paths and `..` are not valid. `depends-on:` is `none` or task IDs. `parallel:` is `yes` or `no`.
+`files:` lists every file the task creates or edits, as repo-relative paths. A directory counts only when the task owns everything under it. Globs, absolute paths and `..` are not valid, and a path part that ends in `.` is refused (Windows). `depends-on:` is `none` or task IDs. `parallel:` is `yes` or `no`.
 
 **Alone.** A task runs alone, and the Plan Gate shows one warning line with the reason, when it has no `parallel: yes`, has `parallel: no`, or has a missing or invalid field (for example an unknown Role, an invalid `files:` list, an unknown dependency, a cycle or a repeated field). Only a task with `parallel: yes` and valid fields can run beside others.
 
 **Overlap.** Two tasks that share a path (compared without regard to case or `\` versus `/`, a directory covering the paths under it) never run at the same time. The later one in plan order waits until the earlier one is done.
 
-**The cap.** At most `pipeline.parallel_cap` Steps of a run run at once. The value is a whole number from 3 to 5; the default is 4, and an invalid stored value falls back to 4 with a warning. Set it in `/aico:settings`. A project value counts and it is not a lock. The cap also limits other parallel Steps in a pipeline run (for example the review lanes). Read-only fan-outs (brainstorm, research, cooler, usability-test Personas) are not capped.
+**The cap.** At most `pipeline.parallel_cap` Steps of a run run at once. The value is a whole number from 3 to 5; the default is 4, and an invalid stored value falls back to the level below (your user value, else 4) with a warning. Set it in `/aico:settings`. A project value counts and it is not a lock. The cap also limits other parallel Steps in a pipeline run (for example the review lanes). Read-only fan-outs (brainstorm, research, cooler, usability-test Personas) are not capped.
 
 **Sequential.** Setting Dispatch (`pipeline.dispatch`) to `sequential` overrides the cap with 1. It is the emergency switch: one Step at a time.
 
@@ -104,9 +104,9 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 
 **Out-of-list paths.** Each plan-task Step gets `Task:` and `Files:` lines. Before the commit, the Lead sorts the Step's changed paths. A path outside `Files:` is committed and named to you as extra. A path that belongs to another running task is not committed; the Code Reviewer records it as a `[spec]` blocker. The count of extra plus sibling paths goes to the run's `par` ledger line.
 
-**What is stored.** The run record `.company/work/<slug>/parallel.jsonl` holds task IDs and repo-relative paths only. It stays with the run's Handoffs: local where `.company/work/` is ignored. At `ship` the ledger gets one `par` line of four whole numbers (cap, peak Steps at once, tasks that waited for an overlap, out-of-list paths). The ledger stays local to the repository and keeps counts only.
+**What is stored.** The run record `.company/work/<slug>/parallel.jsonl` holds task IDs, repo-relative paths, the plan file name, a plan hash, the cap, the mode and UTC times. It holds no Handoff, plan or CEO text. It stays with the run's Handoffs: local where `.company/work/` is ignored. At `ship` the ledger gets one `par` line of four whole numbers (cap, peak Steps at once, tasks that waited for an overlap, out-of-list paths). The ledger stays local to the repository and keeps counts only.
 
-**The verdict.** `/aico:feedback` quotes one `parallel verdict:` line from `ledger.mjs parallel-verdict`. It compares the newest runs on v0.18 with a capped cap of 2 or more against v0.17 runs, both with at least 2 builder Steps and on the same plan check key and model floor. With fewer than 10 runs on either side (default; `--runs` sets 3 to 50) it says `insufficient (n=<k>)`. It says `pass` only when time minus your wait at Gates is at most 0.75 times the v0.17 value, Fix-round, high-blocker and Gate-reject medians are not higher, spend per AC is at most 1.10 times the v0.17 value, and the out-of-list median is 0. Otherwise it says `fail`. Until it says `pass`, nothing here is shown to save time. The verdict never blocks a Step or a Gate.
+**The verdict.** `/aico:feedback` quotes one `parallel verdict:` line from `ledger.mjs parallel-verdict`. It compares the newest runs on v0.18 with a cap of 2 or more against v0.17 runs, both with at least 2 builder Steps and on the same plan check key and model floor. With fewer than 10 runs on either side (default; `--runs` sets 3 to 50) it says `insufficient (n=<k>)`. It says `pass` only when time minus your wait at Gates is at most 0.75 times the v0.17 value, Fix-round, high-blocker and Gate-reject medians are not higher, spend per AC is at most 1.10 times the v0.17 value, and the out-of-list median is 0. Otherwise it says `fail`. Until it says `pass`, nothing here is shown to save time. The verdict never blocks a Step or a Gate.
 
 **Rolling back.** When the verdict says `fail`, set `pipeline.parallel_cap` to 5 in `/aico:settings`; the verdict line names this step. If the runs already used a cap of 5, set `pipeline.dispatch` to `sequential` instead. Reviewer, QA and Security verdicts and the Gates do not change.
 
