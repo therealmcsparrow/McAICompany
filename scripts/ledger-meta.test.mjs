@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { validateRecord, main } from './ledger.mjs';
+import { validateRecord, main, FLOOR_RELEASE_V017 } from './ledger.mjs';
 
 const NOW = Date.parse('2026-10-28T12:00:00Z');
 const BASE_COMMIT = 'ad82a54';
@@ -145,4 +145,63 @@ test('the v1.1 script skips the meta line with one warning and keeps its numbers
   assert.equal(a.stdout.split('\n').filter((l) => l.startsWith('warning: line 3 skipped')).length, 1);
   assert.equal(a.stdout.split('\n').filter((l) => l.startsWith('warning')).length, 1);
   assert.equal(a.stdout.replace(/warning: line 3 skipped\n/, ''), b.stdout);
+});
+
+// ---------- the floor key (v1.3) ----------
+
+const withFloor = (sb, loadFloor) => main(['ship', 'demo', '3'], { now: NOW, root: sb.dir, pluginRoot: sb.pluginRoot, loadFloor });
+
+test('validateRecord accepts a meta floor in version shape and refuses every other value', () => {
+  assert.equal(validateRecord({ ...meta('demo', '0.18.0'), floor: '0.16.0' }).ok, true);
+  const bad = ['0.16', '0.16.0.1', '1000.1.1', '0.16.0-rc1', ' 0.16.0', '0.16.0\n', '../1.2.3', '', 16, null, ['0.16.0'], { a: 1 }, true];
+  for (const floor of bad) assert.equal(validateRecord({ ...meta('demo', '0.18.0'), floor }).ok, false, JSON.stringify(floor));
+});
+
+test('ship writes the floor release on the meta line', (t) => {
+  const sb = sandbox(t, '0.18.0');
+  const r = withFloor(sb, () => ({ release: '0.16.0', floor: {}, protected: [], downgraded: [], warnings: [] }));
+  assert.equal(r.code, 0);
+  const recs = readLines(sb, 'demo');
+  assert.deepEqual(recs[0], { v: 1, run: 'demo', kind: 'meta', aico: '0.18.0', floor: '0.16.0' });
+  assert.deepEqual(Object.keys(recs[0]), ['v', 'run', 'kind', 'aico', 'floor']);
+});
+
+test('ship leaves the floor key out when the release is null, odd or unreadable', (t) => {
+  const odd = [null, undefined, '0.16', '0.16.0.1', ' 0.16.0', '0.16.0\n', '../1.2.3', '0.16.0-rc1', '1000.0.0', '', 16, ['0.16.0'], { a: 1 }];
+  for (const release of odd) {
+    const sb = sandbox(t, '0.18.0');
+    const r = withFloor(sb, () => ({ release }));
+    assert.equal(r.code, 0, JSON.stringify(release));
+    assert.deepEqual(readLines(sb, 'demo')[0], { v: 1, run: 'demo', kind: 'meta', aico: '0.18.0' }, JSON.stringify(release));
+  }
+  for (const loader of [() => { throw new Error('no floor'); }, () => null, () => 'x', () => ({})]) {
+    const sb = sandbox(t, '0.18.0');
+    assert.equal(withFloor(sb, loader).code, 0);
+    assert.deepEqual(readLines(sb, 'demo').map((x) => x.kind), ['meta', 'ship']);
+    assert.equal(Object.hasOwn(readLines(sb, 'demo')[0], 'floor'), false);
+  }
+});
+
+test('ship still prints exactly one line and writes no meta line when the plugin version is missing', (t) => {
+  const sb = sandbox(t, null);
+  const r = withFloor(sb, () => ({ release: '0.16.0' }));
+  assert.equal(r.lines.length, 1);
+  assert.deepEqual(readLines(sb, 'demo').map((x) => x.kind), ['ship']);
+});
+
+test('FLOOR_RELEASE_V017 equals the release of company/model-floor.json at tag v0.17.0', (t) => {
+  const root = path.join(import.meta.dirname, '..');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-floor-tag-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const gitConfig = path.join(dir, 'empty-gitconfig');
+  fs.writeFileSync(gitConfig, '');
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' };
+  let text;
+  try {
+    text = execFileSync('git', ['cat-file', '-p', 'v0.17.0:company/model-floor.json'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000 });
+  } catch {
+    return t.skip('git or the tag v0.17.0 is not available');
+  }
+  assert.equal(FLOOR_RELEASE_V017, JSON.parse(text).release);
+  assert.equal(FLOOR_RELEASE_V017, '0.16.0');
 });
