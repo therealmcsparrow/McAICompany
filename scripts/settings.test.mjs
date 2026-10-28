@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, PLAN_CHECK_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -277,7 +277,7 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
   assert.equal(Object.keys(data.roles).length, fs.readdirSync(path.join(import.meta.dirname, '..', 'agents')).filter((f) => f.endsWith('.md')).length);
   assert.equal(data.roles.architect.name, 'Ava');
 });
@@ -1263,4 +1263,88 @@ test('writeLayer refuses a bad reprompt.question_rounds and writes nothing; a go
   writeLayer('user', { version: 1, reprompt: { question_rounds: 3 } }, s.ctx);
   assert.equal(roundsOf(s), 3);
   assert.equal(s.cli('get', 'reprompt.question_rounds').out, '3\n');
+});
+
+// ---------- plan_check.policy and plan_check.runs (aico-settings v1.5) ----------
+const PC_POLICY_MSG = 'plan_check.policy must be off, warn or block';
+const PC_RUNS_MSG = 'plan_check.runs must be a whole number from 3 to 50';
+const planCheckOf = (s) => plain(resolveSettings(s.ctx).plan_check);
+
+test('hostile plan_check.policy values are refused with the Contract text and no echo', () => {
+  const hostile = ['Warn', 'WARN', ' warn', 'warn ', 'ask', '', null, true, 1, ['warn'], { a: 1 }, '__proto__', 'x'.repeat(10240)];
+  for (const bad of hostile) {
+    assert.deepEqual(validateLayer({ version: 1, plan_check: { policy: bad } }, roleSet), [PC_POLICY_MSG], String(bad).slice(0, 12));
+  }
+  for (const ok of ['off', 'warn', 'block']) assert.deepEqual(validateLayer({ version: 1, plan_check: { policy: ok } }, roleSet), []);
+});
+
+test('hostile plan_check.runs values are refused with the Contract text and no echo', () => {
+  const hostile = [2, 51, 0, -5, 5.5, NaN, Infinity, '5', '10.0', '1e1', '', null, true, [5], { a: 1 }, 1e21, 'x'.repeat(10240)];
+  for (const bad of hostile) {
+    assert.deepEqual(validateLayer({ version: 1, plan_check: { runs: bad } }, roleSet), [PC_RUNS_MSG], String(bad).slice(0, 12));
+  }
+  for (const ok of [3, 5, 50]) assert.deepEqual(validateLayer({ version: 1, plan_check: { runs: ok } }, roleSet), []);
+});
+
+test('plan_check refuses unknown keys, wrong shapes, and prints only plain key names', () => {
+  assert.deepEqual(validateLayer({ version: 1, plan_check: { mode: 1 } }, roleSet), ['plan_check.mode: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, plan_check: JSON.parse('{"__proto__":{"runs":3}}') }, roleSet), ['plan_check.__proto__: unknown key']);
+  const long = 'k'.repeat(300);
+  const reasons = validateLayer({ version: 1, plan_check: { [long]: 1, 'a b\u0000<script>': 1 } }, roleSet);
+  assert.deepEqual(reasons, ['plan_check.?: unknown key', 'plan_check.?: unknown key']);
+  for (const bad of ['1', [], null, 1]) assert.deepEqual(validateLayer({ version: 1, plan_check: bad }, roleSet), ['plan_check: must be an object']);
+});
+
+test('PLAN_CHECK_DEFAULTS is warn and 5 and a fresh install resolves it through get and get <key>', (t) => {
+  assert.deepEqual(plain(PLAN_CHECK_DEFAULTS), { policy: 'warn', runs: 5 });
+  const s = sandbox(t);
+  assert.deepEqual(plain(pluginDefaults(s.pluginRoot).plan_check), { policy: 'warn', runs: 5 });
+  assert.deepEqual(planCheckOf(s), { policy: 'warn', runs: 5 });
+  assert.deepEqual(JSON.parse(s.cli('get').out).plan_check, { policy: 'warn', runs: 5 });
+  assert.equal(s.cli('get', 'plan_check.policy').out, 'warn\n');
+  assert.equal(s.cli('get', 'plan_check.runs').out, '5\n');
+});
+
+test('plan_check resolves per field, project else user else default, and is not a lock', (t) => {
+  const s = sandbox(t);
+  s.user({ plan_check: { policy: 'block', runs: 20 } });
+  assert.deepEqual(planCheckOf(s), { policy: 'block', runs: 20 });
+  s.project({ plan_check: { policy: 'off' } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(plain(r.plan_check), { policy: 'off', runs: 20 });
+  assert.deepEqual(r.ignored, [], 'a project value counts without an unlock');
+});
+
+test('a broken project layer does not change a valid project plan_check value', (t) => {
+  const s = sandbox(t);
+  s.user({ unlocked: ['ship'] });
+  s.project({ plan_check: { policy: 'off', runs: 7 }, gates: { ship: 'nope' } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(plain(r.plan_check), { policy: 'off', runs: 7 });
+  assert.ok(r.warnings.length > 0);
+});
+
+test('a bad plan_check value falls back to the level below, ending at the default, with a warning', (t) => {
+  const s = sandbox(t);
+  s.user({ plan_check: { policy: 'block', runs: 12 } });
+  s.project({ plan_check: { policy: 'stop', runs: 99 } });
+  let r = resolveSettings(s.ctx);
+  assert.deepEqual(plain(r.plan_check), { policy: 'block', runs: 12 });
+  assert.equal(r.warnings.filter((w) => w.includes(PC_POLICY_MSG)).length, 1);
+  assert.equal(r.warnings.filter((w) => w.includes(PC_RUNS_MSG)).length, 1);
+  s.user({ plan_check: { policy: 'nope', runs: '12' } });
+  s.project({ plan_check: { policy: 'stop', runs: 1.5 } });
+  r = resolveSettings(s.ctx);
+  assert.deepEqual(plain(r.plan_check), { policy: 'warn', runs: 5 });
+  assert.ok(!r.warnings.join('|').includes('stop'), 'a refused value is never echoed');
+});
+
+test('writeLayer refuses a bad plan_check value and writes nothing; a good one round-trips', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, plan_check: { policy: 'strict' } }, s.ctx), (e) => e instanceof Refusal && e.message === PC_POLICY_MSG);
+  assert.throws(() => writeLayer('user', { version: 1, plan_check: { runs: 2 } }, s.ctx), (e) => e instanceof Refusal && e.message === PC_RUNS_MSG);
+  assert.ok(!fs.existsSync(s.config));
+  writeLayer('user', { version: 1, plan_check: { policy: 'block', runs: 50 } }, s.ctx);
+  assert.deepEqual(planCheckOf(s), { policy: 'block', runs: 50 });
+  assert.equal(s.cli('get', 'plan_check.runs').out, '50\n');
 });

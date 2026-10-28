@@ -18,3 +18,5 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 A code comment about Handoffs, Steps, Roles, AI or company process is `## Blocking` `spec` (`aico:tdd`).
 
 **Sort:** bug, spec miss, Contract violation, missing test, security risk → `## Blocking`; style → `## Nits`.
+
+**Open decisions.** A finding caused by a choice the plan left open (no `Decided:` line) also gets a Nit `[open-decision] <plan file>:<line or section> — <the open choice>`. The tag never appears under `## Blocking`; a bug it caused stays Blocking, untagged.

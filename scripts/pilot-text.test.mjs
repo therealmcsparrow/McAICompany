@@ -21,13 +21,14 @@ const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
 
 // Byte budget: pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
 const PRE = {
-  'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 1899,
+  'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 2048,
+  // review: 1899 + 149 B for the open-decision Nit paragraph (plan-check v1, v0.16).
   // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
   'skills/standards/SKILL.md': 1680, 'agents/code-reviewer.md': 1950, 'agents/senior-engineer.md': 2365,
 };
 // Extra bytes a load may carry over the PRE sum. The handoff skill grew 110 B (Starting a Step item 5: Roles never start a Playbook,
-// ADR 0026): code-reviewer is 14 B over its PRE sum, senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
-const LOAD_EXTRA = { 'agents/senior-engineer.md': 132, 'agents/code-reviewer.md': 14 };
+// ADR 0026): code-reviewer is 127 B over its PRE sum (14 B of handoff growth, 113 B of open-decision Nit text, plan-check v1), senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
+const LOAD_EXTRA = { 'agents/senior-engineer.md': 132, 'agents/code-reviewer.md': 127 };
 const LOAD = {
   'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
   'agents/senior-engineer.md': ['agents/senior-engineer.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md', 'skills/standards/SKILL.md'],
@@ -51,7 +52,7 @@ test('byte budget: each pilot Role loads at most the pre-run sum, references/pil
     const now = files.reduce((n, f) => n + bytes(f), 0) + bytes(PILOT);
     assert.ok(now <= pre, `${agent} loads ${now} B, pre-run ${pre} B`);
   }
-  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 15608);
+  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 15757);
 });
 
 test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () => {
