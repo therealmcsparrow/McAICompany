@@ -16,7 +16,7 @@ const KiB = 1024;
 const MAX_DATA_BYTES = 16 * KiB;
 const MAX_RECORD_BYTES = 16 * KiB;
 const MAX_RECORD_LINES = 100;
-const MAX_RECORD_LINE_BYTES = 256;
+const MAX_RECORD_LINE_BYTES = 512;
 const MAX_PLAN_BYTES = 256 * KiB;
 const MAX_PROJECT_BYTES = 64 * KiB;
 const MAX_ARG_CHARS = 4096;
@@ -26,7 +26,9 @@ const MAX_HIT_LINES = 5;
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
-const SHA = /^[0-9a-f]{7,40}$/;
+const SHA = /^[0-9a-f]{7,64}$/;
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const MAX_CANDIDATES = 16;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const ECHO = /^[a-z0-9-]{1,40}$/;
 const TOKEN = /^[a-z0-9]{2,32}$/;
@@ -59,11 +61,13 @@ export const FORCED_HIGH_V1 = Object.freeze(
     'consent personal privacy migration migrations migrate alembic flyway liquibase').split(' ')
 );
 
+export const CORE_FIXED = Object.freeze(['.company/project.md', '.company/settings.json', '.company/standards.md']);
+
 const USAGE = [
   'usage: tier-set.mjs <command>',
   '  sets',
-  '  preview <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> [--ceo full]',
-  '  begin <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> --base <sha> [--ceo full]',
+  '  preview <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> [--ceo <short|full>]',
+  '  begin <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> --base <sha> [--ceo <short|full>]',
   '  sync <slug> [--plan <plan>] [--diff]',
   '  raise <slug> <medium|high>',
   '  read <slug>'
@@ -187,6 +191,8 @@ function validate(data) {
   if (!Array.isArray(fh) || fh.length < 1 || fh.length > 200 || fh.some((x) => typeof x !== 'string' || !TOKEN.test(x)) || new Set(fh).size !== fh.length) {
     return 'forced_high';
   }
+  const missing = FORCED_HIGH_V1.find((x) => !fh.includes(x));
+  if (missing) return `forced_high lacks ${missing}`;
   return null;
 }
 
@@ -244,14 +250,32 @@ function checkKey(p) {
   return p.replaceAll('\\', '/').split('/').map(trimAlias).join('/').toLowerCase().replace(/\/$/, '');
 }
 
-// Tokens of one segment: split after a lower-case letter or digit that precedes an upper-case letter, lower-case, split on non-alphanumerics.
-export function tokens(segment) {
-  if (typeof segment !== 'string') return [];
+// Tokens of one segment: the word split, then the acronym split added after it, without repeats.
+function wordSplit(segment) {
   return segment
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((t) => t !== '');
+}
+
+const isUpper = (c) => c >= 'A' && c <= 'Z';
+const isLower = (c) => c >= 'a' && c <= 'z';
+
+// Breaks between a run of upper-case letters and an upper-case letter that starts a word, in one pass.
+function acronymBreaks(segment) {
+  let out = '';
+  for (let i = 0; i < segment.length; i++) {
+    const c = segment[i];
+    if (i > 0 && isUpper(c) && isUpper(segment[i - 1]) && i + 1 < segment.length && isLower(segment[i + 1])) out += ' ';
+    out += c;
+  }
+  return out;
+}
+
+export function tokens(segment) {
+  if (typeof segment !== 'string') return [];
+  return [...new Set([...wordSplit(segment), ...wordSplit(acronymBreaks(segment))])];
 }
 
 function safeEcho(p) {
@@ -261,7 +285,7 @@ function safeEcho(p) {
 
 // Returns the hits for a list of paths: { reason: 'contract' | 'core' | 'pattern <token>', path }. core holds path keys.
 export function checkPaths(paths, { core = [], forcedHigh = FORCED_HIGH_V1 } = {}) {
-  const coreKeys = [...core].map((c) => checkKey(String(c))).filter((c) => c !== '');
+  const coreKeys = [...core, ...CORE_FIXED].map((c) => checkKey(String(c))).filter((c) => c !== '');
   const forced = new Set(forcedHigh);
   const hits = [];
   for (const original of paths) {
@@ -286,14 +310,12 @@ export function checkPaths(paths, { core = [], forcedHigh = FORCED_HIGH_V1 } = {
   return hits;
 }
 
-// The Core paths of .company/project.md: { core, warning } or { unknown: true }.
-function readCore(root) {
-  const file = path.join(root, '.company', 'project.md');
+// The Core paths of .company/project.md at the base commit: { core, warning } or { unknown: true }.
+function readCore(env, base) {
+  if (typeof base !== 'string' || !FULL_SHA.test(base)) return { unknown: true };
   let text;
   try {
-    const st = lstatOrNull(file);
-    if (!st || !isPlain(st) || st.size > MAX_PROJECT_BYTES) return { unknown: true };
-    const bytes = readOpened(file, st, MAX_PROJECT_BYTES);
+    const bytes = gitRun(env, ['cat-file', 'blob', '--end-of-options', `${base}:.company/project.md`]);
     if (bytes.length > MAX_PROJECT_BYTES) return { unknown: true };
     text = decode(bytes);
   } catch {
@@ -337,25 +359,46 @@ function readPlanPaths(root, slug, name) {
   }
 }
 
-function defaultGit(args, { cwd }) {
-  return execFileSync('git', args, { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: MAX_GIT_BYTES, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+function defaultGit(args, { cwd, env }) {
+  return execFileSync('git', args, { cwd, env, timeout: GIT_TIMEOUT_MS, maxBuffer: MAX_GIT_BYTES, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
-// Paths of the work since base, or null when any git call fails. The base is used only after the sha rule.
-function readDiffPaths(root, base, git) {
-  if (typeof base !== 'string' || !SHA.test(base)) return null;
+// One git call: fixed argument array, no shell. Returns the output as a Buffer; throws on a failure or an output over the cap.
+function gitRun(env, sub) {
+  const args = ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...sub];
+  const out = env.git(args, { cwd: env.root, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' } });
+  const buf = Buffer.isBuffer(out) ? out : Buffer.from(String(out ?? ''), 'utf8');
+  if (buf.length > MAX_GIT_BYTES) throw new Error('output too large');
+  return buf;
+}
+
+// The one full commit id a --base value names, or null. Short values go through object-name lookup only, never refs.
+function resolveBase(env, base) {
+  try {
+    const isCommit = (id) => gitRun(env, ['cat-file', '-t', '--end-of-options', id]).toString('utf8').trim() === 'commit';
+    if (FULL_SHA.test(base)) return isCommit(base) ? base : null;
+    const ids = gitRun(env, ['rev-parse', `--disambiguate=${base}`]).toString('utf8').split('\n').filter((l) => l !== '');
+    if (ids.length === 0 || ids.length > MAX_CANDIDATES || ids.some((id) => !FULL_SHA.test(id))) return null;
+    const commits = ids.filter(isCommit);
+    return commits.length === 1 ? commits[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+// Paths of the work since base, or null when any git call fails. The base is used only when it is a full commit id.
+function readDiffPaths(env, base) {
+  if (typeof base !== 'string' || !FULL_SHA.test(base)) return null;
   const calls = [
-    ['cat-file', '-e', `${base}^{commit}`],
-    ['diff', '--name-only', '-z', '--no-renames', base, 'HEAD', '--'],
-    ['diff', '--name-only', '-z', '--no-renames', 'HEAD', '--'],
+    ['cat-file', '-e', '--end-of-options', `${base}^{commit}`],
+    ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options', base, 'HEAD', '--'],
+    ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options', 'HEAD', '--'],
     ['ls-files', '--others', '--exclude-standard', '-z']
   ];
   const all = new Set();
   try {
-    calls.forEach((args, i) => {
-      const out = git(args, { cwd: root });
-      const buf = Buffer.isBuffer(out) ? out : Buffer.from(String(out ?? ''), 'utf8');
-      if (buf.length > MAX_GIT_BYTES) throw new Error('output too large');
+    calls.forEach((sub, i) => {
+      const buf = gitRun(env, sub);
       if (i === 0) return;
       for (const p of buf.toString('utf8').split('\0')) if (p !== '') all.add(p);
     });
@@ -367,8 +410,21 @@ function readDiffPaths(root, base, git) {
 
 // ---------------------------------------------------------------- record
 
-const BEGIN_KEYS = ['v', 'at', 'ev', 'pb', 'tier', 'path', 'why', 'rev', 'base'];
+const BEGIN_KEYS = ['v', 'at', 'ev', 'pb', 'tier', 'path', 'why', 'rev', 'base', 'skip'];
 const RAISE_KEYS = ['v', 'at', 'ev', 'tier', 'cause'];
+
+// The skip list of a begin line: route entries in route order, no repeats, none required, empty on a full path.
+function skipValid(rec) {
+  if (!Array.isArray(rec.skip)) return false;
+  if (rec.path === 'full') return rec.skip.length === 0;
+  const index = new Map(ROUTE_V018[rec.pb].map((e, i) => [e, i]));
+  let last = -1;
+  for (const e of rec.skip) {
+    if (typeof e !== 'string' || !index.has(e) || REQUIRED[rec.pb].includes(e) || index.get(e) <= last) return false;
+    last = index.get(e);
+  }
+  return true;
+}
 
 function parseRecordText(slug, text) {
   const records = [];
@@ -380,7 +436,7 @@ function parseRecordText(slug, text) {
   lines.forEach((line, i) => {
     const n = i + 1;
     const bad = (reason) => new TierPathRecordError(slug, n, reason);
-    if (Buffer.byteLength(line, 'utf8') > MAX_RECORD_LINE_BYTES) throw bad('line over 256 bytes');
+    if (Buffer.byteLength(line, 'utf8') > MAX_RECORD_LINE_BYTES) throw bad('line over 512 bytes');
     let rec;
     try {
       rec = JSON.parse(line);
@@ -399,7 +455,8 @@ function parseRecordText(slug, text) {
       if (rec.path !== 'short' && rec.path !== 'full') throw bad('path');
       if (!WHY.includes(rec.why)) throw bad('why');
       if (!Number.isInteger(rec.rev) || rec.rev < 0 || rec.rev > 999) throw bad('rev');
-      if (typeof rec.base !== 'string' || !SHA.test(rec.base)) throw bad('base');
+      if (typeof rec.base !== 'string' || !FULL_SHA.test(rec.base)) throw bad('base');
+      if (!skipValid(rec)) throw bad('skip');
       tier = rec.tier;
     } else {
       if (i === 0) throw bad('first line is not begin');
@@ -472,28 +529,26 @@ function utc(now) {
   return new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
-function buildView(slug, records, loaded) {
+// The view is built from the record alone: what was skipped is what begin recorded.
+function buildView(slug, records) {
   const begin = records[0];
   const raises = records.filter((r) => r.ev === 'raise');
   const tier = raises.length > 0 ? raises.at(-1).tier : begin.tier;
   const cause = raises.length > 0 ? raises[0].cause : null;
   const route = ROUTE_V018[begin.pb];
-  const short = begin.path === 'short';
-  const set = short && cause !== 'sets' ? [...loaded.sets[begin.pb][tier]] : [...route];
-  const beginSet = short ? loaded.sets[begin.pb][begin.tier] : route;
-  const skipped = short ? route.filter((e) => !beginSet.includes(e)) : [];
-  const add = skipped.filter((e) => set.includes(e));
+  const raised = raises.length > 0;
+  const set = raised ? [...route] : route.filter((e) => !begin.skip.includes(e));
   return {
     v: 1, slug, state: 'on', pb: begin.pb, start_tier: begin.tier, tier, path: begin.path, why: begin.why, rev: begin.rev,
-    base: begin.base, raised: raises.length > 0, cause, skipped, set, add
+    base: begin.base, raised, cause, skipped: [...begin.skip], set, add: raised ? [...begin.skip] : []
   };
 }
 
-export function readTierPath(root, slug, { pluginRoot } = {}) {
+export function readTierPath(root, slug) {
   if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TierPathRecordError('?', 0, 'bad slug');
   const cur = loadRecord(root, slug);
   if (cur.records.length === 0) return { v: 1, slug, state: 'none' };
-  return buildView(slug, cur.records, loadTierSets(pluginRoot));
+  return buildView(slug, cur.records);
 }
 
 function statusLines(view, note = null) {
@@ -554,18 +609,20 @@ function runTier(env, slug, triage) {
   return { rank: Math.max(RANK[triage], stepRank), stepRank };
 }
 
-function beginRecord(env, slug, flags, sets) {
+function beginRecord(env, slug, flags, sets, base, ceoDefault) {
   const pb = oneOf(PLAYBOOKS, flags['--playbook'], 'playbook');
   const triage = oneOf(TIERS, flags['--triage'], 'triage');
   const short = oneOf(['on', 'off'], flags['--short'], 'short');
-  if (Object.hasOwn(flags, '--ceo') && flags['--ceo'] !== 'full') throw new Refusal('ceo must be full');
+  const ceo = Object.hasOwn(flags, '--ceo') ? oneOf(['short', 'full'], flags['--ceo'], 'ceo') : ceoDefault;
   const tier = TIERS[runTier(env, slug, triage).rank];
   let why = 'short';
   if (!sets.ok) why = 'refused';
   else if (tier !== 'low') why = 'tier';
   else if (short === 'off') why = 'setting';
-  else if (flags['--ceo'] === 'full') why = 'ceo';
-  return { v: 1, at: utc(env.now), ev: 'begin', pb, tier, path: why === 'short' ? 'short' : 'full', why, rev: sets.rev, base: flags['--base'] ?? '0000000' };
+  else if (ceo !== 'short') why = 'ceo';
+  const short_ = why === 'short';
+  const skip = short_ ? ROUTE_V018[pb].filter((e) => !sets.sets[pb][tier].includes(e)) : [];
+  return { v: 1, at: utc(env.now), ev: 'begin', pb, tier, path: short_ ? 'short' : 'full', why, rev: sets.rev, base, skip };
 }
 
 function cmdSets(args, env) {
@@ -583,13 +640,20 @@ function cmdPreview(args, env, write) {
     if (!Object.hasOwn(flags, '--base') || !SHA.test(flags['--base'])) throw new Refusal('base must be a commit sha');
   } else if (Object.hasOwn(flags, '--base')) throw new Refusal(USAGE);
   const sets = loadTierSets(env.pluginRoot);
-  const rec = beginRecord(env, slug, flags, sets);
-  const cur = loadRecord(env.root, slug);
+  let rec;
+  let cur = null;
   if (write) {
+    cur = loadRecord(env.root, slug);
     if (cur.records.length > 0) throw new Refusal('a begin record exists');
+    if (!cur.dir) throw new Refusal('run folder missing');
+    const base = resolveBase(env, flags['--base']);
+    if (base === null) throw new Refusal('base is not one commit');
+    rec = beginRecord(env, slug, flags, sets, base, 'full');
     appendRecord(cur, slug, rec);
+  } else {
+    rec = beginRecord(env, slug, flags, sets, '0'.repeat(40), 'short');
   }
-  const view = buildView(slug, [rec], sets);
+  const view = buildView(slug, [rec]);
   return { code: 0, lines: statusLines(view, sets.ok ? null : `tier-sets: refused ${sets.reason}`) };
 }
 
@@ -600,7 +664,7 @@ function checkTo(env, slug, base, flags) {
   const wantPlan = Object.hasOwn(flags, '--plan');
   const wantDiff = flags['--diff'] === true;
   if (!wantPlan && !wantDiff) return null;
-  const core = readCore(env.root);
+  const core = readCore(env, base);
   const all = [];
   if (core.unknown) hits.push({ source: 'core', reason: 'core unknown', path: null });
   else warning = core.warning;
@@ -610,7 +674,7 @@ function checkTo(env, slug, base, flags) {
     else all.push(...items.map((p) => ({ source: 'plan', p })));
   }
   if (wantDiff) {
-    const items = readDiffPaths(env.root, base, env.git);
+    const items = readDiffPaths(env, base);
     if (items === null) hits.push({ source: 'diff', reason: 'diff unknown', path: null });
     else all.push(...items.map((p) => ({ source: 'diff', p })));
   }
@@ -642,7 +706,7 @@ function cmdSync(args, env) {
   const cur = loadRecord(env.root, slug);
   if (cur.records.length === 0) return { code: 0, lines: ['tier-path: none'] };
   const sets = loadTierSets(env.pluginRoot);
-  const view = buildView(slug, cur.records, sets);
+  const view = buildView(slug, cur.records);
   const env2 = { ...env, forcedHigh: sets.forced_high };
   const check = checkTo(env2, slug, view.base, flags);
   const step = runTier(env, slug, 'low').stepRank;
@@ -671,7 +735,7 @@ function cmdSync(args, env) {
     records = [...records, rec];
   }
   const note = setsHit ? (sets.ok ? 'tier-sets: changed since begin' : `tier-sets: refused ${sets.reason}`) : null;
-  const out = statusLines(buildView(slug, records, sets), note);
+  const out = statusLines(buildView(slug, records), note);
   if (check) out.push(...checkLines(check));
   return { code: 0, lines: out };
 }
@@ -683,16 +747,14 @@ function cmdRaise(args, env) {
   const tier = oneOf(['medium', 'high'], positional[1], 'tier');
   const cur = loadRecord(env.root, slug);
   if (cur.records.length === 0) throw new Refusal('no begin record for this run');
-  const sets = loadTierSets(env.pluginRoot);
   let records = cur.records;
-  const view = buildView(slug, records, sets);
+  const view = buildView(slug, records);
   if (RANK[tier] > RANK[view.tier]) {
     const rec = { v: 1, at: utc(env.now), ev: 'raise', tier, cause: 'ceo' };
     appendRecord(cur, slug, rec);
     records = [...records, rec];
   }
-  const after = buildView(slug, records, sets);
-  return { code: 0, lines: statusLines(after, after.path === 'short' && !sets.ok ? `tier-sets: refused ${sets.reason}` : null) };
+  return { code: 0, lines: statusLines(buildView(slug, records)) };
 }
 
 function cmdRead(args, env) {
@@ -700,7 +762,7 @@ function cmdRead(args, env) {
   const slug = slugArg(positional, 1);
   const cur = loadRecord(env.root, slug);
   if (cur.records.length === 0) return { code: 0, lines: [JSON.stringify({ v: 1, slug, state: 'none' })] };
-  return { code: 0, lines: [JSON.stringify(buildView(slug, cur.records, loadTierSets(env.pluginRoot)))] };
+  return { code: 0, lines: [JSON.stringify(buildView(slug, cur.records))] };
 }
 
 const HANDLERS = {
