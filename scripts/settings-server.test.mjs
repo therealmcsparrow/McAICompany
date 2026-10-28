@@ -1489,3 +1489,54 @@ test('Parallel cap hint equals the Contract text once and sits after the context
   const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
   assert.ok(cap > 0 && cap < hint && hint < h2, `order ${cap} ${hint} ${h2}`);
 });
+
+test('state carries the short_path default; save round-trips on/off and refuses other values with nothing written', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.equal(before.plugin.pipeline.short_path, 'on');
+  assert.equal(before.resolved.pipeline.short_path, 'on');
+  for (const bad of ['maybe', true, 1, null, 'ON']) {
+    const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, pipeline: { short_path: bad } } });
+    assert.equal(res.status, 400);
+    const { refused } = await res.json();
+    assert.ok(refused.some((r) => r.includes('pipeline.short_path must be on or off')), refused.join(' | '));
+  }
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, pipeline: { short_path: 'on' } }, project: { version: 1, pipeline: { short_path: 'off' } } });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  assert.equal(after.resolved.pipeline.short_path, 'off');
+});
+
+test('page has a Short path row after Parallel cap with label-for selects tied to the hint, project offers only off, and a refusal path', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ['shortPathRow(tbody, defaults.short_path)', "['pipeline', 'short_path']", "['on', 'off'] : ['off']",
+    "el('label', { for: id }", "'aria-describedby', 'short-path-hint'", "id: 'short-path-hint'", 'REFUSED_SHORT_PATH', "getElementById('field-live')"]) {
+    assert.ok(html.includes(needle), needle);
+  }
+  const cap = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap)');
+  const row = html.indexOf('shortPathRow(tbody, defaults.short_path)');
+  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  assert.ok(cap > 0 && cap < row && row < review, `order ${cap} ${row} ${review}`);
+  assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'))));
+  assert.ok(!html.includes('innerHTML'));
+});
+
+test('Short path hint equals the Contract text once and sits as the fourth hint, before Reprompt', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = /exactly: "(Short path: [^"]*)"/.exec(contract);
+  assert.ok(m, 'Contract hint not found');
+  assert.equal(html.split(`const SHORT_PATH_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
+  const par = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
+  const hint = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
+  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  assert.ok(par > 0 && par < hint && hint < h2, `order ${par} ${hint} ${h2}`);
+});
+
+test('a stored project short_path on shows disabled and is described as ignored', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  assert.ok(html.includes("state.project.pipeline?.short_path === 'on'"));
+  assert.ok(html.includes('a project can only turn the short path off'));
+});

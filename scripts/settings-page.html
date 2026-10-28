@@ -423,6 +423,9 @@ function effective(path, pluginValue) {
   const [area, , key] = path;
   if (area === 'mods') return modsEffective(path, pluginValue);
   const [value, source] = pickSource(path, pluginValue);
+  if (area === 'pipeline' && key === 'short_path' && getIn(draft.project, path) === 'on') {
+    return { value: getIn(draft.user, path) ?? 'on', source: 'locked', held: 'on from project is ignored: a project can only turn the short path off' };
+  }
   if (area === 'skillspector' && getIn(draft.project, path) === 'claude_cli') {
     const fromUser = getIn(draft.user, path);
     return { value: fromUser ?? pluginValue, source: 'locked', held: 'claude_cli from project counts only from your user settings' };
@@ -1024,6 +1027,14 @@ function mapRefusals(lines) {
       if (!plan.includes(crec)) plan.push(crec);
       continue;
     }
+    const sm = REFUSED_SHORT_PATH.exec(line);
+    const srec = sm && planRecs.find((r) => r.level === sm[1] && r.key === 'short_path');
+    if (srec) {
+      srec.sticky = `Error: ${srec.label} ${SHORT_PATH_REFUSAL}`;
+      srec.stickyValue = srec.control.value;
+      if (!plan.includes(srec)) plan.push(srec);
+      continue;
+    }
     const m = REFUSED_PERSONALITY.exec(line);
     const rec = m && pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]);
     if (!rec) { rest.push(line); continue; }
@@ -1226,6 +1237,45 @@ function parallelCapRow(tbody, pluginValue) {
   tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), cells, effect));
   syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
 }
+const REFUSED_SHORT_PATH = /^(user|project) pipeline[.]short_path(?![a-z_])/;
+const SHORT_PATH_REFUSAL = 'must be on or off.';
+const SHORT_PATH_HINT = 'Short path: a feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes and the ruleset research; a fix triaged as low risk skips the security lane. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file. Off: low-risk runs take the full route. A project setting can only turn it off.';
+// Short path row: a labelled select per level tied to the hint. The project select offers only off; a stored project "on" stays visible, disabled.
+function shortPathRow(tbody, pluginValue) {
+  const path = ['pipeline', 'short_path'];
+  const label = 'Short path';
+  const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
+  const cells = ['user', 'project'].map((level) => {
+    const id = `short-path-${level}`;
+    const control = bindLayer(selectFor(level === 'user' ? ['on', 'off'] : ['off'], null), level, path, String);
+    if (level === 'project' && state.project.pipeline?.short_path === 'on') control.append(el('option', { value: 'on', disabled: true }, 'on'));
+    control.id = id;
+    control.setAttribute('aria-describedby', 'short-path-hint');
+    const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
+    const rec = { key: 'short_path', level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
+    const prefix = `${label}, ${level} level: `;
+    syncers.push(() => {
+      if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
+      const message = rec.sticky;
+      if (message !== rec.message) {
+        const live = document.getElementById('field-live');
+        if (message) live.textContent = prefix + message.replace(/^Error: /, '').replace(`${label} `, '');
+        else if (live.textContent.startsWith(prefix)) live.textContent = '';
+      }
+      rec.message = message;
+      rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
+      err.textContent = message;
+      err.hidden = message === '';
+      if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `short-path-hint ${err.id}`); }
+      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', 'short-path-hint'); }
+    });
+    if (!control.disabled) planRecs.push(rec);
+    const tag = el('label', { for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
+    return el('td', {}, el('div', { class: 'cf' }, tag, control, err));
+  });
+  tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), cells, effect));
+  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+}
 const REFUSED_PLAN_CHECK = /^(user|project) plan_check\.(policy|runs)\b/;
 function planLink(rec) {
   const link = el('a', { href: `#${rec.control.id}` }, planRefusalText(rec));
@@ -1246,6 +1296,7 @@ function renderPipeline(panel) {
   pipelineRow(tbody, 'Dispatch', ['pipeline', 'dispatch'], defaults.dispatch,
     (l) => selectFor(['parallel', 'sequential'], l), String, String);
   parallelCapRow(tbody, defaults.parallel_cap);
+  shortPathRow(tbody, defaults.short_path);
   pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
     (l) => selectFor(['plain', 'pilot'], l), String, String);
   pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
@@ -1254,6 +1305,7 @@ function renderPipeline(panel) {
   panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
   panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
   panel.append(el('p', { class: 'hint', id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT));
+  panel.append(el('p', { class: 'hint', id: 'short-path-hint' }, SHORT_PATH_HINT));
   panel.append(el('h2', {}, 'Reprompt'));
   const rp = table(COLUMNS);
   const rpDefaults = state.plugin.reprompt;
