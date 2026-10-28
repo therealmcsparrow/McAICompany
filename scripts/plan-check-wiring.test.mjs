@@ -49,12 +49,27 @@ test('the reference runs gate or off at the Plan Gate, wave after the form, read
   assert.ok(!/<plugin root>/.test(reference));
 });
 
-test('the reference still runs gate with plan name none when files-touched lists no plan file, and picks one of two', () => {
+test('the reference runs gate with plan name none when files-touched lists no plan file, only for warn or block', () => {
   has(reference,
-    'plan-check.mjs" gate \'<slug>\' \'none\' --policy \'<policy>\'',
-    'reason `plan-name`',
-    'two plan files');
+    'plan-check.mjs" gate \'<slug>\' \'none\' --policy \'<warn|block>\'',
+    'reason `plan-name`');
+  assert.ok(!reference.includes('--policy \'<policy>\''));
   assert.ok(!reference.includes('skip the scan'));
+});
+
+test('the reference resolves the policy first and runs off whatever files-touched says', () => {
+  const step1 = reference.slice(reference.indexOf('1. **Before the Gate form.**'), reference.indexOf('2. **Run it.**'));
+  const at = (s) => { const i = step1.indexOf(s); assert.ok(i !== -1, `missing: ${s}`); return i; };
+  assert.ok(at('plan_check.policy') < at('plan-check.mjs" gate'));
+  has(step1, 'With `off`, run the `off` command of step 2 whatever `files-touched` says');
+  has(step1, 'Only with `warn` or `block` and no plan file');
+});
+
+test('the reference settles several plan files: one highest prefix wins, otherwise plan name none', () => {
+  has(reference,
+    'take the one file with the highest number prefix',
+    'If two files share that prefix, if any is unprefixed, or if no single file wins, use no plan file');
+  assert.ok(!reference.includes('files-touched of the Architect\'s Handoff; it must match `^(\\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\\.md$`, if'));
 });
 
 test('review, planning and feedback texts carry the open-decision wiring', () => {
