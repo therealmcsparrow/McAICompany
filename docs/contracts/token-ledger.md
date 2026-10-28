@@ -1,8 +1,7 @@
 # Contract: token-ledger v1.4
 
 
-Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, the scorecard from v1.1, `parallel-verdict` from v1.3 and `low-path-verdict` from v1.4)
-, the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
+Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, the scorecard from v1.1, `parallel-verdict` from v1.3 and `low-path-verdict` from v1.4), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
 Sources read: `plan-tasks` v1 `readParallel` (by `ship`, v1.3); `tier-sets` v1 `readTierPath` (by `ship`, v1.4).
 
 Rationale for the two sources: `docs/adr/0011-token-counts-from-transcripts.md` (Spike S1/S2, `.company/work/optimize-brainstorm/03-spike-ai-data-engineer.md`).
@@ -89,8 +88,7 @@ Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a
 | `parallel-verdict [--runs <3-50>]` | (v1.3) prints the one parallel verdict line, read-only. `--runs` digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise always exit 0 |
 | `low-path-verdict [--runs <3-50>]` | (v1.4) prints exactly two lines, feature then fix, read-only. `--runs` digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise exit 0 |
 
-### `report --json`
- (part M)
+### `report --json` (part M)
 One JSON object, the same numbers as the text report (unchanged in v1.1; rows carry no times):
 ```json
 { "v": 1, "run": "x", "rows": [{ "kind": "step", "id": "05", "role": "backend-engineer", "agent": "a1",
@@ -177,8 +175,7 @@ Compares runs on the short path (v0.19) with comparable runs before it, to tell 
 - A v1.1 reader skips a v1.2 `meta` line with one `warning: line <n> skipped`; its numbers stay the same (tested against the v1.1 script).
 - A v1.2 reader skips `par` lines and a `meta` line with `floor`, each with `warning: line <n> skipped`; its `report` and `scorecard` numbers stay the same. Its `model-verdict` then reads such a v0.18 run as v0.16 (no `meta`); this matters only after installing an older tag.
 - A v1.3 reader skips `meta` lines with `pb`/`sets` and `ship` lines with `path`/`raised`, each with `warning: line <n> skipped`; a v0.19 run then reads as unshipped there. This matters only after installing an older tag.
-- A v1.1 reader reads every v1 file;
- a v1 `ship` is untimed and counts in `excluded`.
+- A v1.1 reader reads every v1 file; a v1 `ship` is untimed and counts in `excluded`.
 - A v1 reader (an earlier tag after a rollback) skips v1.1 lines that hold `t0`/`t1` or v1.1 `ship` keys, each with `warning: line <n> skipped`. Spend from reconciled runs stays the same (transcript records carry no v1.1 key); per-AC values of v1.1 runs read `n/a` there.
 
 ## Error cases

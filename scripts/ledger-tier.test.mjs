@@ -41,8 +41,8 @@ const workDir = (sb, slug) => {
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 };
-const SHA = 'abcdef1';
-const begin = (over = {}) => ({ v: 1, at: '2026-10-28T10:00:00Z', ev: 'begin', pb: 'feature', tier: 'low', path: 'short', why: 'short', rev: 1, base: SHA, ...over });
+const SHA = 'abcdef0123456789abcdef0123456789abcdef01';
+const begin = (over = {}) => ({ v: 1, at: '2026-10-28T10:00:00Z', ev: 'begin', pb: 'feature', tier: 'low', path: 'short', why: 'short', rev: 1, base: SHA, skip: over.path === 'full' ? [] : ['design-researcher', 'brand-artist'], ...over });
 const raiseEv = (tier, cause = 'step') => ({ v: 1, at: '2026-10-28T11:00:00Z', ev: 'raise', tier, cause });
 const writeTierPath = (sb, slug, ...events) => fs.writeFileSync(path.join(workDir(sb, slug), 'tier-path.jsonl'), jl(...events));
 function writeRunState(sb, slug, tier) {
@@ -223,7 +223,7 @@ test('an excluded run reads no record and writes none of the keys', (t) => {
 
 test('the ledger text holds no path, text or free value from the record', (t) => {
   const sb = sandbox(t);
-  writeTierPath(sb, 'demo', begin({ base: 'abcdef1234567' }), raiseEv('medium', 'diff'));
+  writeTierPath(sb, 'demo', begin({ base: 'abcdef1234567'.padEnd(40, '0') }), raiseEv('medium', 'diff'));
   call(sb, ['ship', 'demo', '2']);
   const text = fs.readFileSync(ledgerFile(sb, 'demo'), 'utf8');
   assert.doesNotMatch(text, /abcdef|cause|diff|why|base|\.md|src\//);
