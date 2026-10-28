@@ -30,6 +30,9 @@ const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const DEP_ID = /^T\d{1,3}[a-z]?$/;
 const TASK_REC = /^(?:T\d{1,3}[a-z]?(?:-dup\d{1,3})?|U1)$/;
 const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on|parallel):[ \t]*(.*)$/;
+const DECIDED_LINE = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided:/;
+const CONTRACTS_TITLE = /\bcontracts?\b/i;
+const ANY_TASK_TOKEN = /(?:^|[^A-Za-z0-9])T\d{1,3}[a-z]?(?![0-9a-z])/;
 const DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 const PATH_SHAPE = /^[A-Za-z0-9._@+-]+(\/[A-Za-z0-9._@+-]+)*\/?$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -897,7 +900,8 @@ function cmdLines(args, env) {
 // The builder's slice of the plan: its own task block, the plan's Contracts section, every Decided line outside
 // the task blocks, and every other section whose heading names the task. Plan text goes to the file only, never to stdout.
 export function taskBrief(text, id, planName) {
-  const lines = readPlanLines(text).lines;
+  const read = readPlanLines(text);
+  const lines = read.lines;
   const own = [];
   const contracts = [];
   const decided = [];
@@ -905,6 +909,7 @@ export function taskBrief(text, id, planName) {
   const idToken = new RegExp(`(^|[^A-Za-z0-9])${id}(?![0-9a-z])`);
   let section = null;
   let inTask = false;
+  if (read.openFence) return null;
   for (const entry of lines) {
     if (entry.kind === 'heading') {
       if (section && entry.level <= section.level) section = null;
@@ -915,8 +920,9 @@ export function taskBrief(text, id, planName) {
           section = { level: entry.level, into: head[1] === id ? own : null };
         } else {
           inTask = false;
-          if (entry.level === 2 && /^Contracts\b/i.test(entry.title.trim())) section = { level: 2, into: contracts };
-          else if (idToken.test(entry.title)) section = { level: entry.level, into: named };
+          if (idToken.test(entry.title)) section = { level: entry.level, into: named };
+          else if (ANY_TASK_TOKEN.test(entry.title)) section = { level: entry.level, into: null };
+          else if (entry.level <= 3 && CONTRACTS_TITLE.test(entry.title)) section = { level: entry.level, into: contracts };
         }
       } else if (!section && entry.level < 2) {
         inTask = false;
@@ -926,7 +932,7 @@ export function taskBrief(text, id, planName) {
     }
     if (section?.into) {
       section.into.push(entry.line);
-    } else if (!inTask && !section && entry.kind === 'text' && /^\s{0,3}(?:[-*]\s+)?Decided:/.test(entry.line)) {
+    } else if (!inTask && !section && entry.kind === 'text' && DECIDED_LINE.test(entry.line)) {
       decided.push(entry.line);
     }
   }
@@ -934,7 +940,7 @@ export function taskBrief(text, id, planName) {
   const out = [
     `# Task brief: ${id} (from ${planName})`,
     '',
-    'Your slice of the plan. Build from this file, the Contracts it names and the brief; do not open the full plan.',
+    'Your slice of the plan. Build from this file, the Architect\'s Handoff, the Contracts they name and the brief; do not open the full plan.',
     'Missing something you need → return `status: blocked` with `missing plan context: <what>`.',
     '',
     ...own
@@ -948,26 +954,38 @@ export function taskBrief(text, id, planName) {
 function cmdBrief(args, env) {
   const [slug, id] = twoArgs(args);
   const st = needState(env, slug);
-  const tasks = roundTasks(needPlan(env, slug, st, { strict: true }).tasks, st);
-  if (!tasks.some((t) => t.id === id)) throw new Refusal('task is not in this round');
+  const plan = readPlan(env.root, slug, st.plan);
+  if (plan.hash !== st.hash) throw new Refusal('plan changed since begin');
+  const parsed = parsePlan(plan.text, { agents: env.agents() });
+  if (parsed.tooMany) throw new PlanProblem('plan-too-large');
+  if (!roundTasks(parsed.tasks, st).some((t) => t.id === id)) throw new Refusal('task is not in this round');
   if (!DEP_ID.test(id)) throw new Refusal('task has no plan block');
-  const brief = taskBrief(readPlan(env.root, slug, st.plan).text, id, st.plan);
-  if (brief === null) throw new Refusal('task has no plan block');
+  const brief = taskBrief(plan.text, id, st.plan);
+  if (brief === null) throw new Refusal('task has no plan block or the plan has an unclosed fence');
   const dir = runDir(env.root, slug);
   if (dir === null || dir === 'unsafe') throw new Refusal('run folder missing');
   const tasksDir = path.join(dir, 'tasks');
-  const dst = lstatOrNull(tasksDir);
-  if (dst && !dst.isDirectory()) throw new Refusal('tasks folder is not a folder');
-  if (!dst) fs.mkdirSync(tasksDir);
+  if (!lstatOrNull(tasksDir)) {
+    try {
+      fs.mkdirSync(tasksDir);
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw new Refusal('tasks folder cannot be made');
+    }
+  }
+  if (!lstatOrNull(tasksDir)?.isDirectory()) throw new Refusal('tasks folder is not a folder');
   const file = path.join(tasksDir, `${id}.md`);
   const fst = lstatOrNull(file);
   if (fst && !isPlain(fst)) throw new Refusal('task brief is not a plain file');
-  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW ?? 0);
+  const nofollow = fs.constants.O_NOFOLLOW ?? 0;
+  const flags = fst ? fs.constants.O_WRONLY | nofollow : fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | nofollow;
   let fd;
   try {
     fd = fs.openSync(file, flags, 0o644);
-    fs.writeSync(fd, brief);
-  } catch {
+    if (!openedMatches(fd, fst)) throw new Refusal('task brief is not a plain file');
+    fs.ftruncateSync(fd, 0);
+    fs.writeSync(fd, brief, 0);
+  } catch (error) {
+    if (error instanceof Refusal) throw error;
     throw new Refusal('task brief cannot be written');
   } finally {
     if (fd !== undefined) fs.closeSync(fd);

@@ -9,7 +9,7 @@ effort: medium
 
 **Mission:** native apps that feel right on Windows, Linux and macOS, built as a plugin host (Core) with feature Modules.
 
-**Start:** follow `aico:handoff`. Read the Designer's Handoff. With a `Task brief:` line, read that file and the Contracts it names, never the full plan; without one, read the Architect's Handoff (Module map, extension-point Contracts) and only your tasks. Get the stack (Tauri, Wails, Electron, .NET, Qt, …) from `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
+**Start:** follow `aico:handoff`. Read the Designer's Handoff. Read the Architect's Handoff (Module map, extension-point Contracts). A `Task brief:` line replaces the plan: read that file, never the full plan; without one, read the plan and only your tasks. Get the stack (Tauri, Wails, Electron, .NET, Qt, …) from `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
 
 **Do**
 - Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.

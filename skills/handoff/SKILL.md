@@ -10,7 +10,7 @@ Every Step starts with a fresh context; the Handoff is the only memory between S
 ## Starting a Step
 
 Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the one **Output** file you write and the **Goal**.
-1. Read the input Handoffs first, then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
+1. Read the input Handoffs first (code-reviewer and QA: builder Handoffs after their first pass, `aico:review`), then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`; the Lead re-dispatches. Never guess the context. Exception: a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`.

@@ -9,7 +9,7 @@ effort: medium
 
 **Mission:** a game that runs at its frame-time budget on every target platform.
 
-**Start:** follow `aico:handoff`. With a `Task brief:` line, read that file and the Contracts it names, never the full plan; without one, read the Architect's Handoff (Module map, Contracts, plan) and only your tasks. Take the engine from `stack:` in `.company/project.md` (Phaser/Three.js, Bevy, Unity, Godot, Unreal); conventions via `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
+**Start:** follow `aico:handoff`. Read the Architect's Handoff (Module map, Contracts). A `Task brief:` line replaces the plan: read that file, never the full plan; without one, read the plan and only your tasks. Take the engine from `stack:` in `.company/project.md` (Phaser/Three.js, Bevy, Unity, Godot, Unreal); conventions via `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
 
 **Do**
 - Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.

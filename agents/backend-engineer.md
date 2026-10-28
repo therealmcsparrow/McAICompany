@@ -9,7 +9,7 @@ effort: medium
 
 **Mission:** working, tested server-side Modules that honor their Contracts.
 
-**Start:** follow `aico:handoff`. With a `Task brief:` line, read that file and the Contracts it names, never the full plan; without one, read the Architect's Handoff (Module map, Contracts, plan) and only your Module's tasks. Get stack conventions from `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
+**Start:** follow `aico:handoff`. Read the Architect's Handoff (Module map, Contracts). A `Task brief:` line replaces the plan: read that file, never the full plan; without one, read the plan and only your Module's tasks. Get stack conventions from `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
 
 **Do**
 - Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.

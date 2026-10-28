@@ -728,12 +728,14 @@ describe('brief', () => {
   const full = [
     '# Plan', '', 'Settled choices carry `Decided:` lines.', '',
     '## Core', '- Decided: the script is a Module.', '',
-    '## Contracts', '| Contract | Version |', '| x | v1 |', '',
+    '## Core, Modules and Contracts', '| Contract | Version |', '| x | v1 |', '### Contract changes', 'x gains a field', '',
+    '## Rules', '1. Decided: numbered rule.', '   + Decided: plus rule.', '```', 'Decided: fenced, not a rule.', '```', '',
     '## Tasks', '',
     task('T1', { files: 'a.js' }).trimEnd(), 'Build a.', 'Decided: a stays small.', '#### T1 notes', 'more for T1', '',
     task('T10', { files: 'b.js' }).trimEnd(), 'Build b.', 'Decided: b is T10 only.', '',
     '## Delta A (T1 pastes it)', '```', '## not a heading', '```', '',
-    '## Delta B (T10 pastes it)', 'for T10', '',
+    '## Delta B (T10 pastes it)', 'for T10', 'Decided: T10 delta rule.', '',
+    '## Delta C contract (T10 pastes it)', 'contract text for T10', '',
     '## Rollback', 'Decided: revert by tag.', ''
   ].join('\n');
 
@@ -743,11 +745,13 @@ describe('brief', () => {
     assert.deepEqual(fx.run('brief', 'demo', 'T1'), { code: 0, lines: ['Task brief: .company/work/demo/tasks/T1.md'] });
     const text = fs.readFileSync(path.join(fx.dir, 'tasks', 'T1.md'), 'utf8');
     for (const want of ['# Task brief: T1 (from 02-plan.md)', '### T1 title of T1', 'Build a.', 'Decided: a stays small.', '#### T1 notes',
-      '## Contracts', '| x | v1 |', '## Decided (plan-wide)', '- Decided: the script is a Module.', 'Decided: revert by tag.',
+      '## Core, Modules and Contracts', '| x | v1 |', '### Contract changes', 'x gains a field',
+      '## Decided (plan-wide)', '- Decided: the script is a Module.', 'Decided: revert by tag.', '1. Decided: numbered rule.', '   + Decided: plus rule.',
       '## Delta A (T1 pastes it)', '## not a heading']) {
       assert.ok(text.includes(want), want);
     }
-    for (const unwanted of ['T10 title', 'Build b.', 'Decided: b is T10 only.', 'Delta B', 'for T10', 'Settled choices']) {
+    for (const unwanted of ['T10 title', 'Build b.', 'Decided: b is T10 only.', 'Delta B', 'for T10', 'Settled choices', 'Decided: fenced',
+      'Decided: T10 delta rule.', 'Delta C', 'contract text for T10']) {
       assert.ok(!text.includes(unwanted), unwanted);
     }
   });
@@ -760,6 +764,36 @@ describe('brief', () => {
     assert.equal(fx.run('brief', 'demo', 'T9').code, 3);
     fs.appendFileSync(fx.plan, 'changed\n');
     assert.equal(fx.run('brief', 'demo', 'T1').code, 3);
+  });
+
+  test('refuses a tasks path that is a file or a link, U1 and an unclosed fence', () => {
+    const fx = fixture(full);
+    begin(fx);
+    fs.writeFileSync(path.join(fx.dir, 'tasks'), 'x\n');
+    assert.equal(fx.run('brief', 'demo', 'T1').code, 3);
+    fs.rmSync(path.join(fx.dir, 'tasks'));
+    const away = path.join(fx.root, 'away');
+    fs.mkdirSync(away);
+    let linked = true;
+    try {
+      fs.symlinkSync(away, path.join(fx.dir, 'tasks'), 'junction');
+    } catch {
+      linked = false;
+    }
+    if (linked) {
+      assert.equal(fx.run('brief', 'demo', 'T1').code, 3);
+      assert.deepEqual(fs.readdirSync(away), []);
+      fs.rmSync(path.join(fx.dir, 'tasks'), { recursive: false, force: true });
+    }
+
+    const fu = fixture(full);
+    begin(fu);
+    assert.equal(fu.run('round', 'demo', '1', '--loose', '1', '--').code, 0);
+    assert.match(fu.run('brief', 'demo', 'U1').lines[0], /^refused: task has no plan block/);
+
+    const ff = fixture(`${full}\`\`\`\nnever closed\n`);
+    begin(ff);
+    assert.match(ff.run('brief', 'demo', 'T1').lines[0], /^refused: task has no plan block or the plan has an unclosed fence/);
   });
 
   test('refuses a linked brief file', () => {
