@@ -1,4 +1,4 @@
-// Wiring test for the tier path text (task low-tier-path, T6, AC1/AC3/AC4/AC6/AC8/AC11/AC14).
+// Checks the tier path wording in the pipeline, feature, fix, triage and feedback skills and tier-path.md.
 // Reads skill text only; the one git call is `git show v0.18.0:...` with fixed arguments, no shell.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -36,6 +36,25 @@ test("tier-path.md names the commands, the Gate options and the fail-closed rule
   }
   assert.ok(!text.includes("\r"), "tier-path.md has a CR byte");
   assert.ok(!/<plugin root>/.test(text));
+});
+
+test("tier-path.md carries the fix round 1 rules", () => {
+  const text = read("skills/pipeline/references/tier-path.md");
+  const step = (n) => {
+    const m = text.match(new RegExp(`^${n}\\. [^\\n]*`, "m"));
+    assert.ok(m, `step ${n} missing`);
+    return m[0];
+  };
+  const intro = text.split("\n1. ")[0];
+  assert.ok(intro.includes("^[0-9a-f]{7,64}$"));
+  assert.ok(intro.includes("`short` or `full`"));
+  assert.ok(step(2).includes("Never run `triage issue` yourself"));
+  assert.ok(step(4).includes("--ceo '<c>'"));
+  assert.ok(step(4).includes("An auto Brief Gate (`gates.brief` `auto`) always takes the full path"));
+  assert.ok(step(5).includes("gates.brief"));
+  assert.ok(step(8).includes("Run no `sync` before `begin`"));
+  assert.ok(step(11).includes("tier-sets: changed since begin"));
+  assert.ok(step(11).includes("a `sync` after `begin` prints `tier-path: none`"));
 });
 
 test("feature and fix name the tier set at each skippable step", () => {
