@@ -142,9 +142,10 @@ test('empty folder: insufficient with question marks, exit 0', (t) => {
   assert.equal(seg(r, 'runs'), 'runs 0 v0.17, 0 v0.16 (plan check ?)');
 });
 
-test('fail by total spend: every downgraded Role rolls back', (t) => {
+test('fail by total spend alone: downgraded spend is lower, every downgraded Role rolls back', (t) => {
   const sb = sandbox(t);
-  passing(sb, { down: 120 });
+  // downgraded 80 vs 100 (lower), total 510 vs 500 (higher): only the total-spend guard trips.
+  passing(sb, { down: 80, other: 430 });
   const r = verdict(sb);
   assert.equal(seg(r, 'model verdict'), 'model verdict: fail');
   assert.equal(seg(r, 'roll back:'), 'roll back: senior-engineer, tech-researcher');
@@ -188,6 +189,60 @@ test('medians: the existing middle-value rule, one decimal', (t) => {
   assert.equal(seg(r, 'fix rounds median'), 'fix rounds median 1.0 (v0.16 2.0)');
 });
 
+// ---------- pass-rule boundaries ----------
+
+test('boundary: equal downgraded spend per AC is not lower, so it fails', (t) => {
+  const sb = sandbox(t);
+  passing(sb, { down: 100, other: 400 });
+  const r = verdict(sb);
+  assert.equal(seg(r, 'downgraded spend/AC'), 'downgraded spend/AC 25 (v0.16 25)');
+  assert.equal(seg(r, 'model verdict'), 'model verdict: fail');
+});
+
+test('boundary: equal total spend per AC is not higher, so it passes', (t) => {
+  const sb = sandbox(t);
+  passing(sb, { down: 80, other: 420 });
+  const r = verdict(sb);
+  assert.equal(seg(r, 'spend/AC'), 'spend/AC 125 (v0.16 125)');
+  assert.equal(seg(r, 'model verdict'), 'model verdict: pass');
+});
+
+test('boundary: a little more total spend per AC fails', (t) => {
+  const sb = sandbox(t);
+  passing(sb, { down: 80, other: 424 });
+  assert.equal(seg(verdict(sb), 'model verdict'), 'model verdict: fail');
+});
+
+test('boundary: equal Fix rounds median passes', (t) => {
+  const sb = sandbox(t);
+  passing(sb, { fix: 1 }, { fix: 1 });
+  assert.equal(seg(verdict(sb), 'model verdict'), 'model verdict: pass');
+});
+
+test('boundary: equal high blockers median passes', (t) => {
+  const sb = sandbox(t);
+  passing(sb, { high: 1 }, { high: 1 });
+  assert.equal(seg(verdict(sb), 'model verdict'), 'model verdict: pass');
+});
+
+test('medians are compared unrounded: v0.16 [0,1] vs v0.17 [1,1] fails on Fix rounds', (t) => {
+  const sb = sandbox(t);
+  for (let i = 0; i < 10; i += 1) mk(sb, `new-${i}`, { side: '17', age: i, down: 80, fix: 1 });
+  for (let i = 0; i < 6; i += 1) mk(sb, `old-${i}`, { side: '16', age: 20 + i, down: 100, fix: i < 3 ? 0 : 1 });
+  const r = verdict(sb);
+  assert.equal(seg(r, 'fix rounds median'), 'fix rounds median 1.0 (v0.16 0.5)');
+  assert.equal(seg(r, 'model verdict'), 'model verdict: fail');
+});
+
+test('medians are compared unrounded: v0.16 [0,1] vs v0.17 [1,1] fails on high blockers', (t) => {
+  const sb = sandbox(t);
+  for (let i = 0; i < 10; i += 1) mk(sb, `new-${i}`, { side: '17', age: i, down: 80, high: 1 });
+  for (let i = 0; i < 6; i += 1) mk(sb, `old-${i}`, { side: '16', age: 20 + i, down: 100, high: i < 3 ? 0 : 1 });
+  const r = verdict(sb);
+  assert.equal(seg(r, 'high blockers median'), 'high blockers median 1.0 (v0.16 0.5)');
+  assert.equal(seg(r, 'model verdict'), 'model verdict: fail');
+});
+
 // ---------- sets, sides and the plan-check key ----------
 
 test('--runs limits both sets to the newest runs', (t) => {
@@ -203,7 +258,7 @@ test('--runs: the newest runs by ship time are taken, older ones are left out', 
   for (let i = 0; i < 4; i += 1) mk(sb, `new-${i}`, { side: '17', age: i, down: 80, fix: i >= 2 ? 9 : 0 });
   for (let i = 0; i < 5; i += 1) mk(sb, `old-${i}`, { side: '16', age: 20 + i });
   assert.equal(seg(verdict(sb, ['--runs', '3']), 'fix rounds median'), 'fix rounds median 0.0 (v0.16 0.0)');
-  assert.equal(seg(verdict(sb, ['--runs', '4']), 'fix rounds median'), 'fix rounds median 5.0 (v0.16 0.0)');
+  assert.equal(seg(verdict(sb, ['--runs', '4']), 'fix rounds median'), 'fix rounds median 4.5 (v0.16 0.0)');
 });
 
 test('AC9: runs whose plan-check policy differs are left out and counted in excluded', (t) => {

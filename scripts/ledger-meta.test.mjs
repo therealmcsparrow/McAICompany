@@ -121,9 +121,13 @@ test('report and scorecard give the same numbers with or without the meta line',
 // ---------- a v1.1 reader skips the line ----------
 
 test('the v1.1 script skips the meta line with one warning and keeps its numbers', (t) => {
-  const git = spawnSync('git', ['show', `${BASE_COMMIT}:scripts/ledger.mjs`], { cwd: import.meta.dirname, encoding: 'utf8' });
-  if (git.status !== 0) return t.skip('base script not available');
   const sb = sandbox(t);
+  // Git reads no user or system config: an empty per-test global file and no system file.
+  const gitConfig = path.join(sb.dir, 'empty-gitconfig');
+  fs.writeFileSync(gitConfig, '');
+  const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' };
+  const git = spawnSync('git', ['show', `${BASE_COMMIT}:scripts/ledger.mjs`], { cwd: import.meta.dirname, encoding: 'utf8', env: gitEnv });
+  if (git.status !== 0) return t.skip('base script not available');
   const old = path.join(sb.dir, 'ledger-v11.mjs');
   const runState = pathToFileURL(path.join(import.meta.dirname, 'run-state.mjs')).href;
   fs.writeFileSync(old, git.stdout.replace("'./run-state.mjs'", JSON.stringify(runState)));

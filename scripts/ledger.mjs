@@ -569,6 +569,13 @@ function median(list) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
+// The true middle value (an even count averages the two middle ones); round only for display.
+function exactMedian(list) {
+  const sorted = [...list].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 // A record with counts: a host transcript, an imported baseline, or a mod's own call.
 const hasCounts = (r) => r.src === 'transcript' || r.src === 'mod';
 
@@ -988,7 +995,7 @@ function aggregate(set) {
   const down = [...roleSpend.values()].reduce((a, b) => a + b, 0n);
   return {
     n: set.length, acs: sum((r) => BigInt(r.acs)), spend: sum((r) => r.spend), down, roleSpend,
-    fix: set.length ? median(set.map((r) => r.fix)) : undefined, high: set.length ? median(set.map((r) => r.high)) : undefined
+    fix: set.length ? exactMedian(set.map((r) => r.fix)) : undefined, high: set.length ? exactMedian(set.map((r) => r.high)) : undefined
   };
 }
 
