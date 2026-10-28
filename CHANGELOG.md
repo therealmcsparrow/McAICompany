@@ -2,7 +2,7 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
-## [Unreleased]
+## [0.16.0] - 2026-10-28
 
 The Plan Gate lists choices a plan left open.
 
