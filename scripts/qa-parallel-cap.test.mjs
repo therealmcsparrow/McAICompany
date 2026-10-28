@@ -207,6 +207,76 @@ test('AC3 an unknown or hostile dependency never makes a task eligible and is no
   }
 });
 
+test('AC3 a dependency on a later task is normal: T1 depends-on T3 starts only after T3 is done, no warning', (t) => {
+  const fx = fixture(t, plan(task('T1', { deps: 'T3' }), task('T2'), task('T3')));
+  const checked = fx.check();
+  assert.equal(checked.code, 0);
+  assert.deepEqual(checked.lines.filter((l) => l.startsWith('warning ')), []);
+  fx.begin();
+  assert.ok(!fx.starts().includes('T1'), 'T1 waits for T3');
+  assert.equal(fx.waits().T1, 'depends T3');
+  assert.equal(fx.run('start', SLUG, 'T1').code, 3);
+  startAll(fx);
+  assert.deepEqual(fx.view().running.sort(), ['T2', 'T3']);
+  assert.ok(!fx.starts().includes('T1'), 'T3 running is not enough');
+  fx.done('T3');
+  assert.deepEqual(fx.starts(), ['T1']);
+  assert.equal(fx.start('T1').code, 0);
+  fx.done('T1');
+  fx.done('T2');
+  assert.deepEqual(fx.view().running, []);
+});
+
+test('AC4 a real cycle falls back to alone: one warning per cyclic task, and the plan still runs to the end', (t) => {
+  const fx = fixture(t, plan(task('T1'), task('T2', { deps: 'T3' }), task('T3', { deps: 'T2' }), task('T4')));
+  const checked = fx.check();
+  assert.equal(checked.code, 0);
+  const warned = checked.lines.filter((l) => l.startsWith('warning ')).map((l) => l.split(':')[0]);
+  assert.ok(warned.includes('warning T2') || warned.includes('warning T3'), checked.lines.join('\n'));
+  assert.ok(checked.lines.some((l) => /^warning T[23]: runs alone: .*depends-on/.test(l)));
+  fx.begin();
+  const finished = [];
+  for (let guard = 0; guard < 12 && finished.length < 4; guard += 1) {
+    const now = fx.starts();
+    for (const id of now) {
+      if (id === 'T2' || id === 'T3') {
+        assert.deepEqual(now, [id], `${id} starts alone`);
+        assert.deepEqual(fx.view().running, [], `${id} starts with nothing running`);
+      }
+      assert.equal(fx.start(id).code, 0);
+    }
+    const first = fx.view().running[0];
+    assert.ok(first, 'a cycle must not hang the plan');
+    assert.equal(fx.done(first).code, 0);
+    finished.push(first);
+  }
+  assert.deepEqual([...finished].sort(), ['T1', 'T2', 'T3', 'T4']);
+});
+
+test('AC6 a trailing dot on a segment is no way round the rules: refused, or it overlaps the plain path', (t) => {
+  const refused = fixture(t, plan(task('T1', { files: 'a/one.js' }), task('T2', { files: '.git./hooks/x' }), task('T3', { files: 'c/three.js' })));
+  const r = refused.check();
+  assert.equal(r.code, 0);
+  assert.ok(r.lines.some((l) => /^warning T2: runs alone: /.test(l)), r.lines.join('\n'));
+  refused.begin();
+  for (let guard = 0; guard < 6 && refused.view().done['0']?.length !== 3; guard += 1) {
+    const now = refused.starts();
+    if (now.includes('T2')) assert.deepEqual(now, ['T2']);
+    for (const id of now) refused.start(id);
+    for (const id of refused.view().running) refused.done(id);
+  }
+  const alias = fixture(t, plan(task('T1', { files: 'scripts/x.mjs' }), task('T2', { files: 'Scripts./X.MJS' }), task('T3', { files: 'free/c.js' })));
+  alias.begin();
+  assert.ok(!alias.starts().includes('T2') || !alias.starts().includes('T1'), 'T1 and T2 never start together');
+  const why = alias.waits().T2;
+  assert.ok(why === 'overlap T1' || /^alone/.test(why ?? ''), `T2 waits: ${why}`);
+  assert.equal(alias.run('start', SLUG, 'T2').code, 3);
+  alias.start('T1');
+  assert.ok(!alias.starts().includes('T2'), 'running is not enough');
+  alias.done('T1');
+  assert.ok(alias.starts().includes('T2') || Object.keys(alias.waits()).includes('T2'));
+});
+
 // ---------- runs alone ----------
 
 const ALONE_CASES = [
@@ -236,7 +306,8 @@ const ALONE_CASES = [
   ['missing role', { role: null }],
   ['unknown dependency', { deps: 'T77' }],
   ['dependency on itself', { deps: 'T2' }],
-  ['dependency on a later task', { deps: 'T3' }]
+  ['trailing dot in a directory name', { files: '.git./hooks/x' }],
+  ['trailing dot in a directory name, capitals', { files: 'Scripts./X.MJS' }]
 ];
 
 for (const [label, over] of ALONE_CASES) {
