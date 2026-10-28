@@ -1,0 +1,13 @@
+{
+  "decided": 2,
+  "findings": [
+    { "line": 9, "id": "tbd", "phrase": "TBD" },
+    { "line": 14, "id": "open-choice", "phrase": "Decided: A or B?" },
+    { "line": 19, "id": "open-choice", "phrase": "Which store, files or SQLite?" },
+    { "line": 21, "id": "decide-later", "phrase": "decide later" },
+    { "line": 26, "id": "tbd", "phrase": "TBD" },
+    { "line": 33, "id": "todo", "phrase": "TODO" },
+    { "line": 34, "id": "open-choice", "phrase": "- Ship by Friday or Monday?" },
+    { "line": 35, "id": "decide-later", "phrase": "Decide Later" }
+  ]
+}
