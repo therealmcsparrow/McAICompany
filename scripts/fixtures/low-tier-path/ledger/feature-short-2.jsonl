@@ -1,0 +1,4 @@
+{"v":1,"run":"feature-short-2","kind":"step","id":"01","role":"product-manager","agent":"a102x","src":"notification","ctx_end":10}
+{"v":1,"run":"feature-short-2","kind":"step","id":"01","role":"product-manager","agent":"a102x","src":"transcript","tokens":{"in":1000,"cache_write":0,"cache_read":5,"out":0}}
+{"v":1,"run":"feature-short-2","kind":"meta","aico":"0.19.0","pb":"feature","sets":1}
+{"v":1,"run":"feature-short-2","kind":"ship","acs":2,"fix_rounds":0,"high_blockers":0,"tier":"low","t_start":"2026-10-05T15:55:00Z","t_ship":"2026-10-05T16:00:00Z","wait":0,"rej_ship":0,"path":"short","raised":0}

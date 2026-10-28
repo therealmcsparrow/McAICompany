@@ -1,0 +1,3 @@
+{"v":1,"run":"feature-before-0","kind":"step","id":"01","role":"product-manager","agent":"a0x","src":"notification","ctx_end":10}
+{"v":1,"run":"feature-before-0","kind":"step","id":"01","role":"product-manager","agent":"a0x","src":"transcript","tokens":{"in":1000,"cache_write":0,"cache_read":5,"out":0}}
+{"v":1,"run":"feature-before-0","kind":"ship","acs":2,"fix_rounds":0,"high_blockers":0,"tier":"low","t_start":"2026-10-01T09:53:20Z","t_ship":"2026-10-01T10:00:00Z","wait":0,"rej_ship":0}
