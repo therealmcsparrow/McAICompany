@@ -303,6 +303,66 @@ test('the last valid ship line decides', () => {
   assert.deepEqual(run(root, ['verdict']).warnings, []);
 });
 
+const shipLine = (slug, extra = {}) => JSON.stringify({ v: 1, run: slug, kind: 'ship', acs: 3, fix_rounds: 0, ...extra });
+
+test('a run whose last valid ship line has path short is on neither side and adds no warning', () => {
+  const root = repo();
+  addSide(root, 'none', 'b', [2, 2, 2], 0);
+  addSide(root, 'on', 'o', [1, 1, 1], 3);
+  // Short runs on both sides, one with fix rounds that disagree with its Handoffs, one in plan-check error state.
+  addRun(root, { slug: 's-base', order: 6, rounds: [0, 0], ledgerText: `${shipLine('s-base', { path: 'short', tier: 'low' })}\n` });
+  addRun(root, { slug: 's-on', order: 7, side: 'on', rounds: [0, 3], ledgerText: `${shipLine('s-on', { path: 'short', fix_rounds: 0 })}\n` });
+  addRun(root, { slug: 's-err', order: 8, rounds: [0], ledgerText: `${shipLine('s-err', { path: 'short' })}\n` });
+  put(root, '.company/work/s-err/plan-check.jsonl', '{"v":99}\n');
+  const r = run(root, ['verdict', '--runs', '3']);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.runs.on.map(x => x.slug).sort(), ['o-0', 'o-1', 'o-2']);
+  assert.deepEqual(r.runs.base.map(x => x.slug).sort(), ['b-0', 'b-1', 'b-2']);
+  assert.equal(oneLine(r), 'plan-check verdict: pass | check on: median 1.0 (n=3) | baseline: median 2.0 (n=3) | waved off n/a');
+});
+
+test('short runs do not change a verdict line compared with a ledger that never had them', () => {
+  const plain = repo();
+  addSide(plain, 'none', 'b', [2, 2, 2, 2], 0);
+  addSide(plain, 'on', 'o', [1, 2, 1, 2], 4);
+  const mixed = repo();
+  addSide(mixed, 'none', 'b', [2, 2, 2, 2], 0);
+  addSide(mixed, 'on', 'o', [1, 2, 1, 2], 4);
+  addRun(mixed, { slug: 's1', order: 9, rounds: [0, 0], ledgerText: `${shipLine('s1', { path: 'short' })}\n` });
+  addRun(mixed, { slug: 's2', order: 10, side: 'on', rounds: [0, 0], ledgerText: `${shipLine('s2', { path: 'short' })}\n` });
+  assert.equal(oneLine(run(mixed, ['verdict', '--runs', '4'])), oneLine(run(plain, ['verdict', '--runs', '4'])));
+});
+
+test('only path equal to short leaves a run out: full, no path and an unknown path count as before', () => {
+  const root = repo();
+  addRun(root, { slug: 'full', order: 1, rounds: [0, 1], ledgerText: `${shipLine('full', { path: 'full', fix_rounds: 1 })}\n` });
+  addRun(root, { slug: 'nopath', order: 2, rounds: [0, 1], ledgerText: `${shipLine('nopath', { fix_rounds: 1 })}\n` });
+  // An unknown path value makes the line invalid: it is skipped, so the run has no recorded value and is left out by the old rule.
+  addRun(root, { slug: 'odd', order: 3, rounds: [0, 1], ledgerText: `${shipLine('odd', { path: 'Short', fix_rounds: 1 })}\n` });
+  const r = run(root, ['verdict']);
+  assert.deepEqual(r.runs.base.map(x => x.slug).sort(), ['full', 'nopath']);
+  assert.deepEqual(r.warnings, ['odd: fix rounds none vs handoffs 1']);
+});
+
+test('the last valid ship line decides whether a run is short', () => {
+  const root = repo();
+  addRun(root, { slug: 'was-short', order: 1, rounds: [0, 1], ledgerText: `${shipLine('was-short', { path: 'short' })}\n${shipLine('was-short', { path: 'full', fix_rounds: 1 })}\n` });
+  addRun(root, { slug: 'now-short', order: 2, rounds: [0, 1], ledgerText: `${shipLine('now-short', { path: 'full', fix_rounds: 1 })}\n${shipLine('now-short', { path: 'short' })}\n` });
+  // A later invalid line, a later line of another run and an over-long line do not count as the last ship line.
+  const pad = JSON.stringify({ v: 1, run: 'ignored', kind: 'ship', acs: 1, path: 'short', pad: 'a'.repeat(600) });
+  addRun(root, { slug: 'guarded', order: 3, rounds: [0, 1], ledgerText: [shipLine('guarded', { path: 'full', fix_rounds: 1 }), shipLine('other', { path: 'short' }), shipLine('guarded', { path: 'short', fix_rounds: -1 }), pad, '{broken'].join('\n') + '\n' });
+  const r = run(root, ['verdict']);
+  assert.deepEqual(r.runs.base.map(x => x.slug).sort(), ['guarded', 'was-short']);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('a short mark in a ledger file over 1 MiB is not read, so the run is left out by the old rule', () => {
+  const root = repo();
+  addRun(root, { slug: 'huge', order: 1, rounds: [0, 1], ledgerText: `${shipLine('huge', { path: 'short' })}\n${' '.repeat(1024 * 1024 + 1)}` });
+  assert.deepEqual(run(root, ['verdict']).warnings, ['huge: fix rounds none vs handoffs 1']);
+});
+
 test('--runs is refused outside 3 to 50 and unknown arguments are refused', () => {
   const root = repo();
   for (const args of [['verdict', '--runs', '2'], ['verdict', '--runs', '51'], ['verdict', '--runs', 'x'], ['verdict', '--runs'], ['verdict', 'extra'], ['nope'], [], ['history', '--bogus'], ['history', '--limit', '0'], ['history', '--limit', '201'], ['history', '--labels']]) {

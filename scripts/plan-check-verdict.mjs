@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1). Node built-ins and git only.
+// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.1). Node built-ins and git only.
 // Read-only: nothing is written to the repository or to .company/. Output goes to stdout (one line for `verdict`).
 // git runs through execFile with a fixed argument list, no shell, in the product root. Every value taken from git output and
 // reused as an argument is matched against a strict pattern first.
@@ -91,8 +91,8 @@ function readBounded(file, max) {
   }
 }
 
-// The recorded fix_rounds of the last valid ship line of the run's ledger file, or null.
-function recordedFixRounds(root, slug) {
+// The last valid ship record of the run's ledger file, or null.
+function lastShip(root, slug) {
   const buf = readBounded(join(root, '.company', 'ledger', `${slug}.jsonl`), MAX_LEDGER_BYTES);
   if (!buf) return null;
   let ship = null;
@@ -103,8 +103,11 @@ function recordedFixRounds(root, slug) {
     if (!validateRecord(rec).ok || rec.kind !== 'ship' || rec.run !== slug) continue;
     ship = rec;
   }
-  return ship !== null && Object.hasOwn(ship, 'fix_rounds') ? ship.fix_rounds : null;
+  return ship;
 }
+
+// The recorded fix_rounds of a ship record, or null.
+const recordedFixRounds = ship => (ship !== null && Object.hasOwn(ship, 'fix_rounds') ? ship.fix_rounds : null);
 
 // ---------- statistics ----------
 
@@ -204,9 +207,11 @@ function collectRuns(root, warnings) {
   const gitState = { failed: gitFailed };
   const counted = [];
   for (const r of ordered) {
+    const ship = lastShip(root, r.slug);
+    if (ship !== null && ship.path === 'short') continue;
     const rec = readRecord(root, r.slug);
     if (rec.state === 'error') { warnings.push(`${r.slug}: plan-check record in error state`); continue; }
-    const recorded = recordedFixRounds(root, r.slug);
+    const recorded = recordedFixRounds(ship);
     const fromFiles = handoffRounds(root, r.slug, warnings, gitState);
     if (recorded === null || fromFiles === null || recorded !== fromFiles) {
       warnings.push(`${r.slug}: fix rounds ${recorded ?? 'none'} vs handoffs ${fromFiles ?? 'none'}`);
