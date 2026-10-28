@@ -1,12 +1,16 @@
-# Contract: token-ledger v1.3
+# Contract: token-ledger v1.4
 
-Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, the scorecard from v1.1, and `parallel-verdict` from v1.3), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
-Sources read: `plan-tasks` v1 `readParallel` (by `ship`, v1.3).
+
+Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, the scorecard from v1.1, `parallel-verdict` from v1.3 and `low-path-verdict` from v1.4), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
+Sources read: `plan-tasks` v1 `readParallel` (by `ship`, v1.3); `tier-sets` v1 `readTierPath` (by `ship`, v1.4).
+
 Rationale for the two sources: `docs/adr/0011-token-counts-from-transcripts.md` (Spike S1/S2, `.company/work/optimize-brainstorm/03-spike-ai-data-engineer.md`).
 Part M, Fix round 6 (CEO, after SP-M3 `62-spike-ai-data-engineer.md`; still unshipped): keep-warm is cut, so the `keepwarm` kind and its `W<n>` ids are gone; `src: mod` stays for Reflect `model` mode.
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0028-run-timing-from-run-state.md`): Step times on dispatch records, run time, CEO wait and Gate rejects on `ship`, the `scorecard` command, and `report --acs`. The `ship` record is written after the Ship Gate is approved, no longer before it. Every v1 file is a valid v1.1 file and `report` gives the same numbers for it (AC6); the stored `v` stays `1`.
 v1.2 is additive (task cheaper-role-models, `docs/adr/0032-plugin-version-ledger-meta.md`): it adds the `meta` kind and the `model-verdict` command. Every v1.1 file is a valid v1.2 file and `report`, `scorecard` give the same numbers for it.
 v1.3 is additive (task parallel-cap, `docs/adr/0033-plan-tasks-scheduler.md`): it adds the `par` kind, the optional `floor` key on `meta`, the `parallel-verdict` command, and limits the model verdict's v0.17 side to 0.17.x. Every v1.2 file is a valid v1.3 file and `report`, `scorecard` and `model-verdict` give the same numbers for it.
+v1.4 is additive (task low-tier-path, `docs/adr/0034-tier-sets-data-file.md`): it adds the optional meta keys `pb` and `sets`, the optional ship keys `path` and `raised`, ship's tier from the tier record, the scorecard's path segment, the `low-path-verdict` command, and leaves short-path runs out of the parallel verdict. Every v1.3 file is a valid v1.4 file and `report`, `scorecard`, `model-verdict` and `parallel-verdict` give the same numbers for it.
+
 
 ## Storage
 - `.company/ledger/<run>.jsonl`, one JSON object per line. `<run>` = the task slug, or `brainstorm-<YYYYMMDD-HHMM>` for a brainstorm, `replay-<name>` for a replay, `baseline-<name>` for an imported baseline. Committed with the run's Finish when the product tracks `.company/`; otherwise it stays local. Readers only need the local file.
@@ -61,6 +65,11 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 
 **`meta` (v1.3):** optional key `floor`, `^\d{1,3}\.\d{1,3}\.\d{1,3}$` = `loadModelFloor(pluginRoot).release` at `ship` time; left out when `release` is `null` or not a version. Keys exactly `v`, `run`, `kind`, `aico`, optional `floor`.
 
+**`meta` (v1.4):** optional `pb` (`feature | fix`) and `sets` (integer 1-999), from `readTierPath(root, run)` (`tier-sets` v1) when its state is `on`; `sets` = its `rev`, left out when 0. Keys exactly `v`, `run`, `kind`, `aico`, optional `floor`, `pb`, `sets`. `pb` and `sets` are refused on every other kind.
+
+**`ship` (v1.4):** optional `path` (`full | short`) and `raised` (`0 | 1`) from the same view; both refused on every other kind. `tier` = the higher of the run-state view's tier and the view's `tier` when the record is `on`. State `none` → none of the four keys (`pb`, `sets`, `path`, `raised`); a reader error, or a view value outside these allow-lists → none of the four keys, counted in the printed line's `warnings`, and `ship` still succeeds. Only integers and enums are stored: no path, text, cause or base commit.
+
+
 Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a validated `<run>` or `agent`.
 
 ## CLI (Node built-ins only)
@@ -77,6 +86,7 @@ Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a
 | `brainstorm-report <run> [--against <run>]` | the same two lines per round from round 2 on, the crossfire share, and the deltas |
 | `model-verdict [--runs <3-50>]` | (v1.2) prints the one model verdict line (below), read-only. `--runs` is digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise always exit 0 |
 | `parallel-verdict [--runs <3-50>]` | (v1.3) prints the one parallel verdict line, read-only. `--runs` digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise always exit 0 |
+| `low-path-verdict [--runs <3-50>]` | (v1.4) prints exactly two lines, feature then fix, read-only. `--runs` digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise exit 0 |
 
 ### `report --json` (part M)
 One JSON object, the same numbers as the text report (unchanged in v1.1; rows carry no times):
@@ -98,7 +108,8 @@ For each `notification` record with no `transcript` record, `report --live` read
 **Comparison set.** Read at most 500 `.company/ledger/*.jsonl` files with a valid `<run>` name (more → the 500 newest by mtime, plus a warning), each through the normal reader. Excluded and counted in `excluded: <n>`: every `brainstorm-*`, `replay-*` and `baseline-*` file, and every other file whose last `ship` record is untimed. A file with no `ship` record is not a shipped run and is neither eligible nor counted. Eligible: every other file with a timed last `ship`, not this run, with `t_ship` earlier than this run's (any, when this run is untimed). Set = the 5 newest eligible by `t_ship`. When this run has a `tier` and at least 5 eligible runs share it, the set is the 5 newest of that tier (label `tier <t>`), else all eligible (label `all tiers`). Each median uses the set members that have that value, with the existing median rule (middle value; mean of the two middle values, rounded, for an even count).
 
 **The one line** (segments joined by ` | `, in this order; nothing else is printed):
-`scorecard <run> (tier <low|medium|high|unknown>): time <d> (median <d>)` · `CEO wait <d> (median <d>)` · `spend/AC <n> (median <n>)` · `fix rounds <n> (median <n>)` · `high blockers <n> (median <n>)` · `gate rejects <n> (median <n>)` · `<label>[ n=<k>]` · `excluded: <n>` · optional `30% target: <delta> vs <b>/AC, <met|missed|not reconciled>` · optional `warnings: <n>`.
+`scorecard <run> (tier <low|medium|high|unknown>): time <d> (median <d>)` (v1.4: `scorecard <run> (tier <t>, path short): …` when the run's last `ship` has `path: short`; otherwise unchanged)
+ · `CEO wait <d> (median <d>)` · `spend/AC <n> (median <n>)` · `fix rounds <n> (median <n>)` · `high blockers <n> (median <n>)` · `gate rejects <n> (median <n>)` · `<label>[ n=<k>]` · `excluded: <n>` · optional `30% target: <delta> vs <b>/AC, <met|missed|not reconciled>` · optional `warnings: <n>`.
 - `<d>` = `<h>h<mm>m`, or `<m>m` under one hour; an untimed run shows `untimed`; `<n>` = a whole number, or `not reconciled` for spend, or `?`.
 - `n=<k>` only when the set has 1 to 4 runs (AC4). An empty set: every `(median …)` reads `(no baseline)` and the `<label>` segment is left out. A median with no member value reads `(median ?)`.
 - `30% target` (AC13) only with `--baseline`. `<b>` = the median spend per AC of the baseline runs (the `report --baseline` rule); `<delta>` = this run's spend per AC against `<b>`, rounded like `report` (`-31%`). Baseline quality = the medians of `fix_rounds` and `high_blockers` over the baseline runs whose last `ship` holds both. `met` when spend per AC ≤ 0.70 × `<b>` (unrounded), `fix_rounds` ≤ the baseline Fix-round median and `high_blockers` ≤ the baseline high-blocker median; `not reconciled` when this run's spend per AC is `not reconciled`, no baseline run gives a spend per AC, no baseline run holds both quality values, or this run lacks `fix_rounds` or `high_blockers`; else `missed`.
@@ -121,14 +132,29 @@ Compares runs of the current release (v0.17) with the runs before it (v0.16), to
 Compares v0.18 runs (capped parallel) with v0.17 runs. Only `/aico:feedback` runs it; it never blocks a Step or a Gate.
 1. **Files.** Model verdict rule 1.
 2. **Counted run.** Model verdict rule 2, plus at least 2 builder Steps: distinct `id` among `kind: step` records whose `role` is `backend-engineer`, `frontend-engineer`, `desktop-engineer`, `ai-data-engineer` or `game-engineer`. Every other run adds 1 to `not counted`.
-3. **Side.** Last `meta` `aico` 0.18.0 or later and a `par` record with `cap` ≥ 2 → v0.18. `aico` 0.17.x → v0.17. Anything else (no `meta`, older, a v0.18 run with no `par` or `cap` 1) → not counted.
+3. **Side.** Last `meta` `aico` 0.18.0 or later and a `par` record with `cap` ≥ 2 → v0.18. `aico` 0.17.x → v0.17. Anything else (no `meta`, older, a v0.18 run with no `par` or `cap` 1) → not counted. (v1.4) A run whose last `ship` has `path: short` → not counted.
+
 4. **Keys.** Plan check key: model verdict rule 4. Floor key: `meta` `floor`; for a 0.17.x run without it, `FLOOR_RELEASE_V017` = `0.16.0` (the `release` of `company/model-floor.json` at tag v0.17.0). Reference: the plan check key of the newest counted v0.18 run by `t_ship`, and the current `loadModelFloor().release`. Counted runs with another key → `excluded`.
 5. **Sets.** The newest `--runs` runs of each side with the reference keys.
 6. **Values per set.** Time = median of `t_ship − t_start − wait` (seconds); wall = median of `t_ship − t_start`; medians of `fix_rounds`, `high_blockers` and Gate rejects (`rej_brief + rej_plan + rej_ship`, an absent key counts 0) by the scorecard rule; spend/AC = Σ spend ÷ Σ `acs` (model verdict rule 6); v0.18 only: medians of `par` `out` and `cap`. Medians are exact (an even count averages the two middle values) and are compared unrounded; only the printed line rounds.
 7. **State.** `insufficient (n=<k>)` (k = the size of the smaller set) when either set has fewer than `--runs` runs or the floor cannot be loaded. Else `pass` when v0.18 time ≤ 0.75 × v0.17 time (unrounded), the Fix-round, high-blocker and Gate-reject medians are not higher, v0.18 spend/AC ≤ 1.10 × v0.17 spend/AC, and the out-of-list median is 0. Else `fail`. An error never prints as `pass`.
 8. **The line**, segments joined by ` | `: `parallel verdict: <state>` · `runs <a> v0.18, <b> v0.17 (plan check <key>, floor <release>)` · `time minus CEO wait median <d> (v0.17 <d>)` · `wall clock median <d> (v0.17 <d>)` · `fix rounds median <x> (v0.17 <y>)` · `high blockers median <x> (v0.17 <y>)` · `gate rejects median <x> (v0.17 <y>)` · `spend/AC <x> (v0.17 <y>)` · `out-of-list median <x>` · `cap median <x>` · `excluded: <n>` · `not counted: <m>` · on `fail` only: `next step: set pipeline.parallel_cap to 5` when the cap median is below 5, else `next step: set pipeline.dispatch to sequential` · `warnings: <w>` when not 0. `<d>` as in the scorecard; whole numbers; medians with one decimal; `?` where there is no value. No percent sign, currency or saving word.
 
+## Low-path verdict (v1.4)
+Compares runs on the short path (v0.19) with comparable runs before it, to tell whether a low-tier run is faster without more rework. Only `/aico:feedback` runs it; it never blocks a Step or a Gate. Per Playbook `<pb>`:
+1. **Files.** Model verdict rule 1.
+2. **Counted run.** Model verdict rule 2.
+3. **Playbook.** `meta.pb`; a run with no `meta` or `meta.aico` below 0.19.0: a `step` record with role `product-manager` → feature; else the `step` record with the lowest `id` has role `qa` → fix; else not counted.
+4. **Side.** short = `meta.aico` 0.19.0 or later and ship `path: short`. before = ship `tier: low` and ((no `meta` or `meta.aico` below 0.19.0) or (`meta.aico` 0.19.0 or later with ship `path: full`)) (CEO, Plan Gate Q1 b, 2026-10-28). Anything else → not counted.
+5. **Keys.** Plan check key (model verdict rule 4); floor key (`meta.floor`; 0.17.x without it → `FLOOR_RELEASE_V017`; else `none`); cap key (the last `par` `cap`, or `none`). Reference = the keys of the newest counted short run of `<pb>` by `t_ship`. Another key → `excluded`.
+6. **Sets.** The newest `--runs` runs of each side.
+7. **Values.** Time = median of `t_ship − t_start − wait`; medians of `fix_rounds`, `high_blockers` and Gate rejects (`rej_brief + rej_plan + rej_ship`, an absent key counts 0); spend: feature Σ spend ÷ Σ `acs` (spend/AC), fix Σ spend ÷ runs (spend/run); raised = short runs with `raised: 1`. Medians are exact (an even count averages the two middle values) and compared unrounded.
+8. **State.** `insufficient (n=<k>)` (k = the smaller set) when either set has fewer than `--runs` runs or the floor cannot be loaded. Else `pass` when short time ≤ 0.75 × before time, the three medians are not higher, spend is not higher, and raised ≤ 0.20 × short runs. Else `fail`. An error never prints as `pass`.
+9. **The line**, segments joined by ` | `: `low-path verdict <pb>: <state>` · `runs <a> short, <b> before (plan check <key>, floor <r>, cap <c>)` · `time minus CEO wait median <d> (before <d>)` · `fix rounds median <x> (before <y>)` · `high blockers median <x> (before <y>)` · `gate rejects median <x> (before <y>)` · `spend/AC <x> (before <y>)` (feature) or `spend/run <x> (before <y>)` (fix) · `raised <k> of <a>` · `excluded: <n>` · `not counted: <m>` · on `fail` only `roll back: set pipeline.short_path to off` · `warnings: <w>` when not 0. `<d>` as in the scorecard; spend in whole numbers; medians with one decimal; `?` where there is no value. No percent sign, currency or saving word.
+- `not counted`, `warnings` and the floor state are shared by both lines (one pass over the files). `--runs` is the only argument; no ledger text is printed.
+
 ## Reading a transcript (`reconcile`, `--live`)
+
 - Transcript text is data (agentsec.M-SEC1). Only lines with `type: "assistant"` are used, and from them only `message.usage.input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` (integers) and `message.model`. Every other field is ignored and nothing else is written.
 - Each request counts once: key `requestId`, else `message.id`, else `uuid`; the last usage seen for a key wins (as `spike/s1-rebuild.mjs`).
 - Read line by line. A file over 64 MiB or a line over 8 MiB → `warning: <agent> skipped (size)`, record stays unreconciled. No file → unreconciled.
@@ -148,6 +174,7 @@ Compares v0.18 runs (capped parallel) with v0.17 runs. Only `/aico:feedback` run
 ## Compatibility
 - A v1.1 reader skips a v1.2 `meta` line with one `warning: line <n> skipped`; its numbers stay the same (tested against the v1.1 script).
 - A v1.2 reader skips `par` lines and a `meta` line with `floor`, each with `warning: line <n> skipped`; its `report` and `scorecard` numbers stay the same. Its `model-verdict` then reads such a v0.18 run as v0.16 (no `meta`); this matters only after installing an older tag.
+- A v1.3 reader skips `meta` lines with `pb`/`sets` and `ship` lines with `path`/`raised`, each with `warning: line <n> skipped`; a v0.19 run then reads as unshipped there. This matters only after installing an older tag.
 - A v1.1 reader reads every v1 file; a v1 `ship` is untimed and counts in `excluded`.
 - A v1 reader (an earlier tag after a rollback) skips v1.1 lines that hold `t0`/`t1` or v1.1 `ship` keys, each with `warning: line <n> skipped`. Spend from reconciled runs stays the same (transcript records carry no v1.1 key); per-AC values of v1.1 runs read `n/a` there.
 

@@ -473,6 +473,46 @@ function minusLines(a, b) {
 // Lines the ADR 0026 hand-over changed in a software Playbook besides the shared ones, by Playbook. Each is the exact old line
 // (removed) or a pattern for the new line (added); nothing else may differ.
 const HAND_OVER_CHANGES = {
+  feature: {
+    removed: [
+      "Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):",
+      "   **→ Brief Gate**",
+      "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).",
+      "2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`).",
+      "   **→ Plan Gate** (CEO approves Core, Contracts and Art direction)",
+      "   - `aico:security` when `lanes.security` is on (`aico:pipeline` §1.7).",
+      "   - `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7).",
+      "   - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7) ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).",
+      "   **→ Ship Gate**",
+    ],
+    added: [
+      "Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md); an entry not in the set: line is skipped and named in every Gate summary. Steps (∥ = dispatch in parallel):",
+      "   **→ Brief Gate** (with the tier path preview and, on a short path, two Approve options: references/tier-path.md step 4)",
+      "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
+      "2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`). At a short path without senior-engineer-research: map, with one Debt line per pack (tier-path.md step 7).",
+      "   **→ Plan Gate** (CEO approves Core, Contracts and Art direction; tier-path.md step 8 checks the plan first)",
+      "   - `aico:security` when `lanes.security` is on (`aico:pipeline` §1.7), when in the tier set.",
+      "   - `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7), when in the tier set.",
+      "   - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7), when in the tier set ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).",
+      "   **→ Ship Gate** (after tier-set.mjs sync --diff; added Roles and lanes first)",
+    ],
+  },
+  fix: {
+    removed: [
+      "Run with `aico:pipeline`. No Brief or Plan Gate: the bug report is the brief. **Exception:** if the fix needs a Core or Contract change, pause for a Plan Gate.",
+      "1. `aico:qa`: reproduce the bug, write a failing regression test, and name the suspected Module.",
+      "2. The engineer who owns that Module (backend/frontend/desktop/ai-data/game): root cause via `aico:debugging`, fix via `aico:tdd`.",
+      "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, and when `lanes.security` is on (`aico:pipeline` §1.7)), with Fix rounds per `aico:pipeline`.",
+      "   **→ Ship Gate**",
+    ],
+    added: [
+      "Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md). A fix starts low only through a trusted triage record (tier-path.md step 2); without one it starts at medium. No Brief or Plan Gate: the bug report is the brief. **Exception:** if the fix needs a Core or Contract change, pause for a Plan Gate.",
+      "1. `aico:qa`: reproduce the bug, write a failing regression test, and name the suspected Module. Then tier-set.mjs begin (tier-path.md step 5).",
+      "2. The engineer who owns that Module (backend/frontend/desktop/ai-data/game): root cause via `aico:debugging`, fix via `aico:tdd`. After its commit, tier-set.mjs sync --diff (tier-path.md step 8).",
+      "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.",
+      "   **→ Ship Gate** (after sync --diff; added lanes first)",
+    ],
+  },
   incident: {
     removed: [
       'Every Ship Gate in this Playbook is a form, whatever the settings say: the mitigation (rollback or feature flag), each report and the final fix (`aico:pipeline` §4).',
@@ -580,9 +620,9 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   const softwarePlaybooks = manifest('software').playbooks;
   assert.deepEqual(nowSet.filter(f => !baseSet.includes(f)).map(f => f.split('/')[1]).filter(n => softwarePlaybooks.includes(n)), [], 'a Playbook the software type offers is new');
   for (const name of soft) assertV012Playbook(name);
-  // The pipeline only gained lines, except eight lines reworded in place: Setup §1.7 Settings (lists the plan_check and parallel_cap settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval). The Ship Gate text is the one it was.
+  // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
-  assert.equal(Number(removedFromPipeline), 8);
+  assert.equal(Number(removedFromPipeline), 10);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 

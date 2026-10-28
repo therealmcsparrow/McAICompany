@@ -1,0 +1,4 @@
+{"v":1,"run":"fix-short-2","kind":"step","id":"01","role":"qa","agent":"a112x","src":"notification","ctx_end":10}
+{"v":1,"run":"fix-short-2","kind":"step","id":"01","role":"qa","agent":"a112x","src":"transcript","tokens":{"in":1000,"cache_write":0,"cache_read":5,"out":0}}
+{"v":1,"run":"fix-short-2","kind":"meta","aico":"0.19.0","pb":"fix","sets":1}
+{"v":1,"run":"fix-short-2","kind":"ship","acs":1,"fix_rounds":0,"high_blockers":0,"tier":"low","t_start":"2026-10-06T01:53:40Z","t_ship":"2026-10-06T02:00:00Z","wait":0,"rej_ship":0,"path":"short","raised":0}

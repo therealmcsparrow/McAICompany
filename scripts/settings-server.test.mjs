@@ -1489,3 +1489,106 @@ test('Parallel cap hint equals the Contract text once and sits after the context
   const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
   assert.ok(cap > 0 && cap < hint && hint < h2, `order ${cap} ${hint} ${h2}`);
 });
+
+test('state carries the short_path default; save round-trips on/off and refuses other values with nothing written', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.equal(before.plugin.pipeline.short_path, 'on');
+  assert.equal(before.resolved.pipeline.short_path, 'on');
+  for (const bad of ['maybe', true, 1, null, 'ON']) {
+    const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, pipeline: { short_path: bad } } });
+    assert.equal(res.status, 400);
+    const { refused } = await res.json();
+    assert.ok(refused.some((r) => r.includes('pipeline.short_path must be on or off')), refused.join(' | '));
+  }
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, pipeline: { short_path: 'on' } }, project: { version: 1, pipeline: { short_path: 'off' } } });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  assert.equal(after.resolved.pipeline.short_path, 'off');
+});
+
+test('page has a Short path row after Parallel cap with label-for selects tied to the hint, project offers only off, and a refusal path', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  for (const needle of ['shortPathRow(tbody, defaults.short_path)', "['pipeline', 'short_path']", "['on', 'off'] : ['off']",
+    "el('label', { for: id }", "'aria-describedby', 'short-path-hint'", "id: 'short-path-hint'", 'REFUSED_SHORT_PATH', "getElementById('field-live')"]) {
+    assert.ok(html.includes(needle), needle);
+  }
+  const cap = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap)');
+  const row = html.indexOf('shortPathRow(tbody, defaults.short_path)');
+  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  assert.ok(cap > 0 && cap < row && row < review, `order ${cap} ${row} ${review}`);
+  assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'))));
+  assert.ok(!html.includes('innerHTML'));
+});
+
+test('Short path hint equals the Contract text once and sits as the fourth hint, before Reprompt', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = /exactly: "(Short path: [^"]*)"/.exec(contract);
+  assert.ok(m, 'Contract hint not found');
+  assert.equal(html.split(`const SHORT_PATH_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
+  const par = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
+  const hint = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
+  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  assert.ok(par > 0 && par < hint && hint < h2, `order ${par} ${hint} ${h2}`);
+});
+
+test('a stored project short_path on shows disabled and is described as ignored', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  assert.ok(html.includes("state.project.pipeline?.short_path === 'on'"));
+  assert.ok(html.includes('a project can only turn the short path off'));
+});
+
+// Loads the page's own resolver functions into a vm with the given layers and runs them.
+function loadEffective(draft) {
+  const html = pageHtml();
+  const grab = (name) => {
+    const start = html.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, name);
+    return html.slice(start, html.indexOf('\n}\n', start) + 3);
+  };
+  const ctx = vm.createContext({ draft, LOCKED_GATES: [], LOCKED_LANES: [], userUnlocked: () => false });
+  vm.runInContext(html.split('\n').find((l) => l.startsWith('const has = ')) + '\n' + ['getIn', 'pickSource', 'modsEffective', 'effective'].map(grab).join('\n'), ctx);
+  return ctx.effective;
+}
+
+test('effective() on pipeline.short_path: a project on is held and the user value (or on) applies', () => {
+  const p = ['pipeline', 'short_path'];
+  const held = 'on from project is ignored: a project can only turn the short path off';
+  const userOff = loadEffective({ user: { pipeline: { short_path: 'off' } }, project: { pipeline: { short_path: 'on' } } })(p, 'on');
+  assert.deepEqual({ ...userOff }, { value: 'off', source: 'locked', held });
+  const noUser = loadEffective({ user: {}, project: { pipeline: { short_path: 'on' } } })(p, 'on');
+  assert.deepEqual({ ...noUser }, { value: 'on', source: 'locked', held });
+  const projOff = loadEffective({ user: { pipeline: { short_path: 'on' } }, project: { pipeline: { short_path: 'off' } } })(p, 'on');
+  assert.deepEqual({ ...projOff }, { value: 'off', source: 'project' });
+  const none = loadEffective({ user: {}, project: {} })(p, 'on');
+  assert.deepEqual({ ...none }, { value: 'on', source: 'plugin' });
+});
+
+test('a stored project short_path on is styled disabled and its select points at the effect cell', () => {
+  const html = pageHtml();
+  const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
+  assert.ok(row.includes("control.classList.add('ignored')"));
+  assert.ok(row.includes('effectId'));
+  assert.ok(html.includes('select.ignored'));
+});
+
+test('the muted ignored select keeps full-strength text and border, with a non-colour cue, in forced colors too', () => {
+  const html = pageHtml();
+  const rule = html.match(/^select\.ignored \{([^}]*)\}/m);
+  assert.ok(rule, 'select.ignored rule');
+  assert.ok(!/opacity/.test(rule[1]), 'no opacity on the text or border');
+  assert.ok(rule[1].includes('color: var(--muted)'));
+  assert.ok(rule[1].includes('border-style: dashed'));
+  const forced = html.match(/@media \(forced-colors: active\) \{[^@]*select\.ignored \{([^}]*)\}/);
+  assert.ok(forced, 'forced-colors override');
+  assert.ok(forced[1].includes('CanvasText') && !/GrayText|opacity/.test(forced[1]));
+});
+
+test('the ignored class follows the project select value, so picking off or blank removes it', () => {
+  const html = pageHtml();
+  const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
+  assert.ok(row.includes("control.classList.toggle('ignored', ignored && control.value === 'on')"));
+});

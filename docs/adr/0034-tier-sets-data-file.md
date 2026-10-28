@@ -1,0 +1,5 @@
+# 0034: A plugin data file and a script pick the Roles per risk tier, and the tier only rises
+
+Status: proposed (Plan Gate, task low-tier-path)
+
+A low-risk feature or fix should pay fewer Roles than a high-risk one, but a Lead that drops Roles by judgment can be talked into it by request text, so v0.19 puts the Roles and lanes per tier for `feature` and `fix` in `company/tier-sets.json` and lets only `scripts/tier-set.mjs` read it (`tier-sets` v1): medium and high must equal the frozen v0.18 route, required Roles can never leave a tier, a bad file means the high set, and the run tier is the maximum of every source, raised by whole-token path checks (`docs/contracts/`, approved Core, auth, payments, personal data and migration names) and never lowered. A fix only starts low through a nonce-bound triage record (`run-state` v1.4), and a feature only after the CEO approves the short path at the Brief Gate. Hard to reverse because every later tier tune, the ledger `path` key and the low-path verdicts compare against this file's entries and `rev`.

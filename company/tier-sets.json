@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "rev": 1,
+  "playbooks": {
+    "feature": {
+      "low": ["product-manager", "design-researcher", "architect", "ui-ux-designer", "brand-artist", "spikes", "senior-engineer-map", "ruleset-sign-off", "builders", "asset-artists", "code-reviewer", "qa", "legal", "accessibility-tester", "writer", "localizer", "devops"],
+      "medium": ["product-manager", "design-researcher", "architect", "ui-ux-designer", "brand-artist", "spikes", "persona-tester", "senior-engineer-research", "senior-engineer-map", "ruleset-sign-off", "builders", "asset-artists", "code-reviewer", "qa", "security", "senior-engineer-compliance", "legal", "hands-on-tester", "accessibility-tester", "writer", "localizer", "devops"],
+      "high": ["product-manager", "design-researcher", "architect", "ui-ux-designer", "brand-artist", "spikes", "persona-tester", "senior-engineer-research", "senior-engineer-map", "ruleset-sign-off", "builders", "asset-artists", "code-reviewer", "qa", "security", "senior-engineer-compliance", "legal", "hands-on-tester", "accessibility-tester", "writer", "localizer", "devops"]
+    },
+    "fix": {
+      "low": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "devops"],
+      "medium": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "security", "devops"],
+      "high": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "security", "devops"]
+    }
+  },
+  "forced_high": ["auth", "authn", "authz", "authentication", "authorization", "authorize", "oauth", "oauth2", "oidc", "saml", "sso", "jwt", "login", "logout", "signin", "signup", "session", "sessions", "password", "passwords", "passwd", "credential", "credentials", "mfa", "2fa", "totp", "rbac", "acl", "permission", "permissions", "secret", "secrets", "keystore", "crypto", "payment", "payments", "billing", "checkout", "invoice", "invoices", "stripe", "paypal", "mollie", "subscription", "subscriptions", "refund", "refunds", "pii", "gdpr", "consent", "personal", "privacy", "migration", "migrations", "migrate", "alembic", "flyway", "liquibase"]
+}
