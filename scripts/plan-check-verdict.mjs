@@ -4,6 +4,7 @@
 // git runs through execFile with a fixed argument list, no shell, in the product root. Every value taken from git output and
 // reused as an argument is matched against a strict pattern first.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,7 +16,7 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_NAME_RE = /^(?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md$/;
 const PLAN_PATH_RE = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/((?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md)$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
-const SHA_PREFIX_RE = /^[0-9a-f]{7,40}$/;
+const SHA_PREFIX_RE = /^[0-9a-f]{7,64}$/;
 const MAX_RUNS = 200;
 const MAX_PLAN_BYTES = 256 * 1024;
 const MAX_LEDGER_BYTES = 1024 * 1024;
@@ -170,7 +171,8 @@ function addTimes(root, slug) {
   return times;
 }
 
-// The highest numeric round among the run's Step files added no later than the first ship gate answer.
+// The highest numeric round among the run's Step files dated no later than the first ship gate answer. A tracked file is dated by
+// the commit that added it, any other file by its mtime in whole seconds.
 function handoffRounds(root, slug, warnings, gitState) {
   let view;
   try { view = show(root, slug); } catch { return null; }
@@ -181,13 +183,16 @@ function handoffRounds(root, slug, warnings, gitState) {
     times = addTimes(root, slug);
     if (times === null) {
       gitState.failed = true;
-      warnings.push('git unavailable: every work file counted');
+      warnings.push('git unavailable: every work file dated by its mtime');
     }
   }
   let best = null;
   for (const s of view.steps) {
     if (typeof s.round !== 'number') continue;
-    if (cutoff !== null && times !== null && times.has(s.file) && times.get(s.file) * 1000 > cutoff) continue;
+    if (cutoff !== null) {
+      const seconds = times !== null && times.has(s.file) ? times.get(s.file) : Math.floor(Date.parse(s.mtime) / 1000);
+      if (!Number.isFinite(seconds) || seconds * 1000 > cutoff) continue;
+    }
     if (best === null || s.round > best) best = s.round;
   }
   return best;
@@ -293,14 +298,31 @@ function parseHistoryArgs(args) {
   return out;
 }
 
-export function history(root, args) {
-  const opt = parseHistoryArgs(args);
-  const labels = opt.labels === null ? [] : readLabels(opt.labels);
-  const warnings = [];
-  let loaded;
-  try { loaded = loadPatterns(); } catch (e) { return { code: 1, lines: [`history: ${e.message}`], warnings }; }
+// Plans on disk now: [{ path, mtime }], at most MAX_RUNS folders, regular files only. null when there is no work folder.
+function workingTreePlans(root) {
+  const work = join(root, '.company', 'work');
+  const st = lstatOrNull(work);
+  if (!st || !st.isDirectory()) return null;
+  let names;
+  try { names = readdirSync(work).filter(n => SLUG_RE.test(n)).sort().slice(0, MAX_RUNS); } catch { return []; }
+  const plans = [];
+  for (const slug of names) {
+    const dir = join(work, slug);
+    if (!lstatOrNull(dir)?.isDirectory()) continue;
+    let files;
+    try { files = readdirSync(dir); } catch { continue; }
+    for (const name of files.filter(f => PLAN_NAME_RE.test(f)).sort()) {
+      const fst = lstatOrNull(join(dir, name));
+      if (fst?.isFile()) plans.push({ path: `.company/work/${slug}/${name}`, time: Math.floor(fst.mtimeMs / 1000) });
+    }
+  }
+  return plans;
+}
+
+// Plans ever added in git: Map path -> { sha, ct } at the oldest adding commit. null when git failed.
+function gitPlans(root) {
   const log = git(root, ['log', '--no-color', '--no-renames', '--diff-filter=A', '--format=%x01%H%x09%ct', '--name-only', '--', '.company/work']);
-  if (!log.ok) return { code: 1, lines: ['history: git unavailable'], warnings };
+  if (!log.ok) return null;
   const oldest = new Map();
   for (const c of parseLog(log.out)) {
     if (!SHA_RE.test(c.sha) || c.ct === null) continue;
@@ -310,20 +332,41 @@ export function history(root, args) {
       if (!prev || c.ct < prev.ct) oldest.set(p, { sha: c.sha, ct: c.ct });
     }
   }
-  const plans = [...oldest.entries()].map(([path, v]) => ({ path, ...v }));
-  plans.sort((a, b) => b.ct - a.ct || (a.path < b.path ? -1 : 1));
+  return oldest;
+}
+
+export function history(root, args) {
+  const opt = parseHistoryArgs(args);
+  const labels = opt.labels === null ? [] : readLabels(opt.labels);
+  const warnings = [];
+  let loaded;
+  try { loaded = loadPatterns(); } catch (e) { return { code: 1, lines: [`history: ${e.message}`], warnings }; }
+  const fromGit = gitPlans(root);
+  const fromDisk = workingTreePlans(root);
+  if (fromGit === null && fromDisk === null) return { code: 1, lines: ['history: git unavailable'], warnings };
+  if (fromGit === null) warnings.push('git unavailable: working tree only');
+  const merged = new Map();
+  for (const p of fromDisk ?? []) merged.set(p.path, { path: p.path, source: 'working-tree', time: p.time });
+  for (const [path, v] of fromGit ?? []) merged.set(path, { path, source: 'git', time: v.ct, sha: v.sha });
+  const plans = [...merged.values()].sort((a, b) => b.time - a.time || (a.path < b.path ? -1 : 1)).slice(0, opt.limit);
   const result = [];
-  for (const p of plans.slice(0, opt.limit)) {
+  for (const p of plans) {
     const m = PLAN_PATH_RE.exec(p.path);
-    const blob = git(root, ['cat-file', 'blob', `${p.sha}:${p.path}`], { binary: true, maxBuffer: MAX_PLAN_BYTES + 1 });
-    if (!blob.ok || blob.out.length > MAX_PLAN_BYTES) { warnings.push(`${p.path}@${p.sha.slice(0, 7)}: skipped (unreadable or over 256 KiB)`); continue; }
+    let bytes;
+    if (p.source === 'git') {
+      const blob = git(root, ['cat-file', 'blob', `${p.sha}:${p.path}`], { binary: true, maxBuffer: MAX_PLAN_BYTES + 1 });
+      bytes = blob.ok ? blob.out : null;
+    } else bytes = readBounded(join(root, ...p.path.split('/')), MAX_PLAN_BYTES);
+    const rev = p.source === 'git' ? p.sha : bytes === null ? null : createHash('sha256').update(bytes).digest('hex');
+    const label = `${p.path}@${(rev ?? '0000000').slice(0, 7)}`;
+    if (bytes === null || bytes.length > MAX_PLAN_BYTES) { warnings.push(`${label}: skipped (unreadable or over 256 KiB)`); continue; }
     let text;
-    try { text = new TextDecoder('utf-8', { fatal: true }).decode(blob.out); } catch { warnings.push(`${p.path}@${p.sha.slice(0, 7)}: skipped (not UTF-8)`); continue; }
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { warnings.push(`${label}: skipped (not UTF-8)`); continue; }
     const { findings } = scanText(text, loaded.patterns, { file: m[2] });
     result.push({
-      path: p.path, sha: p.sha,
+      path: p.path, source: p.source, rev,
       findings: findings.map(f => {
-        const hit = labels.find(l => l.path === p.path && l.line === f.line && p.sha.startsWith(l.sha));
+        const hit = labels.find(l => l.path === p.path && l.line === f.line && rev.startsWith(l.sha));
         return { line: f.line, phrase: f.phrase, why: f.why, label: hit ? hit.label : 'unlabeled' };
       })
     });
@@ -338,7 +381,7 @@ export function history(root, args) {
   }
   const lines = [];
   for (const r of result) {
-    lines.push(`${r.path}@${r.sha.slice(0, 7)}: ${r.findings.length} findings`);
+    lines.push(`${r.path}@${r.rev.slice(0, 7)}${r.source === 'working-tree' ? ' (working tree)' : ''}: ${r.findings.length} findings`);
     for (const f of r.findings) lines.push(`  ${f.line} | ${f.phrase} | ${f.why} | ${f.label}`);
   }
   lines.push(rate === null

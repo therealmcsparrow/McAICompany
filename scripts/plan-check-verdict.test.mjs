@@ -49,6 +49,7 @@ function commit(root, date) {
   git(root, ['commit', '--quiet', '--message=x', '--allow-empty'], date);
 }
 const stepText = round => `---\nstep: 03\nrole: backend-engineer\ntask: x\nstatus: done\nround: ${round}\nbase-commit: abc1234\nrisk-tier: medium\n---\n## Did\n`;
+const touch = (root, rel, iso) => { const t = new Date(iso); fs.utimesSync(path.join(root, ...rel.split('/')), t, t); };
 const day = order => `2026-10-${String(10 + order).padStart(2, '0')}`;
 
 // One finished run. side: 'on' | 'off' | 'none'. fix: the recorded ledger value (null = no ledger line).
@@ -58,7 +59,11 @@ function addRun(root, { slug, order, side = 'none', fix, rounds, late = [], find
   const dir = `.company/work/${slug}`;
   put(root, `${dir}/00-summary.md`, '# done\n');
   put(root, `${dir}/02-plan.md`, '# Plan\n');
-  rounds.forEach((r, i) => put(root, `${dir}/${String(3 + i).padStart(2, '0')}-backend-engineer.md`, stepText(r)));
+  rounds.forEach((r, i) => {
+    const rel = `${dir}/${String(3 + i).padStart(2, '0')}-backend-engineer.md`;
+    put(root, rel, stepText(r));
+    touch(root, rel, `${d}T10:00:00Z`);
+  });
   put(root, `${dir}/run-state.jsonl`, [
     { v: 1, at: `${d}T08:00:00Z`, ev: 'start' },
     { v: 1, at: `${d}T09:00:00Z`, ev: 'gate', gate: 'plan', result: 'passed' },
@@ -78,7 +83,11 @@ function addRun(root, { slug, order, side = 'none', fix, rounds, late = [], find
   }
   commit(root, `${d}T10:00:00Z`);
   if (late.length) {
-    late.forEach((r, i) => put(root, `${dir}/${String(40 + i).padStart(2, '0')}-backend-engineer.md`, stepText(r)));
+    late.forEach((r, i) => {
+      const rel = `${dir}/${String(40 + i).padStart(2, '0')}-backend-engineer.md`;
+      put(root, rel, stepText(r));
+      touch(root, rel, `${d}T14:00:00Z`);
+    });
     commit(root, `${d}T14:00:00Z`);
   }
 }
@@ -206,14 +215,40 @@ test('without a ship gate entry every work file counts', () => {
   assert.deepEqual(r.warnings, ['open: fix rounds 1 vs handoffs 3']);
 });
 
-test('untracked work files count every Step', () => {
+test('an untracked work file uses its mtime: before the ship gate answer it counts, after it does not', () => {
   const root = repo();
   addSide(root, 'none', 'b', [2, 2, 2], 0);
   addSide(root, 'on', 'o', [1, 1], 3);
-  addRun(root, { slug: 'late', order: 5, side: 'on', fix: 1, rounds: [0, 1] });
+  addRun(root, { slug: 'early', order: 5, side: 'on', fix: 1, rounds: [0, 1] });
+  addRun(root, { slug: 'late', order: 6, side: 'on', fix: 1, rounds: [0, 1] });
+  put(root, '.company/work/early/41-backend-engineer.md', stepText(2));
+  touch(root, '.company/work/early/41-backend-engineer.md', '2026-10-15T11:59:59Z');
   put(root, '.company/work/late/41-backend-engineer.md', stepText(2));
+  touch(root, '.company/work/late/41-backend-engineer.md', '2026-10-16T12:00:01Z');
   const r = run(root, ['verdict', '--runs', '3']);
-  assert.deepEqual(r.warnings, ['late: fix rounds 1 vs handoffs 2']);
+  assert.deepEqual(r.warnings, ['early: fix rounds 1 vs handoffs 2']);
+});
+
+test('an untracked work file at exactly the ship gate time counts; the mtime is floored to whole seconds', () => {
+  const root = repo();
+  addRun(root, { slug: 'edge', order: 1, fix: 1, rounds: [0, 1] });
+  put(root, '.company/work/edge/41-backend-engineer.md', stepText(2));
+  touch(root, '.company/work/edge/41-backend-engineer.md', '2026-10-11T12:00:00.900Z');
+  assert.deepEqual(run(root, ['verdict']).warnings, ['edge: fix rounds 1 vs handoffs 2']);
+});
+
+test('a tracked work file uses its git add time, not its mtime', () => {
+  const root = repo();
+  addRun(root, { slug: 'tr', order: 1, fix: 1, rounds: [0, 1], late: [2] });
+  touch(root, '.company/work/tr/40-backend-engineer.md', '2026-10-11T08:00:00Z');
+  assert.deepEqual(run(root, ['verdict']).warnings, []);
+});
+
+test('the real mtime of a work file is used: every file of a run in the same minute counts when no ship gate entry exists', () => {
+  const root = repo();
+  addRun(root, { slug: 'open', order: 1, fix: 3, rounds: [0, 3] });
+  fs.rmSync(path.join(root, '.company', 'work', 'open', 'run-state.jsonl'));
+  assert.deepEqual(run(root, ['verdict']).warnings, []);
 });
 
 test('a run in plan-check error state is left out with a warning', () => {
@@ -277,13 +312,14 @@ test('--runs is refused outside 3 to 50 and unknown arguments are refused', () =
   }
 });
 
-test('without git, runs are ordered by file time, every work file counts and one warning is added', () => {
+test('without git, runs are ordered by file time, every work file uses its mtime and one warning is added', () => {
   const root = repo();
   addSide(root, 'none', 'b', [2, 2, 2], 0);
+  addRun(root, { slug: 'late', order: 4, fix: 1, rounds: [0, 1], late: [2] });
   fs.rmSync(path.join(root, '.git'), { recursive: true, force: true });
   const r = run(root, ['verdict', '--runs', '3']);
   assert.equal(r.code, 0);
-  assert.ok(r.warnings.includes('git unavailable: runs ordered by file time'));
+  assert.deepEqual(r.warnings, ['git unavailable: runs ordered by file time']);
   assert.match(oneLine(r), /baseline: median 2\.0 \(n=3\)/);
 });
 
@@ -387,11 +423,123 @@ test('history skips a plan over 256 KiB with a warning', () => {
   assert.equal(r.lines.at(-1), 'history: 1 plans, 1 findings, false-positive rate: no labels');
 });
 
-test('history without git prints one line and exits 1', () => {
-  const root = repo({ init: false });
+const sha256 = text => crypto.createHash('sha256').update(text).digest('hex');
+
+// Working tree only: a repository whose work folder is not tracked.
+function localPlans(files) {
+  const root = repo();
+  commit(root, '2026-10-01T01:00:00Z');
+  for (const [rel, text, iso] of files) { put(root, rel, text); touch(root, rel, iso); }
+  return root;
+}
+
+test('history reads plans from the working tree when git has none, marks them and uses the content hash', () => {
+  const root = localPlans([
+    ['.company/work/alpha/02-plan.md', PLAN_A, '2026-10-11T10:00:00Z'],
+    ['.company/work/beta/02-architect-plan.md', PLAN_B, '2026-10-12T10:00:00Z']
+  ]);
+  const a = sha256(PLAN_A).slice(0, 7);
+  const b = sha256(PLAN_B).slice(0, 7);
+  const r = run(root, ['history']);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.lines.filter(l => !l.startsWith(' ')), [
+    `.company/work/beta/02-architect-plan.md@${b} (working tree): 1 findings`,
+    `.company/work/alpha/02-plan.md@${a} (working tree): 2 findings`,
+    'history: 2 plans, 3 findings, false-positive rate: no labels'
+  ]);
+  const j = JSON.parse(run(root, ['history', '--json']).lines[0]);
+  assert.deepEqual(j.plans.map(p => [p.path, p.source, p.rev]), [
+    ['.company/work/beta/02-architect-plan.md', 'working-tree', sha256(PLAN_B)],
+    ['.company/work/alpha/02-plan.md', 'working-tree', sha256(PLAN_A)]
+  ]);
+});
+
+test('history merges both sources by path: git wins for a path in both, a path only in git is kept', () => {
+  const root = historyRepo();
+  put(root, '.company/work/gamma/02-plan.md', '## Tasks\n- TODO\n');
+  touch(root, '.company/work/gamma/02-plan.md', '2026-10-20T10:00:00Z');
+  git(root, ['rm', '--quiet', '--force', '.company/work/beta/02-architect-plan.md'], '2026-10-14T10:00:00Z');
+  git(root, ['commit', '--quiet', '--message=rm'], '2026-10-14T10:00:00Z');
+  const a = sha(root, '.company/work/alpha/02-plan.md').slice(0, 7);
+  const b = sha(root, '.company/work/beta/02-architect-plan.md').slice(0, 7);
+  const g = sha256('## Tasks\n- TODO\n').slice(0, 7);
+  const r = run(root, ['history']);
+  assert.deepEqual(r.lines.filter(l => !l.startsWith(' ')), [
+    `.company/work/gamma/02-plan.md@${g} (working tree): 1 findings`,
+    `.company/work/beta/02-architect-plan.md@${b}: 1 findings`,
+    `.company/work/alpha/02-plan.md@${a}: 2 findings`,
+    'history: 3 plans, 4 findings, false-positive rate: no labels'
+  ]);
+  const j = JSON.parse(run(root, ['history', '--json']).lines[0]);
+  assert.deepEqual(j.plans.map(p => p.source), ['working-tree', 'git', 'git']);
+  assert.equal(j.plans[0].rev, sha256('## Tasks\n- TODO\n'));
+  assert.equal(j.plans[1].rev.length, 40);
+});
+
+test('history --limit applies to the merged list, newest first', () => {
+  const root = historyRepo();
+  put(root, '.company/work/gamma/02-plan.md', '## Tasks\n- TODO\n');
+  touch(root, '.company/work/gamma/02-plan.md', '2026-10-20T10:00:00Z');
+  const two = run(root, ['history', '--limit', '2']);
+  assert.deepEqual(two.lines.filter(l => !l.startsWith(' ')).map(l => l.split('@')[0]), [
+    '.company/work/gamma/02-plan.md', '.company/work/beta/02-architect-plan.md', 'history: 2 plans, 2 findings, false-positive rate: no labels'.split('@')[0]
+  ]);
+});
+
+test('history without git scans the working tree alone with one warning and exits 0', () => {
+  const root = localPlans([['.company/work/alpha/02-plan.md', PLAN_A, '2026-10-11T10:00:00Z']]);
+  fs.rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  const r = run(root, ['history']);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.warnings, ['git unavailable: working tree only']);
+  assert.equal(r.lines.at(-1), 'history: 1 plans, 2 findings, false-positive rate: no labels');
+  assert.match(r.lines[0], /^\.company\/work\/alpha\/02-plan\.md@[0-9a-f]{7} \(working tree\): 2 findings$/);
+});
+
+test('history exits 1 only when neither source can be read', () => {
+  const root = path.join(base, `none${n++}`);
+  fs.mkdirSync(root, { recursive: true });
   const r = run(root, ['history']);
   assert.equal(r.code, 1);
   assert.deepEqual(r.lines, ['history: git unavailable']);
+});
+
+test('working-tree plans are read with lstat: a linked plan file and a plan folder that is a file are ignored', t => {
+  const root = localPlans([['.company/work/real/02-plan.md', '## Tasks\n- TBD\n', '2026-10-11T10:00:00Z']]);
+  put(root, '.company/work/afile', 'not a folder');
+  put(root, '.company/outside.md', '## Tasks\n- TBD\n');
+  try {
+    fs.symlinkSync(path.join(root, '.company', 'outside.md'), path.join(root, '.company', 'work', 'real', '03-plan.md'));
+  } catch { t.diagnostic('symlinks not permitted here'); }
+  const r = run(root, ['history']);
+  assert.equal(r.lines.filter(l => !l.startsWith(' ')).length, 2);
+  assert.match(r.lines[0], /real\/02-plan\.md@/);
+});
+
+test('labels: sha is a 7 to 64 hex prefix of the plan rev; a working-tree plan matches by content hash', () => {
+  const root = localPlans([['.company/work/alpha/02-plan.md', PLAN_A, '2026-10-11T10:00:00Z']]);
+  const full = sha256(PLAN_A);
+  const entry = (sh, line, label) => ({ path: '.company/work/alpha/02-plan.md', sha: sh, line, label });
+  const labels = path.join(base, 'labels-wt.json');
+  fs.writeFileSync(labels, JSON.stringify({ v: 1, labels: [entry(full, 4, 'fp'), entry(full.slice(0, 20), 6, 'tp')] }));
+  const r = run(root, ['history', '--labels', labels]);
+  assert.equal(r.code, 0);
+  assert.equal(r.lines.at(-1), 'history: 1 plans, 2 findings, labeled 2, false positives 1 (50%)');
+  fs.writeFileSync(labels, JSON.stringify({ v: 1, labels: [entry('0'.repeat(7), 4, 'fp')] }));
+  assert.equal(run(root, ['history', '--labels', labels]).lines.at(-1), 'history: 1 plans, 2 findings, false-positive rate: no labels');
+});
+
+test('labels: sha shorter than 7 or longer than 64 is refused; 64 is accepted', () => {
+  const root = historyRepo();
+  const f = path.join(base, 'labels-len.json');
+  const withSha = sh => fs.writeFileSync(f, JSON.stringify({ v: 1, labels: [{ path: '.company/work/alpha/02-plan.md', sha: sh, line: 4, label: 'fp' }] }));
+  withSha('a'.repeat(6));
+  assert.match(run(root, ['history', '--labels', f]).lines[0], /^refused: labels entry 0: sha/);
+  withSha('a'.repeat(65));
+  assert.match(run(root, ['history', '--labels', f]).lines[0], /^refused: labels entry 0: sha/);
+  withSha('a'.repeat(64));
+  assert.equal(run(root, ['history', '--labels', f]).code, 0);
 });
 
 test('hostile labels files are refused with an entry-level message and exit 3', () => {
