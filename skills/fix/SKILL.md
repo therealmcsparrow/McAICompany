@@ -10,10 +10,10 @@ argument-hint: <bug description or issue link>
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook fix` first; exit not 0 → show its output line and stop.
 
-Run with `aico:pipeline`. No Brief or Plan Gate: the bug report is the brief. **Exception:** if the fix needs a Core or Contract change, pause for a Plan Gate.
+Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md). A fix starts low only through a trusted triage record (tier-path.md step 2); without one it starts at medium. No Brief or Plan Gate: the bug report is the brief. **Exception:** if the fix needs a Core or Contract change, pause for a Plan Gate.
 
-1. `aico:qa`: reproduce the bug, write a failing regression test, and name the suspected Module.
-2. The engineer who owns that Module (backend/frontend/desktop/ai-data/game): root cause via `aico:debugging`, fix via `aico:tdd`.
-3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, and when `lanes.security` is on (`aico:pipeline` §1.7)), with Fix rounds per `aico:pipeline`.
-   **→ Ship Gate**
+1. `aico:qa`: reproduce the bug, write a failing regression test, and name the suspected Module. Then tier-set.mjs begin (tier-path.md step 5).
+2. The engineer who owns that Module (backend/frontend/desktop/ai-data/game): root cause via `aico:debugging`, fix via `aico:tdd`. After its commit, tier-set.mjs sync --diff (tier-path.md step 8).
+3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.
+   **→ Ship Gate** (after sync --diff; added lanes first)
 4. `aico:devops` if a release is needed.
