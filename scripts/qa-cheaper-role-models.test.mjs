@@ -412,8 +412,9 @@ test('commands page and feedback Playbook: the verdict line is shown in the repo
 
 test('release notes and the model section state no money, percent or saving', () => {
   const changelog = read('CHANGELOG.md');
-  const start = changelog.search(/^## \[?0\.17\.0/m);
-  assert.ok(start >= 0, 'a 0.17.0 entry exists');
+  // Before release the entry sits under [Unreleased]; release.mjs rolls it into 0.17.0.
+  const start = changelog.search(/^## \[(?:Unreleased|0\.17\.0)/m);
+  assert.ok(start >= 0, 'an [Unreleased] or 0.17.0 entry exists');
   const rest = changelog.slice(start + 1);
   const next = rest.search(/^## /m);
   const entry = next < 0 ? rest : rest.slice(0, next);

@@ -1412,7 +1412,7 @@ test('a model that came from the floor reads floor in the In effect cell', async
   await settle();
   const row = closest(modelControl(page, 'architect', 'user'), 'TR');
   const effect = row.children[row.children.length - 1];
-  assert.match(effect.textContent, /^architect · opus · .*(.*floor.*)$/);
+  assert.match(effect.textContent, /^architect · opus · .*\((?:[^()]*, )?floor\)$/);
 });
 
 test('a protected pick below the floor shows the floor in effect before saving', async () => {
