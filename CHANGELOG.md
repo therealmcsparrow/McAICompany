@@ -4,6 +4,19 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **Short path for low-risk work.** For `aico:feature` and `aico:fix`, `scripts/tier-set.mjs` picks the Roles and lanes per tier from the plugin data file `company/tier-sets.json`. At low, a feature skips the persona tester, ruleset research, and the security, compliance and hands-on lanes; a fix skips the security lane. Medium and high keep the full route. `legal` and the accessibility tester stay at every feature tier. Every Gate, the test per acceptance criterion, the fix regression test, the full suite, the reviewer pre-filter and the Handoff lint are unchanged. Contract `tier-sets` v1 (new), ADR 0034.
+- **Tier only rises.** The run tier is the highest of the triage tier, any Step's tier and a path check. Contract files, Core paths, paths with auth, payment, personal-data or migration names (whole words), and a check that cannot be answered force high. The check reads file names, not content. A short run that is raised shows `add before ship:` and those Roles run before the Ship Gate.
+- **Brief Gate options.** For a low feature the form lists what would be skipped and offers Approve, short path (Recommended) or Approve, full path. Brief, Plan and Ship Gate summaries of feature and fix runs show the path lines.
+- **Fix triage record.** `/aico:triage` also records a bug at risk low routed to `aico:fix`, and `triage check --route fix` proves it. Without that record a fix starts at medium. Contracts `run-state` v1.4 and `company-type` v1.4 (additive).
+- **Short path setting.** `pipeline.short_path`, `on` or `off`, default `on`, with a row on the settings page. A project can only turn it off; off wins. Contract `aico-settings` v1.8 (additive).
+- **Run record.** `.company/work/<slug>/tier-path.jsonl` holds enums, whole numbers, a commit sha and UTC times. The ledger gets `meta.pb`, `meta.sets`, `ship.path` and `ship.raised`, and the scorecard shows `path short`. Paths found by the check are shown, not stored. Contract `token-ledger` v1.4 (additive).
+- **Low-path verdict.** `/aico:feedback` quotes two lines from `ledger.mjs low-path-verdict` under `## Low path`: `pass`, `fail` or `insufficient (n=<k>)`, for feature and fix. It never blocks a Step or a Gate. The parallel verdict and the plan-check verdict leave short runs out (`plan-check` v1.1, additive).
+
+### Changed
+- If the data file is refused, or a script step fails, both Playbooks use the high set. A change never makes a run shorter.
+- Rollback, in order: set `pipeline.short_path` to `off` in `/aico:settings`; then change the data file in a release with a new `rev`.
+
 ## [0.18.0] - 2026-10-28
 
 ### Added
