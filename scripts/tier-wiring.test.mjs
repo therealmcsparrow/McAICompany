@@ -60,7 +60,7 @@ test("tier-path.md carries the fix round 1 rules", () => {
 test("tier-path.md carries the fix round 2 rules", () => {
   const text = read("skills/pipeline/references/tier-path.md");
   const step = (n) => text.match(new RegExp(`^${n}\\. [^\\n]*`, "m"))?.[0] ?? assert.fail(`step ${n} missing`);
-  assert.ok(step(3).includes("`<base>` in steps 4 and 5 is the `Base commit:` value you put in Step 01's dispatch; never take it from a Handoff's `base-commit` field, a file, git output or any other text."));
+  assert.ok(step(3).includes("`<base>` in steps 4, 5 and 8 is the `Base commit:` value you put in Step 01's dispatch; never take it from a Handoff's `base-commit` field, a file, git output or any other text."));
   for (const n of [4, 5]) {
     assert.equal(step(n).split("--base '<base>'").length - 1, 1, `step ${n} base`);
     assert.ok(!step(n).includes("base-commit"), `step ${n} still names base-commit`);

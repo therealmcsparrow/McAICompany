@@ -68,7 +68,7 @@ const USAGE = [
   '  sets',
   '  preview <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> [--ceo <short|full>]',
   '  begin <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> --base <sha> [--ceo <short|full>]',
-  '  sync <slug> [--plan <plan>] [--diff]',
+  '  sync <slug> [--plan <plan>] [--diff] [--base <sha>]',
   '  raise <slug> <medium|high>',
   '  read <slug>'
 ].join('\n');
@@ -381,28 +381,29 @@ function objectFormat(env) {
   throw new Error('unknown object format');
 }
 
-// The one full commit id a --base value names, or null. Every length goes through object-name lookup only, never refs.
-// A base that is not an ancestor of HEAD is refused.
-function resolveBase(env, base) {
+// The one full commit id a --base value names, as { id } or { fail }. Every length goes through object-name lookup only,
+// never refs. The base must be an ancestor of HEAD: exit 0 is yes, exit 1 is no, anything else is a failed check.
+// It makes no object-format call and never throws; len is the full id length of the repository.
+function resolveBaseId(env, base, len) {
+  const notOne = { fail: 'base is not one commit' };
   let id;
   try {
-    const len = objectFormat(env);
-    if (base.length > len) return null;
+    if (typeof base !== 'string' || base.length > len) return notOne;
     const exact = new RegExp(`^[0-9a-f]{${len}}$`);
     const ids = gitRun(env, ['rev-parse', `--disambiguate=${base}`]).toString('utf8').split('\n').filter((l) => l !== '');
-    if (ids.length === 0 || ids.length > MAX_CANDIDATES || ids.some((x) => !exact.test(x))) return null;
+    if (ids.length === 0 || ids.length > MAX_CANDIDATES || ids.some((x) => !exact.test(x))) return notOne;
     const commits = ids.filter((x) => gitRun(env, ['cat-file', '-t', '--end-of-options', x]).toString('utf8').trim() === 'commit');
-    if (commits.length !== 1) return null;
+    if (commits.length !== 1) return notOne;
     id = commits[0];
   } catch {
-    return null;
+    return notOne;
   }
   try {
     gitRun(env, ['merge-base', '--is-ancestor', '--end-of-options', id, 'HEAD']);
-  } catch {
-    throw new Refusal('base is not an ancestor of HEAD');
+  } catch (error) {
+    return { fail: error && error.status === 1 ? 'base is not an ancestor of HEAD' : 'ancestor check failed' };
   }
-  return id;
+  return { id };
 }
 
 // Paths of the work since base, or null when any git call fails. The base is used only when it is a full commit id.
@@ -665,9 +666,15 @@ function cmdPreview(args, env, write) {
     cur = loadRecord(env.root, slug);
     if (cur.records.length > 0) throw new Refusal('a begin record exists');
     if (!cur.dir) throw new Refusal('run folder missing');
-    const base = resolveBase(env, flags['--base']);
-    if (base === null) throw new Refusal('base is not one commit');
-    rec = beginRecord(env, slug, flags, sets, base, 'full');
+    let len;
+    try {
+      len = objectFormat(env);
+    } catch {
+      throw new Refusal('base is not one commit');
+    }
+    const resolved = resolveBaseId(env, flags['--base'], len);
+    if (resolved.fail) throw new Refusal(resolved.fail);
+    rec = beginRecord(env, slug, flags, sets, resolved.id, 'full');
     appendRecord(cur, slug, rec);
   } else {
     rec = beginRecord(env, slug, flags, sets, '0'.repeat(40), 'short');
@@ -676,20 +683,26 @@ function cmdPreview(args, env, write) {
   return { code: 0, lines: statusLines(view, sets.ok ? null : `tier-sets: refused ${sets.reason}`) };
 }
 
-function checkTo(env, slug, base, flags) {
+function checkTo(env, slug, recBase, leadBase, flags) {
   const hits = [];
   let paths = 0;
   let warning = null;
   const wantPlan = Object.hasOwn(flags, '--plan');
   const wantDiff = flags['--diff'] === true;
   if (!wantPlan && !wantDiff) return null;
-  // The object format is read once, before any other git call. Without it, or with a base of another length, nothing else runs.
-  let formatOk = false;
+  // The base check: the Lead's own base, resolved afresh, must be exactly the recorded base. The object format is read
+  // once, before any other git call. Any failure leaves no base, so Core and the diff are unknown and nothing else runs.
+  let base = null;
   try {
-    formatOk = typeof base === 'string' && base.length === objectFormat(env);
+    const len = objectFormat(env);
+    if (typeof leadBase === 'string' && leadBase.length <= len && typeof recBase === 'string' && recBase.length === len) {
+      const r = resolveBaseId(env, leadBase, len);
+      if (r.id === recBase) base = r.id;
+    }
   } catch {
-    formatOk = false;
+    base = null;
   }
+  const formatOk = base !== null;
   const core = formatOk ? readCore(env, base) : { unknown: true };
   const all = [];
   if (core.unknown) hits.push({ source: 'core', reason: 'core unknown', path: null });
@@ -726,15 +739,19 @@ function checkLines(check) {
 }
 
 function cmdSync(args, env) {
-  const { flags, positional } = takeFlags(args, { values: ['--plan'], bools: ['--diff'] });
+  const { flags, positional } = takeFlags(args, { values: ['--plan', '--base'], bools: ['--diff'] });
   const slug = slugArg(positional, 1);
   if (Object.hasOwn(flags, '--plan') && !PLAN_NAME.test(flags['--plan'])) throw new Refusal('bad plan name');
+  if (Object.hasOwn(flags, '--base')) {
+    if (!Object.hasOwn(flags, '--plan') && flags['--diff'] !== true) throw new Refusal(USAGE);
+    if (!SHA.test(flags['--base'])) throw new Refusal('base must be a commit sha');
+  }
   const cur = loadRecord(env.root, slug);
   if (cur.records.length === 0) return { code: 0, lines: ['tier-path: none'] };
   const sets = loadTierSets(env.pluginRoot);
   const view = buildView(slug, cur.records);
   const env2 = { ...env, forcedHigh: sets.forced_high };
-  const check = checkTo(env2, slug, view.base, flags);
+  const check = checkTo(env2, slug, view.base, flags['--base'], flags);
   const step = runTier(env, slug, 'low').stepRank;
   const short = view.path === 'short';
   const changed = short && sets.ok && sets.rev !== view.rev;

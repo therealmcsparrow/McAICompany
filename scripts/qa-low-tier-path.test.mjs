@@ -71,7 +71,7 @@ function world(t, { slug = SLUG, data, project = '## Core\n- skills/pipeline: ru
       return Buffer.from(repo.format);
     }
     if (sub[0] === 'merge-base' && sub[1] === '--is-ancestor') {
-      if (!repo.ancestor) throw new Error('not an ancestor');
+      if (!repo.ancestor) throw Object.assign(new Error('not an ancestor'), { status: 1 });
       return Buffer.alloc(0);
     }
     if (sub[0] === 'rev-parse' && sub[1] === `--disambiguate=${FULL}`) return Buffer.from(repo.ids.filter((x) => x === FULL).map((x) => `${x}\n`).join(''));
@@ -327,7 +327,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const w = world(t);
     w.begin();
     w.plan(fixture('feature-plan.md').replace('documentation/concepts.md', 'skills/pipeline/SKILL.md, src/auth/login.ts'));
-    const r = w.run('sync', SLUG, '--plan', '02-plan.md');
+    const r = w.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(r), 'high');
     assert.equal(line(r, 'path: '), 'path: short, raised to high (plan)');
     assert.ok(r.lines.includes('check: high: contract docs/contracts/aico-settings.md'));
@@ -342,13 +342,13 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const dirty = world(t);
     dirty.begin();
     dirty.plan(fixture('feature-plan.md'));
-    const d = dirty.run('sync', SLUG, '--plan', '02-plan.md');
+    const d = dirty.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(d), 'high');
     assert.ok(d.lines.includes('check: high: contract docs/contracts/aico-settings.md'));
     const clean = world(t);
     clean.begin();
     clean.plan(fixture('feature-plan-clean.md'));
-    const c = clean.run('sync', SLUG, '--plan', '02-plan.md');
+    const c = clean.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(c), 'low');
     assert.ok(c.lines.includes('check: 2 paths, none forced high'));
     assert.equal(clean.records().length, 1);
@@ -358,7 +358,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const w = world(t);
     w.begin();
     w.diff(fixture('feature-diff.txt'));
-    const r = w.run('sync', SLUG, '--diff');
+    const r = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(tierOf(r), 'high');
     assert.ok(r.lines.includes('check: high: pattern billing src/billing/invoice.ts'));
     assert.deepEqual(addOf(r), FEATURE_SKIPPED);
@@ -369,7 +369,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const w = world(t);
     w.begin('fix');
     w.diff(fixture('fix-diff.txt'));
-    const r = w.run('sync', SLUG, '--diff');
+    const r = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(r.lines[0], 'tier-path: fix tier high path short rev 1');
     assert.ok(r.lines.includes('check: high: pattern auth src/auth/session.ts'));
     assert.deepEqual(addOf(r), ['security']);
@@ -381,7 +381,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const w = world(t);
     w.begin('fix');
     w.diff(fixture('clean-diff.txt'));
-    const r = w.run('sync', SLUG, '--diff');
+    const r = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(r.lines[0], 'tier-path: fix tier low path short rev 1');
     assert.equal(addOf(r).length, 0);
     assert.ok(r.lines.includes('check: 2 paths, none forced high'));
@@ -390,19 +390,19 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
   test('AC4 an unknowable check is a hit: git failing, a plan without files, a missing project file', (t) => {
     const failing = world(t);
     failing.begin();
-    const r1 = tierSet(['sync', SLUG, '--diff'], { now: NOW, root: failing.root, pluginRoot: failing.pluginRoot, git: () => { throw new Error('git is gone'); } });
+    const r1 = tierSet(['sync', SLUG, '--diff', '--base', SHA], { now: NOW, root: failing.root, pluginRoot: failing.pluginRoot, git: () => { throw new Error('git is gone'); } });
     assert.equal(tierOf(r1), 'high');
     assert.ok(r1.lines.includes('check: high: diff unknown'));
     const noFiles = world(t);
     noFiles.begin();
     noFiles.plan('# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- depends-on: none\n- parallel: yes\n');
-    const r2 = noFiles.run('sync', SLUG, '--plan', '02-plan.md');
+    const r2 = noFiles.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(r2), 'high');
     assert.ok(r2.lines.includes('check: high: plan files unknown'));
     const noProject = world(t, { project: null });
     noProject.begin();
     noProject.plan(fixture('feature-plan-clean.md'));
-    const r3 = noProject.run('sync', SLUG, '--plan', '02-plan.md');
+    const r3 = noProject.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(r3), 'high');
     assert.ok(r3.lines.includes('check: high: core unknown'));
   });
@@ -411,7 +411,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const w = world(t);
     w.begin();
     w.diff('scripts/lessons.mjs\nscripts/personality.mjs\n.company/work/x/18-security.md\n');
-    const r = w.run('sync', SLUG, '--diff');
+    const r = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(tierOf(r), 'low');
     assert.ok(r.lines.includes('check: 3 paths, none forced high'));
     assert.equal(FORCED_HIGH_V1.length, 58);
@@ -420,8 +420,8 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
   test('AC4 the check points are in the Playbooks: feature before the Plan Gate and Ship Gate, fix after step 2 and before the Ship Gate', () => {
     const tierPath = read('skills/pipeline/references/tier-path.md');
     const step8 = tierPath.split('\n').find((l) => l.startsWith('8. **Sync.**'));
-    assert.match(step8, /`sync '<slug>' --plan '<plan>'` before the Plan Gate \(feature\)/);
-    assert.match(step8, /`sync '<slug>' --diff` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)/);
+    assert.match(step8, /`sync '<slug>' --plan '<plan>' --base '<base>'` before the Plan Gate \(feature\)/);
+    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. A plain `sync '<slug>'` takes no `--base`\./);
     assert.match(step8, /add before ship:/);
     const feature = read('skills/feature/SKILL.md');
     assert.match(feature, /\*\*→ Plan Gate\*\*[^\n]*tier-path\.md step 8 checks the plan first/);
@@ -449,9 +449,9 @@ function scenario(t, pb, hostile) {
   out.begin = w.begin(pb);
   out.sync0 = w.run('sync', SLUG);
   w.plan(fixture('feature-plan-clean.md'));
-  out.plan = w.run('sync', SLUG, '--plan', '02-plan.md');
+  out.plan = w.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
   w.diff(fixture('clean-diff.txt'));
-  out.diff = w.run('sync', SLUG, '--diff');
+  out.diff = w.run('sync', SLUG, '--diff', '--base', SHA);
   w.step('03', 'backend-engineer', 'low', text('handoff-body.md', '## Did\n- done\n'));
   out.step = w.run('sync', SLUG);
   out.records = w.records();
@@ -519,7 +519,7 @@ describe('AC5 text from any source cannot change the set or the tier', () => {
     const w = world(t);
     w.begin();
     w.plan(`# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: ${fixture('injection', 'request.txt').split('\n')[1]}\n- depends-on: none\n- parallel: yes\n`);
-    const r = w.run('sync', SLUG, '--plan', '02-plan.md');
+    const r = w.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(r), 'high');
     assert.deepEqual(setOf(r), [...ROUTE_V018.feature]);
   });
@@ -805,7 +805,7 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     const l = ledgerWorld(t);
     l.w.begin('fix');
     l.w.diff(fixture('fix-diff.txt'));
-    l.w.run('sync', SLUG, '--diff');
+    l.w.run('sync', SLUG, '--diff', '--base', SHA);
     l.call('ship', SLUG, '1');
     const ship = l.lines(SLUG).find((x) => x.kind === 'ship');
     assert.deepEqual(ship, { v: 1, run: SLUG, kind: 'ship', acs: 1, tier: 'high', path: 'short', raised: 1 });
@@ -855,7 +855,7 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     const l = ledgerWorld(t);
     l.w.begin();
     l.w.diff(fixture('fix-diff.txt'));
-    l.w.run('sync', SLUG, '--diff');
+    l.w.run('sync', SLUG, '--diff', '--base', SHA);
     l.call('ship', SLUG, '2');
     const text = fs.readFileSync(l.file(SLUG), 'utf8');
     assert.doesNotMatch(text, /abcdef|cause|auth|session|why|base|\.ts|src\//);
@@ -1417,7 +1417,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     fs.writeFileSync(path.join(w.root, 'src', 'auth', 'x.ts'), 'export {};\n');
     run('add', '-A');
     run('commit', '-q', '-m', 'work');
-    const s = call('sync', SLUG, '--diff');
+    const s = call('sync', SLUG, '--diff', '--base', short);
     assert.equal(tierOf(s), 'high');
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/x.ts'), s.lines.join('\n'));
   });
@@ -1438,7 +1438,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     w.begin();
     fs.writeFileSync(path.join(w.root, '.company', 'project.md'), '## Core\n- elsewhere/only: x\n');
     w.diff('skills/pipeline/SKILL.md\n');
-    const r = w.run('sync', SLUG, '--diff');
+    const r = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(tierOf(r), 'high');
     assert.ok(r.lines.includes('check: high: core skills/pipeline/SKILL.md'));
     const blob = w.calls.find((c) => c.args[4] === 'cat-file' && c.args[5] === 'blob');
@@ -1447,7 +1447,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     other.begin();
     fs.writeFileSync(path.join(other.root, '.company', 'project.md'), '## Core\n- docs/plain: x\n');
     other.diff('docs/plain/a.md\n');
-    const o = other.run('sync', SLUG, '--diff');
+    const o = other.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(tierOf(o), 'low', 'a Core line added after the base commit is not read');
     assert.ok(o.lines.includes('check: 1 paths, none forced high'));
   });
@@ -1457,7 +1457,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     w.begin();
     w.repo.project = null;
     w.plan(fixture('feature-plan-clean.md'));
-    const r = w.run('sync', SLUG, '--plan', '02-plan.md');
+    const r = w.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(tierOf(r), 'high');
     assert.ok(r.lines.includes('check: high: core unknown'));
   });
@@ -1467,7 +1467,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     w.begin();
     w.repo.project = '## Modules\n- a\n';
     w.diff('docs/plain/a.md\n');
-    const r = w.run('sync', SLUG, '--diff');
+    const r = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.ok(r.lines.includes('check: high: core unknown'));
   });
 
@@ -1477,20 +1477,20 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       const d = world(t, { project: empty });
       d.begin();
       d.diff(`${file}\n`);
-      const r = d.run('sync', SLUG, '--diff');
+      const r = d.run('sync', SLUG, '--diff', '--base', SHA);
       assert.equal(tierOf(r), 'high', file);
       assert.ok(r.lines.includes(`check: high: core ${file}`), file);
       const p = world(t, { project: empty });
       p.begin();
       p.plan(`# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: ${file}\n- depends-on: none\n- parallel: yes\n`);
-      const q = p.run('sync', SLUG, '--plan', '02-plan.md');
+      const q = p.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
       assert.equal(tierOf(q), 'high', file);
       assert.ok(q.lines.includes(`check: high: core ${file}`), file);
     }
     const other = world(t, { project: empty });
     other.begin();
     other.diff('.company/work/demo/02-plan.md\n.company/roadmap/x.md\n');
-    assert.equal(tierOf(other.run('sync', SLUG, '--diff')), 'low', 'other .company files stay exempt');
+    assert.equal(tierOf(other.run('sync', SLUG, '--diff', '--base', SHA)), 'low', 'other .company files stay exempt');
   });
 
   describe('skips come from the record', () => {
@@ -1597,7 +1597,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
         const w = world(t);
         w.begin();
         w.diff(`${file}\n`);
-        const r = w.run('sync', SLUG, '--diff');
+        const r = w.run('sync', SLUG, '--diff', '--base', SHA);
         assert.equal(tierOf(r), 'high');
         assert.ok(r.lines.includes(`check: high: pattern ${token} ${file}`), r.lines.join('\n'));
       });
@@ -1607,7 +1607,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       const w = world(t);
       w.begin();
       w.diff('scripts/lessons.mjs\nscripts/personality.mjs\n.company/work/x/18-security.md\nsrc/Mfaction.ts\nsrc/Jwtless.ts\n');
-      const r = w.run('sync', SLUG, '--diff');
+      const r = w.run('sync', SLUG, '--diff', '--base', SHA);
       assert.equal(tierOf(r), 'low', r.lines.join('\n'));
     });
   });
@@ -1662,7 +1662,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     r.commit('src/web/login.js', 'export {};\n', 'login');
     r.g('replace', base, repl);
     assert.equal(r.g('diff', '--name-only', base, 'HEAD', '--', 'src'), '', 'plain git is blind to the file');
-    const s = r.call('sync', SLUG, '--diff');
+    const s = r.call('sync', SLUG, '--diff', '--base', base.slice(0, 12));
     assert.equal(tierOf(s), 'high', s.lines.join('\n'));
     assert.ok(s.lines.includes('check: high: pattern login src/web/login.js'), s.lines.join('\n'));
   });
@@ -1676,7 +1676,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
         const w = world(t);
         w.begin();
         w.diff('docs/a.md\n');
-        w.run('sync', SLUG, '--diff');
+        w.run('sync', SLUG, '--diff', '--base', SHA);
         assert.ok(w.calls.length > 5);
         for (const c of w.calls) {
           assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX, `inherited ${inherited}`);
@@ -1689,7 +1689,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     }
   });
 
-  test('a base that is not an ancestor of HEAD exits 3 with the refusal and writes no record; a failing check counts the same', (t) => {
+  test('a base that is not an ancestor of HEAD exits 3 with the refusal and writes no record; a failing check is its own refusal', (t) => {
     const w = world(t);
     w.repo.ancestor = false;
     const r = w.begin();
@@ -1708,7 +1708,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
       }
     });
     assert.equal(out.code, 3);
-    assert.ok(out.lines.includes('refused: base is not an ancestor of HEAD'), out.lines.join('\n'));
+    assert.ok(out.lines.includes('refused: ancestor check failed'), out.lines.join('\n'));
     assert.equal(gone.records().length, 0);
   });
 
@@ -1741,7 +1741,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     w.begin();
     w.repo.format = 'sha512\n';
     w.diff('docs/a.md\n');
-    const s = w.run('sync', SLUG, '--diff');
+    const s = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(tierOf(s), 'high');
     assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
     assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
@@ -1753,7 +1753,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     w.repo.format = 'sha256\n';
     w.diff('docs/a.md\n');
     const before = w.calls.length;
-    const s = w.run('sync', SLUG, '--diff');
+    const s = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(tierOf(s), 'high');
     assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
     assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
@@ -1763,7 +1763,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     plain.repo.format = 'sha256\n';
     plain.plan(fixture('feature-plan-clean.md'));
     const before2 = plain.calls.length;
-    const p = plain.run('sync', SLUG, '--plan', '02-plan.md');
+    const p = plain.run('sync', SLUG, '--plan', '02-plan.md', '--base', SHA);
     assert.ok(p.lines.includes('check: high: core unknown'), p.lines.join('\n'));
     assert.equal(plain.calls.length - before2, 1);
   });
@@ -1786,7 +1786,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     assert.equal(b.code, 0, b.lines.join('\n'));
     assert.equal(r.w.records()[0].base, base);
     r.commit('src/auth/login.js', 'export {};\n', 'auth');
-    const s = r.call('sync', SLUG, '--diff');
+    const s = r.call('sync', SLUG, '--diff', '--base', base.slice(0, 40));
     assert.equal(tierOf(s), 'high', s.lines.join('\n'));
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/login.js'), s.lines.join('\n'));
   });
@@ -1804,16 +1804,16 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     const file = path.join(w.work, 'tier-path.jsonl');
     const kept = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l !== '' && JSON.parse(l).ev !== 'raise');
     fs.writeFileSync(file, kept.join('\n') + '\n');
-    const after = w.run('sync', SLUG, '--diff');
+    const after = w.run('sync', SLUG, '--diff', '--base', SHA);
     assert.equal(after.code, 0);
     const rank = { low: 0, medium: 1, high: 2 };
     assert.ok(rank[tierOf(after)] < rank[tierOf(raised)], 'line 1 is lower than the highest tier seen, so step 11 applies');
   });
 
-  test('steps 4 and 5 take the base only from the dispatch value named in step 3', () => {
+  test('steps 4, 5 and 8 take the base only from the dispatch value named in step 3', () => {
     const text = read('skills/pipeline/references/tier-path.md');
-    assert.match(text, /`<base>` in steps 4 and 5 is the `Base commit:` value you put in Step 01's dispatch; never take it from a Handoff's `base-commit` field/);
-    assert.equal(text.split("--base '<base>'").length - 1, 2);
+    assert.match(text, /`<base>` in steps 4, 5 and 8 is the `Base commit:` value you put in Step 01's dispatch; never take it from a Handoff's `base-commit` field/);
+    assert.equal(text.split("--base '<base>'").length - 1, 4);
     assert.doesNotMatch(text, /Step 01 base-commit/);
   });
 });

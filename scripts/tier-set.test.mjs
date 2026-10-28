@@ -387,7 +387,7 @@ describe('sync', () => {
     const f = fixture();
     f.begin();
     withPlan(f, PLAN('docs/contracts/x.md, skills/pipeline/SKILL.md, src/auth/login.ts, scripts/lessons.mjs'));
-    const r = f.run('sync', f.slug, '--plan', '02-plan.md');
+    const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
     assert.deepEqual(f.lines()[1], { v: 1, at: '2026-10-28T12:00:00Z', ev: 'raise', tier: 'high', cause: 'plan' });
     assert.ok(r.lines.includes('check: high: contract docs/contracts/x.md'));
     assert.ok(r.lines.includes('check: high: core skills/pipeline/SKILL.md'));
@@ -399,7 +399,7 @@ describe('sync', () => {
     const f = fixture();
     f.begin();
     withPlan(f, PLAN('scripts/lessons.mjs, scripts/personality.mjs'));
-    const r = f.run('sync', f.slug, '--plan', '02-plan.md');
+    const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(r.lines.at(-1), 'check: 2 paths, none forced high');
     assert.equal(f.lines().length, 1);
   });
@@ -409,7 +409,7 @@ describe('sync', () => {
       const f = fixture();
       f.begin();
       if (text !== null) withPlan(f, text);
-      const r = f.run('sync', f.slug, '--plan', '02-plan.md');
+      const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
       assert.ok(r.lines.includes('check: high: plan files unknown'), JSON.stringify(r.lines));
       assert.equal(f.lines()[1].tier, 'high');
       assert.equal(f.lines()[1].cause, 'plan');
@@ -419,7 +419,7 @@ describe('sync', () => {
     const f = fixture();
     f.begin();
     withPlan(f, PLAN(Array.from({ length: 8 }, (_, i) => `src/auth/f${i}.ts`).join(', ')));
-    const r = f.run('sync', f.slug, '--plan', '02-plan.md');
+    const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
     assert.equal(r.lines.filter((l) => l.startsWith('check: high:')).length, 5);
     assert.ok(r.lines.includes('check: +3 more'));
   });
@@ -428,7 +428,7 @@ describe('sync', () => {
       const f = fixture({ project });
       f.begin();
       withPlan(f, PLAN('scripts/lessons.mjs'));
-      assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md').lines.includes('check: high: core unknown'));
+      assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA).lines.includes('check: high: core unknown'));
       assert.equal(f.lines()[1].tier, 'high');
     }
   });
@@ -437,7 +437,7 @@ describe('sync', () => {
     const f = fixture({ project });
     f.begin();
     withPlan(f, PLAN('skills/pipeline/a.md, skills/hidden/a.md, skills/after/a.md'));
-    const r = f.run('sync', f.slug, '--plan', '02-plan.md');
+    const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
     assert.ok(r.lines.includes('check: high: core skills/pipeline/a.md'));
     assert.ok(!r.lines.some((l) => l.includes('skills/hidden') || l.includes('skills/after')));
     assert.ok(r.lines.includes('warning: 2 core items are not paths, not checked'));
@@ -451,12 +451,15 @@ describe('sync', () => {
       if (sub[0] === 'ls-files') return Buffer.alloc(0);
       return undefined;
     });
-    const hit = f.run('sync', f.slug, '--diff');
+    const hit = f.run('sync', f.slug, '--diff', '--base', SHA);
     assert.ok(hit.lines.includes('check: high: pattern auth src/auth/session.ts'));
     assert.equal(f.lines()[1].cause, 'diff');
     const diffFlags = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options'];
     assert.deepEqual(f.calls.map((c) => c.args), [
       FORMAT,
+      git('rev-parse', `--disambiguate=${SHA}`),
+      git('cat-file', '-t', '--end-of-options', RESOLVED),
+      ANCESTOR(RESOLVED),
       git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`),
       git('cat-file', '-e', '--end-of-options', `${RESOLVED}^{commit}`),
       git('diff', ...diffFlags, RESOLVED, 'HEAD', '--'),
@@ -472,7 +475,7 @@ describe('sync', () => {
     const g = fixture();
     g.begin();
     g.setGit((sub) => (sub[0] === 'diff' || sub[0] === 'ls-files' ? Buffer.from('docs/a.md\0docs/b.md\0') : undefined));
-    assert.equal(g.run('sync', g.slug, '--diff').lines.at(-1), 'check: 2 paths, none forced high');
+    assert.equal(g.run('sync', g.slug, '--diff', '--base', SHA).lines.at(-1), 'check: 2 paths, none forced high');
     assert.equal(g.lines().length, 1);
 
     const failures = [
@@ -484,7 +487,7 @@ describe('sync', () => {
       const h = fixture();
       h.begin();
       h.setGit(impl);
-      assert.ok(h.run('sync', h.slug, '--diff').lines.includes('check: high: diff unknown'));
+      assert.ok(h.run('sync', h.slug, '--diff', '--base', SHA).lines.includes('check: high: diff unknown'));
       assert.equal(h.lines()[1].cause, 'diff');
     }
   });
@@ -492,7 +495,7 @@ describe('sync', () => {
     const f = fixture();
     f.begin();
     f.setGit((sub) => (sub[0] === 'diff' ? Buffer.from('src/auth/we ird.ts\0') : undefined));
-    assert.ok(f.run('sync', f.slug, '--diff').lines.includes('check: high: pattern auth ?'));
+    assert.ok(f.run('sync', f.slug, '--diff', '--base', SHA).lines.includes('check: high: pattern auth ?'));
     assert.ok(!fs.readFileSync(f.record, 'utf8').includes('ird'));
   });
   test('a data file changed after begin raises to high (cause sets)', () => {
@@ -528,13 +531,13 @@ describe('sync', () => {
     f.begin();
     fs.writeFileSync(f.dataFile, '{');
     f.setGit((sub) => (sub[0] === 'diff' ? Buffer.from('src/auth/x.ts\0') : undefined));
-    f.run('sync', f.slug, '--diff');
+    f.run('sync', f.slug, '--diff', '--base', SHA);
     assert.equal(f.lines()[1].cause, 'sets');
     const g = fixture();
     g.begin();
     g.setGit((sub) => (sub[0] === 'diff' ? Buffer.from('src/auth/x.ts\0') : undefined));
     withPlan(g, PLAN('src/auth/y.ts'));
-    g.run('sync', g.slug, '--plan', '02-plan.md', '--diff');
+    g.run('sync', g.slug, '--plan', '02-plan.md', '--diff', '--base', SHA);
     assert.equal(g.lines()[1].cause, 'diff');
   });
 });
@@ -700,7 +703,7 @@ describe('real artefacts', () => {
     const f = fixture({ project: fs.readFileSync(project, 'utf8'), slug: 'parallel-cap' });
     fs.copyFileSync(plan, path.join(f.dir, '02-plan.md'));
     f.run('begin', 'parallel-cap', ...BEGIN_LOW, '--base', SHA);
-    const r = f.run('sync', 'parallel-cap', '--plan', '02-plan.md');
+    const r = f.run('sync', 'parallel-cap', '--plan', '02-plan.md', '--base', SHA);
     const text = r.lines.join('\n');
     assert.match(text, /check: high: contract docs\/contracts\//);
     assert.match(text, /check: high: core /);
@@ -799,7 +802,7 @@ describe('fix round: hostile and contract cases', () => {
       process.env.GIT_TERMINAL_PROMPT = inherited;
       const f = fixture();
       f.begin();
-      f.run('sync', f.slug, '--plan', '02-plan.md', '--diff');
+      f.run('sync', f.slug, '--plan', '02-plan.md', '--diff', '--base', SHA);
       assert.ok(f.calls.length >= 8);
       for (const c of f.calls) {
         assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX);
@@ -810,16 +813,20 @@ describe('fix round: hostile and contract cases', () => {
     }
   });
   test('a base that is not an ancestor of HEAD, or an ancestor check that fails, exits 3 with no record', () => {
-    for (const impl of [
-      (sub) => { if (sub[0] === 'merge-base') throw Object.assign(new Error('exit 1'), { status: 1 }); return undefined; },
-      (sub) => { if (sub[0] === 'merge-base') throw Object.assign(new Error('exit 128'), { status: 128 }); return undefined; },
-      (sub) => { if (sub[0] === 'merge-base') throw new Error('boom'); return undefined; }
+    const exit = (status) => (sub) => { if (sub[0] === 'merge-base') throw Object.assign(new Error('merge-base'), { status }); return undefined; };
+    for (const [impl, refused] of [
+      [exit(1), 'base is not an ancestor of HEAD'],
+      [exit(128), 'ancestor check failed'],
+      [exit(null), 'ancestor check failed'],
+      [exit(undefined), 'ancestor check failed'],
+      [exit('1'), 'ancestor check failed'],
+      [(sub) => { if (sub[0] === 'merge-base') throw new Error('output too large'); return undefined; }, 'ancestor check failed']
     ]) {
       const f = fixture();
       f.setGit(impl);
       const r = f.begin();
       assert.equal(r.code, 3);
-      assert.equal(r.lines[0], 'refused: base is not an ancestor of HEAD');
+      assert.equal(r.lines[0], `refused: ${refused}`);
       noRecord(f);
     }
   });
@@ -842,7 +849,7 @@ describe('fix round: hostile and contract cases', () => {
       g.begin();
       g.calls.length = 0;
       g.setGit(impl);
-      const s = g.run('sync', g.slug, '--diff');
+      const s = g.run('sync', g.slug, '--diff', '--base', SHA);
       assert.ok(s.lines.includes('check: high: core unknown'));
       assert.ok(s.lines.includes('check: high: diff unknown'));
       assert.deepEqual(g.calls.map((c) => c.args), [FORMAT]);
@@ -857,7 +864,7 @@ describe('fix round: hostile and contract cases', () => {
     f.begin();
     f.calls.length = 0;
     f.setGit((sub) => (isFormat(sub) ? Buffer.from('sha256\n') : undefined));
-    const s = f.run('sync', f.slug, '--diff');
+    const s = f.run('sync', f.slug, '--diff', '--base', SHA);
     assert.ok(s.lines.includes('check: high: core unknown'));
     assert.ok(s.lines.includes('check: high: diff unknown'));
     assert.deepEqual(f.calls.map((c) => c.args), [FORMAT]);
@@ -865,9 +872,9 @@ describe('fix round: hostile and contract cases', () => {
     const g = fixture();
     g.begin();
     g.calls.length = 0;
-    const p = g.run('sync', g.slug, '--plan', '02-plan.md');
+    const p = g.run('sync', g.slug, '--plan', '02-plan.md', '--base', SHA);
     assert.ok(p.lines.includes('check: high: plan files unknown'));
-    assert.deepEqual(g.calls.map((c) => c.args), [FORMAT, git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`)]);
+    assert.deepEqual(g.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${SHA}`), git('cat-file', '-t', '--end-of-options', RESOLVED), ANCESTOR(RESOLVED), git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`)]);
   });
   test('a sha1 repository refuses a 64 hex base', () => {
     const f = fixture();
@@ -921,7 +928,7 @@ describe('fix round: hostile and contract cases', () => {
     f.begin();
     fs.writeFileSync(path.join(f.root, '.company', 'project.md'), '## Core\n');
     fs.writeFileSync(path.join(f.dir, '02-plan.md'), PLAN('skills/pipeline/a.md'));
-    const r = f.run('sync', f.slug, '--plan', '02-plan.md');
+    const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
     assert.ok(r.lines.includes('check: high: core skills/pipeline/a.md'));
   });
   test('project.md absent at the base commit is core unknown', () => {
@@ -929,7 +936,7 @@ describe('fix round: hostile and contract cases', () => {
     fs.writeFileSync(path.join(f.root, '.company', 'project.md'), '## Core\n- skills/pipeline: x\n');
     f.begin();
     fs.writeFileSync(path.join(f.dir, '02-plan.md'), PLAN('scripts/lessons.mjs'));
-    assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md').lines.includes('check: high: core unknown'));
+    assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA).lines.includes('check: high: core unknown'));
   });
   test('a Core file over 64 KiB or not UTF-8 is core unknown', () => {
     for (const blob of [Buffer.from(`## Core\n${'x'.repeat(64 * 1024)}`), Buffer.from([0x23, 0xff, 0xfe])]) {
@@ -937,7 +944,7 @@ describe('fix round: hostile and contract cases', () => {
       f.begin();
       f.setGit((sub) => (sub[1] === 'blob' ? blob : undefined));
       fs.writeFileSync(path.join(f.dir, '02-plan.md'), PLAN('scripts/lessons.mjs'));
-      assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md').lines.includes('check: high: core unknown'));
+      assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA).lines.includes('check: high: core unknown'));
     }
   });
   test('each CORE_FIXED path is a core hit in a plan and in a diff, even with an empty Core', () => {
@@ -946,11 +953,11 @@ describe('fix round: hostile and contract cases', () => {
       const f = fixture({ project: '## Core\n' });
       f.begin();
       fs.writeFileSync(path.join(f.dir, '02-plan.md'), PLAN(p));
-      assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md').lines.includes(`check: high: core ${p}`), p);
+      assert.ok(f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA).lines.includes(`check: high: core ${p}`), p);
       const g = fixture({ project: '## Core\n' });
       g.begin();
       g.setGit((sub) => (sub[0] === 'diff' && sub.includes(RESOLVED) ? Buffer.from(`${p}\0`) : undefined));
-      assert.ok(g.run('sync', g.slug, '--diff').lines.includes(`check: high: core ${p}`), p);
+      assert.ok(g.run('sync', g.slug, '--diff', '--base', SHA).lines.includes(`check: high: core ${p}`), p);
     }
     assert.deepEqual(checkPaths(['.company/work/x/02-plan.md'], { core: [] }), []);
   });
@@ -983,6 +990,105 @@ describe('fix round: hostile and contract cases', () => {
     const h = shipped();
     h.forced_high = ['zz', ...FORCED_HIGH_V1.filter((x) => x !== 'auth' && x !== 'mfa')];
     assert.equal(loadTierSets(fixture({ data: h }).pluginRoot).reason, 'forced_high lacks auth');
+  });
+});
+
+describe('sync checks against the Lead base', () => {
+  const OTHER = 'f'.repeat(40);
+  const unknownBoth = (r) => {
+    assert.ok(r.lines.includes('check: high: core unknown'), r.lines.join('\n'));
+    assert.ok(r.lines.includes('check: high: diff unknown'), r.lines.join('\n'));
+  };
+
+  test('a malformed --base, or --base with neither --plan nor --diff, exits 3 and leaves the record bytes as they were', () => {
+    const f = fixture();
+    f.begin();
+    const before = fs.readFileSync(f.record);
+    f.calls.length = 0;
+    for (const args of [['--base', SHA], ['--diff', '--base', 'zz'], ['--plan', '02-plan.md', '--base', 'ABCDEF1'], ['--diff', '--base', 'a'.repeat(65)], ['--diff', '--base']]) {
+      assert.equal(f.run('sync', f.slug, ...args).code, 3, args.join(' '));
+    }
+    assert.equal(f.run('sync', f.slug, '--diff', '--base', SHA, '--base', SHA).code, 3);
+    assert.equal(f.calls.length, 0);
+    assert.ok(fs.readFileSync(f.record).equals(before));
+  });
+  test('sync --diff without --base: both unknown, one git call, a raise is recorded', () => {
+    const f = fixture();
+    f.begin();
+    f.calls.length = 0;
+    const r = f.run('sync', f.slug, '--diff');
+    unknownBoth(r);
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT]);
+    assert.equal(f.lines()[1].tier, 'high');
+    assert.equal(f.lines()[1].cause, 'diff');
+    const g = fixture();
+    g.begin();
+    g.calls.length = 0;
+    const p = g.run('sync', g.slug, '--plan', '02-plan.md');
+    assert.ok(p.lines.includes('check: high: core unknown'));
+    assert.deepEqual(g.calls.map((c) => c.args), [FORMAT]);
+    assert.equal(g.lines()[1].tier, 'high');
+  });
+  test('a --base that resolves to another ancestor than the recorded base is core unknown only for --plan', () => {
+    const f = fixture();
+    f.begin();
+    f.calls.length = 0;
+    f.setGit((sub) => (isDisambiguate(sub) ? Buffer.from(`${OTHER}\n`) : undefined));
+    const r = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', 'fffffff');
+    assert.ok(r.lines.includes('check: high: core unknown'), r.lines.join('\n'));
+    assert.ok(!r.lines.includes('check: high: diff unknown'));
+    assert.equal(f.lines()[1].tier, 'high');
+    assert.ok(!f.calls.some((c) => c.args.includes('blob') || c.args.includes('diff')));
+    const g = fixture();
+    g.begin();
+    g.setGit((sub) => (isDisambiguate(sub) ? Buffer.from(`${OTHER}\n`) : undefined));
+    unknownBoth(g.run('sync', g.slug, '--diff', '--base', 'fffffff'));
+  });
+  test('an ancestor check that errors or reports no ancestor at sync is unknown, whatever the exit code', () => {
+    for (const err of [Object.assign(new Error('exit 1'), { status: 1 }), Object.assign(new Error('exit 128'), { status: 128 }), new Error('timeout')]) {
+      const f = fixture();
+      f.begin();
+      f.calls.length = 0;
+      f.setGit((sub) => { if (sub[0] === 'merge-base') throw err; return undefined; });
+      unknownBoth(f.run('sync', f.slug, '--diff', '--base', SHA));
+      assert.ok(!f.calls.some((c) => c.args.includes('diff') || c.args.includes('blob')));
+      assert.equal(f.lines()[1].tier, 'high');
+    }
+  });
+  test('the sync call order: format once, disambiguate, commit type, ancestor, Core blob, then the diff calls with the checked id', () => {
+    const f = fixture();
+    f.begin();
+    f.calls.length = 0;
+    f.setGit((sub) => (sub[0] === 'diff' || sub[0] === 'ls-files' ? Buffer.from('docs/a.md\0') : undefined));
+    const r = f.run('sync', f.slug, '--diff', '--base', SHA);
+    assert.equal(r.lines.at(-1), 'check: 1 paths, none forced high');
+    const flags = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options'];
+    assert.deepEqual(f.calls.map((c) => c.args), [
+      FORMAT,
+      git('rev-parse', `--disambiguate=${SHA}`),
+      git('cat-file', '-t', '--end-of-options', RESOLVED),
+      ANCESTOR(RESOLVED),
+      git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`),
+      git('cat-file', '-e', '--end-of-options', `${RESOLVED}^{commit}`),
+      git('diff', ...flags, RESOLVED, 'HEAD', '--'),
+      git('diff', ...flags, 'HEAD', '--'),
+      git('ls-files', '--others', '--exclude-standard', '-z')
+    ]);
+    assert.equal(f.calls.filter((c) => c.args.includes('--show-object-format')).length, 1);
+  });
+  test('a disambiguation that names two commits is unknown', () => {
+    const f = fixture();
+    f.begin();
+    f.setGit((sub) => (isDisambiguate(sub) ? Buffer.from(`${RESOLVED}\n${OTHER}\n`) : undefined));
+    unknownBoth(f.run('sync', f.slug, '--diff', '--base', SHA));
+    assert.equal(f.lines()[1].tier, 'high');
+  });
+  test('a --base longer than the format is unknown after the format call alone', () => {
+    const f = fixture();
+    f.begin();
+    f.calls.length = 0;
+    unknownBoth(f.run('sync', f.slug, '--diff', '--base', 'a'.repeat(41)));
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT]);
   });
 });
 
@@ -1053,7 +1159,7 @@ describe('real git, every call form', () => {
     fs.writeFileSync(path.join(r.dir, '.company', 'project.md'), '## Core\n');
     fs.writeFileSync(path.join(r.runDir, '02-plan.md'), '# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: skills/pipeline/a.md\n- depends-on: none\n- parallel: yes\n');
     r.calls.length = 0;
-    const s = r.run('sync', 'demo', '--plan', '02-plan.md', '--diff');
+    const s = r.run('sync', 'demo', '--plan', '02-plan.md', '--diff', '--base', first);
     assert.equal(s.code, 0, s.lines.join('\n'));
     const text = s.lines.join('\n');
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/x.ts'), text);
@@ -1064,6 +1170,9 @@ describe('real git, every call form', () => {
     assert.ok(!text.includes('core unknown') && !text.includes('diff unknown'), text);
     assert.deepEqual(r.calls, [
       FORMAT,
+      git('rev-parse', `--disambiguate=${first}`),
+      git('cat-file', '-t', '--end-of-options', first),
+      ANCESTOR(first),
       git('cat-file', 'blob', '--end-of-options', `${first}:.company/project.md`),
       git('cat-file', '-e', '--end-of-options', `${first}^{commit}`),
       git('diff', ...diffFlags, first, 'HEAD', '--'),
@@ -1138,7 +1247,7 @@ describe('real git, every call form', () => {
     r.write('src/web/login.js', 'export {}');
     r.commit('login');
     assert.equal(r.g('diff', '--name-only', base, 'HEAD', '--', 'src'), '', 'the replace ref hides the file from plain git');
-    const s = r.run('sync', 'demo', '--diff');
+    const s = r.run('sync', 'demo', '--diff', '--base', base);
     assert.ok(s.lines.includes('check: high: pattern login src/web/login.js'), s.lines.join('\n'));
     assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[1]).cause, 'diff');
   });
@@ -1154,7 +1263,7 @@ describe('real git, every call form', () => {
     r.g('replace', base, repl);
     assert.equal(r.g('cat-file', 'blob', `${base}:.company/project.md`), '## Core', 'plain git sees the replacement');
     fs.writeFileSync(path.join(r.runDir, '02-plan.md'), '# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: skills/pipeline/a.md\n- depends-on: none\n- parallel: yes\n');
-    const s = r.run('sync', 'demo', '--plan', '02-plan.md');
+    const s = r.run('sync', 'demo', '--plan', '02-plan.md', '--base', base);
     assert.ok(s.lines.includes('check: high: core skills/pipeline/a.md'), s.lines.join('\n'));
   });
 
@@ -1191,7 +1300,7 @@ describe('real git, every call form', () => {
     }
     r.write('src/auth/x.ts', 'x');
     r.commit('auth');
-    const s = r.run('sync', 'demo', '--diff');
+    const s = r.run('sync', 'demo', '--diff', '--base', first);
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/x.ts'), s.lines.join('\n'));
   });
 
@@ -1212,7 +1321,7 @@ describe('real git, every call form', () => {
     const b = r.run('begin', 'demo', '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', base.slice(0, 40), '--ceo', 'short');
     assert.equal(b.code, 0, b.lines.join('\n'));
     assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]).base, base);
-    const s = r.run('sync', 'demo', '--diff');
+    const s = r.run('sync', 'demo', '--diff', '--base', base);
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/auth.js'), s.lines.join('\n'));
     assert.ok(!s.lines.join('\n').includes('unknown'), s.lines.join('\n'));
   });
@@ -1230,9 +1339,86 @@ describe('real git, every call form', () => {
     const line = { v: 1, at: '2026-10-28T12:00:00Z', ev: 'begin', pb: 'feature', tier: 'low', path: 'short', why: 'short', rev: 1, base: 'a'.repeat(40), skip: [] };
     fs.writeFileSync(r.record, `${JSON.stringify(line)}\n`);
     r.calls.length = 0;
-    const s = r.run('sync', 'demo', '--diff');
+    const s = r.run('sync', 'demo', '--diff', '--base', 'a'.repeat(40));
     assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
     assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
     assert.deepEqual(r.calls, [FORMAT]);
   });
+  const bothUnknown = (s) => {
+    assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+  };
+  const setupBase = (r) => {
+    r.write('.company/project.md', '## Core\n- skills/pipeline: x\n');
+    r.write('a.txt', 'one');
+    const base = r.commit('first');
+    const b = r.run('begin', 'demo', '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', base.slice(0, 7), '--ceo', 'short');
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    return base;
+  };
+  const forgeBase = (r, id) => {
+    const lines = fs.readFileSync(r.record, 'utf8').split('\n');
+    lines[0] = JSON.stringify({ ...JSON.parse(lines[0]), base: id });
+    fs.writeFileSync(r.record, lines.join('\n'));
+  };
+  const recordLines = (r) => fs.readFileSync(r.record, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+
+  test('a planted commit that is not an ancestor of HEAD, written into the record, cannot aim the diff', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    r.write('src/auth/login.js', 'export {}');
+    r.g('add', '--all');
+    const tree = r.g('write-tree');
+    const planted = r.g('commit-tree', tree, '-m', 'planted');
+    r.g('reset', '--quiet');
+    forgeBase(r, planted);
+    r.commit('login');
+    r.calls.length = 0;
+    const s = r.run('sync', 'demo', '--diff', '--base', base.slice(0, 7));
+    bothUnknown(s);
+    assert.equal(recordLines(r)[1].tier, 'high');
+    assert.equal(recordLines(r)[1].cause, 'diff');
+    assert.ok(!r.calls.some((c) => c.includes('diff')));
+  });
+  test('a record base set to the latest commit of the run cannot aim the diff', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    r.write('src/auth/login.js', 'export {}');
+    const own = r.commit('login');
+    forgeBase(r, own);
+    bothUnknown(r.run('sync', 'demo', '--diff', '--base', base.slice(0, 7)));
+    assert.equal(recordLines(r)[1].tier, 'high');
+    assert.equal(recordLines(r)[1].cause, 'diff');
+  });
+  test('an untouched record with --base as 7 hex or as the full id reports the real diff', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    r.write('src/auth/login.js', 'export {}');
+    r.commit('login');
+    for (const value of [base.slice(0, 7), base]) {
+      const s = r.run('sync', 'demo', '--diff', '--base', value);
+      assert.ok(s.lines.includes('check: high: pattern auth src/auth/login.js'), s.lines.join('\n'));
+      assert.ok(!s.lines.join('\n').includes('unknown'), s.lines.join('\n'));
+    }
+  });
+  test('a sha256 repository resolves a 40 hex --base prefix to the recorded 64 hex id', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    let r;
+    try {
+      r = repo(t, 'sha256');
+    } catch {
+      return t.skip('git cannot make a sha256 repository');
+    }
+    const base = setupBase(r);
+    assert.equal(base.length, 64);
+    r.write('src/auth/login.js', 'export {}');
+    r.commit('login');
+    const s = r.run('sync', 'demo', '--diff', '--base', base.slice(0, 40));
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/login.js'), s.lines.join('\n'));
+    assert.ok(!s.lines.join('\n').includes('unknown'), s.lines.join('\n'));
+  });
+
 });
