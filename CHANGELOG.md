@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-28
+
 ### Added
 - **Short path for low-risk work.** For `aico:feature` and `aico:fix`, `scripts/tier-set.mjs` picks the Roles and lanes per tier from the plugin data file `company/tier-sets.json`. At low, a feature skips the persona tester, ruleset research, and the security, compliance and hands-on lanes; a fix skips the security lane. Medium and high keep the full route. `legal` and the accessibility tester stay at every feature tier. Every Gate, the test per acceptance criterion, the fix regression test, the full suite, the reviewer pre-filter and the Handoff lint are unchanged. Contract `tier-sets` v1 (new), ADR 0034.
 - **Tier only rises.** The run tier is the highest of the triage tier, any Step's tier and a path check. Contract files, Core paths, `.company/project.md`, `.company/settings.json` and `.company/standards.md`, paths with auth, payment, personal-data or migration names (whole words), and a check that cannot be answered force high. The check reads file names, not content. A short run that is raised shows `add before ship:` and those Roles run before the Ship Gate.
