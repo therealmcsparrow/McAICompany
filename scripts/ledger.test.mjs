@@ -389,12 +389,14 @@ test('import refuses a baseline file over 1 MiB and one that is not a JSON objec
 test('ship appends the ship record and refuses bad numbers', () => {
   const sb = sandbox();
   assert.equal(run(sb, ['ship', 'demo', '5', '2', '1']).status, 0);
-  assert.deepEqual(readLines(sb, 'demo'), [{ v: 1, run: 'demo', kind: 'ship', acs: 5, fix_rounds: 2, high_blockers: 1 }]);
+  const written = readLines(sb, 'demo');
+  assert.deepEqual(written.map((r) => r.kind), ['meta', 'ship']);
+  assert.deepEqual(written[1], { v: 1, run: 'demo', kind: 'ship', acs: 5, fix_rounds: 2, high_blockers: 1 });
   for (const args of [['ship', 'demo', 'x'], ['ship', 'demo', '-1'], ['ship', 'demo', '5', '1.5'], ['ship', '../x', '5']]) {
     const r = run(sb, args);
     assert.equal(r.status, 2, args.join(' '));
   }
-  assert.equal(readLines(sb, 'demo').length, 1);
+  assert.equal(readLines(sb, 'demo').length, 2, 'refused ships write nothing');
 });
 
 // ---------- report ----------

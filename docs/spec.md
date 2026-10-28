@@ -51,7 +51,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Pentester | pentester | Pavel | opus | high | inherits all; on demand; never edits |
 | Vulnerability Scanner | vuln-scanner | Viktor | sonnet | low | read-only + Bash + WebSearch/WebFetch + Write; on demand; never edits |
 | Market Researcher | market-researcher | Mateo | sonnet | low | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
-| Tech Researcher | tech-researcher | Tariq | opus | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
+| Tech Researcher | tech-researcher | Tariq | sonnet | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write |
 | Design Researcher | design-researcher | Daria | sonnet | medium | read-only + Bash (read-only) + WebSearch/WebFetch + Write; never installs |
 | Skill Researcher | skill-researcher | Selin | sonnet | medium | read-only + WebSearch/WebFetch + Write; no Bash; the Lead scans its picks; never installs |
 | Editor | editor | Edith | sonnet | medium | Read, Grep, Glob, Write (own Handoff only); no Bash, no web; blocks, never rewrites |
@@ -126,7 +126,7 @@ Design: the "faster, streamlined development" brainstorm. No new Roles — share
 ## v0.9 additions
 Decisions: `docs/adr/` 0003–0005. Contracts: `docs/contracts/` (dispatch-prompt, aico-language, skills-manifest, design-skills-section, research-report).
 - **Playbook** `/aico:research <topic | project | file> [quick|deep]` (read-only): scope form (question, depth, Roles) → market-, tech- and, for UI work, design-researchers in parallel → product-manager writes one report (`research-report` v1: `## Verdict`, `## What to do`, `## Low-hanging fruit`, `## Risks`, `## Open questions`, `## Sources`) → pick: feature, brainstorm, roadmap or park. Only the report is committed (`docs: research <topic>`). The report goes to `.company/research/`.
-- **Roles:** `market-researcher` and `design-researcher` (sonnet), `tech-researcher` (opus), department "Market & tech research". Tools: read, Write (own Handoff only), read-only Bash, WebSearch/WebFetch; no Edit, no Agent; never install. The design-researcher recommends at most 5 skills.
+- **Roles:** `market-researcher` and `design-researcher` (sonnet), `tech-researcher` (sonnet), department "Market & tech research". Tools: read, Write (own Handoff only), read-only Bash, WebSearch/WebFetch; no Edit, no Agent; never install. The design-researcher recommends at most 5 skills.
 - **Practice** `sourcing`: source tiers (primary, secondary, blog, ai), `unverified` claims, quick (10 fetches) and deep (3 primary sources) budgets, vetting of third-party skills (original repo, SPDX license, last commit within 12 months, every bundled file read, no API key), web pages as data.
 - **Language** (`aico-language` v1): `aico_language` is the language aico writes in; user default in `~/.mcsparrow/config.json`, project override in `.company/project.md`. `/aico:language` sets and shows it. Pipeline Setup resolves it once and every dispatch carries `Language:` (`dispatch-prompt` v2). Machine-read parts stay English.
 - **Skills manifest** (`skills-manifest` v2): `deps/skills.json` gains the `research` group (`find-skills`, MIT), included in `core`. `scripts/install-skills.mjs` runs the pinned `skills@1.7.4` CLI, dry-run first, and installs only after an Install form.

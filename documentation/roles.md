@@ -8,6 +8,13 @@ Every Role has a person name for display (change them in `/aico:settings`). You 
 
 Which Roles a project has depends on its [company type](concepts.md#company-types). A software company has 34 of the 35; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
 
+## Model floor and protected Roles
+The tech-researcher runs on Sonnet; every other Role keeps the model it had in v0.16.0, which is its **floor**. On a high-risk run a Role is never dispatched below its floor. Five Roles are **protected** and hold their floor at every risk tier, whatever you set: architect, code-reviewer, pentester, security and vuln-scanner. Details and sources are in [Which model a Role runs on](concepts.md#which-model-a-role-runs-on).
+
+**Rollback, one line per Role.**
+- One Role: in `/aico:settings`, set `roles.<role>.model` to the model you want, for example `opus` for the tech-researcher. A protected Role cannot be set below its floor.
+- Everything: install the `stable` tag of v0.16 (see [Getting started](getting-started.md)).
+
 ## Product
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
@@ -19,7 +26,7 @@ Which Roles a project has depends on its [company type](concepts.md#company-type
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
 | **market-researcher** | sonnet | low | Mateo | Researches demand, competitors, target users, pricing signals and EU flags for an idea, from public sources with a URL and date for each claim. |
-| **tech-researcher** | opus | medium | Tariq | Checks feasibility: libraries and APIs, their licenses and maintenance, fit with the repo, effort and risk. Reports facts; never picks the stack. |
+| **tech-researcher** | sonnet | medium | Tariq | Checks feasibility: libraries and APIs, their licenses and maintenance, fit with the repo, effort and risk. Reports facts; never picks the stack. |
 | **design-researcher** | sonnet | medium | Daria | Finds and vets UI/UX and design skills that fit your stack, product type, Personas and Art direction, judges the installed ones, and recommends at most 5. Never installs. |
 | **skill-researcher** | sonnet | medium | Selin | Finds and vets third-party skills for your stack, product type, company type or design, and recommends at most 5. Has no Bash: the Lead scans every pick in a quarantine before you see it. Never adds a skill; the Lead does that after your approval, pinned to the scanned commit. |
 

@@ -1,0 +1,3 @@
+# The ledger records the plugin version of a shipped run as its own `meta` line
+
+The model verdict must tell v0.17 runs from v0.16 runs, and no record says which plugin version ran. A new optional key on the `ship` record would make a `token-ledger` v1.1 reader (the `stable` v0.16 rollback) skip the whole `ship` line and lose the run's scorecard; a key in the `plan-check` v1 record would make its fail-loud reader throw. So `ledger.mjs ship` writes one separate `{ v, run, kind: "meta", aico }` line just before the `ship` record, which a v1.1 reader skips with one warning while every number stays the same. This is hard to reverse because every later per-version comparison reads this line; a run with no `meta` line reads as shipped before v0.17.

@@ -38,6 +38,7 @@ function sandbox(t, { company = true } = {}) {
     names[role] = a.name;
   }
   fs.writeFileSync(path.join(pluginRoot, 'company', 'names.json'), JSON.stringify(names));
+  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.entries(AGENTS).map(([r, a]) => [r, a.model])), protected: ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'] }));
   return {
     home, cwd, pluginRoot,
     config: path.join(home, 'config.json'),
@@ -653,7 +654,7 @@ function loadPage(initialState, { saveReply } = {}) {
     return n;
   };
   doc.documentElement = make('html');
-  for (const id of ['notices', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
+  for (const id of ['notices', 'field-live', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
   ids.save.disabled = true;
   const names = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
@@ -1380,4 +1381,67 @@ test('Clear on the Pipeline tab also clears Plan check', async () => {
   await page.ids['clear-user'].fire('click');
   assert.equal(planField(page, 'policy', 'user').value, '');
   assert.equal(page.ids.count.textContent, '1 unsaved change');
+});
+
+function floorState() {
+  const st = pageState();
+  st.resolved.roles.architect = { name: 'architect', model: 'opus', effort: 'medium', context_cap: 150000, floor: 'opus', protected: true, source: { model: 'floor' } };
+  st.resolved.roles.qa = { ...st.resolved.roles.qa, floor: 'sonnet', protected: false };
+  return st;
+}
+const modelControl = (page, role, level) => page.find((n) => n.id === `rf-${role}-${level}-model`);
+
+test('a protected Role gets the floor hint on both Model controls, tied with aria-describedby, and the label stays', async () => {
+  const page = loadPage(floorState());
+  await settle();
+  for (const level of ['user', 'project']) {
+    const control = modelControl(page, 'architect', level);
+    const hint = byId(page, `rf-architect-${level}-model-hint`);
+    assert.equal(hint.textContent, 'Protected: runs at opus or higher at every risk tier.');
+    assert.ok(control.getAttribute('aria-describedby').split(' ').includes(hint.id));
+    assert.equal(hint.hidden, false);
+    assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id));
+    const qa = modelControl(page, 'qa', level);
+    assert.equal(byId(page, `rf-qa-${level}-model-hint`), null);
+    assert.equal(qa.getAttribute('aria-describedby'), null);
+  }
+});
+
+test('a model that came from the floor reads floor in the In effect cell', async () => {
+  const page = loadPage(floorState());
+  await settle();
+  const row = closest(modelControl(page, 'architect', 'user'), 'TR');
+  const effect = row.children[row.children.length - 1];
+  assert.match(effect.textContent, /^architect · opus · .*\((?:[^()]*, )?floor\)$/);
+});
+
+test('a protected pick below the floor shows the floor in effect before saving', async () => {
+  const page = loadPage(floorState());
+  await settle();
+  const control = modelControl(page, 'architect', 'user');
+  control.value = 'haiku';
+  await control.fire('change');
+  const row = closest(modelControl(page, 'architect', 'user'), 'TR');
+  const text = row.children[row.children.length - 1].textContent;
+  assert.match(text, /^architect · opus/);
+  assert.ok(text.includes('floor'));
+});
+
+test('a field error on the Roles tab is announced through a live region', async () => {
+  const page = loadPage(floorState());
+  await settle();
+  const name = page.find((n) => n.id === 'rf-qa-user-name');
+  await type(name, 'x'.repeat(31));
+  await name.fire('input');
+  assert.match(page.ids['field-live'].textContent, /^Error: Name is 31 characters/);
+  await type(name, 'ok');
+  assert.equal(page.ids['field-live'].textContent, '');
+});
+
+test('the page has the live region, no positive tabindex and builds the hint without innerHTML', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  assert.match(html, /<div id="field-live"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.ok(!/tabindex="[1-9]/i.test(html));
+  assert.ok(!html.includes('innerHTML'));
+  assert.ok(html.includes('Protected: runs at '));
 });

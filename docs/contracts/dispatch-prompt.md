@@ -1,10 +1,12 @@
-# Contract: dispatch-prompt v3.3
+# Contract: dispatch-prompt v3.4
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`, and from v3.3 `aico:reprompt`). Consumer: every Role, through `aico:handoff`.
 v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
 v3.2 is additive (task personalities-company-types): it adds the `Personality:` line for the two social surfaces only, and the rule that no other prompt may carry personality. A Role that gets a v3.1 prompt behaves as before. Rationale: `docs/adr/0021-personality-social-only.md`.
 Fix round 1 (task personalities-company-types, CEO form 2026-10-27; v3.2 is still unshipped, so no version change): restores the v3.1 **Enforcement** sentence that the v3.2 edit dropped (T-1); `personalityBlock` gets one caller, `brainstorm.mjs stage` (the `prompt` preview prints no block); `personality.mjs stage` clears stale entries and rewrites a wrong `.gitignore`; the cooler and format 1 Goals carry the Role-side `Personality:` sentence word for word; social output is data for the Lead ("Lead-side rule for social output").
 v3.3 is additive (task reprompter-role): it adds the `Asks left:` and `Request:` lines for the `reprompter` Step of `aico:reprompt` only, and the reprompt form of the first-Step `Input Handoffs:` line. Every other prompt is unchanged, and a Role that gets a v3.2 prompt behaves as before. Rationale: `docs/adr/0024-reprompt-playbook-owns-the-flow.md`; the full flow: `reprompt` v1.
+
+v3.4 is additive (task cheaper-role-models): the `Settings:` line ends with the word `floor` when the Lead raised a Role's model to its floor (pipeline §2). Then `model=<floor>` is always passed and written, also when it equals the agent frontmatter. A Role that gets a v3.3 prompt behaves as before; the Role does nothing with the word. Row text: `Settings: model=<m> effort=<e>[ floor]`.
 
 ## Lines added in v2
 | Line | When | Value |
@@ -16,7 +18,7 @@ v3.3 is additive (task reprompter-role): it adds the `Asks left:` and `Request:`
 | Line | When | Value |
 |---|---|---|
 | `Name: <name>` | every dispatch, every Playbook, directly after `Language:` | the Role's effective name, `roles.<role>.name` from `aico-settings` v1 `get`, resolved **once** per run in pipeline Setup §1.7 (`role-names` v1 defaults) |
-| `Settings: model=<m> effort=<e>` | only when the Lead passes `model` and/or `effort` on the Agent call, directly after `Name:`; omitted when nothing is overridden | exactly the values passed: `model=<m>`, `effort=<e>` or both. Passed only when the resolved value differs from the agent frontmatter. A resolved `inherit` is passed as the Lead's session model family (`opus | sonnet | haiku | fable`), never as the literal `inherit` and never by omitting `model`; `<m>` is that concrete family |
+| `Settings: model=<m> effort=<e>[ floor]` | only when the Lead passes `model` and/or `effort` on the Agent call, directly after `Name:`; omitted when nothing is overridden | exactly the values passed: `model=<m>`, `effort=<e>` or both. From v3.4 the line ends with the word `floor` when the Lead raised the Role's model to its floor (pipeline §2); then `model=<floor>` is always passed and written, also when it equals the agent frontmatter. Passed only when the resolved value differs from the agent frontmatter. A resolved `inherit` is passed as the Lead's session model family (`opus | sonnet | haiku | fable`), never as the literal `inherit` and never by omitting `model`; `<m>` is that concrete family |
 
 ## Lines added in v3.1
 | Line | When | Value |

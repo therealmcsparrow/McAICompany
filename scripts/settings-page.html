@@ -65,6 +65,7 @@ tbody tr:hover > td, tbody tr:hover > th[scope="row"] { background: var(--head);
 .cf { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cf > label { font-size: var(--fs-xs); color: var(--muted); }
 .cell select, .cell input[type="text"] { width: 100%; min-width: 0; }
+.cf > .hint { margin: 0; overflow-wrap: anywhere; }
 select, input[type="text"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--r1); padding: 4px 8px; min-height: 32px; }
 select:hover:not(:disabled), input[type="text"]:hover:not(:disabled) { border-color: var(--text); }
 input[type="text"] { width: 9rem; }
@@ -182,8 +183,9 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
   <p>Project wins over User, and both win over the Plugin default. <strong>—</strong> means not set at that level. Changes apply from the next aico run.</p>
 </header>
 <div id="status" role="status" aria-live="polite"></div>
+<div id="field-live" class="vh" role="status" aria-live="polite"></div>
 <main>
-  <div id="notices"></div>
+  <div id="notices" role="status" aria-live="polite"></div>
   <div role="tablist" aria-label="Settings">
     <button role="tab" id="tab-roles" aria-controls="panel-roles" aria-selected="true">Roles</button>
     <button role="tab" id="tab-personality" aria-controls="panel-personality" aria-selected="false" tabindex="-1">Personality</button>
@@ -564,6 +566,11 @@ function withProblem(control, label, problem) {
   control.errEl = err;
   syncers.push(() => {
     const message = problem(label, control.value);
+    if (message !== err.textContent) {
+      const live = document.getElementById('field-live');
+      if (message) live.textContent = message;
+      else if (live.textContent === err.textContent) live.textContent = '';
+    }
     err.textContent = message;
     err.hidden = message === '';
     if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', err.id); }
@@ -577,10 +584,17 @@ function roleLabel(role) {
   return typeof name === 'string' && name !== '' && name !== role ? `${name} (${role})` : role;
 }
 // A visible label that starts with the field word, then hidden context, so the name contains the visible text.
-function roleField(level, role, field, word, control) {
+function roleField(level, role, field, word, control, hint = null) {
   const id = `rf-${role}-${level}-${field}`;
   control.id = id;
-  return el('div', { class: 'cf' }, el('label', { for: id }, word, el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), control, control.errEl);
+  if (hint) { hint.id = `${id}-hint`; control.setAttribute('aria-describedby', hint.id); }
+  return el('div', { class: 'cf' }, el('label', { for: id }, word, el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), control, hint, control.errEl);
+}
+const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3 };
+// A protected Role's floor from the payload, or '' when the Role is not protected.
+function protectedFloor(role) {
+  const r = state.resolved?.roles?.[role];
+  return r?.protected === true && typeof r.floor === 'string' ? r.floor : '';
 }
 function roleCell(level, role) {
   const name = withProblem(bindLayer(el('input', { type: 'text', placeholder: '—' }), level, ['roles', role, 'name']), 'Name', nameProblem);
@@ -588,7 +602,8 @@ function roleCell(level, role) {
   const effort = bindLayer(selectFor(EFFORTS, null), level, ['roles', role, 'effort']);
   const cap = withProblem(bindLayer(el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), level, ['roles', role, 'context_cap'], Number), 'Cap', capProblem);
   return el('td', {}, el('div', { class: 'cell' },
-    roleField(level, role, 'name', 'Name', name), roleField(level, role, 'model', 'Model', model),
+    roleField(level, role, 'name', 'Name', name),
+    roleField(level, role, 'model', 'Model', model, protectedFloor(role) ? el('p', { class: 'hint' }, `Protected: runs at ${protectedFloor(role)} or higher at every risk tier.`) : null),
     roleField(level, role, 'effort', 'Effort', effort), roleField(level, role, 'cap', 'Cap', cap)));
 }
 function renderRoles(panel) {
@@ -631,6 +646,10 @@ function renderRoles(panel) {
           if (!dirty(path) && resolved[f] !== undefined) return [resolved[f], resolved.source?.[f] ?? 'plugin'];
           return pickSource(path, base[f]);
         });
+        // A protected Role never runs below its floor; the server applies the same rule on save.
+        const floor = protectedFloor(role);
+        const [picked] = parts[1];
+        if (floor && typeof picked === 'string' && picked !== 'inherit' && (MODEL_RANK[picked] ?? 0) < (MODEL_RANK[floor] ?? 0)) parts[1] = [floor, 'floor'];
         // The Role cap, else the global cap, else the plugin default.
         const capPath = ['roles', role, 'context_cap'];
         const globalPath = ['pipeline', 'context_cap'];

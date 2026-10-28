@@ -2,6 +2,21 @@
 
 All notable changes to the aico plugin. Versions follow the plugin's own releases.
 
+## [Unreleased]
+
+## [0.17.0] - 2026-10-28
+
+### Added
+- **Model floor.** `company/model-floor.json` holds each Role's v0.16.0 model as its floor and lists the protected Roles: architect, code-reviewer, pentester, security, vuln-scanner. A high-tier run dispatches no Role below its floor, and the `Settings:` line ends with `floor` when the Lead raised the model. A protected Role ignores a lower stored model at every tier, with a warning. Contracts `aico-settings` v1.6, `dispatch-prompt` v3.4 (additive), ADR 0031.
+- **Model environment line.** `settings.mjs model-env` prints one line when `CLAUDE_CODE_SUBAGENT_MODEL` or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, with the Claude Code version and whether the floor is kept or bypassed.
+- **Model verdict.** `/aico:feedback` quotes one `model verdict:` line from `ledger.mjs model-verdict`: `pass`, `fail` or `insufficient (n=<k>)`, with the Roles to roll back on `fail`. The `ship` step writes a `meta` record with the plugin version. Contract `token-ledger` v1.2 (additive), ADR 0032. It never blocks a Step or a Gate.
+- **Description budget.** `npm run check` estimates agent description size, fails a Role over 400 tokens or a total of 15,000 or more, and prints the total and headroom.
+- **Settings page.** Protected Roles show a hint on the Model controls.
+
+### Changed
+- **tech-researcher** runs on Sonnet (was Opus). Rollback: set `roles.tech-researcher.model` to `opus` in `/aico:settings`, or install the `stable` v0.16 tag.
+- A stored model below a protected Role's floor no longer applies.
+
 ## [0.16.0] - 2026-10-28
 
 The Plan Gate lists choices a plan left open.

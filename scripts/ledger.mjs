@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.1). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.2). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -8,7 +8,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { show as showRun } from './run-state.mjs';
+import * as settings from './settings.mjs';
 
 const MiB = 1024 * 1024;
 const MAX_LEDGER_BYTES = MiB;
@@ -20,6 +22,9 @@ const MAX_REQUESTS = 100000;
 const MAX_LIVE_AGENTS = 500;
 const MAX_COUNT = 1000000000;
 const MAX_COMPARE_FILES = 500;
+const MAX_PLUGIN_JSON_BYTES = 64 * 1024;
+const MAX_VERDICT_BYTES = 32 * MiB;
+const MIN_BASELINE_RUNS = 5;
 const MAX_WAIT = 31536000;
 const MAX_REJECTS = 1000;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -32,13 +37,16 @@ const RUN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const AGENT = /^[A-Za-z0-9_-]{1,64}$/;
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
+const AICO_VERSION = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const META_KEYS = ['v', 'run', 'kind', 'aico'];
+const FAMILIES = ['haiku', 'sonnet', 'opus'];
 const BASELINE_KEY = /^[0-9a-f]{8} [A-Za-z0-9._/-]{1,100}$/;
-const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect'];
+const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect', 'meta'];
 const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship'
+  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico'
 ]);
 const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship'];
 const SHIP_KEYS = new Set(['v', 'run', 'kind', ...SHIP_ONLY]);
@@ -53,7 +61,8 @@ const USAGE = [
   '  ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]',
   '  scorecard <run> [--baseline <run>,<run>,<run>]',
   '  report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]',
-  '  brainstorm-report <run> [--against <run>]'
+  '  brainstorm-report <run> [--against <run>]',
+  '  model-verdict [--runs <3-50>]'
 ].join('\n');
 
 class Refusal extends Error {}
@@ -63,7 +72,7 @@ const isObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x)
 const isInt = (x, max) => Number.isSafeInteger(x) && x >= 0 && x <= max;
 
 // The product root and the clock for the call in progress; main() sets them and puts them back.
-let env = { root: process.cwd(), now: Date.now() };
+let env = { root: process.cwd(), now: Date.now(), pluginRoot: path.resolve(import.meta.dirname, '..'), loadFloor: settings.loadModelFloor };
 const ledgerDir = () => path.join(env.root, '.company', 'ledger');
 const isoSec = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -102,6 +111,13 @@ export function validateRecord(input) {
   if (rec.v !== 1) return fail('v must be 1');
   if (typeof rec.run !== 'string' || !RUN.test(rec.run)) return fail('invalid run');
   if (!KINDS.includes(rec.kind)) return fail('invalid kind');
+  if (rec.kind === 'meta') {
+    const keys = Object.keys(rec);
+    if (keys.length !== META_KEYS.length || !META_KEYS.every((k) => keys.includes(k))) return fail('meta needs exactly v, run, kind, aico');
+    if (typeof rec.aico !== 'string' || !AICO_VERSION.test(rec.aico)) return fail('aico must be a version like 0.17.0');
+    return { ok: true };
+  }
+  if (Object.hasOwn(rec, 'aico')) return fail('aico only on meta');
   if (rec.kind === 'ship') {
     for (const k of Object.keys(rec)) if (!SHIP_KEYS.has(k)) return fail('key not allowed on ship');
     if (!isInt(rec.acs, MAX_REQUESTS)) return fail('acs must be an integer 0-100000');
@@ -446,6 +462,31 @@ function viewKeys(run) {
   return keys;
 }
 
+// The plugin version from <plugin root>/.claude-plugin/plugin.json, or undefined when it is missing, too big or not a version.
+function pluginVersion() {
+  try {
+    const file = path.join(env.pluginRoot, '.claude-plugin', 'plugin.json');
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || st.size > MAX_PLUGIN_JSON_BYTES) return undefined;
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!isObject(data) || !Object.hasOwn(data, 'version')) return undefined;
+    return typeof data.version === 'string' && AICO_VERSION.test(data.version) ? data.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Appends the meta line before the ship record; no line when the version cannot be read.
+function writeMeta(run) {
+  const aico = pluginVersion();
+  if (aico === undefined) return;
+  try {
+    appendRecord({ v: 1, run, kind: 'meta', aico });
+  } catch (error) {
+    if (!(error instanceof Refusal)) throw error;
+  }
+}
+
 function cmdShip(args) {
   const usage = 'usage: ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]';
   const { rest, baselineRuns } = splitBaseline(args, usage);
@@ -456,6 +497,7 @@ function cmdShip(args) {
   if (highBlockers !== undefined) rec.high_blockers = parseCount(highBlockers, 'high_blockers');
   const excluded = EXCLUDED_RUN.test(rec.run);
   const timed = excluded ? rec : { ...rec, ...viewKeys(rec.run) };
+  if (!excluded) writeMeta(rec.run);
   appendRecord(validateRecord(timed).ok ? timed : rec);
   if (excluded) return ['ship recorded (excluded run)'];
   try {
@@ -525,6 +567,13 @@ function median(list) {
   const sorted = [...list].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+// The true middle value (an even count averages the two middle ones); round only for display.
+function exactMedian(list) {
+  const sorted = [...list].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // A record with counts: a host transcript, an imported baseline, or a mod's own call.
@@ -850,6 +899,171 @@ function cmdScorecard(args) {
   return [scorecardLine(checkRun(rest[0]), baselineRuns)];
 }
 
+// ---------- model verdict ----------
+
+const versionParts = (text) => text.split('.').map(Number);
+function atLeast(text, min) {
+  const have = versionParts(text);
+  for (let i = 0; i < min.length; i += 1) if (have[i] !== min[i]) return have[i] > min[i];
+  return true;
+}
+const familyOf = (model) => {
+  const hit = typeof model === 'string' ? /haiku|sonnet|opus/.exec(model) : null;
+  return hit ? FAMILIES.indexOf(hit[0]) : undefined;
+};
+
+// The floor data, reduced to what the verdict may print: Role names that are keys of the floor table.
+function floorFor(loadFloor) {
+  const none = { ok: false, downgraded: [], rank: new Map(), warnings: 1 };
+  try {
+    const f = loadFloor(env.pluginRoot);
+    if (!isObject(f) || !isObject(f.floor) || !Array.isArray(f.downgraded)) return none;
+    const down = [...new Set(f.downgraded.filter((r) => typeof r === 'string' && ROLE.test(r) && Object.hasOwn(f.floor, r) && FAMILIES.includes(f.floor[r])))].sort();
+    return { ok: true, downgraded: down, rank: new Map(down.map((r) => [r, FAMILIES.indexOf(f.floor[r])])), warnings: Array.isArray(f.warnings) ? f.warnings.length : 0 };
+  } catch {
+    return none;
+  }
+}
+
+// One run's counted values, or undefined when the run does not count (see the contract).
+function verdictRun(name, records, floor) {
+  const ship = lastShipOf(records);
+  if (!ship || !isTimed(ship) || timeMs(ship.t_ship) === undefined || !(ship.acs > 0)) return undefined;
+  if (!Object.hasOwn(ship, 'fix_rounds') || !Object.hasOwn(ship, 'high_blockers')) return undefined;
+  if (!records.some((r) => r.src === 'transcript') || summarize(records).unreconciled.length > 0) return undefined;
+  const meta = records.findLast((r) => r.kind === 'meta');
+  let side;
+  if (!meta) side = '16';
+  else if (atLeast(meta.aico, [0, 17, 0])) side = '17';
+  else return undefined;
+  let view;
+  try {
+    view = readPlanCheck(env.root, name);
+  } catch {
+    return undefined;
+  }
+  if (!isObject(view) || view.state === 'error') return undefined;
+  const key = view.state === 'on' ? view.policy : view.state;
+  if (!['none', 'off', 'warn', 'block'].includes(key)) return undefined;
+  const run = { name, side, key, tShip: timeMs(ship.t_ship), acs: ship.acs, fix: ship.fix_rounds, high: ship.high_blockers, spend: 0n, roleSpend: new Map(), lower: 0, ran: 0 };
+  for (const r of records.filter(hasCounts)) {
+    const n = BigInt(spendOf(r.tokens));
+    run.spend += n;
+    if (floor.rank.has(r.role)) run.roleSpend.set(r.role, (run.roleSpend.get(r.role) ?? 0n) + n);
+  }
+  for (const r of records) {
+    if (r.src !== 'transcript' || !ADD_KINDS.includes(r.kind) || !floor.rank.has(r.role)) continue;
+    run.ran += 1;
+    const family = familyOf(r.model);
+    if (family !== undefined && family < floor.rank.get(r.role)) run.lower += 1;
+  }
+  return run;
+}
+
+// Newest first, at most 500 files; a file over 1 MiB and files past 32 MiB in total are left unread.
+function verdictRuns(floor, counts) {
+  const files = comparisonFiles('', counts).sort((a, b) => b.mtime - a.mtime || (a.name < b.name ? -1 : 1));
+  const runs = [];
+  let bytes = 0;
+  for (const { name } of files) {
+    if (EXCLUDED_RUN.test(name)) continue;
+    let size;
+    try {
+      size = fs.lstatSync(path.join(ledgerDir(), `${name}.jsonl`)).size;
+    } catch {
+      counts.warnings += 1;
+      continue;
+    }
+    if (size > MAX_LEDGER_BYTES || bytes + size > MAX_VERDICT_BYTES) {
+      counts.notCounted += 1;
+      continue;
+    }
+    bytes += size;
+    const ledger = readSafe(name);
+    counts.warnings += ledger.warnings.length;
+    const run = verdictRun(name, ledger.records, floor);
+    if (run) runs.push(run);
+    else counts.notCounted += 1;
+  }
+  return runs;
+}
+
+function aggregate(set) {
+  const sum = (pick) => set.reduce((n, r) => n + pick(r), 0n);
+  const roleSpend = new Map();
+  for (const r of set) for (const [role, n] of r.roleSpend) roleSpend.set(role, (roleSpend.get(role) ?? 0n) + n);
+  const down = [...roleSpend.values()].reduce((a, b) => a + b, 0n);
+  return {
+    n: set.length, acs: sum((r) => BigInt(r.acs)), spend: sum((r) => r.spend), down, roleSpend,
+    fix: set.length ? exactMedian(set.map((r) => r.fix)) : undefined, high: set.length ? exactMedian(set.map((r) => r.high)) : undefined
+  };
+}
+
+// a / b against c / d for non-negative counts with positive b and d.
+const ratioLower = (a, b, c, d) => a * d < c * b;
+const ratioNotHigher = (a, b, c, d) => a * d <= c * b;
+
+function cmdModelVerdict(args, { loadFloor }) {
+  const usage = 'usage: model-verdict [--runs <3-50>]';
+  let limit = 10;
+  if (args.length > 0) {
+    if (args.length !== 2 || args[0] !== '--runs' || !/^\d{1,2}$/.test(args[1])) throw new Refusal(usage);
+    limit = Number(args[1]);
+    if (limit < 3 || limit > 50) throw new Refusal('--runs must be a whole number from 3 to 50');
+  }
+  const floor = floorFor(loadFloor);
+  const counts = { warnings: floor.warnings, excluded: 0, notCounted: 0 };
+  const counted = verdictRuns(floor, counts);
+  const newest = (list) => [...list].sort((a, b) => b.tShip - a.tShip || (a.name < b.name ? -1 : 1));
+  const reference = newest(counted.filter((r) => r.side === '17'))[0]?.key;
+  const matching = counted.filter((r) => reference === undefined || r.key === reference);
+  const excluded = counted.length - matching.length;
+  const avail17 = newest(matching.filter((r) => r.side === '17'));
+  const avail16 = newest(matching.filter((r) => r.side === '16'));
+  const set17 = avail17.slice(0, limit);
+  const set16 = avail16.slice(0, limit);
+  const a = aggregate(set17);
+  const b = aggregate(set16);
+
+  let state;
+  let roll = [];
+  if (avail17.length < limit || avail16.length < MIN_BASELINE_RUNS || !floor.ok || floor.downgraded.length === 0 || a.down === 0n || b.down === 0n) {
+    state = `insufficient (n=${avail17.length})`;
+  } else {
+    const downLower = ratioLower(a.down, a.acs, b.down, b.acs);
+    const guards = ratioNotHigher(a.spend, a.acs, b.spend, b.acs) && a.fix <= b.fix && a.high <= b.high;
+    state = downLower && guards ? 'pass' : 'fail';
+    if (state === 'fail') {
+      roll = guards
+        ? floor.downgraded.filter((role) => {
+          const mine = a.roleSpend.get(role) ?? 0n;
+          const base = b.roleSpend.get(role) ?? 0n;
+          return !(mine === 0n && base === 0n) && !ratioLower(mine, a.acs, base, b.acs);
+        })
+        : floor.downgraded;
+    }
+  }
+  const whole = (n, acs) => (acs > 0n ? String(Math.round(Number(n) / Number(acs))) : '?');
+  const dec = (n) => (n === undefined ? '?' : n.toFixed(1));
+  const lower = set17.reduce((n, r) => n + r.lower, 0);
+  const ran = set17.reduce((n, r) => n + r.ran, 0);
+  const parts = [
+    `model verdict: ${state}`,
+    `runs ${a.n} v0.17, ${b.n} v0.16 (plan check ${reference ?? '?'})`,
+    `spend/AC ${whole(a.spend, a.acs)} (v0.16 ${whole(b.spend, b.acs)})`,
+    `downgraded spend/AC ${whole(a.down, a.acs)} (v0.16 ${whole(b.down, b.acs)})`,
+    `fix rounds median ${dec(a.fix)} (v0.16 ${dec(b.fix)})`,
+    `high blockers median ${dec(a.high)} (v0.16 ${dec(b.high)})`,
+    `downgraded: ${floor.downgraded.length ? floor.downgraded.join(', ') : 'none'}`,
+    `lower model: ${lower} of ${ran}`,
+    `excluded: ${excluded}`,
+    `not counted: ${counts.notCounted}`
+  ];
+  if (state === 'fail') parts.push(`roll back: ${roll.join(', ')}`);
+  if (counts.warnings > 0) parts.push(`warnings: ${counts.warnings}`);
+  return [parts.join(' | ')];
+}
+
 // Totals for rounds from round 2 on: spend, cache read, crossfire spend, per round, unreconciled count.
 function roundTotals(records) {
   const roundNo = (r) => (/^R(\d+)$/.test(r.id ?? '') ? Number(r.id.slice(1)) : 0);
@@ -907,22 +1121,25 @@ function cmdBrainstormReport(args) {
 
 // ---------- CLI ----------
 
-// `now` (epoch ms) and `root` (the product root) are for callers that inject them; the CLI uses the defaults.
-export function main(args, { now, root } = {}) {
+// `now` (epoch ms), `root` (the product root), `pluginRoot` and `loadFloor` (the model floor reader) are for callers that
+// inject them; the CLI uses the defaults.
+export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
   const [command, ...rest] = args;
   const before = env;
   env = {
     root: typeof root === 'string' && root !== '' ? root : process.cwd(),
-    now: typeof now === 'number' ? now : Date.now()
+    now: typeof now === 'number' ? now : Date.now(),
+    pluginRoot: typeof pluginRoot === 'string' && pluginRoot !== '' ? pluginRoot : path.resolve(import.meta.dirname, '..'),
+    loadFloor: typeof loadFloor === 'function' ? loadFloor : settings.loadModelFloor
   };
   try {
     const handlers = {
       add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard,
-      report: cmdReport, 'brainstorm-report': cmdBrainstormReport
+      report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
     if (['report', 'brainstorm-report', 'scorecard'].includes(command) && rest.length === 0) throw new Refusal(USAGE);
-    return { code: 0, lines: handlers[command](rest) };
+    return { code: 0, lines: handlers[command](rest, env) };
   } catch (error) {
     if (error instanceof Refusal) return { code: 2, lines: [`refused: ${error.message}`] };
     throw error;
