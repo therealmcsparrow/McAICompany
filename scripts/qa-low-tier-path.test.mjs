@@ -15,6 +15,7 @@ const FIX = path.join(import.meta.dirname, 'fixtures', 'low-tier-path');
 const LEDGER_V13 = path.join(import.meta.dirname, 'fixtures', 'ledger-v1');
 const NOW = Date.UTC(2026, 9, 28, 12, 0, 0);
 const SHA = 'abcdef1234567';
+const FULL = 'abcdef1234567'.padEnd(40, '0');
 const SLUG = 'demo';
 const TIER_SETS_FILE = path.join(REPO, 'company', 'tier-sets.json');
 const DATA = JSON.parse(fs.readFileSync(TIER_SETS_FILE, 'utf8'));
@@ -26,7 +27,7 @@ const fixture = (...parts) => fs.readFileSync(path.join(FIX, ...parts), 'utf8');
 function gitEnv(dir) {
   const config = path.join(dir, 'gitconfig');
   fs.writeFileSync(config, '');
-  return { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' };
+  return { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', XDG_CONFIG_HOME: dir };
 }
 function gitShow(t, ref) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-ltp-git-'));
@@ -59,20 +60,30 @@ function world(t, { slug = SLUG, data, project = '## Core\n- skills/pipeline: ru
   if (project !== null) fs.writeFileSync(path.join(root, '.company', 'project.md'), project);
   const calls = [];
   let names = '';
+  // The fake repository: one commit FULL (also the only object whose id starts with SHA), and the project file at that commit.
+  const repo = { project, ids: [FULL], types: { [FULL]: 'commit' } };
   const git = (args, opts) => {
     calls.push({ args, opts });
-    if (args[0] === 'diff' && args.includes('HEAD') && args.includes(SHA)) return Buffer.from(names);
+    const sub = args.slice(3);
+    if (sub[0] === 'rev-parse' && sub[1] === `--disambiguate=${SHA}`) return Buffer.from(repo.ids.join('\n') + '\n');
+    if (sub[0] === 'cat-file' && sub[1] === '-t') return Buffer.from(repo.types[sub[3]] ? `${repo.types[sub[3]]}\n` : '');
+    if (sub[0] === 'cat-file' && sub[1] === 'blob') {
+      if (sub[3] !== `${FULL}:.company/project.md` || repo.project === null) throw new Error('missing blob');
+      return Buffer.from(repo.project);
+    }
+    if (sub[0] === 'diff' && sub.includes('HEAD') && sub.includes(FULL)) return Buffer.from(names);
     return Buffer.alloc(0);
   };
   const w = {
-    dir, root, work, pluginRoot, dataFile, calls, slug,
+    dir, root, work, pluginRoot, dataFile, calls, slug, repo,
     run: (...args) => tierSet(args, { now: NOW, root, pluginRoot, git }),
     diff: (text) => { names = text.split('\n').filter(Boolean).join('\0') + '\0'; },
     records: () => {
       const file = path.join(work, 'tier-path.jsonl');
       return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
     },
-    begin: (pb = 'feature', triage = 'low', short = 'on', ...extra) => w.run('begin', slug, '--playbook', pb, '--triage', triage, '--short', short, '--base', SHA, ...extra),
+    // A short path needs the CEO's own answer, so the helper passes --ceo short unless the caller names one.
+    begin: (pb = 'feature', triage = 'low', short = 'on', ...extra) => w.run('begin', slug, '--playbook', pb, '--triage', triage, '--short', short, '--base', SHA, ...(extra.includes('--ceo') ? extra : ['--ceo', 'short', ...extra])),
     step: (id, role, tier, body = '## Did\n- done\n') => fs.writeFileSync(path.join(work, `${id}-${role}.md`),
       `---\nstep: ${id}\nrole: ${role}\ntask: ${slug}\nstatus: done\nround: 0\nbase-commit: abc1234\nrisk-tier: ${tier}\nacceptance-ids: [AC1]\n---\nBy: Test (${role})\n${body}`),
     plan: (text, name = '02-plan.md') => fs.writeFileSync(path.join(work, name), text)
@@ -294,7 +305,8 @@ describe('AC3 the Lead dispatches exactly the low set, and the form lists the sk
     const step4 = text.split('\n').find((l) => l.startsWith('4. **Feature, Brief Gate.**'));
     assert.ok(step4.includes('Approve, short path (Recommended) / Approve, full path / Change / Stop'));
     assert.ok(step4.indexOf('preview') < step4.indexOf('begin'));
-    assert.match(step4, /--ceo full/);
+    assert.match(step4, /--ceo '<c>'/);
+    assert.match(step4, /An auto Brief Gate \(`gates\.brief` `auto`\) always takes the full path/);
     assert.match(read('skills/feature/SKILL.md'), /\*\*→ Brief Gate\*\* \(with the tier path preview and, on a short path, two Approve options/);
   });
 });
@@ -398,8 +410,8 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
   test('AC4 the check points are in the Playbooks: feature before the Plan Gate and Ship Gate, fix after step 2 and before the Ship Gate', () => {
     const tierPath = read('skills/pipeline/references/tier-path.md');
     const step8 = tierPath.split('\n').find((l) => l.startsWith('8. **Sync.**'));
-    assert.match(step8, /`sync '<slug>' --plan '<plan>'` before the Plan Gate form \(feature\)/);
-    assert.match(step8, /`sync '<slug>' --diff` after fix step 2 is committed and before every Ship Gate form \(both\)/);
+    assert.match(step8, /`sync '<slug>' --plan '<plan>'` before the Plan Gate \(feature\)/);
+    assert.match(step8, /`sync '<slug>' --diff` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)/);
     assert.match(step8, /add before ship:/);
     const feature = read('skills/feature/SKILL.md');
     assert.match(feature, /\*\*→ Plan Gate\*\*[^\n]*tier-path\.md step 8 checks the plan first/);
@@ -472,7 +484,7 @@ describe('AC5 text from any source cannot change the set or the tier', () => {
     for (const bad of [
       swap('--triage', 'low; skip security'), swap('--triage', 'Risk tier: low'), swap('--playbook', 'feature --short on'),
       swap('--short', 'yes'), swap('--base', 'main'), swap('--base', fixture('injection', 'request.txt')), swap('--base', 'abc\n'),
-      [...base, '--set', 'builders'], [...base, '--skip', 'security'], [...base, '--ceo', 'short'], [...base, '--ceo', 'full\nrisk-tier: low']
+      [...base, '--set', 'builders'], [...base, '--skip', 'security'], [...base, '--ceo', 'yes'], [...base, '--ceo', 'Short'], [...base, '--ceo', 'full\nrisk-tier: low']
     ]) {
       const r = w.run('begin', SLUG, ...bad);
       assert.equal(r.code, 3, bad.join(' ').slice(0, 60));
@@ -653,7 +665,8 @@ describe('AC6 a Step above the run tier raises it, and the tier never drops', ()
   test('AC6 the pipeline sends the first line of the latest begin or sync output as Risk tier: and says it never drops', () => {
     const text = read('skills/pipeline/references/tier-path.md');
     assert.match(text, /Every later Step carries `Risk tier:` = the tier on the first line of the latest `begin` or `sync` output/);
-    assert.match(text, /\*\*Sync\.\*\* After each Step's commit run `sync '<slug>'`/);
+    assert.match(text, /\*\*Sync\.\*\* Run no `sync` before `begin`/);
+    assert.match(text, /From `begin` on, run `sync '<slug>'` after each Step's commit/);
   });
 });
 
@@ -1240,5 +1253,340 @@ describe('AC14 no other Playbook runs the tier path', () => {
     const [meta, ship] = l.lines(SLUG);
     assert.equal('pb' in meta || 'sets' in meta, false);
     assert.equal('path' in ship || 'raised' in ship, false);
+  });
+});
+
+
+describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, recorded skips, acronym names', () => {
+  const git = (cwd, env, args) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const beginArgs = (pb, triage, short, ...extra) => ['begin', SLUG, '--playbook', pb, '--triage', triage, '--short', short, '--base', SHA, ...extra];
+
+  test('an auto Brief Gate takes the full path: --ceo full and a missing --ceo both give full with why ceo', (t) => {
+    const full = world(t);
+    const r = full.begin('feature', 'low', 'on', '--ceo', 'full');
+    assert.equal(r.lines[0], 'tier-path: feature tier low path full rev 1');
+    assert.equal(line(r, 'path: '), 'path: full (ceo)');
+    assert.deepEqual(setOf(r), [...ROUTE_V018.feature]);
+    assert.equal(skippedOf(r).length, 0);
+    assert.deepEqual(full.records()[0].skip, []);
+    const forgot = world(t);
+    const f = forgot.run(...beginArgs('feature', 'low', 'on'));
+    assert.equal(f.code, 0);
+    assert.equal(line(f, 'path: '), 'path: full (ceo)');
+    assert.equal(forgot.records()[0].path, 'full');
+    assert.equal(forgot.records()[0].why, 'ceo');
+    const fix = world(t);
+    const x = fix.run(...beginArgs('fix', 'low', 'on'));
+    assert.equal(line(x, 'path: '), 'path: full (ceo)');
+    assert.deepEqual(setOf(x), [...ROUTE_V018.fix]);
+  });
+
+  test('--ceo short stands only at low with the setting on and a good data file; the refusal order is refused, tier, setting, ceo', (t) => {
+    const cases = [
+      [{}, 'low', 'on', 'short', 'short'],
+      [{}, 'medium', 'on', 'short', 'tier'],
+      [{}, 'low', 'off', 'short', 'setting'],
+      [{}, 'low', 'on', 'full', 'ceo'],
+      [{}, 'medium', 'off', 'full', 'tier'],
+      [{}, 'low', 'off', 'full', 'setting'],
+      [{ data: '{ nope' }, 'low', 'on', 'short', 'refused'],
+      [{ data: '{ nope' }, 'medium', 'off', 'full', 'refused']
+    ];
+    for (const [opts, triage, short, ceo, why] of cases) {
+      const w = world(t, opts);
+      w.run(...beginArgs('feature', triage, short, '--ceo', ceo));
+      assert.equal(w.records()[0].why, why, `${triage} ${short} ${ceo}`);
+      assert.equal(w.records()[0].path, why === 'short' ? 'short' : 'full');
+    }
+  });
+
+  test('preview without --ceo prints the offer of --ceo short, with --ceo full the full path, and uses no git', (t) => {
+    const w = world(t);
+    const flags = ['preview', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on'];
+    const offer = w.run(...flags);
+    assert.equal(offer.lines[1], 'path: short (low)');
+    assert.deepEqual(w.run(...flags, '--ceo', 'short').lines, offer.lines);
+    assert.equal(w.run(...flags, '--ceo', 'full').lines[1], 'path: full (ceo)');
+    assert.equal(w.calls.length, 0);
+  });
+
+  test('begin records the resolved full commit id, never the short value, and asks git with the hardened flags', (t) => {
+    const w = world(t);
+    w.begin();
+    assert.equal(w.records()[0].base, FULL);
+    assert.match(w.records()[0].base, /^[0-9a-f]{40}$/);
+    const subs = w.calls.map((c) => c.args.slice(3));
+    assert.deepEqual(subs[0], ['rev-parse', `--disambiguate=${SHA}`]);
+    assert.deepEqual(subs[1], ['cat-file', '-t', '--end-of-options', FULL]);
+    assert.deepEqual(w.calls[0].args.slice(0, 3), ['--no-optional-locks', '-c', 'core.fsmonitor=false']);
+    assert.equal(w.calls[0].opts.env.GIT_OPTIONAL_LOCKS, '0');
+    assert.equal(w.calls[0].opts.env.GIT_TERMINAL_PROMPT, '0');
+  });
+
+  test('a full-length base is checked with cat-file -t only, and a non-commit full id exits 3', (t) => {
+    const w = world(t);
+    const ok = w.run('begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', FULL, '--ceo', 'short');
+    assert.equal(ok.code, 0);
+    assert.deepEqual(w.calls.map((c) => c.args.slice(3)), [['cat-file', '-t', '--end-of-options', FULL]]);
+    const tree = world(t);
+    tree.repo.types[FULL] = 'tree';
+    const r = tree.run('begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', FULL, '--ceo', 'short');
+    assert.equal(r.code, 3);
+    assert.equal(tree.records().length, 0);
+  });
+
+  test('a short base that matches no commit, only a tree, two commits or over 16 candidates exits 3 and writes no record', (t) => {
+    const id = (n) => n.toString(16).padStart(40, '0');
+    const scenarios = {
+      'no object': (repo) => { repo.ids = []; },
+      'only a tree': (repo) => { repo.types[FULL] = 'tree'; },
+      'two commits': (repo) => { repo.ids.push(id(2)); repo.types[id(2)] = 'commit'; },
+      'over 16 candidates': (repo) => { for (let i = 1; i <= 16; i++) { repo.ids.push(id(i)); repo.types[id(i)] = 'tree'; } },
+      'a candidate that is not an object id': (repo) => { repo.ids.push('not-hex'); }
+    };
+    for (const [label, setup] of Object.entries(scenarios)) {
+      const w = world(t);
+      setup(w.repo);
+      const r = w.begin();
+      assert.equal(r.code, 3, label);
+      assert.match(r.lines.join('\n'), /base is not one commit/, label);
+      assert.equal(w.records().length, 0, label);
+    }
+    const oneAmongTrees = world(t);
+    oneAmongTrees.repo.ids.push(id(3));
+    oneAmongTrees.repo.types[id(3)] = 'tree';
+    assert.equal(oneAmongTrees.begin().code, 0, 'a tree beside exactly one commit is ignored');
+    assert.equal(oneAmongTrees.records()[0].base, FULL);
+    const failing = world(t);
+    const r = tierSet(beginArgs('feature', 'low', 'on', '--ceo', 'short'), { now: NOW, root: failing.root, pluginRoot: failing.pluginRoot, git: () => { throw new Error('git is gone'); } });
+    assert.equal(r.code, 3);
+    assert.equal(failing.records().length, 0);
+  });
+
+  test('a short sha shadowed by a branch resolves to the object, not the branch (real git)', (t) => {
+    const w = world(t, { project: null });
+    const env = gitEnv(w.dir);
+    const run = (...args) => git(w.root, env, args);
+    run('init', '-q');
+    run('config', 'user.name', 'Test');
+    run('config', 'user.email', 'test@example.invalid');
+    run('config', 'commit.gpgsign', 'false');
+    fs.writeFileSync(path.join(w.root, '.gitignore'), '.company/work/\n');
+    fs.writeFileSync(path.join(w.root, '.company', 'project.md'), '## Core\n- scripts/check.mjs: gate\n');
+    run('add', '-A');
+    run('commit', '-q', '-m', 'base');
+    const baseId = run('rev-parse', 'HEAD');
+    fs.writeFileSync(path.join(w.root, 'other.txt'), 'x\n');
+    run('add', '-A');
+    run('commit', '-q', '-m', 'other');
+    const otherId = run('rev-parse', 'HEAD');
+    const short = baseId.slice(0, 7);
+    run('branch', short, otherId);
+    assert.equal(run('rev-parse', short), otherId, 'the branch shadows the short sha for ordinary lookups');
+    const realGit = (args, o) => execFileSync('git', args, { cwd: o.cwd, env: { ...o.env, ...env }, stdio: ['ignore', 'pipe', 'ignore'] });
+    const call = (...args) => tierSet(args, { now: NOW, root: w.root, pluginRoot: w.pluginRoot, git: realGit });
+    const treeShort = run('rev-parse', `${baseId}^{tree}`).slice(0, 7);
+    assert.equal(call('begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', treeShort, '--ceo', 'short').code, 3, 'a tree id is not a commit');
+    assert.equal(w.records().length, 0);
+    const r = call('begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', short, '--ceo', 'short');
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(w.records()[0].base, baseId);
+    fs.mkdirSync(path.join(w.root, 'src', 'auth'), { recursive: true });
+    fs.writeFileSync(path.join(w.root, 'src', 'auth', 'x.ts'), 'export {};\n');
+    run('add', '-A');
+    run('commit', '-q', '-m', 'work');
+    const s = call('sync', SLUG, '--diff');
+    assert.equal(tierOf(s), 'high');
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/x.ts'), s.lines.join('\n'));
+  });
+
+  test('a record line with a short base is a bad line and the reader and the CLI refuse it', (t) => {
+    const w = world(t);
+    w.begin();
+    const file = path.join(w.work, 'tier-path.jsonl');
+    const rec = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+    fs.writeFileSync(file, JSON.stringify({ ...rec, base: SHA }) + '\n');
+    assert.throws(() => readTierPath(w.root, SLUG), /tier-path record demo line 1/);
+    assert.equal(w.run('sync', SLUG).code, 1);
+    assert.equal(w.run('read', SLUG).code, 1);
+  });
+
+  test('Core is read from the base commit: a working-copy edit neither removes nor adds a Core hit', (t) => {
+    const w = world(t);
+    w.begin();
+    fs.writeFileSync(path.join(w.root, '.company', 'project.md'), '## Core\n- elsewhere/only: x\n');
+    w.diff('skills/pipeline/SKILL.md\n');
+    const r = w.run('sync', SLUG, '--diff');
+    assert.equal(tierOf(r), 'high');
+    assert.ok(r.lines.includes('check: high: core skills/pipeline/SKILL.md'));
+    const blob = w.calls.find((c) => c.args[3] === 'cat-file' && c.args[4] === 'blob');
+    assert.deepEqual(blob.args.slice(3), ['cat-file', 'blob', '--end-of-options', `${FULL}:.company/project.md`]);
+    const other = world(t);
+    other.begin();
+    fs.writeFileSync(path.join(other.root, '.company', 'project.md'), '## Core\n- docs/plain: x\n');
+    other.diff('docs/plain/a.md\n');
+    const o = other.run('sync', SLUG, '--diff');
+    assert.equal(tierOf(o), 'low', 'a Core line added after the base commit is not read');
+    assert.ok(o.lines.includes('check: 1 paths, none forced high'));
+  });
+
+  test('a project file absent at the base commit is core unknown even when the working copy has one', (t) => {
+    const w = world(t);
+    w.begin();
+    w.repo.project = null;
+    w.plan(fixture('feature-plan-clean.md'));
+    const r = w.run('sync', SLUG, '--plan', '02-plan.md');
+    assert.equal(tierOf(r), 'high');
+    assert.ok(r.lines.includes('check: high: core unknown'));
+  });
+
+  test('a base project file without a Core heading is core unknown', (t) => {
+    const w = world(t);
+    w.begin();
+    w.repo.project = '## Modules\n- a\n';
+    w.diff('docs/plain/a.md\n');
+    const r = w.run('sync', SLUG, '--diff');
+    assert.ok(r.lines.includes('check: high: core unknown'));
+  });
+
+  test('the three governance files are core hits in a plan and in a diff, even when Core lists nothing', (t) => {
+    const empty = '## Core\n\n## Modules\n';
+    for (const file of ['.company/project.md', '.company/settings.json', '.company/standards.md']) {
+      const d = world(t, { project: empty });
+      d.begin();
+      d.diff(`${file}\n`);
+      const r = d.run('sync', SLUG, '--diff');
+      assert.equal(tierOf(r), 'high', file);
+      assert.ok(r.lines.includes(`check: high: core ${file}`), file);
+      const p = world(t, { project: empty });
+      p.begin();
+      p.plan(`# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: ${file}\n- depends-on: none\n- parallel: yes\n`);
+      const q = p.run('sync', SLUG, '--plan', '02-plan.md');
+      assert.equal(tierOf(q), 'high', file);
+      assert.ok(q.lines.includes(`check: high: core ${file}`), file);
+    }
+    const other = world(t, { project: empty });
+    other.begin();
+    other.diff('.company/work/demo/02-plan.md\n.company/roadmap/x.md\n');
+    assert.equal(tierOf(other.run('sync', SLUG, '--diff')), 'low', 'other .company files stay exempt');
+  });
+
+  describe('skips come from the record', () => {
+    const changed = (fn) => { const d = JSON.parse(JSON.stringify(DATA)); fn(d); return d; };
+
+    test('the begin line holds skip, the route minus the low set, in route order', (t) => {
+      const w = world(t);
+      w.begin();
+      assert.deepEqual(w.records()[0].skip, FEATURE_SKIPPED);
+      const fix = world(t);
+      fix.begin('fix');
+      assert.deepEqual(fix.records()[0].skip, ['security']);
+    });
+
+    test('a data file with a different low set and a new rev after begin raises to high and adds exactly the recorded skips', (t) => {
+      const w = world(t);
+      w.begin();
+      const recorded = w.records()[0].skip;
+      fs.writeFileSync(w.dataFile, JSON.stringify(changed((d) => {
+        d.rev = 2;
+        d.playbooks.feature.low = d.playbooks.feature.low.filter((e) => e !== 'writer');
+      })));
+      const r = w.run('sync', SLUG);
+      assert.equal(tierOf(r), 'high');
+      assert.deepEqual(addOf(r), recorded);
+      assert.ok(r.lines.includes('tier-sets: changed since begin'));
+      assert.equal(w.records()[1].cause, 'sets');
+      assert.deepEqual(setOf(r), [...ROUTE_V018.feature]);
+    });
+
+    test('a refused data file at sync adds the recorded skips and says so', (t) => {
+      const w = world(t);
+      w.begin('fix');
+      fs.writeFileSync(w.dataFile, '{ nope');
+      const r = w.run('sync', SLUG);
+      assert.equal(tierOf(r), 'high');
+      assert.deepEqual(addOf(r), ['security']);
+      assert.ok(r.lines.some((l) => l.startsWith('tier-sets: refused')));
+      assert.equal(w.records()[1].cause, 'sets');
+    });
+
+    test('a full run is not raised by a changed data file', (t) => {
+      const w = world(t);
+      w.begin('feature', 'low', 'on', '--ceo', 'full');
+      fs.writeFileSync(w.dataFile, JSON.stringify(changed((d) => { d.rev = 2; })));
+      const r = w.run('sync', SLUG);
+      assert.equal(tierOf(r), 'low');
+      assert.equal(w.records().length, 1);
+    });
+
+    test('read and readTierPath give the same view with the data file deleted, and raise puts the skips in add', (t) => {
+      const w = world(t);
+      w.begin();
+      const kept = readTierPath(w.root, SLUG);
+      fs.rmSync(w.dataFile);
+      const deleted = readTierPath(w.root, SLUG, { pluginRoot: w.pluginRoot });
+      assert.deepEqual(deleted, kept);
+      assert.deepEqual(JSON.parse(w.run('read', SLUG).lines.join('\n')), kept);
+      assert.deepEqual(kept.skipped, FEATURE_SKIPPED);
+      assert.deepEqual(kept.set, LOW_FEATURE);
+      assert.deepEqual(kept.add, []);
+      const r = w.run('raise', SLUG, 'medium');
+      assert.equal(r.code, 0);
+      const raised = readTierPath(w.root, SLUG);
+      assert.deepEqual(raised.add, FEATURE_SKIPPED);
+      assert.deepEqual(raised.set, [...ROUTE_V018.feature]);
+    });
+
+    test('a skip that breaks its rule is a bad line: unknown entry, a required entry, order, repeat, not a list, non-empty on a full run, missing', (t) => {
+      const bad = [
+        ['unknown entry', { skip: ['root-shell'] }, false],
+        ['a required entry', { skip: ['builders'] }, false],
+        ['order', { skip: ['security', 'persona-tester'] }, false],
+        ['repeat', { skip: ['persona-tester', 'persona-tester'] }, false],
+        ['not a list', { skip: 'security' }, false],
+        ['non-empty on a full run', { skip: ['persona-tester'] }, true]
+      ];
+      for (const [label, patch, full] of bad) {
+        const w = world(t);
+        w.begin('feature', 'low', 'on', '--ceo', full ? 'full' : 'short');
+        const file = path.join(w.work, 'tier-path.jsonl');
+        const rec = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+        fs.writeFileSync(file, JSON.stringify({ ...rec, ...patch }) + '\n');
+        assert.throws(() => readTierPath(w.root, SLUG), /tier-path record demo line 1/, label);
+      }
+      const missing = world(t);
+      missing.begin();
+      const file = path.join(missing.work, 'tier-path.jsonl');
+      const rec = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+      delete rec.skip;
+      fs.writeFileSync(file, JSON.stringify(rec) + '\n');
+      assert.throws(() => readTierPath(missing.root, SLUG), /tier-path record demo line 1/);
+    });
+  });
+
+  describe('acronym file names', () => {
+    const hits = [
+      ['src/JWTValidator.ts', 'jwt'], ['src/JWTMiddleware.ts', 'jwt'], ['src/SSOCallback.ts', 'sso'], ['src/SSOConfig.cs', 'sso'],
+      ['src/PIIRedactor.ts', 'pii'], ['src/PIIMasker.ts', 'pii'], ['src/MFAService.ts', 'mfa'], ['src/MFASetup.tsx', 'mfa'],
+      ['src/RBACPolicy.ts', 'rbac'], ['src/SAMLProvider.java', 'saml'], ['src/getJWTToken.ts', 'jwt'], ['src/OAuth2Client.ts', 'oauth2']
+    ];
+    for (const [file, token] of hits) {
+      test(`${file} is a pattern ${token} hit`, (t) => {
+        const w = world(t);
+        w.begin();
+        w.diff(`${file}\n`);
+        const r = w.run('sync', SLUG, '--diff');
+        assert.equal(tierOf(r), 'high');
+        assert.ok(r.lines.includes(`check: high: pattern ${token} ${file}`), r.lines.join('\n'));
+      });
+    }
+
+    test('names that only look close stay clean: lessons, personality, a Handoff named security, words that hold an acronym inside', (t) => {
+      const w = world(t);
+      w.begin();
+      w.diff('scripts/lessons.mjs\nscripts/personality.mjs\n.company/work/x/18-security.md\nsrc/Mfaction.ts\nsrc/Jwtless.ts\n');
+      const r = w.run('sync', SLUG, '--diff');
+      assert.equal(tierOf(r), 'low', r.lines.join('\n'));
+    });
   });
 });
