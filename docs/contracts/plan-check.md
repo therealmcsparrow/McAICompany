@@ -1,0 +1,105 @@
+# Contract: plan-check v1
+
+Provider: `scripts/plan-check.mjs` (scanner, pattern file loader, record writer and reader; Node built-ins only) with the pattern file `scripts/plan-check-patterns.json`, and `scripts/plan-check-verdict.mjs` (verdict and history scan; Node built-ins and `git` through `execFile`). Writer of the record: the Lead (`aico:pipeline` Plan Gate and Finish, through `skills/pipeline/references/plan-check.md`), only through the CLI. Consumers: the Plan Gate summary (the `gate` block), `aico:feedback` (the `verdict` line), `scripts/plan-check-verdict.mjs` through the exported `readRecord` and `scanText`, and the later hook-run Gate (block, exit 2), which will reuse `scanText` and `loadPatterns`.
+Uses: `run-state` v1.3 (the exported `show(root, slug)`, for each run's Step Handoffs), `aico-settings` v1.5 (`plan_check.policy` and `plan_check.runs`, passed in by the caller as arguments; neither script reads settings itself).
+Rationale: `docs/adr/0030-plan-check-own-record.md`. Ledger records (`token-ledger` v1.1) and Handoff frontmatter (`handoff` v1.1) are not changed by this Contract.
+
+## Plan file
+- One file in the run folder: `.company/work/<slug>/<name>`. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`; `<name>` matches `^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$` (covers `02-plan.md`, `02-architect-plan.md`, `55-architect-plan-m.md`, `plan.md`). Any other name → `error` record, reason `plan-name`.
+- Opened with `lstat`: a regular file, not a link, at most 256 KiB, valid UTF-8. CR LF and a lone CR count as one line break; line numbers are 1-based.
+
+## Scan rules (`scanText(text, patterns, { file })`)
+Lines are read top to bottom with this state:
+1. **Fences.** A line whose text after up to 3 leading spaces starts with 3 or more backticks or tildes opens a fence; it closes at the next line that holds only a run of the same character at least as long (plus spaces). Fence lines and the lines between them are never scanned and are never headings. A fence still open at the end of the file gives one finding at its opening line, id `unclosed-fence`, why `an unclosed code fence hides the rest of the plan from the check`, wherever it opened.
+2. **Sections.** An ATX heading outside a fence (`^ {0,3}(#{1,6})[ \t]+(.*)$`) whose level is 2 or 3 and whose text, trimmed, starts with `Steps` or `Tasks` (case-insensitive) opens a section. It runs to the next ATX heading of the same or a lower level number. Deeper headings inside it are content lines. Lines outside every section are never scanned (AC1). Setext headings are not section boundaries.
+3. **Skipped lines** inside a section (AC2): a blockquote line (first non-space character `>`), and a **Decided line**: `^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided: (\S.*?) because (\S.*)$`, case-sensitive. Each Decided line adds 1 to `decided` (AC10). Only that full shape is skipped: `Decided: A or B?` is scanned like any other line.
+4. **Inline code spans** are removed before matching: a run of n backticks opens a span that closes at the next run of exactly n backticks on the same line; the span becomes one space. A run with no closing run is plain text.
+5. **Long lines.** A content line over 4000 characters gives one finding, id `long-line`, why `line too long to check`, and is not matched further.
+6. **Patterns** are tried in file order on the remaining text; the first match gives exactly one finding for that line and the rest are skipped (AC3).
+- Finding: `{ file: <name>, line: <n>, id: <pattern id>, phrase: <text>, why: <pattern why> }`. `phrase` = the matched text with control characters and backticks removed, `|` replaced by `/`, whitespace runs collapsed to one space, trimmed, and cut to 60 code points plus `…` when longer. Findings are sorted by line.
+- Result: `{ findings: [...], decided: <n> }`. An empty plan, or one with no Steps or Tasks section, gives `findings: []`, `decided: 0`.
+
+## Pattern file `scripts/plan-check-patterns.json` (`loadPatterns(path?)`)
+```json
+{ "v": 1, "patterns": [
+  { "id": "tbd", "re": "\\bTBD\\b", "flags": "", "why": "a placeholder: the plan does not say what to build here" },
+  { "id": "todo", "re": "\\bTODO\\b", "flags": "", "why": "work the plan has not settled" },
+  { "id": "decide-later", "re": "\\bdecide later\\b", "flags": "i", "why": "a choice put off past the Plan Gate" },
+  { "id": "open-choice", "re": "^.* or .*\\?\\s*$", "flags": "", "why": "an open either-or question: the plan has not picked one" } ] }
+```
+- These four entries are the v0.16 defaults. TBD and TODO are whole words and case-sensitive; "decide later" is case-insensitive; `open-choice` needs a literal ` or ` and a final `?` (a line ending in `?` without ` or ` gives no finding).
+- Limits (AC4): file at most 16 KiB; `v` exactly `1`; at most **10** entries; keys of an entry exactly `id`, `re`, `why`, optional `flags`; `id` matches `^[a-z][a-z0-9-]{0,31}$`, unique, and is not `unclosed-fence` or `long-line`; `re` a string of 1 to 200 characters that compiles with `new RegExp(re, flags)`; `flags` absent, `""` or `"i"`; `why` one line of 1 to 120 characters, not blank after trimming.
+- Any problem rejects the whole file; nothing is scanned. The error names the entry: `patterns entry <index> (<id, or ? when the id is bad>): <problem>`, or `patterns: <n> entries, at most 10`, or `patterns: <problem>` for the file itself.
+- `loadPatterns` returns `{ patterns, hash }`; `hash` = the first 12 lowercase hex characters of the SHA-256 of the file bytes.
+- Each pattern must run in linear time on a 4000-character line (a test feeds every entry a 4000-character adversarial line and asserts under 50 ms).
+
+## Record `.company/work/<slug>/plan-check.jsonl`
+The per-run marker (AC11): its last scan, off or error record says whether the check ran for the run.
+- Append-only (`O_APPEND`), LF, one JSON object per line; a line at most 256 bytes, the file at most 64 KiB and 1000 lines. The run folder and the file are opened with `lstat`; a link is refused. Committed with the run's Handoffs.
+- Counts, enums, a file name and times only. No plan text, no phrase, no CEO text (GDPR Art. 5(1)(c)).
+
+| Key | Value | On |
+|---|---|---|
+| `v` | `1` | all |
+| `at` | UTC `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`, written by the script | all |
+| `ev` | `scan \| off \| wave \| error` | all |
+| `policy` | `warn \| block` on `scan` and `error`; `off` on `off` | scan, off, error |
+| `plan` | the plan `<name>` (Plan file rule) | scan; on `error` only when the name is valid |
+| `patterns` | 12 lowercase hex (the `loadPatterns` hash) | scan |
+| `findings` | integer 0-10000 | scan |
+| `decided` | integer 0-10000 | scan |
+| `waved` | integer 0-10000, at most the `findings` of the latest `scan` before it | wave |
+| `reason` | `patterns \| plan-missing \| plan-unreadable \| plan-too-large \| plan-name` | error |
+
+Every key listed for an `ev` is required (except `plan` on `error`); every other key is refused.
+
+## Reader `readRecord(root, slug)` (fail-loud, AC6)
+- No file → `{ v: 1, slug, state: "none" }`.
+- Otherwise every line is checked. A line that is not JSON, a `v` other than `1`, an unknown key, a missing required key, a bad value, a `wave` with no `scan` before it, a `waved` above that scan's `findings`, a link, or a file over a limit throws `PlanCheckRecordError` with message `plan-check record <slug> line <n>: <reason>` (`line 0` for file-level problems). It never skips a line and never returns a partial view.
+- View: `{ v: 1, slug, state: "on" | "off" | "error", policy, plan, patterns, findings, decided, waved, scans }` from the last `scan`, `off` or `error` record: `on` for `scan`, `off` for `off`, `error` for `error`. `waved` = the last `wave` after the last `scan`, else `0`. `scans` = the number of `scan` records. Keys a state lacks are `null`.
+
+## CLI `scripts/plan-check.mjs` (cwd = product root; `main(args, { now, root })` exported)
+Exit codes: **0** done; **1** the scan could not run, or `read` met a broken record; **2** `block` policy with at least one finding (AC8); **3** refused (bad arguments, bad slug, write refused). Refusals print `refused: <reason>` and write nothing.
+
+| Command | Effect |
+|---|---|
+| `gate <slug> <plan-name> --policy <warn\|block> [--json]` | loads the pattern file, reads and scans the plan, appends a `scan` record (also with 0 findings, AC5), prints the Gate block. Pattern or plan problem → appends an `error` record and prints one line `plan-check (<policy>): error <reason>: <detail>`, exit 1. `--json` prints `{ "v": 1, "policy", "count", "decided", "findings": [ ... ] }` with every finding instead of the block |
+| `off <slug>` | appends an `off` record, prints `plan-check: off` (AC8: no scan runs) |
+| `wave <slug> <n>` | appends a `wave` record, prints `plan-check: waved <n> of <findings>`; refused with no `scan` record or `<n>` above its `findings` |
+| `read <slug>` | prints the reader view as JSON, exit 0; broken record → `plan-check record <slug> line <n>: <reason>`, exit 1 |
+
+**Gate block** (stdout, nothing else):
+1. `plan-check (<policy>): <n> open decision[s], <d> decided`
+2. Up to 5 rows `<file>:<line> | <phrase> | <why>`, in line order.
+3. `+<k> more` when more than 5 findings exist (AC7).
+
+## CLI `scripts/plan-check-verdict.mjs` (read-only; cwd = product root; `main(args, { root })` exported)
+It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `git` runs through `execFile` with a fixed argument list, no shell, cwd = root, 30 s timeout, 8 MiB output cap.
+
+**Feature runs.** Every `.company/work/<slug>/` (valid slug, a plain folder, at most 200) that holds `00-summary.md` and a file matching the plan name rule. Order: newest first by the committer time of the last commit that touched its `00-summary.md` (`git log -1 --format=%ct -- <path>`); untracked → the file mtime.
+**Side.** `readRecord` state `on` → check-on. State `none` or `off` → baseline (the backfill: runs before v0.16 and runs with the check off). State `error` → left out, one warning. A broken record → the verdict prints `plan-check verdict: error (<reader message>)`, exit 1.
+**Fix rounds of a run** (the frozen definition, `01-product-manager.md` Decisions, measured the same way on both sides): the highest numeric `round:` among the run's Step Handoffs, from `run-state` v1.3 `show(root, slug).steps`. A run with no Step whose `round` is a number is left out, one warning.
+
+| Command | Output |
+|---|---|
+| `verdict [--runs <N>]` | `N` integer 3-50, default 10. Each side = its newest `N` runs. Exactly one line, segments joined by ` \| `: `plan-check verdict: <pass\|fail\|insufficient (n=<k>)>` · `check on: median <m> (n=<a>)` · `baseline: median <b> (n=<c>)` · `waved off <p>%` plus ` retune` when the share is above 30% (AC14), or `waved off n/a` · `default should become off` (only on fail) · `warnings: <w>` (only when not 0) |
+| `history [--labels <file>] [--limit <n>] [--json]` | the AC12 scan, below |
+
+- **Verdict rule (AC13):** either side with fewer than `N` runs → `insufficient (n=<k>)`, `k` = the size of the smaller side. Otherwise `pass` when baseline median − check-on median ≥ 1 (unrounded medians), else `fail`. Fail means the check stays and its default should become off; the script changes no setting.
+- Medians use the ledger rule (middle value; the mean of the two middle values for an even count); shown with one decimal; an empty side shows `?`.
+- Waved-off share = the sum of `waved` ÷ the sum of `findings` over the check-on side's runs, rounded to a whole percent; `n/a` when the sum of `findings` is 0.
+
+**History scan (AC12).** Lists every plan path ever added under `.company/work/` (`git log --diff-filter=A --format=%H%x09%ct --name-only -- .company/work`), keeps the paths that match `.company/work/<slug>/<plan name>`, takes each path's oldest adding commit, newest first, at most `--limit` (default 50, at most 200), reads each with `git show <sha>:<path>` (over 256 KiB → skipped, one warning) and scans it with the current pattern file.
+- Text: per plan `<path>@<sha7>: <n> findings`, then one row per finding `  <line> | <phrase> | <why> | <fp|tp|unlabeled>`; last line `history: <p> plans, <f> findings, labeled <l>, false positives <fp> (<rate>%)`, or `false-positive rate: no labels` when nothing is labeled. `--json`: the same data as one object.
+- Labels file (read-only, at most 64 KiB, given by the person running it): `{ "v": 1, "labels": [ { "path": "<plan path>", "sha": "<7-40 hex>", "line": <n>, "label": "fp" | "tp" } ] }`; unknown keys or a bad entry → `refused: labels entry <i>: <problem>`, exit 3. A label matches a finding with the same path and line whose commit sha starts with `sha`. Rate = fp ÷ (fp + tp), whole percent.
+
+## Error cases
+- Pattern file invalid → no scan; `gate` writes an `error` record (reason `patterns`) and exits 1; the Plan Gate shows the line and goes on.
+- Plan missing, unreadable, too large or badly named → `error` record with that reason, exit 1.
+- Record unwritable (a link, over a limit, run folder missing) → `refused: <reason>`, exit 3; the Gate shows the line and goes on.
+- `verdict` or `history` with `git` missing or failing → files are ordered by mtime (verdict) or `history: git unavailable` (history), exit 0 for verdict, exit 1 for history.
+- Nothing here ever blocks a v0.16 Gate. Exit 2 exists for the later hook-run Gate; in v0.16 the Plan Gate treats it as warn.
+
+## Compatibility
+- New Contract. A run folder without `plan-check.jsonl` reads as state `none`.
+- A later reader that meets a `v` it does not know throws (fail-loud) rather than guessing. An added key or event needs a new version of this Contract and a reader that accepts it.
