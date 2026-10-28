@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { main, median } from './plan-check-verdict.mjs';
+import { main, median, catBlobArgs } from './plan-check-verdict.mjs';
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-check-verdict-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
@@ -310,6 +310,29 @@ test('--runs is refused outside 3 to 50 and unknown arguments are refused', () =
     assert.equal(r.code, 3, args.join(' '));
     assert.match(r.lines[0], /^refused: /);
   }
+});
+
+test('the unknown-argument refusal never echoes the argument', () => {
+  const root = repo();
+  for (const args of [['history', '--bogus-\u001b[31mX'], ['verdict', 'extra-secret']]) {
+    const r = run(root, args);
+    assert.equal(r.code, 3);
+    assert.ok(!r.lines.join('\n').includes(args[1]), args.join(' '));
+  }
+});
+
+test('the labels sha message says 7 to 64 hex characters', () => {
+  const root = repo();
+  const file = path.join(root, 'labels.json');
+  fs.writeFileSync(file, JSON.stringify({ v: 1, labels: [{ path: '.company/work/a/plan.md', sha: 'zz', line: 1, label: 'fp' }] }));
+  const r = run(root, ['history', '--labels', file]);
+  assert.equal(r.code, 3);
+  assert.match(r.lines[0], /7 to 64 lowercase hex/);
+});
+
+test('catBlobArgs puts --end-of-options before the revision', () => {
+  const args = catBlobArgs('abcdef1', '.company/work/a/plan.md');
+  assert.deepEqual(args, ['cat-file', 'blob', '--end-of-options', 'abcdef1:.company/work/a/plan.md']);
 });
 
 test('without git, runs are ordered by file time, every work file uses its mtime and one warning is added', () => {

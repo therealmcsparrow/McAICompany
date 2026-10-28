@@ -151,7 +151,7 @@ function orderRuns(root, runs, warnings) {
   } else warnings.push('git unavailable: runs ordered by file time');
   const keyed = runs.map(r => ({ ...r, time: last.get(`.company/work/${r.slug}/00-summary.md`) ?? r.mtime }));
   keyed.sort((a, b) => b.time - a.time || (a.slug < b.slug ? -1 : 1));
-  return keyed.slice(0, MAX_RUNS);
+  return { runs: keyed.slice(0, MAX_RUNS), gitFailed: !res.ok };
 }
 
 // Earliest add time (epoch seconds) per work-file name of one run, from one git call. null when git failed.
@@ -200,8 +200,8 @@ function handoffRounds(root, slug, warnings, gitState) {
 
 // Collects the counted runs. Throws the reader's error for a broken record.
 function collectRuns(root, warnings) {
-  const ordered = orderRuns(root, featureRuns(root), warnings);
-  const gitState = { failed: warnings.length > 0 };
+  const { runs: ordered, gitFailed } = orderRuns(root, featureRuns(root), warnings);
+  const gitState = { failed: gitFailed };
   const counted = [];
   for (const r of ordered) {
     const rec = readRecord(root, r.slug);
@@ -270,7 +270,7 @@ function readLabels(file) {
     const keys = Object.keys(e);
     if (keys.length !== 4 || !['path', 'sha', 'line', 'label'].every(k => Object.hasOwn(e, k))) bad('keys must be exactly path, sha, line, label');
     if (typeof e.path !== 'string' || !PLAN_PATH_RE.test(e.path)) bad('path is not a plan path');
-    if (typeof e.sha !== 'string' || !SHA_PREFIX_RE.test(e.sha)) bad('sha must be 7 to 40 lowercase hex characters');
+    if (typeof e.sha !== 'string' || !SHA_PREFIX_RE.test(e.sha)) bad('sha must be 7 to 64 lowercase hex characters');
     if (!Number.isSafeInteger(e.line) || e.line < 1 || e.line > 10000000) bad('line must be a positive whole number');
     if (e.label !== 'fp' && e.label !== 'tp') bad('label must be fp or tp');
     const key = `${e.path}\n${e.sha}\n${e.line}`;
@@ -293,7 +293,7 @@ function parseHistoryArgs(args) {
         if (!/^\d{1,3}$/.test(v) || Number(v) < 1 || Number(v) > MAX_LIMIT) refuse(`--limit must be a whole number from 1 to ${MAX_LIMIT}`);
         out.limit = Number(v);
       }
-    } else refuse(`unknown argument ${a}`);
+    } else refuse('unknown argument');
   }
   return out;
 }
@@ -317,6 +317,11 @@ function workingTreePlans(root) {
     }
   }
   return plans;
+}
+
+// A revision never parses as an option: --end-of-options comes before it.
+export function catBlobArgs(sha, path) {
+  return ['cat-file', 'blob', '--end-of-options', `${sha}:${path}`];
 }
 
 // Plans ever added in git: Map path -> { sha, ct } at the oldest adding commit. null when git failed.
@@ -354,7 +359,7 @@ export function history(root, args) {
     const m = PLAN_PATH_RE.exec(p.path);
     let bytes;
     if (p.source === 'git') {
-      const blob = git(root, ['cat-file', 'blob', `${p.sha}:${p.path}`], { binary: true, maxBuffer: MAX_PLAN_BYTES + 1 });
+      const blob = git(root, catBlobArgs(p.sha, p.path), { binary: true, maxBuffer: MAX_PLAN_BYTES + 1 });
       bytes = blob.ok ? blob.out : null;
     } else bytes = readBounded(join(root, ...p.path.split('/')), MAX_PLAN_BYTES);
     const rev = p.source === 'git' ? p.sha : bytes === null ? null : createHash('sha256').update(bytes).digest('hex');
