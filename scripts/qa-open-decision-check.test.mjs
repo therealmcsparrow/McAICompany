@@ -193,10 +193,20 @@ test('AC1 AC2 AC3 AC10 the mixed fixture plan gives exactly the expected finding
   }
 });
 
-test('AC1 only Steps and Tasks sections count, at level 2 or 3, case-insensitive', async () => {
+test('AC1 only Steps, Tasks, Wave, Phase, Fix round, T<n> and M<n> sections count, at level 2 or 3, case-insensitive', async () => {
   const cases = [
     ['## Steps\nTBD', 1],
     ['### Tasks\nTBD', 1],
+    ['## Wave 1\nTBD', 1],
+    ['### phase B\nTBD', 1],
+    ['## FIX ROUND 2\nTBD', 1],
+    ['### T1 checker\nTBD', 1],
+    ['## M3\nTBD', 1],
+    ['# Wave 1\nTBD', 0],
+    ['#### T1\nTBD', 0],
+    ['## Test notes\nTBD', 0],
+    ['## Fixes\nTBD', 0],
+    ['## Overview\n**T1 build** TBD', 0],
     ['## tasks and more\nTBD', 1],
     ['### STEPS\nTBD', 1],
     ['# Steps\nTBD', 0],
@@ -1512,9 +1522,17 @@ test('AC12 history of a plan with a hostile line reports it without failing, and
   assert.match(r.all, /huge/);
 });
 
-test('AC12 history with no git history reports git unavailable and exits 1', async (t) => {
+test('AC12 history with git missing and a plan on disk scans the working tree only, warns once and exits 0', async (t) => {
   const c = tmp(t, 'qa-odc-history');
   mkRun(c.root, 'demo', '## Steps\nTBD\n');
+  const r = makeEnv(c).verdict('history');
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.all, /git unavailable: working tree only/);
+  assert.match(r.out, /demo\/02-plan\.md@[0-9a-f]{7} \(working tree\): 1 finding/);
+});
+
+test('AC12 history with git missing and no plan on disk exits 1', async (t) => {
+  const c = tmp(t, 'qa-odc-history');
   const r = makeEnv(c).verdict('history');
   assert.equal(r.status, 1, r.all);
   assert.match(r.all, /history: git unavailable/);

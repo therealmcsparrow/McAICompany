@@ -46,6 +46,7 @@ function cli(root, args, now = NOW) {
 const { patterns: PATTERNS } = loadPatterns(shipped);
 const scan = (text) => scanText(text, PATTERNS, { file: '02-plan.md' });
 const inSteps = (...lines) => ['## Steps', ...lines].join('\n');
+const fixture = (name) => fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'plan-check', name), 'utf8');
 
 function patternFile(obj) {
   const f = path.join(tmp(), 'p.json');
@@ -70,6 +71,35 @@ describe('scanText', () => {
 
   test('level 1 and 4 headings do not open a section', () => {
     assert.deepEqual(scan('# Steps\nTBD\n#### Tasks\nTBD').findings, []);
+  });
+
+  test('Wave, Phase, Fix round, T<n> and M<n> headings open a section, any case', () => {
+    for (const title of ['Wave 1', 'Waves 1-4', 'phase A', 'PHASE B', 'Fix round 2', 'T1 checker', 't10', 'M7 gate', 'Steps', 'Tasks']) {
+      assert.equal(scan(`## ${title}\nTBD`).findings.length, 1, title);
+      assert.equal(scan(`### ${title}\nTBD`).findings.length, 1, title);
+    }
+  });
+
+  test('near-miss headings do not open a section', () => {
+    for (const title of ['Test notes', 'Tidy', 'Mixed', 'T-A', 'M', 'T', 'Overview', 'Fix', 'Fixes', 'Notes']) {
+      assert.deepEqual(scan(`## ${title}\nTBD`).findings, [], title);
+    }
+  });
+
+  test('a bold T<n> line opens nothing; it is scanned only under a matching heading', () => {
+    assert.deepEqual(scan('## Overview\n**T1 build** TBD').findings, []);
+    assert.deepEqual(scan('## Wave 1\n**T1 build** TBD').findings.map((f) => f.line), [2]);
+  });
+
+  test('wave fixture: Wave sections and a T<n> heading inside them are scanned', () => {
+    const r = scan(fixture('wave-plan.md'));
+    assert.deepEqual(r.findings.map((f) => [f.line, f.id]), [[9, 'tbd'], [11, 'open-choice'], [12, 'todo'], [16, 'decide-later']]);
+    assert.equal(r.decided, 1);
+  });
+
+  test('task-headings fixture: T<n>, M<n>, Phase and Fix round open sections; Overview and look-alikes do not', () => {
+    const r = scan(fixture('task-headings-plan.md'));
+    assert.deepEqual(r.findings.map((f) => [f.line, f.id]), [[7, 'tbd'], [13, 'open-choice'], [16, 'todo'], [19, 'tbd'], [25, 'todo']]);
   });
 
   test('fences hide lines; tilde and backtick; a shorter run does not close', () => {

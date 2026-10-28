@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Plan check (contract: docs/contracts/plan-check.md v1). Node built-ins only, no child process.
-// Scans the Steps and Tasks sections of a plan for open decisions, and keeps a per-run record of the
+// Scans the Steps, Tasks, Wave, Phase, Fix round, T<n> and M<n> sections of a plan for open decisions, and keeps a per-run record of the
 // scans in .company/work/<slug>/plan-check.jsonl. The record holds counts, enums, a file name and
 // times only, never plan text (GDPR Art. 5(1)(c)). Plan text and CLI arguments are untrusted data.
 import fs from 'node:fs';
@@ -29,7 +29,7 @@ const HASH = /^[0-9a-f]{12}$/;
 const WAVE_COUNT = /^(0|[1-9]\d{0,4})$/;
 const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
 const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*)$/;
-const SECTION_TITLE = /^(steps|tasks)/i;
+const SECTION_TITLE = /^(?:steps|tasks|wave|phase|fix round|[tm]\d)/i;
 const DECIDED = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided: (\S.*?) because (\S.*)$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 const POLICIES = ['warn', 'block'];
