@@ -1596,6 +1596,38 @@ test('readClaudeVersion: a claude planted in the current or product folder is ne
   assert.equal(exec.mock.calls.length, 0);
 });
 
+test('readClaudeVersion: a folder named "..bin" inside the product root is inside, not outside', (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'planted-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  fs.mkdirSync(path.join(repo, '..bin'));
+  fs.writeFileSync(path.join(repo, '..bin', name), 'x', { mode: 0o755 });
+  const exec = t.mock.fn(() => '2.1.311');
+  assert.equal(readClaudeVersion({ env: { PATH: path.join(repo, '..bin') }, exec, cwd: repo, productRoot: repo }), null);
+  assert.equal(exec.mock.calls.length, 0);
+});
+
+test('readClaudeVersion: on Windows only drive-letter entries count; device and UNC spellings of the product root are refused', { skip: process.platform !== 'win32' }, (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'planted-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(repo, 'claude.exe'), 'x');
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'cwd-'));
+  t.after(() => fs.rmSync(other, { recursive: true, force: true }));
+  const real = fs.realpathSync.native(repo);
+  const share = `\\\\localhost\\${real[0]}$${real.slice(2)}`;
+  const forms = [`\\\\?\\${real}`, `\\\\.\\${real}`, share, `\\\\?\\UNC\\${share.slice(2)}`];
+  for (const form of forms) {
+    const exec = t.mock.fn(() => '2.1.311');
+    assert.equal(readClaudeVersion({ env: { PATH: form }, exec, cwd: other, productRoot: repo }), null, form);
+    assert.equal(exec.mock.calls.length, 0, form);
+  }
+  // an allow-list, not a block-list: a harmless device-form entry is refused too
+  const { bin } = pathWith(t);
+  const exec = t.mock.fn(() => '2.1.311');
+  assert.equal(readClaudeVersion({ env: { PATH: `\\\\?\\${fs.realpathSync.native(bin)}` }, exec, cwd: other, productRoot: repo }), null);
+  assert.equal(exec.mock.calls.length, 0);
+});
+
 test('readClaudeVersion: a later trusted PATH entry still answers when a planted one is skipped', (t) => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'planted-'));
   t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
@@ -1653,17 +1685,27 @@ test('model-env FORCE: a disagreement is bypassed; without FORCE the lower versi
 
 test('model-env CLI: a claude.exe planted in the working folder is not run', (t) => {
   const s = sandbox(t);
+  // The planted program is a copy of node. If it ran with --version it would print node's version, which the line
+  // would show (FORCE is off, so the version is printed); the marker file is written by the .cmd twin.
   const marker = path.join(s.cwd, 'ran.txt');
   fs.copyFileSync(process.execPath, path.join(s.cwd, process.platform === 'win32' ? 'claude.exe' : 'claude'));
   fs.writeFileSync(path.join(s.cwd, 'claude.cmd'), `@echo ran> "${marker}"\r\necho 2.1.100\r\n`);
-  const env = { ...process.env, MCSPARROW_HOME: s.home, CLAUDE_CODE_SUBAGENT_MODEL: 'haiku', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' };
+  const env = { ...process.env, MCSPARROW_HOME: s.home, CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' };
   delete env.AI_AGENT;
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
   for (const k of Object.keys(env)) if (k.toLowerCase() === 'path') env[k] = ['', '.', s.cwd].join(path.delimiter);
   const r = spawnSync(process.execPath, [script, 'model-env'], { cwd: s.cwd, encoding: 'utf8', env });
   assert.equal(r.status, 0);
-  assert.ok(r.stdout.includes('Claude Code unknown'), r.stdout);
-  assert.ok(r.stdout.includes('floor bypassed'));
+  assert.ok(r.stdout.includes('Claude Code unknown: version unknown'), r.stdout);
+  assert.ok(!r.stdout.includes(process.versions.node), r.stdout);
   assert.equal(fs.existsSync(marker), false);
+});
+
+test('model-env FORCE: a version known from one source prints that version, only rule 3b and an unknown version print unknown', () => {
+  const out = forceLine({}, { agent: null, cli: [2, 1, 300] });
+  assert.ok(out.includes('Claude Code 2.1.300: forces haiku on every Role'), out);
+  const unconfirmed = forceLine({}, { agent: null, cli: [2, 1, 256] });
+  assert.ok(unconfirmed.includes('Claude Code unknown: version not confirmed'), unconfirmed);
 });
 
 test('model-env CLI: silent without the variables, one line with them', (t) => {

@@ -828,11 +828,14 @@ const atLeast = (v, min) => {
 };
 
 const samePlace = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
-const realOf = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+const realOf = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
 const insideOrSame = (dir, root) => {
+  if (samePlace(dir, root)) return true;
   const rel = path.relative(root, dir);
-  return samePlace(dir, root) || (rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel));
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
 };
+// Windows: only a plain drive-letter path is read; device (\\?\, \\.\), UNC and every other spelling are refused.
+const WIN_DRIVE_RE = /^[A-Za-z]:\\/;
 
 // The absolute path of `claude` found by walking PATH here, or null. Empty, relative, and current-folder or
 // product-folder entries are skipped, so a program planted in a cloned repo is never found.
@@ -843,6 +846,7 @@ export function resolveClaude({ env = process.env, cwd = process.cwd(), productR
   const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
   for (const entry of list.split(path.delimiter)) {
     if (!entry || !path.isAbsolute(entry)) continue;
+    if (process.platform === 'win32' && !WIN_DRIVE_RE.test(entry)) continue;
     const dir = realOf(entry);
     if (blocked.some((root) => insideOrSame(dir, root))) continue;
     const file = path.join(dir, name);
@@ -880,7 +884,7 @@ export function readClaudeVersion(options = {}) {
 
 const sameVersion = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
-// The `model-env` line, or '' when neither variable is set (aico-settings v1.6). Reads only the two named variables.
+// The `model-env` line, or '' when neither variable is set (aico-settings v1.6). Besides the two named variables it reads AI_AGENT and PATH (through `readSources`).
 // `readVersion` (one version) counts as confirmed by both sources; `readSources` gives each source separately.
 export function modelEnvLine({ env = process.env, readVersion, readSources = () => readClaudeSources({ env }) } = {}) {
   const raw = env.CLAUDE_CODE_SUBAGENT_MODEL ?? '';
@@ -899,13 +903,14 @@ export function modelEnvLine({ env = process.env, readVersion, readSources = () 
   }
   let effect;
   let kept = false;
+  let unconfirmed = false;
   if (!version) effect = "version unknown, may override every Role's model";
   else if (!atLeast(version, [2, 1, 251]) && set) effect = "overrides every Role's model, the Agent model included";
   else if (force && atLeast(version, [2, 1, 257])) effect = set ? `forces ${shown(raw)} on every Role` : "forces the main conversation's model on every Role";
-  else if (force && !confirmed) effect = "version not confirmed by both sources, FORCE may force a model on every Role";
+  else if (force && !confirmed) { effect = "version not confirmed by both sources, FORCE may force a model on every Role"; unconfirmed = true; }
   else if (set) { effect = 'a default only; every aico Role sets model in its frontmatter, so no Role changes'; kept = true; }
   else { effect = 'FORCE needs Claude Code 2.1.257; no Role changes'; kept = true; }
-  const ver = version && (confirmed || !force) ? version.join('.') : 'unknown';
+  const ver = version && !unconfirmed ? version.join('.') : 'unknown';
   return `model env: CLAUDE_CODE_SUBAGENT_MODEL=${shown(raw)} CLAUDE_CODE_SUBAGENT_MODEL_FORCE=${shown(rawForce)}, Claude Code ${ver}: ${effect}; floor ${kept ? 'kept' : 'bypassed'}`;
 }
 
