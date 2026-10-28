@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.2). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.4). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
+import { readTierPath } from './tier-set.mjs';
 import * as settings from './settings.mjs';
 
 const MiB = 1024 * 1024;
@@ -40,6 +41,10 @@ const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 const AICO_VERSION = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const META_KEYS = ['v', 'run', 'kind', 'aico'];
+const META_OPTIONAL = ['floor', 'pb', 'sets'];
+const PLAYBOOKS = ['feature', 'fix'];
+const PATHS = ['full', 'short'];
+const TIER_RANK = { low: 0, medium: 1, high: 2 };
 const PAR_KEYS = ['v', 'run', 'kind', 'cap', 'peak', 'waits', 'out'];
 const PAR_ONLY = ['cap', 'peak', 'waits', 'out'];
 // The `release` of company/model-floor.json at tag v0.17.0: the floor a 0.17.x run without a `floor` key ran on.
@@ -52,9 +57,9 @@ const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico', 'floor', 'cap', 'peak', 'waits', 'out'
+  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico', 'floor', 'cap', 'peak', 'waits', 'out', 'pb', 'sets', 'path', 'raised'
 ]);
-const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship'];
+const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'path', 'raised'];
 const SHIP_KEYS = new Set(['v', 'run', 'kind', ...SHIP_ONLY]);
 const REJECT_KEYS = ['rej_brief', 'rej_plan', 'rej_ship'];
 const BASELINE_FIELDS = ['first', 'dispatches', 'requests', 'in', 'cache_write', 'cache_read', 'out', 'notif_total', 'roles'];
@@ -69,7 +74,8 @@ const USAGE = [
   '  report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]',
   '  brainstorm-report <run> [--against <run>]',
   '  model-verdict [--runs <3-50>]',
-  '  parallel-verdict [--runs <3-50>]'
+  '  parallel-verdict [--runs <3-50>]',
+  '  low-path-verdict [--runs <3-50>]'
 ].join('\n');
 
 class Refusal extends Error {}
@@ -119,7 +125,7 @@ export function validateRecord(input) {
   if (typeof rec.run !== 'string' || !RUN.test(rec.run)) return fail('invalid run');
   if (!KINDS.includes(rec.kind)) return fail('invalid kind');
   if (rec.kind !== 'par') for (const k of PAR_ONLY) if (Object.hasOwn(rec, k)) return fail(`${k} only on par`);
-  if (rec.kind !== 'meta' && Object.hasOwn(rec, 'floor')) return fail('floor only on meta');
+  if (rec.kind !== 'meta') for (const k of ['floor', 'pb', 'sets']) if (Object.hasOwn(rec, k)) return fail(`${k} only on meta`);
   if (rec.kind === 'par') {
     const keys = Object.keys(rec);
     if (keys.length !== PAR_KEYS.length || !PAR_KEYS.every((k) => keys.includes(k))) return fail('par needs exactly v, run, kind, cap, peak, waits, out');
@@ -132,10 +138,12 @@ export function validateRecord(input) {
   }
   if (rec.kind === 'meta') {
     const keys = Object.keys(rec);
-    const allowed = [...META_KEYS, 'floor'];
-    if (!META_KEYS.every((k) => keys.includes(k)) || !keys.every((k) => allowed.includes(k))) return fail('meta needs exactly v, run, kind, aico and optionally floor');
+    const allowed = [...META_KEYS, ...META_OPTIONAL];
+    if (!META_KEYS.every((k) => keys.includes(k)) || !keys.every((k) => allowed.includes(k))) return fail('meta needs exactly v, run, kind, aico and optionally floor, pb, sets');
     if (typeof rec.aico !== 'string' || !AICO_VERSION.test(rec.aico)) return fail('aico must be a version like 0.17.0');
     if (Object.hasOwn(rec, 'floor') && (typeof rec.floor !== 'string' || !AICO_VERSION.test(rec.floor))) return fail('floor must be a version like 0.16.0');
+    if (Object.hasOwn(rec, 'pb') && !PLAYBOOKS.includes(rec.pb)) return fail('pb must be feature or fix');
+    if (Object.hasOwn(rec, 'sets') && !(Number.isSafeInteger(rec.sets) && rec.sets >= 1 && rec.sets <= 999)) return fail('sets must be an integer 1-999');
     return { ok: true };
   }
   if (Object.hasOwn(rec, 'aico')) return fail('aico only on meta');
@@ -149,6 +157,8 @@ export function validateRecord(input) {
     for (const k of REJECT_KEYS) {
       if (Object.hasOwn(rec, k) && !isInt(rec[k], MAX_REJECTS)) return fail(`${k} must be an integer 0-1000`);
     }
+    if (Object.hasOwn(rec, 'path') && !PATHS.includes(rec.path)) return fail('path must be full or short');
+    if (Object.hasOwn(rec, 'raised') && rec.raised !== 0 && rec.raised !== 1) return fail('raised must be 0 or 1');
     if (Object.hasOwn(rec, 't_start') !== Object.hasOwn(rec, 't_ship')) return fail('t_start and t_ship come together');
     let span;
     if (Object.hasOwn(rec, 't_start')) {
@@ -509,12 +519,12 @@ function floorRelease() {
 }
 
 // Appends the meta line before the ship record; no line when the version cannot be read.
-function writeMeta(run) {
+function writeMeta(run, extra = {}) {
   const aico = pluginVersion();
   if (aico === undefined) return;
   const floor = floorRelease();
   try {
-    appendRecord({ v: 1, run, kind: 'meta', aico, ...(floor === undefined ? {} : { floor }) });
+    appendRecord({ v: 1, run, kind: 'meta', aico, ...(floor === undefined ? {} : { floor }), ...extra });
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
   }
@@ -541,6 +551,29 @@ function writePar(run) {
   return 0;
 }
 
+// The tier-path keys of a run, from the tier record's reader view only: { meta, ship } with the allow-listed values, or
+// { warnings: 1 } when the reader throws or the view holds a value outside the allow-list (then none of the keys is written).
+// State none gives no keys and no warning.
+function tierKeys(run) {
+  const none = { meta: {}, ship: {}, tier: undefined, warnings: 0 };
+  let view;
+  try {
+    view = readTierPath(env.root, run, { pluginRoot: env.pluginRoot });
+  } catch {
+    return { ...none, warnings: 1 };
+  }
+  if (isObject(view) && view.state === 'none') return none;
+  const valid = isObject(view) && view.state === 'on' && PLAYBOOKS.includes(view.pb) && PATHS.includes(view.path) &&
+    TIERS.includes(view.tier) && typeof view.raised === 'boolean' && Number.isSafeInteger(view.rev) && view.rev >= 0 && view.rev <= 999;
+  if (!valid) return { ...none, warnings: 1 };
+  return {
+    meta: { pb: view.pb, ...(view.rev > 0 ? { sets: view.rev } : {}) },
+    ship: { path: view.path, raised: view.raised ? 1 : 0 },
+    tier: view.tier,
+    warnings: 0
+  };
+}
+
 function cmdShip(args) {
   const usage = 'usage: ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]';
   const { rest, baselineRuns } = splitBaseline(args, usage);
@@ -550,11 +583,13 @@ function cmdShip(args) {
   if (fixRounds !== undefined) rec.fix_rounds = parseCount(fixRounds, 'fix_rounds');
   if (highBlockers !== undefined) rec.high_blockers = parseCount(highBlockers, 'high_blockers');
   const excluded = EXCLUDED_RUN.test(rec.run);
-  const timed = excluded ? rec : { ...rec, ...viewKeys(rec.run) };
-  let extraWarnings = 0;
+  const tiers = excluded ? { meta: {}, ship: {}, tier: undefined, warnings: 0 } : tierKeys(rec.run);
+  const timed = excluded ? rec : { ...rec, ...viewKeys(rec.run), ...tiers.ship };
+  if (tiers.tier !== undefined && !(TIER_RANK[timed.tier] >= TIER_RANK[tiers.tier])) timed.tier = tiers.tier;
+  let extraWarnings = tiers.warnings;
   if (!excluded) {
-    writeMeta(rec.run);
-    extraWarnings = writePar(rec.run);
+    writeMeta(rec.run, tiers.meta);
+    extraWarnings += writePar(rec.run);
   }
   appendRecord(validateRecord(timed).ok ? timed : rec);
   if (excluded) return ['ship recorded (excluded run)'];
@@ -909,7 +944,7 @@ function scorecardLine(run, baselineRuns, extraWarnings = 0) {
   const span = (n) => (n === undefined ? '?' : duration(n));
   const seg = (label, pick, show, mineText) => `${label} ${mineText ?? show(pick(mine))} ${against(pick, show)}`;
   const parts = [
-    `scorecard ${run} (tier ${tier ?? 'unknown'}): ${seg('time', (v) => v.time, span, mine.time === undefined ? 'untimed' : undefined)}`,
+    `scorecard ${run} (tier ${tier ?? 'unknown'}${get(mine.ship, 'path') === 'short' ? ', path short' : ''}): ${seg('time', (v) => v.time, span, mine.time === undefined ? 'untimed' : undefined)}`,
     seg('CEO wait', (v) => v.wait, span),
     seg('spend/AC', (v) => v.spend, whole, mine.spend === undefined ? 'not reconciled' : undefined),
     seg('fix rounds', (v) => v.fix, whole),
@@ -1142,6 +1177,7 @@ function parallelRun(name, records) {
   const base = countedBase(name, records);
   if (!base || !base.meta) return undefined;
   const { ship, meta, key } = base;
+  if (get(ship, 'path') === 'short') return undefined;
   const builders = new Set(records.filter((r) => r.kind === 'step' && BUILDER_ROLES.includes(r.role)).map((r) => r.id));
   if (builders.size < 2) return undefined;
   let side;
@@ -1224,6 +1260,100 @@ function cmdParallelVerdict(args, { loadFloor }) {
   return [parts.join(' | ')];
 }
 
+// ---------- low-path verdict ----------
+
+// The playbook of a run: meta `pb` from 0.19.0 on; before that a product-manager step means feature, else a first step by qa means fix.
+function playbookOf(records, meta, modern) {
+  if (modern) return get(meta, 'pb');
+  const steps = records.filter((r) => r.kind === 'step');
+  if (steps.some((r) => r.role === 'product-manager')) return 'feature';
+  const first = steps.reduce((low, r) => (low === undefined || r.id < low.id ? r : low), undefined);
+  return first?.role === 'qa' ? 'fix' : undefined;
+}
+
+// One run's counted values for the low-path verdict, or undefined when the run does not count.
+function lowPathRun(name, records) {
+  const base = countedBase(name, records);
+  if (!base) return undefined;
+  const { ship, meta, key } = base;
+  const modern = meta !== undefined && atLeast(meta.aico, [0, 19, 0]);
+  const pb = playbookOf(records, meta, modern);
+  if (!PLAYBOOKS.includes(pb)) return undefined;
+  const shipPath = get(ship, 'path');
+  let side;
+  if (modern && shipPath === 'short') side = 'short';
+  else if (get(ship, 'tier') === 'low' && (!modern || shipPath === 'full')) side = 'before';
+  else return undefined;
+  let floorKey = 'none';
+  if (meta && Object.hasOwn(meta, 'floor')) floorKey = meta.floor;
+  else if (meta && atLeast(meta.aico, [0, 17, 0]) && !atLeast(meta.aico, [0, 18, 0])) floorKey = FLOOR_RELEASE_V017;
+  const par = records.findLast((r) => r.kind === 'par');
+  const rejects = REJECT_KEYS.reduce((n, k) => n + (get(ship, k) ?? 0), 0);
+  let spend = 0n;
+  for (const r of records.filter(hasCounts)) spend += BigInt(spendOf(r.tokens));
+  return {
+    name, pb, side, key, floorKey, capKey: par ? String(par.cap) : 'none', tShip: timeMs(ship.t_ship), acs: ship.acs,
+    fix: ship.fix_rounds, high: ship.high_blockers, rejects, raised: get(ship, 'raised') === 1,
+    time: (timeMs(ship.t_ship) - timeMs(ship.t_start)) / 1000 - (get(ship, 'wait') ?? 0), spend
+  };
+}
+
+function lowPathSet(set) {
+  const med = (pick) => (set.length ? exactMedian(set.map(pick)) : undefined);
+  return {
+    n: set.length, acs: set.reduce((n, r) => n + BigInt(r.acs), 0n), spend: set.reduce((n, r) => n + r.spend, 0n),
+    time: med((r) => r.time), fix: med((r) => r.fix), high: med((r) => r.high), rejects: med((r) => r.rejects),
+    raised: set.filter((r) => r.raised).length
+  };
+}
+
+function lowPathLine(pb, list, floor, limit, counts) {
+  const reference = newest(list.filter((r) => r.side === 'short'))[0];
+  const matching = list.filter((r) => reference === undefined ||
+    (r.key === reference.key && r.floorKey === reference.floorKey && r.capKey === reference.capKey));
+  const a = lowPathSet(newest(matching.filter((r) => r.side === 'short')).slice(0, limit));
+  const b = lowPathSet(newest(matching.filter((r) => r.side === 'before')).slice(0, limit));
+  let state;
+  if (!floor.ok || a.n < limit || b.n < limit) {
+    state = `insufficient (n=${Math.min(a.n, b.n)})`;
+  } else {
+    const fast = a.time * 4 <= b.time * 3;
+    const quality = a.fix <= b.fix && a.high <= b.high && a.rejects <= b.rejects;
+    const lean = pb === 'feature' ? a.spend * b.acs <= b.spend * a.acs : a.spend * BigInt(b.n) <= b.spend * BigInt(a.n);
+    state = fast && quality && lean && a.raised * 5 <= a.n ? 'pass' : 'fail';
+  }
+  const dec = (n) => (n === undefined ? '?' : n.toFixed(1));
+  const span = (n) => (n === undefined ? '?' : duration(n));
+  const per = (x) => {
+    const divisor = pb === 'feature' ? x.acs : BigInt(x.n);
+    return divisor > 0n ? String(Math.round(Number(x.spend) / Number(divisor))) : '?';
+  };
+  const unit = pb === 'feature' ? 'spend/AC' : 'spend/run';
+  const parts = [
+    `low-path verdict ${pb}: ${state}`,
+    `runs ${a.n} short, ${b.n} before (plan check ${reference?.key ?? '?'}, floor ${reference?.floorKey ?? '?'}, cap ${reference?.capKey ?? '?'})`,
+    `time minus CEO wait median ${span(a.time)} (before ${span(b.time)})`,
+    `fix rounds median ${dec(a.fix)} (before ${dec(b.fix)})`,
+    `high blockers median ${dec(a.high)} (before ${dec(b.high)})`,
+    `gate rejects median ${dec(a.rejects)} (before ${dec(b.rejects)})`,
+    `${unit} ${per(a)} (before ${per(b)})`,
+    `raised ${a.raised} of ${a.n}`,
+    `excluded: ${list.length - matching.length}`,
+    `not counted: ${counts.notCounted}`
+  ];
+  if (state === 'fail') parts.push('roll back: set pipeline.short_path to off');
+  if (counts.warnings > 0) parts.push(`warnings: ${counts.warnings}`);
+  return parts.join(' | ');
+}
+
+function cmdLowPathVerdict(args, { loadFloor }) {
+  const limit = parseRunsFlag(args, 'usage: low-path-verdict [--runs <3-50>]');
+  const floor = floorFor(loadFloor);
+  const counts = { warnings: floor.warnings, excluded: 0, notCounted: 0 };
+  const counted = verdictRuns(floor, counts, lowPathRun);
+  return PLAYBOOKS.map((pb) => lowPathLine(pb, counted.filter((r) => r.pb === pb), floor, limit, counts));
+}
+
 // Totals for rounds from round 2 on: spend, cache read, crossfire spend, per round, unreconciled count.
 function roundTotals(records) {
   const roundNo = (r) => (/^R(\d+)$/.test(r.id ?? '') ? Number(r.id.slice(1)) : 0);
@@ -1295,7 +1425,8 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
   try {
     const handlers = {
       add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard,
-      report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict
+      report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict,
+      'low-path-verdict': cmdLowPathVerdict
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
     if (['report', 'brainstorm-report', 'scorecard'].includes(command) && rest.length === 0) throw new Refusal(USAGE);
