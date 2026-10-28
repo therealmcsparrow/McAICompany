@@ -80,15 +80,22 @@ function pathReason(p) {
   const segments = p.split('/');
   if (segments.at(-1) === '' && segments.length > 1) segments.pop();
   if (segments.some((s) => s === '.' || s === '..')) return 'dot segment';
-  if (segments.some((s) => s.toLowerCase() === '.git')) return 'git';
+  if (segments.some((s) => trimAlias(s).toLowerCase() === '.git')) return 'git';
   if (segments.some((s) => s.toLowerCase().startsWith('.env'))) return 'env';
   if (p.length > MAX_PATH_CHARS) return 'too long';
-  if (!PATH_SHAPE.test(p) || segments.some((s) => s.startsWith('-'))) return 'bad character';
+  if (!PATH_SHAPE.test(p) || segments.some((s) => s.startsWith('-') || s.endsWith('.') || s.endsWith(' '))) return 'bad character';
   return null;
 }
 
+// Windows drops trailing dots and spaces from a name, so `x.mjs.` is the file `x.mjs`.
+function trimAlias(segment) {
+  let end = segment.length;
+  while (end > 0 && (segment[end - 1] === '.' || segment[end - 1] === ' ')) end--;
+  return end === 0 ? segment : segment.slice(0, end);
+}
+
 function keyOf(p) {
-  return p.replaceAll('\\', '/').toLowerCase().replace(/\/$/, '');
+  return p.replaceAll('\\', '/').split('/').map(trimAlias).join('/').toLowerCase().replace(/\/$/, '');
 }
 
 export function normalizePath(item) {
@@ -213,8 +220,29 @@ function parseDeps(value, known) {
   return { deps, unknown };
 }
 
-// A dependency cycle needs an edge to the same or a later task, so every cycle member is caught by the
-// order check; the walk marks tasks that sit on a real cycle even when their own edge points backwards.
+// The visit order: plan order, except that a task comes after the tasks it depends on (a stable
+// topological order, ties by plan position). A flagged task (unknown dependency or on a cycle) waits for
+// every earlier task in plan order. If the flagged edges close a loop, the first flagged task in plan
+// order goes next, so the order always covers every task and every dependency points backwards.
+function scheduleOrder(depIndexes, flagged) {
+  const n = depIndexes.length;
+  const placed = new Array(n).fill(false);
+  const ready = (i) => (flagged[i]
+    ? placed.slice(0, i).every(Boolean)
+    : depIndexes[i].every((d) => placed[d]));
+  const order = [];
+  while (order.length < n) {
+    let pick = -1;
+    for (let i = 0; i < n && pick === -1; i++) if (!placed[i] && ready(i)) pick = i;
+    if (pick === -1) pick = flagged.findIndex((f, i) => f && !placed[i]);
+    if (pick === -1) pick = placed.indexOf(false);
+    placed[pick] = true;
+    order.push(pick);
+  }
+  return order;
+}
+
+// Marks the tasks that sit on a real dependency cycle, a self dependency included.
 function cycleMembers(ids, edges) {
   const index = new Map(ids.map((id, i) => [id, i]));
   const members = new Set();
@@ -259,9 +287,12 @@ export function parsePlan(text, { agents } = {}) {
     return { block, files, deps, role, roleValue };
   });
   const members = cycleMembers(ids, parsed.map((p) => p.deps.deps));
+  const flaggedAt = parsed.map((p) => p.deps.unknown.length > 0 || members.has(p.block.id));
+  const order = scheduleOrder(parsed.map((p) => p.deps.deps.map((d) => ids.indexOf(d))), flaggedAt);
   return {
     tooMany,
-    tasks: parsed.map(({ block, files, deps, role, roleValue }, position) => {
+    tasks: order.map((at, position) => {
+      const { block, files, deps, role, roleValue } = parsed[at];
       const reasons = [];
       const parallel = block.fields.get('parallel');
       if (parallel === 'no') reasons.push('parallel: no');
@@ -270,19 +301,17 @@ export function parsePlan(text, { agents } = {}) {
       if (roleValue === undefined) reasons.push('role: missing');
       else if (role === null) reasons.push('role: unknown');
       for (const u of deps.unknown) reasons.push(`depends-on: unknown ${u}`);
-      const backwards = deps.deps.every((d) => ids.indexOf(d) < position);
-      const cyclic = members.has(block.id) || !backwards;
-      if (cyclic) reasons.push('depends-on: cycle');
+      if (members.has(block.id)) reasons.push('depends-on: cycle');
       if (block.duplicate) reasons.push('duplicate id');
       for (const key of block.repeated) reasons.push(`field repeated: ${key}`);
-      const flagged = deps.unknown.length > 0 || cyclic;
+      const flagged = flaggedAt[at];
       return {
         id: block.id,
         role,
         items: files.items,
         keys: files.keys,
         filesValid: files.valid,
-        deps: flagged ? ids.slice(0, position) : deps.deps,
+        deps: flagged ? order.slice(0, position).map((i) => ids[i]) : deps.deps,
         marked: reasons.length === 0 && parallel === 'yes',
         alone: reasons.length > 0,
         reasons

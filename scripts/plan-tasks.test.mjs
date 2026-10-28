@@ -50,6 +50,9 @@ describe('path rule', () => {
     ['*.js', 'glob'], ['a/b?.js', 'glob'], ['a[1]', 'glob'], ['a{b}', 'glob'], ['/*', 'absolute'],
     ['..', 'dot segment'], ['a/../b', 'dot segment'], ['./a', 'dot segment'], ['a/.', 'dot segment'],
     ['.git', 'git'], ['a/.GIT/config', 'git'], ['.Git/', 'git'],
+    ['.git.', 'git'], ['.GIT./config', 'git'], ['a/.git../hooks/pre-commit', 'git'], ['.git./hooks/pre-commit', 'git'],
+    ['scripts/x.mjs.', 'bad character'], ['a/b.', 'bad character'], ['scripts./x.mjs', 'bad character'],
+    ['a/b.../c', 'bad character'], ['a/b./', 'bad character'], ['a/b /c', 'bad character'],
     ['.env', 'env'], ['a/.ENV.local', 'env'], ['.envrc', 'env'],
     ['a'.repeat(201), 'too long'],
     ['a b', 'bad character'], ['a//b', 'bad character'], ['', 'bad character'], ['-x', 'bad character'], ['a/-b', 'bad character'],
@@ -95,6 +98,22 @@ describe('overlaps', () => {
     assert.equal(overlaps('docs', 'docs2/x.md'), false);
     assert.equal(overlaps('a/b', 'a/bc'), false);
     assert.equal(overlaps('a/b', 'a/c'), false);
+  });
+
+  test('names the filesystem treats as one file overlap', () => {
+    assert.equal(overlaps('scripts/x.mjs', 'scripts/x.mjs.'), true);
+    assert.equal(overlaps('scripts/x.mjs', 'Scripts./X.MJS'), true);
+    assert.equal(overlaps('docs', 'docs./x.md'), true);
+    assert.equal(overlaps('a/b ', 'a/b'), true);
+    assert.equal(overlaps('a/b', 'a/c.'), false);
+  });
+
+  test('a plan cannot start two spellings of one file together', () => {
+    const body = (f) => ({ files: f });
+    const t = parse(plan(task('T1', body('scripts/x.mjs')), task('T2', body('scripts/x.mjs.')), task('T3', body('Scripts./X.MJS')), task('T4', body('.git./hooks/pre-commit')))).tasks;
+    assert.deepEqual(t.map((x) => x.filesValid), [true, false, false, false]);
+    const s = schedule(t, [], [], 5).filter((e) => e.outcome === 'start').map((e) => e.id);
+    assert.deepEqual(s, ['T1']);
   });
 });
 
@@ -175,17 +194,35 @@ describe('parsePlan', () => {
     assert.equal(tasks[2].alone, true);
   });
 
-  test('cycles, self dependencies and dependencies on a later task run alone', () => {
+  test('cycles and self dependencies run alone; a dependency on a later task is not a cycle', () => {
     const cyc = parse(plan(task('T1', { deps: 'T2' }), task('T2', { deps: 'T1' }), task('T3', { deps: 'T3' }), task('T4', { deps: 'T5' }), task('T5')));
     const t = Object.fromEntries(cyc.tasks.map((x) => [x.id, x]));
-    for (const id of ['T1', 'T2', 'T3', 'T4']) {
+    for (const id of ['T1', 'T2', 'T3']) {
       assert.deepEqual(t[id].reasons, ['depends-on: cycle'], id);
       assert.equal(t[id].alone, true, id);
     }
+    assert.deepEqual(t.T4.reasons, []);
+    assert.equal(t.T4.marked, true);
     assert.equal(t.T5.marked, true);
+    assert.deepEqual(t.T4.deps, ['T5']);
     assert.deepEqual(t.T1.deps, []);
     assert.deepEqual(t.T2.deps, ['T1']);
-    assert.deepEqual(t.T4.deps, ['T1', 'T2', 'T3']);
+    assert.deepEqual(t.T3.deps, ['T1', 'T2']);
+    assert.deepEqual(cyc.tasks.map((x) => x.id), ['T1', 'T2', 'T3', 'T5', 'T4']);
+  });
+
+  test('the order is stable: plan order, except that a task follows what it depends on', () => {
+    const ids = (text) => parse(text).tasks.map((x) => x.id);
+    assert.deepEqual(ids(plan(task('T1', { deps: 'T3' }), task('T2'), task('T3'))), ['T2', 'T3', 'T1']);
+    assert.deepEqual(ids(plan(task('T1', { deps: 'T2, T3' }), task('T2', { deps: 'T3' }), task('T3'), task('T4'))), ['T3', 'T2', 'T1', 'T4']);
+    assert.deepEqual(ids(plan(task('T1'), task('T2'), task('T3'))), ['T1', 'T2', 'T3']);
+  });
+
+  test('a task that depends on a cyclic later task still follows it', () => {
+    const t = parse(plan(task('T1', { deps: 'T2' }), task('T2', { deps: 'T3' }), task('T3', { deps: 'T2' }))).tasks;
+    assert.deepEqual(t.map((x) => x.id), ['T2', 'T1', 'T3']);
+    assert.deepEqual(t.map((x) => x.alone), [true, false, true]);
+    assert.deepEqual(t[1].deps, ['T2']);
   });
 
   test('heading levels, id forms and block ends', () => {
@@ -302,6 +339,26 @@ describe('schedule', () => {
   test('a later task waits for an earlier overlapping task that is not ready yet', () => {
     const tasks = T(task('T1', { files: 'x.md' }), task('T2', { files: 'a.md', deps: 'T1' }), task('T3', { files: 'a.md' }));
     assert.deepEqual(view(schedule(tasks, [], [], 4)), ['start:T1', 'wait:T2:depends:T1', 'wait:T3:overlap:T2']);
+  });
+
+  test('a forward dependency finishes in dependency order, with an overlap too', () => {
+    const tasks = T(task('T1', { files: 'a.md', deps: 'T3' }), task('T2', { files: 'a.md' }), task('T3', { files: 'b.md' }));
+    assert.deepEqual(view(schedule(tasks, [], [], 4)), ['start:T2', 'start:T3', 'wait:T1:depends:T3']);
+    assert.deepEqual(view(schedule(tasks, ['T3'], ['T2'], 4)), ['running:T2', 'wait:T1:overlap:T2']);
+    assert.deepEqual(view(schedule(tasks, ['T2', 'T3'], [], 4)), ['start:T1']);
+    const alone = T(task('T1', { deps: 'T2' }), task('T2'));
+    assert.deepEqual(view(schedule(alone, [], [], 4)), ['start:T2', 'wait:T1:depends:T2']);
+  });
+
+  test('a plan with a cycle still runs to the end', () => {
+    const tasks = T(task('T1', { deps: 'T2' }), task('T2', { deps: 'T1' }), task('T3'));
+    const done = new Set();
+    for (let guard = 0; done.size < 3 && guard < 10; guard++) {
+      const starts = schedule(tasks, done, [], 4).filter((e) => e.outcome === 'start');
+      assert.ok(starts.length > 0);
+      for (const e of starts) done.add(e.id);
+    }
+    assert.equal(done.size, 3);
   });
 
   test('a task with an invalid file list overlaps every other task', () => {
