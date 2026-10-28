@@ -17,6 +17,7 @@ const NOW = Date.UTC(2026, 9, 28, 12, 0, 0);
 const SHA = 'abcdef1234567';
 const FULL = 'abcdef1234567'.padEnd(40, '0');
 const SLUG = 'demo';
+const GIT_PREFIX = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
 const TIER_SETS_FILE = path.join(REPO, 'company', 'tier-sets.json');
 const DATA = JSON.parse(fs.readFileSync(TIER_SETS_FILE, 'utf8'));
 
@@ -61,10 +62,19 @@ function world(t, { slug = SLUG, data, project = '## Core\n- skills/pipeline: ru
   const calls = [];
   let names = '';
   // The fake repository: one commit FULL (also the only object whose id starts with SHA), and the project file at that commit.
-  const repo = { project, ids: [FULL], types: { [FULL]: 'commit' } };
+  const repo = { project, ids: [FULL], types: { [FULL]: 'commit' }, format: 'sha1\n', ancestor: true };
   const git = (args, opts) => {
     calls.push({ args, opts });
-    const sub = args.slice(3);
+    const sub = args.slice(GIT_PREFIX.length);
+    if (sub[0] === 'rev-parse' && sub[1] === '--show-object-format') {
+      if (repo.format === null) throw new Error('no format');
+      return Buffer.from(repo.format);
+    }
+    if (sub[0] === 'merge-base' && sub[1] === '--is-ancestor') {
+      if (!repo.ancestor) throw new Error('not an ancestor');
+      return Buffer.alloc(0);
+    }
+    if (sub[0] === 'rev-parse' && sub[1] === `--disambiguate=${FULL}`) return Buffer.from(repo.ids.filter((x) => x === FULL).map((x) => `${x}\n`).join(''));
     if (sub[0] === 'rev-parse' && sub[1] === `--disambiguate=${SHA}`) return Buffer.from(repo.ids.join('\n') + '\n');
     if (sub[0] === 'cat-file' && sub[1] === '-t') return Buffer.from(repo.types[sub[3]] ? `${repo.types[sub[3]]}\n` : '');
     if (sub[0] === 'cat-file' && sub[1] === 'blob') {
@@ -1315,19 +1325,31 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     w.begin();
     assert.equal(w.records()[0].base, FULL);
     assert.match(w.records()[0].base, /^[0-9a-f]{40}$/);
-    const subs = w.calls.map((c) => c.args.slice(3));
-    assert.deepEqual(subs[0], ['rev-parse', `--disambiguate=${SHA}`]);
-    assert.deepEqual(subs[1], ['cat-file', '-t', '--end-of-options', FULL]);
-    assert.deepEqual(w.calls[0].args.slice(0, 3), ['--no-optional-locks', '-c', 'core.fsmonitor=false']);
-    assert.equal(w.calls[0].opts.env.GIT_OPTIONAL_LOCKS, '0');
-    assert.equal(w.calls[0].opts.env.GIT_TERMINAL_PROMPT, '0');
+    const subs = w.calls.map((c) => c.args.slice(4));
+    assert.deepEqual(subs, [
+      ['rev-parse', '--show-object-format'],
+      ['rev-parse', `--disambiguate=${SHA}`],
+      ['cat-file', '-t', '--end-of-options', FULL],
+      ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD']
+    ]);
+    for (const c of w.calls) {
+      assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX);
+      assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
+      assert.equal(c.opts.env.GIT_OPTIONAL_LOCKS, '0');
+      assert.equal(c.opts.env.GIT_TERMINAL_PROMPT, '0');
+    }
   });
 
-  test('a full-length base is checked with cat-file -t only, and a non-commit full id exits 3', (t) => {
+  test('a full-length base goes through --disambiguate too, and a non-commit full id exits 3', (t) => {
     const w = world(t);
     const ok = w.run('begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', FULL, '--ceo', 'short');
     assert.equal(ok.code, 0);
-    assert.deepEqual(w.calls.map((c) => c.args.slice(3)), [['cat-file', '-t', '--end-of-options', FULL]]);
+    assert.deepEqual(w.calls.map((c) => c.args.slice(4)), [
+      ['rev-parse', '--show-object-format'],
+      ['rev-parse', `--disambiguate=${FULL}`],
+      ['cat-file', '-t', '--end-of-options', FULL],
+      ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD']
+    ]);
     const tree = world(t);
     tree.repo.types[FULL] = 'tree';
     const r = tree.run('begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', FULL, '--ceo', 'short');
@@ -1419,8 +1441,8 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     const r = w.run('sync', SLUG, '--diff');
     assert.equal(tierOf(r), 'high');
     assert.ok(r.lines.includes('check: high: core skills/pipeline/SKILL.md'));
-    const blob = w.calls.find((c) => c.args[3] === 'cat-file' && c.args[4] === 'blob');
-    assert.deepEqual(blob.args.slice(3), ['cat-file', 'blob', '--end-of-options', `${FULL}:.company/project.md`]);
+    const blob = w.calls.find((c) => c.args[4] === 'cat-file' && c.args[5] === 'blob');
+    assert.deepEqual(blob.args.slice(4), ['cat-file', 'blob', '--end-of-options', `${FULL}:.company/project.md`]);
     const other = world(t);
     other.begin();
     fs.writeFileSync(path.join(other.root, '.company', 'project.md'), '## Core\n- docs/plain: x\n');
@@ -1588,5 +1610,210 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       const r = w.run('sync', SLUG, '--diff');
       assert.equal(tierOf(r), 'low', r.lines.join('\n'));
     });
+  });
+});
+
+describe('Fix round 2 rules: replace refs, object format, ancestor check, highest tier', () => {
+  const sh = (cwd, env, args) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const begin = (...extra) => ['begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', ...extra];
+
+  // A real repository in the world's product root; the config is a throwaway file (see gitEnv).
+  function realRepo(t, format) {
+    const w = world(t, { project: null });
+    const env = gitEnv(w.dir);
+    const g = (...args) => sh(w.root, env, args);
+    try {
+      g('init', '-q', '-b', 'main', ...(format ? [`--object-format=${format}`] : []));
+    } catch {
+      return { w, skip: true };
+    }
+    g('config', 'user.name', 'Test');
+    g('config', 'user.email', 'test@example.invalid');
+    g('config', 'commit.gpgsign', 'false');
+    fs.writeFileSync(path.join(w.root, '.gitignore'), '.company/work/\n');
+    fs.writeFileSync(path.join(w.root, '.company', 'project.md'), '## Core\n- scripts/check.mjs: gate\n');
+    g('add', '-A');
+    g('commit', '-q', '-m', 'base');
+    const realGit = (args, o) => execFileSync('git', args, { cwd: o.cwd, env: { ...o.env, ...env }, stdio: ['ignore', 'pipe', 'ignore'] });
+    const call = (...args) => tierSet(args, { now: NOW, root: w.root, pluginRoot: w.pluginRoot, git: realGit });
+    const commit = (rel, text, msg) => {
+      fs.mkdirSync(path.dirname(path.join(w.root, rel)), { recursive: true });
+      fs.writeFileSync(path.join(w.root, rel), text);
+      g('add', '-A');
+      g('commit', '-q', '-m', msg);
+      return g('rev-parse', 'HEAD');
+    };
+    return { w, g, call, commit, skip: false };
+  }
+
+  test('a replace ref on the base does not hide a forced-high path or change the recorded base (real git)', (t) => {
+    const r = realRepo(t);
+    const base = r.g('rev-parse', 'HEAD');
+    const b = r.call(...begin('--base', base.slice(0, 12), '--ceo', 'short'));
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    assert.equal(r.w.records()[0].base, base);
+    r.g('checkout', '-q', '--orphan', 'side');
+    fs.mkdirSync(path.join(r.w.root, 'src', 'web'), { recursive: true });
+    fs.writeFileSync(path.join(r.w.root, 'src', 'web', 'login.js'), 'export {};\n');
+    r.g('add', '-A');
+    r.g('commit', '-q', '-m', 'replacement');
+    const repl = r.g('rev-parse', 'HEAD');
+    r.g('checkout', '-q', '--force', 'main');
+    r.commit('src/web/login.js', 'export {};\n', 'login');
+    r.g('replace', base, repl);
+    assert.equal(r.g('diff', '--name-only', base, 'HEAD', '--', 'src'), '', 'plain git is blind to the file');
+    const s = r.call('sync', SLUG, '--diff');
+    assert.equal(tierOf(s), 'high', s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: pattern login src/web/login.js'), s.lines.join('\n'));
+  });
+
+  test('every git call carries the replace-ref flag and variable, whatever the inherited variable says', (t) => {
+    for (const inherited of [undefined, '', '0', '1']) {
+      const prior = process.env.GIT_NO_REPLACE_OBJECTS;
+      if (inherited === undefined) delete process.env.GIT_NO_REPLACE_OBJECTS;
+      else process.env.GIT_NO_REPLACE_OBJECTS = inherited;
+      try {
+        const w = world(t);
+        w.begin();
+        w.diff('docs/a.md\n');
+        w.run('sync', SLUG, '--diff');
+        assert.ok(w.calls.length > 5);
+        for (const c of w.calls) {
+          assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX, `inherited ${inherited}`);
+          assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1', `inherited ${inherited}`);
+        }
+      } finally {
+        if (prior === undefined) delete process.env.GIT_NO_REPLACE_OBJECTS;
+        else process.env.GIT_NO_REPLACE_OBJECTS = prior;
+      }
+    }
+  });
+
+  test('a base that is not an ancestor of HEAD exits 3 with the refusal and writes no record; a failing check counts the same', (t) => {
+    const w = world(t);
+    w.repo.ancestor = false;
+    const r = w.begin();
+    assert.equal(r.code, 3);
+    assert.ok(r.lines.includes('refused: base is not an ancestor of HEAD'), r.lines.join('\n'));
+    assert.equal(w.records().length, 0);
+    const gone = world(t);
+    const out = tierSet(begin('--base', SHA, '--ceo', 'short'), {
+      now: NOW, root: gone.root, pluginRoot: gone.pluginRoot,
+      git: (args) => {
+        const sub = args.slice(4);
+        if (sub[0] === 'merge-base') throw Object.assign(new Error('fatal'), { status: 128 });
+        if (sub[1] === '--show-object-format') return Buffer.from('sha1\n');
+        if (sub[1] === `--disambiguate=${SHA}`) return Buffer.from(`${FULL}\n`);
+        return Buffer.from('commit\n');
+      }
+    });
+    assert.equal(out.code, 3);
+    assert.ok(out.lines.includes('refused: base is not an ancestor of HEAD'), out.lines.join('\n'));
+    assert.equal(gone.records().length, 0);
+  });
+
+  test('a base on another branch is refused and the HEAD commit itself is accepted (real git)', (t) => {
+    const r = realRepo(t);
+    const first = r.g('rev-parse', 'HEAD');
+    r.g('checkout', '-q', '-b', 'other');
+    const stray = r.commit('x.txt', 'x\n', 'stray');
+    r.g('checkout', '-q', 'main');
+    r.commit('y.txt', 'y\n', 'main work');
+    const refused = r.call(...begin('--base', stray, '--ceo', 'short'));
+    assert.equal(refused.code, 3);
+    assert.ok(refused.lines.includes('refused: base is not an ancestor of HEAD'), refused.lines.join('\n'));
+    assert.equal(r.w.records().length, 0);
+    assert.equal(r.call(...begin('--base', first, '--ceo', 'short')).code, 0);
+    const head = realRepo(t);
+    const tip = head.g('rev-parse', 'HEAD');
+    assert.equal(head.call(...begin('--base', tip, '--ceo', 'short')).code, 0);
+  });
+
+  test('an unknown or failing object format refuses begin and makes sync high', (t) => {
+    for (const format of ['sha512\n', 'sha1 \n', '', null]) {
+      const w = world(t);
+      w.repo.format = format;
+      const r = w.begin();
+      assert.equal(r.code, 3, JSON.stringify(format));
+      assert.equal(w.records().length, 0);
+    }
+    const w = world(t);
+    w.begin();
+    w.repo.format = 'sha512\n';
+    w.diff('docs/a.md\n');
+    const s = w.run('sync', SLUG, '--diff');
+    assert.equal(tierOf(s), 'high');
+    assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+  });
+
+  test('a recorded base whose length does not fit the object format is core unknown and diff unknown after one git call', (t) => {
+    const w = world(t);
+    w.begin();
+    w.repo.format = 'sha256\n';
+    w.diff('docs/a.md\n');
+    const before = w.calls.length;
+    const s = w.run('sync', SLUG, '--diff');
+    assert.equal(tierOf(s), 'high');
+    assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+    assert.deepEqual(w.calls.slice(before).map((c) => c.args.slice(4)), [['rev-parse', '--show-object-format']]);
+    const plain = world(t);
+    plain.begin();
+    plain.repo.format = 'sha256\n';
+    plain.plan(fixture('feature-plan-clean.md'));
+    const before2 = plain.calls.length;
+    const p = plain.run('sync', SLUG, '--plan', '02-plan.md');
+    assert.ok(p.lines.includes('check: high: core unknown'), p.lines.join('\n'));
+    assert.equal(plain.calls.length - before2, 1);
+  });
+
+  test('a sha1 repository refuses a 64-hex base', (t) => {
+    const w = world(t);
+    const r = w.run(...begin('--base', 'a'.repeat(64), '--ceo', 'short'));
+    assert.equal(r.code, 3);
+    assert.equal(w.records().length, 0);
+  });
+
+  test('a sha256 repository records the 64-hex id of a base named by a 40-hex branch shadow (real git)', (t) => {
+    const r = realRepo(t, 'sha256');
+    if (r.skip) return t.skip('git cannot make a sha256 repository here');
+    const base = r.g('rev-parse', 'HEAD');
+    assert.match(base, /^[0-9a-f]{64}$/);
+    const other = r.commit('other.txt', 'x\n', 'other');
+    r.g('branch', base.slice(0, 40), other);
+    const b = r.call(...begin('--base', base.slice(0, 40), '--ceo', 'short'));
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    assert.equal(r.w.records()[0].base, base);
+    r.commit('src/auth/login.js', 'export {};\n', 'auth');
+    const s = r.call('sync', SLUG, '--diff');
+    assert.equal(tierOf(s), 'high', s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/login.js'), s.lines.join('\n'));
+  });
+
+  test('step 11 keeps the highest tier: a raise deleted from the record shows a lower tier on the next line 1, which the step turns into a high run', (t) => {
+    const text = read('skills/pipeline/references/tier-path.md');
+    assert.match(text, /and the highest tier any line 1 of a `begin`, `sync` or `raise` output of this run has shown/);
+    assert.match(text, /`preview`, `begin`, `sync` or `raise` exits not 0 or prints nothing/);
+    assert.match(text, /a later line 1 shows a tier lower than that highest tier/);
+    const w = world(t);
+    w.begin();
+    w.diff('docs/a.md\n');
+    const raised = w.run('raise', SLUG, 'high');
+    assert.equal(tierOf(raised), 'high');
+    const file = path.join(w.work, 'tier-path.jsonl');
+    const kept = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l !== '' && JSON.parse(l).ev !== 'raise');
+    fs.writeFileSync(file, kept.join('\n') + '\n');
+    const after = w.run('sync', SLUG, '--diff');
+    assert.equal(after.code, 0);
+    const rank = { low: 0, medium: 1, high: 2 };
+    assert.ok(rank[tierOf(after)] < rank[tierOf(raised)], 'line 1 is lower than the highest tier seen, so step 11 applies');
+  });
+
+  test('steps 4 and 5 take the base only from the dispatch value named in step 3', () => {
+    const text = read('skills/pipeline/references/tier-path.md');
+    assert.match(text, /`<base>` in steps 4 and 5 is the `Base commit:` value you put in Step 01's dispatch; never take it from a Handoff's `base-commit` field/);
+    assert.equal(text.split("--base '<base>'").length - 1, 2);
+    assert.doesNotMatch(text, /Step 01 base-commit/);
   });
 });
