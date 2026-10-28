@@ -410,19 +410,40 @@ test('commands page and feedback Playbook: the verdict line is shown in the repo
   assert.match(para, /never read as a pass/);
 });
 
-test('release notes and the model section state no money, percent or saving', () => {
-  const changelog = read('CHANGELOG.md');
-  // Before release the entry sits under [Unreleased]; release.mjs rolls it into 0.17.0.
-  const start = changelog.search(/^## \[(?:Unreleased|0\.17\.0)/m);
+// The release entry: the 0.17.0 section when it exists (after release.mjs, which leaves an empty
+// [Unreleased] above it), else the [Unreleased] section. Returns the text under the heading.
+function releaseEntry(changelog) {
+  let start = changelog.search(/^## \[0\.17\.0/m);
+  if (start < 0) start = changelog.search(/^## \[Unreleased\]/mi);
   assert.ok(start >= 0, 'an [Unreleased] or 0.17.0 entry exists');
   const rest = changelog.slice(start + 1);
   const next = rest.search(/^## /m);
-  const entry = next < 0 ? rest : rest.slice(0, next);
+  return next < 0 ? rest : rest.slice(0, next);
+}
+const NO_MONEY = /cheaper|saving|savings|\bsave[sd]?\b|price|pricing|cost|money|euro|[€$£%]|\bEUR\b|\bUSD\b/i;
+
+test('release entry picker: after release it skips the empty Unreleased and takes 0.17.0', () => {
+  const after = '# Changelog\n\n## [Unreleased]\n\n## [0.17.0] - 2026-11-01\n\n- Added the model floor.\n\n## [0.16.0] - 2026-10-28\n\n- Older note.\n';
+  const entry = releaseEntry(after);
+  assert.match(entry, /^- /m);
+  assert.ok(entry.includes('model floor'));
+  assert.equal(entry.includes('Older note'), false);
+  const before = '# Changelog\n\n## [Unreleased]\n\n- Draft note.\n\n## [0.16.0] - 2026-10-28\n\n- Older note.\n';
+  const draft = releaseEntry(before);
+  assert.ok(draft.includes('Draft note'));
+  assert.equal(draft.includes('Older note'), false);
+  // An empty pick is what the real test must refuse: Unreleased empty and no 0.17.0 section.
+  assert.doesNotMatch(releaseEntry('## [Unreleased]\n\n## [0.16.0] - x\n\n- Older.\n'), /^- /m);
+});
+
+test('release notes and the model section state no money, percent or saving', () => {
+  const entry = releaseEntry(read('CHANGELOG.md'));
+  assert.match(entry, /^- /m, 'the chosen changelog section has at least one bullet');
   const concepts = section(read('documentation', 'concepts.md'), 'Which model a Role runs on');
   const verdictLines = section(read('documentation', 'commands.md'), '/aico:feedback').split('\n').join(' ').split(/(?<=\.)\s+/).filter((l) => /model verdict|model-verdict|## Model/.test(l)).join('\n');
   assert.notEqual(verdictLines, '');
   for (const text of [entry, concepts, verdictLines]) {
-    assert.doesNotMatch(text, /cheaper|saving|savings|\bsave[sd]?\b|price|pricing|cost|money|euro|[€$£%]|\bEUR\b|\bUSD\b/i);
+    assert.doesNotMatch(text, NO_MONEY);
   }
 });
 
