@@ -71,7 +71,8 @@ select:hover:not(:disabled), input[type="text"]:hover:not(:disabled) { border-co
 input[type="text"] { width: 9rem; }
 input[type="text"]::placeholder { color: var(--muted); opacity: 1; }
 input.wide { width: 100%; max-width: 24rem; }
-select.ignored { opacity: .55; background: var(--head); }
+select.ignored { color: var(--muted); background: var(--head); border-style: dashed; font-style: italic; }
+@media (forced-colors: active) { select.ignored { color: CanvasText; background: Canvas; border-color: CanvasText; } }
 select:disabled, input:disabled { opacity: .55; cursor: not-allowed; background: var(--head); }
 select.set, input.set { border-color: var(--accent); background: var(--set); }
 select[aria-invalid="true"], input[aria-invalid="true"] { border: 2px solid var(--err); background: var(--err-bg); }
@@ -1260,6 +1261,7 @@ function shortPathRow(tbody, pluginValue) {
     const rec = { key: 'short_path', level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
     const prefix = `${label}, ${level} level: `;
     syncers.push(() => {
+      control.classList.toggle('ignored', ignored && control.value === 'on');
       if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
       const message = rec.sticky;
       if (message !== rec.message) {

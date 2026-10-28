@@ -1574,3 +1574,21 @@ test('a stored project short_path on is styled disabled and its select points at
   assert.ok(row.includes('effectId'));
   assert.ok(html.includes('select.ignored'));
 });
+
+test('the muted ignored select keeps full-strength text and border, with a non-colour cue, in forced colors too', () => {
+  const html = pageHtml();
+  const rule = html.match(/^select\.ignored \{([^}]*)\}/m);
+  assert.ok(rule, 'select.ignored rule');
+  assert.ok(!/opacity/.test(rule[1]), 'no opacity on the text or border');
+  assert.ok(rule[1].includes('color: var(--muted)'));
+  assert.ok(rule[1].includes('border-style: dashed'));
+  const forced = html.match(/@media \(forced-colors: active\) \{[^@]*select\.ignored \{([^}]*)\}/);
+  assert.ok(forced, 'forced-colors override');
+  assert.ok(forced[1].includes('CanvasText') && !/GrayText|opacity/.test(forced[1]));
+});
+
+test('the ignored class follows the project select value, so picking off or blank removes it', () => {
+  const html = pageHtml();
+  const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
+  assert.ok(row.includes("control.classList.toggle('ignored', ignored && control.value === 'on')"));
+});
