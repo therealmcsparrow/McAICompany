@@ -225,10 +225,10 @@ function parseDeps(value, known) {
 // every earlier task in plan order. If the flagged edges close a loop, the first flagged task in plan
 // order goes next, so the order always covers every task and every dependency points backwards. A flagged
 // task also keeps its valid dependencies, except those on its own cycle.
-function scheduleOrder(depIndexes, flagged, cyclic) {
+function scheduleOrder(depIndexes, flagged, sameCycle) {
   const n = depIndexes.length;
   const placed = new Array(n).fill(false);
-  const depsPlaced = (i) => depIndexes[i].every((d) => placed[d] || (cyclic[i] && cyclic[d]));
+  const depsPlaced = (i) => depIndexes[i].every((d) => placed[d] || sameCycle(i, d));
   const ready = (i) => (flagged[i]
     ? placed.slice(0, i).every(Boolean) && depsPlaced(i)
     : depsPlaced(i));
@@ -244,23 +244,23 @@ function scheduleOrder(depIndexes, flagged, cyclic) {
   return order;
 }
 
-// Marks the tasks that sit on a real dependency cycle, a self dependency included.
+// Finds the tasks that sit on a real dependency cycle, a self dependency included. Maps each to the set of
+// tasks it can reach, so two cycle members share a cycle when each reaches the other.
 function cycleMembers(ids, edges) {
   const index = new Map(ids.map((id, i) => [id, i]));
-  const members = new Set();
+  const members = new Map();
   ids.forEach((id, start) => {
     const seen = new Set();
     const stack = [...edges[start]];
+    let onCycle = false;
     while (stack.length) {
       const next = stack.pop();
-      if (next === id) {
-        members.add(id);
-        return;
-      }
+      if (next === id) onCycle = true;
       if (seen.has(next)) continue;
       seen.add(next);
       stack.push(...edges[index.get(next)]);
     }
+    if (onCycle) members.set(id, seen);
   });
   return members;
 }
@@ -290,7 +290,7 @@ export function parsePlan(text, { agents } = {}) {
   });
   const members = cycleMembers(ids, parsed.map((p) => p.deps.deps));
   const flaggedAt = parsed.map((p) => p.deps.unknown.length > 0 || members.has(p.block.id));
-  const order = scheduleOrder(parsed.map((p) => p.deps.deps.map((d) => ids.indexOf(d))), flaggedAt, parsed.map((p) => members.has(p.block.id)));
+  const order = scheduleOrder(parsed.map((p) => p.deps.deps.map((d) => ids.indexOf(d))), flaggedAt, (i, d) => members.get(ids[i])?.has(ids[d]) === true && members.get(ids[d])?.has(ids[i]) === true);
   return {
     tooMany,
     tasks: order.map((at, position) => {

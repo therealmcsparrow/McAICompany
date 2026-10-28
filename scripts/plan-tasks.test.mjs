@@ -201,6 +201,11 @@ describe('parsePlan', () => {
     assert.equal(tasks[2].alone, true);
   });
 
+  test('a task on a cycle skips only dependencies on its own cycle', () => {
+    const { tasks } = parse(plan(task('T1', { deps: 'T1, T3' }), task('T2'), task('T3', { deps: 'T3, T2' })));
+    assert.deepEqual(tasks.map((x) => x.id), ['T2', 'T1', 'T3']);
+  });
+
   test('cycles and self dependencies run alone; a dependency on a later task is not a cycle', () => {
     const cyc = parse(plan(task('T1', { deps: 'T2' }), task('T2', { deps: 'T1' }), task('T3', { deps: 'T3' }), task('T4', { deps: 'T5' }), task('T5')));
     const t = Object.fromEntries(cyc.tasks.map((x) => [x.id, x]));
