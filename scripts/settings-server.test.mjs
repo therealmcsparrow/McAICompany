@@ -1253,3 +1253,131 @@ test('layout: Clear on the Personality tab clears only personality, and on the R
   await settle();
   assert.deepEqual(other.calls.find((c) => c.url === '/api/save').body.user, { version: 1, roles: { qa: { personality: { talk: 'dry' } } } });
 });
+
+const planHintText = () => {
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = /the hint "(Plan check lists[^"]*)"/.exec(contract);
+  assert.ok(m, 'Contract hint not found');
+  return m[1];
+};
+
+test('state carries plan_check defaults; save round-trips policy and runs, refuses bad values and writes nothing', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  assert.deepEqual(before.plugin.plan_check, { policy: 'warn', runs: 5 });
+  assert.deepEqual(before.resolved.plan_check, { policy: 'warn', runs: 5 });
+  for (const bad of [{ policy: 'strict' }, { runs: 2 }, { runs: 51 }, { runs: '10' }]) {
+    const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, plan_check: bad } });
+    assert.equal(res.status, 400);
+    const { refused } = await res.json();
+    assert.ok(refused.some((r) => /^user plan_check\.(policy|runs) /.test(r)), refused.join(' | '));
+  }
+  assert.equal(read(s.config), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, plan_check: { policy: 'off', runs: 3 } }, project: { version: 1, plan_check: { policy: 'block', runs: 50 } } });
+  assert.equal(ok.status, 200);
+  assert.deepEqual((await ok.json()).state.resolved.plan_check, { policy: 'block', runs: 50 });
+});
+
+test('Plan check hint equals the Contract text and the table sits after the Reprompt hint and before Brainstorm', () => {
+  const html = pageHtml();
+  const hintCall = `el('p', { class: 'hint', id: 'plan-check-hint' }, '${planHintText()}')`;
+  assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
+  const reprompt = html.indexOf("id: 'reprompt-hint'");
+  const h2 = html.indexOf("el('h2', {}, 'Plan check')");
+  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  assert.ok(reprompt > 0 && reprompt < h2 && h2 < html.indexOf(hintCall) && html.indexOf(hintCall) < brainstorm);
+  assert.ok(!/tabIndex: [1-9]|tabindex="[1-9]/.test(html), 'no positive tabindex');
+  assert.ok(!/innerHTML/.test(html));
+});
+
+const planField = (page, key, level) => byId(page, `pc-${key}-${level}`);
+
+test('Plan check controls have a visible label tied by for, no aria-label, and the hint in aria-describedby', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  assert.equal(byId(page, 'plan-check-hint').textContent, planHintText());
+  for (const [key, word] of [['policy', 'Policy'], ['runs', 'Verdict runs']]) {
+    for (const level of ['user', 'project']) {
+      const control = planField(page, key, level);
+      assert.ok(control, `${key} ${level}`);
+      assert.equal(control.getAttribute('aria-label'), null);
+      const label = page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id);
+      assert.ok(label.textContent.startsWith(word), label.textContent);
+      assert.ok(label.textContent.includes(`${level} level`));
+      assert.ok(control.getAttribute('aria-describedby').split(' ').includes('plan-check-hint'));
+    }
+  }
+  assert.deepEqual(planField(page, 'policy', 'user').options.map((o) => o.textContent), ['—', 'off', 'warn', 'block']);
+});
+
+test('choosing a policy and a run count sends them in the Save body', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const policy = planField(page, 'policy', 'user');
+  policy.value = 'block';
+  await policy.fire('change');
+  await type(planField(page, 'runs', 'project'), '12');
+  assert.equal(page.ids.count.textContent, '2 unsaved changes');
+  await page.ids.save.fire('click');
+  await settle();
+  const sent = page.calls.find((c) => c.url === '/api/save').body;
+  assert.deepEqual(sent.user.plan_check, { policy: 'block' });
+  assert.deepEqual(sent.project.plan_check, { runs: 12 });
+});
+
+test('a bad run count gets an error tied to the field with the hint kept, and Save names and links the field', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const runs = planField(page, 'runs', 'user');
+  await type(runs, '2');
+  assert.equal(runs.getAttribute('aria-invalid'), 'true');
+  const ids = runs.getAttribute('aria-describedby').split(' ');
+  assert.ok(ids.includes('plan-check-hint'));
+  const err = byId(page, ids.find((i) => i !== 'plan-check-hint'));
+  assert.equal(err.textContent, 'Error: Verdict runs is out of range. Use a whole number from 3 to 50.');
+  await type(runs, 'x');
+  assert.equal(err.textContent, 'Error: Verdict runs must be a whole number from 3 to 50.');
+  await page.ids.save.fire('click');
+  assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
+  assert.equal(page.document.activeElement, walk(page.ids.status, (n) => n.id === 'status-heading'));
+  const link = walk(page.ids.status, (n) => n.tagName === 'A');
+  assert.equal(link.getAttribute('href'), '#pc-runs-user');
+  assert.match(link.textContent, /^Plan check, Verdict runs, user level: /);
+  await page.ids['tab-roles'].fire('click');
+  await link.fire('click');
+  assert.equal(page.document.activeElement, runs);
+  assert.equal(page.ids['panel-pipeline'].hidden, false);
+});
+
+test('a server refusal of a Plan check value marks and links that field; the text comes from the page', async () => {
+  const refused = ['project plan_check.policy must be off, warn or block', 'stale thing'];
+  const page = loadPage(pageState(), { saveReply: { status: 400, body: { refused } } });
+  await settle();
+  const policy = planField(page, 'policy', 'project');
+  policy.value = 'warn';
+  await policy.fire('change');
+  await page.ids.save.fire('click');
+  await settle();
+  const heading = walk(page.ids.status, (n) => n.id === 'status-heading');
+  assert.equal(page.document.activeElement, heading);
+  assert.equal(heading.textContent, 'Nothing was saved. Fix 2 fields:');
+  const links = walkAll(page.ids.status, (n) => n.tagName === 'A');
+  assert.equal(links.length, 1);
+  assert.equal(links[0].getAttribute('href'), '#pc-policy-project');
+  assert.equal(policy.getAttribute('aria-invalid'), 'true');
+  assert.ok(page.ids.status.textContent.includes('stale thing'));
+  await links[0].fire('click');
+  assert.equal(page.document.activeElement, policy);
+});
+
+test('Clear on the Pipeline tab also clears Plan check', async () => {
+  const st = pageState();
+  st.user = { version: 1, plan_check: { policy: 'off' } };
+  const page = loadPage(st);
+  await settle();
+  await page.ids['tab-pipeline'].fire('click');
+  await page.ids['clear-user'].fire('click');
+  assert.equal(planField(page, 'policy', 'user').value, '');
+  assert.equal(page.ids.count.textContent, '1 unsaved change');
+});
