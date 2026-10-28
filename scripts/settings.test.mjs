@@ -1720,3 +1720,72 @@ test('model-env CLI: silent without the variables, one line with them', (t) => {
   assert.equal(loud.status, 0);
   assert.equal(loud.stdout, `${ENV_PREFIX}haiku CLAUDE_CODE_SUBAGENT_MODEL_FORCE=unset, Claude Code 2.1.310: a default only; every aico Role sets model in its frontmatter, so no Role changes; floor kept\n`);
 });
+
+// ---- pipeline.parallel_cap (aico-settings v1.7) ----
+
+test('pipeline.parallel_cap rejects hostile values first and accepts only 3, 4 or 5', () => {
+  const msg = ['pipeline.parallel_cap must be a whole number from 3 to 5'];
+  for (const bad of [2, 6, 0, -4, 4.5, '4', '__proto__', null, true, [4], { a: 4 }, NaN, 'x'.repeat(10 * 1024)]) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { parallel_cap: bad } }, roleSet), msg, String(bad).slice(0, 20));
+  }
+  for (const ok of [3, 4, 5]) assert.deepEqual(validateLayer({ version: 1, pipeline: { parallel_cap: ok } }, roleSet), []);
+});
+
+test('parallel_cap defaults to 4, resolves project over user over plugin and is not a lock', (t) => {
+  const s = sandbox(t);
+  assert.equal(PIPELINE_DEFAULTS.parallel_cap, 4);
+  assert.equal(resolveSettings(s.ctx).pipeline.parallel_cap, 4);
+  assert.equal(s.cli('get', 'pipeline.parallel_cap').out, '4\n');
+  assert.equal(JSON.parse(s.cli('get').out).pipeline.parallel_cap, 4);
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline).slice(0, 4), ['fix_rounds', 'dispatch', 'parallel_cap', 'context_cap']);
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { parallel_cap: 3 } });
+  assert.equal(resolveSettings(s.ctx).pipeline.parallel_cap, 3);
+  s.project({ pipeline: { parallel_cap: 5 } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.parallel_cap, 5);
+  assert.deepEqual(r.ignored, []);
+  assert.equal(s.cli('get', 'pipeline.parallel_cap').out, '5\n');
+});
+
+test('a bad stored parallel_cap falls back one level with one warning that does not echo the value', (t) => {
+  const s = sandbox(t);
+  for (const bad of [2, 6, 4.5, '4']) {
+    s.user({ pipeline: { parallel_cap: 5 } });
+    s.project({ pipeline: { parallel_cap: bad } });
+    const r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.parallel_cap, 5, String(bad));
+    const w = r.warnings.filter((x) => /parallel_cap/.test(x));
+    assert.equal(w.length, 1, String(bad));
+    // The warning starts with the layer's file path, whose random folder name may hold digits.
+    const text = w[0].replace(/^.*settings\.json: |^.*config\.json: /, '');
+    assert.equal(text, 'ignoring pipeline.parallel_cap must be a whole number from 3 to 5', String(bad));
+  }
+  s.user({ pipeline: { parallel_cap: 6 } });
+  s.project({ pipeline: {} });
+  assert.equal(resolveSettings(s.ctx).pipeline.parallel_cap, 4);
+});
+
+test('a fail-closed project layer does not change parallel_cap', (t) => {
+  const s = sandbox(t);
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { parallel_cap: 3 } });
+  s.project({ pipeline: { parallel_cap: 5, review_format: 'PILOT' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.gates.ship, 'ask');
+  assert.equal(r.pipeline.parallel_cap, 5);
+  assert.deepEqual(r.ignored.filter((x) => /parallel_cap/.test(x)), []);
+});
+
+test('writeLayer refuses a bad parallel_cap with the Contract text and writes nothing', (t) => {
+  const s = sandbox(t);
+  assert.throws(() => writeLayer('user', { version: 1, pipeline: { parallel_cap: 6 } }, s.ctx), /pipeline\.parallel_cap must be a whole number from 3 to 5/);
+  assert.equal(fs.existsSync(s.config), false);
+  writeLayer('user', { version: 1, pipeline: { parallel_cap: 3 } }, s.ctx);
+  assert.deepEqual(readLayer('user', s.ctx).layer, { version: 1, pipeline: { parallel_cap: 3 } });
+});
+
+test('a v1.6 file without parallel_cap resolves as before, plus the default key', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', review_format: 'pilot' } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.review_format, r.pipeline.parallel_cap], [3, 'sequential', 'pilot', 4]);
+});
