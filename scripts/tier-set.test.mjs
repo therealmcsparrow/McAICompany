@@ -11,8 +11,12 @@ const REPO = path.resolve(import.meta.dirname, '..');
 const SHIPPED = path.join(REPO, 'company', 'tier-sets.json');
 const SHA = 'abcdef1234567';
 const RESOLVED = `${SHA}${'0'.repeat(27)}`;
-const GIT_PREFIX = ['--no-optional-locks', '-c', 'core.fsmonitor=false'];
+const GIT_PREFIX = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
 const git = (...sub) => [...GIT_PREFIX, ...sub];
+const FORMAT = git('rev-parse', '--show-object-format');
+const isFormat = (sub) => sub[0] === 'rev-parse' && sub[1] === '--show-object-format';
+const isDisambiguate = (sub) => sub[0] === 'rev-parse' && typeof sub[1] === 'string' && sub[1].startsWith('--disambiguate=');
+const ANCESTOR = (id) => git('merge-base', '--is-ancestor', '--end-of-options', id, 'HEAD');
 const PLAYBOOKS = ['feature', 'fix'];
 const BEGIN_LOW = ['--playbook', 'feature', '--triage', 'low', '--short', 'on', '--ceo', 'short'];
 const BEGIN_FULL = ['--playbook', 'feature', '--triage', 'low', '--short', 'off'];
@@ -38,7 +42,8 @@ function fixture({ data = shipped(), raw = null, slug = 'demo', project = '## Co
   const calls = [];
   // The default fake git answers what the script asks: one commit for a short base, a commit type, the Core file at the base.
   const defaultImpl = (sub) => {
-    if (sub[0] === 'rev-parse') return Buffer.from(`${RESOLVED}\n`);
+    if (isFormat(sub)) return Buffer.from('sha1\n');
+    if (isDisambiguate(sub)) return Buffer.from(`${RESOLVED}\n`);
     if (sub[0] === 'cat-file' && sub[1] === '-t') return Buffer.from('commit\n');
     if (sub[0] === 'cat-file' && sub[1] === 'blob') {
       if (project === null) throw new Error('no such blob');
@@ -451,6 +456,7 @@ describe('sync', () => {
     assert.equal(f.lines()[1].cause, 'diff');
     const diffFlags = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options'];
     assert.deepEqual(f.calls.map((c) => c.args), [
+      FORMAT,
       git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`),
       git('cat-file', '-e', '--end-of-options', `${RESOLVED}^{commit}`),
       git('diff', ...diffFlags, RESOLVED, 'HEAD', '--'),
@@ -729,27 +735,30 @@ describe('fix round: hostile and contract cases', () => {
     const f = fixture();
     f.begin();
     assert.equal(f.lines()[0].base, RESOLVED);
-    assert.deepEqual(f.calls.map((c) => c.args), [git('rev-parse', `--disambiguate=${SHA}`), git('cat-file', '-t', '--end-of-options', RESOLVED)]);
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${SHA}`), git('cat-file', '-t', '--end-of-options', RESOLVED), ANCESTOR(RESOLVED)]);
   });
-  test('a 40 and a 64 hex base are checked as a commit without a lookup', () => {
-    for (const base of ['b'.repeat(40), 'c'.repeat(64)]) {
-      const f = fixture();
-      const r = f.run('begin', f.slug, ...BEGIN_LOW, '--base', base);
-      assert.equal(r.code, 0);
-      assert.equal(f.lines()[0].base, base);
-      assert.deepEqual(f.calls.map((c) => c.args), [git('cat-file', '-t', '--end-of-options', base)]);
-    }
+  test('a full-length base goes through the same lookup; a base longer than the format is refused before any lookup', () => {
+    const base = 'b'.repeat(40);
+    const f = fixture();
+    f.setGit((sub) => (isDisambiguate(sub) ? Buffer.from(`${base}\n`) : undefined));
+    assert.equal(f.run('begin', f.slug, ...BEGIN_LOW, '--base', base).code, 0);
+    assert.equal(f.lines()[0].base, base);
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${base}`), git('cat-file', '-t', '--end-of-options', base), ANCESTOR(base)]);
+    const g = fixture();
+    assert.equal(g.run('begin', g.slug, ...BEGIN_LOW, '--base', 'c'.repeat(64)).code, 3);
+    assert.deepEqual(g.calls.map((c) => c.args), [FORMAT]);
+    noRecord(g);
   });
   test('a base that is not exactly one commit exits 3 and writes no record', () => {
     const id = (n) => `${SHA}${String(n).padStart(2, '0')}${'0'.repeat(25)}`;
     const cases = {
-      'no candidate': (sub) => (sub[0] === 'rev-parse' ? Buffer.alloc(0) : undefined),
+      'no candidate': (sub) => (isDisambiguate(sub) ? Buffer.alloc(0) : undefined),
       'a tree': (sub) => (sub[1] === '-t' ? Buffer.from('tree\n') : undefined),
-      'two commits': (sub) => (sub[0] === 'rev-parse' ? Buffer.from(`${id(1)}\n${id(2)}\n`) : undefined),
-      'seventeen candidates': (sub) => (sub[0] === 'rev-parse' ? Buffer.from(Array.from({ length: 17 }, (_, i) => `${id(i)}\n`).join('')) : undefined),
-      'a line that is not an id': (sub) => (sub[0] === 'rev-parse' ? Buffer.from('refs/heads/main\n') : undefined),
+      'two commits': (sub) => (isDisambiguate(sub) ? Buffer.from(`${id(1)}\n${id(2)}\n`) : undefined),
+      'seventeen candidates': (sub) => (isDisambiguate(sub) ? Buffer.from(Array.from({ length: 17 }, (_, i) => `${id(i)}\n`).join('')) : undefined),
+      'a line that is not an id': (sub) => (isDisambiguate(sub) ? Buffer.from('refs/heads/main\n') : undefined),
       'git fails': () => { throw new Error('boom'); },
-      'oversized output': (sub) => (sub[0] === 'rev-parse' ? Buffer.alloc(8 * 1024 * 1024 + 1) : undefined)
+      'oversized output': (sub) => (isDisambiguate(sub) ? Buffer.alloc(8 * 1024 * 1024 + 1) : undefined)
     };
     for (const [label, impl] of Object.entries(cases)) {
       const f = fixture();
@@ -769,12 +778,102 @@ describe('fix round: hostile and contract cases', () => {
     const a = `${SHA}${'1'.repeat(27)}`;
     const b = `${SHA}${'2'.repeat(27)}`;
     f.setGit((sub) => {
-      if (sub[0] === 'rev-parse') return Buffer.from(`${a}\n${b}\n`);
+      if (isDisambiguate(sub)) return Buffer.from(`${a}\n${b}\n`);
       if (sub[1] === '-t') return Buffer.from(sub.at(-1) === b ? 'commit\n' : 'tree\n');
       return undefined;
     });
     assert.equal(f.begin().code, 0);
     assert.equal(f.lines()[0].base, b);
+  });
+  test('every git call carries the replace-ref flag and the three env values, whatever the inherited env holds', (t) => {
+    for (const key of ['GIT_NO_REPLACE_OBJECTS', 'GIT_OPTIONAL_LOCKS', 'GIT_TERMINAL_PROMPT']) {
+      const had = Object.hasOwn(process.env, key) ? process.env[key] : undefined;
+      t.after(() => {
+        if (had === undefined) delete process.env[key];
+        else process.env[key] = had;
+      });
+    }
+    for (const inherited of ['', '0', '1']) {
+      process.env.GIT_NO_REPLACE_OBJECTS = inherited;
+      process.env.GIT_OPTIONAL_LOCKS = inherited;
+      process.env.GIT_TERMINAL_PROMPT = inherited;
+      const f = fixture();
+      f.begin();
+      f.run('sync', f.slug, '--plan', '02-plan.md', '--diff');
+      assert.ok(f.calls.length >= 8);
+      for (const c of f.calls) {
+        assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX);
+        assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
+        assert.equal(c.opts.env.GIT_OPTIONAL_LOCKS, '0');
+        assert.equal(c.opts.env.GIT_TERMINAL_PROMPT, '0');
+      }
+    }
+  });
+  test('a base that is not an ancestor of HEAD, or an ancestor check that fails, exits 3 with no record', () => {
+    for (const impl of [
+      (sub) => { if (sub[0] === 'merge-base') throw Object.assign(new Error('exit 1'), { status: 1 }); return undefined; },
+      (sub) => { if (sub[0] === 'merge-base') throw Object.assign(new Error('exit 128'), { status: 128 }); return undefined; },
+      (sub) => { if (sub[0] === 'merge-base') throw new Error('boom'); return undefined; }
+    ]) {
+      const f = fixture();
+      f.setGit(impl);
+      const r = f.begin();
+      assert.equal(r.code, 3);
+      assert.equal(r.lines[0], 'refused: base is not an ancestor of HEAD');
+      noRecord(f);
+    }
+  });
+  test('the object format must be exactly sha1 or sha256: another value or a failure refuses begin and makes sync high', () => {
+    for (const impl of [
+      (sub) => (isFormat(sub) ? Buffer.from('sha512\n') : undefined),
+      (sub) => (isFormat(sub) ? Buffer.from('sha1 \n') : undefined),
+      (sub) => (isFormat(sub) ? Buffer.alloc(0) : undefined),
+      (sub) => { if (isFormat(sub)) throw new Error('unknown option'); return undefined; }
+    ]) {
+      const f = fixture();
+      f.setGit(impl);
+      const r = f.begin();
+      assert.equal(r.code, 3);
+      assert.equal(r.lines[0], 'refused: base is not one commit');
+      assert.deepEqual(f.calls.map((c) => c.args), [FORMAT]);
+      noRecord(f);
+
+      const g = fixture();
+      g.begin();
+      g.calls.length = 0;
+      g.setGit(impl);
+      const s = g.run('sync', g.slug, '--diff');
+      assert.ok(s.lines.includes('check: high: core unknown'));
+      assert.ok(s.lines.includes('check: high: diff unknown'));
+      assert.deepEqual(g.calls.map((c) => c.args), [FORMAT]);
+      assert.equal(g.lines()[1].tier, 'high');
+    }
+    const f = fixture();
+    f.setGit((sub) => (isFormat(sub) ? Buffer.from('sha256\r\n') : undefined));
+    assert.equal(f.begin().code, 3);
+  });
+  test('a recorded base of another length than the format is core unknown and diff unknown, with one git call', () => {
+    const f = fixture();
+    f.begin();
+    f.calls.length = 0;
+    f.setGit((sub) => (isFormat(sub) ? Buffer.from('sha256\n') : undefined));
+    const s = f.run('sync', f.slug, '--diff');
+    assert.ok(s.lines.includes('check: high: core unknown'));
+    assert.ok(s.lines.includes('check: high: diff unknown'));
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT]);
+    assert.equal(f.lines()[1].cause, 'diff');
+    const g = fixture();
+    g.begin();
+    g.calls.length = 0;
+    const p = g.run('sync', g.slug, '--plan', '02-plan.md');
+    assert.ok(p.lines.includes('check: high: plan files unknown'));
+    assert.deepEqual(g.calls.map((c) => c.args), [FORMAT, git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`)]);
+  });
+  test('a sha1 repository refuses a 64 hex base', () => {
+    const f = fixture();
+    const r = f.run('begin', f.slug, ...BEGIN_LOW, '--base', 'a'.repeat(64));
+    assert.equal(r.code, 3);
+    noRecord(f);
   });
   test('a second begin makes no git call', () => {
     const f = fixture();
@@ -945,7 +1044,7 @@ describe('real git, every call form', () => {
     assert.equal(b.code, 0, b.lines.join('\n'));
     const rec = JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]);
     assert.equal(rec.base, first);
-    assert.deepEqual(r.calls, [git('rev-parse', `--disambiguate=${short}`), git('cat-file', '-t', '--end-of-options', first)]);
+    assert.deepEqual(r.calls, [FORMAT, git('rev-parse', `--disambiguate=${short}`), git('cat-file', '-t', '--end-of-options', first), ANCESTOR(first)]);
 
     r.write('src/auth/x.ts', 'export {}');
     r.commit('auth');
@@ -964,6 +1063,7 @@ describe('real git, every call form', () => {
     assert.ok(s.lines.includes('check: high: core .company/project.md'), text);
     assert.ok(!text.includes('core unknown') && !text.includes('diff unknown'), text);
     assert.deepEqual(r.calls, [
+      FORMAT,
       git('cat-file', 'blob', '--end-of-options', `${first}:.company/project.md`),
       git('cat-file', '-e', '--end-of-options', `${first}^{commit}`),
       git('diff', ...diffFlags, first, 'HEAD', '--'),
@@ -980,14 +1080,96 @@ describe('real git, every call form', () => {
     r.calls.length = 0;
     const ok = r.run('begin', 'demo', '--playbook', 'fix', '--triage', 'low', '--short', 'on', '--base', first, '--ceo', 'short');
     assert.equal(ok.code, 0, ok.lines.join('\n'));
-    assert.deepEqual(r.calls, [git('cat-file', '-t', '--end-of-options', first)]);
+    assert.deepEqual(r.calls, [FORMAT, git('rev-parse', `--disambiguate=${first}`), git('cat-file', '-t', '--end-of-options', first), ANCESTOR(first)]);
+    assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]).base, first);
     fs.rmSync(r.record);
     const tree = r.g('rev-parse', 'HEAD^{tree}');
-    for (const base of [tree, tree.slice(0, 8), '1234567', 'f'.repeat(40)]) {
+    for (const base of [tree, tree.slice(0, 8), '1234567', 'f'.repeat(40), 'a'.repeat(64)]) {
       const bad = r.run('begin', 'demo', '--playbook', 'fix', '--triage', 'low', '--short', 'on', '--base', base);
       assert.equal(bad.code, 3, base);
       assert.equal(fs.existsSync(r.record), false, base);
     }
+  });
+
+  test('a base on another branch is refused as not an ancestor; HEAD itself is accepted', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('a.txt', 'one');
+    r.commit('first');
+    r.g('checkout', '--quiet', '-b', 'other');
+    r.write('b.txt', 'two');
+    const other = r.commit('other');
+    r.g('checkout', '--quiet', 'main');
+    r.write('c.txt', 'three');
+    const head = r.commit('main work');
+    const flags = ['--playbook', 'fix', '--triage', 'low', '--short', 'on', '--ceo', 'short'];
+    for (const base of [other, other.slice(0, 10)]) {
+      const bad = r.run('begin', 'demo', ...flags, '--base', base);
+      assert.equal(bad.code, 3, base);
+      assert.equal(bad.lines[0], 'refused: base is not an ancestor of HEAD');
+      assert.equal(fs.existsSync(r.record), false);
+    }
+    const ok = r.run('begin', 'demo', ...flags, '--base', head);
+    assert.equal(ok.code, 0, ok.lines.join('\n'));
+    assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]).base, head);
+  });
+
+  // A root commit holding the base tree plus the given changes, then switches back to main. Used as a replacement object.
+  function replacement(r, change) {
+    r.g('checkout', '--quiet', '--orphan', 'side');
+    change();
+    r.g('add', '--all', '--', '.', ':!.company/work');
+    r.g('commit', '--quiet', '--message=replacement');
+    const id = r.g('rev-parse', '--verify', 'HEAD');
+    r.g('checkout', '--quiet', '--force', 'main');
+    return id;
+  }
+
+  test('a replace ref on the base does not hide a forced-high file from the diff', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('.company/project.md', '## Core\n- skills/pipeline: x\n');
+    r.write('a.txt', 'one');
+    const base = r.commit('first');
+    const b = r.run('begin', 'demo', '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', base, '--ceo', 'short');
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    const repl = replacement(r, () => r.write('src/web/login.js', 'export {}'));
+    r.g('replace', base, repl);
+    r.write('src/web/login.js', 'export {}');
+    r.commit('login');
+    assert.equal(r.g('diff', '--name-only', base, 'HEAD', '--', 'src'), '', 'the replace ref hides the file from plain git');
+    const s = r.run('sync', 'demo', '--diff');
+    assert.ok(s.lines.includes('check: high: pattern login src/web/login.js'), s.lines.join('\n'));
+    assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[1]).cause, 'diff');
+  });
+
+  test('a replace ref on the base does not change the Core read from the base commit', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('.company/project.md', '## Core\n- skills/pipeline: x\n');
+    const base = r.commit('first');
+    const b = r.run('begin', 'demo', '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', base, '--ceo', 'short');
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    const repl = replacement(r, () => r.write('.company/project.md', '## Core\n'));
+    r.g('replace', base, repl);
+    assert.equal(r.g('cat-file', 'blob', `${base}:.company/project.md`), '## Core', 'plain git sees the replacement');
+    fs.writeFileSync(path.join(r.runDir, '02-plan.md'), '# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: skills/pipeline/a.md\n- depends-on: none\n- parallel: yes\n');
+    const s = r.run('sync', 'demo', '--plan', '02-plan.md');
+    assert.ok(s.lines.includes('check: high: core skills/pipeline/a.md'), s.lines.join('\n'));
+  });
+
+  test('begin ignores a replace ref when it picks the base commit', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('a.txt', 'one');
+    const first = r.commit('first');
+    r.write('b.txt', 'two');
+    r.commit('second');
+    const repl = replacement(r, () => r.write('z.txt', 'z'));
+    r.g('replace', first, repl);
+    const b = r.run('begin', 'demo', '--playbook', 'fix', '--triage', 'low', '--short', 'on', '--base', first, '--ceo', 'short');
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]).base, first);
   });
 
   test('a 64 hex id works in a sha256 repository', (t) => {
@@ -1011,5 +1193,46 @@ describe('real git, every call form', () => {
     r.commit('auth');
     const s = r.run('sync', 'demo', '--diff');
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/x.ts'), s.lines.join('\n'));
+  });
+
+  test('a 40 hex base in a sha256 repository is an object prefix, never a branch of that name', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    let r;
+    try {
+      r = repo(t, 'sha256');
+    } catch {
+      return t.skip('git cannot make a sha256 repository');
+    }
+    r.write('.company/project.md', '## Core\n- skills/pipeline: x\n');
+    const base = r.commit('first');
+    assert.equal(base.length, 64);
+    r.write('src/auth/auth.js', 'export {}');
+    r.commit('auth');
+    r.g('branch', base.slice(0, 40), 'HEAD');
+    const b = r.run('begin', 'demo', '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', base.slice(0, 40), '--ceo', 'short');
+    assert.equal(b.code, 0, b.lines.join('\n'));
+    assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]).base, base);
+    const s = r.run('sync', 'demo', '--diff');
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/auth.js'), s.lines.join('\n'));
+    assert.ok(!s.lines.join('\n').includes('unknown'), s.lines.join('\n'));
+  });
+
+  test('a record with a base of the wrong length for the repository is core unknown and diff unknown', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    let r;
+    try {
+      r = repo(t, 'sha256');
+    } catch {
+      return t.skip('git cannot make a sha256 repository');
+    }
+    r.write('a.txt', 'one');
+    r.commit('first');
+    const line = { v: 1, at: '2026-10-28T12:00:00Z', ev: 'begin', pb: 'feature', tier: 'low', path: 'short', why: 'short', rev: 1, base: 'a'.repeat(40), skip: [] };
+    fs.writeFileSync(r.record, `${JSON.stringify(line)}\n`);
+    r.calls.length = 0;
+    const s = r.run('sync', 'demo', '--diff');
+    assert.ok(s.lines.includes('check: high: core unknown'), s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+    assert.deepEqual(r.calls, [FORMAT]);
   });
 });

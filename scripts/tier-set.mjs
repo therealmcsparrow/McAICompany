@@ -365,25 +365,44 @@ function defaultGit(args, { cwd, env }) {
 
 // One git call: fixed argument array, no shell. Returns the output as a Buffer; throws on a failure or an output over the cap.
 function gitRun(env, sub) {
-  const args = ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...sub];
-  const out = env.git(args, { cwd: env.root, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' } });
+  const args = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false', ...sub];
+  const gitEnv = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' };
+  const out = env.git(args, { cwd: env.root, env: gitEnv });
   const buf = Buffer.isBuffer(out) ? out : Buffer.from(String(out ?? ''), 'utf8');
   if (buf.length > MAX_GIT_BYTES) throw new Error('output too large');
   return buf;
 }
 
-// The one full commit id a --base value names, or null. Short values go through object-name lookup only, never refs.
+// The full id length of the repository's object format: 40 for sha1, 64 for sha256. Throws on any other answer.
+function objectFormat(env) {
+  const name = gitRun(env, ['rev-parse', '--show-object-format']).toString('utf8').replace(/\r?\n$/, '');
+  if (name === 'sha1') return 40;
+  if (name === 'sha256') return 64;
+  throw new Error('unknown object format');
+}
+
+// The one full commit id a --base value names, or null. Every length goes through object-name lookup only, never refs.
+// A base that is not an ancestor of HEAD is refused.
 function resolveBase(env, base) {
+  let id;
   try {
-    const isCommit = (id) => gitRun(env, ['cat-file', '-t', '--end-of-options', id]).toString('utf8').trim() === 'commit';
-    if (FULL_SHA.test(base)) return isCommit(base) ? base : null;
+    const len = objectFormat(env);
+    if (base.length > len) return null;
+    const exact = new RegExp(`^[0-9a-f]{${len}}$`);
     const ids = gitRun(env, ['rev-parse', `--disambiguate=${base}`]).toString('utf8').split('\n').filter((l) => l !== '');
-    if (ids.length === 0 || ids.length > MAX_CANDIDATES || ids.some((id) => !FULL_SHA.test(id))) return null;
-    const commits = ids.filter(isCommit);
-    return commits.length === 1 ? commits[0] : null;
+    if (ids.length === 0 || ids.length > MAX_CANDIDATES || ids.some((x) => !exact.test(x))) return null;
+    const commits = ids.filter((x) => gitRun(env, ['cat-file', '-t', '--end-of-options', x]).toString('utf8').trim() === 'commit');
+    if (commits.length !== 1) return null;
+    id = commits[0];
   } catch {
     return null;
   }
+  try {
+    gitRun(env, ['merge-base', '--is-ancestor', '--end-of-options', id, 'HEAD']);
+  } catch {
+    throw new Refusal('base is not an ancestor of HEAD');
+  }
+  return id;
 }
 
 // Paths of the work since base, or null when any git call fails. The base is used only when it is a full commit id.
@@ -664,7 +683,14 @@ function checkTo(env, slug, base, flags) {
   const wantPlan = Object.hasOwn(flags, '--plan');
   const wantDiff = flags['--diff'] === true;
   if (!wantPlan && !wantDiff) return null;
-  const core = readCore(env, base);
+  // The object format is read once, before any other git call. Without it, or with a base of another length, nothing else runs.
+  let formatOk = false;
+  try {
+    formatOk = typeof base === 'string' && base.length === objectFormat(env);
+  } catch {
+    formatOk = false;
+  }
+  const core = formatOk ? readCore(env, base) : { unknown: true };
   const all = [];
   if (core.unknown) hits.push({ source: 'core', reason: 'core unknown', path: null });
   else warning = core.warning;
@@ -674,7 +700,7 @@ function checkTo(env, slug, base, flags) {
     else all.push(...items.map((p) => ({ source: 'plan', p })));
   }
   if (wantDiff) {
-    const items = readDiffPaths(env, base);
+    const items = formatOk ? readDiffPaths(env, base) : null;
     if (items === null) hits.push({ source: 'diff', reason: 'diff unknown', path: null });
     else all.push(...items.map((p) => ({ source: 'diff', p })));
   }
