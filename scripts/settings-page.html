@@ -1016,6 +1016,14 @@ function mapRefusals(lines) {
       if (!plan.includes(prec)) plan.push(prec);
       continue;
     }
+    const cm = REFUSED_PARALLEL_CAP.exec(line);
+    const crec = cm && planRecs.find((r) => r.level === cm[1] && r.key === 'parallel_cap');
+    if (crec) {
+      crec.sticky = `Error: ${crec.label} ${PARALLEL_CAP_REFUSAL}`;
+      crec.stickyValue = crec.control.value;
+      if (!plan.includes(crec)) plan.push(crec);
+      continue;
+    }
     const m = REFUSED_PERSONALITY.exec(line);
     const rec = m && pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]);
     if (!rec) { rest.push(line); continue; }
@@ -1175,9 +1183,48 @@ function planCheckRow(tbody, key, label, pluginValue, makeControl, decode, probl
   tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), cells, effect));
   syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
 }
-const planRefusalText = (rec) => `Plan check, ${rec.label}, ${rec.level} level: ${rec.message.replace(/^Error: /, '').replace(`${rec.label} `, '')}`;
+const planRefusalText = (rec) => rec.text ?? `Plan check, ${rec.label}, ${rec.level} level: ${rec.message.replace(/^Error: /, '').replace(`${rec.label} `, '')}`;
 function planProblems() {
   return planRecs.filter((rec) => rec.message !== '');
+}
+
+const REFUSED_PARALLEL_CAP = /^(user|project) pipeline[.]parallel_cap(?![a-z_])/;
+const PARALLEL_CAP_REFUSAL = 'must be a whole number from 3 to 5.';
+const PARALLEL_CAP_HINT = 'Parallel cap: at most this many Steps run at once (builders, reviewers, QA and security). Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn. Ignored when Dispatch is sequential.';
+// Parallel cap row: a labelled select per level, tied to the shared hint; a refused value gets its own error text and a live announcement.
+function parallelCapRow(tbody, pluginValue) {
+  const path = ['pipeline', 'parallel_cap'];
+  const label = 'Parallel cap';
+  const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
+  const cells = ['user', 'project'].map((level) => {
+    const id = `parallel-cap-${level}`;
+    const control = bindLayer(selectFor([3, 4, 5], null), level, path, Number);
+    control.id = id;
+    control.setAttribute('aria-describedby', 'parallel-cap-hint');
+    const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
+    const rec = { key: 'parallel_cap', level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
+    const prefix = `${label}, ${level} level: `;
+    syncers.push(() => {
+      if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
+      const message = rec.sticky;
+      if (message !== rec.message) {
+        const live = document.getElementById('field-live');
+        if (message) live.textContent = prefix + message.replace(/^Error: /, '').replace(`${label} `, '');
+        else if (live.textContent.startsWith(prefix)) live.textContent = '';
+      }
+      rec.message = message;
+      rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
+      err.textContent = message;
+      err.hidden = message === '';
+      if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `parallel-cap-hint ${err.id}`); }
+      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', 'parallel-cap-hint'); }
+    });
+    if (!control.disabled) planRecs.push(rec);
+    const tag = el('label', { for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
+    return el('td', {}, el('div', { class: 'cf' }, tag, control, err));
+  });
+  tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), cells, effect));
+  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
 }
 const REFUSED_PLAN_CHECK = /^(user|project) plan_check\.(policy|runs)\b/;
 function planLink(rec) {
@@ -1198,6 +1245,7 @@ function renderPipeline(panel) {
     (l) => selectFor([0, 1, 2, 3, 4, 5], l), Number, String);
   pipelineRow(tbody, 'Dispatch', ['pipeline', 'dispatch'], defaults.dispatch,
     (l) => selectFor(['parallel', 'sequential'], l), String, String);
+  parallelCapRow(tbody, defaults.parallel_cap);
   pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
     (l) => selectFor(['plain', 'pilot'], l), String, String);
   pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
@@ -1205,6 +1253,7 @@ function renderPipeline(panel) {
   panel.append(wrap);
   panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
   panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
+  panel.append(el('p', { class: 'hint', id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT));
   panel.append(el('h2', {}, 'Reprompt'));
   const rp = table(COLUMNS);
   const rpDefaults = state.plugin.reprompt;
