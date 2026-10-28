@@ -123,19 +123,21 @@ For `/aico:feature` and `/aico:fix`, the script `tier-set.mjs` (Contract `tier-s
 
 **What raises the tier.** The run tier is the highest of the triage tier, the tier any Step reports, and the result of the path check. It only goes up. The path check forces **high** for:
 - a file under `docs/contracts/`;
-- a path listed under `## Core` in `.company/project.md`;
+- a path listed under `## Core` in `.company/project.md`, and always `.company/project.md`, `.company/settings.json` and `.company/standards.md` themselves, even when `## Core` lists nothing;
 - a path with a part named like auth, login, session, password, secret, payment, billing, consent, privacy, migration and the other words in the data file's list. Whole words only: `scripts/lessons.mjs` does not match.
-- a check that cannot be answered (plan has no `files:` lines, git fails, `## Core` unreadable).
+- a check that cannot be answered (plan has no `files:` lines, git fails, the base check fails, `## Core` unreadable at the base commit).
+
+Every git call of the script ignores replace refs, so the commit id the run names is the real commit. The base is the full-length commit id of the repository's own object format, and it must be an ancestor of HEAD. At each check the Lead passes its own base, and it must be exactly the base recorded at `begin`; a different or unresolvable base makes the check unanswerable, so the run goes to high and never gets shorter.
 
 The check reads file names, not file content. A risky change inside a plainly named file is not seen by it, so a Role or the Code Reviewer has to raise the tier. When a check raises a short run, the Gate summary shows `add before ship:` and the Roles it names run before the Ship Gate. You can also ask for the skipped Roles at a Gate; the Lead then raises the run to medium.
 
-**At the Brief Gate (feature).** When the run is low, the Lead shows what would be skipped (`skipped by tier:`), and the form offers **Approve, short path (Recommended)**, **Approve, full path**, Change and Stop. The short path starts only after the first. Every Brief, Plan and Ship Gate summary of a feature or fix run shows the path lines (`path:`, `skipped by tier:`, `add before ship:`).
+**At the Brief Gate (feature).** When the run is low, the Lead shows what would be skipped (`skipped by tier:`), and the form offers **Approve, short path (Recommended)**, **Approve, full path**, Change and Stop. The short path starts only after the first: it needs your explicit "Approve, short path". An auto Brief Gate always takes the full path, and a missing or any other answer means full. Every Brief, Plan and Ship Gate summary of a feature or fix run shows the path lines (`path:`, `skipped by tier:`, `add before ship:`).
 
-**How a fix gets low.** A fix has no Brief Gate. It starts low only when the bug request ends in the triage line `route fix` with `risk low` and `/aico:triage` recorded that exact request (see [`/aico:triage`](commands.md#aicotriage)). Otherwise it starts at medium.
+**How a fix gets low.** A fix has no Brief Gate. It starts low only when the bug request ends in the triage line `route fix` with `risk low` and `/aico:triage` recorded that exact request (see [`/aico:triage`](commands.md#aicotriage)). Otherwise it starts at medium. A low fix takes the short path only from that trusted triage record while `gates.brief` is `ask`, because then you saw the triage form that named the skip; with an auto Brief Gate, or no readable setting, it takes the full path.
 
 **The Short path switch.** `pipeline.short_path` in [settings](#settings) is `on` or `off`, default `on`. `off` wins: a project can only turn it off, and a project `on` never overrides a user `off`. With the switch off, or when the settings cannot be read, every run takes the full route.
 
-**Fail closed.** If the data file is refused (missing, too large, not valid, or not matching the v0.18 route for medium and high), both Playbooks use the high set and the Gate summary names the `tier-sets: refused` line. A script error or a broken record also makes the Lead run the rest of the run as high. A change never makes a run shorter.
+**Fail closed.** If the data file is refused (missing, too large, not valid, or not matching the v0.18 route for medium and high), both Playbooks use the high set and the Gate summary names the `tier-sets: refused` line. What a short run skipped is fixed at `begin` and read only from its record. If the data file is refused later, or its `rev` differs from the recorded one, the run goes to high (cause `sets`) and every skipped entry comes back before the Ship Gate. A script error or a broken record also makes the Lead run the rest of the run as high. A change never makes a run shorter.
 
 **What is stored.** `.company/work/<slug>/tier-path.jsonl` holds enums, whole numbers, a commit sha and UTC times: the Playbook, tier, path, why, the data file's `rev` and any raise with its cause. The ledger's `meta` and `ship` lines get the Playbook, `rev`, path and raised flag as enums and integers (Contract `token-ledger` v1.4). Paths found by the check are shown to you and not stored. Both files stay local where `.company/` is ignored.
 
