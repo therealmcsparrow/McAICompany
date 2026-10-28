@@ -10,12 +10,12 @@ Every Step starts with a fresh context; the Handoff is the only memory between S
 ## Starting a Step
 
 Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the one **Output** file you write and the **Goal**.
-1. Read the input Handoffs first, then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
+1. Read the input Handoffs first (code-reviewer and QA: builder Handoffs after their first pass, `aico:review`), then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`; the Lead re-dispatches. Never guess the context. Exception: a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`.
 5. Never start an aico Playbook with the Skill tool; name the Playbook you need under `## Next` for the Lead.
-6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v3.5): other Steps may be working in the same tree right now. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. `Files: none` or no `Files:` line → change only what your Goal names and list every changed path.
+6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v3.5): other Steps may be working in the same tree right now. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v3.6) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
 
 ## Context budget: the `Context cap:` line
 

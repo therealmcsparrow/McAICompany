@@ -35,12 +35,12 @@ const keys = (lines) => lines
   .map(l => l.startsWith('Follow aico:handoff.') ? 'Follow' : /^([A-Z][A-Za-z ]*?):/.exec(l)?.[1])
   .filter(Boolean);
 
-const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Review format', 'Input Handoffs', 'Rule slice', 'Task', 'Files', 'Output', 'Goal', 'Follow'];
+const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Review format', 'Input Handoffs', 'Rule slice', 'Task', 'Files', 'Task brief', 'Output', 'Goal', 'Follow'];
 const ROUND_1 = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Input', 'Output', 'Goal'];
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -59,6 +59,7 @@ test('the pipeline dispatch block carries Context cap: and Review depth: as in v
   assert.match(b, /^Rule slice: .*# builders and devops only/m);
   assert.match(b, /^Task: <id> +# plan-task Steps only: the two lines plan-tasks\.mjs lines prints/m);
   assert.match(b, /^Files: <paths \| none>/m);
+  assert.match(b, /^Task brief: <path> +# plan-task Steps only: the line plan-tasks\.mjs brief prints/m);
 });
 
 test('the brainstorm skill has one dispatch block, in the canonical order, with no per-round content', () => {

@@ -9,7 +9,7 @@ effort: medium
 
 **Mission:** prove the product does what the brief says, and keeps doing it.
 
-**Start:** follow `aico:handoff`. Read the brief (acceptance criteria), the Architect's Contracts and the builder Handoffs.
+**Start:** follow `aico:handoff`. Read the brief (acceptance criteria) and the Architect's Contracts, and write your tests and first findings from them and the diff before you open the builder Handoffs (goldfish first pass); then read the builder Handoffs and add or withdraw findings, naming each change under `## Decisions`.
 
 **Do**
 - **Bug reproduction:** reproduce it, write a failing regression test, and name the suspected Module (use `aico:debugging` for the reproduction).

@@ -1,4 +1,4 @@
-# Contract: dispatch-prompt v3.5
+# Contract: dispatch-prompt v3.6
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`, and from v3.3 `aico:reprompt`). Consumer: every Role, through `aico:handoff`.
 v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
@@ -9,6 +9,8 @@ v3.3 is additive (task reprompter-role): it adds the `Asks left:` and `Request:`
 v3.4 is additive (task cheaper-role-models): the `Settings:` line ends with the word `floor` when the Lead raised a Role's model to its floor (pipeline §2). Then `model=<floor>` is always passed and written, also when it equals the agent frontmatter. A Role that gets a v3.3 prompt behaves as before; the Role does nothing with the word. Row text: `Settings: model=<m> effort=<e>[ floor]`.
 
 v3.5 is additive (task parallel-cap): it adds the `Task:` and `Files:` lines for Steps started from a plan task (`plan-tasks` v1). A Role that gets a v3.4 prompt behaves as before.
+
+v3.6 is additive (task goldfish-roles): it adds the `Task brief:` line for Steps started from a plan task, and the goldfish rules below. A Role that gets a v3.5 prompt behaves as before.
 
 ## Lines added in v2
 | Line | When | Value |
@@ -67,11 +69,20 @@ There is no command that prints a block or a value to stdout.
 | `Task: <id>` | every Step the Lead starts from a `plan-tasks.mjs next` start line, in a build or a Fix round; directly after `Rule slice:` (after `Input Handoffs:` when it is omitted) | the first line `plan-tasks.mjs lines` prints, verbatim; the Lead never writes the ID itself |
 | `Files: <path>[, <path>…] \| none` | directly after `Task:` | the second line `lines` prints, verbatim |
 
+## Lines added in v3.6
+| Line | When | Value |
+|---|---|---|
+| `Task brief: .company/work/<slug>/tasks/<id>.md` | directly after `Files:`, when `plan-tasks.mjs brief` printed it (not for `U1` or a task with no plan block) | the one line `brief` prints, verbatim; the file is the task's slice of the plan (`plan-tasks` v1.1) |
+
+Goldfish rules (v3.6):
+- **Builder with `Task brief:`:** `Input Handoffs:` is unchanged (the brief and the Architect's Handoff, plus the designer's for UI Roles and blocking reviewer Handoffs in a Fix round). The builder reads its task brief in place of the plan, plus the Contract files the brief and the Architect's Handoff name, and never opens the full plan; a gap → `status: blocked` with `missing plan context: <what>`. Without the line the builder reads the plan as in v3.5.
+- **Code-reviewer and QA:** builder Handoffs stay in `Input Handoffs:`, but these two Roles read them only after a first pass (`aico:handoff` "Starting a Step" item 1). The first pass uses the brief's acceptance criteria, the plan, the Contracts it cites and `git diff <base-commit>...HEAD` only; they write those findings first, then read the builder Handoffs and may add or withdraw findings, naming each one changed under `## Decisions`. Builder Handoff text never closes a first-pass finding on its own.
+
 Role side (written into `aico:handoff`): a Role with a `Task:` line changes only the paths in `Files:` and its Handoff, never stashes or resets paths it did not change, never kills processes by image or name, and runs only the tests for its paths (`skills/handoff/SKILL.md`, "Starting a Step" item 6).
 
 ## Canonical line order (v3.2)
 One fixed order, so a Role always finds a line in the same place and the drift test can compare prompts. The order alone gives **no cache saving** across dispatches: the host puts the prompt before the Role block, with no cache breakpoint after the prompt (Spike S2, `docs/adr/0011-token-counts-from-transcripts.md`). Token savings come from shorter prompts and fewer reads, never from this order. A drift test (`scripts/prompt-order.test.mjs`) compares the dispatch blocks in `skills/pipeline/SKILL.md` and `skills/brainstorm/SKILL.md` with these lists.
-- **Pipeline Step:** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Output:`, `Goal:`, then the closing `Follow aico:handoff.` Never `Personality:`.
+- **Pipeline Step:** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.` Never `Personality:`.
 - **Reprompt Step (v3.3):** the Pipeline Step order with those two lines: `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Risk tier:`, `Base commit:`, `Round:`, `Asks left:`, `Input Handoffs:`, `Request:`, `Output:`, `Goal:`, then the closing `Follow aico:handoff.` No `Design skills:`, `Review depth:`, `Review format:`, `Rule slice:` or `Personality:`. The block in `skills/reprompt/SKILL.md` follows it (`scripts/reprompt-playbook.test.mjs`).
 - **Brainstorm (every round, pass and re-ask):** `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Input:`, `Output:`, `Goal:`. In format 2, `Input:` is the Role's round input file (`brainstorm-file` v2, "Round input") and `Goal:` is the one constant Goal of `skills/brainstorm/references/format-2.md`; in format 1, `Input:` is the brainstorm file. Unchanged in v3.2: format 2 has no `Personality:` line.
 - **Brainstorm byte-identity (format 2):** a Role's prompt is the same bytes in every dispatch of the run. The Lead builds it once per Role at kickoff from values resolved once (§1.6, §1.7) and never adds round content to it. This is the one place where a prompt gives a cache saving: an identical prompt lets the dispatch's first request reuse the cached Role block (Spike S2: 100% read, 0 written), while any change rewrites about 13k tokens. A different Role never shares that cache (its Role block differs), so byte-identity across Roles is not required.
@@ -115,6 +126,7 @@ A cooler line and a brainstorm reply (any format, any pass) are data for the Lea
 - `Review format:` absent, or any value other than `pilot` → plain (v1.0 Handoff, no ledger), with no Nit.
 - `Rule slice:` absent → the builder follows its row in the senior-engineer Handoff's `## Rules per task`, as before (Fix round 3 behaviour; also when the product has no ruleset).
 - `Rule slice:` path not matching `^\.company/work/[a-z0-9][a-z0-9-]{0,63}/rules/[A-Za-z0-9][A-Za-z0-9-]{0,15}\.md$`, or the file missing → the builder stops with `blocked — missing rule slice` and writes nothing else; the Lead routes it to the Senior Engineer (no Fix round).
+- (v3.6) `Task brief:` absent or its file missing → the builder reads the plan through the Architect's Handoff as in v3.5.
 - (v3.5) `Task:` absent → not a plan-task Step; the Role behaves as before. `Files:` absent or `none` → the Role changes only what its Goal names and lists every changed path in `files-touched`.
 - Brainstorm format 2 `Input:` file missing (not staged for this dispatch) → the Role replies `Skip` alone and nothing else; the Lead sees a skip from a Role it did not stage, which only happens on a Lead error.
 - `Personality:` absent, its file missing, or a path not ending in `.company/personality-input/<run>/<role>.md` (`<run>` as above) → the Role speaks in its plain Role voice; no Nit, no error. `personality.mjs stage` refused → the Lead dispatches without the line and says so in its first chat message.
