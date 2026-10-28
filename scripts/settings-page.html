@@ -664,6 +664,7 @@ const capital = (word) => word.charAt(0).toUpperCase() + word.slice(1);
 const levelWord = (level) => (level === 'user' ? 'User' : 'Project');
 
 let pRecs = [];     // one record per personality control, in page order
+let planRecs = [];  // one record per Plan check control that can be edited
 let pRoles = {};    // per Role: its details, summary parts and records
 let ruleCache = { source: undefined, value: null };
 
@@ -985,7 +986,17 @@ const REFUSED_PERSONALITY = /^(user|project) roles\.([a-z0-9-]+)\.personality\.(
 function mapRefusals(lines) {
   const rest = [];
   const marked = [];
+  const plan = [];
   for (const line of lines) {
+    const pm = REFUSED_PLAN_CHECK.exec(line);
+    const prec = pm && planRecs.find((r) => r.level === pm[1] && r.key === pm[2]);
+    if (prec) {
+      prec.sticky = `Error: ${prec.label} ${PLAN_REFUSAL[prec.key]}`;
+      prec.stickyValue = prec.control.value;
+      prec.message = prec.sticky;
+      if (!plan.includes(prec)) plan.push(prec);
+      continue;
+    }
     const m = REFUSED_PERSONALITY.exec(line);
     const rec = m && pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]);
     if (!rec) { rest.push(line); continue; }
@@ -995,7 +1006,7 @@ function mapRefusals(lines) {
     rec.refused = true;
     marked.push(rec);
   }
-  return { rest, marked };
+  return { rest, marked, plan };
 }
 // "Ava (architect), user level, Way of talking: can't contain a colon. ..."
 function refusalText(rec) {
@@ -1022,11 +1033,11 @@ function fieldLink(rec) {
   return link;
 }
 // The error summary: a heading that takes focus, then one item per refused line.
-function refusedStatus(marked, rest) {
+function refusedStatus(marked, rest, plan = []) {
   const fields = [...marked].sort((a, b) => pRecs.indexOf(a) - pRecs.indexOf(b));
-  const n = fields.length + rest.length;
+  const n = fields.length + plan.length + rest.length;
   const heading = el('h2', { class: 'sum-title', id: 'status-heading', tabIndex: -1 }, `Nothing was saved. Fix ${n} ${n === 1 ? 'field' : 'fields'}:`);
-  const list = el('ul', {}, fields.map((rec) => el('li', {}, fieldLink(rec))), rest.map((line) => el('li', {}, line)));
+  const list = el('ul', {}, fields.map((rec) => el('li', {}, fieldLink(rec))), plan.map((rec) => el('li', {}, planLink(rec))), rest.map((line) => el('li', {}, line)));
   const box = document.getElementById('status');
   box.replaceChildren(el('div', { class: 'notice err' }, heading, list));
   heading.focus();
@@ -1109,6 +1120,57 @@ function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, forma
   tbody.append(el('tr', {}, head, el('td', { class: 'plugin' }, format(pluginValue)), cells, effect));
   syncers.push(() => showEffect(effect, path, pluginValue, format, getIn(state.resolved, path)));
 }
+// Plan check rows: each control has a visible label, the shared hint and, when refused, its own error text.
+const PLAN_POLICIES = ['off', 'warn', 'block'];
+const PLAN_RUNS_RANGE = 'a whole number from 3 to 50';
+const PLAN_REFUSAL = { policy: 'must be off, warn or block.', runs: `must be ${PLAN_RUNS_RANGE}.` };
+const runsProblem = (label, raw) => {
+  const t = raw.trim();
+  if (t === '') return '';
+  if (!/^\d{1,6}$/.test(t)) return `Error: ${label} must be ${PLAN_RUNS_RANGE}.`;
+  const n = Number(t);
+  return n < 3 || n > 50 ? `Error: ${label} is out of range. Use ${PLAN_RUNS_RANGE}.` : '';
+};
+function planCheckRow(tbody, key, label, pluginValue, makeControl, decode, problem) {
+  const path = ['plan_check', key];
+  const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
+  const cells = ['user', 'project'].map((level) => {
+    const id = `pc-${key}-${level}`;
+    const control = bindLayer(makeControl(), level, path, decode);
+    control.id = id;
+    control.setAttribute('aria-describedby', 'plan-check-hint');
+    const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
+    const rec = { key, level, label, control, sticky: '', stickyValue: '', message: '' };
+    syncers.push(() => {
+      if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
+      rec.message = (problem ? problem(label, control.value) : '') || rec.sticky;
+      err.textContent = rec.message;
+      err.hidden = rec.message === '';
+      if (rec.message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `plan-check-hint ${err.id}`); }
+      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', 'plan-check-hint'); }
+    });
+    if (!control.disabled) planRecs.push(rec);
+    const tag = el('label', { for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
+    return el('td', {}, el('div', { class: 'cf' }, tag, control, err));
+  });
+  tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), cells, effect));
+  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+}
+const planRefusalText = (rec) => `Plan check, ${rec.label}, ${rec.level} level: ${rec.message.replace(/^Error: /, '').replace(`${rec.label} `, '')}`;
+function planProblems() {
+  return planRecs.filter((rec) => rec.message !== '');
+}
+const REFUSED_PLAN_CHECK = /^(user|project) plan_check\.(policy|runs)\b/;
+function planLink(rec) {
+  const link = el('a', { href: `#${rec.control.id}` }, planRefusalText(rec));
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    selectTab('pipeline');
+    rec.control.focus();
+    if (typeof rec.control.scrollIntoView === 'function') rec.control.scrollIntoView({ block: 'center' });
+  });
+  return link;
+}
 const onOff = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
 function renderPipeline(panel) {
   const defaults = state.plugin.pipeline;
@@ -1131,6 +1193,13 @@ function renderPipeline(panel) {
     (l) => selectFor([0, 1, 2, 3], l), Number, String, { describedBy: 'reprompt-hint' });
   panel.append(rp.wrap);
   panel.append(el('p', { class: 'hint', id: 'reprompt-hint' }, 'How often /aico:reprompt may come back with questions before it writes the prompt on stated assumptions. 0: it never asks.'));
+  panel.append(el('h2', {}, 'Plan check'));
+  const pc = table(COLUMNS);
+  const pcDefaults = state.plugin.plan_check;
+  planCheckRow(pc.tbody, 'policy', 'Policy', pcDefaults.policy, () => selectFor(PLAN_POLICIES, null), String, null);
+  planCheckRow(pc.tbody, 'runs', 'Verdict runs', pcDefaults.runs, () => el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), (s) => (/^\d{1,6}$/.test(s.trim()) ? Number(s) : s), runsProblem);
+  panel.append(pc.wrap);
+  panel.append(el('p', { class: 'hint', id: 'plan-check-hint' }, 'Plan check lists open choices in the plan at the Plan Gate. Warn: you see the rows and can still approve. Block: the check reports an error on any finding; in this version the Plan Gate still treats it as a warning. Off: no check runs. Verdict runs: how many check-on runs /aico:feedback compares with as many earlier runs.'));
   panel.append(el('h2', {}, 'Brainstorm'));
   const bs = table(COLUMNS);
   const bsDefaults = state.plugin.brainstorm;
@@ -1264,6 +1333,7 @@ function renderNotices() {
 function render() {
   syncers = [];
   pRecs = [];
+  planRecs = [];
   pRoles = {};
   renderNotices();
   const renderers = { roles: renderRoles, personality: renderPersonality, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
@@ -1328,9 +1398,10 @@ const unreachable = () => status('err', 'Can\'t reach the settings server. It st
 async function save() {
   const previousId = document.activeElement?.id ?? '';
   const bad = personalityProblems();
-  if (bad.length) {
-    refresh();
-    refusedStatus(bad, []);
+  refresh();
+  const badPlan = planProblems();
+  if (bad.length || badPlan.length) {
+    refusedStatus(bad, [], badPlan);
     return;
   }
   const body = { revision: state.resolved.revision };
@@ -1358,9 +1429,9 @@ async function save() {
     restoreFocus(previousId, status('err', 'Your view was stale: the settings changed somewhere else since this page loaded. The page now shows the current values, and your edits were not saved. Make them again and press Save.'));
   } else {
     refresh();
-    const { rest, marked } = mapRefusals(res.data.refused ?? [`the server answered ${res.status}`]);
+    const { rest, marked, plan } = mapRefusals(res.data.refused ?? [`the server answered ${res.status}`]);
     refresh();
-    refusedStatus(marked, rest);
+    refusedStatus(marked, rest, plan);
   }
 }
 
@@ -1383,7 +1454,7 @@ function clearPersonality(level) {
 function clearLevel(level) {
   if (activeTab === 'roles') clearRoles(level);
   else if (activeTab === 'personality') clearPersonality(level);
-  else if (activeTab === 'pipeline') { delete draft[level].pipeline; delete draft[level].reprompt; }
+  else if (activeTab === 'pipeline') { delete draft[level].pipeline; delete draft[level].reprompt; delete draft[level].plan_check; }
   else if (activeTab === 'mods') delete draft[level].mods;
   else if (activeTab === 'scan') delete draft[level].skillspector;
   else if (activeTab === 'gates') { delete draft[level].gates; if (level === 'user') delete draft.user.unlocked; }

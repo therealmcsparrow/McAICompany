@@ -1,0 +1,5 @@
+{ "v": 1, "patterns": [
+  { "id": "tbd", "re": "\\bTBD\\b", "flags": "", "why": "a placeholder: the plan does not say what to build here" },
+  { "id": "todo", "re": "\\bTODO\\b", "flags": "", "why": "work the plan has not settled" },
+  { "id": "decide-later", "re": "\\bdecide later\\b", "flags": "i", "why": "a choice put off past the Plan Gate" },
+  { "id": "open-choice", "re": "^.* or .*\\?\\s*$", "flags": "", "why": "an open either-or question: the plan has not picked one" } ] }

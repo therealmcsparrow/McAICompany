@@ -209,7 +209,7 @@ test('aico-settings: get has the documented keys, no personality, and refuses th
   const got = sb.run('settings.mjs', ['get']);
   assert.equal(got.code, 0, got.err);
   const data = JSON.parse(got.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
   for (const entry of Object.values(data.roles)) assert.deepEqual(Object.keys(entry).sort(), ['context_cap', 'effort', 'model', 'name', 'source']);
   assert.doesNotMatch(got.out, /ZQX|personalit/i);
   for (const key of ['roles.qa.personality', 'roles.qa.personality.talk']) {
