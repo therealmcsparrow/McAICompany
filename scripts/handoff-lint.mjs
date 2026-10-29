@@ -824,22 +824,24 @@ function exceptionLines(text) {
     if (section !== 'Exceptions') continue;
     const m = EXCEPTION_RE.exec(line);
     if (m) {
-      if (realDate(Number(m[3]), Number(m[4]), Number(m[5]))) out.push({ slug: m[1], key: m[2], date: `${m[3]}-${m[4]}-${m[5]}` });
+      if (realDate(Number(m[3]), Number(m[4]), Number(m[5]))) out.push({ slug: m[1], key: m[2], date: `${m[3]}-${m[4]}-${m[5]}`, line });
       continue;
     }
     const u = UNSLUGGED_RE.exec(line);
-    if (u && realDate(Number(u[2]), Number(u[3]), Number(u[4]))) out.push({ slug: null, key: u[1], date: `${u[2]}-${u[3]}-${u[4]}` });
+    if (u && realDate(Number(u[2]), Number(u[3]), Number(u[4]))) out.push({ slug: null, key: u[1], date: `${u[2]}-${u[3]}-${u[4]}`, line });
   }
   return out;
 }
 
 // CEO exceptions: `## Exceptions` of .company/standards.md. Handoff text never counts. A line counts only for this run, on or
 // after the UTC date of the run's latest start; no readable start means no exception.
-function readExceptions(ctx, slug, warnings) {
+// `sink`, when given, collects the applied lines for `applied()` and notes a file that exists but cannot be read.
+function readExceptions(ctx, slug, warnings, sink = null) {
   const found = new Set();
   if (!ctx || !SLUG_RE.test(slug)) return found;
   const got = readInside(ctx.realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return found;
+  if (got.status !== 'ok' && sink) sink.failed = sink.failed ?? 'cannot read standards.md';
   if (got.status === 'refused') {
     warnings.push('warning: standards.md is a link, not a plain file or over 256 KiB; no exceptions applied');
     return found;
@@ -869,19 +871,20 @@ function readExceptions(ctx, slug, warnings) {
       }
     } else if (e.slug === slug) {
       const from = startDate();
-      if (from !== null && e.date >= from) found.add(e.key);
+      if (from !== null && e.date >= from) { found.add(e.key); sink?.exceptions.push(e.line); }
     }
   }
   return found;
 }
 
 // CEO rulings: `## Rulings` of .company/work/<slug>/rulings.md. The last line for a key counts. Returns Map key -> { verb, at }.
-function readRulings(ctx, slug, warnings) {
+function readRulings(ctx, slug, warnings, sink = null) {
   const rulings = new Map();
   if (!ctx || !SLUG_RE.test(slug)) return rulings;
   const got = readInside(ctx.realRoot, ['.company', 'work', slug, 'rulings.md'], MAX_RULINGS);
   if (got.status === 'missing') return rulings;
   if (got.status !== 'ok') {
+    if (sink) sink.failed = sink.failed ?? 'cannot read rulings.md';
     warnings.push('warning: rulings.md is a link, not a plain file, over 64 KiB or unreadable; no rulings applied');
     return rulings;
   }
@@ -896,7 +899,7 @@ function readRulings(ctx, slug, warnings) {
     if (h) { section = h[1].trim(); continue; }
     if (section !== 'Rulings') continue;
     const m = RULING_RE.exec(line);
-    if (m && realDate(Number(m[4]), Number(m[5]), Number(m[6]))) rulings.set(m[1], { verb: m[2], at: `rulings.md line ${i + 1}` });
+    if (m && realDate(Number(m[4]), Number(m[5]), Number(m[6]))) rulings.set(m[1], { verb: m[2], at: `rulings.md line ${i + 1}`, no: i, line });
   }
   return rulings;
 }
@@ -913,7 +916,7 @@ export function exceptionsFor(root, slug) {
 }
 
 // The state table of a run folder: { states: Map key -> state, unresolved, escalated, ruled, excepted, lineages, warnings, errors }.
-export function contests(runFolder) {
+export function contests(runFolder, sink = null) {
   const out = { states: new Map(), unresolved: [], escalated: [], ruled: [], excepted: [], lineages: [], warnings: [], errors: [] };
   const err = m => out.errors.push(m);
   const runAbs = resolve(runFolder);
@@ -998,8 +1001,8 @@ export function contests(runFolder) {
   }
 
   const slug = basename(runAbs);
-  const excepts = readExceptions(ctx, slug, out.warnings);
-  const rulings = readRulings(ctx, slug, out.warnings);
+  const excepts = readExceptions(ctx, slug, out.warnings, sink);
+  const rulings = readRulings(ctx, slug, out.warnings, sink);
   const keyed = [...lineages.values()].map(l => [keyOf(l), l]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
   for (const [key, l] of keyed) {
     const r = l.contest?.escalate ? rulings.get(key) : undefined;
@@ -1007,6 +1010,7 @@ export function contests(runFolder) {
       err(`${r.at}: ruling on security finding ${key} is refused; fix it or ask the CEO for an exception`);
     } else if (r) {
       l.ruling = r.verb;
+      sink?.rulings.push(r);
     }
   }
   for (const [key, l] of keyed) {
@@ -1035,9 +1039,45 @@ export function contests(runFolder) {
   return out;
 }
 
+const MAX_PRINT = 1000;
+const UNSAFE_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+
+// One listed line: "> " plus the line, cut at 1000 characters, control, format and line-separator characters as \u{hex}.
+export function printLine(line) {
+  const cut = line.length > MAX_PRINT ? line.slice(0, MAX_PRINT) : line;
+  const out = ['> ' + cut.replace(UNSAFE_CHAR, c => '\\u{' + c.codePointAt(0).toString(16) + '}')];
+  if (line.length > MAX_PRINT) out.push('> … (' + (line.length - MAX_PRINT) + ' more characters)');
+  return out;
+}
+
+// The rulings and exceptions that apply to a run, as the lint counts them: { code, lines }. Code 2 is a bad run folder.
+export function applied(runFolder) {
+  const runAbs = resolve(runFolder);
+  const ctx = runContext(runAbs);
+  const slug = basename(runAbs);
+  if (!ctx || !SLUG_RE.test(slug)) return { code: 2, lines: [] };
+  const sink = { rulings: [], exceptions: [], failed: null };
+  const r = contests(runAbs, sink);
+  if (sink.failed) return { code: 1, lines: ['ERROR ' + sink.failed] };
+  const rulings = [...sink.rulings].sort((a, b) => a.no - b.no);
+  const lines = ['rulings on file: confirm each is yours (' + rulings.length + ')'];
+  rulings.forEach(x => lines.push(...printLine(x.line)));
+  lines.push('exceptions on file for ' + slug + ': confirm each is yours (' + sink.exceptions.length + ')');
+  sink.exceptions.forEach(x => lines.push(...printLine(x)));
+  r.warnings.filter(w => w.startsWith('warning: run ') || w.startsWith('warning: exception ')).forEach(w => lines.push(w));
+  return { code: 0, lines };
+}
+
 function main(argv) {
-  const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md> | --contests <run folder> | --exceptions-for <slug>';
+  const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md> | --contests <run folder> | --applied <run folder> | --exceptions-for <slug>';
   const args = argv.slice(2);
+  if (args[0] === '--applied') {
+    if (args.length !== 2 || args[1].startsWith('--')) { console.log(USAGE); return 2; }
+    const r = applied(args[1]);
+    if (r.code === 2) { console.log(USAGE); return 2; }
+    r.lines.forEach(l => console.log(l));
+    return r.code;
+  }
   if (args[0] === '--exceptions-for') {
     if (args.length !== 2) { console.log(USAGE); return 2; }
     const r = exceptionsFor(process.cwd(), args[1]);
