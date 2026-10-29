@@ -320,10 +320,19 @@ export function openGit(cwd, seam = {}) {
 }
 
 // The names a judging diff prints with -z, or null on a git failure.
-function diffNames(git, mode, endpoints) {
+// Names that are not valid UTF-8 cannot be passed back to git as text: they are left out and, when `bad` is given, collected there.
+function diffNames(git, mode, endpoints, bad = null) {
   const r = git.diff(['-z', '--name-only', '--no-renames', ...mode], endpoints);
   if (r.failed || r.status !== 0 || r.overflow) return null;
-  return r.out.toString('utf8').split('\0').filter(Boolean);
+  const names = [];
+  for (const part of r.out.toString('latin1').split('\0')) {
+    if (!part) continue;
+    const raw = Buffer.from(part, 'latin1');
+    const name = raw.toString('utf8');
+    if (Buffer.from(name, 'utf8').equals(raw)) names.push(name);
+    else bad?.add(name);
+  }
+  return names;
 }
 
 // The paths a tree holds as submodule entries (their commits are not in this repository), or null on a git failure.
@@ -411,15 +420,17 @@ function binaryFacts(git, base, ref) {
     const m = /^(\S+)\t(\S+)\t([\s\S]+)$/.exec(entry);
     if (m && m[1] === '-' && m[2] === '-') marked.push(m[3]);
   }
-  const tipNames = diffNames(git, ['--diff-filter=d'], [base, ref]);
+  const bad = new Set();
+  const tipNames = diffNames(git, ['--diff-filter=d'], [base, ref], bad);
   if (tipNames === null || marked.length > MAX_CHANGED || tipNames.length > MAX_CHANGED) return { failed: true };
   if (marked.length) {
-    const added = diffNames(git, ['--diff-filter=A'], [base, ref]);
-    const deleted = diffNames(git, ['--diff-filter=D'], [base, ref]);
+    const added = diffNames(git, ['--diff-filter=A'], [base, ref], bad);
+    const deleted = diffNames(git, ['--diff-filter=D'], [base, ref], bad);
     if (added === null || deleted === null) return { failed: true };
     const noBase = new Set(added);
     const noTip = new Set(deleted);
     for (const file of marked) {
+      if (bad.has(file)) continue;
       let text = false;
       let large = false;
       const sides = [...(noBase.has(file) ? [] : [base]), ...(noTip.has(file) ? [] : [ref])];
@@ -437,6 +448,7 @@ function binaryFacts(git, base, ref) {
       if (!large) shown.push(file);
     }
   }
+  for (const file of bad) rows.push({ file, problem: 'path not UTF-8' });
   const tipFiles = loadFiles(git, ref, tipNames);
   if (tipFiles === null) return { failed: true };
   for (const [file, entry] of tipFiles) git.files.set(file, entry);
@@ -462,8 +474,10 @@ function runSession(root, base, slug, seam) {
 
 // ---------- rows ----------
 
+// Controls, format characters (bidi, zero-width, tag characters, BOM) and line and paragraph separators.
+const HIDDEN_RUN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu;
 function clean(value) {
-  return String(value).replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+/g, ' ').replace(/\|/g, '¦').trim();
+  return String(value).replace(HIDDEN_RUN, ' ').replace(/\|/g, '¦').trim();
 }
 
 function cut(value, n = CUT) {
@@ -632,7 +646,7 @@ function cmdRun(a, opts) {
 
 // ---------- text: the --text diff of binary-marked text files ----------
 
-const BIDI = new Set([0x61c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]);
+const HIDDEN_ONE = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
 const hex = (n, width) => n.toString(16).padStart(width, '0');
 
 // Text for a reader: C0 controls except tab and LF, DEL and invalid UTF-8 bytes as \x<hh>; C1 and bidi controls as \u<hhhh>.
@@ -663,7 +677,7 @@ export function escapeBytes(bytes) {
       i++;
       continue;
     }
-    out += (cp >= 0x80 && cp <= 0x9f) || BIDI.has(cp) ? `\\u${hex(cp, 4)}` : String.fromCodePoint(cp);
+    out += HIDDEN_ONE.test(String.fromCodePoint(cp)) ? `\\u${hex(cp, 4)}` : String.fromCodePoint(cp);
     i += need + 1;
   }
   return out;
@@ -920,7 +934,8 @@ const FILL_HEADING = '## Security rows (filled by rule-check)';
 const SEC_MUST = /^[a-z][a-z0-9-]{0,23}\.M-SEC\d+$/;
 const PACK_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}@[A-Za-z0-9._-]{1,40}\.md$/;
 const PACK_ENTRY = /^- (\S+)(?: — .*)?$/;
-const UNSAFE_CHARS = new RegExp('[\\u0000-\\u0008\\u000a-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069\\ufeff]');
+// As plan-tasks.mjs: control and format characters (zero-width, bidi, tag), line and paragraph separators; a tab is kept.
+const UNSAFE_CHARS = /(?!\t)[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const LONG_LINE = 1000;
 
 function regularFile(file) {

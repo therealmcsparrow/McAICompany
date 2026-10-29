@@ -184,3 +184,14 @@ test('a duplicated marker heading is refused', () => {
   const f = fixture({ standards: `## Packs\n- .company/standards/fx@1.md — r\n${HEAD}\n${HEAD}\n` });
   assert.equal(fill(f).code, 2);
 });
+
+test('rows with zero-width or tag characters are reported and not copied', () => {
+  for (const hidden of ['​', '⁠', '\u{e0049}\u{e0047}', '᠎', '﻿']) {
+    const bad = `- fx.M-SEC1 — has ${hidden} hidden — source: x`;
+    const f = fixture({ packs: { 'fx@1.md': `## Security\n${bad}\n${S2}\n` } });
+    const r = fill(f);
+    assert.deepEqual(added(r), ['added fx.M-SEC2'], JSON.stringify(hidden));
+    assert.ok(r.lines.some(l => l.startsWith('skipped fx.M-SEC1')));
+    assert.ok(!read(f).includes(hidden));
+  }
+});

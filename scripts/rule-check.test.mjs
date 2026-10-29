@@ -955,3 +955,37 @@ test('text: any argument but --base and --run is refused, and with none marked i
   assert.equal(none.status, 0);
   assert.equal(none.out, 'no binary-marked text files\n');
 });
+
+// ---------- fix round 1: a failing binary-content read is never a silent gap ----------
+
+// Adds one commit on the run branch whose tree also holds `bytes` as a file name (mktree takes any bytes).
+function commitRawName(root, bytes, content) {
+  const oid = gitIn(root, content, 'hash-object', '-w', '--stdin');
+  const listing = spawnSync('git', ['ls-tree', '-z', 'HEAD'], { cwd: root, env: env(tmp('rule-check-home-')) }).stdout;
+  const entry = Buffer.concat([Buffer.from(`100644 blob ${oid}\t`), bytes, Buffer.from([0])]);
+  const tree = gitIn(root, Buffer.concat([listing, entry]), 'mktree', '-z');
+  const commit = gitIn(root, undefined, 'commit-tree', tree, '-p', 'HEAD', '-m', 'raw name');
+  gitIn(root, undefined, 'update-ref', `refs/heads/aico/${SLUG}`, commit);
+}
+
+test('a tree entry with a non-UTF-8 name is a path not UTF-8 row, the other binary-marked rows survive', () => {
+  const { root, base } = gitRoot({ 'evil.js': 'const a = 1;\n' });
+  setAttributes(root, 'evil.js -diff\n');
+  commitRawName(root, Buffer.from([0x62, 0xff, 0x2e, 0x6a, 0x73]), 'x\n');
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  assert.ok(hasRow(r.out, 'evil.js', 'text shown as binary'), r.out);
+  assert.ok(rowsOf(r.out).some(l => l.split(' | ')[2] === 'path not UTF-8'), r.out);
+  assert.ok(!r.out.includes('tool failed: binary-content'), r.out);
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.equal(t.status, 0, t.all);
+  assert.deepEqual([...sections(t.out).keys()], ['evil.js']);
+});
+
+test('a file name with a zero-width or tag character is cleaned in a row cell', () => {
+  const name = `a​b\u{e0049}c.js`;
+  const { root, base } = gitRoot({ [name]: '/*\0*/\n' });
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.ok(rowsOf(r.out).some(l => l.split(' | ')[2] === 'binary content in a text path'), r.out);
+  assert.doesNotMatch(r.out, /[​\u{e0000}-\u{e007f}]/u);
+});
