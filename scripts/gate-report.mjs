@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Usage: node scripts/gate-report.mjs <x.y.z> (contract: docs/contracts/release.md v1)
-// Prints the Gate Report of one plugin version (contract: docs/contracts/release.md v1). Node built-ins only.
+// Usage: node scripts/gate-report.mjs <x.y.z> (contract: docs/contracts/release.md v1.1)
+// Prints the Gate Report of one plugin version (contract: docs/contracts/release.md v1.1). Node built-ins only.
 // It holds only what the records of the runs of that version show: Gates with result and wait, CEO forms, Fix rounds,
 // run time and Step time per Role id. A value that was not recorded reads `not recorded`. Nothing is estimated.
 // Runs come from .company/ledger/<run>.jsonl whose last `meta` record names the version; Gates and forms from run-state.
@@ -19,6 +19,12 @@ const ROLE = /^(lead|other|[a-z][a-z0-9-]{0,40})$/;
 const GATES = new Set(['brief', 'plan', 'ship']);
 const RESULTS = new Set(['passed', 'changed', 'stopped']);
 export const NONE = 'not recorded';
+const MAX_EVAL_BYTES = 256 * 1024;
+const MAX_EVAL_LINE = 1024;
+const EVAL_FILES = [
+  ['plan review eval', ['tests', 'plan-review', 'eval.jsonl']],
+  ['code review eval', ['tests', 'code-review', 'eval.jsonl']]
+];
 
 function duration(seconds) {
   const s = Math.round(seconds);
@@ -107,11 +113,50 @@ function runLines({ run, ship }, root) {
   return lines;
 }
 
+const count = (n) => Number.isSafeInteger(n) && n >= 0;
+
+// True when each folder from root down to the file is a plain folder or file, not a link.
+function plainPath(root, segments) {
+  let at = root;
+  for (const [i, seg] of segments.entries()) {
+    at = path.join(at, seg);
+    const st = fs.lstatSync(at);
+    if (st.isSymbolicLink() || (i < segments.length - 1 ? !st.isDirectory() : !st.isFile())) return false;
+    if (i === segments.length - 1 && st.size > MAX_EVAL_BYTES) return false;
+  }
+  return true;
+}
+
+// "<label>: <k> of <n> (<date>)" from the last eval record of `version`, else "<label>: not recorded".
+// Only checked numbers and a date cut from a checked UTC time are printed. Any trouble reads as not recorded.
+function evalLine(root, version, [label, segments]) {
+  try {
+    if (!plainPath(root, segments)) return `${label}: ${NONE}`;
+    let found;
+    for (const line of fs.readFileSync(path.join(root, ...segments), 'utf8').split('\n')) {
+      if (line.length > MAX_EVAL_LINE) continue;
+      let rec;
+      try {
+        rec = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (typeof rec === 'object' && rec !== null && !Array.isArray(rec) && rec.aico === version) found = rec;
+    }
+    const ok = found && found.v === 1 && count(found.caught) && count(found.total) && found.caught <= found.total && typeof found.at === 'string' && TIME.test(found.at) && !Number.isNaN(Date.parse(found.at));
+    return ok ? `${label}: ${found.caught} of ${found.total} (${found.at.slice(0, 10)})` : `${label}: ${NONE}`;
+  } catch {
+    return `${label}: ${NONE}`;
+  }
+}
+
 // The report text for `version`: LF only, Role ids only.
 export function gateReport({ root, version }) {
   if (typeof version !== 'string' || !SEMVER.test(version)) throw new Error('version must be plain semver (x.y.z)');
   const runs = runsOf(root, version);
   const lines = [`# Gate Report v${version}`, '', 'Recorded data only. A value that was not recorded reads "not recorded"; nothing is estimated.', ''];
+  for (const entry of EVAL_FILES) lines.push(evalLine(root, version, entry));
+  lines.push('');
   if (runs.length === 0) lines.push(`Runs: ${NONE} for this version.`, '');
   else {
     lines.push(`Runs: ${runs.length}`, '');
