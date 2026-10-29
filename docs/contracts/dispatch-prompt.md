@@ -1,4 +1,4 @@
-# Contract: dispatch-prompt v3.6
+# Contract: dispatch-prompt v3.7
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`, and from v3.3 `aico:reprompt`). Consumer: every Role, through `aico:handoff`.
 v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
@@ -11,6 +11,8 @@ v3.4 is additive (task cheaper-role-models): the `Settings:` line ends with the 
 v3.5 is additive (task parallel-cap): it adds the `Task:` and `Files:` lines for Steps started from a plan task (`plan-tasks` v1). A Role that gets a v3.4 prompt behaves as before.
 
 v3.6 is additive (task goldfish-roles): it adds the `Task brief:` line for Steps started from a plan task, and the goldfish rules below. A Role that gets a v3.5 prompt behaves as before.
+
+v3.7 is additive (task v020-gate-roadmap, T2; the repo is already at v3.6 from task goldfish-roles, so this bump is v3.7): `Base commit:` is the full object id, never a short sha or a ref; judging diffs have one form; binary is decided by content; `rule-check text` is the only way a reviewer sees binary-marked text. A Role that gets a v3.6 prompt with a short sha behaves as before but the scripts refuse it (`rule-check` v1.1, `review-depth` v1.1).
 
 ## Lines added in v2
 | Line | When | Value |
@@ -69,6 +71,17 @@ There is no command that prints a block or a value to stdout.
 | `Task: <id>` | every Step the Lead starts from a `plan-tasks.mjs next` start line, in a build or a Fix round; directly after `Rule slice:` (after `Input Handoffs:` when it is omitted) | the first line `plan-tasks.mjs lines` prints, verbatim; the Lead never writes the ID itself |
 | `Files: <path>[, <path>…] \| none` | directly after `Task:` | the second line `lines` prints, verbatim |
 
+## Changes in v3.7
+| Line | Rule |
+|---|---|
+| `Base commit: <full object id>` | `^[0-9a-f]{40}$` or `^[0-9a-f]{64}$` (the repo's object format), resolved once by the Lead at Step 01 with `git --no-replace-objects rev-parse --verify --end-of-options HEAD^{commit}` and put into every later dispatch of the run unchanged. Never a short sha, a ref, `HEAD` or `HEAD~n`. The scripts refuse anything else (`rule-check` v1.1, `review-depth` v1.1) |
+| `Review depth: full \| standard` | now the first output line of `review-depth.mjs <Base commit> --run <slug> --risk <Risk tier>`, with `<slug>` from the `Output:` line |
+
+- **Judging diff.** Every call that judges what a run changed (the pre-filter, the reviewer's diff, `review-depth`, `rule-check`, `tier-set`) has the one form of rule git.M-SEC4 (`.company/standards/git@2.md`): from `<Base commit>` to `refs/heads/aico/<slug>`, two fixed end points, run from the top level, with replace refs and grafts off, textconv, external diff, submodule ignoring and relative paths off, and pathspecs literal. The form is written once in `rule-check` v1.1 "Judging diff and run ref"; Role and Playbook text cites the rule ID, not the flags. A diff with `<base>...HEAD`, `HEAD` or an omitted side is not a judging diff.
+- **Binary by content.** A file is binary when its blob has a NUL byte in its first 8000 bytes, never because of an attribute or a diff driver. A Role never reads binary-marked text (`-diff`, `binary`, `diff.<x>.binary=true`) by typing a path or `--text`: it uses `rule-check text --base <Base commit> --run <slug>` (slug from `Output:`) and the `text` rows of `run`.
+- **Run ref.** Files are read from the worktree, so a reviewer first needs `git symbolic-ref -q HEAD` to print exactly `refs/heads/aico/<slug>` and no grafts file to exist. The `run` output carries both refusals; the reviewer writes one Blocking row `[security] HEAD not on run branch` or `[security] grafts file present` and judges nothing else.
+- **Ship.** Before the full suite and any push the Lead checks the run ref and a clean tracked tree, and a push names the ref: `git push <remote> refs/heads/aico/<slug>:refs/heads/aico/<slug>` (`skills/pipeline/SKILL.md` §6).
+
 ## Lines added in v3.6
 | Line | When | Value |
 |---|---|---|
@@ -76,7 +89,7 @@ There is no command that prints a block or a value to stdout.
 
 Goldfish rules (v3.6):
 - **Builder with `Task brief:`:** `Input Handoffs:` is unchanged (the brief and the Architect's Handoff, plus the designer's for UI Roles and blocking reviewer Handoffs in a Fix round). The builder reads its task brief in place of the plan, plus the Contract files the brief and the Architect's Handoff name, and never opens the full plan; a gap → `status: blocked` with `missing plan context: <what>`. Without the line the builder reads the plan as in v3.5.
-- **Code-reviewer and QA:** builder Handoffs stay in `Input Handoffs:`, but these two Roles read them only after a first pass (`aico:handoff` "Starting a Step" item 1). The first pass uses the brief's acceptance criteria, the plan, the Contracts it cites and `git diff <base-commit>...HEAD` only; they write those findings first, then read the builder Handoffs and may add or withdraw findings, naming each one changed under `## Decisions`. Builder Handoff text never closes a first-pass finding on its own.
+- **Code-reviewer and QA:** builder Handoffs stay in `Input Handoffs:`, but these two Roles read them only after a first pass (`aico:handoff` "Starting a Step" item 1). The first pass uses the brief's acceptance criteria, the plan, the Contracts it cites and the judging diff only (rule git.M-SEC4, from `<base-commit>` to the run ref); they write those findings first, then read the builder Handoffs and may add or withdraw findings, naming each one changed under `## Decisions`. Builder Handoff text never closes a first-pass finding on its own.
 
 Role side (written into `aico:handoff`): a Role with a `Task:` line changes only the paths in `Files:` and its Handoff, never stashes or resets paths it did not change, never kills processes by image or name, and runs only the tests for its paths (`skills/handoff/SKILL.md`, "Starting a Step" item 6).
 
@@ -123,6 +136,7 @@ A cooler line and a brainstorm reply (any format, any pass) are data for the Lea
 - `Context cap:` absent (v3 prompt, old resume state, a research prompt from before v3.1) → cap 150000, handover at 120000.
 - `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 150000, handover at 120000, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
 - `Review depth:` absent or not `full | standard` → `full`.
+- (v3.7) `Base commit:` not a full object id (a v3.6 or older run, a short sha, `none`) → the scripts refuse it (`rule-check` exit 3, `review-depth` exit 2); the Lead fixes the dispatch, and a Role does not fall back to a short sha or `HEAD~n`.
 - `Review format:` absent, or any value other than `pilot` → plain (v1.0 Handoff, no ledger), with no Nit.
 - `Rule slice:` absent → the builder follows its row in the senior-engineer Handoff's `## Rules per task`, as before (Fix round 3 behaviour; also when the product has no ruleset).
 - `Rule slice:` path not matching `^\.company/work/[a-z0-9][a-z0-9-]{0,63}/rules/[A-Za-z0-9][A-Za-z0-9-]{0,15}\.md$`, or the file missing → the builder stops with `blocked — missing rule slice` and writes nothing else; the Lead routes it to the Senior Engineer (no Fix round).

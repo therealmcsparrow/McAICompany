@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.1). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import os from 'node:os';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const KiB = 1024;
@@ -22,7 +23,8 @@ const RULE_ID = /^[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+$/;
 const RULE_LINE = /^- ([a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+) — (.*)$/;
 const RULE_ID_ANY = /[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+/g;
 const CHECK_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
-const BASE = /^[0-9a-f]{7,40}$/;
+const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const MARKERS = [' — why: ', ' — source: ', ' — enforced-by: ', ' — check: '];
 const BUILTINS = new Set(['aico-check', 'lf', 'node-test', 'handoff-lint']);
@@ -32,9 +34,20 @@ const MAX_SLICE_BYTES = 6 * KiB;
 const RULE_CUT = 200;
 const FOCUS_CUT = 1000;
 const GITATTRIBUTES_LINE = '* text=auto eol=lf';
+const NUL_WINDOW = 8000;
+const TEXT_SHOWN_MAX = MiB;
+const TEXT_TOTAL_MAX = 8 * MiB;
+const TEXT_BUFFER = 16 * MiB;
+const LIST_BUFFER = 16 * MiB;
+const MAX_CHANGED = 2000;
+const BATCH_FILE_MAX = 64 * KiB;
+const BATCH_BUDGET = 16 * MiB;
+const GIT_TIMEOUT_MS = 60000;
+const JUDGING = { id: 'judging-diff', text: 'binary is decided by content, never by attributes' };
 const USAGE = [
   'usage: rule-check.mjs <command> [--root <dir>]',
-  '  run --base <sha> [--handoff <file>]',
+  '  run --base <full id> --run <slug> [--handoff <file>]',
+  '  text --base <full id> --run <slug>',
   '  list',
   '  slices <senior-engineer handoff> [--write]',
   '  drift'
@@ -192,10 +205,264 @@ function runTool(file, args, { cwd, timeout }) {
   return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
 }
 
+// ---------- git (judging calls) ----------
+
+// Signatures of the binary types a product may carry: [offset, hex] parts that must all match for one alternative.
+const SIG = (...alts) => Object.freeze(alts.map(parts => Object.freeze(parts.map(p => Object.freeze([...p])))));
+const RIFF = (tag) => [[0, '52494646'], [8, Buffer.from(tag).toString('hex')]];
+export const BINARY_TYPES = Object.freeze({
+  png: SIG([[0, '89504e470d0a1a0a']]),
+  jpg: SIG([[0, 'ffd8ff']]),
+  jpeg: SIG([[0, 'ffd8ff']]),
+  gif: SIG([[0, '474946383761']], [[0, '474946383961']]),
+  webp: SIG(RIFF('WEBP')),
+  ico: SIG([[0, '00000100']]),
+  woff: SIG([[0, '774f4646']]),
+  woff2: SIG([[0, '774f4632']]),
+  ttf: SIG([[0, '00010000']], [[0, '74727565']]),
+  otf: SIG([[0, '4f54544f']]),
+  zip: SIG([[0, '504b0304']], [[0, '504b0506']]),
+  gz: SIG([[0, '1f8b']]),
+  tgz: SIG([[0, '1f8b']]),
+  pdf: SIG([[0, '255044462d']]),
+  mp3: SIG([[0, '494433']], [[0, 'fffb']], [[0, 'fff3']], [[0, 'fff2']]),
+  wav: SIG(RIFF('WAVE')),
+  ogg: SIG([[0, '4f676753']]),
+  flac: SIG([[0, '664c6143']]),
+  mp4: SIG([[4, '66747970']]),
+  m4a: SIG([[4, '66747970']]),
+  mov: SIG([[4, '66747970']]),
+  webm: SIG([[0, '1a45dfa3']])
+});
+
+export function isRealBinaryType(file, bytes) {
+  const name = file.slice(file.lastIndexOf('/') + 1);
+  const dot = name.lastIndexOf('.');
+  if (dot === -1) return false;
+  const ext = name.slice(dot + 1).replace(/[A-Z]/g, c => c.toLowerCase());
+  if (!Object.hasOwn(BINARY_TYPES, ext)) return false;
+  return BINARY_TYPES[ext].some(parts => parts.every(([at, hex]) => bytes.subarray(at, at + hex.length / 2).toString('hex') === hex));
+}
+
+const hasNul = bytes => bytes.subarray(0, NUL_WINDOW).includes(0);
+
+// The environment of every git child: the parent's without any GIT_ key, then only this script's own fixed keys.
+function gitBaseEnv() {
+  const env = {};
+  for (const [key, value] of Object.entries(process.env)) if (!/^GIT_/i.test(key)) env[key] = value;
+  return env;
+}
+
+const GIT_FIXED = ['--no-replace-objects', '-c', 'core.fsmonitor=false'];
+const JUDGE = ['--literal-pathspecs', '-c', 'diff.ignoreSubmodules=none', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none'];
+
+function runGit(args, { cwd, env, maxBuffer = LIST_BUFFER, input }) {
+  const r = spawnSync('git', args, { cwd, env, maxBuffer, input, timeout: GIT_TIMEOUT_MS, shell: false, windowsHide: true, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+  const cut = r.error?.code === 'ENOBUFS';
+  if (r.error && !cut) return { failed: r.error.code ?? 'spawn error' };
+  if (!cut && r.status === null) return { failed: `signal ${r.signal ?? 'unknown'}` };
+  return { status: cut ? 0 : r.status, out: r.stdout ?? Buffer.alloc(0), overflow: cut };
+}
+
+// Opens the git session every judging call runs in: top level, grafts off, replace refs off, GIT_ keys dropped.
+// Returns { ok: false, reason } when git cannot be used safely, else { ok: true, git }.
+export function gitTopLevel(cwd) {
+  const r = runGit([...GIT_FIXED, 'rev-parse', '--show-toplevel'], { cwd, env: gitBaseEnv() });
+  return r.failed || r.status !== 0 ? '' : r.out.toString('utf8').replace(/\r?\n$/, '');
+}
+
+export function openGit(cwd, seam = {}) {
+  const plain = gitBaseEnv();
+  // One call for the top level and the object format; an older git without the second flag falls back to the first alone.
+  const first = runGit([...GIT_FIXED, 'rev-parse', '--show-toplevel', '--show-object-format'], { cwd, env: plain });
+  const parts = first.failed || first.status !== 0 ? [] : first.out.toString('utf8').split('\n');
+  const combined = parts.length === 3 && parts[2] === '' && parts[0] !== '';
+  const top = combined ? parts[0].replace(/\r$/, '') : gitTopLevel(cwd);
+  if (!top) return { ok: false, reason: 'git unavailable' };
+  const format = combined ? parts[1].trim() : '';
+  const cwdTop = top;
+  const query = seam.graftQuery ? seam.graftQuery() : runGit([...GIT_FIXED, 'rev-parse', '--git-path', 'info/grafts'], { cwd: cwdTop, env: { ...plain, GIT_NO_REPLACE_OBJECTS: '1' } });
+  const printed = query.failed || query.status !== 0 ? '' : Buffer.from(query.out).toString('utf8').replace(/\r?\n$/, '');
+  if (!printed) return { ok: false, reason: 'grafts file present' };
+  try {
+    fs.lstatSync(path.resolve(cwdTop, printed));
+    return { ok: false, reason: 'grafts file present' };
+  } catch (error) {
+    if (error.code !== 'ENOENT') return { ok: false, reason: 'grafts file present' };
+  }
+  const missing = path.join(os.tmpdir(), `aico-no-grafts-${crypto.randomBytes(8).toString('hex')}`);
+  try {
+    fs.lstatSync(missing);
+    return { ok: false, reason: 'git unavailable' };
+  } catch (error) {
+    if (error.code !== 'ENOENT') return { ok: false, reason: 'git unavailable' };
+  }
+  const env = { ...plain, GIT_NO_REPLACE_OBJECTS: '1', GIT_GRAFT_FILE: missing };
+  const diffEnv = { ...env, GIT_LITERAL_PATHSPECS: '1' };
+  const git = {
+    top: cwdTop,
+    links: new Map(),
+    env,
+    diffEnv,
+    run: (args, o = {}) => runGit([...GIT_FIXED, ...args], { cwd: cwdTop, env, ...o }),
+    // The judging diff: mode flags, then --end-of-options, the endpoints, and at most one path.
+    diff: (mode, endpoints, file, o = {}) => runGit([...GIT_FIXED, ...JUDGE, ...mode, '--end-of-options', ...endpoints, ...(file === undefined ? [] : ['--', file])], { cwd: cwdTop, env: diffEnv, ...o }),
+    head: () => {
+      const r = runGit([...GIT_FIXED, 'symbolic-ref', '-q', 'HEAD'], { cwd: cwdTop, env });
+      return r.failed || r.status !== 0 ? null : r.out.toString('utf8');
+    },
+    // 40 for sha1, 64 for sha256, 0 when this git cannot say.
+    objectLength: () => (format === 'sha256' ? 64 : format === 'sha1' ? 40 : 0),
+    files: new Map()
+  };
+  return { ok: true, git };
+}
+
+// The names a judging diff prints with -z, or null on a git failure.
+function diffNames(git, mode, endpoints) {
+  const r = git.diff(['-z', '--name-only', '--no-renames', ...mode], endpoints);
+  if (r.failed || r.status !== 0 || r.overflow) return null;
+  return r.out.toString('utf8').split('\0').filter(Boolean);
+}
+
+// The paths a tree holds as submodule entries (their commits are not in this repository), or null on a git failure.
+function gitlinks(git, treeish) {
+  if (git.links.has(treeish)) return git.links.get(treeish);
+  const r = git.run(['ls-tree', '-r', '-z', '--full-tree', treeish]);
+  let links = null;
+  if (!r.failed && r.status === 0 && !r.overflow) {
+    links = new Set();
+    for (const entry of r.out.toString('utf8').split('\0')) {
+      const m = /^160000 commit [0-9a-f]+\t([\s\S]+)$/.exec(entry);
+      if (m) links.add(m[1]);
+    }
+  }
+  git.links.set(treeish, links);
+  return links;
+}
+
+// First 8000 bytes of a blob and whether it is one: { blob: true, bytes } | { blob: false } | null (git failed).
+function probeBlob(git, treeish, file) {
+  const r = git.run(['cat-file', 'blob', '--end-of-options', `${treeish}:${file}`], { maxBuffer: NUL_WINDOW });
+  if (!r.failed && r.status === 0) return { blob: true, bytes: r.out.subarray(0, NUL_WINDOW) };
+  const links = gitlinks(git, treeish);
+  return links !== null && links.has(file) ? { blob: false } : null;
+}
+
+// Changed files as blobs, most of them in two git calls: Map(file -> { blob, bytes, size, whole }), or null on a git failure.
+// `bytes` is the whole blob when `whole` is true, else its first 8000 bytes. Large files and odd names go one at a time.
+function loadFiles(git, treeish, files) {
+  const out = new Map();
+  const single = [];
+  const listed = [];
+  for (const file of files) (/[\r\n]/.test(file) ? single : listed).push(file);
+  if (listed.length) {
+    const check = git.run(['cat-file', '--batch-check'], { input: listed.map(file => `${treeish}:${file}\n`).join('') });
+    if (check.failed || check.status !== 0 || check.overflow) return null;
+    const infos = check.out.toString('utf8').split('\n');
+    const small = [];
+    let budget = BATCH_BUDGET;
+    listed.forEach((file, i) => {
+      const m = /^[0-9a-f]+ (\w+) (\d+)$/.exec(infos[i] ?? '');
+      const size = m ? Number(m[2]) : 0;
+      if (m && m[1] === 'blob' && size <= BATCH_FILE_MAX && size <= budget) {
+        budget -= size;
+        small.push([file, size]);
+      } else if (m && m[1] === 'commit') out.set(file, { blob: false });
+      else single.push(file);
+    });
+    if (small.length) {
+      const read = git.run(['cat-file', '--batch'], { input: small.map(([file]) => `${treeish}:${file}\n`).join(''), maxBuffer: BATCH_BUDGET + MiB });
+      if (read.failed || read.status !== 0 || read.overflow) return null;
+      let at = 0;
+      for (const [file, size] of small) {
+        const end = read.out.indexOf(10, at);
+        const m = end === -1 ? null : /^[0-9a-f]+ blob (\d+)$/.exec(read.out.toString('latin1', at, end));
+        if (!m || Number(m[1]) !== size || end + 1 + size > read.out.length) return null;
+        out.set(file, { blob: true, bytes: read.out.subarray(end + 1, end + 1 + size), size, whole: true });
+        at = end + 1 + size + 1;
+      }
+    }
+  }
+  for (const file of single) {
+    const p = probeBlob(git, treeish, file);
+    if (p === null) return null;
+    out.set(file, p.blob ? { blob: true, bytes: p.bytes, size: p.bytes.length < NUL_WINDOW ? p.bytes.length : null, whole: p.bytes.length < NUL_WINDOW } : { blob: false });
+  }
+  return out;
+}
+
+function blobSize(git, spec) {
+  const r = git.run(['cat-file', '-s', '--end-of-options', spec]);
+  if (r.failed || r.status !== 0) return null;
+  const n = Number(r.out.toString('utf8').trim());
+  return Number.isSafeInteger(n) && n >= 0 ? n : null;
+}
+
+// Rows for binary-marked text and for binary content, plus the text-by-content paths `text` may show.
+function binaryFacts(git, base, ref) {
+  const rows = [];
+  const shown = [];
+  const num = git.diff(['--numstat', '-z', '--no-renames'], [base, ref]);
+  if (num.failed || num.status !== 0 || num.overflow) return { failed: true };
+  const marked = [];
+  for (const entry of num.out.toString('utf8').split('\0')) {
+    const m = /^(\S+)\t(\S+)\t([\s\S]+)$/.exec(entry);
+    if (m && m[1] === '-' && m[2] === '-') marked.push(m[3]);
+  }
+  const tipNames = diffNames(git, ['--diff-filter=d'], [base, ref]);
+  if (tipNames === null || marked.length > MAX_CHANGED || tipNames.length > MAX_CHANGED) return { failed: true };
+  if (marked.length) {
+    const added = diffNames(git, ['--diff-filter=A'], [base, ref]);
+    const deleted = diffNames(git, ['--diff-filter=D'], [base, ref]);
+    if (added === null || deleted === null) return { failed: true };
+    const noBase = new Set(added);
+    const noTip = new Set(deleted);
+    for (const file of marked) {
+      let text = false;
+      let large = false;
+      const sides = [...(noBase.has(file) ? [] : [base]), ...(noTip.has(file) ? [] : [ref])];
+      for (const treeish of sides) {
+        const p = probeBlob(git, treeish, file);
+        if (p === null) return { failed: true };
+        if (!p.blob || hasNul(p.bytes)) continue;
+        const size = blobSize(git, `${treeish}:${file}`);
+        if (size === null) return { failed: true };
+        text = true;
+        if (size > TEXT_SHOWN_MAX) large = true;
+      }
+      if (!text) continue;
+      rows.push({ file, problem: large ? 'binary-marked file too large to show' : 'text shown as binary' });
+      if (!large) shown.push(file);
+    }
+  }
+  const tipFiles = loadFiles(git, ref, tipNames);
+  if (tipFiles === null) return { failed: true };
+  for (const [file, entry] of tipFiles) git.files.set(file, entry);
+  for (const file of tipNames) {
+    const p = tipFiles.get(file);
+    if (!p) return { failed: true };
+    if (!p.blob || !hasNul(p.bytes)) continue;
+    rows.push({ file, problem: isRealBinaryType(file, p.bytes) ? 'binary file changed' : 'binary content in a text path' });
+  }
+  return { rows, shown };
+}
+
+// The run session of `run` and `text`: the arguments, then HEAD on the run branch, then no grafts. Throws a Refusal (3).
+function runSession(root, base, slug, seam) {
+  const opened = openGit(root, seam);
+  if (!opened.ok) throw new Refusal(opened.reason, 3);
+  const ref = `refs/heads/aico/${slug}`;
+  if (opened.git.head() !== `${ref}\n`) throw new Refusal('head not on run branch', 3);
+  const length = opened.git.objectLength();
+  if (length !== 0 && base.length !== length) throw new Refusal('bad base', 3);
+  return { git: opened.git, ref };
+}
+
 // ---------- rows ----------
 
 function clean(value) {
-  return String(value).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\|/g, '¦').trim();
+  return String(value).replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+/g, ' ').replace(/\|/g, '¦').trim();
 }
 
 function cut(value, n = CUT) {
@@ -226,64 +493,53 @@ function checkAico(ctx) {
   return { findings };
 }
 
-function gitList(ctx, args) {
-  const r = runTool('git', args, ctx);
-  if (r.failed) return r;
-  if (r.status !== 0) return { failed: `git exit ${r.status}` };
-  return { out: r.out };
-}
-
-function firstCr(file) {
-  const buf = fs.readFileSync(file);
-  const at = buf.indexOf(13);
+function firstCr(bytes) {
+  const at = bytes.indexOf(13);
   if (at === -1) return 0;
   let line = 1;
-  for (let i = 0; i < at; i++) if (buf[i] === 10) line++;
+  for (let i = 0; i < at; i++) if (bytes[i] === 10) line++;
   return line;
 }
 
+// Reads every changed file as its tip blob, never from the worktree, and decides binary by content.
 function checkLf(ctx) {
-  const range = `${ctx.base}..HEAD`;
-  const common = ['diff', '-z', '--no-renames', '--diff-filter=ACMR'];
-  const names = gitList(ctx, [...common, '--name-only', range, '--']);
-  if (names.failed) return names;
-  const nums = gitList(ctx, [...common, '--numstat', range, '--']);
-  if (nums.failed) return nums;
-  const binary = new Set();
-  for (const entry of nums.out.split('\0')) {
-    const m = /^(\S+)\t(\S+)\t([\s\S]+)$/.exec(entry);
-    if (m && m[1] === '-' && m[2] === '-') binary.add(m[3]);
-  }
+  const { git, ref, base } = ctx;
+  const names = diffNames(git, ['--diff-filter=ACMR'], [base, ref]);
+  if (names === null) return { failed: 'git failed' };
+  if (names.length > MAX_CHANGED) return { failed: 'too many changed files' };
   const findings = [];
-  for (const name of names.out.split('\0')) {
-    if (!name || binary.has(name)) continue;
-    const abs = path.resolve(ctx.root, name);
-    const inside = path.relative(ctx.root, abs);
-    if (inside.startsWith('..') || path.isAbsolute(inside)) continue;
-    let st;
-    try {
-      st = fs.lstatSync(abs);
-    } catch {
-      continue;
+  const missing = names.filter(name => !git.files.has(name));
+  if (missing.length) {
+    const more = loadFiles(git, ref, missing);
+    if (more === null) return { failed: 'git failed' };
+    for (const [file, entry] of more) git.files.set(file, entry);
+  }
+  for (const name of names) {
+    const entry = git.files.get(name);
+    if (!entry) return { failed: 'git failed' };
+    if (!entry.blob || hasNul(entry.bytes)) continue;
+    let bytes = entry.bytes;
+    if (!entry.whole) {
+      const size = entry.size ?? blobSize(git, `${ref}:${name}`);
+      if (size === null) return { failed: 'git failed' };
+      if (size > MAX_SCAN_BYTES) {
+        findings.push({ file: name, problem: 'too large to scan for CR bytes', fix: 'see rule' });
+        continue;
+      }
+      const whole = git.run(['cat-file', 'blob', '--end-of-options', `${ref}:${name}`], { maxBuffer: size + KiB });
+      if (whole.failed || whole.status !== 0 || whole.overflow) return { failed: 'git failed' };
+      bytes = whole.out;
     }
-    if (!st.isFile()) continue;
-    if (st.size > MAX_SCAN_BYTES) {
-      findings.push({ file: name, problem: 'too large to scan for CR bytes', fix: 'see rule' });
-      continue;
-    }
-    const line = firstCr(abs);
+    const line = firstCr(bytes);
     if (line) findings.push({ file: `${name}:${line}`, problem: 'CR byte in text file', fix: 'convert to LF' });
   }
-  let attributes = [];
-  try {
-    attributes = fs.readFileSync(path.join(ctx.root, '.gitattributes'), 'utf8').split('\n').map(l => l.trim());
-  } catch {
-    attributes = [];
-  }
+  const attr = git.run(['cat-file', 'blob', '--end-of-options', `${ref}:.gitattributes`], { maxBuffer: MiB });
+  const attributes = attr.failed || attr.status !== 0 ? [] : attr.out.toString('utf8').split(/\r?\n/).map(l => l.trim());
   if (!attributes.includes(GITATTRIBUTES_LINE))
     findings.push({ file: '.gitattributes', problem: `missing line "${GITATTRIBUTES_LINE}"`, fix: 'restore the line' });
   return { findings };
 }
+
 
 function failingTestName(output) {
   for (const line of output.split(/\r?\n/)) {
@@ -333,22 +589,28 @@ function ruleset(root) {
 }
 
 function cmdRun(a, opts) {
+  const { git, ref } = runSession(a.root, a.base, a.run, opts.seam);
+  const head = [];
+  let n = 0;
+  const facts = binaryFacts(git, a.base, ref);
+  if (facts.failed) head.push(row(++n, '-', 'tool failed: binary-content', JUDGING));
+  else for (const r of facts.rows) head.push(row(++n, r.file, r.problem, JUDGING));
+  const done = (code, lines) => ({ code, lines: [...head, ...lines] });
   const st = ruleset(a.root);
-  if (!st.standards && !st.checks) return { code: 0, lines: ['no ruleset'] };
-  if (!st.checks) return { code: 0, lines: ['no checks bound'] };
-  if (!st.standards) return { code: 0, lines: [row(0, '.company/checks.json', 'tool config invalid: .company/standards.md is missing', null, 'restore the ruleset')] };
+  if (!st.standards && !st.checks) return done(0, ['no ruleset']);
+  if (!st.checks) return done(0, ['no checks bound']);
+  if (!st.standards) return done(0, [row(0, '.company/checks.json', 'tool config invalid: .company/standards.md is missing', null, 'restore the ruleset')]);
   let checks;
   try {
     checks = loadChecks(a.root);
   } catch (error) {
-    if (error instanceof ConfigError) return { code: 2, lines: [row(0, '.company/checks.json', `tool config invalid: ${error.reason}`, null, 'fix checks.json')] };
+    if (error instanceof ConfigError) return done(2, [row(0, '.company/checks.json', `tool config invalid: ${error.reason}`, null, 'fix checks.json')]);
     throw error;
   }
   const { rules } = loadRules(a.root);
   const timeout = opts.timeoutMs ?? TOOL_TIMEOUT_MS;
-  const ctx = { root: a.root, cwd: a.root, base: a.base, handoff: a.handoff, timeout, nodeTestTimeout: opts.timeoutMs ?? NODE_TEST_TIMEOUT_MS };
+  const ctx = { root: a.root, cwd: a.root, git, ref, base: a.base, handoff: a.handoff, timeout, nodeTestTimeout: opts.timeoutMs ?? NODE_TEST_TIMEOUT_MS };
   const lines = [];
-  let n = 0;
   for (const [id, b] of checks) {
     const rule = rules.get(b.rule);
     if (!rule || sha256(rule.text) !== b.text) {
@@ -363,6 +625,79 @@ function cmdRun(a, opts) {
     else result = checkHandoffLint(ctx);
     if (result.failed) lines.push(row(++n, '-', `tool failed: ${id} (${result.failed})`, rule));
     else for (const f of result.findings) lines.push(row(++n, f.file, f.problem, rule, f.fix));
+  }
+  return done(0, lines);
+}
+
+// ---------- text: the --text diff of binary-marked text files ----------
+
+const BIDI = new Set([0x61c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]);
+const hex = (n, width) => n.toString(16).padStart(width, '0');
+
+// Text for a reader: C0 controls except tab and LF, DEL and invalid UTF-8 bytes as \x<hh>; C1 and bidi controls as \u<hhhh>.
+export function escapeBytes(bytes) {
+  let out = '';
+  let i = 0;
+  while (i < bytes.length) {
+    const b = bytes[i];
+    if (b < 0x80) {
+      out += b === 9 || b === 10 || (b >= 0x20 && b < 0x7f) ? String.fromCharCode(b) : `\\x${hex(b, 2)}`;
+      i++;
+      continue;
+    }
+    let need = 0;
+    let cp = 0;
+    let min = 0;
+    if (b >= 0xc2 && b <= 0xdf) [need, cp, min] = [1, b & 0x1f, 0x80];
+    else if (b >= 0xe0 && b <= 0xef) [need, cp, min] = [2, b & 0x0f, 0x800];
+    else if (b >= 0xf0 && b <= 0xf4) [need, cp, min] = [3, b & 0x07, 0x10000];
+    let valid = need > 0 && i + need < bytes.length;
+    for (let k = 1; valid && k <= need; k++) {
+      const c = bytes[i + k];
+      if ((c & 0xc0) !== 0x80) valid = false;
+      else cp = (cp << 6) | (c & 0x3f);
+    }
+    if (!valid || cp < min || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
+      out += `\\x${hex(b, 2)}`;
+      i++;
+      continue;
+    }
+    out += (cp >= 0x80 && cp <= 0x9f) || BIDI.has(cp) ? `\\u${hex(cp, 4)}` : String.fromCodePoint(cp);
+    i += need + 1;
+  }
+  return out;
+}
+
+function cmdText(a, opts) {
+  const { git, ref } = runSession(a.root, a.base, a.run, opts.seam);
+  const facts = binaryFacts(git, a.base, ref);
+  if (facts.failed) return { code: 1, lines: ['tool failed: text'] };
+  if (!facts.shown.length) return { code: 0, lines: ['no binary-marked text files'] };
+  // Every path is checked before any section is printed.
+  for (const file of facts.shown) {
+    const r = git.diff(['--name-only', '-z'], [a.base, ref], file);
+    if (r.failed || r.status !== 0 || r.overflow) return { code: 1, lines: ['tool failed: text'] };
+    if (r.out.toString('utf8') !== `${file}\0`) throw new Refusal(`path check failed ${clean(file)}`, 3);
+  }
+  const lines = [];
+  let total = 0;
+  let capped = false;
+  for (const file of facts.shown) {
+    let section = null;
+    if (!capped) {
+      let out;
+      try {
+        out = execFileSync('git', [...GIT_FIXED, ...JUDGE, '--text', '--no-renames', '--end-of-options', a.base, ref, '--', file], {
+          cwd: git.top, env: git.diffEnv, maxBuffer: opts.seam?.textBuffer ?? TEXT_BUFFER, timeout: GIT_TIMEOUT_MS, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore']
+        });
+      } catch {
+        return { code: 1, lines: ['tool failed: text'] };
+      }
+      section = `text ${escapeBytes(Buffer.from(clean(file), 'utf8'))}\n${escapeBytes(out).replace(/\n$/, '')}`;
+      if (total + Buffer.byteLength(section, 'utf8') > TEXT_TOTAL_MAX) capped = true;
+      else total += Buffer.byteLength(section, 'utf8');
+    }
+    lines.push(capped ? `text not shown (output cap) ${clean(file)}` : section);
   }
   return { code: 0, lines };
 }
@@ -582,25 +917,28 @@ function cmdDrift(a) {
 
 function parseArgs(args) {
   const [command, ...rest] = args;
-  const allowed = { run: ['--root', '--base', '--handoff'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root'] };
+  const allowed = {
+    run: ['--root', '--base', '--run', '--handoff'], text: ['--base', '--run'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root']
+  };
   if (!command || !Object.hasOwn(allowed, command)) throw new Refusal(USAGE);
+  const code = command === 'run' || command === 'text' ? 3 : 2;
   const opts = {};
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
     if (arg.startsWith('--')) {
-      if (!allowed[command].includes(arg) || Object.hasOwn(opts, arg)) throw new Refusal(USAGE);
+      if (!allowed[command].includes(arg) || Object.hasOwn(opts, arg)) throw new Refusal(USAGE, code);
       if (arg === '--write') {
         opts[arg] = true;
         continue;
       }
-      if (i + 1 >= rest.length) throw new Refusal(USAGE);
+      if (i + 1 >= rest.length) throw new Refusal(USAGE, code);
       opts[arg] = rest[++i];
     } else {
       positional.push(arg);
     }
   }
-  if (positional.length !== (command === 'slices' ? 1 : 0)) throw new Refusal(USAGE);
+  if (positional.length !== (command === 'slices' ? 1 : 0)) throw new Refusal(USAGE, code);
   return { command, opts, positional: positional[0] };
 }
 
@@ -608,7 +946,10 @@ export function main(args, options = {}) {
   try {
     const { command, opts, positional } = parseArgs(args);
     const base = opts['--base'];
-    if (command === 'run' && !(typeof base === 'string' && BASE.test(base))) throw new Refusal('bad base');
+    const slug = opts['--run'];
+    const judging = command === 'run' || command === 'text';
+    if (judging && !(typeof base === 'string' && FULL_ID.test(base))) throw new Refusal('bad base', 3);
+    if (judging && !(typeof slug === 'string' && SLUG.test(slug))) throw new Refusal('bad run', 3);
     const root = path.resolve(opts['--root'] ?? process.cwd());
     let isDir = false;
     try {
@@ -617,14 +958,14 @@ export function main(args, options = {}) {
       isDir = false;
     }
     if (!isDir) throw new Refusal('bad root');
-    const a = { root, base, positional, handoff: null, write: opts['--write'] === true };
+    const a = { root, base, run: slug, positional, handoff: null, write: opts['--write'] === true };
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);
       const inside = path.relative(root, abs);
       if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside) || !isFile(abs)) throw new Refusal('bad handoff');
       a.handoff = abs;
     }
-    const handlers = { run: a2 => cmdRun(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift };
+    const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift };
     return handlers[command](a);
   } catch (error) {
     if (error instanceof Refusal) return { code: error.code, lines: [`refused: ${error.message}`] };

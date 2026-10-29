@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { main, parseRuleLine, sha256 } from './rule-check.mjs';
+import { BINARY_TYPES, escapeBytes, isRealBinaryType, main, parseRuleLine, sha256 } from './rule-check.mjs';
 
 const script = path.join(import.meta.dirname, 'rule-check.mjs');
 const realRoot = path.join(import.meta.dirname, '..');
@@ -34,7 +34,7 @@ function env(home) {
 
 function cli(root, args, { cwd } = {}) {
   const home = tmp('rule-check-home-');
-  const r = spawnSync(process.execPath, [script, ...args], { cwd: cwd ?? root, encoding: 'utf8', env: env(home) });
+  const r = spawnSync(process.execPath, [script, ...args], { cwd: cwd ?? root, encoding: 'utf8', env: env(home), maxBuffer: 64 * MiB });
   return { status: r.status, out: r.stdout, err: r.stderr, all: r.stdout + r.stderr };
 }
 
@@ -84,17 +84,47 @@ function git(root, ...args) {
   return r.stdout.trim();
 }
 
+const SLUG = 't';
+const bases = new Map();
+
+// Commits everything in root on the run branch; the first commit is the base.
+function initRepo(root) {
+  git(root, 'init', '-q', '-b', `aico/${SLUG}`);
+  git(root, 'add', '-A', '-f');
+  git(root, 'commit', '-q', '-m', 'seed', '--allow-empty');
+  const base = git(root, 'rev-parse', 'HEAD');
+  git(root, 'commit', '-q', '-m', 'tip', '--allow-empty');
+  bases.set(root, base);
+  return base;
+}
+
+function runArgs(root, command = 'run') {
+  const base = bases.get(root) ?? initRepo(root);
+  return [command, '--base', base, '--run', SLUG];
+}
+
+// Commits the files byte for byte: a local attribute keeps git from converting line ends while adding.
+function commitFiles(root, files) {
+  for (const [rel, content] of Object.entries(files)) write(root, rel, content);
+  const attributes = path.join(root, '.git', 'info', 'attributes');
+  const kept = fs.existsSync(attributes) ? fs.readFileSync(attributes) : null;
+  fs.mkdirSync(path.dirname(attributes), { recursive: true });
+  fs.writeFileSync(attributes, '* -text\n');
+  git(root, 'add', '-A', '-f');
+  if (kept === null) fs.rmSync(attributes);
+  else fs.writeFileSync(attributes, kept);
+  git(root, 'commit', '-q', '-m', 'change', '--allow-empty');
+}
+
 function gitRoot(files = {}) {
   const root = makeRoot({ checks: { version: 1, checks: { lf: binding('proj.M11') } } });
   write(root, '.gitattributes', '* text=auto eol=lf\n');
   write(root, 'seed.txt', 'seed\n');
-  git(root, 'init', '-q');
+  git(root, 'init', '-q', '-b', `aico/${SLUG}`);
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'seed');
   const base = git(root, 'rev-parse', 'HEAD');
-  for (const [rel, content] of Object.entries(files)) write(root, rel, content);
-  git(root, 'add', '-A', '-f');
-  git(root, 'commit', '-q', '-m', 'change', '--allow-empty');
+  commitFiles(root, files);
   return { root, base };
 }
 
@@ -116,7 +146,7 @@ test('parseRuleLine splits the rule at the first marker and reads the check tag'
 
 test('no standards.md and no checks.json: every command says no ruleset and exits 0', () => {
   const root = tmp();
-  for (const args of [['run', '--base', 'abcdef1'], ['slices', path.join(root, 'h.md')], ['drift']]) {
+  for (const args of [[...runArgs(root)], ['slices', path.join(root, 'h.md')], ['drift']]) {
     const r = cli(root, [...args, '--root', root]);
     assert.equal(r.status, 0, r.all);
     assert.match(r.out, /^no ruleset$/m);
@@ -125,7 +155,7 @@ test('no standards.md and no checks.json: every command says no ruleset and exit
 
 test('standards.md without checks.json: run says no checks bound; drift fails only on a check tag', () => {
   const root = makeRoot({ checks: null });
-  const run = cli(root, ['run', '--base', 'abcdef1', '--root', root]);
+  const run = cli(root, [...runArgs(root), '--root', root]);
   assert.equal(run.status, 0);
   assert.match(run.out, /no checks bound/);
   const drift = cli(root, ['drift', '--root', root]);
@@ -137,7 +167,7 @@ test('standards.md without checks.json: run says no checks bound; drift fails on
 
 test('checks.json without standards.md fails closed', () => {
   const root = makeRoot({ standards: null });
-  const run = cli(root, ['run', '--base', 'abcdef1', '--root', root]);
+  const run = cli(root, [...runArgs(root), '--root', root]);
   assert.equal(run.status, 0);
   assert.match(run.out, /^T-0 .*tool config invalid/m);
   const drift = cli(root, ['drift', '--root', root]);
@@ -150,15 +180,15 @@ test('checks.json without standards.md fails closed', () => {
 
 // ---------- argument refusals ----------
 
-test('bad base and bad root are refused with exit 2', () => {
+test('bad base and bad root are refused', () => {
   const root = makeRoot();
-  for (const base of ['zzz', '--upload-pack=x', 'abc', 'ABCDEF1', 'abcdef1; touch x', 'a'.repeat(41)]) {
-    const r = cli(root, ['run', '--base', base, '--root', root]);
-    assert.equal(r.status, 2, base);
+  for (const base of ['zzz', '--upload-pack=x', 'abc', 'ABCDEF1', 'abcdef1', 'abcdef1; touch x', 'a'.repeat(41), 'a'.repeat(39), 'a'.repeat(63), 'main', 'HEAD', 'refs/heads/aico/t']) {
+    const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+    assert.equal(r.status, 3, base);
     assert.match(r.out, /refused: bad base/);
   }
   const missing = cli(root, ['run', '--root', root]);
-  assert.equal(missing.status, 2);
+  assert.equal(missing.status, 3);
   const noRoot = cli(root, ['list', '--root', path.join(root, 'nope')]);
   assert.equal(noRoot.status, 2);
   assert.match(noRoot.out, /refused: bad root/);
@@ -191,7 +221,7 @@ test('malformed checks.json exits 2 with the reason', () => {
   };
   for (const [name, checks] of Object.entries(cases)) {
     const root = makeRoot({ checks });
-    for (const cmd of [['list'], ['drift'], ['run', '--base', 'abcdef1']]) {
+    for (const cmd of [['list'], ['drift'], [...runArgs(root)]]) {
       const r = cli(root, [...cmd, '--root', root]);
       assert.equal(r.status, 2, `${name} ${cmd[0]}: ${r.all}`);
       if (cmd[0] === 'run') assert.match(r.out, /^T-0 .*tool config invalid/m, name);
@@ -292,7 +322,7 @@ test('run aico-check: one row per WARN line, none for a short agent', () => {
   const head = '---\nname: long\ndescription: d\nmodel: sonnet\neffort: low\n---\n';
   write(root, 'agents/long.md', `${head}${'line\n'.repeat(60)}`);
   write(root, 'agents/short.md', head.replace('long', 'short') + 'line\n');
-  const r = cli(root, ['run', '--base', 'abcdef1', '--root', root]);
+  const r = cli(root, [...runArgs(root), '--root', root]);
   assert.equal(r.status, 0, r.all);
   const rows = r.out.trim().split('\n').filter(l => l.startsWith('T-'));
   assert.equal(rows.length, 1, r.out);
@@ -305,26 +335,27 @@ test('run lf: flags a text file with a CR byte, with its line, and ignores LF fi
   const { root, base } = gitRoot({
     'src/crlf file.txt': 'one\r\ntwo\r\n',
     'src/ok.txt': 'one\ntwo\n',
-    'src/pic.bin': Buffer.from([0, 1, 13, 10, 0, 13])
+    'src/pic.png': Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from([0, 1, 13, 10, 0, 13])])
   });
-  const r = cli(root, ['run', '--base', base, '--root', root]);
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
   assert.equal(r.status, 0, r.all);
   const rows = r.out.trim().split('\n').filter(l => l.startsWith('T-'));
-  assert.equal(rows.length, 1, r.out);
-  assert.match(rows[0], /^T-1 \| src\/crlf file\.txt:1 \| CR byte in text file \| proj\.M11: /);
+  assert.equal(rows.length, 2, r.out);
+  assert.match(rows[0], /^T-1 \| src\/pic\.png \| binary file changed \| judging-diff: /);
+  assert.match(rows[1], /^T-2 \| src\/crlf file\.txt:1 \| CR byte in text file \| proj\.M11: /);
 });
 
 test('run lf: flags a .gitattributes without the eol line, and passes a clean change', () => {
   const clean = gitRoot({ 'a.txt': 'x\n' });
-  assert.equal(cli(clean.root, ['run', '--base', clean.base, '--root', clean.root]).out.trim(), '');
+  assert.equal(cli(clean.root, ['run', '--base', clean.base, '--run', SLUG, '--root', clean.root]).out.trim(), '');
   const { root, base } = gitRoot({ '.gitattributes': '*.png binary\n' });
-  const r = cli(root, ['run', '--base', base, '--root', root]);
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
   assert.match(r.out, /^T-1 \| \.gitattributes \| .*text=auto eol=lf/m);
 });
 
 test('run lf: rule text with shell syntax is shown as text and never run', () => {
   const { root, base } = gitRoot({ 'a.txt': 'x\r\n' });
-  const r = cli(root, ['run', '--base', base, '--root', root]);
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
   assert.match(r.out, /proj\.M11: Every text file is LF only \$\(touch RULEPWN\)/);
   assert.equal(fs.existsSync(path.join(root, 'RULEPWN')), false);
   assert.equal(fs.existsSync(path.join(root, 'RULEPWN2')), false);
@@ -332,8 +363,9 @@ test('run lf: rule text with shell syntax is shown as text and never run', () =>
 
 test('run lf: a base git cannot resolve is "tool failed", not silence', () => {
   const { root } = gitRoot({});
-  const r = cli(root, ['run', '--base', 'deadbeef', '--root', root]);
+  const r = cli(root, ['run', '--base', 'd'.repeat(40), '--run', SLUG, '--root', root]);
   assert.equal(r.status, 0);
+  assert.match(r.out, /tool failed: binary-content/);
   assert.match(r.out, /tool failed: lf/);
 });
 
@@ -348,10 +380,11 @@ function npmFixture(testScript) {
 }
 
 test('run node-test: a green fixture suite gives no row, a red one gives one row naming the first failing test', () => {
-  const green = cli(npmFixture('node pass.mjs'), ['run', '--base', 'abcdef1', '--root', npmFixture('node pass.mjs')]);
+  const greenRoot = npmFixture('node pass.mjs');
+  const green = cli(greenRoot, [...runArgs(greenRoot), '--root', greenRoot]);
   assert.equal(green.out.trim(), '');
   const root = npmFixture('node fail.mjs');
-  const red = cli(root, ['run', '--base', 'abcdef1', '--root', root]);
+  const red = cli(root, [...runArgs(root), '--root', root]);
   assert.equal(red.status, 0, red.all);
   const rows = red.out.trim().split('\n');
   assert.equal(rows.length, 1, red.out);
@@ -372,7 +405,7 @@ function argvRoot(argv, extra = {}) {
 test('run argv check: arguments reach the tool untouched and no shell is involved', () => {
   const hostile = '"$(touch PWNED)" & touch PWNED2 ; `touch PWNED3`';
   const root = argvRoot([process.execPath, 'tool.mjs', hostile]);
-  const r = cli(root, ['run', '--base', 'abcdef1', '--root', root]);
+  const r = cli(root, [...runArgs(root), '--root', root]);
   assert.equal(r.status, 0, r.all);
   assert.match(r.out, /^T-1 \| - \| probe exited 1: /m);
   assert.ok(r.out.includes('touch PWNED2'), r.out);
@@ -381,19 +414,19 @@ test('run argv check: arguments reach the tool untouched and no shell is involve
 
 test('run argv check: exit 0 gives no row; a missing program, a timeout and a flood give "tool failed"', () => {
   let root = argvRoot([process.execPath, 'tool.mjs']);
-  const ok = spawnSync(process.execPath, [script, 'run', '--base', 'abcdef1', '--root', root], { encoding: 'utf8', env: { ...env(tmp('rule-check-home-')), TOOL_EXIT: '0' } });
+  const ok = spawnSync(process.execPath, [script, ...runArgs(root), '--root', root], { encoding: 'utf8', env: { ...env(tmp('rule-check-home-')), TOOL_EXIT: '0' } });
   assert.equal(ok.stdout.trim(), '');
 
   root = argvRoot(['definitely-not-a-program-xyz']);
-  assert.match(cli(root, ['run', '--base', 'abcdef1', '--root', root]).out, /tool failed: probe/);
+  assert.match(cli(root, [...runArgs(root), '--root', root]).out, /tool failed: probe/);
 
   root = argvRoot([process.execPath, '-e', 'setInterval(() => {}, 1000)']);
-  const slow = main(['run', '--base', 'abcdef1', '--root', root], { timeoutMs: 400 });
+  const slow = main([...runArgs(root), '--root', root], { timeoutMs: 400 });
   assert.equal(slow.code, 0);
   assert.match(slow.lines.join('\n'), /tool failed: probe/);
 
   root = argvRoot([process.execPath, '-e', `process.stdout.write('x'.repeat(${2 * MiB}))`]);
-  assert.match(cli(root, ['run', '--base', 'abcdef1', '--root', root]).out, /tool failed: probe/);
+  assert.match(cli(root, [...runArgs(root), '--root', root]).out, /tool failed: probe/);
 });
 
 test('run: a binding whose rule text changed is reported as T-0, not run', () => {
@@ -401,7 +434,7 @@ test('run: a binding whose rule text changed is reported as T-0, not run', () =>
   checks.checks.lf.text = sha256('older');
   const { root, base } = gitRoot({ 'a.txt': 'x\r\n' });
   write(root, '.company/checks.json', JSON.stringify(checks));
-  const r = cli(root, ['run', '--base', base, '--root', root]);
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
   assert.match(r.out, /^T-\d+ \| \.company\/checks\.json \| tool config invalid: .*lf/m);
   assert.doesNotMatch(r.out, /CR byte/);
 });
@@ -412,12 +445,12 @@ test('run handoff-lint: rows for a bad Handoff; tool failed without --handoff', 
   const checks = { version: 1, checks: { 'handoff-lint': binding('proj.S1') } };
   const root = makeRoot({ checks });
   write(root, 'h.md', 'no frontmatter here\n');
-  const bad = cli(root, ['run', '--base', 'abcdef1', '--root', root, '--handoff', 'h.md']);
+  const bad = cli(root, [...runArgs(root), '--root', root, '--handoff', 'h.md']);
   assert.match(bad.out, /^T-1 \| h\.md \| /m);
   assert.equal(bad.status, 0);
-  const none = cli(root, ['run', '--base', 'abcdef1', '--root', root]);
+  const none = cli(root, [...runArgs(root), '--root', root]);
   assert.match(none.out, /tool failed: handoff-lint/);
-  const escape = cli(root, ['run', '--base', 'abcdef1', '--root', root, '--handoff', '../outside.md']);
+  const escape = cli(root, [...runArgs(root), '--root', root, '--handoff', '../outside.md']);
   assert.equal(escape.status, 2);
 });
 
@@ -650,4 +683,275 @@ test('--write is a flag of slices only, takes no value and cannot repeat', () =>
   assert.equal(cli(s.root, ['drift', '--write', '--root', s.root]).status, 2);
   assert.equal(cli(s.root, ['slices', s.handoff, '--write', '--write', '--root', s.root]).status, 2);
   assert.equal(main(['slices', s.handoff, '--write', '--root', s.root]).lines[0], 'wrote 2 slices');
+});
+
+// ---------- judging diff: binary-marked text, binary content, rule-check text ----------
+
+function gitIn(root, input, ...args) {
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.test', '-c', 'core.autocrlf=false', '-c', 'core.protectNTFS=false', '-c', 'commit.gpgsign=false', ...args], {
+    cwd: root, input, env: env(tmp('rule-check-home-'))
+  });
+  assert.equal(r.status, 0, String(r.stderr));
+  return r.stdout.toString('utf8').trim();
+}
+
+// Commits files that a file system may refuse (`*`, `:(exclude)x`) straight into the index.
+function commitBlobs(root, files) {
+  for (const [name, content] of Object.entries(files)) {
+    const oid = gitIn(root, content, 'hash-object', '-w', '--stdin');
+    gitIn(root, undefined, 'update-index', '--add', '--cacheinfo', `100644,${oid},${name}`);
+  }
+  gitIn(root, undefined, 'commit', '-q', '-m', 'blobs', '--allow-empty');
+}
+
+function setAttributes(root, text) {
+  fs.mkdirSync(path.join(root, '.git', 'info'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.git', 'info', 'attributes'), text);
+}
+
+function gitRootBare({ standards = false } = {}) {
+  const root = tmp();
+  if (standards) write(root, '.company/standards.md', standardsText());
+  write(root, 'seed.txt', 'seed\n');
+  git(root, 'init', '-q', '-b', `aico/${SLUG}`);
+  git(root, 'add', '-A', '-f');
+  git(root, 'commit', '-q', '-m', 'seed');
+  return root;
+}
+
+const textArgs = base => ['text', '--base', base, '--run', SLUG];
+const rowsOf = out => out.split('\n').filter(l => l.startsWith('T-'));
+const hasRow = (out, file, problem) => rowsOf(out).some(r => r.split(' | ')[1] === file && r.split(' | ')[2] === problem);
+const sections = out => {
+  const map = new Map();
+  let key = null;
+  for (const line of out.split('\n')) {
+    if (line.startsWith('text ')) {
+      key = line.slice(5);
+      map.set(key, []);
+    } else if (key !== null) map.get(key).push(line);
+  }
+  return map;
+};
+
+test('binary-marked text: -diff in info/attributes and diff.x.binary=true both show as text shown as binary, read as text and scanned by lf', () => {
+  const { root, base } = gitRoot({ 'src/auth.js': 'const a = 1;\r\nconst b = 2;\n', 'src/x.dat': 'plain\n', 'src/ok.js': 'ok\n' });
+  setAttributes(root, 'src/auth.js -diff\nsrc/x.dat diff=x\n');
+  git(root, 'config', 'diff.x.binary', 'true');
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  assert.ok(hasRow(r.out, 'src/auth.js', 'text shown as binary'), r.out);
+  assert.ok(hasRow(r.out, 'src/x.dat', 'text shown as binary'), r.out);
+  assert.ok(!hasRow(r.out, 'src/ok.js', 'text shown as binary'));
+  assert.ok(rowsOf(r.out).some(l => l.split(' | ')[1] === 'src/auth.js:1' && l.includes('CR byte in text file')), 'lf scans the marked file');
+  assert.match(r.out, /judging-diff: binary is decided by content, never by attributes/);
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.equal(t.status, 0, t.all);
+  const s = sections(t.out);
+  assert.deepEqual([...s.keys()], ['src/auth.js', 'src/x.dat']);
+  assert.ok(s.get('src/auth.js').includes('+const a = 1;\\x0d'), t.out);
+  assert.ok(s.get('src/x.dat').includes('+plain'));
+});
+
+test('binary-marked rows print under no ruleset and no checks bound, before that line', () => {
+  for (const [name, root, tail] of [['none', gitRootBare(), 'no ruleset'], ['unbound', gitRootBare({ standards: true }), 'no checks bound']]) {
+    const base = git(root, 'rev-parse', 'HEAD');
+    commitFiles(root, { 'src/auth.js': 'x\n' });
+    setAttributes(root, 'src/auth.js -diff\n');
+    const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+    assert.equal(r.status, 0, name);
+    assert.ok(hasRow(r.out, 'src/auth.js', 'text shown as binary'), name);
+    assert.equal(r.out.trim().split('\n').at(-1), tail, name);
+  }
+});
+
+test('a text file over 1 MiB marked -diff is too large to show and text does not show it', () => {
+  const { root, base } = gitRoot({ 'big.txt': `${'a'.repeat(MiB + 10)}\n`, 'small.txt': 'small\n' });
+  setAttributes(root, '* -diff\n');
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.ok(hasRow(r.out, 'big.txt', 'binary-marked file too large to show'), r.out);
+  assert.ok(hasRow(r.out, 'small.txt', 'text shown as binary'), r.out);
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.deepEqual([...sections(t.out).keys()], ['small.txt']);
+});
+
+test('an added and a deleted binary-marked text file each get a row, and the side that exists is read', () => {
+  const { root } = gitRoot({ 'gone.txt': 'two\n' });
+  const second = git(root, 'rev-parse', 'HEAD');
+  git(root, 'rm', '-q', 'gone.txt');
+  commitFiles(root, { 'added.txt': 'new\n' });
+  setAttributes(root, '* -diff\n');
+  const r = cli(root, ['run', '--base', second, '--run', SLUG, '--root', root]);
+  assert.ok(hasRow(r.out, 'added.txt', 'text shown as binary'), r.out);
+  assert.ok(hasRow(r.out, 'gone.txt', 'text shown as binary'), r.out);
+  const t = sections(cli(root, textArgs(second), { cwd: root }).out);
+  assert.ok(t.get('added.txt').includes('+new'));
+  assert.ok(t.get('gone.txt').includes('-two'));
+});
+
+test('a CR only in the worktree copy of a committed file gives no lf row', () => {
+  const { root, base } = gitRoot({ 'src/a.txt': 'clean\n' });
+  write(root, 'src/a.txt', 'dirty\r\n');
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.doesNotMatch(r.out, /CR byte/);
+});
+
+test('binary by content: NUL in a text path, UTF-16 scripts, fake and real images, and no attribute needed', () => {
+  const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from([0, 0, 0, 13])]);
+  const bigPng = Buffer.concat([png, Buffer.alloc(MiB + 5, 7)]);
+  const { root, base } = gitRoot({
+    'src/x.js': Buffer.from('/*\0*/ run();\n'),
+    'a.ps1': Buffer.from('﻿Write-Host 1\r\n', 'utf16le'),
+    'img/real.png': png,
+    'img/big.png': bigPng,
+    'img/UP.PNG': png,
+    'img/fake.png': Buffer.from('/*\0*/ run();\n'),
+    noext: Buffer.from([1, 0, 2]),
+    'mod.wasm': Buffer.from('0061736d01000000', 'hex'),
+    'src/text.js': 'fine\n'
+  });
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  for (const f of ['src/x.js', 'a.ps1', 'img/fake.png', 'noext', 'mod.wasm']) assert.ok(hasRow(r.out, f, 'binary content in a text path'), `${f}\n${r.out}`);
+  for (const f of ['img/real.png', 'img/big.png', 'img/UP.PNG']) {
+    assert.ok(hasRow(r.out, f, 'binary file changed'), `${f}\n${r.out}`);
+    assert.ok(!hasRow(r.out, f, 'text shown as binary') && !hasRow(r.out, f, 'binary content in a text path'), f);
+  }
+  assert.ok(!rowsOf(r.out).some(l => l.split(' | ')[1] === 'src/text.js'));
+  assert.doesNotMatch(r.out, /CR byte/, 'lf skips binary content');
+  assert.doesNotMatch(cli(root, textArgs(base), { cwd: root }).out, /real\.png|big\.png/);
+});
+
+test('a text file that gains a NUL is both text shown as binary (base side) and binary content; text prints the NUL escaped', () => {
+  const { root } = gitRoot({ 'src/m.js': 'one\n' });
+  const base = git(root, 'rev-parse', 'HEAD');
+  commitFiles(root, { 'src/m.js': Buffer.from('one\0two\n') });
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.ok(hasRow(r.out, 'src/m.js', 'text shown as binary'), r.out);
+  assert.ok(hasRow(r.out, 'src/m.js', 'binary content in a text path'), r.out);
+  const t = sections(cli(root, textArgs(base), { cwd: root }).out);
+  assert.ok(t.get('src/m.js').some(l => l.includes('+one\\x00two')), [...t.get('src/m.js')].join('|'));
+});
+
+test('a changed submodule gets no content row and content rows print under no ruleset', () => {
+  const root = gitRootBare();
+  const base = git(root, 'rev-parse', 'HEAD');
+  git(root, 'update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},sub`);
+  commitFiles(root, { 'bin.dat': Buffer.from([0, 1, 2]) });
+  const r = cli(root, ['run', '--base', base, '--run', SLUG, '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  assert.ok(hasRow(r.out, 'bin.dat', 'binary content in a text path'));
+  assert.ok(!rowsOf(r.out).some(l => l.split(' | ')[1] === 'sub'), r.out);
+  assert.equal(r.out.trim().split('\n').at(-1), 'no ruleset');
+});
+
+test('the binary type table is frozen and matches by extension and signature only', () => {
+  assert.ok(Object.isFrozen(BINARY_TYPES) && Object.isFrozen(BINARY_TYPES.png));
+  assert.throws(() => { BINARY_TYPES.exe = []; }, TypeError);
+  const png = Buffer.from('89504e470d0a1a0a00', 'hex');
+  assert.equal(isRealBinaryType('a/b.PNG', png), true);
+  assert.equal(isRealBinaryType('a/b.png', Buffer.from('GIF89a')), false);
+  assert.equal(isRealBinaryType('a.b/png', png), false);
+  assert.equal(isRealBinaryType('x.wasm', Buffer.from('0061736d', 'hex')), false);
+  assert.equal(isRealBinaryType('x.webp', Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP')])), true);
+  assert.equal(isRealBinaryType('x.webp', Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE')])), false);
+  assert.equal(isRealBinaryType('x.mp4', Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom')])), true);
+  assert.equal(isRealBinaryType('x.ttf', Buffer.from('true')), true);
+  assert.equal(isRealBinaryType('x.PNGK', png), false);
+});
+
+// ---------- rule-check text ----------
+
+test('text: hostile names (*, :(exclude)x, a quote and a command) stay in their own section', () => {
+  const { root, base } = gitRoot({ 'one.txt': 'content-one\n', 'two.txt': 'content-two\n' });
+  commitBlobs(root, { '*': 'content-star\n', ':(exclude)x': 'content-exclude\n', "a';printf x;'": 'content-quote\n', x: 'content-x\n' });
+  setAttributes(root, '* -diff\n');
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.equal(t.status, 0, t.all);
+  const s = sections(t.out);
+  assert.deepEqual([...s.keys()].sort(), ['*', ':(exclude)x', "a';printf x;'", 'one.txt', 'two.txt', 'x'].sort());
+  for (const [name, mark] of [['*', 'star'], [':(exclude)x', 'exclude'], ["a';printf x;'", 'quote'], ['one.txt', 'one'], ['two.txt', 'two'], ['x', 'x']]) {
+    const body = s.get(name).join('\n');
+    assert.ok(body.includes(`+content-${mark}`), name);
+    for (const other of ['star', 'exclude', 'quote', 'one', 'two']) if (other !== mark) assert.ok(!body.includes(`content-${other}`), `${name} holds ${other}`);
+  }
+  assert.equal(fs.existsSync(path.join(root, 'x')), false, 'no command ran');
+});
+
+test('text: controls, bidi, C1 and bad bytes are printed escaped', () => {
+  const body = Buffer.concat([
+    Buffer.from('a\r\n', 'latin1'), Buffer.from('‮\u0085‎‏؜⁦', 'utf8'),
+    Buffer.from([0xff, 0xc0, 0x7f, 0x1b]), Buffer.from('\tend\n', 'utf8')
+  ]);
+  const { root, base } = gitRoot({ 'e.txt': body });
+  setAttributes(root, '* -diff\n');
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.equal(t.status, 0, t.all);
+  assert.doesNotMatch(t.out, /[‮\u0085‎‏؜⁦\r\u001b\u007f]/);
+  for (const piece of ['\\x0d', '\\u202e', '\\u0085', '\\u200e', '\\u200f', '\\u061c', '\\u2066', '\\xff', '\\xc0', '\\x7f', '\\x1b', '\tend']) assert.ok(t.out.includes(piece), piece);
+});
+
+test('escapeBytes: tab and LF stay, every invalid UTF-8 form is escaped byte by byte', () => {
+  assert.equal(escapeBytes(Buffer.from('a\tb\nc')), 'a\tb\nc');
+  assert.equal(escapeBytes(Buffer.from([0xe2, 0x82])), '\\xe2\\x82');
+  assert.equal(escapeBytes(Buffer.from([0xed, 0xa0, 0x80])), '\\xed\\xa0\\x80');
+  assert.equal(escapeBytes(Buffer.from([0xc0, 0x80])), '\\xc0\\x80');
+  assert.equal(escapeBytes(Buffer.from([0xf4, 0x90, 0x80, 0x80])), '\\xf4\\x90\\x80\\x80');
+  assert.equal(escapeBytes(Buffer.from('é€😀')), 'é€😀');
+});
+
+test('text: past the 8 MiB cap a path and every later one print not shown, and no section is cut', () => {
+  const files = {};
+  const line = `${'z'.repeat(900 * 1024)}\n`;
+  for (let i = 0; i < 10; i++) files[`f${i}.txt`] = line;
+  const { root, base } = gitRoot(files);
+  setAttributes(root, '* -diff\n');
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.equal(t.status, 0, t.all.slice(0, 300));
+  const out = t.out.split('\n');
+  const shown = out.filter(l => /^text f\d\.txt$/.test(l));
+  const capped = out.filter(l => l.startsWith('text not shown (output cap) '));
+  assert.ok(shown.length >= 7 && shown.length < 10, `${shown.length}`);
+  assert.equal(shown.length + capped.length, 10);
+  assert.deepEqual(capped, Array.from({ length: capped.length }, (_, i) => `text not shown (output cap) f${shown.length + i}.txt`));
+  for (const l of out.filter(l => l.startsWith('+z'))) assert.equal(l.length, 900 * 1024 + 1, 'no section is cut off');
+  assert.ok(Buffer.byteLength(t.out) <= 8 * MiB + 1024);
+});
+
+test('text: a maxBuffer overflow is tool failed: text with exit 1', () => {
+  const { root, base } = gitRoot({ 'a.txt': 'hello\n' });
+  setAttributes(root, '* -diff\n');
+  const previous = process.cwd();
+  process.chdir(root);
+  try {
+    const r = main(textArgs(base), { seam: { textBuffer: 50 } });
+    assert.equal(r.code, 1);
+    assert.deepEqual(r.lines, ['tool failed: text']);
+  } finally {
+    process.chdir(previous);
+  }
+});
+
+test('text: a folder in the base and a binary-marked file of that name at the tip fail the path check and print no section', () => {
+  const { root } = gitRoot({ 'a/x.js': 'inner\n', 'b.txt': 'other\n' });
+  const base = git(root, 'rev-parse', 'HEAD');
+  git(root, 'rm', '-q', '-r', 'a');
+  commitFiles(root, { a: 'file-a\n', 'b.txt': 'other2\n' });
+  setAttributes(root, '* -diff\n');
+  const t = cli(root, textArgs(base), { cwd: root });
+  assert.equal(t.status, 3, t.all);
+  assert.equal(t.out, 'refused: path check failed a\n');
+});
+
+test('text: any argument but --base and --run is refused, and with none marked it says so', () => {
+  const { root, base } = gitRoot({ 'a.txt': 'x\n' });
+  for (const extra of [['--root', root], ['--handoff', 'h.md'], ['a.txt'], ['--write'], ['--base', base]]) {
+    const r = cli(root, [...textArgs(base), ...extra], { cwd: root });
+    assert.equal(r.status, 3, extra.join(' '));
+    assert.match(r.out, /^refused: /);
+  }
+  assert.equal(cli(root, ['text', '--base', base], { cwd: root }).status, 3);
+  const none = cli(root, textArgs(base), { cwd: root });
+  assert.equal(none.status, 0);
+  assert.equal(none.out, 'no binary-marked text files\n');
 });

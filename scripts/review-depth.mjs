@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-// Usage: node scripts/review-depth.mjs (<base-sha> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json]
-// Review depth follows the paths a diff touches (contract review-depth v1), never the builder's label.
+// Usage: node scripts/review-depth.mjs (<base> --run <slug> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json]
+// Review depth follows the paths a diff touches (contract review-depth v1.1), never the builder's label.
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { gitTopLevel, openGit } from './rule-check.mjs';
 
 const MAX_PATHS = 500;
 const MAX_PROFILE = 1024 * 1024;
-const GIT_OPTS = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024, timeout: 30000 };
-const SHA = /^[0-9a-f]{7,40}$/;
+const MAX_BASE_PROFILE = 64 * 1024;
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const RISKS = ['low', 'medium', 'high'];
 const SEC_WORDS = ['auth', 'login', 'session', 'token', 'secret', 'crypt', 'password', 'payment', 'billing', 'permission'];
 const CONTRACT_FILE = /^(openapi|asyncapi)\./;
@@ -109,13 +110,14 @@ export function analyze(paths, { core = [], modules = [], risk, limit = MAX_PATH
   return { depth, paths: listed, reasons, truncated: paths.length > limit };
 }
 
+class Refused extends Error {}
+
 function refuse(msg) {
-  process.stdout.write(`refused: ${msg}\n`);
-  process.exit(2);
+  throw new Refused(msg);
 }
 
 function parseArgs(argv) {
-  const opts = { sha: undefined, staged: false, worktree: false, json: false, repo: undefined, risk: undefined };
+  const opts = { sha: undefined, run: undefined, staged: false, worktree: false, json: false, repo: undefined, risk: undefined };
   const flag = (key) => {
     if (opts[key]) refuse('unexpected argument');
     opts[key] = true;
@@ -130,6 +132,10 @@ function parseArgs(argv) {
       if (opts.repo !== undefined) refuse('unexpected argument');
       opts.repo = argv[++i];
       if (!opts.repo || opts.repo.startsWith('-')) refuse('--repo needs a directory');
+    } else if (a === '--run') {
+      if (opts.run !== undefined) refuse('unexpected argument');
+      opts.run = argv[++i];
+      if (typeof opts.run !== 'string' || !SLUG.test(opts.run)) refuse('--run needs a run slug');
     } else if (a === '--staged') flag('staged');
     else if (a === '--worktree') flag('worktree');
     else if (a === '--json') flag('json');
@@ -137,8 +143,9 @@ function parseArgs(argv) {
     else refuse('unexpected argument');
   }
   const modes = (opts.sha !== undefined) + opts.staged + opts.worktree;
-  if (modes !== 1) refuse('give one of <base-sha>, --staged, --worktree');
-  if (opts.sha !== undefined && !SHA.test(opts.sha)) refuse('base-sha must match ^[0-9a-f]{7,40}$');
+  if (modes !== 1) refuse('give one of <base>, --staged, --worktree');
+  if (opts.sha !== undefined && !FULL_SHA.test(opts.sha)) refuse('base must be a full object id (40 or 64 hex)');
+  if (opts.sha === undefined && opts.run !== undefined) refuse('--run goes with a base');
   return opts;
 }
 
@@ -150,7 +157,7 @@ const real = (p) => {
 // The directory git runs in: the project's own repository or a folder inside its top level.
 function resolveRepo(dir) {
   try {
-    const top = real(execFileSync('git', ['rev-parse', '--show-toplevel'], GIT_OPTS).trim());
+    const top = real(gitTopLevel(process.cwd()));
     const rel = path.relative(top, real(dir));
     if (rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel))) return fs.realpathSync.native(dir);
   } catch { /* refused below */ }
@@ -171,50 +178,87 @@ function readProfile() {
   }
 }
 
-const gitArgs = (repo, args) => (repo ? ['-C', repo, ...args] : args);
-const gitPaths = (repo, args) => execFileSync('git', gitArgs(repo, args), GIT_OPTS).split('\0').filter(Boolean);
+// .company/project.md as the base commit holds it, or null when it is missing, too big or has no `## Core`.
+function profileAtBase(git, base) {
+  const r = git.run(['cat-file', 'blob', '--end-of-options', `${base}:.company/project.md`], { maxBuffer: MAX_BASE_PROFILE + 1 });
+  if (r.failed || r.status !== 0 || r.overflow || r.out.length > MAX_BASE_PROFILE) return null;
+  const text = r.out.toString('utf8');
+  return /^## Core[ \t]*\r?$/m.test(text) ? text : null;
+}
 
-function hasHead(repo) {
+function listPaths(git, mode, endpoints) {
+  const r = git.diff(['-z', '--name-only', '--no-renames', ...mode], endpoints);
+  if (r.failed || r.status !== 0 || r.overflow) throw new Error('git failed');
+  return r.out.toString('utf8').split('\0').filter(Boolean);
+}
+
+function untrackedPaths(git) {
+  const r = git.run(['ls-files', '-z', '--others', '--exclude-standard', '--full-name', '--', ':/']);
+  if (r.failed || r.status !== 0 || r.overflow) throw new Error('git failed');
+  return r.out.toString('utf8').split('\0').filter(Boolean);
+}
+
+function hasHead(git) {
+  const r = git.run(['rev-parse', '--verify', '-q', 'HEAD']);
+  return !r.failed && r.status === 0;
+}
+
+function readPaths(opts, git) {
+  if (opts.sha !== undefined) return listPaths(git, [], [opts.sha, `refs/heads/aico/${opts.run}`]);
+  const staged = () => listPaths(git, ['--cached'], []);
+  if (opts.staged) return staged();
+  if (!hasHead(git)) return [...new Set([...staged(), ...untrackedPaths(git)])];
+  return [...new Set([...listPaths(git, [], ['HEAD']), ...staged(), ...untrackedPaths(git)])];
+}
+
+function full(opts, head, reason) {
+  if (opts.json) return JSON.stringify({ ...head, depth: 'full', paths: [], reasons: [{ path: '*', rule: reason }], truncated: false }) + '\n';
+  return `full\nreason: ${reason}\n`;
+}
+
+// { code, out } for one invocation. `seam` lets a test replace the graft-path query.
+export function run(argv, { seam } = {}) {
   try {
-    execFileSync('git', gitArgs(repo, ['rev-parse', '--verify', '-q', 'HEAD']), GIT_OPTS);
-    return true;
-  } catch {
-    return false;
+    return { code: 0, out: answer(argv, seam) };
+  } catch (error) {
+    if (error instanceof Refused) return { code: 2, out: `refused: ${error.message}\n` };
+    throw error;
   }
 }
 
-function readPaths(opts, repo) {
-  if (opts.sha !== undefined) return gitPaths(repo, ['diff', '-z', '--name-only', `${opts.sha}..HEAD`]);
-  const staged = () => gitPaths(repo, ['diff', '-z', '--name-only', '--no-renames', '--cached']);
-  if (opts.staged) return staged();
-  const untracked = () => gitPaths(repo, ['ls-files', '-z', '--others', '--exclude-standard', '--full-name', '--', ':/']);
-  if (!hasHead(repo)) return [...new Set([...staged(), ...untracked()])];
-  return [...new Set([...gitPaths(repo, ['diff', '-z', '--name-only', '--no-renames', 'HEAD']), ...staged(), ...untracked()])];
-}
-
-function main(argv) {
+function answer(argv, seam) {
   const opts = parseArgs(argv);
   const repo = opts.repo === undefined ? undefined : resolveRepo(opts.repo);
-  const profile = readProfile();
-  const core = coreFromProject(profile);
   const source = opts.sha !== undefined ? 'base' : opts.staged ? 'staged' : 'worktree';
   const head = { v: 1, source, base: opts.sha ?? null, tier: opts.risk ?? 'unknown' };
-
+  if (source === 'base' && opts.run === undefined) return full(opts, head, 'no run ref');
+  const opened = openGit(repo ?? process.cwd(), seam);
+  if (!opened.ok) return full(opts, head, opened.reason === 'git unavailable' ? 'diff unavailable' : opened.reason);
+  const { git } = opened;
+  if (source === 'base') {
+    if (git.head() !== `refs/heads/aico/${opts.run}\n`) return full(opts, head, 'head not on run branch');
+    const length = git.objectLength();
+    if (length !== 0 && opts.sha.length !== length) return full(opts, head, 'diff unavailable');
+  }
   let paths;
   try {
-    paths = readPaths(opts, repo);
+    paths = readPaths(opts, git);
   } catch {
-    if (opts.json) process.stdout.write(JSON.stringify({ ...head, depth: 'full', paths: [], reasons: [{ path: '*', rule: 'diff unavailable' }], truncated: false }) + '\n');
-    else process.stdout.write('full\nreason: diff unavailable\n');
-    return;
+    return full(opts, head, 'diff unavailable');
   }
+  const profile = source === 'base' ? profileAtBase(git, opts.sha) : readProfile();
+  if (profile === null) return full(opts, head, 'core unknown at base');
+  const core = coreFromProject(profile);
   if (opts.json) {
     const a = analyze(paths, { core, modules: modulesFromProject(profile), risk: opts.risk });
-    process.stdout.write(JSON.stringify({ ...head, depth: a.depth, paths: a.paths, reasons: a.reasons, truncated: a.truncated }) + '\n');
-    return;
+    return JSON.stringify({ ...head, depth: a.depth, paths: a.paths, reasons: a.reasons, truncated: a.truncated }) + '\n';
   }
   const { depth, reasons } = classify(paths, { core, risk: opts.risk });
-  process.stdout.write([depth, ...reasons].join('\n') + '\n');
+  return [depth, ...reasons].join('\n') + '\n';
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv.slice(2));
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const { code, out } = run(process.argv.slice(2));
+  process.stdout.write(out);
+  process.exitCode = code;
+}

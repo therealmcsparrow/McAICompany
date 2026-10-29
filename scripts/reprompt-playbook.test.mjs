@@ -194,11 +194,11 @@ test('image prompt path hands exactly the brief to prompt-artist', () => {
   has('Nothing runs without Use it or Hand to prompt-artist');
 });
 
-test('the only git command is git rev-parse --short HEAD', () => {
-  const cmds = [...text.matchAll(/(?:`|<)git ([a-z-]+)/g)].map((m) => m[1]);
+test('the only git command is the full-id git rev-parse', () => {
+  const cmds = [...text.matchAll(/(?:`|<)git (?:--no-replace-objects )?([a-z-]+)/g)].map((m) => m[1]);
   assert.ok(cmds.length > 0);
   for (const c of cmds) assert.equal(c, 'rev-parse', `unexpected git ${c}`);
-  has('git rev-parse --short HEAD', 'nothing is committed, pushed or stashed');
+  has('git --no-replace-objects rev-parse --verify --end-of-options HEAD^{commit}', 'nothing is committed, pushed or stashed');
   assert.doesNotMatch(text, /git (add|commit|push|stash)\b/);
 });
 

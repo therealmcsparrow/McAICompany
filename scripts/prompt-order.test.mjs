@@ -114,7 +114,7 @@ test('tool checks come first in the pre-filter; a T- row blocks only after the r
   assert.ok(at >= 0);
   const pre = pipeline.slice(at, at + 1600);
   assert.ok(pre.indexOf('rule-check.mjs') >= 0 && pre.indexOf('rule-check.mjs') < pre.indexOf('npm run check'), pre);
-  has(pre, 'run --base <sha>', '`list`', 'T-', 'does **not** consume a Fix round');
+  has(pre, 'run --base <Base commit> --run <slug>', '`list`', 'T-', 'does **not** consume a Fix round');
 });
 
 test('slices are checked before builders; drift runs after sign-off and before Ship', () => {

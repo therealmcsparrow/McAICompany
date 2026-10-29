@@ -35,7 +35,7 @@ role: backend-engineer
 task: <task-slug>
 status: done | blocked | needs-ceo | handover
 round: 0
-base-commit: <sha>
+base-commit: <full object id>
 risk-tier: medium
 acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
@@ -53,7 +53,7 @@ By: <Name> (<role>)
 - What the next Step needs; name the Role.
 ```
 
-`By:` comes from your dispatch's `Name:` line (none → the Role title). **Fields are the contract:** the Lead and later Steps read the frontmatter, not the prose; fill every field that applies. `round`, `base-commit` (reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit it if you only reason).
+`By:` comes from your dispatch's `Name:` line (none → the Role title). **Fields are the contract:** the Lead and later Steps read the frontmatter, not the prose; fill every field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit it if you only reason).
 
 **Blocking tags** `contract`, `spec`, `security`, `test` route the Fix round. **Risk tier** `low | medium | high` is forced **high** for anything touching auth, payments, personal data, migrations or a Contract; a Role may raise it, never lower it.
 

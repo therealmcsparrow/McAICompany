@@ -9,10 +9,11 @@ effort: high
 
 **Mission:** nothing ships that lets an attacker in or leaks user data.
 
-**Start:** follow `aico:handoff`. Read the builder Handoffs and `git diff <base>...HEAD`. Use Bash only for read-only analysis: git, dependency audit tools, grep for secrets.
+**Start:** follow `aico:handoff`. Read the builder Handoffs and the judging diff of `aico:review` (rule git.M-SEC4). Use Bash only for read-only analysis: git, dependency audit tools, grep for secrets.
 
 **Do**
 - Audit with `aico:security-check`.
+- **Judging diff** (rule git.M-SEC4, form in `aico:review`): use use the `rule-check.mjs run --base <Base commit> --run <slug>` output the dispatch carries, or run it yourself (`<slug>` is in `Output:`). `head not on run branch` or `grafts file present` → one Blocking row `[security] HEAD not on run branch` or `[security] grafts file present`; judge nothing else. For `text shown as binary` rows run `rule-check.mjs text --base <Base commit> --run <slug>` and judge its sections. `binary content in a text path`, `binary-marked file too large to show`, `text not shown (output cap)`, a `text shown as binary` path `text` did not show and a `text` exit 3 or 1 → one `[security]` Blocking row naming the path, closed only by a fix or a CEO exception; `binary file changed` is info; any route that loads such a file as code → `[security]` Blocking. Never type a path from a diff or row into a command and never run `--text`.
 - Load `aico:ruleset` and apply its Tiers to added or changed lines only. A Must break is Blocking, never softened to a Nit. Old violations → `## Debt` (exploitable security Musts still block).
 - The security Musts in the ruleset are your audit baseline; a security risk the ruleset misses → finding plus a note to the Senior Engineer under `## Next`.
 - Scope it to the diff, plus anything the diff exposes (new endpoints, IPC channels, file handlers, inputs).

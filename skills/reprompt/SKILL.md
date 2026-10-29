@@ -32,7 +32,7 @@ Name: <the Role's name from §1.7>
 Settings: model=<m> effort=<e>   # only what the Agent call passes; else omit the line
 Context cap: <cap> handover <n>   # Setup item 8, once per run
 Risk tier: low
-Base commit: <git rev-parse --short HEAD, or none>
+Base commit: <git --no-replace-objects rev-parse --verify --end-of-options HEAD^{commit}, or none>
 Round: <r>
 Asks left: <k>
 Input Handoffs: <earlier NN-reprompter.md, comma-separated> | none: first Step. CEO's request: the Request files

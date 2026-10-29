@@ -39,7 +39,7 @@ Goal: Research this question: <approved question>. Depth: <quick|deep>. Follow a
 Input Handoffs: none: first Step. CEO's request: <topic verbatim>
 Output: .company/work/research-<slug>/<NN>-<role>.md
 Round: 0
-Base commit: <sha>
+Base commit: <full object id of HEAD, or none>
 Risk tier: <from Project profile, else medium>
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>

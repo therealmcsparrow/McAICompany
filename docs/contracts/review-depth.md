@@ -1,19 +1,21 @@
-# Contract: review-depth v1
+# Contract: review-depth v1.1
+
+v1.1 (task v020-gate-roadmap, T2; `docs/adr/0007-contract-minor-versions.md`): base mode takes the full base id and `--run <slug>` and reads the diff as the judging diff of rule git.M-SEC4 (the call form is in `rule-check` v1.1, "Judging diff and run ref"); `## Core` and `## Modules` come from `.company/project.md` at the base commit; a grafts file, a HEAD that is not the run ref or an unreadable base profile gives `full`; `--staged` and `--worktree` carry every judging flag. A v1 caller (`<sha>` without `--run`) gets `full` with `reason: no run ref`.
 
 Provider: `scripts/review-depth.mjs`. Consumer: `aico:pipeline` §2 (the `Review depth:` line, `dispatch-prompt` v3.1), the Code Reviewer and, from part M, the Blast Radius mod (`aico-mods` v1).
 Depth follows the touched paths, never the builder's label (AC24).
 
 ## CLI
-`node review-depth.mjs <base-sha> [--risk low|medium|high]` → stdout first line `full` or `standard`, then one `reason: <path> — <rule>` line per path that forced `full`; exit 0. Bad `<base-sha>` (not `^[0-9a-f]{7,40}$`) or bad `--risk` → `refused: <reason>`, exit 2. Paths come from `git diff --name-only <base-sha>..HEAD` via `execFile` (no shell).
+`node review-depth.mjs <full base id> --run <slug> [--risk low|medium|high]` → stdout first line `full` or `standard`, then one `reason: <path> — <rule>` line per path that forced `full`; exit 0. A base that is not `^[0-9a-f]{40}$` or `^[0-9a-f]{64}$`, a bad `--run` slug or a bad `--risk` → `refused: <reason>`, exit 2. Paths come from the judging diff `-z --name-only --no-renames` from the base to `refs/heads/aico/<slug>`, run by `execFile` (no shell) from the top level with grafts and replace refs off and every inherited `GIT_*` key dropped. `--run` belongs to base mode only; `--staged` and `--worktree` refuse it.
 
 ### Part M additions (additive, still unshipped; the text output above is unchanged)
-- `node review-depth.mjs --staged [--risk …] [--repo <dir>]`: paths from `git diff --cached --name-only` (no HEAD yet: `git diff --cached --name-only --root` equivalent, every staged path).
-- `node review-depth.mjs --worktree [--risk …] [--repo <dir>]`: paths from `git diff --name-only HEAD` plus `git diff --cached --name-only` plus `git ls-files -z --others --exclude-standard --full-name -- :/` (staged, unstaged and untracked, ignored files left out; what a commit run after `git add` can include).
-- `<base-sha>`, `--staged` and `--worktree` are mutually exclusive; exactly one is required (`refused: give one of <base-sha>, --staged, --worktree`).
-- `--repo <dir>`: run git with `-C <dir>`; `<dir>` must resolve (realpath) inside the cwd's repository top level or equal it, else `refused: repo outside the project`.
+- `node review-depth.mjs --staged [--risk …] [--repo <dir>]`: paths from the judging diff with `--cached` (no HEAD yet: every staged path).
+- `node review-depth.mjs --worktree [--risk …] [--repo <dir>]`: paths from the judging diff against `HEAD` plus the judging diff with `--cached` plus `git ls-files -z --others --exclude-standard --full-name -- :/` (staged, unstaged and untracked, ignored files left out; what a commit run after `git add` can include). Both diffs carry every flag and env key of the judging diff, so `diff.ignoreSubmodules`, a textconv driver, `diff.external` and `core.fsmonitor` change nothing and a changed submodule is listed. These two modes list what the next commit holds, not what a run changed: they take no `--run` and never go `full` for a missing run ref.
+- `<base>`, `--staged` and `--worktree` are mutually exclusive; exactly one is required (`refused: give one of <base>, --staged, --worktree`).
+- `--repo <dir>`: run git with `<dir>` as the directory it starts in; `<dir>` must resolve (realpath) inside the cwd's repository top level or equal it, else `refused: repo outside the project`.
 - `--json`: instead of the text lines, one JSON object on stdout:
   ```json
-  { "v": 1, "source": "base|staged|worktree", "base": "<sha>|null", "tier": "low|medium|high|unknown",
+  { "v": 1, "source": "base|staged|worktree", "base": "<full id>|null", "tier": "low|medium|high|unknown",
     "depth": "full|standard",
     "paths": [{ "path": "docs/contracts/x.md", "categories": ["contract"], "module": "ledger|null" }],
     "reasons": [{ "path": "docs/contracts/x.md", "rule": "contract path" }],
@@ -27,11 +29,12 @@ Depth follows the touched paths, never the builder's label (AC24).
 3. A Contract path: `docs/contracts/**`, any `contracts/` folder, `*.proto`, `openapi.*`, `asyncapi.*`. Category `contract`.
 4. A security path: a name or folder containing `auth`, `login`, `session`, `token`, `secret`, `crypt`, `password`, `payment`, `billing`, `permission`; `migrations/**`; `.github/workflows/**`; `agents/*.md`; `.company/standards.md`, `.company/standards/**`, `.company/checks.json`, `.company/settings.json`; `package.json`, lockfiles, `deps/**`. Part M adds `hooks/**` and `mods/**` (code that runs on every tool call). Category `security`.
 5. The diff can't be read → `full` with `reason: diff unavailable`; in `--json`, `paths: []` and one reason `{ "path": "*", "rule": "diff unavailable" }`.
+6. Anything else that leaves the diff unjudged, with the same shape and the reason as the rule text: `no run ref` (base mode without `--run`), `grafts file present` (every mode; a graft-path query that fails or prints nothing counts, and `GIT_GRAFT_FILE` is dropped from the inherited environment), `head not on run branch` (base mode: `git symbolic-ref -q HEAD` is not `refs/heads/aico/<slug>`), `core unknown at base` (base mode: `.company/project.md` is missing at the base commit, over 64 KiB or has no `## Core`). The Blast Radius mod counts every such `*` reason except the risk tier as an unknown Security hit.
 
 A path may carry several categories. Otherwise `standard`. The reviewer may raise `standard` to `full`, never lower it.
 
 ## Modules (part M, `--json` only)
-`module` names the `.company/project.md` `## Modules` item a path belongs to; it never changes depth. Item name = the text before the first `:` of the line (`(none yet)` and comment lines ignored).
+`module` names the item of `## Modules` in `.company/project.md` (at the base commit in base mode, else the working copy) a path belongs to; it never changes depth. Item name = the text before the first `:` of the line (`(none yet)` and comment lines ignored).
 - A name containing `/` is a path prefix, matched like a Core item.
 - Any other name matches a path when a directory segment of the path, or the file name without its last extension, equals the name.
 - First matching item in file order wins; none → `null`.
