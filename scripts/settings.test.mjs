@@ -1546,7 +1546,7 @@ test('model-env: a value outside the allow-list prints as (hidden)', () => {
 
 // A directory holding a fake claude on the search path; the exec stub is injected, so nothing runs.
 function pathWith(t, ...extra) {
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-bin-'));
+  const bin = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'claude-bin-')));
   t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
   const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
   fs.writeFileSync(path.join(bin, name), 'x', { mode: 0o755 });
