@@ -529,6 +529,16 @@ const HAND_OVER_CHANGES = {
       /^5\. End of run\. Tell the CEO to start the fix: `\/aico:fix "<root cause> \(incident \.company\/work\/<slug>\/\)"`.*CRA final report: 14 days after a fix is available, 1 month after the notification.*\/aico:lead.*Never drop a deadline\.$/,
     ],
   },
+  // Maintain gains one line: the contract-drift check (contract-index v1).
+  maintain: {
+    removed: [],
+    added: ['   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.'],
+  },
+  // Standards gains one line: reuse of a fresh rule pack (rule-pack v1.2).
+  standards: {
+    removed: [],
+    added: [/^   - Reusing a pack: run `node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" pack-fresh <pack> --version /],
+  },
   refactor: {
     removed: ['Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise run `aico:audit` steps 1–2 first.'],
     added: [/^Run with `aico:pipeline`\. No Brief Gate: the audit report is the brief\. Start from an existing audit report if there is one; otherwise, before pipeline Setup, ask the CEO in a form: \*\*Run audit first \(Recommended\)\*\* \/ \*\*Skip audit\*\*\. Run audit first → .*end this run here.*`\/aico:refactor "<scope>"`, and stop\.$/],
@@ -625,7 +635,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   for (const name of soft) assertV012Playbook(name);
   // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
-  assert.equal(Number(removedFromPipeline), 10);
+  // 22 removed lines: the ten above, plus the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
+  assert.equal(Number(removedFromPipeline), 22);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 

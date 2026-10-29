@@ -760,10 +760,16 @@ describe('AC8 a low run keeps the tests, the pre-filter and handoff-lint', () =>
     }
   });
 
+  // v0.18.0 text reached through the changes made since to the pre-filter call (full base id, run ref, judging diff) and the Ship checks before the suite.
+  const toCurrentCalls = (s) => s
+    .replace('once the last review is clean: run the full test suite once', "once the last review is clean: check that `git symbolic-ref -q HEAD` prints exactly `refs/heads/aico/<slug>` and that `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=no --ignore-submodules=none` prints nothing, so the suite tests exactly the run ref's tree; otherwise stop and name it in the Ship Gate summary. Then run the full test suite once")
+    .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run <slug>` and `list` (`rule-check` v1.1)')
+    .replace('over the diff (`<sha>` = the Base commit)', 'over the judging diff (rule git.M-SEC4)');
+
   test('AC8 the pre-filter, handoff-lint and full-suite lines of the pipeline are the v0.18.0 ones', (t) => {
     const oldText = v018(t, 'skills/pipeline/SKILL.md');
     if (oldText === null) return;
-    const old = oldText.split('\n');
+    const old = toCurrentCalls(oldText).split('\n');
     const now = new Set(read('skills/pipeline/SKILL.md').split('\n'));
     const wanted = old.filter((l) => /pre-filter|handoff-lint|full test suite/i.test(l));
     assert.ok(wanted.length >= 3);

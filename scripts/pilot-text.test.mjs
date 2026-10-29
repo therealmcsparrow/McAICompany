@@ -25,15 +25,18 @@ const PRE = {
   // review +2001 B, code-reviewer +967 B and senior-engineer +971 B for the judging diff, the run-ref and graft refusals and the binary row rules (rule git.M-SEC4, dispatch-prompt v3.7).
   'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4305,
   // review: 1899 + 149 B for the open-decision Nit paragraph (plan-check v1, v0.16).
+  // code-reviewer: +232 B for the judging diff paragraph and the finding ID row rule (rule git.M-SEC4, handoff v1.2).
   // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
-  'skills/standards/SKILL.md': 1680, 'agents/code-reviewer.md': 2955, 'agents/senior-engineer.md': 3340,
+  // standards: +434 B for the pack reuse line (rule-pack v1.2) and the run.mjs resolver form of the Type line (plugin-root v1).
+  'skills/standards/SKILL.md': 2114, 'agents/code-reviewer.md': 3187, 'agents/senior-engineer.md': 3340,
 };
 // Extra bytes a load may carry over the PRE sum. The handoff skill grew 110 B (Starting a Step item 5: Roles never start a Playbook,
 // ADR 0026): code-reviewer is 127 B over its PRE sum (14 B of handoff growth, 113 B of open-decision Nit text, plan-check v1), senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
 // Both loads carry 654 B more for the shared-tree rule (Starting a Step item 6, dispatch-prompt v3.5).
 // Both loads carry 146 B more for the Task brief sentence (Starting a Step item 6) and 79 B for the first-pass exception (item 1), dispatch-prompt v3.6.
 // Both loads carry 100 B more for the full object id in the Handoff base-commit field and the budget rounding above (dispatch-prompt v3.7).
-const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654 + 146 + 79 + 100, 'agents/code-reviewer.md': 127 + 654 + 146 + 79 + 100 };
+// Loads of the reviewer and the senior engineer carry 884 B and 654 B more for the finding ID rows and the contest rule (handoff v1.2) in the shared skills and pilot.md; the budget counts the shared files once per Role, net of the handoff and ruleset text that shrank.
+const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654 + 146 + 79 + 100 + 654, 'agents/code-reviewer.md': 127 + 654 + 146 + 79 + 100 + 652 };
 const LOAD = {
   'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
   'agents/senior-engineer.md': ['agents/senior-engineer.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md', 'skills/standards/SKILL.md'],
@@ -57,7 +60,7 @@ test('byte budget: each pilot Role loads at most the pre-run sum, references/pil
     const now = files.reduce((n, f) => n + bytes(f), 0) + bytes(PILOT);
     assert.ok(now <= pre, `${agent} loads ${now} B, pre-run ${pre} B`);
   }
-  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 19019);
+  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 19251);
 });
 
 test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () => {
