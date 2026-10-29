@@ -215,6 +215,24 @@ describe('hostile cases under block with one open decision', () => {
     assertAllRefused(e, { next: true });
   });
 
+  test('02-PLAN.md (case-folded name) with an open decision beside a clean 03-plan.md is an unreadable error', () => {
+    const e = env();
+    e.plan(OPEN, '02-PLAN.md');
+    e.plan(CLEAN, '03-plan.md');
+    assert.deepEqual(e.check('verify', SLUG).lines, ['plan-check (block): error unreadable']);
+    assert.equal(e.state('start', SLUG).code, 0);
+    assertAllRefused(e, { next: true });
+    assert.equal(e.begin('03-plan.md').code, 3);
+  });
+
+  test('begin finds its exact name in the directory listing, not through a case-folding file system', () => {
+    const e = env({ policy: 'warn' });
+    e.plan(CLEAN, '02-PLAN.md');
+    const r = e.begin('02-plan.md');
+    assert.notEqual(r.code, 0);
+    assert.equal(fs.existsSync(e.file('parallel.jsonl')), false);
+  });
+
   test('a directory named like a plan is an unreadable error', () => {
     const e = env();
     e.plan(CLEAN, '03-plan.md');

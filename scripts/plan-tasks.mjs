@@ -416,6 +416,10 @@ function readPlan(root, slug, name) {
   if (dir === null) throw new PlanProblem('plan-missing');
   if (dir === 'unsafe') throw new PlanProblem('plan-unreadable');
   const file = path.join(dir, name);
+  // The exact name must be in the listing: a case-folding file system would open another file.
+  let listing;
+  try { listing = fs.readdirSync(dir); } catch { throw new PlanProblem('plan-unreadable'); }
+  if (!listing.includes(name)) throw new PlanProblem('plan-missing');
   const st = lstatOrNull(file);
   if (!st) throw new PlanProblem('plan-missing');
   if (!isPlain(st)) throw new PlanProblem('plan-unreadable');

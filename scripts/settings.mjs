@@ -507,9 +507,9 @@ export function readProfile({ cwd } = {}) {
   return { hasProject: true, fields };
 }
 
-// C0, DEL, C1, Arabic letter mark, Mongolian vowel separator, zero-width and bidi marks and controls,
-// line and paragraph separators, word joiner range, byte order mark.
-const PROFILE_BAD_RE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]');
+// Controls, every format character (zero-width, bidi, tag characters, U+2065), line and paragraph separators,
+// Mongolian vowel separator and U+2065 named so a Unicode table that drops them cannot reopen the hole.
+const PROFILE_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}᠎⁥\u{E0000}-\u{E007F}]/u;
 
 // Returns a reason string when `value` is not acceptable for `field`, else null.
 function profileProblem(field, value, options) {

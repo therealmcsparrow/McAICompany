@@ -85,7 +85,7 @@ const OTHER_NAMES = new Set(Object.entries(roster).filter(([role]) => role !== '
 
 const cpClass = (...ranges) => new RegExp(`[${ranges.map(([a, b]) => String.fromCodePoint(parseInt(a, 16)) + (b ? `-${String.fromCodePoint(parseInt(b, 16))}` : '')).join('')}]`, 'u');
 const PLAIN_ASCII = /^[\x20-\x7E]*$/;
-const ZERO_WIDTH_OR_BIDI = cpClass(['061C'], ['180E'], ['200B', '200F'], ['202A', '202E'], ['2060', '2064'], ['2066', '2069'], ['FEFF']);
+const ZERO_WIDTH_OR_BIDI = /[\p{Cf}᠎⁥\u{E0000}-\u{E007F}]/u;
 const CONTROL_OR_SEPARATOR = cpClass(['0000', '001F'], ['007F', '009F'], ['2028', '2029']);
 
 // project-init v1 "Values": the one documented rule for the one-line header values of .company/project.md.
@@ -591,4 +591,14 @@ test('the 4097-character and other long values are handled in bounded time on ev
     timed(`${id} language`, () => runLanguage(['set', v], { home, cwd: repo }));
   }
   assert.deepEqual(slow, []);
+});
+
+test('profile text: U+2065 and Unicode tag characters are refused with project.md untouched', () => {
+  for (const ch of ['\u2065', '\u{E0000}', '\u{E0041}', '\u{E007F}', '\u{E0001}']) {
+    for (const field of TEXT_FIELDS) {
+      writeTemplate();
+      assert.throws(() => writeProfile({ [field]: `web${ch}app` }, { cwd: repo, pluginRoot }), Refusal, `${field} U+${ch.codePointAt(0).toString(16)}`);
+      assert.equal(fs.readFileSync(PROJECT_FILE, 'utf8'), TEMPLATE_TEXT);
+    }
+  }
 });

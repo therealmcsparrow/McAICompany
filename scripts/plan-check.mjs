@@ -587,6 +587,9 @@ function planEntries(dir, plan) {
   } catch {
     throw new PlanProblem('unreadable', 'the run folder cannot be read');
   }
+  // A name that matches the plan pattern only when case is ignored is an alias on a case-folding file system.
+  const CI = new RegExp(PLAN_NAME.source, 'i');
+  if (names.some((n) => CI.test(n) && !PLAN_NAME.test(n))) throw new PlanProblem('unreadable', 'a plan file name differs only in case');
   const found = names.filter((n) => PLAN_NAME.test(n)).sort();
   if (found.length === 0) throw new PlanProblem('no plan', 'no plan file in the run folder');
   if (found.length > MAX_PLANS) throw new PlanProblem('too large', 'more than 50 plan files');
