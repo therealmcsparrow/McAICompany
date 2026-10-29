@@ -47,7 +47,13 @@
   "v1.2 reviewer row without R-id": {
     "file": "bad-reviewer-v12.md",
     "errors": [
-      "line 14: reviewer row needs R-<n> after the tag"
+      "line 15: reviewer row needs R-<n> after the tag"
+    ]
+  },
+  "v1.2 Role id byline without contracts": {
+    "file": "bad-no-contracts.md",
+    "errors": [
+      "frontmatter: missing contracts (required under a Role id byline, handoff v1.2)"
     ]
   }
 }

@@ -39,6 +39,7 @@ base-commit: <full object id>
 risk-tier: medium
 acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
+contracts: [handoff v1.2]
 ---
 By: <role id>
 ## Did
@@ -53,7 +54,7 @@ By: <role id>
 - What the next Step needs; name the Role.
 ```
 
-`By:` is your Role id. **Fields are the contract:** the Lead and later Steps read the frontmatter, not the prose; fill every field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit it if you only reason).
+`By:` is your Role id. **Fields are the contract:** the Lead and Steps read the frontmatter, not the prose; fill each field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit if none).
 
 **Blocking tags** `contract`, `spec`, `security`, `test` route the Fix round. **Risk tier** `low | medium | high` is forced **high** for anything touching auth, payments, personal data, migrations or a Contract; a Role may raise it, never lower it.
 

@@ -9,7 +9,7 @@ import { checkBrainstorm } from './check.mjs';
 // Display names must not drift back into the places that store or carry a Role. The scan looks at positions, not
 // prose: a Role-name word in a sentence is correct (a Dev dependency, a quoted name in a roadmap).
 //   - dispatch blocks: fenced blocks of skills, agents and the dispatch-prompt Contract
-//   - By: line of a Handoff that has a `contracts:` key
+//   - By: line of a Handoff that has a `contracts:` key or a Role-id By: line
 //   - cue lines of a cooler file with `ids: role`
 //   - reply headings, Dissent and Threads lines of a brainstorm file with `ids: role` (the positions checkBrainstorm reads)
 
@@ -108,7 +108,9 @@ function scanDispatch(text, file) {
 
 function scanHandoff(text, file) {
   const doc = frontmatter(text);
-  if (!doc || !doc.map.has('contracts')) return [];
+  if (!doc) return [];
+  const idBy = doc.lines.slice(doc.end + 1, doc.end + 4).some(l => /^By: [a-z][a-z0-9-]*$/.test(l));
+  if (!doc.map.has('contracts') && !idBy) return [];
   for (let i = doc.end + 1; i < Math.min(doc.lines.length, doc.end + 4); i++) {
     if (!doc.lines[i].startsWith('By:')) continue;
     const m = /^By: ([a-z][a-z0-9-]*)$/.exec(doc.lines[i]);
@@ -322,6 +324,14 @@ test('a Handoff is v1.2 only by a contracts: key in its frontmatter', () => {
   assert.deepEqual(scanHandoff(body.replace('risk-tier: low\n---', 'risk-tier: low\nnocontracts: x\n---'), 'h.md'), [], 'another key');
   assert.deepEqual(scanHandoff('By: Nora\n## Did\n', 'h.md'), [], 'no frontmatter');
   assert.deepEqual(scanHandoff('---\ncontracts: [x]\nBy: Nora\n', 'h.md'), [], 'frontmatter never closed');
+});
+
+test('a Handoff with a Role id byline is scanned even without contracts:; a name byline without the key is not', () => {
+  const bare = fx('handoff-v12-ok.md').replace('contracts: [handoff v1.2]\n', '');
+  assert.deepEqual(scanHandoff(bare, 'h.md'), []);
+  assert.deepEqual(kinds(scanHandoff(bare.replace('By: product-manager', 'By: nobody'), 'h.md')), [KIND.by]);
+  assert.deepEqual(scanHandoff(bare.replace('By: product-manager', 'By: Nora'), 'h.md'), []);
+  assert.deepEqual(scanHandoff(bare.replace('By: product-manager', 'By: Nora (product-manager)'), 'h.md'), []);
 });
 
 test('brainstorm positions: only an ids: role file with format 2 is scanned, by exact frontmatter', () => {

@@ -187,6 +187,7 @@ const CONTEST_HINT = {
 // A reviewer row (a Blocking bullet, or a Nit that starts with a tag) must carry an R-, C- or T- ID after its tag.
 function needsId(it, body) {
   if (it.section === 'Nits' && (!/^\[[^\]\s]{1,40}\] /.test(it.body) || it.body.startsWith('[open-decision]'))) return false;
+  if (it.section === 'Nits') body = body.replace(/^\[[^\]\s]{1,40}\] /, '');
   return !/^[RCT]-\d{1,4}(?: |$)/.test(body);
 }
 
@@ -222,6 +223,7 @@ export function lint(text, opts = {}) {
   for (const k of LIST_KEYS) if (k in fm && list(fm[k]) === null) errors.push(`frontmatter: ${k} must be a [list]`);
   if ('contracts' in fm) checkContracts(fm.contracts, opts.index, errors);
   const roleIdBy = BYLINE_ID_RE.test(lines[end + 1] ?? '');
+  if (roleIdBy && !('contracts' in fm)) errors.push('frontmatter: missing contracts (required under a Role id byline, handoff v1.2)');
 
   // One pass: sections, bullets of ## Blocking and ## Nits, and aico-top fences. Text inside any other fence is
   // data, so a quoted aico-top block is not a block (parse like the reader).

@@ -6,6 +6,7 @@ status: done
 round: 0
 base-commit: 0123456789abcdef0123456789abcdef01234567
 risk-tier: medium
+contracts: [handoff v1.2]
 ---
 By: code-reviewer
 ## Did

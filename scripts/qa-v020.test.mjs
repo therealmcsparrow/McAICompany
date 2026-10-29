@@ -1832,7 +1832,10 @@ describe('AC32 one additive handoff bump holds contested findings and the contra
       fs.writeFileSync(path.join(dir, name), text);
       return node(sb, dir, 'handoff-lint.mjs', [path.join(dir, name)]);
     };
-    assert.equal(write('03-backend-engineer.md', base('')).code, 0);
+    const none = write('03-backend-engineer.md', base(''));
+    assert.equal(none.code, 1, none.all);
+    assert.match(none.all, /missing contracts/);
+    assert.equal(write('02-backend-engineer.md', base('').replace('By: backend-engineer', 'By: Bo (backend-engineer)')).code, 0);
     assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v1.2, run-state v1.5]\n')).code, 0);
     const malformed = write('05-backend-engineer.md', base('contracts: handoff v1.2\n'));
     assert.equal(malformed.code, 1, malformed.all);

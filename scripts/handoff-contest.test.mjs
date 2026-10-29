@@ -22,7 +22,7 @@ function project() {
 
 function handoff({ role, round = 0, status = 'done', blocking = [], contested = [], contests: answers = [], decisions = [] }) {
   const list = (h, a) => `## ${h}\n${a.length ? a.map(l => `- ${l}`).join('\n') : '- none'}\n`;
-  return `---\nstep: 05\nrole: ${role}\ntask: run1\nstatus: ${status}\nround: ${round}\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\n---\nBy: ${role}\n## Did\n- work\n${list('Decisions', decisions)}${list('Blocking', blocking)}${list('Contested', contested)}${list('Contests', answers)}## Nits\n- none\n## Next\n- go\n`;
+  return `---\nstep: 05\nrole: ${role}\ntask: run1\nstatus: ${status}\nround: ${round}\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v1.2]\n---\nBy: ${role}\n## Did\n- work\n${list('Decisions', decisions)}${list('Blocking', blocking)}${list('Contested', contested)}${list('Contests', answers)}## Nits\n- none\n## Next\n- go\n`;
 }
 const put = (run, name, text) => writeFileSync(join(run, name), text);
 const state = (r, key) => r.states.get(key);
@@ -280,6 +280,17 @@ test('single-file lint: reviewer rows need R-<n> under a Role id byline; a v1.1 
   assert.deepEqual(lint(handoff({ role: 'backend-engineer', blocking: plain })).errors, []);
 });
 
+test('contracts: is required under a Role id byline; a v1.1 name byline still lints without it; a [nit] R-<n> row lints', () => {
+  const none = handoff({ role: 'backend-engineer' }).replace('contracts: [handoff v1.2]\n', '');
+  assert.match(lint(none).errors.join('\n'), /missing contracts/);
+  assert.deepEqual(lint(none.replace('By: backend-engineer', 'By: Bo (backend-engineer)')).errors, []);
+  assert.deepEqual(lint(none.replace('By: backend-engineer', 'By: Bo')).errors, []);
+  const nit = n => handoff({ role: 'code-reviewer' }).replace('## Nits\n- none', `## Nits\n- ${n}`);
+  assert.deepEqual(lint(nit('[nit] R-5 src/a.mjs:3 — vague name — rename')).errors, []);
+  assert.match(lint(nit('[nit] src/a.mjs:3 — vague name — rename')).errors.join('\n'), /R-<n>/);
+  assert.deepEqual(lint(nit('[open-decision] pick one')).errors, []);
+});
+
 test('single-file lint: contest lines must have their shape', () => {
   const bad = handoff({ role: 'backend-engineer', contested: ['05-code-reviewer:R-1', 'R-1 — no NN'], contests: ['05-code-reviewer:R-1 maybe — x', '05-code-reviewer:R-1 accepted'] });
   assert.equal(lint(bad).errors.length, 4, lint(bad).errors.join('\n'));
@@ -289,7 +300,7 @@ test('single-file lint: contest lines must have their shape', () => {
 
 test('contracts: frontmatter checks every cite against the index', () => {
   const index = new Map([['handoff', { major: 1, minor: 2 }], ['dispatch-prompt', { major: 4, minor: 0 }]]);
-  const withContracts = v => handoff({ role: 'backend-engineer' }).replace('risk-tier: medium\n', `risk-tier: medium\ncontracts: ${v}\n`);
+  const withContracts = v => handoff({ role: 'backend-engineer' }).replace('contracts: [handoff v1.2]\n', `contracts: ${v}\n`);
   assert.deepEqual(lint(withContracts('[handoff v1.2, dispatch-prompt v4]'), { index }).errors, []);
   assert.deepEqual(lint(withContracts('[handoff v1.1]'), { index }).errors, []);
   for (const v of ['[handoff v1.3]', '[handoff v2]', '[dispatch-prompt v3.6]', '[nosuch v1]', '[handoff]', '[handoff v1.2.3]', 'handoff v1', '[handoff v1,, ]']) {
