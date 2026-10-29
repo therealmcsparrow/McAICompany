@@ -43,7 +43,6 @@ let lastAgents = ''
 let lastPart = ''
 
 const OUTPUT_LINE = /^Output: \.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/m
-const NAME_LINE = /^Name: ([^\r\n]{1,40})$/m
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 
@@ -339,12 +338,11 @@ async function noteSpawn($: EngineInterface, prompt: unknown, agentId: unknown):
     if (!settings.mods.cache_tax.enabled) return
     const head = typeof prompt === 'string' ? prompt.slice(0, PROMPT_HEAD).replace(/\r\n?/g, '\n') : ''
     const output = OUTPUT_LINE.exec(head)
-    const name = NAME_LINE.exec(head)
     const row: AgentRow = {
       ...EMPTY_AGENT,
       step: output === null ? null : output[2],
       role: output === null ? null : output[3],
-      name: name === null ? null : fit(name[1], 40),
+      name: null,
       startedMs: await $.clock.now(),
       isRunning: true,
     }

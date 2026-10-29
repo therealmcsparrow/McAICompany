@@ -39,10 +39,10 @@ test('section 6 names which rounds fix_rounds counts', () => {
 
 test('the reference runs gate or off at the Plan Gate, wave after the form, read before the Ship Gate', () => {
   has(reference,
-    'plan-check.mjs" off \'<slug>\'',
-    'plan-check.mjs" gate \'<slug>\' \'<plan name>\' --policy \'<warn|block>\'',
-    'plan-check.mjs" wave \'<slug>\' \'<count>\'',
-    'plan-check.mjs" read \'<slug>\'',
+    'run.mjs" plan-check off \'<slug>\'',
+    'run.mjs" plan-check gate \'<slug>\' \'<plan name>\' --policy \'<warn|block>\'',
+    'run.mjs" plan-check wave \'<slug>\' \'<count>\'',
+    'run.mjs" plan-check read \'<slug>\'',
     'Plan check: mark warnings as noise',
     '`plan-check marker: <state, or the error line>`',
     'exit 2 (`block`) is shown like `warn`');
@@ -51,7 +51,7 @@ test('the reference runs gate or off at the Plan Gate, wave after the form, read
 
 test('the reference runs gate with plan name none when files-touched lists no plan file, only for warn or block', () => {
   has(reference,
-    'plan-check.mjs" gate \'<slug>\' \'none\' --policy \'<warn|block>\'',
+    'run.mjs" plan-check gate \'<slug>\' \'none\' --policy \'<warn|block>\'',
     'reason `plan-name`');
   assert.ok(!reference.includes('--policy \'<policy>\''));
   assert.ok(!reference.includes('skip the scan'));
@@ -60,7 +60,7 @@ test('the reference runs gate with plan name none when files-touched lists no pl
 test('the reference resolves the policy first and runs off whatever files-touched says', () => {
   const step1 = reference.slice(reference.indexOf('1. **Before the Gate form.**'), reference.indexOf('2. **Run it.**'));
   const at = (s) => { const i = step1.indexOf(s); assert.ok(i !== -1, `missing: ${s}`); return i; };
-  assert.ok(at('plan_check.policy') < at('plan-check.mjs" gate'));
+  assert.ok(at('plan_check.policy') < at('run.mjs" plan-check gate'));
   has(step1, 'With `off`, run the `off` command of step 2 whatever `files-touched` says');
   has(step1, 'Only with `warn` or `block` and no plan file');
 });
@@ -76,5 +76,5 @@ test('review, planning and feedback texts carry the open-decision wiring', () =>
   const review = read('skills/review/SKILL.md');
   has(review, 'a Nit `[open-decision] <plan file>:<line or section>', 'The tag never appears under `## Blocking`');
   has(read('skills/planning/SKILL.md'), 'Decided: <choice> because <reason>', '`TBD`, `TODO` or `decide later`');
-  has(read('skills/feedback/SKILL.md'), 'plan-check-verdict.mjs" verdict --runs', '## Plan check');
+  has(read('skills/feedback/SKILL.md'), 'run.mjs" plan-check-verdict verdict --runs', '## Plan check');
 });

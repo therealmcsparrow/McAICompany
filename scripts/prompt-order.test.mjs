@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { loadGolden } from './contract-fixtures.mjs';
 
-// Drift test for the canonical dispatch line order (dispatch-prompt v3.1) plus one
+// Drift test for the canonical dispatch line order (dispatch-prompt v4) plus one
 // assertion per wiring rule of skills/pipeline. The order is for reading only: no cache claim anywhere.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -35,12 +36,12 @@ const keys = (lines) => lines
   .map(l => l.startsWith('Follow aico:handoff.') ? 'Follow' : /^([A-Z][A-Za-z ]*?):/.exec(l)?.[1])
   .filter(Boolean);
 
-const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Review format', 'Input Handoffs', 'Rule slice', 'Task', 'Files', 'Task brief', 'Output', 'Goal', 'Follow'];
-const ROUND_1 = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Input', 'Output', 'Goal'];
+const golden = loadGolden('dispatch-prompt');
+const { pipeline: PIPELINE_ORDER, round1: ROUND_1 } = golden.json('order.json');
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -49,7 +50,7 @@ test('the pipeline dispatch block follows the canonical order', () => {
   assert.deepEqual(keys(stepBlock()), PIPELINE_ORDER);
 });
 
-test('the pipeline dispatch block carries Context cap: and Review depth: as in v3.1', () => {
+test('the pipeline dispatch block carries Context cap: and Review depth: as in v4', () => {
   const b = stepBlock().join('\n');
   assert.match(b, /^Context cap: <cap> handover <n>/m);
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
@@ -93,18 +94,18 @@ test('handover follows the Context cap line for Roles; the Lead keeps its own 15
 });
 
 test('review depth is computed per dispatch from the diff, for the code-reviewer only', () => {
-  has(pipeline, 'review-depth.mjs', '--risk', 'per dispatch', 'Fix-round', 'never from a builder');
+  has(pipeline, 'run.mjs" review-depth', '--risk', 'per dispatch', 'Fix-round', 'never from a builder');
 });
 
 test('each Step is linted, then recorded in the ledger from the notification integers only', () => {
-  has(pipeline, 'handoff-lint.mjs', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
-  has(pipeline, 'ledger.mjs" add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
+  has(pipeline, 'run.mjs" handoff-lint', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
+  has(pipeline, 'run.mjs" ledger add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
   has(pipeline, /integers only/i);
 });
 
 test('the ledger is reconciled and the cost line built before the Ship Gate, shown at Ship only', () => {
-  has(pipeline, 'ledger.mjs" reconcile <slug>', 'ledger.mjs" ship <slug> <acs> <fix_rounds> <high_blockers>', 'ledger.mjs" report <slug> --acs <acs>');
-  assert.ok(pipeline.indexOf('ledger.mjs" report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
+  has(pipeline, 'run.mjs" ledger reconcile <slug>', 'run.mjs" ledger ship <slug> <acs> <fix_rounds> <high_blockers>', 'run.mjs" ledger report <slug> --acs <acs>');
+  assert.ok(pipeline.indexOf('run.mjs" ledger report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
   has(pipeline, 'After the Ship Gate is approved', 'scorecard line', '00-summary.md', 'never stops the run');
   has(pipeline, 'spend', 'cache read', 'per shipped AC', 'context at end (not cost)', 'at the Ship Gate only');
 });
@@ -113,25 +114,25 @@ test('tool checks come first in the pre-filter; a T- row blocks only after the r
   const at = pipeline.indexOf('**Pre-filter');
   assert.ok(at >= 0);
   const pre = pipeline.slice(at, at + 1600);
-  assert.ok(pre.indexOf('rule-check.mjs') >= 0 && pre.indexOf('rule-check.mjs') < pre.indexOf('npm run check'), pre);
-  has(pre, 'run --base <sha>', '`list`', 'T-', 'does **not** consume a Fix round');
+  assert.ok(pre.indexOf('run.mjs" rule-check') >= 0 && pre.indexOf('run.mjs" rule-check') < pre.indexOf('npm run check'), pre);
+  has(pre, 'run --base <Base commit> --run <slug>', '`list`', 'T-', 'does **not** consume a Fix round');
 });
 
 test('slices are checked before builders; drift runs after sign-off and before Ship', () => {
-  has(pipeline, 'rule-check.mjs" slices', 'rule-check.mjs" drift');
+  has(pipeline, 'run.mjs" rule-check slices', 'run.mjs" rule-check drift');
   const signoff = pipeline.slice(pipeline.indexOf('**Ruleset sign-off:**'), pipeline.indexOf('**Ruleset sign-off:**') + 700);
-  has(signoff, 'rule-check.mjs" drift');
+  has(signoff, 'run.mjs" rule-check drift');
   const finish = pipeline.slice(pipeline.indexOf('## 6. Finish'));
-  has(finish, 'rule-check.mjs" drift', /before the Ship Gate/i);
+  has(finish, 'run.mjs" rule-check drift', /before the Ship Gate/i);
 });
 
-test('builders get Rule slice: after Input Handoffs: instead of the senior-engineer Handoff (dispatch-prompt v3.1)', () => {
+test('builders get Rule slice: after Input Handoffs: instead of the senior-engineer Handoff (dispatch-prompt v4)', () => {
   const names = stepBlock().filter(l => !l.startsWith('#')).map(l => l.split(':')[0]);
   assert.equal(names[names.indexOf('Input Handoffs') + 1], 'Rule slice');
   const bullet = skillOnly.split('\n').find(l => l.startsWith('- **Builders**'));
   assert.ok(bullet, 'builders bullet present');
   has(bullet, '.company/work/<slug>/rules/<task>.md', 'directly after `Input Handoffs:`', "no longer the Senior Engineer's Handoff", 'from the plan, never from Role output');
-  has(bullet, 'rule-check.mjs" slices <that Handoff>', "no slice file for the builder's task", 'no Fix round');
+  has(bullet, 'run.mjs" rule-check slices <that Handoff>', "no slice file for the builder's task", 'no Fix round');
   has(bullet, 'blocked — missing rule slice', 'no ruleset', 'at most 3');
 });
 
@@ -162,8 +163,8 @@ test('the commit line is built from checked values in single quotes (agentsec.M-
   has(line, 'no `aico:`, `aico/`, `[builder]`, `senior-engineer:`');
 });
 
-test('rewritten lines keep their rules: settings, locks, auto Gates, Name:, Language:', () => {
-  has(skillOnly, 'never re-resolve mid-run', '`aico-settings` v1', 'Locks are already applied', 'Language: <tag from Setup §1.6>', "Name: <the Role's name from Setup §1.7>");
+test('rewritten lines keep their rules: settings, locks, auto Gates, Language:', () => {
+  has(skillOnly, 'never re-resolve mid-run', '`aico-settings` v1', 'Locks are already applied', 'Language: <tag from Setup §1.6>');
   has(skillOnly, '**Auto Gates (§1.7):**', 'it never merges', 'An auto **Plan Gate** still stops with a form', 'A Gate is never skipped', '**Always a form, whatever the settings say:**');
   has(skillOnly, 'A resolved model of `inherit` means your own session model', 'Never pass the literal `inherit`');
   has(skillOnly, '`Design skills:` lists the names in `.company/project.md` `## Design skills`');
@@ -177,9 +178,9 @@ test('SKILL.md stays within 125 lines and every file is LF only', () => {
 
 test('personality: only the cooler and format 1 fences end with Personality:, the format 2 and pipeline fences never have it', () => {
   const cooler = blocks(read('skills/cooler/SKILL.md')).find(l => l.some(x => x.startsWith('Company profile:')));
-  assert.deepEqual(keys(cooler), ['Goal', 'Input', 'Project brief', 'Output', 'Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Personality']);
+  assert.deepEqual(keys(cooler), ['Goal', 'Input', 'Project brief', 'Output', 'Project profile', 'Company profile', 'Language', 'Settings', 'Personality']);
   const f1 = blocks(read('skills/brainstorm/references/format-1.md')).find(l => l.some(x => x.startsWith('Company profile:')));
-  assert.deepEqual(keys(f1), ['Goal', 'Input', 'Output', 'Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Personality']);
+  assert.deepEqual(keys(f1), ['Goal', 'Input', 'Output', 'Project profile', 'Company profile', 'Language', 'Settings', 'Personality']);
   assert.ok(!keys(stepBlock()).includes('Personality'));
   assert.ok(!keys(blocks(brainstorm).find(l => l.some(x => x.startsWith('Company profile:')))).includes('Personality'));
   has(contract, 'as the last line');
@@ -192,4 +193,56 @@ test('personality: the cooler Goal and the format 1 Goal end with the Contract s
     const goal = read(f).split('\n').find(l => l.startsWith('Goal: '));
     assert.ok(goal && goal.endsWith(sentence), `${f}: Goal ends with the sentence`);
   }
+});
+
+test('the golden dispatch step keeps the canonical key order', () => {
+  const step = golden.text('step.txt');
+  const sample = keys(step.split('\n'));
+  let at = -1;
+  for (const k of sample) {
+    const i = PIPELINE_ORDER.indexOf(k, at + 1);
+    assert.ok(i > at, `key ${k} is out of order or unknown`);
+    at = i;
+  }
+  assert.equal(sample.at(-1), 'Follow');
+  assert.ok(!step.includes('\r'));
+});
+
+// ---- no names in prompts (dispatch-prompt v4) ----
+
+const walk = (dir) => readdirSync(join(root, dir), { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]);
+const promptFiles = [...walk('skills'), ...walk('agents')].filter(f => f.endsWith('.md'));
+
+test('no fenced dispatch block in a skill or agent holds a Name: line', () => {
+  const offenders = [];
+  for (const f of promptFiles) {
+    for (const b of blocks(read(f))) if (b.some(l => /^Name:/.test(l))) offenders.push(f);
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test('no canonical order in the Contract lists Name:, and the fixture order has no Name', () => {
+  const orders = contract.split('\n').filter(l => /^- \*\*(Pipeline Step|Reprompt Step|Brainstorm \(every)/.test(l));
+  assert.equal(orders.length, 3);
+  for (const l of orders) assert.ok(!l.includes('`Name:`'), l.slice(0, 60));
+  assert.ok(!PIPELINE_ORDER.includes('Name') && !ROUND_1.includes('Name'));
+  assert.match(contract, /^# Contract: dispatch-prompt v4\.0$/m);
+});
+
+test('a Name: line in a prompt is ignored and the Role id is used (error case)', () => {
+  has(contract, '`Name:` present', 'the Role ignores the line and uses its Role id');
+});
+
+test('the pipeline holds the quoting rule: names become Role ids, routing first', () => {
+  has(skillOnly, '**No names in a dispatch.**', "Routing happens first, on the CEO's own words", 'replace each effective name in it', 'with its Role id');
+});
+
+test('the pipeline points to the CEO pack and to step times', () => {
+  has(skillOnly, '`references/ceo-pack.md`', '`step-times` v1');
+});
+
+test('the cooler file names Roles by id: frontmatter ids: role and role cues', () => {
+  const cooler = read('skills/cooler/SKILL.md');
+  has(cooler, 'ids: role', '`**<role>**` on every speaker line', 'anything you show the CEO renders each id as `Name (role)`');
+  assert.ok(!/\*\*<NAME>/.test(cooler));
 });

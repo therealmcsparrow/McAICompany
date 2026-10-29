@@ -8,7 +8,7 @@ argument-hint: <product or release to launch>
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:launch` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook launch` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook launch` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`. No Plan Gate unless step 4 builds a landing page with Core/Contract changes.
 Publishing and deploying always ask at the Ship Gate, whatever the settings say (`aico:pipeline` §4).

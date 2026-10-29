@@ -4,6 +4,8 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
+import { checkDrift } from './contract-drift.mjs';
+import { probe } from './drift-probe.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -101,7 +103,7 @@ function checkCompanyTypes(root, agentNames, playbooks, skills, errors) {
     if (!inSome.has(p.name)) errors.push(`ERROR ${p.rel}: Playbook is in no company type manifest`);
     const lines = p.text.split(/\r?\n/);
     const help = lines.findIndex(l => l.startsWith('**Help:**'));
-    const want = `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${p.name}\` first;`;
+    const want = `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${p.name}\` first;`;
     if (help === -1 || lines[help + 1] !== '' || !(lines[help + 2] ?? '').startsWith(want))
       errors.push(`ERROR ${p.rel}: Playbook needs one empty line after its **Help:** line, then the **Type:** company-type line`);
   }
@@ -277,6 +279,7 @@ const DIGEST_PARTS = ['Decisions', 'Open threads', 'Dissent', 'Threads', 'Estima
 const ROLE_RE = '[a-z][a-z0-9-]*';
 const ESTIMATE_RE = /^- (?:[SML], \d+(?:\.\d+)?(?:[–-]\d+(?:\.\d+)?)? d|not estimated)(?: — src: R(\d+))?$/;
 const REPLY_HEADING_RE = new RegExp(`^#### ([^()]+) \\((${ROLE_RE})\\)(?: — (full pass|crossfire))?$`);
+const REPLY_HEADING_ROLE_RE = new RegExp(`^#### (${ROLE_RE})(?: — (full pass|crossfire))?$`);
 const PASS_RANK = { ideas: 0, full: 1, crossfire: 2 };
 const short = s => (s.length > 60 ? `${s.slice(0, 60)}…` : s);
 
@@ -310,7 +313,7 @@ function splitSrc(line) {
 const quoted = s => (s.length >= 2 && s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : null);
 
 // Parses `## Rounds` into Map<round, { mode, replies, lead, ceo }>. Rule 8 errors are pushed to `bad`.
-function parseRounds(lines, bad) {
+function parseRounds(lines, bad, idsRole = false, roster = []) {
   const rounds = new Map();
   let cur = null, reply = null, region = null;
   const closeReply = () => { if (reply) reply.body = reply.lines.join('\n').trim(); reply = null; };
@@ -347,10 +350,12 @@ function parseRounds(lines, bad) {
     } else if (line.startsWith('#### ')) {
       closeReply();
       region = null;
-      const m = REPLY_HEADING_RE.exec(line);
+      const m = (idsRole ? REPLY_HEADING_ROLE_RE : REPLY_HEADING_RE).exec(line);
       if (!m) { bad.push(`reply heading malformed in round ${cur.n}: ${short(line)}`); continue; }
+      if (idsRole && !roster.includes(m[1])) { bad.push(`reply heading names no roster Role in round ${cur.n}: ${short(line)}`); continue; }
       if (cur.lead !== null || cur.ceo !== null) cur.late = true;
-      reply = { name: m[1], role: m[2], key: `${m[1]} (${m[2]})`, pass: m[3] === 'full pass' ? 'full' : m[3] === 'crossfire' ? 'crossfire' : 'ideas', lines: [] };
+      const [name, role, passWord] = idsRole ? [null, m[1], m[2]] : [m[1], m[2], m[3]];
+      reply = { name, role, key: idsRole ? role : `${name} (${role})`, pass: passWord === 'full pass' ? 'full' : passWord === 'crossfire' ? 'crossfire' : 'ideas', lines: [] };
       cur.replies.push(reply);
     } else if (line.startsWith('**Lead:**')) {
       closeReply();
@@ -392,6 +397,8 @@ export function checkBrainstorm(text, { file = 'brainstorm' } = {}) {
   if (!fm.has('format')) return errors;
   if (fm.get('format') !== '2') return [...errors, err(2, `unknown brainstorm format ${short(fm.get('format'))}`)];
 
+  if (fm.has('ids') && fm.get('ids') !== 'role') return [...errors, err(1, `unknown ids value ${short(fm.get('ids'))}`)];
+  const idsRole = fm.get('ids') === 'role';
   const body = lines.slice(front.end + 1);
   const sections = [];
   for (const line of body) {
@@ -421,7 +428,7 @@ export function checkBrainstorm(text, { file = 'brainstorm' } = {}) {
   if (roles.includes('architect') && !parts.has('Estimate')) errors.push(err(3, 'Digest lacks ### Estimate (the roles include architect)'));
 
   const bad8 = [];
-  const rounds = parseRounds(roundsSection.lines, bad8);
+  const rounds = parseRounds(roundsSection.lines, bad8, idsRole, roles);
   for (const m of bad8) errors.push(err(8, m));
 
   // Questions (rule 4)
@@ -473,11 +480,19 @@ export function checkBrainstorm(text, { file = 'brainstorm' } = {}) {
         if (q !== null) { if (!(rounds.get(s.round).ceo ?? '').includes(q)) errors.push(err(6, `Decision quote is not in the **CEO:** line of R${s.round}: ${short(q)}`)); }
         else if (!(m[3].startsWith('default: ') && m[3].endsWith(' (CEO skipped)'))) errors.push(err(6, `Decision is neither a quote nor "default: … (CEO skipped)": ${short(line)}`));
       } else if (name === 'Dissent' || name === 'Threads') {
-        const m = name === 'Dissent'
-          ? new RegExp(`^- ([^()]+) \\((${ROLE_RE})\\) — (.*)$`).exec(s.body)
-          : new RegExp(`^- I-\\d{1,6}\\.\\d{1,6} ← ([^()]+) \\((${ROLE_RE})\\) (.*)$`).exec(s.body);
-        if (!m) { errors.push(err(name === 'Dissent' ? 6 : 5, `${name} line malformed: ${short(line)}`)); continue; }
-        const key = `${m[1]} (${m[2]})`;
+        let m;
+        if (idsRole) {
+          const r = name === 'Dissent'
+            ? new RegExp(`^- (${ROLE_RE}) — (.*)$`).exec(s.body)
+            : new RegExp(`^- I-\\d{1,6}\\.\\d{1,6} ← (${ROLE_RE}) ((?:agree|challenge|build-on): .*)$`).exec(s.body);
+          if (r && roles.includes(r[1])) m = [r[0], null, r[1], r[2]];
+        } else {
+          m = name === 'Dissent'
+            ? new RegExp(`^- ([^()]+) \\((${ROLE_RE})\\) — (.*)$`).exec(s.body)
+            : new RegExp(`^- I-\\d{1,6}\\.\\d{1,6} ← ([^()]+) \\((${ROLE_RE})\\) (.*)$`).exec(s.body);
+        }
+        if (!m) { errors.push(err(name === 'Dissent' ? 6 : 5, `${name} line malformed${idsRole ? ' (this file names Roles by Role id)' : ''}: ${short(line)}`)); continue; }
+        const key = idsRole ? m[2] : `${m[1]} (${m[2]})`;
         if (allSkip(s.round, key)) errors.push(err(6, `${key} only skipped in R${s.round} and has no Digest entry from it: ${short(line)}`));
         else if (name === 'Dissent') {
           const q = quoted(m[3]);
@@ -790,8 +805,8 @@ export function check(root, { today } = {}) {
       if (!b.text.includes('Company profile:')) continue;
       if (!b.text.includes('Language:'))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Language:`);
-      if (!/^Name:/m.test(b.text))
-        errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Name:`);
+      if (/^Name:/m.test(b.text))
+        errors.push(`ERROR ${rel}:${b.line}: dispatch block has a Name: line (dispatch-prompt v4: a Role gets no name)`);
     }
   }
   for (const p of playbooks)
@@ -818,6 +833,15 @@ export function check(root, { today } = {}) {
 
 if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) {
   const args = process.argv.slice(2);
+  if (args[0] === '--drift') {
+    // Contract versions, cites and anchors only (contract-index v1); all logic is in contract-drift.mjs.
+    if (args.length > 2) { console.error('usage: check.mjs --drift [repo root]'); process.exit(2); }
+    const driftRoot = resolve(args[1] ?? join(fileURLToPath(import.meta.url), '..', '..'));
+    const errors = [...checkDrift(driftRoot), ...probe(driftRoot)];
+    errors.forEach(l => console.log(l));
+    console.log(`${errors.length} error(s)`);
+    process.exit(errors.length ? 1 : 0);
+  }
   if (args[0] === '--packs') {
     // Library mode: 90-day freshness and advisories.json (rule-pack v1.1).
     if (!args[1] || args.length > 2) { console.error('usage: check.mjs --packs <library folder>'); process.exit(2); }

@@ -8,7 +8,7 @@ argument-hint: <client question | brief file> [quick|deep]
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:report` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook report` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook report` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`. The type lines from that check are the run's company type (`research`): its Roles are the only ones you dispatch, and its Ship Gate rules apply (`aico:pipeline` §4). No report is released before the Ship Gate, whatever the settings say.
 

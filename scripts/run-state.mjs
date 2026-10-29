@@ -1,14 +1,15 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.4). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (run-state v1.5). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
 // symlink, and read with the handoff-lint parser.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, realpathSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
 
 export const MAX_FILE = 64 * 1024;
@@ -25,6 +26,12 @@ const STEP_RE = /^\d{1,3}$/;
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const WAVE_RE = /^[1-9]\d?$/;
 const GATES = new Set(['brief', 'plan', 'ship']);
+const CEO_GATES = new Set(['brief', 'plan', 'ship', 'none']);
+const CEO_N_RE = /^(?:[1-9]|1\d|20)$/;
+const PHASES = new Set(['start', 'stop']);
+const SUB_ID_RE = /^[0-9a-f]{12}$/;
+const SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const AICO_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const RESULTS = new Set(['passed', 'changed', 'stopped']);
 const PICKS = new Set(['use', 'edit', 'keep', 'stop']);
 const ASKED_RE = /^[0-3]$/;
@@ -38,7 +45,10 @@ const TRIAGE_LINE_RE = / \(triage: XS, risk low, (feature|bug|refactor|launch|au
 const FIX_LINE_RE = / \(triage: (XS|S|M), risk low, (bug), route fix\)$/;
 const TIER_RANK = { low: 1, medium: 2, high: 3 };
 // Allowed keys per event, beyond `v`, `at` and `ev`.
-const EXTRA = { start: [], wave: ['wave'], gate: ['gate', 'result'], ask: ['gate'], pick: ['pick', 'asked'], end: ['outcome'] };
+const EXTRA = { start: [], ceo: ['gate', 'n'], sub: ['role', 'id', 'phase'], wave: ['wave'], gate: ['gate', 'result'], ask: ['gate'], pick: ['pick', 'asked'], end: ['outcome'] };
+
+// Optional keys per event.
+const OPTIONAL = { start: ['aico'], sub: ['session'] };
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
@@ -79,8 +89,15 @@ function validRecord(o) {
   const keys = Object.keys(o);
   if (o.v !== 1 || typeof o.at !== 'string' || !AT_RE.test(o.at)) return false;
   if (typeof o.ev !== 'string' || !Object.hasOwn(EXTRA, o.ev)) return false;
-  const allowed = new Set(['v', 'at', 'ev', ...EXTRA[o.ev]]);
-  if (keys.length !== allowed.size || !keys.every(k => allowed.has(k))) return false;
+  const required = ['v', 'at', 'ev', ...EXTRA[o.ev]];
+  const optional = OPTIONAL[o.ev] ?? [];
+  if (!required.every(k => Object.hasOwn(o, k)) || !keys.every(k => required.includes(k) || optional.includes(k))) return false;
+  if (o.ev === 'start') return !('aico' in o) || (typeof o.aico === 'string' && AICO_RE.test(o.aico));
+  if (o.ev === 'ceo') return typeof o.gate === 'string' && CEO_GATES.has(o.gate) && Number.isInteger(o.n) && o.n >= 1 && o.n <= 20;
+  if (o.ev === 'sub') {
+    return typeof o.role === 'string' && ROLE_RE.test(o.role) && typeof o.id === 'string' && SUB_ID_RE.test(o.id)
+      && typeof o.phase === 'string' && PHASES.has(o.phase) && (!('session' in o) || (typeof o.session === 'string' && SESSION_RE.test(o.session)));
+  }
   if (o.ev === 'wave') return Number.isInteger(o.wave) && o.wave >= 1 && o.wave <= 99;
   if (o.ev === 'gate') return typeof o.gate === 'string' && GATES.has(o.gate) && typeof o.result === 'string' && RESULTS.has(o.result);
   if (o.ev === 'ask') return typeof o.gate === 'string' && GATES.has(o.gate);
@@ -162,7 +179,7 @@ function readSteps(dir, warnings) {
 function load(root, slug, now) {
   const { dir, file } = paths(root, slug);
   const view = {
-    v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [], picks: [],
+    v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [], picks: [], ceo: [], subs: [], sessions: [],
     round: 0, tier: 'unknown', steps: [], warnings: [],
   };
   const dst = lstatOrNull(dir);
@@ -199,6 +216,16 @@ function load(root, slug, now) {
         view.gates.push({ gate: r.gate, result: r.result, at: r.at, wait: wait === null || wait < 0 ? null : wait });
       }
       else if (r.ev === 'pick') view.picks.push({ pick: r.pick, asked: r.asked, at: r.at });
+      else if (r.ev === 'ceo') view.ceo.push({ gate: r.gate, n: r.n, at: r.at });
+      else if (r.ev === 'sub') {
+        if (r.session && !view.sessions.includes(r.session)) view.sessions.push(r.session);
+        if (r.phase === 'start') view.subs.push({ role: r.role, id: r.id, start: r.at, stop: null, ms: null });
+        else {
+          const open = view.subs.findLast(s => s.id === r.id && s.start !== null && s.stop === null);
+          if (open) { open.stop = r.at; open.ms = Math.max(0, Date.parse(r.at) - Date.parse(open.start)); }
+          else view.subs.push({ role: r.role, id: r.id, start: null, stop: r.at, ms: null });
+        }
+      }
       else if (r.ev === 'end') { view.ended = r.at; view.outcome = r.outcome; }
     }
     if (!segmentOpen(seg)) view.state = 'ended';
@@ -426,25 +453,69 @@ export function triage(root, args, { now = Date.now() } = {}) {
   return JSON.stringify({ trusted: true, type: fixRoute ? match[2] : match[1] });
 }
 
+// The plan Gate under plan_check.policy block: every plan in the run folder is scanned again, and no record is read.
+// Settings and the plan check load only here. Throws Refusal on anything but a clean pass.
+function planGate(root, slug, home) {
+  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) refuse('bad slug');
+  let result;
+  try {
+    const load = createRequire(import.meta.url);
+    const { resolveSettings } = load('./settings.mjs');
+    if (resolveSettings({ home, cwd: root }).plan_check.policy !== 'block') return;
+    result = load('./plan-check.mjs').verifyPlans({ root, home, slug });
+  } catch {
+    refuse('plan gate: check failed');
+  }
+  if (result.state === 'open') refuse(`plan gate: ${result.count} open decisions in ${result.plan}`);
+  if (result.state !== 'pass') refuse(`plan gate: ${result.reason}`);
+}
+
+// argv[1] is not resolved, import.meta.url is: a symlinked folder (macOS /var -> /private/var) must still run.
+function isMainReal() {
+  try { return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); } catch { return false; }
+}
+
+// The agent slugs of this plugin: the file names under agents/, beside the scripts folder.
+function agentSlugs() {
+  try {
+    return new Set(readdirSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'agents')).filter(n => n.endsWith('.md')).map(n => n.slice(0, -3)));
+  } catch { return new Set(); }
+}
+
 function usage() {
-  return 'usage: start <slug> | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce> [--route fix]';
+  return 'usage: start <slug> [<aico version>] | ceo <slug> <brief|plan|ship|none> <1-20> | sub <slug> <start|stop> <role> <id> [<session>] | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce> [--route fix]';
 }
 
 // Returns { out, code }.
-export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
+export function run(argv, { root = process.cwd(), now = Date.now(), home } = {}) {
   const [cmd, ...rest] = argv;
   const opts = { now };
   try {
     switch (cmd) {
       case 'start':
-        if (rest.length !== 1) refuse(usage());
-        append(root, rest[0], { ev: 'start' }, opts);
+        if (rest.length < 1 || rest.length > 2) refuse(usage());
+        if (rest.length === 2 && !AICO_RE.test(rest[1])) refuse('aico must be a version like 0.19.1');
+        append(root, rest[0], rest.length === 2 ? { ev: 'start', aico: rest[1] } : { ev: 'start' }, opts);
         return { out: `ok: start ${rest[0]}`, code: 0 };
       case 'wave':
         if (rest.length !== 2) refuse(usage());
         if (!WAVE_RE.test(rest[1])) refuse('wave must be a number from 1 to 99');
         append(root, rest[0], { ev: 'wave', wave: Number(rest[1]) }, opts);
         return { out: `ok: wave ${rest[1]}`, code: 0 };
+      case 'ceo':
+        if (rest.length !== 3) refuse(usage());
+        if (!CEO_GATES.has(rest[1])) refuse('gate must be brief, plan, ship or none');
+        if (!CEO_N_RE.test(rest[2])) refuse('n must be 1 to 20');
+        append(root, rest[0], { ev: 'ceo', gate: rest[1], n: Number(rest[2]) }, opts);
+        return { out: `ok: ceo ${rest[1]} ${rest[2]}`, code: 0 };
+      case 'sub':
+        if (rest.length < 4 || rest.length > 5) refuse(usage());
+        if (!PHASES.has(rest[1])) refuse('phase must be start or stop');
+        if (rest[2] !== 'other' && !agentSlugs().has(rest[2])) refuse('role must be an agent slug or other');
+        if (!SUB_ID_RE.test(rest[3])) refuse('id must be 12 lowercase hex characters');
+        if (rest.length === 5 && !SESSION_RE.test(rest[4])) refuse('session must be a lowercase uuid');
+        append(root, rest[0], { ev: 'sub', role: rest[2], id: rest[3], phase: rest[1], ...(rest.length === 5 ? { session: rest[4] } : {}) }, opts);
+        return { out: `ok: sub ${rest[1]} ${rest[2]}`, code: 0 };
       case 'ask':
         if (rest.length !== 2) refuse(usage());
         if (!GATES.has(rest[1])) refuse('gate must be brief, plan or ship');
@@ -454,6 +525,7 @@ export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
         if (rest.length !== 3) refuse(usage());
         if (!GATES.has(rest[1])) refuse('gate must be brief, plan or ship');
         if (!RESULTS.has(rest[2])) refuse('result must be passed, changed or stopped');
+        if (rest[1] === 'plan' && rest[2] === 'passed') planGate(root, rest[0], home);
         append(root, rest[0], { ev: 'gate', gate: rest[1], result: rest[2] }, opts);
         return { out: `ok: gate ${rest[1]} ${rest[2]}`, code: 0 };
       case 'pick':
@@ -484,7 +556,7 @@ export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
   }
 }
 
-if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) {
+if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '') || isMainReal()) {
   const { out, code } = run(process.argv.slice(2));
   process.stdout.write(`${out}\n`);
   process.exit(code);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1). Node built-ins only, no child process.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.2). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { readPlanLines } from './plan-markdown.mjs';
 
 const KiB = 1024;
@@ -415,6 +416,10 @@ function readPlan(root, slug, name) {
   if (dir === null) throw new PlanProblem('plan-missing');
   if (dir === 'unsafe') throw new PlanProblem('plan-unreadable');
   const file = path.join(dir, name);
+  // The exact name must be in the listing: a case-folding file system would open another file.
+  let listing;
+  try { listing = fs.readdirSync(dir); } catch { throw new PlanProblem('plan-unreadable'); }
+  if (!listing.includes(name)) throw new PlanProblem('plan-missing');
   const st = lstatOrNull(file);
   if (!st) throw new PlanProblem('plan-missing');
   if (!isPlain(st)) throw new PlanProblem('plan-unreadable');
@@ -802,11 +807,28 @@ function cmdCheck(args, env) {
   return { code: 0, lines: gateBlock(parsed, cap, mode) };
 }
 
+// Under plan_check.policy block, every plan in the run folder is scanned again before begin, next or start, and no
+// record is trusted. Settings and the plan check load only here. Any failure to check is a refusal.
+function planGate(env, slug) {
+  let result;
+  try {
+    const load = createRequire(import.meta.url);
+    const { resolveSettings } = load('./settings.mjs');
+    if (resolveSettings({ home: env.home, cwd: env.root }).plan_check.policy !== 'block') return;
+    result = load('./plan-check.mjs').verifyPlans({ root: env.root, home: env.home, slug });
+  } catch {
+    throw new Refusal('plan gate: check failed');
+  }
+  if (result.state === 'open') throw new Refusal(`plan gate: ${result.count} open decisions in ${result.plan}`);
+  if (result.state !== 'pass') throw new Refusal(`plan gate: ${result.reason}`);
+}
+
 function cmdBegin(args, env) {
   const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value' });
   if (positional.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0]);
   const { cap, mode } = capAndMode(flags);
+  planGate(env, slug);
   const { plan, parsed } = planFor(env, slug, positional[1]);
   const st = loadRecord(env.root, slug).state ?? newState();
   if (st.running.length) throw new Refusal('a task is running');
@@ -832,6 +854,7 @@ function cmdNext(args, env) {
   const { positional, flags } = takeFlags(args, { '--json': 'bool' });
   if (positional.length !== 1) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0]);
+  planGate(env, slug);
   const { st, tasks, outcomes, doneCount, complete } = nextView(env, slug);
   const roleOf = new Map(tasks.map((t) => [t.id, t.role ?? '?']));
   if (flags['--json']) {
@@ -864,6 +887,7 @@ function twoArgs(args) {
 
 function cmdStart(args, env) {
   const [slug, id] = twoArgs(args);
+  planGate(env, slug);
   const { st, tasks, outcomes } = nextView(env, slug);
   if (!outcomes.some((e) => e.id === id && e.outcome === 'start')) throw new Refusal('not a start line of next');
   const done = st.done.get(st.round) ?? [];
@@ -1093,11 +1117,12 @@ const HANDLERS = {
 };
 
 // `now` (epoch ms) and `root` (the product root) are for callers that inject them; `pluginRoot` locates agents/.
-export function main(args, { now, root, pluginRoot } = {}) {
+export function main(args, { now, root, pluginRoot, home } = {}) {
   let agents = null;
   const env = {
     root: typeof root === 'string' && root !== '' ? root : process.cwd(),
     now: typeof now === 'number' ? now : Date.now(),
+    home: typeof home === 'string' && home !== '' ? home : undefined,
     agents: () => (agents ??= loadAgents(typeof pluginRoot === 'string' && pluginRoot !== '' ? pluginRoot : path.resolve(import.meta.dirname, '..')))
   };
   try {
@@ -1120,7 +1145,12 @@ export function main(args, { now, root, pluginRoot } = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+// A script started through a symlinked folder (macOS /var -> /private/var) has argv[1] unresolved while import.meta.url is the real path.
+function isMainReal() {
+  try { return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href; } catch { return false; }
+}
+
+if (process.argv[1] && (import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href || isMainReal())) {
   const { code, lines } = main(process.argv.slice(2));
   if (lines.length) process.stdout.write(`${lines.join('\n')}\n`);
   process.exitCode = code;

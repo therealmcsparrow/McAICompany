@@ -8,7 +8,7 @@ argument-hint: <scope>
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:refactor` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook refactor` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook refactor` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise, before pipeline Setup, ask the CEO in a form: **Run audit first (Recommended)** / **Skip audit**. Run audit first → tell the CEO to run `/aico:refactor "<scope>"` once the audit report is written, start `aico:audit` with the Skill tool, argument the scope, and end this run here: it has written nothing, and one Playbook runs at a time. Skip → stop and tell the CEO to bring an audit report. The Skill tool refuses it → tell the CEO to run `/aico:audit "<scope>"`, then `/aico:refactor "<scope>"`, and stop.
 

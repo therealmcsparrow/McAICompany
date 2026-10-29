@@ -182,7 +182,7 @@ test('research Playbook never edits product code and writes no lessons', () => {
 });
 
 test('type gating: research picks its Roles through the company type and checks each before dispatch', () => {
-  has(research, 'company-type.mjs" pick --max 2 market-researcher tech-researcher ux-researcher',
+  has(research, 'run.mjs" company-type pick --max 2 market-researcher tech-researcher ux-researcher',
     'pick design-researcher', 'check-role <role>', 'check-role product-manager', 'first Playbook of the `work:` type line');
   assert.ok(!/aico:feature/.test(research), 'research names no Playbook outside the type');
   assert.ok(!/pick --max 2[^`]*design-researcher/.test(research), 'design-researcher is not a default pick');

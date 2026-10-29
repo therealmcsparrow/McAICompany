@@ -1,0 +1,116 @@
+// Pure logic for the plan Gate mod: which commands and files it judges, and what a `plan-check verify --json` answer means.
+// Nothing here runs a process or touches a file. Allow-lists only: anything not matched exactly is not judged.
+
+const MAX_COMMAND = 4096;
+const MAX_PATH = 4096;
+const MAX_STDOUT = 65536;
+const MAX_COUNT = 1000000;
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SCRIPT_PATH = /^[A-Za-z0-9_.:/\\+@-]+$/;
+const POLICIES = ['off', 'warn', 'block'];
+const STATES = ['pass', 'open', 'error'];
+// A run-state record file under a run folder. Trailing dots, spaces and a stream suffix reach the same file on Windows.
+const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]+)\/run-state\.jsonl[. ]*(?::.*)?$/i;
+
+export const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
+
+export const TEXT = {
+  error: 'plan-check error',
+  denyError: 'aico plan gate: plan-check error; fix the plan check, then retry',
+  denyOpenUnknown: 'aico plan gate: open decisions; answer or settle them in the plan',
+  denyRecord: 'aico plan gate: the run record is written by the run-state script only',
+  failed: 'aico plan gate failed; refused'
+};
+
+export function isSlug(value) {
+  return typeof value === 'string' && SLUG.test(value);
+}
+
+function isScript(file, name) {
+  if (typeof file !== 'string' || file.startsWith('-') || !SCRIPT_PATH.test(file)) return false;
+  const path = file.replaceAll('\\', '/');
+  return path === `scripts/${name}` || path.endsWith(`/scripts/${name}`);
+}
+
+// The slug when the command is, token for token, one of the two recorded forms of the plan Gate; else null.
+//   node <path>/scripts/run-state.mjs gate <slug> plan passed
+//   node <path>/scripts/run.mjs run-state gate <slug> plan passed
+// Single spaces only: a quote, a chain, an env prefix, a redirect, a newline or any other character is not judged.
+export function parseGateCommand(command) {
+  if (typeof command !== 'string' || command.length > MAX_COMMAND) return null;
+  const argv = command.split(' ');
+  if (argv.length === 6 && argv[0] === 'node' && isScript(argv[1], 'run-state.mjs')) {
+    return argv[2] === 'gate' && argv[4] === 'plan' && argv[5] === 'passed' && isSlug(argv[3]) ? argv[3] : null;
+  }
+  if (argv.length === 7 && argv[0] === 'node' && isScript(argv[1], 'run.mjs') && argv[2] === 'run-state') {
+    return argv[3] === 'gate' && argv[5] === 'plan' && argv[6] === 'passed' && isSlug(argv[4]) ? argv[4] : null;
+  }
+  return null;
+}
+
+// For a path to a run-state record under `work/`: { slug } (slug is null when it is not a valid slug); else null.
+export function recordPath(path) {
+  if (typeof path !== 'string' || path.length > MAX_PATH) return null;
+  const found = RECORD_PATH.exec(path.replaceAll('\\', '/'));
+  if (found === null) return null;
+  return { slug: isSlug(found[1]) ? found[1] : null };
+}
+
+export function writeTarget(input) {
+  if (input === null || typeof input !== 'object') return null;
+  const own = (key) => (Object.hasOwn(input, key) && typeof input[key] === 'string' ? input[key] : null);
+  return own('file_path') ?? own('notebook_path') ?? own('path');
+}
+
+function parseVerify(stdout) {
+  if (typeof stdout !== 'string' || stdout.length > MAX_STDOUT) return null;
+  let value;
+  try {
+    value = JSON.parse(stdout.trim());
+  } catch {
+    return null;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const { v, policy, state, count } = value;
+  if (v !== 1 || !POLICIES.includes(policy) || !STATES.includes(state)) return null;
+  if (!Number.isInteger(count) || count < 0 || count > MAX_COUNT) return null;
+  return { policy, state, count };
+}
+
+function openText(count) {
+  return `aico plan gate: ${count} open decision${count === 1 ? '' : 's'}; answer or settle them in the plan`;
+}
+
+// What to do with one `plan-check verify <slug> --json` run.
+//   result: { exitCode, stdout } as `$.process.run` gives it, or null when the call itself failed
+//   last: the policy of the last answer this session, or null
+// Returns { policy, action: 'next' | 'deny' | 'toast', text }. `policy` is what the answer printed, else null.
+// Only a policy of `block` refuses a failure. The mod is the early explanation; the scripts refuse a Gate that is not met.
+export function decideVerify(result, last) {
+  const answer = result !== null && typeof result === 'object' && result.isStdoutTruncated !== true ? parseVerify(result.stdout) : null;
+  const exitCode = result !== null && typeof result === 'object' ? result.exitCode : null;
+  const policy = answer === null ? null : answer.policy;
+  const effective = policy ?? last;
+  const failure = () => {
+    if (effective === 'block') return { policy, action: 'deny', text: TEXT.denyError };
+    return { policy, action: 'toast', text: TEXT.error };
+  };
+  if (result === null || typeof result !== 'object') return failure();
+  if (exitCode === 2) {
+    if (answer === null) return { policy: 'block', action: 'deny', text: TEXT.denyOpenUnknown };
+    return { policy: answer.policy, action: 'deny', text: answer.state === 'open' ? openText(answer.count) : TEXT.denyError };
+  }
+  if (exitCode === 1) return failure();
+  if (exitCode !== 0 || answer === null) return failure();
+  if (answer.state === 'error') return failure();
+  if (answer.state === 'open') {
+    if (answer.policy === 'block') return { policy, action: 'deny', text: openText(answer.count) };
+    if (answer.policy === 'warn' && answer.count > 0) return { policy, action: 'toast', text: `aico plan gate: ${answer.count} open decision${answer.count === 1 ? '' : 's'} (warn)` };
+  }
+  return { policy, action: 'next', text: '' };
+}
+
+// The answer to the mod's own failure: refused only under a `block` policy.
+export function ownFailure(last) {
+  return last === 'block' ? 'deny' : 'next';
+}

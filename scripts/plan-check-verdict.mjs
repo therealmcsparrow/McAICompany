@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.1). Node built-ins and git only.
+// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.2). Node built-ins and git only.
 // Read-only: nothing is written to the repository or to .company/. Output goes to stdout (one line for `verdict`).
 // git runs through execFile with a fixed argument list, no shell, in the product root. Every value taken from git output and
 // reused as an argument is matched against a strict pattern first.

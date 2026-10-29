@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.4). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.5). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readRecord as readPlanCheck } from './plan-check.mjs';
+import { costText, readCost } from './cost-source.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
 import { readTierPath } from './tier-set.mjs';
@@ -71,6 +72,7 @@ const USAGE = [
   '  import <file> <key> <run> <acs>',
   '  ship <run> <acs> [fix_rounds] [high_blockers] [--baseline <run>,<run>,<run>]',
   '  scorecard <run> [--baseline <run>,<run>,<run>]',
+  '  receipt <run> [--baseline <run>,<run>,<run>]',
   '  report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]',
   '  brainstorm-report <run> [--against <run>]',
   '  model-verdict [--runs <3-50>]',
@@ -955,6 +957,7 @@ function scorecardLine(run, baselineRuns, extraWarnings = 0) {
   parts.push(`excluded: ${counts.excluded}`);
   if (baselineRuns.length) parts.push(targetSegment(mine, baselineRuns, counts));
   if (counts.warnings > 0) parts.push(`warnings: ${counts.warnings}`);
+  parts.push(costText(readCost(env.root, run)));
   return parts.join(' | ');
 }
 
@@ -990,6 +993,59 @@ function cmdScorecard(args) {
   const { rest, baselineRuns } = splitBaseline(args, usage);
   if (rest.length !== 1) throw new Refusal(usage);
   return [scorecardLine(checkRun(rest[0]), baselineRuns)];
+}
+
+// ---------- receipt ----------
+
+// The Gates of the run as recorded by run-state; none when there is no run-state.
+function gatesOf(run) {
+  try {
+    return showRun(env.root, run).gates.map((g) => `${g.gate} ${g.result}`);
+  } catch {
+    return [];
+  }
+}
+
+// The median time of the baseline runs that have a timed ship record: { median, n }, or undefined.
+function baselineTime(baselineRuns) {
+  const times = [];
+  for (const name of baselineRuns) {
+    const base = readSafe(name);
+    const ship = base.exists ? lastShipOf(base.records) : undefined;
+    if (ship && isTimed(ship)) times.push((Date.parse(ship.t_ship) - Date.parse(ship.t_start)) / 1000);
+  }
+  return times.length ? { median: exactMedian(times), n: times.length } : undefined;
+}
+
+// What the records of a run show: only the keys that were recorded. The cost line only when a source recorded it.
+function cmdReceipt(args) {
+  const usage = 'usage: receipt <run> [--baseline <run>,<run>,<run>]';
+  const { rest, baselineRuns } = splitBaseline(args, usage);
+  if (rest.length !== 1) throw new Refusal(usage);
+  const run = checkRun(rest[0]);
+  const own = readSafe(run);
+  const lines = [];
+  const ship = own.exists ? lastShipOf(own.records) : undefined;
+  const time = ship && isTimed(ship) ? (Date.parse(ship.t_ship) - Date.parse(ship.t_start)) / 1000 : undefined;
+  if (time !== undefined) {
+    lines.push(`time ${duration(time)}`);
+    const base = baselineRuns.length ? baselineTime(baselineRuns) : undefined;
+    if (base && base.median > time) {
+      lines.push(`time saved ${duration(base.median - time)} (baseline median ${duration(base.median)} of ${base.n} run${base.n === 1 ? '' : 's'})`);
+    }
+  }
+  const sum = summarize(own.records);
+  if (sum.any) {
+    const total = (key) => sum.transcripts.reduce((s, r) => s + r.tokens[key], 0);
+    const unreconciled = sum.unreconciled.length ? ` (${sum.unreconciled.length} unreconciled)` : '';
+    lines.push(`tokens ${TOKEN_KEYS.map((k) => `${k} ${total(k)}`).join(', ')}${unreconciled}`);
+  }
+  const gates = gatesOf(run);
+  if (gates.length) lines.push(`gates ${gates.join(', ')}`);
+  if (ship && get(ship, 'fix_rounds') !== undefined) lines.push(`fix rounds ${ship.fix_rounds}`);
+  const cost = readCost(env.root, run);
+  if (cost.state === 'recorded') lines.push(costText(cost));
+  return [lines.length ? `receipt ${run}` : `no records for ${run}`, ...lines];
 }
 
 // ---------- model verdict ----------
@@ -1424,12 +1480,12 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
   };
   try {
     const handlers = {
-      add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard,
+      add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard, receipt: cmdReceipt,
       report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict,
       'low-path-verdict': cmdLowPathVerdict
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
-    if (['report', 'brainstorm-report', 'scorecard'].includes(command) && rest.length === 0) throw new Refusal(USAGE);
+    if (['report', 'brainstorm-report', 'scorecard', 'receipt'].includes(command) && rest.length === 0) throw new Refusal(USAGE);
     return { code: 0, lines: handlers[command](rest, env) };
   } catch (error) {
     if (error instanceof Refusal) return { code: 2, lines: [`refused: ${error.message}`] };

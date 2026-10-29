@@ -303,18 +303,18 @@ const dispatchBlocks = rel => {
     else if (m && m[1].length >= open.size && /^\s*`+\s*$/.test(line)) { out.push(open); open = null; }
     else open.lines.push(line);
   });
-  return out.filter(b => b.lines.some(l => /^Name:/.test(l)));
+  return out.filter(b => b.lines.some(l => /^Company profile:/.test(l)));
 };
 
 test('dispatch-prompt: the Personality line is the last line of a cooler turn and a format 1 round and appears in no other dispatch', () => {
-  assert.match(promptDoc, /^# Contract: dispatch-prompt v3\.(?:[2-9]|\d{2,})/);
+  assert.match(promptDoc, /^# Contract: dispatch-prompt v(?:[4-9]|\d{2,})\.\d+/);
   for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/references/format-1.md']) {
     const withLine = dispatchBlocks(rel).filter(b => b.lines.some(l => /^Personality:/.test(l)));
     assert.ok(withLine.length >= 1, rel);
     for (const b of withLine) {
       const lines = b.lines.filter(l => l.trim());
       assert.match(lines.at(-1), /^Personality:/, `${rel}:${b.start}`);
-      const order = ['Project profile', 'Company profile', 'Language', 'Name'].map(k => lines.findIndex(l => l.startsWith(`${k}:`)));
+      const order = ['Project profile', 'Company profile', 'Language'].map(k => lines.findIndex(l => l.startsWith(`${k}:`)));
       assert.deepEqual(order, [...order].sort((a, b) => a - b), 'the earlier lines keep their order');
       assert.ok(!lines.some(l => /^Output: \.company\/work\//.test(l)), 'a social turn writes no Handoff');
     }
@@ -335,7 +335,7 @@ test('dispatch-prompt: stage writes one file per Role and prints paths only; the
   assert.deepEqual(Object.keys(out.files).sort(), ['architect', 'writer']);
   const dir = path.join(sb.repo, '.company', 'personality-input', out.run);
   for (const role of ['architect', 'writer']) {
-    assert.equal(path.resolve(out.files[role]), path.join(dir, `${role}.md`));
+    assert.equal(fs.realpathSync(out.files[role]), path.join(fs.realpathSync(dir), `${role}.md`));
     assert.equal(fs.readFileSync(out.files[role], 'utf8'), blockFromContract(DEFAULTS[role]));
   }
   assert.equal(fs.readFileSync(path.join(sb.repo, '.company', 'personality-input', '.gitignore'), 'utf8').trim(), '*');
@@ -394,14 +394,15 @@ test('dispatch-prompt: the v3.1 Context cap rule still holds under v3.2', () => 
   // The v3.1 sentence stays word for word, and the static check still enforces it.
   assert.ok(promptDoc.includes('**Enforcement:** `scripts/check.mjs` reports an `ERROR` for any fenced dispatch block that has an `Output: .company/work/` line and no `Context cap:` line. No Playbook is exempt.'));
   assert.match(promptDoc, /\| `Context cap: <cap> handover <n>` \|/);
-  assert.match(promptDoc, /\*\*Pipeline Step:\*\* `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` \(optional\), `Context cap:`/);
+  assert.match(promptDoc, /\*\*Pipeline Step:\*\* `Project profile:`, `Company profile:`, `Language:`, `Settings:` \(optional\), `Context cap:`/);
+  assert.ok(!/^\s*Name:/m.test(read('skills/pipeline/SKILL.md')));
 });
 
 // ================= brainstorm-file v2.1 =====================================================
 
 const NAMES = { architect: 'Ava (architect)', writer: 'Ren (writer)', 'product-manager': 'Pat (product-manager)' };
 const reply = n => fs.readFileSync(path.join(REPLIES, n), 'utf8');
-const repliesOf = map => Object.fromEntries(Object.entries(map).map(([role, f]) => [NAMES[role], reply(f)]));
+const repliesOf = map => Object.fromEntries(Object.entries(map).map(([role, f]) => [role, reply(f)]));
 
 function brainstormRun(sb, name = '2026-10-27 09.00 - Tea.md', roles = 'architect,writer,product-manager') {
   const folder = path.join(sb.repo, '.company', 'brainstorms');
@@ -438,7 +439,7 @@ test('brainstorm-file: every pass and a re-ask hold the block between Pass and T
   for (const role of pair) startsRight(role, 2, 'crossfire');
   // A re-ask goes to one Role, with the block in the same place.
   const q = brainstormRun(sb, '2026-10-27 10.00 - Re ask.md', 'architect,writer');
-  const bad = sb.run('brainstorm.mjs', ['apply', q.file, '1'], JSON.stringify({ replies: { 'Ava (architect)': 'I: only an idea, no risk line' }, lead: '' }));
+  const bad = sb.run('brainstorm.mjs', ['apply', q.file, '1'], JSON.stringify({ replies: { architect: 'I: only an idea, no risk line' }, lead: '' }));
   assert.equal(bad.code, 0, bad.err);
   const re = q.stage('1', '--reask', 'architect');
   assert.equal(re.code, 0, re.err);
@@ -618,7 +619,7 @@ test('company-type: every Playbook has the Type line after its Help line, with o
     const help = lines.findIndex(l => l.startsWith('**Help:**'));
     assert.ok(help > 0, name);
     assert.equal(lines[help + 1], '', name);
-    assert.equal(lines[help + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`, name);
+    assert.equal(lines[help + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`, name);
     assert.equal(lines.filter(l => l.startsWith('**Type:**')).length, 1, name);
   }
   for (const name of ALWAYS) assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /^\*\*Type:\*\*/m, name);
@@ -1002,8 +1003,8 @@ test('company-type: the consumers named in the Contract do what it says', () => 
   assert.match(help, /Keep the id from the first line \(`company type: <id> \(<label>\)…`\) and the `playbooks:` line/);
   assert.match(help, /list and explain only commands in `playbooks`/);
   const setup = read('skills/setup/SKILL.md');
-  assert.match(setup, /company-type\.mjs" list/);
-  assert.match(setup, /company-type\.mjs" set <id>/);
+  assert.match(setup, /run\.mjs" company-type list/);
+  assert.match(setup, /run\.mjs" company-type set <id>/);
   assert.match(setup, /`Area: company-type`/);
   assert.match(read('skills/lead/references/project-template.md'), /^<!-- company_type: .*-->$/m);
   assert.match(typeDoc, /\| `claims-cited` \| an `editor` Handoff in the run, `status: done`, no `## Blocking`/);

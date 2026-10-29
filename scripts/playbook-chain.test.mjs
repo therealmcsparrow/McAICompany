@@ -338,7 +338,7 @@ test('AC-chain-3j: every Help line answers from documentation/commands.md, names
     if (ls[first] !== l) why.push('is not the first body line after the title');
     if (!always) {
       const at = ls.indexOf(l);
-      if (ls[at + 1] !== '' || !ls[at + 2]?.startsWith(`**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${n}\` first;`)) why.push('is not followed by an empty line and the Type line');
+      if (ls[at + 1] !== '' || !ls[at + 2]?.startsWith(`**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${n}\` first;`)) why.push('is not followed by an empty line and the Type line');
     }
     if (why.length) bad.push(`skills/${n}/SKILL.md: ${why.join('; ')}`);
   }

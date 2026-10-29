@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 
 import { registerBlastRadius } from '../mods/blast-radius'
 import { registerCacheTax } from '../mods/cache-tax'
+import { registerPlanGate } from '../mods/plan-gate'
 import { registerReflect } from '../mods/reflect'
 import { registerRepromptGate } from '../mods/reprompt-gate'
 import { registerSavvy } from '../mods/savvy'
@@ -13,6 +14,7 @@ export const register: Register = on => {
   registerCacheTax(on)
   registerReflect(on)
   registerBlastRadius(on)
+  registerPlanGate(on)
   // Last, so the other mods' guards keep answering for their own failures as before.
   registerRepromptGate(on)
 }

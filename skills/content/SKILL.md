@@ -8,7 +8,7 @@ argument-hint: <topic, brief or existing draft to improve>
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:content` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook content` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook content` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`; keep the §1.0 type lines for the run. Use this for one piece. A multi-channel effort with several deliverables is `/aico:campaign`. Nothing is built; the Plan Gate shows no Core, Contracts or Ruleset line. Publishing or handing the piece to the client always asks at the Ship Gate (`aico:pipeline` §4). Only Roles in the type's `roles` are dispatched.
 

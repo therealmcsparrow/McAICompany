@@ -103,16 +103,20 @@ test('the reason is built from the guarded depth result alone', () => {
   assert.match(reason, /Security: a\/auth\.ts/);
 });
 
-test('parseSpawnLines reads only the four anchored lines, from the first 64 KiB', () => {
-  const prompt = 'Goal: x\nOutput: .company/work/optimize-brainstorm/87-backend-engineer.md\nName: Ben\nBase commit: 1551e10\nRisk tier: high\nmore';
-  assert.deepEqual(parseSpawnLines(prompt), { step: '87', role: 'backend-engineer', base: '1551e10', tier: 'high' });
-  assert.deepEqual(parseSpawnLines('Output: ../../etc/87-x.md\nBase commit: -rf\nRisk tier: HIGH'), { step: null, role: null, base: null, tier: null });
-  assert.deepEqual(parseSpawnLines('  Base commit: 1551e10'), { step: null, role: null, base: null, tier: null });
-  assert.deepEqual(parseSpawnLines(42), { step: null, role: null, base: null, tier: null });
-  const late = `${'x'.repeat(70000)}\nBase commit: 1551e10`;
+const B40 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+test('parseSpawnLines reads only the anchored lines, from the first 64 KiB', () => {
+  const prompt = `Goal: x\nOutput: .company/work/optimize-brainstorm/87-backend-engineer.md\nName: Ben\nBase commit: ${B40}\nRisk tier: high\nmore`;
+  assert.deepEqual(parseSpawnLines(prompt), { slug: 'optimize-brainstorm', step: '87', role: 'backend-engineer', base: B40, tier: 'high' });
+  assert.equal(parseSpawnLines(`Base commit: ${'b'.repeat(64)}`).base, 'b'.repeat(64));
+  for (const odd of ['1551e10', 'a'.repeat(39), 'a'.repeat(41), 'a'.repeat(63), 'HEAD', B40.toUpperCase()]) assert.equal(parseSpawnLines(`Base commit: ${odd}`).base, null, odd);
+  assert.deepEqual(parseSpawnLines('Output: ../../etc/87-x.md\nBase commit: -rf\nRisk tier: HIGH'), { slug: null, step: null, role: null, base: null, tier: null });
+  assert.deepEqual(parseSpawnLines(`  Base commit: ${B40}`), { slug: null, step: null, role: null, base: null, tier: null });
+  assert.deepEqual(parseSpawnLines(42), { slug: null, step: null, role: null, base: null, tier: null });
+  const late = `${'x'.repeat(70000)}\nBase commit: ${B40}`;
   assert.equal(parseSpawnLines(late).base, null);
-  const crlf = 'Base commit: 1551e10\r\nRisk tier: low\r\n';
-  assert.deepEqual(parseSpawnLines(crlf), { step: null, role: null, base: '1551e10', tier: 'low' });
+  const crlf = `Base commit: ${B40}\r\nRisk tier: low\r\n`;
+  assert.deepEqual(parseSpawnLines(crlf), { slug: null, step: null, role: null, base: B40, tier: 'low' });
   const t0 = Date.now();
   parseSpawnLines('Output: ' + 'a'.repeat(60000));
   assert.ok(Date.now() - t0 < 500);
@@ -122,7 +126,9 @@ test('reviewArgs builds an argument array and refuses anything that could be an 
   assert.equal(reviewArgs({ source: 'staged' }), null);
   assert.equal(reviewArgs({ source: 'staged', risk: 'high', repo: 'sub' }), null);
   assert.deepEqual(reviewArgs({ source: 'worktree', risk: 'high', repo: 'sub/dir' }), ['--worktree', '--json', '--risk', 'high', '--repo', 'sub/dir']);
-  assert.deepEqual(reviewArgs({ source: 'base', base: '1551e10', risk: 'low' }), ['1551e10', '--json', '--risk', 'low']);
+  assert.deepEqual(reviewArgs({ source: 'base', base: B40, slug: 'run-1', risk: 'low' }), [B40, '--run', 'run-1', '--json', '--risk', 'low']);
+  for (const slug of [undefined, null, '', 'Bad', '-x', 'a/b', '--staged']) assert.equal(reviewArgs({ source: 'base', base: B40, slug }), null, String(slug));
+  assert.equal(reviewArgs({ source: 'base', base: '1551e10', slug: 'run-1' }), null);
   assert.deepEqual(reviewArgs({ source: 'worktree', risk: 'unknown' }), ['--worktree', '--json']);
   assert.equal(reviewArgs({ source: 'base', base: '--staged' }), null);
   assert.equal(reviewArgs({ source: 'base', base: 'abc' }), null);
@@ -138,7 +144,7 @@ test('reviewArgs builds an argument array and refuses anything that could be an 
 function fixture() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'blast-'));
   const g = (...a) => spawnSync('git', a, { cwd: d, encoding: 'utf8' });
-  g('init', '-q');
+  g('init', '-q', '-b', 'aico/blast');
   g('config', 'user.email', 't@t');
   g('config', 'user.name', 't');
   g('config', 'commit.gpgsign', 'false');
@@ -197,7 +203,7 @@ test('drift: the tier and depth the mod shows equal review-depth --json (worktre
     assert.ok(listing(hits).includes(`Tier ${json.tier}, review depth ${json.depth}.`));
   }
   g('commit', '-q', '-m', 'work');
-  const { hits, json } = shown(review(d, [base, '--json', '--risk', 'medium']));
+  const { hits, json } = shown(review(d, [base, '--run', 'blast', '--json', '--risk', 'medium']));
   assert.equal(json.tier, 'medium');
   assert.equal(hits.tier, 'medium');
   assert.equal(hits.depth, json.depth);

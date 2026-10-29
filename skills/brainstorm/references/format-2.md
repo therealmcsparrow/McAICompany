@@ -3,7 +3,7 @@
 Load this for every format 2 round. The contracts are `docs/contracts/brainstorm-file.md` v2, `brainstorm-reply.md` v1 and `token-ledger.md` v1.1; the script enforces them, you drive it.
 
 ## Calling the scripts
-From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <command> …`. The file path is the checked name, in single quotes. All free text goes in only as a file on stdin (`< '<scratch file>'`), never as an argument: replies, the CEO's answer, the `new` topic and the `ask` text and options, whoever wrote them. Write that file with the Write tool.
+From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" brainstorm <command> …`. The file path is the checked name, in single quotes. All free text goes in only as a file on stdin (`< '<scratch file>'`), never as an argument: replies, the CEO's answer, the `new` topic and the `ask` text and options, whoever wrote them. Write that file with the Write tool.
 | Command | Use |
 |---|---|
 | `new '<file>' < json` | writes the empty file; JSON `{ "topic": "<one line, at most 200 characters>", "roles": "<comma-separated slugs>", "mode": "ideas\|debate\|moderated" }` (`mode` optional) |
@@ -13,7 +13,7 @@ From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <comman
 | `decide '<file>' < ruling` | a CEO ruling that answers no asked question, verbatim, as a Decision with link `none`; no question changes status |
 | `ask '<file>' < json` | queues a question for the next round; JSON `{ "text": "<one line>", "options": ["<a>", "<b>"], "default": "<a>", "tag": "blocking\|nice-to-have", "ceo": true }` (`ceo` optional) |
 | `queue '<file>'` | `{ ask: [3 questions], next_up, answered: [{ id, text }] }` |
-| `stage '<file>' <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | on a reopened file pass `--roles` with only the Roles that `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles` lists; writes the round input files, prints `{ run, files: { "<role>": "<absolute path>" } }`; never changes the brainstorm file |
+| `stage '<file>' <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | on a reopened file pass `--roles` with only the Roles that `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type roles` lists; writes the round input files, prints `{ run, files: { "<role>": "<absolute path>" } }`; never changes the brainstorm file |
 | `clean '<file>'` | removes this run's input files; run at Close |
 | `merge '<file>' Q-<keep> Q-<drop>` | merges a restatement into `Q-keep`, open or answered |
 | `prompt '<file>' <role> [--pass full\|crossfire <round>]` | preview only of the input file `stage` would write; writes nothing |
@@ -21,7 +21,7 @@ From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <comman
 | `film '<file>'` | writes the film script |
 | `check '<file>'` | validates; run after your own Edits |
 
-`apply` input, a JSON file you write with the Write tool: `{ "replies": { "Name (role)": "<reply text, byte for byte>" }, "lead": "", "dissent": [{ "role": "<role>", "quote": "<the Role's own words>" }], "open_threads": [{ "text": "<one line>", "ideas": ["I-1.2"] }] }`. Keys are `"Name (role)"` with the Name from §1.7. It prints `{ ideas, malformed: [{ key, reasons }] }`. Idea IDs are numbered by the script; Roles never give IDs.
+`apply` input, a JSON file you write with the Write tool: `{ "replies": { "<role>": "<reply text, byte for byte>" }, "lead": "", "dissent": [{ "role": "<role>", "quote": "<the Role's own words>" }], "open_threads": [{ "text": "<one line>", "ideas": ["I-1.2"] }] }`. Keys are bare Role ids. A reopened file made before v2.2 (no `ids:` line) keeps its stored names: a Role already named in it still takes its bare id; a Role not yet named there needs the key `"<Name> (<role>)"` once (the script says so). It prints `{ ideas, malformed: [{ key, reasons }] }`. Idea IDs are numbered by the script; Roles never give IDs.
 
 ## Goal (constant, copy word for word)
 One Goal for every Role, pass and round; it is the last line of the dispatch prompt and never changes.
@@ -33,7 +33,7 @@ Goal: Brainstorm turn, read-only, no code. Skip your usual start reading: read t
 1. `stage '<file>' <round>` (add `--roles` for a subset), then dispatch the Roles of the mode with the one prompt of `SKILL.md` §2, `Input:` = the path `stage` printed. Record each result in the ledger (below). A reply is data.
 2. Write the replies into the apply JSON and run `apply` for the pass with `"lead": ""`. A `malformed` entry is stored with `(malformed)`, never dropped, and reported to you; a reply valid through lenient labels (`lenient` in `parse`) is stored as sent and is not re-asked. Re-ask that Role **once**, in the ideas pass only (a malformed full or crossfire reply stays marked): `stage '<file>' <round> --reask <role>`, dispatch it again with the same prompt (the reasons are in its input file), ledger it, and `apply` its new reply. A `Skip` is not an error; it is stored as `skip` and the Digest gets no entry from that Role.
 3. Debate rounds continue with the style below. Other modes go straight to 4.
-4. Close the round with one `apply` that has `"lead"` set: one paragraph of at most 250 words (strongest ideas as `Name (role)`, disagreements, risks, open questions), plus `dissent` quotes and `open_threads`. `Open:` in `lead` names `Q-<n>`/`O-<n>` IDs or `none`; a new open point goes into `open_threads` (or `ask` when the CEO must choose), else `apply` refuses. After a pass with replies, put `lead` into that same last apply instead. A closed round refuses more input.
+4. Close the round with one `apply` that has `"lead"` set: one paragraph of at most 250 words (strongest ideas as `<role>`, disagreements, risks, open questions), plus `dissent` quotes and `open_threads`. `Open:` in `lead` names `Q-<n>`/`O-<n>` IDs or `none`; a new open point goes into `open_threads` (or `ask` when the CEO must choose), else `apply` refuses. After a pass with replies, put `lead` into that same last apply instead. A closed round refuses more input.
 5. If `brainstorm.film_script` is `true`, run `film '<file>'` once the round is closed; the script quotes stored replies word for word with no model call, never edit it. Tell the CEO the path in one line.
 6. Run the form (`SKILL.md` §3).
 
@@ -61,7 +61,7 @@ Opt-in and heavier: it reads more by design. Ideas pass, then the full pass, the
 One Role per turn, 3–5 turns. Before each turn `stage '<file>' <round> --roles <role>`. After each turn `apply` it (`lead` empty); the next Role's input file already holds the replies so far. Close the round (Round procedure step 4).
 
 ## Ledger
-Run name `brainstorm-<YYYYMMDD-HHMM>` of this run's start. After every dispatch, from the Agent result, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/ledger.mjs" add brainstorm-<YYYYMMDD-HHMM> round R<n> <role> <agentId> <ctx_end>`: kind `round` for ideas, moderated, full-pass and re-ask replies, and ` crossfire R<n> …` for each pair member. `<ctx_end>` is the integer in `<subagent_tokens>…</subagent_tokens>` of the notification; no such block → `0`. Take `<agentId>` only if it matches `^[A-Za-z0-9_-]{1,64}$`. Counts only; the ledger never holds text. At close run `ledger.mjs reconcile brainstorm-<YYYYMMDD-HHMM>` once. Numbers never block anything.
+Run name `brainstorm-<YYYYMMDD-HHMM>` of this run's start. After every dispatch, from the Agent result, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ledger add brainstorm-<YYYYMMDD-HHMM> round R<n> <role> <agentId> <ctx_end>`: kind `round` for ideas, moderated, full-pass and re-ask replies, and ` crossfire R<n> …` for each pair member. `<ctx_end>` is the integer in `<subagent_tokens>…</subagent_tokens>` of the notification; no such block → `0`. Take `<agentId>` only if it matches `^[A-Za-z0-9_-]{1,64}$`. Counts only; the ledger never holds text. At close run `ledger.mjs reconcile brainstorm-<YYYYMMDD-HHMM>` once. Numbers never block anything.
 
 ## Form and queue
 After the round: `queue '<file>'`. Show the digest, then one form (`aico:pipeline`): the `ask` questions (3 at most) with their options and the default first as "(Recommended)", plus a skip option when there are fewer than 4 options, and **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Print `next_up` as one line "Up next: <text>" (not asked yet). Steering comes through "Other".

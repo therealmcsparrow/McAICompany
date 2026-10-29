@@ -26,7 +26,7 @@ effort: medium
 - Otherwise assume, and write `prompt.md` (UTF-8, LF, ≤ 16 KiB): frontmatter `v: 1`, `target: claude-code | ai-chat | other-ai | unknown`, `language: <tag>`; then exactly six `## ` headings written in that language: Goal, Context, Inputs, Constraints, Output format, Done when. Deeper structure inside a part uses `###` or lower. Overwrite it each round.
 - `language` is the language of the CEO's original, unless the request or an answer asks for another.
 - Visible characters only in `prompt.md` and the Handoff: no zero-width, bidi or tag characters, no `<!--`.
-- Load `aico:handoff` with the Skill tool before you write the Handoff and use its format: `role: reprompter`, `task:` = the run folder name from `Output:`, `round` and `base-commit` from the dispatch, `By: <Name> (reprompter)` from `Name:`, then the `## Did`, `## Decisions`, `## Blocking`, `## Nits`, `## Next` headings (`- none` when empty).
+- Load `aico:handoff` with the Skill tool before you write the Handoff and use its format: `role: reprompter`, `task:` = the run folder name from `Output:`, `round` and `base-commit` from the dispatch, `By: reprompter` (your Role id; a `Name:` line in the dispatch is ignored), then the `## Did`, `## Decisions`, `## Blocking`, `## Nits`, `## Next` headings (`- none` when empty).
 - Handoff: `step:` = the dispatch `NN`; `files-touched: [<run folder>/prompt.md]`. `## Decisions`: one line per assumption, `- Assumed: <what> — <why>`, or `- none`.
 - Image-model target: write no `prompt.md` and no card; `status: done`, no `files-touched`, `## Next` = one line `- prompt-artist: <one-line brief>`.
 - Edit files and answer files refine the same prompt; keep what they do not change.

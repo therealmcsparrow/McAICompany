@@ -31,7 +31,7 @@ test("pipeline carries the Delta E edits", () => {
 test("tier-path.md names the commands, the Gate options and the fail-closed rule", () => {
   const text = read("skills/pipeline/references/tier-path.md");
   for (const word of ["preview", "begin", "sync", "raise", "--diff", "--plan", "fail closed", "--route fix",
-    "Approve, short path (Recommended)", "Approve, full path", "Change", "Stop", "${CLAUDE_PLUGIN_ROOT}/scripts/tier-set.mjs"]) {
+    "Approve, short path (Recommended)", "Approve, full path", "Change", "Stop", "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" tier-set"]) {
     assert.ok(text.toLowerCase().includes(word.toLowerCase()), `tier-path.md lacks ${word}`);
   }
   assert.ok(!text.includes("\r"), "tier-path.md has a CR byte");
@@ -139,10 +139,16 @@ function gitShow(spec) {
   }
 }
 
+// v0.18.0 text reached through the call forms that changed since: run.mjs resolver (plugin-root v1), full base id and run ref (dispatch-prompt v3.6), judging diff.
+const toCurrentCalls = (s) => s
+  .replace(/scripts\/([a-z][a-z-]*)\.mjs"/g, 'scripts/run.mjs" $1')
+  .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run <slug>` and `list` (`rule-check` v1.1)')
+  .replace('over the diff (`<sha>` = the Base commit)', 'over the judging diff (rule git.M-SEC4)');
+
 test("pre-filter, handoff-lint and full-suite text is byte-identical to v0.18.0 (AC8)", (t) => {
   const old = gitShow("v0.18.0:skills/pipeline/SKILL.md");
   if (old === null) return t.skip("git or tag v0.18.0 not available");
-  const oldText = old.replace(/\r\n/g, "\n");
+  const oldText = toCurrentCalls(old.replace(/\r\n/g, "\n"));
   const now = skill("pipeline");
   const line = (text, start) => text.split("\n").find((l) => l.startsWith(start));
   const prefilter = line(oldText, "- **Pre-filter before the reviewers.**");

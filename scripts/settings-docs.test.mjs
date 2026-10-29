@@ -46,23 +46,27 @@ test('every lane key appears in a Playbook', () => {
     assert.ok(skills.some(t => t.includes(`lanes.${key}\``)), `no Playbook mentions \`lanes.${key}\``);
 });
 
-test('dispatch-prompt is v3.2 or later and lists Name:, Settings: and Context cap:', () => {
+test('dispatch-prompt is v4 or later, lists Settings: and Context cap: and has no Name: line', () => {
   const doc = read('docs/contracts/dispatch-prompt.md');
-  assert.match(doc, /^# Contract: dispatch-prompt v3\.(?:[2-9]|\d{2,})$/m);
+  assert.match(doc, /^# Contract: dispatch-prompt v(?:[4-9]|\d{2,})\.\d+$/m);
   assert.match(doc, /`Context cap: <cap> handover <n>`/);
-  assert.match(doc, /`Name: <name>`/);
+  assert.doesNotMatch(doc, /`Name: <name>`/);
   assert.match(doc, /`Settings: model=<m> effort=<e>(?:\[ floor\])?`/);
-  assert.match(pipeline, /^Name: /m);
+  assert.doesNotMatch(pipeline, /^Name: /m);
   assert.match(pipeline, /^Settings: /m);
 });
 
-test('handoff skill documents the By: line', () => {
+test('handoff skill documents the By: line as the Role id', () => {
   const doc = read('skills/handoff/SKILL.md');
-  assert.match(doc, /By: <Name> \(<role>\)/);
+  assert.match(doc, /^By: <role id>$/m);
+  assert.doesNotMatch(doc, /By: <Name>/);
 });
 
-test('cooler cues use names', () => {
-  assert.ok(read('skills/cooler/SKILL.md').includes('<NAME> (<ROLE>)'));
+test('cooler cues use Role ids and the file says so', () => {
+  const cooler = read('skills/cooler/SKILL.md');
+  assert.ok(cooler.includes('`**<role>**`'));
+  assert.ok(cooler.includes('ids: role'));
+  assert.ok(!cooler.includes('<NAME> (<ROLE>)'));
 });
 
 test('roles.md lists every default name', () => {

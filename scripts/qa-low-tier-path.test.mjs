@@ -18,6 +18,14 @@ const SHA = 'abcdef1234567';
 const FULL = 'abcdef1234567'.padEnd(40, '0');
 const SLUG = 'demo';
 const GIT_PREFIX = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
+// The git subcommand of an argument array: the leading global options and their values removed (the judging diff adds --literal-pathspecs).
+const subOf = (args) => {
+  let i = 0;
+  while (i < args.length && (args[i] === '-c' || args[i].startsWith('--no-') || args[i] === '--literal-pathspecs')) i += args[i] === '-c' ? 2 : 1;
+  return args.slice(i);
+};
+// The two setup calls every command makes first (top level, then the grafts path).
+const isSetup = (sub) => sub[0] === 'rev-parse' && (sub[1] === '--show-toplevel' || sub[1] === '--git-path');
 const TIER_SETS_FILE = path.join(REPO, 'company', 'tier-sets.json');
 const DATA = JSON.parse(fs.readFileSync(TIER_SETS_FILE, 'utf8'));
 
@@ -30,11 +38,13 @@ function gitEnv(dir) {
   fs.writeFileSync(config, '');
   return { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', XDG_CONFIG_HOME: dir };
 }
+// Old skill text is compared after its script calls are moved to the run.mjs form.
+const runForm = (s) => s.replace(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/(?!run\.mjs)([a-z][a-z0-9-]*)\.mjs"/g, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" $1');
 function gitShow(t, ref) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-ltp-git-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   try {
-    return execFileSync('git', ['show', ref], { cwd: REPO, env: gitEnv(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return runForm(execFileSync('git', ['show', ref], { cwd: REPO, env: gitEnv(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
   } catch {
     return null;
   }
@@ -60,12 +70,21 @@ function world(t, { slug = SLUG, data, project = '## Core\n- skills/pipeline: ru
   fs.mkdirSync(work, { recursive: true });
   if (project !== null) fs.writeFileSync(path.join(root, '.company', 'project.md'), project);
   const calls = [];
+  const allCalls = [];
   let names = '';
   // The fake repository: one commit FULL (also the only object whose id starts with SHA), and the project file at that commit.
   const repo = { project, ids: [FULL], types: { [FULL]: 'commit' }, format: 'sha1\n', ancestor: true };
   const git = (args, opts) => {
-    calls.push({ args, opts });
-    const sub = args.slice(GIT_PREFIX.length);
+    const sub = subOf(args);
+    // calls holds the commands' own git calls; the setup calls are kept apart in allCalls.
+    allCalls.push({ args, opts });
+    if (!isSetup(sub)) calls.push({ args, opts });
+    // setup: the top level is the product root; the grafts path is relative to it and absent
+    if (sub[0] === 'rev-parse' && sub[1] === '--show-toplevel') return Buffer.from(`${root}\n`);
+    if (sub[0] === 'rev-parse' && sub[1] === '--git-path') return Buffer.from('.git/info/grafts\n');
+    // run branch: HEAD is aico/<slug> and the ref resolves
+    if (sub[0] === 'symbolic-ref') return Buffer.from(`refs/heads/aico/${slug}\n`);
+    if (sub[0] === 'rev-parse' && sub[1] === '--verify') return Buffer.from(`${FULL}\n`);
     if (sub[0] === 'rev-parse' && sub[1] === '--show-object-format') {
       if (repo.format === null) throw new Error('no format');
       return Buffer.from(repo.format);
@@ -81,11 +100,12 @@ function world(t, { slug = SLUG, data, project = '## Core\n- skills/pipeline: ru
       if (sub[3] !== `${FULL}:.company/project.md` || repo.project === null) throw new Error('missing blob');
       return Buffer.from(repo.project);
     }
-    if (sub[0] === 'diff' && sub.includes('HEAD') && sub.includes(FULL)) return Buffer.from(names);
+    // the committed diff names the full base id and the run ref; the worktree diff and the untracked lists stay empty
+    if (sub[0] === 'diff' && sub.includes(`refs/heads/aico/${slug}`) && sub.includes(FULL)) return Buffer.from(names);
     return Buffer.alloc(0);
   };
   const w = {
-    dir, root, work, pluginRoot, dataFile, calls, slug, repo,
+    dir, root, work, pluginRoot, dataFile, calls, allCalls, slug, repo,
     run: (...args) => tierSet(args, { now: NOW, root, pluginRoot, git }),
     diff: (text) => { names = text.split('\n').filter(Boolean).join('\0') + '\0'; },
     records: () => {
@@ -422,7 +442,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const tierPath = read('skills/pipeline/references/tier-path.md');
     const step8 = tierPath.split('\n').find((l) => l.startsWith('8. **Sync.**'));
     assert.match(step8, /`sync '<slug>' --plan '<plan>' --base '<base>'` before the Plan Gate \(feature\)/);
-    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. A plain `sync '<slug>'` takes no `--base`\./);
+    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. (`--diff` reads the run only while HEAD is on the branch `aico\/<slug>` and no grafts file exists; otherwise it prints `check: high: diff unknown` and step 11 applies\. )A plain `sync '<slug>'` takes no `--base`\./);
     assert.match(step8, /add before ship:/);
     const feature = read('skills/feature/SKILL.md');
     assert.match(feature, /\*\*→ Plan Gate\*\*[^\n]*tier-path\.md step 8 checks the plan first/);
@@ -740,10 +760,16 @@ describe('AC8 a low run keeps the tests, the pre-filter and handoff-lint', () =>
     }
   });
 
+  // v0.18.0 text reached through the changes made since to the pre-filter call (full base id, run ref, judging diff) and the Ship checks before the suite.
+  const toCurrentCalls = (s) => s
+    .replace('once the last review is clean: run the full test suite once', "once the last review is clean: check that `git symbolic-ref -q HEAD` prints exactly `refs/heads/aico/<slug>` and that `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=no --ignore-submodules=none` prints nothing, so the suite tests exactly the run ref's tree; otherwise stop and name it in the Ship Gate summary. Then run the full test suite once")
+    .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run <slug>` and `list` (`rule-check` v1.1)')
+    .replace('over the diff (`<sha>` = the Base commit)', 'over the judging diff (rule git.M-SEC4)');
+
   test('AC8 the pre-filter, handoff-lint and full-suite lines of the pipeline are the v0.18.0 ones', (t) => {
     const oldText = v018(t, 'skills/pipeline/SKILL.md');
     if (oldText === null) return;
-    const old = oldText.split('\n');
+    const old = toCurrentCalls(oldText).split('\n');
     const now = new Set(read('skills/pipeline/SKILL.md').split('\n'));
     const wanted = old.filter((l) => /pre-filter|handoff-lint|full test suite/i.test(l));
     assert.ok(wanted.length >= 3);
@@ -836,7 +862,7 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     fs.writeFileSync(path.join(l.w.work, 'tier-path.jsonl'), '{ not json\n');
     const r = l.call('ship', SLUG, '2');
     assert.equal(r.code, 0);
-    assert.match(r.lines[0], /warnings: 1$/);
+    assert.match(r.lines[0], /warnings: 1 \| cost: not recorded$/);
     assert.deepEqual(l.lines(SLUG)[1], { v: 1, run: SLUG, kind: 'ship', acs: 2 });
   });
 
@@ -881,7 +907,10 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     const runs = fs.readdirSync(LEDGER_V13).filter((n) => n.endsWith('.jsonl')).map((n) => n.slice(0, -6));
     assert.ok(runs.length >= 5);
     for (const run of runs) {
-      for (const cmd of ['report', 'scorecard']) assert.deepEqual(ledger([cmd, run], opts), oldMain([cmd, run], opts), `${cmd} ${run}`);
+      // the scorecard gained a last segment in v1.5; with it cut off the line is the v0.18.0 line
+      const noCost = (r) => ({ ...r, lines: r.lines.map((x) => x.replace(/ \| cost: not recorded$/, '')) });
+      assert.deepEqual(ledger(['report', run], opts), oldMain(['report', run], opts), `report ${run}`);
+      assert.deepEqual(noCost(ledger(['scorecard', run], opts)), oldMain(['scorecard', run], opts), `scorecard ${run}`);
     }
     for (const cmd of ['model-verdict', 'parallel-verdict']) assert.deepEqual(ledger([cmd], opts), oldMain([cmd], opts), cmd);
   });
@@ -1337,11 +1366,25 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       ['cat-file', '-t', '--end-of-options', FULL],
       ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD']
     ]);
-    for (const c of w.calls) {
+    // the setup calls come first (top level, then the grafts path), then the command's own calls
+    assert.deepEqual(w.allCalls.slice(0, 2).map((c) => subOf(c.args)), [['rev-parse', '--show-toplevel'], ['rev-parse', '--git-path', 'info/grafts']]);
+    assert.equal(w.allCalls.length, w.calls.length + 2);
+    const gitKeys = (c) => Object.keys(c.opts.env).filter((k) => /^GIT_/i.test(k)).sort();
+    for (const [i, c] of w.allCalls.entries()) {
       assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX);
-      assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
-      assert.equal(c.opts.env.GIT_OPTIONAL_LOCKS, '0');
-      assert.equal(c.opts.env.GIT_TERMINAL_PROMPT, '0');
+      assert.equal(c.opts.cwd, w.root, 'every call runs at the top level');
+      assert.equal(c.opts.env.GIT_OPTIONAL_LOCKS, undefined, 'no GIT_ key beyond the ones the Contract names');
+      assert.equal(c.opts.env.GIT_TERMINAL_PROMPT, undefined);
+      // the top-level query carries no GIT_ key at all, the grafts-path query only the replace-ref variable;
+      // every later call carries the replace-ref variable and the absent grafts file
+      if (i === 0) assert.deepEqual(gitKeys(c), []);
+      else if (i === 1) assert.deepEqual(gitKeys(c), ['GIT_NO_REPLACE_OBJECTS']);
+      else {
+        assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
+        assert.equal(typeof c.opts.env.GIT_GRAFT_FILE, 'string');
+        assert.notEqual(c.opts.env.GIT_GRAFT_FILE, '');
+        assert.deepEqual(gitKeys(c), ['GIT_GRAFT_FILE', 'GIT_NO_REPLACE_OBJECTS']);
+      }
     }
   });
 
@@ -1394,7 +1437,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
     const w = world(t, { project: null });
     const env = gitEnv(w.dir);
     const run = (...args) => git(w.root, env, args);
-    run('init', '-q');
+    run('init', '-q', '-b', `aico/${SLUG}`);
     run('config', 'user.name', 'Test');
     run('config', 'user.email', 'test@example.invalid');
     run('config', 'commit.gpgsign', 'false');
@@ -1621,6 +1664,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
 describe('Fix round 2 rules: replace refs, object format, ancestor check, highest tier', () => {
   const sh = (cwd, env, args) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   const begin = (...extra) => ['begin', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on', ...extra];
+  const RUN_BRANCH = `aico/${SLUG}`;
 
   // A real repository in the world's product root; the config is a throwaway file (see gitEnv).
   function realRepo(t, format) {
@@ -1628,7 +1672,8 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     const env = gitEnv(w.dir);
     const g = (...args) => sh(w.root, env, args);
     try {
-      g('init', '-q', '-b', 'main', ...(format ? [`--object-format=${format}`] : []));
+      // the run branch is aico/<slug>: sync --diff reads the worktree only when HEAD is that branch
+      g('init', '-q', '-b', RUN_BRANCH, ...(format ? [`--object-format=${format}`] : []));
     } catch {
       return { w, skip: true };
     }
@@ -1663,7 +1708,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     r.g('add', '-A');
     r.g('commit', '-q', '-m', 'replacement');
     const repl = r.g('rev-parse', 'HEAD');
-    r.g('checkout', '-q', '--force', 'main');
+    r.g('checkout', '-q', '--force', RUN_BRANCH);
     r.commit('src/web/login.js', 'export {};\n', 'login');
     r.g('replace', base, repl);
     assert.equal(r.g('diff', '--name-only', base, 'HEAD', '--', 'src'), '', 'plain git is blind to the file');
@@ -1683,9 +1728,14 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
         w.diff('docs/a.md\n');
         w.run('sync', SLUG, '--diff', '--base', SHA);
         assert.ok(w.calls.length > 5);
-        for (const c of w.calls) {
-          assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX, `inherited ${inherited}`);
-          assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1', `inherited ${inherited}`);
+        for (const [i, c] of w.allCalls.entries()) {
+          // the judging diff adds --literal-pathspecs after the first two flags; the prefix test reads the flags and the -c pair apart
+          assert.deepEqual(c.args.filter((a) => a === '--no-replace-objects' || a === '--no-optional-locks'), GIT_PREFIX.slice(0, 2), `inherited ${inherited}`);
+          assert.ok(c.args.some((a, j) => a === 'core.fsmonitor=false' && c.args[j - 1] === '-c'), `inherited ${inherited}`);
+          // the top-level query of each command is the one call that runs before the variable is set; it carries no GIT_ key whatever the inherited value
+          const top = subOf(c.args)[1] === '--show-toplevel';
+          if (top) assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, undefined, `inherited ${inherited} call ${i}`);
+          else assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1', `inherited ${inherited} call ${i}`);
         }
       } finally {
         if (prior === undefined) delete process.env.GIT_NO_REPLACE_OBJECTS;
@@ -1705,7 +1755,9 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     const out = tierSet(begin('--base', SHA, '--ceo', 'short'), {
       now: NOW, root: gone.root, pluginRoot: gone.pluginRoot,
       git: (args) => {
-        const sub = args.slice(4);
+        const sub = subOf(args);
+        if (sub[0] === 'rev-parse' && sub[1] === '--show-toplevel') return Buffer.from(`${gone.root}\n`);
+        if (sub[0] === 'rev-parse' && sub[1] === '--git-path') return Buffer.from('.git/info/grafts\n');
         if (sub[0] === 'merge-base') throw Object.assign(new Error('fatal'), { status: 128 });
         if (sub[1] === '--show-object-format') return Buffer.from('sha1\n');
         if (sub[1] === `--disambiguate=${SHA}`) return Buffer.from(`${FULL}\n`);
@@ -1722,7 +1774,7 @@ describe('Fix round 2 rules: replace refs, object format, ancestor check, highes
     const first = r.g('rev-parse', 'HEAD');
     r.g('checkout', '-q', '-b', 'other');
     const stray = r.commit('x.txt', 'x\n', 'stray');
-    r.g('checkout', '-q', 'main');
+    r.g('checkout', '-q', RUN_BRANCH);
     r.commit('y.txt', 'y\n', 'main work');
     const refused = r.call(...begin('--base', stray, '--ceo', 'short'));
     assert.equal(refused.code, 3);

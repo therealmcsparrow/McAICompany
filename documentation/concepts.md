@@ -63,7 +63,7 @@ At the Plan Gate the Lead runs a text-only check on the plan file. It lists choi
 
 **What it looks at.** Only lines under a `##` or `###` heading that starts with Steps, Tasks, Wave, Phase, Fix round, or `T` or `M` and a number such as `T1` (any case). Lines in code fences, inline code, blockquotes and `Decided:` lines are skipped. A line is a finding when it holds `TBD` or `TODO` (whole word, capital letters), `decide later` (any case), or ends in `?` and contains ` or `. One finding per line. A code fence that is never closed is also a finding, because it hides the rest of the plan.
 
-**What you see.** A **Plan check** block under the Gate summary: `plan-check (<policy>): <n> open decision[s], <d> decided`, then up to 5 rows `file:line | phrase | why`, then `+<k> more` if there are more. With zero findings the block still shows, so silence never means the check was skipped. The block is plain text for a screen reader. In this version the check never blocks a Gate, whatever the policy: `block` only makes the script exit with an error code on any finding, and the Plan Gate shows it like `warn`. With policy `off` no scan runs and the run is marked check-off.
+**What you see.** A **Plan check** block under the Gate summary: `plan-check (<policy>): <n> open decision[s], <d> decided`, then up to 5 rows `file:line | phrase | why`, then `+<k> more` if there are more. With zero findings the block still shows, so silence never means the check was skipped. The block is plain text for a screen reader. Under `warn` (the default) the check never blocks. Under `block`, the scripts refuse the Plan Gate record, the build start and every task start while decisions are open (see [The hook Gate](#the-hook-gate)). With policy `off` no scan runs and the run is marked check-off.
 
 **`Decided:` lines.** When the Architect settles a choice that was open or debated, the plan gets its own line: `Decided: <choice> because <reason>`. Only that full shape is skipped by the check; `Decided: A or B?` is still a finding. Builders cite the `Decided:` lines under `## Decisions` in their Handoff.
 
@@ -150,6 +150,62 @@ The check reads file names, not file content. A risky change inside a plainly na
 2. If only the fix side failed, the fix low set is changed in the data file in a release (a new `rev`), because the setting cannot switch one Playbook.
 3. A tune of the sets is also a data-file change in a release with a new `rev`.
 
+## The hook Gate
+`plan_check.policy` is `warn`, `block` or `off`. Under `block` the scripts refuse the Plan Gate record, the build start and every task start while the plan has open decisions. The scan reads the plan itself, reads no record and writes nothing. A plan entry that is a link or not a plain file is an `unreadable` error, never skipped. A project can raise the policy to `block` but cannot lower a `block` set in your user settings. Under `warn` and `off`, behaviour is unchanged.
+
+## Judging changes
+These checks apply to every run from v0.20.0.
+- **Base commit.** The `Base commit:` of a prompt is the full object id (40 or 64 hex digits), never a short sha or a ref. Reviewers judge the diff from that base to the run branch.
+- **Grafts.** A git grafts file makes every judging check stop: tier checks answer `diff unknown`, review depth goes to `full`, and `rule-check` refuses to run.
+- **Binary files.** Binary is decided by file content. The binary type list is fixed. A file outside the list that holds binary content in a text path (`binary content in a text path`) blocks until it is fixed or you grant an exception. A text file marked binary by git attributes is shown to reviewers through `rule-check text`, never through a path they type.
+- **Contested findings.** A builder can contest a reviewer finding instead of fixing it. Every reviewer finding has an ID of the form `<NN>-<role>:R-<n>`. A security finding never closes by contest.
+
+## Receipts
+`ledger.mjs receipt <run>` prints what the run's records show, and only the lines that were recorded: time, tokens, Gates and Fix rounds. A cost line appears only when a cost is recorded (see [Cost from telemetry](#cost-from-telemetry)). With `--baseline` it can also compare the time with the median of up to three earlier runs.
+
+## The CEO question pack
+The Lead does not show a question the moment a Step returns `needs-ceo`. It holds the question until every Step of the current wave has returned, then shows all held questions as one form (up to 4 questions per form; more are split into the fewest forms). At the Brief, Plan or Ship Gate, the held questions join that Gate's own form. Some questions always get their own form and wait for the wave end only if the run can go on without them: Blocking security findings, escalations after the Fix-round limit, messages to a client, publishing, reports to authorities and production deploys. A Step that cannot continue without its answer ends the wave early.
+
+The Lead records each form with `run-state ceo <slug> <brief|plan|ship|none> <n>`: the Gate and the number of questions, never the text. `none` counts a prompt that appeared outside any form; it is the number the pack aims to reduce.
+
+## The never-cited report
+`node scripts/cited.mjs report --runs <N>` (1 to 50) reads the newest run folders and counts, for each Role, how many of its Step files a later Step of the same run cites. A Step is cited when a later Handoff names its file (`04-senior-engineer`, with or without `.md` or a path) or says `Step 04`. A Step number is shared by parallel Steps, so a prose cite can credit more than one Role. It is read-only and prints Role names only, no Handoff text:
+- `keep <role>` for each keep lane, always: security, pentester, vuln-scanner, legal, accessibility-tester and senior-engineer.
+- `cited <role>: <c> of <w>` for Steps cited of Steps written.
+- `never cited <role>` for a Role that wrote Steps and had none cited.
+- `skipped <k>` for files and folders that were not read.
+
+`/aico:feedback` puts these lines under `## Cited`. A keep lane is never a removal candidate. Only you decide whether a Role is removed.
+
+## Guided first product
+When `.company/project.md` is missing and your request starts a product, the Lead asks three forms, so you edit no file by hand:
+1. **Company.** The company type (optional; none means software).
+2. **Product.** Product type (web, desktop or game), engagement (own or client), client, audience and goal.
+3. **Voice and terms.** Languages, voice (clear, bold or technical), license, jurisdiction and up to 5 personas.
+
+The stack is not asked; it is detected. `scripts/project-init.mjs write` checks each answer (one line of 1 to 200 characters, no control characters) and creates `.company/project.md`. It never replaces an existing profile, and a refused answer is named by its key and asked again. Answers are stored as text and never run. The run then goes on as usual and stops at the Brief Gate.
+
+## Cost from telemetry
+The scorecard shows a cost segment only when a cost is recorded, and never estimates one. The number is Claude Code's approximate cost from telemetry, not a bill. aico reads an OpenTelemetry export file you set up, matched by session id inside the run window.
+
+**Setup.**
+1. Run an OpenTelemetry Collector with a minimal YAML: an OTLP receiver on `127.0.0.1` only, and a `file` exporter to `<MCSPARROW_HOME or ~/.mcsparrow>/otel/metrics.jsonl`. No rotation, no headers, no tokens.
+2. Set the Claude Code telemetry variables in your own shell or in `~/.claude/settings.json`, never in a repository file.
+3. Export metrics only. Do not set the `OTEL_LOG_*` content flags.
+4. Keep delta temporality, which is the default.
+
+The Collector `file` exporter is alpha. The file holds account attributes that aico never reads.
+
+## Releases
+A release carries a `Rollback:` line, an SBOM and a Gate Report. This makes no claim to BSI TR-03183-2.
+
+## Residual risks
+These are limits of the checks, stated plainly.
+- **The plan scan.** A Role that edits `Decided:` lines into the plan, or appends a `begin` record and rewrites the plan into a clean one, passes the scan. Read the plan at the Plan Gate.
+- **User settings.** A Role with Bash can write your user `settings.json`. "Block wins" guards against project files only, the same limit as `pipeline.short_path`.
+- **Git environment.** The judging scripts drop inherited `GIT_*` variables. A Role that can write `.claude/settings*.json` or a shell profile can still add hooks or aliases that change later commands.
+- **Crafted binary files.** A file on the binary type list whose leading bytes are both a media header and code passes as `binary file changed`. These signatures are also a valid JavaScript start: `true` (ttf), `GIF8` (gif), `ID3` (mp3), `OggS` (ogg), `fLaC` (flac), `OTTO` (otf), `wOFF` (woff), `wOF2` (woff2), `RIFF` (webp, wav), and any 4 bytes plus `ftyp` (mp4, m4a, mov). CommonJS `require` runs such a file whatever its extension, so reviewers block any change that loads such a file as code, by any route.
+
 ## Core + Modules + Contracts
 Every product is built the same way:
 
@@ -200,7 +256,7 @@ The skill-researcher (Selin) proposes third-party skills for four areas: `stack`
 `aico_language` sets the language aico writes in: Handoff prose, forms, reports and summaries. It is separate from `languages:`, which covers the product's UI strings. Your default lives in `~/.mcsparrow/config.json`; a product can override it with `aico_language:` in `.company/project.md`. Set it with [`/aico:language`](commands.md#aicolanguage). Machine-read parts stay English in every language.
 
 ## Models, effort and names
-Every Role runs on a **model** (opus, sonnet or haiku) and an **effort** level (`low`, `medium`, `high`, `xhigh`, `max`). The model is how capable the Role is; effort is how long it thinks before acting. The plugin's defaults put the deepest thinking where a miss is expensive (architect, code-reviewer, security, pentester on high) and keep writing, art, lookup and support work on low. Every Role also has a person name for display, such as Ava the architect or Quinn the QA tester. Names show in cooler chats, brainstorms, Gate summaries and Handoff bylines (`By: Ava (architect)`). You can ask for a Role by name ("ask Ava to check the Contracts"). Internal IDs like `aico:architect` never change. The full list is in [Roles](roles.md).
+Every Role runs on a **model** (opus, sonnet or haiku) and an **effort** level (`low`, `medium`, `high`, `xhigh`, `max`). The model is how capable the Role is; effort is how long it thinks before acting. The plugin's defaults put the deepest thinking where a miss is expensive (architect, code-reviewer, security, pentester on high) and keep writing, art, lookup and support work on low. Every Role also has a pseudonym for display, such as Ava the architect or Quinn the QA tester. Use a pseudonym, never a real person's name. Names are shown only to you; Roles get their Role id, not your name, in prompts. A Role never gets a name in its prompt: it works under its Role id and writes that id in its Handoff byline (`By: architect`). Brainstorm files store Role ids from v0.20.0. You can still ask for a Role by name ("ask Ava to check the Contracts"); the Lead routes on your words and replaces the name with the Role id before it dispatches. Internal IDs like `aico:architect` never change. The full list is in [Roles](roles.md).
 
 ## Which model a Role runs on
 Claude Code decides the model of a sub-agent such as an aico Role. The facts below come from the Claude Code documentation, checked on 2026-10-28: https://code.claude.com/docs/en/sub-agents. Quotations are short and are the documentation's words, not instructions to a Role.

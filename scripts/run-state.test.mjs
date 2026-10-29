@@ -320,7 +320,7 @@ test('show: view shape for a running run', () => {
   const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 3000 }).out);
   assert.deepEqual(v, {
     v: 1, slug: 'x', state: 'running', started: at(T0), ended: null, outcome: null, wave: 2,
-    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], round: 0, tier: 'unknown', steps: [], warnings: [],
+    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], ceo: [], subs: [], sessions: [], round: 0, tier: 'unknown', steps: [], warnings: [],
   });
   assert.deepEqual(Object.keys(v).slice(6, 9), ['wave', 'gates', 'picks']);
 });

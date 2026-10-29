@@ -127,7 +127,7 @@ export function registerBlastRadius(on: On): void {
     const lines = parseSpawnLines(e.prompt)
     const label = agentLabel(lines.step, lines.role)
     if (REVIEWER.test(e.subagentType) && lines.base !== null) {
-      const hits = await readDepth($, { source: 'base', base: lines.base, risk: lines.tier ?? undefined }, TIMEOUT_MS.depthPre)
+      const hits = await readDepth($, { source: 'base', base: lines.base, slug: lines.slug ?? undefined, risk: lines.tier ?? undefined }, TIMEOUT_MS.depthPre)
       if (hits !== null) {
         $.ui.log(listing(hits))
         $.ui.toast(`Blast Radius: review depth ${hits.depth}, tier ${hits.tier}, ${hits.files} files`)

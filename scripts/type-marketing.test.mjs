@@ -64,7 +64,7 @@ for (const name of ['campaign', 'content']) {
     const i = lines.findIndex((l) => l.startsWith('**Help:**'));
     assert.ok(i > 0);
     assert.equal(lines[i + 1], '');
-    assert.equal(lines[i + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`);
+    assert.equal(lines[i + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`);
     assert.ok(t.includes('aico:pipeline'));
   });
 

@@ -8,7 +8,7 @@ argument-hint: <what happened>
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:incident` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook incident` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook incident` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`. No Brief or Plan Gate: urgency is allowed, the Ship Gate is kept.
 Every Ship Gate in this Playbook is a form, whatever the settings say: the mitigation (rollback or feature flag) and each report (`aico:pipeline` §4). The run ends after mitigation, reports and postmortem; the fix is a separate run.

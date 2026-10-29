@@ -69,7 +69,7 @@ function showPath(s) {
 
 // ---------- environment ----------
 function real(p) {
-  try { return realpathSync(p); } catch { return resolve(p); }
+  try { return realpathSync.native(p); } catch { return resolve(p); }
 }
 
 function locations(cwd, env) {
@@ -92,8 +92,8 @@ function runFolder(loc, slug) {
   const st = lstatOrNull(dir);
   if (!st || st.isSymbolicLink() || !st.isDirectory()) refuse('run folder missing or not a plain folder');
   let found;
-  try { found = realpathSync(dir); } catch { refuse('run folder missing or not a plain folder'); }
-  if (found !== join(realpathSync(loc.root), '.company', 'work', slug)) refuse('run folder is reached through a link');
+  try { found = realpathSync.native(dir); } catch { refuse('run folder missing or not a plain folder'); }
+  if (found !== join(realpathSync.native(loc.root), '.company', 'work', slug)) refuse('run folder is reached through a link');
   return dir;
 }
 
