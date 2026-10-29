@@ -36,7 +36,7 @@ A Ruleset may lack a loaded pack's `-SEC` Must rows (an ID in `## Debt` or `## E
 
 ## Self-check, exceptions, debt
 - **Builders, before `done`:** `## Standards`: each mapped Must ID → `complied` or `exception requested`.
-- **Exceptions:** a builder who can't meet a Must sets `status: needs-ceo` with rule ID, scope, why and cost under `## Blocking`. Only the CEO approves, into `## Exceptions` (`<ID> — <scope> — <reason> — approved: <date> (CEO)`). Never a Fix round.
+- **Exceptions:** a builder who can't meet a Must sets `status: needs-ceo` with rule ID, scope, why and cost under `## Blocking`. Only the CEO approves, into `## Exceptions`: a rule as `<ID> — <scope> — <reason> — approved: <date> (CEO)`, a reviewer finding as `<slug>/<NN>-<role>:R-<n> — <scope> — <reason> — approved: <date> (CEO)` (`<slug>` is the run folder name; it counts only for that run, from the date of its latest start; `handoff` v1.3). Never a Fix round.
 - **Debt:** when a rule arrives, existing violations go to `## Debt` (`<ID> — <file:line> — <S/M/L>`); it never blocks, and the CEO picks `/aico:fix` or `/aico:refactor` runs from it. An exploitable security-Must violation is `## Blocking` (Security may flag `/aico:incident`).
 
 ## Research hygiene (Senior Engineer)
