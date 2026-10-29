@@ -156,8 +156,8 @@ test('AC10 the style is fixed per run and reopened format 1 files ignore it', ()
   has(skill, 'The style applies to format 2 rounds only');
 });
 
-test('AC10 a crossfire apply holds both pair members, a Skip counts, and apply keys are "Name (role)"', () => {
-  has(f2, '"Name (role)"', 'both pair members in one `apply`', 'a Skip counts');
+test('AC10 a crossfire apply holds both pair members, a Skip counts, and apply keys are "<role>"', () => {
+  has(f2, '"<role>"', 'both pair members in one `apply`', 'a Skip counts');
   has(skill, 'a crossfire apply holds both pair members (`full_pass` style only)');
 });
 

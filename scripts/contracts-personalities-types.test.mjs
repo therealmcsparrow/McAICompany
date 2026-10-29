@@ -402,7 +402,7 @@ test('dispatch-prompt: the v3.1 Context cap rule still holds under v3.2', () => 
 
 const NAMES = { architect: 'Ava (architect)', writer: 'Ren (writer)', 'product-manager': 'Pat (product-manager)' };
 const reply = n => fs.readFileSync(path.join(REPLIES, n), 'utf8');
-const repliesOf = map => Object.fromEntries(Object.entries(map).map(([role, f]) => [NAMES[role], reply(f)]));
+const repliesOf = map => Object.fromEntries(Object.entries(map).map(([role, f]) => [role, reply(f)]));
 
 function brainstormRun(sb, name = '2026-10-27 09.00 - Tea.md', roles = 'architect,writer,product-manager') {
   const folder = path.join(sb.repo, '.company', 'brainstorms');
@@ -439,7 +439,7 @@ test('brainstorm-file: every pass and a re-ask hold the block between Pass and T
   for (const role of pair) startsRight(role, 2, 'crossfire');
   // A re-ask goes to one Role, with the block in the same place.
   const q = brainstormRun(sb, '2026-10-27 10.00 - Re ask.md', 'architect,writer');
-  const bad = sb.run('brainstorm.mjs', ['apply', q.file, '1'], JSON.stringify({ replies: { 'Ava (architect)': 'I: only an idea, no risk line' }, lead: '' }));
+  const bad = sb.run('brainstorm.mjs', ['apply', q.file, '1'], JSON.stringify({ replies: { architect: 'I: only an idea, no risk line' }, lead: '' }));
   assert.equal(bad.code, 0, bad.err);
   const re = q.stage('1', '--reask', 'architect');
   assert.equal(re.code, 0, re.err);
