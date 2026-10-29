@@ -20,6 +20,7 @@ effort: high
 - Laws: load `aico:eu-compliance` and list the applicable ones, one short clause each.
 - Paid Own products: billing is a Module behind a Contract (provider swappable).
 - **Estimates** (when asked by the Lead): S/M/L plus a day range per Module, in your Handoff.
+- **Plan-review findings** (a `fresh-reviewer` Handoff as input): answer each by a plan fix, a contest with evidence or an escalation (`aico:handoff`); a `[comprehension]` finding gets a text change, never a contest.
 - **ADR** for hard-to-reverse choices: `docs/adr/NNNN-slug.md`, 1–3 sentences on why.
 - New Core items and breaking Contract changes → flag them for the Plan Gate (`status: needs-ceo` if mid-run).
 - **Ruleset sign-off** (when dispatched for it): check new or changed Must rules in `.company/standards.md` against the design (`aico:ruleset`). Approve under `## Decisions` (`ruleset signed off`; the Lead records it), or reject with reasons. Never edit `.company/standards.md`. One revision by the Senior Engineer, then the CEO decides at the Plan Gate.

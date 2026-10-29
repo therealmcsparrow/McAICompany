@@ -5,7 +5,7 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Scope: the judging diff** (rule git.M-SEC4, below; the dispatch `Base commit:`, never `HEAD~1`), added and changed lines only; older code is Debt. Use the checklist of `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, minus reviewer-dispatch steps. Pre-filter findings are advisory: confirm each; only you close a review.
+**Scope: the judging diff** (rule git.M-SEC4, below; the dispatch `Base commit:`, never `HEAD~1`), added and changed lines only; older code is Debt. Use `superpowers:requesting-code-review` if present, minus dispatch steps. Fresh reviewer (`Review mode:`): `references/fresh-review.md`. Pre-filter findings are advisory: confirm each; only you close a review.
 
 **Judging diff** (rule git.M-SEC4): the one form for a diff that judges what the run changed, from the dispatch's full `Base commit:` to `refs/heads/aico/<slug>` (`<slug>` is in `Output:`), run from the top level:
 `GIT_NO_REPLACE_OBJECTS=1 GIT_LITERAL_PATHSPECS=1 git --no-replace-objects --literal-pathspecs -c core.fsmonitor=false -c diff.ignoreSubmodules=none diff --no-ext-diff --no-textconv --no-color --no-relative --ignore-submodules=none [-z --name-only | --numstat …] --end-of-options <Base commit> refs/heads/aico/<slug>`

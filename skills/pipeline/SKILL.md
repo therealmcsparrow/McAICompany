@@ -11,7 +11,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 
 ## 1. Setup (once per run)
 0. **Company type (§1.0)**, before every other Setup step, so a refusal changes nothing: keep the type lines the Playbook's `**Type:**` line printed, or, with no such line (the Lead), run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type resolve` from the product root (`company-type` v1). Exit not 0, no output or a first line that starts with neither `ok: ` nor `company type: ` → show its output line (no output: "the type check did not run; reinstall the plugin") and stop the run; nothing is created or written. You never decide yourself what the type allows; only the script does.
-1. **Task slug**: kebab-case, at most 5 words. Work dir: `.company/work/<slug>/`.
+1. **Task slug**: kebab-case, at most 5 words. Work dir: `.company/work/<slug>/`. A new run's slug for which `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" handoff-lint --exceptions-for <slug>` prints `exceptions on file:` more than `0` is refused, pick another (a resumed run is not checked).
 2. **Project profile**: if `.company/project.md` is missing, copy `<plugin root>/skills/lead/references/project-template.md`, fill `stack:` using `aico:stack-detect`, and ask the CEO for the rest in **one** form.
 3. **Branch**: `aico/<slug>`. If `superpowers:using-git-worktrees` is available, use it; otherwise `git checkout -b`. Never work on main.
 4. **Company profile**: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" plugin-root` once (it prints the active plugin root; a refusal stops the run) and join `company/PROFILE.md` to that path and pass it in every dispatch. Don't paste its contents.
@@ -25,6 +25,8 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 11. **Parallel plan**: load `references/parallel.md` in Setup.
 12. **Tier path** (feature and fix only): load references/tier-path.md in Setup.
 13. **CEO pack**: load `references/ceo-pack.md` in Setup (how `needs-ceo` questions are held and shown as one form). Step times need nothing from you: the hooks record each subagent's start and stop (`step-times` v1).
+14. **Plan review** (feature only, when `plan-review` is in the tier set): load `references/plan-review.md` before the Plan Gate.
+15. **Review loop**: load `references/review-loop.md` before the first review Step (failed review Steps, `mark` and `churn` in Fix rounds, the Ship Gate list, the second reviewer).
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:

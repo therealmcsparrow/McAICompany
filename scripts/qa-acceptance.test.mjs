@@ -498,6 +498,9 @@ const HAND_OVER_CHANGES = {
       "   - `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7), when in the tier set.",
       "   - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7), when in the tier set ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).",
       "   **→ Ship Gate** (after tier-set.mjs sync --diff; added Roles and lanes first)",
+      // The plan review step 2e and the second reviewer lane.
+      /^2e\. `aico:fresh-reviewer` plan review, only when `plan-review` is in the set/,
+      /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
     ],
   },
   fix: {
@@ -514,6 +517,7 @@ const HAND_OVER_CHANGES = {
       "2. The engineer who owns that Module (backend/frontend/desktop/ai-data/game): root cause via `aico:debugging`, fix via `aico:tdd`. After its commit, tier-set.mjs sync --diff (tier-path.md step 8).",
       "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.",
       "   **→ Ship Gate** (after sync --diff; added lanes first)",
+      /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
     ],
   },
   incident: {
