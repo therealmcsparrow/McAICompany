@@ -94,6 +94,8 @@ A write gate limits the reprompter to writing `prompt.md` and its own Handoff in
 5. **Writer** adds docs and release notes; **Localizer** translates if you support more than one language. **→ Ship Gate.**
 6. **DevOps** releases as approved.
 
+**Checks you may meet.** Under `plan_check.policy` `block`, the Plan Gate record, the build start and every task start are refused while the plan has open decisions ([The hook Gate](concepts.md#the-hook-gate)). Reviewers judge the diff from the full base commit; a grafts file stops every judging check, and a binary file in a text path blocks until fixed or excepted by you ([Judging changes](concepts.md#judging-changes)). A security finding never closes by contest. Roles work under their Role id; names are shown only to you. A release carries a `Rollback:` line, an SBOM and a Gate Report ([Releases](concepts.md#releases)). The scorecard shows cost only when one is recorded ([Cost from telemetry](concepts.md#cost-from-telemetry)).
+
 **You get.** Shipped code on a branch, tests, docs, and the full Handoff trail under `.company/work/<slug>/`.
 
 **Example.** `/aico:feature a dark-mode toggle that remembers the user's choice`
