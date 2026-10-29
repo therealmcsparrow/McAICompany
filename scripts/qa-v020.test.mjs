@@ -1758,7 +1758,7 @@ describe('AC31 contested findings', () => {
   test('a CEO exception under standards.md closes it, and only that shape counts', () => {
     const sb = sandbox();
     const ok = runFolder(sb, [SECURITY, contest('07', '06-security:R-1')],
-      { standards: '# Ruleset\n## Exceptions\n- 06-security:R-1 — src/y.ts — accepted risk, documented — approved: 2026-10-29 (CEO)\n## Debt\n' });
+      { standards: '# Ruleset\n## Exceptions\n- run1/06-security:R-1 — src/y.ts — accepted risk, documented — approved: 2026-10-29 (CEO)\n## Debt\n' });
     const r = ok.lint();
     assert.equal(r.code, 0, r.all);
     assert.match(r.out, /^excepted 06-security:R-1$/m);

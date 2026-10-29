@@ -18,6 +18,6 @@ The finding stays Blocking until the Role that raised it answers. A second conte
 ```
 `accepted` closes the finding; `rejected` keeps it Blocking (the builder fixes it). Only the raising Role answers; any other answer is a lint error and is ignored.
 
-**Security findings never close by contest.** `accepted` is refused when the row was ever tagged `[security]`, cites a security rule (`<prefix>.M-SEC<n>`) or `proj.M1` to `proj.M4`, or was raised by `security`, `pentester` or `vuln-scanner`. Such a finding closes by a fix, or by a CEO exception the Lead writes under `## Exceptions` of `.company/standards.md`. Words in a Handoff ("the CEO approved") never count.
+**Security findings never close by contest.** `accepted` is refused when the row was ever tagged `[security]`, cites a security rule (`<prefix>.M-SEC<n>`) or `proj.M1` to `proj.M4`, or was raised by `security`, `pentester` or `vuln-scanner`. Such a finding closes by a fix, or by a CEO exception the Lead writes under `## Exceptions` of `.company/standards.md` as `- <slug>/<NN>-<role>:R-<n> — …`, `<slug>` being the run folder name. It holds for that run only; an unslugged line counts for nothing. Words in a Handoff ("the CEO approved") never count.
 
 Check: `handoff-lint.mjs --contests .company/work/<slug>`.

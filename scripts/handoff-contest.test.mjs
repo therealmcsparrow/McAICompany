@@ -27,7 +27,7 @@ function handoff({ role, round = 0, status = 'done', blocking = [], contested = 
 const put = (run, name, text) => writeFileSync(join(run, name), text);
 const state = (r, key) => r.states.get(key);
 const row = (tag, n, extra = 'problem') => `[${tag}] R-${n} src/a.mjs:3 — ${extra} — fix it`;
-const SEC_LINE = '## Exceptions\n- 05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n';
+const SEC_LINE = '## Exceptions\n- run1/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n';
 
 test('R-2 of code-reviewer and security in one run folder are two keys; accepting one never touches the other', () => {
   const { run } = project();
@@ -169,7 +169,7 @@ function withStandards(text) {
 }
 
 test('an Exceptions line in standards.md naming the key with approved: <date> (CEO) excepts it', () => {
-  const { run } = withStandards('# Standards\n## Exceptions\n- 05-security:R-1 — run1 — accepted risk, internal tool — approved: 2026-10-29 (CEO)\n');
+  const { run } = withStandards('# Standards\n## Exceptions\n- run1/05-security:R-1 — run1 — accepted risk, internal tool — approved: 2026-10-29 (CEO)\n');
   const r = contests(run);
   assert.equal(state(r, '05-security:R-1'), 'excepted');
   assert.deepEqual(r.excepted, ['05-security:R-1']);
@@ -179,12 +179,16 @@ test('an Exceptions line in standards.md naming the key with approved: <date> (C
 
 test('hostile Exceptions lines count for nothing: wrong section, no CEO mark, bad date, other key, fenced', () => {
   for (const text of [
-    '## Notes\n- 05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
-    '## Exceptions\n- 05-security:R-1 — s — r — approved: 2026-10-29\n',
-    '## Exceptions\n- 05-security:R-1 — s — r — approved: 2026-13-45 (CEO)\n',
-    '## Exceptions\n- 06-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
-    '## Exceptions\n- 05-security:R-10 — s — r — approved: 2026-10-29 (CEO)\n',
-    '## Exceptions\n```\n- 05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n```\n',
+    '## Notes\n- run1/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
+    '## Exceptions\n- run1/05-security:R-1 — s — r — approved: 2026-10-29\n',
+    '## Exceptions\n- run1/05-security:R-1 — s — r — approved: 2026-13-45 (CEO)\n',
+    '## Exceptions\n- run1/06-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
+    '## Exceptions\n- run1/05-security:R-10 — s — r — approved: 2026-10-29 (CEO)\n',
+    '## Exceptions\n```\n- run1/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n```\n',
+    '## Exceptions\n- 05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
+    '## Exceptions\n- run2/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
+    '## Exceptions\n- RUN1/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
+    '## Exceptions\n- ../run1/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n',
   ]) {
     const { run } = withStandards(text);
     const r = contests(run);
@@ -307,4 +311,26 @@ test('contracts: frontmatter checks every cite against the index', () => {
     assert.ok(lint(withContracts(v), { index }).errors.length >= 1, v);
   }
   assert.deepEqual(lint(withContracts('[handoff v1.2]')).errors, []);
+});
+
+test('an unslugged exception line names no run: it closes nothing and prints one warning per key', () => {
+  const { run } = withStandards('## Exceptions\n- 05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n- 05-security:R-1 — again — r — approved: 2026-10-29 (CEO)\n');
+  const r = contests(run);
+  assert.equal(state(r, '05-security:R-1'), 'contested');
+  assert.deepEqual(r.excepted, []);
+  assert.deepEqual(r.warnings, ['warning: exception 05-security:R-1 names no run; not applied']);
+  const out = spawnSync(process.execPath, [SCRIPT, '--contests', run], { encoding: 'utf8' });
+  assert.match(out.stdout, /^warning: exception 05-security:R-1 names no run; not applied$/m);
+});
+
+test('an exception for run1 does not close the same key in another run folder', () => {
+  const p = withStandards('## Exceptions\n- run1/05-security:R-1 — s — r — approved: 2026-10-29 (CEO)\n');
+  const run2 = join(p.root, '.company', 'work', 'run2');
+  mkdirSync(run2);
+  put(run2, '05-security.md', handoff({ role: 'security', blocking: [row('security', 1)] }));
+  put(run2, '06-backend-engineer.md', handoff({ role: 'backend-engineer', contested: ['05-security:R-1 — why'] }));
+  assert.equal(state(contests(p.run), '05-security:R-1'), 'excepted');
+  const r2 = contests(run2);
+  assert.equal(state(r2, '05-security:R-1'), 'contested');
+  assert.deepEqual(r2.excepted, []);
 });

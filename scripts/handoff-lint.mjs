@@ -382,7 +382,10 @@ export function checkLedger(file, findingIds) {
 
 // ---- contested findings (handoff v1.2) ----
 const RUN_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
-const EXCEPTION_RE = new RegExp(`^- (${KEY_PART}) — .{1,600} — approved: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$`);
+// `- <slug>/<NN>-<role>:R-<n> — … — approved: <date> (CEO)`; the slug is the run folder name. A line without a slug names no run.
+const EXC_TAIL = ' — .{1,600} — approved: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$';
+const EXCEPTION_RE = new RegExp(`^- ([A-Za-z0-9][A-Za-z0-9._-]{0,80})/(${KEY_PART})${EXC_TAIL}`);
+const UNSLUGGED_RE = new RegExp(`^- (${KEY_PART})${EXC_TAIL}`);
 
 // Reads one Handoff of a run folder: its Blocking rows with an R-ID, and its Contested and Contests lines.
 function scanRunFile(text, file, nn, role, errors, warnings) {
@@ -452,6 +455,8 @@ function readExceptions(runAbs, warnings) {
   }
   let text;
   try { text = readFileSync(file, 'utf8'); } catch { unreadable(); return found; }
+  const slug = basename(runAbs);
+  const unslugged = new Set();
   let section = '';
   let fence = false;
   for (const line of text.split(/\r?\n/)) {
@@ -461,7 +466,15 @@ function readExceptions(runAbs, warnings) {
     if (h) { section = h[1].trim(); continue; }
     if (section !== 'Exceptions') continue;
     const m = EXCEPTION_RE.exec(line);
-    if (m && realDate(Number(m[2]), Number(m[3]), Number(m[4]))) found.add(m[1]);
+    if (m) {
+      if (m[1] === slug && realDate(Number(m[3]), Number(m[4]), Number(m[5]))) found.add(m[2]);
+      continue;
+    }
+    const u = UNSLUGGED_RE.exec(line);
+    if (u && realDate(Number(u[2]), Number(u[3]), Number(u[4])) && !unslugged.has(u[1])) {
+      unslugged.add(u[1]);
+      warnings.push(`warning: exception ${u[1]} names no run; not applied`);
+    }
   }
   return found;
 }
