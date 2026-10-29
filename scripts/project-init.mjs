@@ -31,9 +31,10 @@ const ENUMS = Object.freeze({
   voice: ['clear', 'bold', 'technical']
 });
 const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
-// C0, DEL, C1, Arabic letter mark, zero-width and bidi marks and controls, line and paragraph separators,
-// word joiner range, byte order mark.
-const BAD_CHAR_RE = new RegExp("[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]");
+// Category test, not a block list: controls (Cc), format characters (Cf: zero-width, bidi, tag characters
+// U+E0000-E007F, soft hyphen, BOM), line and paragraph separators, plus Mongolian vowel separator (Cf only in
+// newer Unicode) and the unassigned U+2065 inside the invisible-format range.
+const BAD_CHAR_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u180e\u2065]/u;
 
 class Refusal extends Error {}
 const refuse = message => new Refusal(message);
