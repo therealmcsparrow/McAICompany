@@ -1,10 +1,11 @@
-# Contract: run-state v1.4
+# Contract: run-state v1.5
 
 Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0024-reprompt-playbook-owns-the-flow.md`): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric), and it bounds the view's `round` to what the mods accept. Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
 v1.2 is additive (rationale `docs/adr/0027-triage-record.md`): it adds the triage record ("Triage record"), the commands `triage issue` and `triage check <nonce>`, and the folder `.company/triage/`. Run files, records, the run view, `show` and `active` are unchanged; `active` never reads `.company/triage/`.
 v1.3 is additive (rationale `docs/adr/0028-run-timing-from-run-state.md`): it adds the `ask` event (a Gate form shown to the CEO), the command `ask`, and a `wait` key on each entry of the view's `gates`, so the CEO's wait at Gates can be shown apart from run time. Every v1.2 file is a valid v1.3 file and gives the same view with `"wait": null` on each Gate entry. A v1.2 reader skips an `ask` line with its usual `line <n> skipped` warning.
+v1.5 is additive (task plan-gate-enforce): under `plan_check.policy` `block`, `gate <slug> plan passed` is refused unless every plan in the run folder passes the scan. Under `warn` and `off`, and for every other command, v1.4 behaviour is unchanged.
 v1.4 is additive (task low-tier-path): the triage record also proves an approved low-risk fix route, and `triage check` takes `--route fix`. Every v1.3 call behaves as before.
 
 ## Storage
@@ -32,7 +33,7 @@ v1.4 is additive (task low-tier-path): the triage record also proves an approved
 | `start <slug>` | appends `start`. Refused when the file already has a `start` and no `end` (`refused: run <slug> already started`). A new `start` after an `end` begins a new segment (a resumed or reopened run). |
 | `wave <slug> <n>` | appends `wave`. Refused without an open segment. |
 | `ask <slug> <brief\|plan\|ship>` | (v1.3) appends `ask`: the Gate form is about to be shown. Refused without an open segment, or for an unknown Gate. |
-| `gate <slug> <brief\|plan\|ship> <passed\|changed\|stopped>` | appends `gate`. Refused without an open segment. |
+| `gate <slug> <brief\|plan\|ship> <passed\|changed\|stopped>` | appends `gate`. Refused without an open segment. (v1.5) `gate <slug> plan passed` first resolves `plan_check.policy` (`aico-settings` v1.9); under `block` it calls `verifyPlans` (`plan-check` v1.2) in the readdir form, trusts no record, and refuses with nothing written: `refused: plan gate: <n> open decisions in <plan>` or `refused: plan gate: <reason>` (`no plan`, `unreadable`, `too large`, `patterns`). An exception in the check is a refusal (`refused: plan gate: check failed`). `plan changed\|stopped`, other Gates, `warn` and `off` are unchanged. The settings and plan-check scripts load only on this path. |
 | `pick <slug> <use\|edit\|keep\|stop> <asked>` | (v1.1) appends `pick`. Refused without an open segment, or when `<asked>` is not a whole number 0–3 (`refused: asked must be 0 to 3`) or the answer is not in the list (`refused: pick must be use, edit, keep or stop`). |
 | `end <slug> <ship\|abort>` | appends `end`, closing the segment. Refused without an open segment. |
 | `show <slug> --json` | prints the run view (below), exit 0 even for a missing or damaged file |
@@ -67,7 +68,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - Each Brief, Plan and Ship Gate answer (an `auto` Gate counts as `passed`): `gate <slug> <gate> <result>`.
 - Ship done, or the CEO stops the run: `end <slug> ship|abort`.
 - A run resumed with "resume <slug>" after an `end` runs `start <slug>` again.
-- The Lead never edits the file by hand; a refused command is reported in the next Gate summary and the run goes on (run-state never blocks a Step or a Gate).
+- The Lead never edits the file by hand; a refused command is reported in the next Gate summary and the run goes on (run-state never blocks a Step or a Gate, except `gate <slug> plan passed` under `plan_check.policy` `block`; the Lead then stops the run at the Plan Gate and does not report and skip that refusal).
 - (v1.1) The pipeline never writes `pick`; only `aico:reprompt` does (`reprompt` v1, Lead flow step 7).
 - (v1.2) The pipeline never runs `triage`; only `aico:triage` (`issue`) and `aico:lead` (`check`) do (`company-type` v1.3 "Trust rule").
 

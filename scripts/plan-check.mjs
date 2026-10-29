@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan check (contract: docs/contracts/plan-check.md v1). Node built-ins only, no child process.
+// Plan check (contract: docs/contracts/plan-check.md v1.2). Node built-ins; `verify` also loads the settings script.
 // Scans the Steps, Tasks, Wave, Phase, Fix round, T<n> and M<n> sections of a plan for open decisions, and keeps a per-run record of the
 // scans in .company/work/<slug>/plan-check.jsonl. The record holds counts, enums, a file name and
 // times only, never plan text (GDPR Art. 5(1)(c)). Plan text and CLI arguments are untrusted data.
@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { MAX_LINE_CHARS, readPlanLines } from './plan-markdown.mjs';
 
 const KiB = 1024;
@@ -19,6 +20,7 @@ const MAX_RECORD_LINE_BYTES = 256;
 const MAX_COUNT = 10000;
 const MAX_PHRASE = 60;
 const MAX_ROWS = 5;
+const MAX_PLANS = 50;
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
@@ -42,6 +44,7 @@ const USAGE = [
   '  gate <slug> <plan-name> --policy <warn|block> [--json]',
   '  off <slug>',
   '  wave <slug> <n>',
+  '  verify <slug> [<plan-name>] [--json]',
   '  read <slug>'
 ].join('\n');
 
@@ -535,14 +538,141 @@ function cmdRead(args, env) {
   }
 }
 
+// ---------------------------------------------------------------- verify
+
+// A plan entry the check can trust: a regular file with one hard link, opened without following a link,
+// the same file that was inspected, within the cap, valid UTF-8. Anything else is an error, never a skip.
+function readPlanStrict(dir, name) {
+  const file = path.join(dir, name);
+  const st = lstatOrNull(file);
+  if (!st || !st.isFile() || st.nlink !== 1) throw new PlanProblem('unreadable', `${name} is not a plain file`);
+  if (st.size > MAX_PLAN_BYTES) throw new PlanProblem('too large', `${name} is over 256 KiB`);
+  let bytes;
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== st.dev || opened.ino !== st.ino) {
+      throw new Error('file changed');
+    }
+    const buf = Buffer.alloc(Math.min(opened.size, MAX_PLAN_BYTES + 1));
+    let off = 0;
+    while (off < buf.length) {
+      const n = fs.readSync(fd, buf, off, buf.length - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    bytes = buf.subarray(0, off);
+  } catch {
+    throw new PlanProblem('unreadable', `${name} cannot be read`);
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  if (bytes.length > MAX_PLAN_BYTES) throw new PlanProblem('too large', `${name} is over 256 KiB`);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new PlanProblem('unreadable', `${name} is not valid UTF-8`);
+  }
+}
+
+function planEntries(dir, plan) {
+  if (plan !== undefined) {
+    if (typeof plan !== 'string' || !PLAN_NAME.test(plan)) throw new PlanProblem('unreadable', 'the plan file name is not allowed');
+    return [plan];
+  }
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    throw new PlanProblem('unreadable', 'the run folder cannot be read');
+  }
+  const found = names.filter((n) => PLAN_NAME.test(n)).sort();
+  if (found.length === 0) throw new PlanProblem('no plan', 'no plan file in the run folder');
+  if (found.length > MAX_PLANS) throw new PlanProblem('too large', 'more than 50 plan files');
+  return found;
+}
+
+// Scans the plan files itself and reads no record. Returns the result plus the decided count.
+function scanPlans({ root, home, slug, plan }) {
+  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('plan-check: bad slug');
+  // Settings load only here, so gate, off, wave and read need nothing beyond this script.
+  const { resolveSettings } = createRequire(import.meta.url)('./settings.mjs');
+  const policy = resolveSettings({ home, cwd: root }).plan_check.policy;
+  const outcome = (state, extra = {}) => ({ v: 1, policy, state, count: 0, plan: null, decided: 0, ...extra });
+  const failed = (reason) => outcome('error', { reason });
+  const dir = runDir(root, slug);
+  if (dir === null) return failed('no plan');
+  if (dir === 'unsafe') return failed('unreadable');
+  let patterns;
+  try {
+    patterns = loadPatterns().patterns;
+  } catch (error) {
+    if (error instanceof PatternError) return failed('patterns');
+    throw error;
+  }
+  let count = 0;
+  let decidedTotal = 0;
+  let firstOpen = null;
+  let problem = null;
+  let names;
+  try {
+    names = planEntries(dir, plan);
+  } catch (error) {
+    if (error instanceof PlanProblem) return failed(error.reason);
+    throw error;
+  }
+  for (const name of names) {
+    let text;
+    try {
+      text = readPlanStrict(dir, name);
+    } catch (error) {
+      if (!(error instanceof PlanProblem)) throw error;
+      problem ??= error.reason;
+      continue;
+    }
+    const { findings, decided } = scanText(text, patterns, { file: name });
+    count += findings.length;
+    decidedTotal += decided;
+    if (findings.length > 0) firstOpen ??= name;
+  }
+  if (problem) return failed(problem);
+  return outcome(count > 0 ? 'open' : 'pass', { count: Math.min(count, MAX_COUNT), plan: firstOpen, decided: decidedTotal });
+}
+
+// The plan Gate check: every plan file in the run folder (or the named one) against the own pattern file.
+export function verifyPlans(args) {
+  const { decided, ...result } = scanPlans(args);
+  return result;
+}
+
+function cmdVerify(args, env) {
+  const { positional, flags } = takeFlags(args, { '--json': 'bool' });
+  if (positional.length < 1 || positional.length > 2) throw new Refusal(USAGE);
+  const [slug, plan] = positional;
+  checkSlug(slug);
+  let full;
+  try {
+    full = scanPlans({ root: env.root, home: env.home, slug, plan });
+  } catch {
+    full = { v: 1, policy: 'block', state: 'error', count: 0, plan: null, decided: 0, reason: 'unreadable' };
+  }
+  const { decided, ...result } = full;
+  const code = full.state === 'error' ? 1 : full.policy === 'block' && full.state === 'open' ? 2 : 0;
+  if (flags['--json']) return { code, lines: [JSON.stringify(result)] };
+  if (full.state === 'error') return { code, lines: [`plan-check (${full.policy}): error ${full.reason}`] };
+  return { code, lines: [countLine(full.policy, full.count, decided)] };
+}
+
 // `now` (epoch ms) and `root` (the product root) are for callers that inject them; `patternFile` is for tests.
-export function main(args, { now, root, patternFile } = {}) {
+export function main(args, { now, root, patternFile, home } = {}) {
   const env = {
     root: typeof root === 'string' && root !== '' ? root : process.cwd(),
     now: typeof now === 'number' ? now : Date.now(),
-    patternFile
+    patternFile,
+    home: typeof home === 'string' && home !== '' ? home : undefined
   };
-  const handlers = { gate: cmdGate, off: cmdOff, wave: cmdWave, read: cmdRead };
+  const handlers = { gate: cmdGate, off: cmdOff, wave: cmdWave, read: cmdRead, verify: cmdVerify };
   try {
     const [command, ...rest] = Array.isArray(args) ? args : [];
     if (typeof command !== 'string' || !Object.hasOwn(handlers, command)) throw new Refusal(USAGE);

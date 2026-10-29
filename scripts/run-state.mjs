@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.4). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (run-state v1.5). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -9,6 +9,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
 
 export const MAX_FILE = 64 * 1024;
@@ -426,12 +427,29 @@ export function triage(root, args, { now = Date.now() } = {}) {
   return JSON.stringify({ trusted: true, type: fixRoute ? match[2] : match[1] });
 }
 
+// The plan Gate under plan_check.policy block: every plan in the run folder is scanned again, and no record is read.
+// Settings and the plan check load only here. Throws Refusal on anything but a clean pass.
+function planGate(root, slug, home) {
+  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) refuse('bad slug');
+  let result;
+  try {
+    const load = createRequire(import.meta.url);
+    const { resolveSettings } = load('./settings.mjs');
+    if (resolveSettings({ home, cwd: root }).plan_check.policy !== 'block') return;
+    result = load('./plan-check.mjs').verifyPlans({ root, home, slug });
+  } catch {
+    refuse('plan gate: check failed');
+  }
+  if (result.state === 'open') refuse(`plan gate: ${result.count} open decisions in ${result.plan}`);
+  if (result.state !== 'pass') refuse(`plan gate: ${result.reason}`);
+}
+
 function usage() {
   return 'usage: start <slug> | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce> [--route fix]';
 }
 
 // Returns { out, code }.
-export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
+export function run(argv, { root = process.cwd(), now = Date.now(), home } = {}) {
   const [cmd, ...rest] = argv;
   const opts = { now };
   try {
@@ -454,6 +472,7 @@ export function run(argv, { root = process.cwd(), now = Date.now() } = {}) {
         if (rest.length !== 3) refuse(usage());
         if (!GATES.has(rest[1])) refuse('gate must be brief, plan or ship');
         if (!RESULTS.has(rest[2])) refuse('result must be passed, changed or stopped');
+        if (rest[1] === 'plan' && rest[2] === 'passed') planGate(root, rest[0], home);
         append(root, rest[0], { ev: 'gate', gate: rest[1], result: rest[2] }, opts);
         return { out: `ok: gate ${rest[1]} ${rest[2]}`, code: 0 };
       case 'pick':

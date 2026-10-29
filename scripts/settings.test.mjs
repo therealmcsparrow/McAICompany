@@ -1316,8 +1316,8 @@ test('PLAN_CHECK_DEFAULTS is warn and 5 and a fresh install resolves it through 
 
 test('plan_check resolves per field, project else user else default, and is not a lock', (t) => {
   const s = sandbox(t);
-  s.user({ plan_check: { policy: 'block', runs: 20 } });
-  assert.deepEqual(planCheckOf(s), { policy: 'block', runs: 20 });
+  s.user({ plan_check: { policy: 'warn', runs: 20 } });
+  assert.deepEqual(planCheckOf(s), { policy: 'warn', runs: 20 });
   s.project({ plan_check: { policy: 'off' } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(plain(r.plan_check), { policy: 'off', runs: 20 });

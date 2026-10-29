@@ -615,6 +615,16 @@ function resolveMods(user, project, { isUnlocked, broken, ignored, warnings }) {
 }
 
 // Off wins: a user or project off, or a project layer with any problem, gives off. A project on never overrides a user off.
+function resolvePlanPolicy(user, project, ignored) {
+  const u = Object.hasOwn(user.plan_check ?? {}, 'policy') ? user.plan_check.policy : undefined;
+  const p = Object.hasOwn(project.plan_check ?? {}, 'policy') ? project.plan_check.policy : undefined;
+  if (u === 'block') {
+    if (p !== undefined && p !== 'block') ignored.push('plan_check.policy: a project cannot lower a user block');
+    return 'block';
+  }
+  return pick(p, u, PLAN_CHECK_DEFAULTS.policy)[0];
+}
+
 function resolveShortPath(user, project, broken, ignored) {
   const u = user.pipeline?.short_path;
   const p = project.pipeline?.short_path;
@@ -688,9 +698,10 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   // Not a lock: a project value counts, and a fail-closed project layer does not change it.
   const reprompt = { question_rounds: pick(project.reprompt?.question_rounds, user.reprompt?.question_rounds, REPROMPT_DEFAULTS.question_rounds)[0] };
 
-  // Not a lock: a project value counts, and a fail-closed project layer does not change it.
+  // Block wins: a project value counts, except that it never lowers a user block. A fail-closed project layer
+  // is an empty layer, so it never lowers one either.
   const plan_check = {
-    policy: pick(project.plan_check?.policy, user.plan_check?.policy, PLAN_CHECK_DEFAULTS.policy)[0],
+    policy: resolvePlanPolicy(user, project, ignored),
     runs: pick(project.plan_check?.runs, user.plan_check?.runs, PLAN_CHECK_DEFAULTS.runs)[0]
   };
 

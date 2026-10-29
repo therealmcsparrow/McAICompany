@@ -1,9 +1,10 @@
-# Contract: plan-tasks v1.1
+# Contract: plan-tasks v1.2
 
+v1.2 is additive (task plan-gate-enforce): under `plan_check.policy` `block`, `begin`, `next` and `start` refuse unless every plan in the run folder passes the scan. Under `warn` and `off` every command is byte-identical to v1.1.
 v1.1 is additive (task goldfish-roles): the `brief` command. The record format is unchanged; a v1 caller that never runs `brief` behaves as before.
 
 Provider: `scripts/plan-tasks.mjs` (plan task parser, scheduler, run record writer and reader; Node built-ins only). Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/parallel.md`), only through the CLI. Consumers: the Plan Gate summary (the `check` block), the Lead's dispatch of plan-task Steps (`next`, `lines`, `brief`), the commit step (`scope`), Fix rounds (`round`), and `scripts/ledger.mjs` `ship` through the exported `readParallel` (`token-ledger` v1.3 `par` record).
-Uses: `aico-settings` v1.7 (`pipeline.parallel_cap`, `pipeline.dispatch`, passed in by the caller as `--cap` and `--mode`; the script reads no settings itself), the plan file name rule of `plan-check` v1 (same regex, same file checks).
+Uses: `aico-settings` v1.7 (`pipeline.parallel_cap`, `pipeline.dispatch`, passed in by the caller as `--cap` and `--mode`) and, from v1.2, v1.9 (`plan_check.policy`, read through `resolveSettings` only on `begin`, `next` and `start`), `plan-check` v1.2 (`verifyPlans`), the plan file name rule of `plan-check` v1 (same regex, same file checks).
 Rationale: `docs/adr/0033-plan-tasks-scheduler.md`. The plan-check scan (`plan-check` v1) is not changed: task fields are plain list lines inside the plan's `## Tasks` section.
 
 ## Plan task syntax (written by the Architect, `aico:planning`)
@@ -67,7 +68,7 @@ Every key listed for an `ev` is required; every other key is refused.
 - Every line is checked (as `plan-check` v1 `readRecord`); a bad line throws `ParallelRecordError` `parallel record <slug> line <n>: <reason>`. A `start` for a task already running, a `done` for a task not running, a `round` while a task runs, or a first line that is not `begin` is a bad line.
 - View: `{ v: 1, slug, state: "on", plan, hash, cap, mode, effective_cap, round, running: [ids], done: { "<round>": [ids] }, peak, waits, out, sibling }` from the last `begin` on (an earlier segment's done tasks stay done). `peak` = the most tasks running at once over the whole file. `waits` = the number of distinct (round, task) pairs in any `ow`. `out` = the total of `extra` plus `sibling` entries; `sibling` = the `sibling` entries alone.
 
-## CLI `scripts/plan-tasks.mjs` (cwd = product root; `main(args, { now, root, pluginRoot })` exported)
+## CLI `scripts/plan-tasks.mjs` (cwd = product root; `main(args, { now, root, pluginRoot, home })` exported)
 Exit codes: **0** done; **1** the plan cannot be read, or the record is broken; **3** refused (bad arguments, bad slug, a refused state change, a plan changed since `begin`). Refusals print `refused: <reason>` and write nothing. Arguments are checked values only: slug `^[a-z0-9][a-z0-9-]{0,63}$`, plan name (plan-check rule), task ID, digits, the words `parallel`/`sequential`, paths that pass the path rule. An argument that holds a control character (Unicode categories Cc, Cf, Zl or Zp) or is longer than 4096 characters is refused with exit 3 before any command runs, so no printed line can be forged. `scope` is the one command that takes unchecked text (commit candidates); a candidate that fails the path rule is never echoed: it prints as `extra ?` and is recorded as `?`.
 
 | Command | Effect |
@@ -89,10 +90,12 @@ Exit codes: **0** done; **1** the plan cannot be read, or the record is broken; 
 3. One line per alone task: `warning <id>: runs alone: <reason codes joined by "; ">`.
 A plan with no task → the single line `plan-tasks: 0 tasks; plan Steps run one at a time`. A plan that cannot be read → `plan-tasks: error <plan-missing|plan-unreadable|plan-too-large|plan-name>`, exit 1.
 
+**Plan Gate under `block` (v1.2).** `begin <slug> <plan>`, `next <slug>` and `start <slug> <id>` first resolve `plan_check.policy` (`aico-settings` v1.9). Under `block` they call `verifyPlans` (`plan-check` v1.2) in the readdir form before anything else and refuse with nothing written (no `begin` or `start` event, no start lines) when the state is `open` or `error`: `refused: plan gate: <n> open decisions in <plan>` or `refused: plan gate: <reason>`, exit 3. An exception in the check is a refusal. `begin` still reads the named plan as before. `next` and `start` never take the `begin` record as proof: a `begin` line written by hand with the real plan's hash passes the hash test but not the scan. No command looks for a `gate ... plan passed` record. `check`, `done`, `lines`, `brief`, `scope`, `round` and `read` are unchanged, so a running task can still finish and be recorded.
+
 ## Error cases
 - Plan changed after `begin` → `next`, `start`, `lines`, `brief` refuse; the Lead dispatches no new plan Step and asks the CEO (run `check` and `begin` again after a Plan Gate, or stop).
 - Broken record → exit 1 with the reader line; the Lead dispatches no new plan Step until the CEO decides, and `ship` writes no `par` record.
-- Nothing here ever blocks a Gate.
+- Nothing here blocks a Gate, except `begin`, `next` and `start` under `plan_check.policy` `block` (above).
 
 ## Compatibility
 New Contract. A run folder without `parallel.jsonl` reads as state `none`; `ship` then writes no `par` record. A reader that meets a `v` it does not know throws. An added key or event needs a new version.
