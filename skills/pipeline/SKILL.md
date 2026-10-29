@@ -27,6 +27,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 13. **CEO pack**: load `references/ceo-pack.md` in Setup (how `needs-ceo` questions are held and shown as one form). Step times need nothing from you: the hooks record each subagent's start and stop (`step-times` v1).
 14. **Plan review** (feature only, when `plan-review` is in the tier set): load `references/plan-review.md` before the Plan Gate.
 15. **Review loop**: load `references/review-loop.md` before the first review Step (failed review Steps, `mark` and `churn` in Fix rounds, the Ship Gate list, the second reviewer).
+16. **Worktrees** (when `pipeline.worktrees` is `on` and the run is parallel): load `references/worktrees.md` before the first plan Step (waves, merge Step, conflicts, cleanup).
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:
@@ -90,6 +91,7 @@ At **Brief**, **Plan** and **Ship**, stop. Directly before each Gate form run `r
 - **Brief, Plan and Ship Gates** of a feature or fix run also show the tier-path lines (references/tier-path.md step 9).
 - **Plan Gate** also shows one Ruleset line: packs used, Must rules added or changed (signed off by the Architect, or "sign-off skipped: no Must changed"), and any exception requests.
 - **Ship Gate, company types other than `software`** (`company-type` v1, from the §1.0 type lines: `company type:`, `ship:`, `ship lanes:`, `ship checks:`): the summary's first line is `Ship means: <ship.meaning>`; every lane in `ship.lanes` runs whatever `pipeline.lanes` says; each item in `ship.checks` without its satisfying Handoff (`company-type` v1 check table) is an open blocker, shown with the check's finding. For `software` none of this applies.
+- **Every Gate** runs `worktree leftovers`; the Ship Gate also shows `run-guard gate` and `worktree protocheck` (`references/worktrees.md` step 7).
 - **Ship Gate** comes before any push, merge, deploy, publish or message to a client, user or authority. Its summary names every optional lane the settings turned off ("skipped by settings: accessibility").
 
 ## 5. Fix rounds
