@@ -312,9 +312,9 @@ Both install commands change your user-scope configuration, not just this projec
 ## Upkeep and standards
 
 ### `/aico:maintain`
-`/aico:maintain`
+`/aico:maintain [drift]`
 
-**What it does.** Routine upkeep: outdated dependencies, known vulnerabilities, license re-check, CI health and stale rule packs — then applies the upgrades you pick.
+**What it does.** Routine upkeep: outdated dependencies, known vulnerabilities, license re-check, CI health and stale rule packs — then applies the upgrades you pick. With `drift` it also runs an informational behaviour check: the Architect compares a few Contracts with the code and lists differences (missing feature, incomplete model, logic shortcut, architectural divergence), each with the Contract line and code line it rests on. The drift report is linked under Minor in the maintenance report, never blocks a Gate and changes no code. Without the argument no drift check runs.
 
 **When to use it.** On a schedule (monthly works well) or whenever the project has drifted.
 

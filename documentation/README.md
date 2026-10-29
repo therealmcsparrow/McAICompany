@@ -7,6 +7,7 @@ Start here:
 | Guide | What it covers |
 |---|---|
 | [Getting started](getting-started.md) | Install, your first run, how a job flows, and the three Gates where you approve |
+| [From idea to shipped code](idea-to-ship.md) | One walk-through from a rough idea to a merged release: capture, check, triage, build, review, ship |
 | [Commands](commands.md) | Every `/aico:*` command (the Playbooks), what it does and when to reach for it |
 | [Roles](roles.md) | All 36 Role agents, grouped by department, and what each one is for |
 | [Mods](mods.md) | The four mods (Savvy, Cache Tax, Reflect, Blast Radius): what each shows, the shared status line, the cache clock, every `mods.*` setting and the three locks |
