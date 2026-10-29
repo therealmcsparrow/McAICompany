@@ -1,0 +1,74 @@
+# Contract: worktree v1
+
+Provider: `scripts/worktree.mjs` (Node built-ins only; cwd = product root; `main(args, { root, now })` exported by `scripts/worktree.mjs`; `readWorktrees(root, slug)` exported by `scripts/worktree.mjs`). Writer of the record: the script, for the Lead. Consumers: the Lead of `aico:pipeline` (worktree flow), `run-guard` v1 (reads archive and conflict events through `readWorktrees`), the Gates (`leftovers`, `protocheck`). Uses: `plan-tasks` v1.3 (`readParallel` `open_wave`, `normalizePath`), `tier-sets` v1.1 (the "Git" paragraph). Rationale: `docs/adr/0043-task-worktrees-outside-repo.md`.
+Exit codes: 0 done, 1 record or git failure, 2 a stop the Lead must act on (conflict, driver risk, record mismatch, kept work, skip, prototype in the diff), 3 refused (`refused: <reason>`, nothing written). Arguments are checked values only: slug `^[a-z0-9][a-z0-9-]{0,63}$`, `<id>` below, a full commit id `^[0-9a-f]{40}$` or `^[0-9a-f]{64}$`; an argument with a control character (Cc, Cf, Zl, Zp) or over 4096 characters, an unknown flag or a repeated flag → exit 3.
+
+## Git
+`execFile` with fixed argument lists, no shell, 30 s and 8 MiB per call, stderr ignored; a non-zero exit is a failure unless a rule below reads the exit code. `tier-sets` v1.1 "Git" steps 1-4 run on every call, in full:
+- The env is `process.env` without any key that starts with `GIT_` (case-insensitive) plus only `GIT_NO_REPLACE_OBJECTS=1` and `GIT_GRAFT_FILE=<absent temp path>`, a path under the temp folder named `aico-no-grafts-<16 random hex>`, checked absent with `lstat` before the first call that carries it (present → exit 1).
+- `rev-parse --show-toplevel` runs once; its answer must equal `realpath(root)` (case-insensitive on win32) or the command is refused (exit 3).
+- The graft check (`rev-parse --git-path info/grafts`, then `lstat` of the answer, anything there) runs before every later call; a hit → exit 1 with nothing merged, removed or written, except `protocheck` (below).
+- Every call starts `--no-replace-objects --no-optional-locks -c core.fsmonitor=false`; every revision or branch argument comes after `--end-of-options`. Ancestry is `merge-base --is-ancestor` with exit codes 0 (ancestor) and 1 (not) only; any other exit is a git failure.
+- Calls on a worktree are `git -C <absolute worktree path>`, never a changed cwd. The script never runs `stash`, `reset` or `checkout`, and never passes `-X`, `-s`, `--strategy`, `--strategy-option`, `--ours` or `--theirs`.
+- A git failure → exit 1 (`worktree: git failed (<reason>)`), nothing merged, removed or written by the failing step.
+
+## Names and paths
+`<id>` = a task ID lowercased (`^t\d{1,3}[a-z]?$`) or `proto`. Branch `refs/heads/aico-wt/<slug>/<id>`. Worktree root `<dirname(realpath(root))>/<basename(realpath(root))>.aico-wt`; path `<worktree root>/<slug>/<id>`. Every existing segment from the worktree root down is `lstat`ed and a link or non-folder is refused; each also passes the real-path rule (its real path equals the lexical one), at `add` and again at `cleanup`. A path over 200 characters is refused (Windows path margin).
+
+## Record `.company/work/<slug>/worktrees.jsonl`
+Append-only, LF, run folder and file checked with `lstat` (a plain folder; a regular file with one hard link; a link refused) and re-checked on the open handle (regular, one link, same device and inode), as `plan-tasks` v1. A line is at most 512 bytes, the file at most 64 KiB and 500 lines.
+
+| Key | Value | On |
+|---|---|---|
+| `v` | `1` | all |
+| `at` | UTC `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`, written by the script | all |
+| `ev` | `add \| merge \| conflict \| remove \| archive` | all |
+| `task` | the `<id>` | all |
+| `base` | full commit id | add |
+| `commit` | full commit id: the merge commit (merge); the branch head (remove, archive) | merge, remove, archive |
+| `tip` | full commit id: the task tip merged, so the `^2` of `commit` | merge |
+| `paths` | at most 100 path keys (`plan-tasks` v1 keys, `?` for a path that fails the path rule) | conflict |
+| `patch` | file name `<id>-<YYYYMMDDTHHMMSSZ>.patch` | archive |
+
+An id's first event is `add`; `merge`, `conflict`, `remove` and `archive` need a live `add`; `remove` and `archive` end it; an id may be added again after that. `readWorktrees(root, slug)` returns `{ v: 1, slug, state: 'none' | 'on', events, archived, conflicts }` (`events` the lines in file order, `archived` and `conflicts` the number of `archive` and `conflict` events); a broken record throws `WorktreeRecordError` (fail-loud, as `readParallel`); a bad slug throws `TypeError`.
+
+**Record check** (run first by `merge` and `cleanup`): every `add` with no `remove` or `archive` must have its path in `git worktree list --porcelain -z` and its branch in `for-each-ref refs/heads/aico-wt/<slug>/`; an id with a `remove` or `archive` must have neither. A mismatch → `record mismatch <id>` (one line per id), exit 2, nothing merged or removed (a forged `remove` cannot turn a live worktree into `main-tree`).
+
+## `add <slug> <id> --base <full id>`
+The run folder exists; the main tree's HEAD is `refs/heads/aico/<slug>` and its commit equals `--base` (for `proto`: `--base` is a commit and an ancestor of it); no live `add` for the id; branch and path do not exist; the segment, real-path and 200-character checks pass. Runs `git worktree add -b <branch> --end-of-options <path> <base>`; appends `add`; prints exactly `Worktree: <path>` (OS separators).
+
+## `changed <slug> <id>`
+The worktree's changed paths (`status --porcelain=v1 -z --untracked-files=all`, both sides of a rename), one per line, for `plan-tasks scope`; a path that fails the `plan-tasks` v1 path rule prints as `?`. Read-only. No live worktree for the id → exit 3.
+
+## `merge <slug>`
+Takes the ids from `readParallel(root, slug).open_wave` in order (so plan order; `proto` never appears). The record check runs first. Per id with a live `add`, and before **every** merge, not only the first:
+- Refused (exit 3) unless the main tree is on `refs/heads/aico/<slug>` and clean (`status --porcelain=v1 -z --untracked-files=all` prints nothing, except untracked files below `.company/work/<slug>/`, the run's own record files).
+- The run tip and the task tip are read (`rev-parse --verify --end-of-options <ref>^{commit}`, full ids), and every check below uses those two ids.
+- `merge: driver risk <reason> <ID>`, exit 2, that id and later ids not merged (earlier merges are kept), when any of these hits, in this order:
+  - `info-attributes`: `rev-parse --git-path info/attributes` names anything (`lstat`).
+  - `merge-driver`, `merge-default`, `branch-mergeoptions`: `config --get-regexp '^merge\..*\.driver$'`, `'^merge\.default$'` or `'^branch\..*\.mergeoptions$'` exits 0 (any `branch.<name>.mergeOptions`, e.g. `-s ours` or `-X ours`; exit 1 = none; any other exit is a git failure).
+  - `gitattributes-changed`: the branch changes a path whose last segment is `.gitattributes` (case, trailing dot or space, a `:stream` suffix, zero-width characters and `GITATT~<n>` aliases included).
+  - `merge-attribute`: `check-attr -z --stdin merge` on the changed paths prints any value but `unspecified` or `set`.
+  The changed paths: `diff --name-only -z --no-renames` (judging options: `--no-ext-diff --no-textconv --no-color --no-relative --ignore-submodules=none`, `--literal-pathspecs`, `-c diff.ignoreSubmodules=none`) between the `merge-base` of the run tip and the task tip, and the task tip.
+- The merge is of the task tip by id: `git -c rerere.enabled=false -c core.hooksPath=<absent path> -c merge.renormalize=false merge --no-ff --no-edit --no-verify --message=merge: <slug> <ID> --end-of-options <task tip>` (with the leading options above; the absent path is a temp path named `aico-no-hooks-<16 random hex>`, checked absent with `lstat` like the graft path). Hooks, rerere and renormalize are off.
+- Success → `refs/heads/aico/<slug>^1` and `^2` must equal the run tip and the task tip read before (else `merge: unexpected result <ID>`, exit 2, no `merge` event); then the `merge` event (`commit` the merge commit, `tip` the task tip) and `merged <ID> <short id>` (7 characters).
+- Conflict (merge exit 1 with a `MERGE_HEAD`) → `diff --name-only --diff-filter=U -z`, `merge --abort`, a `conflict` event, `conflict <ID> <path>` lines (a path that fails the path rule prints as `?`), `merge: stopped at <ID>`, exit 2; later ids are not merged.
+- An id with no live worktree (a one-task wave) prints `main-tree <ID>` and counts as done.
+Last line `merge: <k> of <n>` (k = ids merged or main-tree, n = the open wave). `merge` never deletes a branch or worktree.
+
+## `cleanup <slug> [--archive]`
+The record check runs first. Per live `add`, only when its path is in `git worktree list --porcelain -z` and its segments pass the `add` checks again (else `skip <id>`, exit 2). Reachability alone never permits a deletion, and `merge-base --is-ancestor` is never the deciding test.
+1. `git -C <path> symbolic-ref --quiet HEAD` must print the task branch, else `kept <id>: worktree not on its branch`, exit 2, nothing deleted. Then the branch head is read.
+2. **Path (a), recorded merge** (never for `proto`): the record's last `merge` event for the id has `tip` equal to the branch head; git confirms its `commit` (`rev-parse --verify --end-of-options <commit>^2^{commit}` equals `tip`, and `merge-base --is-ancestor <commit> refs/heads/aico/<slug>` exits 0); and the worktree is clean (`status --porcelain=v1 -z --untracked-files=all` prints nothing) → `git worktree remove` (no `--force`), `git branch -D`, a `remove` event (`commit` the head), `removed <id>`.
+3. **Path (b), verified patch** (every other case, always for `proto`): without `--archive` → `kept <id>: unmerged work`, exit 2. With `--archive`: `git -C <path> add -A`; then `git -C <path> -c diff.ignoreSubmodules=none diff --cached --binary --no-ext-diff --no-textconv --no-color --no-relative --ignore-submodules=none --end-of-options <base>` (`<base>` from the `add` event) into memory, and the `status` bytes kept. The diff is written to `.company/work/<slug>/worktrees/<id>-<UTC YYYYMMDDTHHMMSSZ>.patch` (the folder has no link on it; the file opened `O_CREAT|O_EXCL|O_WRONLY`, plus `O_NOFOLLOW` only where `fs.constants.O_NOFOLLOW` exists, so not on win32, where `O_EXCL` and the folder check stop a planted link), `fsync`, closed, then read back by the real-path read rule and compared byte for byte with the diff. Then the branch head and the `status` are read again; only when both are unchanged is the `archive` event appended (`commit` the head, `patch` the file name); they are read once more, and only when both are still unchanged do `worktree remove --force` and `branch -D` run, and `archived <id> <patch path>` prints.
+4. A diff over 8 MiB (the call cap), a patch name already taken, a failed write, a read-back mismatch or a failed append → `kept <id>: patch not written`; a changed head or status → `kept <id>: changed during archive`; both exit 2, and no `remove --force` or `branch -D` runs for that id. A written patch file stays in place (`.company/` is never deleted). A change after the `archive` event leaves the record saying archived while the worktree and branch still exist: the next record check prints `record mismatch <id>` and the Lead asks the CEO.
+Ends with `git worktree prune`. Exit 2 when any line is `kept` or `skip`, else 0.
+
+## `leftovers`
+For every slug: worktrees from `git worktree list --porcelain -z` under the worktree root and branches from `for-each-ref refs/heads/aico-wt/` → `leftover worktree <slug>/<id>` and `leftover branch aico-wt/<slug>/<id>` (a name that does not have that shape prints as `?`), else `leftovers: none`. Read-only, exit 0.
+
+## `protocheck <slug>`
+No `proto` add in the record → `prototype: none`. Else the commits of `refs/heads/aico-wt/<slug>/proto` (or the head recorded on its `remove` or `archive`) not reachable from its `base`, intersected with the commits reachable from `refs/heads/aico/<slug>` and not from `base` → `prototype: not in diff`, or `prototype: <k> commits in the run branch`, exit 2. `k` also counts prototype commits whose patch id matches a run-branch commit (`cherry --end-of-options refs/heads/aico/<slug> <proto head> <base>`, lines starting `-`), so a cherry-picked prototype commit is found; a squashed copy is left to review. A `proto` add whose branch is gone with no head recorded on a `remove` or `archive`, a graft hit or a git failure → `prototype: unknown`, exit 2. A broken record → exit 1.
+
+## Test hooks
+`main(args, { root, now, patchCap, hook })`: `patchCap` (an integer, bytes) replaces the 8 MiB diff cap and `hook(name, data)` is called at fixed points (`git`, `tip-read`, `patch-open`, `patch-written`, `archive-verified`, `archive-recorded`). Only tests pass them; the command line never does.
