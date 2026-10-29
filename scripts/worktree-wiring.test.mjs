@@ -42,7 +42,9 @@ test('worktrees.md states the Worktree Steps rules: git -C, no cd, no stash, set
   has(wt, 'git -C', 'absolute path', 'permissions.additionalDirectories', '.aico-wt', 'acceptEdits');
   has(wt, /never `cd` or `Set-Location`/, /never `git stash`/);
   has(wt, 'PowerShell(', 'Bash(');
-  assert.equal(/Bash\(git:\*\)|PowerShell\(git:\*\)/.test(wt), false);
+  // the doc may name the blanket rule only to forbid it ("Never `Bash(git:*)`")
+  assert.equal(/(?<!Never `)(?:Bash|PowerShell)\(git:\*\)/.test(wt), false);
+  has(wt, 'Never `Bash(git:*)`');
   has(wt, '--literal-pathspecs');
   assert.equal(/^Name:/m.test(wt), false);
 });
