@@ -159,7 +159,31 @@ These checks apply to every run from v0.20.0.
 - **Grafts.** A git grafts file makes every judging check stop: tier checks answer `diff unknown`, review depth goes to `full`, and `rule-check` refuses to run.
 - **Binary files.** Binary is decided by file content. The binary type list is fixed. A file outside the list that holds binary content in a text path (`binary content in a text path`) blocks until it is fixed or you grant an exception. A text file marked binary by git attributes is shown to reviewers through `rule-check text`, never through a path they type.
 - **Contested findings.** A builder can contest a reviewer finding instead of fixing it. Every reviewer finding has an ID of the form `<NN>-<role>:R-<n>`. A security finding never closes by contest.
-- **Receipts.** `token-ledger` has a `receipt` command for a run's cost record.
+
+## Receipts
+`ledger.mjs receipt <run>` prints what the run's records show, and only the lines that were recorded: time, tokens, Gates and Fix rounds. A cost line appears only when a cost is recorded (see [Cost from telemetry](#cost-from-telemetry)). With `--baseline` it can also compare the time with the median of up to three earlier runs.
+
+## The CEO question pack
+The Lead does not show a question the moment a Step returns `needs-ceo`. It holds the question until every Step of the current wave has returned, then shows all held questions as one form (up to 4 questions per form; more are split into the fewest forms). At the Brief, Plan or Ship Gate, the held questions join that Gate's own form. Some questions always get their own form and wait for the wave end only if the run can go on without them: Blocking security findings, escalations after the Fix-round limit, messages to a client, publishing, reports to authorities and production deploys. A Step that cannot continue without its answer ends the wave early.
+
+The Lead records each form with `run-state ceo <slug> <brief|plan|ship|none> <n>`: the Gate and the number of questions, never the text. `none` counts a prompt that appeared outside any form; it is the number the pack aims to reduce.
+
+## The never-cited report
+`node scripts/cited.mjs report --runs <N>` (1 to 50) reads the newest run folders and counts, for each Role, how many of its Step files a later Step of the same run cites. A Step is cited when a later Handoff names its file (`04-senior-engineer`, with or without `.md` or a path) or says `Step 04`. A Step number is shared by parallel Steps, so a prose cite can credit more than one Role. It is read-only and prints Role names only, no Handoff text:
+- `keep <role>` for each keep lane, always: security, pentester, vuln-scanner, legal, accessibility-tester and senior-engineer.
+- `cited <role>: <c> of <w>` for Steps cited of Steps written.
+- `never cited <role>` for a Role that wrote Steps and had none cited.
+- `skipped <k>` for files and folders that were not read.
+
+`/aico:feedback` puts these lines under `## Cited`. A keep lane is never a removal candidate. Only you decide whether a Role is removed.
+
+## Guided first product
+When `.company/project.md` is missing and your request starts a product, the Lead asks three forms, so you edit no file by hand:
+1. **Company.** The company type (optional; none means software).
+2. **Product.** Product type (web, desktop or game), engagement (own or client), client, audience and goal.
+3. **Voice and terms.** Languages, voice (clear, bold or technical), license, jurisdiction and up to 5 personas.
+
+The stack is not asked; it is detected. `scripts/project-init.mjs write` checks each answer (one line of 1 to 200 characters, no control characters) and creates `.company/project.md`. It never replaces an existing profile, and a refused answer is named by its key and asked again. Answers are stored as text and never run. The run then goes on as usual and stops at the Brief Gate.
 
 ## Cost from telemetry
 The scorecard shows a cost segment only when a cost is recorded, and never estimates one. The number is Claude Code's approximate cost from telemetry, not a bill. aico reads an OpenTelemetry export file you set up, matched by session id inside the run window.
@@ -232,7 +256,7 @@ The skill-researcher (Selin) proposes third-party skills for four areas: `stack`
 `aico_language` sets the language aico writes in: Handoff prose, forms, reports and summaries. It is separate from `languages:`, which covers the product's UI strings. Your default lives in `~/.mcsparrow/config.json`; a product can override it with `aico_language:` in `.company/project.md`. Set it with [`/aico:language`](commands.md#aicolanguage). Machine-read parts stay English in every language.
 
 ## Models, effort and names
-Every Role runs on a **model** (opus, sonnet or haiku) and an **effort** level (`low`, `medium`, `high`, `xhigh`, `max`). The model is how capable the Role is; effort is how long it thinks before acting. The plugin's defaults put the deepest thinking where a miss is expensive (architect, code-reviewer, security, pentester on high) and keep writing, art, lookup and support work on low. Every Role also has a pseudonym for display, such as Ava the architect or Quinn the QA tester. Names are pseudonyms shown only to you, in cooler chats, brainstorms and Gate summaries. A Role never gets a name in its prompt: it works under its Role id and writes that id in its Handoff byline (`By: architect`). Brainstorm files store Role ids from v0.20.0. You can still ask for a Role by name ("ask Ava to check the Contracts"); the Lead routes on your words and replaces the name with the Role id before it dispatches. Internal IDs like `aico:architect` never change. The full list is in [Roles](roles.md).
+Every Role runs on a **model** (opus, sonnet or haiku) and an **effort** level (`low`, `medium`, `high`, `xhigh`, `max`). The model is how capable the Role is; effort is how long it thinks before acting. The plugin's defaults put the deepest thinking where a miss is expensive (architect, code-reviewer, security, pentester on high) and keep writing, art, lookup and support work on low. Every Role also has a pseudonym for display, such as Ava the architect or Quinn the QA tester. Use a pseudonym, never a real person's name. Names are shown only to you; Roles get their Role id, not your name, in prompts. A Role never gets a name in its prompt: it works under its Role id and writes that id in its Handoff byline (`By: architect`). Brainstorm files store Role ids from v0.20.0. You can still ask for a Role by name ("ask Ava to check the Contracts"); the Lead routes on your words and replaces the name with the Role id before it dispatches. Internal IDs like `aico:architect` never change. The full list is in [Roles](roles.md).
 
 ## Which model a Role runs on
 Claude Code decides the model of a sub-agent such as an aico Role. The facts below come from the Claude Code documentation, checked on 2026-10-28: https://code.claude.com/docs/en/sub-agents. Quotations are short and are the documentation's words, not instructions to a Role.

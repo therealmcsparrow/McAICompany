@@ -1,7 +1,7 @@
 # Security policy
 
 ## Reporting a vulnerability
-Report a vulnerability privately by email to famhermus@gmail.com. Do not open a public issue for it.
+Report a vulnerability privately by email to security@mcsparrow.eu. Do not open a public issue for it.
 
 ## What to include
 - The plugin version (run `/aico:version`).
