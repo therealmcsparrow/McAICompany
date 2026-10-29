@@ -2,9 +2,9 @@ import type { EngineInterface } from 'claude-code'
 
 import { composeStatus } from '../lib/status.mjs'
 
-export type StatusKey = 'savvy' | 'blast' | 'cost' | 'reflect'
+export type StatusKey = 'version' | 'savvy' | 'blast' | 'cost' | 'reflect'
 
-const KEYS: readonly string[] = ['savvy', 'blast', 'cost', 'reflect']
+const KEYS: readonly string[] = ['version', 'savvy', 'blast', 'cost', 'reflect']
 const NOT_WRITTEN = Symbol('not written')
 
 // The parts live here and not in an atom: no view draws from them. The line is built before the first await,

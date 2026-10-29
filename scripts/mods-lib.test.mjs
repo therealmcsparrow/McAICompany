@@ -9,6 +9,7 @@ import {
 } from '../mods/lib/guard.mjs';
 import { composeStatus, IDLE, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
 import { readyText } from '../mods/lib/ready.mjs';
+import { parseVersion } from '../mods/lib/version.mjs';
 import { commitIntent } from '../mods/lib/git-commit.mjs';
 import { cut, cellWidth, fit, fmtInt, fmtCompact, fmtPct, fmtDuration, fmtMinutes, fmtClock, colorEnabled } from '../mods/lib/format.mjs';
 import {
@@ -261,30 +262,54 @@ test('composeStatus returns undefined when there is nothing to say', () => {
 test('STATUS_CAPS add up so the whole line stays on 70 cells, so the host prefix of 8 leaves 2 spare', () => {
   const sum = Object.values(STATUS_CAPS).reduce((a, b) => a + b, 0);
   assert.equal(STATUS_MAX, 70);
-  assert.deepEqual(STATUS_CAPS, { savvy: 22, blast: 12, cost: 17, reflect: 10 });
-  assert.ok(sum + 3 * 3 <= STATUS_MAX);
+  assert.deepEqual(STATUS_CAPS, { version: 9, savvy: 17, blast: 10, cost: 13, reflect: 9 });
+  assert.ok(sum + 4 * 3 <= STATUS_MAX);
 });
 
-test('composeStatus with all four parts at their cap is at most 70 cells and keeps every part', () => {
-  const line = composeStatus({ savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
+test('composeStatus with all five parts at their cap is at most 70 cells and keeps every part', () => {
+  const line = composeStatus({ version: 'v' + '9'.repeat(200), savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
   assert.ok(cellWidth(line) <= 70);
-  assert.equal(line.split(' · ').length, 4);
-  const wide = composeStatus({ savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
+  assert.equal(line.split(' · ').length, 5);
+  const wide = composeStatus({ version: 'v10.20.30', savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
   assert.ok(cellWidth(wide) <= 70);
   assert.ok(8 + cellWidth(wide) <= 78);
-  assert.equal(wide.split(' · ').length, 4);
-  const real = composeStatus({ savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '9007.2P tax 120m', reflect: '20 lessons' });
-  assert.equal(real, 'W3 S12 be-eng 14m · ⚠ security · 9007.2P tax 120m · 20 lessons');
+  assert.equal(wide.split(' · ').length, 5);
+  const real = composeStatus({ version: 'v0.20.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '9 lessons' });
+  assert.equal(real, 'v0.20.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 9 lessons');
   assert.ok(cellWidth(real) <= 70);
 });
 
+test('composeStatus puts the version first, shows it next to the idle part and never drops it before the others', () => {
+  assert.equal(composeStatus({ version: 'v0.20.0' }), 'v0.20.0');
+  assert.equal(composeStatus({ version: 'v0.20.0' }, { idle: true }), 'v0.20.0 · aico idle');
+  assert.equal(composeStatus({ cost: '5 tax', version: 'v0.20.0' }), 'v0.20.0 · 5 tax');
+  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), blast: 'b'.repeat(10), cost: 'c'.repeat(13), reflect: 'r'.repeat(9) };
+  for (const max of [60, 50, 40, 30, 20]) {
+    const l = composeStatus(parts, { max });
+    assert.ok(cellWidth(l) <= max, String(max));
+    assert.ok(l.startsWith('v0.20.0'), max + ': ' + l);
+  }
+  assert.equal(composeStatus(parts, { max: 20 }), 'v0.20.0 · sssssssss…');
+});
+
+test('parseVersion accepts x.y.z from plugin.json text and nothing else', () => {
+  assert.equal(parseVersion('{"name":"aico","version":"0.20.0"}'), '0.20.0');
+  assert.equal(parseVersion('\ufeff{"version":"10.20.30"}\r\n'), '10.20.30');
+  for (const bad of ['', 'x', '[]', 'null', '{}', '{"version":7}', '{"version":"0.20"}', '{"version":"0.20.0-beta"}',
+    '{"version":"v0.20.0"}', '{"version":"0.20.0\n"}', '{"version":" 0.20.0"}', '{"version":"1.2.3\u001b[31m"}',
+    '{"version":"123456789.1.1"}', '{"version":"0.20.0"', '{"__proto__":{"version":"1.2.3"}}', undefined, null, 7, {}]) {
+    assert.equal(parseVersion(bad), undefined, String(bad));
+  }
+  assert.equal(parseVersion('{"version":"' + '1'.repeat(1e6) + '.1.1"}'), undefined);
+});
+
 test('composeStatus with a small max drops reflect, cost, blast, then cuts savvy', () => {
-  const parts = { savvy: 's'.repeat(20), blast: 'b'.repeat(8), cost: 'c'.repeat(15), reflect: 'r'.repeat(8) };
-  const l1 = composeStatus(parts, { max: 55 });
-  assert.ok(cellWidth(l1) <= 55 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(15)));
+  const parts = { savvy: 's'.repeat(17), blast: 'b'.repeat(8), cost: 'c'.repeat(13), reflect: 'r'.repeat(8) };
+  const l1 = composeStatus(parts, { max: 50 });
+  assert.ok(cellWidth(l1) <= 50 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(13)));
   const l2 = composeStatus(parts, { max: 40 });
   assert.ok(cellWidth(l2) <= 40);
-  assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(15)) && l2.includes('b'.repeat(8)));
+  assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(13)) && l2.includes('b'.repeat(8)));
   const l3 = composeStatus(parts, { max: 15 });
   assert.ok(cellWidth(l3) <= 15);
   assert.ok(l3.endsWith('…') && !l3.includes('b'));
@@ -322,6 +347,12 @@ test('readyText lists the mods that are on, in a fixed order', () => {
   const on = (enabled) => ({ enabled });
   assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true), blast_radius: on(true) }, true),
     'aico mods ready: Savvy, Cache Tax, Reflect, Blast Radius');
+  assert.equal(readyText({ savvy: on(true) }, true, '0.20.0'), 'aico 0.20.0 mods ready: Savvy');
+  assert.equal(readyText({ savvy: on(true) }, false, '0.20.0'), 'aico 0.20.0 mods ready (settings unknown): Savvy');
+  assert.equal(readyText(null, true, '0.20.0'), 'aico 0.20.0 mods ready');
+  for (const bad of ['v0.20.0', '0.20', '0.20.0\n', 'x'.repeat(100), 7, null, {}]) {
+    assert.equal(readyText({ savvy: on(true) }, true, bad), 'aico mods ready: Savvy', String(bad));
+  }
   assert.equal(readyText({ savvy: on(false), cache_tax: on(true), reflect: on(false), blast_radius: on(true) }, true),
     'aico mods ready: Cache Tax, Blast Radius');
   assert.equal(readyText({ savvy: on(false) }, true), 'aico mods ready: none on');

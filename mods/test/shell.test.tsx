@@ -151,6 +151,37 @@ test('session start shows one toast that lists the mods that are on, and the idl
   expect(out.statuses[0]).toBe('aico idle')
 })
 
+async function bootWithManifest($: Env[0], on: Env[1], manifest: string | null) {
+  const paths: string[] = []
+  on('fs.stat', ((_: unknown, e: { path: string }) => {
+    paths.push(e.path)
+    if (manifest === null) return { deny: 'no file' }
+    return { value: { kind: 'file', size: manifest.length, mtimeMs: 1, isLink: false } }
+  }) as never)
+  on('fs.read', ((_: unknown, e: { path: string }) => (manifest === null ? { deny: 'no file' } : { value: manifest })) as never)
+  const out = await bootWithOutputs($, on, () => ok(GOOD))
+  return { ...out, paths }
+}
+
+test('the plugin version is the first status part and in the ready toast', async ($, on) => {
+  const out = await bootWithManifest($, on, '{"name":"aico","version":"0.20.0"}')
+  expect(out.paths[0].replaceAll('\\', '/').endsWith('/.claude-plugin/plugin.json')).toBe(true)
+  expect(out.toasts).toEqual(['aico 0.20.0 mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(out.statuses[out.statuses.length - 1]).toBe('v0.20.0 · aico idle')
+})
+
+test('an unreadable or invalid plugin.json leaves the version out and never prints file text', async ($, on) => {
+  const missing = await bootWithManifest($, on, null)
+  expect(missing.toasts).toEqual(['aico mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(missing.statuses[missing.statuses.length - 1]).toBe('aico idle')
+})
+
+test('a plugin.json whose version is not x.y.z leaves the version out', async ($, on) => {
+  const bad = await bootWithManifest($, on, '{"version":"evil\u001b[31m 1.2"}')
+  expect(bad.toasts).toEqual(['aico mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(bad.statuses[bad.statuses.length - 1]).toBe('aico idle')
+})
+
 test('a settings call that fails still toasts, and says the settings are unknown', async ($, on) => {
   const out = await bootWithOutputs($, on, () => ({ deny: 'no process here' }))
   expect(out.toasts).toHaveLength(1)
