@@ -76,7 +76,8 @@ select.ignored { color: var(--muted); background: var(--head); border-style: das
 select:disabled, input:disabled { opacity: .55; cursor: not-allowed; background: var(--head); }
 select.set, input.set { border-color: var(--accent); background: var(--set); }
 select[aria-invalid="true"], input[aria-invalid="true"] { border: 2px solid var(--err); background: var(--err-bg); }
-.lock::after { content: "needs unlock"; margin-left: var(--s2); font-size: var(--fs-sm); font-weight: 400; color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 0 var(--s2); white-space: nowrap; }
+.lockwhy { display: block; font-size: var(--fs-sm); font-weight: 400; margin-top: 2px; color: var(--muted); overflow-wrap: anywhere; }
+.lockwhy.locked { color: var(--warn); }
 .ro { color: var(--muted); font-size: var(--fs-sm); }
 .bulk { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: center; margin-bottom: var(--s3); background: var(--head); border-radius: var(--r2); padding: var(--s3); }
 .bulk label { display: flex; gap: var(--s1); align-items: center; color: var(--muted); font-size: var(--fs-sm); }
@@ -186,6 +187,7 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
 </header>
 <div id="status" role="status" aria-live="polite"></div>
 <div id="field-live" class="vh" role="status" aria-live="polite"></div>
+<div id="lock-live" class="vh" role="status" aria-live="polite"></div>
 <main>
   <div id="notices" role="status" aria-live="polite"></div>
   <div role="tablist" aria-label="Settings">
@@ -318,7 +320,20 @@ function diffCount(a, b) {
 const projectOn = () => state.hasProject;
 const profileOn = () => state.resolved.profile.hasProject;
 const userUnlocked = (key) => (draft.user.unlocked ?? []).includes(key);
+const UNLOCK_NAMES = { ship: 'Ship', installs: 'Installs', security: 'Security' };
+const UNLOCK_VALUES = { ship: 'auto', installs: 'auto', security: 'Off' };
+// Says what a lock change did, in the region that error text does not share.
+function announceLock(message) {
+  const live = document.getElementById('lock-live');
+  live.textContent = '';
+  live.textContent = message;
+}
 function setUnlock(key, on) {
+  if (on !== userUnlocked(key)) {
+    announceLock(on
+      ? `${UNLOCK_NAMES[key]} unlocked. ${key === 'security' ? 'Off now applies to Security, Compliance and Blast Radius.' : 'auto now applies.'}`
+      : `${UNLOCK_NAMES[key]} locked again. ${UNLOCK_VALUES[key]} is held until you unlock it.`);
+  }
   const list = (draft.user.unlocked ?? []).filter((k) => k !== key);
   if (on) list.push(key);
   if (list.length) draft.user.unlocked = list; else delete draft.user.unlocked;
@@ -502,6 +517,7 @@ function confirmUnlock(key) {
       cancel.removeEventListener('click', onCancel);
       dialog.removeEventListener('close', onClose);
       if (dialog.open) dialog.close();
+      if (!result) announceLock('Kept locked. Your choice was not applied.');
       resolve(result);
     };
     const onOk = () => finish(true);
@@ -578,8 +594,9 @@ function withProblem(control, label, problem) {
     }
     err.textContent = message;
     err.hidden = message === '';
-    if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', err.id); }
-    else { control.removeAttribute('aria-invalid'); control.removeAttribute('aria-describedby'); }
+    const ids = [message ? err.id : '', control.baseDesc ?? ''].filter(Boolean).join(' ');
+    if (message) control.setAttribute('aria-invalid', 'true'); else control.removeAttribute('aria-invalid');
+    if (ids) control.setAttribute('aria-describedby', ids); else control.removeAttribute('aria-describedby');
   });
   return control;
 }
@@ -592,7 +609,11 @@ function roleLabel(role) {
 function roleField(level, role, field, word, control, hint = null) {
   const id = `rf-${role}-${level}-${field}`;
   control.id = id;
-  if (hint) { hint.id = `${id}-hint`; control.setAttribute('aria-describedby', hint.id); }
+  if (hint) {
+    hint.id = `${id}-hint`;
+    control.baseDesc = field === 'name' ? `${hint.id} roles-names-notice` : hint.id;
+    control.setAttribute('aria-describedby', control.baseDesc);
+  }
   return el('div', { class: 'cf' }, el('label', { for: id }, word, el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), control, hint, control.errEl);
 }
 const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3 };
@@ -601,13 +622,20 @@ function protectedFloor(role) {
   const r = state.resolved?.roles?.[role];
   return r?.protected === true && typeof r.floor === 'string' ? r.floor : '';
 }
+const NAME_HINTS = {
+  user: 'Use a pseudonym, not a real name.',
+  'user-off': 'Use a pseudonym, not a real name.',
+  project: 'Saved in .company/. Use a pseudonym, not a real name.',
+  'project-off': 'Needs a .company/ folder.'
+};
+const NAMES_NOTICE = "Use a pseudonym, never a real person's name. Names are shown only to you; Roles get their Role id, not your name, in prompts.";
 function roleCell(level, role) {
   const name = withProblem(bindLayer(el('input', { type: 'text', placeholder: '—' }), level, ['roles', role, 'name']), 'Name', nameProblem);
   const model = bindLayer(selectFor(MODELS, null), level, ['roles', role, 'model']);
   const effort = bindLayer(selectFor(EFFORTS, null), level, ['roles', role, 'effort']);
   const cap = withProblem(bindLayer(el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), level, ['roles', role, 'context_cap'], Number), 'Cap', capProblem);
   return el('td', {}, el('div', { class: 'cell' },
-    roleField(level, role, 'name', 'Name', name),
+    roleField(level, role, 'name', 'Name', name, el('p', { class: 'hint' }, NAME_HINTS[projectOn() ? level : `${level}-off`])),
     roleField(level, role, 'model', 'Model', model, protectedFloor(role) ? el('p', { class: 'hint' }, `Protected: runs at ${protectedFloor(role)} or higher at every risk tier.`) : null),
     roleField(level, role, 'effort', 'Effort', effort), roleField(level, role, 'cap', 'Cap', cap)));
 }
@@ -631,7 +659,8 @@ function renderRoles(panel) {
   });
   panel.append(el('div', { class: 'bulk' },
     el('label', {}, 'Apply to', dept), el('label', {}, 'at', level), el('label', {}, 'model', model), el('label', {}, 'effort', effort), apply));
-  panel.append(el('p', { class: 'hint' }, 'Each cell holds name, model and effort. Names are for display only.'));
+  panel.append(el('div', { class: 'notice info', id: 'roles-names-notice' }, NAMES_NOTICE));
+  panel.append(el('p', { class: 'hint' }, 'Each cell holds name, model and effort.'));
 
   const { wrap, tbody } = table(['Role', 'Plugin', 'User', 'Project', 'In effect'], 'roles');
   for (const [d, roles] of groups) {
@@ -1149,14 +1178,26 @@ function renderLanguage(panel) {
 // ---------- Pipeline tab ----------
 function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, format, opts = {}) {
   const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
+  const lockId = `lock-${path.join('-')}`;
   const cells = ['user', 'project'].map((level) => {
     const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock, opts.dialog) : null;
     const control = bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard);
     if (opts.problem) withProblem(control, label, opts.problem);
-    if (opts.describedBy) control.setAttribute('aria-describedby', opts.describedBy);
+    const desc = [opts.lock ? lockId : '', opts.describedBy ?? control.getAttribute('aria-describedby') ?? ''].filter(Boolean).join(' ');
+    if (desc) { control.baseDesc = desc; control.setAttribute('aria-describedby', desc); }
     return el('td', {}, control, control.errEl);
   });
   const head = el('th', { scope: 'row', class: opts.lock ? 'lock' : '' }, label);
+  if (opts.lock) {
+    const why = el('span', { class: 'lockwhy', id: lockId });
+    head.append(why);
+    syncers.push(() => {
+      const open = userUnlocked(opts.lock);
+      why.classList.toggle('locked', !open);
+      const text = open ? 'Unlocked by you.' : `Locked. ${opts.lockedValue} needs your ${opts.lock === 'security' ? 'security' : UNLOCK_NAMES[opts.lock]} unlock.`;
+      if (why.textContent !== text) why.textContent = text;
+    });
+  }
   tbody.append(el('tr', {}, head, el('td', { class: 'plugin' }, format(pluginValue)), cells, effect));
   syncers.push(() => showEffect(effect, path, pluginValue, format, getIn(state.resolved, path)));
 }
@@ -1344,7 +1385,7 @@ function renderPipeline(panel) {
     if (lane === 'legal') {
       pipelineRow(lanes.tbody, LANE_LABELS[lane], path, defaults.lanes[lane], (l) => selectFor(['auto', 'on', 'off'], l), String, String);
     } else {
-      const lock = LOCKED_LANES.includes(lane) ? { lock: 'security', needsUnlock: (v) => v === false } : {};
+      const lock = LOCKED_LANES.includes(lane) ? { lock: 'security', lockedValue: 'Off', needsUnlock: (v) => v === false } : {};
       pipelineRow(lanes.tbody, LANE_LABELS[lane], path, defaults.lanes[lane],
         (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' }), (s) => s === 'true', onOff, lock);
     }
@@ -1358,7 +1399,7 @@ function renderGates(panel) {
   panel.append(el('p', { class: 'hint' }, 'ask shows you a form; auto writes the Gate summary and carries on. Ship and Installs need your unlock before auto applies.'));
   const { wrap, tbody } = table(COLUMNS);
   for (const gate of GATES) {
-    const lock = LOCKED_GATES.includes(gate) ? { lock: gate, needsUnlock: (v) => v === 'auto' } : {};
+    const lock = LOCKED_GATES.includes(gate) ? { lock: gate, lockedValue: 'auto', needsUnlock: (v) => v === 'auto' } : {};
     pipelineRow(tbody, GATE_LABELS[gate], ['gates', gate], defaults[gate], (l) => selectFor(['ask', 'auto'], l), String, String, lock);
   }
   panel.append(wrap);
@@ -1382,7 +1423,7 @@ function renderGates(panel) {
       sel.classList.toggle('set', on);
       effect.replaceChildren(on ? 'unlocked' : 'locked', el('span', { class: 'src' }, on ? '(user)' : '(plugin)'));
     });
-    unlocks.tbody.append(el('tr', {}, el('th', { scope: 'row', class: 'lock' }, label), el('td', { class: 'plugin' }, 'locked'), el('td', {}, sel), projectCell, effect));
+    unlocks.tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, 'locked'), el('td', {}, sel), projectCell, effect));
   }
   panel.append(unlocks.wrap);
 
@@ -1403,13 +1444,13 @@ function renderMods(panel) {
     const { wrap, tbody } = table(COLUMNS);
     const label = MOD_LABELS[mod];
     if (mod === 'blast_radius') {
-      const lock = { lock: 'security', needsUnlock: (v) => v === false, dialog: 'blast' };
+      const lock = { lock: 'security', lockedValue: 'Off', needsUnlock: (v) => v === false, dialog: 'blast' };
       pipelineRow(tbody, `${label} on/off`, ['mods', 'blast_radius', 'enabled'], defaults.blast_radius.enabled, onOffChoice, (s) => s === 'true', onOff, lock);
       const askOrWarn = (l) => selectFor(['ask', 'warn'], l);
       pipelineRow(tbody, `${label} core`, ['mods', 'blast_radius', 'core'], defaults.blast_radius.core, askOrWarn, String, String);
       pipelineRow(tbody, `${label} contract`, ['mods', 'blast_radius', 'contract'], defaults.blast_radius.contract, askOrWarn, String, String);
       pipelineRow(tbody, `${label} security`, ['mods', 'blast_radius', 'security'], defaults.blast_radius.security, askOrWarn, String, String,
-        { lock: 'security', needsUnlock: (v) => v === 'warn', dialog: 'blast' });
+        { lock: 'security', lockedValue: 'warn', needsUnlock: (v) => v === 'warn', dialog: 'blast' });
     } else {
       pipelineRow(tbody, `${label} on/off`, ['mods', mod, 'enabled'], defaults[mod].enabled, onOffChoice, (s) => s === 'true', onOff);
       if (mod !== 'reflect') {
