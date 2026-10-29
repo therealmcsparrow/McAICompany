@@ -174,7 +174,7 @@ test('guard: the new files stay inside the line caps the pins above assume', () 
 const PICKS = 'skills/lead/references/skill-picks.md';
 test('AC3 skill-picks: detect runs before the dispatch; vet comes after the Handoff', () => {
   const t = read(PICKS);
-  order(t, ['## 1. Before the dispatch', 'skillspector.mjs" detect', '## 2. Dispatch', 'skill-picks.mjs" vet']);
+  order(t, ['## 1. Before the dispatch', 'run.mjs" skillspector detect', '## 2. Dispatch', 'run.mjs" skill-picks vet']);
   assert.match(t, /always asked, whatever `gates\.installs` says/);
 });
 test('AC5 skill-picks: approve form then install form; the stop form is never auto', () => {
@@ -252,7 +252,7 @@ const postInstall = () => {
 };
 test('skill-picks post-install: check-install runs with the name and hash from vet, before the scan', () => {
   const t = postInstall();
-  order(t, ['skill-picks.mjs" check-install --name <name> --hash <hash>', 'skillspector.mjs" scan --scope project --skill <name>']);
+  order(t, ['run.mjs" skill-picks check-install --name <name> --hash <hash>', 'run.mjs" skillspector scan --scope project --skill <name>']);
   assert.match(t, /`picks\[\]\.name`/);
   assert.match(t, /`picks\[\]\.hash`/);
   assert.match(t, /from the `vet` output only/);

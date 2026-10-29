@@ -11,8 +11,11 @@ import { run as runCompanyType } from './company-type.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 
+// Old skill text is compared after its script calls are moved to the run.mjs form.
+const runForm = (s) => s.replace(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/(?!run\.mjs)([a-z][a-z0-9-]*)\.mjs"/g, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" $1');
 function git(...args) {
-  return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const out = execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  return args[0] === 'show' ? runForm(out) : out;
 }
 
 // The files this branch changed against the merge base with origin/main, or null when no such base exists
@@ -207,7 +210,7 @@ test('AC1 a Role with no personality set gets its shipped default, for every Rol
   assert.doesNotMatch(result.out, /Style data|temperament|calm and patient/);
   // The cooler Playbook hands the Role a path to that file, as its last prompt line.
   const cooler = read('skills/cooler/SKILL.md');
-  assert.match(cooler, /personality\.mjs" stage/);
+  assert.match(cooler, /run\.mjs" personality stage/);
   const withLine = fenced(cooler).filter(b => b.lines.some(l => /^Personality:/.test(l)));
   assert.ok(withLine.length >= 1);
   for (const b of withLine) assert.match(b.lines.filter(l => l.trim()).at(-1), /^Personality:/);
@@ -540,7 +543,7 @@ const helpLineV13 = name => (
   + `then read the \`### /aico:${name}\` entry of \`documentation/commands.md\` (plugin root = two folders above this skill's base directory) `
   + 'and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.'
 );
-const typeLineV13 = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
+const typeLineV13 = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 const frontKey = (lines, key) => lines.find(l => l.startsWith(`${key}: `));
 
 // One software Playbook, v0.12.0 against now. Allowed: the description starts with the guard (then the old text, except where the
@@ -877,7 +880,7 @@ test('AC10 a Playbook or Role outside the type is refused with the allowed list;
   for (const rel of ['skills/lead/SKILL.md', 'skills/triage/SKILL.md']) assert.match(read(rel), /Setup §1\.0/, rel);
   assert.match(read('skills/lead/SKILL.md'), /Route only to Playbooks in its `playbooks`/);
   assert.match(read('skills/triage/SKILL.md'), /Recommend only Playbooks in its `playbooks`/);
-  for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/SKILL.md']) assert.match(read(rel), /company-type\.mjs" roles/, rel);
+  for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/SKILL.md']) assert.match(read(rel), /run\.mjs" company-type roles/, rel);
 });
 
 test('AC10 pick gives a shared Playbook a stand-in Role, and work names the Playbooks that hand-overs go to', () => {
@@ -912,10 +915,10 @@ test('AC10 pick gives a shared Playbook a stand-in Role, and work names the Play
     assert.ok(sb.type(['resolve']).out.split('\n').includes(`work: ${m.work.join(', ')}`), id);
   }
   // The shared Playbooks use pick with a fallback rather than naming a Role that only some types have.
-  assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick architect product-manager/);
-  assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick devops/);
-  assert.match(read('skills/feedback/SKILL.md'), /company-type\.mjs" pick support account-manager product-manager/);
-  assert.match(read('skills/research/SKILL.md'), /company-type\.mjs" pick --max 2 market-researcher tech-researcher ux-researcher/);
+  assert.match(read('skills/client/SKILL.md'), /run\.mjs" company-type pick architect product-manager/);
+  assert.match(read('skills/client/SKILL.md'), /run\.mjs" company-type pick devops/);
+  assert.match(read('skills/feedback/SKILL.md'), /run\.mjs" company-type pick support account-manager product-manager/);
+  assert.match(read('skills/research/SKILL.md'), /run\.mjs" company-type pick --max 2 market-researcher tech-researcher ux-researcher/);
   assert.match(read('skills/research/SKILL.md'), /pick design-researcher/);
   for (const name of ['client', 'feedback', 'research', 'brainstorm', 'cooler']) {
     assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /\baico:(architect|devops|support)\b/, `${name} names a Role that only some types have`);
@@ -1041,7 +1044,7 @@ test('AC12 setup writes company_type only after the choice, and only once', () =
   assert.equal(fs.existsSync(empty.profile), false);
   // The Playbook orders the steps the same way: list, form, then set from the list output only.
   const setup = read('skills/setup/SKILL.md');
-  assert.ok(setup.indexOf('company-type.mjs" list') < setup.indexOf('company-type.mjs" set <id>'));
+  assert.ok(setup.indexOf('run.mjs" company-type list') < setup.indexOf('run.mjs" company-type set <id>'));
   assert.match(setup, /Cancel, no answer or any other text → run nothing, write nothing/);
   assert.match(setup, /`<id>` taken from the `list` output and never from free text/);
   // Setup reads the readable lines: the source from the first line, the form from the list lines, the hints from their own line.
@@ -1061,7 +1064,7 @@ test('AC13 setup searches skills for the type, at most 5, each vetted, nothing i
   assert.match(setup, /`vet`/);
   assert.match(setup, /never answers the approve, Install or stop form by itself/);
   const picks = read('skills/lead/references/skill-picks.md');
-  assert.match(picks, /skill-picks\.mjs" vet/);
+  assert.match(picks, /run\.mjs" skill-picks vet/);
   assert.match(picks, /Nothing installs unless the approve form and the Install \/ Skip form/);
   assert.match(picks, /Area: stack \| product-type \| company-type \| design/);
   const researcher = read('agents/skill-researcher.md');

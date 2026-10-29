@@ -294,7 +294,7 @@ const HOSTILE = {
 // =====================================================================================================
 test('AC1 /aico:reprompt writes .gitignore then request.md verbatim, takes a baseline, dispatches one reprompter Step, expects prompt.md plus a Handoff', () => {
   const s1 = section(playbook, '1. Start');
-  inOrder(s1, ['`.gitignore` in the folder (exactly `*` and a line feed)', 'then `request.md`: line 1 exactly', 'run-state.mjs" start', 'Take the baseline (section 2), dispatch round 0']);
+  inOrder(s1, ['`.gitignore` in the folder (exactly `*` and a line feed)', 'then `request.md`: line 1 exactly', 'run.mjs" run-state start', 'Take the baseline (section 2), dispatch round 0']);
   assert.match(s1, /create, in this order, `\.gitignore`/);
   assert.match(contract, /\| `\.gitignore` \| Lead \| exactly `\*` and LF; the first file written, before `request\.md` \|/);
   inOrder(section(contract, 'Lead flow (the Playbook)'), ['write `.gitignore`, then `request.md`', 'run `run-state.mjs start <slug>`', '`snap`', 'dispatch round 0']);
@@ -791,9 +791,9 @@ test('AC7 the Playbook passes CEO text only as files with a data header, and she
   const block = dispatchTemplate().join('\n');
   assert.doesNotMatch(block, /<(argument|prompt|CEO|text|answer|edit)\b/i);
   assert.doesNotMatch(playbook, /\$ARGUMENTS|^!`/m);
-  const calls = [...playbook.matchAll(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run-state\.mjs" (\w+)((?: '<[^>']+>')*)(?=[`\s.,;]|$)/g)];
+  const calls = [...playbook.matchAll(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" run-state (\w+)((?: '<[^>']+>')*)(?=[`\s.,;]|$)/g)];
   assert.deepEqual([...new Set(calls.map((c) => c[1]))].sort(), ['pick', 'start']);
-  const all = [...playbook.matchAll(/run-state\.mjs" (\w+)/g)].map((m) => m[1]);
+  const all = [...playbook.matchAll(/run\.mjs" run-state (\w+)/g)].map((m) => m[1]);
   assert.equal(all.length, calls.length, 'no call has an argument outside the allowed shapes');
   const ends = [...playbook.matchAll(/\bend '[^']*'[^\n`]{0,12}/g)].map((m) => m[0]);
   assert.ok(ends.length >= 4, 'end is recorded on every way out');
@@ -805,7 +805,7 @@ test('AC7 the Playbook passes CEO text only as files with a data header, and she
 });
 
 test('AC7 the checker calls in the Playbook are the shapes the real script accepts, and it refuses anything else with exit 3', () => {
-  const calls = [...playbook.matchAll(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/reprompt-check\.mjs" (\w+)((?: '<[^>']+>')*)/g)]
+  const calls = [...playbook.matchAll(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" reprompt-check (\w+)((?: '<[^>']+>')*)/g)]
     .map((m) => [m[1], [...m[2].matchAll(/'<([^>']+)>'/g)].map((x) => x[1])]);
   assert.deepEqual(calls, [['snap', ['slug']], ['reply', ['slug', 'NN', 'hex', 'asks']]]);
   assert.match(playbook, /Before every dispatch, after your own writes, run `node/);
@@ -1560,7 +1560,7 @@ test('AC7 the handover cap, the read scope and the skill scope are in the Playbo
   assert.match(agent, /Never retry a refused call or work around it/);
   assert.match(playbook, /An Agent call refused with a line starting `aico reprompt gate:` \u2192 show that line, `end '<slug>' abort`, stop/);
   assert.match(playbook, /The write gate arms every reprompter dispatch itself \(`arm`\); you never run it/);
-  assert.doesNotMatch(playbook, /reprompt-check\.mjs" arm/, 'the Lead never runs arm');
+  assert.doesNotMatch(playbook, /run\.mjs" reprompt-check arm/, 'the Lead never runs arm');
   assert.doesNotMatch(agent, /Residual risk/);
   assert.match(read('documentation/commands.md'), /its own `\.gitignore`/);
 });

@@ -353,7 +353,7 @@ test('pipeline text: Setup runs model-env once, shows the line, and a bypass rea
   const text = read('skills', 'pipeline', 'SKILL.md');
   const setup = text.split('\n').find((l) => l.startsWith('7. **Settings (§1.7)**'));
   assert.ok(setup);
-  assert.ok(setup.includes('scripts/settings.mjs" model-env'));
+  assert.ok(setup.includes('scripts/run.mjs" settings model-env'));
   assert.match(setup, /once/);
   assert.match(setup, /first chat message/);
   assert.match(setup, /floor bypassed/);
@@ -403,7 +403,7 @@ test('commands page and feedback Playbook: the verdict line is shown in the repo
   const commands = read('documentation', 'commands.md');
   assert.match(section(commands, '/aico:feedback'), /model verdict/);
   const feedback = read('skills', 'feedback', 'SKILL.md');
-  assert.ok(feedback.includes('scripts/ledger.mjs" model-verdict'));
+  assert.ok(feedback.includes('scripts/run.mjs" ledger model-verdict'));
   assert.ok(feedback.includes('`## Model`'));
   const para = feedback.split('\n').filter((l) => l.includes('model-verdict')).join('\n');
   assert.match(para, /never stops the run/);

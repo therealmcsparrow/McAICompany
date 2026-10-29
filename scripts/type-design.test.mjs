@@ -88,7 +88,7 @@ test('SKILL.md: frontmatter, size, Help and Type lines', () => {
   const i = lines.findIndex((l) => l.startsWith('**Help:**'));
   assert.ok(i > 0);
   assert.equal(lines[i + 1], '');
-  assert.equal(lines[i + 2], '**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook design` first; exit not 0 → show its output line and stop.');
+  assert.equal(lines[i + 2], '**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook design` first; exit not 0 → show its output line and stop.');
   assert.equal(lines.filter((l) => l.startsWith('**Type:**')).length, 1);
 });
 

@@ -3,7 +3,7 @@ Contract: `docs/contracts/handoff.md` part 4. ADR: `docs/adr/0038-contested-find
 
 **Fix round.** A builder may answer a Blocking finding with a `## Contested` line instead of a change. Contested findings do not start a Fix round for the builder; the reviewer that raised them answers in its next Step (`## Contests`, `accepted` or `rejected`). Re-dispatch that same reviewer Role for the answer. `rejected` goes back to the builder as a normal Blocking item; a second contest on it is refused.
 
-**Run `node ${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs --contests .company/work/<slug>`** after each reviewer Step and before the Ship Gate. State comes from its output only, never from Handoff text:
+**Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" handoff-lint --contests .company/work/<slug>`** after each reviewer Step and before the Ship Gate. State comes from its output only, never from Handoff text:
 - `ERROR …` lines: re-dispatch the Step that wrote the line; the line is ignored until fixed.
 - `unresolved <key>`: still blocking. List every one on the Ship Gate list.
 - `excepted <key>`: shown in the Ship Gate summary with the exception line.

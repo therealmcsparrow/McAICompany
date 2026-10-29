@@ -1087,7 +1087,7 @@ function releaseBox(t) {
   w('CHANGELOG.md', CHANGELOG);
   w('scripts/check.mjs', 'console.log("check ok");\n');
   w('scripts/ok.mjs', 'console.log("tests ok");\n');
-  w('package.json', '{ "name": "t", "type": "module", "scripts": { "test": "node scripts/ok.mjs" } }\n');
+  w('package.json', '{ "name": "t", "type": "module", "scripts": { "test": "node scripts/run.mjs" ok } }\n');
   git(root, env, 'add', '-A');
   git(root, env, 'commit', '-q', '-m', 'init');
   const fake = path.join(dir, 'fake-claude.mjs');

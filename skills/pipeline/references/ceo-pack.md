@@ -10,7 +10,7 @@ How the Lead bundles questions to the CEO (`run-state` v1.5, `docs/contracts/run
 - A Step that cannot continue without its answer ends the wave early: the Lead shows the form once the other running Steps return.
 
 ## Recording
-- After each form is shown: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs" ceo '<slug>' '<brief|plan|ship|none>' '<n>'`, one record per form, `<n>` the number of questions in it (1 to 20).
+- After each form is shown: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" run-state ceo '<slug>' '<brief|plan|ship|none>' '<n>'`, one record per form, `<n>` the number of questions in it (1 to 20).
 - A Gate form uses its Gate word. A wave-end form between Gates uses the Gate the run is heading for.
 - `none` counts a prompt that appeared outside any form (a stray question in text, a permission prompt the Lead had to ask alone). It is the number to drive down.
 - Pass only the checked words and the count. Never put a question, an answer or CEO text in an argument.

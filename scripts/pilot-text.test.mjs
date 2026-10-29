@@ -89,8 +89,8 @@ test('AC22 reviewers read rule-check list and confirm T- rows, tools never block
 });
 
 test('AC23 slices carry every security Must and a findings ledger survives handover', () => {
-  has(read('skills/ruleset/SKILL.md'), 'every security Must', /rule-check\.mjs"? slices/);
-  has(read('agents/senior-engineer.md'), 'every security Must', /rule-check\.mjs"? slices/);
+  has(read('skills/ruleset/SKILL.md'), 'every security Must', /rule-check(\.mjs)? slices/);
+  has(read('agents/senior-engineer.md'), 'every security Must', /rule-check(\.mjs)? slices/);
   has(read(PILOT), 'findings.md', 'continues the same file', 'appends every new finding before its Handoff', 'never deleted', '`open|fixed|withdrawn`', '[nit]', 'handoff-lint.mjs --findings');
 });
 
@@ -143,7 +143,7 @@ test('ledger timing: written only near a handover (60% of the cap or a decision 
 test('rule slices: builders follow Rule slice, the senior engineer writes the files before done', () => {
   const r = read('skills/ruleset/SKILL.md');
   has(r, '`Rule slice:`', '.company/work/<slug>/rules/<task>.md', 'blocked — missing rule slice', 'instead of the senior-engineer Handoff');
-  for (const f of ['skills/standards/SKILL.md', 'agents/senior-engineer.md']) has(read(f), /rule-check\.mjs"? slices <[^>]+> --write/);
+  for (const f of ['skills/standards/SKILL.md', 'agents/senior-engineer.md']) has(read(f), /rule-check(\.mjs)? slices <[^>]+> --write/);
 });
 
 test('AC24 depth comes from review-depth and is never lowered', () => {
@@ -152,8 +152,8 @@ test('AC24 depth comes from review-depth and is never lowered', () => {
 });
 
 test('AC26 feedback reads ledger report for the last 3 runs, spend and cache read apart', () => {
-  has(read('skills/feedback/SKILL.md'), 'ledger.mjs', 'report', 'last 3 runs', '**spend**', '**cache read**', 'Never add them');
-  has(read('skills/feedback/SKILL.md'), 'ledger.mjs" scorecard <run>', '## Speed', 'never stops the run',
+  has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger', 'report', 'last 3 runs', '**spend**', '**cache read**', 'Never add them');
+  has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger scorecard <run>', '## Speed', 'never stops the run',
     '`brainstorm-`, `replay-` or `baseline-`', 'try the next file, up to 3 tries');
 });
 
@@ -168,6 +168,6 @@ test('handoff skill: context budget follows the Context cap line, lint runs from
   const t = read('skills/handoff/SKILL.md');
   has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '150000', '120000', 'never compute');
   assert.doesNotMatch(t, /around 130k/);
-  has(read('skills/pipeline/SKILL.md'), '${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs');
+  has(read('skills/pipeline/SKILL.md'), '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" handoff-lint');
   assert.doesNotMatch(read(PILOT), /node scripts\/handoff-lint\.mjs/);
 });

@@ -38,11 +38,13 @@ function gitEnv(dir) {
   fs.writeFileSync(config, '');
   return { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', XDG_CONFIG_HOME: dir };
 }
+// Old skill text is compared after its script calls are moved to the run.mjs form.
+const runForm = (s) => s.replace(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/(?!run\.mjs)([a-z][a-z0-9-]*)\.mjs"/g, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" $1');
 function gitShow(t, ref) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-ltp-git-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   try {
-    return execFileSync('git', ['show', ref], { cwd: REPO, env: gitEnv(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return runForm(execFileSync('git', ['show', ref], { cwd: REPO, env: gitEnv(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
   } catch {
     return null;
   }

@@ -149,7 +149,7 @@ describe('cli', () => {
     assert.match(r.stdout, /cites alpha v2/);
   });
   test('the maintain Playbook runs the drift check', () => {
-    assert.match(fs.readFileSync(path.join(REPO, 'skills', 'maintain', 'SKILL.md'), 'utf8'), /check\.mjs" --drift/);
+    assert.match(fs.readFileSync(path.join(REPO, 'skills', 'maintain', 'SKILL.md'), 'utf8'), /run\.mjs" check --drift/);
   });
 });
 

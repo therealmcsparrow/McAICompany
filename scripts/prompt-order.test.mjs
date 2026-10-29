@@ -94,18 +94,18 @@ test('handover follows the Context cap line for Roles; the Lead keeps its own 15
 });
 
 test('review depth is computed per dispatch from the diff, for the code-reviewer only', () => {
-  has(pipeline, 'review-depth.mjs', '--risk', 'per dispatch', 'Fix-round', 'never from a builder');
+  has(pipeline, 'run.mjs" review-depth', '--risk', 'per dispatch', 'Fix-round', 'never from a builder');
 });
 
 test('each Step is linted, then recorded in the ledger from the notification integers only', () => {
-  has(pipeline, 'handoff-lint.mjs', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
-  has(pipeline, 'ledger.mjs" add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
+  has(pipeline, 'run.mjs" handoff-lint', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
+  has(pipeline, 'run.mjs" ledger add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
   has(pipeline, /integers only/i);
 });
 
 test('the ledger is reconciled and the cost line built before the Ship Gate, shown at Ship only', () => {
-  has(pipeline, 'ledger.mjs" reconcile <slug>', 'ledger.mjs" ship <slug> <acs> <fix_rounds> <high_blockers>', 'ledger.mjs" report <slug> --acs <acs>');
-  assert.ok(pipeline.indexOf('ledger.mjs" report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
+  has(pipeline, 'run.mjs" ledger reconcile <slug>', 'run.mjs" ledger ship <slug> <acs> <fix_rounds> <high_blockers>', 'run.mjs" ledger report <slug> --acs <acs>');
+  assert.ok(pipeline.indexOf('run.mjs" ledger report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
   has(pipeline, 'After the Ship Gate is approved', 'scorecard line', '00-summary.md', 'never stops the run');
   has(pipeline, 'spend', 'cache read', 'per shipped AC', 'context at end (not cost)', 'at the Ship Gate only');
 });
@@ -114,16 +114,16 @@ test('tool checks come first in the pre-filter; a T- row blocks only after the r
   const at = pipeline.indexOf('**Pre-filter');
   assert.ok(at >= 0);
   const pre = pipeline.slice(at, at + 1600);
-  assert.ok(pre.indexOf('rule-check.mjs') >= 0 && pre.indexOf('rule-check.mjs') < pre.indexOf('npm run check'), pre);
+  assert.ok(pre.indexOf('run.mjs" rule-check') >= 0 && pre.indexOf('run.mjs" rule-check') < pre.indexOf('npm run check'), pre);
   has(pre, 'run --base <Base commit> --run <slug>', '`list`', 'T-', 'does **not** consume a Fix round');
 });
 
 test('slices are checked before builders; drift runs after sign-off and before Ship', () => {
-  has(pipeline, 'rule-check.mjs" slices', 'rule-check.mjs" drift');
+  has(pipeline, 'run.mjs" rule-check slices', 'run.mjs" rule-check drift');
   const signoff = pipeline.slice(pipeline.indexOf('**Ruleset sign-off:**'), pipeline.indexOf('**Ruleset sign-off:**') + 700);
-  has(signoff, 'rule-check.mjs" drift');
+  has(signoff, 'run.mjs" rule-check drift');
   const finish = pipeline.slice(pipeline.indexOf('## 6. Finish'));
-  has(finish, 'rule-check.mjs" drift', /before the Ship Gate/i);
+  has(finish, 'run.mjs" rule-check drift', /before the Ship Gate/i);
 });
 
 test('builders get Rule slice: after Input Handoffs: instead of the senior-engineer Handoff (dispatch-prompt v4)', () => {
@@ -132,7 +132,7 @@ test('builders get Rule slice: after Input Handoffs: instead of the senior-engin
   const bullet = skillOnly.split('\n').find(l => l.startsWith('- **Builders**'));
   assert.ok(bullet, 'builders bullet present');
   has(bullet, '.company/work/<slug>/rules/<task>.md', 'directly after `Input Handoffs:`', "no longer the Senior Engineer's Handoff", 'from the plan, never from Role output');
-  has(bullet, 'rule-check.mjs" slices <that Handoff>', "no slice file for the builder's task", 'no Fix round');
+  has(bullet, 'run.mjs" rule-check slices <that Handoff>', "no slice file for the builder's task", 'no Fix round');
   has(bullet, 'blocked — missing rule slice', 'no ruleset', 'at most 3');
 });
 

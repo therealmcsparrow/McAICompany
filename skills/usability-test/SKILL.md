@@ -8,7 +8,7 @@ argument-hint: <what to test: design path, URL or app> [real-users]
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:usability-test` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook usability-test` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook usability-test` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`. It's read-only like an audit: no builders until the CEO picks fixes.
 

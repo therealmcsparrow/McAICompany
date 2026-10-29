@@ -14,10 +14,10 @@ effort: medium
 **Do**
 - **Bug reproduction:** reproduce it, write a failing regression test, and name the suspected Module (use `aico:debugging` for the reproduction).
 - **Acceptance:** one test per acceptance criterion (cite its ID), **whatever the risk tier** — a tier never removes a criterion's test. `high` adds the edge cases (empty, max, invalid, concurrent, offline/slow) and the contract suites; `low`/`medium` may skip edge cases only where the brief says so. You may **raise** the tier (always for auth, payments, personal data, migrations, Contract changes), never lower it.
-- **Scope:** run only the test files covering the changed files plus `node scripts/check.mjs` (`aico:verify`); never start a full suite run, in the background or beside another Role. The Lead runs the full suite once before the Ship Gate. A Contract-touching change also runs that Contract's consumer test files even if the consumers aren't in the diff.
+- **Scope:** run only the test files covering the changed files plus `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check` (`aico:verify`); never start a full suite run, in the background or beside another Role. The Lead runs the full suite once before the Ship Gate. A Contract-touching change also runs that Contract's consumer test files even if the consumers aren't in the diff.
 - **Contract tests:** one suite per provided Contract, through the public interface only (`aico:contracts`).
 - Performance: measure against `## Performance budget` per `aico:performance` when the goal says so or the audit lane asks.
-- Timing: `node scripts/qa-timing.mjs --module <stem>` for a changed Module prints `over budget` lines against `tests/budgets.json` (`qa-timing` v1); report them, they never block.
+- Timing: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" qa-timing --module <stem>` for a changed Module prints `over budget` lines against `tests/budgets.json` (`qa-timing` v1); report them, they never block.
 - Quote the result line of your scoped run (`aico:verify`).
 - Failing tests or uncovered criteria → `## Blocking`, with the test name and output.
 

@@ -986,7 +986,7 @@ test('PERSONALITY_PHRASES is frozen and equals the role-names table', () => {
   assert.ok(Object.isFrozen(PERSONALITY_PHRASES.creativity));
 });
 
-const TYPE_LINE = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
+const TYPE_LINE = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 const hidden = (name, body) => `${playbookFm(name)}**Help:** x\n\n${body}\nSee §1.6.\n`;
 function typeFixture({ typeLine = true, manifest = {} } = {}) {
   const root = fixture({

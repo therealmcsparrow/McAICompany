@@ -44,10 +44,10 @@ test('AC12 the form is built from list and set follows the answer', () => {
   assert.match(skill, /first line ends with `from \.company\/project\.md`/);
   assert.match(skill, /`skill search hints:` line/);
   assert.doesNotMatch(skill.slice(skill.indexOf('## Company type')), /JSON/);
-  assert.match(skill, /company-type\.mjs" list/);
+  assert.match(skill, /run\.mjs" company-type list/);
   assert.match(skill, /no pre-selected option/);
-  const iList = skill.indexOf('company-type.mjs" list');
-  const iSet = skill.indexOf('company-type.mjs" set <id>');
+  const iList = skill.indexOf('run.mjs" company-type list');
+  const iSet = skill.indexOf('run.mjs" company-type set <id>');
   assert.ok(iList > 0 && iSet > iList);
   assert.match(skill, /Only after the CEO picks an id from that list/);
   assert.match(skill, /Cancel, no answer or any other text → run nothing, write nothing/);

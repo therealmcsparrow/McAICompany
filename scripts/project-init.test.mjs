@@ -265,7 +265,7 @@ test('the lead skill names every form and ends at the Brief Gate', () => {
   assert.ok(skill.includes('references/first-product.md'));
   for (const form of ['Form 1 Company', 'Form 2 Product', 'Form 3 Voice and terms']) assert.ok(guide.includes(form), form);
   for (const key of [...KEYS, 'personas', 'company_type']) assert.ok(guide.includes(`\`${key}\``), key);
-  assert.ok(guide.includes('project-init.mjs'));
+  assert.ok(guide.includes('run.mjs" project-init'));
   const tail = guide.trimEnd().split('\n').at(-1);
   assert.match(tail, /stops at the \*\*Brief Gate\*\*|stop[s]? at the \*\*Brief Gate\*\*|\*\*Brief Gate\*\*/);
   assert.equal(guide.includes('\r'), false);

@@ -3,7 +3,7 @@
 Load this for every format 2 round. The contracts are `docs/contracts/brainstorm-file.md` v2, `brainstorm-reply.md` v1 and `token-ledger.md` v1.1; the script enforces them, you drive it.
 
 ## Calling the scripts
-From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <command> …`. The file path is the checked name, in single quotes. All free text goes in only as a file on stdin (`< '<scratch file>'`), never as an argument: replies, the CEO's answer, the `new` topic and the `ask` text and options, whoever wrote them. Write that file with the Write tool.
+From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" brainstorm <command> …`. The file path is the checked name, in single quotes. All free text goes in only as a file on stdin (`< '<scratch file>'`), never as an argument: replies, the CEO's answer, the `new` topic and the `ask` text and options, whoever wrote them. Write that file with the Write tool.
 | Command | Use |
 |---|---|
 | `new '<file>' < json` | writes the empty file; JSON `{ "topic": "<one line, at most 200 characters>", "roles": "<comma-separated slugs>", "mode": "ideas\|debate\|moderated" }` (`mode` optional) |
@@ -13,7 +13,7 @@ From the repo root, `node "${CLAUDE_PLUGIN_ROOT}/scripts/brainstorm.mjs" <comman
 | `decide '<file>' < ruling` | a CEO ruling that answers no asked question, verbatim, as a Decision with link `none`; no question changes status |
 | `ask '<file>' < json` | queues a question for the next round; JSON `{ "text": "<one line>", "options": ["<a>", "<b>"], "default": "<a>", "tag": "blocking\|nice-to-have", "ceo": true }` (`ceo` optional) |
 | `queue '<file>'` | `{ ask: [3 questions], next_up, answered: [{ id, text }] }` |
-| `stage '<file>' <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | on a reopened file pass `--roles` with only the Roles that `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles` lists; writes the round input files, prints `{ run, files: { "<role>": "<absolute path>" } }`; never changes the brainstorm file |
+| `stage '<file>' <round> [--pass ideas\|full\|crossfire] [--roles <slug>,<slug>] [--reask <role>]` | on a reopened file pass `--roles` with only the Roles that `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type roles` lists; writes the round input files, prints `{ run, files: { "<role>": "<absolute path>" } }`; never changes the brainstorm file |
 | `clean '<file>'` | removes this run's input files; run at Close |
 | `merge '<file>' Q-<keep> Q-<drop>` | merges a restatement into `Q-keep`, open or answered |
 | `prompt '<file>' <role> [--pass full\|crossfire <round>]` | preview only of the input file `stage` would write; writes nothing |
@@ -61,7 +61,7 @@ Opt-in and heavier: it reads more by design. Ideas pass, then the full pass, the
 One Role per turn, 3–5 turns. Before each turn `stage '<file>' <round> --roles <role>`. After each turn `apply` it (`lead` empty); the next Role's input file already holds the replies so far. Close the round (Round procedure step 4).
 
 ## Ledger
-Run name `brainstorm-<YYYYMMDD-HHMM>` of this run's start. After every dispatch, from the Agent result, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/ledger.mjs" add brainstorm-<YYYYMMDD-HHMM> round R<n> <role> <agentId> <ctx_end>`: kind `round` for ideas, moderated, full-pass and re-ask replies, and ` crossfire R<n> …` for each pair member. `<ctx_end>` is the integer in `<subagent_tokens>…</subagent_tokens>` of the notification; no such block → `0`. Take `<agentId>` only if it matches `^[A-Za-z0-9_-]{1,64}$`. Counts only; the ledger never holds text. At close run `ledger.mjs reconcile brainstorm-<YYYYMMDD-HHMM>` once. Numbers never block anything.
+Run name `brainstorm-<YYYYMMDD-HHMM>` of this run's start. After every dispatch, from the Agent result, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ledger add brainstorm-<YYYYMMDD-HHMM> round R<n> <role> <agentId> <ctx_end>`: kind `round` for ideas, moderated, full-pass and re-ask replies, and ` crossfire R<n> …` for each pair member. `<ctx_end>` is the integer in `<subagent_tokens>…</subagent_tokens>` of the notification; no such block → `0`. Take `<agentId>` only if it matches `^[A-Za-z0-9_-]{1,64}$`. Counts only; the ledger never holds text. At close run `ledger.mjs reconcile brainstorm-<YYYYMMDD-HHMM>` once. Numbers never block anything.
 
 ## Form and queue
 After the round: `queue '<file>'`. Show the digest, then one form (`aico:pipeline`): the `ask` questions (3 at most) with their options and the default first as "(Recommended)", plus a skip option when there are fewer than 4 options, and **Next**: Next round (Recommended) / Change mode / Change Roles / Done, wrap up. Print `next_up` as one line "Up next: <text>" (not asked yet). Steering comes through "Other".

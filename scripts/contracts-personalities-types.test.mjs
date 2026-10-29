@@ -619,7 +619,7 @@ test('company-type: every Playbook has the Type line after its Help line, with o
     const help = lines.findIndex(l => l.startsWith('**Help:**'));
     assert.ok(help > 0, name);
     assert.equal(lines[help + 1], '', name);
-    assert.equal(lines[help + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`, name);
+    assert.equal(lines[help + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`, name);
     assert.equal(lines.filter(l => l.startsWith('**Type:**')).length, 1, name);
   }
   for (const name of ALWAYS) assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /^\*\*Type:\*\*/m, name);
@@ -1003,8 +1003,8 @@ test('company-type: the consumers named in the Contract do what it says', () => 
   assert.match(help, /Keep the id from the first line \(`company type: <id> \(<label>\)…`\) and the `playbooks:` line/);
   assert.match(help, /list and explain only commands in `playbooks`/);
   const setup = read('skills/setup/SKILL.md');
-  assert.match(setup, /company-type\.mjs" list/);
-  assert.match(setup, /company-type\.mjs" set <id>/);
+  assert.match(setup, /run\.mjs" company-type list/);
+  assert.match(setup, /run\.mjs" company-type set <id>/);
   assert.match(setup, /`Area: company-type`/);
   assert.match(read('skills/lead/references/project-template.md'), /^<!-- company_type: .*-->$/m);
   assert.match(typeDoc, /\| `claims-cited` \| an `editor` Handoff in the run, `status: done`, no `## Blocking`/);

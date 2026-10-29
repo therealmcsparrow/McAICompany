@@ -31,7 +31,7 @@ test("pipeline carries the Delta E edits", () => {
 test("tier-path.md names the commands, the Gate options and the fail-closed rule", () => {
   const text = read("skills/pipeline/references/tier-path.md");
   for (const word of ["preview", "begin", "sync", "raise", "--diff", "--plan", "fail closed", "--route fix",
-    "Approve, short path (Recommended)", "Approve, full path", "Change", "Stop", "${CLAUDE_PLUGIN_ROOT}/scripts/tier-set.mjs"]) {
+    "Approve, short path (Recommended)", "Approve, full path", "Change", "Stop", "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" tier-set"]) {
     assert.ok(text.toLowerCase().includes(word.toLowerCase()), `tier-path.md lacks ${word}`);
   }
   assert.ok(!text.includes("\r"), "tier-path.md has a CR byte");
