@@ -1,4 +1,4 @@
-# Contested findings: the Lead's part (handoff v1.3)
+# Contested findings: the Lead's part (handoff v2.0)
 Contract: `docs/contracts/handoff.md` parts 4 and 5. ADRs: `docs/adr/0038-contested-findings.md`, `docs/adr/0040-contest-evidence-and-escalation.md`. Builder and reviewer lines: `skills/handoff/references/contest.md`.
 
 **Fix round.** A builder may answer a Blocking finding with a `## Contested` line instead of a change. A contest with checkable evidence does not start a Fix round for the builder; the reviewer that raised it answers in its next Step (`## Contests`, `accepted` or `rejected`). Re-dispatch that same reviewer Role for the answer. `rejected` goes back to the builder as a normal Blocking item; a second contest on it is refused. An `escalate` line is not for the reviewer: it goes to the CEO (below).

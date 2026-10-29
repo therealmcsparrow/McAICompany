@@ -1,6 +1,6 @@
 # Contract: plan-review v1
 
-Provider: `scripts/plan-review.mjs` (Node built-ins only; cwd = product root; `main(args, { root, now })` exported by `scripts/plan-review.mjs`; runs no git and no shell). Consumers: the Lead of `aico:pipeline` (`lines`, `gate`), the eval run before a release (`score`), `release` v1.1 (reads the eval records). Uses: `contract-index` v1 (`buildIndex`), `plan-tasks` v1 (path rule `normalizePath`), `handoff` v1.3 (`parseLocations`).
+Provider: `scripts/plan-review.mjs` (Node built-ins only; cwd = product root; `main(args, { root, now })` exported by `scripts/plan-review.mjs`; runs no git and no shell). Consumers: the Lead of `aico:pipeline` (`lines`, `gate`), the eval run before a release (`score`), `release` v1.1 (reads the eval records). Uses: `contract-index` v1 (`buildIndex`), `plan-tasks` v1 (path rule `normalizePath`), `handoff` v2.0 (`parseLocations`).
 Exit codes: 0 done, 1 unreadable plan or record, 3 refused (`refused: <reason>`, nothing written). Arguments are checked values only: slug `^[a-z0-9][a-z0-9-]{0,63}$`, plan name by the `plan-check` v1 rule (`^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$`), Handoff file names `^\d{2,3}-[a-z][a-z0-9-]{0,40}\.md$`; an argument with a control character (Cc, Cf, Zl, Zp) or over 4096 characters, an unknown flag or a repeated flag → exit 3.
 
 ## Real-path read rule

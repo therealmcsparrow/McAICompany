@@ -514,12 +514,12 @@ test('read_next pointers: path, R-n, or path#heading with spaces only after the 
   assert.match(errs(make({ top: swap('read_next', '[a.md#]') })), /read_next/);
 });
 
-// ---- fresh-reviewer Handoff shape (handoff v1.3) ----
+// ---- fresh-reviewer Handoff shape (handoff v2.0) ----
 const PARAPHRASE = 'The plan adds a lint rule so a contest needs evidence that a reviewer can open, and a ruling file for the CEO answers. It keeps security findings open until a fix. A comprehension gap is a Blocking row.';
 
 function freshHandoff({ mode = 'plan', paraphrase = PARAPHRASE, firstPass = '- none', extraFm = '', head = null, did = '- read the plan', blocking = '- none' } = {}) {
   const shape = head ?? `## Paraphrase\n${paraphrase}\n## First pass\n${firstPass}\n`;
-  return `---\nstep: 03\nrole: fresh-reviewer\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\nreview-mode: ${mode}\ncontracts: [handoff v1.3]\n${extraFm}---\nBy: fresh-reviewer\n${shape}## Did\n${did}\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n## Next\n- go\n`;
+  return `---\nstep: 03\nrole: fresh-reviewer\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\nreview-mode: ${mode}\ncontracts: [handoff v2.0]\n${extraFm}---\nBy: fresh-reviewer\n${shape}## Did\n${did}\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n## Next\n- go\n`;
 }
 const freshErrors = (text, opts) => lint(text, opts).errors.join('\n');
 

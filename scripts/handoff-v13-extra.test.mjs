@@ -14,7 +14,7 @@ const PARAPHRASE = 'The plan adds a lint rule so a contest needs evidence that a
 // A Handoff of any Role; `fm` adds frontmatter lines, `head` goes right after the By line, `body` between Did and Next.
 function handoff({ role = 'backend-engineer', fm = '', head = '', sections = {}, blocking = '- none' } = {}) {
   const extra = Object.entries(sections).map(([h, lines]) => `## ${h}\n${lines.join('\n')}\n`).join('');
-  return `---\nstep: 05\nrole: ${role}\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\ncontracts: [handoff v1.3]\n${fm}---\nBy: ${role}\n${head}## Did\n- work\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n${extra}## Next\n- go\n`;
+  return `---\nstep: 05\nrole: ${role}\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\ncontracts: [handoff v2.0]\n${fm}---\nBy: ${role}\n${head}## Did\n- work\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n${extra}## Next\n- go\n`;
 }
 const fresh = ({ mode = 'code', model, blocking } = {}) => handoff({
   role: 'fresh-reviewer',
@@ -137,9 +137,9 @@ test('the Handoff skill states the Worktree rule in the Task and Files step', ()
   assert.ok(!/^Name:/m.test(skill));
 });
 
-test('the Contract and the skill texts name the v1.3 parts', () => {
+test('the Contract and the skill texts name the v2.0 parts', () => {
   const contract = read('docs/contracts/handoff.md');
-  assert.match(contract, /^# Contract: handoff v1\.3$/m);
+  assert.match(contract, /^# Contract: handoff v2.0$/m);
   for (const part of ['[comprehension]', '## Paraphrase', '## First pass', 'evidence:', 'rulings.md', 'escalated', 'upheld', 'overruled', 'parseLocations', '--exceptions-for', 'review-mode', 'real-path read rule']) {
     assert.ok(contract.includes(part), part);
   }

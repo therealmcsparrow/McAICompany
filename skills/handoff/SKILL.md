@@ -39,7 +39,7 @@ base-commit: <full object id>
 risk-tier: medium
 acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
-contracts: [handoff v1.3]
+contracts: [handoff v2.0]
 ---
 By: <role id>
 ## Did

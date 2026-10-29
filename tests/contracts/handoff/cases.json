@@ -56,23 +56,23 @@
       "frontmatter: missing contracts (required under a Role id byline, handoff v1.2)"
     ]
   },
-  "v1.3 fresh-reviewer Handoff": {
+  "v2.0 fresh-reviewer Handoff": {
     "file": "fresh-reviewer-v13.md",
     "errors": []
   },
-  "v1.3 fresh-reviewer without review-mode": {
+  "v2.0 fresh-reviewer without review-mode": {
     "file": "bad-fresh-no-mode.md",
     "errors": [
       "frontmatter: missing review-mode"
     ]
   },
-  "v1.3 fresh-reviewer cites a run Handoff before the first pass ends": {
+  "v2.0 fresh-reviewer cites a run Handoff before the first pass ends": {
     "file": "bad-fresh-cites-handoff.md",
     "errors": [
       "line 16: Handoff cited before the first pass ends"
     ]
   },
-  "v1.3 review-mode and comprehension tag on another Role": {
+  "v2.0 review-mode and comprehension tag on another Role": {
     "file": "bad-review-mode-other-role.md",
     "errors": [
       "line 9: review-mode key is for fresh-reviewer only",

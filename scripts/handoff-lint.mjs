@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v1.3): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.0): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
@@ -545,7 +545,7 @@ export function checkLedger(file, findingIds) {
   return findingIds.filter(id => !have.has(id)).map(id => `finding ${id} missing from ledger`);
 }
 
-// ---- evidence refs and real-path reads (handoff v1.3) ----
+// ---- evidence refs and real-path reads (handoff v2.0) ----
 // The path rule of `plan-tasks` v1 (a repo-relative path of safe characters), kept here so the lint has no dependency on the
 // scheduler; a test holds both in step.
 const DEVICE_RE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
@@ -749,7 +749,7 @@ export function parseLocations(text) {
   return out;
 }
 
-// ---- contested findings (handoff v1.3) ----
+// ---- contested findings (handoff v2.0) ----
 const RUN_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
 // `- <slug>/<NN>-<role>:R-<n> — … — approved: <date> (CEO)`; the slug is the run folder name. A line without a slug names no run.
 const EXC_TAIL = ' — .{1,600} — approved: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$';

@@ -26,7 +26,7 @@ function project() {
 
 function handoff({ role, round = 0, status = 'done', blocking = [], contested = [], contests: answers = [], decisions = [] }) {
   const list = (h, a) => `## ${h}\n${a.length ? a.map(l => `- ${l}`).join('\n') : '- none'}\n`;
-  return `---\nstep: 05\nrole: ${role}\ntask: run1\nstatus: ${status}\nround: ${round}\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v1.2]\n---\nBy: ${role}\n## Did\n- work\n${list('Decisions', decisions)}${list('Blocking', blocking)}${list('Contested', contested)}${list('Contests', answers)}## Nits\n- none\n## Next\n- go\n`;
+  return `---\nstep: 05\nrole: ${role}\ntask: run1\nstatus: ${status}\nround: ${round}\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v2.0]\n---\nBy: ${role}\n## Did\n- work\n${list('Decisions', decisions)}${list('Blocking', blocking)}${list('Contested', contested)}${list('Contests', answers)}## Nits\n- none\n## Next\n- go\n`;
 }
 const put = (run, name, text) => writeFileSync(join(run, name), text);
 const state = (r, key) => r.states.get(key);
@@ -289,7 +289,7 @@ test('single-file lint: reviewer rows need R-<n> under a Role id byline; a v1.1 
 });
 
 test('contracts: is required under a Role id byline; a v1.1 name byline still lints without it; a [nit] R-<n> row lints', () => {
-  const none = handoff({ role: 'backend-engineer' }).replace('contracts: [handoff v1.2]\n', '');
+  const none = handoff({ role: 'backend-engineer' }).replace('contracts: [handoff v2.0]\n', '');
   assert.match(lint(none).errors.join('\n'), /missing contracts/);
   assert.deepEqual(lint(none.replace('By: backend-engineer', 'By: Bo (backend-engineer)')).errors, []);
   assert.deepEqual(lint(none.replace('By: backend-engineer', 'By: Bo')).errors, []);
@@ -307,14 +307,13 @@ test('single-file lint: contest lines must have their shape', () => {
 });
 
 test('contracts: frontmatter checks every cite against the index', () => {
-  const index = new Map([['handoff', { major: 1, minor: 2 }], ['dispatch-prompt', { major: 4, minor: 0 }]]);
-  const withContracts = v => handoff({ role: 'backend-engineer' }).replace('contracts: [handoff v1.2]\n', `contracts: ${v}\n`);
-  assert.deepEqual(lint(withContracts('[handoff v1.2, dispatch-prompt v4]'), { index }).errors, []);
-  assert.deepEqual(lint(withContracts('[handoff v1.1]'), { index }).errors, []);
-  for (const v of ['[handoff v1.3]', '[handoff v2]', '[dispatch-prompt v3.6]', '[nosuch v1]', '[handoff]', '[handoff v1.2.3]', 'handoff v1', '[handoff v1,, ]']) {
+  const index = new Map([['handoff', { major: 2, minor: 0 }], ['dispatch-prompt', { major: 4, minor: 0 }]]);
+  const withContracts = v => handoff({ role: 'backend-engineer' }).replace('contracts: [handoff v2.0]\n', `contracts: ${v}\n`);
+  assert.deepEqual(lint(withContracts('[handoff v2.0, dispatch-prompt v4]'), { index }).errors, []);
+  for (const v of ['[handoff v1.1]', '[handoff v1.2]', '[handoff v2.1]', '[handoff v3]', '[dispatch-prompt v3.6]', '[nosuch v1]', '[handoff]', '[handoff v1.2.3]', 'handoff v1', '[handoff v1,, ]']) {
     assert.ok(lint(withContracts(v), { index }).errors.length >= 1, v);
   }
-  assert.deepEqual(lint(withContracts('[handoff v1.2]')).errors, []);
+  assert.deepEqual(lint(withContracts('[handoff v2.0]')).errors, []);
 });
 
 test('an unslugged exception line names no run: it closes nothing and prints one warning per key', () => {
@@ -339,7 +338,7 @@ test('an exception for run1 does not close the same key in another run folder', 
   assert.deepEqual(r2.excepted, []);
 });
 
-// ---- handoff v1.3: evidence, escalation, rulings, comprehension, fresh-reviewer lineages ----
+// ---- handoff v2.0: evidence, escalation, rulings, comprehension, fresh-reviewer lineages ----
 const EV = 'src/a.mjs:1';
 const key = '05-code-reviewer:R-2';
 const NO_EVIDENCE = /has no checkable evidence/;
@@ -552,7 +551,7 @@ const compRow = n => `[comprehension] R-${n} plan.md:3 — the paraphrase differ
 function fresh({ mode = 'plan', round = 0, status = 'done', blocking = [], nn = 3 } = {}) {
   const paraphrase = 'The plan adds a lint rule so a contest needs evidence that a reviewer can open, and a ruling file for the CEO answers. It keeps security findings open until a fix.';
   const list = (h, a) => `## ${h}\n${a.length ? a.map(l => `- ${l}`).join('\n') : '- none'}\n`;
-  return `---\nstep: ${String(nn).padStart(2, '0')}\nrole: fresh-reviewer\ntask: run1\nstatus: ${status}\nround: ${round}\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\nreview-mode: ${mode}\ncontracts: [handoff v1.3]\n---\nBy: fresh-reviewer\n## Paraphrase\n${paraphrase}\n## First pass\n- none\n## Did\n- read\n${list('Decisions', [])}${list('Blocking', blocking)}${list('Contested', [])}${list('Contests', [])}## Nits\n- none\n## Next\n- go\n`;
+  return `---\nstep: ${String(nn).padStart(2, '0')}\nrole: fresh-reviewer\ntask: run1\nstatus: ${status}\nround: ${round}\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\nreview-mode: ${mode}\ncontracts: [handoff v2.0]\n---\nBy: fresh-reviewer\n## Paraphrase\n${paraphrase}\n## First pass\n- none\n## Did\n- read\n${list('Decisions', [])}${list('Blocking', blocking)}${list('Contested', [])}${list('Contests', [])}## Nits\n- none\n## Next\n- go\n`;
 }
 
 test('a comprehension finding cannot be contested or escalated; the text changes instead', () => {

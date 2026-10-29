@@ -1,4 +1,4 @@
-# Contested findings (handoff v1.3)
+# Contested findings (handoff v2.0)
 Contract: `docs/contracts/handoff.md` parts 4 and 5. ADRs: `docs/adr/0038-contested-findings.md`, `docs/adr/0040-contest-evidence-and-escalation.md`. The lint reads the line shapes below; a plain reason alone is not enough.
 
 **Key.** A finding is `<NN>-<role>:R-<n>`, from the file name of the Handoff that holds the row (`05-code-reviewer:R-2` is not `06-security:R-2`). Keep your `R-<n>` across Fix rounds. The fresh reviewer's plan-mode and code-mode `R-1` are two findings.

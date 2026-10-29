@@ -6,7 +6,7 @@ status: done
 round: 0
 base-commit: 0123456789abcdef0123456789abcdef01234567
 risk-tier: low
-contracts: [handoff v1.2]
+contracts: [handoff v2.0]
 ---
 By: product-manager
 ## Did

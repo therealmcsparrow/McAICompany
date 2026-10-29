@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Plan review (contract: docs/contracts/plan-review.md v1). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v1.3
+// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0
 // `lines` writes the inputs file a reviewer reads, `gate` prints the reviewer's paraphrase for the CEO,
 // `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
 // every pattern is anchored over a character class, sizes are capped before parsing, every file is read by

@@ -1586,7 +1586,7 @@ describe('AC26 new Handoffs and cooler files carry the Role id', () => {
     assert.equal(lint.code, 0, lint.all);
     assert.equal(fs.readFileSync(old, 'utf8'), text);
     const fresh = path.join(dir, '04-backend-engineer.md');
-    fs.writeFileSync(fresh, handoff('backend-engineer', 'contracts: [handoff v1.2]\n'));
+    fs.writeFileSync(fresh, handoff('backend-engineer', 'contracts: [handoff v2.0]\n'));
     assert.equal(node(sb, dir, 'handoff-lint.mjs', [fresh]).code, 0);
   });
 });
@@ -1737,14 +1737,14 @@ describe('AC31 contested findings', () => {
     const dir = path.join(sb.dir, 'contest-product');
     const run = path.join(dir, '.company', 'work', 'run1');
     fs.mkdirSync(run, { recursive: true });
-    // v1.3: a contest needs evidence that opens (a real file inside the root) and an exception needs the run's start.
+    // v2.0: a contest needs evidence that opens (a real file inside the root) and an exception needs the run's start.
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'src', 'x.ts'), 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n');
     fs.writeFileSync(path.join(run, 'run-state.jsonl'), '{"v":1,"at":"2026-10-29T08:00:00Z","ev":"start"}\n');
     if (standards !== undefined) fs.writeFileSync(path.join(dir, '.company', 'standards.md'), standards);
     for (const [name, role, body] of files) {
       const nn = name.slice(0, 2);
-      fs.writeFileSync(path.join(run, name), `---\nstep: ${nn}\nrole: ${role}\ntask: run1\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v1.3]\n---\nBy: ${role}\n${body}\n`);
+      fs.writeFileSync(path.join(run, name), `---\nstep: ${nn}\nrole: ${role}\ntask: run1\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v2.0]\n---\nBy: ${role}\n${body}\n`);
     }
     return { dir, run, lint: () => node(sb, dir, 'handoff-lint.mjs', ['--contests', run]) };
   }
@@ -1805,7 +1805,7 @@ describe('AC31 contested findings', () => {
     assert.match(stranger.out, /^state 05-code-reviewer:R-1 contested$/m);
   });
 
-  test('v1.3: a contest without checkable evidence is an ERROR and does not count; an escalation is blocking and cannot be answered', () => {
+  test('v2.0: a contest without checkable evidence is an ERROR and does not count; an escalation is blocking and cannot be answered', () => {
     const contestLine = (nn, line) => [`${nn}-backend-engineer.md`, 'backend-engineer', `## Did\n- Changed.\n## Contested\n${line}\n## Nits\n- none\n## Next\n- code-reviewer: answer.`];
     const bare = runFolder(sandbox(), [REVIEW, contestLine('07', '- 05-code-reviewer:R-1 — the code already handles it')]).lint();
     assert.equal(bare.code, 1, bare.all);
@@ -1851,18 +1851,19 @@ describe('AC31 contested findings', () => {
   });
 });
 
-describe('AC32 one additive handoff bump holds contested findings and the contracts field', () => {
+describe('AC32 the handoff Contract holds contested findings and the contracts field', () => {
   const header = read('docs', 'contracts', 'handoff.md').split('\n')[0];
-  test('the Contract is v1.3, additive, and names the contest, the contracts key and the v1.3 evidence part', () => {
-    assert.equal(header, '# Contract: handoff v1.3');
+  test('the Contract is v2.0, breaking, and names the contest, the contracts key and the v2.0 evidence part', () => {
+    assert.equal(header, '# Contract: handoff v2.0');
     const text = read('docs', 'contracts', 'handoff.md');
-    assert.match(text, /v1\.2[^\n]*additive/);
+    assert.match(text, /v1\.2 is additive/);
+    assert.match(text, /v2\.0 \(part 5\) is \*\*breaking\*\*/);
     assert.match(text, /`contested`/);
     assert.match(text, /`contracts:`|contracts: \[handoff v1\.2\]/);
-    assert.match(text, /v1\.3[^\n]*evidence for contests/);
-    assert.match(text, /^## v1\.3 part 5:/m);
+    assert.match(text, /v2\.0[^\n]*evidence for contests/);
+    assert.match(text, /^## v2\.0 part 5:/m);
   });
-  test('golden fixtures: a v1.1, a v1.2 and a v1.3 Handoff all pass the lint; the contracts value is checked', () => {
+  test('golden fixtures: a v1.1, a v1.2 and a v2.0 Handoff all pass the lint; the contracts value is checked', () => {
     const sb = sandbox();
     const dir = path.join(sb.dir, 'fields');
     fs.mkdirSync(dir, { recursive: true });
@@ -1875,9 +1876,9 @@ describe('AC32 one additive handoff bump holds contested findings and the contra
     assert.equal(none.code, 1, none.all);
     assert.match(none.all, /missing contracts/);
     assert.equal(write('02-backend-engineer.md', base('').replace('By: backend-engineer', 'By: Bo (backend-engineer)')).code, 0);
-    assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v1.2, run-state v1.5]\n')).code, 0);
-    assert.equal(write('08-backend-engineer.md', base('contracts: [handoff v1.3]\n')).code, 0);
-    const malformed = write('05-backend-engineer.md', base('contracts: handoff v1.2\n'));
+    assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v2.0, run-state v1.5]\n')).code, 0);
+    assert.equal(write('08-backend-engineer.md', base('contracts: [handoff v2.0]\n')).code, 0);
+    const malformed = write('05-backend-engineer.md', base('contracts: handoff v2.0\n'));
     assert.equal(malformed.code, 1, malformed.all);
     assert.match(malformed.all, /contracts must be a \[list\]/);
     const unknown = write('06-backend-engineer.md', base('contracts: [nothing-like-this v1]\n'));
@@ -1885,7 +1886,7 @@ describe('AC32 one additive handoff bump holds contested findings and the contra
     assert.match(unknown.all, /is not a Contract/);
     const stale = write('07-backend-engineer.md', base('contracts: [handoff v1.9]\n'));
     assert.equal(stale.code, 1, stale.all);
-    assert.match(stale.all, /handoff v1\.9 is stale, current v1\.3/);
+    assert.match(stale.all, /handoff v1\.9 is stale, current v2\.0/);
   });
   test('the shipped fixture set covers open, accepted and rejected contests', () => {
     const tests = read('scripts', 'handoff-contest.test.mjs');
