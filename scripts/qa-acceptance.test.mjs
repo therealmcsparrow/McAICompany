@@ -529,10 +529,21 @@ const HAND_OVER_CHANGES = {
       /^5\. End of run\. Tell the CEO to start the fix: `\/aico:fix "<root cause> \(incident \.company\/work\/<slug>\/\)"`.*CRA final report: 14 days after a fix is available, 1 month after the notification.*\/aico:lead.*Never drop a deadline\.$/,
     ],
   },
-  // Maintain gains one line: the contract-drift check (contract-index v1).
+  // Maintain gains the contract-drift check (contract-index v1) and the gated behaviour drift report (drift-report v1): its
+  // argument-hint becomes `[drift]` (the only argument besides help), the Run line names it, and one gated line sits under step 1.
+  // The hint change is pinned exactly in `hint`; any other hint still fails the argument-hint check.
   maintain: {
-    removed: [],
-    added: ['   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.'],
+    hint: 'argument-hint: [drift]',
+    removed: [
+      'argument-hint: (no arguments)',
+      'Run with `aico:pipeline`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.',
+    ],
+    added: [
+      'argument-hint: [drift]',
+      'Run with `aico:pipeline`. The only argument besides `help` is `drift`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.',
+      '   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.',
+      /^   Drift \(behaviour check, informational\): only when the argument is exactly `drift`; without it, no drift Step is dispatched and `pick` is not run\. Then run `node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" drift-report pick` and follow `references\/drift\.md`/,
+    ],
   },
   // Standards gains one line: reuse of a fresh rule pack (rule-pack v1.2).
   standards: {
@@ -565,7 +576,7 @@ function assertV012Playbook(name) {
   const now = ctLines(read(file));
   assert.ok(!read(file).includes('\r'), `${name}: LF only`);
   assert.equal(frontKey(now, 'name'), frontKey(old, 'name'), `${name}: name`);
-  assert.equal(frontKey(now, 'argument-hint'), frontKey(old, 'argument-hint'), `${name}: argument-hint`);
+  assert.equal(frontKey(now, 'argument-hint'), (HAND_OVER_CHANGES[name] || {}).hint ?? frontKey(old, 'argument-hint'), `${name}: argument-hint`);
   assert.ok(old.includes('disable-model-invocation: true'), `${name}: was hidden in v0.12.0`);
   assert.equal(now.includes('disable-model-invocation: true'), CEO_ONLY_PLAYBOOKS.includes(name), `${name}: hidden exactly when CEO-only`);
   assert.ok(old.includes(`**Help:** argument is exactly \`help\` or \`--help\` → follow \`aico:help\` for \`${name}\` and stop.`), `${name}: v0.12.0 Help line`);

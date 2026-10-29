@@ -1641,7 +1641,12 @@ describe('AC28 the Ruleset holds the no-Name rule, the real-name Should and the 
     const debt = s.Debt.filter((l) => l.startsWith('- proj.M14 — '));
     assert.ok(debt.length >= 1, 'a Debt row for the old names');
     assert.ok(debt.some((l) => /\.company\/work\/ folders/.test(l)), 'the stored Handoff folders are listed as Debt');
-    assert.ok(!s.Debt.some((l) => l.startsWith('- proj.S3 — ')), 'the Should is not Debt');
+    // The Should stays a Should. Older fixture files that use a name outside the roster may sit in Debt (aico:ruleset: older
+    // violations are Debt), but never the roster file, the docs or the settings text, and never a real person's name.
+    for (const l of s.Debt.filter((d) => d.startsWith('- proj.S3 — '))) {
+      assert.match(l, /fixture names not from the roster/, `an S3 Debt row lists fixture files only: ${l.slice(0, 80)}`);
+      assert.doesNotMatch(l, /company\/names\.json|docs\/|settings/, 'the roster, docs and settings are not Debt');
+    }
   });
 });
 
@@ -1732,16 +1737,20 @@ describe('AC31 contested findings', () => {
     const dir = path.join(sb.dir, 'contest-product');
     const run = path.join(dir, '.company', 'work', 'run1');
     fs.mkdirSync(run, { recursive: true });
+    // v1.3: a contest needs evidence that opens (a real file inside the root) and an exception needs the run's start.
+    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'src', 'x.ts'), 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n');
+    fs.writeFileSync(path.join(run, 'run-state.jsonl'), '{"v":1,"at":"2026-10-29T08:00:00Z","ev":"start"}\n');
     if (standards !== undefined) fs.writeFileSync(path.join(dir, '.company', 'standards.md'), standards);
     for (const [name, role, body] of files) {
       const nn = name.slice(0, 2);
-      fs.writeFileSync(path.join(run, name), `---\nstep: ${nn}\nrole: ${role}\ntask: run1\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v1.2]\n---\nBy: ${role}\n${body}\n`);
+      fs.writeFileSync(path.join(run, name), `---\nstep: ${nn}\nrole: ${role}\ntask: run1\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v1.3]\n---\nBy: ${role}\n${body}\n`);
     }
     return { dir, run, lint: () => node(sb, dir, 'handoff-lint.mjs', ['--contests', run]) };
   }
   const REVIEW = ['05-code-reviewer.md', 'code-reviewer', '## Did\n- Reviewed.\n## Blocking\n- [spec] R-1 src/x.ts:3 — empty case — return early\n- [spec] R-2 src/x.ts:9 — other — fix\n## Nits\n- none\n## Next\n- backend-engineer: fix.'];
   const SECURITY = ['06-security.md', 'security', '## Did\n- Audited.\n## Blocking\n- [security] R-1 src/y.ts:1 — injection — sanitize\n## Nits\n- none\n## Next\n- backend-engineer: fix.'];
-  const contest = (nn, ...keys) => [`${nn}-backend-engineer.md`, 'backend-engineer', `## Did\n- Changed.\n## Contested\n${keys.map((k) => `- ${k} — the code already handles it`).join('\n')}\n## Nits\n- none\n## Next\n- code-reviewer: answer.`];
+  const contest = (nn, ...keys) => [`${nn}-backend-engineer.md`, 'backend-engineer', `## Did\n- Changed.\n## Contested\n${keys.map((k) => `- ${k} — the code already handles it — evidence: src/x.ts:3`).join('\n')}\n## Nits\n- none\n## Next\n- code-reviewer: answer.`];
   const answer = (nn, role, ...lines) => [`${nn}-${role}.md`, role, `## Did\n- Re-reviewed.\n## Contests\n${lines.join('\n')}\n## Nits\n- none\n## Next\n- qa: test.`];
 
   test('hostile first: a security finding never closes by contest, nor by words in a Handoff', () => {
@@ -1789,11 +1798,38 @@ describe('AC31 contested findings', () => {
     const twice = runFolder(sb, [REVIEW, contest('07', '05-code-reviewer:R-1'), contest('08', '05-code-reviewer:R-1')]).lint();
     assert.equal(twice.code, 1, twice.all);
     assert.match(twice.out, /^ERROR /m);
-    const own = runFolder(sandbox(), [REVIEW, ['06-code-reviewer.md', 'code-reviewer', '## Did\n- x\n## Contested\n- 05-code-reviewer:R-2 — self\n## Nits\n- none\n## Next\n- x']]).lint();
+    const own = runFolder(sandbox(), [REVIEW, ['06-code-reviewer.md', 'code-reviewer', '## Did\n- x\n## Contested\n- 05-code-reviewer:R-2 — self — evidence: src/x.ts:3\n## Nits\n- none\n## Next\n- x']]).lint();
     assert.equal(own.code, 1, own.all);
     const stranger = runFolder(sandbox(), [REVIEW, contest('07', '05-code-reviewer:R-1'), answer('08', 'qa', '- 05-code-reviewer:R-1 accepted — me too')]).lint();
     assert.equal(stranger.code, 1, stranger.all);
     assert.match(stranger.out, /^state 05-code-reviewer:R-1 contested$/m);
+  });
+
+  test('v1.3: a contest without checkable evidence is an ERROR and does not count; an escalation is blocking and cannot be answered', () => {
+    const contestLine = (nn, line) => [`${nn}-backend-engineer.md`, 'backend-engineer', `## Did\n- Changed.\n## Contested\n${line}\n## Nits\n- none\n## Next\n- code-reviewer: answer.`];
+    const bare = runFolder(sandbox(), [REVIEW, contestLine('07', '- 05-code-reviewer:R-1 — the code already handles it')]).lint();
+    assert.equal(bare.code, 1, bare.all);
+    assert.match(bare.out, /^ERROR 07-backend-engineer\.md line \d+: contest of 05-code-reviewer:R-1 has no checkable evidence$/m);
+    assert.match(bare.out, /^state 05-code-reviewer:R-1 open$/m);
+    for (const ref of ['/etc/passwd', '../outside.ts', 'src/missing.ts', 'src/x.ts:99']) {
+      const r = runFolder(sandbox(), [REVIEW, contestLine('07', `- 05-code-reviewer:R-1 — why — evidence: ${ref}`)]).lint();
+      assert.equal(r.code, 1, `${ref}: ${r.all}`);
+      assert.match(r.out, /has no checkable evidence/, ref);
+      assert.match(r.out, /^state 05-code-reviewer:R-1 open$/m, ref);
+    }
+    // A failed line does not use up the one contest: a corrected line counts.
+    const fixed = runFolder(sandbox(), [REVIEW, contestLine('07', '- 05-code-reviewer:R-1 — why'), contest('08', '05-code-reviewer:R-1')]).lint();
+    assert.match(fixed.out, /^state 05-code-reviewer:R-1 contested$/m);
+    // Escalation: the finding is escalated (blocking) and the raising Role cannot answer it.
+    const esc = contestLine('07', '- 05-code-reviewer:R-1 — escalate — the reviewer and the spec disagree on the empty case');
+    const e = runFolder(sandbox(), [REVIEW, esc]).lint();
+    assert.equal(e.code, 0, e.all);
+    assert.match(e.out, /^state 05-code-reviewer:R-1 escalated$/m);
+    assert.match(e.out, /^escalated 05-code-reviewer:R-1$/m);
+    const answered = runFolder(sandbox(), [REVIEW, esc, answer('08', 'code-reviewer', '- 05-code-reviewer:R-1 accepted — fair')]).lint();
+    assert.equal(answered.code, 1, answered.all);
+    assert.match(answered.out, /is escalated; only a CEO ruling closes it/);
+    assert.match(answered.out, /^state 05-code-reviewer:R-1 escalated$/m);
   });
 
   test('hostile: keys and reasons that are not the exact shape never change a state and never crash', () => {
@@ -1817,14 +1853,16 @@ describe('AC31 contested findings', () => {
 
 describe('AC32 one additive handoff bump holds contested findings and the contracts field', () => {
   const header = read('docs', 'contracts', 'handoff.md').split('\n')[0];
-  test('the Contract is v1.2, additive, and names both changes', () => {
-    assert.equal(header, '# Contract: handoff v1.2');
+  test('the Contract is v1.3, additive, and names the contest, the contracts key and the v1.3 evidence part', () => {
+    assert.equal(header, '# Contract: handoff v1.3');
     const text = read('docs', 'contracts', 'handoff.md');
     assert.match(text, /v1\.2[^\n]*additive/);
     assert.match(text, /`contested`/);
     assert.match(text, /`contracts:`|contracts: \[handoff v1\.2\]/);
+    assert.match(text, /v1\.3[^\n]*evidence for contests/);
+    assert.match(text, /^## v1\.3 part 5:/m);
   });
-  test('golden fixtures: a v1.1 Handoff and a v1.2 Handoff with the contracts key both pass the lint; the contracts value is checked', () => {
+  test('golden fixtures: a v1.1, a v1.2 and a v1.3 Handoff all pass the lint; the contracts value is checked', () => {
     const sb = sandbox();
     const dir = path.join(sb.dir, 'fields');
     fs.mkdirSync(dir, { recursive: true });
@@ -1838,6 +1876,7 @@ describe('AC32 one additive handoff bump holds contested findings and the contra
     assert.match(none.all, /missing contracts/);
     assert.equal(write('02-backend-engineer.md', base('').replace('By: backend-engineer', 'By: Bo (backend-engineer)')).code, 0);
     assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v1.2, run-state v1.5]\n')).code, 0);
+    assert.equal(write('08-backend-engineer.md', base('contracts: [handoff v1.3]\n')).code, 0);
     const malformed = write('05-backend-engineer.md', base('contracts: handoff v1.2\n'));
     assert.equal(malformed.code, 1, malformed.all);
     assert.match(malformed.all, /contracts must be a \[list\]/);
@@ -1846,7 +1885,7 @@ describe('AC32 one additive handoff bump holds contested findings and the contra
     assert.match(unknown.all, /is not a Contract/);
     const stale = write('07-backend-engineer.md', base('contracts: [handoff v1.9]\n'));
     assert.equal(stale.code, 1, stale.all);
-    assert.match(stale.all, /handoff v1\.9 is stale, current v1\.2/);
+    assert.match(stale.all, /handoff v1\.9 is stale, current v1\.3/);
   });
   test('the shipped fixture set covers open, accepted and rejected contests', () => {
     const tests = read('scripts', 'handoff-contest.test.mjs');
