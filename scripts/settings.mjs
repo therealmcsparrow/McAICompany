@@ -67,7 +67,7 @@ const LOCK_ECHO = ['haiku', 'sonnet', 'fable'];
 const VERSION_TIMEOUT_MS = 5000;
 const VAR_SHOWN_RE = /^[A-Za-z0-9._:[\]-]{1,64}$/;
 export const MODEL_RANK = Object.freeze({ haiku: 1, sonnet: 2, opus: 3 });
-export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner']);
+export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner']);
 const sameRoles = (list, want) => list.length === want.length && want.every((r) => list.includes(r));
 const rankOf = (m) => (typeof m === 'string' && Object.hasOwn(MODEL_RANK, m) ? MODEL_RANK[m] : 0);
 const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');

@@ -1,4 +1,4 @@
-# Contract: role-names v1.3
+# Contract: role-names v1.4
 
 Provider: `company/names.json` (defaults) and `roles.<role>.name` in `aico-settings` v1 (overrides). Consumers: `aico:pipeline` (renders names for the CEO only, `dispatch-prompt` v4), `aico:brainstorm`, `aico:cooler`, `aico:research`, `aico:reprompt` (v1.2), the settings page.
 Every Role has a person's name, shown to the CEO next to its title: "Ava (architect)". Names are display only.
@@ -7,6 +7,8 @@ Fix round 1 (task personalities-company-types, CEO form 2026-10-27; v1.1 is stil
 v1.2 is additive (task reprompter-role, CEO at the Plan Gate): it adds the 35th Role, `reprompter`, after `editor`, with the default name `Lynn` in `company/names.json` and one `company/personalities.json` entry: temperament "patient, precise, quietly curious", way of talking "plain words, one question at a time", pet topic "turning vague asks into clear goals", intelligence `high`, creativity `medium`. No rule, field, phrase or surface changes; every v1.1 consumer behaves as before.
 
 v1.3 is additive for settings and breaking for prompts (task v020-gate-roadmap, T20, Delta L; rationale `docs/adr/0037-names-rendered-for-the-ceo-only.md`): names are rendered only for the CEO. A Role never gets a name; it writes its Role id. The Lead renders `<name> (<role>)` only in text shown to the CEO. The `Name:` dispatch line is gone (`dispatch-prompt` v4.0). Names are pseudonyms shown only to the CEO: they are never sent to the AI or written to project files. Defaults, the name rule and personalities are unchanged.
+
+v1.4 is additive (task elephant-goldfish, T1, Delta A): it adds the 36th Role, `fresh-reviewer`, after `reprompter`, with the default name `Fenna` in `company/names.json` and one `company/personalities.json` entry: temperament "calm and curious", way of talking "plain questions, one at a time", pet topic "what a text really says", intelligence `high`, creativity `medium`. No rule, field, phrase or surface changes; every v1.3 consumer behaves as before.
 
 ## Defaults
 `company/names.json` is `{ "<role>": "<name>" }` with exactly one entry per `agents/*.md`. It lives outside agent frontmatter, because frontmatter allows only documented keys. `scripts/check.mjs` checks it.

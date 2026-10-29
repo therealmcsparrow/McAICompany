@@ -13,7 +13,7 @@ const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const FLOOR_RANK = Object.freeze({ haiku: 1, sonnet: 2, opus: 3 });
 const FLOOR_FILE_MAX = 16 * 1024;
 const FLOOR_KEYS = ['v', 'release', 'floor', 'protected'];
-export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner']);
+export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner']);
 export const DESCRIPTION_BUDGET = Object.freeze({ total: 15000, perRole: 400, perEntry: 4 });
 
 function frontmatter(text) {

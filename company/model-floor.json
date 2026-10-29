@@ -9,6 +9,7 @@
     "backend-engineer": "sonnet",
     "brand-artist": "sonnet",
     "code-reviewer": "opus",
+    "fresh-reviewer": "opus",
     "design-researcher": "sonnet",
     "desktop-engineer": "sonnet",
     "devops": "sonnet",
@@ -41,6 +42,7 @@
   "protected": [
     "architect",
     "code-reviewer",
+    "fresh-reviewer",
     "pentester",
     "security",
     "vuln-scanner"
