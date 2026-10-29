@@ -854,7 +854,7 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     fs.writeFileSync(path.join(l.w.work, 'tier-path.jsonl'), '{ not json\n');
     const r = l.call('ship', SLUG, '2');
     assert.equal(r.code, 0);
-    assert.match(r.lines[0], /warnings: 1$/);
+    assert.match(r.lines[0], /warnings: 1 \| cost: not recorded$/);
     assert.deepEqual(l.lines(SLUG)[1], { v: 1, run: SLUG, kind: 'ship', acs: 2 });
   });
 
@@ -899,7 +899,10 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     const runs = fs.readdirSync(LEDGER_V13).filter((n) => n.endsWith('.jsonl')).map((n) => n.slice(0, -6));
     assert.ok(runs.length >= 5);
     for (const run of runs) {
-      for (const cmd of ['report', 'scorecard']) assert.deepEqual(ledger([cmd, run], opts), oldMain([cmd, run], opts), `${cmd} ${run}`);
+      // the scorecard gained a last segment in v1.5; with it cut off the line is the v0.18.0 line
+      const noCost = (r) => ({ ...r, lines: r.lines.map((x) => x.replace(/ \| cost: not recorded$/, '')) });
+      assert.deepEqual(ledger(['report', run], opts), oldMain(['report', run], opts), `report ${run}`);
+      assert.deepEqual(noCost(ledger(['scorecard', run], opts)), oldMain(['scorecard', run], opts), `scorecard ${run}`);
     }
     for (const cmd of ['model-verdict', 'parallel-verdict']) assert.deepEqual(ledger([cmd], opts), oldMain([cmd], opts), cmd);
   });

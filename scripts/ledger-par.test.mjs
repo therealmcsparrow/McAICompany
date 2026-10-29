@@ -139,7 +139,7 @@ test('a reader error writes no par line, counts one warning and never writes a p
     const r = ship(sb, ['broken', '2']);
     assert.equal(r.code, 0, body.slice(0, 20));
     assert.equal(r.lines.length, 1);
-    assert.match(r.lines[0], / \| warnings: 1$/, body.slice(0, 20));
+    assert.match(r.lines[0], / \| warnings: 1 \| cost: not recorded$/, body.slice(0, 20));
     assert.deepEqual(readLines(sb, 'broken').map((x) => x.kind), ['meta', 'ship']);
   }
 });

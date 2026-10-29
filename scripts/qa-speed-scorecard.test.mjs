@@ -276,7 +276,7 @@ test('AC7 the comparison set reads at most 500 ledger files and says so', (t) =>
   assert.equal(r.code, 0);
   assert.equal(r.lines.length, 1);
   assert.match(r.lines[0], /excluded: (499|500)\b/);
-  assert.match(r.lines[0], /warnings: [1-9]\d*$/);
+  assert.match(r.lines[0], /warnings: [1-9]\d* \| cost: not recorded$/);
 });
 
 test('AC7 files with an invalid run name are ignored by the comparison set', (t) => {
@@ -477,7 +477,7 @@ test('AC2 a v1 ship command (acs only) still works', (t) => {
 // ---------- the one line ----------
 
 const FIVE_LINE = 'scorecard feat-now (tier high): time 2h15m (median 2h00m) | CEO wait 11m (median 15m) | spend/AC 500 (median 600) | ' +
-  'fix rounds 1 (median 1) | high blockers 2 (median 1) | gate rejects 2 (median 2) | all tiers | excluded: 0';
+  'fix rounds 1 (median 1) | high blockers 2 (median 1) | gate rejects 2 (median 2) | all tiers | excluded: 0 | cost: not recorded';
 
 test('AC3 ship returns exactly one line with each value beside its median of the last 5 runs', (t) => {
   const root = mkRoot();
@@ -549,7 +549,7 @@ test('AC4 no earlier shipped run reads no baseline and leaves the label out', (t
   thisRun(root);
   const r = led(root, ['ship', 'feat-now', '4', '1', '2']);
   assert.deepEqual(r.lines, ['scorecard feat-now (tier high): time 2h15m (no baseline) | CEO wait 11m (no baseline) | ' +
-    'spend/AC 500 (no baseline) | fix rounds 1 (no baseline) | high blockers 2 (no baseline) | gate rejects 2 (no baseline) | excluded: 0']);
+    'spend/AC 500 (no baseline) | fix rounds 1 (no baseline) | high blockers 2 (no baseline) | gate rejects 2 (no baseline) | excluded: 0 | cost: not recorded']);
 });
 
 test('AC4 one to four earlier runs show n=<k>', (t) => {
@@ -559,7 +559,7 @@ test('AC4 one to four earlier runs show n=<k>', (t) => {
     PRIOR_FIVE.slice(0, k).forEach((o, i) => prior(root, `prev-${i + 1}`, i + 1, o));
     thisRun(root);
     const line = led(root, ['ship', 'feat-now', '4', '1', '2']).lines[0];
-    assert.match(line, new RegExp(`\\| all tiers n=${k} \\| excluded: 0$`), line);
+    assert.match(line, new RegExp(`\\| all tiers n=${k} \\| excluded: 0 \\| cost: not recorded$`), line);
   }
 });
 
@@ -580,7 +580,7 @@ test('AC4 the set is the 5 newest by Ship Gate time, not by file order or mtime'
   thisRun(root);
   const line = led(root, ['ship', 'feat-now', '4', '1', '2']).lines[0];
   assert.match(line, /time 2h15m \(median 1h00m\)/);
-  assert.match(line, /\| all tiers \| excluded: 0$/);
+  assert.match(line, /\| all tiers \| excluded: 0 \| cost: not recorded$/);
 });
 
 test('AC4 runs shipped later than this one, and this run itself, stay out of the set', (t) => {
@@ -603,7 +603,7 @@ test('AC4 with a tier and 5 runs of that tier the set is those 5 and the label s
   thisRun(root);
   const line = led(root, ['ship', 'feat-now', '4', '1', '2']).lines[0];
   assert.match(line, /time 2h15m \(median 1h00m\)/);
-  assert.match(line, /\| tier high \| excluded: 0$/);
+  assert.match(line, /\| tier high \| excluded: 0 \| cost: not recorded$/);
 });
 
 test('AC4 with 4 runs of the tier the set falls back to all tiers', (t) => {
@@ -614,7 +614,7 @@ test('AC4 with 4 runs of the tier the set falls back to all tiers', (t) => {
   thisRun(root);
   const line = led(root, ['ship', 'feat-now', '4', '1', '2']).lines[0];
   assert.match(line, /time 2h15m \(median 5h00m\)/);
-  assert.match(line, /\| all tiers \| excluded: 0$/);
+  assert.match(line, /\| all tiers \| excluded: 0 \| cost: not recorded$/);
 });
 
 test('AC4 a value no earlier run holds reads median ?, and a missing value of this run reads ?', (t) => {
@@ -660,7 +660,7 @@ test('AC5 brainstorm, replay, baseline and untimed runs are left out of the medi
   assert.equal(r.code, 0);
   assert.equal(r.lines.length, 1);
   assert.match(r.lines[0], /time 2h15m \(median 1h30m\)/);
-  assert.match(r.lines[0], /\| all tiers n=2 \| excluded: 4$/);
+  assert.match(r.lines[0], /\| all tiers n=2 \| excluded: 4 \| cost: not recorded$/);
 });
 
 test('AC5 an untimed run still prints a line and compares with the timed runs', (t) => {
@@ -681,7 +681,7 @@ test('AC5 exit is 0 when every other file is excluded', (t) => {
   thisRun(root);
   const r = cli(root, ['ship', 'feat-now', '4', '1', '2']);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /excluded: 5\n$/);
+  assert.match(r.stdout, /excluded: 5 \| cost: not recorded\n$/);
 });
 
 // ---------- v1 files read as before ----------
@@ -786,7 +786,7 @@ test('AC8 warnings from bad lines are counted on the line, not thrown', (t) => {
   const r = led(root, ['ship', 'feat-now', '4', '1', '2']);
   assert.equal(r.code, 0);
   assert.equal(r.lines.length, 1);
-  assert.match(r.lines[0], /warnings: [1-9]\d*$/);
+  assert.match(r.lines[0], /warnings: [1-9]\d* \| cost: not recorded$/);
 });
 
 test('AC8 a run whose spend is not reconciled still ships, and says so', (t) => {
@@ -846,25 +846,25 @@ function target(t, o = {}) {
 
 test('AC13 met: 30% fewer tokens per AC with Fix rounds and high blockers no higher than the baseline median', (t) => {
   const line = target(t, { spend: 7000 });
-  assert.match(line, /\| 30% target: -30% vs 2000\/AC, met$/);
+  assert.match(line, /\| 30% target: -30% vs 2000\/AC, met \| cost: not recorded$/);
 });
 
 test('AC13 the boundary uses the unrounded value: 1400.4 per AC is missed although it prints -30%', (t) => {
   const line = target(t, { spend: 7002 });
   assert.match(line, /spend\/AC 1400 /);
-  assert.match(line, /\| 30% target: -30% vs 2000\/AC, missed$/);
+  assert.match(line, /\| 30% target: -30% vs 2000\/AC, missed \| cost: not recorded$/);
 });
 
 test('AC13 missed when Fix rounds are above the baseline median', (t) => {
-  assert.match(target(t, { spend: 5000, fix: 3 }), /30% target: -50% vs 2000\/AC, missed$/);
+  assert.match(target(t, { spend: 5000, fix: 3 }), /30% target: -50% vs 2000\/AC, missed \| cost: not recorded$/);
 });
 
 test('AC13 missed when high blockers are above the baseline median', (t) => {
-  assert.match(target(t, { spend: 5000, high: 4 }), /30% target: -50% vs 2000\/AC, missed$/);
+  assert.match(target(t, { spend: 5000, high: 4 }), /30% target: -50% vs 2000\/AC, missed \| cost: not recorded$/);
 });
 
 test('AC13 missed when the spend per AC is not 30% lower', (t) => {
-  assert.match(target(t, { spend: 12000 }), /30% target: \+20% vs 2000\/AC, missed$/);
+  assert.match(target(t, { spend: 12000 }), /30% target: \+20% vs 2000\/AC, missed \| cost: not recorded$/);
 });
 
 test('AC13 not reconciled when no baseline run holds both quality numbers (the real baselines)', (t) => {
@@ -874,22 +874,22 @@ test('AC13 not reconciled when no baseline run holds both quality numbers (the r
   thisRun(root, { spend: 1000 });
   const r = led(root, ['ship', 'feat-now', '5', '1', '1', '--baseline', 'baseline-research-team,baseline-role-effort,baseline-v0-3']);
   assert.equal(r.code, 0);
-  assert.match(r.lines[0], /\| 30% target: -\d+% vs \d+\/AC, not reconciled$/);
+  assert.match(r.lines[0], /\| 30% target: -\d+% vs \d+\/AC, not reconciled \| cost: not recorded$/);
 });
 
 test('AC13 not reconciled when the baseline quality numbers are missing, even with a small spend', (t) => {
-  assert.match(target(t, { spend: 5000, quality: [null, null, null] }), /30% target: -50% vs 2000\/AC, not reconciled$/);
+  assert.match(target(t, { spend: 5000, quality: [null, null, null] }), /30% target: -50% vs 2000\/AC, not reconciled \| cost: not recorded$/);
 });
 
 test('AC13 baseline quality medians use only the baseline runs that hold both numbers', (t) => {
   const met = target(t, { spend: 5000, fix: 2, high: 3, quality: [null, [3, 4], [1, 2]] });
-  assert.match(met, /30% target: -50% vs 2000\/AC, met$/);
+  assert.match(met, /30% target: -50% vs 2000\/AC, met \| cost: not recorded$/);
   const missed = target(t, { spend: 5000, fix: 3, high: 3, quality: [null, [3, 4], [1, 2]] });
-  assert.match(missed, /, missed$/);
+  assert.match(missed, /, missed \| cost: not recorded$/);
 });
 
 test('AC13 not reconciled when this run has no Fix round or high blocker count', (t) => {
-  assert.match(target(t, { spend: 5000, fix: null, high: null }), /, not reconciled$/);
+  assert.match(target(t, { spend: 5000, fix: null, high: null }), /, not reconciled \| cost: not recorded$/);
 });
 
 test('AC13 not reconciled when this run spend per AC is not reconciled; never met or missed', (t) => {
