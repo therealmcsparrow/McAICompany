@@ -270,7 +270,7 @@ function promptMd({ target = 'ai-chat', language = 'en', headings = SIX_EN, bodi
   return `---\nv: 1\ntarget: ${target}\nlanguage: ${language}\n---\n${body}`;
 }
 const assumed = (what, why) => `- Assumed: ${what} \u2014 ${why}`;
-const q = (n, text, options) => `- [spec] Q${n}: ${text} \u2014 options: ${options.join(' | ')}`;
+const q = (n, text, options) => `- [spec] Q${n}: ${text} \u2014 options: ${options.join(' | ')} \u2014 why: it fits what the request names`;
 function handoff({ slug = SLUG, nn = 1, status = 'done', round = 0, files, decisions = ['- none'], blocking = ['- none'], next = ['- Lead: show the prompt, then the Use it form'], did = '- Wrote the reply.' } = {}) {
   const fm = [
     '---', `step: ${pad(nn)}`, 'role: reprompter', `task: ${slug}`, `status: ${status}`, `round: ${round}`, 'base-commit: f54fb09', 'risk-tier: low',
@@ -459,7 +459,7 @@ test('AC4 a real gap gives needs-ceo with 1 to 3 questions of 2 to 4 options and
   const one = ask([q(1, 'Which AI will use the prompt?', opts)]);
   assert.equal(one.code, 0, one.out);
   assert.equal(one.json.kind, 'questions');
-  assert.deepEqual(one.json.questions, [{ n: 1, text: 'Which AI will use the prompt?', options: ['Claude Code', 'A chat assistant', 'Another AI'], recommended: 'Claude Code' }]);
+  assert.deepEqual(one.json.questions, [{ n: 1, text: 'Which AI will use the prompt?', options: ['Claude Code', 'A chat assistant', 'Another AI'], recommended: 'Claude Code', why: 'it fits what the request names' }]);
 
   const three = ask([q(1, 'Which AI?', opts), q(2, 'Who reads the result?', ['Developers (Recommended)', 'Customers']), q(3, 'How big is the scope?', ['One page (Recommended)', 'The whole site', 'Not sure', 'Other'])], 3);
   assert.equal(three.code, 0, three.out);
@@ -478,6 +478,7 @@ test('AC4 a real gap gives needs-ceo with 1 to 3 questions of 2 to 4 options and
   bad([q(1, 'a', ['A (Recommended)', 'B | C'])].map((l) => l.replace('B | C', 'B|C')));
   bad(['- [spec] What target? \u2014 options: A (Recommended) | B']);
   bad([`- [test] Q1: a \u2014 options: A (Recommended) | B`]);
+  bad([q(1, 'a', opts).replace(/ — why: .*$/, '')]);
   bad([q(2, 'a', opts)]);
   bad([q(1, 'a', opts), q(3, 'b', opts)]);
   // Prose next to a question is stopped earlier, by the Handoff linter.
@@ -493,7 +494,7 @@ test('AC4 a real gap gives needs-ceo with 1 to 3 questions of 2 to 4 options and
 test('AC5 the Lead asks the questions in one form, re-dispatches with the answers, and caps the rounds itself', () => {
   const s4 = section(playbook, '4. Question form');
   assert.match(s4, /One form, one question per `Q<n>` \(1 to 3\) as the checker returned them/);
-  assert.match(s4, /the `\(Recommended\)` one first, Other allowed/);
+  assert.match(s4, /the `\(Recommended\)` one first and its `why` as that option's description only .*Other allowed/);
   assert.match(s4, /`held` \+= 1 and write `answers-<held>\.md`/);
   assert.match(s4, /`Q<n>: other: <CEO text, line breaks folded to spaces>`/);
   assert.match(contract, /`Q<n>: other: <CEO text, line breaks folded to spaces>`/);
@@ -782,7 +783,7 @@ test('AC7 the checker prints no Handoff or prompt text on a failed reply, and on
   const asked = step(r, { handoffText: handoff({ did: `- ${secret}`, status: 'needs-ceo', files: null, blocking: [q(1, 'Which AI?', ['A (Recommended)', 'B'])], next: [`- ${secret}`] }) });
   assert.equal(asked.code, 0);
   assert.ok(!asked.out.includes(secret));
-  assert.deepEqual(Object.keys(asked.json.questions[0]).sort(), ['n', 'options', 'recommended', 'text']);
+  assert.deepEqual(Object.keys(asked.json.questions[0]).sort(), ['n', 'options', 'recommended', 'text', 'why']);
 });
 
 test('AC7 the Playbook passes CEO text only as files with a data header, and shell calls carry only slug, enum, integer and the snap value', () => {

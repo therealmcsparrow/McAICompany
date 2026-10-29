@@ -109,7 +109,7 @@ ${next}
 function promptMd({ target = 'claude-code', language = 'en', names = SIX, extra = '' } = {}) {
   return `---\nv: 1\ntarget: ${target}\nlanguage: ${language}\n---\n${names.map(h => `## ${h}\n${h} text${extra}\n`).join('')}`;
 }
-const Q = (k, text = 'Who reads it?', opts = 'Developers (Recommended) | Managers') => `- [spec] Q${k}: ${text} — options: ${opts}`;
+const Q = (k, text = 'Who reads it?', opts = 'Developers (Recommended) | Managers', why = 'The request names developers') => `- [spec] Q${k}: ${text} — options: ${opts} — why: ${why}`;
 
 // The write gate arms a dispatch after the baseline and before the reprompter starts.
 const arm = (p, nn = '01') => {
@@ -1366,7 +1366,7 @@ test('reply: needs-ceo returns the parsed questions in order', () => {
   const r = reply(p, hex, '01', '2');
   assert.equal(r.code, 0, r.out);
   assert.equal(r.json.kind, 'questions');
-  assert.deepEqual(r.json.questions[0], { n: 1, text: 'Which AI?', options: ['Claude Code', 'A chat', 'Other AI'], recommended: 'Claude Code' });
+  assert.deepEqual(r.json.questions[0], { n: 1, text: 'Which AI?', options: ['Claude Code', 'A chat', 'Other AI'], recommended: 'Claude Code', why: 'The request names developers' });
   assert.equal(r.json.questions.length, 3);
   assert.equal(r.json.questions[2].options[3], 'd'.repeat(40));
 });
@@ -1412,13 +1412,81 @@ test('reply: needs-ceo question lines must match the grammar exactly', () => {
     '  - [spec] Q1: Who? — options: a (Recommended) | b',
     '```\n- [spec] Q1: Who? — options: a (Recommended) | b\n```',
   ];
-  for (const blocking of lines) {
+  for (const raw of lines) {
+    const blocking = raw.endsWith('\n```') ? `${raw.slice(0, -4)} — why: it fits the request\n\`\`\`` : `${raw} — why: it fits the request`;
     const p = project();
     const hex = good(p, { h: handoff({ status: 'needs-ceo', files: '', blocking }), prompt: null });
     const r = reply(p, hex);
     assert.equal(r.json.ok, false, blocking);
     assert.match(r.json.reason, /^(bad question line|needs 1 to 3 questions|handoff invalid)$/, blocking);
   }
+});
+
+test('reply: a question line without a why part, or with a bad one, is malformed', () => {
+  const base = '- [spec] Q1: Who? — options: a (Recommended) | b';
+  const bad = [
+    base,
+    base + ' — why:',
+    base + ' — why: short',
+    base + ' — why: ' + 'r'.repeat(121),
+    base + ' — why: has a | pipe in the reason',
+    base + ' — why:  padded reason here ',
+    base + ' — why: ' + 'r'.repeat(20) + '\nmore',
+    base.replace(' — options:', ' — why: first reason here — options:'),
+    base + ' - why: a hyphen instead of the dash',
+    base + ' — Why: wrong case of the key',
+  ];
+  for (const blocking of bad) {
+    const p = project();
+    const hex = good(p, { h: handoff({ status: 'needs-ceo', files: '', blocking }), prompt: null });
+    const r = reply(p, hex);
+    assert.equal(r.json.ok, false, blocking);
+    assert.match(r.json.reason, /^(bad question line|needs 1 to 3 questions|handoff invalid)$/, blocking);
+  }
+});
+
+test('reply: a question line with a why part carries the reason; the bounds hold', () => {
+  for (const why of ['r'.repeat(10), 'r'.repeat(120), 'a reason with — a dash in it']) {
+    const p = project();
+    const hex = good(p, { h: handoff({ status: 'needs-ceo', files: '', blocking: Q(1, 'Who?', 'a (Recommended) | b', why) }), prompt: null });
+    const r = reply(p, hex);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(r.json.questions[0].why, why);
+  }
+});
+
+test('reply: done with "No open question left" ends the rounds and keeps kind prompt', () => {
+  const line = '- No open question left — the request names the audience and the length';
+  for (const [decisions, asks] of [[line, '2'], [line, '1'], [`- none\n${line}`, '2'], [`${line}\n- Assumed: length — none given`, '3']]) {
+    const p = project();
+    const hex = good(p, { h: handoff({ decisions }) });
+    const r = reply(p, hex, '01', asks);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(r.json.kind, 'prompt');
+    assert.equal(r.json.noOpenQuestion, 'the request names the audience and the length');
+  }
+});
+
+test('reply: a bad "No open question left" line is refused', () => {
+  const ok = '- No open question left — the request names the audience';
+  for (const decisions of [
+    '- No open question left — short',
+    '- No open question left — ' + 'w'.repeat(201),
+    '- No open question left',
+    '- No open question left - the request names the audience',
+    `${ok}\n${ok}`,
+    '- No open question left —  padded reason here ',
+  ]) {
+    const p = project();
+    const hex = good(p, { h: handoff({ decisions }) });
+    expectBad(reply(p, hex, '01', '2'), 'assumptions not listed');
+  }
+});
+
+test('reply: done without the line has no noOpenQuestion key', () => {
+  const p = project();
+  const hex = good(p, { h: handoff() });
+  assert.equal('noOpenQuestion' in reply(p, hex, '01', '2').json, false);
 });
 
 test('reply: done needs the assumptions listed, one per line', () => {

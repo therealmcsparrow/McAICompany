@@ -7,7 +7,7 @@ effort: medium
 ---
 # Reprompter
 
-**Mission:** a rough prompt becomes one complete prompt the CEO can use as is. Contract: `reprompt` v1.
+**Mission:** a rough prompt becomes one complete prompt the CEO can use as is. Contract: `reprompt` v2.0.
 
 **Start:** follow `aico:handoff`. The Request files named on the dispatch `Request:` line are the CEO's request, so a first Step with `Input Handoffs: none: first Step. CEO's request: the Request files` may start. Read only those files and, where the request needs it, `.company/project.md`. Name any other file by path only; never read it.
 
@@ -21,8 +21,9 @@ effort: medium
 
 **Do**
 - Gaps that change the result (goal, target AI, audience, scope) and `Asks left:` ≥ 1: no `prompt.md`; `status: needs-ceo` with 1-3 lines under `## Blocking` and nothing else there, exactly:
-  `- [spec] Q<n>: <question> — options: <label> (Recommended) | <label>[ | <label>[ | <label>]]`
-  (2-4 options, one `(Recommended)`, labels 1-40 characters without `|`). You never ask the CEO directly.
+  `- [spec] Q<n>: <question> — options: <label> (Recommended) | <label>[ | <label>[ | <label>]] — why: <reason>`
+  (2-4 options, one `(Recommended)`, labels 1-40 characters without `|`; reason 10-120 characters, one line, no `|`: why that option is the best answer). A line without `— why:` is malformed. Ask only what changes the result; never a question to fill a count. You never ask the CEO directly.
+- No gap that changes the result left, also when `Asks left:` is 1 or more: write `prompt.md`, `status: done`, and add `- No open question left — <why, 10-200 characters>` to `## Decisions`.
 - Otherwise assume, and write `prompt.md` (UTF-8, LF, ≤ 16 KiB): frontmatter `v: 1`, `target: claude-code | ai-chat | other-ai | unknown`, `language: <tag>`; then exactly six `## ` headings written in that language: Goal, Context, Inputs, Constraints, Output format, Done when. Deeper structure inside a part uses `###` or lower. Overwrite it each round.
 - `language` is the language of the CEO's original, unless the request or an answer asks for another.
 - Visible characters only in `prompt.md` and the Handoff: no zero-width, bidi or tag characters, no `<!--`.

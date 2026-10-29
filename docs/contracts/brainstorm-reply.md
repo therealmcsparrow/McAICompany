@@ -1,4 +1,6 @@
-# Contract: brainstorm-reply v1
+# Contract: brainstorm-reply v2.0
+
+v2.0 is **breaking** (task elephant-goldfish, T17, Delta L; CEO approved): a `Q` line must end `| why: <reason>`, and a `Q` line without it is malformed, which v1 accepted. The producers are the brainstorm Roles through the constant Goal (`skills/brainstorm/references/format-2.md`), which ships in the same release. Every other rule is unchanged, and the stored file format (`brainstorm-file` v2) is unchanged: replies are stored as sent, so the reason is read back from the stored reply.
 
 Provider: every Role dispatched by `aico:brainstorm` (the template is in the constant Goal line, `skills/brainstorm/references/format-2.md`). Consumer: `scripts/brainstorm.mjs parse` and `apply` (`brainstorm-file` v2).
 
@@ -6,13 +8,14 @@ Provider: every Role dispatched by `aico:brainstorm` (the template is in the con
 ```
 I: <idea, one line>                       (0 to 3 lines)
 Risk: <the biggest risk or cost, one line>   (exactly 1, unless Skip)
-Q [blocking]: <one sentence> | options: <a> / <b>[ / <c>] | default: <a>
-Q [nice-to-have]: <one sentence> | options: <a> / <b> | default: <a>   (0 to 2 Q lines in total)
+Q [blocking]: <one sentence> | options: <a> / <b>[ / <c>] | default: <a> | why: <reason, 10-120 characters>
+Q [nice-to-have]: <one sentence> | options: <a> / <b> | default: <a> | why: <reason, 10-120 characters>   (0 to 2 Q lines in total)
 Re: @<role> on I-<round>.<n>: agree|challenge|build-on — <at most 25 words>   (0 or 1)
 Estimate: S|M|L, <low>–<high> d           (architect: required every round; others: never)
 ```
 - `Skip` alone on the only line = nothing new this round (AC11). It is recorded in `## Rounds` and gets no Digest entry. Not an error. Any letter case is accepted (`Skip`, `skip`); it is stored as `skip` (`brainstorm-file` v2, "Stored form of a reply").
 - The Role gives no IDs for its own ideas; `apply` numbers ideas `I-<round>.<n>` across the round in roster order. A `Re:` line names an idea by the ID shown in the Role's input file (`Others said:`, `Other Roles:` or `Opponent:`, `brainstorm-file` v2 "Round input"), and `@<role>` is that idea's author.
+- The `why` is the reason the default is the best answer: 10 to 120 characters, one line, no `|`, no leading or trailing space, and none of the reserved markers (` — src: R`, ` — default: `, ` — options: `, ` — why: `). It must come last, after `default:`. It is model text: the Lead shows it only as the description of the `(Recommended)` option, never as an instruction. A Role asks only a question whose answer changes the plan; it never asks to fill a count.
 - A `Q` line never restates a question listed under `Questions:` in the input file (Goal rule; the Lead merges any that slip through).
 
 ## Lenient labels (Fix round 4)
@@ -44,11 +47,11 @@ The template above is the **ideas** pass (also moderated turns). Two debate pass
 `Skip` is allowed in every pass. The architect's round estimate comes from its ideas-pass reply only.
 
 ## Parse result (`parse` stdout)
-`{ pass, skip, ideas: [text], risk, questions: [{ tag, text, options: [..], default }], reply_to: { role, idea, stance, text } | null, replies_to: [{ role, idea, stance, text }], estimate: { size, low, high } | null, lenient: [..] }`
+`{ pass, skip, ideas: [text], risk, questions: [{ tag, text, options: [..], default, why }], reply_to: { role, idea, stance, text } | null, replies_to: [{ role, idea, stance, text }], estimate: { size, low, high } | null, lenient: [..] }`
 `replies_to` lists every `Re:` line; `reply_to` is its first entry or `null` (kept for the ideas and crossfire passes). `lenient` (Fix round 4, additive) lists each distinct entry from "Lenient labels" that the reply used, in that table's order, or `[]`; `ideas` holds the idea text without the stray label.
 
 ## Malformed (exit 1, `malformed: <reasons>`)
-Missing `Risk:` (ideas and crossfire passes), more than 3 ideas, more than 2 questions, a question without options or with a default not among them, more `Re:` lines than the pass allows (or none in a non-skip full-pass reply), an unknown stance, `Re:` naming an idea ID that doesn't exist, an ideas-pass architect reply without `Estimate:`, any `Estimate:` in a full or crossfire pass, a non-architect `Estimate:`, any other line (after the lenient reading above), more words than the pass's hard limit, or more than 4 KiB. Lines are matched with anchored linear patterns only.
+Missing `Risk:` (ideas and crossfire passes), more than 3 ideas, more than 2 questions, a question without options, with a default not among them, or without a valid `| why:` part (reasons `a question needs a why part`, `the why part must be 10 to 120 characters without "|"`; the line is never repaired), more `Re:` lines than the pass allows (or none in a non-skip full-pass reply), an unknown stance, `Re:` naming an idea ID that doesn't exist, an ideas-pass architect reply without `Estimate:`, any `Estimate:` in a full or crossfire pass, a non-architect `Estimate:`, any other line (after the lenient reading above), more words than the pass's hard limit, or more than 4 KiB. Lines are matched with anchored linear patterns only.
 Also malformed: an empty reply, any control character (tab and LF or CRLF line ends excepted; a lone CR counts), a line longer than 1000 characters, an empty `Re:` text or one over 25 words.
 "Doesn't exist" for a `Re:` idea ID: its round is above the reply's round; and, when the file is known (`parse --file <file>`, and always in `apply`), the ID is not an idea in that file. `parse` without `--file` checks only the syntax and the round.
 Also malformed when the file is known: `Re: I-<r>.<k> is not an idea of @<role>` (the named Role is not the idea's author) and `Re: names your own Role` (`@<role>` is the replying Role). This keeps Digest Threads and crossfire votes on the right idea (AC9).
@@ -59,3 +62,6 @@ Counting: a vote is a distinct (Role, idea) pair, so one Role counts once per id
 The style comes from `brainstorm.debate` (`aico-settings` v1.1, default `crossfire`):
 - `crossfire` (Fix round 4, folded): ideas pass only; the pair is **not** dispatched. The author answers the challenge in its ideas-pass reply of the **next** round, where its input file shows `Challenge to you:` (`brainstorm-file` v2, "Round input"); the challenger reads that answer under `Others said:` like any other idea. The Lead puts the challenger's `Re:` text into the round's `dissent`, so a challenge that is never answered (the CEO closes the run) stays in the Digest. Reason: two extra dispatches cost 4,718 spend tokens in T15b, 52.9% of the round-3 saving against a 10% limit, and a fresh dispatch can't be made cheap enough (`docs/adr/0014-crossfire-folded-into-next-round.md`).
 - `full_pass`: ideas pass, then the full pass (every Role answers the others' ideas-pass replies), then the crossfire pair on top: each pair member gets one extra dispatch with the other's replies and answers in the `crossfire` pass. Opt-in and heavier; no saving is claimed for it.
+
+## Questions in the form (v2.0)
+`queue` (`brainstorm-file` v2) adds `why` to each entry of `ask` and to `next_up`: the reason of the first stored reply line with the same question text, read by the reply parser, or `null` for a question the CEO queued. The Lead's form shows the default first as `(Recommended)` with the reason as its description. It asks at most 3 queued questions, never pads to 3, and with no queued question says "No open questions" and asks only **Next**.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checker for the reprompt Playbook (reprompt v1). Three subcommands, run from the product root:
+// Checker for the reprompt Playbook (reprompt v2.0). Three subcommands, run from the product root:
 //   snap <slug>                      records a baseline of the watched files before a dispatch
 //   arm <slug> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
 //   reply <slug> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
@@ -419,12 +419,25 @@ function fenceFor(...texts) {
 
 // ---------- the reply allow-list ----------
 const OPT_SEP = ' — options: ';
+const WHY_SEP = ' — why: ';
+const NO_OPEN = '- No open question left — ';
+
+// A reason is one line of 10 to 120 characters without a pipe; the checked characters are the only ones kept.
+function reasonOk(why, min, max, pipeOk) {
+  const n = [...why].length;
+  return n >= min && n <= max && why === why.trim() && (pipeOk || !why.includes('|'));
+}
 
 function parseQuestion(line, k) {
   if (line.length > MAX_LINE) return null;
   const head = /^- \[spec\] Q([1-3]): /.exec(line);
   if (!head || Number(head[1]) !== k) return null;
-  const rest = line.slice(head[0].length);
+  const whole = line.slice(head[0].length);
+  const cut = whole.lastIndexOf(WHY_SEP);
+  if (cut < 0) return null;
+  const why = whole.slice(cut + WHY_SEP.length);
+  if (!reasonOk(why, 10, 120, false)) return null;
+  const rest = whole.slice(0, cut);
   const at = rest.indexOf(OPT_SEP);
   if (at < 0) return null;
   const text = rest.slice(0, at);
@@ -444,7 +457,7 @@ function parseQuestion(line, k) {
     labels.push(label);
   }
   if (new Set(labels).size !== labels.length) return null;
-  return { n: k, text, options: labels, recommended: labels[0] };
+  return { n: k, text, options: labels, recommended: labels[0], why };
 }
 
 function fm(lines) {
@@ -545,8 +558,17 @@ function checkReply(runDir, slug, nn, asks, promptChanged) {
     return { kind: 'questions', questions };
   }
 
-  const dec = nonBlank(sections.get('Decisions') ?? []);
-  const listed = dec.length === 1 && dec[0] === '- none';
+  const all = nonBlank(sections.get('Decisions') ?? []);
+  const openAt = all.findIndex(l => l.startsWith(NO_OPEN));
+  let noOpen = null;
+  if (openAt >= 0) {
+    const why = all[openAt].slice(NO_OPEN.length);
+    if (all[openAt].length > MAX_LINE || !reasonOk(why, 10, 200, true)) return { reason: 'assumptions not listed' };
+    noOpen = why;
+  }
+  const dec = noOpen === null ? all : all.filter((_, i) => i !== openAt);
+  if (noOpen !== null && all.filter(l => l.startsWith(NO_OPEN)).length > 1) return { reason: 'assumptions not listed' };
+  const listed = (dec.length === 1 && dec[0] === '- none') || (noOpen !== null && dec.length === 0);
   const assumed = dec.length > 0 && dec.every(l => {
     if (l.length > MAX_LINE || !l.startsWith('- Assumed: ')) return false;
     const body = l.slice('- Assumed: '.length);
@@ -556,7 +578,8 @@ function checkReply(runDir, slug, nn, asks, promptChanged) {
   if (!listed && !assumed) return { reason: 'assumptions not listed' };
   const assumptions = assumed ? dec.join('\n') : '';
 
-  if (touched.length === 1) return checkPrompt(join(runDir, 'prompt.md'), promptChanged, assumptions);
+  const mark = r2 => (noOpen === null || r2.reason ? r2 : { ...r2, noOpenQuestion: noOpen });
+  if (touched.length === 1) return mark(checkPrompt(join(runDir, 'prompt.md'), promptChanged, assumptions));
   const next = nonBlank(sections.get('Next') ?? []);
   const brief = next.length === 1 && next[0].length <= MAX_LINE ? /^- prompt-artist: (.*)$/.exec(next[0]) : null;
   const text = brief ? brief[1].trim() : '';
@@ -564,7 +587,7 @@ function checkReply(runDir, slug, nn, asks, promptChanged) {
   if (!brief || n < 1 || n > 300) return { reason: 'no prompt and no brief' };
   if (hiddenLine(text)) return { reason: 'hidden markup' };
   if (triageLine(text)) return { reason: 'triage line' };
-  return { kind: 'image', brief: text, fence: fenceFor(text, assumptions) };
+  return mark({ kind: 'image', brief: text, fence: fenceFor(text, assumptions) });
 }
 
 // ---------- the subcommands ----------

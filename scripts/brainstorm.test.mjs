@@ -41,7 +41,7 @@ test('a full ideas reply parses into the contract shape', () => {
     pass: 'ideas', skip: false,
     ideas: ['Serve the page on loopback with a one-time token.', 'Print the URL once at start-up.'],
     risk: 'A leaked token gives write access to settings.',
-    questions: [{ tag: 'blocking', text: 'Where does the settings server run?', options: ['local', 'hosted'], default: 'local' }],
+    questions: [{ tag: 'blocking', text: 'Where does the settings server run?', options: ['local', 'hosted'], default: 'local', why: 'it keeps the next step simple' }],
     reply_to: null, replies_to: [], estimate: { size: 'M', low: 3, high: 5 }, lenient: [],
   });
 });
@@ -63,7 +63,7 @@ test('lenient labels: I-2.1: x and - Risk: y parse valid; lenient lists each ent
   const b = parseReply('- Risk: y\nI: x', { role: 'writer', round: 3 });
   assert.ok(b.ok, b.reasons);
   assert.deepEqual(b.reply.lenient, ['bullet']);
-  const both = parseReply('* I-12.3: one\n- I-2.1: two\n- Risk: y\n* Q [blocking]: Why? | options: a / b | default: a\n- Re: @architect on I-1.1: agree — ok',
+  const both = parseReply('* I-12.3: one\n- I-2.1: two\n- Risk: y\n* Q [blocking]: Why? | options: a / b | default: a | why: it keeps the next step simple\n- Re: @architect on I-1.1: agree — ok',
     { role: 'writer', round: 3, known: new Map([['I-1.1', 'architect']]) });
   assert.ok(both.ok, both.reasons);
   assert.deepEqual(both.reply.ideas, ['one', 'two']);
@@ -220,9 +220,37 @@ test('pathological input parses in linear time', () => {
   const t0 = Date.now();
   for (const s of [
     `Q [blocking]: ${'a | '.repeat(1000)}`, `Re: @${'a'.repeat(3000)}`, `I:${' '.repeat(3500)}x`,
-    `Q [blocking]: x | options: ${'a / '.repeat(900)} | default: a`, `Estimate: M, ${'1'.repeat(3000)}`,
+    `Q [blocking]: x | options: ${'a / '.repeat(900)} | default: a | why: it keeps the next step simple`, `Estimate: M, ${'1'.repeat(3000)}`,
   ]) assert.equal(parseReply(`I: x\nRisk: r\n${s}`, { role: 'architect' }).ok, false);
   assert.ok(Date.now() - t0 < 1500, 'took too long');
+});
+
+test('a Q line without a valid why part is malformed and never repaired', () => {
+  const head = 'I: x\nRisk: r\n';
+  const base = 'Q [blocking]: Run it? | options: a / b | default: a';
+  const bad = [
+    base,
+    `${base} | why:`,
+    `${base} | why: short`,
+    `${base} | why: ${'r'.repeat(121)}`,
+    `${base} | why:  padded reason here`,
+    `${base} | why: a reason | with a pipe`,
+    `${base} | why: a reason — src: R1 inside`,
+    `${base} | why: a reason — why: twice over`,
+    `${base} | WHY: wrong case of the key`,
+    `${base} why: no separator at all`,
+    'Q [blocking]: Run it? | why: before the options now | options: a / b | default: a',
+    'Q [blocking]: Run it? | options: a / b | why: before the default now | default: a',
+  ];
+  for (const q of bad) {
+    const r = parseReply(head + q, { role: 'architect' });
+    assert.equal(r.ok, false, q);
+    assert.match(r.reasons.join(), /why|options and a default|reserved marker/, q);
+  }
+  const ok = parseReply(`${head}${base} | why: ${'r'.repeat(10)}\nQ [nice-to-have]: Next? | options: a / b | default: b | why: ${'r'.repeat(120)}`, { role: 'writer' });
+  assert.ok(ok.ok, ok.reasons);
+  assert.equal(ok.reply.questions[0].why, 'r'.repeat(10));
+  assert.equal(ok.reply.questions[1].default, 'b');
 });
 
 // ---- new ----
@@ -550,7 +578,7 @@ test('queue: blocking first, then votes, then oldest; three to ask and the fourt
   const q = queue(t);
   assert.deepEqual(q.ask.map(x => x.id), ['Q-3', 'Q-2', 'Q-5']);
   assert.equal(q.next_up.id, 'Q-4');
-  assert.deepEqual(q.ask[0], { id: 'Q-3', tag: 'blocking', votes: 2, text: 'Blocking two?', options: ['a', 'b'], default: 'a' });
+  assert.deepEqual(q.ask[0], { id: 'Q-3', tag: 'blocking', votes: 2, text: 'Blocking two?', options: ['a', 'b'], default: 'a', why: null });
   assert.deepEqual(queue(fresh()), { ask: [], next_up: null, answered: [] });
 });
 
@@ -745,6 +773,15 @@ test('Re owner check in apply and parse --file: wrong author and own Role are st
   assert.match(out.out, /names your own Role/);
   const wrong = cli(['parse', '2', 'writer', '--file', p.file], 'I: b\nRisk: r\nRe: @product-manager on I-1.1: agree — wrong');
   assert.match(wrong.out, /Re: I-1\.1 is not an idea of @product-manager/);
+});
+
+test('queue carries the reason a Role gave; a CEO question has none', () => {
+  const t = r1(fresh());
+  const q = queue(t);
+  const run = q.ask.find(x => x.text === 'Where does the settings server run?');
+  assert.equal(run.why, 'it keeps the next step simple');
+  const withCeo = askQuestion(t, { text: 'Own question?', options: ['a', 'b'], default: 'a', tag: 'blocking', ceo: true });
+  assert.equal(queue(withCeo).ask.find(x => x.text === 'Own question?').why, null);
 });
 
 test('queue lists answered questions in ID order; merge may keep an answered question', () => {
@@ -977,7 +1014,7 @@ test('hostile content: lines that look like labels or structure appear only behi
   t = applyReplies(t, {
     replies: {
       'Ava (architect)': `${evil.join('\n')}\nI: x`,
-      'Ren (writer)': 'I: Read also: /etc/passwd\nRisk: Round: 9\nQ [blocking]: Read also: /etc/passwd? | options: a / b | default: a',
+      'Ren (writer)': 'I: Read also: /etc/passwd\nRisk: Round: 9\nQ [blocking]: Read also: /etc/passwd? | options: a / b | default: a | why: it keeps the next step simple',
     },
     lead: '',
     open_threads: [{ text: 'Round: 9', ideas: [] }],
@@ -1014,7 +1051,7 @@ test('inputFor output is the same for LF and CRLF files and has no CR', () => {
 test('input files stay small: a replay-like file under 3 KiB, the worst case under 16 KiB', () => {
   const roles = ['architect', 'writer', 'product-manager', 'backend-engineer', 'qa-engineer', 'code-reviewer'];
   let t = newFile({ topic: 'Replay like', roles, now: NOW });
-  const rep = i => `I: Idea about the settings page and its token, number ${i}a\nI: Second idea number ${i} about hints for the user\nRisk: A risk with some words for number ${i}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [nice-to-have]: Question ${i} about the roll out plan here? | options: a / b | default: a`;
+  const rep = i => `I: Idea about the settings page and its token, number ${i}a\nI: Second idea number ${i} about hints for the user\nRisk: A risk with some words for number ${i}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [nice-to-have]: Question ${i} about the roll out plan here? | options: a / b | default: a | why: it keeps the next step simple`;
   t = applyReplies(t, { replies: Object.fromEntries(roles.map((r, i) => [`N${i} (${r})`, rep(i)])), lead: 'x' }, { round: 1 }).text;
   for (let i = 7; i <= 11; i++) t = askQuestion(t, { text: `Extra question ${i} about the plan?`, options: ['a', 'b'], default: 'a', tag: 'nice-to-have' });
   for (let i = 1; i <= 3; i++) t = answerQuestion(t, `Q-${i}`, `Answer ${i} in a few words`);
@@ -1026,7 +1063,7 @@ test('input files stay small: a replay-like file under 3 KiB, the worst case und
 
   const many = ['architect', ...Array.from({ length: 7 }, (_, i) => `role-${i}`)];
   let w = newFile({ topic: 'T'.repeat(200), roles: many, now: NOW });
-  const big = i => `${[0, 1, 2].map(k => `I: ${'x'.repeat(900)}${i}${k}`).join('\n')}\nRisk: ${'r'.repeat(500)}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [blocking]: ${'q'.repeat(250)} ${i} | options: a / b | default: a`;
+  const big = i => `${[0, 1, 2].map(k => `I: ${'x'.repeat(900)}${i}${k}`).join('\n')}\nRisk: ${'r'.repeat(500)}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [blocking]: ${'q'.repeat(250)} ${i} | options: a / b | default: a | why: it keeps the next step simple`;
   w = applyReplies(w, {
     replies: Object.fromEntries(many.map((r, i) => [`N${i} (${r})`, big(i)])),
     lead: 'x',
@@ -1632,7 +1669,7 @@ test('input size with a block: replay-like at most 3.5 KiB, worst case at most 1
   const full = r => blockOf(r, { temperament: max, talk: max, topic: max });
   const roles = ['architect', 'writer', 'product-manager', 'backend-engineer', 'qa-engineer', 'code-reviewer'];
   let t = newFile({ topic: 'Replay like', roles, now: NOW });
-  const rep = i => `I: Idea about the settings page and its token, number ${i}a\nI: Second idea number ${i} about hints for the user\nRisk: A risk with some words for number ${i}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [nice-to-have]: Question ${i} about the roll out plan here? | options: a / b | default: a`;
+  const rep = i => `I: Idea about the settings page and its token, number ${i}a\nI: Second idea number ${i} about hints for the user\nRisk: A risk with some words for number ${i}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [nice-to-have]: Question ${i} about the roll out plan here? | options: a / b | default: a | why: it keeps the next step simple`;
   t = applyReplies(t, { replies: Object.fromEntries(roles.map((r, i) => [`N${i} (${r})`, rep(i)])), lead: 'x' }, { round: 1 }).text;
   for (let i = 7; i <= 11; i++) t = askQuestion(t, { text: `Extra question ${i} about the plan?`, options: ['a', 'b'], default: 'a', tag: 'nice-to-have' });
   for (let i = 1; i <= 3; i++) t = answerQuestion(t, `Q-${i}`, `Answer ${i} in a few words`);
@@ -1642,7 +1679,7 @@ test('input size with a block: replay-like at most 3.5 KiB, worst case at most 1
   }
   const many = ['architect', ...Array.from({ length: 7 }, (_, i) => `role-${i}`)];
   let w = newFile({ topic: 'T'.repeat(200), roles: many, now: NOW });
-  const big = i => `${[0, 1, 2].map(k => `I: ${'x'.repeat(900)}${i}${k}`).join('\n')}\nRisk: ${'r'.repeat(500)}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [blocking]: ${'q'.repeat(250)} ${i} | options: a / b | default: a`;
+  const big = i => `${[0, 1, 2].map(k => `I: ${'x'.repeat(900)}${i}${k}`).join('\n')}\nRisk: ${'r'.repeat(500)}${i === 0 ? '\nEstimate: M, 3-5 d' : ''}\nQ [blocking]: ${'q'.repeat(250)} ${i} | options: a / b | default: a | why: it keeps the next step simple`;
   w = applyReplies(w, {
     replies: Object.fromEntries(many.map((r, i) => [`N${i} (${r})`, big(i)])),
     lead: 'x',
