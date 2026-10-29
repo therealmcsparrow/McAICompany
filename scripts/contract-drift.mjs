@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Contract drift (contract: docs/contracts/contract-index.md v1). Node built-ins only; read-only, writes nothing.
 // The index is computed from the `# Contract: <name> v<x>[.<y>]` headers, so no second list exists.
-// Checks: a Module's declared Contract version, version cites in skills, agents and docs, and the
+// Checks: a Module's declared Contract version, version cites in skills and agents, and the
 // paths and exports the Contracts and ADRs point at. Scanned text is untrusted: every pattern is
 // anchored or bounded, files over the cap are skipped, and paths are joined lexically under the root.
 import { readFileSync, readdirSync, lstatSync, existsSync } from 'node:fs';
@@ -96,8 +96,7 @@ function checkModules(root, index, errors) {
 }
 
 function checkCites(root, index, errors) {
-  const files = ['skills', 'agents', 'documentation', 'docs/contracts', 'docs/adr'].flatMap(d => listMarkdown(root, d));
-  if (existsSync(join(root, 'README.md'))) files.push('README.md');
+  const files = ['skills', 'agents'].flatMap(d => listMarkdown(root, d));
   for (const rel of files) {
     const text = readText(join(root, rel));
     if (text === null) continue;

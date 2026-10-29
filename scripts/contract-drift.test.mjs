@@ -88,6 +88,10 @@ describe('cites', () => {
     const root = repo({ ...base, 'skills/x/SKILL.md': 'pinned alpha v2.13.1 and beta v9.4.0 here\n' });
     assert.deepEqual(checkDrift(root), []);
   });
+  test('cites are read only in skills and agents (AC16)', () => {
+    const root = repo({ ...base, 'README.md': 'alpha v9\n', 'documentation/g.md': 'alpha v9\n', 'docs/adr/0001-x.md': 'alpha v9\n', 'docs/contracts/c.md': '# Contract: c v1\n\nalpha v9\n' });
+    assert.deepEqual(checkDrift(root), []);
+  });
   test('a cite that ends a sentence is still read', () => {
     const root = repo({ ...base, 'skills/x/SKILL.md': 'See alpha v1.3. Next beta v1.\n' });
     assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:1 cites alpha v1.3, current v1.2', 'ERROR skills/x/SKILL.md:1 cites beta v1, current v3.7']);
