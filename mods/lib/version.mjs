@@ -1,7 +1,7 @@
 // The plugin's own version, read from the text of its `.claude-plugin/plugin.json`. Pure: no engine object, no Node import.
 const SEMVER = /^\d+\.\d+\.\d+$/;
-// The status part is `v` plus the version inside 9 cells, so 8 characters at most (`10.20.30`).
-const VERSION_MAX = 8;
+// The status part is `v` plus the version inside 8 cells, so 7 characters at most (`10.2.30`).
+const VERSION_MAX = 7;
 const TEXT_MAX = 65536;
 
 // Returns `x.y.z`, or undefined for anything else (never raw file text).

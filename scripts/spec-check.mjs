@@ -156,7 +156,18 @@ const endsWithExtension = (segment) => {
   return dot > 0 && EXTENSIONS.has(segment.slice(dot + 1).toLowerCase());
 };
 
-function isPath(token) {
+// Drops a `#anchor` and a trailing `:<n>` or `:<n>-<n>` line reference; one pass from each end.
+function dropLocation(token) {
+  const hash = token.indexOf('#');
+  const head = hash === -1 ? token : token.slice(0, hash);
+  let b = head.length;
+  while (b > 0 && (head[b - 1] === '-' || (head[b - 1] >= '0' && head[b - 1] <= '9'))) b -= 1;
+  if (b > 0 && b < head.length && head[b - 1] === ':') return trimToken(head.slice(0, b - 1));
+  return trimToken(head);
+}
+
+function isPath(raw) {
+  const token = dropLocation(raw);
   if (token === '') return false;
   const slash = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
   if (slash !== -1 && endsWithExtension(token.slice(slash + 1))) return true; // (a)

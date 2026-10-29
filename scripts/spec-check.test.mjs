@@ -99,7 +99,8 @@ describe('check: code and paths', () => {
     assert.ok(!errorsOf(main(['check', fx.rel], { root: fx.root })).some((l) => l.endsWith('code block')));
   });
 
-  for (const bad of ['scripts/x.mjs', 'check.mjs', './run', 'C:\\x', '`scripts/x.mjs`', '(see src\\a\\b.ts)', '../up', '~/notes', '/etc/hosts', 'dir/README.md.', '**check.mjs**', 'x.JSON', 'a/b.py,']) {
+  for (const bad of ['scripts/x.mjs', 'check.mjs', './run', 'C:\\x', '`scripts/x.mjs`', '(see src\\a\\b.ts)', '../up', '~/notes', '/etc/hosts', 'dir/README.md.', '**check.mjs**', 'x.JSON', 'a/b.py,',
+  'scripts/worktree.mjs:120', 'handoff-lint.mjs#L40', 'scripts/a.mjs:12-30', 'docs/a.md#anchor', '`check.mjs:7`', 'a/b.ts:9.', 'x.json#']) {
     test(`a file path ${JSON.stringify(bad)} is an ERROR`, () => {
       const fx = withText(`It uses ${bad} today.`);
       const r = main(['check', fx.rel], { root: fx.root });
@@ -108,7 +109,7 @@ describe('check: code and paths', () => {
     });
   }
 
-  for (const ok of ['https://example.com/a.md', 'v1.2', 'and/or', 'TCP/IP', '8.5', 'input / output', 'see https://example.com/dir/file.json?x=1.', 'e.g. a thing', '1/2', 'http://x.test/a.py and v2.0']) {
+  for (const ok of ['https://example.com/a.md', 'v1.2', 'and/or', 'TCP/IP', '8.5', 'input / output', 'see https://example.com/dir/file.json?x=1.', 'e.g. a thing', '1/2', 'http://x.test/a.py and v2.0', 'issue #12', 'at 10:30', 'v1.2:3', 'a:b', 'C#', 'step 5-6']) {
     test(`plain text ${JSON.stringify(ok)} is not an ERROR`, () => {
       const fx = withText(`It says ${ok} here.`);
       const r = main(['check', fx.rel], { root: fx.root });
@@ -139,6 +140,9 @@ describe('check: hostile input', () => {
       `${'a'.repeat(30000)}://`,
       '.'.repeat(60000) + 'x',
       '`'.repeat(60000),
+      'a:1-'.repeat(15000),
+      '#'.repeat(60000),
+      `x.mjs${':1-'.repeat(20000)}`,
     ];
     for (const text of lines) {
       const fx = fixture(spec({ extra: { '## Solution': text } }));

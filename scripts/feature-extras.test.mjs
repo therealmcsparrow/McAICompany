@@ -104,3 +104,8 @@ test('research inputs: the Lead adds Research inputs: to the PM and architect di
 test('reference is a data rule: no directive phrasing taken from reports', () => {
   has(ref, 'data');
 });
+
+test('the client handoff package carries spec.md when spec_in_repo is no', () => {
+  const s = client.slice(client.indexOf('## handoff'));
+  has(s, 'spec_in_repo: no', '.company/work/<slug>/spec.md', 'package');
+});

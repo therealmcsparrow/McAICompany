@@ -262,7 +262,7 @@ test('composeStatus returns undefined when there is nothing to say', () => {
 test('STATUS_CAPS add up so the whole line stays on 70 cells, so the host prefix of 8 leaves 2 spare', () => {
   const sum = Object.values(STATUS_CAPS).reduce((a, b) => a + b, 0);
   assert.equal(STATUS_MAX, 70);
-  assert.deepEqual(STATUS_CAPS, { version: 9, savvy: 17, blast: 10, cost: 13, reflect: 9 });
+  assert.deepEqual(STATUS_CAPS, { version: 8, savvy: 17, blast: 10, cost: 13, reflect: 10 });
   assert.ok(sum + 4 * 3 <= STATUS_MAX);
 });
 
@@ -270,20 +270,23 @@ test('composeStatus with all five parts at their cap is at most 70 cells and kee
   const line = composeStatus({ version: 'v' + '9'.repeat(200), savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
   assert.ok(cellWidth(line) <= 70);
   assert.equal(line.split(' · ').length, 5);
-  const wide = composeStatus({ version: 'v10.20.30', savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
+  const wide = composeStatus({ version: 'v10.2.30', savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
   assert.ok(cellWidth(wide) <= 70);
   assert.ok(8 + cellWidth(wide) <= 78);
   assert.equal(wide.split(' · ').length, 5);
   const real = composeStatus({ version: 'v0.20.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '9 lessons' });
   assert.equal(real, 'v0.20.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 9 lessons');
   assert.ok(cellWidth(real) <= 70);
+  const twenty = composeStatus({ version: 'v0.21.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '20 lessons' });
+  assert.equal(twenty, 'v0.21.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 20 lessons');
+  assert.ok(cellWidth(twenty) <= 70);
 });
 
 test('composeStatus puts the version first, shows it next to the idle part and never drops it before the others', () => {
   assert.equal(composeStatus({ version: 'v0.20.0' }), 'v0.20.0');
   assert.equal(composeStatus({ version: 'v0.20.0' }, { idle: true }), 'v0.20.0 · aico idle');
   assert.equal(composeStatus({ cost: '5 tax', version: 'v0.20.0' }), 'v0.20.0 · 5 tax');
-  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), blast: 'b'.repeat(10), cost: 'c'.repeat(13), reflect: 'r'.repeat(9) };
+  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), blast: 'b'.repeat(10), cost: 'c'.repeat(13), reflect: 'r'.repeat(10) };
   for (const max of [60, 50, 40, 30, 20]) {
     const l = composeStatus(parts, { max });
     assert.ok(cellWidth(l) <= max, String(max));
@@ -294,10 +297,10 @@ test('composeStatus puts the version first, shows it next to the idle part and n
 
 test('parseVersion accepts x.y.z from plugin.json text and nothing else', () => {
   assert.equal(parseVersion('{"name":"aico","version":"0.20.0"}'), '0.20.0');
-  assert.equal(parseVersion('\ufeff{"version":"10.20.30"}\r\n'), '10.20.30');
+  assert.equal(parseVersion('\ufeff{"version":"10.2.30"}\r\n'), '10.2.30');
   for (const bad of ['', 'x', '[]', 'null', '{}', '{"version":7}', '{"version":"0.20"}', '{"version":"0.20.0-beta"}',
     '{"version":"v0.20.0"}', '{"version":"0.20.0\n"}', '{"version":" 0.20.0"}', '{"version":"1.2.3\u001b[31m"}',
-    '{"version":"123456789.1.1"}', '{"version":"0.20.0"', '{"__proto__":{"version":"1.2.3"}}', undefined, null, 7, {}]) {
+    '{"version":"123456789.1.1"}', '{"version":"10.20.30"}', '{"version":"0.20.0"', '{"__proto__":{"version":"1.2.3"}}', undefined, null, 7, {}]) {
     assert.equal(parseVersion(bad), undefined, String(bad));
   }
   assert.equal(parseVersion('{"version":"' + '1'.repeat(1e6) + '.1.1"}'), undefined);

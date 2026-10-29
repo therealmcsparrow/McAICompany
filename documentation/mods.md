@@ -87,7 +87,7 @@ Only the parts that have something to say appear, always in this order:
 4. `cost`: `<n> tax <m>m`, for example `12.4k tax 60m`. `n` is the run's cache write count. The clock shows `exp` when the cache has expired and `?` when unknown.
 5. `reflect`: `<n> lessons` (`1 lesson`), the suggestions waiting for you.
 
-Each part has a fixed width, so the text is at most 70 cells (version 9, Savvy 17, Blast Radius 10, Cache Tax 13, Reflect 9). With the host's `⚠ aico: ` in front, the line fits one 80-column terminal row. If the host still cuts it, the last parts are lost first.
+Each part has a fixed width, so the text is at most 70 cells (version 8, Savvy 17, Blast Radius 10, Cache Tax 13, Reflect 10). With the host's `⚠ aico: ` in front, the line fits one 80-column terminal row. If the host still cuts it, the last parts are lost first.
 
 The compact form leaves out the slug, Fix round, Gates, Names, spend, exact counts, expiry time and blast paths. Those are in the panes. Where a pane does not open on its own (under 110 columns, or `claude -p`), the status line is all you see of that mod.
 

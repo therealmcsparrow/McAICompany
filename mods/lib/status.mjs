@@ -4,8 +4,8 @@ import { cellWidth, fit } from './format.mjs';
 export const STATUS_MAX = 70;
 // Stands in the first slot while no run part (`savvy`) is set, when the caller asks for it.
 export const IDLE = 'aico idle';
-// Per-part caps in terminal cells: 9 + 17 + 10 + 13 + 9 + 4 * 3 = 70; the host prefix is 8 cells, so the row stays within 80 with 2 spare.
-export const STATUS_CAPS = Object.freeze({ version: 9, savvy: 17, blast: 10, cost: 13, reflect: 9 });
+// Per-part caps in terminal cells: 8 + 17 + 10 + 13 + 10 + 4 * 3 = 70; the host prefix is 8 cells, so the row stays within 80 with 2 spare.
+export const STATUS_CAPS = Object.freeze({ version: 8, savvy: 17, blast: 10, cost: 13, reflect: 10 });
 const SEP = ' · ';
 const ORDER = ['version', 'savvy', 'blast', 'cost', 'reflect'];
 const DROP = ['reflect', 'cost', 'blast'];
