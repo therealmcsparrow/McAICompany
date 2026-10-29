@@ -45,7 +45,7 @@ Risk overrides size. Anything touching auth, payments, personal data, migrations
 5. **Fix rounds and contests.** Blocking findings go back to the builder. A round is one builder fix plus a re-review by every reviewer that blocked. The default limit is 2 rounds (`pipeline.fix_rounds` in `/aico:settings`); past it, the Lead escalates to you. A builder may instead **contest** a finding with a `## Contested` line; the reviewer that raised it accepts or rejects. A contest the reviewer cannot settle, or an escalated one, comes to you at a Gate, and only your own answer closes it. A security finding is never closed by contest. Nits never trigger a round.
 6. **Full suite.** Builders and QA ran scoped tests only. Once the last review is clean, the Lead runs the whole test suite once and quotes the result line.
 7. **Docs.** The Writer adds user docs and release notes. The Localizer translates if your project lists more than one language.
-8. **Ship Gate.** You see the summary: what changed, test results, open nits, skipped lanes, a cost line. Approve, Change or Stop. Nothing leaves the repo before this.
+8. **Ship Gate.** You see the summary: what changed, test results, open nits, skipped lanes, a cost line. Approve, Change or Stop. No push, merge or release happens before this.
 9. **PR, CI, merge.** After approval the Lead pushes the run branch `aico/<slug>`, opens a pull request, waits for CI on the PR to pass (`gh pr checks <n> --watch`) and merges only when it is green. With the Ship Gate set to `auto`, the Lead opens the PR and stops; you merge it.
 
 Everything is saved under `.company/work/<slug>/`: the brief, plan, one Handoff per Step and a final `00-summary.md`.

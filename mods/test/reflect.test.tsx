@@ -185,7 +185,7 @@ test('Step files present when Reflect first sees the run are not checked; a chan
   expect(stepCalls(w)).toHaveLength(1)
 })
 
-test('Accept runs lessons.mjs with --role and --text as separate arguments and writes only that Lesson', async ($, on) => {
+test('Accept runs lessons.mjs with --role, --class, --target and --text as separate arguments and writes only that Lesson', async ($, on) => {
   const w = makeWorld()
   const hostile = 'security finding in Step 07: "; rm -rf / ; echo (x)'
   w.checks['07-backend-engineer.md'] = ok(check({ lessons: [{ role: 'backend-engineer', text: hostile }, { role: 'backend-engineer', text: LESSON_B }] }))
@@ -196,7 +196,7 @@ test('Accept runs lessons.mjs with --role and --text as separate arguments and w
   expect(buttons.length).toBe(4)
   expect(lessonCalls(w)).toEqual([])
   await ui.press({ key: buttons[0].key as string })
-  expect(lessonCalls(w)).toEqual([['lessons.mjs', 'accept', '--role', 'backend-engineer', '--text', hostile]])
+  expect(lessonCalls(w)).toEqual([['lessons.mjs', 'accept', '--role', 'backend-engineer', '--class', 'judgement', '--target', 'standard: .company/standards.md', '--text', hostile]])
   expect(last(w)).toContain('1 lesson')
   const rows = (await lines(ui)).join('\n')
   expect(rows).toContain('Saved')

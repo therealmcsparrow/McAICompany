@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Usage: node scripts/release.mjs <x.y.z> (contract: docs/contracts/release.md v1)
+// Usage: node scripts/release.mjs <x.y.z> (contract: docs/contracts/release.md v1.1)
 // Bumps every version field, rolls the CHANGELOG [Unreleased] section, runs the checks
 // (including `claude plugin validate --strict .`, which fails closed), builds releases/<x.y.z>/sbom.cdx.json and gate-report.md,
 // then makes one release commit and a local tag v<x.y.z>. It never contacts a remote. Any artefact that cannot be built stops the release.

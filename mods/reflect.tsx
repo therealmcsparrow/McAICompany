@@ -451,7 +451,7 @@ async function answer($: EngineInterface, id: number, isAccept: boolean): Promis
     if (found === undefined) return
     let note = `Declined Lesson ${id}; nothing saved.`
     if (isAccept) {
-      const r = await runPlain($, 'lessons', ['accept', '--role', found.role, '--text', found.text], TIMEOUT_MS.lessons)
+      const r = await runPlain($, 'lessons', ['accept', '--role', found.role, '--class', 'judgement', '--target', 'standard: .company/standards.md', '--text', found.text], TIMEOUT_MS.lessons)
       note = r.ok && r.stdout === 'accepted' ? `Saved Lesson ${id}.` : `Not saved: ${r.ok ? 'the script gave no confirmation' : r.reason}`
     }
     await update($, reflectAtom, prev => {
