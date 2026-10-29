@@ -57,7 +57,7 @@ The first three researchers run in parallel inside [`/aico:research`](commands.m
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
 | **code-reviewer** | opus | high | Rui | Reviews the branch diff for spec match, correctness, standards and Core/Module/Contract rules. Never edits code. |
-| **fresh-reviewer** | opus | high | Fenna | Reviews a diff with a clean context and no run history. Protected: never runs below opus. Never edits code. |
+| **fresh-reviewer** | opus | high | Fenna | Reads a plan before the Plan Gate, and at high risk with the second reviewer on a diff, as a newcomer: it never reads the brief or the builders' notes, writes the plan in its own words first, then lists what the text does not make clear. Protected: never runs below opus. Never edits code. See [The fresh reviewer](concepts.md#the-fresh-reviewer). |
 | **qa** | sonnet | medium | Quinn | Reproduces bugs, turns acceptance criteria into tests, writes contract tests per Module, runs the suite. Edits test files only. |
 | **security** | opus | high | Sam | Audits code, dependencies and configuration for vulnerabilities, auth flaws, secrets and data exposure. Never edits code. |
 | **pentester** | opus | high | Pavel | *On demand.* Authorized red team against your own local/staging build — see below. Never edits code. |
@@ -87,7 +87,7 @@ The first three researchers run in parallel inside [`/aico:research`](commands.m
 
 ## Who may edit code
 
-Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The editor has no Bash and no web access, and writes only its own Handoff. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
+Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, fresh-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The editor has no Bash and no web access, and writes only its own Handoff. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
 
 ## Review Roles and the Handoff block
 The **code-reviewer** and the **senior-engineer** (compliance) are the pilot for [Handoff v1.1](concepts.md#the-handoff-contract). By default (`pipeline.review_format: plain`) they write ordinary findings. With `pilot` set in [settings](concepts.md#settings), they write a top block and findings as `ID | file:line | problem | why | fix` rows, and keep a findings ledger so a handover mid-review loses nothing. With either value they confirm tool-check failures before those block, and the reviewer's depth follows the touched paths. All other Roles write Handoffs as before. In a brainstorm, a Role may skip a round, and the Architect adds an S/M/L estimate.
