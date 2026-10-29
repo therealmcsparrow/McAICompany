@@ -482,7 +482,37 @@ function churnCmd(args, env) {
 
 const BLOCKING_STATES = new Set(['open', 'contested', 'escalated', 'upheld', 'rejected']);
 
-// A blocking finding of one reviewer that no blocking finding of the other overlaps.
+const sameName = (a, b) => (process.platform === 'win32' || process.platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b);
+
+// First 4 KiB of a Handoff: real path equals the lexical path inside the real run folder, one hard link,
+// at most MAX_RECORD_BYTES, and the open handle is the file that was checked. Any miss throws GitUnknown.
+function readHead(runFolder, full) {
+  let fd;
+  try {
+    const realDir = fs.realpathSync.native(runFolder);
+    if (!sameName(fs.realpathSync.native(full), path.join(realDir, path.basename(full)))) throw new Error('moved');
+    const st = fs.lstatSync(full);
+    if (!isPlain(st) || st.size > MAX_RECORD_BYTES) throw new Error('unsafe');
+    fd = fs.openSync(full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const f = fs.fstatSync(fd);
+    if (!isPlain(f) || !sameFile(f, st) || f.size > MAX_RECORD_BYTES) throw new Error('changed');
+    const buf = Buffer.alloc(Math.min(f.size, 4096));
+    let off = 0;
+    while (off < buf.length) {
+      const n = fs.readSync(fd, buf, off, buf.length - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    return buf.subarray(0, off).toString('utf8');
+  } catch {
+    throw new GitUnknown('reviewer handoff');
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+// True when both reviewers left a code-review Handoff. A matching name that is a link, has another hard link,
+// is over the cap or changes while opened refuses the check.
 function bothReviewersRan(runFolder) {
   const seen = new Set();
   let names;
@@ -491,9 +521,7 @@ function bothReviewersRan(runFolder) {
     const m = /^\d{2,3}-(code-reviewer|fresh-reviewer)\.md$/.exec(name);
     if (!m) continue;
     const full = path.join(runFolder, name);
-    const st = lstatOrNull(full);
-    if (!st || !isPlain(st) || st.size > MAX_RECORD_BYTES) continue;
-    const head = fs.readFileSync(full, 'utf8').slice(0, 4096).split(/\r?\n/);
+    const head = readHead(runFolder, full).split(/\r?\n/);
     if (head[0] !== '---') continue;
     const end = head.indexOf('---', 1);
     const fm = head.slice(1, end < 0 ? head.length : end);
@@ -504,6 +532,7 @@ function bothReviewersRan(runFolder) {
   return seen.size === 2;
 }
 
+// A blocking finding of one reviewer that no blocking finding of the other overlaps.
 function singles(runFolder) {
   const lineages = reviewerLineages(runFolder).filter((l) => l.role === 'code-reviewer' || l.role === 'fresh-reviewer');
   if (!bothReviewersRan(runFolder)) return [];

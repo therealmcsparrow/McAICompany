@@ -395,6 +395,51 @@ describe('gate', () => {
     assert.deepEqual(run(root, 'gate', SLUG).lines, ['review-loop: nothing to report']);
   });
 
+  describe('hostile second-reviewer Handoff', () => {
+    const setup = () => {
+      const { root } = makeRepo();
+      handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, ['R-1 a.txt:10 — x — fix']);
+      return root;
+    };
+    const refused = (root) => {
+      const r = run(root, 'gate', SLUG);
+      assert.equal(r.code, 2);
+      assert.deepEqual(r.lines, ['single: unknown']);
+    };
+
+    test('a symlinked reviewer Handoff is refused', (t) => {
+      const root = setup();
+      freshCode(root, '..real.md', []);
+      const real = path.join(folder(root), '..real.md');
+      try { fs.symlinkSync(real, path.join(folder(root), '03-fresh-reviewer.md'), 'file'); } catch (e) { t.skip('symlinks unavailable: ' + e.code); return; }
+      refused(root);
+    });
+
+    test('a hard-linked reviewer Handoff is refused', () => {
+      const root = setup();
+      freshCode(root, '..real.md', []);
+      fs.linkSync(path.join(folder(root), '..real.md'), path.join(folder(root), '03-fresh-reviewer.md'));
+      refused(root);
+    });
+
+    test('an oversize reviewer Handoff is refused', () => {
+      const root = setup();
+      freshCode(root, '03-fresh-reviewer.md', []);
+      fs.appendFileSync(path.join(folder(root), '03-fresh-reviewer.md'), 'x'.repeat(70 * 1024));
+      refused(root);
+    });
+
+    test('a reviewer Handoff that is a junction is refused', (t) => {
+      const root = setup();
+      freshCode(root, '03-fresh-reviewer.md', []);
+      const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'review-loop-swap-'));
+      roots.push(elsewhere);
+      fs.renameSync(path.join(folder(root), '03-fresh-reviewer.md'), path.join(elsewhere, '03-fresh-reviewer.md'));
+      try { fs.symlinkSync(elsewhere, path.join(folder(root), '03-fresh-reviewer.md'), 'junction'); } catch (e) { t.skip('links unavailable: ' + e.code); return; }
+      refused(root);
+    });
+  });
+
   test('no second reviewer Handoff means no single lines', () => {
     const { root } = makeRepo();
     handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, ['R-1 a.txt:10 — x — fix']);

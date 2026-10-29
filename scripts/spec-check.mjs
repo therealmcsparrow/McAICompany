@@ -156,13 +156,21 @@ const endsWithExtension = (segment) => {
   return dot > 0 && EXTENSIONS.has(segment.slice(dot + 1).toLowerCase());
 };
 
-// Drops a `#anchor` and a trailing `:<n>` or `:<n>-<n>` line reference; one pass from each end.
+// Drops a "#anchor" and a trailing location suffix (":12", ":12-30", ":12:5", ":L12", ":L12-L30"); one pass from the end.
 function dropLocation(token) {
   const hash = token.indexOf('#');
   const head = hash === -1 ? token : token.slice(0, hash);
   let b = head.length;
-  while (b > 0 && (head[b - 1] === '-' || (head[b - 1] >= '0' && head[b - 1] <= '9'))) b -= 1;
-  if (b > 0 && b < head.length && head[b - 1] === ':') return trimToken(head.slice(0, b - 1));
+  let colon = -1;
+  let digit = false;
+  while (b > 0) {
+    const c = head[b - 1];
+    if (c === ':') colon = b - 1;
+    else if (c >= '0' && c <= '9') digit = true;
+    else if (c !== '-' && c !== 'L') break;
+    b -= 1;
+  }
+  if (colon > 0 && digit) return trimToken(head.slice(0, colon));
   return trimToken(head);
 }
 

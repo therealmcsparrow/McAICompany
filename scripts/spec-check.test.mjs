@@ -100,7 +100,8 @@ describe('check: code and paths', () => {
   });
 
   for (const bad of ['scripts/x.mjs', 'check.mjs', './run', 'C:\\x', '`scripts/x.mjs`', '(see src\\a\\b.ts)', '../up', '~/notes', '/etc/hosts', 'dir/README.md.', '**check.mjs**', 'x.JSON', 'a/b.py,',
-  'scripts/worktree.mjs:120', 'handoff-lint.mjs#L40', 'scripts/a.mjs:12-30', 'docs/a.md#anchor', '`check.mjs:7`', 'a/b.ts:9.', 'x.json#']) {
+  'scripts/worktree.mjs:120', 'handoff-lint.mjs#L40', 'scripts/a.mjs:12-30', 'docs/a.md#anchor', '`check.mjs:7`', 'a/b.ts:9.', 'x.json#',
+  'scripts/worktree.mjs:12:5', 'handoff-lint.mjs:L40', 'a/b.mjs:L40-L52', 'a/b.mjs:12:5', 'b.mjs:12:5-14:9', 'src/a.ts:3:']) {
     test(`a file path ${JSON.stringify(bad)} is an ERROR`, () => {
       const fx = withText(`It uses ${bad} today.`);
       const r = main(['check', fx.rel], { root: fx.root });
