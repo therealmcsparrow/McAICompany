@@ -679,6 +679,28 @@ describe('begin, next, start, done', () => {
     assert.deepEqual(fx.run('next', 'demo').lines.slice(0, 3), ['next: round 0, running 0 of cap 5', 'start T2 backend-engineer', 'start T3 backend-engineer']);
   });
 
+  test('a begin after a Fix round returns to round 0 and offers the tasks left pending', () => {
+    const fx = fixture(six());
+    begin(fx);
+    fx.run('start', 'demo', 'T1');
+    fx.run('done', 'demo', 'T1');
+    assert.equal(fx.run('round', 'demo', '1', '--', 'src/a.js').code, 0);
+    for (const id of readParallel(fx.root, 'demo').running) fx.run('done', 'demo', id);
+    const roundTask = fx.run('next', 'demo', '--json');
+    for (const { task } of JSON.parse(roundTask.lines[0]).start) {
+      fx.run('start', 'demo', task);
+      fx.run('done', 'demo', task);
+    }
+    assert.equal(begin(fx).code, 0);
+    const view = readParallel(fx.root, 'demo');
+    assert.equal(view.round, 0);
+    assert.deepEqual(view.done[0], ['T1']);
+    assert.deepEqual(fx.run('next', 'demo').lines.slice(0, 2), ['next: round 0, running 0 of cap 4', 'start T2 backend-engineer']);
+    assert.equal(fx.run('lines', 'demo', 'T2').code, 0);
+    assert.equal(fx.run('round', 'demo', '1', '--', 'src/a.js').code, 0);
+    assert.deepEqual(readParallel(fx.root, 'demo').done[1] ?? [], []);
+  });
+
   test('commands that need a begin refuse before one', () => {
     const fx = fixture(six());
     for (const args of [['next', 'demo'], ['start', 'demo', 'T1'], ['done', 'demo', 'T1'], ['lines', 'demo', 'T1'], ['scope', 'demo', 'T1', '--'], ['round', 'demo', '1', '--', 'a.js']]) {
