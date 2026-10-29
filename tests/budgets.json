@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "default_ms": 10000,
+  "modules": {
+    "brainstorm": 40000,
+    "language": 30000,
+    "ledger": 35000,
+    "personality": 20000,
+    "plan-check-verdict": 110000,
+    "release": 35000,
+    "reprompt-check": 170000,
+    "review-depth": 100000,
+    "rule-check": 110000,
+    "settings": 25000,
+    "skill-picks": 25000,
+    "skillspector": 60000,
+    "stable": 120000,
+    "tier-set": 110000
+  }
+}
