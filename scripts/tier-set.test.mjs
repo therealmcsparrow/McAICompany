@@ -13,6 +13,26 @@ const SHA = 'abcdef1234567';
 const RESOLVED = `${SHA}${'0'.repeat(27)}`;
 const GIT_PREFIX = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
 const git = (...sub) => [...GIT_PREFIX, ...sub];
+const DIFF_GLOBAL = ['--no-replace-objects', '--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false', '-c', 'diff.ignoreSubmodules=none'];
+const DIFF_SUB = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none', '--name-only', '-z', '--no-renames'];
+const committedDiff = (id, slug = 'demo') => [...DIFF_GLOBAL, ...DIFF_SUB, '--end-of-options', id, `refs/heads/aico/${slug}`, '--'];
+const worktreeDiff = () => [...DIFF_GLOBAL, ...DIFF_SUB, '--end-of-options', 'HEAD', '--'];
+const LS_PER_DIR = git('ls-files', '--others', '--exclude-per-directory=.gitignore', '-z');
+const LS_GLOB = git('ls-files', '--others', '-z', '--', ':(glob)**/.gitignore');
+// The calls of a sync --diff after the Core read, with the base id and run slug.
+const diffCalls = (id, slug = 'demo') => [
+  git('cat-file', '-e', '--end-of-options', `${id}^{commit}`),
+  git('symbolic-ref', '-q', 'HEAD'),
+  git('rev-parse', '--verify', '--end-of-options', `refs/heads/aico/${slug}^{commit}`),
+  committedDiff(id, slug), worktreeDiff(), LS_PER_DIR, LS_GLOB
+];
+// The git subcommand of an argument array: the leading global options and their values removed.
+const subOf = (args) => {
+  let i = 0;
+  while (i < args.length && (args[i] === '-c' || args[i].startsWith('--no-') || args[i] === '--literal-pathspecs')) i += args[i] === '-c' ? 2 : 1;
+  return args.slice(i);
+};
+const isSetup = (sub) => sub[0] === 'rev-parse' && (sub[1] === '--show-toplevel' || sub[1] === '--git-path');
 const FORMAT = git('rev-parse', '--show-object-format');
 const isFormat = (sub) => sub[0] === 'rev-parse' && sub[1] === '--show-object-format';
 const isDisambiguate = (sub) => sub[0] === 'rev-parse' && typeof sub[1] === 'string' && sub[1].startsWith('--disambiguate=');
@@ -40,8 +60,13 @@ function fixture({ data = shipped(), raw = null, slug = 'demo', project = '## Co
   if (project !== null) fs.writeFileSync(path.join(product, '.company', 'project.md'), project);
   const record = path.join(dir, 'tier-path.jsonl');
   const calls = [];
+  const allCalls = [];
   // The default fake git answers what the script asks: one commit for a short base, a commit type, the Core file at the base.
   const defaultImpl = (sub) => {
+    if (sub[0] === 'rev-parse' && sub[1] === '--show-toplevel') return Buffer.from(`${product}\n`);
+    if (sub[0] === 'rev-parse' && sub[1] === '--git-path') return Buffer.from('.git/info/grafts\n');
+    if (sub[0] === 'symbolic-ref') return Buffer.from(`refs/heads/aico/${slug}\n`);
+    if (sub[0] === 'rev-parse' && sub[1] === '--verify') return Buffer.from(`${RESOLVED}\n`);
     if (isFormat(sub)) return Buffer.from('sha1\n');
     if (isDisambiguate(sub)) return Buffer.from(`${RESOLVED}\n`);
     if (sub[0] === 'cat-file' && sub[1] === '-t') return Buffer.from('commit\n');
@@ -53,14 +78,15 @@ function fixture({ data = shipped(), raw = null, slug = 'demo', project = '## Co
   };
   let gitImpl = () => undefined;
   const fakeGit = (args, opts) => {
-    calls.push({ args, opts });
-    const sub = args.slice(GIT_PREFIX.length);
+    const sub = subOf(args);
+    allCalls.push({ args, opts });
+    if (!isSetup(sub)) calls.push({ args, opts });
     const out = gitImpl(sub, opts);
     return out === undefined ? defaultImpl(sub) : out;
   };
   const run = (...args) => main(args, { now: NOW, root: product, pluginRoot, git: fakeGit });
   return {
-    root: product, pluginRoot, dir, record, slug, run, calls,
+    root: product, pluginRoot, dir, record, slug, run, calls, allCalls,
     setGit: (fn) => { gitImpl = fn; },
     dataFile: path.join(pluginRoot, 'company', 'tier-sets.json'),
     lines: () => fs.readFileSync(record, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)),
@@ -454,23 +480,15 @@ describe('sync', () => {
     const hit = f.run('sync', f.slug, '--diff', '--base', SHA);
     assert.ok(hit.lines.includes('check: high: pattern auth src/auth/session.ts'));
     assert.equal(f.lines()[1].cause, 'diff');
-    const diffFlags = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options'];
     assert.deepEqual(f.calls.map((c) => c.args), [
       FORMAT,
       git('rev-parse', `--disambiguate=${SHA}`),
       git('cat-file', '-t', '--end-of-options', RESOLVED),
       ANCESTOR(RESOLVED),
       git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`),
-      git('cat-file', '-e', '--end-of-options', `${RESOLVED}^{commit}`),
-      git('diff', ...diffFlags, RESOLVED, 'HEAD', '--'),
-      git('diff', ...diffFlags, 'HEAD', '--'),
-      git('ls-files', '--others', '--exclude-standard', '-z')
+      ...diffCalls(RESOLVED)
     ]);
-    for (const c of f.calls) {
-      assert.equal(c.opts.cwd, f.root);
-      assert.equal(c.opts.env.GIT_OPTIONAL_LOCKS, '0');
-      assert.equal(c.opts.env.GIT_TERMINAL_PROMPT, '0');
-    }
+    for (const c of f.allCalls) assert.equal(c.opts.cwd, f.root);
 
     const g = fixture();
     g.begin();
@@ -788,30 +806,6 @@ describe('fix round: hostile and contract cases', () => {
     assert.equal(f.begin().code, 0);
     assert.equal(f.lines()[0].base, b);
   });
-  test('every git call carries the replace-ref flag and the three env values, whatever the inherited env holds', (t) => {
-    for (const key of ['GIT_NO_REPLACE_OBJECTS', 'GIT_OPTIONAL_LOCKS', 'GIT_TERMINAL_PROMPT']) {
-      const had = Object.hasOwn(process.env, key) ? process.env[key] : undefined;
-      t.after(() => {
-        if (had === undefined) delete process.env[key];
-        else process.env[key] = had;
-      });
-    }
-    for (const inherited of ['', '0', '1']) {
-      process.env.GIT_NO_REPLACE_OBJECTS = inherited;
-      process.env.GIT_OPTIONAL_LOCKS = inherited;
-      process.env.GIT_TERMINAL_PROMPT = inherited;
-      const f = fixture();
-      f.begin();
-      f.run('sync', f.slug, '--plan', '02-plan.md', '--diff', '--base', SHA);
-      assert.ok(f.calls.length >= 8);
-      for (const c of f.calls) {
-        assert.deepEqual(c.args.slice(0, 4), GIT_PREFIX);
-        assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
-        assert.equal(c.opts.env.GIT_OPTIONAL_LOCKS, '0');
-        assert.equal(c.opts.env.GIT_TERMINAL_PROMPT, '0');
-      }
-    }
-  });
   test('a base that is not an ancestor of HEAD, or an ancestor check that fails, exits 3 with no record', () => {
     const exit = (status) => (sub) => { if (sub[0] === 'merge-base') throw Object.assign(new Error('merge-base'), { status }); return undefined; };
     for (const [impl, refused] of [
@@ -1062,17 +1056,13 @@ describe('sync checks against the Lead base', () => {
     f.setGit((sub) => (sub[0] === 'diff' || sub[0] === 'ls-files' ? Buffer.from('docs/a.md\0') : undefined));
     const r = f.run('sync', f.slug, '--diff', '--base', SHA);
     assert.equal(r.lines.at(-1), 'check: 1 paths, none forced high');
-    const flags = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options'];
     assert.deepEqual(f.calls.map((c) => c.args), [
       FORMAT,
       git('rev-parse', `--disambiguate=${SHA}`),
       git('cat-file', '-t', '--end-of-options', RESOLVED),
       ANCESTOR(RESOLVED),
       git('cat-file', 'blob', '--end-of-options', `${RESOLVED}:.company/project.md`),
-      git('cat-file', '-e', '--end-of-options', `${RESOLVED}^{commit}`),
-      git('diff', ...flags, RESOLVED, 'HEAD', '--'),
-      git('diff', ...flags, 'HEAD', '--'),
-      git('ls-files', '--others', '--exclude-standard', '-z')
+      ...diffCalls(RESOLVED)
     ]);
     assert.equal(f.calls.filter((c) => c.args.includes('--show-object-format')).length, 1);
   });
@@ -1113,7 +1103,7 @@ describe('real git, every call form', () => {
     fs.mkdirSync(dir);
     const extra = { GIT_CONFIG_GLOBAL: cfg, GIT_CONFIG_NOSYSTEM: '1', HOME: top, USERPROFILE: top, XDG_CONFIG_HOME: top, GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' };
     const g = (...args) => execFileSync('git', args, { cwd: dir, env: { ...process.env, ...extra }, stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf8').trim();
-    g('init', '--quiet', '--initial-branch=main', ...(objectFormat ? [`--object-format=${objectFormat}`] : []));
+    g('init', '--quiet', '--initial-branch=aico/demo', ...(objectFormat ? [`--object-format=${objectFormat}`] : []));
     const write = (rel, text) => {
       fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
       fs.writeFileSync(path.join(dir, rel), text);
@@ -1124,16 +1114,16 @@ describe('real git, every call form', () => {
       return g('rev-parse', '--verify', 'HEAD');
     };
     const calls = [];
+    const allCalls = [];
     const spy = (args, opts) => {
-      calls.push(args);
+      allCalls.push(args);
+      if (!isSetup(subOf(args))) calls.push(args);
       return execFileSync('git', args, { cwd: opts.cwd, env: { ...opts.env, ...extra }, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
     };
     const runDir = path.join(dir, '.company', 'work', 'demo');
     fs.mkdirSync(runDir, { recursive: true });
-    return { dir, g, write, commit, calls, run: (...args) => main(args, { now: NOW, root: dir, git: spy }), record: path.join(runDir, 'tier-path.jsonl'), runDir };
+    return { dir, g, write, commit, calls, allCalls, spy, run: (...args) => main(args, { now: NOW, root: dir, git: spy }), record: path.join(runDir, 'tier-path.jsonl'), runDir };
   }
-
-  const diffFlags = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options'];
 
   test('begin resolves a short base through objects, not a branch of the same name; sync reads Core at the base and the diff', (t) => {
     if (!gitOk) return t.skip('git is not available');
@@ -1174,10 +1164,7 @@ describe('real git, every call form', () => {
       git('cat-file', '-t', '--end-of-options', first),
       ANCESTOR(first),
       git('cat-file', 'blob', '--end-of-options', `${first}:.company/project.md`),
-      git('cat-file', '-e', '--end-of-options', `${first}^{commit}`),
-      git('diff', ...diffFlags, first, 'HEAD', '--'),
-      git('diff', ...diffFlags, 'HEAD', '--'),
-      git('ls-files', '--others', '--exclude-standard', '-z')
+      ...diffCalls(first)
     ]);
   });
 
@@ -1208,7 +1195,7 @@ describe('real git, every call form', () => {
     r.g('checkout', '--quiet', '-b', 'other');
     r.write('b.txt', 'two');
     const other = r.commit('other');
-    r.g('checkout', '--quiet', 'main');
+    r.g('checkout', '--quiet', 'aico/demo');
     r.write('c.txt', 'three');
     const head = r.commit('main work');
     const flags = ['--playbook', 'fix', '--triage', 'low', '--short', 'on', '--ceo', 'short'];
@@ -1230,7 +1217,7 @@ describe('real git, every call form', () => {
     r.g('add', '--all', '--', '.', ':!.company/work');
     r.g('commit', '--quiet', '--message=replacement');
     const id = r.g('rev-parse', '--verify', 'HEAD');
-    r.g('checkout', '--quiet', '--force', 'main');
+    r.g('checkout', '--quiet', '--force', 'aico/demo');
     return id;
   }
 
@@ -1421,4 +1408,499 @@ describe('real git, every call form', () => {
     assert.ok(!s.lines.join('\n').includes('unknown'), s.lines.join('\n'));
   });
 
+  // ------------------------------------------------------------ run branch, excludes, submodules, grafts, env
+
+  const checkLines = (s) => s.lines.filter((l) => l.startsWith('check:'));
+  const authCommit = (r) => {
+    r.write('src/auth/login.js', 'export {}');
+    return r.commit('login');
+  };
+  const withEnv = (vars, fn) => {
+    const had = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+    Object.assign(process.env, vars);
+    try {
+      return fn();
+    } finally {
+      for (const [k, v] of Object.entries(had)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  };
+  const unrelatedCommit = (r) => r.g('commit-tree', 'HEAD^{tree}', '-m', 'unrelated');
+  const ref = 'refs/heads/aico/demo';
+
+  test('a decoy branch and a tag named for the run do not move the diff; it ends at the run branch and lists the run paths', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    r.g('tag', 'aico/demo', base);
+    r.g('branch', 'decoy', base);
+    authCommit(r);
+    r.calls.length = 0;
+    const s = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/login.js'), s.lines.join('\n'));
+    assert.ok(!s.lines.join('\n').includes('unknown'), s.lines.join('\n'));
+    assert.deepEqual(r.calls.at(-4), committedDiff(base));
+    assert.ok(r.calls.at(-4).includes(ref));
+  });
+
+  test('HEAD detached, or on another branch, is diff unknown and lists no path', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    authCommit(r);
+    const record = fs.readFileSync(r.record);
+    r.g('checkout', '--quiet', '--detach', base);
+    fs.mkdirSync(r.runDir, { recursive: true });
+    fs.writeFileSync(r.record, record);
+    const detached = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(detached.lines.includes('check: high: diff unknown'), detached.lines.join('\n'));
+    assert.ok(!detached.lines.some((l) => l.includes('src/auth')), detached.lines.join('\n'));
+    fs.rmSync(r.record);
+    r.g('checkout', '--quiet', '-b', 'other', ref);
+    const s = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+    assert.ok(!s.lines.some((l) => l.includes('src/auth')), s.lines.join('\n'));
+    r.g('checkout', '--quiet', 'aico/demo');
+    const ok = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(ok.lines.includes('check: high: pattern auth src/auth/login.js'), ok.lines.join('\n'));
+  });
+
+  test('a changed submodule is listed although diff.ignoreSubmodules is all', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    const lib = path.join(path.dirname(r.dir), 'lib');
+    fs.mkdirSync(lib);
+    const gl = (...args) => execFileSync('git', ['-C', lib, ...args], { env: { ...process.env, GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid', GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf8').trim();
+    gl('init', '--quiet', '--initial-branch=main');
+    fs.writeFileSync(path.join(lib, 'x.txt'), '1');
+    gl('add', '--all');
+    gl('commit', '--quiet', '--message=one');
+    r.g('-c', 'protocol.file.allow=always', 'submodule', '--quiet', 'add', lib.replaceAll('\\', '/'), 'src/auth-sub');
+    r.commit('add submodule');
+    const sub = path.join(r.dir, 'src', 'auth-sub');
+    const gs = (...args) => execFileSync('git', ['-C', sub, ...args], { env: { ...process.env, GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid', GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf8').trim();
+    fs.writeFileSync(path.join(sub, 'x.txt'), '2');
+    gs('add', '--all');
+    gs('commit', '--quiet', '--message=two');
+    r.commit('move submodule');
+    r.g('config', 'diff.ignoreSubmodules', 'all');
+    assert.equal(r.g('diff', '--name-only', base, ref).includes('src/auth-sub'), false, 'plain git hides the submodule under this config');
+    const s = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth-sub'), s.lines.join('\n'));
+  });
+
+  test('files hidden by .git/info/exclude and by core.excludesFile are listed', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    const global = path.join(path.dirname(r.dir), 'global-ignore');
+    fs.writeFileSync(global, 'src/auth/hidden-b.js\n');
+    r.g('config', 'core.excludesFile', global.replaceAll('\\', '/'));
+    fs.mkdirSync(path.join(r.dir, '.git', 'info'), { recursive: true });
+    fs.writeFileSync(path.join(r.dir, '.git', 'info', 'exclude'), 'src/auth/hidden-a.js\n');
+    r.write('src/auth/hidden-a.js', 'x');
+    r.write('src/auth/hidden-b.js', 'x');
+    assert.equal(r.g('ls-files', '--others', '--exclude-standard').includes('hidden'), false, 'plain git hides both');
+    const s = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/hidden-a.js'), s.lines.join('\n'));
+    assert.ok(s.lines.includes('check: high: pattern auth src/auth/hidden-b.js'), s.lines.join('\n'));
+  });
+
+  test('a changed .gitignore is a hit, and so is an untracked one that ignores itself', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('.gitignore', 'node_modules/\n');
+    const base = setupBase(r);
+    r.write('node_modules/pkg/index.js', 'x');
+    r.write('docs/x.md', 'x');
+    const clean = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.deepEqual(checkLines(clean), ['check: 2 paths, none forced high']);
+    r.write('sub/.gitignore', '*\n');
+    assert.ok(!r.g('ls-files', '--others', '--exclude-per-directory=.gitignore').includes('sub/.gitignore'), 'the per-directory list misses a file that ignores itself');
+    const own = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(own.lines.includes('check: high: ignore file changed sub/.gitignore'), own.lines.join('\n'));
+    assert.ok(!own.lines.join('\n').includes('node_modules'), own.lines.join('\n'));
+    fs.rmSync(path.join(r.dir, 'sub'), { recursive: true });
+    r.write('.gitignore', 'node_modules/\ndocs/\n');
+    r.commit('ignore docs');
+    const changed = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(changed.lines.includes('check: high: ignore file changed .gitignore'), changed.lines.join('\n'));
+  });
+
+  test('a textconv driver and diff.external in the repo config leave the listed paths unchanged', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    authCommit(r);
+    r.write('src/session/a.js', 'x');
+    const plain = checkLines(r.run('sync', 'demo', '--diff', '--base', base));
+    assert.ok(plain.includes('check: high: pattern auth src/auth/login.js'));
+    fs.mkdirSync(path.join(r.dir, '.git', 'info'), { recursive: true });
+    fs.writeFileSync(path.join(r.dir, '.git', 'info', 'attributes'), '*.js diff=x\n');
+    r.g('config', 'diff.x.textconv', 'false');
+    r.g('config', 'diff.x.binary', 'true');
+    r.g('config', 'diff.external', 'false');
+    r.g('config', 'diff.relative', 'true');
+    assert.deepEqual(checkLines(r.run('sync', 'demo', '--diff', '--base', base)), plain);
+  });
+
+  test('a graft file in any form is diff unknown and lists no path', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    const first = authCommit(r);
+    const grafts = path.join(r.dir, '.git', 'info', 'grafts');
+    fs.mkdirSync(path.dirname(grafts), { recursive: true });
+    const unrelated = unrelatedCommit(r);
+    const forms = {
+      'one line': () => fs.writeFileSync(grafts, `${first} ${unrelated}\n`),
+      'empty file': () => fs.writeFileSync(grafts, ''),
+      'folder': () => fs.mkdirSync(grafts),
+      'link': () => fs.symlinkSync(path.join(r.dir, 'a.txt'), grafts)
+    };
+    for (const [label, make] of Object.entries(forms)) {
+      fs.rmSync(grafts, { recursive: true, force: true });
+      try {
+        make();
+      } catch {
+        continue;
+      }
+      const s = r.run('sync', 'demo', '--diff', '--base', base);
+      assert.ok(s.lines.includes('check: high: diff unknown'), `${label}: ${s.lines.join('\n')}`);
+      assert.ok(!s.lines.some((l) => l.includes('src/auth')), label);
+    }
+    fs.rmSync(grafts, { recursive: true, force: true });
+    assert.ok(r.run('sync', 'demo', '--diff', '--base', base).lines.includes('check: high: pattern auth src/auth/login.js'));
+  });
+
+  test('a grafts file in the main repo stops a sync started in a linked worktree', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    authCommit(r);
+    r.g('checkout', '--quiet', '-b', 'other');
+    const wt = path.join(path.dirname(r.dir), 'wt');
+    r.g('worktree', 'add', '--quiet', wt, 'aico/demo');
+    const wtRun = path.join(wt, '.company', 'work', 'demo');
+    fs.mkdirSync(wtRun, { recursive: true });
+    fs.copyFileSync(r.record, path.join(wtRun, 'tier-path.jsonl'));
+    const go = () => main(['sync', 'demo', '--diff', '--base', base], { now: NOW, root: wt, git: r.spy });
+    assert.ok(go().lines.includes('check: high: pattern auth src/auth/login.js'));
+    const grafts = path.join(r.dir, '.git', 'info', 'grafts');
+    fs.mkdirSync(path.dirname(grafts), { recursive: true });
+    fs.writeFileSync(grafts, '');
+    const s = go();
+    assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+    assert.ok(!s.lines.some((l) => l.includes('src/auth')));
+  });
+
+  test('an inherited GIT_GRAFT_FILE is dropped: the result is the same as with no such key', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    setupBase(r);
+    const first = authCommit(r);
+    const unrelated = unrelatedCommit(r);
+    forgeBase(r, unrelated);
+    const file = path.join(path.dirname(r.dir), 'inherited-grafts');
+    fs.writeFileSync(file, `${first} ${unrelated}\n`);
+    const plain = checkLines(r.run('sync', 'demo', '--diff', '--base', unrelated));
+    assert.ok(plain.includes('check: high: diff unknown'), plain.join('\n'));
+    assert.deepEqual(checkLines(withEnv({ GIT_GRAFT_FILE: file }, () => r.run('sync', 'demo', '--diff', '--base', unrelated))), plain);
+  });
+
+  test('inherited GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_*, GIT_EXTERNAL_DIFF and a mixed-case key change nothing', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    authCommit(r);
+    const decoy = path.join(path.dirname(r.dir), 'decoy');
+    fs.mkdirSync(decoy);
+    execFileSync('git', ['init', '--quiet', decoy], { stdio: 'ignore' });
+    const plain = checkLines(r.run('sync', 'demo', '--diff', '--base', base));
+    assert.ok(plain.includes('check: high: pattern auth src/auth/login.js'), plain.join('\n'));
+    const hostile = {
+      GIT_DIR: path.join(decoy, '.git'),
+      GIT_WORK_TREE: decoy,
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'diff.external',
+      GIT_CONFIG_VALUE_0: 'false',
+      GIT_EXTERNAL_DIFF: 'false',
+      GIT_INDEX_FILE: path.join(decoy, 'nope-index'),
+      GIT_LITERAL_PATHSPECS: '0'
+    };
+    if (process.platform === 'win32') hostile.Git_Dir = path.join(decoy, '.git');
+    const got = withEnv(hostile, () => r.run('sync', 'demo', '--diff', '--base', base));
+    assert.deepEqual(checkLines(got), plain);
+    for (const c of r.allCalls.slice(-12)) assert.ok(c.length > 0);
+  });
+
+  test('a sync started in a subfolder under diff.relative lists the same paths as from the top level', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    const base = setupBase(r);
+    authCommit(r);
+    r.g('config', 'diff.relative', 'true');
+    const subRun = path.join(r.dir, 'sub', '.company', 'work', 'demo');
+    fs.mkdirSync(subRun, { recursive: true });
+    fs.copyFileSync(r.record, path.join(subRun, 'tier-path.jsonl'));
+    assert.equal(execFileSync('git', ['-C', path.join(r.dir, 'sub'), 'diff', '--name-only', base, ref], { stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf8').trim(), '', 'plain git hides it from a subfolder');
+    const sub = main(['sync', 'demo', '--diff', '--base', base], { now: NOW, root: path.join(r.dir, 'sub'), git: r.spy });
+    const top = r.run('sync', 'demo', '--diff', '--base', base);
+    assert.ok(checkLines(top).includes('check: high: pattern auth src/auth/login.js'), top.lines.join('\n'));
+    assert.deepEqual(checkLines(sub).filter((l) => l.includes('src/auth')), checkLines(top).filter((l) => l.includes('src/auth')));
+  });
+});
+
+describe('git env, order and grafts with a recording git', () => {
+  const HOSTILE = {
+    GIT_DIR: '/decoy/.git', GIT_WORK_TREE: '/decoy', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'diff.external', GIT_CONFIG_VALUE_0: 'false',
+    GIT_EXTERNAL_DIFF: 'false', GIT_GRAFT_FILE: '/decoy/grafts', GIT_OPTIONAL_LOCKS: '1', GIT_TERMINAL_PROMPT: '1', GIT_NO_REPLACE_OBJECTS: '0',
+    GIT_LITERAL_PATHSPECS: '0', GIT_INDEX_FILE: '/decoy/index', Git_Work_Tree: '/decoy'
+  };
+  const withHostileEnv = (t, fn) => {
+    const had = Object.fromEntries(Object.keys(HOSTILE).map((k) => [k, process.env[k]]));
+    Object.assign(process.env, HOSTILE);
+    t.after(() => {
+      for (const [k, v] of Object.entries(had)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    });
+    return fn();
+  };
+  const gitKeys = (env) => Object.keys(env).filter((k) => /^GIT_/i.test(k)).sort();
+  const NO_GRAFTS = /^aico-no-grafts-[0-9a-f]{16}$/;
+
+  function diffRun(t) {
+    const f = fixture();
+    f.begin();
+    f.allCalls.length = 0;
+    f.calls.length = 0;
+    f.setGit((sub) => (sub[0] === 'diff' || sub[0] === 'ls-files' ? Buffer.from('docs/a.md\0') : undefined));
+    const r = withHostileEnv(t, () => f.run('sync', f.slug, '--diff', '--base', SHA));
+    return { f, r };
+  }
+
+  test('the top level comes first, the graft check second, and no other call runs before them', (t) => {
+    const { f, r } = diffRun(t);
+    assert.equal(r.lines.at(-1), 'check: 1 paths, none forced high');
+    const subs = f.allCalls.map((c) => subOf(c.args));
+    assert.deepEqual(subs[0], ['rev-parse', '--show-toplevel']);
+    assert.deepEqual(subs[1], ['rev-parse', '--git-path', 'info/grafts']);
+    assert.deepEqual(subs[2], ['rev-parse', '--show-object-format']);
+    assert.equal(subs.filter((x) => x[1] === '--show-toplevel').length, 1);
+    assert.equal(subs.filter((x) => x[1] === '--git-path').length, 1);
+  });
+
+  test('every git child env is the process env without GIT_ keys plus only the fixed keys', (t) => {
+    const { f } = diffRun(t);
+    const [top, graft, ...later] = f.allCalls;
+    assert.deepEqual(gitKeys(top.opts.env), []);
+    assert.deepEqual(gitKeys(graft.opts.env), ['GIT_NO_REPLACE_OBJECTS']);
+    assert.equal(graft.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
+    assert.ok(later.length > 8);
+    const files = new Set();
+    for (const c of later) {
+      const sub = subOf(c.args);
+      const isDiff = sub[0] === 'diff';
+      assert.deepEqual(gitKeys(c.opts.env), isDiff ? ['GIT_GRAFT_FILE', 'GIT_LITERAL_PATHSPECS', 'GIT_NO_REPLACE_OBJECTS'] : ['GIT_GRAFT_FILE', 'GIT_NO_REPLACE_OBJECTS'], c.args.join(' '));
+      assert.equal(c.opts.env.GIT_NO_REPLACE_OBJECTS, '1');
+      if (isDiff) assert.equal(c.opts.env.GIT_LITERAL_PATHSPECS, '1');
+      assert.equal(path.dirname(c.opts.env.GIT_GRAFT_FILE), os.tmpdir());
+      assert.match(path.basename(c.opts.env.GIT_GRAFT_FILE), NO_GRAFTS);
+      assert.equal(fs.existsSync(c.opts.env.GIT_GRAFT_FILE), false);
+      files.add(c.opts.env.GIT_GRAFT_FILE);
+    }
+    assert.equal(files.size, 1);
+    for (const c of f.allCalls) assert.ok(!Object.keys(c.opts.env).some((k) => /^git_dir$|^git_work_tree$|^git_config|^git_external_diff$|^git_index_file$/i.test(k)));
+  });
+
+  test('every call runs in the top level the first call printed', () => {
+    const f = fixture();
+    f.begin();
+    f.allCalls.length = 0;
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'tier-set-top-'));
+    roots.push(elsewhere);
+    const real = f.allCalls;
+    f.setGit((sub) => (sub[0] === 'rev-parse' && sub[1] === '--show-toplevel' ? Buffer.from(`${elsewhere}\n`) : undefined));
+    f.run('sync', f.slug, '--diff', '--base', SHA);
+    assert.equal(real[0].opts.cwd, f.root);
+    for (const c of real.slice(1)) assert.equal(c.opts.cwd, path.resolve(elsewhere));
+  });
+
+  test('every diff call is the judging form with the full base id and the run branch as its only endpoints', () => {
+    const f = fixture();
+    f.begin();
+    f.calls.length = 0;
+    f.run('sync', f.slug, '--diff', '--base', SHA);
+    const diffs = f.allCalls.filter((c) => subOf(c.args)[0] === 'diff');
+    assert.equal(diffs.length, 2);
+    assert.deepEqual(diffs[0].args, committedDiff(RESOLVED));
+    assert.deepEqual(diffs[1].args, worktreeDiff());
+    for (const c of diffs) {
+      assert.ok(!c.args.some((a) => a.includes('...')));
+      assert.ok(c.args.includes('--literal-pathspecs') && c.args.includes('--no-ext-diff') && c.args.includes('--no-textconv'));
+      const tail = c.args.slice(c.args.indexOf('--end-of-options') + 1);
+      assert.ok(tail.length === 3 || tail.length === 2);
+    }
+    assert.equal(diffs[0].args.at(-2), 'refs/heads/aico/demo');
+    const glob = f.allCalls.find((c) => c.args.includes(':(glob)**/.gitignore'));
+    assert.ok(glob);
+    assert.ok(!glob.args.includes('--literal-pathspecs'));
+    assert.ok(!('GIT_LITERAL_PATHSPECS' in glob.opts.env));
+    for (const c of f.allCalls.filter((x) => subOf(x.args)[0] !== 'diff')) assert.ok(!('GIT_LITERAL_PATHSPECS' in c.opts.env), c.args.join(' '));
+  });
+
+  test('the source builds each env from the clean env and names no other GIT_ key', () => {
+    const src = fs.readFileSync(path.join(import.meta.dirname, 'tier-set.mjs'), 'utf8');
+    const keys = new Set(src.match(/\bGIT_[A-Z_]+\b/g));
+    assert.deepEqual([...keys].sort(), ['GIT_GRAFT_FILE', 'GIT_KEY', 'GIT_LITERAL_PATHSPECS', 'GIT_NO_REPLACE_OBJECTS', 'GIT_TIMEOUT_MS']);
+    assert.ok(!src.includes('...process.env'));
+  });
+
+  const graftCases = {
+    'a file': (g) => fs.writeFileSync(g, 'x y\n'),
+    'an empty file': (g) => fs.writeFileSync(g, ''),
+    'a folder': (g) => fs.mkdirSync(g, { recursive: true }),
+    'a link': (g, f) => { fs.writeFileSync(path.join(f.root, 'target'), 'x'); fs.symlinkSync(path.join(f.root, 'target'), g); }
+  };
+  for (const [label, make] of Object.entries(graftCases)) {
+    test(`${label} at the printed grafts path is diff unknown after the two setup calls`, (t) => {
+      const f = fixture();
+      f.begin();
+      f.allCalls.length = 0;
+      const g = path.join(f.root, 'grafts-here');
+      try {
+        make(g, f);
+      } catch {
+        return t.skip('cannot make this form here');
+      }
+      f.setGit((sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.from(`${g}\n`) : undefined));
+      const s = f.run('sync', f.slug, '--diff', '--base', SHA);
+      assert.ok(s.lines.includes('check: high: diff unknown'));
+      assert.ok(s.lines.includes('check: high: core unknown'));
+      assert.deepEqual(f.allCalls.map((c) => subOf(c.args)[1]), ['--show-toplevel', '--git-path']);
+      assert.equal(f.lines()[1].cause, 'diff');
+    });
+  }
+
+  test('a relative printed path is resolved against the top level', () => {
+    const f = fixture();
+    f.begin();
+    fs.writeFileSync(path.join(f.root, 'g'), '');
+    f.setGit((sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.from('g\n') : undefined));
+    assert.ok(f.run('sync', f.slug, '--diff', '--base', SHA).lines.includes('check: high: diff unknown'));
+  });
+
+  test('a path with a file where a folder should be is an lstat error other than ENOENT: diff unknown', (t) => {
+    if (process.platform === 'win32') return t.skip('Windows reports ENOENT for this path');
+    const f = fixture();
+    f.begin();
+    fs.writeFileSync(path.join(f.root, 'plainfile'), 'x');
+    f.setGit((sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.from('plainfile/info/grafts\n') : undefined));
+    assert.ok(f.run('sync', f.slug, '--diff', '--base', SHA).lines.includes('check: high: diff unknown'));
+  });
+
+  test('a graft-path query that fails, prints nothing or prints more than one line is diff unknown', () => {
+    for (const impl of [
+      (sub) => { if (sub[0] === 'rev-parse' && sub[1] === '--git-path') throw new Error('boom'); return undefined; },
+      (sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.alloc(0) : undefined),
+      (sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.from('\n') : undefined),
+      (sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.from('a\nb\n') : undefined)
+    ]) {
+      const f = fixture();
+      f.begin();
+      f.allCalls.length = 0;
+      f.setGit(impl);
+      const s = f.run('sync', f.slug, '--diff', '--base', SHA);
+      assert.ok(s.lines.includes('check: high: diff unknown'));
+      assert.deepEqual(f.allCalls.map((c) => subOf(c.args)[1]), ['--show-toplevel', '--git-path']);
+    }
+  });
+
+  test('a top level that fails or prints nothing is diff unknown after one call', () => {
+    for (const impl of [
+      (sub) => { if (sub[1] === '--show-toplevel') throw new Error('not a repo'); return undefined; },
+      (sub) => (sub[1] === '--show-toplevel' ? Buffer.alloc(0) : undefined)
+    ]) {
+      const f = fixture();
+      f.begin();
+      f.allCalls.length = 0;
+      f.setGit(impl);
+      const s = f.run('sync', f.slug, '--diff', '--base', SHA);
+      assert.ok(s.lines.includes('check: high: diff unknown'));
+      assert.equal(f.allCalls.length, 1);
+    }
+  });
+
+  test('begin runs the same setup, and a grafts file refuses it before any base lookup', () => {
+    const f = fixture();
+    fs.writeFileSync(path.join(f.root, 'g'), '');
+    f.setGit((sub) => (sub[0] === 'rev-parse' && sub[1] === '--git-path' ? Buffer.from('g\n') : undefined));
+    const r = f.begin();
+    assert.equal(r.code, 3);
+    assert.equal(fs.existsSync(f.record), false);
+    assert.deepEqual(f.calls, []);
+  });
+
+  test('the run branch checks: another HEAD, a failing symbolic-ref or a missing run ref is diff unknown with no diff call', () => {
+    for (const impl of [
+      (sub) => (sub[0] === 'symbolic-ref' ? Buffer.from('refs/heads/main\n') : undefined),
+      (sub) => (sub[0] === 'symbolic-ref' ? Buffer.from('refs/heads/aico/demo-2\n') : undefined),
+      (sub) => (sub[0] === 'symbolic-ref' ? Buffer.from('refs/heads/aico/demo') : undefined),
+      (sub) => (sub[0] === 'symbolic-ref' ? Buffer.from('aico/demo\n') : undefined),
+      (sub) => (sub[0] === 'symbolic-ref' ? Buffer.from('refs/tags/aico/demo\n') : undefined),
+      (sub) => { if (sub[0] === 'symbolic-ref') throw Object.assign(new Error('detached'), { status: 1 }); return undefined; },
+      (sub) => { if (sub[0] === 'rev-parse' && sub[1] === '--verify') throw new Error('no such ref'); return undefined; }
+    ]) {
+      const f = fixture();
+      f.begin();
+      f.calls.length = 0;
+      f.setGit(impl);
+      const s = f.run('sync', f.slug, '--diff', '--base', SHA);
+      assert.ok(s.lines.includes('check: high: diff unknown'), s.lines.join('\n'));
+      assert.ok(!f.calls.some((c) => subOf(c.args)[0] === 'diff' || subOf(c.args)[0] === 'ls-files'));
+    }
+  });
+
+  test('every ls-files and diff failure, and an oversized answer, is diff unknown', () => {
+    for (const which of ['ls-files', 'diff']) {
+      for (const bad of [() => { throw new Error('boom'); }, () => Buffer.alloc(8 * 1024 * 1024 + 1)]) {
+        const f = fixture();
+        f.begin();
+        f.setGit((sub) => (sub[0] === which ? bad() : undefined));
+        assert.ok(f.run('sync', f.slug, '--diff', '--base', SHA).lines.includes('check: high: diff unknown'));
+      }
+    }
+    const f = fixture();
+    f.begin();
+    f.setGit((sub) => { if (sub[0] === 'ls-files' && sub.includes(':(glob)**/.gitignore')) throw new Error('boom'); return undefined; });
+    assert.ok(f.run('sync', f.slug, '--diff', '--base', SHA).lines.includes('check: high: diff unknown'));
+  });
+
+  test('a .gitignore anywhere in a list is an ignore file hit, whatever its folder or alias', () => {
+    for (const p of ['.gitignore', 'a/b/.gitignore', 'a\\.gitignore', 'a/.GitIgnore', 'a/.gitignore.', 'a/.gitignore ', 'a/GITIGN~1']) {
+      const f = fixture();
+      f.begin();
+      f.setGit((sub) => (sub[0] === 'ls-files' && sub.includes('--exclude-per-directory=.gitignore') ? Buffer.from(`${p}\0`) : undefined));
+      const s = f.run('sync', f.slug, '--diff', '--base', SHA);
+      assert.ok(s.lines.some((l) => l.startsWith('check: high: ignore file changed')), p);
+      assert.equal(f.lines()[1].cause, 'diff', p);
+    }
+    const f = fixture();
+    f.begin();
+    f.setGit((sub) => (sub[0] === 'diff' ? Buffer.from('gitignore.md\0.gitignored\0a/.gitignore-x\0') : undefined));
+    assert.equal(f.run('sync', f.slug, '--diff', '--base', SHA).lines.at(-1), 'check: 3 paths, none forced high');
+  });
+
+  test('a plan that names .gitignore is not an ignore file hit', () => {
+    const f = fixture();
+    f.begin();
+    fs.writeFileSync(path.join(f.dir, '02-plan.md'), '# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: .gitignore\n- depends-on: none\n- parallel: yes\n');
+    const s = f.run('sync', f.slug, '--plan', '02-plan.md', '--base', SHA);
+    assert.ok(!s.lines.some((l) => l.includes('ignore file changed')), s.lines.join('\n'));
+  });
 });
