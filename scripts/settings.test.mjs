@@ -84,7 +84,7 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
     name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 150000, floor: 'sonnet', protected: false,
     source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' }
   });
-  assert.deepEqual(r.pipeline, PIPELINE_DEFAULTS);
+  assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, second_reviewer_model_effective: 'opus' });
   assert.deepEqual(r.gates, GATE_DEFAULTS);
   assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
   assert.equal(r.pipeline.context_cap, 150000);
@@ -1806,7 +1806,7 @@ test('short_path defaults to on in get and in get pipeline.short_path', (t) => {
   assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'on');
   assert.equal(s.cli('get', 'pipeline.short_path').out, 'on\n');
   assert.equal(JSON.parse(s.cli('get').out).pipeline.short_path, 'on');
-  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'context_cap', 'review_format', 'lanes']);
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'second_reviewer', 'second_reviewer_model', 'second_reviewer_model_effective', 'worktrees', 'context_cap', 'review_format', 'lanes']);
 });
 
 test('short_path off from the user level resolves off', (t) => {
@@ -1898,4 +1898,143 @@ test('a v1.7 file without short_path resolves as before, plus the default key', 
   assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.parallel_cap, r.pipeline.review_format, r.pipeline.short_path], [3, 'sequential', 5, 'pilot', 'on']);
   assert.deepEqual(r.ignored, []);
   assert.deepEqual(r.warnings, []);
+});
+
+// ---- pipeline.second_reviewer, second_reviewer_model, worktrees (aico-settings v1.10) ----
+
+const reviewerNames = ['architect', 'code-reviewer', 'fresh-reviewer', 'qa', 'security'];
+
+// A sandbox whose plugin holds the Roles the second reviewer settings read.
+function reviewerSandbox(t, { floorText } = {}) {
+  const s = sandbox(t);
+  const names = JSON.parse(fs.readFileSync(path.join(s.pluginRoot, 'company', 'names.json'), 'utf8'));
+  for (const role of ['code-reviewer', 'fresh-reviewer']) {
+    fs.writeFileSync(path.join(s.pluginRoot, 'agents', `${role}.md`), agentFile(role, { model: 'opus', effort: 'high' }));
+    names[role] = role === 'fresh-reviewer' ? 'Fenna' : 'Rex';
+  }
+  fs.writeFileSync(path.join(s.pluginRoot, 'company', 'names.json'), JSON.stringify(names));
+  const floor = Object.fromEntries(reviewerNames.map((r) => [r, r === 'qa' ? 'sonnet' : 'opus']));
+  writeFloor(s.pluginRoot, { floor });
+  if (floorText !== undefined) fs.writeFileSync(path.join(s.pluginRoot, 'company', 'model-floor.json'), floorText);
+  s.roleSet = new Set(reviewerNames);
+  return s;
+}
+
+test('the new pipeline keys refuse hostile values first, with messages that never echo the value', (t) => {
+  const s = reviewerSandbox(t);
+  const bad = [undefined, null, 1, true, [], {}, 'ON', 'on ', '', 'yes', '__proto__', 'x'.repeat(5000), 'secret-value'];
+  for (const [key, msg] of [['second_reviewer', 'pipeline.second_reviewer must be off or on'], ['worktrees', 'pipeline.worktrees must be off or on']]) {
+    for (const v of bad) {
+      assert.deepEqual(validateLayer({ version: 1, pipeline: { [key]: v } }, s.roleSet), [msg]);
+    }
+    for (const ok of ['on', 'off']) assert.deepEqual(validateLayer({ version: 1, pipeline: { [key]: ok } }, s.roleSet), []);
+  }
+  const modelMsg = 'pipeline.second_reviewer_model must be default or a model at or above the code-reviewer floor (opus)';
+  for (const v of [...bad, 'sonnet', 'haiku', 'fable', 'gpt-4o', 'inherit', 'Opus']) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { second_reviewer_model: v } }, s.roleSet), [modelMsg]);
+  }
+  for (const ok of ['default', 'opus']) assert.deepEqual(validateLayer({ version: 1, pipeline: { second_reviewer_model: ok } }, s.roleSet), []);
+});
+
+test('a save of a bad value is refused with the fixed message and writes nothing', (t) => {
+  const s = reviewerSandbox(t);
+  for (const [key, v] of [['second_reviewer', 'maybe'], ['worktrees', 'sometimes'], ['second_reviewer_model', 'gpt-4o'], ['second_reviewer_model', 'fable'], ['second_reviewer_model', 'sonnet'], ['second_reviewer_model', 'haiku']]) {
+    assert.throws(() => writeLayer('user', { version: 1, pipeline: { [key]: v } }, s.ctx), (e) => e instanceof Refusal && e.message.startsWith(`pipeline.${key} must be`) && !e.message.includes(v));
+  }
+  assert.equal(fs.existsSync(s.config), false);
+});
+
+test('defaults: second reviewer off, model default (effective is the fresh-reviewer model), worktrees off', (t) => {
+  const s = reviewerSandbox(t);
+  const p = resolveSettings(s.ctx).pipeline;
+  assert.equal(p.second_reviewer, 'off');
+  assert.equal(p.second_reviewer_model, 'default');
+  assert.equal(p.second_reviewer_model_effective, 'opus');
+  assert.equal(p.worktrees, 'off');
+  assert.equal(s.cli('get', 'pipeline.second_reviewer').out, 'off\n');
+  assert.equal(s.cli('get', 'pipeline.worktrees').out, 'off\n');
+  assert.equal(JSON.parse(s.cli('get').out).pipeline.second_reviewer_model_effective, 'opus');
+  assert.equal(PIPELINE_DEFAULTS.second_reviewer, 'off');
+  assert.equal(PIPELINE_DEFAULTS.worktrees, 'off');
+});
+
+test('user values count: on, opus and worktrees on', (t) => {
+  const s = reviewerSandbox(t);
+  s.user({ pipeline: { second_reviewer: 'on', second_reviewer_model: 'opus', worktrees: 'on' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.second_reviewer, 'on');
+  assert.equal(r.pipeline.second_reviewer_model, 'opus');
+  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
+  assert.equal(r.pipeline.worktrees, 'on');
+  assert.deepEqual(r.ignored, []);
+});
+
+test('project values of the new keys are ignored and listed', (t) => {
+  const s = reviewerSandbox(t);
+  for (const v of ['on', 'off']) {
+    s.project({ pipeline: { second_reviewer: v, second_reviewer_model: 'opus', worktrees: v } });
+    const r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.second_reviewer, 'off');
+    assert.equal(r.pipeline.second_reviewer_model, 'default');
+    assert.equal(r.pipeline.worktrees, 'off');
+    assert.deepEqual(r.ignored, [
+      'pipeline.second_reviewer: set it at the user level',
+      'pipeline.second_reviewer_model: set it at the user level',
+      'pipeline.worktrees: set it at the user level'
+    ]);
+  }
+  s.user({ pipeline: { second_reviewer: 'on', worktrees: 'on' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.second_reviewer, 'on');
+  assert.equal(r.pipeline.worktrees, 'on');
+});
+
+test('a fail-closed project layer leaves the new keys unchanged', (t) => {
+  const s = reviewerSandbox(t);
+  s.user({ pipeline: { second_reviewer: 'on', worktrees: 'on' } });
+  s.project({ pipeline: { fix_rounds: 99 } });
+  const r = resolveSettings(s.ctx);
+  assert.ok(r.warnings.some((w) => w.includes('ignoring')));
+  assert.equal(r.pipeline.second_reviewer, 'on');
+  assert.equal(r.pipeline.worktrees, 'on');
+});
+
+test('a bad stored user value falls back to the default with a warning', (t) => {
+  const s = reviewerSandbox(t);
+  s.user({ pipeline: { second_reviewer: 'maybe', second_reviewer_model: 'fable', worktrees: 'x' } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.second_reviewer, 'off');
+  assert.equal(r.pipeline.second_reviewer_model, 'default');
+  assert.equal(r.pipeline.worktrees, 'off');
+  assert.equal(r.warnings.filter((w) => w.includes('ignoring pipeline.')).length, 3);
+  assert.ok(r.warnings.some((w) => w.includes('pipeline.second_reviewer_model must be default')));
+  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
+});
+
+test('default effective model is never below opus, also with a project fresh-reviewer model below the floor', (t) => {
+  const s = reviewerSandbox(t);
+  s.project({ roles: { 'fresh-reviewer': { model: 'sonnet' } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.roles['fresh-reviewer'].model, 'opus');
+  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
+  s.project({ roles: { 'fresh-reviewer': { model: 'inherit' } } });
+  assert.equal(resolveSettings(s.ctx).pipeline.second_reviewer_model_effective, 'opus');
+});
+
+test('an unreadable model floor file gives effective opus and a warning', (t) => {
+  const s = reviewerSandbox(t, { floorText: '{not json' });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
+  assert.ok(r.warnings.some((w) => w.startsWith('model floor:')));
+  s.user({ pipeline: { second_reviewer_model: 'opus' } });
+  assert.equal(resolveSettings(s.ctx).pipeline.second_reviewer_model_effective, 'opus');
+});
+
+test('the shipped plugin: six protected names and an effective opus by default', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-real-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const r = resolveSettings({ home, cwd: home });
+  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
+  assert.equal(r.roles['fresh-reviewer'].protected, true);
+  assert.equal(loadModelFloor().protected.length, 6);
 });
