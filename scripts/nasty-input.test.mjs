@@ -387,8 +387,10 @@ test('profile languages: every nasty value is refused with nothing changed or st
         return;
       }
       if (!wellFormed) fails.push(`${id}: accepted a value that is not a list of language tags`);
-      if (after !== expectedProject('languages', v)) fails.push(`${id}: stored bytes differ from the canonical form`);
-      if (wellFormed && !tags.every((t) => t === canonicalTag(t))) fails.push(`${id}: stored a tag that is not in canonical form`);
+      const canonicalList = v.split(',').map((t) => t.replace(t.trim(), canonicalTag(t.trim()) ?? t.trim())).join(',');
+      if (after !== expectedProject('languages', canonicalList)) fails.push(`${id}: stored bytes differ from the canonical form`);
+      const storedTags = (/^languages: (.*)$/m.exec(after)?.[1] ?? '').split(',').map((t) => t.trim());
+      if (wellFormed && !storedTags.every((t) => t === canonicalTag(t))) fails.push(`${id}: stored a tag that is not in canonical form`);
     });
   }
   assert.deepEqual(grouped(fails), []);

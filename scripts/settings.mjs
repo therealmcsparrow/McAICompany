@@ -507,10 +507,16 @@ export function readProfile({ cwd } = {}) {
   return { hasProject: true, fields };
 }
 
+// C0, DEL, C1, Arabic letter mark, Mongolian vowel separator, zero-width and bidi marks and controls,
+// line and paragraph separators, word joiner range, byte order mark.
+const PROFILE_BAD_RE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]');
+
 // Returns a reason string when `value` is not acceptable for `field`, else null.
 function profileProblem(field, value, options) {
   if (typeof value !== 'string' || value.trim() === '') return 'must be text';
-  if (/[\u0000-\u001f\u007f]/.test(value)) return 'must be one line without control characters';
+  if (!value.isWellFormed()) return 'must be well-formed text';
+  if (PROFILE_BAD_RE.test(value)) return 'must be one line without control, invisible or direction characters';
+  if (value.includes('<!--') || value.includes('-->')) return 'must not contain comment marks';
   if (value.length > MAX_TEXT) return `must be at most ${MAX_TEXT} characters`;
   if (value !== value.trim()) return 'must not start or end with spaces';
   if (field === 'languages') {
@@ -521,6 +527,10 @@ function profileProblem(field, value, options) {
   }
   if (OPTION_FIELDS.includes(field)) return options[field].includes(value) ? null : `must be one of ${options[field].join(', ')}`;
   return null;
+}
+
+function canonicalLanguages(value) {
+  return value.split(',').map((tag) => tag.replace(tag.trim(), Intl.getCanonicalLocales(tag.trim())[0])).join(',');
 }
 
 // Rewrites only the edited header lines of .company/project.md. Unchanged values are not re-validated.
@@ -544,7 +554,10 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
     if (changes[field] === stored[field]) continue;
     const problem = profileProblem(field, changes[field], options);
     if (problem) reasons.push(`${field}: ${problem}`);
-    else edits.push(field);
+    else {
+      if (field === 'languages') changes = { ...changes, languages: canonicalLanguages(changes.languages) };
+      edits.push(field);
+    }
   }
   if (reasons.length) throw new Refusal(reasons.join('; '));
   if (edits.length === 0 || dryRun) return;
