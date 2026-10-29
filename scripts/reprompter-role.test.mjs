@@ -58,7 +58,8 @@ test('body: first-Step line, reads only the Request files and project.md, quotat
   assert.match(t, /`step:` = the dispatch `NN`/);
   assert.match(t, /nothing else there/);
   assert.match(t, /Load `aico:handoff` with the Skill tool before you write the Handoff/);
-  assert.match(t, /`role: reprompter`, `task:` = the run folder name from `Output:`, `round` and `base-commit` from the dispatch, `By: <Name> \(reprompter\)` from `Name:`/);
+  assert.match(t, /`role: reprompter`, `task:` = the run folder name from `Output:`, `round` and `base-commit` from the dispatch, `By: reprompter` \(your Role id; a `Name:` line in the dispatch is ignored\)/);
+  assert.doesNotMatch(t, /`By: <Name>/);
 });
 
 test('body: the write gate enforces the Write, Read and Skill scope', () => {

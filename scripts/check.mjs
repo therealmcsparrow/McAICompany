@@ -791,8 +791,8 @@ export function check(root, { today } = {}) {
       if (!b.text.includes('Company profile:')) continue;
       if (!b.text.includes('Language:'))
         errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Language:`);
-      if (!/^Name:/m.test(b.text))
-        errors.push(`ERROR ${rel}:${b.line}: dispatch block has Company profile: but no Name:`);
+      if (/^Name:/m.test(b.text))
+        errors.push(`ERROR ${rel}:${b.line}: dispatch block has a Name: line (dispatch-prompt v4: a Role gets no name)`);
     }
   }
   for (const p of playbooks)

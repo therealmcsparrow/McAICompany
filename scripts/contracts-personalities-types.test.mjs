@@ -303,18 +303,18 @@ const dispatchBlocks = rel => {
     else if (m && m[1].length >= open.size && /^\s*`+\s*$/.test(line)) { out.push(open); open = null; }
     else open.lines.push(line);
   });
-  return out.filter(b => b.lines.some(l => /^Name:/.test(l)));
+  return out.filter(b => b.lines.some(l => /^Company profile:/.test(l)));
 };
 
 test('dispatch-prompt: the Personality line is the last line of a cooler turn and a format 1 round and appears in no other dispatch', () => {
-  assert.match(promptDoc, /^# Contract: dispatch-prompt v3\.(?:[2-9]|\d{2,})/);
+  assert.match(promptDoc, /^# Contract: dispatch-prompt v(?:[4-9]|\d{2,})\.\d+/);
   for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/references/format-1.md']) {
     const withLine = dispatchBlocks(rel).filter(b => b.lines.some(l => /^Personality:/.test(l)));
     assert.ok(withLine.length >= 1, rel);
     for (const b of withLine) {
       const lines = b.lines.filter(l => l.trim());
       assert.match(lines.at(-1), /^Personality:/, `${rel}:${b.start}`);
-      const order = ['Project profile', 'Company profile', 'Language', 'Name'].map(k => lines.findIndex(l => l.startsWith(`${k}:`)));
+      const order = ['Project profile', 'Company profile', 'Language'].map(k => lines.findIndex(l => l.startsWith(`${k}:`)));
       assert.deepEqual(order, [...order].sort((a, b) => a - b), 'the earlier lines keep their order');
       assert.ok(!lines.some(l => /^Output: \.company\/work\//.test(l)), 'a social turn writes no Handoff');
     }
@@ -394,7 +394,8 @@ test('dispatch-prompt: the v3.1 Context cap rule still holds under v3.2', () => 
   // The v3.1 sentence stays word for word, and the static check still enforces it.
   assert.ok(promptDoc.includes('**Enforcement:** `scripts/check.mjs` reports an `ERROR` for any fenced dispatch block that has an `Output: .company/work/` line and no `Context cap:` line. No Playbook is exempt.'));
   assert.match(promptDoc, /\| `Context cap: <cap> handover <n>` \|/);
-  assert.match(promptDoc, /\*\*Pipeline Step:\*\* `Project profile:`, `Company profile:`, `Language:`, `Name:`, `Settings:` \(optional\), `Context cap:`/);
+  assert.match(promptDoc, /\*\*Pipeline Step:\*\* `Project profile:`, `Company profile:`, `Language:`, `Settings:` \(optional\), `Context cap:`/);
+  assert.ok(!/^\s*Name:/m.test(read('skills/pipeline/SKILL.md')));
 });
 
 // ================= brainstorm-file v2.1 =====================================================

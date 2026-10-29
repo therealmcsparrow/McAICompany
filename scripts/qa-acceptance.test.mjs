@@ -274,7 +274,7 @@ test('AC3 the static check refuses a personality line in a pipeline or research 
   const { check } = await import('./check.mjs');
   assert.deepEqual(check(pluginCopy()).errors, [], 'the copy starts clean');
   for (const rel of ['skills/pipeline/SKILL.md', 'skills/research/SKILL.md']) {
-    const errors = await staticCheckWith(rel, text => text.replace(/^(Name:.*)$/m, '$1\nPersonality: /tmp/x.md'));
+    const errors = await staticCheckWith(rel, text => text.replace(/^(Language:.*)$/m, '$1\nPersonality: /tmp/x.md'));
     assert.ok(errors.some(e => e.includes(rel) && /Personality: line/.test(e)), `${rel}: ${errors}`);
   }
   const errors = await staticCheckWith('skills/feature/SKILL.md', text => `${text}\nRun personality.mjs stage first.\n`);

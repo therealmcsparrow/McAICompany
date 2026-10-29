@@ -30,12 +30,14 @@ v1.3 (task v020-gate-roadmap, additive): the plan Gate mod (`mods/plan-gate.ts`,
 | Touched paths, tier, depth (`review-depth` v1) | `review-depth.mjs … --json` | Blast Radius |
 | Lessons (`lessons` v1) | `lessons.mjs accept` (write only) | Reflect |
 | Reprompt run folder (writes `.gate-<NN>` through `arm`; reads only to disarm an armed run: `.gate-<NN>` stat and `run-state.jsonl`, at most 64 KiB) | `reprompt-check.mjs arm <slug> <NN>`; `$.fs.stat`, `$.fs.read` | Reprompt gate |
-| Running subagents | the `agent.spawn` hook's `prompt` (only the `Output:`, `Name:`, `Base commit:`, `Risk tier:` lines, matched by the regexes below, from the first 64 KiB) and `$.agent.list()` | Savvy, Blast Radius, Reprompt gate (`Output:` line by its own regex in `reprompt` v1; `$.agent.list()` for an unrecorded agent) |
+| Running subagents | the `agent.spawn` hook's `prompt` (only the `Output:`, `Base commit:`, `Risk tier:` lines, matched by the regexes below, from the first 64 KiB) and `$.agent.list()` | Savvy, Blast Radius, Reprompt gate (`Output:` line by its own regex in `reprompt` v1; `$.agent.list()` for an unrecorded agent) |
 | Plan check verdict (`plan-check` v1.2) | `plan-check.mjs verify <slug> --json` | Plan Gate |
 | Main-loop request times (and the cache-lifetime split of their usage, when the event carries it) | `turn.start`, `turn.step`, `turn.complete` hooks (main loop only: no `agentId`) | Cache Tax (cache clock) |
 `project.md` and `docs/contracts/` are read only inside `review-depth.mjs`. File-change detection uses `$.fs.stat` on the run folder, its `run-state.jsonl` and `.company/ledger/<run>.jsonl` (no reads).
 
-Prompt line regexes: `^Output: \.company/work/([a-z0-9][a-z0-9-]{0,63})/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$`, `^Name: ([^\r\n]{1,40})$`, `^Base commit: ([0-9a-f]{7,40})$`, `^Risk tier: (low|medium|high)$`. No match → the field is `unknown`.
+Prompt line regexes: `^Output: \.company/work/([a-z0-9][a-z0-9-]{0,63})/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$`, `^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$`, `^Risk tier: (low|medium|high)$`. No match → the field is `unknown`.
+
+Panel names (Delta L, `dispatch-prompt` v4.0): Savvy and Cache Tax never read a name from a prompt; a `Name:` line in a prompt is ignored. They show the effective name for the Role id (taken from the `Output:` line, else the agent type) from the name map they read from the scripts' JSON (`settings.mjs get`, `roles.<role>.name`). A Role id with no map entry shows `unknown`. On screen the panels look as before.
 
 ## Calling a script
 - `$.process.run(['node', <$.plugin.root>/scripts/<name>.mjs, …args], { cwd: <$.session.root()>, timeoutMs })`: no shell. `timeoutMs`: 1000 for `settings.mjs get` and `run-state.mjs`; 5000 for `ledger.mjs report`, `reflect.mjs step`, `lessons.mjs accept` and the pre-review `review-depth`; 5000 for the reprompt gate's `reprompt-check.mjs arm`; 10000 for the commit gate's `review-depth` and `reflect.mjs retro`.

@@ -253,12 +253,24 @@ test('a subagent with no ledger row yet shows running in every count cell', asyn
   const w = makeWorld()
   w.agents = [{ id: 'a1', description: 'x', type: 'aico:frontend-engineer', status: 'running' }]
   await boot($, on, w)
-  await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Output: .company/work/demo/09-frontend-engineer.md\nName: Freya\n' })
+  await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Output: .company/work/demo/09-frontend-engineer.md\n' })
   const ui = await $.ui.mount(pane('terminal'))
   const rows = await lines(ui)
   const at = rows.findIndex(r => r === '09 frontend-engineer (Freya)')
   expect(at).toBeGreaterThan(-1)
   expect(rows.slice(at + 1, at + 6).every(r => r.endsWith('running'))).toBe(true)
+  await ui.unmount()
+})
+
+test('a Name: line in a prompt is ignored; no map entry shows no name', async ($, on) => {
+  const w = makeWorld()
+  w.agents = [{ id: 'a1', description: 'x', type: 'aico:frontend-engineer', status: 'running' }]
+  await boot($, on, w)
+  await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Name: Mallory\nOutput: .company/work/demo/09-frontend-engineer.md\n' })
+  const ui = await $.ui.mount(pane('terminal'))
+  const rows = await lines(ui)
+  expect(rows).toContain('09 frontend-engineer (Freya)')
+  expect(rows.join('\n')).not.toContain('Mallory')
   await ui.unmount()
 })
 

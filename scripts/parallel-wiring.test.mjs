@@ -58,5 +58,5 @@ test('planning names the four task fields and feedback names parallel-verdict an
 });
 
 test('dispatch-prompt v3.5 adds Task: and Files: after Rule slice:', () => {
-  has(dispatch, /^# Contract: dispatch-prompt v3\.(?:[5-9]|\d{2,})$/m, '## Lines added in v3.5', '| `Task: <id>` |', '| `Files: <path>[, <path>…] \\| none` |');
+  has(dispatch, /^# Contract: dispatch-prompt v(?:[4-9]|\d{2,})\.\d+$/m, '## Lines added in v3.5', '| `Task: <id>` |', '| `Files: <path>[, <path>…] \\| none` |');
 });

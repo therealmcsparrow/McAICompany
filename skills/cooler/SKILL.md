@@ -21,6 +21,7 @@ topic: <the CEO's topic, or the one the first speaker raised>
 started: 2026-10-22 14.30
 mode: natural          # natural | turns=N | listen
 people: backend-engineer, ui-ux-designer, …   # everyone who was there at any point
+ids: role              # the file names Roles by Role id only
 ---
 ## Overheard
 - <one line per idea, problem, worry or question> (architect, qa)
@@ -35,16 +36,16 @@ people: backend-engineer, ui-ux-designer, …   # everyone who was there at any 
 
 ### SCENE 1 — INT. OFFICE KITCHEN, BY THE WATER COOLER — NIGHT
 
-*<Set the scene in one or two lines.> Ava and Quinn stand around it with paper cups.*
+*<Set the scene in one or two lines.> architect and qa stand around it with paper cups.*
 
-**Ava (architect)**
+**architect**
 > <their line, one paragraph>
 
-**Quinn (qa)**
+**qa**
 *(leaning on the cooler)*
 > <their line>
 
-*Sam walks up.*
+*ui-ux-designer walks up.*
 
 ---
 
@@ -66,16 +67,16 @@ people: backend-engineer, ui-ux-designer, …   # everyone who was there at any 
 - **Title** `# THE WATER COOLER`, then a one-line italic logline (company from PROFILE.md; the moment from the project brief).
 - **Scene heading** `### SCENE <n> — <slug line>`. Scene 1: `INT. OFFICE KITCHEN, BY THE WATER COOLER — DAY | EVENING | NIGHT` from the local time. Later scenes: `SAME — CONTINUOUS | MOMENTS LATER | LATER | LATE | OFF THE CLOCK`. Separate scenes with `---`.
 - **New scene** whenever the subject changes or the talk is about to shift after a walk-up; 2–5 turns per scene. Each scene opens with one italic action line (who's there, the mood, what the talk turns to).
-- **Cue** `**<NAME> (<ROLE>)**` on a speaker's first line (`**Ava (architect)**`), `**<NAME>**` after that (`**CEO**` for a chime-in), then the line as a `> ` quote, flattened to one paragraph; strip headings or lists the Role added. A short manner note the Role gave goes between them as `*(…)*`.
-- **Action lines** in italics with `<NAME>`: walk-ups (`*Leila walks up, cup in hand.*`), walk-offs (`*Omar heads back to their desk.*`), PASSes (`*Quinn sips their coffee.*`). You write the action lines; never put words in a Role's mouth.
+- **Cue** `**<role>**` on every speaker line (`**architect**`; `**CEO**` for a chime-in), then the line as a `> ` quote, flattened to one paragraph; strip headings or lists the Role added. A short manner note the Role gave goes between them as `*(…)*`.
+- **Action lines** in italics with `<role>`: walk-ups (`*ui-ux-designer walks up, cup in hand.*`), walk-offs (`*backend-engineer heads back to their desk.*`), PASSes (`*qa sips their coffee.*`). You write the action lines; never put words in a Role's mouth.
 - **Ending:** a closing action line, `**FADE OUT.**`, then `*Break's over.*`
 
 ## 1. Scene
 1. Parse the arguments: `turns=N` → **turns** mode (end after N turns); `listen` → **listen** mode; neither → **natural**. The rest is the topic (may be empty).
 2. Read `.company/project.md`, `.company/lessons.md` and the latest few files in `.company/roadmap/` and `.company/cooler/` (any that exist), so you can brief the colleagues on what's going on.
 3. Pick **2–3 Roles at random** from the output of `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" roles` (the company type's Roles, one slug per line; refused → show its line and stop). Use real randomness, e.g. `node -e "const a=process.argv.slice(1);console.log(a.sort(()=>Math.random()-.5).slice(0,3).join(' '))" <names…>`; never choose by relevance.
-4. Resolve the language once per `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; anything invalid or failing → `en`). Everything you write in the file and to the CEO (logline, action lines, Overheard, summary) uses it; the file's frontmatter keys, `##` headings, `SCENE`/`INT.`/`FADE OUT.` script words stay English. Names come from the §1.7 settings. Resolve the settings once per §1.7 too.
-5. Stage personalities (`dispatch-prompt` v3.2): `node "${CLAUDE_PLUGIN_ROOT}/scripts/personality.mjs" stage cooler-<YYYYMMDD-HHMM of the file name> <role>,<role>[,<role>]` with the slugs at the cooler, run from the repo root. It prints `{ "run", "files": { "<role>": "<path>" } }`; keep the paths per Role. Never open, read or quote a file or print a block. Refused or no path for a Role → no `Personality:` line for it, and say so once in your first message to the CEO.
+4. Resolve the language once per `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; anything invalid or failing → `en`). Everything you write in the file and to the CEO (logline, action lines, Overheard, summary) uses it; the file's frontmatter keys, `##` headings, `SCENE`/`INT.`/`FADE OUT.` script words stay English. Resolve the settings once per §1.7 too. Names come from them and are for the CEO only: the file and every prompt hold Role ids; anything you show the CEO renders each id as `Name (role)`.
+5. Stage personalities (`dispatch-prompt` v4): `node "${CLAUDE_PLUGIN_ROOT}/scripts/personality.mjs" stage cooler-<YYYYMMDD-HHMM of the file name> <role>,<role>[,<role>]` with the slugs at the cooler, run from the repo root. It prints `{ "run", "files": { "<role>": "<path>" } }`; keep the paths per Role. Never open, read or quote a file or print a block. Refused or no path for a Role → no `Personality:` line for it, and say so once in your first message to the CEO.
 6. Create the file with the title, logline and Scene 1 (heading and opening action line). Tell the CEO in one line: who's there, the topic (or "open chat"), the mode, and the file path.
 
 ## 2. Turns
@@ -90,7 +91,6 @@ Output: your line only, optionally starting with a short manner note in parenthe
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from §1.6>
-Name: <the Role's name from §1.7>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 Personality: <path from stage for this Role>   # last line; omit the line when stage gave this Role no path
 ```

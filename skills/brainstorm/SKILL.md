@@ -31,7 +31,6 @@ Format 2 rounds follow [references/format-2.md](references/format-2.md), which y
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from §1.6>
-Name: <the Role's name from §1.7>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 Input: <absolute path that stage printed for this Role>
 Output: your reply only. Write no files and no Handoff.

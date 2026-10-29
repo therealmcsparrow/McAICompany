@@ -10,7 +10,7 @@ argument-hint: <topic | project | file> [quick|deep]
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook research` first; exit not 0 → show its output line and stop.
 
-You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language, the settings and the Context cap (§1.2, §1.4, §1.6, §1.7 with Setup item 8); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v1 (RR), `skills-manifest` v2 (SM), `design-skills-section` v1 (DS), `dispatch-prompt` v3.1 (DP), all in `docs/contracts/`.
+You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language, the settings and the Context cap (§1.2, §1.4, §1.6, §1.7 with Setup item 8); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v1 (RR), `skills-manifest` v2 (SM), `design-skills-section` v1 (DS), `dispatch-prompt` v4 (DP), all in `docs/contracts/`.
 
 ## 1. Start
 1. Argument: a topic (text), `project` (the topic is this product: read `.company/project.md`), or a file path (a brainstorm, cooler or earlier report: its idea or `## Summary` is the topic). A trailing `quick` or `deep` sets the depth; default `deep`.
@@ -44,7 +44,6 @@ Risk tier: <from Project profile, else medium>
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag>
-Name: <the Role's name from §1.7>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 Context cap: <cap> handover <n>   # per Role, from aico:pipeline Setup item 8
 Follow aico:handoff.

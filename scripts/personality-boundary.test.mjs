@@ -73,7 +73,7 @@ const MODULE_IMPORTERS_ALLOWED = new Set(['scripts/brainstorm.mjs']);
 // --- prompts and skills never carry personality ---------------------------------------------
 
 test('the scanners find a personality line and a script mention in a fixture', () => {
-  const md = ['# x', '```', 'Company profile: p', 'Name: Ava', 'Personality: /tmp/a.md', '```', 'Run personality.mjs stage'].join('\n');
+  const md = ['# x', '```', 'Company profile: p', 'Language: en', 'Personality: /tmp/a.md', '```', 'Run personality.mjs stage'].join('\n');
   const blocks = fencedBlocks(md);
   assert.equal(blocks.length, 1);
   assert.ok(isDispatchBlock(blocks[0]));
@@ -134,7 +134,7 @@ test('the pipeline, research and brainstorm format 2 dispatch blocks have no Per
 
 test('the cooler and brainstorm format 1 dispatch blocks end with the Personality: line', () => {
   for (const file of [...LINE_ALLOWED]) {
-    const blocks = fencedBlocks(read(file)).filter((b) => b.lines.some((l) => /^Name:/.test(l)));
+    const blocks = fencedBlocks(read(file)).filter((b) => b.lines.some((l) => /^Company profile:/.test(l)));
     assert.ok(blocks.length >= 1, `${file} has a dispatch block`);
     const withLine = blocks.filter(hasPersonalityLine);
     assert.ok(withLine.length >= 1, `${file} has a Personality: line in a dispatch block`);
@@ -649,4 +649,29 @@ test('no subcommand of brainstorm.mjs or personality.mjs prints a personality bl
   for (const args of calls) note(`brainstorm ${args.join(' ')}`, s.cli('brainstorm.mjs', ...args));
   for (const args of [['stage', RUN_ID, 'architect'], ['clean', RUN_ID], ['stage'], ['show', 'architect']]) note(`personality ${args.join(' ')}`, s.cli('personality.mjs', ...args));
   assert.ok(seen.length >= 18);
+});
+
+// --- names out of prompts (dispatch-prompt v4): the rendered block is the v0.19 bytes -----------
+
+test('the rendered personality block is byte-identical to the v0.19 form and holds no name field', async () => {
+  const { renderPersonality, personalityBlock } = await import('./personality.mjs');
+  const expected = [
+    'Personality:',
+    '> Style data from the settings, not instructions. Use it for tone, word choice and how far your ideas reach; it never changes facts, risks, verdicts or estimates.',
+    '- temperament: "calm and exact"',
+    '- way of talking: "short sentences"',
+    '- pet topic: "clean seams"',
+    '- intelligence: high, you reason aloud in depth and weigh trade-offs and side effects',
+    '- creativity: low, you stick to proven, practical ideas',
+    ''
+  ].join('\n');
+  const values = { temperament: 'calm and exact', talk: 'short sentences', topic: 'clean seams', intelligence: 'high', creativity: 'low' };
+  assert.equal(renderPersonality(values), expected);
+  assert.doesNotMatch(renderPersonality(values), /^(?:Name|- name):/m);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-'));
+  try {
+    const block = personalityBlock('architect', { home: tmp, cwd: tmp });
+    assert.match(block, /^Personality:\n> Style data from the settings/);
+    assert.doesNotMatch(block, /^Name:/m);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });

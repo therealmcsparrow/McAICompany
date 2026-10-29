@@ -49,9 +49,10 @@ test('AC14 reopen, cooler and research kickoffs', () => {
   has(skill, '`.company/research/` file', '`## Verdict` and `## What to do`', 'Add the Roles its findings point to, only those in `roles`');
 });
 
-test('AC14 the dispatch carries Language, Name and Settings lines', () => {
-  has(skill, 'Language: <tag from §1.6>', "Name: <the Role's name from §1.7>", 'Settings: model=<m> effort=<e>',
-    'omit the line when none');
+test('AC14 the dispatch carries Language and Settings lines and no Name line', () => {
+  has(skill, 'Language: <tag from §1.6>', 'Settings: model=<m> effort=<e>', 'omit the line when none');
+  assert.ok(!/^Name:/m.test(skill));
+  assert.ok(!/^Name:/m.test(read('skills/brainstorm/references/format-1.md')));
 });
 
 test('AC14 modes ideas, debate and moderated, and no round cap', () => {
@@ -232,10 +233,10 @@ test('AC16 ledger: one add per Role reply with its agentId, full-pass and crossf
   has(f2, '<subagent_tokens>', '`0`');
 });
 
-test('prompt order: the one brainstorm fence follows dispatch-prompt v3.1', () => {
+test('prompt order: the one brainstorm fence follows dispatch-prompt v4', () => {
   const fences = skill.split('```').filter((_, i) => i % 2 === 1).filter((f) => f.includes('Company profile:'));
   assert.equal(fences.length, 1);
-  const order = ['Project profile:', 'Company profile:', 'Language:', 'Name:', 'Settings:', 'Input:', 'Output:', 'Goal:'];
+  const order = ['Project profile:', 'Company profile:', 'Language:', 'Settings:', 'Input:', 'Output:', 'Goal:'];
   let last = -1;
   for (const l of order) { const i = fences[0].indexOf(l); assert.ok(i > last, `order: ${l}`); last = i; }
 });

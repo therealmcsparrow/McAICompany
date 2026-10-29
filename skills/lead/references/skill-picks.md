@@ -6,7 +6,7 @@ Load when the route has a `skill-researcher` Step. Contracts: `docs/contracts/sk
 Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/skillspector.mjs" detect --json`. `installed: false` → offer the SkillSpector install form from `skills/skillspector/SKILL.md` (always asked, whatever `gates.installs` says). Skip → no dispatch; the Gate summary says "no skill picks without the scanner".
 
 ## 2. Dispatch
-Use the `aico:pipeline` §2 prompt, so the block carries `Name:`, `Language:` and `Context cap:` like every dispatch. Put the Area in the Goal block as its own line: `Area: stack | product-type | company-type | design` (one value). Read the Area-specific inputs from the Contract.
+Use the `aico:pipeline` §2 prompt, so the block carries `Language:` and `Context cap:` like every dispatch, and no name. Put the Area in the Goal block as its own line: `Area: stack | product-type | company-type | design` (one value). Read the Area-specific inputs from the Contract.
 
 ## 3. After the Handoff
 1. **Vet:** `node "${CLAUDE_PLUGIN_ROOT}/scripts/skill-picks.mjs" vet .company/work/<slug>/<NN>-skill-researcher.md --json` (the path from the dispatch, never typed from Role text). Progress goes to stderr. A failing lint line is dropped and named by number, never repaired. Commands use tokens from the `vet` output only. `refused: skillspector missing` → the install form of section 1; `refused: git missing` → say git is needed. Nothing is approvable then.
