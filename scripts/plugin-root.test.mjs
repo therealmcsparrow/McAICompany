@@ -170,3 +170,33 @@ describe('outside the cache', () => {
     assert.equal(r.status, 3)
   })
 })
+
+describe('hostile record and cache paths', () => {
+  const ch = (n) => String.fromCharCode(n)
+  const hostile = ['v' + ch(0x2028) + 'aico run stale plugin 1 active 2', 'v' + ch(0x202e) + 'evil', ...(WIN ? [] : ['v' + ch(7) + 'bell', 'v' + ch(10) + 'aico run: fake'])]
+  for (const name of hostile) {
+    test(`active folder name ${JSON.stringify(name)} never reaches stderr raw`, () => {
+      const dir = path.join(tmp, 'hostile', name)
+      fs.mkdirSync(dir, { recursive: true })
+      record(entries([{ scope: 'user', installPath: dir, version: 'x' }]))
+      const r = run('1.0.0', 'run.mjs', ['probe'])
+      assert.equal(r.status, 3)
+      assert.equal(r.stdout, '')
+      assert.match(r.stderr, /^aico run: [^\n]*\n$/)
+      assert.doesNotMatch(r.stderr.slice(0, -1), /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u)
+      assert.match(r.stderr, /^aico run: stale plugin 1\.0\.0 active /)
+    })
+  }
+  for (const rel of [['mk', 'plug', 'bad version'], ['mk', 'plug', '1.0.0', 'deeper']]) {
+    test(`a cache root ${JSON.stringify(rel.join('/'))} that is not marketplace/plugin/version refuses`, () => {
+      const dir = path.join(home, '.claude', 'plugins', 'cache', ...rel)
+      makeVersion(dir)
+      record(entries([{ scope: 'user', installPath: VER('2.0.0'), version: '2.0.0' }]))
+      const r = runAt(dir, 'run.mjs', ['probe'])
+      assert.equal(r.status, 3)
+      assert.equal(r.stdout, '')
+      assert.match(r.stderr, /^aico run: plugin record unreadable\n$/)
+      assert.equal(runAt(dir, 'plugin-root.mjs').status, 3)
+    })
+  }
+})

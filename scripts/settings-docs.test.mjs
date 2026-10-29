@@ -56,9 +56,10 @@ test('dispatch-prompt is v4 or later, lists Settings: and Context cap: and has n
   assert.match(pipeline, /^Settings: /m);
 });
 
-test('handoff skill documents the By: line', () => {
+test('handoff skill documents the By: line as the Role id', () => {
   const doc = read('skills/handoff/SKILL.md');
-  assert.match(doc, /By: <Name> \(<role>\)/);
+  assert.match(doc, /^By: <role id>$/m);
+  assert.doesNotMatch(doc, /By: <Name>/);
 });
 
 test('cooler cues use Role ids and the file says so', () => {

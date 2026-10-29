@@ -39,14 +39,14 @@ function refused(root, args, slug = 'x') {
 }
 const stamp = ms => new Date(T0 + ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
-// A copy of the v1.4 reader from git, next to the current handoff-lint; null when the clone has no such commit.
+// A copy of the v1.4 reader from git, next to the current handoff-lint and contract-drift; null when the clone has no such commit.
 function oldReader() {
   const old = spawnSync('git', ['show', `${V14_COMMIT}:scripts/run-state.mjs`], { cwd: import.meta.dirname, encoding: 'utf8' });
   if (old.status !== 0) return null;
   const lib = path.join(base, `old${n++}`);
   fs.mkdirSync(lib);
   fs.writeFileSync(path.join(lib, 'run-state.mjs'), old.stdout);
-  fs.copyFileSync(path.join(import.meta.dirname, 'handoff-lint.mjs'), path.join(lib, 'handoff-lint.mjs'));
+  for (const f of ['handoff-lint.mjs', 'contract-drift.mjs']) fs.copyFileSync(path.join(import.meta.dirname, f), path.join(lib, f));
   return path.join(lib, 'run-state.mjs');
 }
 const oldView = (reader, root) => JSON.parse(spawnSync(process.execPath, [reader, 'show', 'x', '--json'], { cwd: root, encoding: 'utf8' }).stdout);

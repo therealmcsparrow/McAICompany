@@ -22,13 +22,14 @@ export function ownRoot() {
   return path.dirname(real(path.dirname(fileURLToPath(import.meta.url))))
 }
 
-// The <marketplace>/<plugin>/<version> segments of a root inside the cache, else null.
+// The <marketplace>/<plugin>/<version> segments of a root inside the cache, null outside it,
+// and { bad: true } for a root inside the cache that is not exactly three valid segments.
 function cacheParts(root, home) {
   const base = fold(path.join(real(home), '.claude', 'plugins', 'cache'))
   const here = fold(root)
   if (!within(here, base) || here === base) return null
   const parts = path.relative(path.join(real(home), '.claude', 'plugins', 'cache'), root).split(path.sep)
-  if (parts.length !== 3 || !parts.every((s) => SEGMENT.test(s))) return null
+  if (parts.length !== 3 || !parts.every((s) => SEGMENT.test(s))) return { bad: true }
   return { marketplace: parts[0], plugin: parts[1], version: parts[2] }
 }
 
@@ -68,11 +69,16 @@ function activeEntry(list, cwd) {
   return best ?? user
 }
 
+// Control, format and line or paragraph separator characters become \uXXXX, so a folder name
+// from the record cannot add a line or hide text on stderr. Length is capped.
+const show = (name) => String(name).slice(0, 100).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => `\\u${c.codePointAt(0).toString(16).padStart(4, '0')}`)
+
 // { ok: true, root, own } or { ok: false, code: 3, message }.
 export function resolveActive({ root = ownRoot(), home = os.homedir(), cwd = process.cwd() } = {}) {
   const parts = cacheParts(root, home)
   if (!parts) return { ok: true, root, own: root }
   const unreadable = { ok: false, code: 3, message: 'plugin record unreadable' }
+  if (parts.bad) return unreadable
   if (pluginName(root) !== parts.plugin) return unreadable
   const plugins = readRecord(home)
   const key = `${parts.plugin}@${parts.marketplace}`
@@ -81,7 +87,7 @@ export function resolveActive({ root = ownRoot(), home = os.homedir(), cwd = pro
   if (!entry || !isDir(entry.installPath)) return unreadable
   const active = real(entry.installPath)
   if (fold(active) === fold(root)) return { ok: true, root: active, own: root }
-  return { ok: false, code: 3, message: `stale plugin ${path.basename(root)} active ${path.basename(active)}` }
+  return { ok: false, code: 3, message: `stale plugin ${show(path.basename(root))} active ${show(path.basename(active))}` }
 }
 
 if (process.argv[1] && real(process.argv[1]) === real(fileURLToPath(import.meta.url))) {

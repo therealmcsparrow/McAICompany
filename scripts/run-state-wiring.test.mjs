@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const skill = readFileSync(join(root, 'skills/pipeline/SKILL.md'), 'utf8');
 const refPath = join(root, 'skills/pipeline/references/run-state.md');
-const SCRIPT = '${CLAUDE_PLUGIN_ROOT}/scripts/run-state.mjs';
+const SCRIPT = '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs';
 
 test('SKILL.md points at the reference with exactly one line and stays within 125 lines', () => {
   assert.ok(!skill.includes('\r'));
@@ -25,11 +25,11 @@ test('reference exists, is LF and names the five commands with the plugin-root s
   const ref = readFileSync(refPath, 'utf8');
   assert.ok(!ref.includes('\r'));
   for (const c of [
-    `node "${SCRIPT}" start '<slug>'`,
-    `node "${SCRIPT}" wave '<slug>' '<n>'`,
-    `node "${SCRIPT}" gate '<slug>' '<brief|plan|ship>' '<passed|changed|stopped>'`,
-    `node "${SCRIPT}" ask '<slug>' '<brief|plan|ship>'`,
-    `node "${SCRIPT}" end '<slug>' '<ship|abort>'`,
+    `node "${SCRIPT}" run-state start '<slug>'`,
+    `node "${SCRIPT}" run-state wave '<slug>' '<n>'`,
+    `node "${SCRIPT}" run-state gate '<slug>' '<brief|plan|ship>' '<passed|changed|stopped>'`,
+    `node "${SCRIPT}" run-state ask '<slug>' '<brief|plan|ship>'`,
+    `node "${SCRIPT}" run-state end '<slug>' '<ship|abort>'`,
   ]) assert.ok(ref.includes(c), `missing command: ${c}`);
   assert.ok(!/<plugin root>/.test(ref));
   assert.ok(!/^\s*!/m.test(ref), 'no bang command');
