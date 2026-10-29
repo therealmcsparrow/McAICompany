@@ -10,13 +10,14 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { readParallel, normalizePath, ParallelRecordError } from './plan-tasks.mjs';
+import { readParallel, sortByVisit, normalizePath, ParallelRecordError } from './plan-tasks.mjs';
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ID = /^(?:t\d{1,3}[a-z]?|proto)$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const PATCH_NAME = /^(?:t\d{1,3}[a-z]?|proto)-\d{8}T\d{6}Z\.patch$/;
+const IGNORED_NAME = /^(?:t\d{1,3}[a-z]?|proto)-\d{8}T\d{6}Z\.ignored$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const MAX_ARG_CHARS = 4096;
 const MAX_PATH_CHARS = 200;
@@ -26,6 +27,7 @@ const MAX_LINES = 500;
 const MAX_PATHS = 100;
 const GIT_TIMEOUT_MS = 30_000;
 const GIT_MAX_BUFFER = 8 * 1024 * 1024;
+const IGNORED_CAPS = { files: 1000, file: 8 * 1024 * 1024, total: 64 * 1024 * 1024 };
 const LEAD = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
 
 const USAGE = [
@@ -137,6 +139,7 @@ const EVENT_KEYS = {
   remove: ['task', 'commit'],
   archive: ['task', 'commit', 'patch']
 };
+const OPTIONAL_KEYS = { remove: ['ignored'], archive: ['ignored'] };
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -146,7 +149,7 @@ function applyEvent(ids, rec) {
   if (typeof rec.ev !== 'string' || !Object.hasOwn(EVENT_KEYS, rec.ev)) return 'ev is not allowed';
   const wanted = EVENT_KEYS[rec.ev];
   for (const key of Object.keys(rec)) {
-    if (key !== 'v' && key !== 'at' && key !== 'ev' && !wanted.includes(key)) return 'unknown key';
+    if (key !== 'v' && key !== 'at' && key !== 'ev' && !wanted.includes(key) && !OPTIONAL_KEYS[rec.ev]?.includes(key)) return 'unknown key';
   }
   for (const key of ['at', ...wanted]) if (!Object.hasOwn(rec, key)) return `missing key ${key}`;
   if (typeof rec.at !== 'string' || !TIME.test(rec.at) || Number.isNaN(Date.parse(rec.at)) || new Date(rec.at).toISOString().slice(0, 19) + 'Z' !== rec.at) {
@@ -165,6 +168,9 @@ function applyEvent(ids, rec) {
     }
   }
   if (rec.ev === 'archive' && !(typeof rec.patch === 'string' && PATCH_NAME.test(rec.patch))) return 'patch is not a patch file name';
+  if (Object.hasOwn(rec, 'ignored') && !(typeof rec.ignored === 'string' && IGNORED_NAME.test(rec.ignored) && rec.ignored.startsWith(`${rec.task}-`))) {
+    return 'ignored is not an ignored-files folder name';
+  }
   const cur = ids.get(rec.task);
   if (rec.ev === 'add') {
     if (cur?.live) return 'add while the worktree is live';
@@ -379,8 +385,8 @@ function parseStatus(buf) {
   return out;
 }
 
-function statusOf(ctx, dir) {
-  return ctx.git(['status', '--porcelain=v1', '-z', '--untracked-files=all'], { dir }).out;
+function statusOf(ctx, dir, { ignored = false } = {}) {
+  return ctx.git(['status', '--porcelain=v1', '-z', ...(ignored ? ['--ignored'] : []), '--untracked-files=all'], { dir }).out;
 }
 
 function listWorktrees(ctx) {
@@ -451,9 +457,12 @@ function takeFlags(list, allowed) {
 }
 
 // Record against git: a live add has its worktree and its branch; an id that ended has neither.
+// The other way too: a branch or worktree of this run that has no live add in the record is a mismatch (named by id, or ? when it is not a task id).
 function recordMismatches(ctx, slug, rec) {
-  const trees = new Set(listWorktrees(ctx).map(sameKey));
-  const branches = new Set(listBranches(ctx, slug));
+  const treeList = listWorktrees(ctx);
+  const trees = new Set(treeList.map(sameKey));
+  const branchList = listBranches(ctx, slug);
+  const branches = new Set(branchList);
   const bad = [];
   for (const [id, st] of rec.ids) {
     const { wt } = layoutOf(ctx.realRoot, slug, id);
@@ -461,7 +470,19 @@ function recordMismatches(ctx, slug, rec) {
     const hasBranch = branches.has(refOf(slug, id));
     if (st.live ? !(hasTree && hasBranch) : (hasTree || hasBranch)) bad.push(id);
   }
-  return bad;
+  const strays = new Set();
+  const stray = (id) => {
+    if (!ID.test(id)) strays.add('?');
+    else if (!rec.ids.get(id)?.live && !bad.includes(id)) strays.add(id);
+  };
+  const branchPrefix = `refs/heads/aico-wt/${slug}/`;
+  for (const ref of branchList) stray(ref.slice(branchPrefix.length));
+  const slugPrefix = `${sameKey(layoutOf(ctx.realRoot, slug, 'x').slugDir)}${path.sep}`;
+  for (const p of treeList) {
+    const key = sameKey(p);
+    if (key.startsWith(slugPrefix) && !key.slice(slugPrefix.length).includes(path.sep)) stray(path.basename(path.resolve(p)));
+  }
+  return [...bad, ...strays];
 }
 
 const attrAlias = (segment) => {
@@ -552,6 +573,7 @@ function driverRisk(ctx, runTip, taskTip) {
   if (hit('^merge\\..*\\.driver$')) return 'merge-driver';
   if (hit('^merge\\.default$')) return 'merge-default';
   if (hit('^branch\\..*\\.mergeoptions$')) return 'branch-mergeoptions';
+  if (hit('^pull\\.(twohead|octopus)$')) return 'pull-strategy';
   const mb = ctx.text(['merge-base', '--end-of-options', runTip, taskTip]);
   if (!FULL_ID.test(mb)) throw new GitFailure('merge base unreadable');
   const raw = ctx.git([
@@ -577,6 +599,7 @@ function mergeOne(ctx, env, slug, ID_, id) {
   if (risk) return { kind: 'risk', reason: risk };
   const merged = ctx.git([
     '-c', 'rerere.enabled=false', '-c', `core.hooksPath=${ctx.noHooks}`, '-c', 'merge.renormalize=false',
+    '-c', 'pull.twohead=ort', '-c', 'pull.octopus=octopus',
     'merge', '--no-ff', '--no-edit', '--no-verify', `--message=merge: ${slug} ${ID_}`, '--end-of-options', taskTip
   ], { codes: [0, 1] });
   if (merged.code === 1) {
@@ -601,7 +624,9 @@ function cmdMerge(args, env) {
   if (bad.length) return { code: 2, lines: bad.map((id) => `record mismatch ${id}`) };
   const view = readParallel(env.root, slug);
   if (view.state !== 'on' || !Array.isArray(view.open_wave)) throw new Refusal('no open wave');
-  const wave = view.open_wave.map((ID_) => {
+  const ordered = sortByVisit(env.root, slug, view.open_wave);
+  if (ordered === null) throw new Refusal('open wave cannot be put in plan order: plan unreadable, changed since begin, or missing a task');
+  const wave = ordered.map((ID_) => {
     const id = ID_.toLowerCase();
     if (!ID.test(id) || id === 'proto') throw new Refusal('open wave holds a task that cannot be merged');
     return { ID: ID_, id };
@@ -675,32 +700,120 @@ function writePatch(env, slug, id, diff) {
   }
 }
 
-function removeWorktree(ctx, layout, slug, id, { force }) {
-  ctx.git(['worktree', 'remove', ...(force ? ['--force'] : []), '--end-of-options', layout.wt]);
-  ctx.git(['branch', '-D', '--end-of-options', branchOf(slug, id)]);
+const isSymref = (ctx, ref) => ctx.git(['symbolic-ref', '--quiet', '--end-of-options', ref], { codes: [0, 1] }).code === 0;
+
+// Deletes the task branch only when it is not a symbolic ref and still holds the checked head. Returns a reason when it stays.
+function deleteBranch(ctx, slug, id, head) {
+  const ref = refOf(slug, id);
+  if (isSymref(ctx, ref)) return 'branch is a symbolic ref';
+  try {
+    ctx.git(['update-ref', '--no-deref', '-d', '--end-of-options', ref, head]);
+  } catch (error) {
+    if (error instanceof GitFailure && error.message.startsWith('exit ')) return 'branch moved';
+    throw error;
+  }
+  return null;
 }
+
+function removeWorktree(ctx, layout, slug, id, { force, head }) {
+  ctx.git(['worktree', 'remove', ...(force ? ['--force'] : []), '--end-of-options', layout.wt]);
+  return deleteBranch(ctx, slug, id, head);
+}
+
+// Makes each folder of the path below base one at a time, each checked with lstat.
+function ensureFolders(base, parts) {
+  let dir = base;
+  for (const part of parts) {
+    dir = path.join(dir, part);
+    const st = lstatOrNull(dir);
+    if (!st) fs.mkdirSync(dir, 0o700);
+    const now = lstatOrNull(dir);
+    if (!now || !isFolder(now)) throw new Error('not a folder');
+  }
+}
+
+// Creates a new file, writes it, syncs it, reads it back by the real-path read rule and compares it byte for byte.
+function writeVerified(file, data, env) {
+  const flags = fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const fd = fs.openSync(file, flags, 0o600);
+  try {
+    let off = 0;
+    while (off < data.length) off += fs.writeSync(fd, data, off, data.length - off);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  env.hook?.('ignored-written', { file });
+  if (!readFileChecked(file, data.length + 1).equals(data)) throw new Error('read-back mismatch');
+}
+
+// The path rule of plan-tasks, except its refusal of .env names: those are the files this copy exists to save.
+function archivable(p) {
+  const swapped = p.split('/').map((seg) => (seg.toLowerCase().startsWith('.env') ? `x${seg.slice(1)}` : seg)).join('/');
+  const n = normalizePath(swapped);
+  return n.ok && n.path === swapped && !n.dir;
+}
+
+// Copies the worktree's git-ignored files into a new folder that git ignores itself. Returns { ok, count, name }.
+function archiveIgnored(env, layout, slug, id, statusBytes) {
+  const paths = parseStatus(statusBytes).filter((e) => e.xy === '!!').map((e) => e.path);
+  if (paths.length === 0) return { ok: true, count: 0 };
+  const caps = env.ignoredCaps;
+  if (paths.length > caps.files) return { ok: false };
+  try {
+    if (!paths.every(archivable)) return { ok: false };
+    const name = `${id}-${utc(env.now).replace(/[-:]/g, '')}.ignored`;
+    const dest = path.join(archiveDir(env.root, slug), name);
+    fs.mkdirSync(dest, 0o700);
+    const st = lstatOrNull(dest);
+    if (!st || !isFolder(st) || !isUnlinked(dest)) return { ok: false };
+    writeVerified(path.join(dest, '.gitignore'), Buffer.from('*\n'), env);
+    let total = 0;
+    for (const p of paths) {
+      const parts = p.split('/');
+      const data = readFileChecked(path.join(layout.wt, ...parts), caps.file);
+      total += data.length;
+      if (data.length > caps.file || total > caps.total) return { ok: false };
+      ensureFolders(dest, parts.slice(0, -1));
+      writeVerified(path.join(dest, ...parts), data, env);
+    }
+    env.hook?.('ignored-verified', { id, folder: dest });
+    return { ok: true, count: paths.length, name };
+  } catch {
+    return { ok: false };
+  }
+}
+
+const withCount = (line, count) => (count > 0 ? `${line} ignored ${count}` : line);
 
 function cleanOne(ctx, env, slug, id, st, archive) {
   const layout = layoutOf(ctx.realRoot, slug, id);
   const inList = listWorktrees(ctx).map(sameKey).includes(sameKey(layout.wt));
   if (!inList || !segmentsOk(layout) || !isUnlinked(layout.wt)) return { line: `skip ${id}`, stop: true };
+  if (isSymref(ctx, refOf(slug, id))) return { line: `kept ${id}: branch is a symbolic ref`, stop: true };
   const onBranch = ctx.text(['symbolic-ref', '--quiet', 'HEAD'], { dir: layout.wt, codes: [0, 1] });
   if (onBranch !== refOf(slug, id)) return { line: `kept ${id}: worktree not on its branch`, stop: true };
   const head = ctx.commitOf(refOf(slug, id));
+  const ignoredNotSaved = { line: `kept ${id}: ignored files not archived`, stop: true };
+  const changed = { line: `kept ${id}: changed during archive`, stop: true };
   const m = st.merge;
   if (id !== 'proto' && m && m.tip === head) {
     const second = ctx.git(['rev-parse', '--verify', '--end-of-options', `${m.commit}^2^{commit}`], { codes: [0, 128] });
     const confirmed = second.code === 0 && lineOf(second.out) === m.tip
       && ctx.git(['merge-base', '--is-ancestor', '--end-of-options', m.commit, runRef(slug)], { codes: [0, 1] }).code === 0;
     if (confirmed && statusOf(ctx, layout.wt).length === 0) {
-      removeWorktree(ctx, layout, slug, id, { force: false });
-      appendEvent(env, slug, { v: 1, at: utc(env.now), ev: 'remove', task: id, commit: head });
-      return { line: `removed ${id}` };
+      const before = statusOf(ctx, layout.wt, { ignored: true });
+      const saved = archiveIgnored(env, layout, slug, id, before);
+      if (!saved.ok) return ignoredNotSaved;
+      if (ctx.commitOf(refOf(slug, id)) !== head || !statusOf(ctx, layout.wt, { ignored: true }).equals(before)) return changed;
+      const stays = removeWorktree(ctx, layout, slug, id, { force: false, head });
+      if (stays) return { line: `kept ${id}: ${stays}`, stop: true };
+      appendEvent(env, slug, { v: 1, at: utc(env.now), ev: 'remove', task: id, commit: head, ...(saved.name ? { ignored: saved.name } : {}) });
+      return { line: withCount(`removed ${id}`, saved.count) };
     }
   }
   if (!archive) return { line: `kept ${id}: unmerged work`, stop: true };
   const notWritten = { line: `kept ${id}: patch not written`, stop: true };
-  const changed = { line: `kept ${id}: changed during archive`, stop: true };
   ctx.git(['add', '-A'], { dir: layout.wt });
   let diff;
   try {
@@ -713,21 +826,26 @@ function cleanOne(ctx, env, slug, id, st, archive) {
     throw error;
   }
   if (diff.length > (env.patchCap ?? GIT_MAX_BUFFER)) return notWritten;
-  const before = statusOf(ctx, layout.wt);
+  const before = statusOf(ctx, layout.wt, { ignored: true });
   const written = writePatch(env, slug, id, diff);
   if (!written) return notWritten;
+  const saved = archiveIgnored(env, layout, slug, id, before);
+  if (!saved.ok) return ignoredNotSaved;
   env.hook?.('archive-verified', { id, file: written.file });
-  const same = () => ctx.commitOf(refOf(slug, id)) === head && statusOf(ctx, layout.wt).equals(before);
+  const same = () => ctx.commitOf(refOf(slug, id)) === head && statusOf(ctx, layout.wt, { ignored: true }).equals(before);
   if (!same()) return changed;
   try {
-    appendEvent(env, slug, { v: 1, at: utc(env.now), ev: 'archive', task: id, commit: head, patch: written.name });
+    appendEvent(env, slug, {
+      v: 1, at: utc(env.now), ev: 'archive', task: id, commit: head, patch: written.name, ...(saved.name ? { ignored: saved.name } : {})
+    });
   } catch {
     return notWritten;
   }
   env.hook?.('archive-recorded', { id });
   if (!same()) return changed;
-  removeWorktree(ctx, layout, slug, id, { force: true });
-  return { line: `archived ${id} ${written.file}` };
+  const stays = removeWorktree(ctx, layout, slug, id, { force: true, head });
+  if (stays) return { line: `kept ${id}: ${stays}`, stop: true };
+  return { line: withCount(`archived ${id} ${written.file}`, saved.count) };
 }
 
 function cmdCleanup(args, env) {
@@ -812,11 +930,16 @@ function cmdProtocheck(args, env) {
 
 const HANDLERS = { add: cmdAdd, changed: cmdChanged, merge: cmdMerge, cleanup: cmdCleanup, leftovers: cmdLeftovers, protocheck: cmdProtocheck };
 
-export function main(args, { now, root, patchCap, hook } = {}) {
+export function main(args, { now, root, patchCap, ignoredCap, hook } = {}) {
   const env = {
     root: typeof root === 'string' && root !== '' ? root : process.cwd(),
     now: typeof now === 'number' ? now : Date.now(),
     patchCap: Number.isInteger(patchCap) && patchCap >= 0 ? patchCap : undefined,
+    ignoredCaps: {
+      files: Number.isInteger(ignoredCap?.files) && ignoredCap.files >= 0 ? ignoredCap.files : IGNORED_CAPS.files,
+      file: Number.isInteger(ignoredCap?.file) && ignoredCap.file >= 0 ? ignoredCap.file : IGNORED_CAPS.file,
+      total: Number.isInteger(ignoredCap?.total) && ignoredCap.total >= 0 ? ignoredCap.total : IGNORED_CAPS.total
+    },
     hook: typeof hook === 'function' ? hook : undefined
   };
   try {

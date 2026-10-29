@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { main, readParallel } from './plan-tasks.mjs';
+import { main, readParallel, sortByVisit } from './plan-tasks.mjs';
 
 const NOW = Date.UTC(2026, 9, 28, 12, 0, 0);
 const FIXTURES = path.join(import.meta.dirname, '..', 'tests', 'fixtures', 'plan-tasks-v13');
@@ -526,7 +526,7 @@ describe('waves', () => {
     assert.throws(() => readParallel(e.product, 'demo'), /merged outside waves mode/);
   });
 
-  test('the view holds merged and open_wave in start order, only in waves mode', () => {
+  test('the view holds merged and open_wave in start order, sortByVisit gives plan order, only in waves mode', () => {
     const e = env(wavesPlan());
     beginWaves(e);
     assert.deepEqual(readParallel(e.product, 'demo').open_wave, []);
@@ -534,6 +534,15 @@ describe('waves', () => {
     e.run('start', 'demo', 'T1');
     const open = readParallel(e.product, 'demo');
     assert.deepEqual(open.open_wave, ['T2', 'T1']);
+    assert.deepEqual(sortByVisit(e.product, 'demo', open.open_wave), ['T1', 'T2']);
+    assert.equal(sortByVisit(e.product, 'demo', ['T1', 'T9']), null);
+    const planFile = path.join(e.dir, '02-plan.md');
+    const planText = fs.readFileSync(planFile, 'utf8');
+    fs.writeFileSync(planFile, `${planText}
+changed
+`);
+    assert.equal(sortByVisit(e.product, 'demo', open.open_wave), null);
+    fs.writeFileSync(planFile, planText);
     assert.deepEqual(open.merged, {});
     assert.equal(open.effective_cap, 3);
     e.run('done', 'demo', 'T2');

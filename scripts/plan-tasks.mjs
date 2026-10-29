@@ -784,6 +784,24 @@ export function readParallel(root, slug) {
   return state ? viewOf(slug, state) : { v: 1, slug, state: 'none' };
 }
 
+// The given task ids in the visit order of the plan the run began with. Null when the plan cannot be read, differs from the
+// one hashed at begin, or lacks one of the ids: a caller that merges in plan order stops then.
+export function sortByVisit(root, slug, ids) {
+  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('plan-tasks: bad slug');
+  const { state } = loadRecord(root, slug);
+  if (!state?.begun || !Array.isArray(ids)) return null;
+  try {
+    const plan = readPlan(root, slug, state.plan);
+    if (plan.hash !== state.hash) return null;
+    const rank = new Map(parsePlan(plan.text).tasks.map((t, i) => [t.id, i]));
+    if (!ids.every((id) => rank.has(id))) return null;
+    return [...ids].sort((x, y) => rank.get(x) - rank.get(y));
+  } catch (error) {
+    if (error instanceof PlanProblem) return null;
+    throw error;
+  }
+}
+
 function utc(now) {
   if (!Number.isFinite(now)) throw new Refusal('clock is not a time');
   return new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z');

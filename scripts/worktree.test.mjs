@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { main, readWorktrees, isGitattributesName } from './worktree.mjs';
+import { readParallel } from './plan-tasks.mjs';
 
 const NOW = Date.UTC(2026, 9, 29, 12, 0, 0);
 const SLUG = 'demo';
@@ -70,10 +72,15 @@ function makeRepo({ name = 'repo' } = {}) {
   return r;
 }
 
-// The plan-tasks record of an open wave.
+// The plan-tasks record of an open wave: the tasks start in the order given, the plan lists them by number.
 function writeWave(r, ids) {
   const at = '2026-10-29T10:00:00Z';
-  const lines = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash: '0123456789ab', cap: 3, mode: 'waves', tasks: ids.length, ow: [] }];
+  const dir = path.join(r.repo, '.company', 'work', SLUG);
+  const byNumber = [...ids].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  const planText = `# Plan\n\n## Tasks\n\n${byNumber.map((id) => `### ${id} title of ${id}\n`).join('\n')}`;
+  fs.writeFileSync(path.join(dir, '02-plan.md'), planText);
+  const hash = crypto.createHash('sha256').update(planText).digest('hex').slice(0, 12);
+  const lines = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash, cap: 3, mode: 'waves', tasks: ids.length, ow: [] }];
   for (const id of ids) lines.push({ v: 1, at, ev: 'start', task: id, round: 0, ow: [] });
   fs.writeFileSync(path.join(r.repo, '.company', 'work', SLUG, 'parallel.jsonl'), `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
 }
@@ -246,22 +253,23 @@ describe('changed', () => {
 });
 
 describe('merge', () => {
-  test('follows open_wave order and records commit and tip', () => {
+  test('follows plan order, not start order, and records commit and tip', () => {
     const r = makeRepo();
     task(r, 't2', 'two.txt', '2\n');
     task(r, 't1', 'one.txt', '1\n');
     writeWave(r, ['T2', 'T1']);
     const tip2 = r.g('rev-parse', `aico-wt/${SLUG}/t2`);
     const tip1 = r.g('rev-parse', `aico-wt/${SLUG}/t1`);
+    assert.deepEqual(readParallel(r.repo, SLUG).open_wave, ['T2', 'T1']);
     const res = r.run('merge', SLUG);
     assert.equal(res.code, 0, res.lines.join('\n'));
-    assert.match(res.lines[0], /^merged T2 [0-9a-f]{7}$/);
-    assert.match(res.lines[1], /^merged T1 [0-9a-f]{7}$/);
+    assert.match(res.lines[0], /^merged T1 [0-9a-f]{7}$/);
+    assert.match(res.lines[1], /^merged T2 [0-9a-f]{7}$/);
     assert.equal(res.lines[2], 'merge: 2 of 2');
     const merges = r.events().filter((e) => e.ev === 'merge');
-    assert.deepEqual(merges.map((e) => e.task), ['t2', 't1']);
-    assert.deepEqual(merges.map((e) => e.tip), [tip2, tip1]);
-    assert.equal(r.g('rev-parse', `refs/heads/aico/${SLUG}^2`), tip1);
+    assert.deepEqual(merges.map((e) => e.task), ['t1', 't2']);
+    assert.deepEqual(merges.map((e) => e.tip), [tip1, tip2]);
+    assert.equal(r.g('rev-parse', `refs/heads/aico/${SLUG}^2`), tip2);
     assert.equal(r.g('rev-parse', `refs/heads/aico/${SLUG}`), merges[1].commit);
     assert.ok(fs.existsSync(path.join(r.repo, 'one.txt')) && fs.existsSync(path.join(r.repo, 'two.txt')));
     // nothing is deleted
@@ -290,10 +298,11 @@ describe('merge', () => {
   test('an id with no worktree prints main-tree', () => {
     const r = makeRepo();
     task(r, 't1', 'one.txt', '1\n');
-    writeWave(r, ['T9', 'T1']);
+    writeWave(r, ['T1', 'T9']);
     const res = r.run('merge', SLUG);
     assert.equal(res.code, 0, res.lines.join('\n'));
-    assert.equal(res.lines[0], 'main-tree T9');
+    assert.match(res.lines[0], /^merged T1 /);
+    assert.equal(res.lines[1], 'main-tree T9');
     assert.equal(res.lines.at(-1), 'merge: 2 of 2');
   });
 
@@ -369,6 +378,90 @@ describe('merge', () => {
     assert.equal(c.code, 2);
     assert.deepEqual(c.lines, ['kept t1: unmerged work']);
     assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+  });
+
+  test('T2 started first, T1 still merges first; a plan that changed after begin refuses the merge', () => {
+    const r = makeRepo();
+    task(r, 't2', 'two.txt', '2\n');
+    task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T2', 'T1']);
+    const planFile = path.join(r.repo, '.company', 'work', SLUG, '02-plan.md');
+    const planText = fs.readFileSync(planFile, 'utf8');
+    fs.writeFileSync(planFile, `${planText}\nchanged\n`);
+    const refused = r.run('merge', SLUG);
+    assert.equal(refused.code, 3);
+    assert.match(refused.lines[0], /^refused: /);
+    assert.equal(r.events().filter((e) => e.ev === 'merge').length, 0);
+    fs.writeFileSync(planFile, planText);
+    const res = r.run('merge', SLUG);
+    assert.equal(res.code, 0, res.lines.join('\n'));
+    assert.deepEqual(res.lines.map((l) => l.split(' ').slice(0, 2).join(' ')), ['merged T1', 'merged T2', 'merge: 2']);
+  });
+
+  test('a pull.twohead or pull.octopus setting in the repo config: driver risk pull-strategy, exit 2, nothing merged, cleanup keeps the branch', () => {
+    for (const [key, value] of [['pull.twohead', 'ours'], ['pull.octopus', 'ours'], ['pull.twohead', 'ort']]) {
+      const r = makeRepo();
+      task(r, 't1', 'one.txt', '1\n');
+      writeWave(r, ['T1']);
+      r.g('config', key, value);
+      const res = r.run('merge', SLUG);
+      assert.equal(res.code, 2, `${key} ${value}`);
+      assert.equal(res.lines[0], 'merge: driver risk pull-strategy T1');
+      assert.ok(!fs.existsSync(path.join(r.repo, 'one.txt')));
+      assert.equal(r.events().filter((e) => e.ev === 'merge').length, 0);
+      assert.ok(!r.calls.some((c) => c.args.includes('--no-ff')));
+      assert.deepEqual(r.run('cleanup', SLUG), { code: 2, lines: ['kept t1: unmerged work'] });
+      assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+    }
+  });
+
+  test('pull.twohead ours in the global config reaches the script through HOME: driver risk, nothing merged', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T1']);
+    const file = path.join(HOME, '.gitconfig');
+    fs.writeFileSync(file, '[pull]\n\ttwohead = ours\n');
+    try {
+      const res = r.run('merge', SLUG);
+      assert.equal(res.code, 2, res.lines.join('\n'));
+      assert.equal(res.lines[0], 'merge: driver risk pull-strategy T1');
+      assert.ok(!fs.existsSync(path.join(r.repo, 'one.txt')));
+      assert.equal(r.events().filter((e) => e.ev === 'merge').length, 0);
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  test('a commit made in the worktree after tip-read: the merge takes the tip read, cleanup keeps the branch', () => {
+    const r = makeRepo();
+    const wt = task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T1']);
+    r.hooks['tip-read'] = () => {
+      fs.writeFileSync(path.join(wt, 'late.txt'), 'late\n');
+      r.at(wt, 'add', '-A');
+      r.at(wt, 'commit', '--quiet', '--message=late');
+    };
+    assert.equal(r.run('merge', SLUG).code, 0);
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 2, lines: ['kept t1: unmerged work'] });
+    assert.ok(fs.existsSync(wt));
+    assert.equal(r.g('for-each-ref', '--format=%(refname)', 'refs/heads/aico-wt/'), `refs/heads/aico-wt/${SLUG}/t1`);
+  });
+
+  test('a branch and worktree with no add line in the record: record mismatch, not main-tree; strays are named', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    task(r, 't2', 'two.txt', '2\n');
+    writeWave(r, ['T1', 'T2']);
+    const kept = fs.readFileSync(r.record(), 'utf8').split('\n').filter((l) => l.includes('"t2"')).join('\n');
+    fs.writeFileSync(r.record(), `${kept}\n`);
+    const res = r.run('merge', SLUG);
+    assert.deepEqual(res, { code: 2, lines: ['record mismatch t1'] });
+    assert.ok(!fs.existsSync(path.join(r.repo, 'one.txt')) && !fs.existsSync(path.join(r.repo, 'two.txt')));
+    assert.deepEqual(r.run('cleanup', SLUG, '--archive'), { code: 2, lines: ['record mismatch t1'] });
+    assert.ok(fs.existsSync(path.join(r.wtRoot, SLUG, 't1')));
+    r.g('branch', `aico-wt/${SLUG}/t5`);
+    r.g('branch', `aico-wt/${SLUG}/x`);
+    assert.deepEqual([...r.run('merge', SLUG).lines].sort(), ['record mismatch ?', 'record mismatch t1', 'record mismatch t5']);
   });
 
   const riskCases = {
@@ -470,6 +563,9 @@ describe('merge', () => {
     const hp = m.find((a) => a.startsWith('core.hooksPath='));
     assert.ok(hp && !fs.existsSync(hp.slice('core.hooksPath='.length)));
     assert.ok(m.includes('merge.renormalize=false') && m.includes('rerere.enabled=false') && m.includes('--no-verify'));
+    const pins = m.filter((a, i) => m[i - 1] === '-c');
+    assert.ok(pins.includes('pull.twohead=ort') && pins.includes('pull.octopus=octopus'), m.join(' '));
+    assert.ok(!m.some((a) => /^-s/.test(a) || a.startsWith('--strategy')), m.join(' '));
   });
 
   test('the task tip read is the one merged when the branch moves after the read', () => {
@@ -764,6 +860,232 @@ describe('cleanup', () => {
     assert.deepEqual(r.run('cleanup', SLUG), { code: 2, lines: ['kept proto: unmerged work'] });
     const res = r.run('cleanup', SLUG, '--archive');
     assert.match(res.lines[0], /^archived proto /);
+  });
+});
+
+describe('cleanup branch delete', () => {
+  test('a task branch made a symref to the run branch: kept, the run branch is intact', () => {
+    const r = makeRepo();
+    const wt = task(r, 't1', 'one.txt', '1\n');
+    const runTip = r.head();
+    r.g('symbolic-ref', `refs/heads/aico-wt/${SLUG}/t1`, `refs/heads/aico/${SLUG}`);
+    for (const args of [['cleanup', SLUG], ['cleanup', SLUG, '--archive']]) {
+      const res = r.run(...args);
+      assert.deepEqual(res, { code: 2, lines: ['kept t1: branch is a symbolic ref'] });
+      assert.ok(fs.existsSync(wt));
+      assert.equal(r.g('rev-parse', '--verify', `refs/heads/aico/${SLUG}`), runTip);
+    }
+    assert.ok(r.events().every((e) => e.ev === 'add'));
+  });
+
+  test('a symref swapped in after the worktree is removed: the run branch is kept and no remove event is written', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    const runTip = r.head();
+    r.hooks.git = ({ args }) => {
+      if (args.includes('remove') && args.includes('worktree')) r.g('symbolic-ref', `refs/heads/aico-wt/${SLUG}/t1`, `refs/heads/aico/${SLUG}`);
+    };
+    const res = r.run('cleanup', SLUG);
+    r.hooks.git = undefined;
+    assert.deepEqual(res, { code: 2, lines: ['kept t1: branch is a symbolic ref'] });
+    assert.equal(r.g('rev-parse', '--verify', `refs/heads/aico/${SLUG}`), runTip);
+    assert.ok(!r.events().some((e) => e.ev === 'remove'));
+  });
+
+  test('the branch moves between the worktree removal and the delete: branch moved, branch kept, no event', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    const moved = r.head();
+    r.hooks.git = ({ args }) => {
+      if (args.includes('update-ref')) r.g('update-ref', `refs/heads/aico-wt/${SLUG}/t1`, moved);
+    };
+    const res = r.run('cleanup', SLUG);
+    r.hooks.git = undefined;
+    assert.deepEqual(res, { code: 2, lines: ['kept t1: branch moved'] });
+    assert.equal(r.g('rev-parse', '--verify', `refs/heads/aico-wt/${SLUG}/t1`), moved);
+    assert.ok(!r.events().some((e) => e.ev === 'remove'));
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 2, lines: ['record mismatch t1'] });
+  });
+
+  test('a commit made in the worktree after the head was read: the update-ref old-value check fails and the branch is kept', () => {
+    const r = makeRepo();
+    const wt = task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    let late;
+    r.hooks.git = ({ args }) => {
+      if (args.includes('worktree') && args.includes('remove') && !late) {
+        fs.writeFileSync(path.join(wt, 'late.txt'), 'late\n');
+        r.at(wt, 'add', '-A');
+        r.at(wt, 'commit', '--quiet', '--message=late');
+        late = r.at(wt, 'rev-parse', 'HEAD');
+      }
+    };
+    const res = r.run('cleanup', SLUG);
+    r.hooks.git = undefined;
+    assert.equal(res.code, 2, res.lines.join('\n'));
+    assert.ok(res.lines[0] === 'kept t1: branch moved' || res.lines[0].startsWith('kept t1:'), res.lines[0]);
+    assert.equal(r.g('rev-parse', '--verify', `refs/heads/aico-wt/${SLUG}/t1`), late);
+    assert.ok(!r.events().some((e) => e.ev === 'remove'));
+  });
+
+  test('the branch is deleted with update-ref --no-deref -d and the checked head, never branch -D', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    task(r, 't2', 'two.txt', '2\n');
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    const head = r.g('rev-parse', `aico-wt/${SLUG}/t1`);
+    r.calls.length = 0;
+    assert.equal(r.run('cleanup', SLUG, '--archive').code, 0);
+    assert.ok(!r.calls.some((c) => c.args.includes('branch')));
+    const del = r.calls.find((c) => c.args.includes('update-ref') && c.args.includes('-d')).args;
+    const at = del.indexOf('update-ref');
+    assert.deepEqual(del.slice(at), ['update-ref', '--no-deref', '-d', '--end-of-options', `refs/heads/aico-wt/${SLUG}/t1`, head]);
+    assert.ok(r.calls.some((c) => c.args.includes('symbolic-ref') && c.args.includes(`refs/heads/aico-wt/${SLUG}/t1`)));
+  });
+});
+
+describe('cleanup ignored files', () => {
+  const ARCHIVE = (r) => path.join(r.repo, '.company', 'work', SLUG, 'worktrees', 't1-20261029T120000Z.ignored');
+
+  function ignoredTask(r) {
+    const wt = task(r, 't1', '.gitignore', '.env.local\nnode_modules/\n');
+    fs.writeFileSync(path.join(wt, '.env.local'), 'KEY=secret\n');
+    fs.mkdirSync(path.join(wt, 'node_modules', 'x'), { recursive: true });
+    fs.writeFileSync(path.join(wt, 'node_modules', 'x', 'y.js'), Buffer.from([0, 1, 2, 255]));
+    return wt;
+  }
+
+  const kept = (reason) => ({ code: 2, lines: [`kept t1: ${reason}`] });
+  const notArchived = kept('ignored files not archived');
+
+  test('path (a): ignored files are archived under a git-ignored folder, byte for byte, then the worktree is removed', () => {
+    const r = makeRepo();
+    const wt = ignoredTask(r);
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    const res = r.run('cleanup', SLUG);
+    assert.deepEqual(res, { code: 0, lines: ['removed t1 ignored 2'] });
+    assert.ok(!fs.existsSync(wt));
+    const dir = ARCHIVE(r);
+    assert.equal(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8'), '*\n');
+    assert.equal(fs.readFileSync(path.join(dir, '.env.local'), 'utf8'), 'KEY=secret\n');
+    assert.deepEqual(fs.readFileSync(path.join(dir, 'node_modules', 'x', 'y.js')), Buffer.from([0, 1, 2, 255]));
+    assert.ok(!r.g('status', '--porcelain=v1', '--untracked-files=all').includes('.ignored'));
+    const ev = r.events().find((e) => e.ev === 'remove');
+    assert.equal(ev.ignored, 't1-20261029T120000Z.ignored');
+    assert.equal(readWorktrees(r.repo, SLUG).events.at(-1).ignored, ev.ignored);
+    assert.ok(!res.lines.join('\n').includes('secret') && !res.lines.join('\n').includes('.env'));
+  });
+
+  test('path (b): the ignored files are archived with the patch and the archive event names the folder', () => {
+    const r = makeRepo();
+    const wt = ignoredTask(r);
+    fs.writeFileSync(path.join(wt, 'dirty.txt'), 'dirty\n');
+    const res = r.run('cleanup', SLUG, '--archive');
+    assert.equal(res.code, 0, res.lines.join('\n'));
+    assert.match(res.lines[0], /^archived t1 .*\.patch ignored 2$/);
+    assert.equal(fs.readFileSync(path.join(ARCHIVE(r), '.env.local'), 'utf8'), 'KEY=secret\n');
+    const ev = r.events().find((e) => e.ev === 'archive');
+    assert.equal(ev.ignored, 't1-20261029T120000Z.ignored');
+    assert.ok(!fs.existsSync(wt));
+  });
+
+  test('no ignored files: no folder and no ignored key', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 0, lines: ['removed t1'] });
+    assert.ok(!fs.existsSync(ARCHIVE(r)));
+    assert.ok(!('ignored' in r.events().find((e) => e.ev === 'remove')));
+  });
+
+  test('a record line with a bad ignored key is refused', () => {
+    const r = makeRepo();
+    task(r, 't1', 'one.txt', '1\n');
+    for (const bad of ['../x.ignored', 't2-20261029T120000Z.ignored', 7, 't1-20261029T120000Z.patch']) {
+      fs.appendFileSync(r.record(), `${JSON.stringify({ v: 1, at: '2026-10-29T12:00:00Z', ev: 'remove', task: 't1', commit: r.head(), ignored: bad })}\n`);
+      assert.throws(() => readWorktrees(r.repo, SLUG), /worktree record demo line 2/);
+      fs.writeFileSync(r.record(), fs.readFileSync(r.record(), 'utf8').split('\n')[0] + '\n');
+    }
+  });
+
+  const hostile = {
+    'a hard-linked ignored file': (r, wt) => fs.linkSync(path.join(wt, '.env.local'), path.join(r.base, 'second-name')),
+    'a file over the per-file cap': (r, wt) => fs.writeFileSync(path.join(wt, '.env.local'), 'x'.repeat(100)),
+    'a read-back mismatch': (r) => { r.hooks['ignored-written'] = ({ file }) => fs.appendFileSync(file, 'tampered'); },
+    'an archive folder that already exists': (r) => {
+      const dir = ARCHIVE(r);
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  };
+  for (const [name, arrange] of Object.entries(hostile)) {
+    test(`path (a), ${name}: kept, worktree and branch stay`, () => {
+      const r = makeRepo();
+      const wt = ignoredTask(r);
+      writeWave(r, ['T1']);
+      assert.equal(r.run('merge', SLUG).code, 0);
+      arrange(r, wt);
+      const res = r.runWith({ ignoredCap: { file: 50 } }, 'cleanup', SLUG);
+      assert.deepEqual(res, notArchived);
+      assert.ok(fs.existsSync(path.join(wt, '.env.local')));
+      assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+      assert.ok(!r.events().some((e) => e.ev === 'remove'));
+    });
+    test(`path (b), ${name}: kept, no archive event`, () => {
+      const r = makeRepo();
+      const wt = ignoredTask(r);
+      arrange(r, wt);
+      const res = r.runWith({ ignoredCap: { file: 50 } }, 'cleanup', SLUG, '--archive');
+      assert.deepEqual(res, notArchived);
+      assert.ok(fs.existsSync(path.join(wt, '.env.local')));
+      assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+      assert.ok(!r.events().some((e) => e.ev === 'archive' || e.ev === 'remove'));
+    });
+  }
+
+  test('an ignored symlink keeps the worktree', (t) => {
+    const r = makeRepo();
+    const wt = ignoredTask(r);
+    try {
+      fs.symlinkSync(path.join(r.base, 'elsewhere.txt'), path.join(wt, 'node_modules', 'link'));
+    } catch {
+      t.skip('symlinks cannot be created here');
+      return;
+    }
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    assert.deepEqual(r.run('cleanup', SLUG), notArchived);
+    assert.ok(fs.existsSync(wt));
+  });
+
+  test('the file count cap and the total cap keep the worktree', () => {
+    for (const cap of [{ files: 1 }, { total: 10 }]) {
+      const r = makeRepo();
+      const wt = ignoredTask(r);
+      writeWave(r, ['T1']);
+      assert.equal(r.run('merge', SLUG).code, 0);
+      assert.deepEqual(r.runWith({ ignoredCap: cap }, 'cleanup', SLUG), notArchived, JSON.stringify(cap));
+      assert.ok(fs.existsSync(wt));
+    }
+  });
+
+  test('an ignored file written after the archive: kept, changed during archive', () => {
+    const r = makeRepo();
+    const wt = ignoredTask(r);
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    r.hooks['ignored-verified'] = () => fs.writeFileSync(path.join(wt, 'node_modules', 'new.js'), 'late\n');
+    assert.deepEqual(r.run('cleanup', SLUG), kept('changed during archive'));
+    assert.ok(fs.existsSync(wt));
+    assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+    assert.ok(!r.events().some((e) => e.ev === 'remove'));
   });
 });
 

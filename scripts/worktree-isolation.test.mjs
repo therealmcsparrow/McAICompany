@@ -3,11 +3,24 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { main } from './worktree.mjs';
 
 const NOW = Date.UTC(2026, 9, 29, 12, 0, 0);
 const SLUG = 'iso';
+
+// The plan-tasks record of an open wave, with the plan it hashes.
+function writeWave(r, ids) {
+  const at = '2026-10-29T10:00:00Z';
+  const dir = path.join(r.repo, '.company', 'work', SLUG);
+  const planText = `# Plan\n\n## Tasks\n\n${ids.map((id) => `### ${id} title of ${id}\n`).join('\n')}`;
+  fs.writeFileSync(path.join(dir, '02-plan.md'), planText);
+  const hash = crypto.createHash('sha256').update(planText).digest('hex').slice(0, 12);
+  const rows = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash, cap: 3, mode: 'waves', tasks: ids.length, ow: [] },
+    ...ids.map((t) => ({ v: 1, at, ev: 'start', task: t, round: 0, ow: [] }))];
+  fs.writeFileSync(path.join(dir, 'parallel.jsonl'), `${rows.map((x) => JSON.stringify(x)).join('\n')}\n`);
+}
 
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-iso-home-'));
 const SAVED = {};
@@ -113,10 +126,7 @@ describe('two worktrees are isolated from each other and from the main tree', ()
     mk('t2', 'a.txt', 'two\n');
     mk('t3', 'c.txt', 'c\n');
     mk('proto', 'p.txt', 'p\n');
-    const at = '2026-10-29T10:00:00Z';
-    const rows = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash: '0123456789ab', cap: 3, mode: 'waves', tasks: 3, ow: [] },
-      ...['T1', 'T2', 'T3'].map((t) => ({ v: 1, at, ev: 'start', task: t, round: 0, ow: [] }))];
-    fs.writeFileSync(path.join(r.repo, '.company', 'work', SLUG, 'parallel.jsonl'), `${rows.map((x) => JSON.stringify(x)).join('\n')}\n`);
+    writeWave(r, ['T1', 'T2', 'T3']);
     assert.equal(r.run('changed', SLUG, 't1').code, 0);
     assert.equal(r.run('merge', SLUG).code, 2);
     assert.equal(r.run('cleanup', SLUG).code, 2);
@@ -145,10 +155,7 @@ describe('two worktrees are isolated from each other and from the main tree', ()
       git(wt, 'add', '-A');
       git(wt, 'commit', '--quiet', `--message=${id}`);
     }
-    const at = '2026-10-29T10:00:00Z';
-    const rows = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash: '0123456789ab', cap: 3, mode: 'waves', tasks: 2, ow: [] },
-      ...['T1', 'T2'].map((t) => ({ v: 1, at, ev: 'start', task: t, round: 0, ow: [] }))];
-    fs.writeFileSync(path.join(r.repo, '.company', 'work', SLUG, 'parallel.jsonl'), `${rows.map((x) => JSON.stringify(x)).join('\n')}\n`);
+    writeWave(r, ['T1', 'T2']);
     const res = r.run('merge', SLUG);
     assert.equal(res.code, 2);
     const mergedHead = r.g('rev-parse', 'HEAD');
