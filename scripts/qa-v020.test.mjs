@@ -934,10 +934,11 @@ function costRun(sb, { sessions = [SESSION_A] } = {}) {
   fs.writeFileSync(path.join(ledger, 'demo.jsonl'), `${recs.map((r) => JSON.stringify(r)).join('\n')}\n`);
   return p;
 }
-function otelFile(sb, { session = SESSION_A, offsetMs = -200 } = {}) {
+function otelFile(sb, { session = SESSION_A, offsetMs = 0 } = {}) {
+  // Run records carry whole seconds, so the point spans a minute and ends now: it overlaps the run window however fast the run was.
   const template = fs.readFileSync(path.join(SCRIPTS, 'fixtures', 'v020', 'otel-body.template.json'), 'utf8').trim();
   const at = BigInt(Date.now() + offsetMs) * 1000000n;
-  const body = template.replace('@SESSION@', session).replace('@START@', String(at - 500000000n)).replace('@TIME@', String(at));
+  const body = template.replace('@SESSION@', session).replace('@START@', String(at - 60000000000n)).replace('@TIME@', String(at));
   const dir = path.join(sb.home, '.mcsparrow', 'otel');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'metrics.jsonl'), `${body}\n`);

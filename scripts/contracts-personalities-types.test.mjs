@@ -335,7 +335,7 @@ test('dispatch-prompt: stage writes one file per Role and prints paths only; the
   assert.deepEqual(Object.keys(out.files).sort(), ['architect', 'writer']);
   const dir = path.join(sb.repo, '.company', 'personality-input', out.run);
   for (const role of ['architect', 'writer']) {
-    assert.equal(path.resolve(out.files[role]), path.join(dir, `${role}.md`));
+    assert.equal(fs.realpathSync(out.files[role]), path.join(fs.realpathSync(dir), `${role}.md`));
     assert.equal(fs.readFileSync(out.files[role], 'utf8'), blockFromContract(DEFAULTS[role]));
   }
   assert.equal(fs.readFileSync(path.join(sb.repo, '.company', 'personality-input', '.gitignore'), 'utf8').trim(), '*');

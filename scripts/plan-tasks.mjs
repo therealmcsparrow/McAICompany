@@ -1145,7 +1145,12 @@ export function main(args, { now, root, pluginRoot, home } = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+// A script started through a symlinked folder (macOS /var -> /private/var) has argv[1] unresolved while import.meta.url is the real path.
+function isMainReal() {
+  try { return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href; } catch { return false; }
+}
+
+if (process.argv[1] && (import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href || isMainReal())) {
   const { code, lines } = main(process.argv.slice(2));
   if (lines.length) process.stdout.write(`${lines.join('\n')}\n`);
   process.exitCode = code;

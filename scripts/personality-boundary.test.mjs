@@ -563,7 +563,7 @@ test('stage writes only the file, prints only paths and a bad stored value never
   assert.deepEqual(Object.keys(printed).sort(), ['files', 'run']);
   assert.equal(printed.run, RUN_ID);
   const file = printed.files.architect;
-  assert.equal(path.resolve(file), path.join(s.cwd, '.company', 'personality-input', RUN_ID, 'architect.md'));
+  assert.equal(fs.realpathSync(file), path.join(fs.realpathSync(s.cwd), '.company', 'personality-input', RUN_ID, 'architect.md'));
   assert.doesNotMatch(r.out, /Personality:|temperament|ZQX/i);
   assert.doesNotMatch(r.err, /ZQX|"\n/);
   const block = fs.readFileSync(file, 'utf8');

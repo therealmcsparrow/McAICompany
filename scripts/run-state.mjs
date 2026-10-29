@@ -6,7 +6,7 @@
 // Counts, enums and times only. The Step files are LLM-written, so they are size-capped, never followed through a
 // symlink, and read with the handoff-lint parser.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, realpathSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -470,6 +470,11 @@ function planGate(root, slug, home) {
   if (result.state !== 'pass') refuse(`plan gate: ${result.reason}`);
 }
 
+// argv[1] is not resolved, import.meta.url is: a symlinked folder (macOS /var -> /private/var) must still run.
+function isMainReal() {
+  try { return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); } catch { return false; }
+}
+
 // The agent slugs of this plugin: the file names under agents/, beside the scripts folder.
 function agentSlugs() {
   try {
@@ -551,7 +556,7 @@ export function run(argv, { root = process.cwd(), now = Date.now(), home } = {})
   }
 }
 
-if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) {
+if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '') || isMainReal()) {
   const { out, code } = run(process.argv.slice(2));
   process.stdout.write(`${out}\n`);
   process.exit(code);

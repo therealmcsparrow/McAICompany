@@ -274,7 +274,8 @@ test('a missing claude CLI fails closed with no commit and no tag', (t) => {
   const r = runWith(s.root, {
     AICO_CLAUDE_BIN: undefined,
     Path: undefined,
-    PATH: [empty, gitDir(), path.dirname(process.execPath)].join(path.delimiter)
+    // npm runs its scripts through sh, which macOS keeps in /bin, not in git's folder.
+    PATH: [empty, gitDir(), path.dirname(process.execPath), ...(process.platform === 'win32' ? [] : ['/bin'])].join(path.delimiter)
   }, '0.11.0');
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /validate/);

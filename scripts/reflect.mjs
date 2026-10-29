@@ -240,12 +240,17 @@ function ledgerReport(slug) {
   }
 }
 
+// An absolute path may reach the run folder through a symlinked parent (macOS /var -> /private/var); compare real paths.
+function realOr(p) {
+  try { return fs.realpathSync(p); } catch { return p; }
+}
+
 function resolveStepFile(dir, file) {
   if (typeof file !== 'string' || file === '') throw new Refusal(USAGE);
   const abs = path.resolve(process.cwd(), file);
   const name = path.basename(abs);
   const bare = !file.includes('/') && !file.includes('\\');
-  if (!bare && path.relative(dir, path.dirname(abs)) !== '') throw new Refusal('file must be in the run folder');
+  if (!bare && path.relative(realOr(dir), realOr(path.dirname(abs))) !== '') throw new Refusal('file must be in the run folder');
   if (!FILE_RE.test(name)) throw new Refusal('file must match ^\\d{2}-[a-z0-9-]+\\.md$');
   return { name, full: path.join(dir, name) };
 }
