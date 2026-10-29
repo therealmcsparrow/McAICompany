@@ -201,7 +201,7 @@ async function staticCheckWith(rel, mutate) {
 // ----- personalities ------------------------------------------------------------------------
 
 test('AC1 a Role with no personality set gets its shipped default, for every Role, in a cooler turn', () => {
-  assert.equal(AGENTS.length, 35);
+  assert.equal(AGENTS.length, 36);
   assert.deepEqual(Object.keys(DEFAULTS).sort(), AGENTS);
   const sb = sandbox();
   const { result, text } = stage(sb, AGENTS);
@@ -289,7 +289,7 @@ test('AC4 the settings every other prompt is built from are identical whatever t
   const strip = out => out.replace(/"revision":"[0-9a-f]{64}"/, '"revision":"R"');
   const base = sb.run('settings.mjs', ['get']);
   assert.equal(base.code, 0, base.err);
-  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 35);
+  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 36);
   const variants = [
     () => sb.user({ roles: { architect: { personality: { temperament: 'loud and brave', talk: 'big words', topic: 'ZQXtopicZQX', intelligence: 'low', creativity: 'high' } } } }),
     () => { fs.rmSync(sb.userFile); sb.project({ roles: { qa: { personality: { intelligence: 'high', creativity: 'low' } }, writer: { personality: { topic: 'tea' } } } }); },
@@ -761,7 +761,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   const expectedPlaybooks = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
   assert.deepEqual([...m.playbooks].sort(), expectedPlaybooks);
   assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
-  assert.equal(m.roles.length, 34);
+  assert.equal(m.roles.length, 35);
   assert.deepEqual(m.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
@@ -771,7 +771,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
     const baseAgents = git('ls-tree', '--name-only', BASE, 'agents/').split('\n').filter(Boolean).map(f => path.basename(f, '.md')).sort();
-    assert.deepEqual([...m.roles].sort(), [...baseAgents, 'reprompter'].sort());
+    assert.deepEqual([...m.roles].sort(), [...baseAgents, 'reprompter', 'fresh-reviewer'].sort());
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();

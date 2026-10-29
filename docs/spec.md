@@ -34,6 +34,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Writer | writer | Wen | sonnet | low | full |
 | Marketer | marketer | Maya | sonnet | low | full |
 | Code Reviewer | code-reviewer | Rui | opus | high | read-only + Write |
+| Fresh Reviewer | fresh-reviewer | Fenna | opus | high | read-only + Write |
 | QA Tester | qa | Quinn | sonnet | medium | read + Bash + Write (tests & handoff only) |
 | Security Engineer | security | Sam | opus | high | read-only + Bash + Write |
 | Brand Artist | brand-artist | Bianca | sonnet | low | full |

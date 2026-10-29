@@ -97,7 +97,7 @@ test('names.json: reprompter is Lynn, unique, case-insensitive', () => {
   const names = JSON.parse(read('company/names.json'));
   assert.equal(names.reprompter, 'Lynn');
   const keys = Object.keys(names);
-  assert.equal(keys[keys.length - 1], 'reprompter');
+  assert.equal(keys[keys.length - 2], 'reprompter');
   const lower = Object.values(names).map((n) => n.toLowerCase());
   assert.equal(new Set(lower).size, lower.length);
 });

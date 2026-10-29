@@ -11,7 +11,7 @@ import {
 
 const script = path.join(import.meta.dirname, 'settings.mjs');
 
-const PROTECTED_IN_SANDBOX = ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'];
+const PROTECTED_IN_SANDBOX = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'];
 
 // The sandbox plugin's floor table: each Role's frontmatter model is its floor.
 function writeFloor(pluginRoot, { protectedRoles = PROTECTED_IN_SANDBOX, floor } = {}) {
@@ -1427,7 +1427,7 @@ test('loadModelFloor fails closed on a wrong protected list or an extra key, nev
 test('loadModelFloor never merges a __proto__ key from the file', (t) => {
   const s = sandbox(t);
   const file = path.join(s.pluginRoot, 'company', 'model-floor.json');
-  fs.writeFileSync(file, '{"v":1,"release":"0.16.0","floor":{"__proto__":"opus","architect":"opus","qa":"sonnet","security":"opus"},"protected":["architect","code-reviewer","pentester","security","vuln-scanner"]}');
+  fs.writeFileSync(file, '{"v":1,"release":"0.16.0","floor":{"__proto__":"opus","architect":"opus","qa":"sonnet","security":"opus"},"protected":["architect","code-reviewer","fresh-reviewer","pentester","security","vuln-scanner"]}');
   const table = loadModelFloor(s.pluginRoot);
   assert.deepEqual(table.protected, ['architect', 'security']);
   assert.equal({}.polluted, undefined);

@@ -284,7 +284,7 @@ The documentation says: "Before v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` came firs
 ### The floor and the protected Roles
 `company/model-floor.json` lists a **floor** for every Role: the model that Role had in v0.16.0. The floor is the lowest model it runs on in these cases:
 - **High risk tier.** The Lead raises a Role below its floor to the floor, passes it as the Agent `model` and writes `floor` at the end of the `Settings:` line of the dispatch. At low and medium tier a Role that is not protected runs the model you set.
-- **Protected Roles.** `architect`, `code-reviewer`, `pentester`, `security` and `vuln-scanner` hold their floor at every risk tier. A lower `roles.<role>.model` is not applied and the settings warning says so. No unlock lifts this. If the floor file cannot be read, every Role is held at `opus`.
+- **Protected Roles.** `architect`, `code-reviewer`, `fresh-reviewer`, `pentester`, `security` and `vuln-scanner` hold their floor at every risk tier. A lower `roles.<role>.model` is not applied and the settings warning says so. No unlock lifts this. If the floor file cannot be read, every Role is held at `opus`.
 - **Order of the ranks:** `haiku`, then `sonnet`, then `opus`. `fable` is not ranked, so a Role set to it runs at its floor where the floor applies. The Agent call cannot take `inherit`, so the Lead first turns `inherit` into the model of its own session, then applies the floor to that model.
 
 ### The model environment line

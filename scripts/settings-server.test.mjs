@@ -38,7 +38,7 @@ function sandbox(t, { company = true } = {}) {
     names[role] = a.name;
   }
   fs.writeFileSync(path.join(pluginRoot, 'company', 'names.json'), JSON.stringify(names));
-  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.entries(AGENTS).map(([r, a]) => [r, a.model])), protected: ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'] }));
+  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.entries(AGENTS).map(([r, a]) => [r, a.model])), protected: ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'] }));
   return {
     home, cwd, pluginRoot,
     config: path.join(home, 'config.json'),

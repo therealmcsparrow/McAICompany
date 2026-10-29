@@ -11,7 +11,7 @@ import { DESCRIPTION_BUDGET, check, checkBrainstorm, checkPack, checkPacks, PERS
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });
 
-const PROTECTED = ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'];
+const PROTECTED = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'];
 const floorFile = (agents) => ({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.keys(agents).map(a => [a, 'sonnet'])), protected: PROTECTED });
 
 function fixture({ skills = {}, agents = {}, names, floor }) {
@@ -380,7 +380,7 @@ test('floor file: one ranked floor per agent, no more, no fewer', () => {
   assert.ok(floorErrors({ floor: { ...f, floor: { ...f.floor, qa: 'inherit' } } }).some(e => e.includes('qa: floor must be')));
 });
 
-test('floor file: protected is exactly the five names', () => {
+test('floor file: protected is exactly the six names', () => {
   const f = goodFloor();
   assert.ok(floorErrors({ floor: { ...f, protected: [...PROTECTED, 'qa'] } }).some(e => e.includes('protected')));
   assert.ok(floorErrors({ floor: { ...f, protected: PROTECTED.slice(1) } }).some(e => e.includes('protected')));
