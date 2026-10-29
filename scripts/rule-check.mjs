@@ -50,7 +50,8 @@ const USAGE = [
   '  text --base <full id> --run <slug>',
   '  list',
   '  slices <senior-engineer handoff> [--write]',
-  '  drift'
+  '  drift',
+  '  fill-security <standards.md> --packs <dir>'
 ].join('\n');
 
 class Refusal extends Error {
@@ -913,12 +914,128 @@ function cmdDrift(a) {
   return { code: lines.length ? 1 : 0, lines: lines.length ? lines : ['drift ok'] };
 }
 
+// ---------- fill-security ----------
+
+const FILL_HEADING = '## Security rows (filled by rule-check)';
+const SEC_MUST = /^[a-z][a-z0-9-]{0,23}\.M-SEC\d+$/;
+const PACK_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}@[A-Za-z0-9._-]{1,40}\.md$/;
+const PACK_ENTRY = /^- (\S+)(?: — .*)?$/;
+const UNSAFE_CHARS = new RegExp('[\\u0000-\\u0008\\u000a-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069\\ufeff]');
+const LONG_LINE = 1000;
+
+function regularFile(file) {
+  try {
+    return fs.lstatSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function listedPacks(text) {
+  const names = [];
+  const skipped = [];
+  for (const { section, line } of sections(text)) {
+    if (section !== 'Packs') continue;
+    const m = PACK_ENTRY.exec(line);
+    if (!m) continue;
+    const name = m[1].slice(Math.max(m[1].lastIndexOf('/'), m[1].lastIndexOf('\\')) + 1);
+    if (!PACK_FILE.test(name)) skipped.push(`pack not read ${cut(name, 35)}`);
+    else if (!names.includes(name)) names.push(name);
+  }
+  return { names, skipped };
+}
+
+function cmdFillSecurity(a) {
+  if (typeof a.packs !== 'string' || typeof a.positional !== 'string') throw new Refusal(USAGE);
+  const file = path.resolve(a.positional);
+  if (!regularFile(file)) throw new Refusal('standards file is not a regular file');
+  const text = readCapped(file, MAX_TEXT_BYTES, 'standards file');
+  if (text.includes('\r')) throw new Refusal('standards file has CR bytes');
+  const packDir = path.resolve(a.packs);
+  let dirStat;
+  try {
+    dirStat = fs.lstatSync(packDir);
+  } catch {
+    dirStat = null;
+  }
+  if (!dirStat || !dirStat.isDirectory()) throw new Refusal('bad packs folder');
+  const lines = text.split('\n');
+  if (lines.filter(l => l.trimEnd() === FILL_HEADING).length > 1) throw new Refusal('marker heading appears twice');
+
+  const have = new Set();
+  for (const { section, line } of sections(text)) {
+    if (section !== 'Project rules' && section !== FILL_HEADING.slice(3)) continue;
+    const r = parseRuleLine(line);
+    if (r) have.add(r.id);
+  }
+
+  const { names, skipped } = listedPacks(text);
+  const report = [...skipped];
+  const rows = [];
+  for (const name of names) {
+    const packFile = path.join(packDir, name);
+    if (!regularFile(packFile)) {
+      report.push(`pack not read ${name}`);
+      continue;
+    }
+    let packText;
+    try {
+      packText = readCapped(packFile, MAX_TEXT_BYTES, name);
+    } catch {
+      report.push(`pack not read ${name}`);
+      continue;
+    }
+    for (const { section, line } of sections(packText)) {
+      if (section !== 'Must' && section !== 'Security') continue;
+      const r = parseRuleLine(line);
+      if (!r || !SEC_MUST.test(r.id) || have.has(r.id)) continue;
+      have.add(r.id);
+      if (UNSAFE_CHARS.test(line)) {
+        report.push(`skipped ${r.id} (control character in the pack line)`);
+        continue;
+      }
+      rows.push({ id: r.id, line });
+      if (line.length > LONG_LINE) report.push(`long ${r.id} (${line.length} characters, copied whole)`);
+    }
+  }
+  if (!rows.length) return { code: 0, lines: [...report, 'nothing to add'] };
+
+  const added = rows.map(r => r.line);
+  let next;
+  const at = lines.findIndex(l => l.trimEnd() === FILL_HEADING);
+  if (at === -1) {
+    const body = text.endsWith('\n') || text === '' ? text : `${text}\n`;
+    const gap = body === '' || body.endsWith('\n\n') ? '' : '\n';
+    next = `${body}${gap}${FILL_HEADING}\n${added.join('\n')}\n`;
+  } else {
+    let end = lines.findIndex((l, i) => i > at && l.startsWith('## '));
+    if (end === -1) end = lines.length;
+    let insert = end;
+    while (insert > at + 1 && lines[insert - 1].trim() === '') insert--;
+    const copy = [...lines];
+    copy.splice(insert, 0, ...added);
+    next = copy.join('\n');
+    if (!next.endsWith('\n')) next += '\n';
+  }
+  if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_BYTES) throw new Refusal('standards file would pass its size cap');
+
+  const temp = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  try {
+    fs.writeFileSync(temp, next, { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(temp, file);
+  } catch (error) {
+    fs.rmSync(temp, { force: true });
+    throw new Refusal(`cannot write standards file (${error.code ?? 'error'})`);
+  }
+  return { code: 0, lines: [...report, ...rows.map(r => `added ${r.id}`)] };
+}
+
 // ---------- CLI ----------
 
 function parseArgs(args) {
   const [command, ...rest] = args;
   const allowed = {
-    run: ['--root', '--base', '--run', '--handoff'], text: ['--base', '--run'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root']
+    run: ['--root', '--base', '--run', '--handoff'], text: ['--base', '--run'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root'], 'fill-security': ['--root', '--packs']
   };
   if (!command || !Object.hasOwn(allowed, command)) throw new Refusal(USAGE);
   const code = command === 'run' || command === 'text' ? 3 : 2;
@@ -938,7 +1055,7 @@ function parseArgs(args) {
       positional.push(arg);
     }
   }
-  if (positional.length !== (command === 'slices' ? 1 : 0)) throw new Refusal(USAGE, code);
+  if (positional.length !== (command === 'slices' || command === 'fill-security' ? 1 : 0)) throw new Refusal(USAGE, code);
   return { command, opts, positional: positional[0] };
 }
 
@@ -958,14 +1075,14 @@ export function main(args, options = {}) {
       isDir = false;
     }
     if (!isDir) throw new Refusal('bad root');
-    const a = { root, base, run: slug, positional, handoff: null, write: opts['--write'] === true };
+    const a = { root, packs: opts['--packs'], base, run: slug, positional, handoff: null, write: opts['--write'] === true };
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);
       const inside = path.relative(root, abs);
       if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside) || !isFile(abs)) throw new Refusal('bad handoff');
       a.handoff = abs;
     }
-    const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift };
+    const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift, 'fill-security': cmdFillSecurity };
     return handlers[command](a);
   } catch (error) {
     if (error instanceof Refusal) return { code: error.code, lines: [`refused: ${error.message}`] };
