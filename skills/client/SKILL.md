@@ -15,7 +15,7 @@ Anything sent to the client always asks at the Ship Gate, whatever the settings 
 
 ## intake
 1. `aico:account-manager`: intake (goals, constraints, budget, deadline, open questions for the client).
-2. `aico:product-manager`: brief and acceptance criteria.
+2. `aico:product-manager`: brief and acceptance criteria. Ask the client whether the destination spec of later feature runs may live in their repo; write the answer as `spec_in_repo: yes` or `spec_in_repo: no` in `.company/project.md`.
 3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type pick architect product-manager`; the Role it prints gives the proposed Core/Modules (or the parts of the work) and an effort estimate per Module (S/M/L plus a range in days). Refused → show its line and stop.
    **→ Brief Gate**
 4. `aico:account-manager`: proposal (scope, phases, estimate, assumptions, what's excluded) in the client's voice preset.

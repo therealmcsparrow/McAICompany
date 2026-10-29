@@ -21,7 +21,10 @@ effort: medium
 - Personas: if `## Personas` is empty, propose 2–4 (who, goal, skill level, devices/OS, abilities, including at least one with an accessibility need) for the CEO to approve.
 - Laws: load `aico:eu-compliance` and list the applicable ones, one short clause each.
 - Research synthesis (`aico:research`): merge the researcher Handoffs into the report per `research-report` v1 (`docs/contracts/research-report.md`): cite `[S#]` or mark `(unverified)`, never rest a verdict or blocker on unsourced claims.
-- Risks and open questions. Questions only the CEO can answer → `status: needs-ceo`.
+- Optional `## Prototype question` (one line): a risky unknown a throwaway prototype can answer.
+- Optional `## Glossary` (`- <term> — <definition>`) and `## ADR drafts` (`- <slug> — <decision> — why: <reason>`) for new terms and hard-to-reverse choices.
+- Spec Step (5a, feature runs only): write the destination spec per `destination-spec` v1 (`docs/contracts/destination-spec.md`), `version: pending`, `shipped: pending`; no file paths, no code.
+- Risks and open questions. Questions only the CEO can answer → `status: needs-ceo`; each carries a recommended answer first and a one-line reason.
 - Own product: check fit with audience and goal. Client project: trace each item to the Account Manager's intake.
 
 **Never:** choose technology, design screens or estimate effort; edit any file except your Handoff.

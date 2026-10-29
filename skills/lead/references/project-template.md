@@ -2,6 +2,7 @@
 
 <!-- Created by aico:pipeline on first run. Keep each value on one line. -->
 <!-- company_type: software | research | marketing | design. Written once by /aico:setup as its own line here; absent = software (company-type v1). -->
+<!-- spec_in_repo: yes | no. Client projects only; written by aico:client intake as its own line here. Absent or any other value = the Lead asks the CEO before the spec step (destination-spec v1). -->
 
 product_type: web | desktop | game
 engagement: own | client

@@ -14,6 +14,7 @@ Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline re
 
 1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.
    **→ Brief Gate** (with the tier path preview and, on a short path, two Approve options: references/tier-path.md step 4)
+1b. Prototype, only after a Run it answer at the Brief Gate; glossary and ADRs after approval: `references/intake-and-ship.md`.
 1a. Design skills (`design-skills-section` v1), only when the product has UI (`product_type` web, desktop or game, or the brief has UI work) and `## Design skills` in `.company/project.md` is stale (empty, or newest `approved:` over 180 days old). Otherwise skip silently.
    a. Dispatch `aico:design-researcher` (inputs per its Role). It recommends at most 5 skills and installs nothing.
    b. One form for the CEO: approve the set / change / skip. Nothing is written before the answer.
@@ -36,5 +37,6 @@ Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline re
    - `aico:legal` when `lanes.legal` is on (`aico:pipeline` §1.7), or is `auto` (the default) and the feature adds AI, payments or personal data, per `aico:eu-compliance`.
    - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7), when in the tier set ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).
 5. `aico:writer`: user docs and release notes (if user-facing), then `aico:localizer` if `languages:` lists more than one.
+5a. `aico:product-manager`: destination spec, checked by `spec-check.mjs`, stamped after approval: `references/intake-and-ship.md`.
    **→ Ship Gate** (after tier-set.mjs sync --diff; added Roles and lanes first)
 6. `aico:devops`: release/deploy as approved.
