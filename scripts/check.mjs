@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
+import { checkDrift } from './contract-drift.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -818,6 +819,14 @@ export function check(root, { today } = {}) {
 
 if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) {
   const args = process.argv.slice(2);
+  if (args[0] === '--drift') {
+    // Contract versions, cites and anchors only (contract-index v1); all logic is in contract-drift.mjs.
+    if (args.length > 2) { console.error('usage: check.mjs --drift [repo root]'); process.exit(2); }
+    const errors = checkDrift(resolve(args[1] ?? join(fileURLToPath(import.meta.url), '..', '..')));
+    errors.forEach(l => console.log(l));
+    console.log(`${errors.length} error(s)`);
+    process.exit(errors.length ? 1 : 0);
+  }
   if (args[0] === '--packs') {
     // Library mode: 90-day freshness and advisories.json (rule-pack v1.1).
     if (!args[1] || args.length > 2) { console.error('usage: check.mjs --packs <library folder>'); process.exit(2); }
