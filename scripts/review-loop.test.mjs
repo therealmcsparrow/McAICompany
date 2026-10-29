@@ -363,6 +363,38 @@ describe('gate', () => {
     assert.deepEqual(r.lines, ['single 02-code-reviewer:R-2 b.txt', 'single 03-fresh-reviewer:R-2 a.txt']);
   });
 
+  const freshCode = (root, name, rows) => fs.writeFileSync(path.join(folder(root), name),
+    `---\nstep: 03\nrole: fresh-reviewer\ntask: ${SLUG}\nstatus: done\nround: 0\nreview-mode: code\nmodel: opus\n---\nBy: t\n## Blocking\n${rows.map((r) => `- ${r}`).join('\n')}\n## Next\n- x\n`);
+
+  test('one reviewer blocks and the other is clear: single is printed', () => {
+    const { root } = makeRepo();
+    handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, ['R-1 a.txt:10 — x — fix']);
+    freshCode(root, '03-fresh-reviewer.md', []);
+    assert.deepEqual(run(root, 'gate', SLUG).lines, ['single 02-code-reviewer:R-1 a.txt']);
+  });
+
+  test('the second reviewer blocks and the Code Reviewer is clear: single is printed', () => {
+    const { root } = makeRepo();
+    handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, []);
+    freshCode(root, '03-fresh-reviewer.md', ['R-1 a.txt:12 — x — fix']);
+    assert.deepEqual(run(root, 'gate', SLUG).lines, ['single 03-fresh-reviewer:R-1 a.txt']);
+  });
+
+  test('a Blocking row with no readable location prints single <key> ?', () => {
+    const { root } = makeRepo();
+    handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, ['R-1 the plan is vague — fix it']);
+    freshCode(root, '03-fresh-reviewer.md', []);
+    assert.deepEqual(run(root, 'gate', SLUG).lines, ['single 02-code-reviewer:R-1 ?']);
+  });
+
+  test('a plan-mode fresh reviewer does not count as the second reviewer', () => {
+    const { root } = makeRepo();
+    handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, ['R-1 a.txt:10 — x — fix']);
+    fs.writeFileSync(path.join(folder(root), '03-fresh-reviewer.md'),
+      `---\nstep: 03\nrole: fresh-reviewer\ntask: ${SLUG}\nstatus: done\nround: 0\nreview-mode: plan\n---\nBy: t\n## Next\n- x\n`);
+    assert.deepEqual(run(root, 'gate', SLUG).lines, ['review-loop: nothing to report']);
+  });
+
   test('no second reviewer Handoff means no single lines', () => {
     const { root } = makeRepo();
     handoff(root, '02-code-reviewer.md', 'code-reviewer', 0, ['R-1 a.txt:10 — x — fix']);

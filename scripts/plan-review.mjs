@@ -589,6 +589,7 @@ function cmdScore(args, env) {
       if (fm.get('role') === 'fresh-reviewer' || fm.get('role') === 'code-reviewer') rows = blockingRows(sections);
     }
     if (expected.control) {
+      if (res.text === undefined) { lines.push(`control ${name} missing`); continue; }
       hasControl = true;
       controls += rows.length;
       lines.push(`control ${name} ${rows.length} blocking`);

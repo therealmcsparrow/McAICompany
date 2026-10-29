@@ -263,10 +263,10 @@ describe('AC3 scoring of hand-written results', () => {
     assert.equal(r.lines.filter((l) => l.startsWith('case ')).length, 5);
   });
 
-  test('a control with a none row, or no result, prints 0 blocking and still leaves n at 5', () => {
+  test('a control with a none row prints 0 blocking, one with no result prints missing, and n stays 5', () => {
     const root = stage();
     allCaught(root);
-    assert.ok(score(root).lines.includes('control control 0 blocking'));
+    assert.ok(score(root).lines.includes('control control missing'));
     put(root, 'work/results/control.md', resultText([]));
     assert.ok(score(root).lines.includes('control control 0 blocking'));
     assert.equal(caughtLine(root), 'caught 5 of 5');
@@ -288,7 +288,7 @@ describe('AC3 scoring of hand-written results', () => {
     const r = score(root);
     assert.equal(r.code, 0);
     assert.equal(r.lines.at(-1), 'caught 0 of 5');
-    assert.ok(r.lines.includes('control control 0 blocking'));
+    assert.ok(r.lines.includes('control control missing'));
   });
 
   test('a row one line before or after the range misses; the first and the last line of the range catch', () => {

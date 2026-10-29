@@ -483,15 +483,37 @@ function churnCmd(args, env) {
 const BLOCKING_STATES = new Set(['open', 'contested', 'escalated', 'upheld', 'rejected']);
 
 // A blocking finding of one reviewer that no blocking finding of the other overlaps.
+function bothReviewersRan(runFolder) {
+  const seen = new Set();
+  let names;
+  try { names = fs.readdirSync(runFolder).sort().slice(0, 2000); } catch { throw new GitUnknown('run folder'); }
+  for (const name of names) {
+    const m = /^\d{2,3}-(code-reviewer|fresh-reviewer)\.md$/.exec(name);
+    if (!m) continue;
+    const full = path.join(runFolder, name);
+    const st = lstatOrNull(full);
+    if (!st || !isPlain(st) || st.size > MAX_RECORD_BYTES) continue;
+    const head = fs.readFileSync(full, 'utf8').slice(0, 4096).split(/\r?\n/);
+    if (head[0] !== '---') continue;
+    const end = head.indexOf('---', 1);
+    const fm = head.slice(1, end < 0 ? head.length : end);
+    if (!fm.some((x) => x === `role: ${m[1]}`)) continue;
+    if (m[1] === 'fresh-reviewer' && !fm.some((x) => /^review-mode:[ \t]*code[ \t]*$/.test(x))) continue;
+    seen.add(m[1]);
+  }
+  return seen.size === 2;
+}
+
 function singles(runFolder) {
   const lineages = reviewerLineages(runFolder).filter((l) => l.role === 'code-reviewer' || l.role === 'fresh-reviewer');
-  if (!lineages.some((l) => l.role === 'fresh-reviewer') || !lineages.some((l) => l.role === 'code-reviewer')) return [];
+  if (!bothReviewersRan(runFolder)) return [];
   const live = lineages.filter((l) => BLOCKING_STATES.has(l.state));
   const locs = (l) => parseLocations(l.holders[0].text).map((x) => ({ ...x, path: normPath(x.path) }));
   const touches = (a, b) => a.path === b.path && (a.from === null || b.from === null || (a.from <= b.to && b.from <= a.to));
   const out = [];
   for (const l of live) {
     const seen = new Set();
+    if (!locs(l).length) { out.push(`single ${l.key} ?`); continue; }
     for (const loc of locs(l)) {
       const other = live.some((o) => o.role !== l.role && locs(o).some((x) => touches(loc, x)));
       if (!other && !seen.has(loc.path)) { seen.add(loc.path); out.push(`single ${l.key} ${loc.path}`); }

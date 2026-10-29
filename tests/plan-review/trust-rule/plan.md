@@ -202,8 +202,3 @@ In `skills/feedback/SKILL.md` step 2, after the Model paragraph:
 
 ## Rollback (AC15, CEO Q6)
 Decided: on a `fail` verdict the one step is set `pipeline.parallel_cap` to 5 in `/aico:settings`, and when the runs already used 5 the step is `pipeline.dispatch` `sequential`, because the CEO chose to keep v0.18 and a cap already at 5 cannot be raised. The verdict line prints the step; reviewer, QA, security verdicts and the Gates do not change.
-
-## CEO answers (Plan Gate 2026-10-28)
-- Approved: plan, Core edits (pipeline + the shared-tree rule in skills/handoff), plan-tasks v1, aico-settings v1.7, token-ledger v1.3, dispatch-prompt v3.5.
-- Rollback line on fail: raise the cap to 5; if runs already used 5, switch pipeline.dispatch to sequential.
-- Default cap is 4 (CEO), not the 3 in the brief AC1.

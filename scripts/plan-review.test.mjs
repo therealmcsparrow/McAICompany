@@ -384,6 +384,14 @@ describe('score', () => {
     assert.deepEqual(r.lines.slice(1), ['case seed-a missed', 'case seed-b missed', 'caught 0 of 2']);
   });
 
+  test('a missing control result prints control <name> missing and is not recorded as clean', () => {
+    const root = scoreRoot();
+    fs.rmSync(path.join(root, 'work', 'results', 'real-control.md'));
+    const r = run(root, 'score', 'work/cases', 'work/results', '--record', '0.20.0');
+    assert.equal(r.lines[0], 'control real-control missing');
+    assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(evalFile(root), 'utf8'))), ['v', 'aico', 'at', 'caught', 'total']);
+  });
+
   test('--tag turns an overlapping [spec] row into missed when tag is test', () => {
     const root = scoreRoot();
     put(root, 'work/cases/seed-b/expected.json', '{ "v": 1, "file": "src/util.mjs", "lines": [5, 6], "tag": "test" }\n');

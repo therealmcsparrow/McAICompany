@@ -54,7 +54,7 @@ By: <role id>
 - What the next Step needs; name the Role.
 ```
 
-`By:` is your Role id. **Fields are the contract:** the Lead and Steps read the frontmatter, not the prose; fill each field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit if none).
+`By:` is your Role id. **Fields are the contract:** the Lead and Steps read the frontmatter, not the prose; fill each field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit if none). `contracts:` is required in every Handoff written under a Role id: list the Contracts you used or changed as `[<name> v<x.y>]`, or `[handoff v2.0]` when none other.
 
 **Blocking tags** `contract`, `spec`, `security`, `test` route the Fix round. **Risk tier** `low | medium | high` is forced **high** for anything touching auth, payments, personal data, migrations or a Contract; a Role may raise it, never lower it.
 
