@@ -5,7 +5,7 @@ Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0024-reprompt-playbook-owns-the-flow.md`): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric), and it bounds the view's `round` to what the mods accept. Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
 v1.2 is additive (rationale `docs/adr/0027-triage-record.md`): it adds the triage record ("Triage record"), the commands `triage issue` and `triage check <nonce>`, and the folder `.company/triage/`. Run files, records, the run view, `show` and `active` are unchanged; `active` never reads `.company/triage/`.
 v1.3 is additive (rationale `docs/adr/0028-run-timing-from-run-state.md`): it adds the `ask` event (a Gate form shown to the CEO), the command `ask`, and a `wait` key on each entry of the view's `gates`, so the CEO's wait at Gates can be shown apart from run time. Every v1.2 file is a valid v1.3 file and gives the same view with `"wait": null` on each Gate entry. A v1.2 reader skips an `ask` line with its usual `line <n> skipped` warning.
-v1.5 is additive (task plan-gate-enforce): under `plan_check.policy` `block`, `gate <slug> plan passed` is refused unless every plan in the run folder passes the scan. Under `warn` and `off`, and for every other command, v1.4 behaviour is unchanged.
+v1.5 is additive (task plan-gate-enforce, task run-state-ceo-sub): it adds the `ceo` event (a bundled CEO form), the `sub` event (a subagent start or stop, optional `session`), the optional `aico` key on `start`, the commands `ceo` and `sub`, and the view keys `ceo`, `subs` and `sessions`. Every v1.4 file is a valid v1.5 file and gives the same view plus `"ceo": [], "subs": [], "sessions": []`. A v1.4 reader skips a `ceo` or `sub` line, and a `start` line that carries `aico`, with its usual `line <n> skipped` warning. Under `plan_check.policy` `block`, `gate <slug> plan passed` is refused unless every plan in the run folder passes the scan. Under `warn` and `off`, and for every other command, v1.4 behaviour is unchanged.
 v1.4 is additive (task low-tier-path): the triage record also proves an approved low-risk fix route, and `triage check` takes `--route fix`. Every v1.3 call behaves as before.
 
 ## Storage
@@ -19,21 +19,29 @@ v1.4 is additive (task low-tier-path): the triage record also proves an approved
 |---|---|
 | `v` | `1` |
 | `at` | UTC time `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`, written by the script, never typed by the Lead |
-| `ev` | `start \| wave \| gate \| ask \| pick \| end` (`pick` v1.1, `ask` v1.3) |
+| `ev` | `start \| wave \| gate \| ask \| pick \| ceo \| sub \| end` (`pick` v1.1, `ask` v1.3, `ceo` and `sub` v1.5) |
 | `wave` | `wave` only: integer 1–99 (the plan's wave number; a Fix round keeps the wave it belongs to) |
-| `gate` | `gate` and `ask` only: `brief \| plan \| ship` |
+| `gate` | `gate` and `ask`: `brief \| plan \| ship`; `ceo` (v1.5) also `none` |
 | `result` | `gate` only: `passed \| changed \| stopped` |
 | `pick` | `pick` only: `use \| edit \| keep \| stop` (the reprompt form answer, v1.1) |
 | `asked` | `pick` only: integer 0–3, question rounds held before this answer (v1.1) |
 | `outcome` | `end` only: `ship \| abort` |
+| `n` | `ceo` only (v1.5): integer 1-20, the questions bundled in one form |
+| `role` | `sub` only (v1.5): an `agents/` file slug, or `other`. The CLI checks the slug against `agents/`; a reader accepts the shape `^[a-z][a-z0-9-]{0,40}$` |
+| `id` | `sub` only (v1.5): exactly 12 lowercase hex, the first 12 characters of the SHA-256 of the agent id; the raw agent id is never stored |
+| `phase` | `sub` only (v1.5): `start \| stop` |
+| `session` | `sub` only, optional (v1.5): `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$` (lowercase), the hook payload's `session_id` |
+| `aico` | `start` only, optional (v1.5): `^\d{1,3}\.\d{1,3}\.\d{1,3}$`, the plugin version from `plugin.json`; not shown in the view |
 
 ## CLI (cwd = product repo; refusals `refused: <reason>` on stdout, exit 2)
 | Command | Effect |
 |---|---|
-| `start <slug>` | appends `start`. Refused when the file already has a `start` and no `end` (`refused: run <slug> already started`). A new `start` after an `end` begins a new segment (a resumed or reopened run). |
+| `start <slug> [<aico>]` | appends `start` (v1.5: with `aico` when given; a value outside the pattern is `refused: aico must be a version like 0.19.1`). Refused when the file already has a `start` and no `end` (`refused: run <slug> already started`). A new `start` after an `end` begins a new segment (a resumed or reopened run). |
 | `wave <slug> <n>` | appends `wave`. Refused without an open segment. |
 | `ask <slug> <brief\|plan\|ship>` | (v1.3) appends `ask`: the Gate form is about to be shown. Refused without an open segment, or for an unknown Gate. |
 | `gate <slug> <brief\|plan\|ship> <passed\|changed\|stopped>` | appends `gate`. Refused without an open segment. (v1.5) `gate <slug> plan passed` first resolves `plan_check.policy` (`aico-settings` v1.9); under `block` it calls `verifyPlans` (`plan-check` v1.2) in the readdir form, trusts no record, and refuses with nothing written: `refused: plan gate: <n> open decisions in <plan>` or `refused: plan gate: <reason>` (`no plan`, `unreadable`, `too large`, `patterns`). An exception in the check is a refusal (`refused: plan gate: check failed`). `plan changed\|stopped`, other Gates, `warn` and `off` are unchanged. The settings and plan-check scripts load only on this path. |
+| `ceo <slug> <brief\|plan\|ship\|none> <n>` | (v1.5) appends `ceo`: one CEO form was shown with `<n>` (1-20) questions. `none` counts a prompt outside any form. Refused without an open segment, for another gate or for `<n>` outside 1-20. |
+| `sub <slug> <start\|stop> <role> <id> [<session>]` | (v1.5) appends `sub`. Refused without an open segment, for another phase, a role that is neither an `agents/` slug nor `other`, an `<id>` that is not 12 lowercase hex, or a `<session>` outside the pattern (upper case included); nothing written. The time is the receipt time. No prompt text, agent id or message is ever an argument. |
 | `pick <slug> <use\|edit\|keep\|stop> <asked>` | (v1.1) appends `pick`. Refused without an open segment, or when `<asked>` is not a whole number 0–3 (`refused: asked must be 0 to 3`) or the answer is not in the list (`refused: pick must be use, edit, keep or stop`). |
 | `end <slug> <ship\|abort>` | appends `end`, closing the segment. Refused without an open segment. |
 | `show <slug> --json` | prints the run view (below), exit 0 even for a missing or damaged file |
@@ -48,12 +56,16 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 { "v": 1, "slug": "x", "state": "running|ended|stale|none", "started": "<at>", "ended": "<at>|null",
   "outcome": "ship|abort|null", "wave": 2, "gates": [{ "gate": "brief", "result": "passed", "at": "<at>", "wait": 120 }],
   "picks": [{ "pick": "keep", "asked": 0, "at": "<at>" }],
+  "ceo": [{ "gate": "ship", "n": 3, "at": "<at>" }],
+  "subs": [{ "role": "qa", "id": "<12 hex>", "start": "<at>", "stop": "<at>|null", "ms": 5000 }],
+  "sessions": ["<uuid>"],
   "round": 1, "tier": "low|medium|high|unknown",
   "steps": [{ "step": "05", "role": "backend-engineer", "status": "done", "round": 0, "file": "05-backend-engineer.md", "mtime": "<at>" }],
   "warnings": ["line 7 skipped"] }
 ```
 - `picks` (v1.1): every `pick` of the last segment, in file order; `[]` when none. Placed directly after `gates`.
 - `wait` (v1.3): whole seconds from the latest `ask` for the same Gate that comes after the previous `gate` entry for that Gate (or after the segment `start`) to this entry's `at`; `null` when there is no such `ask` (an `auto` Gate, or a v1.2 file) or the result would be negative. `ask` lines appear nowhere else in the view.
+- `ceo`, `subs`, `sessions` (v1.5): of the last segment; `[]` when none. `ceo`: every `ceo` in file order. `subs`: a `start` opens an entry; a `stop` closes the latest open entry with the same `id` (`stop`, and `ms` = whole milliseconds, never negative); a `stop` with no open entry is its own entry with `start` and `ms` `null`; a `start` never stopped has `stop` and `ms` `null`. `sessions`: the distinct `session` values, first-seen order. `report`, `scorecard`, `receipt` and the Gate Report never print a session.
 - `steps`: every `^\d{2}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`; a step's `round` is allowed as a whole number 0–99 (v1.1; a reprompt run's edits have no cap, so its rounds can pass 99).
 - `round` = highest numeric `round:` among `steps` (so 0–99), else `0`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
 - Times and order come from the file; the view uses only the last segment (from the last `start`).
@@ -62,12 +74,14 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 `active` picks, among `.company/work/*/run-state.jsonl` (at most 200 folders), the one whose last segment has no `end` and whose newest activity (last record, or newest Step file mtime) is the most recent. A segment with no activity for 12 hours is `stale` and never active. No candidate → `{ "slug": null, "view": null }`.
 
 ## How the pipeline uses it (`aico:pipeline`, Core)
-- Setup, once the slug is known: `start <slug>`.
+- Setup, once the slug is known: `start <slug> <aico>` (v1.5, `<aico>` read from `plugin.json`; omitted when unreadable).
 - Each wave start in the plan: `wave <slug> <n>`.
 - (v1.3) Directly before showing each Brief, Plan and Ship Gate form: `ask <slug> <gate>`. An `auto` Gate shows no form and gets no `ask`.
 - Each Brief, Plan and Ship Gate answer (an `auto` Gate counts as `passed`): `gate <slug> <gate> <result>`.
 - Ship done, or the CEO stops the run: `end <slug> ship|abort`.
 - A run resumed with "resume <slug>" after an `end` runs `start <slug>` again.
+- (v1.5) Needs-ceo questions from Steps of one wave are held until the wave ends and shown as one form; at a Gate they join that Gate's form (`skills/pipeline/references/ceo-pack.md`). After each form: `ceo <slug> <gate> <n>`. A prompt outside any form is recorded as `ceo <slug> none <n>`. The older "ask each `needs-ceo` at once" rule no longer applies.
+- (v1.5) The pipeline never writes `sub`; the `step-times` hook does.
 - The Lead never edits the file by hand; a refused command is reported in the next Gate summary and the run goes on (run-state never blocks a Step or a Gate, except `gate <slug> plan passed` under `plan_check.policy` `block`; the Lead then stops the run at the Plan Gate and does not report and skip that refusal).
 - (v1.1) The pipeline never writes `pick`; only `aico:reprompt` does (`reprompt` v1, Lead flow step 7).
 - (v1.2) The pipeline never runs `triage`; only `aico:triage` (`issue`) and `aico:lead` (`check`) do (`company-type` v1.3 "Trust rule").
@@ -117,5 +131,5 @@ No request text, no route or tier, no names: hashes, an event and a time only.
 - Missing file → `state: none`, empty `gates` and `picks`, `steps` still listed.
 - Bad line (invalid JSON, unknown key, over 256 bytes, CR byte) → skipped, `warnings: ["line <n> skipped"]`.
 - File over 64 KiB or a symlink → `state: none`, `warnings: ["run-state unreadable"]`; writes refused.
-- Bad `<slug>`, unknown gate (on `gate` or `ask`), result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3 → `refused`, nothing written.
+- Bad `<slug>`, unknown gate (on `gate`, `ask` or `ceo`), result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3, `n` outside 1–20, a bad `sub` role, id, phase or session, a bad `aico` → `refused`, nothing written.
 - (v1.2) `triage`: a link in the path, or `.gitignore` or `records.jsonl` with more than one hard link ("Plain files only"; a hard-linked `request.txt` is not a refusal: it counts as missing, `check` exits 0 with `no request`), `records.jsonl` unreadable or over 64 KiB when read (checked before pruning), a bad nonce, or any other error → `refused: <reason>`, exit 2, nothing appended. `request.txt` is still deleted once read. After a refusal for a link at `.company` or `.company/triage`, the unlink of the name `request.txt` is resolved through that link and reaches the link target; it is never read, and it happens only when it is a regular file with one hard link whose mtime is within the last 10 minutes (the Write just made it), else it is left in place. A refusal for a hard-linked `.gitignore` follows the same rule. A refused `issue` means no direct route (`company-type` v1.3); a refused `check` means untrusted. The rest of run-state is unaffected.
