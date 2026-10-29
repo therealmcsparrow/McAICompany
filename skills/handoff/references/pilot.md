@@ -12,3 +12,4 @@ Contract: `docs/contracts/handoff.md`. Lint: `handoff-lint.mjs --require-top`; a
 - Layout: the Handover line of your agent; statuses `open|fixed|withdrawn`; no `|` inside a field; a Nit's Handoff row drops `[nit]`. Rows are appended or change status, never deleted.
 - A handover or Fix-round reviewer continues the same file, appends every new finding before its Handoff, and re-checks only open rows plus the new diff. Check: `handoff-lint.mjs --findings <file>`.
 - No ledger: keep the IDs of rows you re-report, list closed ones in `## Did` (`fixed R-2`), number new findings from 1 + the highest `R-<n>`/`C-<n>` in any earlier Handoff of the task.
+- Handoff v1.2: a pilot row's `R-<n>` is keyed `<NN>-<role>:R-<n>` by the file name; the ledger statuses above (`open|fixed|withdrawn`) are ledger rows only. Contests and their states: `references/contest.md`.

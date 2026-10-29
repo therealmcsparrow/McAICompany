@@ -44,7 +44,7 @@ test('parallel.md names every plan-tasks command, the cap fallback 4 and the ref
 test('the goldfish rules are wired into parallel.md, the pipeline and the handoff skill (dispatch-prompt v3.6)', () => {
   has(parallel, 'put its one line in as `Task brief:` (v3.6)', 'Any `brief` refusal', 'dispatch without a `Task brief:` line');
   has(pipeline, '**Goldfish builders and reviewers**', 'never opens the full plan', '**first pass**');
-  has(handoff, 'builder Handoffs after their first pass', 'A `Task brief:` line (v3.6) is your slice of the plan', 'missing plan context');
+  has(handoff, 'builder Handoffs after their first pass', 'A `Task brief:` line (v4) is your slice of the plan', 'missing plan context');
 });
 
 test('the handoff rule names the shared-tree dangers', () => {

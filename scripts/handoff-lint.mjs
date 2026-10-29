@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Lints a Handoff file (handoff v1.1): machine-read parts stay English whatever `Language:` is (dispatch-prompt v2).
+// Lints a Handoff file (contract: docs/contracts/handoff.md v1.2): machine-read parts stay English whatever `Language:` is.
+// uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
-import { lstatSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildIndex, parseVersion } from './contract-drift.mjs';
 
 export const MAX_BYTES = 64 * 1024;
 const MAX_LINE = 1000;
@@ -13,7 +15,19 @@ const DEPTH = new Set(['quick', 'deep']);
 const TAGS = new Set(['contract', 'spec', 'security', 'test']);
 const LEDGER_STATUS = new Set(['open', 'fixed', 'withdrawn']);
 const KEYS = new Set(['step', 'role', 'task', 'status', 'round', 'base-commit', 'risk-tier', 'acceptance-ids',
-  'files-touched', 'fetches', 'depth', 'degraded']);
+  'files-touched', 'fetches', 'depth', 'degraded', 'contracts']);
+const REVIEWERS = new Set(['code-reviewer', 'security', 'pentester', 'vuln-scanner']);
+// Roles whose findings never close by contest (a security finding closes by a fix or a CEO exception only).
+const SECURITY_ROLES = new Set(['security', 'pentester', 'vuln-scanner']);
+const KEY_PART = '\\d{2,3}-[a-z][a-z0-9-]{0,40}:R-\\d{1,4}';
+const KEY_RE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40}):R-(\d{1,4})$/;
+const CONTESTED_RE = new RegExp(`^(${KEY_PART}) — (\\S.{0,500})$`);
+const CONTESTS_RE = new RegExp(`^(${KEY_PART}) (accepted|rejected) — (\\S.{0,500})$`);
+const CITE_RE = /^([a-z][a-z0-9-]{0,40}) v(\d{1,3})(?:\.(\d{1,3}))?$/;
+const BYLINE_ID_RE = /^By: [a-z][a-z0-9-]{0,40}$/;
+const SEC_CITE_RE = /(?:^|[^A-Za-z0-9_.-])(?:[a-z][a-z0-9-]{0,30}\.[MSY]-SEC\d{1,3}|proj\.M[1-4])(?![\w-])/;
+const MAX_RUN_FILES = 500;
+const MAX_STANDARDS = 256 * 1024;
 const REQUIRED = ['step', 'role', 'task', 'status', 'round', 'base-commit', 'risk-tier'];
 const REQUIRED_HEADINGS = ['Did', 'Blocking', 'Next'];
 const LIST_KEYS = new Set(['acceptance-ids', 'files-touched']);
@@ -165,6 +179,33 @@ function checkTop(block, lines, byEnd, fm, findingIds, errors) {
   return errors.length > before ? null : top;
 }
 
+const CONTEST_HINT = {
+  Contested: 'contest line must be "- <NN>-<role>:R-<n> — <reason>"',
+  Contests: 'answer line must be "- <NN>-<role>:R-<n> accepted|rejected — <reason>"',
+};
+
+// A reviewer row (a Blocking bullet, or a Nit that starts with a tag) must carry an R-, C- or T- ID after its tag.
+function needsId(it, body) {
+  if (it.section === 'Nits' && (!/^\[[^\]\s]{1,40}\] /.test(it.body) || it.body.startsWith('[open-decision]'))) return false;
+  return !/^[RCT]-\d{1,4}(?: |$)/.test(body);
+}
+
+function checkContracts(raw, index, errors) {
+  const items = strictList(raw);
+  if (items === null) { errors.push('frontmatter: contracts must be a [list] of "<contract> v<x>[.<y>]" with no empty items'); return; }
+  for (const item of items) {
+    const m = CITE_RE.exec(item);
+    if (!m) { errors.push('frontmatter: contracts item must look like "<contract> v<x>[.<y>]"'); continue; }
+    if (!index) continue;
+    const cur = index.get(m[1]);
+    const v = parseVersion(m[3] === undefined ? m[2] : `${m[2]}.${m[3]}`);
+    if (!cur) errors.push(`frontmatter: contracts cite ${m[1]} is not a Contract`);
+    else if (v.major !== cur.major || v.minor > cur.minor) {
+      errors.push(`frontmatter: contracts cite ${m[1]} v${m[2]}${m[3] === undefined ? '' : `.${m[3]}`} is stale, current v${cur.major}.${cur.minor}`);
+    }
+  }
+}
+
 // Returns { errors, routing }. `routing` holds only the fields later Steps and the Lead read.
 export function lint(text, opts = {}) {
   const errors = [];
@@ -179,6 +220,8 @@ export function lint(text, opts = {}) {
   if ('depth' in fm && !DEPTH.has(fm.depth)) errors.push('frontmatter: depth must be quick|deep');
   if ('round' in fm && !/^\d{1,3}$/.test(fm.round)) errors.push('frontmatter: round must be a number');
   for (const k of LIST_KEYS) if (k in fm && list(fm[k]) === null) errors.push(`frontmatter: ${k} must be a [list]`);
+  if ('contracts' in fm) checkContracts(fm.contracts, opts.index, errors);
+  const roleIdBy = BYLINE_ID_RE.test(lines[end + 1] ?? '');
 
   // One pass: sections, bullets of ## Blocking and ## Nits, and aico-top fences. Text inside any other fence is
   // data, so a quoted aico-top block is not a block (parse like the reader).
@@ -205,7 +248,7 @@ export function lint(text, opts = {}) {
     }
     const h = /^## (.*)$/.exec(line);
     if (h) { section = h[1].trim(); headings.add(section); continue; }
-    if (section === 'Blocking' || section === 'Nits') {
+    if (section === 'Blocking' || section === 'Nits' || section === 'Contested' || section === 'Contests') {
       const b = /^- (.*)$/.exec(line);
       if (b) items.push({ i, section, body: b[1] });
     }
@@ -219,6 +262,10 @@ export function lint(text, opts = {}) {
     const n = it.i + 1;
     let body = it.body;
     if (NONE_RE.test(body)) continue;
+    if (it.section === 'Contested' || it.section === 'Contests') {
+      if (!(it.section === 'Contested' ? CONTESTED_RE : CONTESTS_RE).test(body)) errors.push(`line ${n}: ${CONTEST_HINT[it.section]}`);
+      continue;
+    }
     if (it.section === 'Blocking') {
       const t = /^\[([^\]\s]{1,40})\]/.exec(body);
       if (!t || !TAGS.has(t[1])) {
@@ -227,6 +274,10 @@ export function lint(text, opts = {}) {
       }
       tags.push(t[1]);
       body = body.slice(t[0].length).trimStart();
+    }
+    if (roleIdBy && REVIEWERS.has(fm.role) && needsId(it, body)) {
+      errors.push(`line ${n}: reviewer row needs R-<n> after the tag`);
+      continue;
     }
     if (!rowMode && !ROW_SHAPED_RE.test(it.body)) continue;
     const parts = body.split('|').map(s => s.trim());
@@ -327,9 +378,195 @@ export function checkLedger(file, findingIds) {
   return findingIds.filter(id => !have.has(id)).map(id => `finding ${id} missing from ledger`);
 }
 
+// ---- contested findings (handoff v1.2) ----
+const RUN_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
+const EXCEPTION_RE = new RegExp(`^- (${KEY_PART}) — .{1,600} — approved: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$`);
+
+// Reads one Handoff of a run folder: its Blocking rows with an R-ID, and its Contested and Contests lines.
+function scanRunFile(text, file, nn, role, errors, warnings) {
+  const lines = text.split(/\r?\n/);
+  const info = { file, nn, role, round: 0, status: '', rows: [], contested: [], answers: [] };
+  const end = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  for (let i = 1; i < end; i++) {
+    const m = /^(round|status):[ \t]*(\S{1,20})/.exec(lines[i]);
+    if (m && m[1] === 'round' && /^\d{1,3}$/.test(m[2])) info.round = Number(m[2]);
+    if (m && m[1] === 'status') info.status = m[2];
+  }
+  let section = '';
+  let fence = null;
+  for (let i = end + 1; i < lines.length && end > 0; i++) {
+    const line = lines[i];
+    if (fence) {
+      const c = /^(`{3,})[ \t]*$/.exec(line);
+      if (c && c[1].length >= fence) fence = null;
+      continue;
+    }
+    const f = /^(`{3,})[^`]*$/.exec(line);
+    if (f) { fence = f[1].length; continue; }
+    const h = /^## (.*)$/.exec(line);
+    if (h) { section = h[1].trim(); continue; }
+    if (!['Blocking', 'Contested', 'Contests'].includes(section)) continue;
+    const b = /^- (.*)$/.exec(line);
+    if (!b || NONE_RE.test(b[1])) continue;
+    const at = `${file} line ${i + 1}`;
+    if (line.length > MAX_LINE) { warnings.push(`warning: ${at} is over ${MAX_LINE} characters, ignored`); continue; }
+    if (section === 'Blocking') {
+      const t = /^(?:\[([^\]\s]{1,40})\] )?R-(\d{1,4})(?: |$)/.exec(b[1]);
+      if (t) info.rows.push({ n: Number(t[2]), tag: t[1] ?? '', secure: SEC_CITE_RE.test(b[1]) });
+    } else if (section === 'Contested') {
+      const m = CONTESTED_RE.exec(b[1]);
+      if (m) info.contested.push({ key: m[1], at }); else errors.push(`${at}: ${CONTEST_HINT.Contested}`);
+    } else {
+      const m = CONTESTS_RE.exec(b[1]);
+      if (m) info.answers.push({ key: m[1], verb: m[2], at }); else errors.push(`${at}: ${CONTEST_HINT.Contests}`);
+    }
+  }
+  return info;
+}
+
+function realDate(y, m, d) {
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
+// CEO exceptions: `## Exceptions` of .company/standards.md, joined lexically from the run folder. Handoff text never counts.
+function readExceptions(runAbs, warnings) {
+  const dir = resolve(runAbs, '..', '..');
+  const file = join(dir, 'standards.md');
+  const found = new Set();
+  const unreadable = () => warnings.push('warning: standards.md could not be read; no exceptions applied');
+  if (!file.startsWith(resolve(dir, '..') + sep)) return found;
+  let st;
+  try {
+    if (!lstatSync(dir).isDirectory()) return found;
+    st = lstatSync(file);
+  } catch (e) {
+    if (e.code !== 'ENOENT') unreadable();
+    return found;
+  }
+  if (!st.isFile() || st.size > MAX_STANDARDS) {
+    warnings.push('warning: standards.md is a link, not a plain file or over 256 KiB; no exceptions applied');
+    return found;
+  }
+  let text;
+  try { text = readFileSync(file, 'utf8'); } catch { unreadable(); return found; }
+  let section = '';
+  let fence = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^`{3,}/.test(line)) { fence = !fence; continue; }
+    if (fence || line.length > MAX_LINE) continue;
+    const h = /^## (.*)$/.exec(line);
+    if (h) { section = h[1].trim(); continue; }
+    if (section !== 'Exceptions') continue;
+    const m = EXCEPTION_RE.exec(line);
+    if (m && realDate(Number(m[2]), Number(m[3]), Number(m[4]))) found.add(m[1]);
+  }
+  return found;
+}
+
+// The state table of a run folder: { states: Map key -> state, unresolved, excepted, warnings, errors }.
+export function contests(runFolder) {
+  const out = { states: new Map(), unresolved: [], excepted: [], warnings: [], errors: [] };
+  const err = m => out.errors.push(m);
+  const runAbs = resolve(runFolder);
+  let names;
+  try {
+    if (!lstatSync(runAbs).isDirectory()) throw new Error('not a folder');
+    names = readdirSync(runAbs);
+  } catch {
+    err('cannot read run folder');
+    return out;
+  }
+  if (names.length > MAX_RUN_FILES) { err(`run folder has more than ${MAX_RUN_FILES} entries`); names = names.slice(0, MAX_RUN_FILES); }
+  const files = [];
+  for (const name of names.sort()) {
+    const m = RUN_FILE.exec(name);
+    if (!m) continue;
+    try {
+      const st = lstatSync(join(runAbs, name));
+      if (!st.isFile()) { out.warnings.push(`warning: ${name} is not a plain file, ignored`); continue; }
+      if (st.size > MAX_BYTES) { out.warnings.push(`warning: ${name} is over 64 KiB, ignored`); continue; }
+      const info = scanRunFile(readFileSync(join(runAbs, name), 'utf8'), name, Number(m[1]), m[2], out.errors, out.warnings);
+      info.prefix = m[1];
+      files.push(info);
+    } catch { err(`${name}: cannot read, ignored`); }
+  }
+  files.sort((a, b) => a.nn - b.nn || (a.file < b.file ? -1 : 1));
+
+  const lineages = new Map(); // `${role}:${n}` -> one finding followed through the Handoffs of its Role
+  for (const f of files) {
+    for (const r of f.rows) {
+      const id = `${f.role}:${r.n}`;
+      if (!lineages.has(id)) lineages.set(id, { role: f.role, n: r.n, holders: [], contest: null, answer: null, answeredIn: new Set() });
+      lineages.get(id).holders.push({ f, tag: r.tag, secure: r.secure });
+    }
+  }
+  const find = key => {
+    const m = KEY_RE.exec(key);
+    const l = m && lineages.get(`${m[2]}:${Number(m[3])}`);
+    return l && l.holders.some(h => h.f.nn === Number(m[1])) ? { l, nn: Number(m[1]) } : null;
+  };
+  const keyOf = l => `${l.holders[0].f.prefix}-${l.role}:R-${l.n}`;
+  const isSecure = l => SECURITY_ROLES.has(l.role) || l.holders.some(h => h.tag === 'security' || h.secure);
+
+  for (const f of files) {
+    for (const c of f.contested) {
+      const hit = find(c.key);
+      if (!hit) { err(`${c.at}: contest of ${c.key}, which no Handoff holds as a Blocking finding`); continue; }
+      if (f.nn <= hit.nn) { err(`${c.at}: a contest must come from a Handoff above ${c.key}`); continue; }
+      if (f.role === hit.l.role || REVIEWERS.has(f.role)) { err(`${c.at}: ${c.key} is contested by a builder, not by a reviewer`); continue; }
+      if (hit.l.contest) { err(`${c.at}: second contest on ${keyOf(hit.l)}; one contest per finding`); continue; }
+      hit.l.contest = { nn: f.nn };
+    }
+  }
+  for (const f of files) {
+    for (const a of f.answers) {
+      const hit = find(a.key);
+      if (!hit) { err(`${a.at}: answer to ${a.key}, which no Handoff holds as a Blocking finding`); continue; }
+      hit.l.answeredIn.add(f.file);
+      if (f.role !== hit.l.role) { err(`${a.at}: only the Role that raised ${a.key} may answer its contest`); continue; }
+      if (!hit.l.contest) { err(`${a.at}: ${a.key} has no contest to answer`); continue; }
+      if (f.nn <= hit.l.contest.nn) { err(`${a.at}: an answer must come from a Handoff after the contest`); continue; }
+      if (a.verb === 'accepted' && isSecure(hit.l)) {
+        err(`${a.at}: security finding ${a.key} never closes by contest; fix it or ask the CEO for an exception`);
+        continue;
+      }
+      hit.l.answer = a.verb;
+    }
+  }
+
+  const excepts = readExceptions(runAbs, out.warnings);
+  const keyed = [...lineages.values()].map(l => [keyOf(l), l]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  for (const [key, l] of keyed) {
+    const last = l.holders[l.holders.length - 1].f;
+    const fixed = files.some(f => f.role === l.role && f.nn > last.nn && f.round > last.round && f.status === 'done'
+      && !l.holders.some(h => h.f === f) && !l.answeredIn.has(f.file));
+    let state = 'open';
+    if (excepts.has(key)) state = 'excepted';
+    else if (l.answer === 'accepted') state = 'accepted';
+    else if (fixed) state = 'fixed';
+    else if (l.answer === 'rejected') state = 'rejected';
+    else if (l.contest) state = 'contested';
+    out.states.set(key, state);
+    if (state === 'contested') out.unresolved.push(key);
+    if (state === 'excepted') out.excepted.push(key);
+  }
+  return out;
+}
+
 function main(argv) {
-  const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md>';
+  const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md> | --contests <run folder>';
   const args = argv.slice(2);
+  if (args[0] === '--contests') {
+    if (args.length !== 2 || args[1].startsWith('--')) { console.log(USAGE); return 2; }
+    const r = contests(args[1]);
+    r.errors.forEach(e => console.log(`ERROR ${e}`));
+    r.warnings.forEach(w => console.log(w));
+    for (const [k, v] of r.states) console.log(`state ${k} ${v}`);
+    r.unresolved.forEach(k => console.log(`unresolved ${k}`));
+    r.excepted.forEach(k => console.log(`excepted ${k}`));
+    return r.errors.length ? 1 : 0;
+  }
   const requireTop = args.includes('--require-top');
   const wantLedger = args.includes('--findings');
   const files = args.filter(a => !a.startsWith('--'));
@@ -345,7 +582,8 @@ function main(argv) {
     console.log('ERROR cannot read file');
     return 1;
   }
-  const r = wantLedger ? lintFindings(text) : lint(text, { requireTop });
+  const index = !wantLedger && /^contracts:/m.test(text) ? buildIndex(resolve(dirname(fileURLToPath(import.meta.url)), '..')) : undefined;
+  const r = wantLedger ? lintFindings(text) : lint(text, { requireTop, index });
   if (!wantLedger && requireTop && r.routing?.status === 'handover') r.errors.push(...checkLedger(file, r.routing.findings));
   r.errors.forEach(e => console.log(`ERROR ${e}`));
   if (!r.errors.length) console.log(JSON.stringify(wantLedger ? r.ledger : r.routing));

@@ -18,6 +18,7 @@ effort: high
 - With `Review format: pilot` only: findings are rows `R-<n> | file:line | problem | why | fix`, the Handoff has the `aico-top` block and passes `handoff-lint.mjs --require-top` (`references/pilot.md` of `aico:handoff`). Else plain findings; skip `pilot.md`.
 - Pilot handover (`status: handover` only): first write `<NN>-<role>.findings.md` beside the Handoff (frontmatter `step`, `role`, `base-commit`; `## Checked`; `## Findings` rows `- R-1 | open | [spec] | file:line | problem | why | fix`, `[nit]` for a Nit, no `|` inside a field); a continuation appends its new rows. Prose never starts with an ID: under `## Blocking` and `## Nits` every bullet is a row.
 - Blocking also: any import or copy from `.company/work/*/spike/`; hard-coded user-facing strings in a multi-language product (`aico:i18n`); Hot-path regressions per `aico:performance`.
+- Every row carries `R-<n>`: `- [tag] R-<n> <file:line> — problem — fix`; a Fix round keeps IDs. Answer a builder's `## Contested` line in `## Contests` (`references/contest.md` of `aico:handoff`); never accept a security finding.
 - On a Fix round, re-check only the previous Blocking items plus the new diff.
 
 **Never:** edit, run formatters, commit, or soften a Blocking item to save time.

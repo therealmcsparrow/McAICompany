@@ -13,14 +13,14 @@ Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the 
 1. Read the input Handoffs first (code-reviewer and QA: builder Handoffs after their first pass, `aico:review`), then only the `.company/project.md` sections you need; don't read other Steps' Handoffs or browse `.company/work/`.
 2. **Input Handoffs missing *or* output path missing → stop.** Write nothing else. Return `blocked — missing handoff`; the Lead re-dispatches. Never guess the context. Exception: a dispatch that literally says `Input Handoffs: none: first Step` and quotes the CEO's request.
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
-4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`.
+4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`. Reviewer rows carry `R-<n>`; to contest or answer one: `references/contest.md`.
 5. Never start an aico Playbook with the Skill tool; name the Playbook you need under `## Next` for the Lead.
-6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v3.5): other Steps may be working in the same tree right now. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v3.6) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
+6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v4): other Steps may be working in the same tree right now. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v4) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
 
 ## Context budget: the `Context cap:` line
 
 Your dispatch carries `Context cap: <cap> handover <n>`: `<cap>` is the most context you may use, `<n>` the handover point. The Lead computes both; you never compute them. Past the cap quality drops, so hand over to a clean Step.
-- Absent → cap 150000, handover at 120000. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v3.1).
+- Absent → cap 150000, handover at 120000. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v4).
 - Big reads, long diffs and test logs add up: read slices, grep first. Near `<n>` (or you can't tell and have done a lot of reading), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
 - Write `status: handover`: `## Did` what's finished, `## Next` what's left, in order, with file paths, so a fresh Role of the same type continues without re-reading. Commit-ready work only. A handover is not a failure or a blocker; never cut scope or skip checks to squeeze under the budget.
 
@@ -40,7 +40,7 @@ risk-tier: medium
 acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
 ---
-By: <Name> (<role>)
+By: <role id>
 ## Did
 - What changed, as facts, with file paths.
 ## Decisions
@@ -53,7 +53,7 @@ By: <Name> (<role>)
 - What the next Step needs; name the Role.
 ```
 
-`By:` comes from your dispatch's `Name:` line (none → the Role title). **Fields are the contract:** the Lead and later Steps read the frontmatter, not the prose; fill every field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit it if you only reason).
+`By:` is your Role id. **Fields are the contract:** the Lead and later Steps read the frontmatter, not the prose; fill every field that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit it if you only reason).
 
 **Blocking tags** `contract`, `spec`, `security`, `test` route the Fix round. **Risk tier** `low | medium | high` is forced **high** for anything touching auth, payments, personal data, migrations or a Contract; a Role may raise it, never lower it.
 
