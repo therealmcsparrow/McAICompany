@@ -5,6 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROUTE_V018, FORCED_HIGH_V1, CORE_FIXED, loadTierSets, tokens, checkPaths, readTierPath, TierPathRecordError, main } from './tier-set.mjs';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const __mkdtemp = fs.mkdtempSync;
+const __rmTree = fs.rmSync;
+fs.mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const NOW = Date.UTC(2026, 9, 28, 12, 0, 0);
 const REPO = path.resolve(import.meta.dirname, '..');

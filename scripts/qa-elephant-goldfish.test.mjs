@@ -188,7 +188,7 @@ function contestProduct(sb, { blocker = 'code-reviewer', tag = 'spec' } = {}) {
 const KEY = '05-code-reviewer:R-1';
 const ESCALATE = 'only the CEO can say whether this wording is wanted, no file shows it';
 
-// ================================================================== AC1
+// ==================================================================
 
 describe('AC1 the plan review inputs hold only the plan, its Contracts and the code it cites', () => {
   const linesArgs = (extra = []) => ['lines', SLUG, PLAN, '--mode', 'plan', '--after', '03-architect.md', ...extra];
@@ -327,7 +327,7 @@ describe('AC1 the plan review inputs hold only the plan, its Contracts and the c
   });
 });
 
-// ================================================================== AC2
+// ==================================================================
 
 describe('AC2 the first pass comes before any line that cites a run Handoff', () => {
   const valid = fs.readFileSync(path.join(FIX, 'handoffs', 'fresh-reviewer-plan.md'), 'utf8');
@@ -402,7 +402,7 @@ describe('AC2 the first pass comes before any line that cites a run Handoff', ()
   });
 });
 
-// ================================================================== AC4
+// ==================================================================
 
 describe('AC4 plan review findings join the Plan Gate summary; no Gate is added', () => {
   function gateOf(paraphrase, { extra = [] } = {}) {
@@ -477,7 +477,7 @@ describe('AC4 plan review findings join the Plan Gate summary; no Gate is added'
   });
 });
 
-// ================================================================== AC5
+// ==================================================================
 
 describe('AC5 the second reviewer runs at tier high with the setting on, never as a third pass', () => {
   function settingsOf(sb, cwd, ...args) {
@@ -617,7 +617,7 @@ function runRepo(sb, name = 'repo') {
   };
 }
 
-// ================================================================== AC6
+// ==================================================================
 
 describe('AC6 a finding only one reviewer raised stays Blocking and is listed at the Ship Gate', () => {
   const gateLines = (r) => r.run(['gate', SLUG]).lines;
@@ -690,7 +690,7 @@ describe('AC6 a finding only one reviewer raised stays Blocking and is listed at
   });
 });
 
-// ================================================================== AC7
+// ==================================================================
 
 describe('AC7 the fresh reviewer keeps a Paraphrase, even with no findings, and the Gate shows it', () => {
   for (const mode of ['plan', 'code']) {
@@ -732,7 +732,7 @@ describe('AC7 the fresh reviewer keeps a Paraphrase, even with no findings, and 
   });
 });
 
-// ================================================================== AC8
+// ==================================================================
 
 describe('AC8 a paraphrase gap is a comprehension Blocking row whose fix is a text change', () => {
   const lintRows = (role, rows, extra = {}) => {
@@ -768,7 +768,7 @@ describe('AC8 a paraphrase gap is a comprehension Blocking row whose fix is a te
   });
 });
 
-// ================================================================== AC9
+// ==================================================================
 
 describe('AC9 a review Step that fails twice is recorded as not run, never as a clean pass', () => {
   const recordFile = (r) => path.join(r.runFolder, 'review-loop.jsonl');
@@ -876,7 +876,7 @@ describe('AC9 a review Step that fails twice is recorded as not run, never as a 
   });
 });
 
-// ================================================================== AC10
+// ==================================================================
 
 describe('AC10 a new Blocking finding on a range the last Fix round changed is churn; the Lead stops and escalates', () => {
   const FIRST = '05-code-reviewer:R-1';
@@ -991,7 +991,7 @@ describe('AC10 a new Blocking finding on a range the last Fix round changed is c
   });
 });
 
-// ================================================================== AC11
+// ==================================================================
 
 describe('AC11 a contest needs evidence the reviewer can open', () => {
   const NO_EVIDENCE = new RegExp(`contest of ${KEY} has no checkable evidence`);
@@ -1098,7 +1098,7 @@ describe('AC11 a contest needs evidence the reviewer can open', () => {
   });
 });
 
-// ================================================================== AC12
+// ==================================================================
 
 describe('AC12 a contest with no reachable evidence is escalated and only the CEO closes it', () => {
   function escalated(sb, { blocker = 'code-reviewer', tag = 'spec', reason = ESCALATE } = {}) {
@@ -1240,7 +1240,7 @@ describe('AC12 a contest with no reachable evidence is escalated and only the CE
   });
 });
 
-// ================================================================== AC13
+// ==================================================================
 
 describe('AC13 a comprehension finding cannot be contested; the v0.20 contest limits stay', () => {
   const COMP = '04-fresh-reviewer:R-1';
@@ -1332,7 +1332,7 @@ describe('AC13 a comprehension finding cannot be contested; the v0.20 contest li
   });
 });
 
-// ================================================================== AC14
+// ==================================================================
 
 describe('AC14 the drift report compares Contract claims with code, cites both paths and blocks nothing', () => {
   const REPORT = `.company/work/${SLUG}/drift-2026-10-29.md`;
@@ -1493,7 +1493,7 @@ describe('AC14 the drift report compares Contract claims with code, cites both p
   });
 });
 
-// ================================================================== AC15
+// ==================================================================
 
 describe('AC15 without the drift argument no drift Step is dispatched', () => {
   const maintain = read('skills', 'maintain', 'SKILL.md');

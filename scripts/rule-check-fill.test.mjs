@@ -4,6 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { main } from './rule-check.mjs';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const __mkdtemp = fs.mkdtempSync;
+const __rmTree = fs.rmSync;
+fs.mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const made = [];
 function tmp() {

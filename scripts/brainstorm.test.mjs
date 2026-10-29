@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, mkdirSync, symlinkSync, renameSync } from 'node:fs';
+import { mkdtempSync as __mkdtemp, rmSync as __rmTree, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, mkdirSync, symlinkSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,10 @@ import {
 } from './brainstorm.mjs';
 import { checkBrainstorm } from './check.mjs';
 import { personalityBlock } from './personality.mjs';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(here, 'brainstorm.mjs');

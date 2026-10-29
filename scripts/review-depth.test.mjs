@@ -5,6 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { classify } from './review-depth.mjs';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const __mkdtemp = fs.mkdtempSync;
+const __rmTree = fs.rmSync;
+fs.mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const script = path.join(import.meta.dirname, 'review-depth.mjs');
 const SLUG = 'rd';

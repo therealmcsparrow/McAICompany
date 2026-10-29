@@ -53,7 +53,7 @@ const FIXTURE_ROLES = {
   writer: ['haiku', 'sonnet']
 };
 const NAMES = {
-  architect: 'Ava', 'code-reviewer': 'Rex', 'fresh-reviewer': 'Fenna', pentester: 'Pia', security: 'Sam', 'vuln-scanner': 'Vic',
+  architect: 'Ava', 'code-reviewer': 'Rui', 'fresh-reviewer': 'Fenna', pentester: 'Pavel', security: 'Sam', 'vuln-scanner': 'Viktor',
   qa: 'Quinn', 'backend-engineer': 'Bob', 'tech-researcher': 'Tess', writer: 'Wes'
 };
 

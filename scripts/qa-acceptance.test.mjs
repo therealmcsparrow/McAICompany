@@ -501,6 +501,9 @@ const HAND_OVER_CHANGES = {
       // The plan review step 2e and the second reviewer lane.
       /^2e\. `aico:fresh-reviewer` plan review, only when `plan-review` is in the set/,
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
+      // The prototype step and the destination spec at ship (v0.21.0).
+      /^1b\. Prototype, only after a Run it answer at the Brief Gate/,
+      /^5a\. `aico:product-manager`: destination spec, checked by `spec-check\.mjs`/,
     ],
   },
   fix: {
@@ -650,8 +653,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   for (const name of soft) assertV012Playbook(name);
   // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
-  // 23 removed lines: the ten above, plus the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
-  assert.equal(Number(removedFromPipeline), 23);
+  // 24 removed lines: the ten above, plus the Task slug line (the exceptions-on-file refusal, v0.21.0), the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
+  assert.equal(Number(removedFromPipeline), 24);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 

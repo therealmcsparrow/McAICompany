@@ -1,12 +1,16 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync as __mkdtemp, rmSync as __rmTree, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { CEO_ONLY } from './company-type.mjs';
 import { DESCRIPTION_BUDGET, check, checkBrainstorm, checkPack, checkPacks, PERSONALITY_TEXT_RE, PERSONALITY_LEVELS, PERSONALITY_PHRASES, PERSONALITY_MAX, personalityProblem } from './check.mjs';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const tempDirs = [];
 after(() => { for (const d of tempDirs) rmSync(d, { recursive: true, force: true }); });

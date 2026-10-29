@@ -15,7 +15,7 @@ const SIX = ['Goal', 'Context', 'Inputs', 'Constraints', 'Output format', 'Done 
 let n = 0;
 
 function git(cwd, ...args) {
-  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd, encoding: 'utf8', env: envFor(cwd) });
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd, encoding: 'utf8', env: { ...envFor(cwd), GIT_CONFIG_NOSYSTEM: '1' } });
   assert.equal(r.status, 0, r.stderr);
 }
 
@@ -259,7 +259,7 @@ const sizeOf = (f) => fs.statSync(f).size;
 
 // Runs git the way the CEO would, to show the planted command really does run.
 function plantIsLive(p, marker) {
-  spawnSync('git', ['status', '--porcelain'], { cwd: p.root, env: envFor(p.root), encoding: 'utf8' });
+  spawnSync('git', ['status', '--porcelain'], { cwd: p.root, env: { ...envFor(p.root), GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8' });
   return fs.existsSync(marker);
 }
 const refusedConfig = (r) => {
@@ -477,7 +477,7 @@ test('hostile: a plain git status and a commit between baseline and reply do not
   const hex = good(p);
   put(path.join(p.root, 'app.js'), 'console.log(2);\n');
   const env = envFor(p.root);
-  const st = spawnSync('git', ['status'], { cwd: p.root, env, encoding: 'utf8' });
+  const st = spawnSync('git', ['status'], { cwd: p.root, env: { ...env, GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8' });
   assert.equal(st.status, 0, st.stderr);
   git(p.root, 'add', '-A');
   git(p.root, 'commit', '-q', '-m', 'second');

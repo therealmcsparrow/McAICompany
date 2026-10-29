@@ -1910,7 +1910,7 @@ function reviewerSandbox(t, { floorText } = {}) {
   const names = JSON.parse(fs.readFileSync(path.join(s.pluginRoot, 'company', 'names.json'), 'utf8'));
   for (const role of ['code-reviewer', 'fresh-reviewer']) {
     fs.writeFileSync(path.join(s.pluginRoot, 'agents', `${role}.md`), agentFile(role, { model: 'opus', effort: 'high' }));
-    names[role] = role === 'fresh-reviewer' ? 'Fenna' : 'Rex';
+    names[role] = role === 'fresh-reviewer' ? 'Fenna' : 'Rui';
   }
   fs.writeFileSync(path.join(s.pluginRoot, 'company', 'names.json'), JSON.stringify(names));
   const floor = Object.fromEntries(reviewerNames.map((r) => [r, r === 'qa' ? 'sonnet' : 'opus']));

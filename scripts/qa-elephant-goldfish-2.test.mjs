@@ -83,7 +83,7 @@ function put(root, rel, text) {
   return abs;
 }
 
-// ------------------------------------------------------------------ AC16-AC18: plan task size and shape
+// ------------------------------------------------------------------ plan task size and shape
 
 // A product folder holding one plan. Returns a runner for plan-tasks.
 function planProduct(t, planText) {
@@ -249,7 +249,7 @@ describe('AC18: the plan lists test seams and the TDD skill tests only there', (
   });
 });
 
-// ------------------------------------------------------------------ AC20, AC21: question rules
+// ------------------------------------------------------------------ question rules
 
 // A reprompt run folder in a temp product, driven through the checker's snap, arm and reply commands.
 const REPROMPT_SLUG = 'reprompt-20261029-0905';
@@ -369,7 +369,7 @@ describe('AC21: the Role stops asking when no open question blocks the brief, an
   });
 });
 
-// ------------------------------------------------------------------ AC22: lessons
+// ------------------------------------------------------------------ lessons
 
 describe('AC22: a lesson is classed mechanical or judgement and lint rejects an unclassified one', () => {
   const lessons = (sb, cwd, ...args) => node(sb, cwd, 'lessons.mjs', args);
@@ -439,7 +439,7 @@ describe('AC22: a lesson is classed mechanical or judgement and lint rejects an 
   });
 });
 
-// ------------------------------------------------------------------ AC23: research reuse
+// ------------------------------------------------------------------ research reuse
 
 // A Handoff of a given Role with the extra sections between ## Nits and ## Next.
 function handoffText({ role = 'architect', fm = '', decisions = ['- none'], blocking = ['- none'], extra = '' } = {}) {
@@ -496,7 +496,7 @@ describe('AC23: an earlier research report is cited with its date and never take
   });
 });
 
-// ------------------------------------------------------------------ AC24, AC25: second reviewer model
+// ------------------------------------------------------------------ second reviewer model
 
 // Settings JSON for a user config; returns the parsed `pipeline` group and the warning lines.
 function pipelineSettings(sb, pipeline) {
@@ -598,7 +598,7 @@ describe('AC25: with the model unset the second reviewer uses the default review
   });
 });
 
-// ------------------------------------------------------------------ AC26, AC27: destination spec
+// ------------------------------------------------------------------ destination spec
 
 // Puts a spec at the allowed path of a temp product and runs spec-check on it.
 function specProduct(t, text) {
@@ -706,7 +706,7 @@ describe('AC27: a saved spec holding a file path or a code block is an ERROR', (
   });
 });
 
-// ------------------------------------------------------------------ AC30: glossary and ADR drafts
+// ------------------------------------------------------------------ glossary and ADR drafts
 
 describe('AC30: settled terms and hard decisions are listed at the Brief Gate and written after approval', () => {
   test('the product manager Handoff may hold a Glossary, ADR drafts and one Prototype question', (t) => {
@@ -762,7 +762,7 @@ describe('AC30: settled terms and hard decisions are listed at the Brief Gate an
   });
 });
 
-// ------------------------------------------------------------------ worktree tests (AC28, AC29, AC31-AC34)
+// ------------------------------------------------------------------ worktree tests
 
 const wtPath = (root, id, slug = SLUG) => path.join(`${root}.aico-wt`, slug, id);
 

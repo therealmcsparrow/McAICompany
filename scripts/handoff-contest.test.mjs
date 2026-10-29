@@ -281,7 +281,7 @@ test('a run folder that is missing or a link gives one error, not a crash', () =
 
 test('single-file lint: reviewer rows need R-<n> under a Role id byline; a v1.1 name byline still lints', () => {
   const plain = ['[spec] src/a.mjs:3 — problem — fix'];
-  const v11 = handoff({ role: 'code-reviewer', blocking: plain }).replace('By: code-reviewer', 'By: Rae (code-reviewer)');
+  const v11 = handoff({ role: 'code-reviewer', blocking: plain }).replace('By: code-reviewer', 'By: Rui (code-reviewer)');
   assert.deepEqual(lint(v11).errors, []);
   assert.match(lint(handoff({ role: 'code-reviewer', blocking: plain })).errors.join('\n'), /R-<n>/);
   assert.deepEqual(lint(handoff({ role: 'code-reviewer', blocking: [row('spec', 2)] })).errors, []);
