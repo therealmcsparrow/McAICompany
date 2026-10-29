@@ -21,7 +21,10 @@ One line each, sorted by check, duplicates removed:
 - `ERROR <doc>:<line> anchor <path> missing` or `refused`
 - `ERROR <contract> provider <script> lacks export <name>`
 
-The CLI prints the lines and `<n> error(s)`; exit 1 on any error, else 0. `check.mjs --drift [root]` runs only these checks (exit 2 on bad usage); `aico:maintain` runs it and reports each line.
+The CLI prints the lines and `<n> error(s)`; exit 1 on any error, else 0. `check.mjs --drift [root]` runs only these checks and the probe below (exit 2 on bad usage); `aico:maintain` runs it and reports each line.
+
+## Fixtures and probe
+Fixtures: `tests/contracts/<contract>/` holds the golden files of a Contract; `version.txt` equals the Contract header version, and `loadGolden(contract)` exported by `scripts/contract-fixtures.mjs` throws when it differs. Probe: `probe(root)` exported by `scripts/drift-probe.mjs` reads every Contract line that quotes a backticked sentence after one of the two marker phrases (see the Delta I probe rule); that sentence must appear byte for byte in each file the line names and in at least one test file. Errors: `ERROR <contract file>:<line> sentence differs from <file>` and `ERROR <contract file>:<line> sentence not found in any test file (scripts or tests)`. `check.mjs --drift [root]` runs the drift checks above and then the probe, prints all lines with one `<n> error(s)` total, and exits 1 on any error.
 
 ## Bounds
 A file over 2,000,000 bytes, a link, or a folder deeper than 6 levels is skipped. All patterns are anchored or bounded: linear time on hostile text.
