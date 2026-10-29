@@ -27,7 +27,9 @@ function run(sb, args) {
   return { status: r.status, out: r.stdout, err: r.stderr };
 }
 
-const accept = (sb, role, text) => run(sb, ['accept', '--role', role, '--text', text]);
+const TARGET = 'check: test lessons';
+const accept = (sb, role, text, cls = 'mechanical', target = TARGET) =>
+  run(sb, ['accept', '--role', role, '--class', cls, '--target', target, '--text', text]);
 const GOOD = 'check the Contract tests before asking for review';
 const BIG = '- 2026-10-22 lead: filler text for the size limit\n'.repeat(1400);
 
@@ -109,7 +111,7 @@ describe('accept', () => {
     assert.equal(r.status, 0);
     assert.equal(r.out, 'accepted\n');
     const today = new Date().toISOString().slice(0, 10);
-    assert.equal(fs.readFileSync(sb.file, 'utf8'), `- ${today} backend-engineer: ${GOOD}\n`);
+    assert.equal(fs.readFileSync(sb.file, 'utf8'), `- ${today} backend-engineer: [mechanical] ${GOOD} — ${TARGET}\n`);
   });
 
   test('keeps existing lines and starts a new line after a file with no final LF', (t) => {
@@ -118,7 +120,7 @@ describe('accept', () => {
     assert.equal(accept(sb, 'lead', GOOD).status, 0);
     const lines = fs.readFileSync(sb.file, 'utf8').split('\n');
     assert.equal(lines[0], '- 2026-10-22 lead: wait for CI before you merge');
-    assert.match(lines[1], /^- \d{4}-\d{2}-\d{2} lead: check the Contract/);
+    assert.match(lines[1], /^- \d{4}-\d{2}-\d{2} lead: \[mechanical\] check the Contract/);
     assert.equal(lines[2], '');
   });
 
@@ -152,7 +154,7 @@ describe('accept', () => {
   test('text is trimmed before it is written', (t) => {
     const sb = sandbox(t);
     assert.equal(accept(sb, 'lead', `   ${GOOD}   `).status, 0);
-    assert.match(fs.readFileSync(sb.file, 'utf8'), new RegExp(`lead: ${GOOD}\\n$`));
+    assert.match(fs.readFileSync(sb.file, 'utf8'), new RegExp(`lead: \\[mechanical\\] ${GOOD} — check: test lessons\\n$`));
   });
 
   test('usage errors are refused', (t) => {
@@ -162,6 +164,8 @@ describe('accept', () => {
       ['accept', '--text', GOOD, '--role', 'lead'],
       ['accept', '--role', 'lead'],
       ['accept', '--role', 'lead', '--text', GOOD, 'extra'],
+      ['accept', '--role', 'lead', '--class', 'mechanical', '--target', TARGET, '--text', GOOD, '--text', GOOD],
+      ['accept', '--role', 'lead', '--class', 'mechanical', '--target', TARGET, '--text', GOOD, '--note', 'x'],
       ['bogus'],
       [],
       ['list'],
@@ -194,7 +198,7 @@ describe('accept', () => {
       t.skip('symlinks not available');
       return;
     }
-    for (const args of [['accept', '--role', 'lead', '--text', GOOD], ['list', '--json']]) {
+    for (const args of [['accept', '--role', 'lead', '--class', 'mechanical', '--target', TARGET, '--text', GOOD], ['list', '--json'], ['lint']]) {
       const r = run(sb, args);
       assert.equal(r.status, 2);
       assert.match(r.out, /^refused: /);
@@ -232,7 +236,7 @@ describe('list', () => {
     assert.equal(r.status, 0);
     const list = JSON.parse(r.out);
     assert.deepEqual(list.map((l) => l.role), ['lead', 'qa']);
-    assert.deepEqual(list[0], { date: '2026-10-22', role: 'lead', text: 'wait for CI before you merge' });
+    assert.deepEqual(list[0], { date: '2026-10-22', role: 'lead', class: null, target: null, text: 'wait for CI before you merge' });
     assert.match(r.err, /warning: line 2 skipped/);
     assert.match(r.err, /warning: line 3 skipped/);
   });
@@ -264,5 +268,139 @@ describe('list', () => {
     const list = JSON.parse(run(sb, ['list', '--json']).out);
     assert.equal(list.length, 1);
     assert.equal(list[0].text, GOOD);
+    assert.equal(list[0].class, 'mechanical');
+    assert.equal(list[0].target, TARGET);
+  });
+});
+
+describe('class and target, hostile first', () => {
+  const badTargets = {
+    'CLAUDE.md': ['judgement', 'standard: CLAUDE.md'],
+    'agents file': ['judgement', 'standard: agents/qa.md'],
+    'AGENTS.md': ['judgement', 'standard: AGENTS.md'],
+    'check name naming CLAUDE.md': ['mechanical', 'check: lint CLAUDE.md'],
+    'check name naming agents/': ['mechanical', 'check: test agents/qa'],
+    'standard in a mechanical lesson': ['mechanical', 'standard: .company/standards.md'],
+    'check in a judgement lesson': ['judgement', 'check: test lessons'],
+    'other standard path': ['judgement', 'standard: docs/spec.md'],
+    'dot-dot in references': ['judgement', 'standard: skills/review/references/../../x.md'],
+    'slash in references name': ['judgement', 'standard: skills/review/references/a/b.md'],
+    'references non-md': ['judgement', 'standard: skills/review/references/x.mjs'],
+    'unknown check kind': ['mechanical', 'check: shell lessons'],
+    'empty check name': ['mechanical', 'check: test '],
+    'check name over 80': ['mechanical', 'check: test ' + 'x'.repeat(81)],
+    'trailing space in name': ['mechanical', 'check: test lessons '],
+    'newline in target': ['mechanical', 'check: test a\nb'],
+    'em dash in target': ['mechanical', 'check: test a — b'],
+    'empty target': ['mechanical', '']
+  };
+  for (const [name, [cls, target]] of Object.entries(badTargets)) {
+    test(`refuses ${name}`, (t) => {
+      const sb = sandbox(t);
+      const r = accept(sb, 'lead', GOOD, cls, target);
+      assert.equal(r.status, 2);
+      assert.match(r.out, /^refused: lesson target /);
+      assert.equal(fs.existsSync(sb.file), false);
+    });
+  }
+
+  test('accept without --class is refused and writes nothing', (t) => {
+    const sb = sandbox(t);
+    const r = run(sb, ['accept', '--role', 'lead', '--target', TARGET, '--text', GOOD]);
+    assert.equal(r.status, 2);
+    assert.equal(r.out, 'refused: lesson needs --class mechanical|judgement\n');
+    assert.equal(fs.existsSync(sb.file), false);
+  });
+
+  test('an unknown class is refused', (t) => {
+    const sb = sandbox(t);
+    for (const cls of ['', 'Mechanical', 'both', 'mechanical ']) {
+      assert.equal(accept(sb, 'lead', GOOD, cls).out, 'refused: lesson needs --class mechanical|judgement\n');
+    }
+    assert.equal(fs.existsSync(sb.file), false);
+  });
+
+  test('a missing target is refused', (t) => {
+    const sb = sandbox(t);
+    const r = run(sb, ['accept', '--role', 'lead', '--class', 'judgement', '--text', GOOD]);
+    assert.equal(r.status, 2);
+    assert.match(r.out, /^refused: lesson target is missing/);
+  });
+
+  test('the three standard targets and a check target are accepted', (t) => {
+    const sb = sandbox(t);
+    const ok = [
+      ['mechanical', 'check: script lessons lint'],
+      ['judgement', 'standard: .company/standards.md'],
+      ['judgement', 'standard: skills/review/SKILL.md'],
+      ['judgement', 'standard: skills/review/references/fresh-review.md']
+    ];
+    ok.forEach(([cls, target], i) => assert.equal(accept(sb, 'lead', `${GOOD} ${i}`, cls, target).status, 0, target));
+    assert.equal(run(sb, ['lint']).status, 0);
+  });
+
+  test('a text with an em dash cannot forge a second target', (t) => {
+    const sb = sandbox(t);
+    assert.equal(accept(sb, 'lead', 'text then — standard: CLAUDE.md', 'judgement', 'standard: .company/standards.md').status, 2);
+  });
+});
+
+describe('list and lint on v1 and v2 lines', () => {
+  const V1 = '- 2026-10-22 lead: wait for CI before you merge';
+  const V2 = '- 2026-10-29 qa: [judgement] read the Contract before the diff — standard: skills/review/SKILL.md';
+
+  test('list on a mixed file gives class, target and one warning per v1 line', (t) => {
+    const sb = sandbox(t);
+    fs.writeFileSync(sb.file, [V1, V2, '- 2026-10-23 lead: second v1 line here', ''].join('\n'));
+    const r = run(sb, ['list', '--json']);
+    assert.equal(r.status, 0);
+    const list = JSON.parse(r.out);
+    assert.deepEqual(list.map((l) => l.class), [null, 'judgement', null]);
+    assert.deepEqual(list[1], { date: '2026-10-29', role: 'qa', class: 'judgement', target: 'standard: skills/review/SKILL.md', text: 'read the Contract before the diff' });
+    assert.deepEqual(r.err.trim().split('\n'), ['warning: line 1 unclassified (v1)', 'warning: line 3 unclassified (v1)']);
+  });
+
+  test('lint exits 0 on v1 lines, even with text the v2 rule would refuse', (t) => {
+    const sb = sandbox(t);
+    fs.writeFileSync(sb.file, `${V1}\n- 2026-10-28 lead: use \`code\` and <tags> here; a v1 line\n`);
+    const r = run(sb, ['lint']);
+    assert.equal(r.status, 0);
+    assert.equal(r.out, 'lessons: 0 errors\n');
+    assert.match(r.err, /line 1 unclassified/);
+  });
+
+  test('lint exits 2 on a malformed v2 line, one ERROR per line', (t) => {
+    const sb = sandbox(t);
+    const bad = [
+      '- 2026-10-29 qa: [judgement] read the Contract before the diff',
+      '- 2026-10-29 qa: [judgement] read the Contract before the diff — standard: CLAUDE.md',
+      '- 2026-10-29 qa: [mechanical] read the Contract before the diff — standard: .company/standards.md',
+      '- 2026-10-29 qa: [judgement]',
+      '- 2026-10-29 qa: [mechanical] <b>bold</b> text here — check: test x'
+    ];
+    fs.writeFileSync(sb.file, [V1, ...bad, V2, ''].join('\n'));
+    const r = run(sb, ['lint']);
+    assert.equal(r.status, 2);
+    const lines = r.out.trim().split('\n');
+    assert.deepEqual(lines.slice(0, -1).map((e) => e.match(/^ERROR line (\d+): /)?.[1]), ['2', '3', '4', '5', '6']);
+    assert.equal(lines.at(-1), 'lessons: 5 errors');
+  });
+
+  test('a malformed v2 line is not listed', (t) => {
+    const sb = sandbox(t);
+    fs.writeFileSync(sb.file, '- 2026-10-29 qa: [judgement] read the Contract before the diff — agents/qa.md\n');
+    assert.deepEqual(JSON.parse(run(sb, ['list', '--json']).out), []);
+  });
+
+  test('lint stays fast on a file near the size limit', (t) => {
+    const sb = sandbox(t);
+    fs.writeFileSync(sb.file, `- 2026-10-29 qa: [judgement] ${'a '.repeat(100)}— x\n`.repeat(200));
+    const start = Date.now();
+    run(sb, ['lint']);
+    assert.ok(Date.now() - start < 5000);
+  });
+
+  test('lint refuses extra arguments', (t) => {
+    assert.equal(run(sandbox(t), ['lint', 'x']).status, 2);
   });
 });
