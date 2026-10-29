@@ -1,0 +1,4 @@
+{
+  "pipeline": ["Project profile", "Company profile", "Language", "Name", "Settings", "Context cap", "Design skills", "Risk tier", "Base commit", "Round", "Review depth", "Review format", "Input Handoffs", "Rule slice", "Task", "Files", "Task brief", "Output", "Goal", "Follow"],
+  "round1": ["Project profile", "Company profile", "Language", "Name", "Settings", "Input", "Output", "Goal"]
+}

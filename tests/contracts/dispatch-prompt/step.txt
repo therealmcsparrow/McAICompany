@@ -1,0 +1,16 @@
+Project profile: .company/project.md
+Company profile: company/PROFILE.md
+Language: en
+Settings: effort=high
+Context cap: 150000 handover 120000
+Risk tier: high
+Base commit: 0123456789abcdef0123456789abcdef01234567
+Round: 0
+Input Handoffs: .company/work/sample/01-product-manager.md
+Rule slice: .company/work/sample/rules/T1.md
+Task: T1
+Files: scripts/x.mjs
+Task brief: .company/work/sample/tasks/T1.md
+Output: .company/work/sample/02-qa.md
+Goal: Build T1 per its task brief.
+Follow aico:handoff.

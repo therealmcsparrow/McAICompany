@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { loadGolden } from './contract-fixtures.mjs';
 
 // Drift test for the canonical dispatch line order (dispatch-prompt v3.1) plus one
 // assertion per wiring rule of skills/pipeline. The order is for reading only: no cache claim anywhere.
@@ -35,8 +36,8 @@ const keys = (lines) => lines
   .map(l => l.startsWith('Follow aico:handoff.') ? 'Follow' : /^([A-Z][A-Za-z ]*?):/.exec(l)?.[1])
   .filter(Boolean);
 
-const PIPELINE_ORDER = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Context cap', 'Design skills', 'Risk tier', 'Base commit', 'Round', 'Review depth', 'Review format', 'Input Handoffs', 'Rule slice', 'Task', 'Files', 'Task brief', 'Output', 'Goal', 'Follow'];
-const ROUND_1 = ['Project profile', 'Company profile', 'Language', 'Name', 'Settings', 'Input', 'Output', 'Goal'];
+const golden = loadGolden('dispatch-prompt');
+const { pipeline: PIPELINE_ORDER, round1: ROUND_1 } = golden.json('order.json');
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
@@ -192,4 +193,17 @@ test('personality: the cooler Goal and the format 1 Goal end with the Contract s
     const goal = read(f).split('\n').find(l => l.startsWith('Goal: '));
     assert.ok(goal && goal.endsWith(sentence), `${f}: Goal ends with the sentence`);
   }
+});
+
+test('the golden dispatch step keeps the canonical key order', () => {
+  const step = golden.text('step.txt');
+  const sample = keys(step.split('\n'));
+  let at = -1;
+  for (const k of sample) {
+    const i = PIPELINE_ORDER.indexOf(k, at + 1);
+    assert.ok(i > at, `key ${k} is out of order or unknown`);
+    at = i;
+  }
+  assert.equal(sample.at(-1), 'Follow');
+  assert.ok(!step.includes('\r'));
 });

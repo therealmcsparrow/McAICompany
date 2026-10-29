@@ -1,0 +1,25 @@
+{
+  "valid": { "file": "valid.md", "errors": [] },
+  "missing Next heading": { "file": "missing-next.md", "errors": ["missing English heading ## Next"] },
+  "bad status": {
+    "file": "bad-status.md",
+    "errors": [
+      "frontmatter: status must be done|blocked|needs-ceo|handover",
+      "aico-top: status must be done|blocked|needs-ceo|handover"
+    ]
+  },
+  "bad top block": { "file": "bad-top.md", "errors": ["aico-top: tokens_used must be an integer or unknown"] },
+  "routing": {
+    "file": "valid.md",
+    "routing": {
+      "status": "done",
+      "round": "0",
+      "base-commit": "0123456789abcdef0123456789abcdef01234567",
+      "risk-tier": "medium",
+      "acceptance-ids": ["AC1", "AC3"],
+      "files-touched": ["src/x.ts"],
+      "blocking": [],
+      "findings": []
+    }
+  }
+}
