@@ -954,10 +954,10 @@ describe('cleanup ignored files', () => {
   const ARCHIVE = (r) => path.join(r.repo, '.company', 'work', SLUG, 'worktrees', 't1-20261029T120000Z.ignored');
 
   function ignoredTask(r) {
-    const wt = task(r, 't1', '.gitignore', '.env.local\nnode_modules/\n');
+    const wt = task(r, 't1', '.gitignore', '*.local\n');
     fs.writeFileSync(path.join(wt, '.env.local'), 'KEY=secret\n');
-    fs.mkdirSync(path.join(wt, 'node_modules', 'x'), { recursive: true });
-    fs.writeFileSync(path.join(wt, 'node_modules', 'x', 'y.js'), Buffer.from([0, 1, 2, 255]));
+    fs.mkdirSync(path.join(wt, 'config', 'x'), { recursive: true });
+    fs.writeFileSync(path.join(wt, 'config', 'x', 'y.local'), Buffer.from([0, 1, 2, 255]));
     return wt;
   }
 
@@ -975,7 +975,7 @@ describe('cleanup ignored files', () => {
     const dir = ARCHIVE(r);
     assert.equal(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8'), '*\n');
     assert.equal(fs.readFileSync(path.join(dir, '.env.local'), 'utf8'), 'KEY=secret\n');
-    assert.deepEqual(fs.readFileSync(path.join(dir, 'node_modules', 'x', 'y.js')), Buffer.from([0, 1, 2, 255]));
+    assert.deepEqual(fs.readFileSync(path.join(dir, 'config', 'x', 'y.local')), Buffer.from([0, 1, 2, 255]));
     assert.ok(!r.g('status', '--porcelain=v1', '--untracked-files=all').includes('.ignored'));
     const ev = r.events().find((e) => e.ev === 'remove');
     assert.equal(ev.ignored, 't1-20261029T120000Z.ignored');
@@ -1054,7 +1054,7 @@ describe('cleanup ignored files', () => {
     const r = makeRepo();
     const wt = ignoredTask(r);
     try {
-      fs.symlinkSync(path.join(r.base, 'elsewhere.txt'), path.join(wt, 'node_modules', 'link'));
+      fs.symlinkSync(path.join(r.base, 'elsewhere.txt'), path.join(wt, 'config', 'link.local'));
     } catch {
       t.skip('symlinks cannot be created here');
       return;
@@ -1081,11 +1081,108 @@ describe('cleanup ignored files', () => {
     const wt = ignoredTask(r);
     writeWave(r, ['T1']);
     assert.equal(r.run('merge', SLUG).code, 0);
-    r.hooks['ignored-verified'] = () => fs.writeFileSync(path.join(wt, 'node_modules', 'new.js'), 'late\n');
+    r.hooks['ignored-verified'] = () => fs.writeFileSync(path.join(wt, 'config', 'new.local'), 'late\n');
     assert.deepEqual(r.run('cleanup', SLUG), kept('changed during archive'));
     assert.ok(fs.existsSync(wt));
     assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
     assert.ok(!r.events().some((e) => e.ev === 'remove'));
+  });
+});
+
+describe('cleanup ignored folders', () => {
+  const kept = (reason) => ({ code: 2, lines: [`kept t1: ${reason}`] });
+  const notArchived = kept('ignored files not archived');
+  const ARCHIVE = (r) => path.join(r.repo, '.company', 'work', SLUG, 'worktrees', 't1-20261029T120000Z.ignored');
+
+  function mergedTask(r, ignore) {
+    const wt = task(r, 't1', '.gitignore', ignore);
+    writeWave(r, ['T1']);
+    assert.equal(r.run('merge', SLUG).code, 0);
+    return wt;
+  }
+  function fill(dir, n) {
+    fs.mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < n; i++) fs.writeFileSync(path.join(dir, `f${i}.js`), 'x');
+  }
+
+  test('node_modules/ with 2000 files is skipped: worktree removed, branch deleted, nothing copied', () => {
+    const r = makeRepo();
+    const wt = mergedTask(r, 'node_modules/\n');
+    fill(path.join(wt, 'node_modules', 'pkg'), 2000);
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 0, lines: ['removed t1'] });
+    assert.ok(!fs.existsSync(wt));
+    assert.equal(r.g('for-each-ref', '--format=%(refname)', `refs/heads/aico-wt/${SLUG}/t1`), '');
+    assert.ok(!fs.existsSync(ARCHIVE(r)));
+  });
+
+  test('path (b): a rebuildable folder is skipped and a loose .env.local is still archived', () => {
+    const r = makeRepo();
+    const wt = task(r, 't1', '.gitignore', 'node_modules/\n.env.local\n');
+    fill(path.join(wt, 'node_modules'), 1500);
+    fs.writeFileSync(path.join(wt, '.env.local'), 'KEY=secret\n');
+    fs.writeFileSync(path.join(wt, 'dirty.txt'), 'dirty\n');
+    const res = r.run('cleanup', SLUG, '--archive');
+    assert.match(res.lines[0], /^archived t1 .*\.patch ignored 1$/);
+    assert.equal(fs.readFileSync(path.join(ARCHIVE(r), '.env.local'), 'utf8'), 'KEY=secret\n');
+    assert.ok(!fs.existsSync(path.join(ARCHIVE(r), 'node_modules')));
+    assert.ok(!fs.existsSync(wt));
+  });
+
+  test('the file cap counts archived files only, not skipped folders', () => {
+    const r = makeRepo();
+    const wt = mergedTask(r, 'node_modules/\n.env.local\n');
+    fill(path.join(wt, 'node_modules'), 5);
+    fs.writeFileSync(path.join(wt, '.env.local'), 'k\n');
+    assert.deepEqual(r.runWith({ ignoredCap: { files: 1 } }, 'cleanup', SLUG), { code: 0, lines: ['removed t1 ignored 1'] });
+  });
+
+  for (const [name, dir, ignore] of [
+    ['an ignored secrets/ folder', 'secrets', 'secrets/\n'],
+    ['Node_Modules/ (case differs)', 'Node_Modules', 'Node_Modules/\n'],
+    ['a nested folder not on the list', path.join('a', 'logs'), 'logs/\n']
+  ]) {
+    test(`${name} keeps the worktree and the branch`, () => {
+      const r = makeRepo();
+      const wt = mergedTask(r, ignore);
+      fill(path.join(wt, dir), 3);
+      assert.deepEqual(r.run('cleanup', SLUG), notArchived);
+      assert.ok(fs.existsSync(path.join(wt, dir, 'f0.js')));
+      assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+      assert.ok(!r.events().some((e) => e.ev === 'remove'));
+    });
+  }
+
+  test('a nested rebuildable folder is skipped by its last segment', () => {
+    const r = makeRepo();
+    const wt = mergedTask(r, 'node_modules/\n');
+    fill(path.join(wt, 'pkg', 'node_modules'), 3);
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 0, lines: ['removed t1'] });
+    assert.ok(!fs.existsSync(wt));
+  });
+
+  test('node_modules as a link or junction keeps the worktree', (t) => {
+    const r = makeRepo();
+    const wt = mergedTask(r, 'node_modules\n');
+    const target = path.join(r.base, 'elsewhere');
+    fill(target, 2);
+    try {
+      fs.symlinkSync(target, path.join(wt, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      t.skip('links cannot be created here');
+      return;
+    }
+    assert.deepEqual(r.run('cleanup', SLUG), notArchived);
+    assert.ok(fs.existsSync(wt));
+    assert.ok(fs.existsSync(path.join(target, 'f0.js')));
+  });
+
+  test('a folder ignored whole that appears after the archive: changed during archive', () => {
+    const r = makeRepo();
+    const wt = mergedTask(r, 'dist/\n.env.local\n');
+    fs.writeFileSync(path.join(wt, '.env.local'), 'k\n');
+    r.hooks['ignored-verified'] = () => fill(path.join(wt, 'dist'), 1);
+    assert.deepEqual(r.run('cleanup', SLUG), kept('changed during archive'));
+    assert.ok(fs.existsSync(wt));
   });
 });
 

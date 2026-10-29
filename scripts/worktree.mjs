@@ -28,6 +28,11 @@ const MAX_PATHS = 100;
 const GIT_TIMEOUT_MS = 30_000;
 const GIT_MAX_BUFFER = 8 * 1024 * 1024;
 const IGNORED_CAPS = { files: 1000, file: 8 * 1024 * 1024, total: 64 * 1024 * 1024 };
+// Dependency and build output: an ignored folder with one of these exact names is deleted with the worktree, not copied.
+const REBUILDABLE = new Set([
+  'node_modules', 'dist', 'build', 'out', 'target', 'coverage', 'bin', 'obj', 'vendor', '.venv', 'venv', '__pycache__',
+  '.pytest_cache', '.mypy_cache', '.ruff_cache', '.tox', '.gradle', '.next', '.nuxt', '.svelte-kit', '.turbo', '.parcel-cache'
+]);
 const LEAD = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
 
 const USAGE = [
@@ -386,7 +391,7 @@ function parseStatus(buf) {
 }
 
 function statusOf(ctx, dir, { ignored = false } = {}) {
-  return ctx.git(['status', '--porcelain=v1', '-z', ...(ignored ? ['--ignored'] : []), '--untracked-files=all'], { dir }).out;
+  return ctx.git(['status', '--porcelain=v1', '-z', ...(ignored ? ['--ignored=matching'] : []), '--untracked-files=all'], { dir }).out;
 }
 
 function listWorktrees(ctx) {
@@ -754,13 +759,29 @@ function archivable(p) {
   return n.ok && n.path === swapped && !n.dir;
 }
 
-// Copies the worktree's git-ignored files into a new folder that git ignores itself. Returns { ok, count, name }.
+// An ignored folder entry ('a/node_modules/') is skipped only when its last segment is on the list (exact, case-sensitive)
+// and lstat shows a real folder, not a link, whose real path is its own path inside the worktree.
+function skippable(layout, entry) {
+  const rel = entry.slice(0, -1);
+  if (!archivable(rel)) return false;
+  const name = rel.slice(rel.lastIndexOf('/') + 1);
+  if (!REBUILDABLE.has(name)) return false;
+  const full = path.join(layout.wt, ...rel.split('/'));
+  const st = lstatOrNull(full);
+  return st !== null && isFolder(st) && isUnlinked(full);
+}
+
+// Copies the worktree's loose git-ignored files into a new folder that git ignores itself. Returns { ok, count, name }.
+// Listed rebuildable folders are skipped; every other folder entry keeps the worktree.
 function archiveIgnored(env, layout, slug, id, statusBytes) {
-  const paths = parseStatus(statusBytes).filter((e) => e.xy === '!!').map((e) => e.path);
-  if (paths.length === 0) return { ok: true, count: 0 };
-  const caps = env.ignoredCaps;
-  if (paths.length > caps.files) return { ok: false };
+  const entries = parseStatus(statusBytes).filter((e) => e.xy === '!!').map((e) => e.path);
+  const folders = entries.filter((p) => p.endsWith('/'));
+  const paths = entries.filter((p) => !p.endsWith('/'));
   try {
+    if (!folders.every((p) => skippable(layout, p))) return { ok: false };
+    if (paths.length === 0) return { ok: true, count: 0 };
+    const caps = env.ignoredCaps;
+    if (paths.length > caps.files) return { ok: false };
     if (!paths.every(archivable)) return { ok: false };
     const name = `${id}-${utc(env.now).replace(/[-:]/g, '')}.ignored`;
     const dest = path.join(archiveDir(env.root, slug), name);
