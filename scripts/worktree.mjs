@@ -976,9 +976,15 @@ function cmdProtocheck(args, env) {
 
 const HANDLERS = { add: cmdAdd, changed: cmdChanged, merge: cmdMerge, cleanup: cmdCleanup, leftovers: cmdLeftovers, protocheck: cmdProtocheck };
 
+// The product root is resolved to its real path once here; every path the script derives, prints or compares starts from it.
+function realRootOf(root) {
+  const given = typeof root === 'string' && root !== '' ? root : process.cwd();
+  return realOf(given) ?? given;
+}
+
 export function main(args, { now, root, patchCap, ignoredCap, hook } = {}) {
   const env = {
-    root: typeof root === 'string' && root !== '' ? root : process.cwd(),
+    root: realRootOf(root),
     now: typeof now === 'number' ? now : Date.now(),
     patchCap: Number.isInteger(patchCap) && patchCap >= 0 ? patchCap : undefined,
     ignoredCaps: {

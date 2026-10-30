@@ -46,7 +46,7 @@ function git(cwd, ...args) {
 }
 
 function makeRepo() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-iso-'));
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-iso-')));
   bases.push(base);
   const repo = path.join(base, 'repo');
   fs.mkdirSync(repo);

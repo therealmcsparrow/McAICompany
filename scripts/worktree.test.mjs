@@ -36,10 +36,19 @@ function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, env: setupEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).replace(/\n$/, '');
 }
 
-function makeRepo({ name = 'repo' } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-'));
+// linked: the repo is reached through a symlinked folder (a junction on win32); the script must print and use real paths.
+function makeRepo({ name = 'repo', linked = false } = {}) {
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-')));
   bases.push(base);
-  const repo = path.join(base, name);
+  let parent = base;
+  let realParent = base;
+  if (linked) {
+    realParent = path.join(base, 'real');
+    parent = path.join(base, 'link');
+    fs.mkdirSync(realParent);
+    fs.symlinkSync(realParent, parent, process.platform === 'win32' ? 'junction' : 'dir');
+  }
+  const repo = path.join(parent, name);
   fs.mkdirSync(repo);
   git(repo, 'init', '--quiet', `--initial-branch=aico/${SLUG}`);
   for (const [k, v] of [['user.name', 'Test'], ['user.email', 'test@example.com'], ['core.autocrlf', 'false'], ['commit.gpgsign', 'false']]) {
@@ -61,7 +70,7 @@ function makeRepo({ name = 'repo' } = {}) {
     g: (...a) => git(repo, ...a),
     at: (dir, ...a) => git(dir, ...a),
     head: () => git(repo, 'rev-parse', 'HEAD'),
-    wtRoot: path.join(base, `${name}.aico-wt`),
+    wtRoot: path.join(realParent, `${name}.aico-wt`),
     run: (...args) => main(args, { root: repo, now: NOW, hook }),
     runWith: (opts, ...args) => main(args, { root: repo, now: NOW, hook, ...opts }),
     record: () => path.join(repo, '.company', 'work', SLUG, 'worktrees.jsonl'),
@@ -1086,6 +1095,69 @@ describe('cleanup ignored files', () => {
     assert.ok(fs.existsSync(wt));
     assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
     assert.ok(!r.events().some((e) => e.ev === 'remove'));
+  });
+});
+
+describe('repo under a symlinked parent folder', () => {
+  const linkedRepo = (t) => {
+    try {
+      return makeRepo({ linked: true });
+    } catch (error) {
+      if (error.code === 'EPERM') {
+        t.skip(`symlink needs a privilege here: ${error.code}`);
+        return null;
+      }
+      throw error;
+    }
+  };
+
+  test('add prints the real worktree path and the folder is made beside the real repo', (t) => {
+    const r = linkedRepo(t);
+    if (!r) return;
+    const res = r.run('add', SLUG, 't1', '--base', r.head());
+    assert.deepEqual(res, { code: 0, lines: [`Worktree: ${path.join(r.wtRoot, SLUG, 't1')}`] });
+    assert.ok(fs.existsSync(path.join(r.wtRoot, SLUG, 't1', 'a.txt')));
+  });
+
+  test('add, merge and cleanup path (a) with ignored files give the outcomes of an unlinked root', (t) => {
+    const r = linkedRepo(t);
+    if (!r) return;
+    const wt = task(r, 't1', '.gitignore', '*.local\nnode_modules/\n');
+    fs.writeFileSync(path.join(wt, '.env.local'), 'KEY=secret\n');
+    fs.mkdirSync(path.join(wt, 'node_modules', 'p'), { recursive: true });
+    fs.writeFileSync(path.join(wt, 'node_modules', 'p', 'i.js'), 'x');
+    writeWave(r, ['T1']);
+    const merged = r.run('merge', SLUG);
+    assert.equal(merged.code, 0, merged.lines.join('\n'));
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 0, lines: ['removed t1 ignored 1'] });
+    assert.ok(!fs.existsSync(wt));
+    const dir = path.join(r.repo, '.company', 'work', SLUG, 'worktrees', 't1-20261029T120000Z.ignored');
+    assert.equal(fs.readFileSync(path.join(dir, '.env.local'), 'utf8'), 'KEY=secret\n');
+    assert.equal(r.g('for-each-ref', 'refs/heads/aico-wt/'), '');
+  });
+
+  test('add and cleanup path (b) with --archive give the outcomes of an unlinked root', (t) => {
+    const r = linkedRepo(t);
+    if (!r) return;
+    const wt = task(r, 't1', '.gitignore', '*.local\n');
+    fs.writeFileSync(path.join(wt, '.env.local'), 'KEY=secret\n');
+    fs.writeFileSync(path.join(wt, 'dirty.txt'), 'dirty\n');
+    const res = r.run('cleanup', SLUG, '--archive');
+    assert.equal(res.code, 0, res.lines.join('\n'));
+    assert.match(res.lines[0], /^archived t1 .*\.patch ignored 1$/);
+    assert.ok(!fs.existsSync(wt));
+    assert.equal(r.g('for-each-ref', 'refs/heads/aico-wt/'), '');
+  });
+
+  test('a link inside the root still refuses: a linked slug folder is not followed', (t) => {
+    const r = linkedRepo(t);
+    if (!r) return;
+    const elsewhere = fs.mkdtempSync(path.join(r.base, 'else-'));
+    fs.mkdirSync(r.wtRoot);
+    fs.symlinkSync(elsewhere, path.join(r.wtRoot, SLUG), process.platform === 'win32' ? 'junction' : 'dir');
+    const res = r.run('add', SLUG, 't1', '--base', r.head());
+    assert.equal(res.code, 3, res.lines.join('\n'));
+    assert.deepEqual(fs.readdirSync(elsewhere), []);
   });
 });
 
