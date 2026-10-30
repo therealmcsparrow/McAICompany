@@ -69,6 +69,16 @@ test('Plan Gate outcome 3: no Base commit, base unknown or exit 1 is one stale n
     'Decided (stale not checked):', 'every `files:` path', 'back to the architect once', 'open at the Plan Gate');
 });
 
+test('Plan Gate outcome 3 fails closed: a grafts refusal, a link refusal or no summary line is a stale not checked Blocking', () => {
+  has(draft, 'refused: grafts file present', 'refused: link', 'exit other than 0 or 2', '`draft-input stale:` summary line',
+    '`[spec] stale not checked: <first line>`');
+  assert.match(draft, /any `stale` exit other than 0 or 2/i);
+});
+
+test('the path given to take and stale is quoted', () => {
+  has(draft, "take '<path>' --for feature", "stale '<path>'");
+});
+
 test('Plan Gate checks: Lead checks Decided lines, plan-check and reviewer as usual, no approval carries over, stale not rerun', () => {
   has(draft, 'plan-check', 'plan reviewer', 'No earlier approval carries over', 'not rerun', 'data');
 });
