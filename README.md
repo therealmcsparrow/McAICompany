@@ -37,7 +37,10 @@ Details: [`documentation/getting-started.md`](documentation/getting-started.md).
 | `/aico:lead <request>` | Front door. Picks the Roles and the route, then runs it |
 | `/aico:triage <request>` | Classifies a request by size, risk and type and recommends the shortest valid route before you commit to a Playbook |
 | `/aico:reprompt <prompt>` | Turns a rough prompt into a complete one. It never runs it; you choose Use it, Edit, Keep only or Stop |
-| `/aico:feature <desc>` | Brief → Plan (Core + Contracts) → build per Module → review, QA, security → Ship |
+| `/aico:feature <desc\|draft file>` | Brief → Plan (Core + Contracts) → build per Module → review, QA, security → Ship. Takes a grill, spec or plan draft as its argument |
+| `/aico:grill <idea\|file\|resume <slug>>` | You start it. Interviews you one question at a time until the branches of an idea are closed; saves `grill.md`. Builds nothing |
+| `/aico:to-spec <idea\|grill.md\|file>` | You start it, software only. Writes a spec draft (`spec.md`, `version: pending`) from an idea or a grill. Never committed or stamped |
+| `/aico:to-tickets <spec.md\|brief>` | You start it, software only. Splits a spec or brief into a plan of small tasks (`plan.md`) |
 | `/aico:fix <bug>` | QA reproduces → engineer fixes test-first → review → Ship |
 | `/aico:launch <product>` | Positioning, copy, release notes, privacy/terms → Ship |
 | `/aico:audit [scope]` | Read-only quality, test, security and license report |

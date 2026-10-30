@@ -26,6 +26,6 @@ The work then runs through the first Playbook of the `work:` type line (`feature
 ## handoff
 1. `aico:writer`: user/admin docs. In parallel, when `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type pick devops` prints `devops`: deployment/runbook, environment and credentials checklist (no secrets in files). `pick` refused → skip that part and say so.
 2. `aico:legal`: license and IP transfer check against the proposal.
-   Package contents: when `.company/project.md` has `spec_in_repo: no`, add each run's `.company/work/<slug>/spec.md` to the package (destination-spec v1); with `yes` the specs already sit in the client's repo.
+   Package contents: when `.company/project.md` has `spec_in_repo: no`, add each feature run's stamped `.company/work/<slug>/spec.md` to the package, never a `pending` draft (destination-spec v1); with `yes` the specs already sit in the client's repo.
 3. `aico:account-manager`: handoff letter with what was delivered vs. scope, and known issues.
    **→ Ship Gate**

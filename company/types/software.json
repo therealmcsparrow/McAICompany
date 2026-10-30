@@ -47,6 +47,7 @@
     "feature",
     "feedback",
     "fix",
+    "grill",
     "incident",
     "launch",
     "maintain",
@@ -54,6 +55,8 @@
     "refactor",
     "research",
     "standards",
+    "to-spec",
+    "to-tickets",
     "usability-test",
     "vulnscan"
   ],

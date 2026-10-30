@@ -13,8 +13,8 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 const script = path.join(root, 'scripts', 'company-type.mjs');
 const haveScript = fs.existsSync(script);
 
-const SOFTWARE = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident',
-  'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
+const SOFTWARE = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'grill', 'incident',
+  'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan'];
 const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector'];
 
 const SHIP_GATE = '- **Ship Gate** comes before any push, merge, deploy, publish or message to a client, user or authority. '
@@ -28,7 +28,7 @@ for (const name of SOFTWARE) {
     const i = lines.findIndex((l) => l.startsWith('**Help:**'));
     assert.ok(i > 0);
     assert.equal(lines[i + 1], '');
-    assert.equal(lines[i + 2], typeLine(name));
+    assert.ok(lines[i + 2].startsWith(typeLine(name)));
     assert.equal(lines.filter((l) => l.startsWith('**Type:**')).length, 1);
   });
 }
@@ -92,7 +92,7 @@ test('no gating skill grants tools or uses a placeholder root', () => {
   }
 });
 
-test('software company allows exactly the 16 Playbooks (needs company-type.mjs)', { skip: !haveScript }, () => {
+test('software company allows exactly the 19 Playbooks (needs company-type.mjs)', { skip: !haveScript }, () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'type-gating-'));
   try {
     const run = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: home, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
@@ -108,6 +108,39 @@ test('software company allows exactly the 16 Playbooks (needs company-type.mjs)'
     assert.match(run('check-playbook', 'fix').stdout, /^ok: fix is part of the software company\ncompany type: software \(Software company\), default: no company_type line\n/);
     assert.equal(JSON.parse(run('check-playbook', 'fix', '--json').stdout).id, 'software');
     assert.equal(run('pick', 'architect', 'product-manager').stdout, 'architect\n');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('grill in every type, to-spec and to-tickets software only', { skip: !haveScript }, () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'type-gating-'));
+  try {
+    const inType = (id) => {
+      const cwd = fs.mkdtempSync(path.join(home, 'p-'));
+      fs.mkdirSync(path.join(cwd, '.company'));
+      fs.writeFileSync(path.join(cwd, '.company', 'project.md'), `company_type: ${id}\n`);
+      return (...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
+    };
+    for (const bad of ['__proto__', 'constructor', 'nope', 'Software']) {
+      const r = inType(bad)('check-playbook', 'grill');
+      assert.equal(r.status, 2, bad);
+      assert.ok(!r.stdout.startsWith('ok:'), bad);
+    }
+    for (const id of ['software', 'research', 'marketing', 'design']) {
+      const r = inType(id)('check-playbook', 'grill');
+      assert.equal(r.status, 0, id);
+      assert.match(r.stdout, new RegExp(`^ok: grill is part of the ${id} company\n`));
+    }
+    for (const name of ['to-spec', 'to-tickets']) {
+      assert.equal(inType('software')('check-playbook', name).status, 0, name);
+      for (const id of ['research', 'marketing', 'design']) {
+        const r = inType(id)('check-playbook', name);
+        assert.equal(r.status, 2, `${id} ${name}`);
+        assert.match(r.stdout, new RegExp(`^refused: ${name} is not part of the ${id} company; allowed: `));
+        assert.ok(!/\ballowed:[^\n]*\bto-(spec|tickets)\b/.test(r.stdout), `${id} ${name}`);
+      }
+    }
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

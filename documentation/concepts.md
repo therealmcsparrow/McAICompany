@@ -342,12 +342,14 @@ A project has one company type. It decides which Roles and Playbooks the company
 
 | Type | Roles | Playbooks | What "ship" means |
 |---|---|---|---|
-| `software` (Software company) | 34 Roles, every Role except the editor | audit, brainstorm, client, cooler, feature, feedback, fix, incident, launch, maintain, pentest, refactor, research, standards, usability-test, vulnscan | Push, merge, release or deploy. Unchanged. |
-| `research` (Research consultancy) | 11 | research, client, report, feedback, brainstorm, cooler | The final report goes to the client or is published, with every claim cited `[S#]` or marked `(unverified)`. |
-| `marketing` (Marketing and content agency) | 15 | campaign, content, research, client, feedback, brainstorm, cooler | The work is published or handed to the client after the legal and accessibility lanes, with every claim cited or marked unverified. |
-| `design` (Design studio) | 19 | design, research, client, feedback, brainstorm, cooler | The design handoff package (files, specs, tokens and the asset licence record) goes to the client or the build team. |
+| `software` (Software company) | 34 Roles, every Role except the editor | audit, brainstorm, client, cooler, feature, feedback, fix, grill, incident, launch, maintain, pentest, refactor, research, standards, to-spec, to-tickets, usability-test, vulnscan | Push, merge, release or deploy. Unchanged. |
+| `research` (Research consultancy) | 11 | research, client, report, feedback, brainstorm, cooler, grill | The final report goes to the client or is published, with every claim cited `[S#]` or marked `(unverified)`. |
+| `marketing` (Marketing and content agency) | 15 | campaign, content, research, client, feedback, brainstorm, cooler, grill | The work is published or handed to the client after the legal and accessibility lanes, with every claim cited or marked unverified. |
+| `design` (Design studio) | 19 | design, research, client, feedback, brainstorm, cooler, grill | The design handoff package (files, specs, tokens and the asset licence record) goes to the client or the build team. |
 
 Every type also has `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage`, `skillspector` and `reprompt`, and every type has the reprompter Role. The Lead and `/aico:triage` route only to the type's own Playbooks and Roles, and `/aico:cooler` and `/aico:brainstorm` pick Roles only from it. A Role or command outside the type is refused with the list of allowed ones, and nothing is dispatched.
+
+`grill` is in all four types; `to-spec` and `to-tickets` are in `software` only. `grill` ends with a form that fits the type. Where the main work of the type is `feature`, it offers `/aico:to-spec` on the grill file (recommended), `/aico:feature` with the file, or Stop. Otherwise it offers only what the type has. `grill`, `to-spec` and `to-tickets` run only on your own command, like the other CEO-only commands.
 
 For types other than `software`, the Ship Gate summary starts with `Ship means: …`. The type also switches on review lanes and checks that settings cannot turn off:
 

@@ -419,7 +419,7 @@ test('registry lookup never touches the file system with the project value', () 
 
 // Behaviour.
 
-test('software is every agent but the editor: 35 Roles, 16 Playbooks, 25 commands with ALWAYS', () => {
+test('software is every agent but the editor: 35 Roles, 19 Playbooks, 28 commands with ALWAYS', () => {
   const r = json(['resolve'], project(null));
   assert.equal(r.code, 0);
   const out = JSON.parse(r.out);
@@ -432,9 +432,9 @@ test('software is every agent but the editor: 35 Roles, 16 Playbooks, 25 command
   const agents = fs.readdirSync(path.join(REAL_ROOT, 'agents')).map(f => f.slice(0, -3));
   assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor').sort());
   assert.equal(ALWAYS.length, 9);
-  assert.equal(out.playbooks.length, 25);
-  assert.deepEqual(out.playbooks.slice(16), ALWAYS);
-  assert.deepEqual(out.playbooks.slice(0, 16), ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan']);
+  assert.equal(out.playbooks.length, 28);
+  assert.deepEqual(out.playbooks.slice(19), ALWAYS);
+  assert.deepEqual(out.playbooks.slice(0, 19), ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'grill', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan']);
   assert.deepEqual(out.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
   assert.deepEqual(out.skill_search, { hints: [] });
   assert.deepEqual(out.work, ['feature', 'fix']);
@@ -620,10 +620,10 @@ test('the manifest files and script use LF only', () => {
 
 test('CEO_ONLY is frozen and equals the contract list', () => {
   assert.ok(Object.isFrozen(CEO_ONLY));
-  assert.deepEqual([...CEO_ONLY], ['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest']);
+  assert.deepEqual([...CEO_ONLY], ['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest', 'grill', 'to-spec', 'to-tickets']);
   const contract = fs.readFileSync(path.join(REAL_ROOT, 'docs', 'contracts', 'company-type.md'), 'utf8');
   const line = contract.split('\n').find(l => l.startsWith('- **`CEO_ONLY`**'));
-  assert.deepEqual([...line.matchAll(/`([a-z]+)`/g)].map(m => m[1]).slice(0, 7), [...CEO_ONLY]);
+  assert.deepEqual([...line.matchAll(/`([a-z-]+)`/g)].map(m => m[1]).slice(0, 10), [...CEO_ONLY]);
 });
 
 test('a skill is a Playbook by an argument-hint line inside its frontmatter, not by the flag', () => {

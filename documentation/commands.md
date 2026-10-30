@@ -9,13 +9,15 @@ Arguments in `<angle brackets>` are required; `[square brackets]` are optional. 
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
 - **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, skillspector, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
-**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage`, `reprompt` and `skillspector`, so every type has the reprompter. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards` and `launch`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
+**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage`, `reprompt` and `skillspector`, so every type has the reprompter. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. `grill` is in all four types; its last step depends on the type. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards`, `launch`, `to-spec` and `to-tickets`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
 
 **Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` explains one command's options and what it does, without running it. Every Playbook also answers `/aico:<command> help` (or `--help`) from its own `### /aico:<name>` entry in this file, so each entry below is what that command tells you.
 
-**Hand-over between commands.** A few commands end with a choice that starts another command: `lead`, `triage`, `brainstorm`, `research` and `refactor`. After you pick, the next command starts by itself, with your pick as its argument. If it cannot start, you are shown the exact command to type, and the run stops there. A command never starts another one on its own, and never because a file, a report or a web page asks for it. Only your own request or your choice at a form or Gate starts one. `incident` does not hand over: it ends after the mitigation, the reports and the postmortem, and tells you to run `/aico:fix` yourself.
+**Hand-over between commands.** A few commands end with a choice that starts another command: `lead`, `triage`, `brainstorm`, `research`, `refactor` and `grill`. `grill` hands over only to `/aico:feature` and, for `/aico:to-spec`, shows you the command to type. After you pick, the next command starts by itself, with your pick as its argument. If it cannot start, you are shown the exact command to type, and the run stops there. A command never starts another one on its own, and never because a file, a report or a web page asks for it. Only your own request or your choice at a form or Gate starts one. `incident` does not hand over: it ends after the mitigation, the reports and the postmortem, and tells you to run `/aico:fix` yourself.
 
-**Commands only you start.** Seven commands are never started by another command or by the Lead: `help`, `version`, `language`, `settings`, `setup`, `skillspector` and `pentest`. They change your configuration, install software or attack a target, so you type them yourself. When a run needs one, it tells you the command and waits. For `pentest` it gives you `/aico:pentest <target>`.
+**Commands only you start.** Ten commands are never started by another command or by the Lead: `help`, `version`, `language`, `settings`, `setup`, `skillspector`, `pentest`, `grill`, `to-spec` and `to-tickets`. The first seven change your configuration, install software or attack a target. The last three run before any build, so they run only on your own command. You type them yourself. When a run needs one, it tells you the command and waits. For `pentest` it gives you `/aico:pentest <target>`.
+
+**Privacy of drafts.** `grill.md`, the `input-*.md` copies a draft command makes and the one-shot argument file may hold what you type. The drafts live in `.company/work/<slug>/` and the argument file is `.company/draft-input-arg-<for>.txt`, both on your machine. aico never commits them. They stay out of git only if your product ignores `.company/`; add that line to your `.gitignore` yourself, because aico does not set it up. The AI model that runs the command reads their text, and `grill` may run web searches built from your idea. There is no other recipient. They are archived, not deleted (GDPR Art. 5(1)(c) and (e)). If a person asks for erasure of their data, that request overrides the archive rule; the CEO decides. The argument file is removed as soon as the command has read it.
 
 Each entry below gives what the command does, when to reach for it, how it runs (Gates marked), what you get, and an example.
 
@@ -82,9 +84,11 @@ A write gate limits the reprompter to writing `prompt.md` and its own Handoff in
 **Example.** `/aico:reprompt make the signup page better`
 
 ### `/aico:feature`
-`/aico:feature <feature description>`
+`/aico:feature <feature description | draft file>`
 
 **What it does.** Builds a feature or a whole new product end to end, from brief to shipped.
+
+**Draft inputs.** The argument may be a draft file from [`/aico:grill`](#aicogrill), [`/aico:to-spec`](#aicoto-spec) or [`/aico:to-tickets`](#aicoto-tickets): `.company/work/<name>/grill.md`, `spec.md` or `plan.md`. The run reads a copy of it as input and works under a new task name, so your draft is never changed. A `plan.md` draft is checked at the Plan Gate: a path the plan lists that is gone, or that exists now although the plan expected it missing, is a Blocking line, and a path that changed since the plan's base commit is shown for the Architect to weigh. A draft with no base commit line, or one whose base commit is unknown, shows as `stale not checked`. Every other argument starts the run as before: a description, a report path handed over by `research` or `brainstorm`, or a request with its triage line.
 
 **When to use it.** New functionality or a new product — anything that adds or materially changes behavior.
 
@@ -100,7 +104,61 @@ A write gate limits the reprompter to writing `prompt.md` and its own Handoff in
 
 **You get.** Shipped code on a branch, tests, docs, and the full Handoff trail under `.company/work/<slug>/`.
 
-**Example.** `/aico:feature a dark-mode toggle that remembers the user's choice`
+**Example.** `/aico:feature a dark-mode toggle that remembers the user's choice` · `/aico:feature .company/work/dark-mode/plan.md`
+
+### `/aico:grill`
+`/aico:grill <idea | file | resume <slug>>`
+
+**Only you start this command.** No other command or the Lead starts it.
+
+**What it does.** Interviews you about an idea, one question at a time, until the open branches are closed. Each question has two to four options and a recommended one. The Lead asks in the main session and looks facts up in your files; a fact it finds is logged with its source. Nothing is built.
+
+**When to use it.** The idea is rough and you want its decisions made before a spec or a build. It works in all four company types.
+
+**How it runs.**
+1. Takes your idea as typed, or a file you name, and lists the branches to settle.
+2. Asks one question per branch, saves `.company/work/<slug>/grill.md` after every answer, and shows how many are answered and how many are open.
+3. Stops when every branch is closed or when you stop it. `resume <slug>` or the path of an existing `grill.md` continues where it ended.
+4. Ends with a form. In a software company you pick `/aico:to-spec` on the file (recommended), `/aico:feature` with the file, or Stop. In the other types it ends in the form of that type.
+
+**You get.** `.company/work/<slug>/grill.md`: the idea, the decisions with your answers, and proposed glossary and ADR lines. grill proposes them and never writes them.
+
+**Example.** `/aico:grill let customers pause their subscription`
+
+### `/aico:to-spec`
+`/aico:to-spec <idea | grill.md | file>`
+
+**Only you start this command.** No other command or the Lead starts it. Software company only.
+
+**What it does.** Turns an idea, a grill file or another file into a spec draft: problem, solution and decisions. When the draft comes from a grill, each decision ends with the question it came from, such as `(grill Q-3)`.
+
+**When to use it.** You want a written spec to review before tickets or a build.
+
+**How it runs.**
+1. The Product Manager writes the draft from your input.
+2. The spec check runs on it. A draft that fails is marked `not ready` and the run ends `blocked`.
+
+**You get.** `.company/work/<slug>/spec.md` with `version: pending` and `shipped: pending`. It is a draft: never committed and never stamped. A `/aico:feature` run that takes it writes the shipped spec at its own spec step.
+
+**Example.** `/aico:to-spec .company/work/pause-subscription/grill.md`
+
+### `/aico:to-tickets`
+`/aico:to-tickets <spec.md | brief file>`
+
+**Only you start this command.** No other command or the Lead starts it. Software company only.
+
+**What it does.** Splits a spec or a brief into a plan of small tasks, each with a role, files, dependencies, context size, slice and seams.
+
+**When to use it.** You have a spec and want the work cut into ordered tasks before building.
+
+**How it runs.**
+1. Needs a spec with a problem and a solution, or a brief with `AC<n>:` lines. Otherwise it says what is missing and writes nothing.
+2. The Architect writes the plan, with the base commit as its third line.
+3. The plan check runs and the run prints the task graph and one line per task.
+
+**You get.** `.company/work/<slug>/plan.md`. Start the build with `/aico:feature` and the plan path; paths the plan lists are compared with the repository then.
+
+**Example.** `/aico:to-tickets .company/work/pause-subscription/spec.md`
 
 ### `/aico:fix`
 `/aico:fix <bug description or issue link>`

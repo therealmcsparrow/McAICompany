@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Destination spec check (contract: docs/contracts/destination-spec.md v1). Node built-ins only.
+// Destination spec check (contract: docs/contracts/destination-spec.md v1.1). Node built-ins only.
 // `check` reports a spec that holds a code block, a file path, a bad frontmatter or a wrong heading list;
 // `stamp` fills the two pending frontmatter values once. Spec text and arguments are untrusted: sizes are
 // capped before parsing, every pattern is anchored over a character class or replaced by a single scan, the
@@ -199,7 +199,7 @@ function holdsPath(line) {
   return false;
 }
 
-function checkText(text) {
+export function checkText(text) {
   const lines = text.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l));
   const errors = [];
   const fm = frontmatter(lines);

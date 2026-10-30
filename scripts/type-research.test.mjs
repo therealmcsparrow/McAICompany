@@ -19,7 +19,7 @@ test('manifest has the contract values', () => {
   assert.equal(manifest.id, 'research');
   assert.deepEqual(manifest.roles, ['product-manager', 'account-manager', 'market-researcher', 'tech-researcher',
     'ux-researcher', 'writer', 'legal', 'localizer', 'editor', 'skill-researcher', 'reprompter']);
-  assert.deepEqual(manifest.playbooks, ['research', 'client', 'report', 'feedback', 'brainstorm', 'cooler']);
+  assert.deepEqual(manifest.playbooks, ['research', 'client', 'report', 'feedback', 'brainstorm', 'cooler', 'grill']);
   assert.deepEqual(manifest.ship, { kind: 'deliver-report', meaning: MEANING, lanes: ['legal'], checks: ['claims-cited'] });
   assert.deepEqual(Object.keys(manifest).sort(), ['id', 'label', 'playbooks', 'roles', 'ship', 'skill_search', 'v', 'work']);
   assert.deepEqual(manifest.work, ['report']);
