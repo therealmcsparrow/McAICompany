@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { main, readReviewLoop, ReviewLoopRecordError } from './review-loop.mjs';
+import { main, readReviewLoop, bothReviewersRan, ReviewLoopRecordError } from './review-loop.mjs';
 
 const SLUG = 'demo';
 const NOW = Date.UTC(2026, 9, 29, 12, 0, 0);
@@ -437,6 +437,17 @@ describe('gate', () => {
       fs.renameSync(path.join(folder(root), '03-fresh-reviewer.md'), path.join(elsewhere, '03-fresh-reviewer.md'));
       try { fs.symlinkSync(elsewhere, path.join(folder(root), '03-fresh-reviewer.md'), 'junction'); } catch (e) { t.skip('links unavailable: ' + e.code); return; }
       refused(root);
+    });
+
+    test('a run folder swapped for a link to an outside folder after the first check is refused', (t) => {
+      const root = setup();
+      freshCode(root, '03-fresh-reviewer.md', []);
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'review-loop-out-'));
+      roots.push(outside);
+      for (const n of fs.readdirSync(folder(root))) fs.renameSync(path.join(folder(root), n), path.join(outside, n));
+      fs.rmdirSync(folder(root));
+      try { fs.symlinkSync(outside, folder(root), 'junction'); } catch (e) { t.skip('links unavailable: ' + e.code); return; }
+      assert.throws(() => bothReviewersRan(root, SLUG, folder(root)), (e) => e.constructor.name === 'GitUnknown');
     });
   });
 

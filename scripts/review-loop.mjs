@@ -484,12 +484,13 @@ const BLOCKING_STATES = new Set(['open', 'contested', 'escalated', 'upheld', 're
 
 const sameName = (a, b) => (process.platform === 'win32' || process.platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b);
 
-// First 4 KiB of a Handoff: real path equals the lexical path inside the real run folder, one hard link,
+// First 4 KiB of a Handoff: the run folder is the real repo root's .company/work/<slug>, real path equals the lexical path inside the real run folder, one hard link,
 // at most MAX_RECORD_BYTES, and the open handle is the file that was checked. Any miss throws GitUnknown.
-function readHead(runFolder, full) {
+function readHead(root, slug, runFolder, full) {
   let fd;
   try {
     const realDir = fs.realpathSync.native(runFolder);
+    if (!sameName(realDir, path.join(fs.realpathSync.native(root), '.company', 'work', slug))) throw new Error('outside');
     if (!sameName(fs.realpathSync.native(full), path.join(realDir, path.basename(full)))) throw new Error('moved');
     const st = fs.lstatSync(full);
     if (!isPlain(st) || st.size > MAX_RECORD_BYTES) throw new Error('unsafe');
@@ -513,7 +514,7 @@ function readHead(runFolder, full) {
 
 // True when both reviewers left a code-review Handoff. A matching name that is a link, has another hard link,
 // is over the cap or changes while opened refuses the check.
-function bothReviewersRan(runFolder) {
+export function bothReviewersRan(root, slug, runFolder) {
   const seen = new Set();
   let names;
   try { names = fs.readdirSync(runFolder).sort().slice(0, 2000); } catch { throw new GitUnknown('run folder'); }
@@ -521,7 +522,7 @@ function bothReviewersRan(runFolder) {
     const m = /^\d{2,3}-(code-reviewer|fresh-reviewer)\.md$/.exec(name);
     if (!m) continue;
     const full = path.join(runFolder, name);
-    const head = readHead(runFolder, full).split(/\r?\n/);
+    const head = readHead(root, slug, runFolder, full).split(/\r?\n/);
     if (head[0] !== '---') continue;
     const end = head.indexOf('---', 1);
     const fm = head.slice(1, end < 0 ? head.length : end);
@@ -533,9 +534,9 @@ function bothReviewersRan(runFolder) {
 }
 
 // A blocking finding of one reviewer that no blocking finding of the other overlaps.
-function singles(runFolder) {
+function singles(root, slug, runFolder) {
   const lineages = reviewerLineages(runFolder).filter((l) => l.role === 'code-reviewer' || l.role === 'fresh-reviewer');
-  if (!bothReviewersRan(runFolder)) return [];
+  if (!bothReviewersRan(root, slug, runFolder)) return [];
   const live = lineages.filter((l) => BLOCKING_STATES.has(l.state));
   const locs = (l) => parseLocations(l.holders[0].text).map((x) => ({ ...x, path: normPath(x.path) }));
   const touches = (a, b) => a.path === b.path && (a.from === null || b.from === null || (a.from <= b.to && b.from <= a.to));
@@ -569,7 +570,7 @@ function gateCmd(args, env) {
   }
   const dir = runDir(env.root, slug);
   if (typeof dir === 'string' && dir !== 'unsafe') {
-    try { lines.push(...singles(dir)); } catch (error) {
+    try { lines.push(...singles(env.root, slug, dir)); } catch (error) {
       if (!(error instanceof GitUnknown)) throw error;
       lines.push('single: unknown');
       code = 2;
