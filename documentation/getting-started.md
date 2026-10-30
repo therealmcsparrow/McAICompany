@@ -38,6 +38,23 @@ Then run `/plugin install aico@aico` as above. The tag form was checked with the
 
 Not sure what a command does? `/aico:help` lists them all, and `/aico:help <command>` (or `/aico:<command> help`) explains its options without running it.
 
+## One-time setup: the compaction point
+
+This step is optional but recommended. It lets the Lead hand over to itself at about 85500 tokens, before Claude Code's own limit. A plugin cannot set it, so you set it once.
+
+1. Open `~/.claude/settings.json` (on Windows `%USERPROFILE%\.claude\settings.json`).
+2. Add this line to the `env` block, and create the block if it is missing:
+
+   ```json
+   "env": {
+     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"
+   }
+   ```
+
+3. Restart Claude Code. Expected result: new sessions compact near 85500 tokens, and the Lead continues from its own Lead Handoff file.
+
+It applies to every Claude Code session on the machine. To undo it, remove the line. Without it, the Lead hands over only at Claude Code's default compaction point. See [Lead hand-over](concepts.md#lead-hand-over).
+
 ## Your first run
 
 Open Claude Code in the repository of the product you want to work on (or an empty folder for a brand-new product) and describe what you want:
@@ -45,6 +62,8 @@ Open Claude Code in the repository of the product you want to work on (or an emp
 ```
 /aico:lead add a dark-mode toggle to the settings page
 ```
+
+Starting from a rough idea or a bug report? Use `/aico:idea <idea>` or `/aico:bug <bug report>`. Both guide you with forms from the first words to a build; see [From idea to shipped code](idea-to-ship.md).
 
 `/aico:lead` is the front door. The Lead reads your request, picks the Roles it needs, shows you the planned route, and waits for your go-ahead. If your request matches a known kind of work, it tells you and switches to the matching command — for a feature it runs [`/aico:feature`](commands.md#aicofeature), for a bug [`/aico:fix`](commands.md#aicofix), and so on. You can also call those commands directly.
 
@@ -70,7 +89,7 @@ A **Gate** is a checkpoint where the company stops and waits for you:
 | **Plan** | After the Architect (and designer) plan it | The Core list, the Contracts, the Module map and the art direction — before anything is built |
 | **Ship** | Before anything is released or made public | The finished, reviewed work — before it goes out |
 
-At every Gate you can **Approve**, **Change** (send it back with notes) or **Stop**. Read-only commands such as [`/aico:audit`](commands.md#aicoaudit) have no Plan or Ship Gate because they build nothing — they end with a report you act on.
+At every Gate you can **Approve**, **Change** (send it back with notes) or **Stop**. `/aico:feature` and `/aico:fix` have no Brief Gate and no Plan Gate, in any run; they keep only the Ship Gate, and it always runs. Other commands keep the Gates listed here. Read-only commands such as [`/aico:audit`](commands.md#aicoaudit) have no Plan or Ship Gate because they build nothing — they end with a report you act on.
 
 ## Tune the company
 
@@ -78,7 +97,7 @@ Run `/aico:settings` to open the settings page in your browser. There you can:
 - rename Roles
 - move a Role to another model or effort level
 - change how many Fix rounds run before aico asks you
-- set the max context per Role (default 150000, minimum 60000)
+- see the max context, fixed at 95000 with a hand-over at 85500 (the old `context_cap` setting has no effect)
 - pick the brainstorm debate style, or turn on the film script
 - choose which review lanes run
 - let the Brief or Plan Gate continue on its own

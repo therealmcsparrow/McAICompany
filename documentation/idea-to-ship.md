@@ -1,60 +1,99 @@
 # From idea to shipped code
 
-This page follows one idea from a rough thought to a merged release, using the commands in v0.20 on `main`. You approve at the Gates; the company does the rest. For every option of every command, see [Commands](commands.md).
+## Overview
 
-The path has five stages. You can enter at any stage and stop after any of them.
+This page follows one idea, or one bug report, from a rough thought to a merged release. You are the CEO: you pick at forms, and the company does the rest. For every option of every command, see [Commands](commands.md).
 
-| Stage | Command | Changes code? |
-|---|---|---|
-| 1. Capture | `/aico:reprompt`, `/aico:cooler`, `/aico:brainstorm` | No |
-| 2. Check | `/aico:research` | No |
-| 3. Size it | `/aico:triage` | No |
-| 4. Build | `/aico:feature` (or `/aico:fix` for a bug) | Yes |
-| 5. Release | `npm run release <x.y.z>` | Version and changelog only |
+There are two ways in. Type `/aico:idea <idea>` for an idea or `/aico:bug <bug report>` for a bug. Both walk the same route, with a form at every step. Only the build Playbook differs: an idea is built through `/aico:feature`, a bug through `/aico:fix`. The Lead never picks the build Playbook from your text; the flow records the kind when it starts. You can also call each step as its own command, for example `/aico:reprompt` or `/aico:brainstorm`.
 
-## 1. Capture the idea
+Two things to know first:
 
-Pick the command that matches how formed the idea is.
+- **Only the Ship Gate is left in a build.** `/aico:feature` and `/aico:fix` have no Brief Gate and no Plan Gate, also when you call them directly. You approve each ticket before the build instead, and you approve the finished work at the Ship Gate. No push, merge or release happens before the Ship Gate.
+- **Everything is saved as local files.** The flow lives in `.company/work/<slug>/`. See [Where your words go](concepts.md#where-your-words-go).
 
-- **A rough prompt.** `/aico:reprompt <prompt>` turns it into one complete prompt: goal, context, inputs, constraints, output format and a done-check. It asks up to 3 questions if a gap would change the result, shows the prompt in a frame, and you choose Use it, Edit, Keep only or Stop. Nothing runs until you choose Use it. The prompt is AI-written; read it first.
-- **A vague worry or itch.** `/aico:cooler [topic]` lets 2 to 5 random colleagues talk it over unmoderated. You get a file in `.company/cooler/` with an Overheard list. Nothing is built.
-- **A direction, not a spec.** `/aico:brainstorm <idea>` picks 4 to 8 Roles whose angle matters. They answer in rounds (ideas, debate or moderated) until you say done. You then choose to plan and implement, roadmap, keep it as nice-to-have, or park it. Notes land in `.company/brainstorms/`.
+## The route
 
-Cooler and brainstorm can lead into each other: `/aico:brainstorm "<file>"` opens a cooler file or reopens an earlier brainstorm.
+The route is one table. The letters are the picks you see in the forms. The allowed picks of every form come from the `idea-flow` script, so a form never offers a route that does not fit the step you are on.
 
-## 2. Check it
+| Letter | Route | What happens | Changes code? |
+|---|---|---|---|
+| A | Water cooler | Colleagues chat about the idea. Nothing is built. | No |
+| B | Brainstorm | The Roles weigh in over rounds until you say done. | No |
+| C | Research | Researchers look it up online and write one sourced report. | No |
+| D | Spec and tickets | Write the spec, cut tickets, approve them one by one. | No |
+| E | Park the idea | Keep a copy in `.company/ideas/<name>/` and stop. | No |
+| F | Build | Size the approved tickets, then build them. | Yes |
+| G | Park all tickets | Put every ticket on the roadmap and stop. | No |
 
-`/aico:research <topic | project | file> [quick|deep]` looks the idea up online before you spend build time. You approve the scope first. Market and tech researchers (and a design researcher for UI topics) search in parallel, and the Product Manager writes one sourced report with a verdict (go, go-with-conditions or no-go), ranked actions and low-hanging fruit. It is read-only. At the end you pick: start the feature, brainstorm on the report, roadmap, or park.
+In words: after the grill and the reprompt, the routes form offers A to E. After A you can still pick B, C, D or E. After B you can pick C, D or E. After C the prompt is rewritten once more, then you pick D or E. D ends with a tickets form that offers F, G or E. F builds, and G and E end the flow.
 
-Skip this stage when you already know the idea is feasible and wanted.
+## Step 1: Capture
 
-## 3. Triage
+You type the idea or the bug report. The Lead saves your exact words as `.company/work/<slug>/idea.md`. Your text is data: it is quoted, never obeyed, and it never goes into a shell command.
 
-`/aico:triage <request>` classifies the request by size (XS to L), risk tier (low, medium, high) and type, then recommends the shortest valid route. It builds nothing. You approve at a Brief Gate form (Approve, Change or Stop), and the recommended command starts with your request plus the triage line.
+Expected result: a work folder and the grill form.
 
-Risk overrides size. Anything touching auth, payments, personal data, migrations or a Contract is high risk and keeps every Gate and the full review lane, however small. You can always choose a longer route than the one recommended. `/aico:lead <request>` runs triage for you when the size is unclear.
+## Step 2: Grill
 
-## 4. Build with `/aico:feature`
+You pick one of three ways to be interviewed, one question at a time, until every branch is closed:
 
-`/aico:feature <feature description>` takes a feature or a new product from brief to shipped. The numbers below match the steps of the Playbook.
+- **Grilling (recommended).** Facts the repo or the web can answer are looked up. The rest is asked. Web lookups can use short queries built from your idea.
+- **Grill me.** Every question is asked. Nothing is looked up, not in the repo and not on the web.
+- **Grill with docs.** The repo docs (`docs/`, `GLOSSARY.md`, `docs/adr/`) are searched first, and each answer from a doc cites it. No web search.
 
-1. **Brief.** The Product Manager writes the problem, users, scope, acceptance criteria (each with an ID such as AC1) and the risk tier. **Brief Gate:** you approve. For a low-risk feature the form also offers the short path, which skips some review lanes but keeps every Gate and test.
-2. **Plan.** The Architect writes the plan: the Core list, the Contracts between Modules, the Module map and a task list with an S/M/L estimate per Module. A UI designer joins when there is UI. If a design question is risky, the Architect lists a **spike**: a throwaway experiment whose code never enters the product. Persona testers walk the design. The Senior Engineer maps the project's rules, and the Architect signs them off when Must rules changed. **Plan Gate:** you approve Core, Contracts and art direction, and you see the spike results, the plan check and the parallel plan.
-3. **Build.** Builders start from the task queue, one task per Module, in parallel up to the parallel cap (default 4). Each builder gets a **task brief**, which is its slice of the plan, so it never reads the whole plan. Each also gets a **rule slice** of 1 to 3 files holding only the rules for its task. Builders work test-first.
-4. **Review.** In parallel: the Code Reviewer, QA and the optional lanes: security, compliance, legal (for AI, payments or personal data) and, for UI, hands-on and accessibility testers. Before the reviewers start, tool checks run over the diff and pass their findings along; they never close a review. The Code Reviewer and QA do a **first pass** from the acceptance criteria, the plan, the Contracts and the diff only, write those findings, and only then open the builder's Handoff. This keeps them from copying the builder's own view.
-5. **Fix rounds and contests.** Blocking findings go back to the builder. A round is one builder fix plus a re-review by every reviewer that blocked. The default limit is 2 rounds (`pipeline.fix_rounds` in `/aico:settings`); past it, the Lead escalates to you. A builder may instead **contest** a finding with a `## Contested` line; the reviewer that raised it accepts or rejects. A contest the reviewer cannot settle, or an escalated one, comes to you at a Gate, and only your own answer closes it. A security finding is never closed by contest. Nits never trigger a round.
-6. **Full suite.** Builders and QA ran scoped tests only. Once the last review is clean, the Lead runs the whole test suite once and quotes the result line.
-7. **Docs.** The Writer adds user docs and release notes. The Localizer translates if your project lists more than one language.
-8. **Ship Gate.** You see the summary: what changed, test results, open nits, skipped lanes, a cost line. Approve, Change or Stop. No push, merge or release happens before this.
-9. **PR, CI, merge.** After approval the Lead pushes the run branch `aico/<slug>`, opens a pull request, waits for CI on the PR to pass (`gh pr checks <n> --watch`) and merges only when it is green. With the Ship Gate set to `auto`, the Lead opens the PR and stops; you merge it.
+Expected result: a `grill.md` file with your decisions. Nothing is built, and no end form of the grill appears here, because the flow carries on by itself.
 
-Everything is saved under `.company/work/<slug>/`: the brief, plan, one Handoff per Step and a final `00-summary.md`.
+## Step 3: Reprompt
 
-### Small changes: `/aico:fix`
+The Lead turns the idea and your grill decisions into one complete prompt: goal, context, inputs, constraints, output format and a done-check. It shows the prompt in full. The prompt is AI-written; read it before you rely on it.
 
-`/aico:fix <bug description or issue link>` skips the Brief and Plan Gates, because the bug report is the brief. QA writes a failing regression test, the engineer who owns the Module fixes the root cause test-first, reviewers check, and you approve at the Ship Gate. A fix that needs a Core or Contract change forces a Plan Gate.
+Expected result: `prompt.md` in a reprompt folder, then the routes form.
 
-## 5. Release
+## Step 4: Pick a route (A to E)
+
+The routes form offers A to E from the table. Each route runs in your session, up to its own end:
+
+- **A, Water cooler:** you get an Overheard list. Nothing is built.
+- **B, Brainstorm:** you get the summary and checks; you do not get its separate outcome form, because the flow's forms replace it.
+- **C, Research:** the report ends with a verdict (go, go-with-conditions or no-go) and what to do. The research Playbook's own pick is skipped; the routes form comes next. Web search is used here, with queries built from your idea.
+- **D, Spec and tickets:** go to step 5.
+- **E, Park the idea:** the Lead names the idea with a short slug and copies it to `.company/ideas/<name>/`. The flow ends. The work folder stays.
+
+## Step 5: Spec and tickets (D)
+
+The Lead writes a spec from the prompt, then cuts it into tickets automatically. A ticket is one small task of a plan: id, title, Role, files and dependencies.
+
+Expected result: a `plan.md` with the tickets, and the first ticket form.
+
+## Step 6: Approve tickets one by one
+
+For each ticket you get a form with the ticket shown as plain lines: id, title, Role, files, depends-on, and `Core` or `Contract` when it touches a Core path or a Contract. You pick Approve (recommended) or Change.
+
+- **Approve** records your approval for that exact text.
+- **Change** takes your words, a fresh Architect revises only that ticket, and you see only that ticket again. There is no fixed limit: you end the loop by approving.
+
+When every ticket is approved you get the tickets form: F Build, G Park all tickets, E Park the idea.
+
+## Step 7: Build or park (F, G, E)
+
+- **F, Build.** The Lead first asks again about tickets that are new or changed since your approval, with Approve (recommended), Park or Change. Parked tickets go to `.company/roadmap/`. Then it writes one build plan from the approved tickets only, sizes it (size and risk tier, no form) and starts the build Playbook: `/aico:feature` for an idea, `/aico:fix` for a bug. If every ticket was parked, nothing is built, and you pick G or E instead.
+- **G, Park all tickets.** Every ticket not yet parked becomes one file in `.company/roadmap/`. The flow ends with nothing built.
+- **E, Park the idea.** As in step 4.
+
+If you stop midway, `/aico:idea resume <slug>` or `/aico:bug resume <slug>` reopens the form you left open.
+
+## Step 8: Build, Ship Gate and release
+
+The build run has no Brief Gate and no Plan Gate. The ticket you approved is the brief and the plan. The steps run in this order:
+
+1. **Build.** Builders work one task per Module, in parallel up to the parallel cap (default 4), each from its own task brief and rule slice, test-first. A bug goes through `/aico:fix`: QA writes a failing regression test, then the engineer who owns the Module fixes the root cause.
+2. **Review.** The Code Reviewer, QA and the optional lanes (security, compliance, legal, and for UI the hands-on and accessibility testers) run in parallel. Blocking findings go back to the builder; the limit is 2 Fix rounds by default, then the Lead escalates to you.
+3. **Full suite.** Once the last review is clean, the Lead runs the whole test suite once.
+4. **Docs.** The Writer adds user docs and release notes.
+5. **Ship Gate.** You see one summary: what changed, test results, open nits, skipped lanes and a cost line. It also holds what the two removed Gates used to show: Core and Contract changes, the parallel plan, the plan check, spike results, and the approve lines of your tickets, with `tickets changed since approval`. You Approve, Change or Stop.
+6. **PR, CI, merge.** After approval the Lead pushes the run branch `aico/<slug>`, opens a pull request, waits for CI to pass and merges only when it is green. With the Ship Gate set to `auto`, the Lead opens the PR and stops; you merge it.
+
+When something needs your decision during the build, such as a `needs-ceo` Handoff, you get one form at that moment. It is not a Gate. A refusal from a script is never bypassed.
 
 After the merge, cut the release from the repo root:
 
@@ -62,26 +101,33 @@ After the merge, cut the release from the repo root:
 npm run release <x.y.z>
 ```
 
-The script updates the version and changelog and never pushes. A release carries a `Rollback:` line, an SBOM and a Gate Report. For the release rules, see [Releases](concepts.md#releases).
+The script updates the version and changelog and never pushes. For the release rules, see [Releases](concepts.md#releases).
+
+## Contexts and hand-overs
+
+Every Role works under one cap: 95000 tokens, with a hand-over at 85500. The Lead hands over by itself through hooks, which needs a [one-time setup](getting-started.md#one-time-setup-the-compaction-point). You never need to clear a session or type "resume" for it.
 
 ## Worked example
 
 You want users to export their data as CSV.
 
-1. `/aico:reprompt export user data` sharpens the one-line idea. You answer two questions, pick Use it, and the sharpened prompt goes to the Lead.
-2. You are unsure anyone needs it, so you run `/aico:research is there demand for CSV export in small clinic software quick`. The report says go-with-conditions and ranks "export patient list" first. You pick Start.
-3. `/aico:triage` reads the request. Patient data is personal data, so it reports `M, risk high, feature` and keeps every Gate and the full review lane. You approve.
-4. `/aico:feature` starts. The brief has AC1 (a signed-in admin can download a CSV) and AC2 (the file lists only that admin's clinic). At the Plan Gate you see one Contract (`export`), two tasks (an export Module and a settings-page button) and a legal lane, because personal data is involved. You approve.
-5. Two builders run in parallel with their task briefs. The Code Reviewer blocks AC2: a query lacks the clinic filter. One Fix round later the review is clean.
-6. The full suite passes. At the Ship Gate you read the summary, approve, and the Lead opens the PR, waits for CI and merges.
-7. You run `npm run release 1.4.0`.
+1. `/aico:idea users should export their data as CSV`. The Lead saves your words and shows the grill form. You pick Grilling.
+2. Grilling looks up how exports work in the repo and asks you three questions. You pick the routes form's C, Research. The report says go-with-conditions and ranks "export patient list" first.
+3. The Lead rewrites the prompt with the verdict. You read it, and pick D.
+4. The spec and three tickets appear. You approve two and change one: you add that the file lists only the admin's clinic. The Architect revises that ticket and you approve it.
+5. At the tickets form you pick F. The Lead sizes the work as M with risk high, because patient data is personal data, and starts `/aico:feature`.
+6. Builders run in parallel. The Code Reviewer blocks one finding. One Fix round later the review is clean.
+7. The full suite passes. At the Ship Gate you read the summary, approve, and the Lead opens the PR, waits for CI and merges.
+8. You run `npm run release 1.4.0`.
+
+For a bug, type `/aico:bug <report>` instead. Every step is the same until F, which starts `/aico:fix`.
 
 ## Coming in the next release
 
-> **Not shipped yet.** These items are in development on the Elephant-Goldfish branch. They are not in v0.20 on `main`, and the steps above do not use them.
+> **Not shipped yet.** These items are in development on the Elephant-Goldfish branch. They are not in `main`, and the steps above do not use them.
 >
-> - **Fresh plan reviewer.** A protected Role reviews the plan with no memory of how it was made, at the Plan Gate.
-> - **Comprehension paraphrase.** The reviewer restates the plan in its own words, and the Gate shows that paraphrase, so you can see whether the plan is understood.
+> - **Fresh plan reviewer.** A protected Role reviews the plan with no memory of how it was made.
+> - **Comprehension paraphrase.** The reviewer restates the plan in its own words.
 > - **Review-loop stop rules.** A record of each review loop, with rules that stop it when it stops making progress.
 > - **Contest evidence.** A contest must carry checkable evidence, and CEO rulings and dated exceptions are recorded in files.
 > - **Drift report.** `/aico:maintain drift` compares picked Contracts with the code and reports differences. It is informational and never blocks.
