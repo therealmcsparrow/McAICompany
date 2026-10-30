@@ -477,7 +477,9 @@ function minusLines(a, b) {
 // (removed) or a pattern for the new line (added); nothing else may differ.
 const HAND_OVER_CHANGES = {
   feature: {
+    hint: "argument-hint: <feature description | draft file>",
     removed: [
+      "argument-hint: <feature description>",
       "Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):",
       "   **→ Brief Gate**",
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).",
@@ -489,6 +491,7 @@ const HAND_OVER_CHANGES = {
       "   **→ Ship Gate**",
     ],
     added: [
+      "argument-hint: <feature description | draft file>",
       "Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md); an entry not in the set: line is skipped and named in every Gate summary. Steps (∥ = dispatch in parallel):",
       "   **→ Brief Gate** (with the tier path preview and, on a short path, two Approve options: references/tier-path.md step 4)",
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
@@ -504,6 +507,7 @@ const HAND_OVER_CHANGES = {
       // The prototype step and the destination spec at ship (v0.21.0).
       /^1b\. Prototype, only after a Run it answer at the Brief Gate/,
       /^5a\. `aico:product-manager`: destination spec, checked by `spec-check\.mjs`/,
+      /^\*\*Draft input:\*\* the argument is one token with no whitespace ending/,
     ],
   },
   fix: {
@@ -649,7 +653,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   const baseSet = playbookSet(BASE);
   assert.deepEqual(baseSet.filter(f => !nowSet.includes(f)), [], 'a v0.12.0 Playbook is gone');
   const softwarePlaybooks = manifest('software').playbooks;
-  assert.deepEqual(nowSet.filter(f => !baseSet.includes(f)).map(f => f.split('/')[1]).filter(n => softwarePlaybooks.includes(n)), [], 'a Playbook the software type offers is new');
+  const addedByGrillSpecTickets = ['grill', 'to-spec', 'to-tickets'];
+  assert.deepEqual(nowSet.filter(f => !baseSet.includes(f)).map(f => f.split('/')[1]).filter(n => softwarePlaybooks.includes(n) && !addedByGrillSpecTickets.includes(n)), [], 'a Playbook the software type offers is new');
   for (const name of soft) assertV012Playbook(name);
   // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
@@ -776,7 +781,7 @@ test('AC7 a profile without read permission is refused as unreadable', { skip: (
 
 test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the reprompter and ship meaning', () => {
   const m = manifest('software');
-  const expectedPlaybooks = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
+  const expectedPlaybooks = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'grill', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan'];
   assert.deepEqual([...m.playbooks].sort(), expectedPlaybooks);
   assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
   assert.equal(m.roles.length, 35);
@@ -784,7 +789,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
   const t = sb.typeJson(['resolve']);
-  assert.equal(t.playbooks.length, 25);
+  assert.equal(t.playbooks.length, 28);
   assert.deepEqual([...t.playbooks].sort(), [...expectedPlaybooks, ...ALWAYS].sort());
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
@@ -793,7 +798,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();
-    assert.deepEqual([...t.playbooks].filter(n => n !== 'reprompt').sort(), basePlaybooks);
+    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'grill', 'to-spec', 'to-tickets'].includes(n)).sort(), basePlaybooks);
   }
 });
 

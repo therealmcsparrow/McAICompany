@@ -568,10 +568,10 @@ test('company-type: every shipped manifest obeys the schema of the Contract', ()
 
 test('company-type: the four shipped types are the table of the Contract', () => {
   const table = {
-    software: { kind: 'release', lanes: [], checks: [], work: ['feature', 'fix'], playbooks: 'audit, brainstorm, client, cooler, feature, feedback, fix, incident, launch, maintain, pentest, refactor, research, standards, usability-test, vulnscan' },
-    research: { kind: 'deliver-report', lanes: ['legal'], checks: ['claims-cited'], work: ['report'], playbooks: 'research, client, report, feedback, brainstorm, cooler' },
-    marketing: { kind: 'publish', lanes: ['legal', 'accessibility'], checks: ['claims-cited', 'ai-disclosure', 'asset-licences'], work: ['content', 'campaign'], playbooks: 'campaign, content, research, client, feedback, brainstorm, cooler' },
-    design: { kind: 'design-handoff', lanes: ['legal', 'accessibility', 'security'], checks: ['ai-disclosure', 'asset-licences', 'handoff-package'], work: ['design'], playbooks: 'design, research, client, feedback, brainstorm, cooler' }
+    software: { kind: 'release', lanes: [], checks: [], work: ['feature', 'fix'], playbooks: 'audit, brainstorm, client, cooler, feature, feedback, fix, grill, incident, launch, maintain, pentest, refactor, research, standards, to-spec, to-tickets, usability-test, vulnscan' },
+    research: { kind: 'deliver-report', lanes: ['legal'], checks: ['claims-cited'], work: ['report'], playbooks: 'research, client, report, feedback, brainstorm, cooler, grill' },
+    marketing: { kind: 'publish', lanes: ['legal', 'accessibility'], checks: ['claims-cited', 'ai-disclosure', 'asset-licences'], work: ['content', 'campaign'], playbooks: 'campaign, content, research, client, feedback, brainstorm, cooler, grill' },
+    design: { kind: 'design-handoff', lanes: ['legal', 'accessibility', 'security'], checks: ['ai-disclosure', 'asset-licences', 'handoff-package'], work: ['design'], playbooks: 'design, research, client, feedback, brainstorm, cooler, grill' }
   };
   const roles = {
     marketing: 'product-manager, account-manager, marketer, writer, brand-artist, prompt-artist, motion-artist, localizer, market-researcher, persona-tester, accessibility-tester, legal, editor, skill-researcher, reprompter',
@@ -604,7 +604,7 @@ test('company-type: the manifests and the always-on commands cover every Playboo
   const union = new Set(TYPES.flatMap(id => manifest(id).playbooks));
   assert.deepEqual([...PLAYBOOKS].sort(), [...new Set([...union, ...ALWAYS])].sort());
   const t = JSON.parse(runCompanyType(['resolve', '--json'], { cwd: sandbox().repo }).out);
-  assert.equal(t.playbooks.length, 25);
+  assert.equal(t.playbooks.length, 28);
   assert.deepEqual(t.playbooks.slice(-9), ALWAYS);
   // A Playbook that no manifest lists is an error for the static check.
   const orphan = checkWith('skills/zz-orphan/SKILL.md', () => '---\nname: zz-orphan\ndescription: Use when testing the orphan rule.\nargument-hint: (no arguments)\n---\n# Orphan\n');
@@ -613,13 +613,13 @@ test('company-type: the manifests and the always-on commands cover every Playboo
 
 test('company-type: every Playbook has the Type line after its Help line, with one empty line between', () => {
   const listed = PLAYBOOKS.filter(n => !ALWAYS.includes(n));
-  assert.equal(listed.length, 20);
+  assert.equal(listed.length, 23);
   for (const name of listed) {
     const lines = read(`skills/${name}/SKILL.md`).split('\n');
     const help = lines.findIndex(l => l.startsWith('**Help:**'));
     assert.ok(help > 0, name);
     assert.equal(lines[help + 1], '', name);
-    assert.equal(lines[help + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`, name);
+    assert.ok(lines[help + 2].startsWith(`**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`), name);
     assert.equal(lines.filter(l => l.startsWith('**Type:**')).length, 1, name);
   }
   for (const name of ALWAYS) assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /^\*\*Type:\*\*/m, name);
