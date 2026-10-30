@@ -85,10 +85,11 @@ test('Setup fixes the context cap once; it lives only here', () => {
   has(pipeline, '**Context cap (§1.7)**', 'Context cap: 95000 handover 85500', 'the Role never computes');
 });
 
-test('handover follows the Context cap line for Roles; the Lead keeps its own 150k', () => {
+test('handover follows the Context cap line for Roles; the Lead uses the same fixed cap with automatic hand-over', () => {
   has(pipeline, '`status: handover` → the Role reached the handover point of its `Context cap:`');
   assert.doesNotMatch(pipeline, /hit the 150k context budget/);
-  has(pipeline, '**Your own budget is 150k too.**');
+  assert.doesNotMatch(pipeline, /Your own budget is 150k/);
+  has(pipeline, '95000', '85500', 'references/lead-handover.md');
 });
 
 test('review depth is computed per dispatch from the diff, for the code-reviewer only', () => {
