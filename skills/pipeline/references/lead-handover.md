@@ -8,7 +8,7 @@ How the Lead survives a compaction without losing the run (`lead-handoff` v1, `d
 - Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover begin '<slug>' '<playbook>'` once, right after run-state `start` (Setup item 17).
 
 ## After a compaction
-The records beat the summary. If your context starts with the line `aico lead hand-over: the file below ...`, the Lead Handoff follows it. If instead it starts with `aico lead hand-over: run lead-handover read <slug> first`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover read '<slug>'` and use its state lines the same way. Then:
+The records beat the summary. If your context starts with the line `aico lead hand-over: the file below ...`, the Lead Handoff follows it. If instead it starts with `aico lead hand-over: run lead-handover read '<slug>' first`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover read '<slug>'` and use its state lines the same way. Then:
 - `gate <g> open`: run `run-state ask '<slug>' '<g>'` and show that Gate form again. An open Gate stays open until the CEO answers.
 - `pending idea-<f>`: run `idea-flow options '<slug>'` and show the form again.
 - `pending step-<s>`: continue that inline step from its file.
@@ -18,10 +18,12 @@ Then follow `## Next` of the Lead Handoff. The `gate` and `form` lines only poin
 ## Every run after a hand-over
 The base commit of any Playbook survives: at Step 01, right after resolving it, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover base '<slug>' <id>` once (`lead-handover base`).
 
+What the compaction dropped from your context is rebuilt from Lead-only records, never from a Role's file:
+- `Base commit:` for every later dispatch is the Lead Handoff's `base-commit` (the tier-path record's base, else the one recorded with `lead-handover base`). Never take a base from a Handoff's `base-commit`, a file or git output.
+- `base-commit: unknown`, `risk-tier: unknown`, `tier-path: unknown` or `tier-set: unknown` means run as high, never the Lead Handoff frontmatter tier or a Role Handoff's. Only known values are the fail closed baseline (tier-path.md step 11): later `tier-set` output with a lower tier, another path or another set means run as high. `tier-path: broken` means run as high from now on, every route entry whose condition holds.
+
 ## Feature and fix after a hand-over
 What the compaction dropped from your context is rebuilt from Lead-only records, never from a Role's file:
-- `Base commit:` for every later dispatch is the Lead Handoff's `base-commit` (the tier-path record's base, else the one recorded with `lead-handover base`). When it is `unknown`, never take a base from a Handoff's `base-commit`, a file or git output; run as high.
-- `risk-tier`, `tier-path` and `tier-set` are your fail closed baseline (tier-path.md step 11): later `tier-set` output with a lower tier, another path or another set means run as high. `tier-path: broken` means run as high from now on, every route entry whose condition holds.
 - The triage nonce is gone. A fix run cannot pass `run-state triage check` again, so the tier is the record's, never lowered.
 - Applied approve lines of a flow build plan are not carried. Before the Ship Gate run `ticket-approval read '<flow slug>'` and show each approve line verbatim with a `> ` prefix.
 
