@@ -1,6 +1,6 @@
 ---
 name: writing
-description: Use when an aico Role writes user-facing words: docs, UX copy, marketing, release notes, client documents.
+description: Use when an aico Role writes user-facing words docs, UX copy, marketing, release notes, client documents.
 ---
 
 # Writing
