@@ -703,6 +703,43 @@ test('tree: only prompt.md and the Handoff changed is ok', () => {
   assert.deepEqual(r.json.paths, []);
 });
 
+const START_LINE = '{"v":1,"at":"2026-10-30T12:10:09Z","ev":"start"}\n';
+const SUB_LINE = '{"v":1,"at":"2026-10-30T12:10:14Z","ev":"sub","role":"other","id":"2e86b2c721bf","phase":"start","session":"s1"}\n';
+
+test('tree: step-times sub lines appended to the run log are ok', () => {
+  for (const withGit of [false, true]) {
+    const p = project({ withGit });
+    const log = path.join(p.dir, 'run-state.jsonl');
+    fs.writeFileSync(log, START_LINE);
+    const hex = good(p);
+    put(log, START_LINE + SUB_LINE + SUB_LINE.replace('"start"', '"stop"').replace('"start"', '"stop"'));
+    const r = reply(p, hex);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(r.json.tree, 'ok');
+  }
+});
+
+test('tree: any other run log change is seen', () => {
+  for (const [before, after] of [
+    [START_LINE, START_LINE + '{"v":1,"at":"2026-10-30T12:10:14Z","ev":"end","outcome":"ship"}\n'],
+    [START_LINE, SUB_LINE + SUB_LINE],
+    [START_LINE, START_LINE + SUB_LINE.slice(0, -1)],
+    [START_LINE, START_LINE + SUB_LINE.replace('"s1"', '"s1","x":"y"')],
+    [START_LINE, START_LINE + SUB_LINE.replace('"v":1', '"v":"1"')],
+    [START_LINE + SUB_LINE, START_LINE],
+    [null, START_LINE],
+  ]) {
+    const p = project();
+    const log = path.join(p.dir, 'run-state.jsonl');
+    if (before !== null) fs.writeFileSync(log, before);
+    const hex = good(p);
+    put(log, after);
+    const r = reply(p, hex);
+    assert.equal(r.code, 2, `${JSON.stringify(after)}: ${r.out}`);
+    assert.ok(r.json.paths.includes(`.company/work/${SLUG}/run-state.jsonl`), r.out);
+  }
+});
+
 test('tree: a write to .company/project.md under an ignored .company/ is seen, even at the same size', () => {
   const p = project({ ignoreCompany: true, withGit: true });
   const hex = good(p);
