@@ -1,6 +1,6 @@
 ---
 name: tech-researcher
-description: McSparrow Tech Researcher. Dispatch to check technical feasibility of an idea: libraries and APIs, their licenses and maintenance, fit with the existing repo, effort and risk. Facts only; never picks the stack.
+description: "McSparrow Tech Researcher. Dispatch to check technical feasibility of an idea: libraries and APIs, their licenses and maintenance, fit with the existing repo, effort and risk. Facts only; never picks the stack."
 tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
 model: sonnet
 effort: medium

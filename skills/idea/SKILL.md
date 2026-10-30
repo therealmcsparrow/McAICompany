@@ -1,13 +1,13 @@
 ---
 name: idea
-description: Playbook. The CEO types a rough idea and the Lead guides it from there. It is captured, you pick a grill (grilling, grill-me or grill-with-docs), the idea is refined, then you choose a route: water cooler, brainstorm, research, or spec and tickets. Tickets are approved one by one, then built through aico:feature, parked on the roadmap, or the idea is parked.
+description: "Playbook. The CEO types a rough idea and the Lead guides it from there. It is captured, you pick a grill (grilling, grill-me or grill-with-docs), the idea is refined, then you choose a route: water cooler, brainstorm, research, or spec and tickets. Tickets are approved one by one, then built through aico:feature, parked on the roadmap, or the idea is parked."
 disable-model-invocation: true
 argument-hint: <idea> | resume <slug>
 ---
 
 # Playbook: idea
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:idea` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/idea.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook idea` first; exit not 0 → show its output line and stop. Keep the type lines it printed.
 

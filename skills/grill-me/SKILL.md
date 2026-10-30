@@ -1,13 +1,13 @@
 ---
 name: grill-me
-description: Playbook. The CEO gives an idea or a file and the Lead interviews them, one question at a time, until every branch of the decision tree is closed. Every branch is asked: no lookups in the repo or the web. Each answer is logged to grill.md before the next question. Builds nothing; ends with a pick of what to run next.
+description: "Playbook. The CEO gives an idea or a file and the Lead interviews them, one question at a time, until every branch of the decision tree is closed. Every branch is asked: no lookups in the repo or the web. Each answer is logged to grill.md before the next question. Builds nothing; ends with a pick of what to run next."
 disable-model-invocation: true
 argument-hint: <idea | file> | resume <slug>
 ---
 
 # Playbook: grill-me
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:grill-me` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/grill-me.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook grill-me` first; exit not 0 → show its output line and stop. Keep the type lines it printed.
 
