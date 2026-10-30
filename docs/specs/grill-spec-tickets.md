@@ -1,7 +1,7 @@
 ---
 slug: grill-spec-tickets
-version: pending
-shipped: pending
+version: 0.22.0
+shipped: 2026-10-30
 ---
 ## Problem
 To grill an idea, draft a spec or cut tickets, the CEO has to start a full feature run, with its branch, builders and Gates. Before he commits to a build he wants to think an idea through, see it as a spec and see it as a task plan, without anything being built. Each of those outputs should then feed the next command and, in the end, a feature run.
