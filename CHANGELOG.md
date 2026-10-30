@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-30
+
+Rollback: node scripts/stable.mjs 0.23.0
+
 ### Added
 - **`aico:wizard`.** DevOps hands the CEO manual steps (dashboards, credentials, CI secrets) as a bash wizard built from `skills/wizard/template.sh`: one stage at a time, hidden secret entry, `.env` upserts, `gh secret` writes, a confirm before anything irreversible.
 
