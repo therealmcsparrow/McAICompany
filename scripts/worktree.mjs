@@ -720,7 +720,31 @@ function deleteBranch(ctx, slug, id, head) {
   return null;
 }
 
-function removeWorktree(ctx, layout, slug, id, { force, head }) {
+// Removes each skipped folder with fs.rmSync (recursive, no force: it unlinks a link it meets and never enters it),
+// after repeating the skip check on it. The folder must then be gone (lstat ENOENT). Returns true only when all are.
+function removeSkipped(env, layout, folders) {
+  for (const rel of folders) {
+    const full = path.join(layout.wt, ...rel.split('/'));
+    try {
+      if (!skippable(layout, `${rel}/`)) return false;
+      env.hook?.('rebuildable-remove', { path: full });
+      if (!skippable(layout, `${rel}/`)) return false;
+      fs.rmSync(full, { recursive: true });
+      try {
+        fs.lstatSync(full);
+        return false;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+function removeWorktree(ctx, layout, slug, id, { force, head, env, skipped = [] }) {
+  if (!removeSkipped(env, layout, skipped)) return 'rebuildable folder not removed';
   ctx.git(['worktree', 'remove', ...(force ? ['--force'] : []), '--end-of-options', layout.wt]);
   return deleteBranch(ctx, slug, id, head);
 }
@@ -779,7 +803,8 @@ function archiveIgnored(env, layout, slug, id, statusBytes) {
   const paths = entries.filter((p) => !p.endsWith('/'));
   try {
     if (!folders.every((p) => skippable(layout, p))) return { ok: false };
-    if (paths.length === 0) return { ok: true, count: 0 };
+    const skipped = folders.map((p) => p.slice(0, -1));
+    if (paths.length === 0) return { ok: true, count: 0, skipped };
     const caps = env.ignoredCaps;
     if (paths.length > caps.files) return { ok: false };
     if (!paths.every(archivable)) return { ok: false };
@@ -799,7 +824,7 @@ function archiveIgnored(env, layout, slug, id, statusBytes) {
       writeVerified(path.join(dest, ...parts), data, env);
     }
     env.hook?.('ignored-verified', { id, folder: dest });
-    return { ok: true, count: paths.length, name };
+    return { ok: true, count: paths.length, name, skipped };
   } catch {
     return { ok: false };
   }
@@ -827,7 +852,7 @@ function cleanOne(ctx, env, slug, id, st, archive) {
       const saved = archiveIgnored(env, layout, slug, id, before);
       if (!saved.ok) return ignoredNotSaved;
       if (ctx.commitOf(refOf(slug, id)) !== head || !statusOf(ctx, layout.wt, { ignored: true }).equals(before)) return changed;
-      const stays = removeWorktree(ctx, layout, slug, id, { force: false, head });
+      const stays = removeWorktree(ctx, layout, slug, id, { force: false, head, env, skipped: saved.skipped });
       if (stays) return { line: `kept ${id}: ${stays}`, stop: true };
       appendEvent(env, slug, { v: 1, at: utc(env.now), ev: 'remove', task: id, commit: head, ...(saved.name ? { ignored: saved.name } : {}) });
       return { line: withCount(`removed ${id}`, saved.count) };
@@ -864,7 +889,7 @@ function cleanOne(ctx, env, slug, id, st, archive) {
   }
   env.hook?.('archive-recorded', { id });
   if (!same()) return changed;
-  const stays = removeWorktree(ctx, layout, slug, id, { force: true, head });
+  const stays = removeWorktree(ctx, layout, slug, id, { force: true, head, env, skipped: saved.skipped });
   if (stays) return { line: `kept ${id}: ${stays}`, stop: true };
   return { line: withCount(`archived ${id} ${written.file}`, saved.count) };
 }

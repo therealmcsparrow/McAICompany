@@ -1176,6 +1176,95 @@ describe('cleanup ignored folders', () => {
     assert.ok(fs.existsSync(path.join(target, 'f0.js')));
   });
 
+  for (const [name, args] of [['path (a)', []], ['path (b)', ['--archive']]]) {
+    const setup = (r, ignore = 'node_modules/\n') => (args.length ? task(r, 't1', '.gitignore', ignore) : mergedTask(r, ignore));
+
+    test(`${name}: a junction inside node_modules/ is never followed`, () => {
+      const r = makeRepo();
+      const wt = setup(r);
+      const outside = path.join(r.base, 'outside');
+      fill(outside, 2);
+      fill(path.join(wt, 'node_modules', 'pkg'), 2);
+      fs.symlinkSync(outside, path.join(wt, 'node_modules', 'junc'), 'junction');
+      const res = r.run('cleanup', SLUG, ...args);
+      assert.equal(res.code, 0);
+      assert.ok(!fs.existsSync(wt));
+      assert.equal(fs.readFileSync(path.join(outside, 'f1.js'), 'utf8'), 'x');
+    });
+
+    test(`${name}: the folder swapped for a junction before removal: target kept, worktree kept`, () => {
+      const r = makeRepo();
+      const wt = setup(r);
+      const outside = path.join(r.base, 'outside');
+      fill(outside, 2);
+      fill(path.join(wt, 'node_modules'), 2);
+      r.hooks['rebuildable-remove'] = ({ path: p }) => {
+        fs.rmSync(p, { recursive: true });
+        fs.symlinkSync(outside, p, 'junction');
+      };
+      const res = r.run('cleanup', SLUG, ...args);
+      assert.deepEqual(res, kept('rebuildable folder not removed'));
+      assert.ok(fs.existsSync(wt));
+      assert.equal(fs.readFileSync(path.join(outside, 'f0.js'), 'utf8'), 'x');
+      assert.ok(!r.events().some((e) => e.ev === 'remove'));
+    });
+
+    test(`${name}: a parent swapped for a junction before removal: target kept, worktree kept`, () => {
+      const r = makeRepo();
+      const wt = setup(r, 'out/\n');
+      const outside = path.join(r.base, 'outside');
+      fill(path.join(outside, 'out'), 2);
+      fill(path.join(wt, 'src', 'out'), 1);
+      r.hooks['rebuildable-remove'] = () => {
+        fs.rmSync(path.join(wt, 'src'), { recursive: true });
+        fs.symlinkSync(outside, path.join(wt, 'src'), 'junction');
+      };
+      const res = r.run('cleanup', SLUG, ...args);
+      assert.deepEqual(res, kept('rebuildable folder not removed'));
+      assert.ok(fs.existsSync(wt));
+      assert.equal(fs.readFileSync(path.join(outside, 'out', 'f0.js'), 'utf8'), 'x');
+    });
+
+    test(`${name}: a throw while removing keeps the worktree, branch and record`, () => {
+      const r = makeRepo();
+      const wt = setup(r);
+      fill(path.join(wt, 'node_modules'), 2);
+      r.hooks['rebuildable-remove'] = () => { throw new Error('locked'); };
+      assert.deepEqual(r.run('cleanup', SLUG, ...args), kept('rebuildable folder not removed'));
+      assert.ok(fs.existsSync(wt));
+      assert.equal(r.g('rev-parse', '--verify', `aico-wt/${SLUG}/t1`).length, 40);
+      assert.ok(!r.events().some((e) => e.ev === 'remove'));
+    });
+
+    test(`${name}: a folder gone before the removal (no force) keeps the worktree`, () => {
+      const r = makeRepo();
+      const wt = setup(r);
+      fill(path.join(wt, 'node_modules'), 2);
+      r.hooks['rebuildable-remove'] = ({ path: p }) => fs.rmSync(p, { recursive: true });
+      assert.deepEqual(r.run('cleanup', SLUG, ...args), kept('rebuildable folder not removed'));
+      assert.ok(fs.existsSync(wt));
+    });
+  }
+
+  test('a symlink inside node_modules/ pointing outside: target kept, worktree removed', (t) => {
+    const r = makeRepo();
+    const wt = mergedTask(r, 'node_modules/\n');
+    const outside = path.join(r.base, 'outside');
+    fill(outside, 2);
+    fill(path.join(wt, 'node_modules', 'pkg'), 2);
+    try {
+      fs.symlinkSync(outside, path.join(wt, 'node_modules', 'link'), 'dir');
+      fs.symlinkSync(path.join(outside, 'f0.js'), path.join(wt, 'node_modules', 'flink'), 'file');
+    } catch (error) {
+      if (error.code !== 'EPERM') throw error;
+      t.skip(`symlink needs a privilege here: ${error.code}`);
+      return;
+    }
+    assert.deepEqual(r.run('cleanup', SLUG), { code: 0, lines: ['removed t1'] });
+    assert.ok(!fs.existsSync(wt));
+    assert.equal(fs.readFileSync(path.join(outside, 'f1.js'), 'utf8'), 'x');
+  });
+
   test('a folder ignored whole that appears after the archive: changed during archive', () => {
     const r = makeRepo();
     const wt = mergedTask(r, 'dist/\n.env.local\n');
