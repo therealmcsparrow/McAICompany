@@ -75,4 +75,7 @@ test('changelog Unreleased mentions the commands', () => {
 test('spec.md mentions the drafts', () => {
   const spec = read('docs/spec.md');
   for (const n of NAMES) assert.ok(spec.includes(`/aico:${n}`), n);
+  assert.ok(!/git-ignored/i.test(spec), 'no git-ignored claim');
+  assert.ok(!/never sent/i.test(spec), 'no never-sent claim');
+  assert.ok(spec.includes('grill-file v1 Personal data'), 'points to Personal data');
 });
