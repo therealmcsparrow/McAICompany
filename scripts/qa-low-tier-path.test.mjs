@@ -338,14 +338,14 @@ describe('AC3 the Lead dispatches exactly the low set, and the form lists the sk
     assert.equal(w.records().length, 1);
   });
 
-  test('AC3 the Brief Gate text offers both Approve options and the preview comes before the form', () => {
+  test('AC3 the short path form offers both options and the preview comes before begin', () => {
     const text = read('skills/pipeline/references/tier-path.md');
-    const step4 = text.split('\n').find((l) => l.startsWith('4. **Feature, Brief Gate.**'));
-    assert.ok(step4.includes('Approve, short path (Recommended) / Approve, full path / Change / Stop'));
+    const step4 = text.split('\n').find((l) => l.startsWith('4. **Feature, no Brief Gate.**'));
+    assert.ok(step4.includes('Short path (Recommended) / Full path'));
     assert.ok(step4.indexOf('preview') < step4.indexOf('begin'));
     assert.match(step4, /--ceo '<c>'/);
-    assert.match(step4, /An auto Brief Gate \(`gates\.brief` `auto`\) always takes the full path/);
-    assert.match(read('skills/feature/SKILL.md'), /\*\*→ Brief Gate\*\* \(with the tier path preview and, on a short path, two Approve options/);
+    assert.match(step4, /a form not shown included, it is `full`/);
+    assert.match(read('skills/feature/SKILL.md'), /references\/tier-path\.md step 4 \(preview, then begin\)/);
   });
 });
 
@@ -445,14 +445,14 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     assert.equal(FORCED_HIGH_V1.length, 58);
   });
 
-  test('AC4 the check points are in the Playbooks: feature before the Plan Gate and Ship Gate, fix after step 2 and before the Ship Gate', () => {
+  test('AC4 the check points are in the Playbooks: feature before the first builder and the Ship Gate, fix after step 2 and before the Ship Gate', () => {
     const tierPath = read('skills/pipeline/references/tier-path.md');
     const step8 = tierPath.split('\n').find((l) => l.startsWith('8. **Sync.**'));
-    assert.match(step8, /`sync '<slug>' --plan '<plan>' --base '<base>'` before the Plan Gate \(feature\)/);
+    assert.match(step8, /`sync '<slug>' --plan '<plan>' --base '<base>'` before the first builder \(feature\)/);
     assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. (`--diff` reads the run only while HEAD is on the branch `aico\/<slug>` and no grafts file exists; otherwise it prints `check: high: diff unknown` and step 11 applies\. )A plain `sync '<slug>'` takes no `--base`\./);
     assert.match(step8, /add before ship:/);
     const feature = read('skills/feature/SKILL.md');
-    assert.match(feature, /\*\*→ Plan Gate\*\*[^\n]*tier-path\.md step 8 checks the plan first/);
+    assert.match(feature, /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/m);
     assert.match(feature, /\*\*→ Ship Gate\*\* \(after tier-set\.mjs sync --diff; added Roles and lanes first\)/);
     const fix = read('skills/fix/SKILL.md');
     assert.match(fix, /After its commit, tier-set\.mjs sync --diff/);
@@ -735,7 +735,7 @@ describe('AC7 every Gate stops as before and its summary names the path and the 
 
   test('AC7 the Gate summaries paste lines 2-4 of the latest output at the Brief, Plan and Ship Gate', () => {
     const text = read('skills/pipeline/references/tier-path.md');
-    assert.match(text, /\*\*Gates\.\*\* Paste lines 2-4 of the latest `sync` \(or `preview`\) output into every Brief \(feature\), Plan and Ship Gate summary/);
+    assert.match(text, /\*\*Gates\.\*\* Paste lines 2-4 of the latest `sync` \(or `preview`\) output into every Ship Gate summary/);
     assert.match(text, /Every Gate the Playbook has stops as today/);
     assert.match(read('skills/pipeline/SKILL.md'), /\*\*Brief, Plan and Ship Gates\*\* of a feature or fix run also show the tier-path lines/);
   });
@@ -745,9 +745,11 @@ describe('AC7 every Gate stops as before and its summary names the path and the 
       const old = v018(t, `skills/${name}/SKILL.md`);
       if (old === null) return;
       const gates = (text) => text.split('\n').filter((l) => /\*\*→ [A-Za-z ]*Gate\*\*/.test(l)).map((l) => l.match(/\*\*→ ([A-Za-z ]*Gate)\*\*/)[1]);
-      assert.deepEqual(gates(read(`skills/${name}/SKILL.md`)), gates(old), name);
+      // Feature lost its Brief and Plan Gate (ADR 0050); every other Gate stays in the same order.
+      const kept = name === 'feature' ? gates(old).filter((g) => g === 'Ship Gate') : gates(old);
+      assert.deepEqual(gates(read(`skills/${name}/SKILL.md`)), kept, name);
     }
-    assert.deepEqual(['Brief Gate', 'Plan Gate', 'Ship Gate'], read('skills/feature/SKILL.md').match(/\*\*→ [A-Za-z ]*Gate\*\*/g).map((g) => g.slice(4, -2)));
+    assert.deepEqual(['Ship Gate'], read('skills/feature/SKILL.md').match(/\*\*→ [A-Za-z ]*Gate\*\*/g).map((g) => g.slice(4, -2)));
   });
 
   test('AC7 a refused data file prints its line in the summary block of a short run', (t) => {

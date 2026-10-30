@@ -478,10 +478,14 @@ function minusLines(a, b) {
 const HAND_OVER_CHANGES = {
   feature: {
     hint: "argument-hint: <feature description | draft file>",
+    desc: 'Build a feature or new product end to end, from request to shipped, with the Ship Gate and no Brief or Plan Gate.',
     removed: [
       "argument-hint: <feature description>",
       "Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):",
       "   **→ Brief Gate**",
+      "1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.",
+      "2a. Spikes per `aico:pipeline` if the Architect listed any (show the result at the Plan Gate).",
+      '2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate. A rejected rule goes back to the Senior Engineer once; still rejected → the CEO decides at the Plan Gate.',
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).",
       "2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`).",
       "   **→ Plan Gate** (CEO approves Core, Contracts and Art direction)",
@@ -492,11 +496,15 @@ const HAND_OVER_CHANGES = {
     ],
     added: [
       "argument-hint: <feature description | draft file>",
-      "Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md); an entry not in the set: line is skipped and named in every Gate summary. Steps (∥ = dispatch in parallel):",
-      "   **→ Brief Gate** (with the tier path preview and, on a short path, two Approve options: references/tier-path.md step 4)",
+      /^Run with `aico:pipeline`\. Roles and lanes run per the tier set .* No Brief Gate and no Plan Gate in any run, a direct call included: .* Steps \(∥ = dispatch in parallel\):$/,
+      /^1\. `aico:product-manager`: brief and acceptance criteria from the CEO's request\. No Gate: the Lead runs references\/tier-path\.md step 4/,
+      /^1b\. Prototype, only after a Run it answer on the prototype form;/,
+      /^2a\. Spikes per `aico:pipeline` if the Architect listed any \(the result goes in the Ship Gate summary\)\.$/,
+      /^2d\. `aico:architect`: ruleset sign-off, only when Must rules were added or changed\. Otherwise say "sign-off skipped" in the Ship Gate summary\./,
+      /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/,
+      /^5b\. Ship Gate summary: the Gate items that used to show earlier/,
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
       "2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`). At a short path without senior-engineer-research: map, with one Debt line per pack (tier-path.md step 7).",
-      "   **→ Plan Gate** (CEO approves Core, Contracts and Art direction; tier-path.md step 8 checks the plan first)",
       "   - `aico:security` when `lanes.security` is on (`aico:pipeline` §1.7), when in the tier set.",
       "   - `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7), when in the tier set.",
       "   - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7), when in the tier set ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).",
@@ -505,7 +513,6 @@ const HAND_OVER_CHANGES = {
       /^2e\. `aico:fresh-reviewer` plan review, only when `plan-review` is in the set/,
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
       // The prototype step and the destination spec at ship (v0.21.0).
-      /^1b\. Prototype, only after a Run it answer at the Brief Gate/,
       /^5a\. `aico:product-manager`: destination spec, checked by `spec-check\.mjs`/,
       /^\*\*Draft input:\*\* the argument is one token with no whitespace ending/,
     ],
@@ -605,7 +612,9 @@ function assertV012Playbook(name) {
     wantRemoved.push(oldDesc);
     assert.ok(oldDesc.startsWith('description: Playbook. '), `${name}: v0.12.0 description`);
     assert.ok(newDesc.startsWith(`description: ${GUARD} `), `${name}: the description starts with the shared guard`);
-    if (name !== 'incident') assert.equal(newDesc, `description: ${GUARD} ${oldDesc.slice('description: Playbook. '.length)}`, `${name}: description text after the guard`);
+    // Feature's text after the guard changed with the Gate removal (ADR 0050).
+    if (extra.desc) assert.equal(newDesc, `description: ${GUARD} ${extra.desc}`, `${name}: description text after the guard`);
+    else if (name !== 'incident') assert.equal(newDesc, `description: ${GUARD} ${oldDesc.slice('description: Playbook. '.length)}`, `${name}: description text after the guard`);
   }
   assert.deepEqual(removed.slice().sort(), wantRemoved.slice().sort(), `${name}: lines removed from the v0.12.0 Playbook`);
 

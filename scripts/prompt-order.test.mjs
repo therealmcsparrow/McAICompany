@@ -314,7 +314,7 @@ test('the pipeline stays at 125 lines with room for two more pointer lines', () 
 test('feature and fix name the plan review and the second reviewer; the architect answers findings', () => {
   const feature = read('skills/feature/SKILL.md');
   has(feature, '2e.', 'plan-review', 'references/plan-review.md', 'second-reviewer', 'references/review-loop.md');
-  assert.ok(idx(feature, '2e.') > idx(feature, '2d.') && idx(feature, '2e.') < idx(feature, '**→ Plan Gate**'));
+  assert.ok(idx(feature, '2e.') > idx(feature, '2d.') && idx(feature, '2e.') < idx(feature, '2f.'));
   const fix = read('skills/fix/SKILL.md');
   has(fix, 'second-reviewer', 'references/review-loop.md');
   const architect = read('agents/architect.md');
