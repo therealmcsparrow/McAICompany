@@ -24,7 +24,8 @@ test("pipeline carries the Delta E edits", () => {
   assert.match(text, /short path off/);
   assert.match(text, /feature and fix from tier-set\.mjs \(references\/tier-path\.md\)/);
   assert.match(text, /tier-set\.mjs sync runs after the commit \(references\/tier-path\.md step 8\)/);
-  assert.match(text, /\*\*Brief, Plan and Ship Gates\*\* of a feature or fix run also show the tier-path lines/);
+  assert.match(text, /\*\*Ship Gate\*\* of a feature or fix run also shows the tier-path lines/);
+  assert.doesNotMatch(text, /Brief, Plan and Ship Gates/);
   assert.match(text, /every ## Debt line of a senior-engineer map Handoff that ran in place of research/);
 });
 

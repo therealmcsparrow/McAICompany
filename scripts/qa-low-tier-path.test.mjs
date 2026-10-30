@@ -737,7 +737,8 @@ describe('AC7 every Gate stops as before and its summary names the path and the 
     const text = read('skills/pipeline/references/tier-path.md');
     assert.match(text, /\*\*Gates\.\*\* Paste lines 2-4 of the latest `sync` \(or `preview`\) output into every Ship Gate summary/);
     assert.match(text, /Every Gate the Playbook has stops as today/);
-    assert.match(read('skills/pipeline/SKILL.md'), /\*\*Brief, Plan and Ship Gates\*\* of a feature or fix run also show the tier-path lines/);
+    assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate\*\* of a feature or fix run also shows the tier-path lines/);
+    assert.doesNotMatch(read('skills/pipeline/SKILL.md'), /Brief, Plan and Ship Gates/);
   });
 
   test('AC7 the Gates of feature and fix are the v0.18.0 ones, in the same order', (t) => {

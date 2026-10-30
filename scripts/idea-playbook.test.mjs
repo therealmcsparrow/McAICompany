@@ -207,4 +207,37 @@ describe('scripts walk in route order', () => {
     const after = a('tickets', 'idea-g', 'idea-g-plan/plan.md', '--phase', 'f');
     assert.deepEqual(after.lines.filter((l) => l.startsWith('skip ')), ['skip T1 parked', 'skip T2 parked', 'skip T3 parked']);
   });
+
+  test('route F: every ticket parked leaves the tickets form open, G then ends the flow', () => {
+    const cwd = tmp('idea-playbook-');
+    const dir = path.join(cwd, '.company', 'work', 'idea-f-plan');
+    fs.mkdirSync(dir, { recursive: true });
+    const blk = (id, deps) => `### ${id} title ${id}\n- role: backend-engineer\n- files: src/${id}.mjs\n- depends-on: ${deps}\n`;
+    fs.writeFileSync(path.join(dir, 'plan.md'),
+      `# Plan: f\n\nBase commit: ${'a'.repeat(40)}\n\n## Tasks\n\n${blk('T1', 'none')}\n${blk('T2', 'T1')}`);
+    const f = run(cwd);
+    const a = (...argv) => approval(argv, { now: new Date(2026, 9, 30, 13, 9).getTime(), root: cwd });
+    f('start', 'idea-f', '--kind', 'idea');
+    f('pick', 'idea-f', '1'); f('done', 'idea-f', 'grilling'); f('done', 'idea-f', 'reprompt');
+    f('pick', 'idea-f', 'D'); f('done', 'idea-f', 'to-spec'); f('done', 'idea-f', 'to-tickets');
+    assert.equal(a('tickets', 'idea-f', 'idea-f-plan/plan.md', '--phase', 'f').code, 0);
+    for (const id of ['T2', 'T1']) {
+      assert.equal(a('ticket', 'idea-f', id, 'park').code, 0);
+      assert.equal(a('park-ticket', 'idea-f', id).code, 0);
+    }
+    const built = a('build-plan', 'idea-f');
+    assert.equal(built.code, 3);
+    assert.deepEqual(built.lines, ['refused: no approved ticket']);
+    assert.deepEqual(optionLines(f('options', 'idea-f')).map((l) => l.split(' ')[1]), ['F', 'G', 'E']);
+    assert.match(f('pick', 'idea-f', 'G').out, /picked G park-roadmap/);
+    assert.equal(f('options', 'idea-f').out.trim(), 'ended');
+  });
+
+  test('route F text picks F only after build-plan built, and closes the no-ticket dead end', () => {
+    const f = routes.slice(at(routes, '## Route F'), at(routes, '## Route G'));
+    has(f, 'Do not `pick` yet', '`built <n> tickets`', 'refused: no approved ticket', 'only its G and E options',
+      'refused: file exists', 'archive', 'never delete');
+    assert.ok(at(f, 'built <n> tickets') < at(f, '`pick` the F letter'));
+    lacks(f, /^`pick` the F letter/m);
+  });
 });
