@@ -141,3 +141,8 @@ test('plugin scripts use the plugin root variable, no placeholder, no shell inje
 test('no Role names a display name', () => {
   lacks(/^Name:/m);
 });
+
+test('R-14 files stay in the work folder, never claimed git-ignored; erasure overrides archive', () => {
+  lacks('git-ignored');
+  has('stay in `.company/work/<slug>/`; aico never commits them (grill-file v1 Personal data)', 'an erasure request overrides the archive rule (CEO decides)');
+});
