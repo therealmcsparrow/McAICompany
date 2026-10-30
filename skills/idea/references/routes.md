@@ -18,7 +18,7 @@ Every ask is an AskUserQuestion form with 2 to 4 options, the recommended one fi
 - route `cooler`: Water cooler. Colleagues chat about it, nothing is built.
 - route `brainstorm`: Brainstorm. The Roles weigh in over rounds until you say done.
 - route `research`: Research. Researchers look it up online and write one sourced report.
-- route `to-spec`: Spec and tickets. Write the spec, cut tickets, then approve them one by one.
+- route `to-spec`: Spec and tickets. Write the spec, cut tickets, then approve them one by one. Offered only in a software company: the script never prints it in another type, and a pick of it there is refused.
 - route `park-idea`: Park the idea. Keep a copy in the ideas folder and stop.
 - route `build`: Build. Size the approved tickets, then build them.
 - route `park-roadmap`: Park all tickets. Put every ticket on the roadmap and stop.

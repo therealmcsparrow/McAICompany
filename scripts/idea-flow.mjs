@@ -70,7 +70,7 @@ function checkEvent(o) {
   }
 }
 
-// The build pick exists only in a software company; the type comes from company-type resolve, never from text.
+// The build and Spec-and-tickets picks exist only in a software company; the type comes from company-type resolve, never from text.
 function typeOf(cwd) {
   const r = companyType(['resolve', '--json'], { cwd });
   let id;
@@ -83,7 +83,11 @@ function optionsOf(st, cwd) {
   if (st.form === 'grill') return GRILL_FORM;
   // Replay (no cwd) accepts every record the full form allows; the type limits only new picks.
   if (st.form === 'tickets') return cwd === undefined || typeOf(cwd) === 'software' ? TICKET_FORM : TICKET_FORM_PARK;
-  if (st.form === 'routes') return ROUTES.filter(([, r]) => !(r in LEVEL) || LEVEL[r] > st.level);
+  if (st.form === 'routes') {
+    // to-spec and to-tickets are software-only Playbooks, so Spec and tickets is offered only there.
+    const soft = cwd === undefined || typeOf(cwd) === 'software';
+    return ROUTES.filter(([, r]) => (!(r in LEVEL) || LEVEL[r] > st.level) && (soft || r !== 'to-spec'));
+  }
   return [];
 }
 

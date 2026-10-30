@@ -316,8 +316,8 @@ function setType(cwd, id) {
 test('outside software the tickets form offers only G and E; pick F is refused', () => {
   for (const id of ['research', 'marketing', 'design']) {
     const cwd = root();
+    toTickets(cwd, 'n', 'idea'); // a record opened in a software run; the type then changes
     setType(cwd, id);
-    toTickets(cwd, 'n', 'idea');
     assert.deepEqual(letters(run(cwd, 'options', 'n')), ['G', 'E'], id);
     const r = run(cwd, 'pick', 'n', 'F');
     assert.equal(r.code, 3);
@@ -336,7 +336,41 @@ test('software (explicit or default) keeps F G E; other forms do not depend on t
   const c2 = root();
   setType(c2, 'research');
   toRoutes(c2, 'r', 'idea');
-  assert.deepEqual(letters(run(c2, 'options', 'r')), ['A', 'B', 'C', 'D', 'E']);
+  assert.deepEqual(letters(run(c2, 'options', 'r')), ['A', 'B', 'C', 'E']);
+  const c3 = root();
+  toRoutes(c3, 'r', 'idea');
+  assert.deepEqual(letters(run(c3, 'options', 'r')), ['A', 'B', 'C', 'D', 'E']);
+});
+
+test('outside software the routes form never offers Spec and tickets; pick D is refused', () => {
+  for (const id of ['research', 'marketing', 'design']) {
+    const cwd = root();
+    setType(cwd, id);
+    toRoutes(cwd, 'q', 'idea');
+    assert.deepEqual(letters(run(cwd, 'options', 'q')), ['A', 'B', 'C', 'E'], id);
+    const before = fs.readFileSync(rec(cwd, 'q'), 'utf8');
+    const r = run(cwd, 'pick', 'q', 'D');
+    assert.equal(r.code, 3);
+    assert.equal(r.out, 'refused: not an allowed pick\n');
+    assert.equal(fs.readFileSync(rec(cwd, 'q'), 'utf8'), before);
+    ok(run(cwd, 'pick', 'q', 'C'));
+    ok(run(cwd, 'done', 'q', 'research'));
+    ok(run(cwd, 'done', 'q', 'reprompt'));
+    assert.deepEqual(letters(run(cwd, 'options', 'q')), ['E'], id);
+  }
+});
+
+test('a broken company_type line fails the routes form loud and writes nothing', () => {
+  const cwd = root();
+  toRoutes(cwd, 'z', 'idea');
+  setType(cwd, 'nonsense');
+  const before = fs.readFileSync(rec(cwd, 'z'), 'utf8');
+  for (const argv of [['options', 'z'], ['pick', 'z', 'D']]) {
+    const r = run(cwd, ...argv);
+    assert.equal(r.code, 1);
+    assert.equal(r.out, 'error: company type\n');
+  }
+  assert.equal(fs.readFileSync(rec(cwd, 'z'), 'utf8'), before);
 });
 
 test('a broken company_type line fails the tickets form loud and writes nothing', () => {

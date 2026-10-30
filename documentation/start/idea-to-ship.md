@@ -27,7 +27,7 @@ The route is one table. The routes are the picks you see in the forms. The allow
 | Build | Size the approved tickets, then build them. | Yes |
 | Park all tickets | Put every ticket on the roadmap and stop. | No |
 
-In words: after the grill and the reprompt, the routes form offers Water cooler, Brainstorm, Research, Spec and tickets, and Park the idea. After Water cooler you can still pick Brainstorm, Research, Spec and tickets, or Park the idea. After Brainstorm you can pick Research, Spec and tickets, or Park the idea. After Research the prompt is rewritten once more, then you pick Spec and tickets or Park the idea. Spec and tickets ends with a tickets form. In a software company it offers Build, Park all tickets or Park the idea. In any other company type there is no Build for now, and it offers only Park all tickets or Park the idea. Build builds, and Park all tickets and Park the idea end the flow.
+In words: after the grill and the reprompt, the routes form offers Water cooler, Brainstorm, Research, Spec and tickets, and Park the idea. After Water cooler you can still pick Brainstorm, Research, Spec and tickets, or Park the idea. After Brainstorm you can pick Research, Spec and tickets, or Park the idea. After Research the prompt is rewritten once more, then you pick Spec and tickets or Park the idea. Spec and tickets ends with a tickets form that offers Build, Park all tickets or Park the idea. Spec and tickets and Build exist only in a software company. In any other company type the routes are Water cooler, Brainstorm, Research and Park the idea: after Water cooler you can still pick Brainstorm, Research or Park the idea, after Brainstorm Research or Park the idea, and after Research (and its rewritten prompt) only Park the idea. Build builds, and Park all tickets and Park the idea end the flow.
 
 ### Step 1: Capture
 
@@ -54,12 +54,12 @@ Expected result: `prompt.md` in a reprompt folder, then the routes form.
 
 ### Step 4: Pick a route (Water cooler to Park the idea)
 
-The routes form offers the first five routes from the table. Each route runs in your session, up to its own end:
+The routes form offers the first five routes from the table (outside a software company, without Spec and tickets). Each route runs in your session, up to its own end:
 
 - **Water cooler:** you get an Overheard list. Nothing is built.
 - **Brainstorm:** you get the summary and checks; you do not get its separate outcome form, because the flow's forms replace it.
 - **Research:** the report ends with a verdict (go, go-with-conditions or no-go) and what to do. The research Playbook's own pick is skipped; the routes form comes next. Web search is used here, with queries built from your idea.
-- **Spec and tickets:** go to step 5.
+- **Spec and tickets** (software company only): go to step 5.
 - **Park the idea:** the Lead names the idea with a short slug and copies it to `.company/ideas/<name>/`. The flow ends. The work folder stays.
 
 ### Step 5: Spec and tickets
@@ -75,8 +75,7 @@ For each ticket you get a form with the ticket shown as plain lines: id, title, 
 - **Approve** records your approval for that exact text.
 - **Change** takes your words, a fresh Architect revises only that ticket, and you see only that ticket again. There is no fixed limit: you end the loop by approving.
 
-When every ticket is approved you get the tickets form: Build, Park all tickets, Park the idea. Outside a software company the form has only Park all tickets and Park the idea.
-
+When every ticket is approved you get the tickets form: Build, Park all tickets, Park the idea.
 ### Step 7: Build or park
 
 - **Build** (software company only). The Lead first asks again about tickets that are new or changed since your approval, with Approve (recommended), Park or Change. Parked tickets go to `.company/roadmap/`. Then it writes one build plan from the approved tickets only, sizes it (size and risk tier, no form) and starts the build Playbook: `/aico:feature` for an idea, `/aico:fix` for a bug. If every ticket was parked, nothing is built, and you pick Park all tickets or Park the idea instead.
@@ -127,7 +126,7 @@ For a bug, type `/aico:bug <report>` instead. Every step is the same until Build
 
 All calls go through `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs"`. The route is shared by both commands in `skills/idea/references/routes.md`. Contract `idea-flow` v1.1, ADR 0048.
 
-The script gives every pick in a form a letter, and the forms show the route names: Water cooler, Brainstorm, Research, Spec and tickets, Park the idea, Build, Park all tickets. It reads the company type with `company-type resolve` and never lists Build outside a software company; picking it there is refused.
+The script gives every pick in a form a letter, and the forms show the route names: Water cooler, Brainstorm, Research, Spec and tickets, Park the idea, Build, Park all tickets. It reads the company type with `company-type resolve` and never lists Spec and tickets or Build outside a software company; picking either there is refused.
 
 - `idea-flow start <slug> --kind idea|bug`: creates the record and the work folder. Prints `started`. A record that exists exits 1 with `exists`; the Lead then appends `-2` to `-9` to the slug and retries.
 - `idea-flow options <slug>`: one `option <letter> <route>` line per allowed pick. `pending <step>` or `ended` means no form.

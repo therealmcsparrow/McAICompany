@@ -16,7 +16,7 @@ You are the Lead and the only voice. The kind of this run is kind `idea`; the ro
 Read `${CLAUDE_PLUGIN_ROOT}/skills/idea/references/routes.md` now. It holds the whole route; follow it with kind `idea`:
 1. **Capture** the idea, then ask the grill form: grilling, grill-me or grill-with-docs.
 2. After the grill, **reprompt** refines the idea into one prompt, then the **routes form** offers A to E from `idea-flow options`.
-3. **A** water cooler, **B** brainstorm, **C** research (then reprompt runs again), **D** spec and tickets, **E** park the idea. Which letters come next is the script's answer, not yours.
+3. **A** water cooler, **B** brainstorm, **C** research (then reprompt runs again), **D** spec and tickets (software company only), **E** park the idea. Which letters come next is the script's answer, not yours.
 4. **D** writes the spec and the tickets, and every ticket is approved or changed one at a time. Then one form, built from `idea-flow options`: in a software company **F** build, **G** park all tickets on the roadmap, **E** park the idea; in any other company type only G and E (no build there for now).
 5. **F** asks only new or changed tickets, sizes the approved ones with triage, and starts the build Playbook the route file names.
 

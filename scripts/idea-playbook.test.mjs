@@ -61,15 +61,29 @@ describe('SKILL.md', () => {
   test('outside software the tickets form has no build letter', () => {
     has(routes, /park-roadmap and park-idea in any other type/, /Only when `idea-flow options` printed the build letter/);
     const cwd = tmp('idea-playbook-');
-    fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
-    fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: design\n');
     const f = (...argv) => flow(argv, cwd);
     const optionLines = (r) => r.out.split('\n').filter((l) => l.startsWith('option '));
     f('start', 'idea-t', '--kind', 'idea');
     f('pick', 'idea-t', '1'); f('done', 'idea-t', 'grilling'); f('done', 'idea-t', 'reprompt');
     f('pick', 'idea-t', 'D'); f('done', 'idea-t', 'to-spec'); f('done', 'idea-t', 'to-tickets');
+    // the type changes after the tickets form opened (a record from a software run)
+    fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: design\n');
     assert.deepEqual(optionLines(f('options', 'idea-t')).map((l) => l.split(' ')[2]), ['park-roadmap', 'park-idea']);
     assert.equal(f('pick', 'idea-t', 'F').code, 3);
+  });
+
+  test('outside software the routes form has no Spec and tickets', () => {
+    has(routes, /Offered only in a software company/);
+    const cwd = tmp('idea-playbook-');
+    fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: research\n');
+    const f = (...argv) => flow(argv, cwd);
+    f('start', 'idea-u', '--kind', 'idea');
+    f('pick', 'idea-u', '1'); f('done', 'idea-u', 'grilling'); f('done', 'idea-u', 'reprompt');
+    assert.deepEqual(f('options', 'idea-u').out.split('\n').filter((l) => l.startsWith('option ')).map((l) => l.split(' ')[2]),
+      ['cooler', 'brainstorm', 'research', 'park-idea']);
+    assert.equal(f('pick', 'idea-u', 'D').code, 3);
   });
 
   test('trust and privacy lines name the recipients', () => {

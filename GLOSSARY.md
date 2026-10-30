@@ -79,7 +79,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Context cap** — the fixed max context of every Role and tier: 95000, with a hand-over at 85500, passed in each dispatch as `Context cap: 95000 handover 85500`. The old `context_cap` settings are accepted but have no effect. A soft limit.
 
-**Idea flow** — the route of `/aico:idea` and `/aico:bug`: capture, a grill, a reprompt, then the routes A to E, ticket approval and the tickets form F, G, E. Both kinds share one route; the kind decides the build Playbook (`aico:feature` for an idea, `aico:fix` for a bug). The allowed picks come from the `idea-flow` script. Record: `.company/work/<slug>/idea-flow.jsonl`. Contract `idea-flow` v1.
+**Idea flow** — the route of `/aico:idea` and `/aico:bug`: capture, a grill, a reprompt, then the routes A to E, ticket approval and the tickets form F, G, E. Both kinds share one route; the kind decides the build Playbook (`aico:feature` for an idea, `aico:fix` for a bug). The allowed picks come from the `idea-flow` script. Record: `.company/work/<slug>/idea-flow.jsonl`. Contract `idea-flow` v1.1.
 
 **Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.
 
