@@ -319,15 +319,15 @@ test('a v1.2 Handoff byline must be exactly a roster Role id: other shapes, extr
 test('a Handoff is v1.2 only by a contracts: key in its frontmatter', () => {
   const body = fx('handoff-old.md');
   assert.deepEqual(scanHandoff(body, 'h.md'), []);
-  assert.deepEqual(scanHandoff(body.replace('## Next', 'contracts: [handoff v1.2]\n## Next'), 'h.md'), [], 'key in the body');
-  assert.deepEqual(scanHandoff(body.replace('risk-tier: low\n---', 'risk-tier: low\ncontracts: [handoff v1.2]\n---'), 'h.md').length, 1);
+  assert.deepEqual(scanHandoff(body.replace('## Next', 'contracts: [handoff v2.0]\n## Next'), 'h.md'), [], 'key in the body');
+  assert.deepEqual(scanHandoff(body.replace('risk-tier: low\n---', 'risk-tier: low\ncontracts: [handoff v2.0]\n---'), 'h.md').length, 1);
   assert.deepEqual(scanHandoff(body.replace('risk-tier: low\n---', 'risk-tier: low\nnocontracts: x\n---'), 'h.md'), [], 'another key');
   assert.deepEqual(scanHandoff('By: Nora\n## Did\n', 'h.md'), [], 'no frontmatter');
   assert.deepEqual(scanHandoff('---\ncontracts: [x]\nBy: Nora\n', 'h.md'), [], 'frontmatter never closed');
 });
 
 test('a Handoff with a Role id byline is scanned even without contracts:; a name byline without the key is not', () => {
-  const bare = fx('handoff-v12-ok.md').replace('contracts: [handoff v1.2]\n', '');
+  const bare = fx('handoff-v12-ok.md').replace('contracts: [handoff v2.0]\n', '');
   assert.deepEqual(scanHandoff(bare, 'h.md'), []);
   assert.deepEqual(kinds(scanHandoff(bare.replace('By: product-manager', 'By: nobody'), 'h.md')), [KIND.by]);
   assert.deepEqual(scanHandoff(bare.replace('By: product-manager', 'By: Nora'), 'h.md'), []);

@@ -21,7 +21,8 @@
     "writer",
     "legal",
     "skill-researcher",
-    "reprompter"
+    "reprompter",
+    "fresh-reviewer"
   ],
   "playbooks": [
     "design",

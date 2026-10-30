@@ -419,7 +419,7 @@ test('registry lookup never touches the file system with the project value', () 
 
 // Behaviour.
 
-test('software is every agent but the editor: 34 Roles, 16 Playbooks, 25 commands with ALWAYS', () => {
+test('software is every agent but the editor: 35 Roles, 16 Playbooks, 25 commands with ALWAYS', () => {
   const r = json(['resolve'], project(null));
   assert.equal(r.code, 0);
   const out = JSON.parse(r.out);
@@ -427,7 +427,7 @@ test('software is every agent but the editor: 34 Roles, 16 Playbooks, 25 command
   assert.equal(out.id, 'software');
   assert.equal(out.source, 'default');
   assert.equal(out.label, 'Software company');
-  assert.equal(out.roles.length, 34);
+  assert.equal(out.roles.length, 35);
   assert.ok(!out.roles.includes('editor'));
   const agents = fs.readdirSync(path.join(REAL_ROOT, 'agents')).map(f => f.slice(0, -3));
   assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor').sort());

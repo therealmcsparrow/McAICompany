@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync as __mkdtemp, rmSync as __rmTree, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseSkillsSection, parseDesignSkills, main } from './install-skills.mjs';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const TODAY = new Date('2026-10-26T12:00:00Z');
 const manifest = { core: [{ name: 'impeccable', install: 'npx -y impeccable skills install' }] };

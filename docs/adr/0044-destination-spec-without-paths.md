@@ -1,0 +1,3 @@
+# Each shipped feature leaves a destination spec in the product repo, with no file paths and no code
+
+Plans are per run and path-exact, and they stay in the run folder; what lasts after the ship is a short spec of the destination (problem, solution, user stories, decisions, testing decisions, out of scope, ship date, version), checked by script so that it holds no file path or code block that would go stale. For client projects the spec goes into the client's repo only when the client agrees at intake. This is hard to reverse because later runs, reviewers and clients will read these specs as the record of what was built.

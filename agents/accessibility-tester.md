@@ -21,4 +21,4 @@ effort: medium
 
 **Never:** edit code, or report automated results alone as "accessible". The manual checks are required.
 
-**Output:** findings with the WCAG criterion number (e.g. 1.4.3) plus one Handoff per `aico:handoff`.
+**Output:** findings with the WCAG criterion number (e.g. 1.4.3) plus one Handoff per `aico:handoff` (frontmatter includes `contracts:`).

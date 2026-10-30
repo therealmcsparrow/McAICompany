@@ -114,10 +114,10 @@ test('role-names: the code rules are the rules the Contract prints', () => {
     assert.ok(!DOC_TEXT_RE.test(bad), JSON.stringify(bad));
 });
 
-test('role-names: one name per Role, valid and unique, the editor is Role 34 and the reprompter Role 35', () => {
+test('role-names: one name per Role, valid and unique, the editor is Role 34 and the reprompter Role 35, the fresh-reviewer Role 36', () => {
   const names = json('company/names.json');
   assert.deepEqual(Object.keys(names).sort(), AGENTS);
-  assert.equal(AGENTS.length, 35);
+  assert.equal(AGENTS.length, 36);
   assert.ok(AGENTS.includes('editor'));
   assert.ok(AGENTS.includes('reprompter'));
   for (const [role, name] of Object.entries(names)) assert.ok(DOC_NAME_RE.test(name), `${role}: ${name}`);
@@ -575,7 +575,7 @@ test('company-type: the four shipped types are the table of the Contract', () =>
   };
   const roles = {
     marketing: 'product-manager, account-manager, marketer, writer, brand-artist, prompt-artist, motion-artist, localizer, market-researcher, persona-tester, accessibility-tester, legal, editor, skill-researcher, reprompter',
-    design: 'product-manager, account-manager, ui-ux-designer, design-researcher, ux-researcher, brand-artist, motion-artist, prompt-artist, game-artist, persona-tester, hands-on-tester, accessibility-tester, frontend-engineer, code-reviewer, security, writer, legal, skill-researcher, reprompter',
+    design: 'product-manager, account-manager, ui-ux-designer, design-researcher, ux-researcher, brand-artist, motion-artist, prompt-artist, game-artist, persona-tester, hands-on-tester, accessibility-tester, frontend-engineer, code-reviewer, fresh-reviewer, security, writer, legal, skill-researcher, reprompter',
     research: 'product-manager, account-manager, market-researcher, tech-researcher, ux-researcher, writer, legal, localizer, editor, skill-researcher, reprompter'
   };
   const sorted = a => [...a].sort();

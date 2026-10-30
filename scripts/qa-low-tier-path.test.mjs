@@ -128,17 +128,22 @@ const addOf = (r) => (line(r, 'add before ship: ') ?? '').slice('add before ship
 const tierOf = (r) => r.lines[0].match(/ tier (low|medium|high) /)[1];
 const without = (list, drop) => list.filter((e) => !drop.includes(e));
 
-const FEATURE_SKIPPED = ['persona-tester', 'senior-engineer-research', 'security', 'senior-engineer-compliance', 'hands-on-tester'];
+// Tier-sets rev 2: the low feature set drops the plan review and the second reviewer too; the low fix set drops the second reviewer and security.
+const FEATURE_SKIPPED = ['persona-tester', 'senior-engineer-research', 'plan-review', 'second-reviewer', 'security', 'senior-engineer-compliance', 'hands-on-tester'];
+const FIX_SKIPPED = ['second-reviewer', 'security'];
+// Entries added to the v0.18.0 route after that release (the v0.18.0 skills cannot name them).
+const ADDED_FEATURE = ['prototype', 'plan-review', 'second-reviewer', 'destination-spec'];
+const ADDED_FIX = ['second-reviewer'];
 const LOW_FEATURE = DATA.playbooks.feature.low;
 const LOW_FIX = DATA.playbooks.fix.low;
 
 
 describe('AC1 the data file prints the Roles and lanes per tier', () => {
-  test('AC1 sets prints rev 1 and six lines; medium and high equal the v0.18 route', () => {
+  test('AC1 sets prints rev 2 and six lines; medium and high equal the v0.18 route', () => {
     const r = spawnSync(process.execPath, [path.join(import.meta.dirname, 'tier-set.mjs'), 'sets'], { cwd: REPO, encoding: 'utf8' });
     assert.equal(r.status, 0);
     const lines = r.stdout.split('\n').filter(Boolean);
-    assert.equal(lines[0], 'tier-sets: rev 1');
+    assert.equal(lines[0], 'tier-sets: rev 2');
     assert.deepEqual(lines.slice(1), [
       `feature low: ${LOW_FEATURE.join(', ')}`,
       `feature medium: ${ROUTE_V018.feature.join(', ')}`,
@@ -147,8 +152,8 @@ describe('AC1 the data file prints the Roles and lanes per tier', () => {
       `fix medium: ${ROUTE_V018.fix.join(', ')}`,
       `fix high: ${ROUTE_V018.fix.join(', ')}`
     ]);
-    assert.equal(ROUTE_V018.feature.length, 22);
-    assert.equal(ROUTE_V018.fix.length, 6);
+    assert.equal(ROUTE_V018.feature.length, 26);
+    assert.equal(ROUTE_V018.fix.length, 7);
   });
 
   test('AC1 the route entries are the Roles and lanes of the v0.18.0 feature and fix skills', (t) => {
@@ -163,13 +168,15 @@ describe('AC1 the data file prints the Roles and lanes per tier', () => {
       security: 'aico:security', 'senior-engineer-compliance': '(compliance)', legal: 'aico:legal', 'hands-on-tester': 'aico:hands-on-tester',
       'accessibility-tester': 'aico:accessibility-tester', writer: 'aico:writer', localizer: 'aico:localizer', devops: 'aico:devops'
     };
-    assert.deepEqual(Object.keys(featureNeedle), [...ROUTE_V018.feature]);
+    assert.deepEqual(Object.keys(featureNeedle), ROUTE_V018.feature.filter((e) => !ADDED_FEATURE.includes(e)));
+    assert.ok(ADDED_FEATURE.every((e) => ROUTE_V018.feature.includes(e)));
     for (const [entry, needle] of Object.entries(featureNeedle)) assert.ok(feature.includes(needle), `v0.18 feature skill lacks ${entry}`);
     const fixNeedle = {
       'qa-reproduce': 'reproduce the bug', 'owning-engineer': 'The engineer who owns that Module', 'code-reviewer': 'aico:code-reviewer',
       'qa-rerun': 're-run the regression test', security: 'aico:security', devops: 'aico:devops'
     };
-    assert.deepEqual(Object.keys(fixNeedle), [...ROUTE_V018.fix]);
+    assert.deepEqual(Object.keys(fixNeedle), ROUTE_V018.fix.filter((e) => !ADDED_FIX.includes(e)));
+    assert.ok(ADDED_FIX.every((e) => ROUTE_V018.fix.includes(e)));
     for (const [entry, needle] of Object.entries(fixNeedle)) assert.ok(fix.includes(needle), `v0.18 fix skill lacks ${entry}`);
   });
 
@@ -180,7 +187,7 @@ describe('AC1 the data file prints the Roles and lanes per tier', () => {
       assert.ok(DATA.playbooks[pb].low.every((e) => ROUTE_V018[pb].includes(e)));
     }
     assert.deepEqual(without(ROUTE_V018.feature, LOW_FEATURE), FEATURE_SKIPPED);
-    assert.deepEqual(without(ROUTE_V018.fix, LOW_FIX), ['security']);
+    assert.deepEqual(without(ROUTE_V018.fix, LOW_FIX), FIX_SKIPPED);
   });
 });
 
@@ -279,7 +286,7 @@ describe('AC3 the Lead dispatches exactly the low set, and the form lists the sk
     const w = world(t);
     const r = w.run('preview', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on');
     assert.equal(r.code, 0);
-    assert.equal(r.lines[0], 'tier-path: feature tier low path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: feature tier low path short rev 2');
     assert.equal(r.lines[1], 'path: short (low)');
     assert.deepEqual(skippedOf(r), FEATURE_SKIPPED);
     assert.deepEqual(setOf(r), LOW_FEATURE);
@@ -304,19 +311,19 @@ describe('AC3 the Lead dispatches exactly the low set, and the form lists the sk
     assert.equal(skippedOf(r).length, 0);
   });
 
-  test('AC3 a fix at low dispatches the low fix set and skips only the security lane', (t) => {
+  test('AC3 a fix at low dispatches the low fix set and skips only the second-reviewer and security lanes', (t) => {
     const w = world(t);
     const r = w.begin('fix');
-    assert.equal(r.lines[0], 'tier-path: fix tier low path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: fix tier low path short rev 2');
     assert.deepEqual(setOf(r), LOW_FIX);
-    assert.deepEqual(skippedOf(r), ['security']);
+    assert.deepEqual(skippedOf(r), FIX_SKIPPED);
   });
 
   test('AC3 medium and high triage take the full route, whatever the setting says', (t) => {
     for (const [pb, tier] of [['feature', 'medium'], ['feature', 'high'], ['fix', 'medium'], ['fix', 'high']]) {
       const w = world(t);
       const r = w.begin(pb, tier);
-      assert.equal(r.lines[0], `tier-path: ${pb} tier ${tier} path full rev 1`);
+      assert.equal(r.lines[0], `tier-path: ${pb} tier ${tier} path full rev 2`);
       assert.deepEqual(setOf(r), [...ROUTE_V018[pb]]);
       assert.equal(line(r, 'skipped by tier'), undefined);
       assert.equal(w.records()[0].why, 'tier');
@@ -391,9 +398,9 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     w.begin('fix');
     w.diff(fixture('fix-diff.txt'));
     const r = w.run('sync', SLUG, '--diff', '--base', SHA);
-    assert.equal(r.lines[0], 'tier-path: fix tier high path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: fix tier high path short rev 2');
     assert.ok(r.lines.includes('check: high: pattern auth src/auth/session.ts'));
-    assert.deepEqual(addOf(r), ['security']);
+    assert.deepEqual(addOf(r), FIX_SKIPPED);
     assert.deepEqual(setOf(r), [...ROUTE_V018.fix]);
     assert.equal(w.records()[1].cause, 'diff');
   });
@@ -403,7 +410,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     w.begin('fix');
     w.diff(fixture('clean-diff.txt'));
     const r = w.run('sync', SLUG, '--diff', '--base', SHA);
-    assert.equal(r.lines[0], 'tier-path: fix tier low path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: fix tier low path short rev 2');
     assert.equal(addOf(r).length, 0);
     assert.ok(r.lines.includes('check: 2 paths, none forced high'));
   });
@@ -491,7 +498,7 @@ describe('AC5 text from any source cannot change the set or the tier', () => {
       const clean = scenario(t, pb, false);
       const hostile = scenario(t, pb, true);
       assert.deepEqual(hostile, clean);
-      assert.equal(clean.begin.lines[0], `tier-path: ${pb} tier low path short rev 1`);
+      assert.equal(clean.begin.lines[0], `tier-path: ${pb} tier low path short rev 2`);
       assert.deepEqual(setOf(hostile.begin), pb === 'feature' ? LOW_FEATURE : LOW_FIX);
       assert.equal(tierOf(hostile.step), 'low');
     });
@@ -583,7 +590,7 @@ describe('AC5 text from any source cannot change the set or the tier', () => {
     assert.equal(fixTier(issued.nonce), 'medium');
     assert.equal(fixTier(issued.nonce), 'medium', 'a spent nonce stays spent');
     const begin = w.begin('fix', fixTier('f'.repeat(32)));
-    assert.equal(begin.lines[0], 'tier-path: fix tier medium path full rev 1');
+    assert.equal(begin.lines[0], 'tier-path: fix tier medium path full rev 2');
     assert.deepEqual(setOf(begin), [...ROUTE_V018.fix]);
   });
 
@@ -629,7 +636,7 @@ describe('AC6 a Step above the run tier raises it, and the tier never drops', ()
     w.begin();
     w.step('02', 'architect', 'medium');
     const r = w.run('sync', SLUG);
-    assert.equal(r.lines[0], 'tier-path: feature tier medium path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: feature tier medium path short rev 2');
     assert.equal(line(r, 'path: '), 'path: short, raised to medium (step)');
     assert.deepEqual(addOf(r), FEATURE_SKIPPED);
     assert.deepEqual(setOf(r), [...ROUTE_V018.feature]);
@@ -642,8 +649,8 @@ describe('AC6 a Step above the run tier raises it, and the tier never drops', ()
     w.begin('fix');
     w.step('01', 'qa', 'medium');
     const r = w.run('sync', SLUG);
-    assert.equal(r.lines[0], 'tier-path: fix tier medium path short rev 1');
-    assert.deepEqual(addOf(r), ['security']);
+    assert.equal(r.lines[0], 'tier-path: fix tier medium path short rev 2');
+    assert.deepEqual(addOf(r), FIX_SKIPPED);
     assert.deepEqual(setOf(r), [...ROUTE_V018.fix]);
   });
 
@@ -669,7 +676,7 @@ describe('AC6 a Step above the run tier raises it, and the tier never drops', ()
     w.run('sync', SLUG);
     w.step('03', 'backend-engineer', 'high');
     const r = w.run('sync', SLUG);
-    assert.equal(r.lines[0], 'tier-path: feature tier high path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: feature tier high path short rev 2');
     assert.deepEqual(addOf(r), FEATURE_SKIPPED);
     assert.equal(w.records().length, 3);
   });
@@ -688,7 +695,7 @@ describe('AC6 a Step above the run tier raises it, and the tier never drops', ()
     const w = world(t);
     w.begin();
     const r = w.run('raise', SLUG, 'medium');
-    assert.equal(r.lines[0], 'tier-path: feature tier medium path short rev 1');
+    assert.equal(r.lines[0], 'tier-path: feature tier medium path short rev 2');
     assert.deepEqual(addOf(r), FEATURE_SKIPPED);
     assert.equal(w.records()[1].cause, 'ceo');
   });
@@ -710,11 +717,11 @@ describe('AC7 every Gate stops as before and its summary names the path and the 
     assert.equal(r.lines[2], `skipped by tier: ${FEATURE_SKIPPED.join(', ')}`);
   });
 
-  test('AC7 a low fix run names the skipped security lane', (t) => {
+  test('AC7 a low fix run names the skipped second-reviewer and security lanes', (t) => {
     const w = world(t);
     const r = w.begin('fix');
     assert.equal(r.lines[1], 'path: short (low)');
-    assert.equal(r.lines[2], 'skipped by tier: security');
+    assert.equal(r.lines[2], `skipped by tier: ${FIX_SKIPPED.join(', ')}`);
   });
 
   test('AC7 after a raise the skipped line is gone and the add before ship line takes its place', (t) => {
@@ -827,7 +834,7 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     l.w.begin();
     l.call('ship', SLUG, '2');
     const [meta, ship] = l.lines(SLUG);
-    assert.deepEqual(meta, { v: 1, run: SLUG, kind: 'meta', aico: '0.19.0', floor: '0.16.0', pb: 'feature', sets: 1 });
+    assert.deepEqual(meta, { v: 1, run: SLUG, kind: 'meta', aico: '0.19.0', floor: '0.16.0', pb: 'feature', sets: 2 });
     assert.deepEqual(ship, { v: 1, run: SLUG, kind: 'ship', acs: 2, tier: 'low', path: 'short', raised: 0 });
   });
 
@@ -1202,7 +1209,7 @@ describe('AC13 pipeline.short_path off gives the full route, and only off can be
     for (const pb of ['feature', 'fix']) {
       const w = world(t);
       const r = w.begin(pb, 'low', short);
-      assert.equal(r.lines[0], `tier-path: ${pb} tier low path full rev 1`);
+      assert.equal(r.lines[0], `tier-path: ${pb} tier low path full rev 2`);
       assert.equal(line(r, 'path: '), 'path: full (setting)');
       assert.deepEqual(setOf(r), [...ROUTE_V018[pb]]);
       assert.equal(r.lines.some((l) => l.startsWith('skipped by tier')), false);
@@ -1266,7 +1273,8 @@ describe('AC14 no other Playbook runs the tier path', () => {
     };
     walk(path.join(REPO, 'skills'));
     walk(path.join(REPO, 'agents'));
-    assert.deepEqual(named.sort(), ['skills/feature/SKILL.md', 'skills/fix/SKILL.md', 'skills/pipeline/SKILL.md', 'skills/pipeline/references/tier-path.md']);
+    // intake-and-ship.md is a feature reference; it only names the tier-sets Contract (entries prototype, destination-spec)
+    assert.deepEqual(named.sort(), ['skills/feature/SKILL.md', 'skills/feature/references/intake-and-ship.md', 'skills/fix/SKILL.md', 'skills/pipeline/SKILL.md', 'skills/pipeline/references/tier-path.md']);
     const playbooks = fs.readdirSync(path.join(REPO, 'skills')).filter((n) => fs.existsSync(path.join(REPO, 'skills', n, 'SKILL.md')) && /^# Playbook: /m.test(read(`skills/${n}/SKILL.md`)));
     assert.ok(playbooks.includes('refactor') && playbooks.length > 5);
     assert.doesNotMatch(read('skills/lead/SKILL.md'), /tier-set|tier-path/);
@@ -1308,7 +1316,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
   test('an auto Brief Gate takes the full path: --ceo full and a missing --ceo both give full with why ceo', (t) => {
     const full = world(t);
     const r = full.begin('feature', 'low', 'on', '--ceo', 'full');
-    assert.equal(r.lines[0], 'tier-path: feature tier low path full rev 1');
+    assert.equal(r.lines[0], 'tier-path: feature tier low path full rev 2');
     assert.equal(line(r, 'path: '), 'path: full (ceo)');
     assert.deepEqual(setOf(r), [...ROUTE_V018.feature]);
     assert.equal(skippedOf(r).length, 0);
@@ -1550,7 +1558,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       assert.deepEqual(w.records()[0].skip, FEATURE_SKIPPED);
       const fix = world(t);
       fix.begin('fix');
-      assert.deepEqual(fix.records()[0].skip, ['security']);
+      assert.deepEqual(fix.records()[0].skip, FIX_SKIPPED);
     });
 
     test('a data file with a different low set and a new rev after begin raises to high and adds exactly the recorded skips', (t) => {
@@ -1558,7 +1566,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       w.begin();
       const recorded = w.records()[0].skip;
       fs.writeFileSync(w.dataFile, JSON.stringify(changed((d) => {
-        d.rev = 2;
+        d.rev = 3;
         d.playbooks.feature.low = d.playbooks.feature.low.filter((e) => e !== 'writer');
       })));
       const r = w.run('sync', SLUG);
@@ -1575,7 +1583,7 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       fs.writeFileSync(w.dataFile, '{ nope');
       const r = w.run('sync', SLUG);
       assert.equal(tierOf(r), 'high');
-      assert.deepEqual(addOf(r), ['security']);
+      assert.deepEqual(addOf(r), FIX_SKIPPED);
       assert.ok(r.lines.some((l) => l.startsWith('tier-sets: refused')));
       assert.equal(w.records()[1].cause, 'sets');
     });

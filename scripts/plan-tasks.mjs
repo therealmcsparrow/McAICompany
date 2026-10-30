@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1.2). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.3). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -30,7 +30,7 @@ const ROLE = /^[a-z][a-z0-9-]{1,40}$/;
 const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const DEP_ID = /^T\d{1,3}[a-z]?$/;
 const TASK_REC = /^(?:T\d{1,3}[a-z]?(?:-dup\d{1,3})?|U1)$/;
-const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on|parallel):[ \t]*(.*)$/;
+const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on|parallel|context|slice|seams):[ \t]*(.*)$/;
 const DECIDED_LINE = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided:/;
 const CONTRACTS_TITLE = /\bcontracts?\b/i;
 const ANY_TASK_TOKEN = /(?:^|[^A-Za-z0-9])T\d{1,3}[a-z]?(?![0-9a-z])/;
@@ -41,18 +41,30 @@ const HASH = /^[0-9a-f]{12}$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const KEY_ECHO = /^[a-z_]{1,20}$/;
 const echoKey = (key) => (KEY_ECHO.test(key) ? key : '?');
-const MODES = ['parallel', 'sequential'];
+const MODES = ['parallel', 'sequential', 'waves'];
+const HANDOVER_KEYS = ['context', 'slice', 'seams'];
+const CONTEXT = /^[1-9]\d{0,3}k$/;
+const SYMBOL = /^[A-Za-z_$][A-Za-z0-9_$.-]{0,80}$/;
+const MAX_CONTEXT_K = 1000;
+const MAX_SEAMS = 10;
+const MIN_HANDOVER = 10000;
+const MAX_HANDOVER = 1000000;
+const STOP_WORDS = new Set('a an the all and of for to in on with into from by layer layers'.split(' '));
+const LAYER_WORDS = new Set(('data model models schema schemas database db table tables api apis endpoint endpoints route routes handler handlers '
+  + 'ui frontend backend server client types type interface interfaces tests test docs doc migration migrations service services '
+  + 'controller controllers view views component components store stores repository repositories').split(' '));
 const PLAN_ERRORS = ['plan-missing', 'plan-unreadable', 'plan-too-large', 'plan-name'];
 
 const USAGE = [
   'usage: plan-tasks.mjs <command>',
-  '  check <slug> <plan> --cap <3-5> --mode <parallel|sequential>',
-  '  begin <slug> <plan> --cap <3-5> --mode <parallel|sequential>',
+  '  check <slug> <plan> --cap <3-5> --mode <parallel|sequential|waves> [--handover <10000-1000000>]',
+  '  begin <slug> <plan> --cap <3-5> --mode <parallel|sequential|waves> [--handover <10000-1000000>]',
   '  next <slug> [--json]',
   '  start <slug> <id>',
   '  done <slug> <id>',
   '  lines <slug> <id>',
   '  brief <slug> <id>',
+  '  merged <slug> <id>[,<id>...]',
   '  scope <slug> <id> -- <path>...',
   '  round <slug> <n> [--loose <k>] -- <path>...',
   '  read <slug>'
@@ -303,9 +315,9 @@ export function parsePlan(text, { agents } = {}) {
       for (const u of deps.unknown) reasons.push(`depends-on: unknown ${u}`);
       if (members.has(block.id)) reasons.push('depends-on: cycle');
       if (block.duplicate) reasons.push('duplicate id');
-      for (const key of block.repeated) reasons.push(`field repeated: ${key}`);
+      for (const key of block.repeated) if (!HANDOVER_KEYS.includes(key)) reasons.push(`field repeated: ${key}`);
       const flagged = flaggedAt[at];
-      return {
+      const task = {
         id: block.id,
         role,
         items: files.items,
@@ -316,8 +328,109 @@ export function parsePlan(text, { agents } = {}) {
         alone: reasons.length > 0,
         reasons
       };
+      handoverFields.set(task, {
+        context: block.fields.get('context'),
+        slice: block.fields.get('slice'),
+        seams: block.fields.get('seams'),
+        repeated: block.repeated.filter((key) => HANDOVER_KEYS.includes(key))
+      });
+      return task;
     })
   };
+}
+
+// ---------------------------------------------------------------- handover checks
+
+// The context, slice and seams lines of each parsed task. They are read only when a caller passes a handover size.
+const handoverFields = new WeakMap();
+
+function splitRef(ref) {
+  const at = ref.indexOf('#');
+  return at === -1 ? { file: ref, name: null } : { file: ref.slice(0, at), name: ref.slice(at + 1) };
+}
+
+function contextProblem(value, handover) {
+  if (value === undefined) return 'context: missing';
+  if (!CONTEXT.test(value)) return 'context: bad value';
+  const n = Number(value.slice(0, -1));
+  if (n > MAX_CONTEXT_K) return 'context: bad value';
+  return n * 1000 > handover ? `context: ${n}k above handover ${handover}` : null;
+}
+
+function namesALayer(behaviour) {
+  const words = behaviour.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w !== '' && !STOP_WORDS.has(w));
+  return words.every((w) => LAYER_WORDS.has(w));
+}
+
+function hasArrow(behaviour) {
+  const wide = behaviour.indexOf(' \u2192 ');
+  const narrow = behaviour.indexOf(' -> ');
+  const at = wide === -1 ? narrow : narrow === -1 ? wide : Math.min(wide, narrow);
+  if (at === -1) return false;
+  const size = behaviour.startsWith(' -> ', at) ? 4 : 3;
+  return behaviour.slice(0, at).trim() !== '' && behaviour.slice(at + size).trim() !== '';
+}
+
+// Returns { error }, { warning } or {}.
+function sliceProblem(value, keys) {
+  if (value === undefined) return { error: 'slice: missing' };
+  const bad = { error: 'slice: bad shape' };
+  if (CONTROLS.test(value)) return bad;
+  const wide = 'wide-refactor \u2014 ';
+  if (value.startsWith(wide)) {
+    const reason = value.slice(wide.length).trim();
+    return reason.length < 20 || reason.length > 300 ? bad : { warning: reason.slice(0, 60) };
+  }
+  const marker = ' \u2014 demo: ';
+  const at = value.lastIndexOf(marker);
+  if (at === -1) return bad;
+  const behaviour = value.slice(0, at).trim();
+  if (behaviour.length < 10 || behaviour.length > 200) return bad;
+  if (namesALayer(behaviour)) return { error: 'slice: names a layer, not a behaviour' };
+  if (!hasArrow(behaviour)) return bad;
+  const { file, name } = splitRef(stripTicks(value.slice(at + marker.length).trim()));
+  const n = normalizePath(file);
+  if (!n.ok) return bad;
+  if (name !== null && (name.length < 1 || name.length > 120 || name.includes('#') || name.includes(';'))) return bad;
+  return keys.some((k) => keysOverlap(k, n.key)) ? {} : { error: 'slice: no demo in files' };
+}
+
+function seamsProblems(value) {
+  if (value === undefined) return ['seams: missing'];
+  if (CONTROLS.test(value)) return ['seams: bad value'];
+  const none = 'none \u2014 ';
+  if (value === 'none' || value.startsWith(none)) {
+    const reason = value.slice(none.length).trim();
+    return value !== 'none' && reason.length >= 10 && reason.length <= 200 ? [] : ['seams: bad value'];
+  }
+  const raw = value.split(',');
+  const problems = [];
+  raw.slice(0, MAX_SEAMS).forEach((item, index) => {
+    const { file, name } = splitRef(stripTicks(item.trim()));
+    const n = normalizePath(file);
+    if (!n.ok) problems.push(`seams item ${index + 1}: ${n.reason}`);
+    else if (name !== null && !SYMBOL.test(name)) problems.push(`seams item ${index + 1}: bad character`);
+  });
+  if (raw.length > MAX_SEAMS) problems.push('seams: more than 10');
+  return problems;
+}
+
+// The ERROR and warning lines for every task, then the closing count line. Plan text appears only as a cut reason.
+function handoverReport(tasks, handover) {
+  const errors = [];
+  const warnings = [];
+  for (const t of tasks) {
+    const f = handoverFields.get(t);
+    if (!f) continue;
+    const add = (reason) => errors.push(`ERROR ${t.id}: ${reason}`);
+    const context = f.repeated.includes('context') ? 'context: bad value' : contextProblem(f.context, handover);
+    if (context) add(context);
+    const slice = f.repeated.includes('slice') ? { error: 'slice: bad shape' } : sliceProblem(f.slice, t.keys);
+    if (slice.error) add(slice.error);
+    if (slice.warning !== undefined) warnings.push(`warning ${t.id}: wide-refactor: ${slice.warning}`);
+    for (const reason of f.repeated.includes('seams') ? ['seams: bad value'] : seamsProblems(f.seams)) add(reason);
+  }
+  return { lines: [...errors, ...warnings, `plan-tasks: ${errors.length} errors (handover ${handover})`], errors: errors.length };
 }
 
 // ---------------------------------------------------------------- scheduling
@@ -464,13 +577,14 @@ const EVENTS = {
   start: ['task', 'round', 'ow'],
   done: ['task', 'round', 'ow'],
   out: ['task', 'round', 'extra', 'sibling'],
-  round: ['round', 'sets', 'loose', 'ow']
+  round: ['round', 'sets', 'loose', 'ow'],
+  merged: ['round', 'tasks']
 };
 
 function newState() {
   return {
     begun: false, plan: null, hash: null, cap: null, mode: null, round: 0, running: [], done: new Map(),
-    peak: 0, waits: new Set(), out: 0, sibling: 0, extras: new Map(), sets: null
+    peak: 0, waits: new Set(), out: 0, sibling: 0, extras: new Map(), sets: null, wave: [], merged: new Map()
   };
 }
 
@@ -523,7 +637,7 @@ function applyEvent(st, rec) {
       if ((problem = owProblem(rec.ow))) return problem;
       if (st.running.length) return 'begin while a task runs';
       // A begin opens a new segment at round 0, so tasks left pending when a Fix round started are offered again.
-      Object.assign(st, { begun: true, plan: rec.plan, hash: rec.hash, cap: rec.cap, mode: rec.mode, round: 0, sets: null });
+      Object.assign(st, { begun: true, plan: rec.plan, hash: rec.hash, cap: rec.cap, mode: rec.mode, round: 0, sets: null, wave: [] });
       break;
     }
     case 'start': {
@@ -533,6 +647,7 @@ function applyEvent(st, rec) {
       if (st.done.get(st.round)?.includes(rec.task)) return 'task already done in this round';
       if (st.round > 0 && !st.sets?.has(rec.task)) return 'task is not in the round';
       st.running.push(rec.task);
+      st.wave.push(rec.task);
       st.peak = Math.max(st.peak, st.running.length);
       break;
     }
@@ -566,10 +681,24 @@ function applyEvent(st, rec) {
       if ((problem = owProblem(rec.ow))) return problem;
       if (st.running.length) return 'round while a task runs';
       if (rec.round !== st.round + 1) return 'round must follow the last round';
+      if (st.mode === 'waves' && st.wave.length) return 'round while a wave is open';
       st.round = rec.round;
       st.sets = sets;
+      st.wave = [];
       // After a re-begin a round number can repeat; its tasks start undone.
       st.done.set(rec.round, []);
+      break;
+    }
+    case 'merged': {
+      if (st.mode !== 'waves') return 'merged outside waves mode';
+      if (!isInt(rec.round, 0, MAX_ROUND) || rec.round !== st.round) return 'round does not match';
+      if (!Array.isArray(rec.tasks) || rec.tasks.length < 1 || rec.tasks.length > MAX_TASKS) return 'tasks must be a list of 1 to 100 task ids';
+      if (!rec.tasks.every((id) => typeof id === 'string' && TASK_REC.test(id))) return 'tasks holds a bad task id';
+      if (st.running.length) return 'merged while a task runs';
+      const ids = new Set(rec.tasks);
+      if (ids.size !== rec.tasks.length || ids.size !== st.wave.length || !st.wave.every((id) => ids.has(id))) return 'tasks do not equal the open wave';
+      st.merged.set(st.round, [...(st.merged.get(st.round) ?? []), ...st.wave]);
+      st.wave = [];
       break;
     }
     default:
@@ -639,17 +768,41 @@ function viewOf(slug, st) {
   for (const round of [...st.done.keys()].sort((a, b) => a - b)) {
     if (st.done.get(round).length) done[round] = [...st.done.get(round)];
   }
-  return {
+  const view = {
     v: 1, slug, state: 'on', plan: st.plan, hash: st.hash, cap: st.cap, mode: st.mode,
     effective_cap: st.mode === 'sequential' ? 1 : st.cap, round: st.round, running: [...st.running], done,
     peak: st.peak, waits: st.waits.size, out: st.out, sibling: st.sibling
   };
+  if (st.mode === 'waves') {
+    view.merged = {};
+    for (const round of [...st.merged.keys()].sort((a, b) => a - b)) view.merged[round] = [...st.merged.get(round)];
+    view.open_wave = [...st.wave];
+  }
+  return view;
 }
 
 export function readParallel(root, slug) {
   if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('plan-tasks: bad slug');
   const { state } = loadRecord(root, slug);
   return state ? viewOf(slug, state) : { v: 1, slug, state: 'none' };
+}
+
+// The given task ids in the visit order of the plan the run began with. Null when the plan cannot be read, differs from the
+// one hashed at begin, or lacks one of the ids: a caller that merges in plan order stops then.
+export function sortByVisit(root, slug, ids) {
+  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('plan-tasks: bad slug');
+  const { state } = loadRecord(root, slug);
+  if (!state?.begun || !Array.isArray(ids)) return null;
+  try {
+    const plan = readPlan(root, slug, state.plan);
+    if (plan.hash !== state.hash) return null;
+    const rank = new Map(parsePlan(plan.text).tasks.map((t, i) => [t.id, i]));
+    if (!ids.every((id) => rank.has(id))) return null;
+    return [...ids].sort((x, y) => rank.get(x) - rank.get(y));
+  } catch (error) {
+    if (error instanceof PlanProblem) return null;
+    throw error;
+  }
 }
 
 function utc(now) {
@@ -668,7 +821,8 @@ function appendEvent(env, slug, rec) {
     if (error instanceof ParallelRecordError) throw new Refusal(`record refuses the event: ${error.reason}`);
     throw error;
   }
-  const flags = fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | (fs.constants.O_NOFOLLOW ?? 0);
+  const create = cur.stat ? 0 : fs.constants.O_CREAT | fs.constants.O_EXCL;
+  const flags = fs.constants.O_WRONLY | fs.constants.O_APPEND | create | (fs.constants.O_NOFOLLOW ?? 0);
   let fd;
   try {
     fd = fs.openSync(cur.file, flags, 0o644);
@@ -784,8 +938,16 @@ function checkId(id) {
 function capAndMode(flags) {
   if (!Object.hasOwn(flags, '--cap') || !Object.hasOwn(flags, '--mode')) throw new Refusal(USAGE);
   if (!/^[345]$/.test(flags['--cap'])) throw new Refusal('cap must be 3, 4 or 5');
-  if (!MODES.includes(flags['--mode'])) throw new Refusal('mode must be parallel or sequential');
+  if (!MODES.includes(flags['--mode'])) throw new Refusal('mode must be parallel, sequential or waves');
   return { cap: Number(flags['--cap']), mode: flags['--mode'] };
+}
+
+function handoverFlag(flags) {
+  if (!Object.hasOwn(flags, '--handover')) return null;
+  const text = flags['--handover'];
+  const n = /^[1-9]\d{4,6}$/.test(text) ? Number(text) : 0;
+  if (n < MIN_HANDOVER || n > MAX_HANDOVER) throw new Refusal('handover must be a whole number from 10000 to 1000000');
+  return n;
 }
 
 function checkPaths(list) {
@@ -802,12 +964,16 @@ function planFor(env, slug, name) {
 }
 
 function cmdCheck(args, env) {
-  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value' });
+  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value' });
   if (positional.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0]);
   const { cap, mode } = capAndMode(flags);
+  const handover = handoverFlag(flags);
   const { parsed } = planFor(env, slug, positional[1]);
-  return { code: 0, lines: gateBlock(parsed, cap, mode) };
+  const lines = gateBlock(parsed, cap, mode);
+  if (handover === null) return { code: 0, lines };
+  const report = handoverReport(parsed.tasks, handover);
+  return { code: report.errors > 0 ? 2 : 0, lines: [...lines, ...report.lines] };
 }
 
 // Under plan_check.policy block, every plan in the run folder is scanned again before begin, next or start, and no
@@ -827,12 +993,17 @@ function planGate(env, slug) {
 }
 
 function cmdBegin(args, env) {
-  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value' });
+  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value' });
   if (positional.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0]);
   const { cap, mode } = capAndMode(flags);
+  const handover = handoverFlag(flags);
   planGate(env, slug);
   const { plan, parsed } = planFor(env, slug, positional[1]);
+  if (handover !== null) {
+    const { errors } = handoverReport(parsed.tasks, handover);
+    if (errors > 0) throw new Refusal(`${errors} task errors`);
+  }
   const st = loadRecord(env.root, slug).state ?? newState();
   if (st.running.length) throw new Refusal('a task is running');
   const ow = overlapWaits(parsed.tasks, st.done.get(0) ?? [], [], mode === 'sequential' ? 1 : cap);
@@ -842,12 +1013,26 @@ function cmdBegin(args, env) {
   return { code: 0, lines: [gateBlock(parsed, cap, mode)[0], 'begun'] };
 }
 
+// Waves mode, rule 0: while a wave is open, a task that was not in the start set at the wave's first start waits for
+// the merge; the others in that start set may still join the wave, so the tasks of one wave can start one by one.
+function waveOutcomes(st, tasks, done, outcomes) {
+  if (st.mode !== 'waves' || st.wave.length === 0) return outcomes;
+  const inWave = new Set(st.wave);
+  const joinable = new Set(schedule(tasks, done.filter((id) => !inWave.has(id)), [], effectiveCap(st))
+    .filter((e) => e.outcome === 'start').map((e) => e.id));
+  return outcomes.map((e) => {
+    if (e.outcome === 'running') return e;
+    if (joinable.has(e.id) && !inWave.has(e.id)) return { id: e.id, outcome: 'start', reason: null, on: null };
+    return { id: e.id, outcome: 'wait', reason: 'wave', on: st.wave[0] };
+  });
+}
+
 function nextView(env, slug) {
   const st = needState(env, slug);
   const parsed = needPlan(env, slug, st, { strict: true });
   const tasks = roundTasks(parsed.tasks, st);
   const done = st.done.get(st.round) ?? [];
-  const outcomes = schedule(tasks, done, st.running, effectiveCap(st));
+  const outcomes = waveOutcomes(st, tasks, done, schedule(tasks, done, st.running, effectiveCap(st)));
   const doneCount = tasks.filter((t) => done.includes(t.id)).length;
   return { st, tasks, outcomes, doneCount, complete: doneCount === tasks.length };
 }
@@ -1019,6 +1204,24 @@ function cmdBrief(args, env) {
   return { code: 0, lines: [`Task brief: .company/work/${slug}/tasks/${id}.md`] };
 }
 
+function cmdMerged(args, env) {
+  if (args.length !== 2) throw new Refusal(USAGE);
+  const slug = checkSlug(args[0]);
+  const ids = args[1].split(',');
+  if (ids.length > MAX_TASKS) throw new Refusal('more than 100 tasks');
+  ids.forEach(checkId);
+  const st = needState(env, slug);
+  if (st.mode !== 'waves') throw new Refusal('not a waves run');
+  if (st.wave.length === 0) throw new Refusal('no open wave');
+  if (st.running.length) throw new Refusal('a task is running');
+  const given = new Set(ids);
+  if (given.size !== ids.length || given.size !== st.wave.length || !st.wave.every((id) => given.has(id))) {
+    throw new Refusal('ids do not equal the open wave');
+  }
+  appendEvent(env, slug, { v: 1, at: utc(env.now), ev: 'merged', round: st.round, tasks: [...st.wave] });
+  return { code: 0, lines: [`merged ${st.wave.length} tasks`] };
+}
+
 function cmdScope(args, env) {
   const { head, tail } = splitDash(args);
   if (tail === null || head.length !== 2) throw new Refusal(USAGE);
@@ -1077,6 +1280,7 @@ function cmdRound(args, env) {
   });
   const st = needState(env, slug);
   if (st.running.length) throw new Refusal('a task is running');
+  if (st.mode === 'waves' && st.wave.length) throw new Refusal('the open wave is not merged');
   if (n !== st.round + 1) throw new Refusal(`round must be ${st.round + 1}`);
   if (blockers.length === 0 && loose === 0) throw new Refusal('nothing to send back');
   const parsed = needPlan(env, slug, st, { strict: true });
@@ -1115,7 +1319,7 @@ function cmdRead(args, env) {
 }
 
 const HANDLERS = {
-  check: cmdCheck, begin: cmdBegin, next: cmdNext, start: cmdStart, done: cmdDone, lines: cmdLines, brief: cmdBrief, scope: cmdScope, round: cmdRound, read: cmdRead
+  check: cmdCheck, begin: cmdBegin, next: cmdNext, start: cmdStart, done: cmdDone, lines: cmdLines, brief: cmdBrief, scope: cmdScope, merged: cmdMerged, round: cmdRound, read: cmdRead
 };
 
 // `now` (epoch ms) and `root` (the product root) are for callers that inject them; `pluginRoot` locates agents/.

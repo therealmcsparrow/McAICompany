@@ -1066,6 +1066,14 @@ function mapRefusals(lines) {
       if (!plan.includes(srec)) plan.push(srec);
       continue;
     }
+    const um = REFUSED_USER_ONLY.exec(line);
+    const urec = um && planRecs.find((r) => r.level === um[1] && r.key === um[2]);
+    if (urec) {
+      urec.sticky = `Error: ${urec.label} ${USER_ONLY_REFUSAL[urec.key]}`;
+      urec.stickyValue = urec.control.value;
+      if (!plan.includes(urec)) plan.push(urec);
+      continue;
+    }
     const m = REFUSED_PERSONALITY.exec(line);
     const rec = m && pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]);
     if (!rec) { rest.push(line); continue; }
@@ -1282,7 +1290,7 @@ function parallelCapRow(tbody, pluginValue) {
 }
 const REFUSED_SHORT_PATH = /^(user|project) pipeline[.]short_path(?![a-z_])/;
 const SHORT_PATH_REFUSAL = 'must be on or off.';
-const SHORT_PATH_HINT = 'Short path: a feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes and the ruleset research; a fix triaged as low risk skips the security lane. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file. Off: low-risk runs take the full route. A project setting can only turn it off.';
+const SHORT_PATH_HINT = 'Short path: a feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes, the ruleset research and the plan review; a fix triaged as low risk skips the security lane. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file. Off: low-risk runs take the full route. A project setting can only turn it off.';
 // Short path row: a labelled select per level tied to the hint. The project select offers only off; a stored project "on" stays visible, disabled.
 function shortPathRow(tbody, pluginValue) {
   const path = ['pipeline', 'short_path'];
@@ -1324,6 +1332,61 @@ function shortPathRow(tbody, pluginValue) {
   tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), cells, effect));
   syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
 }
+const SECOND_REVIEWER_HINT = "Second reviewer: at high risk, a fresh reviewer that never reads the brief or the builders' notes reviews the code beside the Code Reviewer. It adds one more review per round. Set it for yourself only.";
+const SECOND_REVIEWER_MODEL_HINT = "Second reviewer model: the Claude model the second reviewer runs on. It never runs below the Code Reviewer's floor and never on another provider. Set it for yourself only.";
+const WORKTREES_HINT = "Worktrees: parallel builder tasks each get their own git worktree in a folder beside the repo, merged in plan order. Allow that folder in Claude Code's permissions first. Set it for yourself only.";
+const REFUSED_USER_ONLY = /^(user|project) pipeline[.](second_reviewer_model|second_reviewer|worktrees)(?![a-z_])/;
+const USER_ONLY_REFUSAL = {
+  second_reviewer: 'must be off or on.',
+  second_reviewer_model: 'must be default or a model at or above the Code Reviewer floor.',
+  worktrees: 'must be off or on.',
+};
+// Values of the model select: default plus every ranked model at or above the code-reviewer floor (opus when unknown).
+function reviewerModelOptions() {
+  const floor = MODEL_RANK[protectedFloor('code-reviewer')] ?? MODEL_RANK.opus;
+  return ['default', ...Object.keys(MODEL_RANK).filter((m) => MODEL_RANK[m] >= floor).sort((a, b) => MODEL_RANK[a] - MODEL_RANK[b])];
+}
+const USER_ONLY_ROWS = {
+  second_reviewer: { label: 'Second reviewer', slug: 'second-reviewer', hint: 'second-reviewer-hint', options: () => ['off', 'on'] },
+  second_reviewer_model: { label: 'Second reviewer model', slug: 'second-reviewer-model', hint: 'second-reviewer-model-hint', options: reviewerModelOptions },
+  worktrees: { label: 'Worktrees', slug: 'worktrees', hint: 'worktrees-hint', options: () => ['off', 'on'] },
+};
+// User-only row: one labelled select at the user level; the Project column is text (not set, locked, why), never a control.
+function userOnlyRow(tbody, spec, key, pluginValue) {
+  const path = ['pipeline', key];
+  const { label } = spec;
+  const id = `${spec.slug}-user`;
+  const effect = el('td', { class: 'effect', id: `${spec.slug}-effect`, 'aria-live': 'polite' });
+  const control = bindLayer(selectFor(spec.options(), null), 'user', path, String);
+  control.id = id;
+  control.options[0].textContent = 'not set';
+  const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
+  control.setAttribute('aria-describedby', spec.hint);
+  const rec = { key, level: 'user', label, control, sticky: '', stickyValue: '', message: '', text: '' };
+  const prefix = `${label}, user level: `;
+  syncers.push(() => {
+    if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
+    const message = rec.sticky;
+    if (message !== rec.message) {
+      const live = document.getElementById('field-live');
+      if (message) live.textContent = prefix + message.replace(/^Error: /, '').replace(`${label} `, '');
+      else if (live.textContent.startsWith(prefix)) live.textContent = '';
+    }
+    rec.message = message;
+    rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
+    err.textContent = message;
+    err.hidden = message === '';
+    if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `${spec.hint} ${err.id}`); }
+    else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', spec.hint); }
+  });
+  planRecs.push(rec);
+  const tag = el('label', { for: id }, label, el('span', { class: 'vh' }, ', user level'));
+  const user = el('td', {}, el('div', { class: 'cf' }, tag, control, err));
+  const lockId = `${spec.slug}-lock`;
+  const project = el('td', {}, el('span', {}, 'not set'), ' ', el('span', { class: 'held', id: lockId }, 'Locked. Set at the user level only.'));
+  tbody.append(el('tr', {}, el('th', { scope: 'row' }, label), el('td', { class: 'plugin' }, String(pluginValue)), user, project, effect));
+  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+}
 const REFUSED_PLAN_CHECK = /^(user|project) plan_check\.(policy|runs)\b/;
 function planLink(rec) {
   const link = el('a', { href: `#${rec.control.id}` }, planRefusalText(rec));
@@ -1345,6 +1408,9 @@ function renderPipeline(panel) {
     (l) => selectFor(['parallel', 'sequential'], l), String, String);
   parallelCapRow(tbody, defaults.parallel_cap);
   shortPathRow(tbody, defaults.short_path);
+  userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer, 'second_reviewer', defaults.second_reviewer ?? 'off');
+  userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer_model, 'second_reviewer_model', defaults.second_reviewer_model ?? 'default');
+  userOnlyRow(tbody, USER_ONLY_ROWS.worktrees, 'worktrees', defaults.worktrees ?? 'off');
   pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
     (l) => selectFor(['plain', 'pilot'], l), String, String);
   pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
@@ -1354,6 +1420,9 @@ function renderPipeline(panel) {
   panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
   panel.append(el('p', { class: 'hint', id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT));
   panel.append(el('p', { class: 'hint', id: 'short-path-hint' }, SHORT_PATH_HINT));
+  panel.append(el('p', { class: 'hint', id: 'second-reviewer-hint' }, SECOND_REVIEWER_HINT));
+  panel.append(el('p', { class: 'hint', id: 'second-reviewer-model-hint' }, SECOND_REVIEWER_MODEL_HINT));
+  panel.append(el('p', { class: 'hint', id: 'worktrees-hint' }, WORKTREES_HINT));
   panel.append(el('h2', {}, 'Reprompt'));
   const rp = table(COLUMNS);
   const rpDefaults = state.plugin.reprompt;

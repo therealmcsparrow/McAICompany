@@ -52,7 +52,7 @@ test('the report holds the Gates, forms, Fix rounds and times of a run of that v
   assert.match(text, /Fix rounds: 1/);
   assert.match(text, /Run time: 30 min 0 s/);
   assert.match(text, /Step time by Role: architect 1 min 0 s/);
-  assert.ok(!text.includes(': not recorded'), text);
+  assert.ok(!text.split('### alpha')[1].includes(': not recorded'), text);
   assert.ok(!text.includes('\r'));
 });
 
@@ -118,4 +118,112 @@ test('the command prints the report and refuses a bad version', (t) => {
   assert.match(ok.stdout, /^# Gate Report v0\.20\.0\n/);
   const bad = spawnSync(process.execPath, [script, '1.2'], { cwd: root, encoding: 'utf8', env });
   assert.notEqual(bad.status, 0);
+});
+
+const EVAL_FILES = { plan: ['tests', 'plan-review', 'eval.jsonl'], code: ['tests', 'code-review', 'eval.jsonl'] };
+
+function evalFile(root, kind, text) {
+  const file = path.join(root, ...EVAL_FILES[kind]);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return file;
+}
+const rec = (o) => JSON.stringify({ v: 1, aico: '0.21.0', at: '2026-10-29T09:30:00Z', caught: 4, total: 5, ...o });
+const planLine = (text) => text.split('\n').find((l) => l.startsWith('plan review eval:'));
+const codeLine = (text) => text.split('\n').find((l) => l.startsWith('code review eval:'));
+const report = (root) => gateReport({ root, version: '0.21.0' });
+
+test('hostile eval files read not recorded and never fail the report', (t) => {
+  const root = tmp(t);
+  evalFile(root, 'plan', 'x'.repeat(2 * 1024 * 1024));
+  evalFile(root, 'code', rec({ caught: '2' }) + '\n');
+  let text = report(root);
+  assert.equal(planLine(text), 'plan review eval: not recorded');
+  assert.equal(codeLine(text), 'code review eval: not recorded');
+  const bad = [
+    rec({ caught: -1 }), rec({ caught: 1.5 }), rec({ total: null }), rec({ caught: 6 }), rec({ aico: 5 }),
+    rec({ at: '2026-13-45T99:99:99Z' }), rec({ at: 'yesterday' }), rec({ v: 2 }), '[1]', '"x"', 'null', '{not json',
+    rec({ caught: '3' }),
+    rec({ at: '2026-10-29T09:30:00Z\n# injected' })
+  ];
+  for (const line of bad) {
+    evalFile(root, 'plan', `${line}\n`);
+    text = report(root);
+    assert.equal(planLine(text), 'plan review eval: not recorded', line);
+    assert.ok(!text.includes('injected') && !text.includes('\r'));
+  }
+  evalFile(root, 'plan', 'x'.repeat(3000) + '\n' + rec({ caught: 3, total: 5 }) + '\n');
+  assert.equal(planLine(report(root)), 'plan review eval: 3 of 5 (2026-10-29)');
+});
+
+test('an eval record with a __proto__ key never changes the line or the prototype', (t) => {
+  const root = tmp(t);
+  evalFile(root, 'plan', '{"v":1,"aico":"0.21.0","at":"2026-10-29T09:30:00Z","caught":3,"total":5,"__proto__":{"caught":9},"constructor":{"x":1}}\n');
+  assert.equal(planLine(report(root)), 'plan review eval: 3 of 5 (2026-10-29)');
+  assert.equal({}.caught, undefined);
+});
+
+test('an eval file that is a link reads not recorded', (t) => {
+  const root = tmp(t);
+  const real = path.join(root, 'real.jsonl');
+  fs.writeFileSync(real, rec() + '\n');
+  const file = path.join(root, ...EVAL_FILES.plan);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.symlinkSync(real, file);
+  } catch {
+    t.skip('symlinks are not allowed here');
+    return;
+  }
+  assert.equal(planLine(report(root)), 'plan review eval: not recorded');
+});
+
+test('a folder or a linked parent in place of the eval file reads not recorded', (t) => {
+  const root = tmp(t);
+  fs.mkdirSync(path.join(root, ...EVAL_FILES.plan), { recursive: true });
+  assert.equal(planLine(report(root)), 'plan review eval: not recorded');
+  const other = path.join(root, 'elsewhere');
+  fs.mkdirSync(other);
+  fs.writeFileSync(path.join(other, 'eval.jsonl'), rec() + '\n');
+  fs.mkdirSync(path.join(root, 'tests'), { recursive: true });
+  try {
+    fs.symlinkSync(other, path.join(root, 'tests', 'code-review'), 'junction');
+  } catch {
+    return;
+  }
+  assert.equal(codeLine(report(root)), 'code review eval: not recorded');
+});
+
+test('the plan review line comes from the last record of the matching version', (t) => {
+  const root = tmp(t);
+  evalFile(root, 'plan', [rec({ aico: '0.20.0', caught: 5 }), rec({ caught: 2, at: '2026-10-28T01:00:00Z' }), rec({ caught: 4 }), rec({ aico: '0.22.0', caught: 1 })].join('\n') + '\n');
+  assert.equal(planLine(report(root)), 'plan review eval: 4 of 5 (2026-10-29)');
+});
+
+test('the line reads not recorded when no record names the version or the file is missing', (t) => {
+  const root = tmp(t);
+  assert.equal(planLine(report(root)), 'plan review eval: not recorded');
+  evalFile(root, 'plan', rec({ aico: '0.20.0' }) + '\n');
+  assert.equal(planLine(report(root)), 'plan review eval: not recorded');
+});
+
+test('the code review line follows the plan review line, from its own file', (t) => {
+  const root = tmp(t);
+  evalFile(root, 'plan', rec() + '\n');
+  evalFile(root, 'code', [rec({ caught: 1, total: 2 }), rec({ caught: 2, total: 2, at: '2026-10-30T00:00:00Z' })].join('\n') + '\n');
+  const lines = report(root).split('\n');
+  const i = lines.indexOf('plan review eval: 4 of 5 (2026-10-29)');
+  assert.ok(i >= 0);
+  assert.equal(lines[i + 1], 'code review eval: 2 of 2 (2026-10-30)');
+});
+
+test('the eval lines print with no runs and with runs, and a record of another version is not used', (t) => {
+  const root = tmp(t);
+  evalFile(root, 'code', rec({ aico: '0.20.0' }) + '\n');
+  assert.match(report(root), /Runs: not recorded for this version\./);
+  assert.equal(codeLine(report(root)), 'code review eval: not recorded');
+  fullRun(root, 'zeta', '0.21.0');
+  const text = report(root);
+  assert.match(text, /Runs: 1/);
+  assert.equal(planLine(text), 'plan review eval: not recorded');
 });

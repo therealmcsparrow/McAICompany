@@ -39,7 +39,7 @@ const readJson = (...parts) => JSON.parse(read(...parts));
 
 // ---------- shared fixtures ----------
 
-const PROTECTED = ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'];
+const PROTECTED = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'];
 // Frontmatter model and floor per fixture Role. tech-researcher and writer sit below their floor.
 const FIXTURE_ROLES = {
   architect: ['opus', 'opus'],
@@ -53,7 +53,7 @@ const FIXTURE_ROLES = {
   writer: ['haiku', 'sonnet']
 };
 const NAMES = {
-  architect: 'Ava', 'code-reviewer': 'Rex', pentester: 'Pia', security: 'Sam', 'vuln-scanner': 'Vic',
+  architect: 'Ava', 'code-reviewer': 'Rui', 'fresh-reviewer': 'Fenna', pentester: 'Pavel', security: 'Sam', 'vuln-scanner': 'Viktor',
   qa: 'Quinn', 'backend-engineer': 'Bob', 'tech-researcher': 'Tess', writer: 'Wes'
 };
 
@@ -107,7 +107,7 @@ const cleanChildEnv = (home, extra = {}) => {
 test('plugin defaults: tech-researcher is sonnet and every other Role keeps its earlier model', () => {
   const ctx = mkCtx(repoRoot);
   const got = resolveSettings(ctx);
-  const opus = ['architect', 'code-reviewer', 'pentester', 'product-manager', 'security', 'senior-engineer'];
+  const opus = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'product-manager', 'security', 'senior-engineer'];
   const haiku = ['localizer', 'prompt-artist'];
   const roles = fs.readdirSync(path.join(repoRoot, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3));
   assert.deepEqual(Object.keys(got.roles).sort(), roles.sort());
@@ -251,7 +251,7 @@ test('floor file hostile or unreadable: every Role is held at opus with one warn
     missing: null,
     'not json': '{nope',
     'array': '[]',
-    'proto key in floor': '{"v":1,"release":"0.16.0","floor":{"__proto__":{"architect":"haiku"}},"protected":["architect","code-reviewer","pentester","security","vuln-scanner"]}',
+    'proto key in floor': '{"v":1,"release":"0.16.0","floor":{"__proto__":{"architect":"haiku"}},"protected":["architect","code-reviewer","fresh-reviewer","pentester","security","vuln-scanner"]}',
     'role missing from floor': JSON.stringify((() => { const f = floorJson(); delete f.floor.qa; return f; })()),
     'unranked floor value': JSON.stringify((() => { const f = floorJson(); f.floor.qa = 'fable'; return f; })())
   };

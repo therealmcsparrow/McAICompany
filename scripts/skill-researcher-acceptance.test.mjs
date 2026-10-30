@@ -100,7 +100,7 @@ test('aico-mods v1.1: only the pane draws bars; the status part and the off swit
   order(savvy, ['labelled(\'Elapsed\'', '...progressRows(model.view, width)', 'No subagent running.']);
   assert.match(savvy, /savvy is off; switch it on in \/aico:settings/);
   assert.doesNotMatch(read('mods/lib/bars.mjs'), /[^\x00-\x7f]/, 'ASCII only');
-  assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.[123]/);
+  assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.\d+/);
   for (const f of ['mods/shared/status.ts', 'mods/lib/status.mjs']) assert.doesNotMatch(read(f), /progressRows|Gates \[/, f);
 });
 

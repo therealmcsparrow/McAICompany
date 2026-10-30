@@ -14,6 +14,7 @@ Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline re
 
 1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.
    **→ Brief Gate** (with the tier path preview and, on a short path, two Approve options: references/tier-path.md step 4)
+1b. Prototype, only after a Run it answer at the Brief Gate; glossary and ADRs after approval: `references/intake-and-ship.md`.
 1a. Design skills (`design-skills-section` v1), only when the product has UI (`product_type` web, desktop or game, or the brief has UI work) and `## Design skills` in `.company/project.md` is stale (empty, or newest `approved:` over 180 days old). Otherwise skip silently.
    a. Dispatch `aico:design-researcher` (inputs per its Role). It recommends at most 5 skills and installs nothing.
    b. One form for the CEO: approve the set / change / skip. Nothing is written before the answer.
@@ -25,14 +26,17 @@ Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline re
 2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.
 2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`). At a short path without senior-engineer-research: map, with one Debt line per pack (tier-path.md step 7).
 2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate. A rejected rule goes back to the Senior Engineer once; still rejected → the CEO decides at the Plan Gate.
+2e. `aico:fresh-reviewer` plan review, only when `plan-review` is in the set and the architect ran: `references/plan-review.md` of `aico:pipeline` (inputs from `plan-review.mjs lines`, one architect revision, one re-check at `Round: 1`). The Plan Gate shows its block or `plan review: not run`.
    **→ Plan Gate** (CEO approves Core, Contracts and Art direction; tier-path.md step 8 checks the plan first)
 3. Builders, one Step per Module, in parallel when their Contracts are settled: `aico:backend-engineer` / `aico:frontend-engineer` / `aico:desktop-engineer` / `aico:ai-data-engineer` / `aico:game-engineer`, as the Module map says.
 3b. Assets the build needs: `aico:brand-artist` / `aico:motion-artist` / `aico:game-artist`, in parallel with the builders.
 4. `aico:code-reviewer` ∥ `aico:qa` ∥ the lanes below. Fix rounds per `aico:pipeline` (max `pipeline.fix_rounds`, default 2). Usability S1 findings count as Blocking. Skipped lanes are named in the Ship Gate summary.
    - `aico:security` when `lanes.security` is on (`aico:pipeline` §1.7), when in the tier set.
+   - `aico:fresh-reviewer` (set entry `second-reviewer`) beside the Code Reviewer, only at Risk tier `high` with `pipeline.second_reviewer` `on` and the entry in the set (`aico:pipeline` references/review-loop.md).
    - `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7), when in the tier set.
    - `aico:legal` when `lanes.legal` is on (`aico:pipeline` §1.7), or is `auto` (the default) and the feature adds AI, payments or personal data, per `aico:eu-compliance`.
    - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7), when in the tier set ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).
 5. `aico:writer`: user docs and release notes (if user-facing), then `aico:localizer` if `languages:` lists more than one.
+5a. `aico:product-manager`: destination spec, checked by `spec-check.mjs`, stamped after approval: `references/intake-and-ship.md`.
    **→ Ship Gate** (after tier-set.mjs sync --diff; added Roles and lanes first)
 6. `aico:devops`: release/deploy as approved.

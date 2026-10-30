@@ -1,15 +1,15 @@
 # Roles
 
-The company has **35 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
+The company has **36 Role agents**, each a specialist with a fresh context and a narrow job. The Lead dispatches only the Roles a job needs. Reporting lines (who signs off) are in the [hierarchy diagram](../README.md#company-hierarchy); the Lead dispatches every Role regardless.
 
 Each Role runs on a model and an effort level matched to its work. The model is how capable the Role is: **Opus** for the Roles that reason hardest (architecture, review, security, product strategy), **Sonnet** for most building, testing and writing, **Haiku** for mechanical content work. The effort is how much thinking it does before it answers: **high** for the architect, code-reviewer, security and pentester; **low** for writing, art, lookup and support Roles; **medium** for the rest.
 
 Every Role has a person name for display (change them in `/aico:settings`). You can also ask for a Role by name; the Lead routes it. The default names are the ones in the Name column of the tables below, for example Ava for the architect, Wen for the writer and Edith for the editor. Names are unique across Roles, ignoring case. Each Role also has a [personality](concepts.md#personalities) that colours how it talks in cooler chats and brainstorms, and nowhere else.
 
-Which Roles a project has depends on its [company type](concepts.md#company-types). A software company has 34 of the 35; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
+Which Roles a project has depends on its [company type](concepts.md#company-types). A software company has 35 of the 36; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
 
 ## Model floor and protected Roles
-The tech-researcher runs on Sonnet; every other Role keeps the model it had in v0.16.0, which is its **floor**. On a high-risk run a Role is never dispatched below its floor. Five Roles are **protected** and hold their floor at every risk tier, whatever you set: architect, code-reviewer, pentester, security and vuln-scanner. Details and sources are in [Which model a Role runs on](concepts.md#which-model-a-role-runs-on).
+The tech-researcher runs on Sonnet; every other Role keeps the model it had in v0.16.0, which is its **floor**. On a high-risk run a Role is never dispatched below its floor. Six Roles are **protected** and hold their floor at every risk tier, whatever you set: architect, code-reviewer, fresh-reviewer, pentester, security and vuln-scanner. Details and sources are in [Which model a Role runs on](concepts.md#which-model-a-role-runs-on).
 
 **Rollback, one line per Role.**
 - One Role: in `/aico:settings`, set `roles.<role>.model` to the model you want, for example `opus` for the tech-researcher. A protected Role cannot be set below its floor.
@@ -57,6 +57,7 @@ The first three researchers run in parallel inside [`/aico:research`](commands.m
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
 | **code-reviewer** | opus | high | Rui | Reviews the branch diff for spec match, correctness, standards and Core/Module/Contract rules. Never edits code. |
+| **fresh-reviewer** | opus | high | Fenna | Reads a plan before the Plan Gate, and at high risk with the second reviewer on a diff, as a newcomer: it never reads the brief or the builders' notes, writes the plan in its own words first, then lists what the text does not make clear. Protected: never runs below opus. Never edits code. See [The fresh reviewer](concepts.md#the-fresh-reviewer). |
 | **qa** | sonnet | medium | Quinn | Reproduces bugs, turns acceptance criteria into tests, writes contract tests per Module, runs the suite. Edits test files only. |
 | **security** | opus | high | Sam | Audits code, dependencies and configuration for vulnerabilities, auth flaws, secrets and data exposure. Never edits code. |
 | **pentester** | opus | high | Pavel | *On demand.* Authorized red team against your own local/staging build — see below. Never edits code. |
@@ -86,7 +87,7 @@ The first three researchers run in parallel inside [`/aico:research`](commands.m
 
 ## Who may edit code
 
-Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The editor has no Bash and no web access, and writes only its own Handoff. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
+Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, fresh-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The editor has no Bash and no web access, and writes only its own Handoff. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
 
 ## Review Roles and the Handoff block
 The **code-reviewer** and the **senior-engineer** (compliance) are the pilot for [Handoff v1.1](concepts.md#the-handoff-contract). By default (`pipeline.review_format: plain`) they write ordinary findings. With `pilot` set in [settings](concepts.md#settings), they write a top block and findings as `ID | file:line | problem | why | fix` rows, and keep a findings ledger so a handover mid-review loses nothing. With either value they confirm tool-check failures before those block, and the reviewer's depth follows the touched paths. All other Roles write Handoffs as before. In a brainstorm, a Role may skip a round, and the Architect adds an S/M/L estimate.

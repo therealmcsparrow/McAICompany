@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
+  cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync as __mkdtemp, rmSync as __rmTree, readFileSync, readdirSync, realpathSync,
   rmSync, symlinkSync, utimesSync, writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -23,6 +23,10 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+// Remove the temp dirs this file made, once the run is over.
+const __tmpDirs = [];
+const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = join(root, 'scripts', 'skillspector.mjs');

@@ -22,11 +22,15 @@ export const CONTEXT_CAP_MAX = 1000000;
 export const CONTEXT_CAP_DEFAULT = 150000;
 export const DEBATES = ['crossfire', 'full_pass'];
 export const REVIEW_FORMATS = ['plain', 'pilot'];
+export const SECOND_REVIEWER_MODELS = ['default', 'opus', 'sonnet', 'haiku', 'fable'];
 export const PIPELINE_DEFAULTS = {
   fix_rounds: 2,
   dispatch: 'parallel',
   parallel_cap: 4,
   short_path: 'on',
+  second_reviewer: 'off',
+  second_reviewer_model: 'default',
+  worktrees: 'off',
   context_cap: CONTEXT_CAP_DEFAULT,
   review_format: 'plain',
   lanes: { security: true, compliance: true, legal: 'auto', persona: true, hands_on: true, accessibility: true }
@@ -67,7 +71,7 @@ const LOCK_ECHO = ['haiku', 'sonnet', 'fable'];
 const VERSION_TIMEOUT_MS = 5000;
 const VAR_SHOWN_RE = /^[A-Za-z0-9._:[\]-]{1,64}$/;
 export const MODEL_RANK = Object.freeze({ haiku: 1, sonnet: 2, opus: 3 });
-export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner']);
+export const PROTECTED_ROLES = Object.freeze(['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner']);
 const sameRoles = (list, want) => list.length === want.length && want.every((r) => list.includes(r));
 const rankOf = (m) => (typeof m === 'string' && Object.hasOwn(MODEL_RANK, m) ? MODEL_RANK[m] : 0);
 const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');
@@ -252,8 +256,16 @@ const PIPELINE_RULES = {
   parallel_cap: { ok: (v) => Number.isInteger(v) && v >= 3 && v <= 5, msg: 'pipeline.parallel_cap must be a whole number from 3 to 5' },
   short_path: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.short_path must be on or off' },
   context_cap: CONTEXT_CAP,
-  review_format: { ok: (v) => REVIEW_FORMATS.includes(v), msg: `pipeline.review_format must be ${REVIEW_FORMATS.join(' or ')}` }
+  review_format: { ok: (v) => REVIEW_FORMATS.includes(v), msg: `pipeline.review_format must be ${REVIEW_FORMATS.join(' or ')}` },
+  second_reviewer: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.second_reviewer must be off or on' },
+  worktrees: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.worktrees must be off or on' }
 };
+
+// The second reviewer's model counts only when it is `default` or ranked at or above the floor (fable is unranked).
+const secondReviewerModelRule = (floor) => ({
+  ok: (v) => v === 'default' || (typeof v === 'string' && SECOND_REVIEWER_MODELS.includes(v) && rankOf(v) > 0 && rankOf(v) >= rankOf(floor)),
+  msg: `pipeline.second_reviewer_model must be default or a model at or above the code-reviewer floor (${floor})`
+});
 const BRAINSTORM_RULES = {
   film_script: BOOLEAN,
   debate: { ok: (v) => DEBATES.includes(v), msg: `brainstorm.debate must be ${DEBATES.join(' or ')}` }
@@ -323,7 +335,7 @@ function sanitizePersonality(value, at, reasons) {
 }
 
 // Walks a layer against the schema. Returns { clean, reasons }: clean keeps only valid parts.
-function sanitize(layer, roleNames) {
+function sanitize(layer, roleNames, floor = 'opus') {
   const reasons = [];
   const clean = { version: 1 };
   if (!isObject(layer)) return { clean, reasons: [`${KEY}: must be an object`] };
@@ -347,7 +359,7 @@ function sanitize(layer, roleNames) {
       if (notEmpty(roles)) clean.roles = roles;
     } else if (key === 'pipeline') {
       if (!isObject(value)) { reasons.push('pipeline: must be an object'); continue; }
-      const pipeline = checkFields(value, PIPELINE_RULES, 'pipeline', reasons, ['lanes']);
+      const pipeline = checkFields(value, { ...PIPELINE_RULES, second_reviewer_model: secondReviewerModelRule(floor) }, 'pipeline', reasons, ['lanes']);
       if (Object.hasOwn(value, 'lanes')) {
         if (!isObject(value.lanes)) reasons.push('pipeline.lanes: must be an object');
         else {
@@ -406,12 +418,12 @@ function sanitize(layer, roleNames) {
   return { clean, reasons };
 }
 
-export function validateLayer(layer, roleNames) {
-  return sanitize(layer, roleNames).reasons;
+export function validateLayer(layer, roleNames, floor = 'opus') {
+  return sanitize(layer, roleNames, floor).reasons;
 }
 
 // Reads one layer file. Returns { raw, layer, warnings }; raw feeds the revision hash.
-function loadLayer(level, ctx, roleNames) {
+function loadLayer(level, ctx, roleNames, floor = 'opus') {
   const file = layerPath(level, ctx);
   const empty = { version: 1 };
   let bytes;
@@ -430,14 +442,20 @@ function loadLayer(level, ctx, roleNames) {
     return { raw: bytes, layer: empty, warnings: [error.message], reasons: [] };
   }
   if (!Object.hasOwn(data, KEY)) return { raw: bytes, layer: empty, warnings: [], reasons: [] };
-  const { clean, reasons } = sanitize(data[KEY], roleNames);
+  const { clean, reasons } = sanitize(data[KEY], roleNames, floor);
   return { raw: bytes, layer: clean, warnings: reasons.map((r) => `${file}: ignoring ${r}`), reasons };
+}
+
+// The code-reviewer floor from the model floor file; an unreadable file gives opus.
+function reviewerFloor(pluginRoot) {
+  const f = loadModelFloor(pluginRoot).floor['code-reviewer'];
+  return rankOf(f) > 0 ? f : 'opus';
 }
 
 const roleNamesOf = (pluginRoot) => new Set(Object.keys(pluginDefaults(pluginRoot).roles));
 
 export function readLayer(level, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
-  const { layer, warnings } = loadLayer(level, { home, cwd }, roleNamesOf(pluginRoot));
+  const { layer, warnings } = loadLayer(level, { home, cwd }, roleNamesOf(pluginRoot), reviewerFloor(pluginRoot));
   return { layer, warnings };
 }
 
@@ -638,6 +656,20 @@ function resolvePlanPolicy(user, project, ignored) {
   return pick(p, u, PLAN_CHECK_DEFAULTS.policy)[0];
 }
 
+// Pipeline keys that count only from the user level; a project value is ignored and listed.
+function userOnly(user, project, key, ignored) {
+  if (Object.hasOwn(project.pipeline ?? {}, key)) ignored.push(`pipeline.${key}: set it at the user level`);
+  return Object.hasOwn(user.pipeline ?? {}, key) ? user.pipeline[key] : PIPELINE_DEFAULTS[key];
+}
+
+// `default` follows the fresh-reviewer's resolved model, never below the code-reviewer floor; an unreadable floor file gives opus.
+function effectiveReviewerModel(setting, resolved, table) {
+  if (setting !== 'default') return setting;
+  if (table.release === null) return 'opus';
+  const floor = rankOf(table.floor['code-reviewer']) > 0 ? table.floor['code-reviewer'] : 'opus';
+  return rankOf(resolved) >= rankOf(floor) && rankOf(resolved) > 0 ? resolved : floor;
+}
+
 function resolveShortPath(user, project, broken, ignored) {
   const u = user.pipeline?.short_path;
   const p = project.pipeline?.short_path;
@@ -649,8 +681,9 @@ function resolveShortPath(user, project, broken, ignored) {
 export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
-  const u = loadLayer('user', { home, cwd }, roleNames);
-  const p = loadLayer('project', { home, cwd }, roleNames);
+  const floorName = reviewerFloor(pluginRoot);
+  const u = loadLayer('user', { home, cwd }, roleNames, floorName);
+  const p = loadLayer('project', { home, cwd }, roleNames, floorName);
   const user = u.layer;
   const project = p.layer;
   const warnings = [...u.warnings, ...p.warnings];
@@ -673,10 +706,15 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     dispatch: pick(project.pipeline?.dispatch, user.pipeline?.dispatch, PIPELINE_DEFAULTS.dispatch)[0],
     parallel_cap: pick(project.pipeline?.parallel_cap, user.pipeline?.parallel_cap, PIPELINE_DEFAULTS.parallel_cap)[0],
     short_path: resolveShortPath(user, project, p.warnings.length > 0, ignored),
+    second_reviewer: userOnly(user, project, 'second_reviewer', ignored),
+    second_reviewer_model: userOnly(user, project, 'second_reviewer_model', ignored),
+    second_reviewer_model_effective: null,
+    worktrees: userOnly(user, project, 'worktrees', ignored),
     context_cap: pick(project.pipeline?.context_cap, user.pipeline?.context_cap, PIPELINE_DEFAULTS.context_cap)[0],
     review_format: pick(project.pipeline?.review_format, user.pipeline?.review_format, PIPELINE_DEFAULTS.review_format)[0],
     lanes: {}
   };
+  pipeline.second_reviewer_model_effective = effectiveReviewerModel(pipeline.second_reviewer_model, roles['fresh-reviewer']?.model, table);
   // Not locks: no unlock is involved, and a fail-closed project layer does not change them.
   const brainstorm = {};
   for (const k of Object.keys(BRAINSTORM_DEFAULTS)) {
@@ -806,8 +844,9 @@ export function resolvePersonalities({ home, cwd, pluginRoot = DEFAULT_PLUGIN_RO
 export function checkLayers(user, project, { pluginRoot = DEFAULT_PLUGIN_ROOT } = {}) {
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
-  const u = sanitize(user, roleNames);
-  const p = sanitize(project, roleNames);
+  const floorName = reviewerFloor(pluginRoot);
+  const u = sanitize(user, roleNames, floorName);
+  const p = sanitize(project, roleNames, floorName);
   const reasons = [...u.reasons.map((r) => `user ${r}`), ...p.reasons.map((r) => `project ${r}`)];
   if (reasons.length === 0) reasons.push(...nameClashes(resolveRoles(defaults, u.clean, p.clean)));
   return reasons;
@@ -829,10 +868,11 @@ export function writeLayer(level, layer, { home, cwd, pluginRoot = DEFAULT_PLUGI
   const file = layerPath(level, { home, cwd });
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
-  const { clean, reasons } = sanitize(layer, roleNames);
+  const floorName = reviewerFloor(pluginRoot);
+  const { clean, reasons } = sanitize(layer, roleNames, floorName);
   if (reasons.length) throw new Refusal(reasons.join('; '));
-  if (other === undefined) other = loadLayer(level === 'user' ? 'project' : 'user', { home, cwd }, roleNames).layer;
-  else other = sanitize(other, roleNames).clean;
+  if (other === undefined) other = loadLayer(level === 'user' ? 'project' : 'user', { home, cwd }, roleNames, floorName).layer;
+  else other = sanitize(other, roleNames, floorName).clean;
   const roles = level === 'user' ? resolveRoles(defaults, clean, other) : resolveRoles(defaults, other, clean);
   const clashes = nameClashes(roles);
   if (clashes.length) throw new Refusal(clashes.join('; '));

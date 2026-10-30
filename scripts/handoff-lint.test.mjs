@@ -513,3 +513,67 @@ test('read_next pointers: path, R-n, or path#heading with spaces only after the 
   assert.match(errs(make({ top: swap('read_next', '[a.md#x\ty]') })), /read_next/);
   assert.match(errs(make({ top: swap('read_next', '[a.md#]') })), /read_next/);
 });
+
+// ---- fresh-reviewer Handoff shape (handoff v2.0) ----
+const PARAPHRASE = 'The plan adds a lint rule so a contest needs evidence that a reviewer can open, and a ruling file for the CEO answers. It keeps security findings open until a fix. A comprehension gap is a Blocking row.';
+
+function freshHandoff({ mode = 'plan', paraphrase = PARAPHRASE, firstPass = '- none', extraFm = '', head = null, did = '- read the plan', blocking = '- none' } = {}) {
+  const shape = head ?? `## Paraphrase\n${paraphrase}\n## First pass\n${firstPass}\n`;
+  return `---\nstep: 03\nrole: fresh-reviewer\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\nreview-mode: ${mode}\ncontracts: [handoff v2.0]\n${extraFm}---\nBy: fresh-reviewer\n${shape}## Did\n${did}\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n## Next\n- go\n`;
+}
+const freshErrors = (text, opts) => lint(text, opts).errors.join('\n');
+
+test('a well-formed fresh-reviewer Handoff lints in both modes', () => {
+  assert.deepEqual(lint(freshHandoff()).errors, []);
+  assert.deepEqual(lint(freshHandoff({ mode: 'code', extraFm: 'model: opus\n' })).errors, []);
+  assert.deepEqual(lint(freshHandoff({ firstPass: '- R-1 the cited Contract is stale\n- R-2 task 3 has no depends-on' })).errors, []);
+  assert.deepEqual(lint(freshHandoff({ blocking: '- [comprehension] R-1 plan.md:3 — paraphrase differs — change the text' })).errors, []);
+});
+
+test('review-mode is required for the fresh reviewer, a plan or code value, and refused for every other Role', () => {
+  assert.match(freshErrors(freshHandoff().replace('review-mode: plan\n', '')), /missing review-mode/);
+  assert.match(freshErrors(freshHandoff({ mode: 'both' })), /review-mode must be plan\|code/);
+  const other = freshHandoff().replace('role: fresh-reviewer', 'role: code-reviewer').replace('By: fresh-reviewer', 'By: code-reviewer');
+  assert.match(freshErrors(other), /line 9: review-mode key is for fresh-reviewer only/);
+});
+
+test('the first two headings are ## Paraphrase then ## First pass', () => {
+  assert.match(freshErrors(freshHandoff({ head: '## First pass\n- none\n' })), /Paraphrase/);
+  assert.match(freshErrors(freshHandoff({ head: `## First pass\n- none\n## Paraphrase\n${PARAPHRASE}\n` })), /needs ## Paraphrase as its first heading/);
+  assert.match(freshErrors(freshHandoff({ head: `## Paraphrase\n${PARAPHRASE}\n## Did\n- x\n## First pass\n- none\n` })), /First pass directly after/);
+  assert.match(freshErrors(freshHandoff({ head: `## Paraphrase\n${PARAPHRASE}\n` })), /First pass/);
+});
+
+test('the paraphrase is 200 to 1200 characters of non-empty lines', () => {
+  const pad = n => 'a'.repeat(n);
+  assert.match(freshErrors(freshHandoff({ paraphrase: pad(199) })), /paraphrase must be 200-1200 characters \(got 199\)/);
+  assert.match(freshErrors(freshHandoff({ paraphrase: pad(1201) })), /paraphrase must be 200-1200 characters \(got 1201\)/);
+  assert.equal(lint(freshHandoff({ paraphrase: pad(200) })).errors.length, 0);
+  assert.equal(lint(freshHandoff({ paraphrase: pad(1200) })).errors.length, 0);
+  assert.match(freshErrors(freshHandoff({ paraphrase: '\n\n' })), /paraphrase must be 200-1200 characters \(got 0\)/);
+  // Empty lines do not count; the lines are joined by one line break.
+  assert.deepEqual(lint(freshHandoff({ paraphrase: `${pad(100)}\n\n\n${pad(99)}` })).errors, []);
+  assert.match(freshErrors(freshHandoff({ paraphrase: `${pad(100)}\n\n\n${pad(98)}` })), /\(got 199\)/);
+});
+
+test('a first pass line is "- R-<n> …" or "- none"', () => {
+  assert.match(freshErrors(freshHandoff({ firstPass: 'prose about the plan' })), /first pass line/);
+  assert.match(freshErrors(freshHandoff({ firstPass: '- the plan is fine' })), /first pass line/);
+});
+
+test('no run Handoff is cited before the first pass ends; the plan may be', () => {
+  const cited = /Handoff cited before the first pass ends/;
+  assert.match(freshErrors(freshHandoff({ firstPass: '- R-1 03-architect.md says the Contract is v1' })), cited);
+  assert.match(freshErrors(freshHandoff({ firstPass: '- R-1 see .company/work/t/03-architect.md:4' })), cited);
+  assert.match(freshErrors(freshHandoff({ paraphrase: `${PARAPHRASE} It follows 05-product-manager.md.` })), cited);
+  assert.match(freshErrors(freshHandoff({ firstPass: '- R-1 see 1103-architect.md' })), cited);
+  assert.deepEqual(lint(freshHandoff({ firstPass: '- R-1 03-plan.md task T2 breaks the Contract' })).errors, []);
+  assert.deepEqual(lint(freshHandoff({ firstPass: '- R-1 .company/work/t/03-architect-plan.md:12' })).errors, []);
+  assert.deepEqual(lint(freshHandoff({ did: '- compared with 03-architect.md after the first pass' })).errors, []);
+});
+
+test('the fresh reviewer is a reviewer Role: rows need R-<n>; a comprehension row needs the fresh reviewer', () => {
+  assert.match(freshErrors(freshHandoff({ blocking: '- [spec] plan.md:3 — vague — fix' })), /R-<n>/);
+  const code = freshHandoff({ blocking: '- [comprehension] R-1 plan.md:3 — paraphrase differs — change the text' }).replace('fresh-reviewer', 'architect');
+  assert.match(freshErrors(code), /comprehension tag is for fresh-reviewer only/);
+});

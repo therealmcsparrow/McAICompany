@@ -82,6 +82,8 @@ async function boot($: Env[0], on: Env[1], surface: (typeof SURFACES)[number], o
   const posix = (path: string) => path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
   on('fs.stat', ((_: unknown, raw: { path: string }) => {
     const e = { path: posix(raw.path) }
+    // The shell reads the plugin's own manifest at session start; that is not a gate read.
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) throw new Error('ENOENT')
     fsCalls.push(`stat ${e.path}`)
     if (e.path.startsWith(`${RUN}/.gate-`)) {
       if (world.marker === 'gone') throw new Error('ENOENT')

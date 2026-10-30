@@ -201,7 +201,7 @@ async function staticCheckWith(rel, mutate) {
 // ----- personalities ------------------------------------------------------------------------
 
 test('AC1 a Role with no personality set gets its shipped default, for every Role, in a cooler turn', () => {
-  assert.equal(AGENTS.length, 35);
+  assert.equal(AGENTS.length, 36);
   assert.deepEqual(Object.keys(DEFAULTS).sort(), AGENTS);
   const sb = sandbox();
   const { result, text } = stage(sb, AGENTS);
@@ -289,7 +289,7 @@ test('AC4 the settings every other prompt is built from are identical whatever t
   const strip = out => out.replace(/"revision":"[0-9a-f]{64}"/, '"revision":"R"');
   const base = sb.run('settings.mjs', ['get']);
   assert.equal(base.code, 0, base.err);
-  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 35);
+  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 36);
   const variants = [
     () => sb.user({ roles: { architect: { personality: { temperament: 'loud and brave', talk: 'big words', topic: 'ZQXtopicZQX', intelligence: 'low', creativity: 'high' } } } }),
     () => { fs.rmSync(sb.userFile); sb.project({ roles: { qa: { personality: { intelligence: 'high', creativity: 'low' } }, writer: { personality: { topic: 'tea' } } } }); },
@@ -498,6 +498,12 @@ const HAND_OVER_CHANGES = {
       "   - `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7), when in the tier set.",
       "   - UI work: `aico:hands-on-tester` (one per Persona) when `lanes.hands_on` is on (`aico:pipeline` §1.7), when in the tier set ∥ `aico:accessibility-tester` when `lanes.accessibility` is on (`aico:pipeline` §1.7).",
       "   **→ Ship Gate** (after tier-set.mjs sync --diff; added Roles and lanes first)",
+      // The plan review step 2e and the second reviewer lane.
+      /^2e\. `aico:fresh-reviewer` plan review, only when `plan-review` is in the set/,
+      /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
+      // The prototype step and the destination spec at ship (v0.21.0).
+      /^1b\. Prototype, only after a Run it answer at the Brief Gate/,
+      /^5a\. `aico:product-manager`: destination spec, checked by `spec-check\.mjs`/,
     ],
   },
   fix: {
@@ -514,6 +520,7 @@ const HAND_OVER_CHANGES = {
       "2. The engineer who owns that Module (backend/frontend/desktop/ai-data/game): root cause via `aico:debugging`, fix via `aico:tdd`. After its commit, tier-set.mjs sync --diff (tier-path.md step 8).",
       "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.",
       "   **→ Ship Gate** (after sync --diff; added lanes first)",
+      /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
     ],
   },
   incident: {
@@ -529,10 +536,21 @@ const HAND_OVER_CHANGES = {
       /^5\. End of run\. Tell the CEO to start the fix: `\/aico:fix "<root cause> \(incident \.company\/work\/<slug>\/\)"`.*CRA final report: 14 days after a fix is available, 1 month after the notification.*\/aico:lead.*Never drop a deadline\.$/,
     ],
   },
-  // Maintain gains one line: the contract-drift check (contract-index v1).
+  // Maintain gains the contract-drift check (contract-index v1) and the gated behaviour drift report (drift-report v1): its
+  // argument-hint becomes `[drift]` (the only argument besides help), the Run line names it, and one gated line sits under step 1.
+  // The hint change is pinned exactly in `hint`; any other hint still fails the argument-hint check.
   maintain: {
-    removed: [],
-    added: ['   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.'],
+    hint: 'argument-hint: [drift]',
+    removed: [
+      'argument-hint: (no arguments)',
+      'Run with `aico:pipeline`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.',
+    ],
+    added: [
+      'argument-hint: [drift]',
+      'Run with `aico:pipeline`. The only argument besides `help` is `drift`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.',
+      '   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.',
+      /^   Drift \(behaviour check, informational\): only when the argument is exactly `drift`; without it, no drift Step is dispatched and `pick` is not run\. Then run `node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" drift-report pick` and follow `references\/drift\.md`/,
+    ],
   },
   // Standards gains one line: reuse of a fresh rule pack (rule-pack v1.2).
   standards: {
@@ -565,7 +583,7 @@ function assertV012Playbook(name) {
   const now = ctLines(read(file));
   assert.ok(!read(file).includes('\r'), `${name}: LF only`);
   assert.equal(frontKey(now, 'name'), frontKey(old, 'name'), `${name}: name`);
-  assert.equal(frontKey(now, 'argument-hint'), frontKey(old, 'argument-hint'), `${name}: argument-hint`);
+  assert.equal(frontKey(now, 'argument-hint'), (HAND_OVER_CHANGES[name] || {}).hint ?? frontKey(old, 'argument-hint'), `${name}: argument-hint`);
   assert.ok(old.includes('disable-model-invocation: true'), `${name}: was hidden in v0.12.0`);
   assert.equal(now.includes('disable-model-invocation: true'), CEO_ONLY_PLAYBOOKS.includes(name), `${name}: hidden exactly when CEO-only`);
   assert.ok(old.includes(`**Help:** argument is exactly \`help\` or \`--help\` → follow \`aico:help\` for \`${name}\` and stop.`), `${name}: v0.12.0 Help line`);
@@ -635,8 +653,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   for (const name of soft) assertV012Playbook(name);
   // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
-  // 23 removed lines: the ten above, plus the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
-  assert.equal(Number(removedFromPipeline), 23);
+  // 24 removed lines: the ten above, plus the Task slug line (the exceptions-on-file refusal, v0.21.0), the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
+  assert.equal(Number(removedFromPipeline), 24);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 
@@ -761,7 +779,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   const expectedPlaybooks = ['audit', 'brainstorm', 'client', 'cooler', 'feature', 'feedback', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'usability-test', 'vulnscan'];
   assert.deepEqual([...m.playbooks].sort(), expectedPlaybooks);
   assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
-  assert.equal(m.roles.length, 34);
+  assert.equal(m.roles.length, 35);
   assert.deepEqual(m.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
@@ -771,7 +789,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
     const baseAgents = git('ls-tree', '--name-only', BASE, 'agents/').split('\n').filter(Boolean).map(f => path.basename(f, '.md')).sort();
-    assert.deepEqual([...m.roles].sort(), [...baseAgents, 'reprompter'].sort());
+    assert.deepEqual([...m.roles].sort(), [...baseAgents, 'reprompter', 'fresh-reviewer'].sort());
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();

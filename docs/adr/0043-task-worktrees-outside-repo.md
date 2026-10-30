@@ -1,0 +1,3 @@
+# Parallel builder tasks run in per-task git worktrees beside the repo, merged in plan order by one script
+
+When worktrees are on and a wave has two or more tasks, each task gets its own worktree in a folder beside the repo, on a branch under the `aico-wt/` namespace, and only the worktree script merges the branches back into the run branch, in plan order, with a conflict stopping the merge instead of dropping a side. Beside the repo, because inside it every stack's test runner, type checker and linter would scan the copies; a separate branch namespace, because git cannot hold a branch `aico/<slug>` and branches below it at once. This is hard to reverse: the scheduler's wave rule, the dispatch line, cleanup and the leftover checks at every Gate all assume this layout.

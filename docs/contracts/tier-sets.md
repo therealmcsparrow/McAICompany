@@ -1,7 +1,8 @@
-# Contract: tier-sets v1.1
+# Contract: tier-sets v1.2
 
 Provider: `scripts/tier-set.mjs` (data file loader, tier and path decision, forced-high path check, run record writer and reader; Node built-ins only) and the plugin data file `company/tier-sets.json`. Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/tier-path.md`), only through the CLI, only for `aico:feature` and `aico:fix` runs. Consumers: the Lead (which Roles and lanes to dispatch, the `Risk tier:` of each later dispatch, the Gate summary lines), and `scripts/ledger.mjs` `ship` through the exported `readTierPath` (`token-ledger` v1.4).
 Uses: `run-state` v1.3 `show(root, slug)` (the view's `tier`, read only), `plan-tasks` v1 exports `parsePlan` and `normalizePath` and its plan file name rule, `aico-settings` v1.8 `pipeline.short_path` (passed in by the caller as `--short`; the script reads no settings), `run-state` v1.4 `triage check --route fix` (only through the caller's `--triage` value), `git` (object format and base resolution at `begin`; object format, the base check, Core and the diff at `sync`), run as the "Git" paragraph below says (v1.1; `rule-check` v1.1 and `review-depth` v1.1 run their git the same way).
+v1.2 is additive (task elephant-goldfish, T3): the route gains `prototype`, `plan-review`, `second-reviewer` and `destination-spec` (table below), the data file `rev` is 2, and `plan-review` and `second-reviewer` are in no low set. A trust rule is unchanged: a set never adds a Role the route would not run.
 Rationale: `docs/adr/0034-tier-sets-data-file.md`. Amended in Fix round 1 of task low-tier-path, before v1 shipped (`.company/work/low-tier-path/02-plan.md` "Fix round 1 amendments"), in Fix round 2 (replace refs off, base in the repo's object format, base an ancestor of HEAD; `.company/work/low-tier-path/28-architect.md`), and in Fix round 3 (`sync` checks against the Lead's own base, never the record's alone; the ancestor exit code read exactly; `.company/work/low-tier-path/34-architect.md`).
 
 ## Trust rules (the Architect's; builders implement them, never decide them)
@@ -18,16 +19,16 @@ Rationale: `docs/adr/0034-tier-sets-data-file.md`. Amended in Fix round 1 of tas
 Plugin file, shipped with the plugin; a project cannot change it (Brief Gate Q3; `aico-settings` v1.8 can only switch the short path off). At most 16 KiB, UTF-8, a regular file and not a link (`lstat`). Exactly these keys:
 
 ```json
-{ "v": 1, "rev": 1,
+{ "v": 1, "rev": 2,
   "playbooks": {
     "feature": {
-      "low": ["product-manager", "design-researcher", "architect", "ui-ux-designer", "brand-artist", "spikes", "senior-engineer-map", "ruleset-sign-off", "builders", "asset-artists", "code-reviewer", "qa", "legal", "accessibility-tester", "writer", "localizer", "devops"],
-      "medium": ["<the 22 feature route entries, route order>"],
-      "high": ["<the 22 feature route entries, route order>"] },
+      "low": ["product-manager", "prototype", "design-researcher", "architect", "ui-ux-designer", "brand-artist", "spikes", "senior-engineer-map", "ruleset-sign-off", "builders", "asset-artists", "code-reviewer", "qa", "legal", "accessibility-tester", "writer", "destination-spec", "localizer", "devops"],
+      "medium": ["<the 26 feature route entries, route order>"],
+      "high": ["<the 26 feature route entries, route order>"] },
     "fix": {
       "low": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "devops"],
-      "medium": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "security", "devops"],
-      "high": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "security", "devops"] } },
+      "medium": ["qa-reproduce", "owning-engineer", "code-reviewer", "second-reviewer", "qa-rerun", "security", "devops"],
+      "high": ["qa-reproduce", "owning-engineer", "code-reviewer", "second-reviewer", "qa-rerun", "security", "devops"] } },
   "forced_high": ["<tokens, below>"] }
 ```
 The shipped file writes the medium and high lists out in full (no placeholders). `rev` is the version key the ledger stores: an integer 1-999, raised by one for every change to the file (a tune is a data-file change and a new `rev`).
@@ -36,6 +37,7 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 | Playbook | Entry | Step today | v0.18 condition (unchanged; the Lead applies it) | Required in every tier |
 |---|---|---|---|---|
 | feature | `product-manager` | 1 | always | yes |
+| feature | `prototype` | 1b | the CEO accepted a prototype question at the Brief Gate (v1.2) | |
 | feature | `design-researcher` | 1a | UI work and `## Design skills` stale | |
 | feature | `architect` | 2 | always | |
 | feature | `ui-ux-designer` | 2 | UI work | |
@@ -45,9 +47,11 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 | feature | `senior-engineer-research` | 2c | a pack missing, stale or new | |
 | feature | `senior-engineer-map` | 2c | otherwise | |
 | feature | `ruleset-sign-off` | 2d | Must rules added or changed | |
+| feature | `plan-review` | 2e | the architect ran; after `ruleset-sign-off` (v1.2) | |
 | feature | `builders` | 3 | always | yes |
 | feature | `asset-artists` | 3b | the build needs Assets | |
 | feature | `code-reviewer` | 4 | always | yes |
+| feature | `second-reviewer` | 4 | run tier `high` and `pipeline.second_reviewer` `on`; after `code-reviewer` (v1.2) | |
 | feature | `qa` | 4 | always | yes |
 | feature | `security` | 4 | `lanes.security` on | |
 | feature | `senior-engineer-compliance` | 4 | `lanes.compliance` on | |
@@ -55,15 +59,18 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 | feature | `hands-on-tester` | 4 | UI work and `lanes.hands_on` on | |
 | feature | `accessibility-tester` | 4 | UI work and `lanes.accessibility` on | yes |
 | feature | `writer` | 5 | user-facing | |
+| feature | `destination-spec` | 5a | always; after `writer` (v1.2) | |
 | feature | `localizer` | 5 | `languages:` lists more than one | |
 | feature | `devops` | 6 | as approved | |
 | fix | `qa-reproduce` | 1 | always | yes |
 | fix | `owning-engineer` | 2 | always | yes |
 | fix | `code-reviewer` | 3 | always | yes |
+| fix | `second-reviewer` | 3 | run tier `high` and `pipeline.second_reviewer` `on`; after `code-reviewer` (v1.2) | |
 | fix | `qa-rerun` | 3 | always | yes |
 | fix | `security` | 3 | touches auth, input handling or data, and `lanes.security` on | |
 | fix | `devops` | 4 | a release is needed | |
 
+Low sets (v1.2): `plan-review` and `second-reviewer` are in no low set (feature or fix); `prototype` and `destination-spec` are in every feature set, the low one included, because each is gated by its condition or required at ship, and in no fix set. Medium and high equal the route.
 Gates, the Core/Contract Plan Gate exception of fix, the test per AC, the fix regression test, the full suite before the Ship Gate, the rule-check pre-filter and handoff-lint are not entries: no data file can touch them.
 `senior-engineer-map` when `senior-engineer-research` is due but not in the set: the Senior Engineer runs map and writes one `## Debt` line per missing, stale or new pack (`tier-path.md` step 7).
 `legal` and `accessibility-tester` are required by the Architect beyond AC2 (EU law: GDPR/AI Act advice and EAA/EN 301 549 stay at every tier).
@@ -124,7 +131,7 @@ Every key listed for an `ev` is required; every other key is refused. A first li
 - View: `{ v: 1, slug, state: "on", pb, start_tier, tier, path, why, rev, base, raised, cause, skipped, set, add }`, built from the record alone.
   - `tier` = the last `raise` tier, else the start tier. `raised` = true when any `raise` exists. `cause` = the first `raise` cause, else `null`.
   - `skipped` = the record's `skip`.
-  - `set` = `ROUTE_V018[pb]` minus `skipped` when not raised; `ROUTE_V018[pb]` when raised (medium and high always equal the v0.18 route, whatever the cause).
+  - `set` = `ROUTE_V018[pb]` minus `skipped` when not raised; `ROUTE_V018[pb]` when raised (medium and high always equal the route, whatever the cause).
   - `add` = `skipped` when raised, else empty. They never ran, so all of them run before the Ship Gate.
 - A legacy second argument (`{ pluginRoot }`) is accepted and ignored.
 

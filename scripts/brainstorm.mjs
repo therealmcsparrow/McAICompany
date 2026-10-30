@@ -24,7 +24,8 @@ const KEY_RE = new RegExp(`^([^()]{1,40}) \\((${ROLE})\\)$`);
 const IDEA_RE = /^I-[1-9]\d{0,5}\.[1-9]\d{0,5}$/;
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/;
 const STRUCTURE = /^(?:#|\*\*Lead:\*\*|\*\*CEO:\*\*)/;
-const MARKERS = [' — src: R', ' — default: ', ' — options: '];
+const MARKERS = [' — src: R', ' — default: ', ' — options: ', ' — why: '];
+const WHY_MIN = 10, WHY_MAX = 120;
 
 export class Refused extends Error {
   constructor(message) { super(`refused: ${message}`); this.name = 'Refused'; }
@@ -41,7 +42,7 @@ const isPlain = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const sanitize = s => s.replace(new RegExp(CONTROL.source, 'g'), '?');
 const normQ = s => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
 
-// ---- brainstorm-reply v1 ----
+// ---- brainstorm-reply v2.0 ----
 function skipReply(pass) {
   return { pass, skip: true, ideas: [], risk: null, questions: [], reply_to: null, replies_to: [], estimate: null, lenient: [] };
 }
@@ -62,19 +63,26 @@ function parseQuestion(line, n, reasons) {
   const m = /^Q \[(blocking|nice-to-have)\]: (.*)$/.exec(line);
   if (!m) { reasons.push(`line ${n}: question tag must be [blocking] or [nice-to-have]`); return null; }
   const rest = m[2];
-  const di = rest.lastIndexOf(' | default: ');
+  const wi = rest.lastIndexOf(' | why: ');
+  const di = wi < 0 ? -1 : rest.lastIndexOf(' | default: ', wi);
   const oi = di < 0 ? -1 : rest.lastIndexOf(' | options: ', di);
+  if (wi < 0) { reasons.push(`line ${n}: a question needs a why part`); return null; }
   if (oi < 0) { reasons.push(`line ${n}: a question needs options and a default`); return null; }
   const text = rest.slice(0, oi).trim();
   const options = rest.slice(oi + 12, di).split(' / ').map(s => s.trim());
-  const def = rest.slice(di + 12).trim();
-  if ([text, def, ...options].some(hasMarker)) { reasons.push(`line ${n}: reserved marker inside a question`); return null; }
+  const def = rest.slice(di + 12, wi).trim();
+  const why = rest.slice(wi + 8);
+  const whyLen = [...why].length;
+  if (why !== why.trim() || whyLen < WHY_MIN || whyLen > WHY_MAX || why.includes('|')) {
+    reasons.push(`line ${n}: the why part must be ${WHY_MIN} to ${WHY_MAX} characters without "|"`); return null;
+  }
+  if ([text, def, why, ...options].some(hasMarker)) { reasons.push(`line ${n}: reserved marker inside a question`); return null; }
   if (!text || text.length > 300) { reasons.push(`line ${n}: question text must be 1 to 300 characters`); return null; }
   if (options.length < 2 || options.length > 3 || options.some(o => !o || o.length > 80 || o.includes('|'))) {
     reasons.push(`line ${n}: a question needs 2 or 3 options`); return null;
   }
   if (!options.includes(def)) { reasons.push(`line ${n}: the default must be one of the options`); return null; }
-  return { tag: m[1], text, options, default: def };
+  return { tag: m[1], text, options, default: def, why };
 }
 
 function parseRe(line, n, round, known, role, reasons) {
@@ -355,10 +363,22 @@ const qId = s => {
 const openQuestions = L => questionsOf(L).map(x => x.q).filter(q => q.status === 'open')
   .sort((a, b) => (a.tag === b.tag ? 0 : a.tag === 'blocking' ? -1 : 1) || b.votes - a.votes || a.id - b.id);
 
+// The reason a Role gave for its default: the first stored reply line with the same question text, read by the reply parser.
+// A question the CEO queued has none (null).
+function whyOf(L, text) {
+  for (const raw of L) {
+    const line = raw.trimEnd();
+    if (!/^(?:[-*] )?Q \[/.test(line) || line.length > MAX_LINE) continue;
+    const q = parseQuestion(BULLET_RE.test(line) ? line.slice(2) : line, 0, []);
+    if (q && q.text === text) return q.why;
+  }
+  return null;
+}
+
 export function queue(text) {
   const { L } = loadDoc(text);
   const open = openQuestions(L)
-    .map(q => ({ id: `Q-${q.id}`, tag: q.tag, votes: q.votes, text: q.text, options: q.options, default: q.default }));
+    .map(q => ({ id: `Q-${q.id}`, tag: q.tag, votes: q.votes, text: q.text, options: q.options, default: q.default, why: whyOf(L, q.text) }));
   const answered = questionsOf(L).map(x => x.q).filter(q => q.status === 'answered').sort((a, b) => a.id - b.id)
     .map(q => ({ id: `Q-${q.id}`, text: q.text }));
   return { ask: open.slice(0, 3), next_up: open[3] ?? null, answered };

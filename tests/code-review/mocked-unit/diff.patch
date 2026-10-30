@@ -1,0 +1,51 @@
+diff --git a/src/mail/queue.mjs b/src/mail/queue.mjs
+index e97e23e..d6d9b82 100644
+--- a/src/mail/queue.mjs
++++ b/src/mail/queue.mjs
+@@ -1,9 +1,16 @@
+ export const mailQueue = {
+-  drain(queue, send) {
++  drain(queue, send, { maxFailures = 3 } = {}) {
+     let sent = 0;
+-    while (queue.length > 0) {
+-      send(queue.shift());
+-      sent += 1;
++    let failures = 0;
++    while (queue.length > 0 && failures < maxFailures) {
++      const message = queue.shift();
++      try {
++        send(message);
++        sent += 1;
++      } catch {
++        failures += 1;
++        queue.push(message);
++      }
+     }
+     return sent;
+   }
+diff --git a/src/mail/queue.test.mjs b/src/mail/queue.test.mjs
+index a4f7f50..bf72966 100644
+--- a/src/mail/queue.test.mjs
++++ b/src/mail/queue.test.mjs
+@@ -1,4 +1,4 @@
+-import { test } from 'node:test';
++import { test, mock } from 'node:test';
+ import assert from 'node:assert/strict';
+ import { mailQueue } from './queue.mjs';
+ 
+@@ -7,3 +7,15 @@ test('drain sends every message and returns the count', () => {
+   assert.equal(mailQueue.drain(['a', 'b'], (m) => seen.push(m)), 2);
+   assert.deepEqual(seen, ['a', 'b']);
+ });
++
++test('drain stops after maxFailures failed sends', () => {
++  const queue = ['a', 'b', 'c'];
++  const failing = () => {
++    throw new Error('relay down');
++  };
++  mock.method(mailQueue, 'drain', () => 0);
++  const sent = mailQueue.drain(queue, failing, { maxFailures: 2 });
++  assert.equal(sent, 0);
++  assert.equal(mailQueue.drain.mock.callCount(), 1);
++  mock.restoreAll();
++});

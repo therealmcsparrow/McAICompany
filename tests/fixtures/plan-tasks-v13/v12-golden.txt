@@ -1,0 +1,34 @@
+$ check demo 02-plan.md --cap 3 --mode parallel
+exit 0
+plan-tasks: 4 tasks, 3 marked, 1 alone, cap 3 (parallel)
+wave 1: T1, T2
+wave 2: T3 depends T1
+wave 3: T4 alone T3
+warning T4: runs alone: parallel: no
+$ begin demo 02-plan.md --cap 3 --mode parallel
+exit 0
+plan-tasks: 4 tasks, 3 marked, 1 alone, cap 3 (parallel)
+begun
+$ next demo
+exit 0
+next: round 0, running 0 of cap 3
+start T1 backend-engineer
+start T2 frontend-engineer
+wait T3 depends T1
+wait T4 depends T2
+done 0 of 4
+$ start demo T1
+exit 0
+started T1
+$ start demo T2
+exit 0
+started T2
+$ next demo --json
+exit 0
+{"v":1,"round":0,"cap":3,"running":2,"start":[],"wait":[{"task":"T3","reason":"depends","on":"T1"},{"task":"T4","reason":"depends","on":"T2"}],"done":0,"total":4,"complete":false}
+$ done demo T1
+exit 0
+done T1
+$ read demo
+exit 0
+{"v":1,"slug":"demo","state":"on","plan":"02-plan.md","hash":"58007f752e74","cap":3,"mode":"parallel","effective_cap":3,"round":0,"running":["T2"],"done":{"0":["T1"]},"peak":2,"waits":0,"out":0,"sibling":0}

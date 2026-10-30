@@ -1,13 +1,13 @@
-// The one status line of the plugin: `<savvy> · <blast> · <cost> · <reflect>` (the host adds its own 8 cell prefix).
+// The one status line of the plugin: `v<x.y.z> · <savvy> · <blast> · <cost> · <reflect>` (the host adds its own 8 cell prefix).
 import { cellWidth, fit } from './format.mjs';
 
 export const STATUS_MAX = 70;
 // Stands in the first slot while no run part (`savvy`) is set, when the caller asks for it.
 export const IDLE = 'aico idle';
-// Per-part caps in terminal cells: 61 + 3 * 3 = 70; the host prefix is 8 cells, so the row stays within 80 with 2 spare.
-export const STATUS_CAPS = Object.freeze({ savvy: 22, blast: 12, cost: 17, reflect: 10 });
+// Per-part caps in terminal cells: 8 + 17 + 10 + 13 + 10 + 4 * 3 = 70; the host prefix is 8 cells, so the row stays within 80 with 2 spare.
+export const STATUS_CAPS = Object.freeze({ version: 8, savvy: 17, blast: 10, cost: 13, reflect: 10 });
 const SEP = ' · ';
-const ORDER = ['savvy', 'blast', 'cost', 'reflect'];
+const ORDER = ['version', 'savvy', 'blast', 'cost', 'reflect'];
 const DROP = ['reflect', 'cost', 'blast'];
 
 function onePart(value, cap) {
@@ -34,7 +34,12 @@ export function composeStatus(parts, options) {
     if (Object.keys(have).length > 1) delete have[key];
   }
   if (cellWidth(line()) <= max) return line();
-  const first = ORDER.find((k) => k in have);
-  have[first] = fit(have[first], Math.max(1, max));
+  // The version stays whole; the first other part gives way. A line of the version alone is cut only as a last resort.
+  const first = ORDER.find((k) => k !== 'version' && k in have);
+  if (first === undefined) have.version = fit(have.version, Math.max(1, max));
+  else {
+    const rest = cellWidth(line()) - cellWidth(have[first]);
+    have[first] = fit(have[first], Math.max(1, max - rest));
+  }
   return line();
 }

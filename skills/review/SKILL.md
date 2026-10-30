@@ -5,7 +5,7 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Scope: the judging diff** (rule git.M-SEC4, below; the dispatch `Base commit:`, never `HEAD~1`), added and changed lines only; older code is Debt. Use the checklist of `superpowers:requesting-code-review` or `mattpocock-skills:code-review` if available, minus reviewer-dispatch steps. Pre-filter findings are advisory: confirm each; only you close a review.
+**Scope: the judging diff** (rule git.M-SEC4, below; the dispatch `Base commit:`, never `HEAD~1`), added and changed lines only; older code is Debt. Fresh reviewer (`Review mode:`): `references/fresh-review.md`. Pre-filter findings are advisory: confirm each; only you close a review.
 
 **Judging diff** (rule git.M-SEC4): the one form for a diff that judges what the run changed, from the dispatch's full `Base commit:` to `refs/heads/aico/<slug>` (`<slug>` is in `Output:`), run from the top level:
 `GIT_NO_REPLACE_OBJECTS=1 GIT_LITERAL_PATHSPECS=1 git --no-replace-objects --literal-pathspecs -c core.fsmonitor=false -c diff.ignoreSubmodules=none diff --no-ext-diff --no-textconv --no-color --no-relative --ignore-submodules=none [-z --name-only | --numstat …] --end-of-options <Base commit> refs/heads/aico/<slug>`
@@ -13,7 +13,7 @@ Never `<a>...<b>`, `HEAD`, `HEAD~n`, a short sha or a ref name as base. `git sym
 
 **Goldfish first pass** (`dispatch-prompt` v4): write findings from the brief's ACs, the plan, its Contracts and the diff before opening builder Handoffs; then add or withdraw, naming each under `## Decisions`. A builder's claim closes nothing.
 
-**Tool checks.** Read `rule-check.mjs list`; don't re-judge or restate those rules. Confirm each `T-` row: confirmed → `## Blocking`, same ID; rejected → Nit `T-<n> | <file>[:<line>] | not confirmed | <why> | none`. A tool never blocks on its own; report `tool failed: <id>` as a row (`binary-content` blocks, see above). Compliance stays a separate lane.
+**Tool checks.** Read `rule-check.mjs list`; don't re-judge or restate those rules. Confirm each `T-` row: confirmed → `## Blocking`, same ID; rejected → Nit `T-<n> | <file>[:<line>] | not confirmed | <why> | none`. A tool never blocks on its own; report `tool failed: <id>` as a row.
 
 **Depth.** `Review depth:` comes from `review-depth.mjs`, not the builder's label. `full`: every touched line plus callers and Contracts; `standard`: the scope. Raise to `full` for a Contract, Core or security path, never lower it. Absent or invalid → `full`.
 
@@ -23,6 +23,6 @@ Never `<a>...<b>`, `HEAD`, `HEAD~n`, a short sha or a ref name as base. `git sym
 
 A code comment about Handoffs, Steps, Roles, AI or company process is `## Blocking` `spec` (`aico:tdd`).
 
-**Sort:** bug, spec miss, Contract violation, missing test, security risk → `## Blocking`; style → `## Nits`.
+**Sort:** bug, spec miss, Contract violation, missing test, security risk → `## Blocking`; style → `## Nits`. A test that asserts its own setup or mocks the unit under test is `## Blocking` `[test]` (`aico:tdd`, `plan-tasks` v1.3 `seams:`).
 
 **Open decisions.** A finding caused by a choice the plan left open (no `Decided:` line) also gets a Nit `[open-decision] <plan file>:<line or section> — <the open choice>`. The tag never appears under `## Blocking`; a bug it caused stays Blocking, untagged.

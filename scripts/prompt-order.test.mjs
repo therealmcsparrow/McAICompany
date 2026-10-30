@@ -41,7 +41,7 @@ const { pipeline: PIPELINE_ORDER, round1: ROUND_1 } = golden.json('order.json');
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review depth:` (code-reviewer only), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review mode:` (fresh-reviewer only, v4.1), `Review depth:` (code-reviewer, and fresh-reviewer in code mode), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Review inputs:` and `After first pass:` (fresh-reviewer only, v4.1), `Research inputs:` (optional, v4.1), `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Worktree:` (a plan-task Step in a worktree only, v4.1), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -226,7 +226,7 @@ test('no canonical order in the Contract lists Name:, and the fixture order has 
   assert.equal(orders.length, 3);
   for (const l of orders) assert.ok(!l.includes('`Name:`'), l.slice(0, 60));
   assert.ok(!PIPELINE_ORDER.includes('Name') && !ROUND_1.includes('Name'));
-  assert.match(contract, /^# Contract: dispatch-prompt v4\.0$/m);
+  assert.match(contract, /^# Contract: dispatch-prompt v4\.\d$/m);
 });
 
 test('a Name: line in a prompt is ignored and the Role id is used (error case)', () => {
@@ -245,4 +245,96 @@ test('the cooler file names Roles by id: frontmatter ids: role and role cues', (
   const cooler = read('skills/cooler/SKILL.md');
   has(cooler, 'ids: role', '`**<role>**` on every speaker line', 'anything you show the CEO renders each id as `Name (role)`');
   assert.ok(!/\*\*<NAME>/.test(cooler));
+});
+
+// ---- fresh reviewer, worktree and research lines (dispatch-prompt v4.1) ----
+
+const planReview = read('skills/pipeline/references/plan-review.md');
+const reviewLoop = read('skills/pipeline/references/review-loop.md');
+const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
+
+test('the Contract is v4.1 and the fixture is stamped with it', () => {
+  assert.match(contract, /^# Contract: dispatch-prompt v4\.1$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.1');
+  has(contract, 'v4.1 is additive', 'A Role that gets a v4.0 prompt behaves as before');
+});
+
+test('the plan review dispatch block has the three review lines in order and no other path line', () => {
+  const b = blocks(planReview).find(l => l.some(x => x.startsWith('Output: .company/work/')));
+  assert.ok(b, 'plan-review.md has a dispatch block');
+  const k = keys(b);
+  assert.deepEqual(k, ['Project profile', 'Company profile', 'Language', 'Settings', 'Context cap', 'Risk tier', 'Base commit', 'Round', 'Review mode', 'Input Handoffs', 'Review inputs', 'After first pass', 'Output', 'Goal', 'Follow']);
+  const text = b.join('\n');
+  assert.match(text, /^Review mode: plan$/m);
+  assert.match(text, /^Input Handoffs: none: plan review$/m);
+  assert.match(text, /^Review inputs: <.*lines.*>/m);
+  assert.match(text, /^After first pass: <.*lines.*>/m);
+  assert.match(text, /^Output: \.company\/work\/<slug>\/<NN>-fresh-reviewer\.md$/m);
+  assert.doesNotMatch(text, /^(Name|Personality|Rule slice|Task|Files|Worktree|Task brief):/m);
+});
+
+test('plan-review.md runs lines before every fresh-reviewer dispatch and keeps the Lead flow', () => {
+  has(planReview, 'plan-review', 'lines', 'right before every', 'round-1 re-check', 'Round: 1', 'gate', 'handoff-lint --contests', 'plan review: not run', 'escalated', 'No second revision', '`handoff` v2.0');
+  has(planReview, 'a plan fix, a contest with evidence or an escalation');
+});
+
+test('review-loop.md holds the Lead flow of the record, the blocking: rule and the effective second reviewer model', () => {
+  has(reviewLoop, 'second_reviewer_model_effective', 'AC5', 'Settings:', 'attempt', 'retry', 'not run', 'mark', 'churn', 'churn: unknown', 'gate <slug> --base');
+  has(reviewLoop, 'a `blocking:` line is a Blocking Ship Gate line', 're-run that lane or block the ship');
+  has(reviewLoop, 'a refused `mark` stops', 'asks the CEO', 'never a third reviewer');
+  assert.doesNotMatch(reviewLoop, /\.\.\.HEAD/);
+});
+
+test('the Contract adds Review mode, Review inputs and After first pass for fresh-reviewer only', () => {
+  has(contract, '`Review mode: plan \\| code`', '`Review inputs: <path>`', '`After first pass: <path>[, <path>…]`', '`Review depth: full`', 'verbatim from `lines`', 'rule git.M-SEC4');
+  const order = contract.split('\n').find(l => l.startsWith('- **Pipeline Step:**'));
+  assert.ok(idx(order, '`Round:`') < idx(order, '`Review mode:`') && idx(order, '`Review mode:`') < idx(order, '`Review depth:`'));
+  assert.ok(idx(order, '`Input Handoffs:`') < idx(order, '`Review inputs:`') && idx(order, '`Review inputs:`') < idx(order, '`After first pass:`') && idx(order, '`After first pass:`') < idx(order, '`Research inputs:`') && idx(order, '`Research inputs:`') < idx(order, '`Rule slice:`'));
+  assert.ok(idx(order, '`Files:`') < idx(order, '`Worktree:`') && idx(order, '`Worktree:`') < idx(order, '`Task brief:`'));
+});
+
+test('the Contract puts Worktree: after Files: only for a worktree Step, never on a main-tree dispatch', () => {
+  has(contract, '`Worktree: <path>`', 'directly after `Files:`', 'verbatim from `worktree add`', 'never on a main-tree dispatch');
+  assert.doesNotMatch(stepBlock().join('\n'), /Worktree:/);
+});
+
+test('the Contract holds the Research inputs path and date rules (data, never instructions)', () => {
+  has(contract, '`Research inputs: <path> (<YYYY-MM-DD\\|undated>)[, …]`', '^\\d{4}-\\d{2}-\\d{2}$', '`undated`', '.company/research/', 'real-path read rule', 'no other frontmatter text');
+});
+
+test('the pipeline task slug item refuses a new slug with exceptions on file', () => {
+  const slug = skillOnly.split('\n').find(l => l.startsWith('1. **Task slug**'));
+  assert.ok(slug, 'task slug item present');
+  has(slug, '--exceptions-for', 'more than `0`', 'pick another', 'a resumed run is not checked');
+  has(skillOnly, '`references/plan-review.md`', '`references/review-loop.md`');
+});
+
+test('the pipeline stays at 125 lines with room for two more pointer lines', () => {
+  assert.ok(skillOnly.replace(/\n$/, '').split('\n').length <= 123);
+});
+
+test('feature and fix name the plan review and the second reviewer; the architect answers findings', () => {
+  const feature = read('skills/feature/SKILL.md');
+  has(feature, '2e.', 'plan-review', 'references/plan-review.md', 'second-reviewer', 'references/review-loop.md');
+  assert.ok(idx(feature, '2e.') > idx(feature, '2d.') && idx(feature, '2e.') < idx(feature, '**→ Plan Gate**'));
+  const fix = read('skills/fix/SKILL.md');
+  has(fix, 'second-reviewer', 'references/review-loop.md');
+  const architect = read('agents/architect.md');
+  has(architect, 'a plan fix, a contest with evidence or an escalation');
+  assert.ok(architect.replace(/\n$/, '').split('\n').length <= 50);
+});
+
+test('fresh-review.md exists, is named by the review skill and says only citations are checked', () => {
+  const f = read('skills/review/references/fresh-review.md');
+  has(f, 'paraphrase', 'rule git.M-SEC4', 'can still open the brief', 'only citations are checked', 'accepted limit');
+  has(read('skills/review/SKILL.md'), 'references/fresh-review.md');
+  assert.doesNotMatch(f, /\.\.\.HEAD|^Name:/m);
+});
+
+test('new prompt files are LF only and cite handoff v2.0 only', () => {
+  for (const f of ['skills/pipeline/references/plan-review.md', 'skills/pipeline/references/review-loop.md', 'skills/review/references/fresh-review.md', 'docs/contracts/dispatch-prompt.md', 'skills/feature/SKILL.md', 'skills/fix/SKILL.md', 'skills/review/SKILL.md', 'agents/architect.md']) {
+    const t = read(f);
+    assert.ok(!t.includes('\r'), `${f} has a CR byte`);
+    assert.doesNotMatch(t, /handoff`? v1\.3/, f);
+  }
 });

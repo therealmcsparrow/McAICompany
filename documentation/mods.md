@@ -76,17 +76,18 @@ If you need a guard on those, use a git hook in the repository. Blast Radius als
 The four mods share one status line. They cannot overwrite each other. Claude Code prints `⚠ aico: ` before it, and the mods supply only the text after that. The text is in compact form:
 
 ```
-<savvy> · <blast> · <cost> · <reflect>
+v<version> · <savvy> · <blast> · <cost> · <reflect>
 ```
 
 Only the parts that have something to say appear, always in this order:
 
-1. `savvy`: `W<wave> S<step> <role> <elapsed>`, for example `W3 S12 ba-eng 14m`. The role is cut to two letters per leading word and three for the last. After the run ends it reads `ended <outcome> <elapsed>`. Elapsed time is in whole minutes. An unknown field shows `?`.
-2. `blast`: `⚠ <category>` for 60 seconds after a warning. Before a code review it reads `rev <depth>`.
-3. `cost`: `<n> tax <m>m`, for example `12.4k tax 60m`. `n` is the run's cache write count. The clock shows `exp` when the cache has expired and `?` when unknown.
-4. `reflect`: `<n> lessons` (`1 lesson`), the suggestions waiting for you.
+1. `version`: the plugin version, for example `v0.20.0`, read from the plugin's own `plugin.json`. It is left out when that file cannot be read. It is the last part to go when the line gets too long.
+2. `savvy`: `W<wave> S<step> <role> <elapsed>`, for example `W3 S12 ba-eng 14m`. The role is cut to two letters per leading word and three for the last. After the run ends it reads `ended <outcome> <elapsed>`. Elapsed time is in whole minutes. An unknown field shows `?`.
+3. `blast`: `⚠ <category>` for 60 seconds after a warning. Before a code review it reads `rev <depth>`.
+4. `cost`: `<n> tax <m>m`, for example `12.4k tax 60m`. `n` is the run's cache write count. The clock shows `exp` when the cache has expired and `?` when unknown.
+5. `reflect`: `<n> lessons` (`1 lesson`), the suggestions waiting for you.
 
-Each part has a fixed width, so the text is at most 70 cells. With the host's `⚠ aico: ` in front, the line fits one 80-column terminal row. If the host still cuts it, the last parts are lost first.
+Each part has a fixed width, so the text is at most 70 cells (version 8, Savvy 17, Blast Radius 10, Cache Tax 13, Reflect 10). With the host's `⚠ aico: ` in front, the line fits one 80-column terminal row. If the host still cuts it, the last parts are lost first.
 
 The compact form leaves out the slug, Fix round, Gates, Names, spend, exact counts, expiry time and blast paths. Those are in the panes. Where a pane does not open on its own (under 110 columns, or `claude -p`), the status line is all you see of that mod.
 
@@ -141,10 +142,10 @@ If a project settings file is broken, Blast Radius and Reflect `mode` stay at th
 
 ## Check that the mods are on
 
-With no run active, the status line shows only the part `aico idle`. Use one of these to check that the mods loaded:
+With no run active, the status line shows only the version and the part `aico idle`. Use one of these to check that the mods loaded:
 
-1. Start a session and look for the toast `aico mods ready`. It shows once, at the start.
-2. Look at the status line. With no run it shows the part `aico idle`.
+1. Start a session and look for the toast `aico <version> mods ready`. It shows once, at the start.
+2. Look at the status line. With no run it shows `v<version> · aico idle`.
 3. Run `/aico-cost`. The Cache Tax pane opens; with no run it says "No aico run is active".
 
 If none of these appear, the mods are not loaded. In a folder you have never trusted, Claude Code loads no mods until you accept "Yes, I trust this folder".

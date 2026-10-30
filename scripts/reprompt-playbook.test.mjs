@@ -96,7 +96,19 @@ test('the Playbook sets Round and Asks left itself; the reply check is an allow-
     '`v: 1` frontmatter and the six `## ` parts',
     'Re-dispatch once with `Asks left: 0` and the same Request files', 'A second malformed reply in a row', "end '<slug>' abort");
   assert.doesNotMatch(section('3. Read the reply'), /more than 3 `Q<n>` lines|headerless/);
-  has(/Valid question line: `- \[spec\] Q<n>: <question> — options: <label> \(Recommended\)/);
+  has(/Valid question line: `- \[spec\] Q<n>: <question> — options: <label> \(Recommended\)[^\n]* — why: <reason>`/);
+});
+
+test('v2.0: a question line needs a why part and a reply with no open question ends the rounds', () => {
+  has('Contract: `reprompt` v2.0', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
+  has('`noOpenQuestion`', 'say "No open question left"', 'hold no further question round', "that option's description only");
+  assert.ok(section('4. Question form').includes('`(Recommended)` one first and its `why` as that option'));
+  assert.doesNotMatch(text, /Contract v1\b|`reprompt` v1\.2/);
+  const agent = readFileSync(join(root, 'agents', 'reprompter.md'), 'utf8');
+  assert.ok(agent.includes('— why: <reason>') && agent.includes('- No open question left — <why, 10-200 characters>'));
+  assert.ok(agent.includes('never a question to fill a count'));
+  assert.ok(agent.split('\n').length <= 51 && text.split('\n').length <= 126);
+  assert.doesNotMatch(agent + text, /^Name:/m);
 });
 
 test('round 0 names the Request files as the CEO request; snap and reply calls take only Lead-made tokens', () => {

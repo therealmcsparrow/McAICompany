@@ -38,7 +38,7 @@ function sandbox(t, { company = true } = {}) {
     names[role] = a.name;
   }
   fs.writeFileSync(path.join(pluginRoot, 'company', 'names.json'), JSON.stringify(names));
-  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.entries(AGENTS).map(([r, a]) => [r, a.model])), protected: ['architect', 'code-reviewer', 'pentester', 'security', 'vuln-scanner'] }));
+  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor: Object.fromEntries(Object.entries(AGENTS).map(([r, a]) => [r, a.model])), protected: ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'] }));
   return {
     home, cwd, pluginRoot,
     config: path.join(home, 'config.json'),
@@ -1533,6 +1533,70 @@ test('Short path hint equals the Contract text once and sits as the fourth hint,
   const hint = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
   const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
   assert.ok(par > 0 && par < hint && hint < h2, `order ${par} ${hint} ${h2}`);
+});
+
+const pageSource = () => fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+const contractHint = (start) => {
+  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
+  const m = new RegExp(`exactly: "(${start}: [^"]*)"`).exec(contract);
+  assert.ok(m, `Contract hint ${start} not found`);
+  return m[1];
+};
+
+test('user-only rows come after Short path in the pipeline panel, in order, and are built through el() and textContent', () => {
+  const html = pageSource();
+  const short = html.indexOf('shortPathRow(tbody, defaults.short_path)');
+  const rev = html.indexOf('userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer');
+  const model = html.indexOf('userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer_model');
+  const wt = html.indexOf('userOnlyRow(tbody, USER_ONLY_ROWS.worktrees');
+  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  assert.ok(short > 0 && short < rev && rev < model && model < wt && wt < review, `order ${short} ${rev} ${model} ${wt} ${review}`);
+  assert.ok(!html.includes('innerHTML'));
+  const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
+  assert.ok(!/tabindex/i.test(fn));
+  for (const needle of ["el('label', { for: id }", "'aria-describedby'", "'aria-live'", "getElementById('field-live')", 'Locked']) {
+    assert.ok(fn.includes(needle), needle);
+  }
+});
+
+test('Second reviewer, Second reviewer model and Worktrees hints equal the Contract text once, each tied by id', () => {
+  const html = pageSource();
+  const cases = [
+    ['SECOND_REVIEWER_HINT', 'second-reviewer-hint', 'Second reviewer'],
+    ['SECOND_REVIEWER_MODEL_HINT', 'second-reviewer-model-hint', 'Second reviewer model'],
+    ['WORKTREES_HINT', 'worktrees-hint', 'Worktrees'],
+  ];
+  let last = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
+  for (const [name, id, start] of cases) {
+    const text = contractHint(start);
+    assert.equal(html.split(`const ${name} = ${JSON.stringify(text)};`).length - 1, 1, `${name} must equal the Contract text, once`);
+    const at = html.indexOf(`id: '${id}' }, ${name}`);
+    assert.ok(at > last, `${id} hint order`);
+    last = at;
+  }
+  assert.ok(last < html.indexOf("el('h2', {}, 'Reprompt')"));
+});
+
+test('Second reviewer model offers only the values the code-reviewer floor allows', () => {
+  const html = pageSource();
+  const fn = html.slice(html.indexOf('function reviewerModelOptions'), html.indexOf('function userOnlyRow'));
+  assert.ok(fn.includes("protectedFloor('code-reviewer')"));
+  assert.ok(fn.includes('MODEL_RANK'));
+  // Run the page's own function against a floor of opus, sonnet and an unreadable floor.
+  const run = (floor) => [...vm.runInNewContext(`${'const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3 };'}\nconst protectedFloor = () => ${JSON.stringify(floor)};\n${fn}\nreviewerModelOptions()`)];
+  assert.deepEqual(run('opus'), ['default', 'opus']);
+  assert.deepEqual(run('sonnet'), ['default', 'sonnet', 'opus']);
+  assert.deepEqual(run(''), ['default', 'opus']);
+});
+
+test('user-only rows lock the Project column with a visible reason and have no project control', () => {
+  const html = pageSource();
+  const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
+  assert.ok(fn.includes("'not set'"));
+  assert.ok(fn.includes('Locked. Set at the user level only.'));
+  assert.ok(!fn.includes("['user', 'project']"), 'no project select');
+  for (const key of ['second_reviewer', 'second_reviewer_model', 'worktrees']) assert.ok(html.includes(`${key}:`), key);
+  assert.ok(html.includes('REFUSED_USER_ONLY'));
 });
 
 test('a stored project short_path on shows disabled and is described as ignored', () => {

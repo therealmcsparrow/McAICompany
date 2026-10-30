@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1.1). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v1.2). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
@@ -44,11 +44,12 @@ const CAUSES = ['step', 'plan', 'diff', 'sets', 'ceo'];
 
 export const ROUTE_V018 = Object.freeze({
   feature: Object.freeze([
-    'product-manager', 'design-researcher', 'architect', 'ui-ux-designer', 'brand-artist', 'spikes', 'persona-tester',
-    'senior-engineer-research', 'senior-engineer-map', 'ruleset-sign-off', 'builders', 'asset-artists', 'code-reviewer', 'qa',
-    'security', 'senior-engineer-compliance', 'legal', 'hands-on-tester', 'accessibility-tester', 'writer', 'localizer', 'devops'
+    'product-manager', 'prototype', 'design-researcher', 'architect', 'ui-ux-designer', 'brand-artist', 'spikes', 'persona-tester',
+    'senior-engineer-research', 'senior-engineer-map', 'ruleset-sign-off', 'plan-review', 'builders', 'asset-artists', 'code-reviewer',
+    'second-reviewer', 'qa', 'security', 'senior-engineer-compliance', 'legal', 'hands-on-tester', 'accessibility-tester', 'writer',
+    'destination-spec', 'localizer', 'devops'
   ]),
-  fix: Object.freeze(['qa-reproduce', 'owning-engineer', 'code-reviewer', 'qa-rerun', 'security', 'devops'])
+  fix: Object.freeze(['qa-reproduce', 'owning-engineer', 'code-reviewer', 'second-reviewer', 'qa-rerun', 'security', 'devops'])
 });
 
 const REQUIRED = {
