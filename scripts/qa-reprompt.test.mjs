@@ -160,7 +160,7 @@ function buildDispatch({ slug, nn = 1, round = 0, asks = 1, lang = 'en', answers
       Language: lang,
       Name: 'Lynn',
       Settings: settings,
-      'Context cap': '150000 handover 120000',
+      'Context cap': '95000 handover 85500',
       'Base commit': 'f54fb09',
       Round: String(round),
       'Asks left': String(asks),

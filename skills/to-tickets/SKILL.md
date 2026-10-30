@@ -40,7 +40,7 @@ Add `Settings:` as `aico:pipeline` §2 says. `needs-ceo` → ask in a form, re-d
 Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" plan-tasks check '<slug>' 'plan.md' --cap '<cap>' --mode '<mode>' --handover '<h>'` from the §1.7 `settings get` JSON:
 - `<cap>` = `pipeline.parallel_cap` when it is 3, 4 or 5, else 4.
 - `<mode>` = `sequential` when `pipeline.dispatch` is exactly `sequential`, else `parallel`; never `waves` (no build, no worktree).
-- `<h>` = the smallest floor(`context_cap` × 0.8) over the task Roles of the plan, digits only; no JSON → 120000.
+- `<h>` = `85500`, the fixed handover of every Role, digits only.
 
 Ready comes from the exit code and the `ERROR` lines of this check, never the Architect's Handoff. Exit 0 and no `ERROR` line → ready. Otherwise one fix round: re-dispatch `architect` (`Round: 1`, Step `02`) with only the `ERROR` lines and the same fields, then run the check again. Still failing → `not ready`: show the `ERROR` lines, name the plan path, stop.
 
