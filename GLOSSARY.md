@@ -35,7 +35,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After the Fix-round limit (2 by default, 0–5 in settings) on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded, never looped.
 
-**Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate. Nothing enters Core without that approval.
+**Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate, or, in feature and fix, which have no Plan Gate, at the Ship Gate. Nothing enters Core without that approval. The approved Core list enters `.company/project.md` after Ship Gate approval in feature and fix; until then reviewers judge Core against the list in the Architect's Handoff.
 
 **Module** — a self-contained, pluggable unit of functionality outside Core. A Module talks to Core and to other Modules only through Contracts, never through their internals.
 
@@ -77,7 +77,13 @@ _Avoid_: orchestrator (use Lead).
 
 **Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only, and only with `pipeline.review_format: pilot` (default `plain`). Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
 
-**Context cap** — `context_cap`: the max context a Role gets, set in Settings (global and per Role). Default 150000, floor 60000. A Role hands over at 80%; high-risk work is never below the default. A soft limit passed in the dispatch.
+**Context cap** — the fixed max context of every Role and tier: 95000, with a hand-over at 85500, passed in each dispatch as `Context cap: 95000 handover 85500`. The old `context_cap` settings are accepted but have no effect. A soft limit.
+
+**Idea flow** — the route of `/aico:idea` and `/aico:bug`: capture, a grill, a reprompt, then the routes A to E, ticket approval and the tickets form F, G, E. Both kinds share one route; the kind decides the build Playbook (`aico:feature` for an idea, `aico:fix` for a bug). The allowed picks come from the `idea-flow` script. Record: `.company/work/<slug>/idea-flow.jsonl`. Contract `idea-flow` v1.1.
+
+**Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.
+
+**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a `PreCompact` hook writes from the run's records at a clean point, and a `SessionStart` hook returns after compaction, so the Lead continues without the CEO. Needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` set to `98500` once. Contract `lead-handoff` v1; ADR 0049.
 
 **Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 
@@ -103,7 +109,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Film script** — an optional separate file (`brainstorm.film_script`, off by default) where every line quotes a stored brainstorm reply. No model call.
 
-**Context budget** — no agent (Role or Lead) goes over 150k tokens of context by default. A Role near it stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
+**Context budget** — no agent (Role or Lead) goes over 95000 tokens of context. A Role at 85500 stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
 
 **Risk tier** — `low | medium | high`, set in the Brief and carried in every dispatch; forced high for auth, payments, personal data, migrations or a Contract change. Drives test depth, rule scope and routing. A Role may raise it, never lower it.
 

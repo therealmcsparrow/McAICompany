@@ -7,7 +7,7 @@ argument-hint: <idea | file>
 
 # Playbook: to-spec
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:to-spec` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/to-spec.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook to-spec` first; exit not 0 → show its output line and stop.
 
@@ -36,7 +36,7 @@ Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call; omit the line when none
-Context cap: <cap> handover <n>   # from aico:pipeline Setup item 8, high-tier floor included
+Context cap: <cap> handover <n>   # fixed, from aico:pipeline Setup item 8
 Follow aico:handoff.
 ```
 Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7). `blocked` or `needs-ceo` → ask the CEO in a form, then re-dispatch once.
@@ -56,7 +56,7 @@ Then run `git status --porcelain`; any entry that was not in the baseline → st
 
 ## 5. End
 End by printing the path `.company/work/<slug>/spec.md` (prints the path first), the check line (`spec-check: <e> errors`) and, in `Language:`:
-- ready → the next commands: `/aico:to-tickets .company/work/<slug>/spec.md` (cut tickets) and `/aico:feature .company/work/<slug>/spec.md` (build; it runs its own Brief Gate and Plan Gate and writes the shipped spec). The draft is not approved by this run.
+- ready → the next commands: `/aico:to-tickets .company/work/<slug>/spec.md` (cut tickets) and `/aico:feature .company/work/<slug>/spec.md` (build; it keeps only the Ship Gate and writes the shipped spec). The draft is not approved by this run.
 - not ready → the ERROR lines, and that `/aico:to-spec .company/work/<slug>/spec.md` can be rerun on it.
 The next command runs only when the CEO types it (only the CEO starts it). Start nothing yourself; never use the Skill tool for it.
 Nothing is committed: the draft and the work Handoffs stay in `.company/work/<slug>/`; aico never commits them (grill-file v1 Personal data). Write nothing to `.company/lessons.md`.

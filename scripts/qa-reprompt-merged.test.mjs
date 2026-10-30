@@ -311,7 +311,7 @@ test('question_rounds: the Playbook reads it from the settings JSON, falls back 
   assert.match(playbook, /not a whole number 0 to 3 → `1`/);
   assert.match(playbook, /`Asks left:` = `question_rounds` - `held`; always `0` on an edit dispatch/);
   assert.match(read('docs/contracts/aico-settings.md'), /reprompt\.question_rounds/);
-  assert.match(read('documentation/commands.md'), /Question rounds[^\n]*0 to 3[^\n]*default 1|0 to 3, default 1/);
+  assert.match(read('documentation/commands/settings.md'), /Question rounds[^\n]*0 to 3[^\n]*default 1|0 to 3, default 1/);
 });
 
 // ---------- settings page ----------
@@ -339,7 +339,7 @@ test('settings page: the served page has the Reprompt table and the Question rou
   assert.ok(html.includes(`'${hint}'`), `the page shows the Contract hint exactly: ${hint}`);
   assert.ok(!/Question rounds is a whole number from 0 to 3/.test(html), 'the old hint wording is gone');
   // Directly under the pipeline table: after the context cap hint, before the Brainstorm heading.
-  const capHint = html.indexOf('The context cap is a whole number from 60000 to 1000000');
+  const capHint = html.indexOf('The context cap is fixed.');
   const reprompt = html.indexOf("el('h2', {}, 'Reprompt')");
   const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
   assert.ok(capHint > 0 && reprompt > capHint && brainstorm > reprompt, 'order: context cap hint, Reprompt heading, Brainstorm heading');
@@ -420,12 +420,8 @@ test('reprompt Playbook: the Help line is the first body line and is the always-
   assert.ok(!playbookLines[titleAt + 2].includes('aico:help'));
 });
 
-test('reprompt Playbook: the Help line answers from an entry that exists in commands.md', () => {
-  const commands = read('documentation/commands.md');
-  const start = commands.indexOf('### `/aico:reprompt`');
-  assert.ok(start >= 0);
-  const next = commands.indexOf('\n### ', start + 1);
-  const entry = commands.slice(start, next < 0 ? undefined : next);
+test('reprompt Playbook: the Help line answers from the page documentation/commands/reprompt.md', () => {
+  const entry = read('documentation/commands/reprompt.md');
   assert.match(entry, /`\/aico:reprompt <prompt to improve>`/);
   assert.match(entry, /\/aico:reprompt help/);
   assert.match(entry, /\*\*Example\.\*\*/);

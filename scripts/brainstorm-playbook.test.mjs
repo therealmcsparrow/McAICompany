@@ -27,7 +27,7 @@ const section = (text, from, to) => {
 
 // ---- every rule of the 0.10.0 Playbook still holds ----
 test('AC14 help: the argument help or --help is answered from commands.md and stops', () => {
-  has(skill, 'argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:brainstorm` entry of `documentation/commands.md`', 'change nothing, start nothing, and stop');
+  has(skill, 'argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/brainstorm.md`', 'change nothing, start nothing, and stop');
 });
 
 test('AC14 Roles think, nobody builds, and every Role is read-only', () => {

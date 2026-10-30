@@ -1046,7 +1046,7 @@ test('AC15 pass and insufficient name no next step', (t) => {
 });
 
 test('AC15 the rollback step is the same in the docs, the Contract and the settings the step names', (t) => {
-  const concepts = read('documentation/concepts.md');
+  const concepts = read('documentation/concepts/parallel-steps.md');
   assert.match(concepts, /\*\*Rolling back\.\*\* When the verdict says `fail`, set `pipeline\.parallel_cap` to 5 in `\/aico:settings`/);
   assert.match(concepts, /set `pipeline\.dispatch` to `sequential` instead/);
   assert.match(concepts, /Reviewer, QA and Security verdicts and the Gates do not change\./);

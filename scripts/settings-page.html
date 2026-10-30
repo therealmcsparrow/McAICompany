@@ -564,21 +564,10 @@ function roleGroups() {
   if (other.length) groups.push(['Other', other]);
   return groups;
 }
-// A whole-number text field; the server holds the 60000-1000000 range. Nothing is cut off: an over-long or out-of-range entry gets an error text.
-function capInput(label) {
-  return el('input', { type: 'text', inputMode: 'numeric', placeholder: '—', 'aria-label': label });
-}
 const NAME_LIMIT = 30;
 const nameProblem = (label, raw) => {
   const n = [...raw.trim()].length;
   return n > NAME_LIMIT ? `Error: ${label} is ${n} characters. The limit is ${NAME_LIMIT}. Remove ${n - NAME_LIMIT}.` : '';
-};
-const capProblem = (label, raw) => {
-  const t = raw.trim();
-  if (t === '') return '';
-  const n = Number(t);
-  if (!Number.isInteger(n)) return `Error: ${label} must be a whole number from 60000 to 1000000.`;
-  return n < 60000 || n > 1000000 ? `Error: ${label} is out of range. Use a whole number from 60000 to 1000000.` : '';
 };
 let checkSeq = 0;
 // Shows a field-linked error under a bound control after every refresh. The caller places control.errEl next to it.
@@ -633,11 +622,10 @@ function roleCell(level, role) {
   const name = withProblem(bindLayer(el('input', { type: 'text', placeholder: '—' }), level, ['roles', role, 'name']), 'Name', nameProblem);
   const model = bindLayer(selectFor(MODELS, null), level, ['roles', role, 'model']);
   const effort = bindLayer(selectFor(EFFORTS, null), level, ['roles', role, 'effort']);
-  const cap = withProblem(bindLayer(el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), level, ['roles', role, 'context_cap'], Number), 'Cap', capProblem);
   return el('td', {}, el('div', { class: 'cell' },
     roleField(level, role, 'name', 'Name', name, el('p', { class: 'hint' }, NAME_HINTS[projectOn() ? level : `${level}-off`])),
     roleField(level, role, 'model', 'Model', model, protectedFloor(role) ? el('p', { class: 'hint' }, `Protected: runs at ${protectedFloor(role)} or higher at every risk tier.`) : null),
-    roleField(level, role, 'effort', 'Effort', effort), roleField(level, role, 'cap', 'Cap', cap)));
+    roleField(level, role, 'effort', 'Effort', effort)));
 }
 function renderRoles(panel) {
   const groups = roleGroups();
@@ -684,15 +672,8 @@ function renderRoles(panel) {
         const floor = protectedFloor(role);
         const [picked] = parts[1];
         if (floor && typeof picked === 'string' && picked !== 'inherit' && (MODEL_RANK[picked] ?? 0) < (MODEL_RANK[floor] ?? 0)) parts[1] = [floor, 'floor'];
-        // The Role cap, else the global cap, else the plugin default.
-        const capPath = ['roles', role, 'context_cap'];
-        const globalPath = ['pipeline', 'context_cap'];
-        if (!dirty(capPath) && !dirty(globalPath) && resolved.context_cap !== undefined) parts.push([`cap ${resolved.context_cap}`, resolved.source?.context_cap ?? 'plugin']);
-        else {
-          const [own, ownFrom] = pickSource(capPath, undefined);
-          const [global, globalFrom] = pickSource(globalPath, state.plugin.pipeline.context_cap);
-          parts.push(own !== undefined ? [`cap ${own}`, ownFrom] : [`cap ${global}`, globalFrom]);
-        }
+        // The context cap is fixed; every Role runs at the same value.
+        parts.push([`cap ${resolved.context_cap ?? state.plugin.pipeline.context_cap}`, 'plugin']);
         effect.append(parts.map(([v]) => v ?? '—').join(' · '));
         const sources = [...new Set(parts.map(([, s]) => s))];
         effect.append(el('span', { class: 'src' }, `(${sources.join(', ')})`));
@@ -1184,6 +1165,16 @@ function renderLanguage(panel) {
 }
 
 // ---------- Pipeline tab ----------
+const CONTEXT_CAP_HINT = 'The context cap is fixed. Every Role and every risk tier uses it. A context_cap value in an old settings file is kept but has no effect.';
+// Fixed, read-only row: the row header names it for screen readers; the value is plain text, never an input.
+function contextCapRow(tbody, value) {
+  const cell = el('td', { colspan: 4, id: 'context-cap-fixed' });
+  tbody.append(el('tr', {}, el('th', { scope: 'row' }, 'Context cap'), cell));
+  syncers.push(() => {
+    const text = `${getIn(state.resolved, ['pipeline', 'context_cap']) ?? value} (fixed, cannot be changed)`;
+    if (cell.textContent !== text) cell.textContent = text;
+  });
+}
 function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, format, opts = {}) {
   const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
   const lockId = `lock-${path.join('-')}`;
@@ -1413,11 +1404,10 @@ function renderPipeline(panel) {
   userOnlyRow(tbody, USER_ONLY_ROWS.worktrees, 'worktrees', defaults.worktrees ?? 'off');
   pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
     (l) => selectFor(['plain', 'pilot'], l), String, String);
-  pipelineRow(tbody, 'Context cap', ['pipeline', 'context_cap'], defaults.context_cap,
-    (l) => capInput(l), Number, String, { problem: capProblem });
+  contextCapRow(tbody, defaults.context_cap);
   panel.append(wrap);
   panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
-  panel.append(el('p', { class: 'hint' }, 'The context cap is a whole number from 60000 to 1000000. A Role can set its own on the Roles tab. High-risk work never runs below 150000.'));
+  panel.append(el('p', { class: 'hint' }, CONTEXT_CAP_HINT));
   panel.append(el('p', { class: 'hint', id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT));
   panel.append(el('p', { class: 'hint', id: 'short-path-hint' }, SHORT_PATH_HINT));
   panel.append(el('p', { class: 'hint', id: 'second-reviewer-hint' }, SECOND_REVIEWER_HINT));

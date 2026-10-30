@@ -60,3 +60,10 @@ test('planning names the four task fields and feedback names parallel-verdict an
 test('dispatch-prompt v3.5 adds Task: and Files: after Rule slice:', () => {
   has(dispatch, /^# Contract: dispatch-prompt v(?:[4-9]|\d{2,})\.\d+$/m, '## Lines added in v3.5', '| `Task: <id>` |', '| `Files: <path>[, <path>…] \\| none` |');
 });
+
+test('feature and fix runs have no Plan Gate: check runs before begin, the block goes to the Ship Gate summary', () => {
+  const rule = parallel.split('\n').find((l) => l.startsWith('**Feature and fix.**'));
+  assert.ok(rule, 'no Feature and fix rule');
+  has(rule, 'no Plan Gate', 'Ship Gate summary', 'Fix / Stop', '--handover \'<h>\'', 'never bypassed');
+  has(parallel, '3. **Plan Gate.** Before the form run `check');
+});

@@ -181,14 +181,67 @@ test('project template has ## Design skills in the empty form (DS)', () => {
   assert.doesNotMatch(t, /aico_language:/);
 });
 
-test('Playbook without a ### /aico:<name> entry in documentation/commands.md is an error', () => {
+const PAGE = (h1, extra = '') => `${h1}\n\n## In short\n\nx\n\n## How it works\n\n1. x\n\n## Technical details\n\nx\n${extra}`;
+
+test('Playbook without a documentation/commands/<name>.md page is an error', () => {
   const root = fixture({ skills: { p: playbook('p'), q: playbook('q') } });
-  write(root, 'documentation/commands.md', '# Commands\n\n### `/aico:p`\n\ntext\n');
+  write(root, 'documentation/commands/p.md', PAGE('# `/aico:p`'));
   const r = check(root);
-  assert.ok(r.errors.some(e => e.includes('Playbook q has no ### /aico:q')), r.errors.join('\n'));
-  assert.ok(!r.errors.some(e => e.includes('Playbook p ')), r.errors.join('\n'));
-  write(root, 'documentation/commands.md', '### /aico:p\n### /aico:q\n');
+  assert.ok(r.errors.some(e => e.includes('commands/q.md: Playbook q has no command page')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('commands/p.md')), r.errors.join('\n'));
+  write(root, 'documentation/commands/q.md', PAGE('# /aico:q'));
   assert.deepEqual(check(root).errors, []);
+});
+
+test('command page needs the right line 1 and must name a Playbook', () => {
+  const root = fixture({ skills: { p: playbook('p') } });
+  write(root, 'documentation/commands/p.md', PAGE('# Something else'));
+  write(root, 'documentation/commands/ghost.md', PAGE('# `/aico:ghost`'));
+  const r = check(root);
+  assert.ok(r.errors.some(e => e.includes('commands/p.md: line 1')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('commands/ghost.md: names no Playbook')), r.errors.join('\n'));
+});
+
+test('roles pages: every agent has one and every page is an agent', () => {
+  const root = fixture({ agents: { qa: agent('qa'), support: agent('support') } });
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', '| **qa** | sonnet | medium | x |\n| **support** | sonnet | medium | x |\n'));
+  write(root, 'documentation/roles/qa.md', PAGE('# QA'));
+  write(root, 'documentation/roles/zed.md', PAGE('# Zed'));
+  const r = check(root);
+  assert.ok(r.errors.some(e => e.includes('roles/support.md: Role support has no page')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('roles/zed.md: names no agent')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('roles/qa.md')), r.errors.join('\n'));
+});
+
+test('documentation pages need the three sections in order; fenced headings do not count', () => {
+  const root = fixture({});
+  write(root, 'documentation/start/a.md', '# A\n\n## In short\n\n```\n## Fake\n```\n\n## How it works\n\n## Technical details\n');
+  write(root, 'documentation/start/b.md', '# B\n\n## How it works\n\n## In short\n\n## Technical details\n');
+  write(root, 'documentation/start/c.md', '# C\n\n## In short\n\n## How it works\n\n## Technical details\n\n## Extra\n');
+  const r = check(root);
+  assert.ok(!r.errors.some(e => e.includes('start/a.md')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('start/b.md: needs exactly')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('start/c.md: needs exactly')), r.errors.join('\n'));
+});
+
+test('documentation/ holds only README.md at the top level', () => {
+  const root = fixture({});
+  write(root, 'documentation/README.md', PAGE('# Docs'));
+  write(root, 'documentation/old.md', PAGE('# Old'));
+  const r = check(root);
+  assert.ok(r.errors.some(e => e.includes('documentation/old.md: only README.md')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('documentation/README.md')), r.errors.join('\n'));
+});
+
+test('relative links in documentation and README must resolve', () => {
+  const root = fixture({});
+  write(root, 'documentation/README.md', PAGE('# Docs', '[ok](start/a.md#x) [bad](start/nope.md) [web](https://x.y/z) [top](#t) [m](mailto:a@b.c)\n```\n[fenced](nope.md)\n```\n'));
+  write(root, 'documentation/start/a.md', PAGE('# A', '[up](../README.md)\n'));
+  write(root, 'README.md', '[d](documentation/start/a.md) [gone](documentation/start/gone.md)\n');
+  const r = check(root);
+  assert.ok(r.errors.some(e => e.includes('documentation/README.md:') && e.includes('start/nope.md')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.startsWith('ERROR README.md:') && e.includes('gone.md')), r.errors.join('\n'));
+  assert.equal(r.errors.filter(e => e.includes('link target')).length, 2, r.errors.join('\n'));
 });
 
 test('research entries need license and vetted', () => {
@@ -230,38 +283,38 @@ test('manifest check survives a __proto__ group key', () => {
   assert.ok(r.errors.some(e => e.includes('name fails')), r.errors.join('\n'));
 });
 
-test('Role count in plugin.json, README, roles.md and spec must equal agents/*.md', () => {
+test('Role count in plugin.json, README, roles/README.md and spec must equal agents/*.md', () => {
   const root = fixture({ agents: { qa: agent('qa'), support: agent('support') } });
   write(root, '.claude-plugin/plugin.json', '{ "description": "a Lead and 3 Role agents" }');
   write(root, 'README.md', 'routes work to 2 **Role** agents. See all 5 Roles.');
-  write(root, 'documentation/roles.md', 'The company has **2 Role agents**. **qa** **support**');
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', 'The company has **2 Role agents**. **qa** **support**'));
   write(root, 'docs/spec.md', '| qa | x |\n| support | x |\n2 Role agents.');
   const r = check(root);
   assert.ok(r.errors.some(e => e.includes('.claude-plugin/plugin.json: Role count 3 != 2')), r.errors.join('\n'));
   assert.ok(r.errors.some(e => e.includes('README.md: Role count 5 != 2')), r.errors.join('\n'));
-  assert.ok(!r.errors.some(e => e.includes('roles.md') || e.includes('spec.md')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('roles/README.md') || e.includes('spec.md')), r.errors.join('\n'));
 });
 
-test('an agent missing from roles.md or the spec roster is an error', () => {
+test('an agent missing from roles/README.md or the spec roster is an error', () => {
   const root = fixture({ agents: { qa: agent('qa'), support: agent('support') } });
-  write(root, 'documentation/roles.md', '**qa**');
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', '**qa**'));
   write(root, 'docs/spec.md', '| qa | x |');
   const r = check(root);
-  assert.ok(r.errors.some(e => e.includes('roles.md: Role support missing')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('roles/README.md: Role support missing')), r.errors.join('\n'));
   assert.ok(r.errors.some(e => e.includes('spec.md: Role support missing')), r.errors.join('\n'));
 });
 
-test('roles.md model or effort that differs from frontmatter is an error', () => {
+test('roles/README.md model or effort that differs from frontmatter is an error', () => {
   const root = fixture({ agents: { qa: agent('qa', 'Body.', 'sonnet', 'medium') } });
-  write(root, 'documentation/roles.md', '| **qa** | opus | medium | x |');
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', '| **qa** | opus | medium | x |'));
   let r = check(root);
-  assert.ok(r.errors.some(e => e.includes('documentation/roles.md: qa model opus != sonnet')), r.errors.join('\n'));
-  write(root, 'documentation/roles.md', '| **qa** (lead) | sonnet | high | x |');
+  assert.ok(r.errors.some(e => e.includes('documentation/roles/README.md: qa model opus != sonnet')), r.errors.join('\n'));
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', '| **qa** (lead) | sonnet | high | x |'));
   r = check(root);
-  assert.ok(r.errors.some(e => e.includes('documentation/roles.md: qa effort high != medium')), r.errors.join('\n'));
-  write(root, 'documentation/roles.md', '| **qa** | sonnet | medium | x |');
+  assert.ok(r.errors.some(e => e.includes('documentation/roles/README.md: qa effort high != medium')), r.errors.join('\n'));
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', '| **qa** | sonnet | medium | x |'));
   r = check(root);
-  assert.ok(!r.errors.some(e => e.includes('roles.md')), r.errors.join('\n'));
+  assert.ok(!r.errors.some(e => e.includes('roles/README.md')), r.errors.join('\n'));
 });
 
 test('package.json test script is a glob, not a list of files', () => {
@@ -1029,9 +1082,9 @@ test('company types: ALWAYS commands need no Type line', () => {
   assert.ok(!check(root).errors.some(e => e.includes('skills/help/')));
 });
 
-test('company types: software must be every agent but editor and the 19 Playbooks; a Playbook in no type is an error', () => {
+test('company types: software must be every agent but editor and the 24 Playbooks; a Playbook in no type is an error', () => {
   const errors = check(typeFixture()).errors;
-  assert.ok(errors.some(e => e.includes('software.json') && e.includes('playbooks must be the 19')), errors.join('\n'));
+  assert.ok(errors.some(e => e.includes('software.json') && e.includes('playbooks must be the 24')), errors.join('\n'));
   assert.ok(!errors.some(e => e.includes('roles must be every agent except editor')));
   const withEditor = check(typeFixture({ manifest: { roles: ['qa', 'skill-researcher', 'reprompter', 'editor'] } })).errors;
   assert.ok(withEditor.some(e => e.includes('roles must be every agent except editor')));

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { docFolder } from './doc-pages.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
@@ -76,7 +77,7 @@ test('AC36/AC48 fresh defaults: all four mods on; Blast Radius core ask, securit
   const b = MODS_DEFAULTS.blast_radius;
   assert.deepEqual([b.enabled, b.core, b.contract, b.security], [true, 'ask', 'warn', 'ask']);
   for (const k of ['savvy', 'cache_tax', 'reflect']) assert.equal(MODS_DEFAULTS[k].enabled, true);
-  assert.match(read('documentation/mods.md'), /`core: ask`, `security: ask`, `contract: warn`/);
+  assert.match(docFolder(root, 'mods'), /`core: ask`, `security: ask`, `contract: warn`/);
 });
 
 test('AC47/AC48 the commit gate registers for Bash and PowerShell only', () => {
@@ -87,7 +88,7 @@ test('AC47/AC48 the commit gate registers for Bash and PowerShell only', () => {
 });
 
 test('AC49 the docs name the four mods, the shell tools, the cache clock, no keep-warm and desktop unverified', () => {
-  const docs = read('documentation/mods.md');
+  const docs = docFolder(root, 'mods');
   for (const need of ['Savvy', 'Cache Tax', 'Reflect', 'Blast Radius', 'PowerShell', 'Bash', 'cache clock', 'no keep-warm', 'Unverified', 'nobody can be asked; commit refused', '<savvy> · <blast> · <cost> · <reflect>', 'mods.cache_tax.keep_warm']) {
     assert.ok(docs.includes(need) || docs.toLowerCase().includes(need.toLowerCase()), `documentation/mods.md lacks: ${need}`);
   }

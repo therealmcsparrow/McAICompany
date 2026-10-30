@@ -1,12 +1,12 @@
 ---
 name: usability-test
 description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Test a design or running product with every Persona in parallel (persona, hands-on, accessibility), merge the findings, optionally plan real-user tests, and route fixes.
-argument-hint: <what to test: design path, URL or app> [real-users]
+argument-hint: "<what to test: design path, URL or app> [real-users]"
 ---
 
 # Playbook: usability-test
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:usability-test` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/usability-test.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook usability-test` first; exit not 0 → show its output line and stop.
 

@@ -173,7 +173,7 @@ test('kept rules: reviewer never edits, Must never softened, old rules still pre
 
 test('handoff skill: context budget follows the Context cap line, lint runs from the plugin root', () => {
   const t = read('skills/handoff/SKILL.md');
-  has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '150000', '120000', 'never compute');
+  has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '95000', '85500', 'never compute');
   assert.doesNotMatch(t, /around 130k/);
   has(read('skills/pipeline/SKILL.md'), '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" handoff-lint');
   assert.doesNotMatch(read(PILOT), /node scripts\/handoff-lint\.mjs/);

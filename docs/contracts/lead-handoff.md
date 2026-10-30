@@ -1,0 +1,48 @@
+# Contract: lead-handoff v1.2
+
+v1.2 (task reprompt-20261030-1309-draft-2-draft; additive): a new record event `base` and CLI command `base <slug> <id>` keep the run's base commit for every Playbook, also before the tier-path record exists; `base-commit` is the tier-path base when usable, else the recorded `base`, else `unknown`; a 64-hex id is accepted in the Handoff.
+
+v1.1 (task reprompt-20261030-1309-draft-2-draft; additive): `base-commit` and `risk-tier` come from the run's tier-path record (`tier-sets` v1.2, written only by the Lead's `tier-set` commands), never from a file a Role wrote; the Handoff gains `tier-path` and `tier-set` after `risk-tier`; the fallback run scan ranks by newest modification time before it caps at 200 folders.
+
+New Contract. Provider: `scripts/lead-handover.mjs` (Node built-ins only). Mechanism: ADR 0049 (PreCompact and SessionStart hooks, a script-written Handoff). Writers of the record: the script only, through its hooks and its CLI. Consumers: the Lead (`read`, the injected Handoff) and the Ship Gate summary. Uses `run-state` v1.5 (exported `active` and `show`, plus a read-only parse of the run's `ask` and `gate` lines under the same lstat and 64 KiB limits), `idea-flow` v1.1 (`state`) and `tier-sets` v1.2 (`readTierPath`, read-only).
+
+## One-time setup
+The hand-over point is the Claude Code auto-compaction point. The CEO sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` = `98500` in the `env` block of the user settings (`~/.claude/settings.json`); a plugin cannot set it. Without it the Lead hands over only at Claude Code's default compaction point. Constants, exported by the script:
+- `CAP = 95000` (the fixed Context cap), `AUTO_COMPACT_WINDOW = 98500`, `COMPACT_RESERVE = 13000`, `HANDOVER_AT = 85500`, and `AUTO_COMPACT_WINDOW - COMPACT_RESERVE === HANDOVER_AT`.
+
+## Where it lives
+- Lead Handoff: `.company/work/<slug>/lead-handoff-<n>.md`, slug `^[a-z0-9][a-z0-9-]{0,63}$`. `<n>` is 1 + the highest number among existing `lead-handoff-<n>.md` files and `handover` events. Exclusive create (`O_CREAT|O_EXCL`), at most 8 KiB, LF only.
+- Record: `.company/work/<slug>/lead-handover.jsonl`. Append-only, one JSON object per line, at most 1000 lines of at most 512 bytes. Created once with exclusive create; every later open is an append that checks the file is a regular file with one link and the same `dev` and `ino` as its `lstat`; `O_NOFOLLOW` is ORed in only where it exists (never on win32). Every folder on the path is checked with `lstat` (no link, a directory).
+- Active run: `active(root)` from run-state; else the 200 newest by modification time of the `.company/work/*/idea-flow.jsonl` files modified within 12 hours (all folders are listed first, at most 20000, so the cap never drops a newer flow) whose `state` form is not `ended`. None: the hooks do nothing.
+
+## Record events
+Keys in this order: `v` (1), `n` (line number), `at` (UTC time to the second), `ev`, then:
+- `begin`: `playbook`.
+- `base`: `base` (a full object id, 40 or 64 lowercase hex, not all zeros). At most one per record; written only by the Lead's `base` command, never from a Role file.
+- `handover`: `file` (`lead-handoff-<n>.md`), `tokens` (integer or null), `window` (integer or null), `trigger` (`auto` | `manual`).
+- `resume`: `of` (the `<n>` of an earlier handover), `via` (`hook` when that handover's trigger was `auto`, `ceo` when `manual`).
+Any other key, type or value breaks the record.
+
+## Lead Handoff file
+Frontmatter, derived and validated by the script only, in this order: `slug`; `playbook` (last `begin`, else the idea-flow kind, else `unknown`); `step` (`<NN> <role>` of the newest Step file, else `none`); `round`; `base-commit` (the `base` of the tier-path record, hex 7 to 40 and not all zeros; else the record's `base` event; else `unknown`; `unknown` when the tier-path record is unreadable; never read from a Role-written file); `risk-tier` (the tier-path record's current tier; `high` when that record is unreadable; with no record, the highest tier the run's files show); `tier-path` (`none`, `broken`, or `<feature|fix> <short|full>`); `tier-set` (an inline list of the record's current route entries, empty without a record); `gate` (`none`, `<brief|plan|ship> open` for an `ask` with no later `gate`, else `<gate> <passed|changed|stopped>`); `form` (`none`, `pending gate-<g>`, `pending idea-<grill|routes|tickets>`, `pending step-<idea step>`); `records` (an inline list of the existing files among `run-state.jsonl`, `idea-flow.jsonl`, `tickets.jsonl`, and always `lead-handover.jsonl`, which this write creates); `running: none` (a clean point); `tokens-at-handover` (integer or `unknown`); `window` (integer or `unknown`); `trigger`. Then `## Next`: fixed template lines per state. No file text, transcript text or model text is copied into it. An answer is a record event, so a form still open is `pending` and is asked again.
+
+## CLI and hooks (cwd = product root)
+- `watch` (PreCompact adapter): stdin JSON at most 64 KiB, one parse, allow-listed fields (`hook_event_name`, `transcript_path`, `trigger`, `agent_id`). Not `PreCompact`, `agent_id` present (a subagent), no active run, or any error: exit 0, nothing written. Tokens = the last main-chain assistant `usage` (input + cache creation + cache read + output) in the last 1 MiB of a regular `transcript_path` whose real path lies under the real `projects` folder of the Claude config dir; otherwise unknown. Transcript text is never read as instruction, stored or echoed. A `subs` entry of the run with `stop` null (a Step running): tokens below `CAP` → exit 2, one fixed stderr line, nothing written (compaction is retried on the next turn); tokens at or over `CAP`, or unknown → exit 0, nothing written. A clean point: writes the Lead Handoff and the `handover` event, exit 0. The script exits by itself after 4 seconds.
+- `write <slug>`: the clean-point writer, trigger `manual`. Prints `wrote lead-handoff-<n>.md`. A Step running → `refused: step running`, exit 3 (retry at the next clean point).
+- `resume` (SessionStart adapter, matcher `compact`): source other than `compact` or `agent_id` present: nothing. The newest handover of the active run with no later `resume` and an `at` within 10 minutes: the file is validated again (regular file, 8 KiB, exact key order, each value against its allow-list, slug equal to the run, `## Next` lines from the fixed templates); valid → prints `hookSpecificOutput.additionalContext` = one fixed header line that marks the file as data from the run records, then the file; appends `resume`. Otherwise, with an active run: one fixed line telling the Lead to run `lead-handover read <slug>` first. Always exit 0.
+- `begin <slug> <playbook>`: playbook `^[a-z][a-z0-9-]{0,40}$` with `skills/<playbook>/SKILL.md` in the plugin. Prints `begun`.
+- `base <slug> <id>`: the Lead runs it once at Step 01 after resolving the base commit. The id is 40 or 64 lowercase hex, not all zeros, else `refused: bad base`; a second call → `refused: base set`. Prints `recorded`.
+- `read <slug>`: prints `handovers <n>`, `resumes hook <a> ceo <b>`, `last <file|none>`, then the `gate`, `form`, `step` and `running` lines `write` would use.
+- Every argument is at most 4096 characters without a character of category Cc, Cf, Zl or Zp, else `refused: argument is not accepted`, exit 3.
+- Refusals exit 3: `usage`, `argument is not accepted`, `bad slug`, `bad playbook`, `bad base`, `base set`, `no run`, `step running`. Fail loud, exit 1: `broken record`, `link`, `not a regular file`, `hard-linked`, `too large`. In the hooks every error is exit 0 and silent, except the one exit 2 above.
+
+## Personal data and destinations
+The record and the Handoff hold enums, numbers, a base commit and file names; no transcript text and no CEO words. Destinations: the Handoff text goes to the Claude model of the next context (inside the fixed header); token counts go to the local record only; nothing else leaves the machine and McSparrow adds no recipient. Location `.company/work/<slug>/`, git-ignored where the product ignores `.company/`; archived, never deleted early; an erasure request overrides (CEO decides). Keep only what the decision needs (GDPR Art. 5(1)(c)).
+
+## Error cases
+- Broken record → CLI exit 1, hooks silent; the Lead runs `read` and stops if it also fails (fail closed).
+- Handoff fails validation on resume → the fixed line is injected instead; the Lead reads the run records.
+- Open Gate or form: never taken from the Handoff's `gate` or `form` lines alone; the Lead reads `run-state` and `idea-flow options` and shows the form again.
+
+## Compatibility
+New Contract, v1; v1.1 and v1.2 are additive. An added event, key or command needs a new version.

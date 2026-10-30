@@ -127,7 +127,7 @@ function pageState(overrides = {}) {
     plugin, user: { version: 1 }, project: { version: 1 }, hasProject: true,
     language: { user: null, project: null },
     resolved: {
-      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: 'Ava', model: 'sonnet', effort: 'medium', context_cap: 150000, source: {} }])),
+      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: 'Ava', model: 'sonnet', effort: 'medium', context_cap: 95000, source: {} }])),
       ignored: [], warnings: [], language: { tag: 'en', source: 'default' }, profile: { hasProject: true, fields: {}, options: {} }
     },
     personalities: { rule: { text_re: '^.*$', flags: '', max: 80, levels: ['low', 'medium', 'high'], phrases: {} }, roles: {}, ignored: [] },

@@ -1,6 +1,6 @@
 # aico: the McSparrow AI company
 
-A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 36 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at three **Gates**: Brief, Plan and Ship. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
+A Claude Code plugin that runs a small software company. You are the **CEO**. A **Lead** (Project Manager) routes work to 36 **Role** agents. Each Role starts with a fresh context and passes its work on through **Handoff** files. You approve at up to three **Gates**: Brief, Plan and Ship. `/aico:feature` and `/aico:fix` keep only the Ship Gate. Terms are defined in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
 **New here?** The full user guide is in [`documentation/`](documentation/README.md): getting started, every command, all 36 Roles, and the concepts the company runs on.
 
@@ -27,9 +27,9 @@ A Claude Code plugin that runs a small software company. You are the **CEO**. A 
 
 **Update:** `/plugin marketplace update aico`, then `/reload-plugins`. Run `/aico:version` to confirm.
 
-**Uninstall:** `claude plugin uninstall aico@aico` in a terminal (or `/plugin` in Claude Code). Skills added by `/aico:setup` or a skill pick are not removed with it; see `documentation/commands.md` for their removal commands.
+**Uninstall:** `claude plugin uninstall aico@aico` in a terminal (or `/plugin` in Claude Code). Skills added by `/aico:setup` or a skill pick are not removed with it; see `documentation/commands/skillspector.md` for their removal commands.
 
-Details: [`documentation/getting-started.md`](documentation/getting-started.md).
+Details: [`documentation/start/getting-started.md`](documentation/start/getting-started.md).
 
 ## Use
 | Command | What it does |
@@ -37,11 +37,16 @@ Details: [`documentation/getting-started.md`](documentation/getting-started.md).
 | `/aico:lead <request>` | Front door. Picks the Roles and the route, then runs it |
 | `/aico:triage <request>` | Classifies a request by size, risk and type and recommends the shortest valid route before you commit to a Playbook |
 | `/aico:reprompt <prompt>` | Turns a rough prompt into a complete one. It never runs it; you choose Use it, Edit, Keep only or Stop |
-| `/aico:feature <desc\|draft file>` | Brief → Plan (Core + Contracts) → build per Module → review, QA, security → Ship. Takes a grill, spec or plan draft as its argument |
+| `/aico:idea <idea\|resume <slug>>` | Guides an idea with forms: capture, a grill (grilling, grill-me or grill-with-docs), a reprompt, then cooler, brainstorm, research, or spec and tickets. You approve tickets one by one; then build through `/aico:feature`, park the tickets on the roadmap, or park the idea |
+| `/aico:bug <bug report\|resume <slug>>` | The same route as `/aico:idea`, but the build step is always `/aico:fix`. See [From idea to shipped code](documentation/start/idea-to-ship.md) |
+| `/aico:feature <desc\|draft file>` | Plan (Core + Contracts) → build per Module → review, QA, security → Ship. No Brief or Plan Gate; the Ship Gate always runs. Takes a grill, spec or plan draft as its argument |
 | `/aico:grill <idea\|file\|resume <slug>>` | You start it. Interviews you one question at a time until the branches of an idea are closed; saves `grill.md`. Builds nothing |
+| `/aico:grilling <idea\|file\|resume <slug>>` | The grill with lookups: repo and web facts are looked up (the web search tool may get queries built from your idea), the rest is asked. Builds nothing |
+| `/aico:grill-me <idea\|file\|resume <slug>>` | The grill with no lookups: every question is asked. Builds nothing |
+| `/aico:grill-with-docs <idea\|file\|resume <slug>>` | The grill that searches repo docs first (`docs/`, `GLOSSARY.md`, `docs/adr/`) and cites them. No web search. Builds nothing |
 | `/aico:to-spec <idea\|grill.md\|file>` | You start it, software only. Writes a spec draft (`spec.md`, `version: pending`) from an idea or a grill. Never committed or stamped |
 | `/aico:to-tickets <spec.md\|brief>` | You start it, software only. Splits a spec or brief into a plan of small tasks (`plan.md`) |
-| `/aico:fix <bug>` | QA reproduces → engineer fixes test-first → review → Ship |
+| `/aico:fix <bug>` | QA reproduces → engineer fixes test-first → review → Ship. No Brief or Plan Gate; a Core or Contract change is listed in the Ship Gate summary |
 | `/aico:launch <product>` | Positioning, copy, release notes, privacy/terms → Ship |
 | `/aico:audit [scope]` | Read-only quality, test, security and license report |
 | `/aico:research <topic\|project\|file> [quick\|deep]` | Before you build: the market, tech and (for UI work) design researchers look it up online, in parallel. You get one sourced report with a verdict, ranked actions and low-hanging fruit. You then pick: feature, brainstorm, roadmap or park. Nothing is built |
@@ -87,7 +92,7 @@ Run `/aico:settings`. It opens a local page (127.0.0.1) in your browser. Nothing
 - **See what is in effect:** from the product repo, run `node "<plugin root>/scripts/settings.mjs" get`. It prints the resolved JSON, including `ignored` and `warnings`; `get <key>` prints one value, for example `get pipeline.fix_rounds`. The plugin root is the installed version's folder, such as `~/.claude/plugins/cache/aico/aico/0.12.0`.
 - **Reset:** a key that is absent at a level counts as not set, so the level below applies. To reset a project, remove the key (or delete `.company/settings.json`). To reset your default, remove the key from `aico_settings` in `~/.mcsparrow/config.json`. An invalid value is refused on save and nothing is written.
 
-Language has its own command: `/aico:language`. Full rules and every key: [`docs/contracts/aico-settings.md`](docs/contracts/aico-settings.md); user guide: [`documentation/concepts.md`](documentation/concepts.md#settings).
+Language has its own command: `/aico:language`. Full rules and every key: [`docs/contracts/aico-settings.md`](docs/contracts/aico-settings.md); user guide: [`documentation/concepts/settings-and-locks.md`](documentation/concepts/settings-and-locks.md).
 
 ## Company hierarchy
 Reporting lines show who signs off; the Lead dispatches every Role.
@@ -132,7 +137,9 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 - **Ruleset** (`aico:ruleset`): sourced Must/Should/May rules per tool, kept by the Senior Engineer. Security is law. Builders follow the rules before review; a Must exception needs your approval.
 - **Fix rounds:** at most 2 by default (0–5 in `/aico:settings`), then escalation to you. Nits never loop.
 - **Handoff Contract** (`aico:handoff`): Roles pass work through machine-readable Handoff fields (`base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) with a `contract|spec|security|test` blocking taxonomy; independent Steps run in parallel by default, and reviewers diff only against `base-commit`. From v1.1 the code-reviewer and compliance Steps also write a top block and `ID | file:line | problem | why | fix` rows.
-- **Token cost:** a max context per Role in `/aico:settings` (default 150000, minimum 60000, handover at 80%), and a counts-only token ledger with one cost line at Ship. Savings come from reading less; no saving percentage is claimed yet.
+- **Token cost:** one fixed context cap for every Role and tier (95000, handover at 85500; the old `context_cap` setting has no effect), and a counts-only token ledger with one cost line at Ship. Savings come from reading less; no saving percentage is claimed yet.
+- **Lead hand-over:** hooks write a Lead Handoff before the Lead's context compacts and hand it back afterwards. One-time setup: add `"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"` to the `env` block of `~/.claude/settings.json` and restart Claude Code (see [Getting started](documentation/start/setup.md)). The hooks read token counts from the local transcript and store none of its text.
+- **Where idea and bug text goes:** to the Claude model you configured, to the web search tool only in grilling lookups and in research, and otherwise to local files in `.company/work/<slug>/`, `.company/ideas/` and `.company/roadmap/`. aico writes no ignore rule, so add `.company/` to your `.gitignore`. Nothing is pushed or published.
 - **Lessons:** a Ship appends up to 3 one-line Lessons to `.company/lessons.md`; later runs read it and pass the relevant ones to each Role.
 - **EU compliance** (`aico:eu-compliance`): GDPR, CRA, AI Act Art. 50, EAA, VAT and consumer law are checked before Ship.
 - **Git:** branch `aico/<task>`, one commit per Step, no push before the Ship Gate (an unlocked auto Ship Gate pushes and opens a PR, never merges). Commit subjects are `<type>: <summary>` (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`), never prefixed with `aico` or a Role name.
@@ -143,10 +150,10 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 - Company facts and the three Voice presets (clear, bold, technical): `company/PROFILE.md`
 - Missing stack skills: `find-skills`, then add a group to `deps/skills.json`.
 - Skill picks: the skill-researcher (Selin) finds and vets third-party skills for your stack, product type or company type, and the Lead scans every pick before you see it. You approve the set, then confirm the exact install commands in a second form. The install pins the scanned commit, and a bad scan after the install stops the run. Approved skills go in the `## Skills` section of `.company/project.md` (design skills stay in `## Design skills`). Scan mode (`no-llm` or `claude_cli`) is in `/aico:settings` (Skill scan tab). Both modes send package names, versions and ecosystems to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found; `claude_cli` also sends skill text to Anthropic.
-- Company type: one per project, set with `/aico:setup` and saved as `company_type:` in `.company/project.md`. `software` is the default and works as before. `research` (Research consultancy), `marketing` (Marketing and content agency) and `design` (Design studio) each have their own Roles and Playbooks and their own meaning of "ship". For these three the Ship Gate summary starts with `Ship means: …`, and checks such as `claims-cited` (every claim cited or marked unverified, checked by the editor) must pass first. A passed check records that Legal stated its position; it is a process check, not legal advice or a compliance certificate, so have a qualified lawyer review before you publish. Switching a type later is not supported. Details: `documentation/concepts.md#company-types`.
-- Personalities: every Role has a personality (temperament, way of talking, pet topic, and an Intelligence and a Creativity level of low, medium or high) that is social-only style data and only colours its voice in `/aico:cooler` chats and `/aico:brainstorm` rounds. Change it in `/aico:settings` (Personality tab), as your default or per project. A project value counts, and is passed only as quoted style data. A personality never changes a model, a verdict, a review, a Gate or any other dispatch. Details: `documentation/concepts.md#personalities`.
+- Company type: one per project, set with `/aico:setup` and saved as `company_type:` in `.company/project.md`. `software` is the default and works as before. `research` (Research consultancy), `marketing` (Marketing and content agency) and `design` (Design studio) each have their own Roles and Playbooks and their own meaning of "ship". For these three the Ship Gate summary starts with `Ship means: …`, and checks such as `claims-cited` (every claim cited or marked unverified, checked by the editor) must pass first. A passed check records that Legal stated its position; it is a process check, not legal advice or a compliance certificate, so have a qualified lawyer review before you publish. Switching a type later is not supported. Details: `documentation/concepts/company-types.md`.
+- Personalities: every Role has a personality (temperament, way of talking, pet topic, and an Intelligence and a Creativity level of low, medium or high) that is social-only style data and only colours its voice in `/aico:cooler` chats and `/aico:brainstorm` rounds. Change it in `/aico:settings` (Personality tab), as your default or per project. A project value counts, and is passed only as quoted style data. A personality never changes a model, a verdict, a review, a Gate or any other dispatch. Details: `documentation/concepts/personalities.md`.
 - Language aico writes in: `/aico:language` sets your default; `/aico:language <tag> project` overrides it for one product (`aico_language:` in `.company/project.md`). Product UI strings follow `languages:` instead.
-- Mods: four add-ons that show run progress (Savvy, with a Gates bar and a Steps bar in text, such as `Gates 1/3 [###-----] last: brief`), cost and the Lead's cache clock (Cache Tax), suggested Lessons (Reflect), and check risky `git commit`s before they run (Blast Radius). All on by default; switch them in `/aico:settings`. Terminal is proven, desktop is unverified. Blast Radius only sees commits Claude makes through its Bash and PowerShell tools, not `!git commit`, another terminal or an IDE. See `documentation/mods.md`.
+- Mods: four add-ons that show run progress (Savvy, with a Gates bar and a Steps bar in text, such as `Gates 1/3 [###-----] last: brief`), cost and the Lead's cache clock (Cache Tax), suggested Lessons (Reflect), and check risky `git commit`s before they run (Blast Radius). All on by default; switch them in `/aico:settings`. Terminal is proven, desktop is unverified. Blast Radius only sees commits Claude makes through its Bash and PowerShell tools, not `!git commit`, another terminal or an IDE. See `documentation/mods/README.md`.
 - Rule library shared by all projects on this machine: `~/.mcsparrow/standards/` (make it a git repo to sync it). Each product commits copies of the packs it uses in `.company/standards/`.
 
 ## Maintain

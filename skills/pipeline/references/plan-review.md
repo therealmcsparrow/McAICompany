@@ -3,13 +3,15 @@ Contract: `docs/contracts/plan-review.md`. Role: `aico:fresh-reviewer` (`agents/
 
 **When.** The run's tier set holds `plan-review` (its `set:` line, feature step 2e), after the architect Step(s) and the ruleset sign-off, and before the Plan Gate. Not in the set → no plan review Step, and the Plan Gate says `plan review: not run`.
 
+**Feature and fix.** These two Playbooks have no Plan Gate. The plan review runs the same way, after the architect Step(s) and before the first builder, but the block of step 4 goes into the Ship Gate summary and nothing waits for it: an `escalated` key is one form when it arises, and a plan review that did not run shows `plan review: not run`. Every other Playbook keeps the Plan Gate wording below.
+
 1. **Inputs.** Run `lines '<slug>' '<plan>' --mode plan --after '<NN-architect.md>[,<file>…]'` right before every fresh-reviewer dispatch, the round-1 re-check included. `--after` lists the architect Handoff(s) of the run; on a re-check it adds the revision and the reviewer's own round-0 Handoff, so it keeps its IDs and answers contests. Exit not 0 → `plan review: not run (<first output line>)` at the Plan Gate and no dispatch. Dispatch with that output, copied unchanged:
 ```
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from Setup §1.6>
 Settings: model=<m> effort=<e> floor   # only the values passed on the Agent call, as in §2
-Context cap: <cap> handover <n>
+Context cap: 95000 handover 85500
 Risk tier: <tier from the latest `set:` output>
 Base commit: <full object id from Step 01>
 Round: <0 first review, 1 re-check>

@@ -103,7 +103,7 @@ function sites(filter) {
 // ---- the detector itself is not vacuous ----
 test('detector: the hidden set is read from frontmatter and equals CEO_ONLY', () => {
   const only = ceoOnly();
-  assert.deepEqual([...only].sort(), ['grill', 'help', 'language', 'pentest', 'settings', 'setup', 'skillspector', 'to-spec', 'to-tickets', 'version'].sort(), 'CEO_ONLY is the contract list');
+  assert.deepEqual([...only].sort(), ['bug', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'help', 'idea', 'language', 'pentest', 'settings', 'setup', 'skillspector', 'to-spec', 'to-tickets', 'version'].sort(), 'CEO_ONLY is the contract list');
   assert.ok(Object.isFrozen(only), 'CEO_ONLY is frozen');
   assert.deepEqual([...hidden].sort(), [...only].sort(), 'exactly the CEO_ONLY skills carry disable-model-invocation: true');
   for (const n of ['research', 'feature', 'fix', 'brainstorm', 'lead', 'triage', 'audit', 'report', 'design', 'content', 'campaign']) {
@@ -312,11 +312,11 @@ test('AC-chain-3i: incident ends after mitigation, reports and postmortem; the C
 const helpLine = (name, always) => (
   '**Help:** argument is exactly `help` or `--help` → '
   + (always ? '' : 'do the **Type:** step below first; then ')
-  + `read the \`### /aico:${name}\` entry of \`documentation/commands.md\` (plugin root = two folders above this skill's base directory) `
+  + `read \`documentation/commands/${name}.md\` (plugin root = two folders above this skill's base directory) `
   + 'and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.'
 );
 
-test('AC-chain-3j: every Help line answers from documentation/commands.md, names no aico:help and equals the contract template', () => {
+test('AC-chain-3j: every Help line answers from documentation/commands/<name>.md, names no aico:help and equals the contract template', () => {
   assert.ok(Array.isArray(ALWAYS), 'company-type.mjs exports ALWAYS');
   const subjects = skillNames.filter((n) => !['help', 'language'].includes(n)
     && (playbooks.includes(n) || lines(read(`skills/${n}/SKILL.md`)).some(isHelpLine)));
@@ -329,8 +329,8 @@ test('AC-chain-3j: every Help line answers from documentation/commands.md, names
     const l = helps[0];
     const why = [];
     if (/aico:help/.test(l)) why.push('names aico:help');
-    if (!l.includes('documentation/commands.md')) why.push('misses documentation/commands.md');
-    if (!l.includes(`### /aico:${n}`)) why.push(`misses ### /aico:${n}`);
+    if (!l.includes(`documentation/commands/${n}.md`)) why.push(`misses documentation/commands/${n}.md`);
+    if (l.includes('commands.md')) why.push('still names the flat commands.md');
     const always = ALWAYS.includes(n);
     if (l !== helpLine(n, always)) why.push(`differs from the ${always ? 'ALWAYS' : 'standard'} template`);
     const title = ls.findIndex((x) => /^# /.test(x));
@@ -378,15 +378,13 @@ test('AC-chain-5: aico:handoff tells a Role never to start a Playbook with the S
 });
 
 // ---- guard: every Playbook stays reachable by the CEO ----
-test('guard: every Playbook is listed as /aico:<name> in documentation/commands.md (the CEO can find the command)', () => {
+test('guard: every Playbook has a documentation/commands/<name>.md page (the CEO can find the command)', () => {
   const helpText = read('skills/help/SKILL.md');
-  assert.ok(/commands\.md/.test(helpText), 'help reads commands.md');
-  const cmdFile = 'documentation/commands.md';
-  assert.ok(existsSync(join(root, cmdFile)), 'documentation/commands.md exists');
-  const cmds = read(cmdFile);
+  assert.ok(/documentation\/commands\//.test(helpText), 'help reads documentation/commands/');
+  assert.ok(existsSync(join(root, 'documentation/commands/README.md')), 'documentation/commands/README.md exists');
   assert.ok(playbooks.length >= 28, `expected at least 28 Playbooks, found ${playbooks.length}`);
-  const missing = playbooks.filter((n) => !cmds.includes(`/aico:${n}`));
-  assert.deepEqual(missing, [], `Playbooks the CEO cannot find in commands.md: ${missing.join(', ')}`);
-  const noEntry = playbooks.filter((n) => !new RegExp(`^### \`?/aico:${n}\`?\\s*$`, 'm').test(cmds));
-  assert.deepEqual(noEntry, [], `Playbooks without a "### /aico:<name>" entry (the Help line reads it): ${noEntry.join(', ')}`);
+  const missing = playbooks.filter((n) => !existsSync(join(root, `documentation/commands/${n}.md`)));
+  assert.deepEqual(missing, [], `Playbooks without a command page (the Help line reads it): ${missing.join(', ')}`);
+  const noTitle = playbooks.filter((n) => !new RegExp(`^# \`?/aico:${n}\`?\\s*$`).test(lines(read(`documentation/commands/${n}.md`))[0]));
+  assert.deepEqual(noTitle, [], `command pages whose line 1 is not "# /aico:<name>": ${noTitle.join(', ')}`);
 });

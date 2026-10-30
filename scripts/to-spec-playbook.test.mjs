@@ -36,7 +36,7 @@ test('size: at most 125 lines, LF only, no CR', () => {
 test('Help line, one empty line, then the Type line (AC45)', () => {
   const help = lines.findIndex((l) => l.startsWith('**Help:**'));
   assert.ok(help > 0);
-  assert.ok(lines[help].includes('### /aico:to-spec') && lines[help].includes('documentation/commands.md'));
+  assert.ok(lines[help].includes('documentation/commands/to-spec.md'));
   assert.equal(lines[help + 1], '');
   assert.ok(lines[help + 2].startsWith(`**Type:** run \`${RUN} company-type check-playbook to-spec\` first;`));
 });

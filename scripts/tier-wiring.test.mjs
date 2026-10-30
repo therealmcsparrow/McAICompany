@@ -24,14 +24,15 @@ test("pipeline carries the Delta E edits", () => {
   assert.match(text, /short path off/);
   assert.match(text, /feature and fix from tier-set\.mjs \(references\/tier-path\.md\)/);
   assert.match(text, /tier-set\.mjs sync runs after the commit \(references\/tier-path\.md step 8\)/);
-  assert.match(text, /\*\*Brief, Plan and Ship Gates\*\* of a feature or fix run also show the tier-path lines/);
+  assert.match(text, /\*\*Ship Gate\*\* of a feature or fix run also shows the tier-path lines/);
+  assert.doesNotMatch(text, /Brief, Plan and Ship Gates/);
   assert.match(text, /every ## Debt line of a senior-engineer map Handoff that ran in place of research/);
 });
 
 test("tier-path.md names the commands, the Gate options and the fail-closed rule", () => {
   const text = read("skills/pipeline/references/tier-path.md");
   for (const word of ["preview", "begin", "sync", "raise", "--diff", "--plan", "fail closed", "--route fix",
-    "Approve, short path (Recommended)", "Approve, full path", "Change", "Stop", "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" tier-set"]) {
+    "Short path (Recommended)", "Full path", "Stop", "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" tier-set"]) {
     assert.ok(text.toLowerCase().includes(word.toLowerCase()), `tier-path.md lacks ${word}`);
   }
   assert.ok(!text.includes("\r"), "tier-path.md has a CR byte");
@@ -50,7 +51,7 @@ test("tier-path.md carries the fix round 1 rules", () => {
   assert.ok(intro.includes("`short` or `full`"));
   assert.ok(step(2).includes("Never run `triage issue` yourself"));
   assert.ok(step(4).includes("--ceo '<c>'"));
-  assert.ok(step(4).includes("An auto Brief Gate (`gates.brief` `auto`) always takes the full path"));
+  assert.ok(step(4).includes("a form not shown included, it is `full`"));
   assert.ok(step(5).includes("gates.brief"));
   assert.ok(step(8).includes("Run no `sync` before `begin`"));
   assert.ok(step(11).includes("tier-sets: changed since begin"));
@@ -76,7 +77,7 @@ test("feature and fix name the tier set at each skippable step", () => {
   assert.match(feature, /Roles and lanes run per the tier set/);
   assert.match(feature, /persona-tester is in the tier set\./);
   assert.match(feature, /tier-path\.md step 7/);
-  assert.match(feature, /tier-path\.md step 8 checks the plan first/);
+  assert.match(feature, /tier-path\.md step 8 check the plan/);
   assert.match(feature, /tier-set\.mjs sync --diff/);
   assert.equal((feature.match(/, when in the tier set/g) || []).length, 3);
   const fix = skill("fix");
@@ -111,6 +112,10 @@ test("no other skill names tier-set (AC14)", () => {
       }
     }
   }
+});
+
+test("skills/pipeline/references/lead-handover.md names tier-set, inside the allowed pipeline dir (AC14)", () => {
+  assert.ok(read("skills/pipeline/references/lead-handover.md").includes("tier-set"));
 });
 
 test("skill files stay within the size limits", () => {

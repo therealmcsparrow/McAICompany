@@ -38,7 +38,7 @@ test('Help line is the first body line, the Trust line is right below it, before
   const title = lines.findIndex((l) => l.startsWith('# Playbook: reprompt'));
   assert.ok(title > 0);
   assert.equal(lines[title + 1], '');
-  assert.equal(lines[title + 2], "**Help:** argument is exactly `help` or `--help` → read the `### /aico:reprompt` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
+  assert.equal(lines[title + 2], "**Help:** argument is exactly `help` or `--help` → read `documentation/commands/reprompt.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
   assert.equal(lines[title + 3], '');
   assert.ok(lines[title + 4].startsWith('**Trust:**'));
   const i = text.indexOf('**Trust:**');
@@ -56,7 +56,7 @@ test('size and encoding: at most 125 lines, LF only, no shell injection of argum
 });
 
 test('help, empty argument and the 32 KiB limit come before any write', () => {
-  has(/\*\*Help:\*\* argument is exactly `help` or `--help`[^\n]*commands\.md/);
+  has(/\*\*Help:\*\* argument is exactly `help` or `--help`[^\n]*documentation\/commands\/reprompt\.md/);
   assert.doesNotMatch(text.match(/^\*\*Help:\*\*[^\n]*/m)[0], /aico:help/);
   has(/^1\. Argument empty after trimming → do what the Help line says[^\n]*nothing dispatched, nothing written/m);
   has('refused: prompt too long (max 32 KiB)', 'Check this before any write', 'UTF-8');
@@ -177,8 +177,8 @@ test('exit 3 shows paths and the git line; exit 2 says the files stay changed; t
   assert.doesNotMatch(text, /run\.mjs" reprompt-check arm/, 'the Lead never calls arm');
 });
 
-test('commands.md: step 3 names the AI notice, the framed text and the gate', () => {
-  const doc = readFileSync(join(root, 'documentation/commands.md'), 'utf8');
+test('commands/reprompt.md: step 3 names the AI notice, the framed text and the gate', () => {
+  const doc = readFileSync(join(root, 'documentation/commands/reprompt.md'), 'utf8');
   assert.ok(!doc.includes('\r'));
   const step3 = doc.split('\n').find((l) => l.startsWith('3. The Lead shows the full prompt'));
   assert.ok(step3.includes('one line saying the prompt is AI-written and to check it before you use it'));

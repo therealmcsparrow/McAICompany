@@ -43,26 +43,26 @@ test('feature SKILL.md: steps 1b and 5a are one line each and point to the refer
   assert.equal(l5a.length, 1);
   has(l1b[0], 'references/intake-and-ship.md');
   has(l5a[0], 'references/intake-and-ship.md');
-  assert.ok(feature.indexOf('\n1b. ') > feature.indexOf('**→ Brief Gate**'));
+  assert.ok(feature.indexOf('\n1b. ') > feature.indexOf('\n1. '));
   assert.ok(feature.indexOf('\n5a. ') > feature.indexOf('\n5. `aico:writer`'));
   assert.ok(feature.indexOf('\n5a. ') < feature.indexOf('**→ Ship Gate**'));
 });
 
-test('prototype: no prototype Step text runs without the Brief Gate yes (AC29)', () => {
+test('prototype: no prototype Step text runs without the Run it answer (AC29)', () => {
   const s = sectionOf(ref, '## Prototype');
-  has(s, 'Prototype: <question>', 'Run it', 'Skip', 'only after the CEO answered Run it at the Brief Gate',
+  has(s, 'Prototype: <question>', 'Run it', 'Skip', 'only after the CEO answered Run it on the prototype form',
     'worktree add', 'proto', 'NN-prototype-<role>.md', 'answer: <question>', '## Answer', 'at most 5 lines',
     'never merges', 'Skip or no question', 'no prototype Step', 'no worktree');
   has(feature.split('\n').find((l) => /^1b\. /.test(l)), 'Run it');
 });
 
-test('prototype: the Plan Gate shows the answer line and the architect cites it', () => {
-  has(ref, 'prototype: <first line of the answer>', 'Decided:', 'Plan Gate');
+test('prototype: the Ship Gate summary shows the answer line and the architect cites it', () => {
+  has(ref, 'prototype: <first line of the answer>', 'Decided:', 'Ship Gate');
 });
 
-test('glossary and ADR drafts: Brief Gate form, separate GLOSSARY.md question, architect writes them', () => {
+test('glossary and ADR drafts: one Write them / Skip form, separate GLOSSARY.md question, architect writes them', () => {
   const s = sectionOf(ref, '## Glossary and ADRs');
-  has(s, '## Glossary', '## ADR drafts', 'Write them after approval', 'Change', 'Skip',
+  has(s, '## Glossary', '## ADR drafts', 'Write them / Skip',
     'Create GLOSSARY.md', 'No (Recommended)', 'architect', 'docs/adr/NNNN-<slug>.md');
   has(pm, '## Prototype question', '## Glossary', '## ADR drafts');
   has(architect, 'GLOSSARY.md', 'docs/adr/NNNN-<slug>.md');

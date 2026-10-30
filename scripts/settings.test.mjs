@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, PLAN_CHECK_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, CONTEXT_CAP_DEFAULT, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, PLAN_CHECK_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   MODEL_RANK, loadModelFloor, modelEnvLine, readClaudeVersion, templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
@@ -81,13 +81,13 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
   assert.deepEqual(d.brainstorm, { film_script: false, debate: 'crossfire' });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 150000, floor: 'sonnet', protected: false,
+    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 95000, floor: 'sonnet', protected: false,
     source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' }
   });
   assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, second_reviewer_model_effective: 'opus' });
   assert.deepEqual(r.gates, GATE_DEFAULTS);
   assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
-  assert.equal(r.pipeline.context_cap, 150000);
+  assert.equal(r.pipeline.context_cap, 95000);
   assert.deepEqual(r.unlocked, []);
   assert.deepEqual(r.ignored, []);
   assert.deepEqual(r.warnings, []);
@@ -100,7 +100,7 @@ test('project beats user beats plugin, per field', (t) => {
   s.project({ roles: { qa: { effort: 'high' } }, pipeline: { fix_rounds: 0, lanes: { legal: 'on' } } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 150000, floor: 'sonnet', protected: false,
+    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 95000, floor: 'sonnet', protected: false,
     source: { name: 'plugin', model: 'user', effort: 'project', context_cap: 'plugin' }
   });
   assert.equal(r.pipeline.fix_rounds, 0);
@@ -227,7 +227,7 @@ test('broken config.json falls back to defaults with a warning', (t) => {
   assert.equal(r.pipeline.dispatch, 'sequential');
   assert.deepEqual(r.gates, GATE_DEFAULTS);
   assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
-  assert.equal(r.pipeline.context_cap, 150000);
+  assert.equal(r.pipeline.context_cap, 95000);
   assert.equal(r.warnings.length, 4, JSON.stringify(r.warnings));
 
   const { layer, warnings } = readLayer('user', s.ctx);
@@ -523,23 +523,31 @@ test('names refuse edge spaces and double spaces, allow combining marks, clash c
   assert.ok(resolveSettings(s.ctx).warnings.some((w) => w.includes('qa') && w.includes('security')));
 });
 
-test('context_cap: Role beats pipeline, project beats user, plugin default 150000', (t) => {
+test('context_cap is deprecated and reported 95000', (t) => {
   const s = sandbox(t);
-  s.user({ roles: { qa: { context_cap: 200000 } }, pipeline: { context_cap: 100000 } });
   let r = resolveSettings(s.ctx);
-  assert.equal(r.roles.qa.context_cap, 200000);
-  assert.equal(r.roles.qa.source.context_cap, 'user');
-  assert.equal(r.roles.architect.context_cap, 100000);
-  assert.equal(r.roles.architect.source.context_cap, 'pipeline:user');
-  assert.equal(r.pipeline.context_cap, 100000);
+  assert.equal(r.pipeline.context_cap, 95000);
+  assert.equal(r.roles.qa.context_cap, 95000);
+  assert.equal(r.roles.qa.source.context_cap, 'plugin');
+  s.user({ roles: { qa: { context_cap: 200000 } }, pipeline: { context_cap: 100000 } });
   s.project({ roles: { qa: { context_cap: 60000 } }, pipeline: { context_cap: 1000000 } });
   r = resolveSettings(s.ctx);
-  assert.equal(r.roles.qa.context_cap, 60000);
-  assert.equal(r.roles.qa.source.context_cap, 'project');
-  assert.equal(r.roles.architect.context_cap, 1000000);
-  assert.equal(r.roles.architect.source.context_cap, 'pipeline:project');
-  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '60000\n');
-  assert.equal(s.cli('get', 'pipeline.context_cap').out, '1000000\n');
+  assert.equal(r.roles.qa.context_cap, 95000);
+  assert.equal(r.roles.qa.source.context_cap, 'plugin');
+  assert.equal(r.roles.architect.context_cap, 95000);
+  assert.equal(r.pipeline.context_cap, 95000);
+  assert.deepEqual(r.warnings, []);
+  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '95000\n');
+  assert.equal(s.cli('get', 'pipeline.context_cap').out, '95000\n');
+});
+
+test('a stored context_cap stays on disk and is still accepted by set', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { context_cap: 100000 } });
+  assert.deepEqual(readLayer('user', s.ctx).layer.pipeline, { context_cap: 100000 });
+  assert.deepEqual(resolveSettings(s.ctx).warnings, []);
+  assert.equal(PIPELINE_DEFAULTS.context_cap, 95000);
+  assert.equal(CONTEXT_CAP_DEFAULT, 95000);
 });
 
 test('context_cap refuses anything but a whole number from 60000 to 1000000', () => {
@@ -577,8 +585,8 @@ test('a bad brainstorm or context_cap layer falls back to the level below with a
   s.project({ brainstorm: { debate: 'duel' }, pipeline: { context_cap: 5 }, roles: { qa: { context_cap: 'big' } } });
   const r = resolveSettings(s.ctx);
   assert.equal(r.brainstorm.debate, 'full_pass');
-  assert.equal(r.pipeline.context_cap, 90000);
-  assert.equal(r.roles.qa.context_cap, 90000);
+  assert.equal(r.pipeline.context_cap, 95000);
+  assert.equal(r.roles.qa.context_cap, 95000);
   assert.equal(r.warnings.filter((w) => /brainstorm\.debate|context_cap/.test(w)).length, 3);
 });
 

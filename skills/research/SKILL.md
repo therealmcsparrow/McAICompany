@@ -6,7 +6,7 @@ argument-hint: <topic | project | file> [quick|deep]
 
 # Playbook: research
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:research` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/research.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook research` first; exit not 0 → show its output line and stop.
 
@@ -45,10 +45,10 @@ Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
-Context cap: <cap> handover <n>   # per Role, from aico:pipeline Setup item 8
+Context cap: <cap> handover <n>   # fixed, from aico:pipeline Setup item 8
 Follow aico:handoff.
 ```
-Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7), and each Role's Context cap (Setup item 8, high-tier floor included). The design-researcher gets the Goal "judge the installed design skills and recommend at most 5, each as a DS line with `approved: pending`" and no other input. A `blocked` researcher does not stop the run: the report notes it (RR error cases). `needs-ceo` → ask the CEO in a form, then re-dispatch that Role. `handover` → dispatch a fresh Step of the same Role (next `NN`) with the same fields, Input = the original Input plus the handover Handoff, Goal "continue from `<path>` `## Next`"; it is not `blocked`.
+Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7), and the fixed Context cap (Setup item 8). The design-researcher gets the Goal "judge the installed design skills and recommend at most 5, each as a DS line with `approved: pending`" and no other input. A `blocked` researcher does not stop the run: the report notes it (RR error cases). `needs-ceo` → ask the CEO in a form, then re-dispatch that Role. `handover` → dispatch a fresh Step of the same Role (next `NN`) with the same fields, Input = the original Input plus the handover Handoff, Goal "continue from `<path>` `## Next`"; it is not `blocked`.
 
 ## 4. Synthesis
 Run `check-role product-manager` (refused → show its line and stop), then dispatch `product-manager` with Output `.company/work/research-<slug>/<NN>-product-manager.md` and every researcher Handoff as Input, each link of a handover chain included. Goal: write the report per RR at `.company/research/YYYY-MM-DD HH.MM - <Short Topic>.md` (local start time; Short Topic per the RR `## Short Topic` rule: allow-list regex, at most 60 characters and 5 words, Title Case; a failing topic becomes the run slug, never repaired). Cite that rule in the dispatch. Pass `topic`, `question`, `depth`, `roles`, `started` and `degraded:` for the frontmatter. `outcome: open`, `label: AI-generated research`. The same dispatch fields, `Language:`, `Name:`, `Settings:` and `Context cap:` as §3.

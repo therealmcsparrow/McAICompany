@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Pins the feature Playbook's draft input text: scope, argument file, take, Plan Gate outcomes.
+// Pins the feature Playbook's draft input text: scope, argument file, take, Ship Gate summary outcomes.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const has = (text, ...needles) => {
@@ -55,21 +55,21 @@ test('input kinds: spec, grill, brief or text go to the product-manager; plan go
   assert.match(draft, /spec[^\n]*grill[^\n]*brief[^\n]*text[^\n]*product-manager|product-manager[^\n]*spec[^\n]*grill[^\n]*brief[^\n]*text/);
 });
 
-test('Plan Gate outcome 1: stale gone/exists lines are Blocking [spec]', () => {
+test('Ship Gate outcome 1: stale gone/exists lines are Blocking [spec]', () => {
   has(draft, 'stale <id> <path>', 'gone', 'exists', 'Blocking `[spec]`', 'Decided (stale <id> <path>):');
 });
 
-test('Plan Gate outcome 2: changed lines are info, not Blocking', () => {
-  has(draft, 'changed <id> <path>', 'info', 'Plan Gate summary');
+test('Ship Gate outcome 2: changed lines are info, not Blocking', () => {
+  has(draft, 'changed <id> <path>', 'info', 'Ship Gate summary');
   assert.match(draft, /`changed[^\n]*info/);
 });
 
-test('Plan Gate outcome 3: no Base commit, base unknown or exit 1 is one stale not checked Blocking', () => {
+test('Ship Gate outcome 3: no Base commit, base unknown or exit 1 is one stale not checked Blocking', () => {
   has(draft, 'refused: plan has no Base commit line', 'base unknown', 'exit 1', 'stale not checked',
-    'Decided (stale not checked):', 'every `files:` path', 'back to the architect once', 'open at the Plan Gate');
+    'Decided (stale not checked):', 'every `files:` path', 'back to the architect once', 'open at the Ship Gate');
 });
 
-test('Plan Gate outcome 3 fails closed: a grafts refusal, a link refusal or no summary line is a stale not checked Blocking', () => {
+test('Ship Gate outcome 3 fails closed: a grafts refusal, a link refusal or no summary line is a stale not checked Blocking', () => {
   has(draft, 'refused: grafts file present', 'refused: link', 'exit other than 0 or 2', '`draft-input stale:` summary line',
     '`[spec] stale not checked: <first line>`');
   assert.match(draft, /any `stale` exit other than 0 or 2/i);
@@ -79,7 +79,7 @@ test('the path given to take and stale is quoted', () => {
   has(draft, "take '<path>' --for feature", "stale '<path>'");
 });
 
-test('Plan Gate checks: Lead checks Decided lines, plan-check and reviewer as usual, no approval carries over, stale not rerun', () => {
+test('Ship Gate checks: Lead checks Decided lines, plan-check and reviewer as usual, no approval carries over, stale not rerun', () => {
   has(draft, 'plan-check', 'plan reviewer', 'No earlier approval carries over', 'not rerun', 'data');
 });
 

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { BRAINSTORM_DEFAULTS, GATE_DEFAULTS, GATES, LANES, MODS, MODS_DEFAULTS, PIPELINE_DEFAULTS, SKILLSPECTOR_DEFAULTS } from './settings.mjs';
 
+import { docFolder, commandPage } from './doc-pages.mjs';
 const root = path.join(import.meta.dirname, '..');
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
 const pipeline = read('skills/pipeline/SKILL.md');
@@ -69,25 +70,28 @@ test('cooler cues use Role ids and the file says so', () => {
   assert.ok(!cooler.includes('<NAME> (<ROLE>)'));
 });
 
-test('roles.md lists every default name', () => {
+test('roles/README.md lists every default name', () => {
   const names = JSON.parse(read('company/names.json'));
-  const doc = read('documentation/roles.md');
+  const doc = read('documentation/roles/README.md');
   for (const [role, name] of Object.entries(names))
-    assert.ok(doc.includes(`| ${name} |`), `roles.md lacks ${name} (${role})`);
+    assert.ok(doc.includes(`| ${name} |`), `roles/README.md lacks ${name} (${role})`);
 });
 
 test('aico-settings v1.3 or later keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
   const doc = read('docs/contracts/aico-settings.md');
   assert.match(doc, /^# Contract: aico-settings v1\.(?:[3-9]|\d{2,})$/m);
-  assert.equal(PIPELINE_DEFAULTS.context_cap, 150000);
-  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 150000/);
+  assert.equal(PIPELINE_DEFAULTS.context_cap, 95000);
+  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 95000/);
   assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
   assert.match(doc, /refused: context_cap must be a whole number from 60000 to 1000000/);
+  assert.match(doc, /^# Contract: aico-settings v1\.(?:1[1-9]|[2-9]\d|\d{3,})$/m);
+  assert.match(doc, /deprecated/);
+  assert.match(doc, /always as `95000`/);
   assert.deepEqual(BRAINSTORM_DEFAULTS, { film_script: false, debate: 'crossfire' });
   assert.match(doc, /`brainstorm\.film_script` \| boolean; default `false`/);
   assert.match(doc, /`brainstorm\.debate` \| `crossfire \\| full_pass`; default `crossfire`/);
   assert.match(doc, /refused: brainstorm\.debate must be crossfire or full_pass/);
-  assert.match(doc, /Plugin defaults include `context_cap` 150000, `review_format` `plain`, `film_script` false and `debate` `crossfire`/);
+  assert.match(doc, /Plugin defaults include `context_cap` 95000, `review_format` `plain`, `film_script` false and `debate` `crossfire`/);
   assert.equal(PIPELINE_DEFAULTS.review_format, 'plain');
   assert.match(doc, /`pipeline\.review_format` \| `plain \\| pilot`; default `plain`/);
   assert.match(doc, /refused: pipeline\.review_format must be plain or pilot/);
@@ -124,17 +128,17 @@ test('aico-settings v1.3 or later names skillspector.mode, its default, the user
 });
 
 test('user docs describe the Personality tab, the Plan Gates and the Legal disclaimer', () => {
-  const concepts = read('documentation/concepts.md');
-  const commands = read('documentation/commands.md');
+  const concepts = docFolder(root, 'concepts');
+  const commands = docFolder(root, 'commands');
   const readme = read('README.md');
   assert.match(concepts, /It has seven tabs, in this order/);
   assert.match(concepts, /\*\*Personality\*\* — one collapsible card per Role/);
   assert.match(concepts, /Filter Roles/);
   assert.match(commands, /on the Personality tab/);
   assert.match(readme, /Personality \(one collapsible card per Role/);
-  for (const t of ['concepts.md', 'commands.md'])
-    assert.ok(!/Personality\*\* section has one collapsible card/.test(read('documentation/' + t)), t);
-  const section = (name) => commands.split(new RegExp('^### `/aico:' + name + '`', 'm'))[1].split(/^### /m)[0];
+  for (const t of [concepts, commands])
+    assert.ok(!/Personality\*\* section has one collapsible card/.test(t));
+  const section = (name) => commandPage(root, name);
   for (const p of ['report', 'campaign', 'content']) assert.match(section(p), /Plan Gate/, p);
   assert.match(concepts, /not legal advice or a compliance certificate/);
   assert.match(readme, /not legal advice or a compliance certificate/);

@@ -146,8 +146,8 @@ test('AC14 Playbook reports findings with suggested removal commands and runs no
   const text = read('skills/skillspector/SKILL.md');
   assert.match(text, /never run|do not run|runs none|none (is|are) run/i);
 });
-test('AC8 the command is documented in documentation/commands.md', () => {
-  assert.match(read('documentation/commands.md'), /\/aico:skillspector/);
+test('AC8 the command is documented in documentation/commands/skillspector.md', () => {
+  assert.match(read('documentation/commands/skillspector.md'), /\/aico:skillspector/);
 });
 
 // ---------- Role registration ----------
@@ -159,8 +159,8 @@ test('AC7 the Lead routes to skill-researcher and sourcing names it', () => {
   assert.match(read('skills/lead/SKILL.md'), /skill-researcher/);
   assert.match(read('skills/sourcing/SKILL.md'), /skill-researcher/);
 });
-test('AC7 documentation/roles.md lists the skill-researcher', () => {
-  assert.match(read('documentation/roles.md'), /skill-researcher/);
+test('AC7 documentation/roles/README.md lists the skill-researcher', () => {
+  assert.match(read('documentation/roles/README.md'), /skill-researcher/);
 });
 test('guard: the new files stay inside the line caps the pins above assume', () => {
   for (const p of ['agents/skill-researcher.md', 'skills/skillspector/SKILL.md']) {
@@ -203,7 +203,7 @@ test('AC8 Playbook: --all is an argument and a scope form asks when the scope is
 });
 
 // ---------- what no-llm sends: OSV.dev named everywhere, "nothing leaves" nowhere ----------
-const MODE_FILES = ['scripts/settings-page.html', 'docs/contracts/aico-settings.md', 'docs/contracts/skillspector-scan.md', 'skills/skillspector/SKILL.md', 'documentation/commands.md', 'CHANGELOG.md'];
+const MODE_FILES = ['scripts/settings-page.html', 'docs/contracts/aico-settings.md', 'docs/contracts/skillspector-scan.md', 'skills/skillspector/SKILL.md', 'documentation/commands/skillspector.md', 'CHANGELOG.md'];
 test('no file outside .company says nothing leaves the machine', () => {
   const claim = /nothing\s+leaves|no\s+data\s+leaves/i;
   const skip = new Set(['.git', '.company', 'node_modules', 'types']);
@@ -227,7 +227,7 @@ test('every text that describes the no-llm mode names the OSV.dev lookup', () =>
     for (const l of lines) assert.match(l, /OSV\.dev/, `${f}: ${l.slice(0, 80)}`);
   }
 });
-const EGRESS_FILES = [...MODE_FILES, 'documentation/concepts.md', 'README.md'];
+const EGRESS_FILES = [...MODE_FILES, 'documentation/concepts/settings-and-locks.md', 'README.md'];
 test('every no-llm description names ecosystems and never says "package names and versions"', () => {
   for (const f of EGRESS_FILES) {
     const text = read(f);

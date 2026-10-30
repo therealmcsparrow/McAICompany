@@ -69,8 +69,8 @@ test('skills-section v1: Contract, project template and installer agree on the #
 // ---------- registration and check.mjs ----------
 test('AC7 skill-researcher is registered everywhere and scripts/check.mjs passes', () => {
   assert.equal(JSON.parse(read('company/names.json'))['skill-researcher'], 'Selin');
-  for (const f of ['documentation/roles.md', 'README.md', 'documentation/concepts.md']) assert.match(read(f), /skill-researcher/, f);
-  assert.match(read('documentation/commands.md'), /\/aico:skillspector/);
+  for (const f of ['documentation/roles/README.md', 'README.md', 'documentation/concepts/research-and-skills.md']) assert.match(read(f), /skill-researcher/, f);
+  assert.match(read('documentation/commands/skillspector.md'), /\/aico:skillspector/);
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'check.mjs')], { cwd: root, encoding: 'utf8', timeout: 120000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
