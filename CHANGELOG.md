@@ -35,6 +35,9 @@ Planned release: 0.21.0.
 - The model floor file holds six protected Roles.
 - Rollback: set `pipeline.second_reviewer` and `pipeline.worktrees` to `off` in `/aico:settings`. The plan review has no setting; `pipeline.short_path` `on` skips it for low-risk work.
 
+### Fixed
+- **Re-begin after a Fix round.** `plan-tasks.mjs begin` now starts a new segment at round 0, so plan tasks left pending when a Fix round started are offered again by `next`, `lines` and `brief`. Before, the record stayed in the Fix round and those tasks could only be dispatched by hand, without a task brief. A `round` event now starts its round with an empty done list, since a round number can repeat after a re-begin. Contract `plan-tasks` v1.1 (fix note; record format unchanged).
+
 ## [0.20.0] - 2026-10-29
 
 Rollback: node scripts/stable.mjs 0.19.1

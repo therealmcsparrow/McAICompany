@@ -636,7 +636,8 @@ function applyEvent(st, rec) {
       if (!isInt(rec.tasks, 0, MAX_TASKS)) return 'tasks must be an integer 0 to 100';
       if ((problem = owProblem(rec.ow))) return problem;
       if (st.running.length) return 'begin while a task runs';
-      Object.assign(st, { begun: true, plan: rec.plan, hash: rec.hash, cap: rec.cap, mode: rec.mode, wave: [] });
+      // A begin opens a new segment at round 0, so tasks left pending when a Fix round started are offered again.
+      Object.assign(st, { begun: true, plan: rec.plan, hash: rec.hash, cap: rec.cap, mode: rec.mode, round: 0, sets: null, wave: [] });
       break;
     }
     case 'start': {
@@ -684,6 +685,8 @@ function applyEvent(st, rec) {
       st.round = rec.round;
       st.sets = sets;
       st.wave = [];
+      // After a re-begin a round number can repeat; its tasks start undone.
+      st.done.set(rec.round, []);
       break;
     }
     case 'merged': {
@@ -1003,8 +1006,7 @@ function cmdBegin(args, env) {
   }
   const st = loadRecord(env.root, slug).state ?? newState();
   if (st.running.length) throw new Refusal('a task is running');
-  const tasks = roundTasks(parsed.tasks, st);
-  const ow = overlapWaits(tasks, st.done.get(st.round) ?? [], [], mode === 'sequential' ? 1 : cap);
+  const ow = overlapWaits(parsed.tasks, st.done.get(0) ?? [], [], mode === 'sequential' ? 1 : cap);
   appendEvent(env, slug, {
     v: 1, at: utc(env.now), ev: 'begin', plan: positional[1], hash: plan.hash, cap, mode, tasks: parsed.tasks.length, ow
   });
