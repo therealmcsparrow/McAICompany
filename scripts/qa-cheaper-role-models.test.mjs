@@ -378,7 +378,7 @@ function section(text, heading) {
 }
 
 test('concepts page: the source order, versions, citations and the two unverified marks', () => {
-  const s = section(read('documentation', 'concepts.md'), 'Which model a Role runs on');
+  const s = read('documentation', 'concepts', 'model-choice.md');
   for (const needle of ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', '2.1.251', '2.1.257', 'roles.<role>.model', 'frontmatter', 'floor', 'protected']) {
     assert.ok(s.includes(needle), needle);
   }
@@ -390,7 +390,7 @@ test('concepts page: the source order, versions, citations and the two unverifie
 });
 
 test('roles page: tech-researcher on sonnet, the protected list and both rollback lines', () => {
-  const doc = read('documentation', 'roles.md');
+  const doc = read('documentation', 'roles', 'README.md');
   assert.match(doc, /tech-researcher[^\n]*sonnet/i);
   for (const r of PROTECTED) assert.ok(doc.includes(r), r);
   assert.match(doc, /roles\.<role>\.model/);
@@ -400,8 +400,8 @@ test('roles page: tech-researcher on sonnet, the protected list and both rollbac
 });
 
 test('commands page and feedback Playbook: the verdict line is shown in the report and never stops the run', () => {
-  const commands = read('documentation', 'commands.md');
-  assert.match(section(commands, '/aico:feedback'), /model verdict/);
+  const commands = read('documentation', 'commands', 'feedback.md');
+  assert.match(commands, /model verdict/);
   const feedback = read('skills', 'feedback', 'SKILL.md');
   assert.ok(feedback.includes('scripts/run.mjs" ledger model-verdict'));
   assert.ok(feedback.includes('`## Model`'));
@@ -439,8 +439,8 @@ test('release entry picker: after release it skips the empty Unreleased and take
 test('release notes and the model section state no money, percent or saving', () => {
   const entry = releaseEntry(read('CHANGELOG.md'));
   assert.match(entry, /^- /m, 'the chosen changelog section has at least one bullet');
-  const concepts = section(read('documentation', 'concepts.md'), 'Which model a Role runs on');
-  const verdictLines = section(read('documentation', 'commands.md'), '/aico:feedback').split('\n').join(' ').split(/(?<=\.)\s+/).filter((l) => /model verdict|model-verdict|## Model/.test(l)).join('\n');
+  const concepts = read('documentation', 'concepts', 'model-choice.md');
+  const verdictLines = read('documentation', 'commands', 'feedback.md').split('\n').join(' ').split(/(?<=\.)\s+/).filter((l) => /model verdict|model-verdict|## Model/.test(l)).join('\n');
   assert.notEqual(verdictLines, '');
   for (const text of [entry, concepts, verdictLines]) {
     assert.doesNotMatch(text, NO_MONEY);

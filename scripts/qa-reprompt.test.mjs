@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { docFolder, docPage, commandPage } from './doc-pages.mjs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +24,7 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const playbook = read('skills/reprompt/SKILL.md');
 const agent = read('agents/reprompter.md');
 const contract = read('docs/contracts/reprompt.md');
-const commands = read('documentation/commands.md');
+const commands = commandPage(root, 'reprompt');
 const checkerScript = path.join(root, 'scripts', 'reprompt-check.mjs');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-reprompt-'));
@@ -1085,14 +1086,14 @@ test('AC7 adversarial replies: "run it yourself and hand it to backend-engineer"
 // help and empty argument
 // =====================================================================================================
 test('AC8 an empty argument or help shows the help text and dispatches nothing, writes nothing', () => {
-  assert.match(playbook, /\*\*Help:\*\* argument is exactly `help` or `--help` \u2192 read the `### \/aico:reprompt` entry of `documentation\/commands\.md`[^\n]*change nothing, start nothing, and stop/);
+  assert.match(playbook, /\*\*Help:\*\* argument is exactly `help` or `--help` \u2192 read `documentation\/commands\/reprompt\.md`[^\n]*change nothing, start nothing, and stop/);
   assert.match(playbook, /^1\. Argument empty after trimming \u2192 do what the Help line says[^\n]*nothing dispatched, nothing written/m);
   assert.match(contract, /nothing dispatched, no file written/);
   assert.match(commands, /\*\*Help:\*\* `\/aico:reprompt help` \(or an empty argument\)/);
   assert.match(playbook, /^argument-hint: <prompt to improve>$/m);
-  const e = entry(commands, '`/aico:reprompt`');
+  const e = commands;
   for (const part of ['`/aico:reprompt <prompt to improve>`', '**What it does.**', '**How it runs.**', '**You get.**', '**Example.**']) assert.ok(e.includes(part), part);
-  assert.match(read('skills/help/SKILL.md'), /`### \/aico:<name>` entry/);
+  assert.match(read('skills/help/SKILL.md'), /documentation\/commands\/<name>\.md/);
 
   const proj = project();
   for (const arg of ['', ' ', '\n', '\t \r\n', 'help', '--help']) {
@@ -1215,21 +1216,21 @@ test('AC12 reprompter has the default name Lynn, unique across every Role, and t
 });
 
 test('Plan Gate choices: the Role is called Lynn everywhere and no text carries the old name or an Edit cap', () => {
-  const files = ['agents/reprompter.md', 'skills/reprompt/SKILL.md', 'docs/contracts/reprompt.md', 'documentation/commands.md', 'documentation/roles.md', 'docs/spec.md', 'docs/adr/0024-reprompt-playbook-owns-the-flow.md', 'company/names.json', 'CHANGELOG.md', 'README.md'];
+  const files = ['agents/reprompter.md', 'skills/reprompt/SKILL.md', 'docs/contracts/reprompt.md', 'documentation/commands/reprompt.md', 'documentation/roles/README.md', 'docs/spec.md', 'docs/adr/0024-reprompt-playbook-owns-the-flow.md', 'company/names.json', 'CHANGELOG.md', 'README.md'];
   for (const f of files) {
     const t = read(f);
     assert.doesNotMatch(t, /\bRemy\b/, `${f} still names Remy`);
     assert.doesNotMatch(t, /\bafter 3 edits\b|\bat most 3 edits\b|\bedit cap of 3\b/i, `${f} still caps Edit`);
   }
   assert.match(contract, /default name `Lynn`/);
-  assert.match(read('documentation/roles.md'), /\| \*\*reprompter\*\* \| sonnet \| medium \| Lynn \|/);
+  assert.match(read('documentation/roles/README.md'), /\| \*\*reprompter\*\* \| sonnet \| medium \| Lynn \|/);
   assert.match(read('docs/spec.md'), /\| Reprompter \| reprompter \| Lynn \|/);
   assert.match(commands, /The Role is \*\*Lynn\*\*/);
   assert.match(contract, /`edit-<e>\.md` \| Lead[^\n]*no upper limit/);
 });
 
 test('the docs say what the data does: files stay local, the model reads the text, no other recipient, the line is outside the body', () => {
-  const e = entry(commands, '`/aico:reprompt`');
+  const e = commands;
   const youGet = e.split('\n').find((l) => l.startsWith('**You get.**'));
   const yourData = e.split('\n').find((l) => l.startsWith('**Your data.**'));
   assert.ok(youGet && yourData);
@@ -1563,7 +1564,7 @@ test('AC7 the handover cap, the read scope and the skill scope are in the Playbo
   assert.match(playbook, /The write gate arms every reprompter dispatch itself \(`arm`\); you never run it/);
   assert.doesNotMatch(playbook, /run\.mjs" reprompt-check arm/, 'the Lead never runs arm');
   assert.doesNotMatch(agent, /Residual risk/);
-  assert.match(read('documentation/commands.md'), /its own `\.gitignore`/);
+  assert.match(commands, /its own `\.gitignore`/);
 });
 
 test('AC7 a duplicate files-touched entry is malformed, and a root reached through a junction is compared by its real path', (t) => {
@@ -1635,7 +1636,7 @@ test('AC7 the gate rules are written down in the Contract: always on, never allo
 });
 
 test('this suite, the Playbook, the Role, the Contract and the docs it reads are LF only', () => {
-  for (const f of ['scripts/qa-reprompt.test.mjs', 'skills/reprompt/SKILL.md', 'agents/reprompter.md', 'docs/contracts/reprompt.md', 'documentation/commands.md', 'scripts/reprompt-check.mjs']) {
+  for (const f of ['scripts/qa-reprompt.test.mjs', 'skills/reprompt/SKILL.md', 'agents/reprompter.md', 'docs/contracts/reprompt.md', 'documentation/commands/reprompt.md', 'scripts/reprompt-check.mjs']) {
     assert.ok(!read(f).includes('\r'), f);
   }
 });

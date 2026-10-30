@@ -22,7 +22,7 @@ const front = (text) => {
   assert.equal(lines[0], '---');
   const end = lines.indexOf('---', 1);
   assert.ok(end > 0, 'frontmatter closes');
-  return { lines, end, map: new Map(lines.slice(1, end).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2)])) };
+  return { lines, end, map: new Map(lines.slice(1, end).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2).replace(/^"(.*)"$/, '$1')])) };
 };
 
 for (const name of NAMES) {

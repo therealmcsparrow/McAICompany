@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -160,7 +160,7 @@ test('AC10 docs agree: GLOSSARY terms, README department, commands entries, spec
   const g = read('GLOSSARY.md');
   for (const t of ['Research run', 'Feasibility verdict', 'Low-hanging fruit', 'aico language', 'Design skills']) has(g, `**${t}**`);
   has(read('README.md'), 'Market & tech research', 'User research & testing', '/aico:research', '/aico:language');
-  has(read('documentation/commands.md'), '### `/aico:research`', '### `/aico:language`');
+  assert.ok(existsSync(join(root, 'documentation/commands/research.md')) && existsSync(join(root, 'documentation/commands/language.md')), 'research and language command pages');
   const spec = read('docs/spec.md');
   has(spec, 'market-researcher', 'tech-researcher', 'design-researcher', 'sourcing');
   has(read('CHANGELOG.md'), '0.9.0');

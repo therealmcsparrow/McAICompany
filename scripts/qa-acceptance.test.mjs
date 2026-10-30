@@ -586,6 +586,8 @@ const helpLineV13 = name => (
 );
 const typeLineV13 = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 const frontKey = (lines, key) => lines.find(l => l.startsWith(`${key}: `));
+// check.mjs strips one pair of surrounding double quotes from a frontmatter value; so does this comparison.
+const unq = l => (l === undefined ? l : l.replace(/^([a-z-]+: )"(.*)"$/, "$1$2"));
 
 // One software Playbook, v0.12.0 against now. Allowed: the description starts with the guard (then the old text, except where the
 // hand-over text itself changed), `disable-model-invocation` leaves every Playbook but the CEO-only ones, the Help line becomes the
@@ -593,10 +595,10 @@ const frontKey = (lines, key) => lines.find(l => l.startsWith(`${key}: `));
 function assertV012Playbook(name) {
   const file = `skills/${name}/SKILL.md`;
   const old = ctLines(git('show', `${BASE}:${file}`));
-  const now = ctLines(read(file));
+  const now = ctLines(read(file)).map(l => (/^(argument-hint|description): /.test(l) ? unq(l) : l));
   assert.ok(!read(file).includes('\r'), `${name}: LF only`);
   assert.equal(frontKey(now, 'name'), frontKey(old, 'name'), `${name}: name`);
-  assert.equal(frontKey(now, 'argument-hint'), (HAND_OVER_CHANGES[name] || {}).hint ?? frontKey(old, 'argument-hint'), `${name}: argument-hint`);
+  assert.equal(unq(frontKey(now, 'argument-hint')), (HAND_OVER_CHANGES[name] || {}).hint ?? unq(frontKey(old, 'argument-hint')), `${name}: argument-hint`);
   assert.ok(old.includes('disable-model-invocation: true'), `${name}: was hidden in v0.12.0`);
   assert.equal(now.includes('disable-model-invocation: true'), CEO_ONLY_PLAYBOOKS.includes(name), `${name}: hidden exactly when CEO-only`);
   assert.ok(old.includes(`**Help:** argument is exactly \`help\` or \`--help\` → follow \`aico:help\` for \`${name}\` and stop.`), `${name}: v0.12.0 Help line`);

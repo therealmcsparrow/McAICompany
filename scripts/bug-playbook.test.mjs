@@ -29,7 +29,7 @@ const at = (text, s) => { const i = text.indexOf(s); assert.ok(i >= 0, `missing:
 describe('SKILL.md', () => {
   const lines = skill.split('\n');
   const end = lines.indexOf('---', 1);
-  const map = new Map(lines.slice(1, end).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2)]));
+  const map = new Map(lines.slice(1, end).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2).replace(/^"(.*)"$/, '$1')]));
 
   test('frontmatter is exact, CEO-only, no allowed-tools, file stays short', () => {
     assert.equal(lines[0], '---');

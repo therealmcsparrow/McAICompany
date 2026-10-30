@@ -5,16 +5,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { docFolder, commandPage } from './doc-pages.mjs';
 
 const root = path.join(import.meta.dirname, '..');
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
-const commands = read('documentation/commands.md');
+const commands = docFolder(root, 'commands');
 const readme = read('README.md');
 const NAMES = ['grill', 'to-spec', 'to-tickets'];
 
 test('each command has entry and README row', () => {
   for (const n of NAMES) {
-    assert.ok(commands.includes(`### \`/aico:${n}\``), `entry ${n}`);
+    assert.ok(fs.existsSync(path.join(root, `documentation/commands/${n}.md`)), `command page ${n}`);
     assert.ok(readme.includes(`| \`/aico:${n} `), `README row ${n}`);
   }
 });
@@ -26,7 +27,7 @@ test('privacy line names the argument file path and no false gitignore claim', (
 });
 
 test('feature entry names draft inputs', () => {
-  const feature = commands.split('### `/aico:feature`')[1].split('\n### ')[0];
+  const feature = commandPage(root, 'feature');
   assert.match(feature, /draft file/);
   for (const f of ['grill.md', 'spec.md', 'plan.md']) assert.ok(feature.includes(f), f);
   assert.match(feature, /Blocking/);
@@ -57,7 +58,7 @@ test('privacy text names real destinations', () => {
 });
 
 test('company types table lists the new commands', () => {
-  const concepts = read('documentation/concepts.md');
+  const concepts = docFolder(root, 'concepts');
   const rows = concepts.split('\n').filter(l => /^\| `(software|research|marketing|design)` \(/.test(l));
   assert.equal(rows.length, 4);
   for (const r of rows) assert.ok(r.includes('grill'), r.slice(0, 20));
@@ -93,8 +94,9 @@ function runChangelogCheck(changelog) {
   try {
     fs.mkdirSync(path.join(tmp, 'scripts'));
     fs.mkdirSync(path.join(tmp, 'documentation'));
+    fs.copyFileSync(path.join(root, 'scripts/doc-pages.mjs'), path.join(tmp, 'scripts/doc-pages.mjs'));
     fs.copyFileSync(path.join(root, 'scripts/grill-spec-docs.test.mjs'), path.join(tmp, 'scripts/grill-spec-docs.test.mjs'));
-    fs.copyFileSync(path.join(root, 'documentation/commands.md'), path.join(tmp, 'documentation/commands.md'));
+    fs.cpSync(path.join(root, 'documentation/commands'), path.join(tmp, 'documentation/commands'), { recursive: true });
     fs.copyFileSync(path.join(root, 'README.md'), path.join(tmp, 'README.md'));
     fs.writeFileSync(path.join(tmp, 'CHANGELOG.md'), changelog);
     return spawnSync(process.execPath, ['--test', '--test-reporter=tap', `--test-name-pattern=${CHECK}`,

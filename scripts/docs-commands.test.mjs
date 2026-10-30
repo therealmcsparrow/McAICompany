@@ -3,19 +3,16 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { docFolder, commandPage } from './doc-pages.mjs';
 
 const root = path.join(import.meta.dirname, '..');
-const text = fs.readFileSync(path.join(root, 'documentation/commands.md'), 'utf8');
+const text = docFolder(root, 'commands');
 const NEW = ['idea', 'bug', 'grilling', 'grill-me', 'grill-with-docs'];
-const entry = name => {
-  const parts = text.split(`\n### \`/aico:${name}\`\n`);
-  assert.equal(parts.length, 2, `one entry for ${name}`);
-  return parts[1].split(/\n#{2,3} /)[0];
-};
+const entry = name => commandPage(root, name);
 
 describe('reference', () => {
   it('has an overview heading, a jargon list and a route table', async () => {
-    assert.match(text, /^## Overview$/m);
+    assert.match(text, /^## In short$/m);
     assert.match(text, /^\*\*Words used on this page\.\*\*$/m);
     for (const w of ['Playbook', 'Role', 'Lead', 'Gate', 'Handoff', 'Slug', 'Context cap', 'Ticket']) {
       assert.ok(text.includes(`- **${w}**`) || text.includes(`**${w}**:`) , w);
