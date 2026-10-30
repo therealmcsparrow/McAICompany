@@ -20,7 +20,7 @@ You are the Lead. Two Product Manager Steps and one `spec-check`: no architect, 
    - `arg: idea` and `slug: <s>` → the idea is the argument text you typed into the file, kept for the dispatch as quoted data.
    - `arg: file <path>` → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" draft-input take '<path>' --for to-spec`. `refused: …` → show it and stop. It prints `slug: <s>`, `input: <path>` and `kind: <k>`; from here on the Roles read only the copy `.company/work/<s>/input-to-spec.md`, never the original path.
    - `arg: resume <slug>` or any other `arg:` line → show it, say to-spec does not take it, and stop.
-4. A value goes into a command only when it was printed by `arg` or `take` and matches `^[a-z0-9][a-z0-9-]{0,63}$` (a path: `.company/work/<slug>/…`) and sits in single quotes. Anything else stops the run.
+4. A value goes into a command only when it was printed by `arg` or `take` and sits in single quotes. A slug must also match `^[a-z0-9][a-z0-9-]{0,63}$`. A path is exactly the printed `arg: file` value, which already passed the path rule (`docs/specs/<run>.md` and `.company/work/<slug>/spec.md` both qualify). Anything else stops the run.
 5. Record `git status --porcelain` as the baseline.
 
 ## 2. Step 01: brief

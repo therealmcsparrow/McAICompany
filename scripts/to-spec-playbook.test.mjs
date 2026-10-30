@@ -89,6 +89,16 @@ test('values reaching Bash come only from arg, take or free output and match the
   assert.ok(!/<idea>|\$ARGUMENTS|\$1/.test(text.replace(/argument-hint:[^\n]*/, '')), 'no raw argument in a command');
 });
 
+test('a path value is exactly the printed arg: file value, so docs/specs/<run>.md is taken; only slugs need the slug pattern', () => {
+  const rule = lines.find((l) => l.startsWith('4. '));
+  assert.ok(rule, 'item 4 exists');
+  assert.match(rule, /docs\/specs\/<run>\.md/);
+  assert.match(rule, /exactly the (?:printed )?`arg: file` value/);
+  assert.match(rule, /path rule/);
+  assert.ok(rule.indexOf('^[a-z0-9][a-z0-9-]{0,63}$') > rule.indexOf('slug'), 'the slug pattern is tied to slugs');
+  assert.ok(!/\(a path: `\.company\/work\/<slug>/.test(rule), 'a path is not forced under .company/work');
+});
+
 test('AC43 a draft built from a grill traces each Decision with (grill Q-<n>) or (grill F-<n>), never the file name', () => {
   has('(grill Q-<n>)', '(grill F-<n>)', 'kind grill', 'never the file name');
 });
