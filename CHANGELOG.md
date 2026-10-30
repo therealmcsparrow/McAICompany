@@ -4,6 +4,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Fixed
+- **Re-begin after a Fix round.** `plan-tasks.mjs begin` now starts a new segment at round 0, so plan tasks left pending when a Fix round started are offered again by `next`, `lines` and `brief`. Before, the record stayed in the Fix round and those tasks could only be dispatched by hand, without a task brief. A `round` event now starts its round with an empty done list, since a round number can repeat after a re-begin. Contract `plan-tasks` v1.1 (fix note; record format unchanged).
 ## [0.20.0] - 2026-10-29
 
 Rollback: node scripts/stable.mjs 0.19.1
