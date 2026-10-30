@@ -1276,8 +1276,8 @@ describe('AC14 no other Playbook runs the tier path', () => {
     };
     walk(path.join(REPO, 'skills'));
     walk(path.join(REPO, 'agents'));
-    // intake-and-ship.md is a feature reference; it only names the tier-sets Contract (entries prototype, destination-spec)
-    assert.deepEqual(named.sort(), ['skills/feature/SKILL.md', 'skills/feature/references/intake-and-ship.md', 'skills/fix/SKILL.md', 'skills/pipeline/SKILL.md', 'skills/pipeline/references/tier-path.md']);
+    // intake-and-ship.md names the tier-sets Contract (entries prototype, destination-spec); lead-handover.md names the tier-path record the Lead hand-over reads
+    assert.deepEqual(named.sort(), ['skills/feature/SKILL.md', 'skills/feature/references/intake-and-ship.md', 'skills/fix/SKILL.md', 'skills/pipeline/SKILL.md', 'skills/pipeline/references/lead-handover.md', 'skills/pipeline/references/tier-path.md']);
     const playbooks = fs.readdirSync(path.join(REPO, 'skills')).filter((n) => fs.existsSync(path.join(REPO, 'skills', n, 'SKILL.md')) && /^# Playbook: /m.test(read(`skills/${n}/SKILL.md`)));
     assert.ok(playbooks.includes('refactor') && playbooks.length > 5);
     assert.doesNotMatch(read('skills/lead/SKILL.md'), /tier-set|tier-path/);
