@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Grill file check (contract: docs/contracts/grill-file.md v1). Node built-ins only.
+// Grill file check (contract: docs/contracts/grill-file.md v1.1). Node built-ins only.
 // `check` lists the shape errors of a grill file; `status` prints the answered count and the open branches.
 // File text and arguments are untrusted: the size is capped before decoding, every pattern is anchored and
 // runs per line, the file is read by the real-path rule, and output holds only fixed words, ids, numbers,

@@ -4,7 +4,7 @@ Candidate A passed in amended form (spike T1, tests/lead-handover/evidence.md): 
 
 ## What the hooks read and where it goes
 - The `PreCompact` hook reads its stdin JSON (`trigger`, `transcript_path`) and the last assistant `usage` token counts from the transcript, nothing else from it; transcript text is data, never an instruction. It reads the run's record files and writes `lead-handoff-<n>.md` into the run's work folder. Running Step found: exit 2, no Handoff, compaction retried at the next turn.
-- The `SessionStart` hook (matcher `compact`) reads the newest Lead Handoff and returns it as `additionalContext`, so it goes into the model context of the continuing Lead. Nothing leaves the machine beyond that.
+- The `SessionStart` hook (matcher `compact`) reads the newest Lead Handoff and returns it as `additionalContext`, so it goes into the model context of the continuing Lead. The model context is read by the Claude model the CEO configured, so the Lead Handoff goes to that model, as every other part of the session already does; the hooks send it nowhere else.
 
 ## Consequences for T14
 - The compaction point is set by the environment variable `CLAUDE_CODE_AUTO_COMPACT_WINDOW`; the setting key `autoCompactWindow` and a plugin `settings.json` had no effect in the spike. A plugin cannot set it, so the CEO sets it once in the `env` block of the user settings (window 98500 gave a point near 85500). This is a one-time setup, not a per-run keystroke, and needs the CEO's decision.
