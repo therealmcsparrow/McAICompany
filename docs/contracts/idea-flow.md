@@ -1,6 +1,8 @@
-# Contract: idea-flow v1
+# Contract: idea-flow v1.1
 
-New Contract. Provider: `scripts/idea-flow.mjs` (Node built-ins only). Writer of the record: the Lead of `aico:idea` and `aico:bug`, only through this CLI. Consumers: the same Leads (`options`, `state`, `read`) and `ticket-approval` v1 (reads nothing from it). The allowed picks of every form come from `options`, never from the Lead's text.
+v1.1 (task reprompt-20261030-1309-draft-2-draft, CEO decision 2026-10-30; additive): outside the `software` company type the tickets form offers only `G park-roadmap` and `E park-idea`; `options` never prints the build letter there and `pick` of it is refused. The type is read with `company-type` v1.7 `resolve` (the project's `company_type` line, default `software`), never from a Role or the CEO's text.
+
+Provider: `scripts/idea-flow.mjs` (Node built-ins only; it imports `run` from `scripts/company-type.mjs`). Writer of the record: the Lead of `aico:idea` and `aico:bug`, only through this CLI. Consumers: the same Leads (`options`, `state`, `read`) and `ticket-approval` v1 (reads nothing from it). The allowed picks of every form come from `options`, never from the Lead's text.
 
 ## Where it lives
 - `.company/work/<slug>/idea-flow.jsonl`, slug `^[a-z0-9][a-z0-9-]{0,63}$`. No other path is accepted.
@@ -18,6 +20,7 @@ Forms and the picks they offer:
 - grill form: `1 grilling`, `2 grill-me`, `3 grill-with-docs`. Then `done <grill step>`, then `done reprompt`.
 - routes form: `A cooler`, `B brainstorm`, `C research`, `D to-spec`, `E park-idea`. After A: B C D E. After B: C D E. After C: `done reprompt` first, then D E.
 - D: `done to-spec`, then `done to-tickets`, then the tickets form: `F build`, `G park-roadmap`, `E park-idea`.
+- Tickets form by company type (v1.1): `software` offers `F build`, `G park-roadmap`, `E park-idea`; every other type offers `G park-roadmap`, `E park-idea` only (no build route there for now). The type is looked up when `options` or `pick` meets the tickets form; no other form depends on it, and replaying the record never does, so an old record stays valid.
 - F: `done triage --size <s> --tier <t>`, then `done build`; the flow ends. G ends the flow at once, nothing built: the Lead has parked every ticket not yet parked in the roadmap through `ticket-approval` v1 `park-ticket`. E: `park-idea <slug> <name>` ends the flow.
 - While a step is pending `options` prints no option line; `pick` is refused.
 - `state` prints `build: feature` for kind idea and `build: fix` for kind bug. Nothing else depends on the kind; both kinds offer identical letters at every form.
@@ -31,7 +34,7 @@ Every argument is at most 4096 characters and holds no character of Unicode cate
 - `park-idea <slug> <name>`: only while `park-idea` is pending. `<name>` matches `^[a-z0-9][a-z0-9-]{2,63}$` and is not a Windows device name (`con prn aux nul com1-9 lpt1-9`, with or without a `-` suffix part, case-folded); else exit 1 `name refused`. Copies the work folder (regular files only, no link followed or copied, depth 3, at most 200 files, 1 MiB each) to `.company/ideas/<name>/`; the directory is made without `recursive` so a collision is detected, then `<name>-2` to `<name>-9` are tried, then exit 1 `name taken`. Files are copied with exclusive create. The work folder is never changed or deleted. Prints `parked <final-name>`.
 - `state <slug>`: prints `kind: <k>`, `form: <grill|routes|tickets|pending <step>|ended>`, `build: <feature|fix>`.
 - `read <slug>`: prints `<n> <event> <fields>` per line, validated values only.
-- Refusals `refused: <reason>` exit 3: `usage`, `argument is not accepted`, `bad slug`, `bad kind`, `bad step`, `bad size`, `bad tier`, `bad out`, `not an allowed pick`, `size and tier only for triage`, `size and tier required`. Exit 1, fail loud: `unknown slug`, `exists`, `step out of order`, `name refused`, `name taken`, `broken record`, `link`, `not a regular file`, `hard-linked`, `too large`.
+- Refusals `refused: <reason>` exit 3: `usage`, `argument is not accepted`, `bad slug`, `bad kind`, `bad step`, `bad size`, `bad tier`, `bad out`, `not an allowed pick`, `size and tier only for triage`, `size and tier required`. Exit 1, fail loud: `company type` (v1.1: `company-type resolve` refused or printed no type, at the tickets form only; nothing is written), `unknown slug`, `exists`, `step out of order`, `name refused`, `name taken`, `broken record`, `link`, `not a regular file`, `hard-linked`, `too large`.
 - Output holds only fixed words, slugs, validated values and numbers; no argument or file text is echoed on a refusal.
 
 ## Personal data
@@ -42,4 +45,4 @@ The record holds the kind, step names, chosen routes, an optional artefact path 
 - Script cannot run or prints nothing → the Lead stops.
 
 ## Compatibility
-New Contract, v1. An added event, step, route or reason needs a new version.
+v1.1 is additive: kinds, events, steps, routes and every reason of v1 are unchanged; `software` behaves byte for byte as v1; one new exit-1 reason `company type`. An added event, step, route or reason needs a new version.

@@ -52,9 +52,24 @@ describe('SKILL.md', () => {
     assert.ok(at(skill, '**Help:**') < at(skill, '**Type:**'));
   });
 
-  test('loads the shared route, is kind idea and builds through feature', () => {
-    has(skill, ROUTES_PATH, 'kind `idea`', 'aico:feature');
-    lacks(skill, 'aico:fix', /<plugin root>/);
+  test('loads the shared route, is kind idea and names no build Playbook (the route file does)', () => {
+    has(skill, ROUTES_PATH, 'kind `idea`', /only G and E/);
+    lacks(skill, 'aico:feature', 'aico:fix', 'aico:bug', /<plugin root>/);
+    has(routes, 'aico:feature', 'aico:fix', '(gated: `playbooks:` lists feature)');
+  });
+
+  test('outside software the tickets form has no build letter', () => {
+    has(routes, /park-roadmap and park-idea in any other type/, /Only when `idea-flow options` printed the build letter/);
+    const cwd = tmp('idea-playbook-');
+    fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: design\n');
+    const f = (...argv) => flow(argv, cwd);
+    const optionLines = (r) => r.out.split('\n').filter((l) => l.startsWith('option '));
+    f('start', 'idea-t', '--kind', 'idea');
+    f('pick', 'idea-t', '1'); f('done', 'idea-t', 'grilling'); f('done', 'idea-t', 'reprompt');
+    f('pick', 'idea-t', 'D'); f('done', 'idea-t', 'to-spec'); f('done', 'idea-t', 'to-tickets');
+    assert.deepEqual(optionLines(f('options', 'idea-t')).map((l) => l.split(' ')[2]), ['park-roadmap', 'park-idea']);
+    assert.equal(f('pick', 'idea-t', 'F').code, 3);
   });
 
   test('trust and privacy lines name the recipients', () => {

@@ -307,3 +307,47 @@ test('the CLI runs as a process and echoes no argument on refusal', () => {
   assert.equal(q.status, 0);
   assert.match(q.stdout, /started/);
 });
+
+function setType(cwd, id) {
+  fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, '.company', 'project.md'), `# Project\ncompany_type: ${id}\n`);
+}
+
+test('outside software the tickets form offers only G and E; pick F is refused', () => {
+  for (const id of ['research', 'marketing', 'design']) {
+    const cwd = root();
+    setType(cwd, id);
+    toTickets(cwd, 'n', 'idea');
+    assert.deepEqual(letters(run(cwd, 'options', 'n')), ['G', 'E'], id);
+    const r = run(cwd, 'pick', 'n', 'F');
+    assert.equal(r.code, 3);
+    assert.equal(r.out, 'refused: not an allowed pick\n');
+    assert.equal(fs.readFileSync(rec(cwd, 'n'), 'utf8').includes('"build"'), false);
+    assert.match(run(cwd, 'pick', 'n', 'G').out, /picked G park-roadmap/);
+    assert.equal(run(cwd, 'options', 'n').out, 'ended\n');
+  }
+});
+
+test('software (explicit or default) keeps F G E; other forms do not depend on the type', () => {
+  const cwd = root();
+  setType(cwd, 'software');
+  toTickets(cwd, 's', 'idea');
+  assert.deepEqual(letters(run(cwd, 'options', 's')), ['F', 'G', 'E']);
+  const c2 = root();
+  setType(c2, 'research');
+  toRoutes(c2, 'r', 'idea');
+  assert.deepEqual(letters(run(c2, 'options', 'r')), ['A', 'B', 'C', 'D', 'E']);
+});
+
+test('a broken company_type line fails the tickets form loud and writes nothing', () => {
+  const cwd = root();
+  toTickets(cwd, 'b', 'idea');
+  setType(cwd, 'nonsense');
+  const before = fs.readFileSync(rec(cwd, 'b'), 'utf8');
+  for (const argv of [['options', 'b'], ['pick', 'b', 'F']]) {
+    const r = run(cwd, ...argv);
+    assert.equal(r.code, 1);
+    assert.equal(r.out, 'error: company type\n');
+  }
+  assert.equal(fs.readFileSync(rec(cwd, 'b'), 'utf8'), before);
+});

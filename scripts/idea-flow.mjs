@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v1).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.1).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { run as companyType } from './company-type.mjs';
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -21,6 +22,7 @@ const STEPS = [...GRILLS, 'reprompt', 'cooler', 'brainstorm', 'research', 'to-sp
 const GRILL_FORM = [['1', 'grilling'], ['2', 'grill-me'], ['3', 'grill-with-docs']];
 const ROUTES = [['A', 'cooler'], ['B', 'brainstorm'], ['C', 'research'], ['D', 'to-spec'], ['E', 'park-idea']];
 const TICKET_FORM = [['F', 'build'], ['G', 'park-roadmap'], ['E', 'park-idea']];
+const TICKET_FORM_PARK = TICKET_FORM.filter(([, r]) => r !== 'build');
 const LEVEL = { cooler: 1, brainstorm: 2, research: 3 };
 
 const MAX_ARG = 4096;
@@ -68,9 +70,19 @@ function checkEvent(o) {
   }
 }
 
-function optionsOf(st) {
+// The build pick exists only in a software company; the type comes from company-type resolve, never from text.
+function typeOf(cwd) {
+  const r = companyType(['resolve', '--json'], { cwd });
+  let id;
+  try { id = JSON.parse(r.out).id; } catch { fail('company type'); }
+  if (r.code !== 0 || typeof id !== 'string') fail('company type');
+  return id;
+}
+
+function optionsOf(st, cwd) {
   if (st.form === 'grill') return GRILL_FORM;
-  if (st.form === 'tickets') return TICKET_FORM;
+  // Replay (no cwd) accepts every record the full form allows; the type limits only new picks.
+  if (st.form === 'tickets') return cwd === undefined || typeOf(cwd) === 'software' ? TICKET_FORM : TICKET_FORM_PARK;
   if (st.form === 'routes') return ROUTES.filter(([, r]) => !(r in LEVEL) || LEVEL[r] > st.level);
   return [];
 }
@@ -267,7 +279,7 @@ function exec(argv, cwd) {
       checkSlug(slug);
       const { events, state } = load(cwd, slug);
       if (cmd === 'options') {
-        const o = optionsOf(state);
+        const o = optionsOf(state, cwd);
         if (o.length) o.forEach(([l, r]) => lines.push(`option ${l} ${r}`));
         else lines.push(formText(state));
       } else if (cmd === 'state') {
@@ -279,7 +291,7 @@ function exec(argv, cwd) {
       if (rest.length !== 1) usage();
       checkSlug(slug);
       const { state } = load(cwd, slug);
-      const hit = optionsOf(state).find(([l]) => l === rest[0]);
+      const hit = optionsOf(state, cwd).find(([l]) => l === rest[0]);
       if (!hit) refuse('not an allowed pick');
       append(cwd, slug, { e: 'pick', letter: hit[0], route: hit[1] }, false);
       lines.push(`picked ${hit[0]} ${hit[1]}`);
