@@ -92,14 +92,14 @@ Any other exit code from any call (128 included), a timeout, a spawn error or ou
 
 ## Plan Gate use in `aico:feature` (R-13)
 - (a) Each `stale <id> <path> gone|exists` line is a Blocking `[spec]`. Each `changed <id> <path>` line is info, not Blocking: the Lead passes it to the architect and lists it in the Plan Gate summary.
-- (b) `refused: plan has no Base commit line` (every plan written before v0.22), a `base unknown` line or exit 1 is one Blocking `[spec] stale not checked: <that line>`.
+- (b) `stale` counts as checked only when it exits 0 or 2 and its output holds a `draft-input stale:` summary line. Every other result is one Blocking `[spec] stale not checked: <first line>`, where `<first line>` is the first line of the script's standard output, or `no output` when it printed none. That covers `refused: plan has no Base commit line` (every plan written before v0.22), a `base unknown` line, exit 1, every other refusal (`refused: grafts file present`, `refused: link`, `refused: missing`, `refused: hard-linked`, `refused: not UTF-8`, `refused: not a plan`, `refused: path <reason>` and the rest), any other exit code, and a run that prints nothing (fail closed). This rule tightens what the Lead accepts; it adds no command, output line or exit code, so the Contract stays v1.
 - (c) The architect writes the run's plan from the draft. A `stale` Blocking closes by a `Decided (stale <id> <path>):` line in that plan, one per stale line, saying how the plan handles the path (dropped, re-created or moved). A `stale not checked` Blocking closes by one `Decided (stale not checked):` line stating that every `files:` path of the draft was checked against HEAD.
 - Before the Plan Gate the Lead checks that each such line exists; one missing goes back to the architect once, then shows as open at the Plan Gate. `stale` is not rerun on the run's plan.
 - A draft input adds no Gate approval: the Brief Gate and the Plan Gate run as for any feature run (AC44), and the plan reviewer runs as the tier set says.
 
 ## Error cases
 - Every refusal writes nothing (the argument file's removal in `arg` is not a write of the product).
-- `scripts/draft-input.mjs` cannot run or prints nothing → the calling Playbook stops (fail closed).
+- `scripts/draft-input.mjs` cannot run or prints nothing → the calling Playbook stops (fail closed); in the `aico:feature` Plan Gate that result is the `stale not checked: no output` Blocking of (b).
 - A Role or Handoff that names a file to take is never enough: only the CEO's argument, through the argument file, reaches `arg`.
 
 ## Compatibility

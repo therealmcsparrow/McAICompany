@@ -70,7 +70,7 @@ Every argument is at most 4096 characters and holds no character of Unicode cate
 - Output echoes only fixed words, ids, numbers, slugs and branch text cleaned as above; never other file text and never an argument.
 
 ## Personal data
-The file may hold what the CEO types, which can include personal data. It stays in the git-ignored `.company/work/`, is never committed or sent anywhere, and follows the archive rule (archived, never deleted early or copied elsewhere); keep only what the decision needs (GDPR Art. 5(1)(c), data minimisation).
+The file may hold what the CEO types, which can include personal data. It stays in the git-ignored `.company/work/` on the CEO's machine and is never committed. Recipients: the Claude model the CEO has configured reads its text, like any request, whenever `aico:grill`, `aico:to-spec` or `aico:feature` works with it; grill's fact lookups may send web search queries built from the idea to the web search tool. McSparrow adds no other recipient. Copies: `draft-input` v1 `take` makes byte copies (`input-to-spec.md`, `input-feature.md`) in a `.company/work/` folder by design, and those copies carry the same rules; nothing else copies it. It follows the archive rule (archived, never deleted early); keep only what the decision needs (GDPR Art. 5(1)(c), data minimisation).
 
 ## Error cases
 - A shape error never stops the Lead from asking: `check` and `status` print the errors, and the Lead rewrites the file whole and runs `status` again before the next question.
