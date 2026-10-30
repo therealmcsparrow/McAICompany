@@ -68,13 +68,13 @@ test('company types table lists the new commands', () => {
   }
 });
 
-test('changelog Unreleased mentions the commands', () => {
-  // The release empties Unreleased into the newest version section, so accept either.
+const CHECK = 'changelog Unreleased or 0.22.0 mentions the commands';
+test(CHECK, () => {
+  // Pinned release: the entry sits in Unreleased until 0.22.0 ships, then in the 0.22.0 section for good.
   const sections = read('CHANGELOG.md').split('\n## [').slice(1);
-  const unreleased = sections.find(s => s.startsWith('Unreleased]')) ?? '';
-  const newest = sections.find(s => !s.startsWith('Unreleased]')) ?? '';
-  const section = unreleased.replace(/^Unreleased\]/, '').trim() ? unreleased : newest;
-  for (const n of NAMES) assert.ok(section.includes(`/aico:${n}`), n);
+  const candidates = ['Unreleased]', '0.22.0]'].map(h => sections.find(s => s.startsWith(h)) ?? '');
+  const section = candidates.find(c => NAMES.every(n => c.includes(`/aico:${n}`)));
+  assert.ok(section, 'commands in neither Unreleased nor 0.22.0');
   assert.ok(!/\r/.test(section));
 });
 
@@ -97,18 +97,26 @@ function runChangelogCheck(changelog) {
     fs.copyFileSync(path.join(root, 'documentation/commands.md'), path.join(tmp, 'documentation/commands.md'));
     fs.copyFileSync(path.join(root, 'README.md'), path.join(tmp, 'README.md'));
     fs.writeFileSync(path.join(tmp, 'CHANGELOG.md'), changelog);
-    return spawnSync(process.execPath, ['--test', '--test-name-pattern=changelog Unreleased mentions the commands',
-      path.join(tmp, 'scripts/grill-spec-docs.test.mjs')], { encoding: 'utf8', env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
+    return spawnSync(process.execPath, ['--test', '--test-reporter=tap', `--test-name-pattern=${CHECK}`,
+      path.join(tmp, 'scripts/grill-spec-docs.test.mjs')], { encoding: 'utf8', timeout: 30000, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 const ENTRY = '- **Grill, spec and tickets.** `/aico:grill`, `/aico:to-spec`, `/aico:to-tickets`.\n';
 
-test('regression: changelog check passes after release (commands under newest version, Unreleased empty)', () => {
-  const r = runChangelogCheck(`# Changelog\n\n## [Unreleased]\n\n## [0.22.0] - 2026-10-30\n\n### Added\n${ENTRY}\n## [0.21.0] - 2026-10-29\n\n- old\n`);
-  assert.equal(r.status, 0, r.stdout.slice(-800));
-});
+const mk = (unreleased, ...versions) => `# Changelog\n\n## [Unreleased]\n${unreleased}\n${versions.join('\n')}`;
+const V22 = `## [0.22.0] - 2026-10-30\n\n### Added\n${ENTRY}\n`;
+const V21 = '## [0.21.0] - 2026-10-29\n\n- old\n';
+const OTHER = '\n### Added\n- **Other.** Unrelated entry.\n';
+// Asserts the check itself ran (tap line for its name), so a renamed check cannot pass vacuously.
+const ran = (r, ok) => {
+  assert.ok(r.stdout.includes(`${ok ? 'ok' : 'not ok'} 1 - ${CHECK}`), `check did not run: ${r.stdout.slice(-800)}`);
+  assert.equal(r.status === 0, ok, r.stdout.slice(-800));
+};
 
-test('control: changelog check passes before release (commands under Unreleased)', () => {
-  const r = runChangelogCheck(`# Changelog\n\n## [Unreleased]\n\n### Added\n${ENTRY}\n## [0.21.0] - 2026-10-29\n\n- old\n`);
-  assert.equal(r.status, 0, r.stdout.slice(-800));
+test('regression: passes after release (commands under 0.22.0, Unreleased empty)', () => ran(runChangelogCheck(mk('', V22, V21)), true));
+test('control: passes before release (commands under Unreleased)', () => ran(runChangelogCheck(mk(`\n### Added\n${ENTRY}`, V21)), true));
+test('regression: passes with an unrelated Unreleased entry after 0.22.0', () => ran(runChangelogCheck(mk(OTHER, V22, V21)), true));
+test('regression: passes after 0.23.0 is released on top', () => ran(runChangelogCheck(mk('', '## [0.23.0] - 2026-11-01\n\n- other\n', V22, V21)), true));
+test('negative: fails when the commands are in neither Unreleased nor 0.22.0', () => {
+  ran(runChangelogCheck(mk(OTHER, '## [0.22.0] - 2026-10-30\n\n- other\n', `## [0.21.0] - 2026-10-29\n\n${ENTRY}`)), false);
 });
