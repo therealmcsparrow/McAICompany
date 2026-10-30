@@ -71,7 +71,7 @@ describe('calibration', () => {
 
   test('the Contract holds the setting name and the window', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1$/m);
+    assert.match(text, /^# Contract: lead-handoff v1.1$/m);
     assert.ok(text.includes('CLAUDE_CODE_AUTO_COMPACT_WINDOW'));
     assert.ok(text.includes('98500'));
     assert.ok(text.includes('85500'));
@@ -80,8 +80,8 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1');
-    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.1');
+    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
 
@@ -221,16 +221,66 @@ describe('Handoff content', () => {
     assert.ok(!text.includes('evil'));
   });
 
-  test('a good base commit is carried', () => {
+  const BASE = 'ab12'.repeat(10);
+  const stepFile = (fx, base) => fs.writeFileSync(path.join(fx.dir, '02-architect.md'), [
+    '---', 'step: 2', 'role: architect', 'task: x', 'status: done', 'round: 1',
+    `base-commit: ${base}`, 'risk-tier: low', '---', 'By: architect', '',
+  ].join('\n'));
+  const tierPath = (fx, extra = []) => {
+    const begin = { v: 1, at: iso(Date.now()), ev: 'begin', pb: 'feature', tier: 'medium', path: 'full', why: 'tier', rev: 1, base: BASE, skip: [] };
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), [begin, ...extra].map((r) => `${JSON.stringify(r)}\n`).join(''));
+  };
+
+  test('the base commit comes from the tier-path record, never from a Step file', () => {
     const fx = fixture();
-    fs.writeFileSync(path.join(fx.dir, '02-architect.md'), [
-      '---', 'step: 2', 'role: architect', 'task: x', 'status: done', 'round: 1',
-      `base-commit: ${'ab12'.repeat(10)}`, 'risk-tier: low', '---', 'By: architect', '',
-    ].join('\n'));
+    stepFile(fx, 'cd34'.repeat(10));
+    tierPath(fx);
     watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
-    assert.match(text, /^base-commit: ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12$/m);
+    assert.match(text, new RegExp(`^base-commit: ${BASE}$`, 'm'));
+    assert.ok(!text.includes('cd34'));
     assert.match(text, /^round: 1$/m);
+  });
+
+  test('without a tier-path record the base commit is unknown, whatever a Step file says', () => {
+    const fx = fixture();
+    stepFile(fx, BASE);
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    const text = fs.readFileSync(handoffFile(fx), 'utf8');
+    assert.match(text, /^base-commit: unknown$/m);
+    assert.match(text, /^tier-path: none$/m);
+    assert.match(text, /^tier-set: \[\]$/m);
+  });
+
+  test('the tier, path and set of the record are carried and a raise only goes up', () => {
+    const fx = fixture();
+    stepFile(fx, BASE);
+    tierPath(fx, [{ v: 1, at: iso(Date.now()), ev: 'raise', tier: 'high', cause: 'diff' }]);
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    const text = fs.readFileSync(handoffFile(fx), 'utf8');
+    assert.match(text, /^risk-tier: high$/m);
+    assert.match(text, /^tier-path: feature full$/m);
+    assert.match(text, /^tier-set: \[[a-z0-9-]+(, [a-z0-9-]+)*\]$/m);
+    assert.ok(resume(sessionStart(), opts(fx)).out.includes('tier-path: feature full'));
+  });
+
+  test('a broken tier-path record fails closed: high, no base, marked broken', () => {
+    const fx = fixture();
+    stepFile(fx, BASE);
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), 'not json\n');
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    const text = fs.readFileSync(handoffFile(fx), 'utf8');
+    assert.match(text, /^risk-tier: high$/m);
+    assert.match(text, /^tier-path: broken$/m);
+    assert.match(text, /^base-commit: unknown$/m);
+  });
+
+  test('an all-zero or Step-claimed base is never carried', () => {
+    const fx = fixture();
+    const begin = { v: 1, at: iso(Date.now()), ev: 'begin', pb: 'fix', tier: 'low', path: 'short', why: 'short', rev: 1, base: '0'.repeat(40), skip: [] };
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), `${JSON.stringify(begin)}\n`);
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^base-commit: unknown$/m);
   });
 
   test('an open Gate is a pending form; a passed Gate is not', () => {
@@ -268,6 +318,23 @@ describe('Handoff content', () => {
     assert.ok(Buffer.byteLength(text) < 2048);
     const next = text.slice(text.indexOf('## Next'));
     for (const l of next.split('\n').slice(1).filter(Boolean)) assert.match(l, /^- [A-Za-z0-9 .,`'-]{1,160}$/);
+  });
+});
+
+describe('finding the run', () => {
+  test('with more than 200 work folders the newest open idea flow is still found', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-handover-'));
+    tmps.push(base);
+    const root = path.join(base, 'product');
+    const claudeDir = path.join(base, 'claude');
+    fs.mkdirSync(path.join(claudeDir, 'projects', 'p1'), { recursive: true });
+    const work = path.join(root, '.company', 'work');
+    for (let i = 0; i < 201; i++) fs.mkdirSync(path.join(work, `a${String(i).padStart(3, '0')}`), { recursive: true });
+    fs.mkdirSync(path.join(work, 'zzz-open'), { recursive: true });
+    fs.writeFileSync(path.join(work, 'zzz-open', 'idea-flow.jsonl'), `${JSON.stringify({ e: 'start', kind: 'idea', ts: '2026-10-30T10:00:00.000Z' })}\n`);
+    const fx = { root, claudeDir, dir: path.join(work, 'zzz-open'), slug: 'zzz-open' };
+    watch(preCompact(transcript(fx, USAGE_85500)), { root, claudeDir, env: {} });
+    assert.ok(fs.existsSync(path.join(work, 'zzz-open', 'lead-handoff-1.md')));
   });
 });
 
@@ -432,6 +499,7 @@ describe('hooks.json and source', () => {
 });
 
 describe('pipeline wiring', () => {
+  const fresh = (s) => s.toLowerCase();
   const pipeline = fs.readFileSync(path.join(repo, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
   const ref = fs.readFileSync(path.join(repo, 'skills', 'pipeline', 'references', 'lead-handover.md'), 'utf8');
 
@@ -452,6 +520,28 @@ describe('pipeline wiring', () => {
     for (const needle of ['records beat the summary', 'run-state', 'ask', 'idea-flow', 'options', 'lead-handover', 'read',
       '## Next', 'lead hand-overs:', 'never write a Lead Handoff by hand', 'never ask the CEO to clear or resume', 'about 8k tokens']) {
       assert.ok(ref.toLowerCase().includes(needle.toLowerCase()), `lead-handover.md lacks ${needle}`);
+    }
+  });
+
+  test('the Lead budget line is the fixed cap and the automatic hand-over, no manual resume', () => {
+    assert.ok(!pipeline.includes('150k'));
+    assert.ok(!pipeline.includes('00-lead-state'));
+    assert.ok(!/resume <slug>/.test(pipeline));
+    assert.ok(pipeline.includes('95000') && pipeline.includes('85500'));
+    assert.ok(pipeline.includes('references/lead-handover.md'));
+  });
+
+  test('approved Core is written to project.md after the Ship Gate Approve in feature and fix', () => {
+    const line = pipeline.split('\n').find((l) => /Ship Gate.*Approve.*[.]company[/]project[.]md/.test(l));
+    assert.ok(line, 'no Ship Gate Core line');
+    assert.ok(/feature and fix/.test(line));
+    assert.ok(/Plan Gate/.test(pipeline.split('\n').find((l) => l.startsWith('- **Plan Gate** must show'))));
+  });
+
+  test('after a hand-over the Lead takes base and fail-closed state from the record only', () => {
+    const t = fresh(ref);
+    for (const needle of ['base commit:', 'tier-path', 'tier-set', 'fail closed', 'high', 'triage', 'nonce', 'ticket-approval read', 'approve line']) {
+      assert.ok(t.includes(needle), `lead-handover.md lacks ${needle}`);
     }
   });
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1
-// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1
+// contract: docs/contracts/lead-handoff.md v1.1
+// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point and a SessionStart hook that
 // injects it after compaction, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
@@ -10,8 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { active, show } from './run-state.mjs';
-import { lint } from './handoff-lint.mjs';
 import { main as flow } from './idea-flow.mjs';
+import { readTierPath } from './tier-set.mjs';
 
 export const CAP = 95000;
 export const AUTO_COMPACT_WINDOW = 98500;
@@ -42,6 +42,7 @@ const MAX_LINES = 1000;
 const MAX_LINE = 512;
 const MAX_FOLDERS = 200;
 const MAX_NAMES = 2000;
+const MAX_SCAN = 20000;
 const FRESH_MS = 12 * 60 * 60 * 1000;
 const RESUME_MS = 10 * 60 * 1000;
 const SELF_EXIT_MS = 4000;
@@ -173,11 +174,16 @@ function findRun(root, now) {
   const l = lstatOrNull(work);
   if (!l || !l.isDirectory() || l.isSymbolicLink()) return null;
   let names;
-  try { names = fs.readdirSync(work).filter((n) => SLUG.test(n)).sort().slice(0, MAX_FOLDERS); } catch { return null; }
-  let best = null;
+  try { names = fs.readdirSync(work).filter((n) => SLUG.test(n)).slice(0, MAX_SCAN); } catch { return null; }
+  const recent = [];
   for (const slug of names) {
     const f = lstatOrNull(path.join(work, slug, 'idea-flow.jsonl'));
-    if (!f || !f.isFile() || now - f.mtimeMs > FRESH_MS) continue;
+    if (f && f.isFile() && now - f.mtimeMs <= FRESH_MS) recent.push({ slug, mtimeMs: f.mtimeMs });
+  }
+  recent.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.slug < b.slug ? -1 : 1));
+  let best = null;
+  for (const { slug, mtimeMs } of recent.slice(0, MAX_FOLDERS)) {
+    const f = { mtimeMs };
     let st;
     try { st = flowState(root, slug); } catch { continue; }
     if (st && st.form !== 'ended' && (!best || f.mtimeMs > best.mtime)) best = { slug, mtime: f.mtimeMs };
@@ -212,16 +218,15 @@ function gateState(dir) {
   return last ?? 'none';
 }
 
-// base-commit of the newest Step file when it is a hex id of 7 to 40 characters, else `unknown`.
-function baseCommit(dir, file) {
-  const text = readSmall(path.join(dir, file), MAX_STEP_FILE);
-  if (text === null) return 'unknown';
-  const lines = text.split(/\r?\n/);
-  const end = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
-  if (end < 0) return 'unknown';
-  const { routing } = lint(lines.slice(0, end + 1).join('\n'));
-  const b = routing?.['base-commit'];
-  return typeof b === 'string' && /^[0-9a-f]{7,40}$/.test(b) ? b : 'unknown';
+// The tier-path record of a run, written only by the Lead's tier-set commands. An unreadable or invalid record is 'broken'.
+function tierPathOf(root, slug) {
+  let v;
+  try { v = readTierPath(root, slug); } catch { return { kind: 'broken' }; }
+  if (v.state === 'none') return { kind: 'none' };
+  if (!['feature', 'fix'].includes(v.pb) || !['short', 'full'].includes(v.path) || !['low', 'medium', 'high'].includes(v.tier)) return { kind: 'broken' };
+  const base = typeof v.base === 'string' && /^[0-9a-f]{7,40}$/.test(v.base) && !/^0+$/.test(v.base) ? v.base : 'unknown';
+  const set = Array.isArray(v.set) ? v.set.filter((e) => typeof e === 'string' && PLAYBOOK.test(e)) : [];
+  return { kind: 'ok', pb: v.pb, path: v.path, tier: v.tier, base, set };
 }
 
 function runExists(root, slug) {
@@ -243,6 +248,7 @@ function deriveState(root, slug, dir, events, now) {
     if (['grill', 'routes', 'tickets'].includes(st.form)) form = `pending idea-${st.form}`;
     else if (FORM_STEPS.includes(st.form.replace(/^pending /, ''))) form = `pending step-${st.form.replace(/^pending /, '')}`;
   }
+  const tp = tierPathOf(root, slug);
   const begun = events.findLast((e) => e.ev === 'begin');
   const records = RECORD_FILES.filter((n) => n === 'lead-handover.jsonl' || lstatOrNull(path.join(dir, n))?.isFile());
   return {
@@ -251,8 +257,10 @@ function deriveState(root, slug, dir, events, now) {
     playbook: begun ? begun.playbook : (st ? st.kind : 'unknown'),
     step: last ? `${last.file.slice(0, 2)} ${last.role}` : 'none',
     round: view.round,
-    baseCommit: last ? baseCommit(dir, last.file) : 'unknown',
-    tier: view.tier,
+    baseCommit: tp.kind === 'ok' ? tp.base : 'unknown',
+    tier: tp.kind === 'broken' ? 'high' : (tp.kind === 'ok' ? tp.tier : view.tier),
+    tierPath: tp.kind === 'ok' ? `${tp.pb} ${tp.path}` : tp.kind,
+    tierSet: tp.kind === 'ok' ? tp.set : [],
     gate,
     form,
     records,
@@ -278,6 +286,8 @@ function handoffText(st, { tokens, window, trigger }) {
     `round: ${st.round}`,
     `base-commit: ${st.baseCommit}`,
     `risk-tier: ${st.tier}`,
+    `tier-path: ${st.tierPath}`,
+    `tier-set: [${st.tierSet.join(', ')}]`,
     `gate: ${st.gate}`,
     `form: ${st.form}`,
     `records: [${st.records.join(', ')}]`,
@@ -295,6 +305,7 @@ function handoffText(st, { tokens, window, trigger }) {
 const FM_KEYS = [
   ['slug', SLUG], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
   ['base-commit', /^([0-9a-f]{7,40}|unknown)$/], ['risk-tier', /^(low|medium|high|unknown)$/],
+  ['tier-path', /^(none|broken|(feature|fix) (short|full))$/], ['tier-set', /^\[(?:[a-z][a-z0-9-]{0,40}(?:, [a-z][a-z0-9-]{0,40})*)?\]$/],
   ['gate', /^(none|(brief|plan|ship) (open|passed|changed|stopped))$/],
   ['form', /^(none|pending gate-(brief|plan|ship)|pending idea-(grill|routes|tickets)|pending step-[a-z-]{1,20})$/],
   ['records', /^\[(?:[a-z-]+\.jsonl(?:, [a-z-]+\.jsonl)*)?\]$/], ['running', /^none$/],
