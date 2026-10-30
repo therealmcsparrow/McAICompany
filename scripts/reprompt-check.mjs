@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checker for the reprompt Playbook (reprompt v2.0). Three subcommands, run from the product root:
+// Checker for the reprompt Playbook (reprompt v2.1). Three subcommands, run from the product root:
 //   snap <slug>                      records a baseline of the watched files before a dispatch
 //   arm <slug> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
 //   reply <slug> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
@@ -28,6 +28,8 @@ const MAX_HANDOFF = 64 * KIB;
 const MAX_PROMPT = 16 * KIB;
 const MAX_OUT = 64 * KIB;
 const MAX_ENTRIES = 50000;
+const MAX_RUN_LOG = 64 * KIB;
+const SUB_KEYS = new Set(['v', 'at', 'ev', 'role', 'id', 'phase', 'session']);
 const MAX_GIT_OUT = 8 * 1024 * KIB;
 const MAX_CLAUDE_JSON = 32 * 1024 * KIB;
 const GIT_MS = 10000;
@@ -606,7 +608,9 @@ function readBaseline(runDir, hex) {
   if (createHash('sha256').update(buf).digest('hex') !== hex) refuse('baseline changed');
   let doc;
   try { doc = JSON.parse(buf.toString('utf8')); } catch { refuse('baseline changed'); }
-  if (doc === null || typeof doc !== 'object' || doc.v !== 2 || typeof doc.git !== 'boolean') refuse('baseline changed');
+  if (doc === null || typeof doc !== 'object' || doc.v !== 3 || typeof doc.git !== 'boolean') refuse('baseline changed');
+  const log = doc.runlog;
+  if (!(log === null || (log && Number.isInteger(log.size) && log.size >= 0 && typeof log.sha === 'string' && HEX_RE.test(log.sha)))) refuse('baseline changed');
   if (!Array.isArray(doc.control) || !doc.control.every(p => typeof p === 'string')) refuse('baseline changed');
   return {
     git: doc.git,
@@ -614,7 +618,36 @@ function readBaseline(runDir, hex) {
     centries: pairs(doc.centries),
     watch: pairs(doc.watch),
     view: pairs(doc.view),
+    runlog: log,
   };
+}
+
+// The run log at snap time: its size and the hash of its bytes; null when missing.
+function runLogState(dir) {
+  const file = join(dir, 'run-state.jsonl');
+  const st = lstatOrNull(file);
+  if (!st) return null;
+  if (!st.isFile() || st.size > MAX_RUN_LOG) refuse('run log unreadable');
+  return { size: st.size, sha: createHash('sha256').update(readFileSync(file)).digest('hex') };
+}
+
+// True when the run log only grew by step-times `sub` lines (the hooks write them while a Step runs).
+function runLogAppendedSubs(dir, before) {
+  const file = join(dir, 'run-state.jsonl');
+  const st = lstatOrNull(file);
+  if (!st || !st.isFile() || st.size > MAX_RUN_LOG) return false;
+  const buf = readFileSync(file);
+  const old = before ? before.size : 0;
+  if (buf.length <= old) return false;
+  if (before && createHash('sha256').update(buf.subarray(0, old)).digest('hex') !== before.sha) return false;
+  const added = decode(buf.subarray(old));
+  if (added === null || !added.endsWith('\n')) return false;
+  return added.slice(0, -1).split('\n').every(line => {
+    let o;
+    try { o = JSON.parse(line); } catch { return false; }
+    return o !== null && typeof o === 'object' && !Array.isArray(o) && o.v === 1 && o.ev === 'sub'
+      && Object.keys(o).every(k => SUB_KEYS.has(k) && typeof o[k] === (k === 'v' ? 'number' : 'string'));
+  });
 }
 
 // The run folder holds only the files of the Run folder table; the Lead's files are size-capped.
@@ -642,7 +675,7 @@ function snap(loc, env, slug) {
   const { watch, view } = collect(loc, env, dir, info, budget);
   const centries = walkControl(loc, control, budget);
   const buf = Buffer.from(JSON.stringify({
-    v: 2, git: Boolean(info), control, centries: [...centries], watch: [...watch], view: [...view],
+    v: 3, git: Boolean(info), control, centries: [...centries], watch: [...watch], view: [...view], runlog: runLogState(dir),
   }));
   writeFileSync(join(dir, '.tree.json'), buf);
   return { json: { snap: createHash('sha256').update(buf).digest('hex') }, code: 0 };
@@ -687,6 +720,7 @@ function reply(loc, env, slug, nn, hex, asks) {
   const now = collect(loc, env, dir, info, budget);
 
   const allowed = new Set([runKey, `${runKey}/prompt.md`, `${runKey}/${nn}-reprompter.md`, `${runKey}/.gate-${nn}`]);
+  if (runLogAppendedSubs(dir, base.runlog)) allowed.add(`${runKey}/run-state.jsonl`);
   const watchAll = diff(base.watch, now.watch);
   const viewAll = diff(base.view, now.view);
   const watchMoved = watchAll.filter(p => !allowed.has(p));

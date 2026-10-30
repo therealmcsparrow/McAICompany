@@ -9,6 +9,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 - **Feature runs take a draft.** `/aico:feature` accepts a `grill.md`, `spec.md` or `plan.md` file as its argument and works from a copy under a new task name. A plan draft is checked against the repository at the Plan Gate: a gone or newly existing path is Blocking, a changed path is shown to the Architect. Every other argument starts a run as before.
 - Drafts live in `.company/work/<slug>/` and the one-shot argument file is `.company/draft-input-arg-<for>.txt`. aico never commits them. They stay out of git only if your product ignores `.company/`, which you should add to its `.gitignore` (aico does not set it up). The AI model that runs the command reads their text, and grill may run web searches built from the idea; there is no other recipient. An erasure request overrides the archive rule (the CEO decides). The argument file is removed once read.
 
+### Fixed
+- **Reprompt no longer flags its own run log.** `/aico:reprompt` stopped after every reply to ask Stop or Go on because the run's `run-state.jsonl` had changed. The step-times hooks write to that file while the reprompter runs. The tree check now allows the log to grow by those `sub` lines only. Any other change to it is still shown. Contract `reprompt` v2.1 (additive).
+
 ## [0.21.0] - 2026-10-30
 
 Rollback: node scripts/stable.mjs 0.20.0
