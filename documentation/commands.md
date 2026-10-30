@@ -2,22 +2,65 @@
 
 Every command is a **Playbook**: a fixed, named sequence of Roles for a recurring kind of work. Type it in Claude Code with the plugin installed. If you're not sure which fits, use `/aico:lead` (or `/aico:triage`) and let the company choose.
 
+## Overview
+
+This page lists every command once. Start here, find the command for your job in the route table, then read its entry further down.
+
+**Words used on this page.**
+- **Playbook**: a command, a fixed list of steps for one kind of work.
+- **Role**: one member of the company, such as the Architect or the Writer. A Role does one step.
+- **Lead**: the Role that talks to you in the main session and runs the other Roles.
+- **Gate**: a point where the company stops and asks you to Approve, Change or Stop.
+- **Handoff**: the one short file a Role writes at the end of its step, so the next Role knows what happened.
+- **Slug**: the short task name a run picks, used as a folder name.
+- **Context cap**: how much text a Role may keep in its head at once. It is fixed at 95000 tokens for every Role, and a Role hands over to a fresh one at 85500.
+- **Core and Contract**: the Core is the small base of a product; a Contract is the written rule for how two parts of it talk to each other.
+- **Ticket**: one small task cut from a spec, with a Role, the files it touches and what it depends on.
+
+**Route table.** The same list as the headings below, in words.
+
+| You have | Start with | What you get |
+| --- | --- | --- |
+| Any request, or you are unsure | `/aico:lead` | The company picks the route |
+| A rough idea you want guided to a build | `/aico:idea` | Grill, route pick, tickets, build |
+| A bug report you want guided to a fix | `/aico:bug` | The same route, ending in a fix |
+| An idea to question first | `/aico:grilling`, `/aico:grill-me`, `/aico:grill-with-docs` or `/aico:grill` | A `grill.md` of decisions |
+| A feature to build | `/aico:feature` | Shipped code on a branch |
+| A bug to fix | `/aico:fix` | A fix and a regression test |
+| Something to look into, nothing built | `/aico:audit`, `/aico:research`, `/aico:feedback` and others under Assess | A report |
+
+**What each route does, in words.**
+- `/aico:idea` and `/aico:bug` run one guided route from your text to a build. See their entries below.
+- The four grill commands interview you about an idea and build nothing. They differ in where answers come from.
+- `/aico:feature` and `/aico:fix` build. Both keep only the Ship Gate: no Brief Gate and no Plan Gate.
+- Everything under Assess reads and reports, and changes no code.
+
 Arguments in `<angle brackets>` are required; `[square brackets]` are optional. Most commands run through the shared pipeline, so a few conventions hold everywhere:
 
-- **Gates** are where the company stops for your approval — **Brief** (scope), **Plan** (design), **Ship** (before anything leaves the repo). At each you Approve, Change or Stop. A Playbook only skips a Gate if its own description says so.
+- **Gates** are where the company stops for your approval — **Brief** (scope), **Plan** (design), **Ship** (before anything leaves the repo). At each you Approve, Change or Stop. A Playbook only skips a Gate if its own description says so. `/aico:feature` and `/aico:fix` have no Brief Gate and no Plan Gate in any run: they keep only the Ship Gate, and what those two Gates showed goes into the Ship Gate summary. A decision that used to wait for such a Gate is asked as one plain form when it comes up.
 - **Work lands under `.company/`** in your repo: the brief, designs, reviews, reports and the per-step Handoff files. `<slug>` below is the short task name the run picks.
 - **Nothing is pushed, merged, deployed or sent** before the Ship Gate.
 - **Read-only** commands (audit, feedback, usability-test, pentest, vulnscan, skillspector, research) change no code — they end in a report you act on. Brainstorm and cooler change no code either; help and version only answer in the terminal.
 
-**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage`, `reprompt` and `skillspector`, so every type has the reprompter. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. `grill` is in all four types; its last step depends on the type. Only the software company has `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards`, `launch`, `to-spec` and `to-tickets`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
+**Company type.** Each project has one [company type](concepts.md#company-types): `software` (the default when nothing is set), `research`, `marketing` or `design`. The type decides which commands and Roles the project has. `/aico:help` lists only the commands of your type. A command outside it stops with "not part of your `<type>` company" and the list of allowed ones. The commands that every type has: `help`, `version`, `language`, `settings`, `setup`, `lead`, `triage`, `reprompt` and `skillspector`, so every type has the reprompter. `brainstorm`, `cooler`, `research`, `client` and `feedback` are in all four types. `grill` is in all four types; its last step depends on the type. So are `idea`, `grilling`, `grill-me` and `grill-with-docs`. Only the software company has `bug`, `feature`, `fix`, `refactor`, `incident`, `audit`, `pentest`, `vulnscan`, `usability-test`, `maintain`, `standards`, `launch`, `to-spec` and `to-tickets`. The new Playbooks `report`, `campaign`, `content` and `design` are described under [Other company types](#other-company-types). The shared commands hand a finished idea over to the main work of your type, after your pick: `/aico:feature` or `/aico:fix` in a software company, `/aico:report`, `/aico:content` or `/aico:campaign`, `/aico:design` in the others. The type check prints readable lines (the [type lines](concepts.md#company-types)), and a refusal names what was wrong, such as the unknown command or the line number in `.company/project.md`.
 
 **Help in the terminal.** `/aico:help` lists every command; `/aico:help <command>` explains one command's options and what it does, without running it. Every Playbook also answers `/aico:<command> help` (or `--help`) from its own `### /aico:<name>` entry in this file, so each entry below is what that command tells you.
 
-**Hand-over between commands.** A few commands end with a choice that starts another command: `lead`, `triage`, `brainstorm`, `research`, `refactor` and `grill`. `grill` hands over only to `/aico:feature` and, for `/aico:to-spec`, shows you the command to type. After you pick, the next command starts by itself, with your pick as its argument. If it cannot start, you are shown the exact command to type, and the run stops there. A command never starts another one on its own, and never because a file, a report or a web page asks for it. Only your own request or your choice at a form or Gate starts one. `incident` does not hand over: it ends after the mitigation, the reports and the postmortem, and tells you to run `/aico:fix` yourself.
+**Hand-over between commands.** A few commands end with a choice that starts another command: `lead`, `triage`, `brainstorm`, `research`, `refactor`, `grill`, `grilling`, `grill-me` and `grill-with-docs`. The grill commands hand over only to `/aico:feature` and, for `/aico:to-spec`, show you the command to type. `idea` and `bug` start the build step themselves after your pick of F (see their entries). After you pick, the next command starts by itself, with your pick as its argument. If it cannot start, you are shown the exact command to type, and the run stops there. A command never starts another one on its own, and never because a file, a report or a web page asks for it. Only your own request or your choice at a form or Gate starts one. `incident` does not hand over: it ends after the mitigation, the reports and the postmortem, and tells you to run `/aico:fix` yourself.
 
-**Commands only you start.** Ten commands are never started by another command or by the Lead: `help`, `version`, `language`, `settings`, `setup`, `skillspector`, `pentest`, `grill`, `to-spec` and `to-tickets`. The first seven change your configuration, install software or attack a target. The last three run before any build, so they run only on your own command. You type them yourself. When a run needs one, it tells you the command and waits. For `pentest` it gives you `/aico:pentest <target>`.
+**Commands only you start.** Ten commands are never started by another command or by the Lead: `help`, `version`, `language`, `settings`, `setup`, `skillspector`, `pentest`, `grill`, `to-spec` and `to-tickets`. The first seven change your configuration, install software or attack a target. The last three run before any build, so they run only on your own command. Five newer commands follow the same rule: `idea`, `bug`, `grilling`, `grill-me` and `grill-with-docs`. You type them yourself. When a run needs one, it tells you the command and waits. For `pentest` it gives you `/aico:pentest <target>`.
 
 **Privacy of drafts.** `grill.md`, the `input-*.md` copies a draft command makes and the one-shot argument file may hold what you type. The drafts live in `.company/work/<slug>/` and the argument file is `.company/draft-input-arg-<for>.txt`, both on your machine. aico never commits them. They stay out of git only if your product ignores `.company/`; add that line to your `.gitignore` yourself, because aico does not set it up. The AI model that runs the command reads their text, and `grill` may run web searches built from your idea. There is no other recipient. They are archived, not deleted (GDPR Art. 5(1)(c) and (e)). If a person asks for erasure of their data, that request overrides the archive rule; the CEO decides. The argument file is removed as soon as the command has read it.
+
+**Where your text goes.** Four places, and no others:
+- The Claude model you configured reads your idea or bug text, the grill answers, the tickets and the Lead Handoff text.
+- The web search tool gets queries built from your idea in `/aico:grilling` fact lookups and in `/aico:research` (route C of `idea` and `bug`). It never gets them from `/aico:grill-me`, and `/aico:grill-with-docs` never searches the web.
+- Local files on your machine: `.company/work/<slug>/` (records and copies), `.company/draft-input-arg-<for>.txt`, `.company/ideas/<name>/` and `.company/roadmap/`. aico writes no ignore rule; they stay out of git only if your product ignores `.company/`.
+- The hand-over hooks read token counts from the local Claude Code transcript. They store none of its text.
+
+Nothing is pushed or published by these commands.
+
+**Hand-over of the Lead.** A long run can fill the Lead's context. A hook watches the token count in the local transcript. Near 85500 it asks the Lead to write a Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, at the next clean point (no Step running), and after compaction a second hook hands the newest one back. It needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` set to `98500` in the `env` block of your user settings; a plugin cannot set it. Without it the Lead hands over only at Claude Code's default point.
 
 Each entry below gives what the command does, when to reach for it, how it runs (Gates marked), what you get, and an example.
 
@@ -86,21 +129,21 @@ A write gate limits the reprompter to writing `prompt.md` and its own Handoff in
 ### `/aico:feature`
 `/aico:feature <feature description | draft file>`
 
-**What it does.** Builds a feature or a whole new product end to end, from brief to shipped.
+**What it does.** Builds a feature or a whole new product end to end, from brief to shipped. It keeps only the Ship Gate: there is no Brief Gate and no Plan Gate, in any run, a direct call included. Nothing waits for you before the build. What those two Gates used to show (Core and Contract changes, art direction, the task waves, the plan check, the plan review, spike and prototype results, stale paths) is listed in the Ship Gate summary. A decision that used to wait for a Gate is asked as one plain form when it comes up: a `needs-ceo` Handoff, a rule rejected twice, a refused plan check (Fix or Stop), the prototype question (Run it or Skip) and the glossary and ADR drafts (Write or Skip). A script refusal is never bypassed.
 
-**Draft inputs.** The argument may be a draft file from [`/aico:grill`](#aicogrill), [`/aico:to-spec`](#aicoto-spec) or [`/aico:to-tickets`](#aicoto-tickets): `.company/work/<name>/grill.md`, `spec.md` or `plan.md`. The run reads a copy of it as input and works under a new task name, so your draft is never changed. A `plan.md` draft is checked at the Plan Gate: a path the plan lists that is gone, or that exists now although the plan expected it missing, is a Blocking line, and a path that changed since the plan's base commit is shown for the Architect to weigh. A draft with no base commit line, or one whose base commit is unknown, shows as `stale not checked`. Every other argument starts the run as before: a description, a report path handed over by `research` or `brainstorm`, or a request with its triage line.
+**Draft inputs.** The argument may be a draft file from [`/aico:grill`](#aicogrill), [`/aico:to-spec`](#aicoto-spec) or [`/aico:to-tickets`](#aicoto-tickets): `.company/work/<name>/grill.md`, `spec.md` or `plan.md`. The run reads a copy of it as input and works under a new task name, so your draft is never changed. A `plan.md` draft is checked when the plan is read, and the result goes to the Ship Gate summary because there is no Plan Gate: a path the plan lists that is gone, or that exists now although the plan expected it missing, is a Blocking line, and a path that changed since the plan's base commit is shown for the Architect to weigh. A draft with no base commit line, or one whose base commit is unknown, shows as `stale not checked`. Every other argument starts the run as before: a description, a report path handed over by `research` or `brainstorm`, or a request with its triage line.
 
 **When to use it.** New functionality or a new product — anything that adds or materially changes behavior.
 
 **How it runs.**
-1. **Product Manager** writes the brief: problem, users, scope, IDed acceptance criteria, risk tier. It may add one prototype question, proposed `GLOSSARY.md` entries and proposed ADR drafts, and it can use an earlier research report you name as input. **→ Brief Gate.** The form lists the glossary and ADR lines (Write them after approval, Change or Skip; a product with no `GLOSSARY.md` gets one only if you answer Yes to "Create GLOSSARY.md") and asks "Prototype: <question>" with Run it or Skip. Run it answers the question on a throwaway branch before the Plan Gate, and nothing from it ships. For a low-risk feature the form lists what the [short path](concepts.md#short-path-for-low-risk-work) would skip and offers Approve, short path (Recommended) or Approve, full path. Only "Approve, short path" gives the short path; an auto Brief Gate or any other answer gives the full path.
-2. **Architect** ∥ **UI/UX Designer** (if there's UI) ∥ **Brand Artist** (if new art is needed) produce the Core list, Contracts, Module map and wireframes. Persona testers walk the design; the **Senior Engineer** researches or maps the ruleset; the Architect signs it off if Must rules changed. The **Fresh Reviewer** then reads the plan as a newcomer (when the tier set has the plan review): see [The fresh reviewer](concepts.md#the-fresh-reviewer). **→ Plan Gate** (you approve Core, Contracts and art direction; the summary also shows the reviewer's paraphrase and findings, or `plan review: not run`).
+1. **Product Manager** writes the brief: problem, users, scope, IDed acceptance criteria, risk tier. It may add one prototype question, proposed `GLOSSARY.md` entries and proposed ADR drafts, and it can use an earlier research report you name as input. No Brief Gate. One form lists the glossary and ADR lines (Write or Skip; a product with no `GLOSSARY.md` gets one only if you answer Yes to "Create GLOSSARY.md") and asks "Prototype: <question>" with Run it or Skip. Run it answers the question on a throwaway branch before the build, and nothing from it ships. For what a low-risk run may skip, see [short path](concepts.md#short-path-for-low-risk-work).
+2. **Architect** ∥ **UI/UX Designer** (if there's UI) ∥ **Brand Artist** (if new art is needed) produce the Core list, Contracts, Module map and wireframes. Persona testers walk the design; the **Senior Engineer** researches or maps the ruleset; the Architect signs it off if Must rules changed. The **Fresh Reviewer** then reads the plan as a newcomer (when the tier set has the plan review): see [The fresh reviewer](concepts.md#the-fresh-reviewer). No Plan Gate: the plan check runs and the builders start. Core and Contract changes, art direction and the reviewer's paraphrase and findings (or `plan review: not run`) go to the Ship Gate summary.
 3. **Builders** build one Module each (in parallel once Contracts are settled), test-first, at the seams the plan names and one slice at a time, following the rules mapped to their tasks. A test that only asserts its own setup is blocked in review. Each task is sized to fit one fresh context ([Plan tasks](concepts.md#plan-tasks-sizes-slices-and-seams)). With `pipeline.worktrees` on, parallel tasks each get a git worktree ([Worktrees](concepts.md#worktrees)). Assets are produced alongside.
 4. **Code Reviewer** ∥ **QA** ∥ **Security** ∥ **Senior Engineer** (compliance) review in parallel (at risk `high` with `pipeline.second_reviewer` `on`, plus the **Fresh Reviewer** as a second reviewer; plus **Legal** for AI/payments/personal data, and hands-on + accessibility testers for UI). Blocking findings go back to the builder — at most two Fix rounds by default (set the limit in `/aico:settings`). A review Step that fails twice is recorded as `not run` and shows at the Ship Gate; it never counts as a clean review. If a fix's lines draw a new Blocking finding in the next round, the Fix rounds stop and the Lead asks you.
 5. **Writer** adds docs and release notes; **Localizer** translates if you support more than one language. The **Product Manager** writes the destination spec, `docs/specs/<slug>.md` ([Destination spec](concepts.md#destination-spec)). **→ Ship Gate.** Besides the usual summary it shows the review `not run`, churn and disagreement lines, the rulings and exceptions on file for you to confirm, the spec-check line, two guardrail lines and any leftover worktree.
 6. **DevOps** releases as approved.
 
-**Checks you may meet.** Under `plan_check.policy` `block`, the Plan Gate record, the build start and every task start are refused while the plan has open decisions ([The hook Gate](concepts.md#the-hook-gate)). Reviewers judge the diff from the full base commit; a grafts file stops every judging check, and a binary file in a text path blocks until fixed or excepted by you ([Judging changes](concepts.md#judging-changes)). A security finding never closes by contest. Roles work under their Role id; names are shown only to you. A release carries a `Rollback:` line, an SBOM and a Gate Report ([Releases](concepts.md#releases)). The scorecard shows cost only when one is recorded ([Cost from telemetry](concepts.md#cost-from-telemetry)).
+**Checks you may meet.** Under `plan_check.policy` `block`, the build start and every task start are refused while the plan has open decisions, and you get a Fix or Stop form ([The hook Gate](concepts.md#the-hook-gate)). Reviewers judge the diff from the full base commit; a grafts file stops every judging check, and a binary file in a text path blocks until fixed or excepted by you ([Judging changes](concepts.md#judging-changes)). A security finding never closes by contest. Roles work under their Role id; names are shown only to you. A release carries a `Rollback:` line, an SBOM and a Gate Report ([Releases](concepts.md#releases)). The scorecard shows cost only when one is recorded ([Cost from telemetry](concepts.md#cost-from-telemetry)).
 
 **You get.** Shipped code on a branch, tests, docs, and the full Handoff trail under `.company/work/<slug>/`.
 
@@ -124,6 +167,113 @@ A write gate limits the reprompter to writing `prompt.md` and its own Handoff in
 **You get.** `.company/work/<slug>/grill.md`: the idea, the decisions with your answers, and proposed glossary and ADR lines. grill proposes them and never writes them.
 
 **Example.** `/aico:grill let customers pause their subscription`
+
+### `/aico:idea`
+`/aico:idea <idea | resume <slug>>`
+
+**Help:** `/aico:idea help` (or `--help`) explains the command without running it.
+
+**Only you start this command.** No other command or the Lead starts it. All four company types.
+
+**What it does.** Guides a rough idea from your text to a build, one pick at a time. Builds only after you pick Build, and then through `/aico:feature`.
+
+**When to use it.** You have an idea and want the company to lead you through questions, a route and tickets. For a bug use `/aico:bug`.
+
+**How it runs.**
+1. The idea is saved as `idea.md` in `.company/work/<slug>/`, then a form asks which grill to use: grilling (recommended), grill-me or grill-with-docs.
+2. After the grill, a reprompt step turns the idea and the decisions into one prompt. It is shown in full, marked as AI-written.
+3. The routes form offers A to E. The letters on offer come from the `idea-flow` script, never from the Lead's own text.
+   - **A** Water cooler: colleagues chat about it, nothing is built.
+   - **B** Brainstorm: the Roles weigh in until you say done.
+   - **C** Research: researchers look it up online and write one sourced report; reprompt then runs again.
+   - **D** Spec and tickets: the spec is written, tickets are cut, and you approve or change each ticket one at a time.
+   - **E** Park the idea: a copy goes to `.company/ideas/<name>/` and the flow ends.
+4. After D, one form: **F** Build, **G** park all tickets on the roadmap, or **E** park the idea.
+5. **F** asks again only for tickets that are new or changed since you approved them, sizes the approved ones with triage (size and tier only), writes `.company/work/<slug>-build/plan.md` and starts `/aico:feature` on it. If the start is refused, you are shown the command to type.
+
+Each step runs in the same session by reading that Playbook up to its stop point. `resume <slug>` reopens the open form.
+
+**You get.** Local files under `.company/work/<slug>/`, a parked copy under `.company/ideas/<name>/` or roadmap files under `.company/roadmap/`, or a feature built through the Ship Gate.
+
+**Your data.** The Claude model you configured reads the idea, grill, ticket and Handoff text. The web search tool gets queries only in grilling fact lookups and in research (route C). Files are local, archived and never deleted; an erasure request overrides that.
+
+**Example.** `/aico:idea let customers pause their subscription`
+
+### `/aico:bug`
+`/aico:bug <bug report | resume <slug>>`
+
+**Help:** `/aico:bug help` (or `--help`) explains the command without running it.
+
+**Only you start this command.** No other command or the Lead starts it. Software company only.
+
+**What it does.** The same guided route as `/aico:idea`, for a bug report. Its build step is always `/aico:fix`. A report that asks for a feature, or says it is not a bug, changes nothing.
+
+**When to use it.** You have a bug report and want questions, a route and approved tickets before the fix.
+
+**How it runs.** As in `/aico:idea`: capture, grill choice, reprompt, routes A to E, ticket approval, then F, G or E. F builds through `/aico:fix` on `.company/work/<slug>-build/plan.md`; the build step comes from the script's `build:` line, not from the report text.
+
+**You get.** As in `/aico:idea`, ending in a fix with a regression test through the Ship Gate.
+
+**Your data.** The same as `/aico:idea`; the report is saved as `idea.md` and a parked report is copied to `.company/ideas/<name>/`.
+
+**Example.** `/aico:bug the export button does nothing on Safari`
+
+### `/aico:grilling`
+`/aico:grilling <idea | file | resume <slug>>`
+
+**Help:** `/aico:grilling help` (or `--help`) explains the command without running it.
+
+**Only you start this command.** No other command or the Lead starts it. All four company types.
+
+**What it does.** Interviews you about an idea, one question at a time, until every branch is closed. Facts the repo or the web can answer are looked up and cited with their source; the rest is asked. Builds nothing.
+
+**When to use it.** The idea is rough and you want its decisions made. This is the recommended grill.
+
+**How it runs.** Each question has two to four options and a recommended one. Each answer is saved to `.company/work/<slug>/grill.md` before the next question. It ends with a form whose options depend on your company type.
+
+**You get.** `grill.md` with the idea, decisions, facts with sources, and proposed glossary and ADR lines. Proposals are never written for you.
+
+**Your data.** Local files in `.company/work/<slug>/` and `.company/draft-input-arg-grill.txt`. The Claude model reads them. The idea and your answers may become web search queries for fact lookups; the Lead keeps each query to the fact needed.
+
+**Example.** `/aico:grilling let customers pause their subscription`
+
+### `/aico:grill-me`
+`/aico:grill-me <idea | file | resume <slug>>`
+
+**Help:** `/aico:grill-me help` (or `--help`) explains the command without running it.
+
+**Only you start this command.** No other command or the Lead starts it. All four company types.
+
+**What it does.** The same interview, but every branch is asked. Nothing is looked up in the repo or on the web, so the file has no fact entries.
+
+**When to use it.** You want your own answers only, with no search of any kind.
+
+**How it runs.** As `/aico:grilling`, without lookups.
+
+**You get.** `grill.md` in `.company/work/<slug>/`.
+
+**Your data.** Local files and the Claude model, as above. No web search ever; no idea text or answer becomes a query.
+
+**Example.** `/aico:grill-me let customers pause their subscription`
+
+### `/aico:grill-with-docs`
+`/aico:grill-with-docs <idea | file | resume <slug>>`
+
+**Help:** `/aico:grill-with-docs help` (or `--help`) explains the command without running it.
+
+**Only you start this command.** No other command or the Lead starts it. All four company types.
+
+**What it does.** The same interview, but the repo docs (`docs/`, `GLOSSARY.md`, `docs/adr/`) are searched first. A branch a doc closes cites that doc as `path:line`. A doc that disagrees with your answer is shown to you, not followed.
+
+**When to use it.** Your product already has docs and decisions that should settle part of the idea.
+
+**How it runs.** As `/aico:grilling`, reading repo docs only.
+
+**You get.** `grill.md` with doc-cited facts and Proposals that carry glossary and ADR lines. It proposes and never writes those files.
+
+**Your data.** Local files and the Claude model, as above. No web search: only repo files are read.
+
+**Example.** `/aico:grill-with-docs let customers pause their subscription`
 
 ### `/aico:to-spec`
 `/aico:to-spec <idea | grill.md | file>`
@@ -163,7 +313,7 @@ A write gate limits the reprompter to writing `prompt.md` and its own Handoff in
 ### `/aico:fix`
 `/aico:fix <bug description or issue link>`
 
-**What it does.** Fixes a bug, test-first. The bug report is the brief, so there's no Brief or Plan Gate (unless the fix needs a Core or Contract change, which forces a Plan Gate).
+**What it does.** Fixes a bug, test-first. The bug report is the brief. It keeps only the Ship Gate: no Brief Gate and no Plan Gate in any run, and a Core or Contract change no longer pauses the run; it is listed in the Ship Gate summary. A decision that used to wait for a Gate is one plain form when it comes up (a `needs-ceo` Handoff, a rule rejected twice, or a refused plan check as Fix or Stop).
 
 **When to use it.** Something is broken and you want it fixed with a regression test that proves it stays fixed.
 
@@ -637,7 +787,7 @@ Effective language: the project override, else your default, else English. An un
 - **Two levels:** your user default (`config.json` under `~/.mcsparrow/`, or the folder in `MCSPARROW_HOME`) and a project override (`.company/settings.json`, with the profile in `.company/project.md`). The project wins.
 - The page is reachable only through the link with its token, which is printed in the terminal. The browser opens by itself.
 - The server stops when you press Done, or after 30 minutes idle. Changes apply from the next aico run.
-- **Max context** (`context_cap`): a global value plus an override per Role. Default 150000, minimum 60000. Roles hand over at 80% of it, and high-risk work never gets less than the default.
+- **Max context** (`context_cap`): deprecated. The Context cap is fixed at 95000 for every Role and tier, and Roles hand over at 85500. The old keys are still accepted so old settings files keep working, but nothing reads them; the page shows the value as fixed text.
 
 **You get.** The full link to the page in the terminal, and the settings saved to the level you chose.
 
