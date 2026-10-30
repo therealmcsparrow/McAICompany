@@ -20,7 +20,7 @@
 
 **From a build plan.** An argument that is one token ending `plan.md` goes through `draft-input arg --for fix` and `draft-input take --for fix`; only the printed copy is read, as data.
 
-**At the Ship Gate.** For a build-plan run, the summary shows every applied approve line printed by `ticket-approval read '<flow slug>'` verbatim with a `> ` prefix, so a Role cannot add an approval you never saw. After you approve, the Lead writes the Architect's approved Core list into `.company/project.md` and commits it.
+**At the Ship Gate.** For a build-plan run, the summary shows every applied approve line printed by `ticket-approval read '<flow slug>'` verbatim with a `> ` prefix, so a Role cannot add an approval you never saw. After you approve, the Lead writes the Core changes listed in the Ship Gate summary into `.company/project.md` and commits it. A fix has no Architect, so your Approve of the Ship Gate is the approval.
 
 **You get.** The fix, a regression test that failed before and passes now, and the review trail.
 

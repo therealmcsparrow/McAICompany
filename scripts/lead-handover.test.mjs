@@ -71,7 +71,7 @@ describe('calibration', () => {
 
   test('the Contract holds the setting name and the window', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1.1$/m);
+    assert.match(text, /^# Contract: lead-handoff v1.2$/m);
     assert.ok(text.includes('CLAUDE_CODE_AUTO_COMPACT_WINDOW'));
     assert.ok(text.includes('98500'));
     assert.ok(text.includes('85500'));
@@ -80,7 +80,7 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.1');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.2');
     assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
@@ -250,6 +250,36 @@ describe('Handoff content', () => {
     assert.match(text, /^base-commit: unknown$/m);
     assert.match(text, /^tier-path: none$/m);
     assert.match(text, /^tier-set: \[\]$/m);
+  });
+
+  test('a Lead-only base survives a hand-over before any tier-path record, never a Step file', () => {
+    const fx = fixture();
+    const B = 'ab'.repeat(32);
+    stepFile(fx, 'cd34'.repeat(10));
+    assert.equal(main(['base', fx.slug, B], fx.root, {}).code, 0);
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    const text = fs.readFileSync(handoffFile(fx), 'utf8');
+    assert.match(text, new RegExp(`^base-commit: ${B}$`, 'm'));
+    assert.match(text, /^tier-path: none$/m);
+    assert.ok(!text.includes('cd34'));
+    assert.ok(resume(sessionStart(), opts(fx)).out.includes(`base-commit: ${B}`));
+  });
+
+  test('the tier-path base wins over the Lead-only base once a record exists', () => {
+    const fx = fixture();
+    stepFile(fx, BASE);
+    tierPath(fx);
+    main(['base', fx.slug, 'ab'.repeat(20)], fx.root, {});
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), new RegExp(`^base-commit: ${BASE}$`, 'm'));
+  });
+
+  test('a broken tier-path record keeps no base even when a Lead-only base exists', () => {
+    const fx = fixture();
+    main(['base', fx.slug, 'ab'.repeat(20)], fx.root, {});
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), 'not json\n');
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^base-commit: unknown$/m);
   });
 
   test('the tier, path and set of the record are carried and a raise only goes up', () => {
@@ -431,6 +461,31 @@ describe('CLI', () => {
     assert.equal(records(fx)[0].playbook, 'fix');
   });
 
+  test('base records the full id once and checks it as 40 or 64 hex', () => {
+    const fx = fixture();
+    for (const bad of ['abc1234', 'AB'.repeat(20), '0'.repeat(40), 'ab'.repeat(21), 'ab'.repeat(20) + 'g', 'ab'.repeat(30), '']) {
+      assert.equal(main(['base', fx.slug, bad], fx.root, {}).code, 3, bad);
+    }
+    assert.equal(main(['base', fx.slug], fx.root, {}).code, 3);
+    assert.equal(main(['base', 'missing-run', 'ab'.repeat(20)], fx.root, {}).code, 3);
+    assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-handover.jsonl')));
+    const ok = main(['base', fx.slug, 'ab'.repeat(20)], fx.root, {});
+    assert.equal(ok.code, 0);
+    assert.deepEqual(records(fx).map((e) => [e.ev, e.base]), [['base', 'ab'.repeat(20)]]);
+    assert.equal(main(['base', fx.slug, 'cd'.repeat(20)], fx.root, {}).code, 3);
+    const fx2 = fixture();
+    assert.equal(main(['base', fx2.slug, 'ef'.repeat(32)], fx2.root, {}).code, 0);
+  });
+
+  test('a record with a second or malformed base line is broken', () => {
+    const fx = fixture();
+    const line = (n, base) => `${JSON.stringify({ v: 1, n, at: iso(Date.now()), ev: 'base', base })}\n`;
+    fs.writeFileSync(path.join(fx.dir, 'lead-handover.jsonl'), line(1, 'ab'.repeat(20)) + line(2, 'cd'.repeat(20)));
+    assert.equal(main(['read', fx.slug], fx.root, {}).code, 1);
+    fs.writeFileSync(path.join(fx.dir, 'lead-handover.jsonl'), line(1, 'AB'.repeat(20)));
+    assert.equal(main(['read', fx.slug], fx.root, {}).code, 1);
+  });
+
   test('bad slug, bad arguments and unknown commands are refused', () => {
     const fx = fixture();
     assert.equal(main(['read', '../x'], fx.root, {}).code, 3);
@@ -536,6 +591,21 @@ describe('pipeline wiring', () => {
     assert.ok(line, 'no Ship Gate Core line');
     assert.ok(/feature and fix/.test(line));
     assert.ok(/Plan Gate/.test(pipeline.split('\n').find((l) => l.startsWith('- **Plan Gate** must show'))));
+  });
+
+  test('the Lead records the base once at Step 01 and reads it back after a hand-over', () => {
+    const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
+    assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
+    assert.ok(ref.includes('lead-handover base'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.2'));
+  });
+
+  test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {
+    const line = pipeline.split('\n').find((l) => /^- \*\*Ship Gate\*\*, feature and fix/.test(l));
+    assert.ok(/Feature: the Architect/.test(line) && /Fix has no Architect: its Ship Gate summary lists the Core changes/.test(line));
+    const doc = fs.readFileSync(path.join(repo, 'documentation', 'commands', 'fix.md'), 'utf8');
+    assert.ok(!/Architect's approved Core/.test(doc));
+    assert.ok(/Ship Gate summary/.test(doc.split('\n').find((l) => l.startsWith('**At the Ship Gate.**'))));
   });
 
   test('after a hand-over the Lead takes base and fail-closed state from the record only', () => {

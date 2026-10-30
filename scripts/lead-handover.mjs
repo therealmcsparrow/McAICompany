@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1.1
+// contract: docs/contracts/lead-handoff.md v1.2
 // uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point and a SessionStart hook that
 // injects it after compaction, plus a small CLI. Every hook payload, transcript line, record line and Step
@@ -99,6 +99,9 @@ function readSmall(file, max) {
   } catch { return null; } finally { fs.closeSync(h.fd); }
 }
 
+// A full object id: 40 or 64 lowercase hex, not all zeros.
+const validBase = (b) => typeof b === 'string' && /^([0-9a-f]{40}|[0-9a-f]{64})$/.test(b) && !/^0+$/.test(b);
+
 function checkEvent(o, index, events) {
   if (o === null || typeof o !== 'object' || Array.isArray(o)) return false;
   const keys = Object.keys(o).join(',');
@@ -106,6 +109,7 @@ function checkEvent(o, index, events) {
   const tail = keys.split(',').slice(4).join(',');
   if (!keys.startsWith('v,n,at,ev')) return false;
   if (o.ev === 'begin') return tail === 'playbook' && typeof o.playbook === 'string' && PLAYBOOK.test(o.playbook);
+  if (o.ev === 'base') return tail === 'base' && validBase(o.base) && !events.some((e) => e.ev === 'base');
   if (o.ev === 'handover') {
     const m = typeof o.file === 'string' ? HANDOFF_RE.exec(o.file) : null;
     const num = (x) => x === null || (Number.isInteger(x) && x >= 0 && x <= MAX_TOKENS);
@@ -229,6 +233,13 @@ function tierPathOf(root, slug) {
   return { kind: 'ok', pb: v.pb, path: v.path, tier: v.tier, base, set };
 }
 
+// The tier-path base when it is usable, else the base the Lead recorded; a broken tier-path record keeps none.
+function baseOf(tp, events) {
+  if (tp.kind === 'broken') return 'unknown';
+  if (tp.kind === 'ok' && tp.base !== 'unknown') return tp.base;
+  return events.find((e) => e.ev === 'base')?.base ?? 'unknown';
+}
+
 function runExists(root, slug) {
   const dir = workDir(root, slug);
   if (!dir) return null;
@@ -257,7 +268,7 @@ function deriveState(root, slug, dir, events, now) {
     playbook: begun ? begun.playbook : (st ? st.kind : 'unknown'),
     step: last ? `${last.file.slice(0, 2)} ${last.role}` : 'none',
     round: view.round,
-    baseCommit: tp.kind === 'ok' ? tp.base : 'unknown',
+    baseCommit: baseOf(tp, events),
     tier: tp.kind === 'broken' ? 'high' : (tp.kind === 'ok' ? tp.tier : view.tier),
     tierPath: tp.kind === 'ok' ? `${tp.pb} ${tp.path}` : tp.kind,
     tierSet: tp.kind === 'ok' ? tp.set : [],
@@ -304,7 +315,7 @@ function handoffText(st, { tokens, window, trigger }) {
 
 const FM_KEYS = [
   ['slug', SLUG], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
-  ['base-commit', /^([0-9a-f]{7,40}|unknown)$/], ['risk-tier', /^(low|medium|high|unknown)$/],
+  ['base-commit', /^([0-9a-f]{7,40}|[0-9a-f]{64}|unknown)$/], ['risk-tier', /^(low|medium|high|unknown)$/],
   ['tier-path', /^(none|broken|(feature|fix) (short|full))$/], ['tier-set', /^\[(?:[a-z][a-z0-9-]{0,40}(?:, [a-z][a-z0-9-]{0,40})*)?\]$/],
   ['gate', /^(none|(brief|plan|ship) (open|passed|changed|stopped))$/],
   ['form', /^(none|pending gate-(brief|plan|ship)|pending idea-(grill|routes|tickets)|pending step-[a-z-]{1,20})$/],
@@ -505,6 +516,17 @@ function exec(argv, root, env) {
       const events = loadRecord(dir);
       appendEvent(dir, events, { ev: 'begin', playbook }, now);
       return 'begun\n';
+    }
+    case 'base': {
+      if (rest.length !== 1) refuse('usage');
+      checkSlug(slug);
+      if (!validBase(rest[0])) refuse('bad base');
+      const dir = runExists(root, slug);
+      if (!dir) refuse('no run');
+      const events = loadRecord(dir);
+      if (events.some((e) => e.ev === 'base')) refuse('base set');
+      appendEvent(dir, events, { ev: 'base', base: rest[0] }, now);
+      return 'recorded\n';
     }
     default:
       return refuse('usage');
