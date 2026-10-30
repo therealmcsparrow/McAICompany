@@ -7,7 +7,7 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ### Added
 - **Grill, spec and tickets.** Three commands you start yourself: `/aico:grill` interviews you one question at a time and saves `grill.md`; `/aico:to-spec` writes a spec draft (`version: pending`, never committed or stamped); `/aico:to-tickets` splits a spec or brief into a task plan. `grill` is in all four company types, the other two in `software` only. The CEO-only list is now ten commands. Contracts `grill-file` v1 and `draft-input` v1 (new), `destination-spec` v1.1 and `company-type` v1.6 (additive).
 - **Feature runs take a draft.** `/aico:feature` accepts a `grill.md`, `spec.md` or `plan.md` file as its argument and works from a copy under a new task name. A plan draft is checked against the repository at the Plan Gate: a gone or newly existing path is Blocking, a changed path is shown to the Architect. Every other argument starts a run as before.
-- Drafts and the one-shot argument file stay in the git-ignored `.company/` folder, are never committed or sent, and the argument file is removed once read.
+- Drafts and the one-shot argument file stay in `.company/work/` (covered by the repo `.gitignore`) and are never committed. The AI model that runs the command reads their text, and grill may run web searches built from the idea; there is no other recipient. An erasure request overrides the archive rule (the CEO decides). The argument file is removed once read.
 
 ## [0.21.0] - 2026-10-30
 

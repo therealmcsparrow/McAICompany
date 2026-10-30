@@ -37,6 +37,17 @@ test('privacy clause covers the draft files', () => {
   assert.match(commands, /Art\. 5\(1\)\(c\)/);
 });
 
+test('privacy text names real destinations', () => {
+  const changelog = read('CHANGELOG.md');
+  for (const t of [commands, changelog]) {
+    assert.doesNotMatch(t, /never committed or sent/);
+    assert.doesNotMatch(t, /git-ignored `\.company\/` folder/);
+  }
+  assert.match(commands, /web searches/);
+  assert.match(commands, /erasure/);
+  assert.match(changelog, /web searches/);
+});
+
 test('company types table lists the new commands', () => {
   const concepts = read('documentation/concepts.md');
   const rows = concepts.split('\n').filter(l => /^\| `(software|research|marketing|design)` \(/.test(l));
