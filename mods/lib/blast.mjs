@@ -16,15 +16,16 @@ const MAX_MODULES_IN_REASON = 120;
 const MAX_LABEL = 60;
 const MORE_ROOM = 14;
 
-const OUTPUT = /^Output: \.company\/work\/[a-z0-9][a-z0-9-]{0,63}\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/;
-const BASE = /^Base commit: ([0-9a-f]{7,40})$/;
+const OUTPUT = /^Output: \.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/;
+const BASE = /^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$/;
 const TIER = /^Risk tier: (low|medium|high)$/;
-const SHA = /^[0-9a-f]{7,40}$/;
+const SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
-// The four prompt lines Blast Radius reads, from the first 64 KiB. A missing or odd line is null.
+// The prompt lines Blast Radius reads, from the first 64 KiB. A missing or odd line is null.
 export function parseSpawnLines(prompt) {
-  const out = { step: null, role: null, base: null, tier: null };
+  const out = { slug: null, step: null, role: null, base: null, tier: null };
   if (typeof prompt !== 'string') return out;
   const cutOff = prompt.length > MAX_PROMPT;
   const lines = (cutOff ? prompt.slice(0, MAX_PROMPT) : prompt).split('\n');
@@ -34,8 +35,9 @@ export function parseSpawnLines(prompt) {
     if (line.length > MAX_LINE) continue;
     let m;
     if (out.step === null && (m = OUTPUT.exec(line)) !== null) {
-      out.step = m[1];
-      out.role = m[2];
+      out.slug = m[1];
+      out.step = m[2];
+      out.role = m[3];
     } else if (out.base === null && (m = BASE.exec(line)) !== null) out.base = m[1];
     else if (out.tier === null && (m = TIER.exec(line)) !== null) out.tier = m[1];
   }
@@ -54,7 +56,7 @@ export function reviewArgs(spec) {
   if (spec === null || typeof spec !== 'object') return null;
   let args;
   if (spec.source === 'worktree') args = ['--worktree', '--json'];
-  else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base)) args = [spec.base, '--json'];
+  else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base) && typeof spec.slug === 'string' && SLUG.test(spec.slug)) args = [spec.base, '--run', spec.slug, '--json'];
   else return null;
   if (spec.risk === 'low' || spec.risk === 'medium' || spec.risk === 'high') args.push('--risk', spec.risk);
   const repo = spec.repo;
@@ -83,7 +85,8 @@ export function hitsFromDepth(depth) {
   }
   hits.modules = unique(depth.paths.map((p) => p.module), 20);
   const reasons = Array.isArray(depth.reasons) ? depth.reasons : [];
-  if (reasons.some((r) => r.path === '*' && r.rule === 'diff unavailable')) hits.security.push('unknown (diff unavailable)');
+  // Any answer the script gave up on (not the tier reason) leaves the diff unjudged, so it counts as an unknown hit.
+  for (const r of reasons) if (r.path === '*' && r.rule !== 'risk tier — high') hits.security.push(`unknown (${r.rule})`);
   if (depth.truncated === true) hits.security.push('unknown (list truncated)');
   return hits;
 }

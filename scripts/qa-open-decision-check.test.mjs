@@ -1056,9 +1056,9 @@ test('AC10 the planning skill asks for Decided lines and no open words under Ste
 
 test('AC11 the pipeline reference runs gate or off at every Plan Gate and read before the Ship Gate', () => {
   const ref = fs.readFileSync(path.join(repoRoot, 'skills', 'pipeline', 'references', 'plan-check.md'), 'utf8');
-  const gate = ref.indexOf('plan-check.mjs" gate');
-  const off = ref.indexOf('plan-check.mjs" off');
-  const read = ref.indexOf('plan-check.mjs" read');
+  const gate = ref.indexOf('run.mjs" plan-check gate');
+  const off = ref.indexOf('run.mjs" plan-check off');
+  const read = ref.indexOf('run.mjs" plan-check read');
   assert.ok(gate >= 0 && off >= 0 && read >= 0, 'gate, off and read commands');
   assert.ok(read > gate);
   const readLine = ref.slice(Math.max(0, ref.lastIndexOf('\n', read)), ref.indexOf('\n', read));

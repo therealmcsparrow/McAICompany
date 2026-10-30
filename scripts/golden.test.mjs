@@ -1,8 +1,10 @@
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { lint } from './handoff-lint.mjs';
+import { loadGolden } from './contract-fixtures.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'golden');
 const baseline = JSON.parse(readFileSync(join(dir, 'baseline.json'), 'utf8'));
@@ -59,4 +61,29 @@ test('AC27 baseline holds counts only', () => {
     assert.ok(Number.isInteger(v.lines) && v.lines > 0);
   }
   assert.ok(!readFileSync(join(dir, 'baseline.json'), 'utf8').includes('\r'));
+});
+
+describe('handoff Contract fixtures', () => {
+  const fixtures = loadGolden('handoff');
+  const cases = fixtures.json('cases.json');
+
+  test('fixtures are stamped with the Contract version', () => {
+    assert.match(fixtures.version, /^\d+\.\d+$/);
+  });
+
+  for (const [name, c] of Object.entries(cases)) {
+    test(`lint: ${name}`, () => {
+      const text = fixtures.text(c.file);
+      assert.ok(!text.includes('\r'), 'LF only');
+      assert.ok(text.endsWith('\n'));
+      const { errors, routing } = lint(text);
+      if (c.errors) assert.deepEqual(errors, c.errors);
+      if (c.routing) {
+        assert.deepEqual(errors, []);
+        const { top, ...rest } = routing;
+        assert.deepEqual(rest, c.routing);
+        assert.ok(top);
+      }
+    });
+  }
 });

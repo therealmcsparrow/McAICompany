@@ -31,8 +31,7 @@ let lastSignature = ''
 let lastPollMs = 0
 
 const OUTPUT_LINE = /^Output: \.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/m
-const NAME_LINE = /^Name: ([^\r\n]{1,40})$/m
-const BASE_LINE = /^Base commit: ([0-9a-f]{7,40})$/m
+const BASE_LINE = /^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$/m
 const TIER_LINE = /^Risk tier: (low|medium|high)$/m
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
 
@@ -320,13 +319,12 @@ async function afterTurnStart($: EngineInterface): Promise<void> {
 function parsePrompt(prompt: unknown): Pick<AgentRow, 'step' | 'role' | 'name' | 'baseCommit' | 'tier'> {
   const head = typeof prompt === 'string' ? prompt.slice(0, PROMPT_HEAD).replace(/\r\n?/g, '\n') : ''
   const output = OUTPUT_LINE.exec(head)
-  const name = NAME_LINE.exec(head)
   const base = BASE_LINE.exec(head)
   const tier = TIER_LINE.exec(head)
   return {
     step: output === null ? null : output[2],
     role: output === null ? null : output[3],
-    name: name === null ? null : fit(name[1], 40),
+    name: null,
     baseCommit: base === null ? null : base[1],
     tier: tier === null ? null : (tier[1] as 'low' | 'medium' | 'high'),
   }

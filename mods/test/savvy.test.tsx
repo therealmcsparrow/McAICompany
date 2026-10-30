@@ -118,7 +118,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const w = makeWorld()
     w.agents = [{ id: 'a1', description: 'x', type: 'aico:frontend-engineer', status: 'running' }]
     const clock = await boot($, on, w, surface)
-    await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Output: .company/work/demo/06-frontend-engineer.md\nName: Freya\nBase commit: abc1234\nRisk tier: high\n' })
+    await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Output: .company/work/demo/06-frontend-engineer.md\nBase commit: 0123456789abcdef0123456789abcdef01234567\nRisk tier: high\n' })
     await clock.advance(2100)
     const ui = await $.ui.mount(pane(surface))
     const text = (await lines(ui)).join('\n')
@@ -193,6 +193,30 @@ for (const width of [39, 63, 89]) {
     await ui.unmount()
   })
 }
+
+test('a Name: line in a prompt is ignored: the name comes from the Role id', async ($, on) => {
+  const w = makeWorld()
+  w.agents = [{ id: 'a1', description: 'x', type: 'aico:frontend-engineer', status: 'running' }]
+  await boot($, on, w)
+  await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Name: Mallory\nOutput: .company/work/demo/06-frontend-engineer.md\nRisk tier: high\n' })
+  const ui = await $.ui.mount(pane('terminal'))
+  const text = (await lines(ui)).join('\n')
+  expect(text).toContain('Step     06 frontend-engineer (Freya)')
+  expect(text).not.toContain('Mallory')
+  await ui.unmount()
+})
+
+test('a Role id with no name map entry shows unknown', async ($, on) => {
+  const w = makeWorld()
+  w.agents = [{ id: 'a1', description: 'x', type: 'aico:game-engineer', status: 'running' }]
+  await boot($, on, w)
+  await $.agent.spawn({ subagentType: 'aico:game-engineer', prompt: 'Name: Mallory\nOutput: .company/work/demo/07-game-engineer.md\n' })
+  const ui = await $.ui.mount(pane('terminal'))
+  const text = (await lines(ui)).join('\n')
+  expect(text).toContain('Step     07 game-engineer (?)')
+  expect(text).not.toContain('Mallory')
+  await ui.unmount()
+})
 
 test('hostile prompt lines are cut and cleaned, a 10 MiB prompt does not hang', async ($, on) => {
   const w = makeWorld()

@@ -507,10 +507,16 @@ export function readProfile({ cwd } = {}) {
   return { hasProject: true, fields };
 }
 
+// Controls, every format character (zero-width, bidi, tag characters, U+2065), line and paragraph separators,
+// Mongolian vowel separator and U+2065 named so a Unicode table that drops them cannot reopen the hole.
+const PROFILE_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}᠎⁥\u{E0000}-\u{E007F}]/u;
+
 // Returns a reason string when `value` is not acceptable for `field`, else null.
 function profileProblem(field, value, options) {
   if (typeof value !== 'string' || value.trim() === '') return 'must be text';
-  if (/[\u0000-\u001f\u007f]/.test(value)) return 'must be one line without control characters';
+  if (!value.isWellFormed()) return 'must be well-formed text';
+  if (PROFILE_BAD_RE.test(value)) return 'must be one line without control, invisible or direction characters';
+  if (value.includes('<!--') || value.includes('-->')) return 'must not contain comment marks';
   if (value.length > MAX_TEXT) return `must be at most ${MAX_TEXT} characters`;
   if (value !== value.trim()) return 'must not start or end with spaces';
   if (field === 'languages') {
@@ -521,6 +527,10 @@ function profileProblem(field, value, options) {
   }
   if (OPTION_FIELDS.includes(field)) return options[field].includes(value) ? null : `must be one of ${options[field].join(', ')}`;
   return null;
+}
+
+function canonicalLanguages(value) {
+  return value.split(',').map((tag) => tag.replace(tag.trim(), Intl.getCanonicalLocales(tag.trim())[0])).join(',');
 }
 
 // Rewrites only the edited header lines of .company/project.md. Unchanged values are not re-validated.
@@ -544,7 +554,10 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
     if (changes[field] === stored[field]) continue;
     const problem = profileProblem(field, changes[field], options);
     if (problem) reasons.push(`${field}: ${problem}`);
-    else edits.push(field);
+    else {
+      if (field === 'languages') changes = { ...changes, languages: canonicalLanguages(changes.languages) };
+      edits.push(field);
+    }
   }
   if (reasons.length) throw new Refusal(reasons.join('; '));
   if (edits.length === 0 || dryRun) return;
@@ -615,6 +628,16 @@ function resolveMods(user, project, { isUnlocked, broken, ignored, warnings }) {
 }
 
 // Off wins: a user or project off, or a project layer with any problem, gives off. A project on never overrides a user off.
+function resolvePlanPolicy(user, project, ignored) {
+  const u = Object.hasOwn(user.plan_check ?? {}, 'policy') ? user.plan_check.policy : undefined;
+  const p = Object.hasOwn(project.plan_check ?? {}, 'policy') ? project.plan_check.policy : undefined;
+  if (u === 'block') {
+    if (p !== undefined && p !== 'block') ignored.push('plan_check.policy: a project cannot lower a user block');
+    return 'block';
+  }
+  return pick(p, u, PLAN_CHECK_DEFAULTS.policy)[0];
+}
+
 function resolveShortPath(user, project, broken, ignored) {
   const u = user.pipeline?.short_path;
   const p = project.pipeline?.short_path;
@@ -688,9 +711,10 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   // Not a lock: a project value counts, and a fail-closed project layer does not change it.
   const reprompt = { question_rounds: pick(project.reprompt?.question_rounds, user.reprompt?.question_rounds, REPROMPT_DEFAULTS.question_rounds)[0] };
 
-  // Not a lock: a project value counts, and a fail-closed project layer does not change it.
+  // Block wins: a project value counts, except that it never lowers a user block. A fail-closed project layer
+  // is an empty layer, so it never lowers one either.
   const plan_check = {
-    policy: pick(project.plan_check?.policy, user.plan_check?.policy, PLAN_CHECK_DEFAULTS.policy)[0],
+    policy: resolvePlanPolicy(user, project, ignored),
     runs: pick(project.plan_check?.runs, user.plan_check?.runs, PLAN_CHECK_DEFAULTS.runs)[0]
   };
 

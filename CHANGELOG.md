@@ -6,6 +6,23 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ### Fixed
 - **Re-begin after a Fix round.** `plan-tasks.mjs begin` now starts a new segment at round 0, so plan tasks left pending when a Fix round started are offered again by `next`, `lines` and `brief`. Before, the record stayed in the Fix round and those tasks could only be dispatched by hand, without a task brief. A `round` event now starts its round with an empty done list, since a round number can repeat after a re-begin. Contract `plan-tasks` v1.1 (fix note; record format unchanged).
+## [0.20.0] - 2026-10-29
+
+Rollback: node scripts/stable.mjs 0.19.1
+
+### Added
+- **Hook Gate.** `plan_check.policy` `block`: the scripts refuse the Plan Gate record, the build start and every task start while the plan has open decisions. A project can raise the policy to `block` but never lower a user `block`. Under `warn` and `off` nothing changes. Contracts `plan-check` v1.2, `plan-tasks` v1.2, `run-state` v1.5, `aico-settings` v1.9 (additive).
+- **Judging diff.** Reviewers get the diff from the full base commit (40 or 64 hex) to the run branch. A git grafts file stops every judging check. Binary is decided by file content; a binary file outside the fixed type list in a text path blocks until fixed or excepted by you; binary-marked text files are shown through `rule-check text`. Contracts `tier-sets` v1.1, `rule-check` v1.1, `review-depth` v1.1, `dispatch-prompt` v4.0.
+- **Contested findings and receipts.** Every reviewer finding has an ID `<NN>-<role>:R-<n>` and can be contested; a security finding never closes by contest. `token-ledger` gets a `receipt` command. Contracts `handoff` v1.2 (additive), `token-ledger` v1.5.
+- **Cost from telemetry.** The scorecard shows a cost segment only when one is recorded in your OpenTelemetry export file. It is Claude Code's approximate cost, not a bill. Contract `cost-source` v1. See [concepts](documentation/concepts.md#cost-from-telemetry) for the setup.
+- **CEO question pack, never-cited report, first product.** Contracts `cited-report` v1 and `project-init` v1.
+- **Releases.** An SBOM, a `Rollback:` line and a Gate Report per release. Contract `release` v1.
+- **Other new Contracts.** `qa-timing`, `step-times`, `contract-index`, `plugin-root`; `rule-pack` v1.2.
+- **SECURITY.md** with private vulnerability reporting.
+
+### Changed
+- **Names only for the CEO.** A Role gets no `Name:` line (breaking: `dispatch-prompt` v4.0) and writes its Role id in its byline. Names show only to you. Brainstorm files store Role ids (`brainstorm-file` v2.2, `role-names` v1.3, `reprompt` v1.2).
+- The documentation lists the checks' residual risks under Residual risks in `documentation/concepts.md`.
 
 ## [0.19.1] - 2026-10-28
 

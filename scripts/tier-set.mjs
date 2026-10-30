@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v1.1). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
 // and a time only. Plans, project.md, git output, the data file and every CLI argument are untrusted data:
 // output holds fixed words, known entry names and paths that passed the path rule.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
@@ -363,14 +365,67 @@ function defaultGit(args, { cwd, env }) {
   return execFileSync('git', args, { cwd, env, timeout: GIT_TIMEOUT_MS, maxBuffer: MAX_GIT_BYTES, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
-// One git call: fixed argument array, no shell. Returns the output as a Buffer; throws on a failure or an output over the cap.
-function gitRun(env, sub) {
-  const args = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false', ...sub];
-  const gitEnv = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' };
-  const out = env.git(args, { cwd: env.root, env: gitEnv });
+const GIT_KEY = /^GIT_/i;
+
+// The environment of the process without any GIT_ key, whatever its case.
+function cleanGitEnv() {
+  const out = {};
+  for (const [key, value] of Object.entries(process.env)) if (!GIT_KEY.test(key)) out[key] = value;
+  return out;
+}
+
+// 'ENOENT' when nothing is at the path; any other code, or 'exists', is a reason to refuse.
+function lstatCode(file) {
+  try {
+    fs.lstatSync(file);
+    return 'exists';
+  } catch (error) {
+    return error && typeof error.code === 'string' ? error.code : 'unknown';
+  }
+}
+
+function spawnGit(env, args, cwd, gitEnv) {
+  const out = env.git(args, { cwd, env: gitEnv });
   const buf = Buffer.isBuffer(out) ? out : Buffer.from(String(out ?? ''), 'utf8');
   if (buf.length > MAX_GIT_BYTES) throw new Error('output too large');
   return buf;
+}
+
+// Resolves the top level, checks that no grafts file exists and picks the absent grafts path for later calls.
+// The result is kept for the whole command; a failure is kept too, so no later call runs.
+function gitStart(env) {
+  const state = env.gitState;
+  if (state.failed) throw new Error('git setup failed');
+  if (state.ready) return state;
+  state.failed = true;
+  const base = ['--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false'];
+  const topText = spawnGit(env, [...base, 'rev-parse', '--show-toplevel'], env.root, cleanGitEnv()).toString('utf8').replace(/\r?\n$/, '');
+  if (topText === '' || topText.includes('\n') || topText.includes('\0')) throw new Error('no top level');
+  const top = path.resolve(topText);
+  const printed = spawnGit(env, [...base, 'rev-parse', '--git-path', 'info/grafts'], top, { ...cleanGitEnv(), GIT_NO_REPLACE_OBJECTS: '1' })
+    .toString('utf8').replace(/\r?\n$/, '');
+  if (printed === '' || printed.includes('\n') || printed.includes('\0')) throw new Error('no grafts path');
+  if (lstatCode(path.resolve(top, printed)) !== 'ENOENT') throw new Error('grafts file');
+  const noGrafts = path.join(os.tmpdir(), `aico-no-grafts-${randomBytes(8).toString('hex')}`);
+  if (lstatCode(noGrafts) !== 'ENOENT') throw new Error('grafts path taken');
+  state.top = top;
+  state.noGrafts = noGrafts;
+  state.ready = true;
+  state.failed = false;
+  return state;
+}
+
+// One git call: fixed argument array, no shell, the top level as cwd. Returns the output as a Buffer; throws on a failure or an output
+// over the cap. Mode 'diff' is the judging diff (literal pathspecs); mode 'glob' is the one call that needs pathspec globs.
+function gitRun(env, sub, mode = 'plain') {
+  const { top, noGrafts } = gitStart(env);
+  const literal = mode === 'diff';
+  const args = [
+    '--no-replace-objects', '--no-optional-locks', ...(literal ? ['--literal-pathspecs'] : []),
+    '-c', 'core.fsmonitor=false', ...(literal ? ['-c', 'diff.ignoreSubmodules=none'] : []), ...sub
+  ];
+  const gitEnv = { ...cleanGitEnv(), GIT_NO_REPLACE_OBJECTS: '1', GIT_GRAFT_FILE: noGrafts, ...(literal ? { GIT_LITERAL_PATHSPECS: '1' } : {}) };
+  return spawnGit(env, args, top, gitEnv);
 }
 
 // The full id length of the repository's object format: 40 for sha1, 64 for sha256. Throws on any other answer.
@@ -406,26 +461,35 @@ function resolveBaseId(env, base, len) {
   return { id };
 }
 
-// Paths of the work since base, or null when any git call fails. The base is used only when it is a full commit id.
-function readDiffPaths(env, base) {
-  if (typeof base !== 'string' || !FULL_SHA.test(base)) return null;
-  const calls = [
-    ['cat-file', '-e', '--end-of-options', `${base}^{commit}`],
-    ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options', base, 'HEAD', '--'],
-    ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options', 'HEAD', '--'],
-    ['ls-files', '--others', '--exclude-standard', '-z']
-  ];
+const DIFF_FLAGS = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none', '--name-only', '-z', '--no-renames'];
+
+// Paths of the work since base, or null when any check or git call fails. The base is used only when it is a full commit id.
+// The committed diff ends at the run branch itself; the worktree diff and the untracked lists are read only when HEAD is that branch.
+function readDiffPaths(env, base, slug) {
+  if (typeof base !== 'string' || !FULL_SHA.test(base) || typeof slug !== 'string' || !SLUG.test(slug)) return null;
+  const ref = `refs/heads/aico/${slug}`;
   const all = new Set();
+  const add = (buf) => {
+    for (const p of buf.toString('utf8').split('\0')) if (p !== '') all.add(p);
+  };
   try {
-    calls.forEach((sub, i) => {
-      const buf = gitRun(env, sub);
-      if (i === 0) return;
-      for (const p of buf.toString('utf8').split('\0')) if (p !== '') all.add(p);
-    });
+    gitRun(env, ['cat-file', '-e', '--end-of-options', `${base}^{commit}`]);
+    if (gitRun(env, ['symbolic-ref', '-q', 'HEAD']).toString('utf8') !== `${ref}\n`) return null;
+    gitRun(env, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]);
+    add(gitRun(env, [...DIFF_FLAGS, '--end-of-options', base, ref, '--'], 'diff'));
+    add(gitRun(env, [...DIFF_FLAGS, '--end-of-options', 'HEAD', '--'], 'diff'));
+    add(gitRun(env, ['ls-files', '--others', '--exclude-per-directory=.gitignore', '-z']));
+    add(gitRun(env, ['ls-files', '--others', '-z', '--', ':(glob)**/.gitignore'], 'glob'));
   } catch {
     return null;
   }
   return [...all];
+}
+
+// A path whose last segment is a .gitignore, with the aliases a Windows file system gives it.
+function isIgnoreFile(p) {
+  const last = trimAlias(p.replaceAll('\\', '/').split('/').at(-1)).toLowerCase();
+  return last === '.gitignore' || last === 'gitign~1';
 }
 
 // ---------------------------------------------------------------- record
@@ -713,13 +777,17 @@ function checkTo(env, slug, recBase, leadBase, flags) {
     else all.push(...items.map((p) => ({ source: 'plan', p })));
   }
   if (wantDiff) {
-    const items = formatOk ? readDiffPaths(env, base) : null;
+    const items = formatOk ? readDiffPaths(env, base, slug) : null;
     if (items === null) hits.push({ source: 'diff', reason: 'diff unknown', path: null });
     else all.push(...items.map((p) => ({ source: 'diff', p })));
   }
   paths = new Set(all.map((x) => x.p)).size;
+  for (const x of all) {
+    if (x.source === 'diff' && isIgnoreFile(x.p)) hits.push({ source: 'diff', reason: 'ignore file changed', path: safeEcho(x.p) });
+  }
   if (!core.unknown) {
     for (const x of all) {
+      if (x.source === 'diff' && isIgnoreFile(x.p)) continue;
       const one = checkPaths([x.p], { core: core.core, forcedHigh: env.forcedHigh });
       if (one.length > 0) hits.push({ source: x.source, reason: one[0].reason, path: one[0].path });
     }
@@ -823,7 +891,8 @@ export function main(args, { now, root, pluginRoot, git } = {}) {
     root: typeof root === 'string' && root !== '' ? root : process.cwd(),
     now: typeof now === 'number' ? now : Date.now(),
     pluginRoot: typeof pluginRoot === 'string' && pluginRoot !== '' ? pluginRoot : defaultPluginRoot(),
-    git: typeof git === 'function' ? git : defaultGit
+    git: typeof git === 'function' ? git : defaultGit,
+    gitState: {}
   };
   try {
     const list = Array.isArray(args) ? args : [];

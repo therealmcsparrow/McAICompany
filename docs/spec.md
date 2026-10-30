@@ -135,10 +135,10 @@ Decisions: `docs/adr/` 0003–0005. Contracts: `docs/contracts/` (dispatch-promp
 - **Build:** `npm test` runs every `scripts/*.test.mjs`; `.nvmrc` 24 and `engines` >= 24; CI uses read-only token permissions and commit-pinned actions.
 
 ## v0.10 additions
-Decisions: `docs/adr/` 0006. Contracts: `docs/contracts/` (`aico-settings`, `role-names`, `dispatch-prompt` v3).
+Decisions: `docs/adr/` 0006. Contracts: `docs/contracts/` (`aico-settings`, `role-names`, `dispatch-prompt` v4).
 - **Playbook** `/aico:settings`: starts the local page (`scripts/settings.mjs serve`, `settings-server.mjs`, `settings-page.html`) and hands the CEO the URL with its token. The page sets each Role's name, model and effort, the Fix-round limit, dispatch mode, optional lanes and Gates, at user level (`~/.mcsparrow/config.json`) or project level (`.company/settings.json`). Precedence is project > user > plugin. Ship, installs and the security lanes unlock only from user level. The script owns validation and every write.
-- **Role names** (`role-names` v1): each Role has a person name in `company/names.json` (editable per level). The Lead routes by name only when it is used as a person; scripts, Handoffs, Gates and help show the name with the Role.
-- **Pipeline** Setup §1.7 resolves settings once per run; every dispatch carries `Name:` and `Settings:` lines (`dispatch-prompt` v3) and passes `model` and `effort` as Agent-call parameters. Agent files are never edited. With nothing set, behaviour is unchanged.
+- **Role names** (`role-names` v1): each Role has a person name in `company/names.json` (editable per level). The Lead routes by name only when it is used as a person; Gates and help show the name with the Role to the CEO; Roles, Handoffs and dispatches use the Role id and never a name (`role-names` v1.3).
+- **Pipeline** Setup §1.7 resolves settings once per run; every dispatch carries a `Settings:` line and no name (`dispatch-prompt` v4) and passes `model` and `effort` as Agent-call parameters. Agent files are never edited. With nothing set, behaviour is unchanged.
 - **Roles:** each Role sets an `effort` level; writer, vuln-scanner and design-researcher moved to sonnet.
 
 ## Unreleased additions

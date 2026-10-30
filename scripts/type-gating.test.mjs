@@ -20,7 +20,7 @@ const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'tri
 const SHIP_GATE = '- **Ship Gate** comes before any push, merge, deploy, publish or message to a client, user or authority. '
   + 'Its summary names every optional lane the settings turned off ("skipped by settings: accessibility").';
 
-const typeLine = (name) => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
+const typeLine = (name) => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 
 for (const name of SOFTWARE) {
   test(`${name}: Type line one empty line after the Help line`, () => {
@@ -46,9 +46,9 @@ test('pipeline: type check first, Role check before dispatch, Ship Gate text unc
   const zero = t.indexOf('0. **Company type (§1.0)**');
   const one = t.indexOf('1. **Task slug**');
   assert.ok(setup < zero && zero < one);
-  assert.match(t.slice(zero, one), /company-type\.mjs" resolve/);
+  assert.match(t.slice(zero, one), /run\.mjs" company-type resolve/);
   assert.match(t.slice(zero, one), /Exit not 0, no output or a first line that starts with neither `ok: ` nor `company type: `/);
-  assert.match(t, /company-type\.mjs" check-role <role>/);
+  assert.match(t, /run\.mjs" company-type check-role <role>/);
   assert.ok(t.includes(SHIP_GATE));
   const ship = t.split('\n').find((l) => l.startsWith('- **Ship Gate, company types other than `software`**'));
   assert.ok(ship);
@@ -61,7 +61,7 @@ test('pipeline: type check first, Role check before dispatch, Ship Gate text unc
 
 test('help lists only the type\'s Playbooks and names the allowed ones on refusal', () => {
   const t = read('skills/help/SKILL.md');
-  assert.match(t, /company-type\.mjs" resolve/);
+  assert.match(t, /run\.mjs" company-type resolve/);
   assert.match(t, /only commands in `playbooks`/);
   assert.match(t, /`playbooks:` line/);
   assert.doesNotMatch(t.split('\n').find((l) => l.includes('Company type:')), /JSON/);
@@ -75,7 +75,7 @@ test('lead and triage filter by the type', () => {
 
 test('cooler and brainstorm pick Roles from company-type roles', () => {
   for (const name of ['cooler', 'brainstorm']) {
-    assert.match(read(`skills/${name}/SKILL.md`), /company-type\.mjs" roles/, name);
+    assert.match(read(`skills/${name}/SKILL.md`), /run\.mjs" company-type roles/, name);
   }
   assert.ok(!read('skills/cooler/SKILL.md').includes('<plugin root>/agents/'));
 });

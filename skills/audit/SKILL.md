@@ -8,7 +8,7 @@ argument-hint: [path or scope]
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:audit` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook audit` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook audit` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`, but **read-only**: no branch commits except Handoffs, and no builders. No Gates until the report is ready.
 

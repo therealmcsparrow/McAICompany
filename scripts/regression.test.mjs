@@ -87,14 +87,15 @@ test('seed 2 lessons: a CRLF text file in a change is caught by rule-check lf, w
   write(root, '.company/checks.json', JSON.stringify({ version: 1, checks: { lf: { rule: 'proj.M11', text: sha(lfRule) } } }));
   write(root, '.gitattributes', '* text=auto eol=lf\n');
   write(root, 'seed.txt', 'seed\n');
-  git(root, 'init', '-q');
+  git(root, 'init', '-q', '-b', 'aico/lf');
   git(root, 'add', '-A', '-f');
   git(root, 'commit', '-q', '-m', 'seed');
   const base = git(root, 'rev-parse', 'HEAD');
   write(root, 'run.mjs', '#!/usr/bin/env node\r\nconsole.log(1);\r\n'); // CR bytes come from escapes, never stored
+  write(root, '.git/info/attributes', '* -text\n'); // the blob keeps its CR bytes: rule-check reads blobs, not the worktree
   git(root, 'add', '-A', '-f');
   git(root, 'commit', '-q', '-m', 'change');
-  const r = ruleCheckCli(root, ['run', '--base', base]);
+  const r = ruleCheckCli(root, ['run', '--base', base, '--run', 'lf']);
   const rows = r.out.split('\n').filter((l) => l.startsWith('T-'));
   assert.equal(rows.length, 1, r.all);
   assert.match(rows[0], /^T-1 \| run\.mjs:1 \| CR byte in text file \| proj\.M11: /);

@@ -443,12 +443,12 @@ test('reprompt Playbook: no Type line anywhere, and the type check is the resolv
   assert.doesNotMatch(playbook, /^\*\*Type:\*\*/m);
   assert.doesNotMatch(playbook, /check-playbook/);
   const start = playbook.slice(playbook.indexOf('## 1. Start'), playbook.indexOf('## 2. Dispatch'));
-  const resolveAt = start.indexOf('company-type.mjs" resolve');
+  const resolveAt = start.indexOf('run.mjs" company-type resolve');
   const writeAt = start.indexOf('With the Write tool create');
   assert.ok(resolveAt > 0 && writeAt > resolveAt, 'resolve comes before the first write');
   assert.match(start, /first line that starts with neither `ok: ` nor `company type: `/);
   assert.ok(start.indexOf('Argument empty after trimming') < resolveAt, 'an empty argument is answered before anything runs');
-  assert.match(playbook, /company-type\.mjs" check-role reprompter/);
+  assert.match(playbook, /run\.mjs" company-type check-role reprompter/);
 });
 
 test('reprompt Playbook: an empty argument shows the help and starts nothing', () => {

@@ -1,7 +1,7 @@
-# Contract: rule-pack v1.1
+# Contract: rule-pack v1.2
 
 Provider: `aico:senior-engineer` (`/aico:standards` runs and refresh Steps). Validator: `checkPack(text, { file, today, advisories })` exported by `scripts/check.mjs` (Core). Consumers: every Role that loads rules (`aico:ruleset`), `rule-check` v1.
-v1.0 = the pack format in `skills/ruleset/SKILL.md` §Pack format at 0.10.0. v1.1 is additive: every valid v1.0 pack is a valid v1.1 pack. The committed copies in `.company/standards/` at base `bea3242` are the reference: all of them must pass.
+v1.0 = the pack format in `skills/ruleset/SKILL.md` §Pack format at 0.10.0. v1.1 is additive: every valid v1.0 pack is a valid v1.1 pack. v1.2 is additive: the reuse rule below adds a script and no field. The committed copies in `.company/standards/` at base `bea3242` are the reference: all of them must pass.
 
 ## Format (v1.0, now checked)
 - File `<tool>@<major>.md`; frontmatter `tool` equals `<tool>`, `versions` non-empty, `researched` a real `YYYY-MM-DD` date not after today.
@@ -25,6 +25,13 @@ v1.0 = the pack format in `skills/ruleset/SKILL.md` §Pack format at 0.10.0. v1.
 | Repo | `node check.mjs` scans `<root>/.company/standards/*@*.md` | format; `researched` more than 180 days before today (the Stale rule in `aico:ruleset`); a rule ID used in two committed packs |
 
 The 90-day rule governs reusing a library pack for a new project, so it is checked on the library, not on a project's committed copies. `today` is injectable for tests.
+
+## Reuse rule (v1.2)
+`node pack-fresh.mjs <pack> --version <v> [--use new|repo] [--standards <file>] [--root <dir>]` (Module `scripts/pack-fresh.mjs`, calls `checkPack`) prints `reuse` or `research <reason>`, reason one of `invalid`, `version`, `age`, `advisory`. The checks run in that order and the first hit is printed. Any doubt is `research`. No new freshness field.
+- `invalid`: the pack is unreadable, a link, over 256 KiB or fails `checkPack`.
+- `version` (the Stale rule in `aico:ruleset`): `--version` is required and matches `^\d{1,6}(\.\d{1,6}){0,2}$`; missing or bad is `research version`. In range when `versions` is a list of comparators (`>=`, `<=`, `>`, `<`, `=` or none, separated by one space) and `<v>` meets every one; else, when the file's `@<major>` is below 1000, the first number of `<v>` equals it; else (a dated pack with free-text `versions`) the first number of `<v>` appears in `versions` as a whole number (not next to a digit, `.` or `-`). A file `@<major>` below 1000 must equal the first number of `<v>` in every case. A `versions` value over 400 characters is out of range.
+- `age`: the limit follows the use, never the file's location. `new` (the default) is 90 days. `repo` is 180 days only when `--standards`, after `path.resolve`, equals `<root>/.company/standards.md` (separator and case folded on win32), that file is a regular file within 256 KiB, and the pack's file name is listed under its `## Packs`. Any other `--standards` path (a copy elsewhere, a `../` path, a link) or none makes `repo` count as `new`. A library pack copied into `.company/standards/` for a first use is `new`. `<root>` is `--root`, default the current folder.
+- `advisory`: an `advisories.json` entry for the tool dated after `researched`. The file sits next to the pack; missing means no advisory; a link, not a regular file, over 256 KiB, invalid JSON or a malformed entry is `research advisory`.
 
 ## No ruleset (CI and fresh clones)
 `.company/` may be untracked (here: the global gitignore), so CI and a fresh clone have no committed copies. Repo mode with no `<root>/.company/standards/` directory prints `no ruleset` once and adds no error. CI proves `checkPack` on fixtures (`tests/fixtures/packs/`); the real copies are checked wherever they exist, i.e. on the Lead's machine (`docs/adr/0012-ruleset-stays-local.md`).

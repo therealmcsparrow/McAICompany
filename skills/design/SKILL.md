@@ -8,7 +8,7 @@ argument-hint: <design brief | project | file>
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:design` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook design` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook design` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`; keep the §1.0 type lines for the run. The `design` company ships a handoff package, not a release. Ship means the package goes to the client or the build team. Ship Gate: `aico:pipeline` §4, company types other than `software`.
 

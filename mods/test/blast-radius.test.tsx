@@ -170,18 +170,18 @@ test('the script arguments are an array: worktree for -a, repo from -C', async (
 
 test('a code-reviewer dispatch lists the touched paths and never blocks', async ($, on) => {
   const t = await boot($, on, 'terminal', { review: ok(CORE) })
-  const prompt = 'Output: .company/work/x/12-code-reviewer.md\nBase commit: 1551e10\nRisk tier: high\n'
+  const prompt = 'Output: .company/work/x/12-code-reviewer.md\nBase commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nRisk tier: high\n'
   const r = await $.agent.spawn({ prompt, subagentType: 'aico:code-reviewer' })
   expect(r.deny).toBe(undefined)
   const last = t.calls[t.calls.length - 1]
-  expect(last.slice(1)).toEqual(['1551e10', '--json', '--risk', 'high'])
+  expect(last.slice(1)).toEqual(['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '--run', 'x', '--json', '--risk', 'high'])
   expect(t.toasts.length).toBe(1)
   expect(t.logs.some(l => l.includes('skills/x.md'))).toBe(true)
 })
 
 test('a failing review-depth on a dispatch still lets the dispatch through', async ($, on) => {
   const t = await boot($, on, 'terminal', { review: { deny: 'boom' } })
-  const r = await $.agent.spawn({ prompt: 'Base commit: 1551e10', subagentType: 'code-reviewer' })
+  const r = await $.agent.spawn({ prompt: 'Base commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', subagentType: 'code-reviewer' })
   expect(r.deny).toBe(undefined)
   expect(t.toasts.length).toBe(0)
 })
@@ -199,7 +199,7 @@ test('an error in the hook denies a commit and passes any other shell call', asy
 
 test('a dispatched subagent commit starts with From subagent <Step> <role>', async ($, on) => {
   await boot($, on, 'terminal', { review: ok(SEC) })
-  const prompt = 'Output: .company/work/x/12-backend-engineer.md\nBase commit: 1551e10\nRisk tier: high\n'
+  const prompt = 'Output: .company/work/x/12-backend-engineer.md\nBase commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nRisk tier: high\n'
   const spawned = await $.agent.spawn({ prompt, subagentType: 'aico:backend-engineer' })
   expect(spawned.deny).toBe(undefined)
   const r = await $.tool.check({ tool: 'Bash', input: { command: GIT.Bash }, agentId: 'r1' } as never)

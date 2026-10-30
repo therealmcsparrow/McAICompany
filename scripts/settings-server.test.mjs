@@ -861,7 +861,7 @@ test('the cap and name inputs never cut input off; an over-long or out-of-range 
   assert.equal(cap.getAttribute('aria-describedby'), null);
   await type(name, 'n'.repeat(35));
   assert.equal(name.value.length, 35);
-  assert.equal(page.allRoles((n) => n.id === name.getAttribute('aria-describedby'))[0].textContent, 'Error: Name is 35 characters. The limit is 30. Remove 5.');
+  assert.equal(page.allRoles((n) => n.id === name.getAttribute('aria-describedby').split(' ')[0])[0].textContent, 'Error: Name is 35 characters. The limit is 30. Remove 5.');
   await type(name, 'Quinn');
   assert.equal(name.getAttribute('aria-invalid'), null);
 });
@@ -998,7 +998,7 @@ test('the page keeps the layout fixes: the Roles table fits, and the footer sits
   assert.ok(/\.cell > :first-child \{[^}]*grid-column: 1 \/ -1/.test(html));
   assert.ok(/footer \{[^}]*z-index: 10/.test(html));
   assert.ok(!html.includes('1F512'), 'the lock emoji is gone');
-  assert.ok(/\.lock::after \{[^}]*content: "needs unlock"/.test(html));
+  assert.ok(!html.includes('content: "needs unlock"'), 'the lock reason is real text, not generated content');
   assert.ok(/@media \(prefers-reduced-motion: no-preference\)/.test(html));
   assert.ok(/@media \(forced-colors: active\)/.test(html));
   assert.ok(!/\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write/.test(html));

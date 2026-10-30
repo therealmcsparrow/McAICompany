@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-// Usage: node scripts/release.mjs <x.y.z>
+// Usage: node scripts/release.mjs <x.y.z> (contract: docs/contracts/release.md v1)
 // Bumps every version field, rolls the CHANGELOG [Unreleased] section, runs the checks
-// (including `claude plugin validate --strict .`, which fails closed), then makes one release commit and a local tag v<x.y.z>. It never contacts a remote.
+// (including `claude plugin validate --strict .`, which fails closed), builds releases/<x.y.z>/sbom.cdx.json and gate-report.md,
+// then makes one release commit and a local tag v<x.y.z>. It never contacts a remote. Any artefact that cannot be built stops the release.
+// The new CHANGELOG section starts with the rollback line `Rollback: node scripts/stable.mjs <previous>`; the first release has none.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { buildSbom, serialize, SbomError } from './sbom.mjs';
+import { gateReport } from './gate-report.mjs';
 
 // npm ships as npm.cmd on Windows, which cannot start without a shell. Run its JS entry point with this node instead.
 function npmTest() {
@@ -97,7 +101,16 @@ let end = lines.findIndex((l, i) => i > at && /^## /.test(l));
 if (end < 0) end = lines.length;
 if (lines.slice(at + 1, end).every((l) => l.trim() === '')) fail('the Unreleased section in CHANGELOG.md is empty');
 const today = new Date().toISOString().slice(0, 10);
-lines.splice(at + 1, 0, '', `## [${version}] - ${today}`);
+// The version released before this one is the next plain-semver heading below the Unreleased section.
+let previous = null;
+for (const l of lines.slice(end)) {
+  const m = l.match(/^## \[(\d+\.\d+\.\d+)\]/);
+  if (m && SEMVER.test(m[1])) {
+    previous = m[1];
+    break;
+  }
+}
+lines.splice(at + 1, 0, '', `## [${version}] - ${today}`, ...(previous ? ['', `Rollback: node scripts/stable.mjs ${previous}`] : []));
 
 const next = new Map();
 next.set('plugin', originals.get('plugin').replace(/("version":\s*")[^"]+(")/, `$1${version}$2`));
@@ -112,6 +125,19 @@ const restore = () => {
   for (const [k, text] of originals) fs.writeFileSync(abs(k), text);
 };
 for (const [k, text] of next) fs.writeFileSync(abs(k), text);
+
+// Both artefacts are built from the bumped files before any check runs; one that cannot be built stops the release.
+let artefacts;
+try {
+  artefacts = [
+    [`releases/${version}/sbom.cdx.json`, serialize(buildSbom({ root }))],
+    [`releases/${version}/gate-report.md`, gateReport({ root, version })]
+  ];
+  if (fs.existsSync(path.join(root, 'releases', version))) throw new SbomError(`releases/${version} exists`);
+} catch (e) {
+  restore();
+  fail(`could not build the release artefacts (${String(e && e.message).slice(0, 200)}); files restored, no commit, no tag`);
+}
 
 const npm = npmTest();
 const checks = [
@@ -146,7 +172,20 @@ if (!validate()) {
 }
 
 // The checks may write files; the release commit takes only the files this script changed.
-const files = [...next.keys()].map((k) => rel[k]);
+const written = [];
+try {
+  for (const [file, text] of artefacts) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text, { flag: 'wx' });
+    written[written.length] = file;
+  }
+} catch (e) {
+  for (const f of written) fs.rmSync(path.join(root, f), { force: true });
+  fs.rmSync(path.join(root, 'releases', version), { recursive: true, force: true });
+  restore();
+  fail(`could not write the release artefacts (${String(e && e.code).slice(0, 40)}); files restored, no commit, no tag`);
+}
+const files = [...[...next.keys()].map((k) => rel[k]), ...written];
 git(root, ['add', '--', ...files]);
 git(root, ['commit', '-q', '-m', `chore: release v${version}`, '--', ...files]);
 git(root, ['tag', '-a', `v${version}`, '-m', `v${version}`]);

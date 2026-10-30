@@ -369,7 +369,7 @@ test('scorecard for a lone run reads no baseline and prints one line', (t) => {
     code: 0,
     lines: [
       'scorecard solo (tier medium): time 1h00m (no baseline) | CEO wait 10m (no baseline) | spend/AC 100 (no baseline) | ' +
-      'fix rounds 2 (no baseline) | high blockers 0 (no baseline) | gate rejects 1 (no baseline) | excluded: 0'
+      'fix rounds 2 (no baseline) | high blockers 0 (no baseline) | gate rejects 1 (no baseline) | excluded: 0 | cost: not recorded'
     ]
   });
 });
@@ -385,9 +385,9 @@ test('scorecard compares with the 5 newest earlier timed runs and shows n only u
   assert.equal(
     call(sb, ['scorecard', 'new']).lines[0],
     'scorecard new (tier unknown): time 1h30m (median 1h00m) | CEO wait 5m (median 4m) | spend/AC 200 (median 400) | ' +
-    'fix rounds 1 (median 3) | high blockers 0 (median 1) | gate rejects 1 (median 3) | all tiers | excluded: 0'
+    'fix rounds 1 (median 3) | high blockers 0 (median 1) | gate rejects 1 (median 3) | all tiers | excluded: 0 | cost: not recorded'
   );
-  assert.match(call(sb, ['scorecard', 'old-04']).lines[0], / \| all tiers n=2 \| excluded: 0$/);
+  assert.match(call(sb, ['scorecard', 'old-04']).lines[0], / \| all tiers n=2 \| excluded: 0 \| cost: not recorded$/);
 });
 
 test('scorecard medians of an even set round the mean of the middle two', (t) => {
@@ -408,10 +408,10 @@ test('scorecard splits by tier at 5 same-tier runs and falls back to all tiers b
   shipped(sb, 'cur-low', { end: '2026-10-20T11:00:00Z', min: 50, tier: 'low' });
   const high = call(sb, ['scorecard', 'cur-high']).lines[0];
   assert.match(high, /\(tier high\): time 50m \(median 1h40m\)/);
-  assert.match(high, / \| tier high \| excluded: 0$/);
+  assert.match(high, / \| tier high \| excluded: 0 \| cost: not recorded$/);
   const low = call(sb, ['scorecard', 'cur-low']).lines[0];
   assert.match(low, /\(tier low\)/);
-  assert.match(low, / \| all tiers \| excluded: 0$/);
+  assert.match(low, / \| all tiers \| excluded: 0 \| cost: not recorded$/);
   assert.match(low, /time 50m \(median 10m\)/);
 });
 
@@ -424,7 +424,7 @@ test('scorecard excludes brainstorm, replay, baseline and untimed runs and ignor
   shipped(sb, 'cur', { end: '2026-10-09T10:00:00Z', min: 30 });
   const line = call(sb, ['scorecard', 'cur']).lines[0];
   assert.match(line, /time 30m \(median 20m\)/);
-  assert.match(line, / \| all tiers n=1 \| excluded: 4$/);
+  assert.match(line, / \| all tiers n=1 \| excluded: 4 \| cost: not recorded$/);
 });
 
 test('scorecard of an untimed run shows untimed and compares with every eligible run', (t) => {
@@ -434,7 +434,7 @@ test('scorecard of an untimed run shows untimed and compares with every eligible
   writeLedger(sb, 'cur', jl(shipRec('cur', { acs: 1 })));
   const line = call(sb, ['scorecard', 'cur']).lines[0];
   assert.match(line, /^scorecard cur \(tier unknown\): time untimed \(median 30m\) \| CEO wait \? \(median 10m\) \| /);
-  assert.match(line, / \| all tiers n=2 \| excluded: 0$/);
+  assert.match(line, / \| all tiers n=2 \| excluded: 0 \| cost: not recorded$/);
 });
 
 test('scorecard spend per AC needs counts, nothing unreconciled and acs above 0', (t) => {
@@ -470,15 +470,15 @@ test('scorecard 30% target: met, missed and not reconciled', (t) => {
   const base = ['--baseline', 'baseline-a,baseline-b,baseline-c'];
   // b = median(1000, 1200, 800) = 1000; quality medians over the two runs holding both: fix 3, high 2
   shipped(sb, 'good', { end: '2026-10-09T10:00:00Z', spend: 2800, acs: 4, fix_rounds: 3, high_blockers: 2 });
-  assert.match(call(sb, ['scorecard', 'good', ...base]).lines[0], / \| 30% target: -30% vs 1000\/AC, met$/);
+  assert.match(call(sb, ['scorecard', 'good', ...base]).lines[0], / \| 30% target: -30% vs 1000\/AC, met \| cost: not recorded$/);
   shipped(sb, 'slow', { end: '2026-10-10T10:00:00Z', spend: 2804, acs: 4, fix_rounds: 3, high_blockers: 2 });
-  assert.match(call(sb, ['scorecard', 'slow', ...base]).lines[0], / \| 30% target: -30% vs 1000\/AC, missed$/);
+  assert.match(call(sb, ['scorecard', 'slow', ...base]).lines[0], / \| 30% target: -30% vs 1000\/AC, missed \| cost: not recorded$/);
   shipped(sb, 'sloppy', { end: '2026-10-11T10:00:00Z', spend: 400, acs: 4, fix_rounds: 4, high_blockers: 2 });
-  assert.match(call(sb, ['scorecard', 'sloppy', ...base]).lines[0], / \| 30% target: -90% vs 1000\/AC, missed$/);
+  assert.match(call(sb, ['scorecard', 'sloppy', ...base]).lines[0], / \| 30% target: -90% vs 1000\/AC, missed \| cost: not recorded$/);
   shipped(sb, 'noq', { end: '2026-10-12T10:00:00Z', spend: 400, acs: 4 });
-  assert.match(call(sb, ['scorecard', 'noq', ...base]).lines[0], / \| 30% target: -90% vs 1000\/AC, not reconciled$/);
+  assert.match(call(sb, ['scorecard', 'noq', ...base]).lines[0], / \| 30% target: -90% vs 1000\/AC, not reconciled \| cost: not recorded$/);
   writeLedger(sb, 'unrec', jl(noteRec('unrec', '01', 'a1'), shipRec('unrec', { fix_rounds: 0, high_blockers: 0 })));
-  assert.match(call(sb, ['scorecard', 'unrec', ...base]).lines[0], / \| 30% target: n\/a vs 1000\/AC, not reconciled$/);
+  assert.match(call(sb, ['scorecard', 'unrec', ...base]).lines[0], / \| 30% target: n\/a vs 1000\/AC, not reconciled \| cost: not recorded$/);
   assert.doesNotMatch(call(sb, ['scorecard', 'good']).lines[0], /30% target/);
 });
 
@@ -486,8 +486,8 @@ test('scorecard 30% target is not reconciled when no baseline holds both quality
   const sb = sandbox(t);
   writeLedger(sb, 'baseline-a', jl(totalRec('baseline-a', 1000), shipRec('baseline-a', { acs: 1, fix_rounds: 2 })));
   shipped(sb, 'cur', { spend: 400, acs: 4, fix_rounds: 0, high_blockers: 0 });
-  assert.match(call(sb, ['scorecard', 'cur', '--baseline', 'baseline-a']).lines[0], / \| 30% target: -90% vs 1000\/AC, not reconciled$/);
-  assert.match(call(sb, ['scorecard', 'cur', '--baseline', 'baseline-missing']).lines[0], / \| 30% target: n\/a vs \?\/AC, not reconciled$/);
+  assert.match(call(sb, ['scorecard', 'cur', '--baseline', 'baseline-a']).lines[0], / \| 30% target: -90% vs 1000\/AC, not reconciled \| cost: not recorded$/);
+  assert.match(call(sb, ['scorecard', 'cur', '--baseline', 'baseline-missing']).lines[0], / \| 30% target: n\/a vs \?\/AC, not reconciled \| cost: not recorded$/);
 });
 
 test('ship --baseline prints the 30% target in its one line', (t) => {
@@ -496,7 +496,7 @@ test('ship --baseline prints the 30% target in its one line', (t) => {
   writeLedger(sb, 'feat', jl(noteRec('feat', '01', 'a1'), countRec('feat', '01', 'a1', 600)));
   const r = call(sb, ['ship', 'feat', '1', '1', '1', '--baseline', 'baseline-a']);
   assert.equal(r.lines.length, 1);
-  assert.match(r.lines[0], / \| 30% target: -40% vs 1000\/AC, met$/);
+  assert.match(r.lines[0], / \| 30% target: -40% vs 1000\/AC, met \| cost: not recorded$/);
 });
 
 test('scorecard counts skipped lines and unreadable files as warnings', (t) => {
@@ -507,7 +507,7 @@ test('scorecard counts skipped lines and unreadable files as warnings', (t) => {
   shipped(sb, 'cur', { end: '2026-10-09T10:00:00Z' });
   fs.appendFileSync(ledgerFile(sb, 'cur'), 'oops\n');
   const line = call(sb, ['scorecard', 'cur']).lines[0];
-  assert.match(line, / \| excluded: 0 \| warnings: 4$/);
+  assert.match(line, / \| excluded: 0 \| warnings: 4 \| cost: not recorded$/);
   assert.equal(line.includes('\n'), false);
 });
 
@@ -516,7 +516,7 @@ test('scorecard skips hostile ledger lines', (t) => {
   writeLedger(sb, 'evil', `{"__proto__":{"polluted":true},"v":1,"run":"evil","kind":"ship","acs":1}\n${JSON.stringify(shipRec('evil', { acs: 1 }))}\n`);
   const r = call(sb, ['scorecard', 'evil']);
   assert.match(r.lines[0], /^scorecard evil /);
-  assert.match(r.lines[0], /warnings: 1$/);
+  assert.match(r.lines[0], /warnings: 1 \| cost: not recorded$/);
   assert.equal({}.polluted, undefined);
 });
 
@@ -530,7 +530,7 @@ test('scorecard reads at most 500 comparison files and warns', (t) => {
     fs.utimesSync(ledgerFile(sb, name), when, when);
   }
   shipped(sb, 'cur', { end: '2026-10-09T10:00:00Z' });
-  assert.match(call(sb, ['scorecard', 'cur']).lines[0], / \| all tiers \| excluded: 0 \| warnings: 1$/);
+  assert.match(call(sb, ['scorecard', 'cur']).lines[0], / \| all tiers \| excluded: 0 \| warnings: 1 \| cost: not recorded$/);
 });
 
 test('scorecard compares only files with a valid run name', (t) => {
@@ -538,7 +538,7 @@ test('scorecard compares only files with a valid run name', (t) => {
   shipped(sb, 'good', { end: '2026-10-02T10:00:00Z' });
   fs.writeFileSync(path.join(sb.dir, '.company', 'ledger', 'Bad_Name.jsonl'), jl(shipRec('good')));
   shipped(sb, 'cur', { end: '2026-10-09T10:00:00Z' });
-  assert.match(call(sb, ['scorecard', 'cur']).lines[0], / \| all tiers n=1 \| excluded: 0$/);
+  assert.match(call(sb, ['scorecard', 'cur']).lines[0], / \| all tiers n=1 \| excluded: 0 \| cost: not recorded$/);
 });
 
 test('the scorecard command through the CLI prints one line and exits 0', (t) => {

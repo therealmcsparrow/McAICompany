@@ -8,7 +8,7 @@ argument-hint: <campaign goal, client brief or audience>
 
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:campaign` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook campaign` first; exit not 0 → show its output line and stop.
+**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook campaign` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`; keep the §1.0 type lines for the run. Nothing is built or deployed: the work is text, images, prompts and storyboards. The Plan Gate shows no Core, Contracts or Ruleset line. Publishing or handing work to the client always asks at the Ship Gate, whatever the settings say (`aico:pipeline` §4). Only Roles in the type's `roles` are dispatched (`aico:pipeline` §2).
 

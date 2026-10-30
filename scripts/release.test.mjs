@@ -81,6 +81,8 @@ function sandbox(t, { changelog = CHANGELOG, marketplace = null } = {}) {
   if (marketplace) write(root, '.claude-plugin/marketplace.json', marketplace);
   write(root, 'documentation/README.md', '# Docs\n\n**Current: 0.10.0** (32 Role agents).\n');
   write(root, 'CHANGELOG.md', changelog);
+  write(root, 'deps/skills.json', JSON.stringify(SKILLS));
+  write(root, 'tools/claude-cli/package-lock.json', JSON.stringify(LOCK));
   write(root, 'scripts/check.mjs', "import fs from 'node:fs';\nif (fs.existsSync('FAIL')) { console.error('check failed'); process.exit(1); }\nconsole.log('check ok');\n");
   write(root, 'scripts/ok.mjs', 'console.log("tests ok");\n');
   write(root, 'package.json', '{ "name": "t", "type": "module", "scripts": { "test": "node scripts/ok.mjs" } }\n');
@@ -94,6 +96,17 @@ function sandbox(t, { changelog = CHANGELOG, marketplace = null } = {}) {
   write(base, 'fake-claude.mjs', FAKE_CLAUDE);
   return { root, origin, marker, claude, claudeLog };
 }
+
+const SKILLS = { core: [{ name: 'find-skills', source: 'vercel-labs/skills' }, { include: 'extra' }], extra: [{ name: 'humanizer', source: 'blader/humanizer' }] };
+const SHA512 = 'sha512-' + Buffer.alloc(64, 7).toString('base64');
+const LOCK = {
+  lockfileVersion: 3,
+  packages: {
+    '': { name: 'ci', version: '0.0.0', devDependencies: { '@sc/tool': '1.2.3' } },
+    'node_modules/@sc/tool': { version: '1.2.3', resolved: 'https://registry.npmjs.org/@sc/tool/-/tool-1.2.3.tgz', integrity: SHA512, dev: true, license: 'MIT', dependencies: { leaf: '^1.0.0' } },
+    'node_modules/leaf': { version: '1.0.1', license: 'ISC' }
+  }
+};
 
 // A stand-in for the claude CLI: records its arguments and exits with FAKE_CLAUDE_EXIT.
 const FAKE_CLAUDE = [
@@ -132,7 +145,7 @@ test('release bumps every version field, rolls the changelog, commits and tags l
   assert.match(read(s.root, 'documentation/README.md'), /\*\*Current: 0\.11\.0\*\* \(32 Role agents\)\./);
   const log = read(s.root, 'CHANGELOG.md');
   const today = new Date().toISOString().slice(0, 10);
-  assert.ok(log.includes(`## [Unreleased]\n\n## [0.11.0] - ${today}\n\n### Added\n- A new thing.\n\n## [0.10.0]`), log);
+  assert.ok(log.includes(`## [Unreleased]\n\n## [0.11.0] - ${today}\n\nRollback: node scripts/stable.mjs 0.10.0\n\n### Added\n- A new thing.\n\n## [0.10.0]`), log);
   assert.equal(git(s.root, 'tag', '--list', 'v0.11.0'), 'v0.11.0');
   assert.equal(git(s.root, 'status', '--porcelain'), '');
   assert.equal(git(s.root, 'log', '-1', '--format=%s'), 'chore: release v0.11.0');
@@ -261,7 +274,8 @@ test('a missing claude CLI fails closed with no commit and no tag', (t) => {
   const r = runWith(s.root, {
     AICO_CLAUDE_BIN: undefined,
     Path: undefined,
-    PATH: [empty, gitDir(), path.dirname(process.execPath)].join(path.delimiter)
+    // npm runs its scripts through sh, which macOS keeps in /bin, not in git's folder.
+    PATH: [empty, gitDir(), path.dirname(process.execPath), ...(process.platform === 'win32' ? [] : ['/bin'])].join(path.delimiter)
   }, '0.11.0');
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /validate/);
@@ -306,4 +320,100 @@ test('release.mjs names the validate command in full and has no shell', () => {
   assert.ok(src.includes("'plugin', 'validate', '--strict', '.'"));
   assert.ok(!/shell:\s*(true|process)/.test(src));
   assert.ok(!/\bexec(Sync)?\(/.test(src));
+});
+
+const json = (root, rel) => JSON.parse(read(root, rel));
+
+test('a release writes a CycloneDX 1.6 SBOM with the plugin, every skill and the lockfile packages, committed with the release', (t) => {
+  const s = sandbox(t);
+  const r = run(s.root, '0.11.0');
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const bom = json(s.root, 'releases/0.11.0/sbom.cdx.json');
+  assert.equal(bom.bomFormat, 'CycloneDX');
+  assert.equal(bom.specVersion, '1.6');
+  assert.match(bom.serialNumber, /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  assert.equal(bom.metadata.component.name, 'aico');
+  assert.equal(bom.metadata.component.version, '0.11.0');
+  assert.deepEqual(bom.components.map((c) => c.name).sort(), ['@sc/tool', 'find-skills', 'humanizer', 'leaf']);
+  assert.ok(!('vulnerabilities' in bom));
+  const committed = git(s.root, 'show', '--name-only', '--format=', 'HEAD').split('\n');
+  assert.ok(committed.includes('releases/0.11.0/sbom.cdx.json'));
+  assert.ok(committed.includes('releases/0.11.0/gate-report.md'));
+  assert.equal(git(s.root, 'status', '--porcelain'), '');
+});
+
+test('release fails closed when the SBOM cannot be built: input missing, broken or hostile', (t) => {
+  const cases = [
+    ['tools/claude-cli/package-lock.json', null],
+    ['tools/claude-cli/package-lock.json', '{ not json'],
+    ['tools/claude-cli/package-lock.json', JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/x': { version: '1.0.0; rm -rf' } } })],
+    ['deps/skills.json', null],
+    ['deps/skills.json', JSON.stringify({ core: [{ name: 'x y', source: 'a/b' }] })]
+  ];
+  for (const [file, text] of cases) {
+    const s = sandbox(t);
+    if (text === null) git(s.root, 'rm', '-q', file);
+    else write(s.root, file, text);
+    git(s.root, 'add', '-A');
+    git(s.root, 'commit', '-q', '-m', 'break input');
+    const head = git(s.root, 'rev-parse', 'HEAD');
+    const r = run(s.root, '0.11.0');
+    assert.notEqual(r.status, 0, file);
+    assert.match(r.stderr, /release artefacts/);
+    assert.equal(git(s.root, 'status', '--porcelain'), '');
+    assert.equal(git(s.root, 'rev-parse', 'HEAD'), head);
+    assert.equal(git(s.root, 'tag', '--list'), '');
+    assert.equal(fs.existsSync(path.join(s.root, 'releases')), false);
+    assert.match(read(s.root, '.claude-plugin/plugin.json'), /0\.10\.0/);
+  }
+});
+
+test('release refuses when releases/<version> already exists', (t) => {
+  const s = sandbox(t);
+  write(s.root, 'releases/0.11.0/old.txt', 'x');
+  git(s.root, 'add', '-A');
+  git(s.root, 'commit', '-q', '-m', 'stale folder');
+  const r = run(s.root, '0.11.0');
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /exists/);
+  assert.equal(git(s.root, 'tag', '--list'), '');
+});
+
+test('the Gate Report is written for the version and says not recorded without runs', (t) => {
+  const s = sandbox(t);
+  assert.equal(run(s.root, '0.11.0').status, 0);
+  const text = read(s.root, 'releases/0.11.0/gate-report.md');
+  assert.match(text, /^# Gate Report v0\.11\.0\n/);
+  assert.match(text, /Runs: not recorded/);
+  assert.ok(!text.includes('\r'));
+});
+
+test('the first release has no rollback line', (t) => {
+  const s = sandbox(t, { changelog: '# Changelog\n\n## [Unreleased]\n\n### Added\n- First.\n' });
+  assert.equal(run(s.root, '0.11.0').status, 0);
+  assert.ok(!read(s.root, 'CHANGELOG.md').includes('Rollback:'));
+});
+
+test('the rollback line in the new CHANGELOG section moves stable back', (t) => {
+  const s = sandbox(t);
+  fs.rmSync(path.join(s.root, '.git/hooks/pre-push'));
+  git(s.root, 'tag', '-a', 'v0.10.0', '-m', 'v0.10.0');
+  const first = git(s.root, 'rev-parse', 'HEAD');
+  assert.equal(run(s.root, '0.11.0').status, 0);
+  const second = git(s.root, 'rev-parse', 'HEAD');
+  git(s.root, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
+  fs.mkdirSync(path.join(s.root, 'scripts'), { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, 'stable.mjs'), path.join(s.root, 'scripts', 'stable.mjs'));
+  const env = envFor(path.dirname(s.root));
+  const node = (...a) => spawnSync(process.execPath, a, { cwd: s.root, encoding: 'utf8', env });
+  const up = node('scripts/stable.mjs', '0.11.0');
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(git(s.origin, 'rev-parse', 'refs/heads/stable'), second);
+  const line = read(s.root, 'CHANGELOG.md').split('\n').find((l) => l.startsWith('Rollback: '));
+  assert.equal(line, 'Rollback: node scripts/stable.mjs 0.10.0');
+  const [cmd, script2, ver] = line.slice('Rollback: '.length).split(' ');
+  assert.equal(cmd, 'node');
+  const back = node(script2, ver);
+  assert.equal(back.status, 0, back.stderr);
+  assert.equal(git(s.origin, 'rev-parse', 'refs/heads/stable'), first);
 });

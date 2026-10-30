@@ -192,7 +192,7 @@ test('a broken record writes none of the four keys, counts one warning and ship 
     const r = call(sb, ['ship', 'demo', '2']);
     assert.equal(r.code, 0, body.slice(0, 30));
     assert.equal(r.lines.length, 1);
-    assert.match(r.lines[0], /warnings: 1$/, body.slice(0, 30));
+    assert.match(r.lines[0], /warnings: 1 \| cost: not recorded$/, body.slice(0, 30));
     const recs = readLines(sb, 'demo');
     assert.deepEqual(recs.map((x) => x.kind), ['meta', 'ship']);
     assert.deepEqual(Object.keys(recs[0]), ['v', 'run', 'kind', 'aico', 'floor'], 'no partial meta');
@@ -257,11 +257,11 @@ const GOLD_REPORT = {
   'brainstorm-20261027-1140': '3cf75e4e93f727fd', 'triage-hardening': 'abf1578a7f872c82'
 };
 const GOLD_SCORE_FIXTURES = {
-  'baseline-research-team': 'scorecard baseline-research-team (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 123450 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4',
-  'baseline-role-effort': 'scorecard baseline-role-effort (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 197164 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4',
-  'baseline-v0-3': 'scorecard baseline-v0-3 (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 111829 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4',
+  'baseline-research-team': 'scorecard baseline-research-team (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 123450 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4 | cost: not recorded',
+  'baseline-role-effort': 'scorecard baseline-role-effort (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 197164 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4 | cost: not recorded',
+  'baseline-v0-3': 'scorecard baseline-v0-3 (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 111829 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4 | cost: not recorded',
   'brainstorm-20261027-1140': 'no ship record for brainstorm-20261027-1140',
-  'triage-hardening': 'scorecard triage-hardening (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC not reconciled (no baseline) | fix rounds 1 (no baseline) | high blockers 6 (no baseline) | gate rejects ? (no baseline) | excluded: 4'
+  'triage-hardening': 'scorecard triage-hardening (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC not reconciled (no baseline) | fix rounds 1 (no baseline) | high blockers 6 (no baseline) | gate rejects ? (no baseline) | excluded: 4 | cost: not recorded'
 };
 const GOLD_MODEL_FIXTURES = 'model verdict: insufficient (n=0) | runs 0 v0.17, 0 v0.16 (plan check ?) | spend/AC ? (v0.16 ?) | downgraded spend/AC ? (v0.16 ?) | fix rounds median ? (v0.16 ?) | high blockers median ? (v0.16 ?) | downgraded: none | lower model: 0 of 0 | excluded: 0 | not counted: 1';
 const GOLD_PAR_FIXTURES = 'parallel verdict: insufficient (n=0) | runs 0 v0.18, 0 v0.17 (plan check ?, floor 0.16.0) | time minus CEO wait median ? (v0.17 ?) | wall clock median ? (v0.17 ?) | fix rounds median ? (v0.17 ?) | high blockers median ? (v0.17 ?) | gate rejects median ? (v0.17 ?) | spend/AC ? (v0.17 ?) | out-of-list median ? | cap median ? | excluded: 0 | not counted: 1';
@@ -292,10 +292,10 @@ test('the parallel-cap ledger gives the same numbers, copied to a temp dir', { s
   fs.copyFileSync(PARALLEL_CAP, ledgerFile(sb, 'parallel-cap'));
   assert.equal(sha(call(sb, ['report', 'parallel-cap']).lines), '2b01f95ddff85bb3');
   assert.deepEqual(call(sb, ['scorecard', 'parallel-cap']).lines, [
-    'scorecard parallel-cap (tier high): time 3h34m (no baseline) | CEO wait 1h43m (no baseline) | spend/AC 192760 (no baseline) | fix rounds 3 (no baseline) | high blockers 9 (no baseline) | gate rejects 1 (no baseline) | excluded: 5'
+    'scorecard parallel-cap (tier high): time 3h34m (no baseline) | CEO wait 1h43m (no baseline) | spend/AC 192760 (no baseline) | fix rounds 3 (no baseline) | high blockers 9 (no baseline) | gate rejects 1 (no baseline) | excluded: 5 | cost: not recorded'
   ]);
   assert.deepEqual(call(sb, ['scorecard', 'triage-hardening']).lines, [
-    'scorecard triage-hardening (tier unknown): time untimed (median 3h34m) | CEO wait ? (median 1h43m) | spend/AC not reconciled (median 192760) | fix rounds 1 (median 3) | high blockers 6 (median 9) | gate rejects ? (median 1) | all tiers n=1 | excluded: 4'
+    'scorecard triage-hardening (tier unknown): time untimed (median 3h34m) | CEO wait ? (median 1h43m) | spend/AC not reconciled (median 192760) | fix rounds 1 (median 3) | high blockers 6 (median 9) | gate rejects ? (median 1) | all tiers n=1 | excluded: 4 | cost: not recorded'
   ]);
   assert.deepEqual(call(sb, ['model-verdict']).lines, [
     'model verdict: insufficient (n=1) | runs 1 v0.17, 0 v0.16 (plan check none) | spend/AC 192760 (v0.16 ?) | downgraded spend/AC 0 (v0.16 ?) | fix rounds median 3.0 (v0.16 ?) | high blockers median 9.0 (v0.16 ?) | downgraded: none | lower model: 0 of 0 | excluded: 0 | not counted: 1'

@@ -7,6 +7,14 @@ import { spawnSync } from 'node:child_process';
 import { classify } from './review-depth.mjs';
 
 const script = path.join(import.meta.dirname, 'review-depth.mjs');
+const SLUG = 'rd';
+const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'rd-home-'));
+test.after(() => fs.rmSync(HOME, { recursive: true, force: true }));
+const ENV = () => {
+  const e = { ...process.env, HOME, USERPROFILE: HOME, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(HOME, 'none') };
+  delete e.NODE_TEST_CONTEXT;
+  return e;
+};
 const CORE = ['skills/handoff', 'scripts/check.mjs'];
 
 test('classify: plain source is standard', () => {
@@ -48,8 +56,8 @@ test('classify: reasons list only the forcing paths', () => {
 
 function repo() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rd-'));
-  const g = (...a) => spawnSync('git', a, { cwd: d, encoding: 'utf8' });
-  g('init', '-q');
+  const g = (...a) => spawnSync('git', a, { cwd: d, encoding: 'utf8', env: ENV() });
+  g('init', '-q', '-b', 'main');
   g('config', 'user.email', 't@t');
   g('config', 'user.name', 't');
   g('config', 'commit.gpgsign', 'false');
@@ -60,6 +68,7 @@ function repo() {
   g('add', '-A');
   g('commit', '-q', '-m', 'base');
   const base = g('rev-parse', 'HEAD').stdout.trim();
+  g('checkout', '-q', '-b', `aico/${SLUG}`);
   const commit = (file) => {
     fs.mkdirSync(path.dirname(path.join(d, file)), { recursive: true });
     fs.writeFileSync(path.join(d, file), 'x\n');
@@ -68,7 +77,11 @@ function repo() {
   };
   return { d, base, commit };
 }
-const run = (d, args) => spawnSync('node', [script, ...args], { cwd: d, encoding: 'utf8' });
+// A base id gets the run slug unless the test passes its own --run.
+const run = (d, args) => {
+  const withRun = /^[0-9a-f]{40}$/.test(args[0] ?? '') && !args.includes('--run') ? [args[0], '--run', SLUG, ...args.slice(1)] : args;
+  return spawnSync('node', [script, ...withRun], { cwd: d, encoding: 'utf8', env: ENV() });
+};
 
 test('cli: standard for a plain diff', () => {
   const { d, base, commit } = repo();
@@ -110,7 +123,7 @@ test('cli: refuses bad sha and bad risk with exit 2', () => {
 
 test('cli: unreadable diff is full with diff unavailable', () => {
   const { d } = repo();
-  const r = run(d, ['deadbeef']);
+  const r = run(d, ['d'.repeat(40)]);
   assert.equal(r.status, 0);
   assert.equal(r.stdout, 'full\nreason: diff unavailable\n');
 });
@@ -124,7 +137,7 @@ test('no CR bytes in output or source', () => {
 
 // ---- staged, worktree, --repo, --json ----
 
-const git = (d, ...a) => spawnSync('git', a, { cwd: d, encoding: 'utf8' });
+const git = (d, ...a) => spawnSync('git', a, { cwd: d, encoding: 'utf8', env: ENV() });
 const put = (d, file, body = 'x\n') => {
   fs.mkdirSync(path.dirname(path.join(d, file)), { recursive: true });
   fs.writeFileSync(path.join(d, file), body);
@@ -258,7 +271,7 @@ test('mode: exactly one of base-sha, --staged, --worktree', () => {
   for (const args of [[], ['--staged', '--worktree'], [base, '--staged'], [base, '--worktree'], ['--json']]) {
     const r = run(d, args);
     assert.equal(r.status, 2, args.join(' '));
-    assert.equal(r.stdout, 'refused: give one of <base-sha>, --staged, --worktree\n', args.join(' '));
+    assert.equal(r.stdout, 'refused: give one of <base>, --staged, --worktree\n', args.join(' '));
   }
 });
 
@@ -388,14 +401,18 @@ test('security paths: hooks/** and mods/** force full, lookalikes do not', () =>
   assert.match(classify(['hooks/a.json'], { core: [] }).reasons[0], /^reason: hooks\/a\.json — security path/);
 });
 
+// Commits a project.md with these Modules lines and returns the commit: the base reads it from there.
 function withModules(d, lines) {
   fs.writeFileSync(path.join(d, '.company/project.md'),
     `# P\n\n## Core\n- skills/pipeline: wiring\n\n## Modules\n<!-- name: purpose -->\n${lines}\n\n## Other\n- ledger: not a module\n`);
+  git(d, 'add', '-A');
+  git(d, 'commit', '-q', '-m', 'modules');
+  return git(d, 'rev-parse', 'HEAD').stdout.trim();
 }
 
 test('modules: by prefix, by directory segment, by file name without extension', () => {
-  const { d, base, commit } = repo();
-  withModules(d, '- scripts/ledger: tokens\n- `settings`: settings page\n- run-state: runs\n- (none yet)');
+  const { d, commit } = repo();
+  const base = withModules(d, '- scripts/ledger: tokens\n- `settings`: settings page\n- run-state: runs\n- (none yet)');
   commit('scripts/ledger/a.mjs');
   commit('x/settings/b.mjs');
   commit('scripts/run-state.mjs');
@@ -412,8 +429,8 @@ test('modules: by prefix, by directory segment, by file name without extension',
 });
 
 test('modules: a prefix is not a substring match, first item in file order wins', () => {
-  const { d, base, commit } = repo();
-  withModules(d, '- scripts/led: short\n- scripts: all scripts\n- run: runs');
+  const { d, commit } = repo();
+  const base = withModules(d, '- scripts/led: short\n- scripts: all scripts\n- run: runs');
   commit('scripts/ledger/a.mjs');
   commit('scripts/run.mjs');
   const m = Object.fromEntries(json(d, [base]).paths.map((p) => [p.path, p.module]));
@@ -422,15 +439,16 @@ test('modules: a prefix is not a substring match, first item in file order wins'
 });
 
 test('modules: never change depth, absent section gives null', () => {
-  const { d, base, commit } = repo();
-  withModules(d, '- src: code');
+  const { d, commit } = repo();
+  const base = withModules(d, '- src: code');
   commit('src/util.mjs');
   let j = json(d, [base]);
   assert.equal(j.paths.find((p) => p.path === 'src/util.mjs').module, 'src');
   assert.equal(j.depth, 'standard');
-  fs.rmSync(path.join(d, '.company'), { recursive: true });
-  j = json(d, [base]);
-  assert.equal(j.paths.find((p) => p.path === 'src/util.mjs').module, null);
+  const bare = withModules(d, '- (none yet)');
+  commit('src/two.mjs');
+  j = json(d, [bare]);
+  assert.equal(j.paths.find((p) => p.path === 'src/two.mjs').module, null);
 });
 
 test('limits: 501 paths list 500 and mark truncated, depth covers all', () => {
@@ -478,7 +496,7 @@ test('odd file names: a newline in a path cannot add lines to the text output', 
 
 test('unreadable diff in json: full, no paths, one reason', () => {
   const { d } = repo();
-  const j = json(d, ['deadbeef', '--risk', 'low']);
+  const j = json(d, ['d'.repeat(40), '--risk', 'low']);
   assert.equal(j.depth, 'full');
   assert.deepEqual(j.paths, []);
   assert.deepEqual(j.reasons, [{ path: '*', rule: 'diff unavailable' }]);
@@ -500,8 +518,11 @@ test('json output is LF only and a single line object', () => {
 });
 
 test('hostile project.md: CRLF and a huge Modules section still parse', () => {
-  const { d, base, commit } = repo();
-  fs.writeFileSync(path.join(d, '.company/project.md'), '## Modules\r\n- src: code\r\n' + '- m: x\r\n'.repeat(20000));
+  const { d, commit } = repo();
+  fs.writeFileSync(path.join(d, '.company/project.md'), '## Core\r\n- a/b: c\r\n## Modules\r\n- src: code\r\n' + '- m: x\r\n'.repeat(5000));
+  git(d, 'add', '-A');
+  git(d, 'commit', '-q', '-m', 'profile');
+  const base = git(d, 'rev-parse', 'HEAD').stdout.trim();
   commit('src/a.mjs');
   assert.equal(json(d, [base]).paths.find((p) => p.path === 'src/a.mjs').module, 'src');
 });

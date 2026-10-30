@@ -194,7 +194,7 @@ function secRange(L, name) {
   return [s + 1, e];
 }
 
-function readRounds(L) {
+function readRounds(L, idsRole = false) {
   const [s, e] = secRange(L, 'Rounds');
   const rounds = [];
   let cur = null, rep = null, region = null;
@@ -207,8 +207,9 @@ function readRounds(L) {
       rounds.push(cur); rep = null; region = null;
     } else if (!cur) continue;
     else if (line.startsWith('#### ')) {
-      m = /^#### ([^()]+) \((.+?)\)(?: — (full pass|crossfire))?$/.exec(line);
-      rep = { name: m[1], role: m[2], key: `${m[1]} (${m[2]})`, pass: m[3] === 'full pass' ? 'full' : m[3] === 'crossfire' ? 'crossfire' : 'ideas', at: i, lines: [] };
+      m = (idsRole ? /^#### ([a-z][a-z0-9-]*)(?: — (full pass|crossfire))?$/ : /^#### ([^()]+) \((.+?)\)(?: — (full pass|crossfire))?$/).exec(line);
+      const [name, role, passWord] = idsRole ? [null, m[1], m[2]] : [m[1], m[2], m[3]];
+      rep = { name, role, key: idsRole ? role : `${name} (${role})`, pass: passWord === 'full pass' ? 'full' : passWord === 'crossfire' ? 'crossfire' : 'ideas', at: i, lines: [] };
       cur.replies.push(rep); region = null;
     } else if (line.startsWith('**Lead:**')) { cur.leadAt = i; cur.leadLines = [line.slice(9).trim()]; rep = null; region = 'lead'; }
     else if (line.startsWith('**CEO:**')) { cur.ceoAt = i; cur.ceoLines = [line.slice(8).trim()]; rep = null; region = 'ceo'; }
@@ -249,7 +250,8 @@ function loadDoc(text, file = 'brainstorm') {
   const errors = checkBrainstorm(lf, { file });
   if (errors.length) throw new Refused(`the file fails the check: ${errors.join('; ')}`);
   const roster = front.fm.get('roles').split(',').map(s => s.trim());
-  return { L, roster, topic: front.fm.get('topic') ?? '', ...readRounds(L) };
+  const idsRole = front.fm.get('ids') === 'role';
+  return { L, roster, idsRole, topic: front.fm.get('topic') ?? '', ...readRounds(L, idsRole) };
 }
 
 const finish = (L, file) => {
@@ -472,6 +474,11 @@ export function crossfirePair(text, round, { file } = {}) {
 // ---- apply ----
 function resolveKey(k, doc, names, what) {
   if (typeof k !== 'string') throw new Refused(`${what} is not text`);
+  if (doc.idsRole) {
+    if (!ROLE_RE.test(k)) throw new Refused(KEY_RE.test(k) ? 'names are not stored in this file; use the Role id' : `${what} ${short(k)} is not a Role id`);
+    if (!doc.roster.includes(k)) throw new Refused(`${k} is not in the roster`);
+    return { name: null, role: k, key: k };
+  }
   let name, role;
   const m = KEY_RE.exec(k);
   if (m) { name = m[1].trim(); role = m[2]; }
@@ -540,6 +547,15 @@ function checkLeadOpen(lead, L) {
   throw new Refused('lead Open: names no Q-<n> or O-<n>; add open_threads or ask');
 }
 
+// A word before "(<roster slug>)" reads as a display name; refused in files that store Role ids only.
+function checkNoNamedRole(text, roster) {
+  const alt = roster.map(r => r.replace(/[^a-z0-9-]/g, '')).join('|');
+  for (const m of text.matchAll(new RegExp(`\\((?:${alt})\\)`, 'g'))) {
+    if (m.index >= 2 && text[m.index - 1] === ' ' && !/[\s()]/.test(text[m.index - 2]))
+      throw new Refused('lead names a Role as "<word> (<role>)"; write the Role id');
+  }
+}
+
 export function applyReplies(text, input, { round, mode, pass = 'ideas', file } = {}) {
   if (!Number.isInteger(round) || round < 1 || round > 999999) throw new Refused('round must be a positive integer');
   if (!PASSES.includes(pass)) throw new Refused('pass must be ideas, full or crossfire');
@@ -547,6 +563,7 @@ export function applyReplies(text, input, { round, mode, pass = 'ideas', file } 
   const inp = checkApplyInput(input);
   const doc = loadDoc(text, file);
   const L = doc.L;
+  if (doc.idsRole) for (const t of [inp.lead, ...inp.open.map(o => o.text)]) checkNoNamedRole(t, doc.roster);
   const names = new Map();
   for (const r of doc.rounds) for (const rep of r.replies) names.set(rep.role, rep.name);
 
@@ -654,7 +671,7 @@ function cut(s, n) {
   return `${c.trimEnd()}…`;
 }
 const quoted = s => s.split('\n').map(l => `> ${l}`).join('\n');
-const headingOf = rep => `#### ${rep.key}${rep.pass === 'full' ? ' — full pass' : rep.pass === 'crossfire' ? ' — crossfire' : ''}`;
+const headingOf = rep => `#### ${rep.role}${rep.pass === 'full' ? ' — full pass' : rep.pass === 'crossfire' ? ' — crossfire' : ''}`;
 
 // Shown form of a reply: `I: <idea>` becomes `I-<r>.<k>: <idea>`; the IDs exist only in this view.
 function shownLines(rep) {
@@ -742,6 +759,23 @@ function blockLines(block) {
   return l[0] === 'Personality:' && l.length > 1 && l.slice(1).every(x => x.startsWith('> ') || x.startsWith('- ')) ? l : [];
 }
 
+// A stored display name (from a "#### <Name> (<role>)" heading) reads as its Role id in a round input, whole word.
+function scrubNames(line, doc) {
+  const byName = new Map();
+  for (const r of doc.rounds) for (const rep of r.replies) {
+    if (!rep.name || !rep.name.trim()) continue;
+    byName.set(rep.name, byName.has(rep.name) && byName.get(rep.name) !== rep.role ? null : rep.role);
+  }
+  const names = [...byName].filter(([, role]) => role).map(([name]) => name).sort((a, b) => b.length - a.length);
+  if (!names.length) return line;
+  const alt = names.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(`(?<![\\p{L}\\p{N}_])(${alt})( \\(${ROLE}\\))?(?![\\p{L}\\p{N}_])`, 'gu');
+  return line.replace(re, (all, name, paren) => {
+    const role = byName.get(name);
+    return paren && paren !== ` (${role})` ? `${role}${paren}` : role;
+  });
+}
+
 function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectFile = null, personality = '' } = {}) {
   if (typeof role !== 'string' || !doc.roster.includes(role)) throw new Refused(`${short(String(role))} is not in the roster`);
   if (!PASSES.includes(pass)) throw new Refused('pass must be ideas, full or crossfire');
@@ -753,7 +787,7 @@ function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectF
     re = reaskParts(doc, role, n);
   } else n = stageRound(doc, round, pass);
   const all = doc.rounds.flatMap(r => r.replies);
-  const out = [`Round: ${n}`, `Pass: ${pass}`, ...blockLines(personality), 'Topic:', quoted(doc.topic)];
+  const out = ['Topic:', quoted(doc.topic)];
   if (projectFile && !all.some(r => r.role === role)) out.push(`Read also: ${projectFile}`);
   const summary = summaryOf(doc.L);
   if (summary) out.push('Summary:', quoted(summary));
@@ -794,7 +828,8 @@ function renderInput(doc, role, { round, pass = 'ideas', reask = false, projectF
       out.push(`Your replies of round ${n}:`, ...render(role), 'Opponent:', ...render(pair.find(x => x !== role)));
     }
   }
-  return `${out.join('\n')}\n`;
+  const shown = out.map(l => (l.startsWith('Read also: ') ? l : scrubNames(l, doc)));
+  return `${[`Round: ${n}`, `Pass: ${pass}`, ...blockLines(personality), ...shown].join('\n')}\n`;
 }
 
 export function inputFor(text, role, opts = {}) {
@@ -896,17 +931,18 @@ export function renderFilm(text, { source = 'brainstorm.md', file } = {}) {
 }
 
 // ---- new file ----
-export function newFile({ topic, roles, mode, now = new Date() } = {}) {
+export function newFile({ topic, roles, mode, ids, now = new Date() } = {}) {
   const t = typeof topic === 'string' ? topic.trim() : '';
   if (!t || t.length > 200 || /[\n\r]/.test(t) || CONTROL.test(t)) throw new Refused('topic must be one plain line of 1 to 200 characters');
   const list = typeof roles === 'string' ? roles.split(',').map(s => s.trim()) : roles;
   if (!Array.isArray(list) || !list.length || list.length > 20 || list.some(r => typeof r !== 'string' || !ROLE_RE.test(r)) || new Set(list).size !== list.length)
     throw new Refused('roles must be 1 to 20 distinct role slugs');
   if (mode !== undefined && !FILE_MODES.includes(mode)) throw new Refused(`mode must be one of ${FILE_MODES.join(', ')}`);
+  if (ids !== undefined && ids !== 'role') throw new Refused('ids must be role');
   const p = n => String(n).padStart(2, '0');
   const started = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}.${p(now.getMinutes())}`;
   return [
-    '---', `topic: ${t}`, `started: ${started}`, 'status: open', `roles: ${list.join(', ')}`, 'format: 2', ...(mode ? [`mode: ${mode}`] : []), '---',
+    '---', `topic: ${t}`, `started: ${started}`, 'status: open', `roles: ${list.join(', ')}`, 'format: 2', ...(ids ? [`ids: ${ids}`] : []), ...(mode ? [`mode: ${mode}`] : []), '---',
     '## Summary', '(written at close)', '## Digest', '### Decisions', '### Open threads', '### Dissent', '### Threads', '### Estimate', '- not estimated',
     '## Questions', '## Rounds', '',
   ].join('\n');
@@ -986,7 +1022,7 @@ export function run(argv) {
       const input = jsonIn();
       if (!isPlain(input)) throw new Refused('input must be a JSON object');
       for (const k of Object.keys(input)) if (!['topic', 'roles', 'mode'].includes(k)) throw new Refused(`unknown key ${short(k)}`);
-      const text = newFile({ topic: input.topic, roles: input.roles, mode: input.mode });
+      const text = newFile({ topic: input.topic, roles: input.roles, mode: input.mode, ids: 'role' });
       try { writeFileSync(f, text, { flag: 'wx' }); } catch (e) { throw new Refused(e.code === 'EEXIST' ? `${short(f)} already exists` : `cannot write ${short(f)}`); }
       out.push(`created ${f}`);
       break;

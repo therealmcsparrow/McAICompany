@@ -9,7 +9,7 @@ argument-hint: [command]
 
 Read-only: change no file, dispatch no Role, start nothing. Plugin root = two folders above this skill's base directory. The source is `<plugin root>/documentation/commands.md`; each command's `argument-hint` in `<plugin root>/skills/<name>/SKILL.md` is the authority on its options.
 
-0. **Company type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" resolve` from the product root. Exit not 0 or no output → show its output line and stop. Keep the id from the first line (`company type: <id> (<label>)…`) and the `playbooks:` line (a comma list); list and explain only commands in `playbooks`. Any other command (also a Playbook name, `aico:` form or not) → "`<name>` is not part of your `<id>` company" and the allowed list from `playbooks`.
+0. **Company type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type resolve` from the product root. Exit not 0 or no output → show its output line and stop. Keep the id from the first line (`company type: <id> (<label>)…`) and the `playbooks:` line (a comma list); list and explain only commands in `playbooks`. Any other command (also a Playbook name, `aico:` form or not) → "`<name>` is not part of your `<id>` company" and the allowed list from `playbooks`.
 1. **No argument** → list every command in `playbooks` from `commands.md`, grouped by its `##` sections: `` `/aico:<name> <options>` `` and one line on what it does. End with: "`/aico:help <command>` or `/aico:<command> help` for details."
 2. **A command** (`feature`, `/aico:feature` and `aico:feature` all match) → find its `### /aico:<name>` entry and answer with:
    - **Usage:** the syntax line.
@@ -18,6 +18,6 @@ Read-only: change no file, dispatch no Role, start nothing. Plugin root = two fo
    - **You get** and **Example**, as in the entry.
 3. **Unknown name** → say so and show the closest matches from the list in step 1. A Role name or person name (e.g. `security`, or `Sam`) → say it's a Role, not a command, give its person name and one line from `documentation/roles.md`, and show how to summon it ("use the aico security agent on …").
 
-**Language (§1.6):** resolve it as in `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/language.mjs"`, first field; invalid or failing → `en`) and write your reply in it. Command names, options, flags and example commands stay as written. With `en` nothing changes.
+**Language (§1.6):** resolve it as in `aico:pipeline` Setup §1.6 (`node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" language`, first field; invalid or failing → `en`) and write your reply in it. Command names, options, flags and example commands stay as written. With `en` nothing changes.
 
 Never end with a question; this is a reply, not a form.

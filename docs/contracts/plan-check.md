@@ -1,10 +1,11 @@
-# Contract: plan-check v1.1
+# Contract: plan-check v1.2
 
 Provider: `scripts/plan-check.mjs` (scanner, pattern file loader, record writer and reader; Node built-ins only) with the pattern file `scripts/plan-check-patterns.json`, and `scripts/plan-check-verdict.mjs` (verdict and history scan; Node built-ins and `git` through `execFile`). Writer of the record: the Lead (`aico:pipeline` Plan Gate and Finish, through `skills/pipeline/references/plan-check.md`), only through the CLI. Consumers: the Plan Gate summary (the `gate` block), `aico:feedback` (the `verdict` line), `scripts/plan-check-verdict.mjs` through the exported `readRecord` and `scanText`, and the later hook-run Gate (block, exit 2), which will reuse `scanText` and `loadPatterns`.
 Uses: `run-state` v1.3 (the exported `show(root, slug)`, for each run's Step Handoffs, their `mtime` and the Gate entries), `token-ledger` v1.1 read-only (the exported `validateRecord` of `scripts/ledger.mjs`, for each run's recorded `fix_rounds`; nothing is written to the ledger), `aico-settings` v1.5 (`plan_check.policy` and `plan_check.runs`, passed in by the caller as arguments; neither script reads settings itself).
 Rationale: `docs/adr/0030-plan-check-own-record.md`. Ledger records (`token-ledger` v1.1) and Handoff frontmatter (`handoff` v1.1) are not changed by this Contract.
 Step 05 (Architect, after Spike S1 `03-spike-ai-data-engineer.md`; v1 is unshipped, no version change): the Fix-round measure is the recorded ledger value, cross-checked against the Handoffs up to the first Ship Gate answer; the `--runs` default is 5.
 Step 12 (Architect, after T3 `08-ai-data-engineer.md`; v1 is unshipped, no version change): `.company/work/` can be git-ignored (it is in this repo), so a Step's time falls back to its file mtime, and `history` scans the plans in the working tree as well as any in git history.
+v1.2 is additive (task plan-gate-enforce): the `verify` command and the exported `verifyPlans`, the check the hook-run Gate needs. `gate`, `read`, `off` and `wave` are unchanged; every v1.1 call behaves as before, except that an `off` record has no effect on a Gate under `plan_check.policy` `block` (the Gate scripts never read the record).
 v1.1 is additive (task low-tier-path, AC12): the verdict leaves out a run whose last valid ledger ship record has path short (token-ledger v1.4). Results for v0.18 and older runs are unchanged.
 
 ## Plan file
@@ -61,7 +62,17 @@ Every key listed for an `ev` is required (except `plan` on `error`); every other
 - Otherwise every line is checked. A line that is not JSON, a `v` other than `1`, an unknown key, a missing required key, a bad value, a `wave` with no `scan` before it, a `waved` above that scan's `findings`, a link, or a file over a limit throws `PlanCheckRecordError` with message `plan-check record <slug> line <n>: <reason>` (`line 0` for file-level problems). It never skips a line and never returns a partial view.
 - View: `{ v: 1, slug, state: "on" | "off" | "error", policy, plan, patterns, findings, decided, waved, scans }` from the last `scan`, `off` or `error` record: `on` for `scan`, `off` for `off`, `error` for `error`. `waved` = the last `wave` after the last `scan`, else `0`. `scans` = the number of `scan` records. Keys a state lacks are `null`.
 
-## CLI `scripts/plan-check.mjs` (cwd = product root; `main(args, { now, root })` exported)
+## Verify (v1.2)
+`verifyPlans({ root, home, slug, plan })` (exported) and the CLI `verify <slug> [<plan>] [--json]` scan the plan files themselves. They read no `plan-check.jsonl`, `run-state` or `parallel.jsonl` record and write nothing.
+- Policy: `resolveSettings({ home, cwd: root }).plan_check.policy` (`aico-settings` v1.9). `home` defaults as in `settings.mjs` (`MCSPARROW_HOME`, else the user's `.mcsparrow`).
+- Plans: the named `<plan>` (its name must match the plan name rule), or, with none named (the readdir form), every entry of `.company/work/<slug>/` whose name matches the plan name rule (at most 50). The run folder follows the `plan-tasks` run folder rule: a link or non-folder at `.company`, `work` or the slug folder gives `error unreadable`; a missing folder, or no plan entry, gives `error no plan`.
+- Every plan entry must be a regular file with one hard link, opened without following a link and checked as the same file, within 256 KiB and valid UTF-8. An entry that is a link, another type or has more than one hard link is `error unreadable`; over the cap is `error too large`. An entry is never skipped: a linked real plan cannot hide behind a clean decoy.
+- A name that matches the plan pattern only when case is ignored (for example `02-PLAN.md`) is `error unreadable` in the readdir form: on a case-folding file system it can alias or hide a plan. `plan-tasks` reads a named plan only when its exact name is in the directory listing.
+- Each plan is scanned with the same patterns, caps and `Decided:` rules as `gate`. The pattern file is the one beside the script (`import.meta.url`); a file that cannot be read or is invalid gives `error patterns`.
+- Result `{ v: 1, policy, state: "pass" | "open" | "error", count, plan, reason }`: `count` is the open decisions in all plans, `plan` the first plan (sorted by name) with one, else `null`; `reason` (`no plan`, `unreadable`, `too large`, `patterns`) only for `error`. A bad slug throws.
+- CLI: one line `plan-check (<policy>): <n> open decision(s), <d> decided` or `plan-check (<policy>): error <reason>`; `--json` prints the result object. Exit 2 when the policy is `block` and the state is `open`; exit 1 on `error` under any policy (also when the check itself fails); exit 3 for a refused argument; else 0.
+
+## CLI `scripts/plan-check.mjs` (cwd = product root; `main(args, { now, root, home })` exported)
 Exit codes: **0** done; **1** the scan could not run, or `read` met a broken record; **2** `block` policy with at least one finding (AC8); **3** refused (bad arguments, bad slug, write refused). Refusals print `refused: <reason>` and write nothing.
 
 | Command | Effect |

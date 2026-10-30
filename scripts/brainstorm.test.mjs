@@ -99,7 +99,7 @@ test('lenient labels: a stray label adds no Thread and no vote; a lenient reply 
 test('lenient labels: the shown form of a lenient idea line has the new ID only', () => {
   const t = applyReplies(r1(fresh()), { replies: { 'Ava (architect)': '- I-1.3: First.\n* Risk: r\nEstimate: S, 1-2 d', 'Ren (writer)': 'Skip', 'Pat (product-manager)': 'Skip' }, lead: '' }, { round: 2, mode: 'debate:full_pass' }).text;
   const p = inputFor(t, 'writer', { round: 2, pass: 'full' });
-  assert.deepEqual(section(p, 'Other Roles:'), ['#### Ava (architect)', 'I-2.1: First.', 'Risk: r', 'Estimate: S, 1-2 d']);
+  assert.deepEqual(section(p, 'Other Roles:'), ['#### architect', 'I-2.1: First.', 'Risk: r', 'Estimate: S, 1-2 d']);
 });
 
 test('lenient labels: parse on the CLI reports lenient; a stored lenient reply passes check and later applies', () => {
@@ -652,7 +652,7 @@ test('decide on the CLI: usage, extra arguments and a v1 file', () => {
   const dir = tmp();
   const f = join(dir, '2026-10-26 14.05 - Settings server.md');
   cli(['new', f], JSON.stringify({ topic: 'Settings server', roles: 'architect' }));
-  assert.equal(cli(['apply', f, '1'], JSON.stringify({ replies: { 'Ava (architect)': reply('r1-architect.txt') }, lead: 'Local first.' })).code, 0);
+  assert.equal(cli(['apply', f, '1'], JSON.stringify({ replies: { architect: reply('r1-architect.txt') }, lead: 'Local first.' })).code, 0);
   assert.equal(cli(['decide', f, 'Q-1'], 'x').code, 2);
   assert.equal(cli(['decide'], 'x').code, 2);
   const ok = cli(['decide', f], 'Priority: cost.\n');
@@ -884,14 +884,14 @@ test('inputFor: full and crossfire blocks use shown form, (malformed) and the st
   const p = inputFor(t, 'architect', { round: 2, pass: 'full' });
   assert.ok(p.includes('Pass: full\n'));
   assert.deepEqual(section(p, 'Your ideas-pass reply of round 2:'), ['I-2.1: Bind to 127.0.0.1 only and refuse other hosts.', 'Risk: Loopback-only blocks remote-desktop users.', 'Re: @writer on I-1.3: challenge — A hint under the URL is noise for people who know the tool.', 'Estimate: L, 4-6 d']);
-  assert.deepEqual(section(p, 'Other Roles:'), ['#### Ren (writer)', '(malformed)']);
+  assert.deepEqual(section(p, 'Other Roles:'), ['#### writer', '(malformed)']);
   assert.ok(!/Others said|Your last reply/.test(p));
   const c = inputFor(fullPassRound(), 'architect', { round: 2, pass: 'crossfire' });
   assert.ok(c.includes('Pass: crossfire\n'));
   const own = section(c, 'Your replies of round 2:');
-  assert.ok(own.includes('#### Ava (architect)') && own.includes('#### Ava (architect) — full pass'));
+  assert.ok(own.includes('#### architect') && own.includes('#### architect — full pass'));
   const opp = section(c, 'Opponent:');
-  assert.ok(opp.includes('#### Ren (writer)') && opp.includes('#### Ren (writer) — full pass'));
+  assert.ok(opp.includes('#### writer') && opp.includes('#### writer — full pass'));
   assert.ok(opp.includes('I-2.2: Add one help line that links the guide.'));
   assert.ok(!c.includes('five new users'), 'a Role outside the pair never appears');
   assert.ok(!/Others said|Other Roles:/.test(c));
@@ -1366,18 +1366,20 @@ function cli(args, input = '') {
 }
 const json = s => JSON.parse(s);
 
+const setBare = (names) => Object.fromEntries(Object.entries(names).map(([role, f]) => [role, reply(f)]));
+
 function endToEnd(style) {
   const dir = tmp();
   const f = join(dir, '2026-10-26 14.05 - Settings server.md');
   assert.equal(cli(['new', f], JSON.stringify({ topic: 'Settings server', roles: 'architect,writer,product-manager', mode: 'debate' })).code, 0);
   const rep = n => reply(n);
-  const a1 = cli(['apply', f, '1'], JSON.stringify({ replies: set({ architect: 'r1-architect.txt', writer: 'r1-writer.txt', 'product-manager': 'r1-pm.txt' }), lead: 'Local first.' }));
+  const a1 = cli(['apply', f, '1'], JSON.stringify({ replies: setBare({ architect: 'r1-architect.txt', writer: 'r1-writer.txt', 'product-manager': 'r1-pm.txt' }), lead: 'Local first.' }));
   assert.equal(a1.code, 0, a1.err);
   const ans = cli(['answer', f, 'Q-1'], 'Local.\n');
   assert.equal(ans.code, 0, ans.err);
   const q = json(cli(['queue', f]).out);
   assert.deepEqual(q.ask.map(x => x.id), ['Q-2']);
-  const a2 = cli(['apply', f, '2', '--mode', `debate:${style}`], JSON.stringify({ replies: set({ architect: 'r2-architect.txt', writer: 'r2-writer.txt', 'product-manager': 'r2-pm.txt' }), lead: '' }));
+  const a2 = cli(['apply', f, '2', '--mode', `debate:${style}`], JSON.stringify({ replies: setBare({ architect: 'r2-architect.txt', writer: 'r2-writer.txt', 'product-manager': 'r2-pm.txt' }), lead: '' }));
   assert.equal(a2.code, 0, a2.err);
   if (style === 'full_pass') {
     for (const [role, n] of [['architect', 'r2-full-architect.txt'], ['writer', 'r2-full-writer.txt'], ['product-manager', 'r2-full-pm.txt']]) {
@@ -1386,7 +1388,7 @@ function endToEnd(style) {
       assert.ok(p.out.includes('Other Roles:'));
       assert.deepEqual(json(cli(['parse', '2', role, '--pass', 'full', '--file', f], rep(n)).out).pass, 'full');
     }
-    const a3 = cli(['apply', f, '2', '--pass', 'full'], JSON.stringify({ replies: set({ architect: 'r2-full-architect.txt', writer: 'r2-full-writer.txt', 'product-manager': 'r2-full-pm.txt' }), lead: '' }));
+    const a3 = cli(['apply', f, '2', '--pass', 'full'], JSON.stringify({ replies: setBare({ architect: 'r2-full-architect.txt', writer: 'r2-full-writer.txt', 'product-manager': 'r2-full-pm.txt' }), lead: '' }));
     assert.equal(a3.code, 0, a3.err);
   }
   const pair = json(cli(['crossfire', f, '2']).out);
@@ -1397,14 +1399,14 @@ function endToEnd(style) {
       assert.equal(p.code, 0, p.err);
       assert.ok(p.out.includes('Opponent:'));
     }
-    const a4 = cli(['apply', f, '2', '--pass', 'crossfire'], JSON.stringify({ replies: set({ architect: 'r2-cross-architect.txt', writer: 'r2-cross-writer.txt' }), lead: 'Tokens and one help line.', dissent: [{ role: 'writer', quote: 'Strict binding hides the tool from hosted editors.' }] }));
+    const a4 = cli(['apply', f, '2', '--pass', 'crossfire'], JSON.stringify({ replies: setBare({ architect: 'r2-cross-architect.txt', writer: 'r2-cross-writer.txt' }), lead: 'Tokens and one help line.', dissent: [{ role: 'writer', quote: 'Strict binding hides the tool from hosted editors.' }] }));
     assert.equal(a4.code, 0, a4.err);
     assert.equal(json(cli(['crossfire', f, '2']).out), null);
   } else {
     // FR4: the pair is not dispatched; the challenge becomes dissent and the author's next input.
     assert.equal(cli(['stage', f, '2', '--pass', 'crossfire']).code, 1);
     assert.equal(cli(['prompt', f, 'writer', '--pass', 'crossfire', '2']).code, 1);
-    const refuse = cli(['apply', f, '2', '--pass', 'crossfire'], JSON.stringify({ replies: set({ architect: 'r2-cross-architect.txt', writer: 'r2-cross-writer.txt' }), lead: 'x' }));
+    const refuse = cli(['apply', f, '2', '--pass', 'crossfire'], JSON.stringify({ replies: setBare({ architect: 'r2-cross-architect.txt', writer: 'r2-cross-writer.txt' }), lead: 'x' }));
     assert.equal(refuse.code, 1);
     assert.match(refuse.err, /^refused: pass crossfire not allowed in round 2/);
     const a4 = cli(['apply', f, '2'], JSON.stringify({ replies: {}, lead: 'Tokens and one help line.', dissent: [{ role: 'architect', quote: 'A hint under the URL is noise for people who know the tool.' }] }));
@@ -1480,7 +1482,7 @@ test('CLI: usage errors exit 2 and refusals exit 1 with the file unchanged', () 
   assert.match(bad.err, /^refused: /);
   assert.equal(readFileSync(f, 'utf8'), before);
   assert.equal(cli(['apply', f, '1', '--mode', 'debate:loud'], '{}').code, 2);
-  const skip = JSON.stringify({ replies: { 'Ava (architect)': 'Skip' }, lead: 'x' });
+  const skip = JSON.stringify({ replies: { architect: 'Skip' }, lead: 'x' });
   assert.equal(cli(['apply', f, '1'], skip).code, 0);
   const closedText = readFileSync(f, 'utf8');
   const closed = cli(['apply', f, '1'], skip);

@@ -22,16 +22,22 @@ const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
 // Byte budget: pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
 const PRE = {
   // review +256 B and code-reviewer +35 B for the goldfish first pass (dispatch-prompt v3.6).
-  'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 2304,
+  // review +2001 B, code-reviewer +967 B and senior-engineer +971 B for the judging diff, the run-ref and graft refusals and the binary row rules (rule git.M-SEC4, dispatch-prompt v4.0).
+  // review +87 B more (fix round 1): a failing binary-content read and a non-UTF-8 path name are Blocking [security] rows, and the grafts check names the git.M-SEC4 (2) query.
+  'skills/handoff/SKILL.md': 5844, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4392,
   // review: 1899 + 149 B for the open-decision Nit paragraph (plan-check v1, v0.16).
+  // code-reviewer: +232 B for the judging diff paragraph and the finding ID row rule (rule git.M-SEC4, handoff v1.2).
   // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
-  'skills/standards/SKILL.md': 1680, 'agents/code-reviewer.md': 1985, 'agents/senior-engineer.md': 2365,
+  // standards: +434 B for the pack reuse line (rule-pack v1.2) and the run.mjs resolver form of the Type line (plugin-root v1).
+  'skills/standards/SKILL.md': 2114, 'agents/code-reviewer.md': 3187, 'agents/senior-engineer.md': 3340,
 };
 // Extra bytes a load may carry over the PRE sum. The handoff skill grew 110 B (Starting a Step item 5: Roles never start a Playbook,
 // ADR 0026): code-reviewer is 127 B over its PRE sum (14 B of handoff growth, 113 B of open-decision Nit text, plan-check v1), senior-engineer 110 B over on top of its 22 B of drift and the standards line above.
 // Both loads carry 654 B more for the shared-tree rule (Starting a Step item 6, dispatch-prompt v3.5).
 // Both loads carry 146 B more for the Task brief sentence (Starting a Step item 6) and 79 B for the first-pass exception (item 1), dispatch-prompt v3.6.
-const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654 + 146 + 79, 'agents/code-reviewer.md': 127 + 654 + 146 + 79 };
+// Both loads carry 100 B more for the full object id in the Handoff base-commit field and the budget rounding above (dispatch-prompt v4.0).
+// Loads of the reviewer and the senior engineer carry 884 B and 654 B more for the finding ID rows and the contest rule (handoff v1.2) in the shared skills and pilot.md; the budget counts the shared files once per Role, net of the handoff and ruleset text that shrank.
+const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654 + 146 + 79 + 100 + 654, 'agents/code-reviewer.md': 127 + 654 + 146 + 79 + 100 + 652 };
 const LOAD = {
   'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
   'agents/senior-engineer.md': ['agents/senior-engineer.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md', 'skills/standards/SKILL.md'],
@@ -55,7 +61,7 @@ test('byte budget: each pilot Role loads at most the pre-run sum, references/pil
     const now = files.reduce((n, f) => n + bytes(f), 0) + bytes(PILOT);
     assert.ok(now <= pre, `${agent} loads ${now} B, pre-run ${pre} B`);
   }
-  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 16048);
+  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 19338);
 });
 
 test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () => {
@@ -87,8 +93,8 @@ test('AC22 reviewers read rule-check list and confirm T- rows, tools never block
 });
 
 test('AC23 slices carry every security Must and a findings ledger survives handover', () => {
-  has(read('skills/ruleset/SKILL.md'), 'every security Must', /rule-check\.mjs"? slices/);
-  has(read('agents/senior-engineer.md'), 'every security Must', /rule-check\.mjs"? slices/);
+  has(read('skills/ruleset/SKILL.md'), 'every security Must', /rule-check(\.mjs)? slices/);
+  has(read('agents/senior-engineer.md'), 'every security Must', /rule-check(\.mjs)? slices/);
   has(read(PILOT), 'findings.md', 'continues the same file', 'appends every new finding before its Handoff', 'never deleted', '`open|fixed|withdrawn`', '[nit]', 'handoff-lint.mjs --findings');
 });
 
@@ -141,7 +147,7 @@ test('ledger timing: written only near a handover (60% of the cap or a decision 
 test('rule slices: builders follow Rule slice, the senior engineer writes the files before done', () => {
   const r = read('skills/ruleset/SKILL.md');
   has(r, '`Rule slice:`', '.company/work/<slug>/rules/<task>.md', 'blocked — missing rule slice', 'instead of the senior-engineer Handoff');
-  for (const f of ['skills/standards/SKILL.md', 'agents/senior-engineer.md']) has(read(f), /rule-check\.mjs"? slices <[^>]+> --write/);
+  for (const f of ['skills/standards/SKILL.md', 'agents/senior-engineer.md']) has(read(f), /rule-check(\.mjs)? slices <[^>]+> --write/);
 });
 
 test('AC24 depth comes from review-depth and is never lowered', () => {
@@ -150,8 +156,8 @@ test('AC24 depth comes from review-depth and is never lowered', () => {
 });
 
 test('AC26 feedback reads ledger report for the last 3 runs, spend and cache read apart', () => {
-  has(read('skills/feedback/SKILL.md'), 'ledger.mjs', 'report', 'last 3 runs', '**spend**', '**cache read**', 'Never add them');
-  has(read('skills/feedback/SKILL.md'), 'ledger.mjs" scorecard <run>', '## Speed', 'never stops the run',
+  has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger', 'report', 'last 3 runs', '**spend**', '**cache read**', 'Never add them');
+  has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger scorecard <run>', '## Speed', 'never stops the run',
     '`brainstorm-`, `replay-` or `baseline-`', 'try the next file, up to 3 tries');
 });
 
@@ -166,6 +172,6 @@ test('handoff skill: context budget follows the Context cap line, lint runs from
   const t = read('skills/handoff/SKILL.md');
   has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '150000', '120000', 'never compute');
   assert.doesNotMatch(t, /around 130k/);
-  has(read('skills/pipeline/SKILL.md'), '${CLAUDE_PLUGIN_ROOT}/scripts/handoff-lint.mjs');
+  has(read('skills/pipeline/SKILL.md'), '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" handoff-lint');
   assert.doesNotMatch(read(PILOT), /node scripts\/handoff-lint\.mjs/);
 });

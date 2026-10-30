@@ -124,22 +124,22 @@ const manifestRoot = m => {
 
 test('dispatch block with Company profile: but no Language: is an error', () => {
   const bad = skill('a', 'See below.\n\n```\nCompany profile: x\nGoal: y\n```');
-  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
+  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
   const r = check(fixture({ skills: { a: bad, b: good } }));
   assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Language:')), r.errors.join('\n'));
   assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
 });
 
-test('dispatch block without Name: is an error', () => {
-  const bad = skill('a', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
-  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
+test('dispatch block with a Name: line is an error', () => {
+  const bad = skill('a', '```\nCompany profile: x\nLanguage: en\nName: Ava\nGoal: y\n```');
+  const good = skill('b', '```\nCompany profile: x\nLanguage: en\nGoal: y\n```');
   const r = check(fixture({ skills: { a: bad, b: good } }));
-  assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('no Name:')), r.errors.join('\n'));
+  assert.ok(r.errors.some(e => e.includes('skills/a/SKILL.md:') && e.includes('has a Name: line')), r.errors.join('\n'));
   assert.ok(!r.errors.some(e => e.includes('skills/b/')), r.errors.join('\n'));
 });
 
 test('a longer fence is closed only by an equal or longer fence', () => {
-  const nested = skill('a', '````\nCompany profile: x\n```\ninner\n```\nLanguage: en\nName: Ava\n````');
+  const nested = skill('a', '````\nCompany profile: x\n```\ninner\n```\nLanguage: en\n````');
   assert.deepEqual(check(fixture({ skills: { a: nested } })).errors, []);
 });
 
@@ -293,9 +293,9 @@ const realPlaybooks = readdirSync(join(REPO, 'skills')).filter(d => {
 });
 
 for (const name of realPlaybooks) {
-  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language: and Name:`, () => {
+  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language: and no Name:`, () => {
     const r = check(REPO);
-    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:') || e.includes('no Name:'))), r.errors.join('\n'));
+    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:') || e.includes('has a Name: line'))), r.errors.join('\n'));
   });
 }
 
@@ -809,7 +809,7 @@ test('the fixtures folder holds only LF text (proj.M11)', () => {
 });
 
 // ---- dispatch rule, Context cap: (dispatch-prompt v3.1) ----
-const stepBlock = (extra = '', dir = 's') => '```\nProject profile: p\nCompany profile: x\nLanguage: en\nName: Ava\n' + extra + 'Output: .company/work/' + dir + '/01-r.md\nGoal: y\n```';
+const stepBlock = (extra = '', dir = 's') => '```\nProject profile: p\nCompany profile: x\nLanguage: en\n' + extra + 'Output: .company/work/' + dir + '/01-r.md\nGoal: y\n```';
 
 test('dispatch block with Output: .company/work/ but no Context cap: is an error', () => {
   const bad = skill('a', stepBlock());
@@ -820,7 +820,7 @@ test('dispatch block with Output: .company/work/ but no Context cap: is an error
 });
 
 test('dispatch blocks whose Output is a reply only need no Context cap:', () => {
-  const bs = skill('a', '```\nCompany profile: x\nLanguage: en\nName: Ava\nOutput: your reply only.\nGoal: y\n```');
+  const bs = skill('a', '```\nCompany profile: x\nLanguage: en\nOutput: your reply only.\nGoal: y\n```');
   assert.deepEqual(check(fixture({ skills: { a: bs } })).errors, []);
 });
 
@@ -933,7 +933,7 @@ test('personalities.json: hostile text values are errors', () => {
   assert.deepEqual(ok, []);
 });
 
-const dispatchWith = line => '```\nProject profile: x\nCompany profile: y\nLanguage: en\nName: Ava\n' + line + '\nOutput: z\n```';
+const dispatchWith = line => '```\nProject profile: x\nCompany profile: y\nLanguage: en\n' + line + '\nOutput: z\n```';
 
 test('a Personality: line in a dispatch block outside the two allowed files is an error', () => {
   const root = fixture({ skills: {
@@ -986,7 +986,7 @@ test('PERSONALITY_PHRASES is frozen and equals the role-names table', () => {
   assert.ok(Object.isFrozen(PERSONALITY_PHRASES.creativity));
 });
 
-const TYPE_LINE = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
+const TYPE_LINE = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 const hidden = (name, body) => `${playbookFm(name)}**Help:** x\n\n${body}\nSee §1.6.\n`;
 function typeFixture({ typeLine = true, manifest = {} } = {}) {
   const root = fixture({

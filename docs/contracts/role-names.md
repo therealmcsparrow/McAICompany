@@ -1,10 +1,12 @@
-# Contract: role-names v1.2
+# Contract: role-names v1.3
 
-Provider: `company/names.json` (defaults) and `roles.<role>.name` in `aico-settings` v1 (overrides). Consumers: `aico:pipeline` (the `Name:` dispatch line, `dispatch-prompt` v3), `aico:brainstorm`, `aico:cooler`, `aico:research`, `aico:reprompt` (v1.2), the settings page.
-Every Role has a person's name, shown next to its title: "Ava (architect)". Names are display only.
+Provider: `company/names.json` (defaults) and `roles.<role>.name` in `aico-settings` v1 (overrides). Consumers: `aico:pipeline` (renders names for the CEO only, `dispatch-prompt` v4), `aico:brainstorm`, `aico:cooler`, `aico:research`, `aico:reprompt` (v1.2), the settings page.
+Every Role has a person's name, shown to the CEO next to its title: "Ava (architect)". Names are display only.
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; task personalities-company-types): it adds each Role's **personality** (part "Personality") and the 34th Role, `editor` (CEO, Brief Gate). Every v1 consumer behaves as before; nothing in "Defaults" and "Rules" for names changes.
 Fix round 1 (task personalities-company-types, CEO form 2026-10-27; v1.1 is still unshipped, so no version change): rule T is tightened. Invisible (default-ignorable) code points and the spacing modifier letters U+02B0–U+02FF are refused, and each word starts with a letter or digit (security finding: invisible text and quote lookalikes passed). The refusal reason lines are unchanged.
 v1.2 is additive (task reprompter-role, CEO at the Plan Gate): it adds the 35th Role, `reprompter`, after `editor`, with the default name `Lynn` in `company/names.json` and one `company/personalities.json` entry: temperament "patient, precise, quietly curious", way of talking "plain words, one question at a time", pet topic "turning vague asks into clear goals", intelligence `high`, creativity `medium`. No rule, field, phrase or surface changes; every v1.1 consumer behaves as before.
+
+v1.3 is additive for settings and breaking for prompts (task v020-gate-roadmap, T20, Delta L; rationale `docs/adr/0037-names-rendered-for-the-ceo-only.md`): names are rendered only for the CEO. A Role never gets a name; it writes its Role id. The Lead renders `<name> (<role>)` only in text shown to the CEO. The `Name:` dispatch line is gone (`dispatch-prompt` v4.0). Names are pseudonyms shown only to the CEO: they are never sent to the AI or written to project files. Defaults, the name rule and personalities are unchanged.
 
 ## Defaults
 `company/names.json` is `{ "<role>": "<name>" }` with exactly one entry per `agents/*.md`. It lives outside agent frontmatter, because frontmatter allows only documented keys. `scripts/check.mjs` checks it.
@@ -13,7 +15,8 @@ v1.2 is additive (task reprompter-role, CEO at the Plan Gate): it adds the 35th 
 - A name is 1–30 characters matching `^(?=.{1,30}$)\p{L}[\p{L}\p{M}'\-]*(?: [\p{L}'\-][\p{L}\p{M}'\-]*)*$`u: it starts with a letter; then Unicode letters, combining marks, hyphens and apostrophes, with single spaces between words and no space at either end.
 - Effective names (after project > user > plugin) are unique across Roles, case-insensitive. A save that would clash is refused, naming both Roles.
 - Never route, file or match on a name. `aico:<role>` IDs, file names, frontmatter and every machine-read part stay unchanged. The one exception is the Lead's rule: a name in the CEO's request that matches exactly one effective name routes to that Role.
-- A Role that gets no `Name:` uses its Role title.
+- (v1.3) A Role never gets a name; it writes its Role id in bylines, cues and files. A `Name:` line in a prompt is ignored.
+- (v1.3) Before the Lead quotes a CEO request or pitch into a dispatch, it replaces each effective name in it (the exact match of the routing rule above) with its Role id. Routing happens first, on the CEO's own words.
 
 ## Personality (v1.1)
 Social only: it colours how a Role comes across in `aico:cooler` turns and `aico:brainstorm` rounds, and nowhere else. It never changes a model, an effort, a verdict, a review, a Gate, a Handoff or any other dispatch. Rationale and the trust boundary: `docs/adr/0021-personality-social-only.md`.
@@ -58,11 +61,11 @@ Personality:
 
 The phrases are plugin text and change only with a minor bump of this Contract. LF line endings, final newline.
 
-### Surfaces (exhaustive; `dispatch-prompt` v3.2)
+### Surfaces (exhaustive; `dispatch-prompt` v4)
 1. `aico:cooler` turns: the `Personality:` dispatch line names a file holding the block (`personality.mjs stage`).
 2. `aico:brainstorm` format 1 rounds: the same line and file.
 3. `aico:brainstorm` format 2 rounds: the block inside the Role's round input file, written by `brainstorm.mjs stage` (`brainstorm-file` v2.1).
-Nowhere else: not `settings.mjs get` (CLI), not `brainstorm.mjs prompt` (Fix round 1), not any other dispatch, Handoff, Gate summary, review, commit, ledger, brainstorm file, film script or cooler file. (v1.2) The `reprompter` dispatch of `aico:reprompt` is not a surface: it carries `Name:` like every Step and never a `Personality:` line; the Role's personality shows only when a cooler or brainstorm picks it.
+Nowhere else: not `settings.mjs get` (CLI), not `brainstorm.mjs prompt` (Fix round 1), not any other dispatch, Handoff, Gate summary, review, commit, ledger, brainstorm file, film script or cooler file. (v1.2) The `reprompter` dispatch of `aico:reprompt` is not a surface: it carries no `Name:` and never a `Personality:` line; the Role's personality shows only when a cooler or brainstorm picks it.
 
 ## Error cases
 - `names.json` missing a Role, an invalid name or a duplicate → `check.mjs` error.

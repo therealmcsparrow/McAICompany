@@ -11,8 +11,11 @@ import { run as runCompanyType } from './company-type.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 
+// Old skill text is compared after its script calls are moved to the run.mjs form.
+const runForm = (s) => s.replace(/node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/(?!run\.mjs)([a-z][a-z0-9-]*)\.mjs"/g, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" $1');
 function git(...args) {
-  return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const out = execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  return args[0] === 'show' ? runForm(out) : out;
 }
 
 // The files this branch changed against the merge base with origin/main, or null when no such base exists
@@ -207,7 +210,7 @@ test('AC1 a Role with no personality set gets its shipped default, for every Rol
   assert.doesNotMatch(result.out, /Style data|temperament|calm and patient/);
   // The cooler Playbook hands the Role a path to that file, as its last prompt line.
   const cooler = read('skills/cooler/SKILL.md');
-  assert.match(cooler, /personality\.mjs" stage/);
+  assert.match(cooler, /run\.mjs" personality stage/);
   const withLine = fenced(cooler).filter(b => b.lines.some(l => /^Personality:/.test(l)));
   assert.ok(withLine.length >= 1);
   for (const b of withLine) assert.match(b.lines.filter(l => l.trim()).at(-1), /^Personality:/);
@@ -274,7 +277,7 @@ test('AC3 the static check refuses a personality line in a pipeline or research 
   const { check } = await import('./check.mjs');
   assert.deepEqual(check(pluginCopy()).errors, [], 'the copy starts clean');
   for (const rel of ['skills/pipeline/SKILL.md', 'skills/research/SKILL.md']) {
-    const errors = await staticCheckWith(rel, text => text.replace(/^(Name:.*)$/m, '$1\nPersonality: /tmp/x.md'));
+    const errors = await staticCheckWith(rel, text => text.replace(/^(Language:.*)$/m, '$1\nPersonality: /tmp/x.md'));
     assert.ok(errors.some(e => e.includes(rel) && /Personality: line/.test(e)), `${rel}: ${errors}`);
   }
   const errors = await staticCheckWith('skills/feature/SKILL.md', text => `${text}\nRun personality.mjs stage first.\n`);
@@ -526,6 +529,16 @@ const HAND_OVER_CHANGES = {
       /^5\. End of run\. Tell the CEO to start the fix: `\/aico:fix "<root cause> \(incident \.company\/work\/<slug>\/\)"`.*CRA final report: 14 days after a fix is available, 1 month after the notification.*\/aico:lead.*Never drop a deadline\.$/,
     ],
   },
+  // Maintain gains one line: the contract-drift check (contract-index v1).
+  maintain: {
+    removed: [],
+    added: ['   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.'],
+  },
+  // Standards gains one line: reuse of a fresh rule pack (rule-pack v1.2).
+  standards: {
+    removed: [],
+    added: [/^   - Reusing a pack: run `node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" pack-fresh <pack> --version /],
+  },
   refactor: {
     removed: ['Run with `aico:pipeline`. No Brief Gate: the audit report is the brief. Start from an existing audit report if there is one; otherwise run `aico:audit` steps 1–2 first.'],
     added: [/^Run with `aico:pipeline`\. No Brief Gate: the audit report is the brief\. Start from an existing audit report if there is one; otherwise, before pipeline Setup, ask the CEO in a form: \*\*Run audit first \(Recommended\)\*\* \/ \*\*Skip audit\*\*\. Run audit first → .*end this run here.*`\/aico:refactor "<scope>"`, and stop\.$/],
@@ -540,7 +553,7 @@ const helpLineV13 = name => (
   + `then read the \`### /aico:${name}\` entry of \`documentation/commands.md\` (plugin root = two folders above this skill's base directory) `
   + 'and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.'
 );
-const typeLineV13 = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/company-type.mjs" check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
+const typeLineV13 = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;
 const frontKey = (lines, key) => lines.find(l => l.startsWith(`${key}: `));
 
 // One software Playbook, v0.12.0 against now. Allowed: the description starts with the guard (then the old text, except where the
@@ -622,7 +635,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   for (const name of soft) assertV012Playbook(name);
   // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
-  assert.equal(Number(removedFromPipeline), 10);
+  // 23 removed lines: the ten above, plus the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
+  assert.equal(Number(removedFromPipeline), 23);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 
@@ -877,7 +891,7 @@ test('AC10 a Playbook or Role outside the type is refused with the allowed list;
   for (const rel of ['skills/lead/SKILL.md', 'skills/triage/SKILL.md']) assert.match(read(rel), /Setup §1\.0/, rel);
   assert.match(read('skills/lead/SKILL.md'), /Route only to Playbooks in its `playbooks`/);
   assert.match(read('skills/triage/SKILL.md'), /Recommend only Playbooks in its `playbooks`/);
-  for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/SKILL.md']) assert.match(read(rel), /company-type\.mjs" roles/, rel);
+  for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/SKILL.md']) assert.match(read(rel), /run\.mjs" company-type roles/, rel);
 });
 
 test('AC10 pick gives a shared Playbook a stand-in Role, and work names the Playbooks that hand-overs go to', () => {
@@ -912,10 +926,10 @@ test('AC10 pick gives a shared Playbook a stand-in Role, and work names the Play
     assert.ok(sb.type(['resolve']).out.split('\n').includes(`work: ${m.work.join(', ')}`), id);
   }
   // The shared Playbooks use pick with a fallback rather than naming a Role that only some types have.
-  assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick architect product-manager/);
-  assert.match(read('skills/client/SKILL.md'), /company-type\.mjs" pick devops/);
-  assert.match(read('skills/feedback/SKILL.md'), /company-type\.mjs" pick support account-manager product-manager/);
-  assert.match(read('skills/research/SKILL.md'), /company-type\.mjs" pick --max 2 market-researcher tech-researcher ux-researcher/);
+  assert.match(read('skills/client/SKILL.md'), /run\.mjs" company-type pick architect product-manager/);
+  assert.match(read('skills/client/SKILL.md'), /run\.mjs" company-type pick devops/);
+  assert.match(read('skills/feedback/SKILL.md'), /run\.mjs" company-type pick support account-manager product-manager/);
+  assert.match(read('skills/research/SKILL.md'), /run\.mjs" company-type pick --max 2 market-researcher tech-researcher ux-researcher/);
   assert.match(read('skills/research/SKILL.md'), /pick design-researcher/);
   for (const name of ['client', 'feedback', 'research', 'brainstorm', 'cooler']) {
     assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /\baico:(architect|devops|support)\b/, `${name} names a Role that only some types have`);
@@ -1041,7 +1055,7 @@ test('AC12 setup writes company_type only after the choice, and only once', () =
   assert.equal(fs.existsSync(empty.profile), false);
   // The Playbook orders the steps the same way: list, form, then set from the list output only.
   const setup = read('skills/setup/SKILL.md');
-  assert.ok(setup.indexOf('company-type.mjs" list') < setup.indexOf('company-type.mjs" set <id>'));
+  assert.ok(setup.indexOf('run.mjs" company-type list') < setup.indexOf('run.mjs" company-type set <id>'));
   assert.match(setup, /Cancel, no answer or any other text → run nothing, write nothing/);
   assert.match(setup, /`<id>` taken from the `list` output and never from free text/);
   // Setup reads the readable lines: the source from the first line, the form from the list lines, the hints from their own line.
@@ -1061,7 +1075,7 @@ test('AC13 setup searches skills for the type, at most 5, each vetted, nothing i
   assert.match(setup, /`vet`/);
   assert.match(setup, /never answers the approve, Install or stop form by itself/);
   const picks = read('skills/lead/references/skill-picks.md');
-  assert.match(picks, /skill-picks\.mjs" vet/);
+  assert.match(picks, /run\.mjs" skill-picks vet/);
   assert.match(picks, /Nothing installs unless the approve form and the Install \/ Skip form/);
   assert.match(picks, /Area: stack \| product-type \| company-type \| design/);
   const researcher = read('agents/skill-researcher.md');

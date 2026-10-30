@@ -1,0 +1,5 @@
+# 0037: Names are rendered for the CEO only
+
+Status: proposed (Plan Gate, task v020-gate-roadmap)
+
+A Role never gets a name. Dispatches, canonical orders, Handoff bylines, rule slices, task briefs, reprompter dispatches and brainstorm or cooler inputs name a Role by its Role id. The Lead renders `<name> (<role>)` only in text shown to the CEO, and it replaces an effective name in a quoted CEO request with the Role id before the request enters a dispatch (routing still runs first, on the CEO's own words). Names are pseudonyms shown only to the CEO; they are never sent to the AI or written to project files (GDPR Art. 5(1)(c) and 25(2): no data the work does not need). The change is breaking, so `dispatch-prompt` goes to v4.0 and `role-names` to v1.3. Savvy and Cache Tax take the name for a Role id from the name map in the scripts' JSON, so the panels look the same on screen. Hard to reverse because every Role and Playbook prompt, and the Handoff `By:` line, now rely on the Role id alone.

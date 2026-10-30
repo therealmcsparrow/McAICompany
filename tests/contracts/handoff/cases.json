@@ -1,0 +1,59 @@
+{
+  "valid": {
+    "file": "valid.md",
+    "errors": []
+  },
+  "missing Next heading": {
+    "file": "missing-next.md",
+    "errors": [
+      "missing English heading ## Next"
+    ]
+  },
+  "bad status": {
+    "file": "bad-status.md",
+    "errors": [
+      "frontmatter: status must be done|blocked|needs-ceo|handover",
+      "aico-top: status must be done|blocked|needs-ceo|handover"
+    ]
+  },
+  "bad top block": {
+    "file": "bad-top.md",
+    "errors": [
+      "aico-top: tokens_used must be an integer or unknown"
+    ]
+  },
+  "routing": {
+    "file": "valid.md",
+    "routing": {
+      "status": "done",
+      "round": "0",
+      "base-commit": "0123456789abcdef0123456789abcdef01234567",
+      "risk-tier": "medium",
+      "acceptance-ids": [
+        "AC1",
+        "AC3"
+      ],
+      "files-touched": [
+        "src/x.ts"
+      ],
+      "blocking": [],
+      "findings": []
+    }
+  },
+  "v1.2 reviewer row with R-id": {
+    "file": "reviewer-v12.md",
+    "errors": []
+  },
+  "v1.2 reviewer row without R-id": {
+    "file": "bad-reviewer-v12.md",
+    "errors": [
+      "line 15: reviewer row needs R-<n> after the tag"
+    ]
+  },
+  "v1.2 Role id byline without contracts": {
+    "file": "bad-no-contracts.md",
+    "errors": [
+      "frontmatter: missing contracts (required under a Role id byline, handoff v1.2)"
+    ]
+  }
+}
