@@ -19,15 +19,8 @@ const handoff = read('skills/handoff/SKILL.md');
 const contract = read('docs/contracts/dispatch-prompt.md');
 const parallel = read('skills/pipeline/references/parallel.md');
 
-// Malformed lines the Role must treat like an absent one.
-const HOSTILE = [
-  'Context cap: 95000', 'Context cap: abc handover def', 'Context cap: 95000 handover 99000',
-  'Context cap: 40000 handover 32000', 'Context cap: -1 handover -1', 'Context cap: 95000 handover 85500 handover 1',
-  `Context cap: ${'9'.repeat(400)} handover 1`, 'Context cap: 1e5 handover 8e4',
-];
-
-test('malformed cap lines are all covered by the contract rule: same values plus the Nit', () => {
-  assert.equal(HOSTILE.length, 8);
+// No script reads the line: the Role reads it from the prose rule, so the test pins that rule text only.
+test('the contract rule for malformed cap lines gives the same values plus the Nit', () => {
   has(contract, 'not two integers', '`<n>` > `<cap>`', 'cap 95000, handover at 85500, and a Nit `invalid Context cap`', 'at most 35 characters');
   has(handoff, 'Absent → cap 95000, handover at 85500', 'Malformed → the same, plus a Nit `invalid Context cap`');
 });

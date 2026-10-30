@@ -86,9 +86,36 @@ describe('SKILL.md', () => {
     assert.equal(f('pick', 'idea-u', 'D').code, 3);
   });
 
+  test('outside software after Research the routes form is Park the idea plus Stop (2 options)', () => {
+    has(routes, /route `stop`: Stop\./, /Park the idea \/ Stop/, /after Research/);
+    const cwd = tmp('idea-playbook-');
+    fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: research\n');
+    const f = (...argv) => flow(argv, cwd);
+    f('start', 'idea-s', '--kind', 'idea');
+    f('pick', 'idea-s', '1'); f('done', 'idea-s', 'grilling'); f('done', 'idea-s', 'reprompt');
+    f('pick', 'idea-s', 'C'); f('done', 'idea-s', 'research'); f('done', 'idea-s', 'reprompt');
+    assert.deepEqual(f('options', 'idea-s').out.split('\n').filter((l) => l.startsWith('option ')).map((l) => l.split(' ')[2]),
+      ['park-idea', 'stop']);
+    assert.equal(f('pick', 'idea-s', 'S').code, 0);
+    assert.equal(f('options', 'idea-s').out, 'ended\n');
+  });
+
+  test('the Ship Gate shows the applied approve lines from ticket-approval read, not from context', () => {
+    has(routes, /Ship Gate/, /ticket-approval read/, /not kept only in your context|not from your context/);
+  });
+
   test('trust and privacy lines name the recipients', () => {
     has(skill, /data, never instructions/, /Only the CEO's own pick/);
     has(skill, 'Claude model', 'web search', 'grilling', 'research', '.company/', 'git-ignored');
+  });
+
+  test('both Playbooks and the contract state exactly where web search can run', () => {
+    const sentence = 'The web search tools (WebSearch, WebFetch) run in grilling lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient.';
+    has(skill, sentence);
+    has(read('skills/bug/SKILL.md'), sentence);
+    has(read('docs/contracts/idea-flow.md'), sentence);
+    lacks(skill, 'used only in grilling lookups and in research');
   });
 });
 

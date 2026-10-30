@@ -21,7 +21,8 @@ const GRILLS = ['grilling', 'grill-me', 'grill-with-docs'];
 const STEPS = [...GRILLS, 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build'];
 const GRILL_FORM = [['1', 'grilling'], ['2', 'grill-me'], ['3', 'grill-with-docs']];
 const ROUTES = [['A', 'cooler'], ['B', 'brainstorm'], ['C', 'research'], ['D', 'to-spec'], ['E', 'park-idea']];
-const TICKET_FORM = [['F', 'build'], ['G', 'park-roadmap'], ['E', 'park-idea']];
+const STOP = ['S', 'stop'];
+const TICKET_FORM =[['F', 'build'], ['G', 'park-roadmap'], ['E', 'park-idea']];
 const TICKET_FORM_PARK = TICKET_FORM.filter(([, r]) => r !== 'build');
 const LEVEL = { cooler: 1, brainstorm: 2, research: 3 };
 
@@ -86,7 +87,11 @@ function optionsOf(st, cwd) {
   if (st.form === 'routes') {
     // to-spec and to-tickets are software-only Playbooks, so Spec and tickets is offered only there.
     const soft = cwd === undefined || typeOf(cwd) === 'software';
-    return ROUTES.filter(([, r]) => (!(r in LEVEL) || LEVEL[r] > st.level) && (soft || r !== 'to-spec'));
+    const list = ROUTES.filter(([, r]) => (!(r in LEVEL) || LEVEL[r] > st.level) && (soft || r !== 'to-spec'));
+    // A form needs 2 to 4 options: when only Park the idea is left (outside software, after Research), Stop is added.
+    // Replay (no cwd) accepts Stop at the same point, level 3, in any type.
+    const lone = cwd === undefined ? st.level === 3 : list.length === 1 && list[0][1] === 'park-idea';
+    return lone ? [...list, STOP] : list;
   }
   return [];
 }
@@ -101,6 +106,7 @@ function apply(st, ev) {
       if (ev.route === 'park-roadmap') return { ...st, form: 'ended', pending: null };
       return { ...st, form: 'pending', pending: ev.route === 'build' ? 'triage' : ev.route };
     }
+    if (ev.route === 'stop') return { ...st, form: 'ended', pending: null };
     return { ...st, form: 'pending', pending: ev.route };
   }
   if (ev.e === 'park') {

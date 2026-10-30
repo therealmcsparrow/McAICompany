@@ -356,8 +356,34 @@ test('outside software the routes form never offers Spec and tickets; pick D is 
     ok(run(cwd, 'pick', 'q', 'C'));
     ok(run(cwd, 'done', 'q', 'research'));
     ok(run(cwd, 'done', 'q', 'reprompt'));
-    assert.deepEqual(letters(run(cwd, 'options', 'q')), ['E'], id);
+    // A form needs 2 to 4 options: Park the idea plus Stop (v1.1).
+    assert.deepEqual(letters(run(cwd, 'options', 'q')), ['E', 'S'], id);
+    assert.match(run(cwd, 'options', 'q').out, /option S stop/);
+    assert.match(ok(run(cwd, 'pick', 'q', 'S')).out, /picked S stop/);
+    assert.equal(run(cwd, 'options', 'q').out, 'ended\n');
+    assert.match(run(cwd, 'state', 'q').out, /form: ended/);
+    assert.equal(run(cwd, 'read', 'q').code, 0);
   }
+});
+
+test('Stop is offered only outside software after Research; E still parks there', () => {
+  const soft = root();
+  toRoutes(soft, 'a', 'idea');
+  assert.equal(run(soft, 'pick', 'a', 'S').code, 3);
+  ok(run(soft, 'pick', 'a', 'C'));
+  ok(run(soft, 'done', 'a', 'research'));
+  ok(run(soft, 'done', 'a', 'reprompt'));
+  assert.deepEqual(letters(run(soft, 'options', 'a')), ['D', 'E']);
+  assert.equal(run(soft, 'pick', 'a', 'S').code, 3);
+  const cwd = root();
+  setType(cwd, 'design');
+  toRoutes(cwd, 'b', 'idea');
+  assert.equal(run(cwd, 'pick', 'b', 'S').code, 3);
+  ok(run(cwd, 'pick', 'b', 'C'));
+  ok(run(cwd, 'done', 'b', 'research'));
+  ok(run(cwd, 'done', 'b', 'reprompt'));
+  ok(run(cwd, 'pick', 'b', 'E'));
+  assert.match(run(cwd, 'options', 'b').out, /pending park-idea/);
 });
 
 test('a broken company_type line fails the routes form loud and writes nothing', () => {
