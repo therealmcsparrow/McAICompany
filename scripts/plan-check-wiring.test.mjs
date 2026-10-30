@@ -78,3 +78,28 @@ test('review, planning and feedback texts carry the open-decision wiring', () =>
   has(read('skills/planning/SKILL.md'), 'Decided: <choice> because <reason>', '`TBD`, `TODO` or `decide later`');
   has(read('skills/feedback/SKILL.md'), 'run.mjs" plan-check-verdict verdict --runs', '## Plan check');
 });
+
+test('feature and fix runs show the plan check at the Ship Gate and ask a form only on a refusal', () => {
+  const rule = reference.split('\n').find((l) => l.startsWith('**Feature and fix.**'));
+  assert.ok(rule, 'no Feature and fix rule');
+  has(rule,
+    'no Plan Gate',
+    'Ship Gate summary',
+    'Fix / Stop',
+    '`plan-tasks begin` or `next` refusal',
+    'never bypassed');
+  has(reference, 'At each Plan Gate');
+});
+
+test('the pasted plan-check block sits inside a code fence', () => {
+  has(reference, 'inside a code fence');
+});
+
+test('plan-review keeps its Plan Gate text and adds the feature and fix rule with the fixed cap', () => {
+  const review = read('skills/pipeline/references/plan-review.md');
+  const rule = review.split('\n').find((l) => l.startsWith('**Feature and fix.**'));
+  assert.ok(rule, 'no Feature and fix rule');
+  has(rule, 'no Plan Gate', 'Ship Gate summary', 'plan review: not run');
+  has(review, 'Context cap: 95000 handover 85500', '**Plan Gate block.** Under the summary show');
+  assert.ok(!review.includes('Context cap: <cap> handover <n>'));
+});

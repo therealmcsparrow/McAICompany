@@ -472,8 +472,8 @@ describe('AC4 plan review findings join the Plan Gate summary; no Gate is added'
     assert.ok(gates.has('Plan Gate'));
     const feature = read('skills', 'feature', 'SKILL.md');
     const marks = [...feature.matchAll(/\*\*→ ([A-Za-z ]+?)\*\*/g)].map((m) => m[1]);
-    assert.deepEqual(marks, ['Brief Gate', 'Plan Gate', 'Ship Gate']);
-    assert.ok(feature.indexOf('2e. `aico:fresh-reviewer`') < feature.indexOf('**→ Plan Gate**'));
+    assert.deepEqual(marks, ['Ship Gate']);
+    assert.ok(feature.indexOf('2e. `aico:fresh-reviewer`') < feature.indexOf('**→ Ship Gate**'));
   });
 });
 

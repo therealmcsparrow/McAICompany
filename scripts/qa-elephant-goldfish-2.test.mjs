@@ -708,7 +708,7 @@ describe('AC27: a saved spec holding a file path or a code block is an ERROR', (
 
 // ------------------------------------------------------------------ glossary and ADR drafts
 
-describe('AC30: settled terms and hard decisions are listed at the Brief Gate and written after approval', () => {
+describe('AC30: settled terms and hard decisions are shown in a form and written after the CEO says so', () => {
   test('the product manager Handoff may hold a Glossary, ADR drafts and one Prototype question', (t) => {
     const sb = sandbox(t);
     const r = lintText(sb, fixture('handoffs', 'pm-intake.md'), '01-product-manager.md');
@@ -752,13 +752,13 @@ describe('AC30: settled terms and hard decisions are listed at the Brief Gate an
     assert.match(lintText(sb, late, '01-product-manager.md').errors.join('\n'), /Glossary must come before ## Next/);
   });
 
-  test('the Brief Gate lists them, asks before writing, and creates GLOSSARY.md only on a yes', () => {
+  test('the glossary and ADR drafts are one form, and GLOSSARY.md is created only on a yes', () => {
     const ship = read('skills', 'feature', 'references', 'intake-and-ship.md');
-    assert.match(ship, /The Brief Gate summary lists the PM's `## Glossary` and `## ADR drafts` lines/);
-    assert.match(ship, /Write them after approval \/ Change \/ Skip/);
-    assert.match(ship, /A product with no `GLOSSARY\.md` gets a separate question: Create GLOSSARY\.md: Yes \/ No \(Recommended\)/);
+    assert.match(ship, /When the brief has `## Glossary` or `## ADR drafts` lines, show them/);
+    assert.match(ship, /in one form: Write them \/ Skip/);
+    assert.ok(ship.includes('A product with no `GLOSSARY.md` gets a separate question: Create GLOSSARY.md: Yes / No (Recommended)'));
     assert.match(ship, /Skip → nothing is written/);
-    assert.match(ship, /the architect writes `GLOSSARY\.md` entries and `docs\/adr\/NNNN-<slug>\.md` files/);
+    assert.ok(ship.includes('the architect writes `GLOSSARY.md` entries and `docs/adr/NNNN-<slug>.md` files'));
   });
 });
 
@@ -1248,13 +1248,13 @@ describe('AC28: an accepted prototype runs on a throwaway branch and never reach
     assert.equal(r.g('rev-parse', 'HEAD'), r.base);
   });
 
-  test('the Brief Gate asks, the Handoff answers in five lines, the plan cites it and the Plan Gate shows it; no new Gate', () => {
+  test('the prototype form asks, the Handoff answers in five lines, the plan cites it and the Ship Gate summary shows it; no Gate', () => {
     const ship = read('skills', 'feature', 'references', 'intake-and-ship.md');
-    assert.match(ship, /The Brief Gate form then asks "Prototype: <question>" with Run it \/ Skip/);
-    assert.match(ship, /Step 1b runs only after the CEO answered Run it at the Brief Gate/);
-    assert.match(ship, /with Output `NN-prototype-<role>\.md`, the `Worktree:` line verbatim after `Files:` and Goal `answer: <question>`/);
-    assert.match(ship, /`## Answer` \(at most 5 lines\)/);
-    assert.match(ship, /cites it in a `Decided:` line\. The Plan Gate shows `prototype: <first line of the answer>`/);
+    assert.ok(ship.includes('The prototype form (see `## Forms`) then asks "Prototype: <question>" with Run it / Skip'));
+    assert.match(ship, /Step 1b runs only after the CEO answered Run it on the prototype form/);
+    assert.ok(ship.includes('with Output `NN-prototype-<role>.md`, the `Worktree:` line verbatim after `Files:` and Goal `answer: <question>`'));
+    assert.ok(ship.includes('`## Answer` (at most 5 lines)'));
+    assert.ok(ship.includes('cites it in a `Decided:` line. The Ship Gate summary shows `prototype: <first line of the answer>`'));
     assert.match(ship, /The prototype branch never merges/);
     assert.match(read('skills', 'pipeline', 'references', 'worktrees.md'), /`protocheck` exit 2 .* is a Blocking Ship Gate line the CEO must answer/);
   });
