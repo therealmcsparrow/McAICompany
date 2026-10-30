@@ -10,6 +10,8 @@
 **When to use it.** You have a short or vague prompt for an AI and want it sharpened first. It works in every company type. The Lead can start it for you when you ask to improve a prompt; it passes your text as the command's argument. A prompt for an image model is handed to the prompt-artist instead.
 
 ## How it works
+**How it runs.** Lynn works in four steps, below. She writes only `prompt.md` and her own Handoff, and nothing runs without your **Use it**.
+
 1. The Lead saves your text verbatim in a new run folder and dispatches the reprompter.
 2. If a gap would change the result (goal, target AI, audience or scope), the reprompter returns up to 3 questions with 2 to 4 options each and a recommended one. Each question carries a one-line reason for the recommended option, and the form shows that reason under it. The Lead asks them in one form. The number of question rounds defaults to 1 and you can set it from 0 to 3 in `/aico:settings` (Question rounds); 0 means no questions. That number is an upper bound: as soon as no gap that changes the result is left, the reprompter says "No open question left" and asks no further round, even with rounds remaining. After the last round the reprompter goes on with stated assumptions and does not ask again. (`reprompt` v2.0: a question without its reason is malformed.)
 3. The Lead shows the full prompt and its assumptions as plain text in a framed block, so nothing in them is hidden or rendered. Under them is one line saying the prompt is AI-written and to check it before you use it. Then it asks: **Use it** / **Edit** / **Keep only** / **Stop**. Edit has no fixed cap on rounds.
