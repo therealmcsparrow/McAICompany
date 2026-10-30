@@ -24,7 +24,7 @@ Reference material lives alongside these guides:
 
 ## Version
 
-**Current: 0.20.0** (36 Role agents).
+**Current: 0.21.0** (36 Role agents).
 
 Update an installed copy with:
 

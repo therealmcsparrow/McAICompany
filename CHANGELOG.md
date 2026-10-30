@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-30
+
+Rollback: node scripts/stable.mjs 0.20.0
+
 Planned release: 0.21.0.
 
 ### Breaking
