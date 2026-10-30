@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1.2
+// contract: docs/contracts/lead-handoff.md v1.3
 // uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point and a SessionStart hook that
 // injects it after compaction, plus a small CLI. Every hook payload, transcript line, record line and Step
@@ -485,6 +485,22 @@ function stateLines(st) {
   return [`gate: ${st.gate}`, `form: ${st.form}`, `step: ${st.step}`, `running: ${st.running ? 'step' : 'none'}`];
 }
 
+const FULL_BASE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+// The recorded values `read` prints after `running:`. They come from the Lead's records only, in the shape
+// their writer records; a missing value is `unknown` and a broken tier-path record stays `broken`.
+function recordedLines(root, slug, st) {
+  const tp = tierPathOf(root, slug);
+  const tier = tp.kind === 'ok' ? tp.tier : (tp.kind === 'broken' ? 'high' : 'unknown');
+  const set = tp.kind === 'ok' ? `[${tp.set.join(', ')}]` : 'unknown';
+  return [
+    `base-commit: ${FULL_BASE.test(st.baseCommit) && !/^0+$/.test(st.baseCommit) ? st.baseCommit : 'unknown'}`,
+    `risk-tier: ${tier}`,
+    `tier-path: ${st.tierPath}`,
+    `tier-set: ${set}`,
+  ];
+}
+
 function exec(argv, root, env) {
   for (const a of argv) if (typeof a !== 'string' || a.length > MAX_ARG || BAD_CHAR.test(a)) refuse('argument is not accepted');
   const [cmd, slug, ...rest] = argv;
@@ -504,7 +520,7 @@ function exec(argv, root, env) {
       const hs = events.filter((e) => e.ev === 'handover');
       const rs = events.filter((e) => e.ev === 'resume');
       return [`handovers ${hs.length}`, `resumes hook ${rs.filter((e) => e.via === 'hook').length} ceo ${rs.filter((e) => e.via === 'ceo').length}`,
-        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st)].join('\n') + '\n';
+        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st), ...recordedLines(root, slug, st)].join('\n') + '\n';
     }
     case 'begin': {
       if (rest.length !== 1) refuse('usage');

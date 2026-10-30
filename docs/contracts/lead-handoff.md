@@ -1,4 +1,6 @@
-# Contract: lead-handoff v1.2
+# Contract: lead-handoff v1.3
+
+v1.3 (task idea-20261030-2242-build-draft; additive): `read <slug>` prints four more lines after `running:`: `base-commit`, `risk-tier`, `tier-path` and `tier-set`, from the Lead's records only (never a Role Handoff). `base-commit` is a full 40 or 64 lowercase hex id, not all zeros, else `unknown`; `risk-tier` is the tier-path record's tier, `high` when that record is broken, `unknown` without one; `tier-path` is `none`, `broken` or `<feature|fix> <short|full>`; `tier-set` is the inline list of the record's route entries, `unknown` without a record.
 
 v1.2 (task reprompt-20261030-1309-draft-2-draft; additive): a new record event `base` and CLI command `base <slug> <id>` keep the run's base commit for every Playbook, also before the tier-path record exists; `base-commit` is the tier-path base when usable, else the recorded `base`, else `unknown`; a 64-hex id is accepted in the Handoff.
 
@@ -32,7 +34,7 @@ Frontmatter, derived and validated by the script only, in this order: `slug`; `p
 - `resume` (SessionStart adapter, matcher `compact`): source other than `compact` or `agent_id` present: nothing. The newest handover of the active run with no later `resume` and an `at` within 10 minutes: the file is validated again (regular file, 8 KiB, exact key order, each value against its allow-list, slug equal to the run, `## Next` lines from the fixed templates); valid → prints `hookSpecificOutput.additionalContext` = one fixed header line that marks the file as data from the run records, then the file; appends `resume`. Otherwise, with an active run: one fixed line telling the Lead to run `lead-handover read <slug>` first. Always exit 0.
 - `begin <slug> <playbook>`: playbook `^[a-z][a-z0-9-]{0,40}$` with `skills/<playbook>/SKILL.md` in the plugin. Prints `begun`.
 - `base <slug> <id>`: the Lead runs it once at Step 01 after resolving the base commit. The id is 40 or 64 lowercase hex, not all zeros, else `refused: bad base`; a second call → `refused: base set`. Prints `recorded`.
-- `read <slug>`: prints `handovers <n>`, `resumes hook <a> ceo <b>`, `last <file|none>`, then the `gate`, `form`, `step` and `running` lines `write` would use.
+- `read <slug>`: prints `handovers <n>`, `resumes hook <a> ceo <b>`, `last <file|none>`, then the `gate`, `form`, `step` and `running` lines `write` would use, then `base-commit`, `risk-tier`, `tier-path` and `tier-set` (`unknown` when not recorded).
 - Every argument is at most 4096 characters without a character of category Cc, Cf, Zl or Zp, else `refused: argument is not accepted`, exit 3.
 - Refusals exit 3: `usage`, `argument is not accepted`, `bad slug`, `bad playbook`, `bad base`, `base set`, `no run`, `step running`. Fail loud, exit 1: `broken record`, `link`, `not a regular file`, `hard-linked`, `too large`. In the hooks every error is exit 0 and silent, except the one exit 2 above.
 
@@ -45,4 +47,4 @@ The record and the Handoff hold enums, numbers, a base commit and file names; no
 - Open Gate or form: never taken from the Handoff's `gate` or `form` lines alone; the Lead reads `run-state` and `idea-flow options` and shows the form again.
 
 ## Compatibility
-New Contract, v1; v1.1 and v1.2 are additive. An added event, key or command needs a new version.
+New Contract, v1; v1.1, v1.2 and v1.3 are additive. An added event, key or command needs a new version.
