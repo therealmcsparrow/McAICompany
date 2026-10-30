@@ -52,7 +52,7 @@ test('the pipeline dispatch block follows the canonical order', () => {
 
 test('the pipeline dispatch block carries Context cap: and Review depth: as in v4', () => {
   const b = stepBlock().join('\n');
-  assert.match(b, /^Context cap: <cap> handover <n>/m);
+  assert.match(b, /^Context cap: 95000 handover 85500/m);
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
   assert.match(b, /^Review format: pilot +# code-reviewer and senior-engineer compliance, only when pipeline\.review_format is pilot/m);
   assert.match(b, /^Design skills: .*# only /m);
@@ -81,10 +81,8 @@ test('the order is described as fixed for reading, with no cache claim', () => {
   has(pipeline, 'no cache saving');
 });
 
-test('Setup resolves the context cap once; the floor and the 80% live only here', () => {
-  has(pipeline, '**Context cap (§1.7)**', 'roles.<role>.context_cap', 'max(`<cap>`, 150000)', 'floor(`<cap>` × 0.8)', 'once per run per Role', 'Context cap: <cap> handover <n>');
-  has(pipeline, /Risk tier `high`/);
-  has(pipeline, 'the Role never computes');
+test('Setup fixes the context cap once; it lives only here', () => {
+  has(pipeline, '**Context cap (§1.7)**', 'Context cap: 95000 handover 85500', 'the Role never computes');
 });
 
 test('handover follows the Context cap line for Roles; the Lead keeps its own 150k', () => {
@@ -253,10 +251,10 @@ const planReview = read('skills/pipeline/references/plan-review.md');
 const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
-test('the Contract is v4.1 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v4\.1$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.1');
-  has(contract, 'v4.1 is additive', 'A Role that gets a v4.0 prompt behaves as before');
+test('the Contract is v4.2 and the fixture is stamped with it', () => {
+  assert.match(contract, /^# Contract: dispatch-prompt v4.2$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.2');
+  has(contract, 'v4.1 is additive', 'v4.2 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 
 test('the plan review dispatch block has the three review lines in order and no other path line', () => {
