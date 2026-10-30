@@ -4,8 +4,9 @@
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { normalizePath } from './plan-tasks.mjs';
+import { normalizePath, parsePlan } from './plan-tasks.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
@@ -366,12 +367,128 @@ function arg(args, root) {
   return { code: 0, lines: ['arg: idea', `slug: ${pickFree(realRoot, baseSlug(text), forWhat)}`] };
 }
 
+const GIT_TIMEOUT_MS = 10000;
+const HEX_ID = { 40: /^[0-9a-f]{40}$/, 64: /^[0-9a-f]{64}$/ };
+
+class GitFailed extends Error {}
+
+// The caller's GIT_* variables never reach git; only these fixed keys do.
+function gitEnv() {
+  const env = {};
+  for (const [key, value] of Object.entries(process.env)) if (!/^GIT_/i.test(key)) env[key] = value;
+  env.GIT_NO_REPLACE_OBJECTS = '1';
+  env.GIT_LITERAL_PATHSPECS = '1';
+  return env;
+}
+
+// Runs one git call without a shell. Returns { status, out } for any exit code; a spawn error, timeout or signal throws.
+function runGit(root, env, args) {
+  const r = spawnSync('git', ['--no-replace-objects', ...args], { cwd: root, env, encoding: 'utf8', shell: false, timeout: GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
+  if (r.error) throw new GitFailed(r.error.code === 'ETIMEDOUT' ? 'timeout' : r.error.code === 'ENOENT' ? 'not found' : 'bad output');
+  if (r.status === null) throw new GitFailed('timeout');
+  return { status: r.status, out: r.stdout };
+}
+
+// Exit 0 with one full hex id gives the id, exit 1 gives null; every other code or shape is a failure.
+function revId(root, env, rev, length) {
+  const { status, out } = runGit(root, env, ['rev-parse', '--verify', '-q', '--end-of-options', rev]);
+  if (status === 1) return null;
+  if (status !== 0) throw new GitFailed(`exit ${status}`);
+  const id = out.replace(/\n$/, '');
+  if (!HEX_ID[length].test(id)) throw new GitFailed('bad output');
+  return id;
+}
+
+function baseCommit(lines) {
+  for (const line of lines) {
+    if (line === '## Tasks') return null;
+    const m = /^Base commit: ([0-9a-f]+)$/.exec(line);
+    if (m && (m[1].length === 40 || m[1].length === 64)) return m[1];
+  }
+  return null;
+}
+
+// Task ids in heading order, named as parsePlan names them (a repeated id gets -dup<k>).
+function planOrder(text) {
+  const seen = new Map();
+  const order = [];
+  for (const { kind, level, title } of readPlanLines(text).lines) {
+    if (kind !== 'heading' || level < 2 || level > 4) continue;
+    const m = TASK_HEAD.exec(title.trim());
+    if (!m) continue;
+    const k = seen.get(m[1]) ?? 0;
+    seen.set(m[1], k + 1);
+    order.push(k === 0 ? m[1] : `${m[1]}-dup${k}`);
+  }
+  return order;
+}
+
+function stale(args, root) {
+  const { rest } = parseFor(args, { needFor: false });
+  if (rest.length !== 1) throw new Refused('usage');
+  const norm = normalizePath(rest[0]);
+  if (!norm.ok) throw new Refused(`path ${norm.reason}`);
+  const text = readFile(realRootOf(root), norm.path).toString('utf8');
+  if (classify(text).kind !== 'plan') throw new Refused('not a plan');
+  const base = baseCommit(splitLines(text));
+  if (base === null) throw new Refused('plan has no Base commit line');
+  const env = gitEnv();
+  try {
+    const grafts = runGit(root, env, ['rev-parse', '--git-path', 'info/grafts']);
+    if (grafts.status !== 0) throw new GitFailed(`exit ${grafts.status}`);
+    const graftPath = grafts.out.replace(/\r?\n$/, '');
+    if (graftPath === '' || graftPath.includes('\n')) throw new GitFailed('bad output');
+    let present = true;
+    try {
+      fs.lstatSync(path.resolve(root, graftPath));
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw new GitFailed('bad output');
+      present = false;
+    }
+    if (present) throw new Refused('grafts file present');
+    const format = runGit(root, env, ['rev-parse', '--show-object-format']);
+    if (format.status !== 0) throw new GitFailed(`exit ${format.status}`);
+    const length = { sha1: 40, sha256: 64 }[format.out.trim()];
+    if (length === undefined) throw new GitFailed('bad output');
+    if (base.length !== length) throw new Refused('plan has no Base commit line');
+    if (revId(root, env, `${base}^{commit}`, length) === null) return { code: 2, lines: [`base unknown ${base.slice(0, 12)}`] };
+    const rank = new Map(planOrder(text).map((id, i) => [id, i]));
+    const tasks = parsePlan(text).tasks.slice().sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+    const lines = [];
+    let stales = 0;
+    let changed = 0;
+    for (const task of tasks) {
+      for (const item of task.items) {
+        const p = item.endsWith('/') ? item.slice(0, -1) : item;
+        const atBase = revId(root, env, `${base}:${p}`, length);
+        const atHead = revId(root, env, `HEAD:${p}`, length);
+        if (atBase !== null && atHead === null) {
+          lines.push(`stale ${task.id} ${item} gone`);
+          stales++;
+        } else if (atBase === null && atHead !== null) {
+          lines.push(`stale ${task.id} ${item} exists`);
+          stales++;
+        } else if (atBase !== null && atBase !== atHead) {
+          lines.push(`changed ${task.id} ${item}`);
+          changed++;
+        }
+      }
+    }
+    lines.push(`draft-input stale: ${stales} stale, ${changed} changed`);
+    return { code: stales > 0 ? 2 : 0, lines };
+  } catch (error) {
+    if (error instanceof GitFailed) return { code: 1, lines: [`error: git ${error.message}`] };
+    throw error;
+  }
+}
+
 export function main(args, { root = process.cwd() } = {}) {
   try {
     checkArgs(args);
     if (args[0] === 'take') return take(args.slice(1), root);
     if (args[0] === 'free') return free(args.slice(1), root);
     if (args[0] === 'arg') return arg(args.slice(1), root);
+    if (args[0] === 'stale') return stale(args.slice(1), root);
     throw new Refused('usage');
   } catch (error) {
     if (error instanceof Refused) return { code: 3, lines: [`refused: ${error.message}`] };
