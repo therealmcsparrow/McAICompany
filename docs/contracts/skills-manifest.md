@@ -1,7 +1,7 @@
-# Contract: skills-manifest v2.1
+# Contract: skills-manifest v2.2
 
 Provider: `deps/skills.json` (plugin groups, user scope) `.company/project.md` `## Design skills` (group `design`, project scope, see `design-skills-section` v1.1) and `## Skills` (group `skills`, project scope, see `skills-section` v1). Consumer: `scripts/install-skills.mjs`, called by `aico:setup`, `aico:research`, `aico:feature`, and the Lead's skill picks (`skill-recommendation` v1).
-v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2. v2.1 is additive with `skills-section` v1: group `skills` and `parseSkillsSection`; every v2 manifest is valid v2.1. Fix round 1 (task skill-researcher-scan, unreleased, additive): a project line with `commit` installs that commit.
+v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2. v2.1 is additive with `skills-section` v1: group `skills` and `parseSkillsSection`; every v2 manifest is valid v2.1. Fix round 1 (task skill-researcher-scan, unreleased, additive): a project line with `commit` installs that commit. v2.2 drops `mattpocock-skills` as a plugin dependency; no required plugin skill is left in the research presence check.
 
 ## Group entries
 - `{ "name", "source" }` → `npx -y skills@1.7.4 add <source> -s <name> -g -a claude-code -y` (user scope; the CLI pin is one constant, bumped in a change of its own, agentsec.S1).
@@ -14,7 +14,7 @@ v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2. v2.1 is additiv
 - Exactly one entry: `{ "name": "find-skills", "source": "vercel-labs/skills", "license": "MIT", "vetted": "2026-10-22" }`. It is also in `core`; the commands are deduplicated.
 - S1 approved no other skill: every keyless candidate either ran code, needed an account or browser login, or added nothing over the baseline.
 - Baseline, not in the manifest: the WebSearch/WebFetch tools, plus keyless public endpoints named in `aico:sourcing` (fetched with WebFetch, no skill needed).
-- Plugin skills are never manifest entries: `mattpocock-skills:research` arrives with the plugin dependency; `anthropic-skills:deep-research` is used when the session lists it and is never required.
+- Plugin skills are never manifest entries: `anthropic-skills:deep-research` is used when the session lists it and is never required.
 - **find-skills is guidance only.** Roles that load it follow the Role and `aico:sourcing` rules where they conflict: never run `npx skills find` or `npx skills add` (its install step with `-g -y` is skipped), never rank or trust by install count, and search through WebSearch, WebFetch of `skills.sh/<owner>/<repo>/<skill>` pages and the keyless GitHub repository search. skills.sh `/api/` and `/search` are never fetched (robots.txt disallows them; proj.M10).
 
 ## CLI additions to `install-skills.mjs`
@@ -31,7 +31,7 @@ v1 = 0.8.1 shape. v2 is additive: every v1 manifest is valid v2. v2.1 is additiv
 
 ## Presence check (AC8), run by the Playbook at run start
 1. `node install-skills.mjs <groups> [--project .company/project.md] --dry-run`. No command printed → present.
-2. Plugin skills the run wants (`mattpocock-skills:research`, `anthropic-skills:deep-research`, plugin design skills) → checked against the session's skill list; missing required plugin skill → its `/plugin install <plugin>` line is shown with the commands; optional ones are not shown.
+2. Plugin skills the run wants (`anthropic-skills:deep-research`, plugin design skills) → checked against the session's skill list; missing required plugin skill → its `/plugin install <plugin>` line is shown with the commands; optional ones are not shown.
 3. Anything missing → show the printed commands, one line `The skills CLI sends anonymous telemetry (skill name, timestamp) to skills.sh.`, and ask **one** form: Install (Recommended) / Skip. Install → same command without `--dry-run`, then tell the CEO to `/reload-plugins`. Skip → continue on the baseline, record `degraded: missing <name>, <name>` in the report/Handoff frontmatter. Never install without the form. No Role or Playbook runs `npx skills find`.
 
 ## Error cases

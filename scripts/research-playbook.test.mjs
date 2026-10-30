@@ -56,7 +56,7 @@ test('AC6 quick caps fetches at 10; deep needs 3 independent primary sources', (
   has(skill('sourcing'), 'at most 10 web fetches', 'at least 3 independent primary sources');
 });
 
-test('AC7 research group holds find-skills with license and vetted, core includes it; mattpocock research via plugin', () => {
+test('AC7 research group holds find-skills with license and vetted, core includes it; no mattpocock plugin', () => {
   const m = JSON.parse(read('deps/skills.json'));
   assert.ok(m.core.some((e) => e.include === 'research'));
   assert.ok(Array.isArray(m.research) && m.research.length >= 1);
@@ -65,7 +65,18 @@ test('AC7 research group holds find-skills with license and vetted, core include
     assert.ok(!/api[-_ ]?key/i.test(JSON.stringify(e)));
   }
   assert.ok(m.research.some((e) => e.name === 'find-skills'));
-  has(research, 'mattpocock-skills:research', 'anthropic-skills:deep-research', 'optional, never shown');
+  has(research, 'anthropic-skills:deep-research', 'optional, never shown');
+});
+
+test('aico depends on no mattpocock-skills plugin and no skill or agent names it', () => {
+  const plugin = JSON.parse(read('.claude-plugin/plugin.json'));
+  assert.ok(!plugin.dependencies.some((d) => d.startsWith('mattpocock-skills')));
+  for (const dir of ['skills', 'agents']) {
+    for (const f of readdirSync(join(root, dir), { recursive: true })) {
+      if (!/.(md|sh)$/.test(f)) continue;
+      assert.ok(!read(join(dir, f)).includes('mattpocock'), `${dir}/${f} names mattpocock`);
+    }
+  }
 });
 
 test('AC8 missing skills: dry-run commands, one Install / Skip form, Skip records degraded', () => {

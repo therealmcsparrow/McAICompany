@@ -9,7 +9,7 @@ argument-hint: [core] [research] [go] [react] [tanstack] [auth] [type]
 
 **Help:** argument is exactly `help` or `--help` → read `documentation/commands/setup.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-The plugin dependencies (`superpowers`, `mattpocock-skills`) install automatically with aico. This skill adds the **standalone skills** listed in `${CLAUDE_PLUGIN_ROOT}/deps/skills.json`.
+The plugin dependency `superpowers` installs automatically with aico. This skill adds the **standalone skills** listed in `${CLAUDE_PLUGIN_ROOT}/deps/skills.json`.
 
 1. Groups = the arguments except `type`, or `core` if there are none (and no `type`). Available groups: `core` (also installs `research`), `research`, `go`, `react`, `tanstack`, `auth`. `core` includes `research` (find-skills, used as guidance only; no Role runs `npx skills find` or `add`).
 2. Dry run: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" install-skills <groups> --dry-run`. Commands use a pinned skills CLI version; the CLI sends anonymous telemetry (skill name, timestamp) to skills.sh.

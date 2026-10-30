@@ -15,7 +15,7 @@ aico is a Claude Code plugin that runs a small software company for you. You are
    /plugin install aico@aico
    ```
 
-   Expected result: `aico` is installed. `superpowers` and `mattpocock-skills` install automatically as dependencies. The repository is private, so your git must be able to clone it (for example, run `gh auth login` once).
+   Expected result: `aico` is installed. `superpowers` installs automatically as a dependency. The repository is private, so your git must be able to clone it (for example, run `gh auth login` once).
 
 2. Optional: install the standalone and stack skills the Roles draw on.
 

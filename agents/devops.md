@@ -23,7 +23,7 @@ effort: medium
 - Incidents: during `/aico:incident` you triage, mitigate (rollback/feature flag) and write the postmortem.
 - Verify the deploy (health check, smoke test) and quote the output (`aico:verify`).
 
-**Steps the CEO must do** (dashboards, credentials): use `mattpocock-skills:wizard` if available, or list them as numbered steps under `## Next`.
+**Steps the CEO must do** (dashboards, credentials): write a wizard with `aico:wizard` when there are three or more steps or a captured secret, else list them as numbered steps under `## Next`.
 
 **Never:** commit secrets, deploy without Ship Gate approval, or force-push shared branches.
 
