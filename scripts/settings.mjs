@@ -19,7 +19,8 @@ export const GATES = ['brief', 'plan', 'ship', 'installs'];
 export const LOCKABLE = ['ship', 'security', 'installs'];
 export const CONTEXT_CAP_MIN = 60000;
 export const CONTEXT_CAP_MAX = 1000000;
-export const CONTEXT_CAP_DEFAULT = 150000;
+// The fixed cap every dispatch carries. Stored `context_cap` values are still validated but never read.
+export const CONTEXT_CAP_DEFAULT = 95000;
 export const DEBATES = ['crossfire', 'full_pass'];
 export const REVIEW_FORMATS = ['plain', 'pilot'];
 export const SECOND_REVIEWER_MODELS = ['default', 'opus', 'sonnet', 'haiku', 'fable'];
@@ -467,13 +468,8 @@ function resolveRoles(defaults, user, project) {
     for (const f of ROLE_FIELDS) {
       [entry[f], source[f]] = pick(project.roles?.[role]?.[f], user.roles?.[role]?.[f], base[f]);
     }
-    // Role cap, else the global cap, else the plugin default. `source` says which level supplied it.
-    const own = pick(project.roles?.[role]?.context_cap, user.roles?.[role]?.context_cap, undefined);
-    if (own[0] !== undefined) [entry.context_cap, source.context_cap] = own;
-    else {
-      const [value, from] = pick(project.pipeline?.context_cap, user.pipeline?.context_cap, PIPELINE_DEFAULTS.context_cap);
-      [entry.context_cap, source.context_cap] = [value, from === 'plugin' ? 'plugin' : `pipeline:${from}`];
-    }
+    // Deprecated key: stored values are validated elsewhere and have no effect.
+    [entry.context_cap, source.context_cap] = [CONTEXT_CAP_DEFAULT, 'plugin'];
     roles[role] = { ...entry, source };
   }
   return roles;
@@ -710,7 +706,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     second_reviewer_model: userOnly(user, project, 'second_reviewer_model', ignored),
     second_reviewer_model_effective: null,
     worktrees: userOnly(user, project, 'worktrees', ignored),
-    context_cap: pick(project.pipeline?.context_cap, user.pipeline?.context_cap, PIPELINE_DEFAULTS.context_cap)[0],
+    context_cap: CONTEXT_CAP_DEFAULT,
     review_format: pick(project.pipeline?.review_format, user.pipeline?.review_format, PIPELINE_DEFAULTS.review_format)[0],
     lanes: {}
   };

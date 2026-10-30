@@ -344,7 +344,7 @@ test('save round-trips context_cap and brainstorm keys, refuses bad ones and wri
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   const before = await state();
-  assert.equal(before.plugin.pipeline.context_cap, 150000);
+  assert.equal(before.plugin.pipeline.context_cap, 95000);
   assert.deepEqual(before.plugin.brainstorm, { film_script: false, debate: 'crossfire' });
   assert.deepEqual(before.resolved.brainstorm, { film_script: false, debate: 'crossfire' });
   const bad = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, brainstorm: { debate: 'duel' }, pipeline: { context_cap: 10 } } });
@@ -361,15 +361,18 @@ test('save round-trips context_cap and brainstorm keys, refuses bad ones and wri
   assert.equal(ok.status, 200);
   const { state: after } = await ok.json();
   assert.deepEqual(after.resolved.brainstorm, { film_script: true, debate: 'full_pass' });
-  assert.equal(after.resolved.roles.qa.context_cap, 80000);
-  assert.equal(after.resolved.roles.architect.context_cap, 120000);
+  assert.equal(after.resolved.roles.qa.context_cap, 95000);
+  assert.equal(after.resolved.roles.architect.context_cap, 95000);
+  assert.equal(after.resolved.pipeline.context_cap, 95000);
 });
 
-test('page has the cap, film-script and debate rows built from the existing controls', () => {
+test('page has the fixed cap text, film-script and debate rows built from the existing controls', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const needle of ["['pipeline', 'context_cap']", "['brainstorm', 'film_script']", "['brainstorm', 'debate']", "'crossfire'", "'full_pass'", "'context_cap'"]) {
+  for (const needle of ["['pipeline', 'context_cap']", "['brainstorm', 'film_script']", "['brainstorm', 'debate']", "'crossfire'", "'full_pass'", 'contextCapRow']) {
     assert.ok(html.includes(needle), needle);
   }
+  assert.ok(!html.includes("['roles', role, 'context_cap']"), 'no editable Role cap');
+  assert.ok(!html.includes('innerHTML'), 'fixed text is set with textContent');
   assert.ok(!html.includes('type="range"') && !/<script[^>]*\ssrc=/i.test(html));
 });
 
@@ -406,7 +409,7 @@ test('Reprompt hint equals the Contract text byte for byte and sits between the 
   assert.ok(m, 'Contract hint not found');
   const hintCall = `el('p', { class: 'hint', id: 'reprompt-hint' }, '${m[1]}')`;
   assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
-  const cap = html.indexOf('The context cap is a whole number from 60000 to 1000000.');
+  const cap = html.indexOf('The context cap is fixed.');
   const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
   const hint = html.indexOf(hintCall);
   const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
@@ -716,7 +719,7 @@ function pageState(overrides = {}) {
     plugin, user: { version: 1 }, project: { version: 1 }, hasProject: true,
     language: { user: null, project: null },
     resolved: {
-      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: r, model: 'sonnet', effort: 'medium', context_cap: 150000, source: {} }])),
+      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: r, model: 'sonnet', effort: 'medium', context_cap: 95000, source: {} }])),
       ignored: [], warnings: [], language: { tag: 'en', source: 'default' }, profile: { hasProject: true, fields: {}, options: {} }
     },
     personalities: {
@@ -840,30 +843,30 @@ test('an invisible or lookalike character is named by kind with its code point',
   assert.ok((await errOf('a˸b')).includes('a lookalike of a punctuation mark (U+02F8)'), 'modifier colon');
 });
 
-test('the cap and name inputs never cut input off; an over-long or out-of-range entry gets a field-linked error', async () => {
+test('the name input never cuts input off; an over-long entry gets a field-linked error', async () => {
   const html = pageHtml();
-  assert.ok(!/maxLength: (7|30)\b/.test(html));
+  assert.ok(!/maxLength: (7|30)/.test(html));
   const page = loadPage(pageState());
   await settle();
-  const cap = page.allRoles((n) => n.tagName === 'INPUT' && n.id === 'rf-qa-user-cap')[0];
   const name = page.allRoles((n) => n.tagName === 'INPUT' && n.id === 'rf-qa-user-name')[0];
-  assert.equal(cap.maxLength, undefined);
   assert.equal(name.maxLength, undefined);
-  await type(cap, '10000000');
-  assert.equal(cap.value, '10000000', 'the typed value is kept whole');
-  assert.equal(cap.getAttribute('aria-invalid'), 'true');
-  const capErr = page.allRoles((n) => n.id === cap.getAttribute('aria-describedby'))[0];
-  assert.equal(capErr.textContent, 'Error: Cap is out of range. Use a whole number from 60000 to 1000000.');
-  await type(cap, 'abc');
-  assert.equal(capErr.textContent, 'Error: Cap must be a whole number from 60000 to 1000000.');
-  await type(cap, '120000');
-  assert.equal(cap.getAttribute('aria-invalid'), null);
-  assert.equal(cap.getAttribute('aria-describedby'), null);
   await type(name, 'n'.repeat(35));
   assert.equal(name.value.length, 35);
   assert.equal(page.allRoles((n) => n.id === name.getAttribute('aria-describedby').split(' ')[0])[0].textContent, 'Error: Name is 35 characters. The limit is 30. Remove 5.');
   await type(name, 'Quinn');
   assert.equal(name.getAttribute('aria-invalid'), null);
+});
+
+test('the context cap shows as fixed read-only text with a row header and no cap input', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  assert.equal(page.allRoles((n) => n.tagName === 'INPUT' && /-cap$/.test(n.id ?? '')).length, 0, 'no Role cap input');
+  await page.ids['tab-pipeline'].fire('click');
+  const cell = walk(page.ids['panel-pipeline'], (n) => n.id === 'context-cap-fixed');
+  assert.ok(cell, 'fixed cap cell exists');
+  assert.equal(cell.tagName, 'TD');
+  assert.equal(cell.textContent, '95000 (fixed, cannot be changed)');
+  assert.equal(page.allRoles((n) => n.tagName === 'INPUT' && n.getAttribute('aria-label') === 'Context cap, user').length, 0);
 });
 
 test('a Save with a bad value sends nothing, marks the field and puts the error summary in the status', async () => {
@@ -1107,13 +1110,13 @@ test('layout: every Roles-table control has a visible label that starts with its
   const page = loadPage(namedState());
   await settle();
   const controls = page.allRoles((n) => /^rf-/.test(idOf(n)) && (n.tagName === 'INPUT' || n.tagName === 'SELECT'));
-  assert.equal(controls.length, 2 * 2 * 4, 'two Roles, two levels, four fields');
+  assert.equal(controls.length, 2 * 2 * 3, 'two Roles, two levels, three fields');
   for (const control of controls) {
     assert.equal(control.getAttribute('aria-label'), null, control.id);
     const label = page.allRoles((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id)[0];
     assert.ok(label, control.id);
-    const [, role, level, key] = /^rf-([a-z-]+?)-(user|project)-(name|model|effort|cap)$/.exec(control.id);
-    const word = { name: 'Name', model: 'Model', effort: 'Effort', cap: 'Cap' }[key];
+    const [, role, level, key] = /^rf-([a-z-]+?)-(user|project)-(name|model|effort)$/.exec(control.id);
+    const word = { name: 'Name', model: 'Model', effort: 'Effort' }[key];
     assert.equal(label.children[0].textContent, word, 'the visible text is the field word');
     assert.equal(label.textContent, `${word}, ${role === 'architect' ? 'Ava (architect)' : role}, ${level} level`);
     assert.ok(label.children[1].className.split(' ').includes('vh'), 'the context is visually hidden');
@@ -1385,7 +1388,7 @@ test('Clear on the Pipeline tab also clears Plan check', async () => {
 
 function floorState() {
   const st = pageState();
-  st.resolved.roles.architect = { name: 'architect', model: 'opus', effort: 'medium', context_cap: 150000, floor: 'opus', protected: true, source: { model: 'floor' } };
+  st.resolved.roles.architect = { name: 'architect', model: 'opus', effort: 'medium', context_cap: 95000, floor: 'opus', protected: true, source: { model: 'floor' } };
   st.resolved.roles.qa = { ...st.resolved.roles.qa, floor: 'sonnet', protected: false };
   return st;
 }
@@ -1484,7 +1487,7 @@ test('Parallel cap hint equals the Contract text once and sits after the context
   const m = /exactly: "(Parallel cap: [^"]*)"/.exec(contract);
   assert.ok(m, 'Contract hint not found');
   assert.equal(html.split(`const PARALLEL_CAP_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
-  const cap = html.indexOf('The context cap is a whole number from 60000 to 1000000.');
+  const cap = html.indexOf('The context cap is fixed.');
   const hint = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
   const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
   assert.ok(cap > 0 && cap < hint && hint < h2, `order ${cap} ${hint} ${h2}`);
