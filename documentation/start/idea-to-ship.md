@@ -15,19 +15,19 @@ Type `/aico:idea <idea>` for an idea or `/aico:bug <bug report>` for a bug. Both
 
 ### The route
 
-The route is one table. The letters are the picks you see in the forms. The allowed picks of every form come from the `idea-flow` script, so a form never offers a route that does not fit the step you are on.
+The route is one table. The routes are the picks you see in the forms. The allowed picks of every form come from the `idea-flow` script, so a form never offers a route that does not fit the step you are on.
 
-| Letter | Route | What happens | Changes code? |
-|---|---|---|---|
-| A | Water cooler | Colleagues chat about the idea. Nothing is built. | No |
-| B | Brainstorm | The Roles weigh in over rounds until you say done. | No |
-| C | Research | Researchers look it up online and write one sourced report. | No |
-| D | Spec and tickets | Write the spec, cut tickets, approve them one by one. | No |
-| E | Park the idea | Keep a copy in `.company/ideas/<name>/` and stop. | No |
-| F | Build | Size the approved tickets, then build them. | Yes |
-| G | Park all tickets | Put every ticket on the roadmap and stop. | No |
+| Route | What happens | Changes code? |
+|---|---|---|
+| Water cooler | Colleagues chat about the idea. Nothing is built. | No |
+| Brainstorm | The Roles weigh in over rounds until you say done. | No |
+| Research | Researchers look it up online and write one sourced report. | No |
+| Spec and tickets | Write the spec, cut tickets, approve them one by one. | No |
+| Park the idea | Keep a copy in `.company/ideas/<name>/` and stop. | No |
+| Build | Size the approved tickets, then build them. | Yes |
+| Park all tickets | Put every ticket on the roadmap and stop. | No |
 
-In words: after the grill and the reprompt, the routes form offers A to E. After A you can still pick B, C, D or E. After B you can pick C, D or E. After C the prompt is rewritten once more, then you pick D or E. D ends with a tickets form that offers F, G or E. F builds, and G and E end the flow.
+In words: after the grill and the reprompt, the routes form offers Water cooler, Brainstorm, Research, Spec and tickets, and Park the idea. After Water cooler you can still pick Brainstorm, Research, Spec and tickets, or Park the idea. After Brainstorm you can pick Research, Spec and tickets, or Park the idea. After Research the prompt is rewritten once more, then you pick Spec and tickets or Park the idea. Spec and tickets ends with a tickets form that offers Build, Park all tickets or Park the idea. Build builds, and Park all tickets and Park the idea end the flow.
 
 ### Step 1: Capture
 
@@ -52,17 +52,17 @@ The Lead turns the idea and your grill decisions into one complete prompt: goal,
 
 Expected result: `prompt.md` in a reprompt folder, then the routes form.
 
-### Step 4: Pick a route (A to E)
+### Step 4: Pick a route (Water cooler to Park the idea)
 
-The routes form offers A to E from the table. Each route runs in your session, up to its own end:
+The routes form offers the first five routes from the table. Each route runs in your session, up to its own end:
 
-- **A, Water cooler:** you get an Overheard list. Nothing is built.
-- **B, Brainstorm:** you get the summary and checks; you do not get its separate outcome form, because the flow's forms replace it.
-- **C, Research:** the report ends with a verdict (go, go-with-conditions or no-go) and what to do. The research Playbook's own pick is skipped; the routes form comes next. Web search is used here, with queries built from your idea.
-- **D, Spec and tickets:** go to step 5.
-- **E, Park the idea:** the Lead names the idea with a short slug and copies it to `.company/ideas/<name>/`. The flow ends. The work folder stays.
+- **Water cooler:** you get an Overheard list. Nothing is built.
+- **Brainstorm:** you get the summary and checks; you do not get its separate outcome form, because the flow's forms replace it.
+- **Research:** the report ends with a verdict (go, go-with-conditions or no-go) and what to do. The research Playbook's own pick is skipped; the routes form comes next. Web search is used here, with queries built from your idea.
+- **Spec and tickets:** go to step 5.
+- **Park the idea:** the Lead names the idea with a short slug and copies it to `.company/ideas/<name>/`. The flow ends. The work folder stays.
 
-### Step 5: Spec and tickets (D)
+### Step 5: Spec and tickets
 
 The Lead writes a spec from the prompt, then cuts it into tickets automatically. A ticket is one small task of a plan: id, title, Role, files and dependencies.
 
@@ -75,13 +75,13 @@ For each ticket you get a form with the ticket shown as plain lines: id, title, 
 - **Approve** records your approval for that exact text.
 - **Change** takes your words, a fresh Architect revises only that ticket, and you see only that ticket again. There is no fixed limit: you end the loop by approving.
 
-When every ticket is approved you get the tickets form: F Build, G Park all tickets, E Park the idea.
+When every ticket is approved you get the tickets form: Build, Park all tickets, Park the idea.
 
-### Step 7: Build or park (F, G, E)
+### Step 7: Build or park
 
-- **F, Build.** The Lead first asks again about tickets that are new or changed since your approval, with Approve (recommended), Park or Change. Parked tickets go to `.company/roadmap/`. Then it writes one build plan from the approved tickets only, sizes it (size and risk tier, no form) and starts the build Playbook: `/aico:feature` for an idea, `/aico:fix` for a bug. If every ticket was parked, nothing is built, and you pick G or E instead.
-- **G, Park all tickets.** Every ticket not yet parked becomes one file in `.company/roadmap/`. The flow ends with nothing built.
-- **E, Park the idea.** As in step 4.
+- **Build.** The Lead first asks again about tickets that are new or changed since your approval, with Approve (recommended), Park or Change. Parked tickets go to `.company/roadmap/`. Then it writes one build plan from the approved tickets only, sizes it (size and risk tier, no form) and starts the build Playbook: `/aico:feature` for an idea, `/aico:fix` for a bug. If every ticket was parked, nothing is built, and you pick Park all tickets or Park the idea instead.
+- **Park all tickets.** Every ticket not yet parked becomes one file in `.company/roadmap/`. The flow ends with nothing built.
+- **Park the idea.** As in step 4.
 
 If you stop midway, `/aico:idea resume <slug>` or `/aico:bug resume <slug>` reopens the form you left open.
 
@@ -111,21 +111,23 @@ The script updates the version and changelog and never pushes. For the release r
 You want users to export their data as CSV.
 
 1. `/aico:idea users should export their data as CSV`. The Lead saves your words and shows the grill form. You pick Grilling.
-2. Grilling looks up how exports work in the repo and asks you three questions. You pick the routes form's C, Research. The report says go-with-conditions and ranks "export patient list" first.
-3. The Lead rewrites the prompt with the verdict. You read it, and pick D.
+2. Grilling looks up how exports work in the repo and asks you three questions. You pick Research on the routes form. The report says go-with-conditions and ranks "export patient list" first.
+3. The Lead rewrites the prompt with the verdict. You read it, and pick Spec and tickets.
 4. The spec and three tickets appear. You approve two and change one: you add that the file lists only the admin's clinic. The Architect revises that ticket and you approve it.
-5. At the tickets form you pick F. The Lead sizes the work as M with risk high, because patient data is personal data, and starts `/aico:feature`.
+5. At the tickets form you pick Build. The Lead sizes the work as M with risk high, because patient data is personal data, and starts `/aico:feature`.
 6. Builders run in parallel. The Code Reviewer blocks one finding. One Fix round later the review is clean.
 7. The full suite passes. At the Ship Gate you read the summary, approve, and the Lead opens the PR, waits for CI and merges.
 8. You run `npm run release 1.4.0`.
 
-For a bug, type `/aico:bug <report>` instead. Every step is the same until F, which starts `/aico:fix`.
+For a bug, type `/aico:bug <report>` instead. Every step is the same until Build, which starts `/aico:fix`.
 
 ## Technical details
 
 ### Commands and scripts
 
 All calls go through `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs"`. The route is shared by both commands in `skills/idea/references/routes.md`. Contract `idea-flow` v1, ADR 0048.
+
+The script names each route by a letter: A Water cooler, B Brainstorm, C Research, D Spec and tickets, E Park the idea, F Build, G Park all tickets. The forms show the names.
 
 - `idea-flow start <slug> --kind idea|bug`: creates the record and the work folder. Prints `started`. A record that exists exits 1 with `exists`; the Lead then appends `-2` to `-9` to the slug and retries.
 - `idea-flow options <slug>`: one `option <letter> <route>` line per allowed pick. `pending <step>` or `ended` means no form.
@@ -147,7 +149,7 @@ All calls go through `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs"`. The route i
 ### Where your text goes
 
 - The Claude model you configured reads your idea, bug, grill, ticket and Lead Handoff text.
-- The web search tool gets queries built from your idea only in `/aico:grilling` fact lookups and in research (route C). `/aico:grill-me` never searches the web. `/aico:grill-with-docs` does not either.
+- The web search tool gets queries built from your idea only in `/aico:grilling` fact lookups and in research (the Research route). `/aico:grill-me` never searches the web. `/aico:grill-with-docs` does not either.
 - Everything else is local files: the folders above and `.company/draft-input-arg-*.txt`. aico writes no ignore rule; they are git-ignored only where your product ignores `.company/`.
 - The Lead hand-over hooks read token counts from the local Claude Code transcript and store none of its text.
 - Nothing in the idea flow is pushed or published.
