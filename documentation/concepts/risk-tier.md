@@ -4,13 +4,13 @@
 Every piece of work gets a risk level: low, medium or high. A higher level means deeper testing and more checks. Anything touching logins, payments, personal data, migrations or a Contract is always high. No level ever skips the Ship Gate.
 
 ## How it works
-1. The brief sets the tier. A fix may start low only after `/aico:triage`.
+1. A feature or fix starts at medium, and at low only when a trusted triage record says low (`/aico:triage`).
 2. Every dispatch carries the tier.
 3. A Role may raise the tier, never lower it.
 4. For low-risk feature and fix runs, a short path skips some optional Roles. A path check can raise the run back to high.
 
 ## Technical details
-Every piece of work gets a tier — `low`, `medium` or `high` — set in the brief and confirmed by you at the Brief Gate, then carried in every dispatch. It's forced **high** for anything touching auth, payments, personal data, migrations or a Contract. The tier drives how deep QA tests, how much of the ruleset applies, and how short a route triage may recommend. A Role can raise a tier but never lower it, and no tier ever removes a criterion's single test or skips the Ship Gate's full suite.
+Every piece of work gets a tier — `low`, `medium` or `high` — carried in every dispatch. A feature starts at `medium` unless a trusted triage record says low (tier-path step 2). It's forced **high** for anything touching auth, payments, personal data, migrations or a Contract. The tier drives how deep QA tests, how much of the ruleset applies, and how short a route triage may recommend. A Role can raise a tier but never lower it, and no tier ever removes a criterion's single test or skips the Ship Gate's full suite.
 
 ### Short path for low-risk work
 For `/aico:feature` and `/aico:fix`, the script `tier-set.mjs` (Contract `tier-sets` v1) decides which Roles and lanes a run dispatches. It reads the plugin's data file `company/tier-sets.json`. Nothing you or a report writes can add, drop or rename an entry. Every other Playbook keeps its route.
@@ -33,7 +33,7 @@ Every git call of the script ignores replace refs, so the commit id the run name
 
 The check reads file names, not file content. A risky change inside a plainly named file is not seen by it, so a Role or the Code Reviewer has to raise the tier. When a check raises a short run, the Gate summary shows `add before ship:` and the Roles it names run before the Ship Gate. You can also ask for the skipped Roles at a Gate; the Lead then raises the run to medium.
 
-**At the Brief Gate (feature).** When the run is low, the Lead shows what would be skipped (`skipped by tier:`), and the form offers **Approve, short path (Recommended)**, **Approve, full path**, Change and Stop. The short path starts only after the first: it needs your explicit "Approve, short path". An auto Brief Gate always takes the full path, and a missing or any other answer means full. Every Brief, Plan and Ship Gate summary of a feature or fix run shows the path lines (`path:`, `skipped by tier:`, `add before ship:`).
+**The short-path form (feature).** Feature has no Brief Gate. When the preview prints `path: short (low)`, the Lead shows what would be skipped and asks one form that is not a Gate: **Short path (Recommended)** / **Full path**. The short path starts only after you pick "Short path"; any other case, a form not shown included, means full. Every Ship Gate summary of a feature or fix run shows the path lines (`path:`, `skipped by tier:`, `add before ship:`).
 
 **How a fix gets low.** A fix has no Brief Gate. It starts low only when the bug request ends in the triage line `route fix` with `risk low` and `/aico:triage` recorded that exact request (see [`/aico:triage`](../commands/triage.md)). Otherwise it starts at medium. A low fix takes the short path only from that trusted triage record while `gates.brief` is `ask`, because then you saw the triage form that named the skip; with an auto Brief Gate, or no readable setting, it takes the full path.
 

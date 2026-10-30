@@ -70,7 +70,7 @@ The first three researchers run in parallel inside [`/aico:research`](../command
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
 | **code-reviewer** | opus | high | Rui | Reviews the branch diff for spec match, correctness, standards and Core/Module/Contract rules. Never edits code. [Page](code-reviewer.md) |
-| **fresh-reviewer** | opus | high | Fenna | Reads a plan before the Plan Gate, and at high risk with the second reviewer on a diff, as a newcomer: it never reads the brief or the builders' notes, writes the plan in its own words first, then lists what the text does not make clear. Protected: never runs below opus. Never edits code. See [The fresh reviewer](../concepts/review.md). [Page](fresh-reviewer.md) |
+| **fresh-reviewer** | opus | high | Fenna | Reads a plan before the builders start (feature and fix have no Plan Gate), and at high risk with the second reviewer on a diff, as a newcomer: it never reads the brief or the builders' notes, writes the plan in its own words first, then lists what the text does not make clear. Protected: never runs below opus. Never edits code. See [The fresh reviewer](../concepts/review.md). [Page](fresh-reviewer.md) |
 | **qa** | sonnet | medium | Quinn | Reproduces bugs, turns acceptance criteria into tests, writes contract tests per Module, runs the suite. Edits test files only. [Page](qa.md) |
 | **security** | opus | high | Sam | Audits code, dependencies and configuration for vulnerabilities, auth flaws, secrets and data exposure. Never edits code. [Page](security.md) |
 | **pentester** | opus | high | Pavel | *On demand.* Authorized red team against your own local/staging build — see below. Never edits code. [Page](pentester.md) |

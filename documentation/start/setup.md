@@ -23,6 +23,6 @@ It applies to every Claude Code session on the machine. To undo it, remove the l
 
 - **Why you set it.** This step lets the Lead hand over to itself at about 85500 tokens, before Claude Code's own limit. A plugin cannot set it, so you set it once.
 - **The numbers.** Every Role works under one fixed cap: 95000 tokens, with a hand-over at 85500. The setting `CLAUDE_CODE_AUTO_COMPACT_WINDOW` is `"98500"`.
-- **The hooks.** A PostToolUse hook reads token counts from the local transcript and stores none of its text. At 85500 it tells the Lead to write `lead-handoff-<n>.md` at the next clean point (no Step running). A SessionStart hook for source `compact` injects the newest Lead Handoff after compaction. Contract `lead-handoff` v1, ADR 0049.
+- **The hooks.** A PreCompact hook writes the Lead Handoff `lead-handoff-<n>.md` from the run records; it reads token counts from the local transcript and stores none of its text. A SessionStart hook with source `compact` injects the newest Lead Handoff after compaction. There is no PostToolUse hook. Contract `lead-handoff` v1.1, ADR 0049.
 - **Where the text goes.** The Lead Handoff is a local file. The Claude model you configured reads it, like the rest of the Lead's work. Nothing is pushed or published. See [Where your words go](../concepts/where-your-words-go.md).
 - **More.** [Lead hand-over](../concepts/lead-handover.md) and [Context budget](../concepts/context-budget.md).

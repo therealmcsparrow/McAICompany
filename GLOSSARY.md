@@ -35,7 +35,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After the Fix-round limit (2 by default, 0–5 in settings) on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded, never looped.
 
-**Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate. Nothing enters Core without that approval.
+**Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate, or, in feature and fix, which have no Plan Gate, at the Ship Gate. Nothing enters Core without that approval. The approved Core list enters `.company/project.md` after Ship Gate approval in feature and fix; until then reviewers judge Core against the list in the Architect's Handoff.
 
 **Module** — a self-contained, pluggable unit of functionality outside Core. A Module talks to Core and to other Modules only through Contracts, never through their internals.
 

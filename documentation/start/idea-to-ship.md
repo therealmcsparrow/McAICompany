@@ -27,7 +27,7 @@ The route is one table. The routes are the picks you see in the forms. The allow
 | Build | Size the approved tickets, then build them. | Yes |
 | Park all tickets | Put every ticket on the roadmap and stop. | No |
 
-In words: after the grill and the reprompt, the routes form offers Water cooler, Brainstorm, Research, Spec and tickets, and Park the idea. After Water cooler you can still pick Brainstorm, Research, Spec and tickets, or Park the idea. After Brainstorm you can pick Research, Spec and tickets, or Park the idea. After Research the prompt is rewritten once more, then you pick Spec and tickets or Park the idea. Spec and tickets ends with a tickets form that offers Build, Park all tickets or Park the idea. Spec and tickets and Build exist only in a software company. In any other company type the routes are Water cooler, Brainstorm, Research and Park the idea: after Water cooler you can still pick Brainstorm, Research or Park the idea, after Brainstorm Research or Park the idea, and after Research (and its rewritten prompt) only Park the idea. Build builds, and Park all tickets and Park the idea end the flow.
+In words: after the grill and the reprompt, the routes form offers Water cooler, Brainstorm, Research, Spec and tickets, and Park the idea. After Water cooler you can still pick Brainstorm, Research, Spec and tickets, or Park the idea. After Brainstorm you can pick Research, Spec and tickets, or Park the idea. After Research the prompt is rewritten once more, then you pick Spec and tickets or Park the idea. Spec and tickets ends with a tickets form that offers Build, Park all tickets or Park the idea. Spec and tickets and Build exist only in a software company. In any other company type the routes are Water cooler, Brainstorm, Research and Park the idea: after Water cooler you can still pick Brainstorm, Research or Park the idea, after Brainstorm Research or Park the idea, and after Research (and its rewritten prompt) the form is Park the idea / Stop. Stop ends the flow and parks nothing. Build builds, and Park all tickets and Park the idea end the flow.
 
 ### Step 1: Capture
 
@@ -61,6 +61,7 @@ The routes form offers the first five routes from the table (outside a software 
 - **Research:** the report ends with a verdict (go, go-with-conditions or no-go) and what to do. The research Playbook's own pick is skipped; the routes form comes next. Web search is used here, with queries built from your idea.
 - **Spec and tickets** (software company only): go to step 5.
 - **Park the idea:** the Lead names the idea with a short slug and copies it to `.company/ideas/<name>/`. The flow ends. The work folder stays.
+- **Stop** (outside a software company, after Research, as Park the idea / Stop): the flow ends and nothing is parked.
 
 ### Step 5: Spec and tickets
 
@@ -92,7 +93,7 @@ The build run has no Brief Gate and no Plan Gate. The ticket you approved is the
 2. **Review.** The Code Reviewer, QA and the optional lanes (security, compliance, legal, and for UI the hands-on and accessibility testers) run in parallel. Blocking findings go back to the builder; the limit is 2 Fix rounds by default, then the Lead escalates to you.
 3. **Full suite.** Once the last review is clean, the Lead runs the whole test suite once.
 4. **Docs.** The Writer adds user docs and release notes.
-5. **→ Ship Gate.** You see one summary: what changed, test results, open nits, skipped lanes and a cost line. It also holds what the two removed Gates used to show: Core and Contract changes, the parallel plan, the plan check, spike results, and the approve lines of your tickets, with `tickets changed since approval`. You Approve, Change or Stop.
+5. **→ Ship Gate.** You see one summary: what changed, test results, open nits, skipped lanes and a cost line. It also holds what the two removed Gates used to show: Core and Contract changes, the parallel plan, the plan check, spike results, and the applied approve lines of your tickets from `ticket-approval read`, each shown with a `> ` prefix, with `tickets changed since approval`. You Approve, Change or Stop.
 6. **PR, CI, merge.** After approval the Lead pushes the run branch `aico/<slug>`, opens a pull request, waits for CI to pass and merges only when it is green. With the Ship Gate set to `auto`, the Lead opens the PR and stops; you merge it.
 
 When something needs your decision during the build, such as a `needs-ceo` Handoff, you get one form at that moment. It is not a Gate. A refusal from a script is never bypassed.
@@ -148,7 +149,7 @@ The script gives every pick in a form a letter, and the forms show the route nam
 ### Where your text goes
 
 - The Claude model you configured reads your idea, bug, grill, ticket and Lead Handoff text.
-- The web search tool gets queries built from your idea only in `/aico:grilling` fact lookups and in research (the Research route). `/aico:grill-me` never searches the web. `/aico:grill-with-docs` does not either.
+- The web search tools (WebSearch, WebFetch) run in grilling lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient. `/aico:grill-me` never searches the web. `/aico:grill-with-docs` does not either.
 - Everything else is local files: the folders above and `.company/draft-input-arg-*.txt`. aico writes no ignore rule; they are git-ignored only where your product ignores `.company/`.
 - The Lead hand-over hooks read token counts from the local Claude Code transcript and store none of its text.
 - Nothing in the idea flow is pushed or published.
