@@ -116,6 +116,11 @@ test('ending prints the path and the next commands; the CEO starts them', () => 
     'only the CEO starts', 'prints the path');
 });
 
+test('R-14 no git-ignored claim: files stay in .company/work/<slug>/ and aico never commits them', () => {
+  assert.ok(!/git-ignored/i.test(text));
+  has('stay in `.company/work/<slug>/`; aico never commits them (grill-file v1 Personal data)');
+});
+
 test('code references use the plugin root variable and no placeholder', () => {
   assert.ok(!/<plugin root>/i.test(text));
   for (const m of text.matchAll(/scripts\/[a-z-]+\.mjs/g)) {

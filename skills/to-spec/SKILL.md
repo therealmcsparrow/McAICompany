@@ -59,4 +59,4 @@ End by printing the path `.company/work/<slug>/spec.md` (prints the path first),
 - ready → the next commands: `/aico:to-tickets .company/work/<slug>/spec.md` (cut tickets) and `/aico:feature .company/work/<slug>/spec.md` (build; it runs its own Brief Gate and Plan Gate and writes the shipped spec). The draft is not approved by this run.
 - not ready → the ERROR lines, and that `/aico:to-spec .company/work/<slug>/spec.md` can be rerun on it.
 The next command runs only when the CEO types it (only the CEO starts it). Start nothing yourself; never use the Skill tool for it.
-Nothing is committed: the draft and the work Handoffs stay in the git-ignored `.company/work/`. Write nothing to `.company/lessons.md`.
+Nothing is committed: the draft and the work Handoffs stay in `.company/work/<slug>/`; aico never commits them (grill-file v1 Personal data). Write nothing to `.company/lessons.md`.
