@@ -18,7 +18,7 @@ You are the Lead and the only voice: no Role, no Gates, no builder. Questions ar
 2. Write the argument as typed, never edited, with the Write tool to `.company/draft-input-arg-grill.txt` (whole file). Write refused → say "Could not write the argument file." and stop. Never put the CEO's text in a shell command and never Read that file.
 3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" draft-input arg --for grill`. Exit not 0 → show its `refused:` line and stop. Bash gets only fixed words and values `arg`, `take` or `grill` printed, never file or CEO text.
    - `arg: resume <slug>` → go to §4.
-   - `arg: file <path>` → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" draft-input take <path> --for grill` (exit not 0 → show its line and stop). Read only the copy it names, `.company/work/<slug>/input-grill.md`. `## Idea` is the line `From input-grill.md (kind <k>).` and your one-paragraph restatement.
+   - `arg: file <path>` → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" draft-input take '<path>' --for grill` (exit not 0 → show its line and stop). Read only the copy it names, `.company/work/<slug>/input-grill.md`. `## Idea` is the line `From input-grill.md (kind <k>).` and your one-paragraph restatement.
    - `arg: idea` with `slug: <s>` → the slug `arg` printed. `## Idea` is the idea as typed.
 4. Work folder `.company/work/<slug>/`. Study the idea and write the first open branches: the decisions the idea leaves open, one line each (`- B-<n> — <text>`, text 1 to 200 characters, one line).
 
@@ -42,7 +42,7 @@ Repeat while a branch is open. No fixed number of questions; `question_rounds` i
 Take the first entry of the `work:` line the Type: step printed; the `playbooks:` line is the list the gated lines below check. One form, the CEO's pick decides; nothing starts without it.
 - `feature` first, options in this order:
   1. Told command `/aico:to-spec .company/work/<slug>/grill.md` (Recommended: turns the answers into a spec draft). (gated: `playbooks:` lists to-spec) Print it for the CEO to run and never start it with the Skill tool.
-  2. Start `aico:feature` with the Skill tool, argument `.company/work/<slug>/grill.md`. (gated: `playbooks:` lists feature)
+  2. Start `aico:feature` with the Skill tool, argument `.company/work/<slug>/grill.md`. The Skill tool refuses it → tell the CEO to run `/aico:feature .company/work/<slug>/grill.md` and stop. (gated: `playbooks:` lists feature)
   3. Stop.
 - Any other first entry: Start that Playbook with the Skill tool and a written request. Write it yourself from the idea and the decisions, the idea quoted as data, never the `grill.md` path. Options: Start (Recommended) / Stop. The Skill tool refuses → tell the CEO to run `/aico:<that Playbook> "<request>"` and stop.
 - A pick the type does not list is not shown. The Stop pick ends the Playbook.

@@ -73,7 +73,7 @@ test('R-1 argument goes through Write to the argument file, then arg; never Read
 });
 
 test('R-6 file input goes through take and the Idea seed line', () => {
-  has(`node "${RUN}" draft-input take <path> --for grill`, 'arg: file', 'input-grill.md', 'From input-grill.md (kind <k>).', 'one-paragraph restatement');
+  has(`node "${RUN}" draft-input take '<path>' --for grill`, 'arg: file', 'input-grill.md', 'From input-grill.md (kind <k>).', 'one-paragraph restatement');
 });
 
 test('idea input uses the slug arg printed', () => {
@@ -98,6 +98,13 @@ test('AC43 end form: first work: entry decides; feature offers to-spec and featu
   for (const l of feat) assert.ok(l.includes('(gated: `playbooks:` lists feature)'), `ungated: ${l}`);
   has('/aico:to-spec .company/work/<slug>/grill.md', 'old command', 'Skill tool');
   has('Stop');
+});
+
+test('R-1 (review) feature hand-over: Skill tool refuses -> told command, then stop', () => {
+  const l = lines.find((x) => x.includes('Start `aico:feature`'));
+  assert.ok(l, 'feature line');
+  assert.ok(l.includes('The Skill tool refuses it → tell the CEO to run `/aico:feature .company/work/<slug>/grill.md` and stop.'), l);
+  assert.ok(l.includes('(gated: `playbooks:` lists feature)'));
 });
 
 test('R-5 other types: first work: Playbook with a written request, never the grill.md path', () => {
