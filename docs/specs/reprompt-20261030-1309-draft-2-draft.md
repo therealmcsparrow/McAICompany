@@ -1,7 +1,7 @@
 ---
 slug: reprompt-20261030-1309-draft-2-draft
-version: pending
-shipped: pending
+version: 0.23.0
+shipped: 2026-10-30
 ---
 ## Problem
 The CEO has no guided path from a rough idea or a bug report to a build. He has to know which command comes next, long runs lose quality once a context grows past about 100k tokens, and feature and fix stop him at a Brief Gate and a Plan Gate he no longer wants. A CEO who works by keyboard and screen reader must be able to answer every question as a plain form. The documentation is a few long flat pages that are hard to scan.
