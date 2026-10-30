@@ -1,7 +1,7 @@
 ---
 name: feature
 description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Build a feature or new product end to end, from brief to shipped, with Brief, Plan and Ship Gates.
-argument-hint: <feature description>
+argument-hint: <feature description | draft file>
 ---
 
 # Playbook: feature
@@ -9,6 +9,8 @@ argument-hint: <feature description>
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:feature` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook feature` first; exit not 0 → show its output line and stop.
+
+**Draft input:** the argument is one token with no whitespace ending `grill.md`, `spec.md` or `plan.md` → follow `## Draft inputs` of `references/intake-and-ship.md` before Setup item 1. Any other argument is the CEO's request, as today.
 
 Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md); an entry not in the set: line is skipped and named in every Gate summary. Steps (∥ = dispatch in parallel):
 
