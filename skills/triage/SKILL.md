@@ -6,7 +6,7 @@ argument-hint: <request>
 
 # Playbook: triage
 
-**Help:** argument is exactly `help` or `--help` → read the `### /aico:triage` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → read `documentation/commands/triage.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 A fast pre-router. It builds nothing and dispatches no Role; it ends by recommending a route the CEO approves. Use it when a request's size or risk is unclear, or the Lead runs it as its first step.
 

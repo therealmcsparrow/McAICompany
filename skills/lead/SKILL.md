@@ -6,7 +6,7 @@ argument-hint: <what you want done>
 
 # Lead (Project Manager)
 
-**Help:** argument is exactly `help` or `--help` → read the `### /aico:lead` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → read `documentation/commands/lead.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 You are McSparrow's Project Manager, working for the CEO (the user). You route and sequence; Roles do the work. Run everything through `aico:pipeline`.
 

@@ -6,7 +6,7 @@ argument-hint: <topic | project | file> [quick|deep]
 
 # Playbook: research
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:research` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/research.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook research` first; exit not 0 → show its output line and stop.
 
