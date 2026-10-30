@@ -114,6 +114,10 @@ test("no other skill names tier-set (AC14)", () => {
   }
 });
 
+test("skills/pipeline/references/lead-handover.md names tier-set, inside the allowed pipeline dir (AC14)", () => {
+  assert.ok(read("skills/pipeline/references/lead-handover.md").includes("tier-set"));
+});
+
 test("skill files stay within the size limits", () => {
   for (const n of ["pipeline", "feature", "fix", "triage", "feedback"]) {
     const t = skill(n);
