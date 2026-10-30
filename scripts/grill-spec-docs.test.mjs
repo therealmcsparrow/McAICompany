@@ -69,9 +69,13 @@ test('company types table lists the new commands', () => {
 });
 
 test('changelog Unreleased mentions the commands', () => {
-  const unreleased = read('CHANGELOG.md').split('## [Unreleased]')[1].split('\n## [')[0];
-  for (const n of NAMES) assert.ok(unreleased.includes(`/aico:${n}`), n);
-  assert.ok(!/\r/.test(unreleased));
+  // The release empties Unreleased into the newest version section, so accept either.
+  const sections = read('CHANGELOG.md').split('\n## [').slice(1);
+  const unreleased = sections.find(s => s.startsWith('Unreleased]')) ?? '';
+  const newest = sections.find(s => !s.startsWith('Unreleased]')) ?? '';
+  const section = unreleased.replace(/^Unreleased\]/, '').trim() ? unreleased : newest;
+  for (const n of NAMES) assert.ok(section.includes(`/aico:${n}`), n);
+  assert.ok(!/\r/.test(section));
 });
 
 test('spec.md mentions the drafts', () => {
