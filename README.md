@@ -17,7 +17,7 @@ A Claude Code plugin that runs a small software company. You are the **CEO**. A 
    /plugin marketplace add therealmcsparrow/McAICompany
    /plugin install aico@aico
    ```
-   `superpowers` and `mattpocock-skills` install automatically as plugin dependencies.
+   `superpowers` installs automatically as a plugin dependency.
 2. Optional: install the standalone and stack skills the Roles use:
    ```
    /aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
@@ -162,3 +162,7 @@ npm test        # checker and installer tests
 npm run check   # frontmatter, broken aico: refs; warns when agents > 50 or skills > 125 lines
 ```
 Pressure-test evidence: `tests/pressure/RESULTS.md`.
+
+## Credits
+
+`aico:tdd`, `aico:debugging` and `aico:wizard` adapt ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT, © 2026 Matt Pocock).

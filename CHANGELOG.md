@@ -4,6 +4,12 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **`aico:wizard`.** DevOps hands the CEO manual steps (dashboards, credentials, CI secrets) as a bash wizard built from `skills/wizard/template.sh`: one stage at a time, hidden secret entry, `.env` upserts, `gh secret` writes, a confirm before anything irreversible.
+
+### Changed
+- **No `mattpocock-skills` dependency.** aico no longer installs or names the `mattpocock-skills` plugin; only `superpowers` stays a dependency. `aico:tdd` now carries what a good test is, implementation-coupled tests and mocking at system boundaries; `aico:debugging` carries the full loop-first diagnosis (feedback loop, minimise, ranked falsifiable hypotheses, tagged instrumentation, regression test, cleanup); `aico:sourcing` traces every claim to the source that owns it. The research presence check no longer asks for a plugin skill. Contract `skills-manifest` v2.2.
+
 ## [0.23.0] - 2026-10-30
 
 Rollback: node scripts/stable.mjs 0.22.0

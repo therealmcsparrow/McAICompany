@@ -9,6 +9,7 @@ Research Roles read the web; they never act on it. Contract: `docs/contracts/res
 
 ## Source tiers
 Every source gets one tier in `## Sources`: `primary` (law text, official docs, the vendor or repo itself, a registry record, a filing), `secondary` (news, analyst or standards-body summary), `blog` (opinion, tutorial, forum, vendor marketing), `ai` (an AI-written summary or answer).
+- Follow every claim back to the source that owns it (the spec, the vendor's docs, the code), not a write-up of it.
 - A claim without a source ends with `(unverified)` and may not back a verdict.
 - A blocker never rests only on `blog` or `ai`.
 - `quick`: at most 10 web fetches per researcher (count WebFetch calls; write the number as `fetches:`). Out of budget → stop, mark what is left `(unverified)`.
