@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 // Text pins for the three grill Playbooks that share skills/grilling/references/grill-loop.md,
 // plus a run of scripts/grill.mjs over a file shaped as each Playbook writes it.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const BASE = '62ac88cd2e72904a0fd424039e8f35a9e42d1985';
 const NAMES = ['grilling', 'grill-me', 'grill-with-docs'];
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const skills = Object.fromEntries(NAMES.map((n) => [n, read(`skills/${n}/SKILL.md`)]));
@@ -117,19 +117,13 @@ test('every Playbook names the loop file and the loop file names the three answe
   for (const m of ['lookup', 'ask-all', 'docs']) assert.ok(loop.includes(`\`${m}\``), `mode ${m}`);
 });
 
-test('aico:grill SKILL.md is byte-identical to the base commit', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'grill-base-'));
-  try {
-    const cfg = join(dir, 'gitconfig');
-    writeFileSync(cfg, '');
-    const out = execFileSync('git', ['show', `${BASE}:skills/grill/SKILL.md`], {
-      cwd: root, env: { ...process.env, GIT_CONFIG_GLOBAL: cfg, GIT_CONFIG_NOSYSTEM: '1' }, maxBuffer: 1 << 20,
-    });
-    // Only the Help line's docs path moved (docs by topic); everything else is the base text.
-    const now = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8')
-      .replace('read `documentation/commands/grill.md`', 'read the `### /aico:grill` entry of `documentation/commands.md`');
-    assert.ok(Buffer.compare(out, Buffer.from(now)) === 0);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+const GRILL_SKILL_SHA256 = '65ce71310063d7a138732ccd91c3179cd3cf553304d78b29833a55e4964d4f54';
+
+test('aico:grill SKILL.md matches the pinned hash apart from the Help-line path', () => {
+  const now = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8')
+    .replace(/\r\n/g, '\n')
+    .replace('read `documentation/commands/grill.md`', 'read the `### /aico:grill` entry of `documentation/commands.md`');
+  assert.equal(createHash('sha256').update(now).digest('hex'), GRILL_SKILL_SHA256);
 });
 
 const GRILL = (extra) => `---
