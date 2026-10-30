@@ -24,7 +24,7 @@ After a run you can print a receipt: what the run's records show, nothing more. 
 
 ### Residual risks
 These are limits of the checks, stated plainly.
-- **The plan scan.** A Role that edits `Decided:` lines into the plan, or appends a `begin` record and rewrites the plan into a clean one, passes the scan. Read the plan at the Plan Gate.
+- **The plan scan.** A Role that edits `Decided:` lines into the plan, or appends a `begin` record and rewrites the plan into a clean one, passes the scan. Read the plan at the Plan Gate, or, in feature and fix, which have no Plan Gate, in the Ship Gate summary.
 - **User settings.** A Role with Bash can write your user `settings.json`. "Block wins" guards against project files only, the same limit as `pipeline.short_path`.
 - **Git environment.** The judging scripts drop inherited `GIT_*` variables. A Role that can write `.claude/settings*.json` or a shell profile can still add hooks or aliases that change later commands.
 - **Crafted binary files.** A file on the binary type list whose leading bytes are both a media header and code passes as `binary file changed`. These signatures are also a valid JavaScript start: `true` (ttf), `GIF8` (gif), `ID3` (mp3), `OggS` (ogg), `fLaC` (flac), `OTTO` (otf), `wOFF` (woff), `wOF2` (woff2), `RIFF` (webp, wav), and any 4 bytes plus `ftyp` (mp4, m4a, mov). CommonJS `require` runs such a file whatever its extension, so reviewers block any change that loads such a file as code, by any route.

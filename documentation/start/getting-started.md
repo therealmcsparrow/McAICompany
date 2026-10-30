@@ -96,7 +96,7 @@ Run `/aico:settings` to open the settings page in your browser. There you can:
 - see the max context, fixed at 95000 with a hand-over at 85500
 - pick the brainstorm debate style, or turn on the film script
 - choose which review lanes run
-- let the Brief or Plan Gate continue on its own
+- let a Brief or Plan Gate continue on its own (feature and fix have neither)
 
 Save a change for every project (your user default) or only for the current one. Nothing changes until you save something. See [Settings and locks](../concepts/settings-and-locks.md).
 

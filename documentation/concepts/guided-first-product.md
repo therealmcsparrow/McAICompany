@@ -15,4 +15,4 @@ When `.company/project.md` is missing and your request starts a product, the Lea
 2. **Product.** Product type (web, desktop or game), engagement (own or client), client, audience and goal.
 3. **Voice and terms.** Languages, voice (clear, bold or technical), license, jurisdiction and up to 5 personas.
 
-The stack is not asked; it is detected. `scripts/project-init.mjs write` checks each answer (one line of 1 to 200 characters, no control characters) and creates `.company/project.md`. It never replaces an existing profile, and a refused answer is named by its key and asked again. Answers are stored as text and never run. The run then goes on as usual and stops at the Brief Gate.
+The stack is not asked; it is detected. `scripts/project-init.mjs write` checks each answer (one line of 1 to 200 characters, no control characters) and creates `.company/project.md`. It never replaces an existing profile, and a refused answer is named by its key and asked again. Answers are stored as text and never run. The run then goes on as usual and stops at the first Gate of the Playbook it picked. Feature and fix have no Brief Gate; they stop only at the Ship Gate.

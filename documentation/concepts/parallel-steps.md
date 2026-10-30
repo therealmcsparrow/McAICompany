@@ -27,7 +27,7 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 
 `files:` lists every file the task creates or edits, as repo-relative paths. A directory counts only when the task owns everything under it. Globs, absolute paths and `..` are not valid, and a path part that ends in `.` is refused (Windows). `depends-on:` is `none` or task IDs. A dependency on a later task is allowed: tasks run in dependency order, and only a real cycle (a dependency on the task itself included) makes a task run alone. `parallel:` is `yes` or `no`.
 
-**Alone.** A task runs alone, and the Plan Gate shows one warning line with the reason, when it has no `parallel: yes`, has `parallel: no`, or has a missing or invalid field (for example an unknown Role, an invalid `files:` list, an unknown dependency, a cycle or a repeated field). Only a task with `parallel: yes` and valid fields can run beside others.
+**Alone.** A task runs alone, and the plan shows one warning line with the reason (in the Ship Gate summary for feature and fix, which have no Plan Gate), when it has no `parallel: yes`, has `parallel: no`, or has a missing or invalid field (for example an unknown Role, an invalid `files:` list, an unknown dependency, a cycle or a repeated field). Only a task with `parallel: yes` and valid fields can run beside others.
 
 **Overlap.** Two tasks that share a path (compared without regard to case or `\` versus `/`, a directory covering the paths under it) never run at the same time. They run in the order the script visits the tasks: plan order, except that a task moves back after the tasks it depends on.
 
@@ -35,7 +35,7 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 
 **Sequential.** Setting Dispatch (`pipeline.dispatch`) to `sequential` overrides the cap with 1. It is the emergency switch: one Step at a time.
 
-**At the Plan Gate.** The Lead shows a **Parallel plan** block under the summary: a first line with the task, marked and alone counts and the cap, one `wave` line per wave (a task that waits shows why: `depends`, `overlap`, `alone`, `barrier` or `cap`), and one `warning` line per alone task. The block never blocks the Gate.
+**In the summary.** At a Plan Gate, or in the Ship Gate summary of feature and fix (which have no Plan Gate), the Lead shows a **Parallel plan** block: a first line with the task, marked and alone counts and the cap, one `wave` line per wave (a task that waits shows why: `depends`, `overlap`, `alone`, `barrier` or `cap`), and one `warning` line per alone task. The block never blocks the Gate.
 
 **Out-of-list paths.** Each plan-task Step gets `Task:` and `Files:` lines. Before the commit, the Lead sorts the Step's changed paths. A path outside `Files:` is committed and named to you as extra. A path that belongs to another running task is not committed; the Code Reviewer records it as a `[spec]` blocker. The count of extra plus sibling paths goes to the run's `par` ledger line.
 

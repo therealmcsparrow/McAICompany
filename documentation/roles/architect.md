@@ -7,7 +7,7 @@ Ava, the architect (CTO), designs *how* a product is built: the Core list, the M
 1. The Lead dispatches Ava after the brief is approved.
 2. She designs the Core, the Modules and the Contracts between them.
 3. She writes ADRs and Contract definitions, and nothing else on disk but her Handoff.
-4. The plan she shapes goes to the **→ Plan Gate** for your approval.
+4. In a Playbook with a Plan Gate, the plan she shapes goes to the **→ Plan Gate** for your approval. Feature and fix have no Plan Gate: her Core and Contract changes are listed in the Ship Gate summary.
 
 ## Technical details
 - Agent file: `agents/architect.md`

@@ -16,7 +16,7 @@
 4. Runs the route, pausing at each Gate.
 
 ## Technical details
-**No product profile yet.** When `.company/project.md` is missing and your request starts a product, the Lead runs the [guided first product](../concepts/guided-first-product.md): three forms, then the Brief Gate.
+**No product profile yet.** When `.company/project.md` is missing and your request starts a product, the Lead runs the [guided first product](../concepts/guided-first-product.md): three forms, then the first Gate of the route (feature and fix have only the Ship Gate).
 
 **You get.** Whatever the chosen route produces, plus a short run summary at the end.
 

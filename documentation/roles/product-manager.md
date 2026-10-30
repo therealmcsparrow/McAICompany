@@ -6,7 +6,7 @@ Nora, the product manager, turns your request into a brief: the problem, who it 
 ## How it works
 1. The Lead dispatches the product-manager with your request.
 2. She writes the brief: problem, users, scope, acceptance criteria.
-3. She writes one Handoff. **→ Brief Gate**: you approve the brief before anything is built.
+3. She writes one Handoff. **→ Brief Gate** where the Playbook has one: you approve the brief before anything is built. Feature and fix have no Brief Gate.
 4. In [`/aico:research`](../commands/research.md) she also writes the report from the researchers' Handoffs.
 
 ## Technical details
