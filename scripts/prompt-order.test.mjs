@@ -278,7 +278,7 @@ test('plan-review.md runs lines before every fresh-reviewer dispatch and keeps t
 });
 
 test('review-loop.md holds the Lead flow of the record, the blocking: rule and the effective second reviewer model', () => {
-  has(reviewLoop, 'second_reviewer_model_effective', 'AC5', 'Settings:', 'attempt', 'retry', 'not run', 'mark', 'churn', 'churn: unknown', 'gate <slug> --base');
+  has(reviewLoop, 'second_reviewer_model_effective', 'AC5', 'Settings:', 'attempt', 'retry', 'not run', 'mark', 'churn', 'churn: unknown', "gate '<slug>' --base");
   has(reviewLoop, 'a `blocking:` line is a Blocking Ship Gate line', 're-run that lane or block the ship');
   has(reviewLoop, 'a refused `mark` stops', 'asks the CEO', 'never a third reviewer');
   assert.doesNotMatch(reviewLoop, /\.\.\.HEAD/);
