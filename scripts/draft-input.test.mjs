@@ -599,3 +599,64 @@ describe('command line', () => {
     assert.ok(!fs.existsSync(path.join(root, '.company')));
   });
 });
+
+describe('--for fix (a flow build plan)', () => {
+  const PLAN = '# Build plan\n\n## Tasks\n\n### T1 First ticket\nfiles: a.mjs\n';
+  const BUILD = '.company/work/flow-build/plan.md';
+  const ARG = '.company/draft-input-arg-fix.txt';
+  const argFix = (root, text) => {
+    put(root, ARG, text);
+    return run(root, 'arg', '--for', 'fix');
+  };
+
+  test('arg --for fix names a path token as a file and anything else as the bug report', () => {
+    const root = fixture();
+    assert.deepEqual(argFix(root, `${BUILD}\n`).lines, [`arg: file ${BUILD}`]);
+    assert.deepEqual(argFix(root, 'The login button crashes').lines, ['arg: idea']);
+    assert.ok(!fs.existsSync(path.join(root, ARG)));
+  });
+
+  test('take --for fix copies only the exact build plan path and Roles read the copy', () => {
+    const root = fixture({ [BUILD]: PLAN });
+    const r = run(root, 'take', BUILD, '--for', 'fix');
+    assert.equal(r.code, 0);
+    assert.equal(r.lines[0], 'slug: flow-build-draft');
+    assert.equal(r.lines[1], 'input: .company/work/flow-build-draft/input-fix.md');
+    assert.equal(fs.readFileSync(path.join(root, '.company/work/flow-build-draft/input-fix.md'), 'utf8'), PLAN);
+    assert.equal(run(root, 'take', BUILD, '--for', 'fix').lines[0], 'slug: flow-build-draft-2');
+  });
+
+  test('take --for fix refuses every other path', () => {
+    const root = fixture({
+      [BUILD]: PLAN, '.company/work/flow/plan.md': PLAN, '.company/work/flow-build/grill.md': PLAN,
+      '.company/work/flow-build/sub/plan.md': PLAN, 'docs/plan.md': PLAN, '.company/work/Flow-build/plan.md': PLAN
+    });
+    const before = tree(root);
+    for (const p of ['.company/work/flow/plan.md', '.company/work/flow-build/grill.md', '.company/work/flow-build/sub/plan.md', 'docs/plan.md', '.company/work/Flow-build/plan.md']) {
+      refused(run(root, 'take', p, '--for', 'fix'), 'not a build plan');
+    }
+    assert.deepEqual(tree(root), before);
+  });
+
+  test('take --for fix refuses a link, a hard link and an outside file like every read', () => {
+    const root = fixture({ [BUILD]: PLAN });
+    const outside = fixture({ 'secret.md': PLAN });
+    const dir = path.join(root, '.company/work/other-build');
+    fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.symlinkSync(path.join(outside, 'secret.md'), path.join(dir, 'plan.md'));
+      const r = run(root, 'take', '.company/work/other-build/plan.md', '--for', 'fix');
+      assert.equal(r.code, 3);
+    } catch (error) {
+      if (!error || (error.code !== 'EPERM' && error.code !== 'EACCES')) throw error;
+    }
+    fs.linkSync(path.join(root, BUILD), path.join(root, '.company/work/third-build-plan.md'));
+    refused(run(root, 'take', BUILD, '--for', 'fix'), 'hard-linked');
+  });
+
+  test('--for fix is valid for arg, take and free only; stale still takes none', () => {
+    const root = fixture();
+    assert.deepEqual(run(root, 'free', 'x', '--for', 'fix').lines, ['slug: x']);
+    refused(run(root, 'stale', BUILD, '--for', 'fix'), 'usage');
+  });
+});

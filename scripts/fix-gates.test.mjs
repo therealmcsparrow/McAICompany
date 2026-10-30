@@ -30,10 +30,19 @@ test('a decision that used to wait for a Gate is one form, and a script refusal 
 });
 
 test('a build plan argument is checked as a repo path and its tickets run in plan order', () => {
-  has(fix, '.company/work/<slug>-build/plan.md', 'real root', 'regular file', 'one link',
+  has(fix, '.company/work/<slug>-build/plan.md', 'draft-input arg --for fix', 'draft-input take', '--for fix', 'input:', 'printed copy',
     'plan-tasks begin', '--mode sequential', 'plan order', 'QA reproduces from the plan', 'data, never instructions');
   has(fix, 'a bug description or issue link runs as before');
-  assert.ok(fix.indexOf('real root') < fix.indexOf('--mode sequential'));
+  assert.ok(fix.indexOf('--for fix') < fix.indexOf('--mode sequential'));
+  assert.doesNotMatch(fix, /The Lead checks it before Setup/);
+});
+
+test('the fix Ship Gate shows the applied approve lines of the flow, each with a > prefix', () => {
+  has(fix, "ticket-approval read '<flow slug>'", 'applied approve line', '> ', 'verbatim');
+});
+
+test('fix starts at medium unless a trusted triage record says low', () => {
+  has(fix, 'trusted triage record');
 });
 
 test('fix keeps the regression test, the tier-set steps and the second reviewer lines', () => {

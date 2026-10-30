@@ -46,6 +46,13 @@ test('the Ship Gate summary section lists the former Gate items and shows Role l
     'stale', 'tickets changed since approval', 'ticket-approval', '--phase f', 'sign-off skipped', '> ',
     'verbatim', 'nothing waits');
   has(s, 'never an approval');
+  has(s, "ticket-approval read '<flow slug>'", 'applied approve line');
+});
+
+test('tier-path step 2: feature starts at medium unless a trusted triage record says low', () => {
+  const s = step(2);
+  has(s, 'Feature:', 'medium', 'trusted', 'triage check');
+  assert.doesNotMatch(s, /Feature: the tier of the triage line the request ends in, else `low`/);
 });
 
 test('former Gate decisions become forms when they arise, and a script refusal is never bypassed', () => {
@@ -80,6 +87,7 @@ test('triage keeps its own form and says every Gate the route has', () => {
 
 test('ADR 0050 records the removal, the cc.S2 re-approval and the kept controls', () => {
   has(adr, 'cc.S2', 'Brief and Plan Gate', 'Ship Gate', 'security', 'Playbook start rule', 'CEO', '2026-10-30');
+  has(adr, 'medium', 'trusted triage record', 'security lane always runs');
   assert.ok(lines(adr) <= 12);
   assert.doesNotMatch(adr, /^Name:/m);
 });

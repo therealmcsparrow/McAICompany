@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1). Node built-ins only.
+// Draft input (contract: docs/contracts/draft-input.md v1.1). Node built-ins only.
 // `arg` turns the argument file into a fixed result line, `free` picks a slug that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
 
-const FORS = ['grill', 'to-spec', 'to-tickets', 'feature'];
+const FORS = ['grill', 'to-spec', 'to-tickets', 'feature', 'fix'];
 const MAX_ARG = 4096;
 const BAD_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 
@@ -190,6 +190,7 @@ function checkArgs(args) {
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const WORK_FILE = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(.+)$/;
 const DRAFT_PATH = /^\.company\/work\/[a-z0-9][a-z0-9-]{0,63}\/(?:grill|spec|plan)\.md$/;
+const BUILD_PATH = /^\.company\/work\/[a-z0-9][a-z0-9-]{0,57}-build\/plan\.md$/;
 const DRAFT_NAMES = new Set(['grill.md', 'spec.md', 'plan.md']);
 const OUTPUT = { grill: 'grill.md', 'to-spec': 'spec.md', 'to-tickets': 'plan.md' };
 
@@ -201,7 +202,7 @@ function isFree(realRoot, slug, forWhat) {
   } catch (error) {
     return error && error.code === 'ENOENT';
   }
-  if (forWhat === 'feature' || !st.isDirectory()) return false;
+  if (forWhat === 'feature' || forWhat === 'fix' || !st.isDirectory()) return false;
   let names;
   try {
     names = fs.readdirSync(dir);
@@ -296,6 +297,7 @@ function take(args, root) {
   if (!norm.ok) throw new Refused(`path ${norm.reason}`);
   const rel = norm.path;
   if (forWhat === 'feature' && !DRAFT_PATH.test(rel)) throw new Refused('not a draft file');
+  if (forWhat === 'fix' && !BUILD_PATH.test(rel)) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);
   const bytes = readFile(realRoot, rel);
   const text = bytes.toString('utf8');
@@ -363,7 +365,7 @@ function arg(args, root) {
     return { code: 0, lines: [`arg: file ${norm.path}`] };
   }
   if (forWhat === 'to-tickets') throw new Refused('needs a file');
-  if (forWhat === 'feature') return { code: 0, lines: ['arg: idea'] };
+  if (forWhat === 'feature' || forWhat === 'fix') return { code: 0, lines: ['arg: idea'] };
   return { code: 0, lines: ['arg: idea', `slug: ${pickFree(realRoot, baseSlug(text), forWhat)}`] };
 }
 

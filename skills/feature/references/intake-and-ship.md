@@ -26,7 +26,7 @@ The summary adds what the two removed Gates showed. Every line a Role wrote is s
 - Core and Contract changes, and Art direction, from the architect's Handoff.
 - The plan-tasks waves, the plan-check result, the plan review block or `plan review: not run`, and `sign-off skipped` when no Must rule changed.
 - Spike results, `prototype: <first line of the answer>`, and the stale-path lines of a draft plan.
-- Run from a flow build plan: `tickets changed since approval`, from `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ticket-approval tickets '<flow slug>' '<run plan>' --phase f` (the `ask <id> changed` lines).
+- Run from a flow build plan: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ticket-approval read '<flow slug>'` and show every applied approve line it prints verbatim with a `> ` prefix (a Role can write the record, so a hand-over must not lose it); then `tickets changed since approval`, from `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ticket-approval tickets '<flow slug>' '<run plan>' --phase f` (the `ask <id> changed` lines).
 
 ## Destination spec
 Step 5a, feature runs only (never fix, refactor or other Playbooks): after the writer, the product-manager writes the spec per `destination-spec` v1 with `version: pending` and `shipped: pending`: `docs/specs/<slug>.md` in the product repo.
