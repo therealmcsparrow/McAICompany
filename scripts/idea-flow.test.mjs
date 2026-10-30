@@ -139,10 +139,11 @@ test('tickets form offers F G E and F builds after triage', () => {
   assert.match(run(cwd, 'read', 't').out, /triage/);
 });
 
-test('G ends the flow with nothing built', () => {
+test('G parks the tickets in the roadmap and ends the flow with nothing built', () => {
   const cwd = root();
   toTickets(cwd, 'g', 'idea');
-  ok(run(cwd, 'pick', 'g', 'G'));
+  assert.match(run(cwd, 'options', 'g').out, /option G park-roadmap/);
+  assert.match(ok(run(cwd, 'pick', 'g', 'G')).out, /picked G park-roadmap/);
   assert.match(run(cwd, 'state', 'g').out, /form: ended/);
 });
 

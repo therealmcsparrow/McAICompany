@@ -20,7 +20,7 @@ const GRILLS = ['grilling', 'grill-me', 'grill-with-docs'];
 const STEPS = [...GRILLS, 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build'];
 const GRILL_FORM = [['1', 'grilling'], ['2', 'grill-me'], ['3', 'grill-with-docs']];
 const ROUTES = [['A', 'cooler'], ['B', 'brainstorm'], ['C', 'research'], ['D', 'to-spec'], ['E', 'park-idea']];
-const TICKET_FORM = [['F', 'build'], ['G', 'keep-tickets'], ['E', 'park-idea']];
+const TICKET_FORM = [['F', 'build'], ['G', 'park-roadmap'], ['E', 'park-idea']];
 const LEVEL = { cooler: 1, brainstorm: 2, research: 3 };
 
 const MAX_ARG = 4096;
@@ -82,7 +82,7 @@ function apply(st, ev) {
     const hit = optionsOf(st).find(([l, r]) => l === ev.letter && r === ev.route);
     if (!hit) throw new Order();
     if (st.form === 'tickets') {
-      if (ev.route === 'keep-tickets') return { ...st, form: 'ended', pending: null };
+      if (ev.route === 'park-roadmap') return { ...st, form: 'ended', pending: null };
       return { ...st, form: 'pending', pending: ev.route === 'build' ? 'triage' : ev.route };
     }
     return { ...st, form: 'pending', pending: ev.route };

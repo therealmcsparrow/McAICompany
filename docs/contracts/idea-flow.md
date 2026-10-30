@@ -17,8 +17,8 @@ Keys are exactly those listed, in this order, plus `ts` (ISO 8601 UTC) last. Any
 Forms and the picks they offer:
 - grill form: `1 grilling`, `2 grill-me`, `3 grill-with-docs`. Then `done <grill step>`, then `done reprompt`.
 - routes form: `A cooler`, `B brainstorm`, `C research`, `D to-spec`, `E park-idea`. After A: B C D E. After B: C D E. After C: `done reprompt` first, then D E.
-- D: `done to-spec`, then `done to-tickets`, then the tickets form: `F build`, `G keep-tickets`, `E park-idea`.
-- F: `done triage --size <s> --tier <t>`, then `done build`; the flow ends. G ends the flow at once, nothing built. E: `park-idea <slug> <name>` ends the flow.
+- D: `done to-spec`, then `done to-tickets`, then the tickets form: `F build`, `G park-roadmap`, `E park-idea`.
+- F: `done triage --size <s> --tier <t>`, then `done build`; the flow ends. G ends the flow at once, nothing built: the Lead has parked every ticket not yet parked in the roadmap through `ticket-approval` v1 `park-ticket`. E: `park-idea <slug> <name>` ends the flow.
 - While a step is pending `options` prints no option line; `pick` is refused.
 - `state` prints `build: feature` for kind idea and `build: fix` for kind bug. Nothing else depends on the kind; both kinds offer identical letters at every form.
 
