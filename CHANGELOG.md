@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-30
+
+Rollback: node scripts/stable.mjs 0.22.0
+
 ### Added
 - **Idea and bug flow.** `/aico:idea` and `/aico:bug` take a rough idea or a bug report through one route: capture, grill choice, reprompt, then you pick from routes A Water cooler, B Brainstorm, C Research, D Spec and tickets, E Park the idea, ticket forms, and F (build) or G (park tickets in `.company/roadmap/`); Park the idea writes to `.company/ideas/<name>/`. The allowed picks of every form come from `idea-flow options`, never from the Lead's text. The two commands share the route in `skills/idea/references/routes.md` and run each step in the same session. They differ only in the build Playbook: `idea` builds through `/aico:feature`, `bug` through `/aico:fix`. Contract `idea-flow` v1.1 (new), ADR 0048. Outside a software company the flow offers no Spec and tickets and no Build: the routes are Water cooler, Brainstorm, Research and Park the idea; after Research the form is Park the idea / Stop.
 - **Route F records the build pick after the plan exists.** Build tickets are written to `.company/work/<slug>-build/plan.md` first; only when `ticket-approval build-plan` has built it does the flow `pick` F and go on to triage and the build. If an earlier session already built the plan, the flow stops and tells you to archive the folder (never deletes it) and `resume`. The one build run takes all approved tickets.
