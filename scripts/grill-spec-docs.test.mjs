@@ -17,6 +17,12 @@ test('each command has entry and README row', () => {
   }
 });
 
+test('privacy line names the argument file path and no false gitignore claim', () => {
+  assert.ok(commands.includes('.company/draft-input-arg-'));
+  assert.doesNotMatch(commands, /which the repo `\.gitignore` covers/);
+  assert.doesNotMatch(commands, /`\.company\/work\/`[^.]*\.gitignore. covers/);
+});
+
 test('feature entry names draft inputs', () => {
   const feature = commands.split('### `/aico:feature`')[1].split('\n### ')[0];
   assert.match(feature, /draft file/);
