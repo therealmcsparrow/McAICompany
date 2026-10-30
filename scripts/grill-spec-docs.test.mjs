@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 
 const root = path.join(import.meta.dirname, '..');
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -78,4 +80,31 @@ test('spec.md mentions the drafts', () => {
   assert.ok(!/git-ignored/i.test(spec), 'no git-ignored claim');
   assert.ok(!/never sent/i.test(spec), 'no never-sent claim');
   assert.ok(spec.includes('grill-file v1 Personal data'), 'points to Personal data');
+});
+
+// Regression: the release moves Unreleased to the newest version section before npm test runs.
+// Runs a copy of this file against a fixture root so the real changelog check is what is judged.
+function runChangelogCheck(changelog) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'grill-cl-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'scripts'));
+    fs.mkdirSync(path.join(tmp, 'documentation'));
+    fs.copyFileSync(path.join(root, 'scripts/grill-spec-docs.test.mjs'), path.join(tmp, 'scripts/grill-spec-docs.test.mjs'));
+    fs.copyFileSync(path.join(root, 'documentation/commands.md'), path.join(tmp, 'documentation/commands.md'));
+    fs.copyFileSync(path.join(root, 'README.md'), path.join(tmp, 'README.md'));
+    fs.writeFileSync(path.join(tmp, 'CHANGELOG.md'), changelog);
+    return spawnSync(process.execPath, ['--test', '--test-name-pattern=changelog Unreleased mentions the commands',
+      path.join(tmp, 'scripts/grill-spec-docs.test.mjs')], { encoding: 'utf8', env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+const ENTRY = '- **Grill, spec and tickets.** `/aico:grill`, `/aico:to-spec`, `/aico:to-tickets`.\n';
+
+test('regression: changelog check passes after release (commands under newest version, Unreleased empty)', () => {
+  const r = runChangelogCheck(`# Changelog\n\n## [Unreleased]\n\n## [0.22.0] - 2026-10-30\n\n### Added\n${ENTRY}\n## [0.21.0] - 2026-10-29\n\n- old\n`);
+  assert.equal(r.status, 0, r.stdout.slice(-800));
+});
+
+test('control: changelog check passes before release (commands under Unreleased)', () => {
+  const r = runChangelogCheck(`# Changelog\n\n## [Unreleased]\n\n### Added\n${ENTRY}\n## [0.21.0] - 2026-10-29\n\n- old\n`);
+  assert.equal(r.status, 0, r.stdout.slice(-800));
 });
