@@ -52,7 +52,7 @@ test('report Playbook: frontmatter, Help line, Type line, size', () => {
   const desc = playbook.match(/^description: (.+)$/m)[1];
   assert.ok(desc.length <= 1024);
   const i = lines.findIndex((l) => l.startsWith('**Help:**'));
-  assert.equal(lines[i], "**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read the `### /aico:report` entry of `documentation/commands.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
+  assert.equal(lines[i], "**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/report.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
   assert.equal(lines[i + 1], '');
   assert.equal(lines[i + 2], '**Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook report` first; exit not 0 → show its output line and stop.');
   assert.ok(!playbook.includes('\r'));

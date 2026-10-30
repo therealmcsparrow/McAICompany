@@ -100,7 +100,7 @@ Design: `docs/superpowers/specs/2026-10-19-senior-engineer-design.md`.
 
 ## v0.8 additions
 - **Playbook** `/aico:cooler [topic] [turns=N|listen]`: unmoderated water-cooler chat. 2–3 Roles picked at random (real randomness, not relevance); sequential one-line turns (max 80 words, PASS allowed); every 3 turns a random walk-up (more likely when the talk is in that Role's field) or a walk-off, 2–5 present. Ends: natural (all PASS or 20 turns, default), `turns=N`, or `listen` (CEO form every 4 turns: keep listening / chime in / stop). File `.company/cooler/YYYYMMDD-HHMM-<topic-slug>.md` with `## Overheard` (one bullet per point with its Roles; no verdicts) above `## Chat`, written as a movie script (title and logline, `### SCENE n — <slug line>` per subject, italic action lines for walk-ups/walk-offs/PASSes, capitalised cues with `> ` dialogue, `**FADE OUT.**`); the Overheard stays in the file, the terminal gets only the path; committed, never routed. `/aico:brainstorm` accepts a cooler file as its idea. Roles are read-only.
-- **Playbook** `/aico:help [command]`: lists commands or explains one (usage, options and effects, flow, output) from `documentation/commands.md` and each skill's `argument-hint`. Every Playbook treats a lone `help`/`--help` argument as `/aico:help <itself>`.
+- **Playbook** `/aico:help [command]`: lists commands or explains one (usage, options and effects, flow, output) from `documentation/commands/` and each skill's `argument-hint`. Every Playbook treats a lone `help`/`--help` argument as `/aico:help <itself>`.
 - **Playbook** `/aico:version`: shows the installed plugin version and latest changelog entry.
 
 ## v0.6 additions

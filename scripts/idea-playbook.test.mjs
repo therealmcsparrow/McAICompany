@@ -47,7 +47,7 @@ describe('SKILL.md', () => {
   });
 
   test('Help line comes before the Type line and both name this Playbook', () => {
-    has(skill, '**Help:**', '`### /aico:idea` entry of `documentation/commands.md`', '**Type:**',
+    has(skill, '**Help:**', '`documentation/commands/idea.md`', '**Type:**',
       `${RUN}" company-type check-playbook idea`);
     assert.ok(at(skill, '**Help:**') < at(skill, '**Type:**'));
   });

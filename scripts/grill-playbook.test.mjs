@@ -42,7 +42,7 @@ test('Help line, empty line, Type line in that order', () => {
   const { end } = fm();
   const h = lines.findIndex((l) => l.startsWith('**Help:**'));
   assert.ok(h > end);
-  assert.ok(lines[h].includes('`### /aico:grill` entry of `documentation/commands.md`'));
+  assert.ok(lines[h].includes('`documentation/commands/grill.md`'));
   assert.ok(lines[h].includes('change nothing, start nothing, and stop'));
   assert.equal(lines[h + 1], '');
   assert.ok(lines[h + 2].startsWith('**Type:**'));

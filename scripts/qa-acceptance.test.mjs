@@ -581,7 +581,7 @@ const HAND_OVER_CHANGES = {
 };
 const helpLineV13 = name => (
   '**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; '
-  + `then read the \`### /aico:${name}\` entry of \`documentation/commands.md\` (plugin root = two folders above this skill's base directory) `
+  + `then read \`documentation/commands/${name}.md\` (plugin root = two folders above this skill's base directory) `
   + 'and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.'
 );
 const typeLineV13 = name => `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`;

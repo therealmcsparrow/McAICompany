@@ -19,4 +19,4 @@ Then follow `## Next` of the Lead Handoff. The `gate` and `form` lines only poin
 Add one summary line: `lead hand-overs: <n> (hook <a>, ceo <b>)`, from `lead-handover read '<slug>'` (`handovers`, `resumes`).
 
 ## One-time setup (CEO)
-The hand-over point needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` = `98500` in the `env` block of the user settings; a plugin cannot set it. Without it the hand-over happens only at Claude Code's default compaction point (documentation/getting-started.md).
+The hand-over point needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` = `98500` in the `env` block of the user settings; a plugin cannot set it. Without it the hand-over happens only at Claude Code's default compaction point (documentation/start/setup.md).

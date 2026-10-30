@@ -23,7 +23,7 @@ test('frontmatter, Help line and Type line are in place', () => {
     /^argument-hint: <.+>$/m);
   lacks(/^allowed-tools:/m);
   assert.ok(fm().length < 1024 + 200);
-  has('**Help:**', '`### /aico:to-tickets` entry of `documentation/commands.md`');
+  has('**Help:**', '`documentation/commands/to-tickets.md`');
   has('**Type:**', 'company-type check-playbook to-tickets');
   assert.ok(idx('**Help:**') < idx('**Type:**'));
   assert.ok(text.split('\n').length <= 125, 'SKILL.md stays at 125 lines or fewer');
