@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.5). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.6). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -12,6 +12,7 @@ import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { costText, readCost } from './cost-source.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 import { readTierPath } from './tier-set.mjs';
 import * as settings from './settings.mjs';
 
@@ -36,7 +37,7 @@ const TIME_MAX = Date.parse('2100-01-01T00:00:00Z');
 const EXCLUDED_RUN = /^(brainstorm|replay|baseline)-/;
 const TIERS = ['low', 'medium', 'high'];
 
-const RUN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const isRun = (name) => typeof name === 'string' && isWorkFolder(name);
 const AGENT = /^[A-Za-z0-9_-]{1,64}$/;
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
@@ -99,7 +100,7 @@ function timeMs(text) {
 }
 
 function checkRun(run) {
-  if (typeof run !== 'string' || !RUN.test(run)) throw new Refusal('run must match ^[a-z0-9][a-z0-9-]{0,63}$');
+  if (!isRun(run)) throw new Refusal('run must be a work folder name or a legacy slug');
   return run;
 }
 
@@ -124,7 +125,7 @@ export function validateRecord(input) {
   const rec = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
   for (const k of Object.keys(rec)) if (!RECORD_KEYS.has(k)) return fail('key outside the allow-list');
   if (rec.v !== 1) return fail('v must be 1');
-  if (typeof rec.run !== 'string' || !RUN.test(rec.run)) return fail('invalid run');
+  if (!isRun(rec.run)) return fail('invalid run');
   if (!KINDS.includes(rec.kind)) return fail('invalid kind');
   if (rec.kind !== 'par') for (const k of PAR_ONLY) if (Object.hasOwn(rec, k)) return fail(`${k} only on par`);
   if (rec.kind !== 'meta') for (const k of ['floor', 'pb', 'sets']) if (Object.hasOwn(rec, k)) return fail(`${k} only on meta`);
@@ -894,7 +895,7 @@ function comparisonFiles(run, counts) {
   const files = [];
   for (const file of names) {
     const name = file.endsWith('.jsonl') ? file.slice(0, -6) : '';
-    if (name === run || !RUN.test(name)) continue;
+    if (name === run || !isRun(name)) continue;
     try {
       const st = fs.lstatSync(path.join(ledgerDir(), file));
       if (st.isFile()) files.push({ name, mtime: st.mtimeMs });

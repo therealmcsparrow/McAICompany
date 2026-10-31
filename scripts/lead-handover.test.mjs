@@ -71,7 +71,7 @@ describe('calibration', () => {
 
   test('the Contract holds the setting name and the window', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1.2$/m);
+    assert.match(text, /^# Contract: lead-handoff v1.4$/m);
     assert.ok(text.includes('CLAUDE_CODE_AUTO_COMPACT_WINDOW'));
     assert.ok(text.includes('98500'));
     assert.ok(text.includes('85500'));
@@ -80,8 +80,8 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.2');
-    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.4');
+    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.6 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
 
@@ -349,6 +349,67 @@ describe('Handoff content', () => {
     const next = text.slice(text.indexOf('## Next'));
     for (const l of next.split('\n').slice(1).filter(Boolean)) assert.match(l, /^- [A-Za-z0-9 .,`'-]{1,160}$/);
   });
+
+  const lineOf = (out, key) => out.split('\n').find((l) => l.startsWith(`${key}: `));
+  const afterRunning = (out) => out.split('\n').slice(out.split('\n').findIndex((l) => l.startsWith('running: ')) + 1).filter(Boolean);
+
+  test('read prints unknown for hostile recorded values and never a Step file value', () => {
+    const fx = fixture();
+    stepFile(fx, BASE);
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), `${JSON.stringify({ v: 1, at: iso(Date.now()), ev: 'begin', pb: 'feature', tier: 'high\u001b[31m', path: 'full', why: 'tier', rev: 1, base: 'ab12', skip: [] })}\n`);
+    const out = main(['read', fx.slug], fx.root, {}).out;
+    assert.ok(!out.includes('\u001b'));
+    assert.match(out, /^tier-path: broken$/m);
+    assert.match(out, /^base-commit: unknown$/m);
+    assert.ok(!out.includes(BASE));
+  });
+
+  test('read prints a short base from a record as unknown', () => {
+    const fx = fixture();
+    const begin = { v: 1, at: iso(Date.now()), ev: 'begin', pb: 'fix', tier: 'low', path: 'short', why: 'short', rev: 1, base: 'abcdef1', skip: [] };
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), `${JSON.stringify(begin)}\n`);
+    assert.match(main(['read', fx.slug], fx.root, {}).out, /^base-commit: unknown$/m);
+  });
+
+  test('read prints unknown with no Lead record, whatever Role Handoffs say', () => {
+    const fx = fixture();
+    fs.writeFileSync(path.join(fx.dir, '01-backend-engineer.md'), [
+      '---', 'step: 1', 'role: backend-engineer', 'task: x', 'status: done', 'round: 0',
+      `base-commit: ${BASE}`, 'risk-tier: high', '---', 'By: backend-engineer', '',
+    ].join('\n'));
+    const out = main(['read', fx.slug], fx.root, {}).out;
+    assert.deepEqual(afterRunning(out), ['base-commit: unknown', 'risk-tier: unknown', 'tier-path: none', 'tier-set: unknown']);
+  });
+
+  test('read prints a broken tier-path record as broken and high', () => {
+    const fx = fixture();
+    fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), 'not json\n');
+    main(['base', fx.slug, 'ab'.repeat(20)], fx.root, {});
+    const out = main(['read', fx.slug], fx.root, {}).out;
+    assert.deepEqual(afterRunning(out), ['base-commit: unknown', 'risk-tier: high', 'tier-path: broken', 'tier-set: unknown']);
+  });
+
+  test('read prints the four recorded values', () => {
+    const fx = fixture();
+    tierPath(fx, [{ v: 1, at: iso(Date.now()), ev: 'raise', tier: 'high', cause: 'diff' }]);
+    const c = main(['read', fx.slug], fx.root, {});
+    assert.equal(c.code, 0);
+    const lines = c.out.split('\n').filter(Boolean);
+    assert.deepEqual(lines.slice(3, 7).map((l) => l.split(':')[0]), ['gate', 'form', 'step', 'running']);
+    assert.equal(lines[7], `base-commit: ${BASE}`);
+    assert.equal(lines[8], 'risk-tier: high');
+    assert.equal(lines[9], 'tier-path: feature full');
+    assert.match(lines[10], /^tier-set: \[[a-z0-9-]+(, [a-z0-9-]+)*\]$/);
+    assert.equal(lines.length, 11);
+  });
+
+  test('read prints the Lead-only base before a tier-path record exists', () => {
+    const fx = fixture();
+    main(['base', fx.slug, 'ab'.repeat(32)], fx.root, {});
+    const out = main(['read', fx.slug], fx.root, {}).out;
+    assert.equal(lineOf(out, 'base-commit'), `base-commit: ${'ab'.repeat(32)}`);
+    assert.equal(lineOf(out, 'risk-tier'), 'risk-tier: unknown');
+  });
 });
 
 describe('finding the run', () => {
@@ -386,7 +447,7 @@ describe('resume', () => {
     assert.ok(ctx.includes('tokens-at-handover: 85500'));
     const second = JSON.parse(resume(sessionStart(), opts(fx)).out).hookSpecificOutput.additionalContext;
     assert.ok(!second.includes('tokens-at-handover'));
-    assert.ok(second.includes(`lead-handover read ${fx.slug}`));
+    assert.ok(second.includes(`lead-handover read '${fx.slug}'`));
     assert.equal(records(fx).filter((e) => e.ev === 'resume').length, 1);
   });
 
@@ -548,7 +609,7 @@ describe('hooks.json and source', () => {
   test('the script is LF only, imports no package and holds no process killer', () => {
     const src = fs.readFileSync(SCRIPT, 'utf8');
     assert.ok(!src.includes('\r'));
-    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(m[1].startsWith('node:') || m[1].startsWith('./'), m[1]);
+    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(m[1].startsWith('node:') || m[1].startsWith('./') || m[1] === '../mods/lib/work-folder.mjs', m[1]);
     assert.ok(!/child_process|execSync|spawn|eval\(|new Function/.test(src));
   });
 });
@@ -597,7 +658,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.2'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.4'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {

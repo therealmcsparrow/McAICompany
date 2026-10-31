@@ -98,13 +98,13 @@ test('review depth is computed per dispatch from the diff, for the code-reviewer
 
 test('each Step is linted, then recorded in the ledger from the notification integers only', () => {
   has(pipeline, 'run.mjs" handoff-lint', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
-  has(pipeline, 'run.mjs" ledger add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
+  has(pipeline, 'run.mjs" ledger add \'<slug>\' step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
   has(pipeline, /integers only/i);
 });
 
 test('the ledger is reconciled and the cost line built before the Ship Gate, shown at Ship only', () => {
-  has(pipeline, 'run.mjs" ledger reconcile <slug>', 'run.mjs" ledger ship <slug> <acs> <fix_rounds> <high_blockers>', 'run.mjs" ledger report <slug> --acs <acs>');
-  assert.ok(pipeline.indexOf('run.mjs" ledger report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
+  has(pipeline, 'run.mjs" ledger reconcile \'<slug>\'', 'run.mjs" ledger ship \'<slug>\' <acs> <fix_rounds> <high_blockers>', 'run.mjs" ledger report \'<slug>\' --acs <acs>');
+  assert.ok(pipeline.indexOf('run.mjs" ledger report \'<slug>\' --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
   has(pipeline, 'After the Ship Gate is approved', 'scorecard line', '00-summary.md', 'never stops the run');
   has(pipeline, 'spend', 'cache read', 'per shipped AC', 'context at end (not cost)', 'at the Ship Gate only');
 });
@@ -114,7 +114,7 @@ test('tool checks come first in the pre-filter; a T- row blocks only after the r
   assert.ok(at >= 0);
   const pre = pipeline.slice(at, at + 1600);
   assert.ok(pre.indexOf('run.mjs" rule-check') >= 0 && pre.indexOf('run.mjs" rule-check') < pre.indexOf('npm run check'), pre);
-  has(pre, 'run --base <Base commit> --run <slug>', '`list`', 'T-', 'does **not** consume a Fix round');
+  has(pre, 'run --base <Base commit> --run \'<slug>\'', '`list`', 'T-', 'does **not** consume a Fix round');
 });
 
 test('slices are checked before builders; drift runs after sign-off and before Ship', () => {
@@ -252,10 +252,10 @@ const planReview = read('skills/pipeline/references/plan-review.md');
 const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
-test('the Contract is v4.2 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v4.2$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.2');
-  has(contract, 'v4.1 is additive', 'v4.2 is additive', 'A Role that gets a v4.0 prompt behaves as before');
+test('the Contract is v4.3 and the fixture is stamped with it', () => {
+  assert.match(contract, /^# Contract: dispatch-prompt v4.3$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.3');
+  has(contract, 'v4.1 is additive', 'v4.2 is additive', 'v4.3 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 
 test('the plan review dispatch block has the three review lines in order and no other path line', () => {
@@ -278,7 +278,7 @@ test('plan-review.md runs lines before every fresh-reviewer dispatch and keeps t
 });
 
 test('review-loop.md holds the Lead flow of the record, the blocking: rule and the effective second reviewer model', () => {
-  has(reviewLoop, 'second_reviewer_model_effective', 'AC5', 'Settings:', 'attempt', 'retry', 'not run', 'mark', 'churn', 'churn: unknown', 'gate <slug> --base');
+  has(reviewLoop, 'second_reviewer_model_effective', 'AC5', 'Settings:', 'attempt', 'retry', 'not run', 'mark', 'churn', 'churn: unknown', "gate '<slug>' --base");
   has(reviewLoop, 'a `blocking:` line is a Blocking Ship Gate line', 're-run that lane or block the ship');
   has(reviewLoop, 'a refused `mark` stops', 'asks the CEO', 'never a third reviewer');
   assert.doesNotMatch(reviewLoop, /\.\.\.HEAD/);

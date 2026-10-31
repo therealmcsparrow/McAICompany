@@ -1,11 +1,11 @@
-# Contract: plugin-root v1
+# Contract: plugin-root v1.1
 
 Provider: `scripts/plugin-root.mjs` and `scripts/run.mjs` (Node built-ins only). Consumers: every skill and agent that calls a bundled script, `aico:pipeline` (company profile path).
 Rationale: after a plugin update a session can still hold text from the old version; one resolver makes a stale call fail loudly instead of running old code.
 
 ## Calls
 - Skills and agents write `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" <script> [args]`. `${CLAUDE_PLUGIN_ROOT}` is substituted when the text loads. No skill or agent names another script path. `hooks/hooks.json` keeps its direct paths: Claude Code substitutes the loaded plugin's own root there, so it cannot be stale.
-- The plan Gate is typed without quotes: `node ${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs run-state gate <slug> plan passed`, the form the plan Gate mod judges.
+- The plan Gate is typed with the run name in single quotes: `node ${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs run-state gate '<name>' plan passed`, the form the plan Gate mod judges. The old unquoted form with a legacy slug is still judged.
 - `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" plugin-root` prints the active root on one line. Company profile paths are that root plus `company/PROFILE.md`.
 
 ## Own root
@@ -31,3 +31,4 @@ Nothing is written under the plugin root.
 
 ## History
 - v1: new.
+- v1.1 (additive): the plan Gate call quotes the run name, because a work folder name holds spaces.

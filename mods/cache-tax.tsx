@@ -2,7 +2,7 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
 import { EMPTY_CLOCK, cacheClock, clockLines, clockStatus, noteRequest, wrap } from './lib/cache-clock.mjs'
-import { arr, guardRunActive, int, obj, oneOf, opt, pattern, str } from './lib/guard.mjs'
+import { arr, guardRunActive, int, obj, oneOf, opt, parseOutputText, str, workFolder } from './lib/guard.mjs'
 import { fit, fmtCompact, fmtInt, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
@@ -42,9 +42,7 @@ let lastSignature = ''
 let lastAgents = ''
 let lastPart = ''
 
-const OUTPUT_LINE = /^Output: \.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/m
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 const count = int(0, Number.MAX_SAFE_INTEGER)
 const share = (v: unknown) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : undefined)
@@ -61,7 +59,7 @@ const costRow = obj({
 // `ledger.mjs report <run> --json --live`: the allow-listed keys only; every number is an exact integer.
 const guardReport = obj({
   v: int(1, 1),
-  run: pattern(SLUG),
+  run: workFolder,
   rows: arr(costRow, 1000),
   totals: obj({ spend: count, cache_read: count, cache_write: count, cache_write_share: share }),
   not_reconciled: count,
@@ -337,11 +335,11 @@ async function noteSpawn($: EngineInterface, prompt: unknown, agentId: unknown):
     const settings = await readSettings($)
     if (!settings.mods.cache_tax.enabled) return
     const head = typeof prompt === 'string' ? prompt.slice(0, PROMPT_HEAD).replace(/\r\n?/g, '\n') : ''
-    const output = OUTPUT_LINE.exec(head)
+    const output = parseOutputText(head)
     const row: AgentRow = {
       ...EMPTY_AGENT,
-      step: output === null ? null : output[2],
-      role: output === null ? null : output[3],
+      step: output === null ? null : output.step,
+      role: output === null ? null : output.role,
       name: null,
       startedMs: await $.clock.now(),
       isRunning: true,

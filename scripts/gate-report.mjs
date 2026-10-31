@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Usage: node scripts/gate-report.mjs <x.y.z> (contract: docs/contracts/release.md v1.1)
-// Prints the Gate Report of one plugin version (contract: docs/contracts/release.md v1.1). Node built-ins only.
+// Usage: node scripts/gate-report.mjs <x.y.z> (contract: docs/contracts/release.md v1.2)
+// Prints the Gate Report of one plugin version (contract: docs/contracts/release.md v1.2). Node built-ins only.
 // It holds only what the records of the runs of that version show: Gates with result and wait, CEO forms, Fix rounds,
 // run time and Step time per Role id. A value that was not recorded reads `not recorded`. Nothing is estimated.
 // Runs come from .company/ledger/<run>.jsonl whose last `meta` record names the version; Gates and forms from run-state.
@@ -8,10 +8,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { show } from './run-state.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const MAX_FILES = 500;
 const MAX_LEDGER_BYTES = 1024 * 1024;
-const RUN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const EXCLUDED = /^(brainstorm|replay|baseline)-/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -70,7 +70,7 @@ export function runsOf(root, version) {
   const out = [];
   for (const file of names.filter((n) => n.endsWith('.jsonl')).sort().slice(0, MAX_FILES)) {
     const run = file.slice(0, -6);
-    if (!RUN.test(run) || EXCLUDED.test(run)) continue;
+    if (!isWorkFolder(run) || EXCLUDED.test(run)) continue;
     const records = readLedger(path.join(dir, file));
     if (!records) continue;
     const meta = last(records, 'meta');

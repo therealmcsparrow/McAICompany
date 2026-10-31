@@ -297,6 +297,8 @@ describe('hostile cases under block with one open decision', () => {
     const sandbox = { cwd: e.product, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: e.home, HOME: e.home, USERPROFILE: e.home } };
     const node = (script, ...a) => spawnSync(process.execPath, [path.join(scripts, script), ...a], sandbox);
     for (const d of ['agents', 'company']) fs.cpSync(path.join(import.meta.dirname, '..', d), path.join(plugin, d), { recursive: true });
+    fs.mkdirSync(path.join(plugin, 'mods', 'lib'), { recursive: true });
+    fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'work-folder.mjs'), path.join(plugin, 'mods', 'lib', 'work-folder.mjs'));
     // The patterns file is absent from the copy.
     assert.equal(node('run-state.mjs', 'start', SLUG).status, 0);
     const gate = node('run-state.mjs', 'gate', SLUG, 'plan', 'passed');

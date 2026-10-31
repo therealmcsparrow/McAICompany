@@ -33,12 +33,12 @@ function* files(dir) {
   }
 }
 
-test('the index reads handoff as major 2, minor 0, and version.txt holds 2.0', () => {
+test('the index reads handoff as major 2, minor 1, and version.txt holds 2.1', () => {
   const h = buildIndex(ROOT).get('handoff');
   assert.equal(h.major, 2);
-  assert.equal(h.minor, 0);
-  assert.equal(read('tests/contracts/handoff/version.txt').trim(), '2.0');
-  assert.equal(read('docs/contracts/handoff.md').split('\n')[0], '# Contract: handoff v2.0');
+  assert.equal(h.minor, 1);
+  assert.equal(read('tests/contracts/handoff/version.txt').trim(), '2.1');
+  assert.equal(read('docs/contracts/handoff.md').split('\n')[0], '# Contract: handoff v2.1');
 });
 
 test('the repo has no handoff drift', () => {
@@ -63,13 +63,13 @@ test('no file of docs, skills, agents, scripts or tests cites handoff v1.3 outsi
 const BODY = '## Did\n- work\n## Decisions\n- none\n## Blocking\n- none\n## Nits\n- none\n## Next\n- go\n';
 const withCite = cite => `---\nstep: 05\nrole: backend-engineer\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\ncontracts: [${cite}]\n---\nBy: backend-engineer\n${BODY}`;
 
-test('a handoff cite is stale below or above v2.0 and passes at v2.0', () => {
+test('a handoff cite is stale below or above v2.1 and passes at v2.0 and v2.1', () => {
   const index = buildIndex(ROOT);
-  for (const cite of ['handoff v1.2', 'handoff v1.3', 'handoff v2.1']) {
+  for (const cite of ['handoff v1.2', 'handoff v1.3', 'handoff v2.2']) {
     assert.deepEqual(lint(withCite(cite), { index }).errors.filter(e => /contracts cite/.test(e)),
-      [`frontmatter: contracts cite ${cite} is stale, current v2.0`], cite);
+      [`frontmatter: contracts cite ${cite} is stale, current v2.1`], cite);
   }
-  assert.deepEqual(lint(withCite('handoff v2.0'), { index }).errors, []);
+  for (const ok of ['handoff v2.0', 'handoff v2.1']) assert.deepEqual(lint(withCite(ok), { index }).errors, []);
 });
 
 test('the Contract carries the migration section and no longer calls part 5 a minor bump', () => {
@@ -83,7 +83,7 @@ test('the Contract carries the migration section and no longer calls part 5 a mi
   assert.match(mig, /latest `start`/);
   assert.match(mig, /`contracts:` names `handoff` v1\.x/);
   assert.match(mig, /--exceptions-for/);
-  assert.match(mig, /`contracts: \[handoff v2\.0\]`/);
+  assert.match(mig, /`contracts: \[handoff v2.1]`/);
   assert.doesNotMatch(text, /minor bump although|part 5[^.\n]*minor bump|It is a minor bump/);
   assert.doesNotMatch(text, /If v1\.2 ships alone first/);
   assert.match(text, /^## v2\.0 part 5:/m);

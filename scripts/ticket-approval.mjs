@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Ticket approval record (contract: docs/contracts/ticket-approval.md v1). Node built-ins only.
+// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.1). Node built-ins only.
+// Run and helper folder names come only from ../mods/lib/work-folder.mjs.
 // A ticket is one plan-tasks task block; an approval counts only for the block hash it was given at.
 // Plan text and arguments are untrusted: files are read by the real-path rule, sizes are capped before decoding,
 // every pattern is anchored and runs per line, output holds only fixed words, ids and validated record fields,
@@ -9,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readPlanLines } from './plan-markdown.mjs';
+import { helperName, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -23,11 +25,7 @@ const MAX_PATH_CHARS = 200;
 const MAX_CORE = 200;
 const MAX_TITLE = 60;
 
-const SLUG_SRC = '[a-z0-9][a-z0-9-]{0,63}';
-const SLUG = new RegExp(`^${SLUG_SRC}$`);
-const PLAN_NAME_SRC = '(?:\\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\\.md';
-const PLAN_ARG = new RegExp(`^(?:(${SLUG_SRC})/)?(${PLAN_NAME_SRC})$`);
-const PLAN_REF = new RegExp(`^${SLUG_SRC}/${PLAN_NAME_SRC}$`);
+const PLAN_NAME = /^(?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md$/;
 const TICKET_ID = /^T\d{1,3}[a-z]?$/;
 const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on):[ \t]*(.*)$/;
@@ -63,7 +61,12 @@ const USAGE = [
   '       ticket-approval read <slug>'
 ].join('\n');
 
-class Refusal extends Error {}
+class Refusal extends Error {
+  constructor(message, extra = []) {
+    super(message);
+    this.extra = extra;
+  }
+}
 class PlanProblem extends Error {}
 class RecordError extends Error {}
 
@@ -145,7 +148,11 @@ function ensureDir(root, parts, { create = false } = {}) {
     const st = lstatOrNull(dir);
     if (!st) {
       if (!create || i < parts.length - 1) throw new Refusal('folder missing');
-      fs.mkdirSync(dir);
+      try {
+        fs.mkdirSync(dir);
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw new Refusal('folder cannot be created');
+      }
     } else if (!st.isDirectory()) {
       throw new Refusal('folder is a link or not a folder');
     }
@@ -335,7 +342,7 @@ function checkEvent(slug, rec, n, prevText) {
   if (rec.n !== n) throw badLine(slug, n, 'bad number');
   if (rec.prev !== (prevText === null ? ZERO : sha12(prevText))) throw badLine(slug, n, 'chain broken');
   if (typeof rec.at !== 'string' || !TIME.test(rec.at) || Number.isNaN(Date.parse(rec.at))) throw badLine(slug, n, 'bad time');
-  if (ev === 'plan' && !(typeof rec.plan === 'string' && PLAN_REF.test(rec.plan))) throw badLine(slug, n, 'bad plan');
+  if (ev === 'plan' && !(typeof rec.plan === 'string' && validPlanRef(rec.plan))) throw badLine(slug, n, 'bad plan');
   if (ev !== 'plan' && ev !== 'build') {
     if (typeof rec.id !== 'string' || !TICKET_ID.test(rec.id)) throw badLine(slug, n, 'bad id');
     if (typeof rec.hash !== 'string' || !HASH.test(rec.hash)) throw badLine(slug, n, 'bad hash');
@@ -449,7 +456,7 @@ function appliedLines(rec, tickets) {
 // ---------------------------------------------------------------- commands
 
 function checkSlug(value) {
-  if (typeof value !== 'string' || !SLUG.test(value)) throw new Refusal('bad slug');
+  if (typeof value !== 'string' || !isWorkFolder(value)) throw new Refusal('bad slug');
   return value;
 }
 
@@ -458,10 +465,18 @@ function checkId(value) {
   return value;
 }
 
+// `<work folder name>/<plan file name>`: the name by isWorkFolder, the file by the plan name rule, one `/` only.
+function validPlanRef(ref) {
+  if (typeof ref !== 'string') return false;
+  const cut = ref.indexOf('/');
+  return cut > 0 && isWorkFolder(ref.slice(0, cut)) && PLAN_NAME.test(ref.slice(cut + 1));
+}
+
 function planRefOf(slug, arg) {
-  const m = typeof arg === 'string' ? PLAN_ARG.exec(arg) : null;
-  if (!m) throw new Refusal('bad plan');
-  return `${m[1] ?? slug}/${m[2]}`;
+  if (typeof arg !== 'string') throw new Refusal('bad plan');
+  const ref = arg.includes('/') ? arg : `${slug}/${arg}`;
+  if (!validPlanRef(ref)) throw new Refusal('bad plan');
+  return ref;
 }
 
 // The plan the last `tickets` run named, read now.
@@ -547,8 +562,9 @@ function cmdParkTicket(args, env) {
 function cmdBuildPlan(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
   const slug = checkSlug(args[0]);
-  const buildSlug = `${slug}-build`;
-  if (!SLUG.test(buildSlug)) throw new Refusal('slug too long for a build folder');
+  const buildSlug = helperName(slug, 'Build');
+  if (buildSlug === null) throw new Refusal('no build folder name for this flow');
+  const planPath = `.company/work/${buildSlug}/plan.md`;
   const rec = loadRecord(env.root, slug);
   const { plan } = currentPlan(env, rec);
   const approved = plan.tickets.filter((t) => statusOf(rec, t) === 'approved');
@@ -559,9 +575,14 @@ function cmdBuildPlan(args, env) {
   const applied = appliedLines(rec, plan.tickets);
   ensureDir(env.root, ['.company', 'work']);
   const dir = ensureDir(env.root, ['.company', 'work', buildSlug], { create: true });
-  createNew(dir, 'plan.md', text.endsWith('\n') ? text : `${text}\n`);
+  try {
+    createNew(dir, 'plan.md', text.endsWith('\n') ? text : `${text}\n`);
+  } catch (error) {
+    if (error instanceof Refusal && error.message === 'file exists') throw new Refusal(error.message, [`plan: ${planPath}`]);
+    throw error;
+  }
   appendEvent(env, slug, rec, { ev: 'build', ids: approved.map((t) => t.id) });
-  return { code: 0, lines: [`built ${approved.length} tickets`, ...applied] };
+  return { code: 0, lines: [`built ${approved.length} tickets`, `plan: ${planPath}`, ...applied] };
 }
 
 function cmdRead(args, env) {
@@ -602,7 +623,7 @@ export function main(args, { now, root } = {}) {
     if (typeof command !== 'string' || !Object.hasOwn(HANDLERS, command)) throw new Refusal(USAGE);
     return HANDLERS[command](rest, env);
   } catch (error) {
-    if (error instanceof Refusal) return { code: 3, lines: [`refused: ${error.message}`] };
+    if (error instanceof Refusal) return { code: 3, lines: [`refused: ${error.message}`, ...error.extra] };
     if (error instanceof RecordError) return { code: 1, lines: [error.message] };
     if (error instanceof PlanProblem) return { code: 1, lines: [`ticket-approval: plan ${error.message}`] };
     throw error;

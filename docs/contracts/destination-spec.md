@@ -1,14 +1,15 @@
-# Contract: destination-spec v1.1
+# Contract: destination-spec v1.2
 
 Provider: `scripts/spec-check.mjs` (Node built-ins only). Writer of the shipped spec: the Product Manager, at step 5a of a feature run; writer of a spec draft (v1.1): the Product Manager in an `aico:to-spec` run. Consumers: the Lead of `aico:feature` (`check`, `stamp`), the Ship Gate (the check line), for a client project the `aico:client handoff` package, and from v1.1 `aico:to-spec` (`check`) and `draft-input` (`checkText`, imported in-process, no child process). Rationale: `docs/adr/0044-destination-spec-without-paths.md`.
 A feature run leaves one short spec of the destination. It holds no file path and no code, so it cannot go stale when files move. Plans keep their `files:` paths; only the spec is checked. Feature runs write the shipped spec; `aico:to-spec` writes only drafts; fix, maintain and other Playbooks write no spec.
 v1.1 (task grill-spec-tickets, T1; additive): spec drafts from `aico:to-spec` at `.company/work/<slug>/spec.md`, the stamp and package scope, the `checkText` export and the grill trace in `## Decisions`. The shape, `check`, `stamp`, their output and their refusals are unchanged, so every v1 spec and every v1 caller stays valid.
+v1.2 (task T11, minor): `<slug>` in a spec path and in the frontmatter `slug` is a work folder name, as `work-folder-name` v1 defines it: a new name (`YYYY-MM-DD HH.MM - <Topic>`, with an optional ` <n>` or `Draft` helper form, spaces inside) or a legacy slug. The old pattern is the legacy case. The check is the shared `isWorkFolder`, so a spec of a new run is accepted, a name the contract refuses (a `Build` helper with a number, lower-case words, a trailing space or dot, a bad date, a control character) is `refused`. The shape, `check`, `stamp`, output lines and exit codes are unchanged; every v1.1 spec and caller stays valid. `docs/specs/<name>.md` holds spaces and is committed, so a git call names it as one argument after `--literal-pathspecs` and `--`.
 
 ## Where it lives
-- `docs/specs/<slug>.md` in the product repo (slug `^[a-z0-9][a-z0-9-]{0,63}$`).
+- `docs/specs/<slug>.md` in the product repo (`<slug>` a work folder name: a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$` or a new name; spaces are allowed only in a new name).
 - A client project whose `.company/project.md` has `spec_in_repo: no` keeps it at `.company/work/<slug>/spec.md`; it goes only into the `aico:client handoff` package. The client decides at intake. A client project with no `spec_in_repo:` line: the Lead asks the CEO before step 5a (recommended `no` until the client says yes).
 - (v1.1) A spec draft from `aico:to-spec` (own or client product) lives at `.company/work/<slug>/spec.md`, with `version: pending` and `shipped: pending`. It is never committed and never stamped. It is an input to `aico:feature`, whose step 5a writes the shipped spec.
-- No other path is accepted by either command.
+- No other path is accepted by either command. The folder `.company/work/` and the prefix `docs/specs/` are matched in exactly that case.
 
 ## Stamp and package scope (v1.1)
 - `stamp` runs only on the spec a feature run wrote at its own step 5a, under that run's task slug (`docs/specs/<run slug>.md` or `.company/work/<run slug>/spec.md`). A spec named by a draft, a Handoff or a request is never stamped on that claim.

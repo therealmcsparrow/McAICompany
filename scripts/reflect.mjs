@@ -7,10 +7,10 @@ import { pathToFileURL } from 'node:url';
 import { lint } from './handoff-lint.mjs';
 import { main as ledgerMain } from './ledger.mjs';
 import { checkText, ROLE_RE } from './lessons.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const MAX_BYTES = 64 * 1024;
 const MAX_STEPS = 200;
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const FILE_RE = /^(\d{2})-[a-z0-9-]+\.md$/;
 const TAGS = ['contract', 'spec', 'security', 'test'];
 const STATUSES = new Set(['done', 'blocked', 'needs-ceo', 'handover']);
@@ -186,7 +186,7 @@ function plainDir(p) {
 }
 
 function workDir(slug) {
-  if (!SLUG_RE.test(slug ?? '')) throw new Refusal('slug must match ^[a-z0-9][a-z0-9-]{0,63}$');
+  if (!isWorkFolder(slug)) throw new Refusal('run must be a work folder name');
   const company = path.join(process.cwd(), '.company');
   const work = path.join(company, 'work');
   const dir = path.join(work, slug);

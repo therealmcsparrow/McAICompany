@@ -47,6 +47,10 @@ function oldReader() {
   fs.mkdirSync(lib);
   fs.writeFileSync(path.join(lib, 'run-state.mjs'), old.stdout);
   for (const f of ['handoff-lint.mjs', 'contract-drift.mjs']) fs.copyFileSync(path.join(import.meta.dirname, f), path.join(lib, f));
+  // handoff-lint imports ../mods/lib/work-folder.mjs, so the copy needs it at that relative spot.
+  const modLib = path.join(lib, '..', 'mods', 'lib');
+  fs.mkdirSync(modLib, { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'work-folder.mjs'), path.join(modLib, 'work-folder.mjs'));
   return path.join(lib, 'run-state.mjs');
 }
 const oldView = (reader, root) => JSON.parse(spawnSync(process.execPath, [reader, 'show', 'x', '--json'], { cwd: root, encoding: 'utf8' }).stdout);

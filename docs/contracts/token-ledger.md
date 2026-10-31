@@ -1,8 +1,8 @@
-# Contract: token-ledger v1.5
+# Contract: token-ledger v1.6
 
 
 Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, the scorecard from v1.1, `parallel-verdict` from v1.3 and `low-path-verdict` from v1.4), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).
-Sources read: `plan-tasks` v1 `readParallel` (by `ship`, v1.3); `tier-sets` v1 `readTierPath` (by `ship`, v1.4); `cost-source` v1 `readCost` and `costText` (by `scorecard`, `ship` and `receipt`, v1.5).
+Sources read: `work-folder-name` v1 `isWorkFolder` (by every command that takes a run, v1.6); `plan-tasks` v1 `readParallel` (by `ship`, v1.3); `tier-sets` v1 `readTierPath` (by `ship`, v1.4); `cost-source` v1 `readCost` and `costText` (by `scorecard`, `ship` and `receipt`, v1.5).
 
 Rationale for the two sources: `docs/adr/0011-token-counts-from-transcripts.md` (Spike S1/S2, `.company/work/optimize-brainstorm/03-spike-ai-data-engineer.md`).
 Part M, Fix round 6 (CEO, after SP-M3 `62-spike-ai-data-engineer.md`; still unshipped): keep-warm is cut, so the `keepwarm` kind and its `W<n>` ids are gone; `src: mod` stays for Reflect `model` mode.
@@ -13,9 +13,10 @@ v1.4 is additive (task low-tier-path, `docs/adr/0034-tier-sets-data-file.md`): i
 
 v1.5 is additive (task v020-gate-roadmap, T11): the scorecard gets a last `cost` segment from a recorded source, and the `receipt` command prints what the records hold. Nothing is stored: no record, key or `v` changes, and no cost is ever written to the ledger. Every v1.4 file is a valid v1.5 file; `report`, `model-verdict`, `parallel-verdict` and `low-path-verdict` give the same bytes, and `scorecard` gives the same line plus the last segment.
 
+v1.6 is additive (task build-draft): `run` may be a work folder name (for example `2026-10-30 22.42 - Cache Tax Draft 2`) as well as a legacy slug. Both go through `isWorkFolder`; nothing else decides. A name that fails the check is refused with `refused: run must be a work folder name or a legacy slug` and the text never repeats the name; no file is made. The scorecard and the verdicts compare with the ledger files whose names pass the check and skip the rest. The scorecard file cap is unchanged. Every v1.5 file is a valid v1.6 file and every command gives the same numbers for it; the stored `v` stays `1`.
 
 ## Storage
-- `.company/ledger/<run>.jsonl`, one JSON object per line. `<run>` = the task slug, or `brainstorm-<YYYYMMDD-HHMM>` for a brainstorm, `replay-<name>` for a replay, `baseline-<name>` for an imported baseline. Committed with the run's Finish when the product tracks `.company/`; otherwise it stays local. Readers only need the local file.
+- `.company/ledger/<run>.jsonl`, one JSON object per line. `<run>` = the work folder name of the run (or, for a run started before work-folder-name v1, its task slug), or `brainstorm-<YYYYMMDD-HHMM>` for a brainstorm, `replay-<name>` for a replay, `baseline-<name>` for an imported baseline. Committed with the run's Finish when the product tracks `.company/`; otherwise it stays local. Readers only need the local file.
 - **Counts, enums and UTC times only, never prompt or reply content** (GDPR Art. 5(1)(c)). The schema is an allow-list: unknown keys and free text are refused. Times have the same one-second precision as the git commits of the run.
 - `run` is written **live** by the Lead from the dispatch's task slug. It is never derived from a branch, a session or a time window.
 
@@ -34,7 +35,7 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 | Key | Value |
 |---|---|
 | `v` | `1` |
-| `run` | `^[a-z0-9][a-z0-9-]{0,63}$` |
+| `run` | a work folder name (`work-folder-name` v1: `isWorkFolder` from `mods/lib/work-folder.mjs`, the one check) or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$` |
 | `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect \| meta \| par` (`reflect`: part M, `src: mod` only; `meta`: v1.2; `par`: v1.3, below) |
 | `id` | Step `^\d{2}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `reflect` a Step `^\d{2}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
 | `role` | an `agents/*.md` name, or `lead` (not on `ship`; always `lead` on `reflect`) |

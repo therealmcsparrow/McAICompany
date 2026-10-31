@@ -449,7 +449,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const tierPath = read('skills/pipeline/references/tier-path.md');
     const step8 = tierPath.split('\n').find((l) => l.startsWith('8. **Sync.**'));
     assert.match(step8, /`sync '<slug>' --plan '<plan>' --base '<base>'` before the first builder \(feature\)/);
-    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. (`--diff` reads the run only while HEAD is on the branch `aico\/<slug>` and no grafts file exists; otherwise it prints `check: high: diff unknown` and step 11 applies\. )A plain `sync '<slug>'` takes no `--base`\./);
+    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. (`--diff` reads the run only while HEAD is on the branch `aico\/<branch id>` and no grafts file exists; otherwise it prints `check: high: diff unknown` and step 11 applies\. )A plain `sync '<slug>'` takes no `--base`\./);
     assert.match(step8, /add before ship:/);
     const feature = read('skills/feature/SKILL.md');
     assert.match(feature, /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/m);
@@ -772,8 +772,8 @@ describe('AC8 a low run keeps the tests, the pre-filter and handoff-lint', () =>
 
   // v0.18.0 text reached through the changes made since to the pre-filter call (full base id, run ref, judging diff) and the Ship checks before the suite.
   const toCurrentCalls = (s) => s
-    .replace('once the last review is clean: run the full test suite once', "once the last review is clean: check that `git symbolic-ref -q HEAD` prints exactly `refs/heads/aico/<slug>` and that `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=no --ignore-submodules=none` prints nothing, so the suite tests exactly the run ref's tree; otherwise stop and name it in the Ship Gate summary. Then run the full test suite once")
-    .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run <slug>` and `list` (`rule-check` v1.1)')
+    .replace('once the last review is clean: run the full test suite once', "once the last review is clean: check that `git symbolic-ref -q HEAD` prints exactly `refs/heads/<branch>` (the printed `branch:` value) and that `git -c core.fsmonitor=false status --porcelain=v1 -z --untracked-files=no --ignore-submodules=none` prints nothing, so the suite tests exactly the run ref's tree; otherwise stop and name it in the Ship Gate summary. Then run the full test suite once")
+    .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run \'<slug>\'` and `list` (`rule-check` v1.1)')
     .replace('over the diff (`<sha>` = the Base commit)', 'over the judging diff (rule git.M-SEC4)');
 
   test('AC8 the pre-filter, handoff-lint and full-suite lines of the pipeline are the v0.18.0 ones', (t) => {

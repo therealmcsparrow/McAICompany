@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Lints the `## Recommended set` of a skill-researcher file and, with `vet`, scans each pick itself.
-// Usage: node skill-picks.mjs lint .company/work/<slug>/<NN>-skill-researcher.md   (cwd = product repo)
-//        node skill-picks.mjs vet  .company/work/<slug>/<NN>-skill-researcher.md --json
+// Usage: node skill-picks.mjs lint .company/work/<work folder>/<NN>-skill-researcher.md   (cwd = product repo)
+//        node skill-picks.mjs vet  .company/work/<work folder>/<NN>-skill-researcher.md --json
 //        node skill-picks.mjs check-install --name <skill> --hash <sha-256 hex> --json
 // Contract: docs/contracts/skill-recommendation.md. Offending text is never echoed; refusals go to stdout.
 import { lstatSync, readFileSync } from 'node:fs';
@@ -9,9 +9,12 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
 import { NAME_RE, settingsMode, vetCandidates } from './skillspector.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
-const HANDOFF_RE = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/\d{2}-skill-researcher\.md$/;
+const HANDOFF_PREFIX = '.company/work/';
+const HANDOFF_FILE_RE = /^\d{2}-skill-researcher\.md$/;
+const MAX_HANDOFF_ARG = 300;
 const AREA_RE = /^(stack|product-type|company-type|design)$/;
 const LINE_RE = /^- area: (stack|product-type|company-type|design); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: pending$/;
 const COMMIT_RE = /^[0-9a-f]{40}$/;
@@ -30,11 +33,21 @@ export class Refused extends Error {
 const pad = (n) => String(n).padStart(2, '0');
 const localDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+// The work folder name of `.company/work/<work folder>/<NN>-skill-researcher.md`, or null.
+function handoffFolder(arg) {
+  if (typeof arg !== 'string' || arg.length > MAX_HANDOFF_ARG || !arg.startsWith(HANDOFF_PREFIX)) return null;
+  const rest = arg.slice(HANDOFF_PREFIX.length);
+  const cut = rest.indexOf('/');
+  if (cut < 1) return null;
+  const folder = rest.slice(0, cut);
+  return HANDOFF_FILE_RE.test(rest.slice(cut + 1)) && isWorkFolder(folder) ? folder : null;
+}
+
 function readHandoff(arg, cwd) {
-  const m = typeof arg === 'string' ? HANDOFF_RE.exec(arg) : null;
-  if (!m) throw new Refused('handoff path must be .company/work/<slug>/<NN>-skill-researcher.md');
+  const folder = handoffFolder(arg);
+  if (folder === null) throw new Refused('handoff path must be .company/work/<work folder>/<NN>-skill-researcher.md');
   // No link anywhere on the way, then a regular file within the size cap.
-  for (const rel of ['.company', '.company/work', `.company/work/${m[1]}`, arg]) {
+  for (const rel of ['.company', '.company/work', `.company/work/${folder}`, arg]) {
     let st;
     try { st = lstatSync(resolve(cwd, rel)); } catch { throw new Refused('handoff not found'); }
     if (st.isSymbolicLink()) throw new Refused('handoff path contains a link');

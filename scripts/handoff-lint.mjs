@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v2.0): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.1): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
 import { show as showRun } from './run-state.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 export const MAX_BYTES = 64 * 1024;
 const MAX_LINE = 1000;
@@ -25,7 +26,7 @@ const MAX_FLOOR_FILE = 16 * 1024;
 const MAX_EVIDENCE = 1024 * 1024;
 const MAX_RULINGS = 64 * 1024;
 const MAX_EVIDENCE_READS = 100;
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const TASK_ID_RE = /^[A-Z][0-9]{1,3}[a-z]?$/;
 const PLAN_NAME_RE = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 const RUN_NAME_TOKEN_RE = /\d{2,3}-[a-z][a-z0-9-]{0,40}\.md/g;
 const REVIEWERS = new Set(['code-reviewer', 'security', 'pentester', 'vuln-scanner', 'fresh-reviewer']);
@@ -367,6 +368,7 @@ export function lint(text, opts = {}) {
   if ('depth' in fm && !DEPTH.has(fm.depth)) errors.push('frontmatter: depth must be quick|deep');
   if ('round' in fm && !/^\d{1,3}$/.test(fm.round)) errors.push('frontmatter: round must be a number');
   for (const k of LIST_KEYS) if (k in fm && list(fm[k]) === null) errors.push(`frontmatter: ${k} must be a [list]`);
+  if ('task' in fm && !isWorkFolder(fm.task) && !TASK_ID_RE.test(fm.task)) errors.push(`line ${at.task}: task must be a work folder name or a task id`);
   if ('contracts' in fm) checkContracts(fm.contracts, opts.index, errors);
   const roleIdBy = BYLINE_ID_RE.test(lines[end + 1] ?? '');
   if (roleIdBy && !('contracts' in fm)) errors.push('frontmatter: missing contracts (required under a Role id byline, handoff v1.2)');
@@ -666,7 +668,11 @@ function runContext(runAbs) {
   const company = dirname(work);
   if (basename(work) !== 'work' || basename(company) !== '.company') return null;
   const root = dirname(company);
-  try { return { root, realRoot: realpathSync.native(root), reads: 0, cache: new Map() }; } catch { return null; }
+  try {
+    // The run folder name must be the on-disk name: a case alias would pick up lines filed under the alias (proj.M-SEC8).
+    const canon = basename(realpathSync.native(runAbs)) === basename(runAbs);
+    return { root, realRoot: realpathSync.native(root), reads: 0, cache: new Map(), canon };
+  } catch { return null; }
 }
 
 function lineCount(text) {
@@ -751,9 +757,10 @@ export function parseLocations(text) {
 
 // ---- contested findings (handoff v2.0) ----
 const RUN_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
-// `- <slug>/<NN>-<role>:R-<n> — … — approved: <date> (CEO)`; the slug is the run folder name. A line without a slug names no run.
+// `- <work folder name>/<NN>-<role>:R-<n> — … — approved: <date> (CEO)`; the slug is the run folder name. A line without a slug names no run.
 const EXC_TAIL = ' — .{1,600} — approved: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$';
-const EXCEPTION_RE = new RegExp(`^- ([a-z0-9][a-z0-9-]{0,63})/(${KEY_PART})${EXC_TAIL}`);
+// The run part is read up to the first slash and judged by isWorkFolder afterwards; it must equal the run folder name byte for byte.
+const EXCEPTION_RE = new RegExp(`^- ([^/]{1,120})/(${KEY_PART})${EXC_TAIL}`);
 const UNSLUGGED_RE = new RegExp(`^- (${KEY_PART})${EXC_TAIL}`);
 const RULING_RE = new RegExp(`^- (${KEY_PART}) — (upheld|overruled) — (.{1,600}) — ruled: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$`);
 
@@ -824,7 +831,7 @@ function exceptionLines(text) {
     if (section !== 'Exceptions') continue;
     const m = EXCEPTION_RE.exec(line);
     if (m) {
-      if (realDate(Number(m[3]), Number(m[4]), Number(m[5]))) out.push({ slug: m[1], key: m[2], date: `${m[3]}-${m[4]}-${m[5]}`, line });
+      if (isWorkFolder(m[1]) && realDate(Number(m[3]), Number(m[4]), Number(m[5]))) out.push({ slug: m[1], key: m[2], date: `${m[3]}-${m[4]}-${m[5]}`, line });
       continue;
     }
     const u = UNSLUGGED_RE.exec(line);
@@ -838,7 +845,8 @@ function exceptionLines(text) {
 // `sink`, when given, collects the applied lines for `applied()` and notes a file that exists but cannot be read.
 function readExceptions(ctx, slug, warnings, sink = null) {
   const found = new Set();
-  if (!ctx || !SLUG_RE.test(slug)) return found;
+  if (!ctx || !isWorkFolder(slug)) return found;
+  if (!ctx.canon) { warnings.push('warning: run folder name is not its on-disk name; no exceptions applied'); return found; }
   const got = readInside(ctx.realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return found;
   if (got.status !== 'ok' && sink) sink.failed = sink.failed ?? 'cannot read standards.md';
@@ -880,7 +888,7 @@ function readExceptions(ctx, slug, warnings, sink = null) {
 // CEO rulings: `## Rulings` of .company/work/<slug>/rulings.md. The last line for a key counts. Returns Map key -> { verb, at }.
 function readRulings(ctx, slug, warnings, sink = null) {
   const rulings = new Map();
-  if (!ctx || !SLUG_RE.test(slug)) return rulings;
+  if (!ctx || !isWorkFolder(slug) || !ctx.canon) return rulings;
   const got = readInside(ctx.realRoot, ['.company', 'work', slug, 'rulings.md'], MAX_RULINGS);
   if (got.status === 'missing') return rulings;
   if (got.status !== 'ok') {
@@ -906,13 +914,13 @@ function readRulings(ctx, slug, warnings, sink = null) {
 
 // The number of `## Exceptions` lines that name `<slug>/`, any date. Returns { code, line }.
 export function exceptionsFor(root, slug) {
-  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) return { code: 2, line: 'ERROR slug must match ^[a-z0-9][a-z0-9-]{0,63}$' };
+  if (!isWorkFolder(slug)) return { code: 2, line: 'ERROR slug must be a work folder name' };
   let realRoot;
   try { realRoot = realpathSync.native(root); } catch { return { code: 1, line: 'ERROR cannot read standards.md' }; }
   const got = readInside(realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return { code: 0, line: 'exceptions on file: 0' };
   if (got.status !== 'ok') return { code: 1, line: 'ERROR cannot read standards.md' };
-  return { code: 0, line: `exceptions on file: ${exceptionLines(got.text).filter(e => e.slug === slug).length}` };
+  return { code: 0, line: `exceptions on file: ${exceptionLines(got.text).filter(e => e.slug !== null && e.slug.toLowerCase() === slug.toLowerCase()).length}` };
 }
 
 // The state table of a run folder: { states: Map key -> state, unresolved, escalated, ruled, excepted, lineages, warnings, errors }.
@@ -1055,7 +1063,7 @@ export function applied(runFolder) {
   const runAbs = resolve(runFolder);
   const ctx = runContext(runAbs);
   const slug = basename(runAbs);
-  if (!ctx || !SLUG_RE.test(slug)) return { code: 2, lines: [] };
+  if (!ctx || !ctx.canon || !isWorkFolder(slug)) return { code: 2, lines: [] };
   const sink = { rulings: [], exceptions: [], failed: null };
   const r = contests(runAbs, sink);
   if (sink.failed) return { code: 1, lines: ['ERROR ' + sink.failed] };

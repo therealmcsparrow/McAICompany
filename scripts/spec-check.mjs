@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Destination spec check (contract: docs/contracts/destination-spec.md v1.1). Node built-ins only.
+// Destination spec check (contract: docs/contracts/destination-spec.md v1.2). Node built-ins only.
 // `check` reports a spec that holds a code block, a file path, a bad frontmatter or a wrong heading list;
 // `stamp` fills the two pending frontmatter values once. Spec text and arguments are untrusted: sizes are
 // capped before parsing, every pattern is anchored over a character class or replaced by a single scan, the
@@ -8,13 +8,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
 const MAX_BYTES = 64 * 1024;
 const MAX_ERRORS_SHOWN = 50;
 
-const SLUG = '[a-z0-9][a-z0-9-]{0,63}';
-const SPEC_REL = new RegExp(`^(?:docs/specs/${SLUG}\\.md|\\.company/work/${SLUG}/spec\\.md)$`);
+const SPECS_DIR = 'docs/specs/';
+const WORK_DIR = '.company/work/';
 const VERSION = /^\d+\.\d+\.\d+$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
@@ -28,6 +29,16 @@ const WIN = process.platform === 'win32';
 const CASE_FOLD = WIN || process.platform === 'darwin';
 
 class Refused extends Error {}
+
+// A spec path by name: `docs/specs/<name>.md` or `.company/work/<name>/spec.md`, `<name>` a work folder name
+// (new form or legacy slug). The name is cut out by position and judged by the shared allow-list.
+function isSpecRel(rel) {
+  if (typeof rel !== 'string' || rel.length > MAX_ARG) return false;
+  let name = null;
+  if (rel.startsWith(SPECS_DIR) && rel.endsWith('.md')) name = rel.slice(SPECS_DIR.length, -'.md'.length);
+  else if (rel.startsWith(WORK_DIR) && rel.endsWith('/spec.md')) name = rel.slice(WORK_DIR.length, -'/spec.md'.length);
+  return name !== null && isWorkFolder(name);
+}
 
 const validDate = (text) => {
   const m = DATE.exec(text);
@@ -51,7 +62,7 @@ function realRootOf(root) {
 function relOf(realRoot, arg) {
   let rel = arg.replace(/\\/g, '/');
   if (path.isAbsolute(arg)) rel = path.relative(realRoot, arg).split(path.sep).join('/');
-  if (!SPEC_REL.test(rel)) throw new Refused('spec must be docs/specs/<slug>.md or .company/work/<slug>/spec.md');
+  if (!isSpecRel(rel)) throw new Refused('spec must be docs/specs/<name>.md or .company/work/<name>/spec.md');
   return rel;
 }
 
@@ -67,7 +78,7 @@ function plainSpec(realRoot, rel) {
   }
   if (!sameName(real, lexical)) return null;
   const canon = path.relative(realRoot, real).split(path.sep).join('/');
-  if (!SPEC_REL.test(canon)) return null;
+  if (!isSpecRel(canon)) return null;
   return { file: real, dir: path.dirname(real) };
 }
 
@@ -117,7 +128,7 @@ function frontmatter(lines) {
   const version = /^version: (.+)$/.exec(lines[2]);
   const shipped = /^shipped: (.+)$/.exec(lines[3]);
   if (!slug || !version || !shipped) return null;
-  if (!new RegExp(`^${SLUG}$`).test(slug[1])) return null;
+  if (!isWorkFolder(slug[1])) return null;
   if (version[1] !== 'pending' && !VERSION.test(version[1])) return null;
   if (shipped[1] !== 'pending' && !validDate(shipped[1])) return null;
   return { end: 4, version: version[1], shipped: shipped[1] };

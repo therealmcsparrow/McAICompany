@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Worktree (contract: docs/contracts/worktree.md v1). Node built-ins only; cwd = product root.
+// Worktree (contract: docs/contracts/worktree.md v1.1).Node built-ins only; cwd = product root.
 // uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/tier-sets.md v1.1
 // One git worktree per parallel task, merged back into the run branch in plan order. Every git call is a fixed argument
 // list run without a shell, in a scrubbed environment, with replace refs and grafts off; branches, worktree folders,
@@ -11,9 +11,10 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readParallel, sortByVisit, normalizePath, ParallelRecordError } from './plan-tasks.mjs';
+import { branchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const ID = /^(?:t\d{1,3}[a-z]?|proto)$/;
+const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
+const ID =/^(?:t\d{1,3}[a-z]?|proto)$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const PATCH_NAME = /^(?:t\d{1,3}[a-z]?|proto)-\d{8}T\d{6}Z\.patch$/;
@@ -261,7 +262,7 @@ function loadRecord(root, slug) {
 }
 
 export function readWorktrees(root, slug) {
-  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('worktree: bad slug');
+  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('worktree: bad slug');
   const cur = loadRecord(root, slug);
   if (!cur.events.length) return { v: 1, slug, state: 'none', events: [], archived: 0, conflicts: 0 };
   return {
@@ -400,19 +401,26 @@ function listWorktrees(ctx) {
 }
 
 function listBranches(ctx, slug) {
-  const out = ctx.git(['for-each-ref', '--format=%(refname)', '--end-of-options', `refs/heads/aico-wt/${slug}/`]).out.toString('utf8');
+  const out = ctx.git(['for-each-ref', '--format=%(refname)', '--end-of-options', `refs/heads/aico-wt/${idOf(slug)}/`]).out.toString('utf8');
   return out.split('\n').filter(Boolean);
 }
 
 // ---------------------------------------------------------------- layout
 
-const branchOf = (slug, id) => `aico-wt/${slug}/${id}`;
+// The branch id of a run name (a legacy slug is its own id), re-checked against its allow-list before it is part of a ref or a path.
+function idOf(slug) {
+  const id = isWorkFolder(slug) ? branchId(slug) : null;
+  if (typeof id !== 'string' || !BRANCH_ID.test(id)) throw new Refusal('bad run name');
+  return id;
+}
+
+const branchOf = (slug, id) => `aico-wt/${idOf(slug)}/${id}`;
 const refOf = (slug, id) => `refs/heads/${branchOf(slug, id)}`;
-const runRef = (slug) => `refs/heads/aico/${slug}`;
+const runRef = (slug) => `refs/heads/aico/${idOf(slug)}`;
 
 function layoutOf(realRoot, slug, id) {
   const wtRoot = path.join(path.dirname(realRoot), `${path.basename(realRoot)}.aico-wt`);
-  const slugDir = path.join(wtRoot, slug);
+  const slugDir = path.join(wtRoot, idOf(slug));
   return { wtRoot, slugDir, wt: path.join(slugDir, id) };
 }
 
@@ -434,7 +442,7 @@ function printable(p) {
 // ---------------------------------------------------------------- checks
 
 function checkSlug(value) {
-  if (typeof value !== 'string' || !SLUG.test(value)) throw new Refusal('slug must be lowercase letters, digits and hyphens');
+  if (typeof value !== 'string' || !isWorkFolder(value)) throw new Refusal('slug must be lowercase letters, digits and hyphens');
   return value;
 }
 
@@ -480,7 +488,7 @@ function recordMismatches(ctx, slug, rec) {
     if (!ID.test(id)) strays.add('?');
     else if (!rec.ids.get(id)?.live && !bad.includes(id)) strays.add(id);
   };
-  const branchPrefix = `refs/heads/aico-wt/${slug}/`;
+  const branchPrefix = `refs/heads/aico-wt/${idOf(slug)}/`;
   for (const ref of branchList) stray(ref.slice(branchPrefix.length));
   const slugPrefix = `${sameKey(layoutOf(ctx.realRoot, slug, 'x').slugDir)}${path.sep}`;
   for (const p of treeList) {
@@ -922,7 +930,7 @@ function cmdLeftovers(args, env) {
   const ctx = openGit(env);
   const wtRoot = layoutOf(ctx.realRoot, 'x', 'x').wtRoot;
   const prefix = `${sameKey(wtRoot)}${path.sep}`;
-  const shape = /^[a-z0-9][a-z0-9-]{0,63}\/(?:t\d{1,3}[a-z]?|proto)$/;
+  const shape = /^[a-z0-9][a-z0-9-]{0,127}\/(?:t\d{1,3}[a-z]?|proto)$/;
   const lines = [];
   for (const p of listWorktrees(ctx)) {
     const key = sameKey(p);

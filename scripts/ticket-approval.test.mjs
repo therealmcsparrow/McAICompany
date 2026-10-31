@@ -79,7 +79,7 @@ describe('module seam', () => {
     const src = fs.readFileSync(path.join(import.meta.dirname, 'ticket-approval.mjs'), 'utf8');
     assert.match(src, /from '\.\/plan-markdown\.mjs'/);
     assert.doesNotMatch(src, /child_process|execSync|spawn|execFile/);
-    assert.doesNotMatch(src, /from '(?!node:|\.\/plan-markdown\.mjs)/);
+    assert.doesNotMatch(src, /from '(?!node:|\.\/plan-markdown\.mjs|\.\.\/mods\/lib\/work-folder\.mjs)/);
     assert.equal(src.includes('\r'), false);
   });
 });
@@ -523,7 +523,8 @@ describe('build-plan', () => {
     assert.equal(text.includes('T4'), false);
     assert.equal(text.includes('\r'), false);
     const stored = fx.lines();
-    assert.deepEqual(r.lines.slice(1), [stored[1], stored[2]]);
+    assert.equal(r.lines[1], 'plan: .company/work/demo-build/plan.md');
+    assert.deepEqual(r.lines.slice(2), [stored[1], stored[2]]);
     assert.deepEqual(fx.events().at(-1).ids, ['T1', 'T2']);
   });
 

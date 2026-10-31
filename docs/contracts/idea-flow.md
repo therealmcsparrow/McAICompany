@@ -1,11 +1,13 @@
-# Contract: idea-flow v1.1
+# Contract: idea-flow v1.2
+
+v1.2 (task idea-20261030-2242-build-draft, T7; additive): `<slug>` is any work folder name of `work-folder-name` v1 (`isWorkFolder`): a new name `YYYY-MM-DD HH.MM - Topic[ Suffix[ n]]` or a legacy slug. The Lead makes a new-name folder with `work-folder new --playbook idea|bug --topic file` and passes the printed name, single-quoted, to `start`; `start` never creates a new-name folder (missing folder or missing `.company/work` → exit 1 `unknown slug`, nothing created) and still creates a legacy slug folder as in v1.1. A legacy record resumes unchanged. A name that is not a work folder → `refused: bad slug`, exit 3. The name is checked by the shared module `mods/lib/work-folder.mjs`; this file holds no copy of the pattern. A `--out` path may hold the spaces, dots and hyphens of a new name (the `--out` allow-list is unchanged).
 
 v1.1 (task reprompt-20261030-1309-draft-2-draft, CEO decision 2026-10-30; additive): outside the `software` company type the routes form never offers `D to-spec` (`to-spec` and `to-tickets` are software-only Playbooks) and the tickets form offers only `G park-roadmap` and `E park-idea`; `options` never prints those letters there and `pick` of one is refused (exit 3). Outside `software`, once Research is done the routes form would hold only `E park-idea`, and a form needs 2 to 4 options, so `options` adds `S stop` there: `pick S` ends the flow at once, nothing parked or built (the `pick` event records route `stop`; replay accepts it after Research in any type). Software never offers `S`. The type is read with `company-type` v1.7 `resolve` (the project's `company_type` line, default `software`), never from a Role or the CEO's text.
 
-Provider: `scripts/idea-flow.mjs` (Node built-ins only; it imports `run` from `scripts/company-type.mjs`). Writer of the record: the Lead of `aico:idea` and `aico:bug`, only through this CLI. Consumers: the same Leads (`options`, `state`, `read`) and `ticket-approval` v1 (reads nothing from it). The allowed picks of every form come from `options`, never from the Lead's text.
+Provider: `scripts/idea-flow.mjs` (Node built-ins only; it imports `run` from `scripts/company-type.mjs` and `isWorkFolder`, `isLegacySlug` from `mods/lib/work-folder.mjs`). Writer of the record: the Lead of `aico:idea` and `aico:bug`, only through this CLI. Consumers: the same Leads (`options`, `state`, `read`) and `ticket-approval` v1 (reads nothing from it). The allowed picks of every form come from `options`, never from the Lead's text.
 
 ## Where it lives
-- `.company/work/<slug>/idea-flow.jsonl`, slug `^[a-z0-9][a-z0-9-]{0,63}$`. No other path is accepted.
+- `.company/work/<slug>/idea-flow.jsonl`, `<slug>` a work folder name (see v1.2): a new name, or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. No other path is accepted.
 - Append-only, one JSON object per line, at most 2000 lines of at most 1024 bytes and 256 KiB in total. Created once with exclusive create (`O_CREAT|O_EXCL`); every later open is an append that checks the file is a regular file with one link and the same `dev` and `ino` as its `lstat`; `O_NOFOLLOW` is ORed in only where it exists (never on win32).
 
 ## Events
@@ -28,7 +30,7 @@ Forms and the picks they offer:
 
 ## CLI (cwd = product root)
 Every argument is at most 4096 characters and holds no character of Unicode category Cc, Cf, Zl or Zp, else `refused: argument is not accepted`, exit 3, before any command runs.
-- `start <slug> --kind idea|bug`: creates the record (and the work folder if missing) with the `start` event. Prints `started`. A record that exists → exit 1 `exists`.
+- `start <slug> --kind idea|bug`: creates the record with the `start` event (and the work folder if missing, legacy slug only; a missing new-name folder is exit 1 `unknown slug`). Prints `started`. A record that exists → exit 1 `exists`.
 - `options <slug>`: prints `option <letter> <route>` per allowed pick, or `pending <step>`, or `ended`.
 - `pick <slug> <letter>`: letter must be a single character of the open form's options, else `refused: not an allowed pick`, exit 3, nothing written. Prints `picked <letter> <route>`.
 - `done <slug> <step> [--size S] [--tier T] [--out P]`: step from the fixed list `grilling, grill-me, grill-with-docs, reprompt, cooler, brainstorm, research, to-spec, to-tickets, triage, build`. `--size` and `--tier` are required for `triage` and refused for any other step. `--out` is a relative path of at most 200 characters from `[A-Za-z0-9._ /-]`, no leading `/`, no `.` or `..` segment, no empty segment; it is recorded, never opened. A step that is not the pending one → exit 1 `step out of order`.
@@ -46,4 +48,4 @@ The record holds the kind, step names, chosen routes, an optional artefact path 
 - Script cannot run or prints nothing → the Lead stops.
 
 ## Compatibility
-v1.1 is additive: kinds, events, steps, routes and every reason of v1 are unchanged; `software` behaves byte for byte as v1; one new exit-1 reason `company type`. An added event, step, route or reason needs a new version.
+v1.2 is additive: every v1.1 behavior, reason and exit code holds for legacy slugs; new-name folders add no event, step, route or reason. v1.1 is additive: kinds, events, steps, routes and every reason of v1 are unchanged; `software` behaves byte for byte as v1; one new exit-1 reason `company type`. An added event, step, route or reason needs a new version.

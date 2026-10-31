@@ -1,4 +1,6 @@
-# Contract: cited-report v1
+# Contract: cited-report v1.1
+
+v1.1 (`docs/adr/0007-contract-minor-versions.md`): run folders are new and legacy work folder names (`work-folder-name` v1); the report format is unchanged.
 
 Provider: `scripts/cited.mjs` (Node built-ins only; read-only, writes nothing). Consumer: `aico:feedback` (the `## Cited` section of `feedback-report.md`); the CEO decides any Role removal from it.
 Uses: the Step file layout of `handoff` v1.1 (`.company/work/<run>/NN-<role>.md`) and the Role names in `agents/*.md`.
@@ -8,7 +10,7 @@ Rationale: a Role that no later Handoff of its run ever names is a candidate for
 `node scripts/cited.mjs report --runs <N>` from the product root. `<N>` is digits only, 1 to 50. Any other argument shape or value: `refused: ...`, exit 3. Exit 0 otherwise.
 
 ## What is read
-- Run folders `.company/work/<slug>` (`^[a-z0-9][a-z0-9-]{0,63}$`), newest first by folder time, at most the `<N>` newest that hold a Step. A linked folder is skipped and counted.
+- Run folders `.company/work/<name>` (a name `isWorkFolder` accepts: new name or legacy slug; other names are ignored; names compare case-folded on win32 and darwin), newest first by folder time, at most the `<N>` newest that hold a Step. A linked folder is skipped and counted.
 - Step files in a run: `^(\d{2,3})-((?:spike-)?<role>)\.md$` with `<role>` an `agents/*.md` name. `00-*` files, plan files (`NN-architect-plan.md`) and other names are not Steps. A Step file that is a link, not a plain single-link file, over 256 KiB, not valid UTF-8, or names no known Role is skipped and counted. At most 500 files per run and 8 MiB in all; the rest is skipped and counted.
 
 ## Cites (a later Handoff of the same run: a higher `NN`)

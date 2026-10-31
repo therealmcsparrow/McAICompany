@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
 import { wrap } from './lib/cache-clock.mjs'
-import { arr, cleanText, guardRunActive, int, obj, oneOf, opt, pattern, str, trimEol } from './lib/guard.mjs'
+import { arr, cleanText, guardRunActive, int, obj, oneOf, opt, parseOutputText, pattern, str, trimEol, workFolder } from './lib/guard.mjs'
 import { fmtDuration, fmtInt } from './lib/format.mjs'
 import { checkText } from './lib/lesson-text.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
@@ -27,8 +27,6 @@ const MODEL_TIMEOUT_MS = 60000
 const MODEL_MAX_TOKENS = 400
 
 const PROMPT_HEAD = 65536
-const OUTPUT_LINE = /^Output: \.company\/work\/[a-z0-9][a-z0-9-]{0,63}\/\d{2}-[a-z][a-z0-9-]{0,40}\.md\r?$/m
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/
 // The model id the ledger accepts; any other id is not recorded.
 const LEDGER_MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/
@@ -96,7 +94,7 @@ const guardCheck = obj({
 // `reflect.mjs retro … --json`.
 const guardRetro = obj({
   v: int(1, 1),
-  slug: pattern(SLUG),
+  slug: workFolder,
   outcome: oneOf(['ship', 'abort', 'unknown']),
   top_spend: arr(obj({ step: str(16), role: str(41), spend: count }), 3),
   top_time: arr(obj({ step: str(16), role: str(41), ms: count }), 3),
@@ -550,7 +548,7 @@ export function registerReflect(on: On): void {
   // A Step dispatch is the signal that a run is going: Reflect starts its timer there and idles until then.
   on('agent.spawn', { subagentType: /^.+$/ }, async ($, e, next) => {
     const out = await next(e)
-    if (OUTPUT_LINE.test(typeof e.prompt === 'string' ? e.prompt.slice(0, PROMPT_HEAD) : '')) void begin($)
+    if (parseOutputText(typeof e.prompt === 'string' ? e.prompt.slice(0, PROMPT_HEAD) : '') !== null) void begin($)
     return out
   })
 

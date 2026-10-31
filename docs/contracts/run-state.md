@@ -1,4 +1,4 @@
-# Contract: run-state v1.5
+# Contract: run-state v1.6
 
 Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
@@ -8,8 +8,10 @@ v1.3 is additive (rationale `docs/adr/0028-run-timing-from-run-state.md`): it ad
 v1.5 is additive (task plan-gate-enforce, task run-state-ceo-sub): it adds the `ceo` event (a bundled CEO form), the `sub` event (a subagent start or stop, optional `session`), the optional `aico` key on `start`, the commands `ceo` and `sub`, and the view keys `ceo`, `subs` and `sessions`. Every v1.4 file is a valid v1.5 file and gives the same view plus `"ceo": [], "subs": [], "sessions": []`. A v1.4 reader skips a `ceo` or `sub` line, and a `start` line that carries `aico`, with its usual `line <n> skipped` warning. Under `plan_check.policy` `block`, `gate <slug> plan passed` is refused unless every plan in the run folder passes the scan. Under `warn` and `off`, and for every other command, v1.4 behaviour is unchanged.
 v1.4 is additive (task low-tier-path): the triage record also proves an approved low-risk fix route, and `triage check` takes `--route fix`. Every v1.3 call behaves as before.
 
+v1.6 is additive (task idea-20261030-2242-build-draft): `<slug>` also accepts a work folder name of `work-folder-name` v1 (`<YYYY-MM-DD HH.MM> - <Topic>`, with the Build or Draft suffix and a Draft number), through its `isWorkFolder`; the legacy slug shape stays valid and a legacy folder is never renamed. Every other name is `refused: bad slug`, without the name echoed. A run folder is used only when its real path is the folder of that name inside the real `.company/work`. Every v1.5 call and file behaves as before.
+
 ## Storage
-- `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` matches `^[a-z0-9][a-z0-9-]{0,63}$`.
+- `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a work folder name (`isWorkFolder` of `mods/lib/work-folder.mjs`, `work-folder-name` v1): a new name or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. The name holds spaces and dots, so a shell line quotes it in single quotes.
 - Counts, enums and times only. No prompt, reply, Handoff or CEO text (GDPR Art. 5(1)(c)).
 - Limits: a line ≤ 256 bytes, a file ≤ 64 KiB, at most 1000 lines. The file and the run folder are opened with `lstat`; a symlink is refused.
 - Committed with the run's Handoffs (it sits in the run folder). A reprompt run folder is not committed: it carries its own `.gitignore` (`reprompt` v1).

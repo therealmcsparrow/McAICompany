@@ -132,7 +132,7 @@ const NOT_JUDGED = [
   `FOO=1 ${A}`,
   `"node" ${ROOT}/scripts/run-state.mjs gate run-one plan passed`,
   `node "${ROOT}/scripts/run-state.mjs" gate run-one plan passed`,
-  `node ${ROOT}/scripts/run-state.mjs gate 'run-one' plan passed`,
+  `node ${ROOT}/scripts/run-state.mjs gate "run-one" plan passed`,
   `node ${ROOT}/scripts/other.mjs gate run-one plan passed`,
   `node ${ROOT}/scripts/run-state.mjs gate run-one plan changed`,
   `node ${ROOT}/scripts/run-state.mjs gate run-one brief passed`,

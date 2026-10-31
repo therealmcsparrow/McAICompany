@@ -33,7 +33,7 @@ for (const name of NAMES) {
     assert.deepEqual([...map.keys()], ['name', 'description', 'disable-model-invocation', 'argument-hint']);
     assert.equal(map.get('name'), name);
     assert.equal(map.get('disable-model-invocation'), 'true');
-    assert.equal(map.get('argument-hint'), '<idea | file> | resume <slug>');
+    assert.equal(map.get('argument-hint'), '<idea | file> | resume <name>');
     assert.ok(map.get('description').startsWith('Playbook.'));
     assert.ok(map.get('description').length <= 1024);
     assert.ok(!text.includes('allowed-tools'));
@@ -102,10 +102,10 @@ test('shared loop: one question per form, status after each log, close rules, re
   const need = [
     'exactly one question per form', '2 to 4 options', 'recommended option first', '(Recommended)',
     'Header `<n> answered, <k> open`', 'fixed number of questions', '`question_rounds` is not used',
-    `node "${RUN}" grill status <slug>`, 'Rewrite `.company/work/<slug>/grill.md` whole with the Write tool',
+    `node "${RUN}" grill status '<name>'`, 'Rewrite `.company/work/<name>/grill.md` whole with the Write tool',
     'format: 1', '## Closed branches', '## Proposals', 'status: stopped', 'status: done',
-    'closed by stop', 'git status --porcelain', 'grill-file v1.1 Personal data',
-    'an erasure request overrides the archive rule (CEO decides)', 'resume <slug>',
+    'closed by stop', 'git status --porcelain', 'grill-file v1.2 Personal data',
+    'an erasure request overrides the archive rule (CEO decides)', 'resume <name>',
   ];
   for (const n of need) assert.ok(loop.includes(n), `loop missing: ${n}`);
   assert.ok(!loop.includes('\r'));
@@ -117,7 +117,7 @@ test('every Playbook names the loop file and the loop file names the three answe
   for (const m of ['lookup', 'ask-all', 'docs']) assert.ok(loop.includes(`\`${m}\``), `mode ${m}`);
 });
 
-const GRILL_SKILL_SHA256 = '65ce71310063d7a138732ccd91c3179cd3cf553304d78b29833a55e4964d4f54';
+const GRILL_SKILL_SHA256 = 'f532bfd9f15e2d17efdd6be85bf589bb512914eda2dabaff0936c714464942dc';
 
 test('aico:grill SKILL.md matches the pinned hash apart from the Help-line path', () => {
   const now = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8')
@@ -184,7 +184,7 @@ test('each grill playbook writes grill-file v1: grill status accepts its file', 
 
 test('grill-file contract lists the new writers and the web search set', () => {
   const c = read('docs/contracts/grill-file.md');
-  assert.ok(c.startsWith('# Contract: grill-file v1.1'));
+  assert.ok(c.startsWith('# Contract: grill-file v1.2'));
   for (const n of ['aico:grilling', 'aico:grill-me', 'aico:grill-with-docs']) assert.ok(c.includes(n), n);
   assert.ok(c.includes('the fact lookups of `aico:grill` and `aico:grilling` may send web search queries'));
   assert.ok(c.includes('`aico:grill-me` and `aico:grill-with-docs` send no web search query'));

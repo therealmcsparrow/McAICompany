@@ -22,7 +22,7 @@ test('AC1 research shows one scope form with Approve / Change / Stop before any 
 });
 
 test('AC2 researchers go out in parallel in one message and the tree is checked afterwards', () => {
-  has(research, 'in parallel, in one message', '`.company/work/research-<slug>/NN-<role>.md`', 'git status --porcelain',
+  has(research, 'in parallel, in one message', '`.company/work/<name>/NN-<role>.md`', 'git status --porcelain',
     'only under `.company/research/`');
   assert.ok(idx(research, '## 3. Researchers') < idx(research, '## 5. Check the tree'));
 });

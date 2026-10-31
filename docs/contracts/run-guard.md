@@ -1,10 +1,10 @@
-# Contract: run-guard v1
+# Contract: run-guard v1.1
 
-Provider: `scripts/run-guard.mjs` (Node built-ins only; cwd = product root; `main(args, { root })` exported). Read-only: it writes nothing. Consumers: the Lead of `aico:pipeline` (Ship Gate). Uses: `plan-tasks` v1.3 (`readParallel`), `worktree` v1 (`readWorktrees`), `run-state` v1.5 (`show`).
+Provider: `scripts/run-guard.mjs` (Node built-ins only; cwd = product root; `main(args, { root })` exported). Read-only: it writes nothing. Consumers: the Lead of `aico:pipeline` (Ship Gate). Uses: `plan-tasks` v1.3 (`readParallel`), `worktree` v1.1 (`readWorktrees`), `run-state` v1.5 (`show`), `work-folder-name` v1 (`isWorkFolder`). v1.1 is additive: the run argument may be a new work folder name; a legacy slug is accepted as before.
 The two lines are information for the Ship Gate. They never block a ship and never change an exit code of another command.
 
 ## Command
-`run-guard.mjs gate <slug>`: slug `^[a-z0-9][a-z0-9-]{0,63}$`, checked before any path is built. Exit 0 for a valid slug, whatever the records hold. A bad slug, an unknown command, a wrong argument count, an argument with a control character (Cc, Cf, Zl, Zp) or over 4096 characters → exit 3 and one line `refused: <reason>`. Prints exactly two lines, in this order:
+`run-guard.mjs gate '<work folder>'`: the work folder name passes `isWorkFolder` (`work-folder-name` v1: a new name or a legacy slug), checked before any path is built; a name with spaces is one single-quoted argument and never reaches a shell. Exit 0 for a valid name, whatever the records hold. A bad name, an unknown command, a wrong argument count, an argument with a control character (Cc, Cf, Zl, Zp) or over 4096 characters → exit 3 and one line `refused: <reason>`. Prints exactly two lines, in this order:
 
 ```
 guardrail files: <s> sibling, <e> extra, <a> archived, <c> conflicts
@@ -20,4 +20,4 @@ guardrail handover: <h> of <m> Steps
 Records are read only through the three exported readers; the script has no record parser of its own. A link, a hard link, an oversize file or line, a bad line or a non-UTF-8 file is the reader's fail-loud case and prints `unknown`.
 
 ## Lead flow
-The Lead runs `run-guard.mjs gate <slug>` at the Ship Gate and pastes the two lines into the Gate summary unchanged (`aico:pipeline`, worktree flow). Nothing is asked of the CEO because of them.
+The Lead runs `run-guard.mjs gate '<work folder>'` at the Ship Gate and pastes the two lines into the Gate summary unchanged (`aico:pipeline`, worktree flow). Nothing is asked of the CEO because of them.

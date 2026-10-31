@@ -10,8 +10,18 @@ Rollback: node scripts/stable.mjs 0.23.0
 
 ### Added
 - **`aico:wizard`.** DevOps hands the CEO manual steps (dashboards, credentials, CI secrets) as a bash wizard built from `skills/wizard/template.sh`: one stage at a time, hidden secret entry, `.env` upserts, `gh secret` writes, a confirm before anything irreversible.
+- **Work folders get date and topic names.** Every Playbook now makes its run folder with `work-folder new`, named `YYYY-MM-DD HH.MM - Topic` in local start time (for example `2026-10-30 23.45 - Login Redesign`), so `.company/work/` scans by date and topic like the roadmap and research files. A Topic is ASCII letters and digits, single spaces or hyphens, at most 60 characters and 5 words, Title Case; one that fails falls back to the Playbook name with no repair. Helper folders add one word (`Build` or `Draft`) on top of that cap. A name already taken in the same minute gets a number 2 to 9 and the old folder is untouched. Every script, mod and Playbook reads both forms: existing folders with a lowercase slug keep working and are never renamed or moved. Branches and worktrees use a derived branch id (`aico/2026-10-30-2345-login-redesign`), because a git ref cannot hold a space. Names are single-quoted on every shell line. Contract `work-folder-name` v1 (new), ADR 0051.
+- **`lead-handover read` prints the recorded base and tier.** Four lines follow `running:`: `base-commit`, `risk-tier`, `tier-path` and `tier-set`, from the Lead's records only; a value that is not recorded says `unknown`. The rule to use only the recorded base after a hand-over now applies to every run, not only feature and fix. Contract `lead-handoff` v1.3.
 
 ### Changed
+- **Contract versions for the work folder names** (each is additive; a legacy slug behaves as before):
+  - `aico-mods` v1.5, `cited-report` v1.1, `destination-spec` v1.2, `dispatch-prompt` v4.3, `draft-input` v1.2, `drift-report` v1.1.
+  - `grill-file` v1.2, `handoff` v2.1, `idea-flow` v1.2, `lead-handoff` v1.4 (the `resume` line prints the name single-quoted), `plan-check` v1.3, `plan-review` v1.1.
+  - `plan-tasks` v1.4, `plugin-root` v1.1, `reflect` v1.1, `release` v1.2, `reprompt` v2.1 (a reprompt run is the one `reprompt-check` recorded, never one a name shape decides), `review-depth` v1.2.
+  - `review-loop` v1.1, `rule-check` v1.2, `run-guard` v1.1, `run-state` v1.6, `skill-recommendation` v1.1, `skillspector-scan` v1.1.
+  - `step-times` v1.1, `ticket-approval` v1.1, `tier-sets` v1.3, `token-ledger` v1.6, `worktree` v1.1.
+- **Rule `proj.M-SEC8` is widened.** The run name of an `## Exceptions` line is a work folder name that `isWorkFolder` of `work-folder-name` v1 accepts (new name or legacy slug), equal byte for byte to the run folder name; a forged, case-changed or look-alike name is no exception.
+- **One home for the name check.** `mods/lib/work-folder.mjs` is the only place that checks, builds or maps a work folder name; `scripts/work-folder-guard.test.mjs` fails on a second copy of the old pattern, on an unquoted placeholder on a skill or agent shell line, and on a `work-folder new` call whose `--topic` is not `file` or `none`.
 - **No `mattpocock-skills` dependency.** aico no longer installs or names the `mattpocock-skills` plugin; only `superpowers` stays a dependency. `aico:tdd` now carries what a good test is, implementation-coupled tests and mocking at system boundaries; `aico:debugging` carries the full loop-first diagnosis (feedback loop, minimise, ranked falsifiable hypotheses, tagged instrumentation, regression test, cleanup); `aico:sourcing` traces every claim to the source that owns it. The research presence check no longer asks for a plugin skill. Contract `skills-manifest` v2.2.
 
 ## [0.23.0] - 2026-10-30
@@ -38,7 +48,6 @@ Rollback: node scripts/stable.mjs 0.22.0
 
 ### Known issues
 - `skills/contracts/SKILL.md` still says approved Core comes from a Plan Gate, so a fix that adds Core may be blocked by the reviewer until the CEO decides.
-- After a Lead hand-over without an injected Lead Handoff, `lead-handover read` does not print the recorded base commit or tier, and the rule to use only the recorded base is written for feature and fix only.
 
 ### Data
 - Your idea, bug, grill, ticket and Lead Handoff text is read by the Claude model you configured. The web search tools (WebSearch, WebFetch) run in grilling lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient. `grill-me` and `grill-with-docs` search nothing online. Everything else is local files under `.company/work/<slug>/`, `.company/draft-input-arg-*.txt`, `.company/ideas/<name>/` and `.company/roadmap/`. aico sets no ignore rule. Nothing is pushed or published.

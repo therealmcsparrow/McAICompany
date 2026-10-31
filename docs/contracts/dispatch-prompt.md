@@ -1,4 +1,4 @@
-# Contract: dispatch-prompt v4.2
+# Contract: dispatch-prompt v4.3
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`, and from v3.3 `aico:reprompt`). Consumer: every Role, through `aico:handoff`.
 v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
@@ -19,6 +19,7 @@ v4.0 is **breaking** (task v020-gate-roadmap, T20, Delta L; the v3.x history abo
 v4.1 is additive (task elephant-goldfish): it adds `Review mode:`, `Review inputs:` and `After first pass:` for `fresh-reviewer` only, `Worktree:` for a plan-task Step that runs in a worktree, and `Research inputs:` for any Role when the CEO named an earlier report. A Role that gets a v4.0 prompt behaves as before. Cited by `handoff` v2.0; rationale: `docs/adr/0039-fresh-reviewer-role.md`.
 
 v4.2 is additive (task reprompt-20261030-1309-draft-2-draft, T2): `Context cap: 95000 handover 85500` on every dispatch, for every Role and every Risk tier. The settings read and the high-tier raise are removed; the line format is unchanged. An absent or malformed line reads the same values. A Role that gets a v4.1 prompt with another cap uses the numbers given, as before. Rationale: `docs/adr/0047-one-context-cap.md`.
+v4.3 is additive (task T15, minor): `<slug>` in a path of a prompt is a work folder name (`work-folder-name` v1, spaces allowed in a new name), and the Run ref and Ship lines name `refs/heads/aico/<branch id>` (the `work-folder.mjs branch` output), never the folder name itself. A Role that gets a v4.2 prompt behaves as before.
 
 ## Lines added in v2
 | Line | When | Value |
@@ -84,8 +85,8 @@ There is no command that prints a block or a value to stdout.
 
 - **Judging diff.** Every call that judges what a run changed (the pre-filter, the reviewer's diff, `review-depth`, `rule-check`, `tier-set`) has the one form of rule git.M-SEC4 (`.company/standards/git@2.md`): from `<Base commit>` to `refs/heads/aico/<slug>`, two fixed end points, run from the top level, with replace refs and grafts off, textconv, external diff, submodule ignoring and relative paths off, and pathspecs literal. The form is written once in `rule-check` v1.1 "Judging diff and run ref"; Role and Playbook text cites the rule ID, not the flags. A diff with `<base>...HEAD`, `HEAD` or an omitted side is not a judging diff.
 - **Binary by content.** A file is binary when its blob has a NUL byte in its first 8000 bytes, never because of an attribute or a diff driver. A Role never reads binary-marked text (`-diff`, `binary`, `diff.<x>.binary=true`) by typing a path or `--text`: it uses `rule-check text --base <Base commit> --run <slug>` (slug from `Output:`) and the `text` rows of `run`.
-- **Run ref.** Files are read from the worktree, so a reviewer first needs `git symbolic-ref -q HEAD` to print exactly `refs/heads/aico/<slug>` and no grafts file to exist. The `run` output carries both refusals; the reviewer writes one Blocking row `[security] HEAD not on run branch` or `[security] grafts file present` and judges nothing else.
-- **Ship.** Before the full suite and any push the Lead checks the run ref and a clean tracked tree, and a push names the ref: `git push <remote> refs/heads/aico/<slug>:refs/heads/aico/<slug>` (`skills/pipeline/SKILL.md` §6).
+- **Run ref.** Files are read from the worktree, so a reviewer first needs `git symbolic-ref -q HEAD` to print exactly `refs/heads/aico/<branch id>` and no grafts file to exist. The `run` output carries both refusals; the reviewer writes one Blocking row `[security] HEAD not on run branch` or `[security] grafts file present` and judges nothing else.
+- **Ship.** Before the full suite and any push the Lead checks the run ref and a clean tracked tree, and a push names the ref: `git push <remote> refs/heads/aico/<branch id>:refs/heads/aico/<branch id>` (`skills/pipeline/SKILL.md` §6).
 
 ## Lines added in v3.6
 | Line | When | Value |

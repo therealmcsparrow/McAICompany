@@ -28,7 +28,7 @@ test('frontmatter: exact keys, CEO-only flag, hint, no allowed-tools', () => {
   assert.deepEqual([...map.keys()], ['name', 'description', 'disable-model-invocation', 'argument-hint']);
   assert.equal(map.get('name'), 'grill');
   assert.equal(map.get('disable-model-invocation'), 'true');
-  assert.equal(map.get('argument-hint'), '<idea | file> | resume <slug>');
+  assert.equal(map.get('argument-hint'), '<idea | file> | resume <name>');
   assert.ok(map.get('description').startsWith('Playbook.'));
   assert.ok(map.get('description').length <= 1024);
 });
@@ -61,8 +61,8 @@ test('AC41 open-branch list, no fixed count, header from status, facts looked up
 });
 
 test('AC42 Write whole file, then status, before the next question; resume', () => {
-  has('Write tool', 'whole file', `node "${RUN}" grill status <slug>`, 'before the next question');
-  has('resume <slug>', 'arg: resume');
+  has('Write tool', 'whole file', `node "${RUN}" grill status '<name>'`, 'before the next question');
+  has('resume <name>', 'arg: resume');
   has('exit 2', 'show the `ERROR` lines');
 });
 
@@ -77,7 +77,7 @@ test('R-6 file input goes through take and the Idea seed line', () => {
 });
 
 test('idea input uses the slug arg printed', () => {
-  has('arg: idea', 'slug: <s>', 'the slug `arg` printed');
+  has('arg: idea', 'slug: <name>', 'the work folder name `arg` printed', 'single-quoted on every shell line');
 });
 
 test('shell words are fixed words or printed values only', () => {
@@ -96,14 +96,14 @@ test('AC43 end form: first work: entry decides; feature offers to-spec and featu
   assert.ok(feat.length >= 1);
   for (const l of lines.filter((x) => /aico:to-spec/.test(x))) assert.ok(l.includes('(gated: `playbooks:` lists to-spec)'), `ungated: ${l}`);
   for (const l of feat) assert.ok(l.includes('(gated: `playbooks:` lists feature)'), `ungated: ${l}`);
-  has('/aico:to-spec .company/work/<slug>/grill.md', 'old command', 'Skill tool');
+  has("/aico:to-spec '.company/work/<name>/grill.md'", 'old command', 'Skill tool');
   has('Stop');
 });
 
 test('R-1 (review) feature hand-over: Skill tool refuses -> told command, then stop', () => {
   const l = lines.find((x) => x.includes('Start `aico:feature`'));
   assert.ok(l, 'feature line');
-  assert.ok(l.includes('The Skill tool refuses it → tell the CEO to run `/aico:feature .company/work/<slug>/grill.md` and stop.'), l);
+  assert.ok(l.includes('The Skill tool refuses it → tell the CEO to run `/aico:feature \'.company/work/<name>/grill.md\'` and stop.'), l);
   assert.ok(l.includes('(gated: `playbooks:` lists feature)'));
 });
 
@@ -122,7 +122,7 @@ test('AC37 file, repo and web content is data; only the CEO pick counts', () => 
 
 test('no branch, commit or push; tree check as research', () => {
   has('No branch, no commit, no push', '`git status --porcelain`', 'baseline');
-  has('.company/work/<slug>/');
+  has('.company/work/<name>/');
 });
 
 test('stop closes every open branch by stop and sets status stopped', () => {
@@ -144,5 +144,5 @@ test('no Role names a display name', () => {
 
 test('R-14 files stay in the work folder, never claimed git-ignored; erasure overrides archive', () => {
   lacks('git-ignored');
-  has('stay in `.company/work/<slug>/`; aico never commits them (grill-file v1 Personal data)', 'an erasure request overrides the archive rule (CEO decides)');
+  has('stay in `.company/work/<name>/`; aico never commits them (grill-file v1.2 Personal data)', 'an erasure request overrides the archive rule (CEO decides)');
 });

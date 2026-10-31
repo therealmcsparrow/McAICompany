@@ -1,6 +1,7 @@
 // Pure logic of the Blast Radius mod: hits from a `review-depth --json` answer, the ask/warn/deny decision,
 // the reason text and the script arguments. No engine object, no Node import, no npm package.
-import { cleanText } from './guard.mjs';
+import { cleanText, parseOutputLine } from './guard.mjs';
+import { isWorkFolder } from './work-folder.mjs';
 
 export const MAX_REASON = 600;
 export const NOBODY = 'nobody can be asked; commit refused';
@@ -16,11 +17,9 @@ const MAX_MODULES_IN_REASON = 120;
 const MAX_LABEL = 60;
 const MORE_ROOM = 14;
 
-const OUTPUT = /^Output: \.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/;
 const BASE = /^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$/;
 const TIER = /^Risk tier: (low|medium|high)$/;
 const SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 // The prompt lines Blast Radius reads, from the first 64 KiB. A missing or odd line is null.
@@ -34,10 +33,11 @@ export function parseSpawnLines(prompt) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     if (line.length > MAX_LINE) continue;
     let m;
-    if (out.step === null && (m = OUTPUT.exec(line)) !== null) {
-      out.slug = m[1];
-      out.step = m[2];
-      out.role = m[3];
+    const output = out.step === null ? parseOutputLine(line) : null;
+    if (output !== null) {
+      out.slug = output.slug;
+      out.step = output.step;
+      out.role = output.role;
     } else if (out.base === null && (m = BASE.exec(line)) !== null) out.base = m[1];
     else if (out.tier === null && (m = TIER.exec(line)) !== null) out.tier = m[1];
   }
@@ -56,7 +56,7 @@ export function reviewArgs(spec) {
   if (spec === null || typeof spec !== 'object') return null;
   let args;
   if (spec.source === 'worktree') args = ['--worktree', '--json'];
-  else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base) && typeof spec.slug === 'string' && SLUG.test(spec.slug)) args = [spec.base, '--run', spec.slug, '--json'];
+  else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base) && isWorkFolder(spec.slug)) args = [spec.base, '--run', spec.slug, '--json'];
   else return null;
   if (spec.risk === 'low' || spec.risk === 'medium' || spec.risk === 'high') args.push('--risk', spec.risk);
   const repo = spec.repo;

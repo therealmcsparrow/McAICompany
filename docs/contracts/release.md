@@ -1,6 +1,6 @@
-# Contract: release v1.1
+# Contract: release v1.2
 
-Provider: `scripts/release.mjs` (the one command), `scripts/sbom.mjs` and `scripts/gate-report.mjs` (Node built-ins only). Consumers: the CEO and CI reading `releases/<x.y.z>/`, and `scripts/stable.mjs` through the rollback line. Sources read: `token-ledger` v1.5 files (`.company/ledger/<run>.jsonl`), `run-state` v1.5 `show`.
+Provider: `scripts/release.mjs` (the one command), `scripts/sbom.mjs` and `scripts/gate-report.mjs` (Node built-ins only). Consumers: the CEO and CI reading `releases/<x.y.z>/`, and `scripts/stable.mjs` through the rollback line. Sources read: `token-ledger` v1.6 files (`.company/ledger/<run>.jsonl`), `run-state` v1.5 `show`.
 Rationale: every release carries a bill of materials, a one-line way back and a record of how its Gates went, all made from recorded data. Rules: `.company/standards/cyclonedx@1.md` (cdx.M1 to M7, S1 to S5, M-SEC1, M-SEC2), `.company/standards/git@2.md` (git.M1, git.M4). The deviation from gha.S5 (an SBOM built in CI): it is built here, in `release.mjs`, so the file is in the release commit; CI can run `node scripts/sbom.mjs <file>` to build the same file.
 
 ## Files of a release
@@ -27,7 +27,7 @@ CycloneDX 1.6, JSON. Inputs, each a plain file (not a link) of at most 8 MiB: `.
 The new `## [x.y.z] - <date>` section of `CHANGELOG.md` starts with `Rollback: node scripts/stable.mjs <previous>`, where `<previous>` is the plain-semver version of the next `## [..]` heading below. The first release has no line. Running it moves `stable` to the commit of the annotated tag `v<previous>` (the rules and limits of `scripts/stable.mjs` apply); this contract does not change them.
 
 ## Gate Report (`gate-report.md`, `node scripts/gate-report.mjs <x.y.z>`)
-Title `# Gate Report v<x.y.z>`, the two eval lines below, then one section per run of that version: a run is a ledger file `.company/ledger/<run>.jsonl` (run names `brainstorm-`, `replay-` and `baseline-` excluded) whose last `meta` record has `aico` equal to the version. Per run, only recorded values:
+Title `# Gate Report v<x.y.z>`, the two eval lines below, then one section per run of that version: a run is a ledger file `.company/ledger/<run>.jsonl` whose `<run>` passes `isWorkFolder` (`work-folder-name` v1: a work folder name or a legacy slug; any other file name is skipped) (run names `brainstorm-`, `replay-` and `baseline-` excluded) whose last `meta` record has `aico` equal to the version. Per run, only recorded values:
 - Gates: each `gate` entry of `run-state` with result and wait.
 - CEO forms: each `ceo` entry (Gate and form count).
 - Fix rounds: `fix_rounds` of the last `ship` record.
@@ -43,4 +43,4 @@ Directly after the intro text, before the runs (also when no run of the version 
 Only these two fixed files are read, each a plain file (no link in the path) of at most 256 KiB, line by line; a line over 1024 characters is skipped. A line counts after `JSON.parse` and a check by type: `v` 1, `aico` the version, `caught` and `total` non-negative integers with `caught` at most `total`, `at` a UTC time (`YYYY-MM-DDTHH:MM:SSZ`). Nothing is merged into another object. The line holds only the two numbers and the date part of `at`, never raw file text. A missing file, a link, an oversize file, an unreadable file, or a last matching line that is malformed reads `not recorded`; the eval lines never fail or block the report or the release. The Lead produces the records (`plan-review` v1 `score --record`, `--kind plan|code`); targets 4 of 5 (plan) and 2 of 2 (code) are for the Lead and the Ship Gate, not enforced here.
 
 ## Compatibility
-v1.1 (additive: the two eval lines). v1. A new file under `releases/<x.y.z>/`, another source for the report or a changed rollback line is a minor bump; a different SBOM format version or a removed file is a major bump.
+v1.1 (additive: the two eval lines). v1.2 (additive: run names are work folder names or legacy slugs; every v1.1 report is unchanged). v1. A new file under `releases/<x.y.z>/`, another source for the report or a changed rollback line is a minor bump; a different SBOM format version or a removed file is a major bump.

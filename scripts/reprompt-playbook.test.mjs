@@ -64,7 +64,7 @@ test('help, empty argument and the 32 KiB limit come before any write', () => {
   assert.ok(s1.indexOf('32 KiB') < s1.indexOf('request.md'));
   assert.ok(s1.indexOf('`.gitignore`') < s1.indexOf('`request.md`'), '.gitignore is written before request.md');
   has('exactly `*` and a line feed');
-  has('refused: too many reprompts this minute', 'reprompt-YYYYMMDD-HHMM', '`-2` to `-9`');
+  has('refused: too many runs this minute', 'work-folder new --playbook \'reprompt\' --topic none', 'reprompt-YYYYMMDD-HHMM', 'never because of its name');
 });
 
 test('question_rounds is read from the settings JSON with a fallback of 1', () => {
@@ -100,7 +100,7 @@ test('the Playbook sets Round and Asks left itself; the reply check is an allow-
 });
 
 test('v2.0: a question line needs a why part and a reply with no open question ends the rounds', () => {
-  has('Contract: `reprompt` v2.0', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
+  has('Contract: `reprompt` v2.1', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
   has('`noOpenQuestion`', 'say "No open question left"', 'hold no further question round', "that option's description only");
   assert.ok(section('4. Question form').includes('`(Recommended)` one first and its `why` as that option'));
   assert.doesNotMatch(text, /Contract v1\b|`reprompt` v1\.2/);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1.2
-// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
+// contract: docs/contracts/lead-handoff.md v1.4
+// uses: docs/contracts/run-state.md v1.6 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point and a SessionStart hook that
 // injects it after compaction, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { active, show } from './run-state.mjs';
 import { main as flow } from './idea-flow.mjs';
 import { readTierPath } from './tier-set.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 export const CAP = 95000;
 export const AUTO_COMPACT_WINDOW = 98500;
@@ -21,7 +22,6 @@ export const HEADER = 'aico lead hand-over: the file below was written by the pl
 const RETRY_LINE = 'aico: a Step is still running, so the Lead hand-over waits; compaction is retried on the next turn.\n';
 
 const HERE = import.meta.dirname;
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAYBOOK = /^[a-z][a-z0-9-]{0,40}$/;
 const BAD_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -56,7 +56,7 @@ const broken = (why = 'broken record') => { throw new Broken(why); };
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { return null; } };
 
-// The work folder of a slug when every folder on its path is a real directory, else null.
+// The work folder of a name when every folder on its path is a real directory inside the real work folder, else null.
 function workDir(root, slug) {
   let p = root;
   for (const part of ['.company', 'work', slug]) {
@@ -64,7 +64,15 @@ function workDir(root, slug) {
     const l = lstatOrNull(p);
     if (!l || l.isSymbolicLink() || !l.isDirectory()) return null;
   }
-  return p;
+  return insideWork(root, p) ? p : null;
+}
+
+function insideWork(root, dir) {
+  try {
+    const want = path.join(fs.realpathSync.native(path.join(root, '.company', 'work')), path.basename(dir));
+    const real = fs.realpathSync.native(dir);
+    return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() === want.toLowerCase() : real === want;
+  } catch { return false; }
 }
 
 // Opens a regular file with one link and re-checks the handle against the lstat; null when it is not safe.
@@ -178,7 +186,7 @@ function findRun(root, now) {
   const l = lstatOrNull(work);
   if (!l || !l.isDirectory() || l.isSymbolicLink()) return null;
   let names;
-  try { names = fs.readdirSync(work).filter((n) => SLUG.test(n)).slice(0, MAX_SCAN); } catch { return null; }
+  try { names = fs.readdirSync(work).filter(isWorkFolder).slice(0, MAX_SCAN); } catch { return null; }
   const recent = [];
   for (const slug of names) {
     const f = lstatOrNull(path.join(work, slug, 'idea-flow.jsonl'));
@@ -314,7 +322,7 @@ function handoffText(st, { tokens, window, trigger }) {
 }
 
 const FM_KEYS = [
-  ['slug', SLUG], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
+  ['slug', { test: isWorkFolder }], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
   ['base-commit', /^([0-9a-f]{7,40}|[0-9a-f]{64}|unknown)$/], ['risk-tier', /^(low|medium|high|unknown)$/],
   ['tier-path', /^(none|broken|(feature|fix) (short|full))$/], ['tier-set', /^\[(?:[a-z][a-z0-9-]{0,40}(?:, [a-z][a-z0-9-]{0,40})*)?\]$/],
   ['gate', /^(none|(brief|plan|ship) (open|passed|changed|stopped))$/],
@@ -463,7 +471,7 @@ export function resume(text, options) {
     if (!dir) return { code: 0, out: '' };
     const events = loadRecord(dir);
     const wrap = (ctx) => `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } })}\n`;
-    const fixed = wrap(`aico lead hand-over: run lead-handover read ${slug} first, then follow skills/pipeline/references/lead-handover.md.`);
+    const fixed = wrap(`aico lead hand-over: run lead-handover read '${slug}' first, then follow skills/pipeline/references/lead-handover.md.`);
     const last = events.findLast((e) => e.ev === 'handover');
     if (!last) return { code: 0, out: fixed };
     const num = Number(HANDOFF_RE.exec(last.file)[1]);
@@ -479,10 +487,26 @@ export function resume(text, options) {
   }
 }
 
-function checkSlug(s) { if (typeof s !== 'string' || !SLUG.test(s)) refuse('bad slug'); }
+function checkSlug(s) { if (!isWorkFolder(s)) refuse('bad slug'); }
 
 function stateLines(st) {
   return [`gate: ${st.gate}`, `form: ${st.form}`, `step: ${st.step}`, `running: ${st.running ? 'step' : 'none'}`];
+}
+
+const FULL_BASE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+// The recorded values `read` prints after `running:`. They come from the Lead's records only, in the shape
+// their writer records; a missing value is `unknown` and a broken tier-path record stays `broken`.
+function recordedLines(root, slug, st) {
+  const tp = tierPathOf(root, slug);
+  const tier = tp.kind === 'ok' ? tp.tier : (tp.kind === 'broken' ? 'high' : 'unknown');
+  const set = tp.kind === 'ok' ? `[${tp.set.join(', ')}]` : 'unknown';
+  return [
+    `base-commit: ${FULL_BASE.test(st.baseCommit) && !/^0+$/.test(st.baseCommit) ? st.baseCommit : 'unknown'}`,
+    `risk-tier: ${tier}`,
+    `tier-path: ${st.tierPath}`,
+    `tier-set: ${set}`,
+  ];
 }
 
 function exec(argv, root, env) {
@@ -504,7 +528,7 @@ function exec(argv, root, env) {
       const hs = events.filter((e) => e.ev === 'handover');
       const rs = events.filter((e) => e.ev === 'resume');
       return [`handovers ${hs.length}`, `resumes hook ${rs.filter((e) => e.via === 'hook').length} ceo ${rs.filter((e) => e.via === 'ceo').length}`,
-        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st)].join('\n') + '\n';
+        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st), ...recordedLines(root, slug, st)].join('\n') + '\n';
     }
     case 'begin': {
       if (rest.length !== 1) refuse('usage');

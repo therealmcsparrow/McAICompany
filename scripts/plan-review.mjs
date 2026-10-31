@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Plan review (contract: docs/contracts/plan-review.md v1). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0
+// Plan review (contract: docs/contracts/plan-review.md v1.1). Node built-ins only.
+// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v1
 // `lines` writes the inputs file a reviewer reads, `gate` prints the reviewer's paraphrase for the CEO,
 // `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
 // every pattern is anchored over a character class, sizes are capped before parsing, every file is read by
@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
 import { parseLocations } from './handoff-lint.mjs';
 import { normalizePath } from './plan-tasks.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_ARG = 4096;
@@ -28,7 +29,6 @@ const MAX_CASES = 100;
 const MAX_PARAPHRASE = 1200;
 const MAX_ROW = 1000;
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 const HANDOFF_NAME = /^\d{2,3}-[a-z][a-z0-9-]{0,40}\.md$/;
 const ARCHITECT_NAME = /^\d{2,3}-architect\.md$/;
@@ -141,7 +141,7 @@ function checkArgs(args) {
 }
 
 const needSlug = (s) => {
-  if (!SLUG.test(s)) throw new Refused('bad slug');
+  if (!isWorkFolder(s)) throw new Refused('bad slug');
   return s;
 };
 

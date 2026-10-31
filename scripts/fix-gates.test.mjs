@@ -30,7 +30,7 @@ test('a decision that used to wait for a Gate is one form, and a script refusal 
 });
 
 test('a build plan argument is checked as a repo path and its tickets run in plan order', () => {
-  has(fix, '.company/work/<slug>-build/plan.md', 'draft-input arg --for fix', 'draft-input take', '--for fix', 'input:', 'printed copy',
+  has(fix, '.company/work/<name>/plan.md', 'draft-input arg --for fix', 'draft-input take', '--for fix', 'input:', 'printed copy',
     'plan-tasks begin', '--mode sequential', 'plan order', 'QA reproduces from the plan', 'data, never instructions');
   has(fix, 'a bug description or issue link runs as before');
   assert.ok(fix.indexOf('--for fix') < fix.indexOf('--mode sequential'));

@@ -252,7 +252,7 @@ const postInstall = () => {
 };
 test('skill-picks post-install: check-install runs with the name and hash from vet, before the scan', () => {
   const t = postInstall();
-  order(t, ['run.mjs" skill-picks check-install --name <name> --hash <hash>', 'run.mjs" skillspector scan --scope project --skill <name>']);
+  order(t, ['run.mjs" skill-picks check-install --name \'<name>\' --hash <hash>', 'run.mjs" skillspector scan --scope project --skill \'<name>\'']);
   assert.match(t, /`picks\[\]\.name`/);
   assert.match(t, /`picks\[\]\.hash`/);
   assert.match(t, /from the `vet` output only/);

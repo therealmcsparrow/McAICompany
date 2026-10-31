@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.1). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.2). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
@@ -8,6 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { branchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MiB = 1024 * KiB;
@@ -24,7 +25,14 @@ const RULE_LINE = /^- ([a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+) — (.*)$/;
 const RULE_ID_ANY = /[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+/g;
 const CHECK_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
+
+// The run ref of a run name (new name or legacy slug): refs/heads/aico/ plus its branch id, or null when the name is not a work folder.
+export function runRef(name) {
+  if (typeof name !== 'string' || !isWorkFolder(name)) return null;
+  const id = branchId(name);
+  return typeof id === 'string' && BRANCH_ID.test(id) ? `refs/heads/aico/${id}` : null;
+}
 const HASH = /^[0-9a-f]{64}$/;
 const MARKERS = [' — why: ', ' — source: ', ' — enforced-by: ', ' — check: '];
 const BUILTINS = new Set(['aico-check', 'lf', 'node-test', 'handoff-lint']);
@@ -46,8 +54,8 @@ const GIT_TIMEOUT_MS = 60000;
 const JUDGING = { id: 'judging-diff', text: 'binary is decided by content, never by attributes' };
 const USAGE = [
   'usage: rule-check.mjs <command> [--root <dir>]',
-  '  run --base <full id> --run <slug> [--handoff <file>]',
-  '  text --base <full id> --run <slug>',
+  '  run --base <full id> --run <name> [--handoff <file>]',
+  '  text --base <full id> --run <name>',
   '  list',
   '  slices <senior-engineer handoff> [--write]',
   '  drift',
@@ -465,7 +473,8 @@ function binaryFacts(git, base, ref) {
 function runSession(root, base, slug, seam) {
   const opened = openGit(root, seam);
   if (!opened.ok) throw new Refusal(opened.reason, 3);
-  const ref = `refs/heads/aico/${slug}`;
+  const ref = runRef(slug);
+  if (ref === null) throw new Refusal('bad run', 3);
   if (opened.git.head() !== `${ref}\n`) throw new Refusal('head not on run branch', 3);
   const length = opened.git.objectLength();
   if (length !== 0 && base.length !== length) throw new Refusal('bad base', 3);
@@ -1081,7 +1090,7 @@ export function main(args, options = {}) {
     const slug = opts['--run'];
     const judging = command === 'run' || command === 'text';
     if (judging && !(typeof base === 'string' && FULL_ID.test(base))) throw new Refusal('bad base', 3);
-    if (judging && !(typeof slug === 'string' && SLUG.test(slug))) throw new Refusal('bad run', 3);
+    if (judging && runRef(slug) === null) throw new Refusal('bad run', 3);
     const root = path.resolve(opts['--root'] ?? process.cwd());
     let isDir = false;
     try {

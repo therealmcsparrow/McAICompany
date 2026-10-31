@@ -1630,7 +1630,7 @@ test('AC7 the gate rules are written down in the Contract: always on, never allo
   assert.match(gate, /It never answers `allow`: an allowed call goes to `next\(e\)`/);
   assert.match(gate, /Anything not listed is denied, every other tool included/);
   assert.match(section(contract, 'Checker `scripts/reprompt-check.mjs`'), /\*\*`arm <slug> <NN>`\*\* \u2014 run only by the write gate's `agent\.spawn` hook; the Playbook never runs it/);
-  assert.match(read('docs/contracts/aico-mods.md'), /aico-mods v1.[234]|# Contract: aico-mods v1.[234]/);
+  assert.match(read('docs/contracts/aico-mods.md'), /aico-mods v1.[2345]|# Contract: aico-mods v1.[2345]/);
   assert.ok(fs.existsSync(path.join(root, 'docs', 'adr', '0025-reprompter-write-gate.md')));
   assert.match(read('hooks/register.tsx'), /registerRepromptGate\(on\)/);
 });
