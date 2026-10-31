@@ -1,20 +1,22 @@
 #!/usr/bin/env node
-// Checker for the reprompt Playbook (reprompt v2.0). Three subcommands, run from the product root:
-//   snap <slug>                      records a baseline of the watched files before a dispatch
-//   arm <slug> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
-//   reply <slug> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
+// Checker for the reprompt Playbook (reprompt v2.1). Three subcommands, run from the product root:
+//   snap <name>                      records the run and a baseline of the watched files before a dispatch
+//   arm <name> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
+//   reply <name> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
+// A run is a reprompt run only when `snap` recorded it in the user's own folder (never in the repo), so no folder
+// name, and nothing a Role writes in the repo, makes a run one; `arm` and `reply` refuse a run without the record.
 // The reply is written by an LLM that reads untrusted text: every argument is a fixed-shape token, every read is
 // size-capped, every pattern is anchored and linear, and any doubt is a refusal (exit 3) or a malformed reply (exit 1).
 // Git config can run programs, so `reply` compares the files git reads before it starts any git command.
 import { createHash } from 'node:crypto';
-import { lstatSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lint } from './handoff-lint.mjs';
+import { isRunName } from '../mods/lib/reprompt-gate.mjs';
 
-const SLUG_RE = /^reprompt-\d{8}-\d{4}(-[2-9])?$/;
 const NN_RE = /^\d{2,3}$/;
 const HEX_RE = /^[0-9a-f]{64}$/;
 const ASKS_RE = /^[0-3]$/;
@@ -95,6 +97,43 @@ function runFolder(loc, slug) {
   try { found = realpathSync.native(dir); } catch { refuse('run folder missing or not a plain folder'); }
   if (found !== join(realpathSync.native(loc.root), '.company', 'work', slug)) refuse('run folder is reached through a link');
   return dir;
+}
+
+// ---------- the run record ----------
+const RECORD_DIR = 'reprompt-runs';
+const MAX_RECORD = 512;
+const foldsCase = process.platform === 'win32' || process.platform === 'darwin';
+
+function recordFile(loc, name) {
+  const fold = s => (foldsCase ? s.toLowerCase() : s);
+  const id = createHash('sha256').update(`${fold(loc.root)}\0${fold(name)}`).digest('hex');
+  return join(loc.mcsparrow, RECORD_DIR, `${id}.json`);
+}
+
+const recordText = name => `${JSON.stringify({ v: 1, kind: 'reprompt', name })}\n`;
+
+// `snap` is the only writer. A record already holding the same text is left as it is.
+function writeRecord(loc, name) {
+  const file = recordFile(loc, name);
+  const text = recordText(name);
+  const st = lstatOrNull(file);
+  if (st && st.isFile() && st.size === Buffer.byteLength(text) && readFileSync(file, 'utf8') === text) return;
+  if (st && !st.isFile()) refuse('cannot record the run');
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, text);
+  } catch { refuse('cannot record the run'); }
+}
+
+// The record must be a plain file that holds exactly the text `snap` wrote for this run.
+function requireRecord(loc, name) {
+  const file = recordFile(loc, name);
+  const st = lstatOrNull(file);
+  const text = recordText(name);
+  if (!st || !st.isFile() || st.size > MAX_RECORD || st.size !== Buffer.byteLength(text)) refuse('not a reprompt run');
+  let got;
+  try { got = readFileSync(file, 'utf8'); } catch { refuse('not a reprompt run'); }
+  if (got !== text) refuse('not a reprompt run');
 }
 
 // ---------- the tree manifest ----------
@@ -636,6 +675,7 @@ function checkRunFolder(dir) {
 function snap(loc, env, slug) {
   const dir = runFolder(loc, slug);
   checkRunFolder(dir);
+  writeRecord(loc, slug);
   const budget = { n: 0 };
   const info = gitInfo(loc, env);
   const control = controlPaths(loc, env, info);
@@ -651,6 +691,7 @@ function snap(loc, env, slug) {
 function arm(loc, slug, nn) {
   const dir = runFolder(loc, slug);
   checkRunFolder(dir);
+  requireRecord(loc, slug);
   try {
     writeFileSync(join(dir, `.gate-${nn}`), '1\n', { flag: 'wx' });
   } catch (e) {
@@ -661,6 +702,7 @@ function arm(loc, slug, nn) {
 
 function reply(loc, env, slug, nn, hex, asks) {
   const dir = runFolder(loc, slug);
+  requireRecord(loc, slug);
   const base = readBaseline(dir, hex);
   const runKey = key(dir);
 
@@ -706,7 +748,7 @@ function reply(loc, env, slug, nn, hex, asks) {
 export function run(argv, { cwd = process.cwd(), env = process.env } = {}) {
   try {
     const [cmd, slug, ...rest] = argv;
-    if (typeof slug !== 'string' || !SLUG_RE.test(slug)) refuse(USAGE);
+    if (typeof slug !== 'string' || !isRunName(slug)) refuse(USAGE);
     const loc = locations(cwd, env);
     let res;
     if (cmd === 'snap' && rest.length === 0) {

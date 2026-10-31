@@ -618,6 +618,7 @@ test('arm: writes exactly 1 and a line feed, runs no git command and touches not
 
 test('arm: a second arm, a stray file, a wrong .gitignore, a missing folder and a link are refused', (t) => {
   const p = project();
+  snap(p);
   assert.equal(call(p, 'arm', SLUG, '01').code, 0);
   const twice = call(p, 'arm', SLUG, '01');
   assert.equal(twice.code, 3);
@@ -1648,7 +1649,7 @@ test('the script and its test are LF only, with no dependency outside node:', ()
   for (const f of [script, import.meta.filename]) {
     const text = fs.readFileSync(f, 'utf8');
     assert.equal(text.includes('\r'), false, f);
-    for (const m of text.matchAll(/^import .* from '([^']+)'/gm)) assert.match(m[1], /^(node:|\.\/)/, m[0]);
+    for (const m of text.matchAll(/^import .* from '([^']+)'/gm)) assert.match(m[1], /^(node:|\.\/|\.\.\/mods\/lib\/)/, m[0]);
   }
 });
 
