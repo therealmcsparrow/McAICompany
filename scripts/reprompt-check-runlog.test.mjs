@@ -1,4 +1,4 @@
-// Regression tests for reprompt v2.2, T4: reply skips only the current run's state log.
+// Regression tests for reprompt v2.2: reply skips only the current run's state log.
 // Suspected Module: scripts/reprompt-check.mjs (reply: the `allowed` set; diff).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
