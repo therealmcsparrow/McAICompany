@@ -259,6 +259,12 @@ function resolveStepFile(dir, file) {
   const bare = !file.includes('/') && !file.includes('\\');
   if (!bare) {
     // A path into the work folder root must keep the exact letter case of every segment.
+    // path.relative ignores case on win32, so the .company/work pair is checked first (ASCII fold only, as handoff-lint does).
+    const top = path.relative(process.cwd(), abs).split(path.sep);
+    const ascii = x => x.replace(/[A-Z]/g, c => c.toLowerCase());
+    if (ascii(top[0]) === '.company' && ascii(top[1] ?? '') === 'work' && (top[0] !== '.company' || top[1] !== 'work')) {
+      throw new Refusal('wrong letter case');
+    }
     const parts = path.relative(path.join(process.cwd(), '.company', 'work'), abs).split(path.sep);
     if (parts[0] !== '..' && !path.isAbsolute(parts[0])) {
       try {

@@ -71,6 +71,15 @@ describe('reflect', () => {
     assert.ok(r.out.startsWith('refused: '), r.out);
   });
 
+  test('a wrongly spelled .company/work pair in a step path is refused with the case reason', () => {
+    const root = fixture(files());
+    for (const pair of ['.COMPANY/work', '.company/WORK', '.Company/Work']) {
+      const r = run(root, 'step', DISK, `${pair}/${DISK}/01-qa.md`, '--json');
+      assert.equal(r.code, 2, r.all);
+      assert.equal(r.out, `refused: ${WRONG}\n`, pair);
+    }
+  });
+
   test('the exact run folder is reflected as before', () => {
     const root = fixture(files());
     const r = run(root, 'retro', DISK, '--json');
