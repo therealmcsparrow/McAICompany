@@ -554,6 +554,8 @@ test('AC4 a bad pattern file in the plugin folder gives an error record, exit 1,
   for (const name of fs.readdirSync(here)) {
     if (/^(plan-check|plan-markdown|run-state|ledger|handoff-lint)[a-z-]*\.mjs$/.test(name) && !name.endsWith('.test.mjs')) fs.copyFileSync(path.join(here, name), path.join(copy, name));
   }
+  fs.mkdirSync(path.join(c.base, 'plugin', 'mods', 'lib'), { recursive: true });
+  fs.copyFileSync(path.join(here, '..', 'mods', 'lib', 'work-folder.mjs'), path.join(c.base, 'plugin', 'mods', 'lib', 'work-folder.mjs'));
   fs.writeFileSync(path.join(copy, 'plan-check-patterns.json'), JSON.stringify({ v: 1, patterns: [{ id: 'a', re: 'x' }] }));
   mkRun(c.root, 'demo', inSteps('TBD'));
   const env = envFor(c.home);
