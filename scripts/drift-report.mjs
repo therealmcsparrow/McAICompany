@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Drift report (contract: docs/contracts/drift-report.md v1.1). Node built-ins only.
+// Drift report (contract: docs/contracts/drift-report.md v1.2). Node built-ins only.
 // uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v1.1
 // `pick` lists the Contracts with a script Provider that were checked longest ago; `lint` checks the shape
 // of one report. Neither writes anything. Report text, file names and arguments are untrusted: every
