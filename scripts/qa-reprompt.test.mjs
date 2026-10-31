@@ -206,7 +206,7 @@ function check(proj, ...args) {
   if (r.code === 3) {
     // A control-set refusal also names the paths (and a count of the rest); every other refusal is the one key.
     assert.ok(['refused', 'refused,paths', 'refused,paths,more'].includes(Object.keys(json).join(',')), r.out);
-    assert.match(json.refused, /^refused: [a-z .*0-9()<>|-]+$/i);
+    assert.match(json.refused, /^refused: [a-z .*0-9()<>[\]|-]+$/i);
   } else if (args[0] === 'arm') {
     assert.deepEqual(json, { armed: args[2] });
   } else if (args[0] === 'reply') {
