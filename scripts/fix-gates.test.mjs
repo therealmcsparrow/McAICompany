@@ -55,3 +55,31 @@ test('fix stays within 125 lines and is LF only', () => {
   assert.ok(lines(fix).length <= 125);
   assert.ok(!fix.includes('\r'));
 });
+
+// Bug: plan-tasks refused the drafted copy input-fix.md, so step 2 sent the fix run to a hand-made plan.md. AC6.
+const step2 = () => lines(fix).find((l) => /^2\. /.test(l)) ?? '';
+
+test('AC6 step 2 runs plan-tasks check and then begin on input-fix.md, the drafted copy', () => {
+  const s = step2();
+  has(s, 'input-fix.md', 'plan-tasks check', 'plan-tasks begin', '--mode sequential', /`plan-tasks` v1\.5/);
+  assert.ok(s.indexOf('plan-tasks check') < s.indexOf('plan-tasks begin'), 'check comes before begin');
+  assert.ok(s.indexOf('input-fix.md') < s.indexOf('--mode sequential'));
+  has(s, /draft-input take[^\n]*input:|input:[^\n]*draft-input take|printed/);
+});
+
+test('AC6 step 2 passes --cap: plan-tasks refuses check and begin without it', () => {
+  const s = step2();
+  has(s, '--cap');
+});
+
+test('AC6 no line of the skill asks for a copy named plan.md', () => {
+  const argPath = '.company/work/<name>/plan.md';
+  for (const line of lines(fix)) {
+    const rest = line.split(argPath).join('');
+    if (!rest.includes('plan.md')) continue;
+    // The one allowed mention is the clause that says no Step makes such a copy by hand.
+    assert.match(rest, /\bno Step\b[^.\n]*\bby hand\b/, `a line mentions plan.md: ${line.slice(0, 80)}`);
+  }
+  assert.ok(lines(fix).some((l) => /\bno Step\b[^.\n]*\bplan\.md\b[^.\n]*\bby hand\b/.test(l)), 'the no-hand-made-copy clause is missing');
+  assert.doesNotMatch(fix, /(copy|copies|save|saves|write|writes|rename|named?) (it |them |that |the copy )?(to|as|called|into)? ?`?plan\.md/i);
+});
