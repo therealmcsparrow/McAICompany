@@ -332,8 +332,8 @@ describe('one copy of the name rule', () => {
     for (const file of ['mods/lib/guard.mjs', 'mods/lib/blast.mjs', 'mods/savvy.tsx', 'mods/reflect.tsx', 'mods/cache-tax.tsx', 'scripts/reflect.mjs']) {
       assert.ok(!read(file).includes(OLD), file);
     }
-    // plan-gate keeps the legacy slug pattern only for the unquoted gate form.
-    assert.equal(read('mods/lib/plan-gate.mjs').split(OLD).length - 1, 1);
+    // plan-gate judges the unquoted legacy form through isLegacySlug, so it holds no copy either.
+    assert.ok(!read('mods/lib/plan-gate.mjs').includes(OLD));
   });
 
   test('the mods read an Output line and a run name through the shared parsers', () => {

@@ -1,12 +1,11 @@
 // Pure logic for the plan Gate mod: which commands and files it judges, and what a `plan-check verify --json` answer means.
 // Nothing here runs a process or touches a file. Allow-lists only: anything not matched exactly is not judged.
-import { isWorkFolder } from './work-folder.mjs';
+import { isWorkFolder, isLegacySlug } from './work-folder.mjs';
 
 const MAX_COMMAND = 4096;
 const MAX_PATH = 4096;
 const MAX_STDOUT = 65536;
 const MAX_COUNT = 1000000;
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SCRIPT_PATH = /^[A-Za-z0-9_.:/\\+@-]+$/;
 const POLICIES = ['off', 'warn', 'block'];
 const STATES = ['pass', 'open', 'error'];
@@ -24,7 +23,7 @@ export const TEXT = {
 };
 
 export function isSlug(value) {
-  return typeof value === 'string' && SLUG.test(value);
+  return isLegacySlug(value);
 }
 
 function isScript(file, name) {
