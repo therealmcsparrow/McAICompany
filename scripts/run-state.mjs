@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.5). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (run-state v1.6). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -7,10 +7,11 @@
 // symlink, and read with the handoff-lint parser.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, realpathSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 export const MAX_FILE = 64 * 1024;
 export const MAX_LINE = 256;
@@ -19,7 +20,6 @@ const MAX_STEPS = 200;
 const MAX_FOLDERS = 200;
 const MAX_FM = 8 * 1024;
 const STALE_MS = 12 * 60 * 60 * 1000;
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const STEP_FILE_RE = /^\d{2}-[a-z0-9-]+\.md$/;
 const STEP_RE = /^\d{1,3}$/;
@@ -59,6 +59,15 @@ const refuse = reason => { throw new Refusal(reason); };
 function paths(root, slug) {
   const dir = join(root, '.company', 'work', slug);
   return { dir, file: join(dir, 'run-state.jsonl') };
+}
+
+// True when the run folder's real path is the folder of that name inside the real .company/work of the root.
+function insideWork(root, dir) {
+  try {
+    const want = join(realpathSync(join(root, '.company', 'work')), basename(dir));
+    const real = realpathSync(dir);
+    return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() === want.toLowerCase() : real === want;
+  } catch { return false; }
 }
 
 // True when the opened handle is a regular file with one hard link and, when an lstat is given, the same dev and ino.
@@ -183,7 +192,7 @@ function load(root, slug, now) {
     round: 0, tier: 'unknown', steps: [], warnings: [],
   };
   const dst = lstatOrNull(dir);
-  if (dst && (!dst.isDirectory())) { view.warnings.push('run-state unreadable'); return { view, activity: 0 }; }
+  if (dst && (!dst.isDirectory() || !insideWork(root, dir))) { view.warnings.push('run-state unreadable'); return { view, activity: 0 }; }
   const rec = readRecords(file);
   view.warnings.push(...rec.warnings);
   if (rec.unreadable) view.warnings.push('run-state unreadable');
@@ -235,7 +244,7 @@ function load(root, slug, now) {
 }
 
 export function show(root, slug, { now = Date.now() } = {}) {
-  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) refuse('bad slug');
+  if (!isWorkFolder(slug)) refuse('bad slug');
   return load(root, slug, now).view;
 }
 
@@ -245,7 +254,7 @@ export function active(root, { now = Date.now() } = {}) {
   let best = null;
   if (wst && wst.isDirectory()) {
     let names;
-    try { names = readdirSync(work).filter(n => SLUG_RE.test(n)).sort(); } catch { names = []; }
+    try { names = readdirSync(work).filter(isWorkFolder).sort(); } catch { names = []; }
     for (const slug of names.slice(0, MAX_FOLDERS)) {
       const f = lstatOrNull(join(work, slug, 'run-state.jsonl'));
       if (!f || !f.isFile()) continue;
@@ -259,10 +268,10 @@ export function active(root, { now = Date.now() } = {}) {
 
 // Validates, checks the open segment and limits, then appends one line. Returns the record written.
 export function append(root, slug, fields, { now = Date.now() } = {}) {
-  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) refuse('bad slug');
+  if (!isWorkFolder(slug)) refuse('bad slug');
   const { dir, file } = paths(root, slug);
   const dst = lstatOrNull(dir);
-  if (dst && !dst.isDirectory()) refuse('run folder is not a directory');
+  if (dst && (!dst.isDirectory() || !insideWork(root, dir))) refuse('run folder is not a directory');
   const fst = lstatOrNull(file);
   if (fst && !fst.isFile()) refuse('run-state is not a regular file');
   if (fst && fst.size > MAX_FILE) refuse('run-state unreadable');
@@ -456,7 +465,7 @@ export function triage(root, args, { now = Date.now() } = {}) {
 // The plan Gate under plan_check.policy block: every plan in the run folder is scanned again, and no record is read.
 // Settings and the plan check load only here. Throws Refusal on anything but a clean pass.
 function planGate(root, slug, home) {
-  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) refuse('bad slug');
+  if (!isWorkFolder(slug)) refuse('bad slug');
   let result;
   try {
     const load = createRequire(import.meta.url);

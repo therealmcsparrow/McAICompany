@@ -71,7 +71,7 @@ describe('calibration', () => {
 
   test('the Contract holds the setting name and the window', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1.3$/m);
+    assert.match(text, /^# Contract: lead-handoff v1.4$/m);
     assert.ok(text.includes('CLAUDE_CODE_AUTO_COMPACT_WINDOW'));
     assert.ok(text.includes('98500'));
     assert.ok(text.includes('85500'));
@@ -80,8 +80,8 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.3');
-    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.5 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.4');
+    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.6 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
 
@@ -447,7 +447,7 @@ describe('resume', () => {
     assert.ok(ctx.includes('tokens-at-handover: 85500'));
     const second = JSON.parse(resume(sessionStart(), opts(fx)).out).hookSpecificOutput.additionalContext;
     assert.ok(!second.includes('tokens-at-handover'));
-    assert.ok(second.includes(`lead-handover read ${fx.slug}`));
+    assert.ok(second.includes(`lead-handover read '${fx.slug}'`));
     assert.equal(records(fx).filter((e) => e.ev === 'resume').length, 1);
   });
 
@@ -609,7 +609,7 @@ describe('hooks.json and source', () => {
   test('the script is LF only, imports no package and holds no process killer', () => {
     const src = fs.readFileSync(SCRIPT, 'utf8');
     assert.ok(!src.includes('\r'));
-    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(m[1].startsWith('node:') || m[1].startsWith('./'), m[1]);
+    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(m[1].startsWith('node:') || m[1].startsWith('./') || m[1] === '../mods/lib/work-folder.mjs', m[1]);
     assert.ok(!/child_process|execSync|spawn|eval\(|new Function/.test(src));
   });
 });
@@ -658,7 +658,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.3'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.4'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {

@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const HERE = import.meta.dirname;
 const MAX_INPUT = 64 * 1024;
@@ -64,7 +65,7 @@ export async function handle(text, phase, { runStatePath = join(HERE, 'run-state
     if (act === null) return;
     let slug;
     try { slug = JSON.parse(act).slug; } catch { return; }
-    if (typeof slug !== 'string' || !SLUG_RE.test(slug)) return;
+    if (!isWorkFolder(slug)) return;
     const args = ['sub', slug, phase, rec.role, rec.id, ...(rec.session ? [rec.session] : [])];
     await call(runStatePath, args, cwd, left());
   } catch {
