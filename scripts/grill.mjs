@@ -245,7 +245,14 @@ function relOf(realRoot, arg) {
     if (r === '' || r.startsWith('..') || path.isAbsolute(r)) throw new Refused('outside the product root');
     rel = r.split(path.sep).join('/');
   }
-  if (!isGrillRel(rel)) throw new Refused('not a grill path');
+  if (!isGrillRel(rel)) {
+    // A prefix that differs from `.company/work/` only in ASCII letter case is a case variant, not another path.
+    if (typeof rel === 'string' && rel.length <= MAX_ARG && rel.slice(0, WORK_PREFIX.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_PREFIX
+      && !rel.startsWith(WORK_PREFIX) && isGrillRel(WORK_PREFIX + rel.slice(WORK_PREFIX.length))) {
+      throw new Refused('wrong letter case');
+    }
+    throw new Refused('not a grill path');
+  }
   return rel;
 }
 

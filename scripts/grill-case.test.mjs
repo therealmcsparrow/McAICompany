@@ -30,6 +30,14 @@ describe('grill status and check', () => {
     assert.deepEqual(tree(root), before);
   });
 
+  test('a wrong-case .company or work prefix is refused', () => {
+    const root = fixture({ [`.company/work/${DISK}/grill.md`]: GRILL });
+    const before = tree(root);
+    wrong(grill(root, 'check', `.Company/work/${DISK}/grill.md`));
+    wrong(grill(root, 'check', `.company/WORK/${DISK}/grill.md`));
+    assert.deepEqual(tree(root), before);
+  });
+
   test('the exact spelling is read as before', () => {
     const root = fixture({ [`.company/work/${DISK}/grill.md`]: GRILL });
     for (const args of [['status', DISK], ['check', `.company/work/${DISK}/grill.md`]]) {
