@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1.4). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.5). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -26,6 +26,8 @@ const MAX_ROUND = 5;
 const MAX_WAVES = 101;
 
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
+// The fix input copy is a plan name too: exact, case-sensitive.
+const isPlanName = (name) => PLAN_NAME.test(name) || name === 'input-fix.md';
 const ROLE = /^[a-z][a-z0-9-]{1,40}$/;
 const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const DEP_ID = /^T\d{1,3}[a-z]?$/;
@@ -535,7 +537,7 @@ function runDir(root, slug) {
 }
 
 function readPlan(root, slug, name) {
-  if (typeof name !== 'string' || !PLAN_NAME.test(name)) throw new PlanProblem('plan-name');
+  if (typeof name !== 'string' || !isPlanName(name)) throw new PlanProblem('plan-name');
   const dir = runDir(root, slug);
   if (dir === null) throw new PlanProblem('plan-missing');
   if (dir === 'unsafe') throw new PlanProblem('plan-unreadable');
@@ -640,7 +642,7 @@ function applyEvent(st, rec) {
   let problem;
   switch (rec.ev) {
     case 'begin': {
-      if (typeof rec.plan !== 'string' || !PLAN_NAME.test(rec.plan)) return 'plan is not a plan name';
+      if (typeof rec.plan !== 'string' || !isPlanName(rec.plan)) return 'plan is not a plan name';
       if (typeof rec.hash !== 'string' || !HASH.test(rec.hash)) return 'hash must be 12 lowercase hex';
       if (!isInt(rec.cap, 3, 5)) return 'cap must be an integer 3 to 5';
       if (!MODES.includes(rec.mode)) return 'mode is not allowed';
@@ -967,7 +969,7 @@ function checkPaths(list) {
 }
 
 function planFor(env, slug, name) {
-  if (typeof name !== 'string' || !PLAN_NAME.test(name)) throw new PlanProblem('plan-name');
+  if (typeof name !== 'string' || !isPlanName(name)) throw new PlanProblem('plan-name');
   const plan = readPlan(env.root, slug, name);
   const parsed = parsePlan(plan.text, { agents: env.agents() });
   if (parsed.tooMany) throw new PlanProblem('plan-too-large');

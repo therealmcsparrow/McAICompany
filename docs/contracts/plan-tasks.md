@@ -1,5 +1,6 @@
-# Contract: plan-tasks v1.4
+# Contract: plan-tasks v1.5
 
+v1.5 is additive (task build-draft): the plan file name rule of `plan-tasks` also takes the exact name `input-fix.md`, the fix input copy that `draft-input take` writes. Accepted at `check`, `begin` and every read of a name (`next`, `start`, `done`, `lines`, `brief`, `scope`, `round`, `read`, `readParallel`, `sortByVisit`, and the `plan` key of a record line). The compare is exact and case-sensitive, so `Input-Fix.md`, `input-fix.MD`, `input-fix.md ` and any path are still refused (`plan-name`). Every earlier plan name behaves as before. `plan-check` is not changed, so under `plan_check.policy` `block` the scan does not read `input-fix.md`; a fix run uses the default `warn`.
 v1.4 is additive (task build-draft): `<slug>` takes the shared work folder name rule of `work-folder-name` v1 (a legacy slug or a new name, which may hold spaces); every command behaves as before for a legacy slug. A name that is not a work folder name is refused (`refused: bad slug`, exit 3, never echoed; a throw for `readParallel` and `sortByVisit`). `scope` treats a path under `.company/work/<slug>/` as in scope whatever its capitals, matching the folder part as a whole, because the path rule refuses a space; the rest of the path still goes through the path rule. The plan file name rule and the task path rule are unchanged. Uses `work-folder-name` v1 (`isWorkFolder`) and `plan-check` v1.3.
 v1.3 is additive (task elephant-goldfish): the task fields `context`, `slice` and `seams`, the `--handover` ERROR checks on `check` and `begin`, `--mode waves` with the `merged` event and command, and the view keys `merged` and `open_wave` (waves records only). Without `--handover`, and outside waves mode, every command prints and records exactly as v1.2.
 v1.2 is additive (task plan-gate-enforce): under `plan_check.policy` `block`, `begin`, `next` and `start` refuse unless every plan in the run folder passes the scan. Under `warn` and `off` every command is byte-identical to v1.1.
@@ -108,6 +109,7 @@ A plan with no task → the single line `plan-tasks: 0 tasks; plan Steps run one
 ## Error cases
 - Plan changed after `begin` → `next`, `start`, `lines`, `brief` refuse; the Lead dispatches no new plan Step and asks the CEO (run `check` and `begin` again after a Plan Gate, or stop).
 - Broken record → exit 1 with the reader line; the Lead dispatches no new plan Step until the CEO decides, and `ship` writes no `par` record.
+- Limit (v1.5): under `plan_check.policy` `block`, `begin`, `next` and `start` run the `plan-check` scan, which still matches only its own plan names, so `input-fix.md` is not scanned there. Default is `warn`.
 - Nothing here blocks a Gate, except `begin`, `next` and `start` under `plan_check.policy` `block` (above).
 
 ## Compatibility
