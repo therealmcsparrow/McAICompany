@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1.2). Node built-ins only.
+// Draft input (contract: docs/contracts/draft-input.md v1.3). Node built-ins only.
 // `arg` turns the argument file into a fixed result line, `free` picks a name that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 // Work folder names come only from ../mods/lib/work-folder.mjs.
@@ -92,6 +92,7 @@ function summary(c, text, bytes) {
 const WIN = process.platform === 'win32';
 const CASE_FOLD = WIN || process.platform === 'darwin';
 const MAX_BYTES = 256 * 1024;
+const PROMPT_CAP = 16384;
 const sameName = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 function realRootOf(root) {
@@ -449,7 +450,8 @@ function takeFile(rest, forWhat, root, now) {
   if (forWhat === 'feature' && !(src && DRAFT_FILE.test(src.rest))) throw new Refused('not a draft file');
   if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(src.name))) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);
-  const bytes = readFile(realRoot, rel);
+  const isPrompt = forWhat === 'to-spec' && src !== null && sameName(src.rest, 'prompt.md');
+  const bytes = readFile(realRoot, rel, isPrompt ? PROMPT_CAP : MAX_BYTES);
   const text = bytes.toString('utf8');
   const c = classify(text);
   const gaps = missingFor(forWhat, c);
@@ -457,8 +459,9 @@ function takeFile(rest, forWhat, root, now) {
     takeTopic(realRoot, forWhat, false);
     return { code: 4, lines: gaps.map((g) => `missing: ${g}`) };
   }
-  const topic = takeTopic(realRoot, forWhat, src === null);
-  const { name, dir } = src === null ? claimPrimary(realRoot, forWhat, topic, now) : claimFromSource(realRoot, src, forWhat, now);
+  const fresh = src === null || isPrompt;
+  const topic = takeTopic(realRoot, forWhat, fresh);
+  const { name, dir } = fresh ? claimPrimary(realRoot, forWhat, topic, now) : claimFromSource(realRoot, src, forWhat, now);
   writeNew(path.join(dir, `input-${forWhat}.md`), bytes);
   return { code: 0, lines: [`slug: ${name}`, `input: .company/work/${name}/input-${forWhat}.md`, `kind: ${c.kind}`, summary(c, text, bytes)] };
 }
@@ -490,12 +493,12 @@ function argText(realRoot, forWhat) {
     try {
       bytes = readFile(realRoot, `.company/${name}`, MAX_ARG_FILE);
     } catch (error) {
-      if (error instanceof Refused && error.message === 'too large') throw new Refused('argument is not accepted');
+      if (error instanceof Refused && error.message === 'too large') throw new Refused('argument too large');
       throw error;
     }
     let text = bytes.toString('utf8');
     if (text.endsWith('\n')) text = text.slice(0, -1);
-    if (BAD_CHAR.test(text)) throw new Refused('argument is not accepted');
+    if (BAD_CHAR.test(text)) throw new Refused('argument has a line break or control character');
     return text.trim();
   } finally {
     removeArgFile(realRoot, name);
@@ -504,7 +507,8 @@ function argText(realRoot, forWhat) {
 
 const RESUME = /^resume (.{1,120})$/;
 const WORK_DRAFT = /^\.company\/work\/([^/]{1,120})\/(?:grill|spec|plan)\.md$/;
-const GRILL_PATH = /^\.company\/work\/([^/]{1,120})\/grill\.md$/;
+const PROMPT_PATH = /^\.company\/work\/([^/]{1,120})\/prompt\.md$/;
+const GRILL_PATH =/^\.company\/work\/([^/]{1,120})\/grill\.md$/;
 
 function arg(args, root, now) {
   const { rest, forWhat } = parseFor(args);
@@ -534,6 +538,8 @@ function argResult(realRoot, text, forWhat, now) {
     takeTopic(realRoot, forWhat, false);
     return { code: 0, lines: [`arg: file ${slashed}`] };
   }
+  const prompt = forWhat === 'to-spec' ? PROMPT_PATH.exec(slashed) : null;
+  if (prompt !== null && isWorkFolder(prompt[1])) return { code: 0, lines: [`arg: file ${slashed}`] };
   if (!/\s/.test(text) && (/[/\\]/.test(text) || /\.(?:md|txt)$/.test(text))) {
     const norm = checkPath(text);
     if (!norm.ok) throw new Refused(`path ${norm.reason}`);
