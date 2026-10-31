@@ -100,7 +100,7 @@ test('the Playbook sets Round and Asks left itself; the reply check is an allow-
 });
 
 test('v2.0: a question line needs a why part and a reply with no open question ends the rounds', () => {
-  has('Contract: `reprompt` v2.1', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
+  has('Contract: `reprompt` v2.2', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
   has('`noOpenQuestion`', 'say "No open question left"', 'hold no further question round', "that option's description only");
   assert.ok(section('4. Question form').includes('`(Recommended)` one first and its `why` as that option'));
   assert.doesNotMatch(text, /Contract v1\b|`reprompt` v1\.2/);
