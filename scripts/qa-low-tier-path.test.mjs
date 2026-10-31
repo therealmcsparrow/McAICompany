@@ -449,7 +449,7 @@ describe('AC4 a risky plan or diff makes the run high and the skipped Roles run 
     const tierPath = read('skills/pipeline/references/tier-path.md');
     const step8 = tierPath.split('\n').find((l) => l.startsWith('8. **Sync.**'));
     assert.match(step8, /`sync '<slug>' --plan '<plan>' --base '<base>'` before the first builder \(feature\)/);
-    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. (`--diff` reads the run only while HEAD is on the branch `aico\/<slug>` and no grafts file exists; otherwise it prints `check: high: diff unknown` and step 11 applies\. )A plain `sync '<slug>'` takes no `--base`\./);
+    assert.match(step8, /`sync '<slug>' --diff --base '<base>'` after fix step 2 is committed and before every Ship Gate, form or auto \(both\)\. (`--diff` reads the run only while HEAD is on the branch `aico\/<branch id>` and no grafts file exists; otherwise it prints `check: high: diff unknown` and step 11 applies\. )A plain `sync '<slug>'` takes no `--base`\./);
     assert.match(step8, /add before ship:/);
     const feature = read('skills/feature/SKILL.md');
     assert.match(feature, /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/m);

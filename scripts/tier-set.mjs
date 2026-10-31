@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1.2). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v1.3). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
@@ -13,6 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
 import { show } from './run-state.mjs';
+import { branchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_DATA_BYTES = 16 * KiB;
@@ -26,7 +27,7 @@ const MAX_GIT_BYTES = 8 * 1024 * KiB;
 const GIT_TIMEOUT_MS = 30000;
 const MAX_HIT_LINES = 5;
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 const SHA = /^[0-9a-f]{7,64}$/;
 const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -467,8 +468,10 @@ const DIFF_FLAGS = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--n
 // Paths of the work since base, or null when any check or git call fails. The base is used only when it is a full commit id.
 // The committed diff ends at the run branch itself; the worktree diff and the untracked lists are read only when HEAD is that branch.
 function readDiffPaths(env, base, slug) {
-  if (typeof base !== 'string' || !FULL_SHA.test(base) || typeof slug !== 'string' || !SLUG.test(slug)) return null;
-  const ref = `refs/heads/aico/${slug}`;
+  if (typeof base !== 'string' || !FULL_SHA.test(base) || typeof slug !== 'string' || !isWorkFolder(slug)) return null;
+  const id = branchId(slug);
+  if (typeof id !== 'string' || !BRANCH_ID.test(id)) return null;
+  const ref = `refs/heads/aico/${id}`;
   const all = new Set();
   const add = (buf) => {
     for (const p of buf.toString('utf8').split('\0')) if (p !== '') all.add(p);
@@ -630,7 +633,7 @@ function buildView(slug, records) {
 }
 
 export function readTierPath(root, slug) {
-  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TierPathRecordError('?', 0, 'bad slug');
+  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TierPathRecordError('?', 0, 'bad slug');
   const cur = loadRecord(root, slug);
   if (cur.records.length === 0) return { v: 1, slug, state: 'none' };
   return buildView(slug, cur.records);
@@ -679,7 +682,7 @@ const oneOf = (list, v, label) => {
 
 function slugArg(positional, count) {
   if (positional.length !== count) throw new Refusal(USAGE);
-  if (!SLUG.test(positional[0])) throw new Refusal('bad slug');
+  if (!isWorkFolder(positional[0])) throw new Refusal('bad slug');
   return positional[0];
 }
 
