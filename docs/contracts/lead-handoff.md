@@ -15,24 +15,7 @@ The hand-over point is the Claude Code auto-compaction point. The CEO sets `CLAU
 - `CAP = 95000` (the fixed Context cap), `AUTO_COMPACT_WINDOW = 98500`, `COMPACT_RESERVE = 13000`, `HANDOVER_AT = 85500`, and `AUTO_COMPACT_WINDOW - COMPACT_RESERVE === HANDOVER_AT`.
 
 ## Where it lives
-- Lead Handoff: `.company/work/<slug>/lead-handoff-<n>.md`, `<slug>` a work folder name (v1.4: new name or legacy slug `^[a-z0-9][a-z0-9-]{0,63}# Contract: lead-handoff v1.4
-
-v1.4 (task idea-20261030-2242-build-draft; additive): `<slug>` is a work folder name (`work-folder-name` v1, through `isWorkFolder`): a new name `<YYYY-MM-DD HH.MM> - <Topic>` or a legacy slug, which is never renamed. The Handoff `slug` line accepts either shape. The `resume` fixed line prints the name single-quoted: `aico lead hand-over: run lead-handover read '<name>' first, then follow skills/pipeline/references/lead-handover.md.` (the quotes keep a name with spaces one argument). A folder is used only when its real path is the folder of that name inside the real `.company/work`. Uses `run-state` v1.6. Every other name is `refused: bad slug`, with no echo.
-
-v1.3 (task idea-20261030-2242-build-draft; additive): `read <slug>` prints four more lines after `running:`: `base-commit`, `risk-tier`, `tier-path` and `tier-set`, from the Lead's records only (never a Role Handoff). `base-commit` is a full 40 or 64 lowercase hex id, not all zeros, else `unknown`; `risk-tier` is the tier-path record's tier, `high` when that record is broken, `unknown` without one; `tier-path` is `none`, `broken` or `<feature|fix> <short|full>`; `tier-set` is the inline list of the record's route entries, `unknown` without a record.
-
-v1.2 (task reprompt-20261030-1309-draft-2-draft; additive): a new record event `base` and CLI command `base <slug> <id>` keep the run's base commit for every Playbook, also before the tier-path record exists; `base-commit` is the tier-path base when usable, else the recorded `base`, else `unknown`; a 64-hex id is accepted in the Handoff.
-
-v1.1 (task reprompt-20261030-1309-draft-2-draft; additive): `base-commit` and `risk-tier` come from the run's tier-path record (`tier-sets` v1.2, written only by the Lead's `tier-set` commands), never from a file a Role wrote; the Handoff gains `tier-path` and `tier-set` after `risk-tier`; the fallback run scan ranks by newest modification time before it caps at 200 folders.
-
-New Contract. Provider: `scripts/lead-handover.mjs` (Node built-ins only). Mechanism: ADR 0049 (PreCompact and SessionStart hooks, a script-written Handoff). Writers of the record: the script only, through its hooks and its CLI. Consumers: the Lead (`read`, the injected Handoff) and the Ship Gate summary. Uses `run-state` v1.5 (exported `active` and `show`, plus a read-only parse of the run's `ask` and `gate` lines under the same lstat and 64 KiB limits), `idea-flow` v1.1 (`state`) and `tier-sets` v1.2 (`readTierPath`, read-only).
-
-## One-time setup
-The hand-over point is the Claude Code auto-compaction point. The CEO sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` = `98500` in the `env` block of the user settings (`~/.claude/settings.json`); a plugin cannot set it. Without it the Lead hands over only at Claude Code's default compaction point. Constants, exported by the script:
-- `CAP = 95000` (the fixed Context cap), `AUTO_COMPACT_WINDOW = 98500`, `COMPACT_RESERVE = 13000`, `HANDOVER_AT = 85500`, and `AUTO_COMPACT_WINDOW - COMPACT_RESERVE === HANDOVER_AT`.
-
-## Where it lives
-- Lead Handoff: `.company/work/<slug>/lead-handoff-<n>.md`, ). `<n>` is 1 + the highest number among existing `lead-handoff-<n>.md` files and `handover` events. Exclusive create (`O_CREAT|O_EXCL`), at most 8 KiB, LF only.
+- Lead Handoff: `.company/work/<slug>/lead-handoff-<n>.md`, `<slug>` a work folder name (v1.4: new name or legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`). `<n>` is 1 + the highest number among existing `lead-handoff-<n>.md` files and `handover` events. Exclusive create (`O_CREAT|O_EXCL`), at most 8 KiB, LF only.
 - Record: `.company/work/<slug>/lead-handover.jsonl`. Append-only, one JSON object per line, at most 1000 lines of at most 512 bytes. Created once with exclusive create; every later open is an append that checks the file is a regular file with one link and the same `dev` and `ino` as its `lstat`; `O_NOFOLLOW` is ORed in only where it exists (never on win32). Every folder on the path is checked with `lstat` (no link, a directory).
 - Active run: `active(root)` from run-state; else the 200 newest by modification time of the `.company/work/*/idea-flow.jsonl` files modified within 12 hours (all folders are listed first, at most 20000, so the cap never drops a newer flow) whose `state` form is not `ended`. None: the hooks do nothing.
 

@@ -69,8 +69,8 @@ function workDir(root, slug) {
 
 function insideWork(root, dir) {
   try {
-    const want = path.join(fs.realpathSync(path.join(root, '.company', 'work')), path.basename(dir));
-    const real = fs.realpathSync(dir);
+    const want = path.join(fs.realpathSync.native(path.join(root, '.company', 'work')), path.basename(dir));
+    const real = fs.realpathSync.native(dir);
     return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() === want.toLowerCase() : real === want;
   } catch { return false; }
 }
