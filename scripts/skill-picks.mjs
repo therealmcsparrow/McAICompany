@@ -4,12 +4,12 @@
 //        node skill-picks.mjs vet  .company/work/<work folder>/<NN>-skill-researcher.md --json
 //        node skill-picks.mjs check-install --name <skill> --hash <sha-256 hex> --json
 // Contract: docs/contracts/skill-recommendation.md. Offending text is never echoed; refusals go to stdout.
-import { lstatSync, readFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
 import { NAME_RE, settingsMode, vetCandidates } from './skillspector.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const HANDOFF_PREFIX = '.company/work/';
@@ -46,6 +46,8 @@ function handoffFolder(arg) {
 function readHandoff(arg, cwd) {
   const folder = handoffFolder(arg);
   if (folder === null) throw new Refused('handoff path must be .company/work/<work folder>/<NN>-skill-researcher.md');
+  // Exact letter case of every segment; a missing path keeps `handoff not found` below.
+  try { exactWorkPath({ fs: { readdirSync }, path: { join } }, cwd, [folder, arg.slice(`${HANDOFF_PREFIX}${folder}/`.length)]); } catch (e) { if (e instanceof WorkFolderRefusal) throw new Refused(e.message); throw e; }
   // No link anywhere on the way, then a regular file within the size cap.
   for (const rel of ['.company', '.company/work', `.company/work/${folder}`, arg]) {
     let st;

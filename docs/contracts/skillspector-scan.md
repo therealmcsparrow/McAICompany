@@ -1,4 +1,6 @@
-# Contract: skillspector-scan v1.1
+# Contract: skillspector-scan v1.2
+
+v1.2 (task input-fix, T10; additive): `--report '<work folder>'` (`writeReport`) checks the exact letter case of `.company`, `work` and the report folder with `exactWorkPath` of `work-folder-name` v1.1, after the `bad report slug` check and before anything is created. A folder listed only in another letter case → `refused: wrong letter case`, exit 2, nothing written. A folder missing in every case is made as before.
 
 Provider: `scripts/skillspector.mjs` (Node built-ins only, proj.S1). Consumers: the `/aico:skillspector` Playbook (`skills/skillspector/SKILL.md`), `scripts/skill-picks.mjs vet` (the Lead's pre-approval scan, `skill-recommendation` v1), the Lead's post-install scan (`skills/lead/references/skill-picks.md`).
 The third-party tool is NVIDIA SkillSpector (Apache-2.0), run as its CLI only. Rationale: `docs/adr/0018-skillspector-through-a-tested-wrapper.md`, `docs/adr/0019-lead-runs-the-gating-scan.md`, `docs/adr/0020-bind-the-scan-to-the-installed-bytes.md`. Facts about the tool: `.company/work/skill-researcher-scan/02-tech-researcher.md` (v2.12.0), spikes SP1 (`06-spike-backend-engineer.md`) and SP2 (`04-spike-backend-engineer.md`), and the installed v2.13.1 source read in Fix round 1 (`26-architect.md`). Facts about the skills CLI 1.7.4: its `dist/cli.mjs`, read in Fix round 2 (`40-architect.md`). Still v1 and unreleased; Fix rounds 1 to 3 are folded in.
