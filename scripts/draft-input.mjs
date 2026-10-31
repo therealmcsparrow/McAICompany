@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1.3). Node built-ins only.
+// Draft input (contract: docs/contracts/draft-input.md v1.4). Node built-ins only.
 // `arg` turns the argument file into a fixed result line, `free` picks a name that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 // Work folder names come only from ../mods/lib/work-folder.mjs.
@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { normalizePath, parsePlan } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, candidates, fallbackTopic, helperName, isLegacySlug, isWorkFolder, parseName, readTopicFile, stampOf } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isWorkFolder, parseName, readTopicFile, stampOf } from '../mods/lib/work-folder.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
@@ -90,10 +90,8 @@ function summary(c, text, bytes) {
 }
 
 const WIN = process.platform === 'win32';
-const CASE_FOLD = WIN || process.platform === 'darwin';
 const MAX_BYTES = 256 * 1024;
 const PROMPT_CAP = 16384;
-const sameName = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 function realRootOf(root) {
   try {
@@ -122,7 +120,7 @@ function readFile(realRoot, rel, maxBytes = MAX_BYTES) {
     }
     throw new Refused('missing');
   }
-  if (!sameName(real, lexical)) throw new Refused('link');
+  if (real !== lexical) throw new Refused('link');
   if (!inside(realRoot, real)) throw new Refused('outside the product root');
   let st;
   try {
@@ -210,6 +208,16 @@ function workSource(rel) {
   if (!rel.startsWith(WORK_PREFIX)) return null;
   const cut = rel.indexOf('/', WORK_PREFIX.length);
   return { name: rel.slice(WORK_PREFIX.length, cut), rest: rel.slice(cut + 1) };
+}
+
+// A work folder or file listed only in another letter case is refused; a missing one keeps the later refusals.
+function checkExact(realRoot, src) {
+  try {
+    exactWorkPath({ fs, path }, realRoot, [src.name, ...src.rest.split('/')]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+    throw error;
+  }
 }
 
 const workDir = (realRoot) => path.join(realRoot, '.company', 'work');
@@ -324,7 +332,7 @@ function ensureFolder(realRoot, parts) {
     } catch {
       throw new Refused('link');
     }
-    if (!sameName(real, current)) throw new Refused('link');
+    if (real !== current) throw new Refused('link');
   }
   return current;
 }
@@ -447,10 +455,11 @@ function takeFile(rest, forWhat, root, now) {
   if (!norm.ok) throw new Refused(`path ${norm.reason}`);
   const rel = norm.path;
   const src = workSource(rel);
+  if (src !== null) checkExact(realRootOf(root), src);
   if (forWhat === 'feature' && !(src && DRAFT_FILE.test(src.rest))) throw new Refused('not a draft file');
   if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(src.name))) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);
-  const isPrompt = forWhat === 'to-spec' && src !== null && sameName(src.rest, 'prompt.md');
+  const isPrompt = forWhat === 'to-spec' && src !== null && src.rest === 'prompt.md';
   const bytes = readFile(realRoot, rel, isPrompt ? PROMPT_CAP : MAX_BYTES);
   const text = bytes.toString('utf8');
   const c = classify(text);
