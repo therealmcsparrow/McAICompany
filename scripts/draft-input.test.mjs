@@ -26,7 +26,8 @@ function put(root, rel, body) {
   return file;
 }
 
-const run = (root, ...args) => main(args, { root });
+const STAMP = '2026-10-31 09.15';
+const run = (root, ...args) => main(args, { root, now: new Date(2026, 9, 31, 9, 15) });
 const tree = (root) => {
   const out = [];
   const walk = (dir) => {
@@ -57,8 +58,9 @@ describe('take --for to-tickets', () => {
     const root = fixture({ 'docs/idea.md': BRIEF });
     const r = run(root, 'take', 'docs/idea.md', '--for', 'to-tickets');
     assert.equal(r.code, 0);
-    assert.deepEqual(r.lines, ['slug: idea', 'input: .company/work/idea/input-to-tickets.md', 'kind: brief', 'brief: 2 criteria']);
-    assert.equal(fs.readFileSync(path.join(root, '.company/work/idea/input-to-tickets.md'), 'utf8'), BRIEF);
+    const name = `${STAMP} - To-Tickets`;
+    assert.deepEqual(r.lines, [`slug: ${name}`, `input: .company/work/${name}/input-to-tickets.md`, 'kind: brief', 'brief: 2 criteria']);
+    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', name, 'input-to-tickets.md'), 'utf8'), BRIEF);
   });
 });
 
@@ -227,7 +229,7 @@ describe('kind and summary line', () => {
     const body = '# T\r\nAC1: a\r\n';
     const { root, r } = takeFor({ 'in.md': body });
     assert.equal(r.lines[2], 'kind: brief');
-    assert.equal(fs.readFileSync(path.join(root, '.company/work/in/input-to-spec.md'), 'utf8'), body);
+    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', `${STAMP} - To-Spec`, 'input-to-spec.md'), 'utf8'), body);
   });
 
   test('a very long line of one repeated class is classified in linear time', () => {
@@ -339,22 +341,13 @@ describe('free', () => {
 describe('take slug and folders', () => {
   const take = (root, rel, f) => run(root, 'take', rel, '--for', f);
 
-  test('the stem is the base: lowercase, runs of symbols become one dash, at most 5 words', () => {
-    const root = fixture({ 'docs/My.Big_Idea.for.the.new.thing.md': BRIEF });
-    assert.equal(slugOf(take(root, 'docs/My.Big_Idea.for.the.new.thing.md', 'grill')), 'slug: my-big-idea-for-the');
+  test('a file outside the work folder gets the fallback name of its --for word, whatever its own name', () => {
+    const root = fixture({ 'docs/My.Big_Idea.for.the.new.thing.md': BRIEF, [`docs/${'b'.repeat(64)}.md`]: BRIEF });
+    assert.equal(slugOf(take(root, 'docs/My.Big_Idea.for.the.new.thing.md', 'grill')), `slug: ${STAMP} - Grill`);
+    assert.equal(slugOf(take(root, `docs/${'b'.repeat(64)}.md`, 'grill')), `slug: ${STAMP} - Grill 2`);
   });
 
-  test('a stem of only symbols becomes draft', () => {
-    const root = fixture({ 'docs/___.md': BRIEF });
-    assert.equal(slugOf(take(root, 'docs/___.md', 'grill')), 'slug: draft');
-  });
-
-  test('a 64-character stem is cut to 62', () => {
-    const root = fixture({ [`docs/${'b'.repeat(64)}.md`]: BRIEF });
-    assert.equal(slugOf(take(root, `docs/${'b'.repeat(64)}.md`, 'grill')), `slug: ${'b'.repeat(62)}`);
-  });
-
-  test('a grill.md or spec.md file uses its folder slug, other files use <slug>-draft', () => {
+  test('a grill.md or spec.md file uses its folder, other files give a Draft helper', () => {
     const root = fixture({
       '.company/work/alpha/grill.md': BRIEF,
       '.company/work/beta/spec.md': BRIEF,
@@ -362,15 +355,15 @@ describe('take slug and folders', () => {
     });
     assert.equal(slugOf(take(root, '.company/work/alpha/grill.md', 'to-spec')), 'slug: alpha');
     assert.equal(slugOf(take(root, '.company/work/beta/spec.md', 'to-tickets')), 'slug: beta');
-    assert.equal(slugOf(take(root, '.company/work/gamma/01-product-manager.md', 'grill')), 'slug: gamma-draft');
+    assert.equal(slugOf(take(root, '.company/work/gamma/01-product-manager.md', 'grill')), `slug: ${STAMP} - Gamma Draft`);
   });
 
-  test('a shipped spec in docs/specs gets <run>-2 when the run folder holds a Handoff, nothing lands in the run folder', () => {
+  test('a shipped spec in docs/specs gets a new primary name, nothing lands in a run folder', () => {
     const root = fixture({ 'docs/specs/run.md': spec(), '.company/work/run/01-product-manager.md': 'x' });
     const r = take(root, 'docs/specs/run.md', 'to-spec');
-    assert.equal(slugOf(r), 'slug: run-2');
+    assert.equal(slugOf(r), `slug: ${STAMP} - To-Spec`);
     assert.deepEqual(fs.readdirSync(path.join(root, '.company/work/run')), ['01-product-manager.md']);
-    assert.ok(fs.existsSync(path.join(root, '.company/work/run-2/input-to-spec.md')));
+    assert.ok(fs.existsSync(path.join(root, '.company', 'work', `${STAMP} - To-Spec`, 'input-to-spec.md')));
   });
 
   test('a client run spec in a run folder with a summary and an architect plan gets <run>-2', () => {
@@ -393,10 +386,10 @@ describe('take slug and folders', () => {
 
   test('take for feature never uses the draft folder and refuses non-draft paths', () => {
     const root = fixture({ '.company/work/run/spec.md': spec(), 'docs/idea.md': BRIEF, '.company/work/run/01-x.md': 'x' });
-    assert.equal(slugOf(take(root, '.company/work/run/spec.md', 'feature')), 'slug: run-2');
+    assert.equal(slugOf(take(root, '.company/work/run/spec.md', 'feature')), `slug: ${STAMP} - Run Draft`);
     refused(take(root, 'docs/idea.md', 'feature'), 'not a draft file');
     refused(take(root, '.company/work/run/01-x.md', 'feature'), 'not a draft file');
-    assert.equal(slugOf(take(root, '.company/work/run/spec.md', 'feature')), 'slug: run-3');
+    assert.equal(slugOf(take(root, '.company/work/run/spec.md', 'feature')), `slug: ${STAMP} - Run Draft 2`);
   });
 
   test('a junction in place of .company is refused and nothing lands behind it', () => {
@@ -510,7 +503,7 @@ describe('arg', () => {
       const r = arg(root, 'to-spec', text);
       assert.equal(r.code, 0, text);
       assert.equal(r.lines[0], 'arg: idea');
-      assert.match(r.lines[1], /^slug: [a-z0-9][a-z0-9-]{0,63}$/);
+      assert.equal(r.lines[1], `slug: ${STAMP} - To-Spec`);
       assert.equal(r.lines.length, 2);
     }
     for (const text of ['/etc/passwd.md', 'C:\\Users\\x\\idea.md', '/abs/dir/']) {
@@ -545,40 +538,27 @@ describe('arg', () => {
     assert.deepEqual(arg(fixture(), 'grill', '.company\\work\\my-idea\\grill.md'), { code: 0, lines: ['arg: resume my-idea'] });
     assert.deepEqual(arg(fixture(), 'grill', 'resume my-idea\n'), { code: 0, lines: ['arg: resume my-idea'] });
     assert.deepEqual(arg(fixture(), 'to-spec', '.company/work/my-idea/grill.md'), { code: 0, lines: ['arg: file .company/work/my-idea/grill.md'] });
-    assert.deepEqual(arg(fixture(), 'to-spec', 'resume my-idea'), { code: 0, lines: ['arg: idea', 'slug: resume-my-idea'] });
+    assert.deepEqual(arg(fixture(), 'to-spec', 'resume my-idea'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - To-Spec`] });
   });
 
   test('resume with an invalid slug is an idea; a non-canonical grill path is a file', () => {
-    assert.deepEqual(arg(fixture(), 'grill', 'resume Bad_Slug'), { code: 0, lines: ['arg: idea', 'slug: resume-bad-slug'] });
+    assert.deepEqual(arg(fixture(), 'grill', 'resume Bad_Slug'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - Grill`] });
     assert.deepEqual(arg(fixture(), 'grill', 'docs/grill.md'), { code: 0, lines: ['arg: file docs/grill.md'] });
   });
 
   test('without a file: to-tickets needs one, feature has no slug, grill and to-spec pick a free slug', () => {
     refused(arg(fixture(), 'to-tickets', 'make it faster'), 'needs a file');
     assert.deepEqual(arg(fixture(), 'feature', 'make it faster'), { code: 0, lines: ['arg: idea'] });
-    assert.deepEqual(arg(fixture(), 'grill', 'make it faster'), { code: 0, lines: ['arg: idea', 'slug: make-it-faster'] });
-    const root = fixture({ '.company/work/make-it-faster/01-product-manager.md': 'x' });
-    assert.deepEqual(arg(root, 'to-spec', 'make it faster'), { code: 0, lines: ['arg: idea', 'slug: make-it-faster-2'] });
+    assert.deepEqual(arg(fixture(), 'grill', 'make it faster'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - Grill`] });
+    const root = fixture({ [`.company/work/${STAMP} - To-Spec/01-product-manager.md`]: 'x' });
+    assert.deepEqual(arg(root, 'to-spec', 'make it faster'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - To-Spec 2`] });
   });
 
-  test('slug rule: five words, lowercase, symbols collapse, empty becomes draft', () => {
+  test('the idea text never builds the name', () => {
     const slug = (text) => arg(fixture(), 'grill', text).lines[1];
-    assert.equal(slug('One TWO three four five six seven'), 'slug: one-two-three-four-five');
-    assert.equal(slug('  Hello,   world!!  '), 'slug: hello-world');
-    assert.equal(slug('!!! ???'), 'slug: draft');
-    assert.equal(slug('\u65e5\u672c\u8a9e \u30c6\u30b9\u30c8'), 'slug: draft');
-    assert.equal(slug('caf\u00e9 au lait'), 'slug: caf-au-lait');
-    assert.equal(slug('a'.repeat(70)), `slug: ${'a'.repeat(62)}`);
-    assert.equal(slug(`${'a'.repeat(61)} ${'b'.repeat(5)}`), `slug: ${'a'.repeat(61)}`);
-  });
-
-  test('the base always leaves room for -9 within 64 characters', () => {
-    const root = fixture();
-    const cut = 'a'.repeat(62);
-    for (let n = 1; n <= 8; n++) put(root, `.company/work/${n === 1 ? cut : `${cut}-${n}`}/01-x.md`, 'x');
-    const r = arg(root, 'grill', 'a'.repeat(70));
-    assert.equal(r.lines[1], `slug: ${cut}-9`);
-    assert.equal(r.lines[1].length - 'slug: '.length, 64);
+    for (const text of ['One TWO three four five six seven', '!!! ???', '\u65e5\u672c\u8a9e \u30c6\u30b9\u30c8', 'a'.repeat(70)]) {
+      assert.equal(slug(text), `slug: ${STAMP} - Grill`);
+    }
   });
 
   test('usage: --for is required, one word, nothing else', () => {
@@ -620,10 +600,10 @@ describe('--for fix (a flow build plan)', () => {
     const root = fixture({ [BUILD]: PLAN });
     const r = run(root, 'take', BUILD, '--for', 'fix');
     assert.equal(r.code, 0);
-    assert.equal(r.lines[0], 'slug: flow-build-draft');
-    assert.equal(r.lines[1], 'input: .company/work/flow-build-draft/input-fix.md');
-    assert.equal(fs.readFileSync(path.join(root, '.company/work/flow-build-draft/input-fix.md'), 'utf8'), PLAN);
-    assert.equal(run(root, 'take', BUILD, '--for', 'fix').lines[0], 'slug: flow-build-draft-2');
+    assert.equal(r.lines[0], `slug: ${STAMP} - Flow Draft`);
+    assert.equal(r.lines[1], `input: .company/work/${STAMP} - Flow Draft/input-fix.md`);
+    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', `${STAMP} - Flow Draft`, 'input-fix.md'), 'utf8'), PLAN);
+    assert.equal(run(root, 'take', BUILD, '--for', 'fix').lines[0], `slug: ${STAMP} - Flow Draft 2`);
   });
 
   test('take --for fix refuses every other path', () => {
@@ -632,9 +612,10 @@ describe('--for fix (a flow build plan)', () => {
       '.company/work/flow-build/sub/plan.md': PLAN, 'docs/plan.md': PLAN, '.company/work/Flow-build/plan.md': PLAN
     });
     const before = tree(root);
-    for (const p of ['.company/work/flow/plan.md', '.company/work/flow-build/grill.md', '.company/work/flow-build/sub/plan.md', 'docs/plan.md', '.company/work/Flow-build/plan.md']) {
+    for (const p of ['.company/work/flow/plan.md', '.company/work/flow-build/grill.md', '.company/work/flow-build/sub/plan.md', 'docs/plan.md']) {
       refused(run(root, 'take', p, '--for', 'fix'), 'not a build plan');
     }
+    refused(run(root, 'take', '.company/work/Flow-build/plan.md', '--for', 'fix'), 'path bad character');
     assert.deepEqual(tree(root), before);
   });
 

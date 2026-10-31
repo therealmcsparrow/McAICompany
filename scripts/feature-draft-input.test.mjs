@@ -31,8 +31,9 @@ test('feature SKILL.md stays within 125 lines, LF only, and points to Draft inpu
 });
 
 test('scope: only draft files take the intake (R-12)', () => {
-  has(draft, '.company/work/<s>/grill.md', '.company/work/<s>/spec.md', '.company/work/<s>/plan.md',
-    'one token with no whitespace', 'only to draft files');
+  has(draft, '.company/work/<name>/grill.md', '.company/work/<name>/spec.md', '.company/work/<name>/plan.md',
+    'spaces are allowed only inside `<name>`', 'only to draft files');
+  assert.ok(!draft.includes('one token with no whitespace'));
 });
 
 test('a research-report hand-over (.company/research/<slug>.md) starts exactly as today', () => {

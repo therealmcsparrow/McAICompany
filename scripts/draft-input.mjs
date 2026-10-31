@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1.1). Node built-ins only.
-// `arg` turns the argument file into a fixed result line, `free` picks a slug that never reuses earlier work,
+// Draft input (contract: docs/contracts/draft-input.md v1.2). Node built-ins only.
+// `arg` turns the argument file into a fixed result line, `free` picks a name that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
+// Work folder names come only from ../mods/lib/work-folder.mjs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { normalizePath, parsePlan } from './plan-tasks.mjs';
+import { WorkFolderRefusal, branchId, candidates, fallbackTopic, helperName, isLegacySlug, isWorkFolder, parseName, readTopicFile, stampOf } from '../mods/lib/work-folder.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
@@ -17,16 +19,8 @@ const BAD_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 
 class Refused extends Error {}
 
-function words(text) {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
 function cutSlug(s) {
   return s.slice(0, 62).replace(/-+$/, '');
-}
-
-function baseSlug(text) {
-  return cutSlug(words(text).split('-').filter(Boolean).slice(0, 5).join('-')) || 'draft';
 }
 
 const AC_LINE = /^(?:[-*] )?\**AC\d{1,3}\**:/;
@@ -188,11 +182,61 @@ function checkArgs(args) {
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const WORK_FILE = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(.+)$/;
-const DRAFT_PATH = /^\.company\/work\/[a-z0-9][a-z0-9-]{0,63}\/(?:grill|spec|plan)\.md$/;
-const BUILD_PATH = /^\.company\/work\/[a-z0-9][a-z0-9-]{0,57}-build\/plan\.md$/;
+const WORK_PREFIX = '.company/work/';
+const MAX_WORK_PATH = 400;
+const DRAFT_FILE = /^(?:grill|spec|plan)\.md$/;
+const LEGACY_BUILD = /^[a-z0-9][a-z0-9-]{0,57}-build$/;
 const DRAFT_NAMES = new Set(['grill.md', 'spec.md', 'plan.md']);
 const OUTPUT = { grill: 'grill.md', 'to-spec': 'spec.md', 'to-tickets': 'plan.md' };
+
+// The path rule. A `.company/work/<name>/...` path takes its name by the work folder allow-list (the only place a
+// space may sit) and the rest by the plan-tasks path rule; any other path is checked by the plan-tasks rule whole.
+function checkPath(text) {
+  const p = text.replaceAll('\\', '/');
+  if (!p.startsWith(WORK_PREFIX)) {
+    return p.slice(0, WORK_PREFIX.length).toLowerCase() === WORK_PREFIX ? { ok: false, reason: 'bad character' } : normalizePath(p);
+  }
+  if (p.length > MAX_WORK_PATH) return { ok: false, reason: 'too long' };
+  const cut = p.indexOf('/', WORK_PREFIX.length);
+  if (cut === -1 || cut === p.length - 1) return { ok: false, reason: 'bad character' };
+  const name = p.slice(WORK_PREFIX.length, cut);
+  if (!isWorkFolder(name)) return { ok: false, reason: 'bad character' };
+  const rest = normalizePath(p.slice(cut + 1));
+  if (!rest.ok) return rest;
+  return { ok: true, path: `${WORK_PREFIX}${name}/${rest.path}` };
+}
+
+// { name, rest } for a checked path under .company/work, else null.
+function workSource(rel) {
+  if (!rel.startsWith(WORK_PREFIX)) return null;
+  const cut = rel.indexOf('/', WORK_PREFIX.length);
+  return { name: rel.slice(WORK_PREFIX.length, cut), rest: rel.slice(cut + 1) };
+}
+
+const workDir = (realRoot) => path.join(realRoot, '.company', 'work');
+
+function exists(file) {
+  try {
+    fs.lstatSync(file);
+    return true;
+  } catch (error) {
+    return !(error && error.code === 'ENOENT');
+  }
+}
+
+// Is a name in use: a folder of that name, a name already tried, or a folder with the same branch id.
+function takenFn(realRoot, tried = new Set()) {
+  const ids = new Set();
+  try {
+    for (const entry of fs.readdirSync(workDir(realRoot))) {
+      const id = isWorkFolder(entry) ? branchId(entry) : null;
+      if (id) ids.add(id);
+    }
+  } catch {
+    // no work folder yet
+  }
+  return (name) => tried.has(name) || exists(path.join(workDir(realRoot), name)) || ids.has(branchId(name));
+}
 
 function isFree(realRoot, slug, forWhat) {
   const dir = path.join(realRoot, '.company', 'work', slug);
@@ -222,21 +266,41 @@ function isFree(realRoot, slug, forWhat) {
   return !names.includes(OUTPUT[forWhat]) && !names.includes(`input-${forWhat}.md`);
 }
 
-// The first free candidate: the slug itself, then <slug cut to 62>-2 to -9.
+// A legacy slug, then <slug cut to 62>-2 to -9.
+function legacyNames(slug) {
+  const b = cutSlug(slug);
+  const names = [slug];
+  for (let n = 2; n <= 9; n++) names.push(`${b}-${n}`);
+  return names.filter((c) => SLUG.test(c));
+}
+
 function pickFree(realRoot, slug, forWhat) {
   if (!SLUG.test(slug)) throw new Refused('bad slug');
-  const b = cutSlug(slug);
-  const candidates = [slug];
-  for (let n = 2; n <= 9; n++) candidates.push(`${b}-${n}`);
-  const found = candidates.find((c) => SLUG.test(c) && isFree(realRoot, c, forWhat));
+  const found = legacyNames(slug).find((c) => isFree(realRoot, c, forWhat));
   if (!found) throw new Refused('no free slug');
   return found;
+}
+
+// A new name `YYYY-MM-DD HH.MM - Topic[ Draft][ n]`: the name itself, then ` 2` to ` 9`.
+function newNames(p) {
+  if (p.suffix === 'Draft') {
+    const base = `${p.stamp} - ${p.stem} Draft`;
+    return [base, ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `${base} ${n}`)].filter((n) => parseName(n) !== null);
+  }
+  return candidates(p.stamp, p.stem);
 }
 
 function free(args, root) {
   const { rest, forWhat } = parseFor(args);
   if (rest.length !== 1) throw new Refused('usage');
-  return { code: 0, lines: [`slug: ${pickFree(realRootOf(root), rest[0], forWhat)}`] };
+  const realRoot = realRootOf(root);
+  const p = parseName(rest[0]);
+  if (p === null) return { code: 0, lines: [`slug: ${pickFree(realRoot, rest[0], forWhat)}`] };
+  if (p.suffix === 'Build') throw new Refused('bad slug');
+  const taken = takenFn(realRoot);
+  const found = newNames(p).find((c) => (exists(path.join(workDir(realRoot), c)) ? isFree(realRoot, c, forWhat) : !taken(c)));
+  if (!found) throw new Refused('too many runs this minute');
+  return { code: 0, lines: [`slug: ${found}`] };
 }
 
 // Makes one folder level at a time; every level must be a real folder, never a link.
@@ -280,34 +344,125 @@ function writeNew(file, bytes) {
   }
 }
 
-function takeBase(rel) {
-  const m = WORK_FILE.exec(rel);
-  if (m) {
-    const s = m[1];
-    if (m[2] === 'grill.md' || m[2] === 'spec.md') return cutSlug(s);
-    return `${cutSlug(s.slice(0, 56))}-draft`;
+// Makes one run folder with an exclusive, non-recursive mkdir. Returns its path, or null when the name exists.
+function makeFolder(realRoot, name) {
+  const work = ensureFolder(realRoot, ['.company', 'work']);
+  try {
+    fs.mkdirSync(path.join(work, name));
+  } catch (error) {
+    if (error && error.code === 'EEXIST') return null;
+    throw error;
   }
-  return baseSlug(path.basename(rel, path.extname(rel)));
+  return ensureFolder(realRoot, ['.company', 'work', name]);
 }
 
-function take(args, root) {
+// The first name in the chain that the free rule allows: an existing draft-only folder is reused, a missing one is made.
+function claimChain(realRoot, names, forWhat) {
+  for (const name of names) {
+    if (!isFree(realRoot, name, forWhat)) continue;
+    const dir = exists(path.join(workDir(realRoot), name)) ? ensureFolder(realRoot, ['.company', 'work', name]) : makeFolder(realRoot, name);
+    if (dir !== null) return { name, dir };
+  }
+  return null;
+}
+
+// A Draft helper of `parent` at the run's own start time; never an existing folder.
+function claimHelper(realRoot, parent, forWhat, now) {
+  const tried = new Set();
+  const isTaken = takenFn(realRoot, tried);
+  for (;;) {
+    const name = helperName(parent, 'Draft', { stamp: stampOf(now), fallback: forWhat, isTaken });
+    if (name === null) throw new Refused(isWorkFolder(parent) ? 'too many runs this minute' : 'bad name');
+    const dir = makeFolder(realRoot, name);
+    if (dir !== null) return { name, dir };
+    tried.add(name);
+  }
+}
+
+// The name of a new primary run: the Topic, or the fallback for the --for word, then ` 2` to ` 9`.
+function primaryNames(forWhat, topic, now) {
+  const names = candidates(stampOf(now), topic ?? fallbackTopic(forWhat));
+  if (names.length === 0) throw new Refused('bad name');
+  return names;
+}
+
+function claimPrimary(realRoot, forWhat, topic, now) {
+  const tried = new Set();
+  const isTaken = takenFn(realRoot, tried);
+  for (const name of primaryNames(forWhat, topic, now)) {
+    if (isTaken(name)) continue;
+    const dir = makeFolder(realRoot, name);
+    if (dir !== null) return { name, dir };
+    tried.add(name);
+  }
+  throw new Refused('too many runs this minute');
+}
+
+function claimFromSource(realRoot, src, forWhat, now) {
+  const chain = forWhat !== 'feature' && forWhat !== 'fix' && (src.rest === 'grill.md' || src.rest === 'spec.md');
+  if (chain) {
+    const got = claimChain(realRoot, isLegacySlug(src.name) ? legacyNames(src.name) : [src.name], forWhat);
+    if (got !== null) return got;
+    if (isLegacySlug(src.name)) throw new Refused('no free slug');
+  }
+  return claimHelper(realRoot, src.name, forWhat, now);
+}
+
+// Reads the Topic file of a --for word. read: take its text (a new run with no source folder); otherwise it is
+// only removed. The file is consumed whatever its content, and a missing file gives null.
+function takeTopic(realRoot, forWhat, read) {
+  if (!exists(path.join(realRoot, '.company', `work-folder-topic-${forWhat}.txt`))) return null;
+  ensureFolder(realRoot, ['.company', 'work']);
+  try {
+    return readTopicFile({ fs, path, platform: process.platform }, realRoot, forWhat, read ? 'file' : 'none').topic;
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+    throw error;
+  }
+}
+
+// After a refusal the Topic file is still removed, unread.
+function dropTopic(root, forWhat) {
+  try {
+    takeTopic(realRootOf(root), forWhat, false);
+  } catch {
+    // the refusal being reported stays the answer
+  }
+}
+
+const isBuildName = (name) => LEGACY_BUILD.test(name) || parseName(name)?.suffix === 'Build';
+
+function take(args, root, now) {
   const { rest, forWhat } = parseFor(args);
+  try {
+    return takeFile(rest, forWhat, root, now);
+  } catch (error) {
+    if (error instanceof Refused) dropTopic(root, forWhat);
+    throw error;
+  }
+}
+
+function takeFile(rest, forWhat, root, now) {
   if (rest.length !== 1) throw new Refused('usage');
-  const norm = normalizePath(rest[0]);
+  const norm = checkPath(rest[0]);
   if (!norm.ok) throw new Refused(`path ${norm.reason}`);
   const rel = norm.path;
-  if (forWhat === 'feature' && !DRAFT_PATH.test(rel)) throw new Refused('not a draft file');
-  if (forWhat === 'fix' && !BUILD_PATH.test(rel)) throw new Refused('not a build plan');
+  const src = workSource(rel);
+  if (forWhat === 'feature' && !(src && DRAFT_FILE.test(src.rest))) throw new Refused('not a draft file');
+  if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(src.name))) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);
   const bytes = readFile(realRoot, rel);
   const text = bytes.toString('utf8');
   const c = classify(text);
   const gaps = missingFor(forWhat, c);
-  if (gaps.length > 0) return { code: 4, lines: gaps.map((g) => `missing: ${g}`) };
-  const slug = pickFree(realRoot, takeBase(rel), forWhat);
-  const dir = ensureFolder(realRoot, ['.company', 'work', slug]);
+  if (gaps.length > 0) {
+    takeTopic(realRoot, forWhat, false);
+    return { code: 4, lines: gaps.map((g) => `missing: ${g}`) };
+  }
+  const topic = takeTopic(realRoot, forWhat, src === null);
+  const { name, dir } = src === null ? claimPrimary(realRoot, forWhat, topic, now) : claimFromSource(realRoot, src, forWhat, now);
   writeNew(path.join(dir, `input-${forWhat}.md`), bytes);
-  return { code: 0, lines: [`slug: ${slug}`, `input: .company/work/${slug}/input-${forWhat}.md`, `kind: ${c.kind}`, summary(c, text, bytes)] };
+  return { code: 0, lines: [`slug: ${name}`, `input: .company/work/${name}/input-${forWhat}.md`, `kind: ${c.kind}`, summary(c, text, bytes)] };
 }
 
 const MAX_ARG_FILE = 4096;
@@ -349,24 +504,54 @@ function argText(realRoot, forWhat) {
   }
 }
 
-function arg(args, root) {
+const RESUME = /^resume (.{1,120})$/;
+const WORK_DRAFT = /^\.company\/work\/([^/]{1,120})\/(?:grill|spec|plan)\.md$/;
+const GRILL_PATH = /^\.company\/work\/([^/]{1,120})\/grill\.md$/;
+
+function arg(args, root, now) {
   const { rest, forWhat } = parseFor(args);
   if (rest.length !== 0) throw new Refused('usage');
   const realRoot = realRootOf(root);
   const text = argText(realRoot, forWhat);
+  try {
+    return argResult(realRoot, text, forWhat, now);
+  } catch (error) {
+    if (error instanceof Refused) dropTopic(root, forWhat);
+    throw error;
+  }
+}
+
+function argResult(realRoot, text, forWhat, now) {
   if (text === '') throw new Refused('no argument');
+  const slashed = text.replaceAll('\\', '/');
   if (forWhat === 'grill') {
-    const m = /^resume ([a-z0-9][a-z0-9-]{0,63})$/.exec(text) ?? /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/grill\.md$/.exec(text.replaceAll('\\', '/'));
-    if (m) return { code: 0, lines: [`arg: resume ${m[1]}`] };
+    const name = (RESUME.exec(text) ?? GRILL_PATH.exec(slashed))?.[1];
+    if (name !== undefined && isWorkFolder(name)) {
+      takeTopic(realRoot, forWhat, false);
+      return { code: 0, lines: [`arg: resume ${name}`] };
+    }
+  }
+  const draft = WORK_DRAFT.exec(slashed);
+  if (draft !== null && isWorkFolder(draft[1])) {
+    takeTopic(realRoot, forWhat, false);
+    return { code: 0, lines: [`arg: file ${slashed}`] };
   }
   if (!/\s/.test(text) && (/[/\\]/.test(text) || /\.(?:md|txt)$/.test(text))) {
-    const norm = normalizePath(text);
+    const norm = checkPath(text);
     if (!norm.ok) throw new Refused(`path ${norm.reason}`);
+    if (workSource(norm.path) !== null) takeTopic(realRoot, forWhat, false);
     return { code: 0, lines: [`arg: file ${norm.path}`] };
   }
   if (forWhat === 'to-tickets') throw new Refused('needs a file');
-  if (forWhat === 'feature' || forWhat === 'fix') return { code: 0, lines: ['arg: idea'] };
-  return { code: 0, lines: ['arg: idea', `slug: ${pickFree(realRoot, baseSlug(text), forWhat)}`] };
+  if (forWhat === 'feature' || forWhat === 'fix') {
+    takeTopic(realRoot, forWhat, false);
+    return { code: 0, lines: ['arg: idea'] };
+  }
+  const topic = takeTopic(realRoot, forWhat, true);
+  const isTaken = takenFn(realRoot);
+  const name = primaryNames(forWhat, topic, now).find((n) => !isTaken(n));
+  if (name === undefined) throw new Refused('too many runs this minute');
+  return { code: 0, lines: ['arg: idea', `slug: ${name}`] };
 }
 
 const GIT_TIMEOUT_MS = 10000;
@@ -484,12 +669,12 @@ function stale(args, root) {
   }
 }
 
-export function main(args, { root = process.cwd() } = {}) {
+export function main(args, { root = process.cwd(), now = new Date() } = {}) {
   try {
     checkArgs(args);
-    if (args[0] === 'take') return take(args.slice(1), root);
+    if (args[0] === 'take') return take(args.slice(1), root, now);
     if (args[0] === 'free') return free(args.slice(1), root);
-    if (args[0] === 'arg') return arg(args.slice(1), root);
+    if (args[0] === 'arg') return arg(args.slice(1), root, now);
     if (args[0] === 'stale') return stale(args.slice(1), root);
     throw new Refused('usage');
   } catch (error) {
