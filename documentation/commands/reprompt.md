@@ -20,7 +20,7 @@
 ## Technical details
 A write gate limits the reprompter to writing `prompt.md` and its own Handoff in the run folder. After each reply the checker also compares your git settings and a set of config folders. If something changed, it tells you which files and that they stay changed, and the run stops or asks you whether to go on. The gate needs the aico hooks module; without it the command does not run.
 
-**Big plugin folders.** If the folders to check are too large, the Lead asks once: **Walk less** (check only the active plugin versions; other cached versions and temporary clones are skipped) or **Raise the limit** (check up to 100,000 entries and 16 MiB of git output; a bigger tree is still refused). Your pick holds for the rest of the session and is not saved. Closing the form ends the run.
+**Big plugin folders.** If the folders to check are too large, the Lead asks once: **Walk less** (check only the active version of each cached plugin; older cached versions are skipped) or **Raise the limit** (check up to 100,000 entries and 16 MiB of git output; a bigger tree is still refused). Your pick holds for the rest of the session and is not saved. Closing the form ends the run.
 
 **You get.** `.company/work/<slug>/prompt.md` and the Handoff. These files stay on your machine; the command never commits or pushes them. The prompt is written by an AI and may contain mistakes or wrong assumptions. Read it before you use it; the assumptions are listed under it.
 

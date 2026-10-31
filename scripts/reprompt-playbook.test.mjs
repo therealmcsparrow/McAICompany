@@ -244,7 +244,7 @@ test('snap exit 4 asks the limit form once and passes the pick on', () => {
   assert.ok(s2.includes('"kind":"pick"') || s2.includes('`kind` `pick`') || /kind[^\n]{0,20}pick/.test(s2), 'names the pick result');
   // First form: exactly these two options with their one-line effects (in Language:).
   assert.ok(s2.includes('**Walk less**'));
-  assert.ok(s2.includes('Check only the active plugin versions; other cached versions and temporary clones are skipped.'));
+  assert.ok(s2.includes('Check only the active version of each cached plugin; older cached versions are skipped.'));
   assert.ok(s2.includes('**Raise the limit**'));
   assert.ok(s2.includes('Check everything up to 100,000 entries and 16 MiB of git output; a bigger tree is still refused.'));
   // Re-ask form: Raise the limit / Stop.
