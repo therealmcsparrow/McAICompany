@@ -59,6 +59,9 @@ function realRootOf(root) {
 function relOf(realRoot, arg) {
   let rel = arg.replace(/\\/g, '/');
   if (path.isAbsolute(arg)) rel = path.relative(realRoot, arg).split(path.sep).join('/');
+  if (!rel.startsWith(WORK_DIR) && rel.slice(0, WORK_DIR.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_DIR) {
+    throw new Refused('wrong letter case');
+  }
   if (!isSpecRel(rel)) throw new Refused('spec must be docs/specs/<name>.md or .company/work/<name>/spec.md');
   if (rel.startsWith(WORK_DIR)) {
     try {

@@ -34,6 +34,13 @@ describe('spec-check', () => {
     assert.deepEqual(tree(root), before);
   });
 
+  test('a wrong-case .company or work prefix is refused as wrong letter case', () => {
+    const root = fixture({ [`.company/work/${DISK}/spec.md`]: SPEC });
+    wrong(run(root, 'check', `.Company/work/${DISK}/spec.md`));
+    wrong(run(root, 'check', `.company/WORK/${DISK}/spec.md`));
+    wrong(run(root, 'stamp', `.company/WORK/${DISK}/spec.md`, '--version', '1.0.0', '--date', '2026-10-31'));
+  });
+
   test('the exact spec path is checked as before', () => {
     const root = fixture({ [`.company/work/${DISK}/spec.md`]: SPEC });
     const r = run(root, 'check', `.company/work/${DISK}/spec.md`);
