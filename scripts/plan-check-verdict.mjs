@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.2). Node built-ins and git only.
+// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.3). Node built-ins and git only.
 // Read-only: nothing is written to the repository or to .company/. Output goes to stdout (one line for `verdict`).
 // git runs through execFile with a fixed argument list, no shell, in the product root. Every value taken from git output and
 // reused as an argument is matched against a strict pattern first.
@@ -9,12 +9,13 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, read
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateRecord } from './ledger.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 import { loadPatterns, readRecord, scanText } from './plan-check.mjs';
 import { show } from './run-state.mjs';
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_NAME_RE = /^(?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md$/;
-const PLAN_PATH_RE = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/((?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md)$/;
+const MAX_PLAN_PATH = 200;
+const WORK_PREFIX = '.company/work/';
 const SHA_RE = /^[0-9a-f]{40}$/;
 const SHA_PREFIX_RE = /^[0-9a-f]{7,64}$/;
 const MAX_RUNS = 200;
@@ -32,6 +33,15 @@ const RETUNE_ABOVE = 30;
 
 class Refusal extends Error {}
 const refuse = reason => { throw new Refusal(reason); };
+
+// `.company/work/<work folder name>/<plan file name>` as { slug, name }, or null. The text is length-capped and split on `/`,
+// and each part is checked with the shared name rule: linear cost, and a name never comes out of a pattern match.
+function planPathParts(p) {
+  if (typeof p !== 'string' || p.length > MAX_PLAN_PATH || !p.startsWith(WORK_PREFIX)) return null;
+  const parts = p.slice(WORK_PREFIX.length).split('/');
+  if (parts.length !== 2 || !isWorkFolder(parts[0]) || !PLAN_NAME_RE.test(parts[1])) return null;
+  return { slug: parts[0], name: parts[1] };
+}
 
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
 
@@ -126,7 +136,7 @@ const show1 = m => (m === null ? '?' : m.toFixed(1));
 function featureRuns(root) {
   const work = join(root, '.company', 'work');
   let names;
-  try { names = readdirSync(work).filter(n => SLUG_RE.test(n)).sort(); } catch { return []; }
+  try { names = readdirSync(work).filter(isWorkFolder).sort(); } catch { return []; }
   const runs = [];
   for (const slug of names) {
     const dir = join(work, slug);
@@ -274,7 +284,7 @@ function readLabels(file) {
     if (!plain(e)) bad('not an object');
     const keys = Object.keys(e);
     if (keys.length !== 4 || !['path', 'sha', 'line', 'label'].every(k => Object.hasOwn(e, k))) bad('keys must be exactly path, sha, line, label');
-    if (typeof e.path !== 'string' || !PLAN_PATH_RE.test(e.path)) bad('path is not a plan path');
+    if (planPathParts(e.path) === null) bad('path is not a plan path');
     if (typeof e.sha !== 'string' || !SHA_PREFIX_RE.test(e.sha)) bad('sha must be 7 to 64 lowercase hex characters');
     if (!Number.isSafeInteger(e.line) || e.line < 1 || e.line > 10000000) bad('line must be a positive whole number');
     if (e.label !== 'fp' && e.label !== 'tp') bad('label must be fp or tp');
@@ -309,7 +319,7 @@ function workingTreePlans(root) {
   const st = lstatOrNull(work);
   if (!st || !st.isDirectory()) return null;
   let names;
-  try { names = readdirSync(work).filter(n => SLUG_RE.test(n)).sort().slice(0, MAX_RUNS); } catch { return []; }
+  try { names = readdirSync(work).filter(isWorkFolder).sort().slice(0, MAX_RUNS); } catch { return []; }
   const plans = [];
   for (const slug of names) {
     const dir = join(work, slug);
@@ -337,7 +347,7 @@ function gitPlans(root) {
   for (const c of parseLog(log.out)) {
     if (!SHA_RE.test(c.sha) || c.ct === null) continue;
     for (const p of c.paths) {
-      if (!PLAN_PATH_RE.test(p)) continue;
+      if (planPathParts(p) === null) continue;
       const prev = oldest.get(p);
       if (!prev || c.ct < prev.ct) oldest.set(p, { sha: c.sha, ct: c.ct });
     }
@@ -361,7 +371,7 @@ export function history(root, args) {
   const plans = [...merged.values()].sort((a, b) => b.time - a.time || (a.path < b.path ? -1 : 1)).slice(0, opt.limit);
   const result = [];
   for (const p of plans) {
-    const m = PLAN_PATH_RE.exec(p.path);
+    const m = planPathParts(p.path);
     let bytes;
     if (p.source === 'git') {
       const blob = git(root, catBlobArgs(p.sha, p.path), { binary: true, maxBuffer: MAX_PLAN_BYTES + 1 });
@@ -372,7 +382,7 @@ export function history(root, args) {
     if (bytes === null || bytes.length > MAX_PLAN_BYTES) { warnings.push(`${label}: skipped (unreadable or over 256 KiB)`); continue; }
     let text;
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { warnings.push(`${label}: skipped (not UTF-8)`); continue; }
-    const { findings } = scanText(text, loaded.patterns, { file: m[2] });
+    const { findings } = scanText(text, loaded.patterns, { file: m.name });
     result.push({
       path: p.path, source: p.source, rev,
       findings: findings.map(f => {

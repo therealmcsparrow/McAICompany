@@ -1,5 +1,6 @@
-# Contract: plan-tasks v1.3
+# Contract: plan-tasks v1.4
 
+v1.4 is additive (task build-draft): `<slug>` takes the shared work folder name rule of `work-folder-name` v1 (a legacy slug or a new name, which may hold spaces); every command behaves as before for a legacy slug. A name that is not a work folder name is refused (`refused: bad slug`, exit 3, never echoed; a throw for `readParallel` and `sortByVisit`). `scope` treats a path under `.company/work/<slug>/` as in scope whatever its capitals, matching the folder part as a whole, because the path rule refuses a space; the rest of the path still goes through the path rule. The plan file name rule and the task path rule are unchanged. Uses `work-folder-name` v1 (`isWorkFolder`) and `plan-check` v1.3.
 v1.3 is additive (task elephant-goldfish): the task fields `context`, `slice` and `seams`, the `--handover` ERROR checks on `check` and `begin`, `--mode waves` with the `merged` event and command, and the view keys `merged` and `open_wave` (waves records only). Without `--handover`, and outside waves mode, every command prints and records exactly as v1.2.
 v1.2 is additive (task plan-gate-enforce): under `plan_check.policy` `block`, `begin`, `next` and `start` refuse unless every plan in the run folder passes the scan. Under `warn` and `off` every command is byte-identical to v1.1.
 v1.1 is additive (task goldfish-roles): the `brief` command. The record format is unchanged; a v1 caller that never runs `brief` behaves as before.
@@ -7,7 +8,7 @@ v1.1 is additive (task goldfish-roles): the `brief` command. The record format i
 v1.1 fix (re-begin after a Fix round): a `begin` resets the round to 0 and drops the round's task sets, so plan tasks left pending when a Fix round started are offered again; a `round` event starts its round with an empty done list, because a round number can repeat after a re-begin. The record format is unchanged.
 
 Provider: `scripts/plan-tasks.mjs` (plan task parser, scheduler, run record writer and reader; Node built-ins only). Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/parallel.md`), only through the CLI. Consumers: the Plan Gate summary (the `check` block), the Lead's dispatch of plan-task Steps (`next`, `lines`, `brief`), the commit step (`scope`), Fix rounds (`round`), and `scripts/ledger.mjs` `ship` through the exported `readParallel` (`token-ledger` v1.3 `par` record).
-Uses: `aico-settings` v1.7 (`pipeline.parallel_cap`, `pipeline.dispatch`, passed in by the caller as `--cap` and `--mode`) and, from v1.2, v1.9 (`plan_check.policy`, read through `resolveSettings` only on `begin`, `next` and `start`), `plan-check` v1.2 (`verifyPlans`), the plan file name rule of `plan-check` v1 (same regex, same file checks).
+Uses: `aico-settings` v1.7 (`pipeline.parallel_cap`, `pipeline.dispatch`, passed in by the caller as `--cap` and `--mode`) and, from v1.2, v1.9 (`plan_check.policy`, read through `resolveSettings` only on `begin`, `next` and `start`), `plan-check` v1.3 (`verifyPlans`), the plan file name rule of `plan-check` v1 (same regex, same file checks).
 Rationale: `docs/adr/0033-plan-tasks-scheduler.md`. The plan-check scan (`plan-check` v1) is not changed: task fields are plain list lines inside the plan's `## Tasks` section.
 
 ## Plan task syntax (written by the Architect, `aico:planning`)

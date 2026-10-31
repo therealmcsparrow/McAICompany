@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1.3). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.4). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { readPlanLines } from './plan-markdown.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -24,7 +25,6 @@ const MAX_RECORD_LINE_BYTES = 8 * KiB;
 const MAX_ROUND = 5;
 const MAX_WAVES = 101;
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 const ROLE = /^[a-z][a-z0-9-]{1,40}$/;
 const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
@@ -120,6 +120,17 @@ function trimAlias(segment) {
 
 function keyOf(p) {
   return p.replaceAll('\\', '/').split('/').map(trimAlias).join('/').toLowerCase().replace(/\/$/, '');
+}
+
+// A path under the run folder. The folder name may hold spaces, which the path rule refuses, so the folder part is matched as
+// a whole (case-insensitively, as the key is) and only the rest goes through the path rule. null when the path is not under it.
+function inRunFolder(item, prefix) {
+  if (typeof item !== 'string' || item.length > MAX_PATH_CHARS) return null;
+  const p = item.replaceAll('\\', '/');
+  if (!p.toLowerCase().startsWith(prefix)) return null;
+  const rest = normalizePath(p.slice(prefix.length));
+  if (!rest.ok) return rest;
+  return { ok: true, path: p.slice(0, prefix.length) + rest.path, key: prefix + rest.key, dir: rest.dir };
 }
 
 export function normalizePath(item) {
@@ -782,7 +793,7 @@ function viewOf(slug, st) {
 }
 
 export function readParallel(root, slug) {
-  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('plan-tasks: bad slug');
+  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('plan-tasks: bad slug');
   const { state } = loadRecord(root, slug);
   return state ? viewOf(slug, state) : { v: 1, slug, state: 'none' };
 }
@@ -790,7 +801,7 @@ export function readParallel(root, slug) {
 // The given task ids in the visit order of the plan the run began with. Null when the plan cannot be read, differs from the
 // one hashed at begin, or lacks one of the ids: a caller that merges in plan order stops then.
 export function sortByVisit(root, slug, ids) {
-  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('plan-tasks: bad slug');
+  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('plan-tasks: bad slug');
   const { state } = loadRecord(root, slug);
   if (!state?.begun || !Array.isArray(ids)) return null;
   try {
@@ -926,7 +937,7 @@ function takeFlags(args, spec) {
 }
 
 function checkSlug(slug) {
-  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new Refusal('bad slug');
+  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new Refusal('bad slug');
   return slug;
 }
 
@@ -1233,12 +1244,13 @@ function cmdScope(args, env) {
   const setOf = (taskId) => [...(tasks.find((t) => t.id === taskId)?.keys ?? []), ...(st.extras.get(taskId) ?? [])];
   const own = setOf(id);
   const others = st.running.filter((r) => r !== id).map((r) => ({ id: r, keys: setOf(r) }));
-  const prefix = `.company/work/${slug}/`;
+  const folder = `.company/work/${slug}/`;
+  const prefix = folder.toLowerCase();
   const lines = [];
   const extra = [];
   const sibling = [];
   for (const candidate of candidates) {
-    const n = normalizePath(candidate);
+    const n = inRunFolder(candidate, prefix) ?? normalizePath(candidate);
     if (!n.ok) {
       extra.push('?');
       lines.push('extra ?');
