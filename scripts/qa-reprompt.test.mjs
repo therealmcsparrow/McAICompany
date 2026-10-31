@@ -202,8 +202,14 @@ function check(proj, ...args) {
   assert.ok(!r.out.includes('\n'), 'one JSON line');
   assert.ok(Buffer.byteLength(r.out) <= 64 * 1024, 'at most 64 KiB');
   const json = JSON.parse(r.out);
-  assert.ok([0, 1, 2, 3].includes(r.code), `exit code ${r.code}`);
-  if (r.code === 3) {
+  assert.ok([0, 1, 2, 3, 4].includes(r.code), `exit code ${r.code}`);
+  if (r.code === 4) {
+    // Exit 4 is a snap-only over-limit pick (reprompt v2.2): exactly {kind:'pick', offer}, nothing else.
+    assert.equal(args[0], 'snap', `exit 4 only for snap, got ${args[0]}`);
+    assert.deepEqual(Object.keys(json).sort(), ['kind', 'offer'], r.out);
+    assert.equal(json.kind, 'pick');
+    assert.ok([JSON.stringify(['walk-less', 'raise']), JSON.stringify(['raise'])].includes(JSON.stringify(json.offer)), r.out);
+  } else if (r.code === 3) {
     // A control-set refusal also names the paths (and a count of the rest); every other refusal is the one key.
     assert.ok(['refused', 'refused,paths', 'refused,paths,more'].includes(Object.keys(json).join(',')), r.out);
     assert.match(json.refused, /^refused: [a-z .*0-9()<>[\]|-]+$/i);
