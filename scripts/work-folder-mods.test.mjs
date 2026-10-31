@@ -16,7 +16,7 @@ const STATE = `node ${ROOT}/scripts/run-state.mjs gate`;
 const RUN = `node ${ROOT}/scripts/run.mjs run-state gate`;
 const SHA = 'a'.repeat(40);
 
-// One broken name per AC12 character class, each built on a valid name.
+// One broken name per forbidden character class, each built on a valid name.
 const BAD = {
   'a double dot': '2026-10-30 23.45 - Fix..Login',
   'a forward slash': '2026-10-30 23.45 - Fix/Login',
@@ -82,21 +82,21 @@ describe('Output line, every mod reads it through guard.mjs', () => {
 });
 
 describe('workFolder guard and the run view', () => {
-  test('names pass, AC12 names and wrong types do not', () => {
+  test('names pass, forbidden-character names and wrong types do not', () => {
     assert.equal(workFolder(NAME), NAME);
     assert.equal(workFolder(LEGACY), LEGACY);
     for (const [, bad] of BAD_LIST) assert.equal(workFolder(bad), undefined, bad);
     for (const v of [null, undefined, 5, {}, [], '', 'x'.repeat(121)]) assert.equal(workFolder(v), undefined);
   });
 
-  test('the active run answer takes a new name and refuses an AC12 name', () => {
+  test('the active run answer takes a new name and refuses a forbidden-character name', () => {
     assert.equal(guardRunActive({ slug: NAME, view: null }).slug, NAME);
     assert.equal(guardRunActive({ slug: LEGACY, view: null }).slug, LEGACY);
     assert.equal(guardRunActive({ slug: null, view: null }).slug, null);
     for (const [, bad] of BAD_LIST) assert.equal(guardRunActive({ slug: bad, view: null }), undefined, bad);
   });
 
-  test('a run view with a new name is kept and one with an AC12 name is refused', () => {
+  test('a run view with a new name is kept and one with a forbidden-character name is refused', () => {
     const view = (slug) => ({
       v: 1, slug, state: 'running', started: '2026-10-30T22:45:00Z', ended: null, outcome: null, wave: 1, gates: [], round: 0, tier: 'high', steps: [], warnings: []
     });
