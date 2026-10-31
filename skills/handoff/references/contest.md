@@ -30,4 +30,4 @@ The finding stays Blocking until the Role that raised it answers. A second conte
 
 **Fresh reviewer.** Frontmatter `review-mode: plan | code` (code mode also `model: opus | sonnet | haiku | fable`, the model on your `Settings:` line). The first two headings are `## Paraphrase` (the plan in your own words, 200 to 1200 characters) and `## First pass` (`- R-<n> …` lines or `- none`). Name no run Handoff (`03-architect.md`) in either; the plan may be named. Only you may use the `[comprehension]` tag.
 
-Check: `handoff-lint.mjs --contests .company/work/<slug>`.
+Check: `handoff-lint.mjs --contests '.company/work/<slug>'`.
