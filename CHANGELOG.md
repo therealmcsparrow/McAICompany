@@ -4,6 +4,14 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Security
+- **A work folder typed in the wrong letter case is refused.** Every script that takes a work folder name or path now checks `.company`, `work`, the folder and the file against the directory entries and prints `refused: wrong letter case` (the refusal form and exit code each script already uses) before it reads or writes anything. Before, win32 and darwin accepted `.company/work/2026-10-31 23.56 - draft input folder case draft` for the real folder, and the real-path compare ignored case. A name missing in every case keeps its old refusal. ADR 0053.
+- **Contract versions for the exact letter case** (each is additive; an exact spelling behaves as before):
+  - `cited-report` v1.2, `destination-spec` v1.3, `draft-input` v1.4, `drift-report` v1.2, `grill-file` v1.3, `handoff` v2.2, `idea-flow` v1.3.
+  - `lead-handoff` v1.5, `plan-check` v1.4, `plan-review` v1.2, `plan-tasks` v1.6, `reflect` v1.2, `reprompt` v2.3, `review-loop` v1.2.
+  - `rule-check` v1.3, `run-guard` v1.2, `run-state` v1.7, `skill-recommendation` v1.2, `skillspector-scan` v1.2, `ticket-approval` v1.2.
+  - `tier-sets` v1.4, `token-ledger` v1.7, `work-folder-name` v1.1 (new export `exactWorkPath`), `worktree` v1.2.
+
 ## [0.25.0] - 2026-10-31
 
 Rollback: node scripts/stable.mjs 0.24.0
