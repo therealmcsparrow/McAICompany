@@ -474,10 +474,35 @@ describe('arg', () => {
   });
 
   test('control characters, bidi marks, a second LF and over 4096 bytes are refused', () => {
-    for (const text of ['a\tb', 'a\rb', 'a\u202eb', 'a\u2028b', 'one\n\n', 'one\ntwo', 'x'.repeat(4097), '\u00e9'.repeat(2049)]) {
+    for (const text of ['a\tb', 'a\rb', 'a\u202eb', 'a\u2028b', 'one\n\n', 'one\ntwo']) {
       const root = fixture();
-      refused(arg(root, 'grill', text), 'argument is not accepted');
+      refused(arg(root, 'grill', text), 'argument has a line break or control character');
     }
+    for (const text of ['x'.repeat(4097), '\u00e9'.repeat(2049)]) {
+      const root = fixture();
+      refused(arg(root, 'grill', text), 'argument too large');
+    }
+  });
+
+  test('typed text over 4096 bytes is refused as argument too large', () => {
+    for (const text of ['x'.repeat(4097), `${'x'.repeat(4096)}\n`]) {
+      const root = fixture();
+      refused(arg(root, 'grill', text), 'argument too large');
+      assert.ok(!fs.existsSync(argPath(root, 'grill')));
+    }
+  });
+
+  test('typed text with a line break or control character is refused by its own message', () => {
+    for (const text of ['one\ntwo', 'a\rb', 'a\tb', 'a\u0085b', 'a\u200fb', 'a\u2028b', 'a\u2029b']) {
+      const root = fixture();
+      refused(arg(root, 'grill', text), 'argument has a line break or control character');
+      assert.ok(!fs.existsSync(argPath(root, 'grill')), JSON.stringify(text));
+    }
+  });
+
+  test('text over the limit with a line break gets the size message', () => {
+    const root = fixture();
+    refused(arg(root, 'grill', `${'x'.repeat(4100)}\nsecond`), 'argument too large');
   });
 
   test('a NUL byte in the argument file is not UTF-8', () => {
