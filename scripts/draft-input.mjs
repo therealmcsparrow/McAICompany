@@ -490,12 +490,12 @@ function argText(realRoot, forWhat) {
     try {
       bytes = readFile(realRoot, `.company/${name}`, MAX_ARG_FILE);
     } catch (error) {
-      if (error instanceof Refused && error.message === 'too large') throw new Refused('argument is not accepted');
+      if (error instanceof Refused && error.message === 'too large') throw new Refused('argument too large');
       throw error;
     }
     let text = bytes.toString('utf8');
     if (text.endsWith('\n')) text = text.slice(0, -1);
-    if (BAD_CHAR.test(text)) throw new Refused('argument is not accepted');
+    if (BAD_CHAR.test(text)) throw new Refused('argument has a line break or control character');
     return text.trim();
   } finally {
     removeArgFile(realRoot, name);
