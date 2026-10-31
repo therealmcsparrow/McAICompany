@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
 import { parseLocations } from './handoff-lint.mjs';
 import { normalizePath } from './plan-tasks.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_ARG = 4096;
@@ -42,7 +42,6 @@ const FILES_LINE = /^\s{0,3}[-*]\s+files:[ \t]*(.{0,4000})$/;
 const FENCE = /^\s{0,3}(?:`{3,}|~{3,})/;
 const TAGS = ['contract', 'spec', 'security', 'test', 'comprehension'];
 const KIND_FILES = { plan: ['tests', 'plan-review', 'eval.jsonl'], code: ['tests', 'code-review', 'eval.jsonl'] };
-const WIN = process.platform === 'win32';
 
 const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan|code --after <file>[,<file>…] | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
 
@@ -51,7 +50,6 @@ class Unreadable extends Error {}
 
 // ---------------------------------------------------------------- real-path reads
 
-const sameName = (a, b) => (WIN ? a.toLowerCase() === b.toLowerCase() : a === b);
 const trimAlias = (s) => s.replace(/[. ]+$/, '') || s;
 
 function realRootOf(root) {
@@ -71,7 +69,7 @@ function plainPath(realRoot, segs) {
   } catch {
     return null;
   }
-  if (!sameName(real, lexical)) return null;
+  if (real !== lexical) return null;
   const rel = path.relative(realRoot, real);
   if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return null;
   return lexical;
@@ -144,6 +142,17 @@ const needSlug = (s) => {
   if (!isWorkFolder(s)) throw new Refused('bad slug');
   return s;
 };
+
+// Spelling of the work folder and the named files must match the directory entries; a missing one keeps its own refusal.
+function exactNames(realRoot, slug, files) {
+  try {
+    exactWorkPath({ fs, path }, realRoot, [slug]);
+    for (const f of files) exactWorkPath({ fs, path }, realRoot, [slug, f]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+    throw error;
+  }
+}
 
 // Flags with a value (`valued`) or without (`bare`); each once; the rest are positionals.
 function takeFlags(args, valued, bare) {
@@ -321,6 +330,7 @@ function cmdLines(args, env) {
   if (mode === 'plan' && !after.some((f) => ARCHITECT_NAME.test(f))) throw new Refused('plan mode needs an architect Handoff in --after');
 
   const realRoot = realRootOf(env.root);
+  exactNames(realRoot, slug, [planName, ...after]);
   const text = planFile(realRoot, slug, planName, MAX_PLAN_BYTES);
   for (const f of after) {
     const res = readPlain(realRoot, ['.company', 'work', slug, f], 0);
@@ -430,6 +440,7 @@ function cmdGate(args, env) {
   const name = args[1];
   if (!HANDOFF_NAME.test(name) || PLAN_NAME.test(name)) throw new Refused('bad Handoff name');
   const realRoot = realRootOf(env.root);
+  exactNames(realRoot, slug, [name]);
   const res = readPlain(realRoot, ['.company', 'work', slug, name], MAX_HANDOFF_BYTES);
   if (res.text === undefined) {
     if (res.reason === 'missing') throw new Refused('Handoff missing');

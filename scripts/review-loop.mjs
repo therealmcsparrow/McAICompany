@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { contests, parseLocations } from './handoff-lint.mjs';
-import { isWorkFolder, branchId } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, branchId, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const REVIEW_ROLES = ['code-reviewer', 'fresh-reviewer', 'qa', 'security', 'pentester', 'vuln-scanner', 'senior-engineer',
   'accessibility-tester', 'hands-on-tester', 'persona-tester', 'legal'];
@@ -412,8 +412,12 @@ function churn(root, slug, round, base) {
 // The run branch ref: the branch id of the work folder name, never the name itself.
 const runRef = (slug) => `refs/heads/aico/${branchId(slug)}`;
 
-const checkSlug = (s) => {
+const checkSlug = (s, root) => {
   if (!isWorkFolder(s)) throw new Refusal('slug must be a work folder name');
+  try { exactWorkPath({ fs, path }, root, [s]); } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
   return s;
 };
 const checkRound = (s) => {
@@ -434,7 +438,7 @@ function takeBase(rest, required) {
 
 function attemptCmd(args, env) {
   if (args.length !== 5) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   if (!STEP.test(args[1])) throw new Refusal('step must be NN');
   if (!REVIEW_ROLES.includes(args[2])) throw new Refusal('role is not a review Role');
   const round = checkRound(args[3]);
@@ -450,7 +454,7 @@ function attemptCmd(args, env) {
 
 function markCmd(args, env) {
   if (args.length < 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const round = checkRound(args[1]);
   const base = takeBase(args.slice(2), true);
   const cur = loadRecord(env.root, slug);
@@ -476,7 +480,7 @@ function markCmd(args, env) {
 
 function churnCmd(args, env) {
   if (args.length < 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const round = checkRound(args[1]);
   const base = takeBase(args.slice(2), true);
   const r = churn(env.root, slug, round, base);
@@ -485,16 +489,14 @@ function churnCmd(args, env) {
 
 const BLOCKING_STATES = new Set(['open', 'contested', 'escalated', 'upheld', 'rejected']);
 
-const sameName = (a, b) => (process.platform === 'win32' || process.platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b);
-
 // First 4 KiB of a Handoff: the run folder is the real repo root's .company/work/<slug>, real path equals the lexical path inside the real run folder, one hard link,
 // at most MAX_RECORD_BYTES, and the open handle is the file that was checked. Any miss throws GitUnknown.
 function readHead(root, slug, runFolder, full) {
   let fd;
   try {
     const realDir = fs.realpathSync.native(runFolder);
-    if (!sameName(realDir, path.join(fs.realpathSync.native(root), '.company', 'work', slug))) throw new Error('outside');
-    if (!sameName(fs.realpathSync.native(full), path.join(realDir, path.basename(full)))) throw new Error('moved');
+    if (realDir !== path.join(fs.realpathSync.native(root), '.company', 'work', slug)) throw new Error('outside');
+    if (fs.realpathSync.native(full) !== path.join(realDir, path.basename(full))) throw new Error('moved');
     const st = fs.lstatSync(full);
     if (!isPlain(st) || st.size > MAX_RECORD_BYTES) throw new Error('unsafe');
     fd = fs.openSync(full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
@@ -557,7 +559,7 @@ function singles(root, slug, runFolder) {
 
 function gateCmd(args, env) {
   if (args.length < 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const base = takeBase(args.slice(1), false);
   const events = loadRecord(env.root, slug).events;
   const lines = [];
