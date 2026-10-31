@@ -64,8 +64,8 @@ function paths(root, slug) {
 // True when the run folder's real path is the folder of that name inside the real .company/work of the root.
 function insideWork(root, dir) {
   try {
-    const want = join(realpathSync(join(root, '.company', 'work')), basename(dir));
-    const real = realpathSync(dir);
+    const want = join(realpathSync.native(join(root, '.company', 'work')), basename(dir));
+    const real = realpathSync.native(dir);
     return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() === want.toLowerCase() : real === want;
   } catch { return false; }
 }
