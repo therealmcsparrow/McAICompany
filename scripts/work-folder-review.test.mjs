@@ -149,7 +149,7 @@ describe('agent and skill text', () => {
     const text = fs.readFileSync(path.join(root, 'skills/review/SKILL.md'), 'utf8');
     assert.ok(!text.includes('\r'));
     assert.ok(text.split('\n').length <= 126);
-    assert.ok(text.includes("work-folder.mjs branch '<run>'"));
+    assert.ok(text.includes("scripts/run.mjs\" work-folder branch '<run>'"));
     assert.ok(text.includes('`refs/heads/` plus the `branch:` value'));
     assert.ok(text.includes('never prefix `aico/` again'));
     assert.ok(!text.includes('refs/heads/aico/<slug>'));
