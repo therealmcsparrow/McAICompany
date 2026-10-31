@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.1).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.2).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run as companyType } from './company-type.mjs';
+import { isWorkFolder, isLegacySlug } from '../mods/lib/work-folder.mjs';
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const FINAL_NAME = /^[a-z0-9][a-z0-9-]{2,65}$/;
 const DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
@@ -134,14 +134,16 @@ function replay(events) {
   return st;
 }
 
+// Only a legacy slug folder is ever created here; a new-name folder is made by work-folder new.
 function dirsOk(cwd, slug, create) {
+  const may = create && isLegacySlug(slug);
   let p = cwd;
   for (const part of ['.company', 'work', slug]) {
     p = path.join(p, part);
     let l;
     try { l = fs.lstatSync(p); } catch (e) {
       if (e.code !== 'ENOENT') fail('unknown slug');
-      if (!create) fail('unknown slug');
+      if (!may) fail('unknown slug');
       fs.mkdirSync(p);
       continue;
     }
@@ -207,7 +209,7 @@ function append(cwd, slug, ev, create) {
   } finally { fs.closeSync(fd); }
 }
 
-function checkSlug(s) { if (!SLUG.test(s)) refuse('bad slug'); }
+function checkSlug(s) { if (!isWorkFolder(s)) refuse('bad slug'); }
 
 // Collects regular files of the work folder; links are skipped, caps fail before anything is created.
 function scan(dir, rel, depth, acc) {
