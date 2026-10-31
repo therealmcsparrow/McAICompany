@@ -176,6 +176,49 @@ export function scanMarkdown(root) {
   return hits;
 }
 
+const CONTRACT_HEAD = /# Contract: [a-z0-9-]+ v\d/g;
+
+// Structure of one Contract file: the head once on line 1, no repeated `##` heading, no repeated long line.
+export function contractHits(rel, text) {
+  const hits = [];
+  const seenHeading = new Map();
+  const seenLine = new Map();
+  let fenced = false;
+  text.split(/\r?\n/).forEach((line, i) => {
+    const n = i + 1;
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      return;
+    }
+    if (n === 1 && !/^# Contract: [a-z0-9-]+ v\d/.test(line)) hits.push(`${rel}:1 — first line is not "# Contract: <name> v<n>"`);
+    if (fenced) return;
+    const heads = line.match(CONTRACT_HEAD) ?? [];
+    if (heads.length > 1 || (heads.length === 1 && n > 1)) hits.push(`${rel}:${n} — the Contract head appears again: ${snip(line)}`);
+    if (/^## /.test(line)) {
+      const key = line.trim();
+      if (seenHeading.has(key)) hits.push(`${rel}:${n} — heading repeated from line ${seenHeading.get(key)}: ${snip(line)}`);
+      else seenHeading.set(key, n);
+    }
+    const t = line.trim();
+    if (t.length >= 60) {
+      if (seenLine.has(t)) hits.push(`${rel}:${n} — line repeated from line ${seenLine.get(t)}: ${snip(line)}`);
+      else seenLine.set(t, n);
+    }
+  });
+  return hits;
+}
+
+export function scanContracts(root) {
+  const hits = [];
+  const files = walk(root, join(root, 'docs', 'contracts'), (rel) => rel.endsWith('.md') && rel.split('/').length === 3);
+  for (const rel of files) {
+    const text = readCapped(root, rel);
+    if (text === null) hits.push(`${rel} — over 1 MiB, not scanned`);
+    else hits.push(...contractHits(rel, text));
+  }
+  return hits;
+}
+
 // Hostile and plan fixtures first.
 
 test('one-home: a legacy slug pattern in a new script is one hit', () => {
@@ -286,6 +329,82 @@ test('topic: a prose mention and other commands are not a call', () => {
   assert.equal(badTopic('not-work-folder new --playbook x --topic Foo'), false);
 });
 
+// Contract file structure.
+
+const VERSION_LINE = 'v1.4 (task t; additive): `<slug>` is a work folder name and the version line is long enough to count.';
+const PROVIDER_LINE = 'New Contract. Provider: `scripts/lead-handover.mjs` (Node built-ins only). Mechanism: ADR 0049.';
+const GOOD_CONTRACT = [
+  '# Contract: lead-handoff v1.4',
+  '',
+  VERSION_LINE,
+  '',
+  PROVIDER_LINE,
+  '',
+  '## One-time setup',
+  'text',
+  '',
+  '## Where it lives',
+  'The slug is a work folder name (new name or legacy `^[a-z0-9][a-z0-9-]{0,63}$`).',
+  '',
+].join('\n');
+const HEAD = ['# Contract: lead-handoff v1.4', '', VERSION_LINE, '', PROVIDER_LINE].join('\n');
+
+test('contract: a well-formed Contract file has no hit', () => {
+  assert.deepEqual(contractHits('docs/contracts/x.md', GOOD_CONTRACT), []);
+});
+
+test('contract: the head pasted again after a regex run-on is caught (corrupted shape)', () => {
+  const lines = GOOD_CONTRACT.split('\n');
+  lines[10] = `The slug is a work folder name (new name or legacy \`^[a-z0-9][a-z0-9-]{0,63}$\`).${HEAD.replace(/\n/g, '\n')}`;
+  const hits = contractHits('docs/contracts/x.md', lines.join('\n'));
+  assert.ok(hits.length >= 1);
+  assert.ok(hits.some((h) => /head appears again/.test(h)), hits.join('\n'));
+});
+
+test('contract: a whole head block pasted mid-file is caught by head, heading and line repeats', () => {
+  const text = `${GOOD_CONTRACT}\n${GOOD_CONTRACT}`;
+  const hits = contractHits('docs/contracts/x.md', text);
+  assert.ok(hits.some((h) => /head appears again/.test(h)));
+  assert.ok(hits.some((h) => /heading repeated/.test(h)));
+  assert.ok(hits.some((h) => /line repeated/.test(h)));
+});
+
+test('contract: a repeated heading alone is caught', () => {
+  const hits = contractHits('docs/contracts/x.md', `${GOOD_CONTRACT}\n## One-time setup\nmore\n`);
+  assert.equal(hits.length, 1);
+  assert.match(hits[0], /^docs\/contracts\/x\.md:\d+ — heading repeated from line 7/);
+});
+
+test('contract: a second head on its own line is caught, a first line that is not a head is caught', () => {
+  assert.equal(contractHits('docs/contracts/x.md', `${GOOD_CONTRACT}\n# Contract: other v2.0\n`).length, 1);
+  const noHead = contractHits('docs/contracts/x.md', 'Intro\n# Contract: x v1\n');
+  assert.equal(noHead.length, 2);
+  assert.match(noHead[0], /:1 — first line/);
+});
+
+test('contract: the head pattern in a code span or a fence, and a CRLF file, are not hits', () => {
+  const doc = [
+    '# Contract: contract-index v1.0',
+    '',
+    'Computed from line 1 of each file: `# Contract: <name> v<x>` or `v<x>.<y>`.',
+    '```',
+    '# Contract: x v1.0',
+    '## Same',
+    '## Same',
+    '```',
+    '',
+  ].join('\r\n');
+  assert.deepEqual(contractHits('docs/contracts/x.md', doc), []);
+});
+
+test('contract: a very long line is scanned in linear time', () => {
+  const start = Date.now();
+  const hits = contractHits('docs/contracts/x.md', `# Contract: x v1\n${'# Contract: x v1 '.repeat(20000)}\n${'a'.repeat(200000)}\n`);
+  assert.ok(Date.now() - start < 2000);
+  assert.equal(hits.length, 1);
+  assert.ok(hits[0].length < 200);
+});
+
 // Walk behaviour.
 
 test('walk: skips .company and node_modules and never follows a link', () => {
@@ -345,6 +464,13 @@ test('one-home: no work folder check outside mods/lib/work-folder.mjs', () => {
 
 test('skills and agents: every placeholder on a shell line is single-quoted and every work-folder new takes --topic file or none', () => {
   assert.deepEqual(scanMarkdown(ROOT), []);
+});
+
+test('contracts: every docs/contracts/*.md has one head on line 1, no repeated heading and no repeated long line', () => {
+  const files = walk(ROOT, join(ROOT, 'docs', 'contracts'), (rel) => rel.endsWith('.md'));
+  assert.ok(files.length >= 40);
+  assert.ok(files.includes('docs/contracts/lead-handoff.md'));
+  assert.deepEqual(scanContracts(ROOT), []);
 });
 
 test('this file is LF only', () => {
