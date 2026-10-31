@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lint } from './handoff-lint.mjs';
@@ -22,7 +22,7 @@ const HEX_RE = /^[0-9a-f]{64}$/;
 const ASKS_RE = /^[0-3]$/;
 const LEAD_FILE_RE = /^(request|answers-\d+|edit-\d+)\.md$/;
 const RUN_FILE_RE = /^(\.gitignore|\.tree\.json|\.gate-\d{2,3}|prompt\.md|run-state\.jsonl|request\.md|answers-\d+\.md|edit-\d+\.md|\d{2,3}-reprompter\.md)$/;
-const USAGE = 'bad arguments (snap <slug> | arm <slug> <NN> | reply <slug> <NN> <hex> <asks>)';
+const USAGE = 'bad arguments (snap <slug> [walk-less|raise|both] | arm <slug> <NN> | reply <slug> <NN> <hex> <asks>)';
 
 const KIB = 1024;
 const MAX_LEAD_FILE = 33 * KIB;
@@ -42,7 +42,7 @@ const MCP_KEYS = ['mcpServers', 'enabledMcpjsonServers', 'disabledMcpjsonServers
 // The base limits and the one fixed ceiling of Raise the limit (reprompt v2.2).
 export const LIMITS = Object.freeze({ entries: 50000, gitOut: 8 * 1024 * KIB });
 export const CEILING = 2;
-const LIMIT_TOKEN_RE = /^raise$/;
+const LIMIT_TOKEN_RE = /^(walk-less|raise|both)$/;
 const LIMIT_KINDS = ['none', 'walk-less', 'raise', 'both'];
 
 // Over the active bound: an internal signal, not a refusal, so `snap` can pick exit 4 or exit 3.
@@ -315,11 +315,23 @@ function claudeJsonFingerprint(file) {
 }
 
 // (b) the watch set, walked recursively.
-function watchSet(loc, skip, budget) {
+// `plugins` is null for the full plugins/ walk, or the sorted roots of Walk less.
+function watchSet(loc, skip, budget, plugins) {
   const m = new Manifest(skip, budget);
   for (const n of ['.company', '.claude', 'CLAUDE.md', 'CLAUDE.local.md', '.mcp.json']) m.walk(join(loc.root, n));
   for (const n of ['settings.json', 'CLAUDE.md', 'agents', 'skills', 'commands', 'hooks', 'rules', 'output-styles']) m.walk(join(loc.config, n));
-  m.walk(join(loc.config, 'plugins'), { skipDirs: ['node_modules', '.git'] });
+  const pluginsDir = join(loc.config, 'plugins');
+  if (plugins === null) {
+    m.walk(pluginsDir, { skipDirs: ['node_modules', '.git'] });
+  } else {
+    let names = [];
+    try { names = readdirSync(pluginsDir); } catch { /* none */ }
+    for (const name of names) {
+      const st = lstatOrNull(join(pluginsDir, name));
+      if (st && (!st.isDirectory() || st.isSymbolicLink())) m.entry(join(pluginsDir, name));
+    }
+    for (const root of plugins) m.walk(root, { skipDirs: ['node_modules', '.git'] });
+  }
   let projects = [];
   try { projects = readdirSync(join(loc.config, 'projects')); } catch { /* none */ }
   for (const name of projects) m.walk(join(loc.config, 'projects', name, 'memory'));
@@ -330,7 +342,7 @@ function watchSet(loc, skip, budget) {
 }
 
 // The watch set, then the git view (or, without git, a walk of the product root).
-function collect(loc, env, runDir, info, budget) {
+function collect(loc, env, runDir, info, budget, plugins) {
   const skip = join(runDir, '.tree.json');
   let view;
   if (info) {
@@ -340,7 +352,40 @@ function collect(loc, env, runDir, info, budget) {
     m.walk(loc.root, { skipDirs: ['.git', 'node_modules'] });
     view = m.map;
   }
-  return { watch: watchSet(loc, skip, budget), view };
+  return { watch: watchSet(loc, skip, budget, plugins), view };
+}
+
+const MAX_INSTALLED = 1024 * KIB;
+const foldCase = p => (process.platform === 'win32' || process.platform === 'darwin' ? p.toLowerCase() : p);
+
+// Walk less: the installed plugin folders inside plugins/cache; null (the full walk) when installed_plugins.json is unusable.
+function activePluginRoots(loc) {
+  const file = join(loc.config, 'plugins', 'installed_plugins.json');
+  const st = lstatOrNull(file);
+  if (!st || !st.isFile() || st.size > MAX_INSTALLED) return null;
+  let doc;
+  try {
+    const text = decode(readFileSync(file));
+    if (text === null) return null;
+    doc = JSON.parse(text);
+  } catch { return null; }
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return null;
+  const list = doc.plugins;
+  if (list === null || typeof list !== 'object' || Array.isArray(list)) return null;
+  const cache = foldCase(real(join(loc.config, 'plugins', 'cache')));
+  const roots = new Set();
+  for (const entries of Object.values(list)) {
+    if (!Array.isArray(entries)) return null;
+    for (const e of entries) {
+      if (e === null || typeof e !== 'object' || typeof e.installPath !== 'string' || !isAbsolute(e.installPath)) continue;
+      const p = resolve(e.installPath);
+      const pst = lstatOrNull(p);
+      if (!pst || !pst.isDirectory() || pst.isSymbolicLink()) continue;
+      const inside = foldCase(real(p));
+      if (inside.startsWith(cache + sep) || inside.startsWith(`${cache}/`)) roots.add(p);
+    }
+  }
+  return [...roots].sort();
 }
 
 function diff(before, after) {
@@ -657,7 +702,10 @@ function readBaseline(runDir, hex) {
   if (doc === null || typeof doc !== 'object' || doc.v !== 2 || typeof doc.git !== 'boolean') refuse('baseline changed');
   if (!Array.isArray(doc.control) || !doc.control.every(p => typeof p === 'string')) refuse('baseline changed');
   if (Object.hasOwn(doc, 'limit') && !LIMIT_KINDS.includes(doc.limit)) refuse('baseline changed');
+  const plugins = Object.hasOwn(doc, 'plugins') ? doc.plugins : null;
+  if (plugins !== null && !(Array.isArray(plugins) && plugins.every(p => typeof p === 'string' && isAbsolute(p)))) refuse('baseline changed');
   return {
+    plugins,
     limit: Object.hasOwn(doc, 'limit') ? doc.limit : 'none',
     git: doc.git,
     control: doc.control,
@@ -708,10 +756,11 @@ function snap(loc0, env, slug, base, limit) {
 function snapWrite(loc, env, dir, budget, limit) {
   const info = gitInfo(loc, env);
   const control = controlPaths(loc, env, info);
-  const { watch, view } = collect(loc, env, dir, info, budget);
+  const plugins = limit === 'walk-less' || limit === 'both' ? activePluginRoots(loc) : null;
+  const { watch, view } = collect(loc, env, dir, info, budget, plugins);
   const centries = walkControl(loc, control, budget);
   const buf = Buffer.from(JSON.stringify({
-    v: 2, limit, git: Boolean(info), control, centries: [...centries], watch: [...watch], view: [...view],
+    v: 2, limit, plugins, git: Boolean(info), control, centries: [...centries], watch: [...watch], view: [...view],
   }));
   if (buf.length > MAX_BASELINE) refuse('tree too large');
   writeFileSync(join(dir, '.tree.json'), buf);
@@ -758,7 +807,7 @@ function reply(loc0, env, slug, nn, hex, asks, baseLimits) {
     const moved = [...a].filter(p => !b.has(p)).concat([...b].filter(p => !a.has(p)));
     if (!info || moved.length) refuse('git config changed', moved.sort());
   }
-  const now = collect(loc, env, dir, info, budget);
+  const now = collect(loc, env, dir, info, budget, base.plugins);
 
   const allowed = new Set([runKey, `${runKey}/prompt.md`, `${runKey}/${nn}-reprompter.md`, `${runKey}/.gate-${nn}`]);
   const watchAll = diff(base.watch, now.watch);
