@@ -810,11 +810,14 @@ function reply(loc0, env, slug, nn, hex, asks, baseLimits) {
   const now = collect(loc, env, dir, info, budget, base.plugins);
 
   const allowed = new Set([runKey, `${runKey}/prompt.md`, `${runKey}/${nn}-reprompter.md`, `${runKey}/.gate-${nn}`]);
+  // The run's own state log is skipped only while it is still a plain file.
+  const logKey = `${runKey}/run-state.jsonl`;
+  const plainLog = (m, view) => /^f:/.test(view ? String(m.get(logKey) ?? '').replace(/^[^|]*\|/, '') : String(m.get(logKey) ?? ''));
   const watchAll = diff(base.watch, now.watch);
   const viewAll = diff(base.view, now.view);
-  const watchMoved = watchAll.filter(p => !allowed.has(p));
+  const watchMoved = watchAll.filter(p => !allowed.has(p) && !(p === logKey && plainLog(now.watch, false)));
   const seen = new Set(watchMoved);
-  const viewMoved = viewAll.filter(p => !allowed.has(p) && !seen.has(p));
+  const viewMoved = viewAll.filter(p => !allowed.has(p) && !seen.has(p) && !(p === logKey && plainLog(now.view, true)));
   const bad = [...new Set(watchMoved)].sort().concat([...new Set(viewMoved)].sort());
   const promptChanged = watchAll.includes(`${runKey}/prompt.md`) || viewAll.includes(`${runKey}/prompt.md`);
 

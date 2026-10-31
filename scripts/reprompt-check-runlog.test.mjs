@@ -117,7 +117,7 @@ test('only the current run state log is skipped', () => {
   });
   assert.equal(r.code, 0, r.out);
   assert.equal(r.json.tree, 'ok');
-  assert.equal(r.json.paths, undefined);
+  assert.deepEqual(r.json.paths, []);
   assert.equal(r.json.ok, true);
 });
 
