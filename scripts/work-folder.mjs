@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/work-folder-name.md v1
+// contract: docs/contracts/work-folder-name.md v1.1
 // Work folder creator: `new` makes the run folder and prints its name and branch, `clear` removes a stale Topic file,
 // `branch` prints the branch of an existing folder. Node built-ins only; the naming rules live in mods/lib/work-folder.mjs.
 import fs from 'node:fs';
@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   WorkFolderRefusal, checkPlaybookId, checkWorkDirs, fallbackTopic, readTopicFile, clearTopicFile,
-  candidates, stampOf, branchId, isWorkFolder,
+  candidates, stampOf, branchId, isWorkFolder, exactWorkPath,
 } from '../mods/lib/work-folder.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -75,6 +75,7 @@ function branch(args, { root }) {
   const name = args[0];
   if (!isWorkFolder(name)) refuse('bad name');
   const { work } = checkWorkDirs(io, root);
+  if (exactWorkPath(io, root, [name]) === 'missing') refuse('unknown name');
   const st = lstatOrNull(path.join(work, name));
   if (!st || st.isSymbolicLink() || !st.isDirectory()) refuse('unknown name');
   return { code: 0, lines: [`branch: aico/${branchId(name)}`] };
