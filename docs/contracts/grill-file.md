@@ -1,11 +1,11 @@
-# Contract: grill-file v1.1
+# Contract: grill-file v1.2
 
-New Contract (task grill-spec-tickets, T1). Provider: `scripts/grill.mjs` (Node built-ins only). Writer of the file: the Lead of `aico:grill`, `aico:grilling`, `aico:grill-me` or `aico:grill-with-docs` (v1.1), with the Write tool only, the whole file each time (never an append or a partial edit by Bash). Consumers: the four grill Playbooks (`check`, `status`), `draft-input` v1 (`parseGrill`, imported in-process) and `aico:to-spec` (reads the file through `draft-input` v1 `take`). Rationale: `docs/adr/0045-pre-build-commands-ceo-only.md` (grill is a CEO-only command), `docs/adr/0046-draft-input-copy-and-stale-paths.md` (how a later command reads it).
+New Contract (task grill-spec-tickets, T1). Uses `work-folder-name` v1 (read only). Provider: `scripts/grill.mjs` (Node built-ins only). Writer of the file: the Lead of `aico:grill`, `aico:grilling`, `aico:grill-me` or `aico:grill-with-docs` (v1.1), with the Write tool only, the whole file each time (never an append or a partial edit by Bash). Consumers: the four grill Playbooks (`check`, `status`), `draft-input` v1 (`parseGrill`, imported in-process) and `aico:to-spec` (reads the file through `draft-input` v1 `take`). Rationale: `docs/adr/0045-pre-build-commands-ceo-only.md` (grill is a CEO-only command), `docs/adr/0046-draft-input-copy-and-stale-paths.md` (how a later command reads it).
 A grill file is the record of one grilling session: the idea, the open and closed branches of the decision tree, each question with its options, answer and decision, each looked-up fact, and the GLOSSARY and ADR proposals. After every answer the Lead rewrites it whole and runs `status`, so a crash or a handover loses at most the question in flight (AC42).
 
 ## Where it lives
-- `.company/work/<slug>/grill.md`, slug `^[a-z0-9][a-z0-9-]{0,63}$`. No other path is accepted.
-- A grill started from a file keeps the copy of that file at `.company/work/<slug>/input-grill.md`, in the same folder, by design (`draft-input` v1 `take --for grill`).
+- `.company/work/<name>/grill.md`, where `<name>` is a work folder name (`work-folder-name` v1 `isWorkFolder`): a new name such as `2026-10-31 09.15 - Grill Folders`, `... Grill Folders 2` or `... Grill Folders Draft`, or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. A `Build` helper name is refused. `<name>` is split off the path first and checked by `isWorkFolder`; no pattern runs over the whole path. No other path is accepted. Below, `<slug>` means this `<name>`.
+- A grill started from a file keeps the copy of that file at `.company/work/<name>/input-grill.md`, in the same folder, by design (`draft-input` v1.2 `take --for grill`).
 
 ## Read rule
 Every read of a grill file, by the CLI or by a caller of `parseGrill` that reads the file itself, follows these steps. Any throw or mismatch refuses that read; there is no fallback to the lexical path or to a text compare.
@@ -28,7 +28,7 @@ format: 1
 ## Log
 ## Proposals
 ```
-- Frontmatter: exactly these four keys, in this order, between a first-line `---` and a sixth-line `---`. `slug` matches the slug pattern; `started` is a calendar date and a time `HH:MM` (00-23, 00-59); `status` is one of the three words; `format` is `1`. Anything else → `bad frontmatter` (line 1).
+- Frontmatter: exactly these four keys, in this order, between a first-line `---` and a sixth-line `---`. `slug` is a work folder name (`isWorkFolder`: a new name or a legacy slug), the folder's own name; `started` is a calendar date and a time `HH:MM` (00-23, 00-59); `status` is one of the three words; `format` is `1`. Anything else → `bad frontmatter` (line 1).
 - Sections: the five `## ` headings, each once, in this order, each on its own line exactly as written. A heading not found → `missing section <s>` (on the last line number); one found before a heading that should precede it, or found a second time → `section out of order <s>`. Any other `## ` line is text of the section above it.
 
 ## `## Idea`
@@ -65,7 +65,7 @@ Only lines `- GLOSSARY: <term> — <line>` and `- ADR: <title> — <line>`, and 
 ## CLI (cwd = product root)
 Every argument is at most 4096 characters and holds no character of Unicode category Cc, Cf, Zl or Zp, else `refused: argument is not accepted`, exit 3, before any command runs.
 - `check <file>`: `<file>` is `.company/work/<slug>/grill.md` (`\` read as `/`), or an absolute path whose relative form inside the real root is that. Prints one `ERROR line <n>: <reason>` per error (at most 50 shown), then `grill-check: <e> errors`. Exit 2 when e > 0, else 0. Reasons, fixed words only: `bad frontmatter`, `missing section <s>`, `section out of order <s>`, `bad branch line`, `duplicate branch <id>`, `branch open and closed <id>`, `unknown branch <id>`, `entry out of sequence <id>`, `options count`, `missing field <f>`, `done with open branches`.
-- `status <slug>`: reads `.company/work/<slug>/grill.md`. No errors → prints `grill: <n> answered, <k> open`, then one `open B-<n> — <text>` line per open branch in file order, then `status: <s>`; exit 0. Branch text is already free of Cc, Cf, Zl and Zp by the check; any C0 control, DEL, C1 control or bidi control (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) that still reaches the output is printed as `\u` and four lowercase hex digits. Errors → the `check` lines and the `grill-check:` line, exit 2, and no `open` or `status:` line.
+- `status <slug>`: `<slug>` is a work folder name (new or legacy; a name that fails `isWorkFolder` is `bad slug`); reads `.company/work/<slug>/grill.md`. A name may hold spaces, so the Playbooks single-quote it on every shell line. No errors → prints `grill: <n> answered, <k> open`, then one `open B-<n> — <text>` line per open branch in file order, then `status: <s>`; exit 0. Branch text is already free of Cc, Cf, Zl and Zp by the check; any C0 control, DEL, C1 control or bidi control (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) that still reaches the output is printed as `\u` and four lowercase hex digits. Errors → the `check` lines and the `grill-check:` line, exit 2, and no `open` or `status:` line.
 - Refusals: `refused: <reason>`, exit 3, nothing written. Reasons: `usage: grill.mjs check <file> | status <slug>`, `argument is not accepted`, `not a grill path`, `bad slug`, `outside the product root`, `link`, `not a regular file`, `hard-linked`, `missing`, `too large`, `not UTF-8`.
 - Output echoes only fixed words, ids, numbers, slugs and branch text cleaned as above; never other file text and never an argument.
 
@@ -78,4 +78,5 @@ The file may hold what the CEO types, which can include personal data. Locations
 - `scripts/grill.mjs` cannot run or prints nothing → the Lead stops (fail closed).
 
 ## Compatibility
+v1.2 (task T10, minor): the folder name and the frontmatter `slug` accept a new work folder name as well as a legacy slug, `status` takes either, and the four grill Playbooks write the Topic file `.company/work-folder-topic-grill.txt` (named by the `--for` word) before `draft-input arg --for grill` and accept `resume <name>`. File shape, sections, fields, reasons and exit codes are unchanged, so every v1, v1.1 file and reader stays valid; a legacy grill resumes as before.
 v1.1 (task T8): the writer list grows to the Leads of `aico:grilling`, `aico:grill-me` and `aico:grill-with-docs`, and the Recipients line names which of them may send web search queries. File shape, CLI and reasons are unchanged, so every v1 file and reader stays valid. `format: 1` is the only format; a reader that meets another `format` reports `bad frontmatter`. An added section, field or reason needs a new version.

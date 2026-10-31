@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Grill file check (contract: docs/contracts/grill-file.md v1.1). Node built-ins only.
+// Grill file check (contract: docs/contracts/grill-file.md v1.2). Node built-ins only.
 // `check` lists the shape errors of a grill file; `status` prints the answered count and the open branches.
 // File text and arguments are untrusted: the size is capped before decoding, every pattern is anchored and
 // runs per line, the file is read by the real-path rule, and output holds only fixed words, ids, numbers,
@@ -7,15 +7,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
+const WORK_PREFIX = '.company/work/';
 const MAX_BYTES = 256 * 1024;
 const MAX_ERRORS_SHOWN = 50;
 const MAX_TEXT = 200;
 
-const SLUG_SRC = '[a-z0-9][a-z0-9-]{0,63}';
-const SLUG = new RegExp(`^${SLUG_SRC}$`);
-const GRILL_REL = new RegExp(`^\\.company/work/${SLUG_SRC}/grill\\.md$`);
 const BAD_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const ESCAPE_CHAR = /[\u0000-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]/g;
 const STARTED = /^(\d{4})-(\d{2})-(\d{2}) ([01]\d|2[0-3]):([0-5]\d)$/;
@@ -83,7 +82,7 @@ export function parseGrill(text) {
     const started = /^started: (.+)$/.exec(lines[2]);
     const st = /^status: (.+)$/.exec(lines[3]);
     if (!slug || !started || !st || lines[4] !== 'format: 1') return false;
-    if (!SLUG.test(slug[1]) || !validStarted(started[1])) return false;
+    if (!isWorkFolder(slug[1]) || !validStarted(started[1])) return false;
     if (st[1] !== 'open' && st[1] !== 'done' && st[1] !== 'stopped') return false;
     status = st[1];
     return true;
@@ -224,6 +223,14 @@ export function parseGrill(text) {
   return result;
 }
 
+// True for `.company/work/<work folder name>/grill.md`: the prefix and the file name are fixed words and the
+// name in between is split off first, so no pattern runs over the name.
+function isGrillRel(rel) {
+  if (typeof rel !== 'string' || rel.length > MAX_ARG || !rel.startsWith(WORK_PREFIX)) return false;
+  const parts = rel.slice(WORK_PREFIX.length).split('/');
+  return parts.length === 2 && parts[1] === 'grill.md' && isWorkFolder(parts[0]);
+}
+
 const sameName = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 function checkArgs(args) {
@@ -240,7 +247,7 @@ function relOf(realRoot, arg) {
     if (r === '' || r.startsWith('..') || path.isAbsolute(r)) throw new Refused('outside the product root');
     rel = r.split(path.sep).join('/');
   }
-  if (!GRILL_REL.test(rel)) throw new Refused('not a grill path');
+  if (!isGrillRel(rel)) throw new Refused('not a grill path');
   return rel;
 }
 
@@ -261,7 +268,7 @@ function readGrill(realRoot, rel) {
   if (!sameName(real, lexical)) throw new Refused('link');
   const back = path.relative(realRoot, real);
   if (back === '' || back.startsWith('..') || path.isAbsolute(back)) throw new Refused('outside the product root');
-  if (!GRILL_REL.test(back.split(path.sep).join('/'))) throw new Refused('not a grill path');
+  if (!isGrillRel(back.split(path.sep).join('/'))) throw new Refused('not a grill path');
   let st;
   try {
     st = fs.lstatSync(real, { bigint: true });
@@ -324,9 +331,9 @@ function check(args, root) {
 
 function status(args, root) {
   if (args.length !== 1) throw new Refused(USAGE);
-  if (!SLUG.test(args[0])) throw new Refused('bad slug');
+  if (!isWorkFolder(args[0])) throw new Refused('bad slug');
   const realRoot = realRootOf(root);
-  const parsed = parseGrill(readGrill(realRoot, `.company/work/${args[0]}/grill.md`));
+  const parsed = parseGrill(readGrill(realRoot, `${WORK_PREFIX}${args[0]}/grill.md`));
   if (parsed.errors.length > 0) return { code: 2, lines: errorLines(parsed.errors) };
   return {
     code: 0,
