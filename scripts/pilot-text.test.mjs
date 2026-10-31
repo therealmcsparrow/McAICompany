@@ -160,7 +160,7 @@ test('AC24 depth comes from review-depth and is never lowered', () => {
 
 test('AC26 feedback reads ledger report for the last 3 runs, spend and cache read apart', () => {
   has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger', 'report', 'last 3 runs', '**spend**', '**cache read**', 'Never add them');
-  has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger scorecard <run>', '## Speed', 'never stops the run',
+  has(read('skills/feedback/SKILL.md'), 'run.mjs" ledger scorecard \'<run>\'', '## Speed', 'never stops the run',
     '`brainstorm-`, `replay-` or `baseline-`', 'try the next file, up to 3 tries');
 });
 

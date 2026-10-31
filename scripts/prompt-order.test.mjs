@@ -98,7 +98,7 @@ test('review depth is computed per dispatch from the diff, for the code-reviewer
 
 test('each Step is linted, then recorded in the ledger from the notification integers only', () => {
   has(pipeline, 'run.mjs" handoff-lint', '--require-top', 'code-reviewer', 'senior-engineer', 'no Fix round');
-  has(pipeline, 'run.mjs" ledger add <slug> step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
+  has(pipeline, 'run.mjs" ledger add \'<slug>\' step <NN> <role> <agentId> <ctx_end> <tool_uses> <ms>', '<subagent_tokens>', '<duration_ms>', 'leave both off', 'matches `^[A-Za-z0-9_-]{1,64}$`', 'no such block → `0`');
   has(pipeline, /integers only/i);
 });
 
@@ -114,7 +114,7 @@ test('tool checks come first in the pre-filter; a T- row blocks only after the r
   assert.ok(at >= 0);
   const pre = pipeline.slice(at, at + 1600);
   assert.ok(pre.indexOf('run.mjs" rule-check') >= 0 && pre.indexOf('run.mjs" rule-check') < pre.indexOf('npm run check'), pre);
-  has(pre, 'run --base <Base commit> --run <slug>', '`list`', 'T-', 'does **not** consume a Fix round');
+  has(pre, 'run --base <Base commit> --run \'<slug>\'', '`list`', 'T-', 'does **not** consume a Fix round');
 });
 
 test('slices are checked before builders; drift runs after sign-off and before Ship', () => {

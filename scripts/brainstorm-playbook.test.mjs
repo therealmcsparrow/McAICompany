@@ -276,9 +276,9 @@ test('M-SEC7 the commit line has no double-quoted -m, single quotes and a -- bef
   has(commit, "git commit -m 'docs: brainstorm <Short Topic>' -- '<path>'");
 });
 
-test('M-SEC7 the Short Topic allow-list is checked before any shell command; a failing topic uses the run slug', () => {
+test('M-SEC7 the Short Topic allow-list is checked before any shell command; a failing topic uses the work folder fallback Topic', () => {
   has(skill, '^[\\p{L}\\p{N}]+([ -][\\p{L}\\p{N}]+)*$', 'at most 60 characters', 'at most 5', 'Title Case',
-    '^[a-z0-9]+(-[a-z0-9]+){0,4}$', 'Never strip or repair', 'before any shell command');
+    'work folder fallback Topic', 'Never strip or repair', 'before any shell command');
   has(skill, 'only letters, digits, spaces and hyphens');
 });
 

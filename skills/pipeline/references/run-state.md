@@ -15,7 +15,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" run-state end '<slug>' '<ship|abort
 - `wave`: at the start of each wave of the plan, `<n>` the plan's wave number (1 to 99). A Fix round keeps the wave it belongs to.
 - `ask`: directly before each Brief, Plan and Ship Gate form is shown, so the CEO's wait can be told from run time. An `auto` Gate shows no form and gets no `ask`.
 - `gate`: after each Brief, Plan and Ship Gate answer: Approve is `passed`, Change is `changed`, Stop is `stopped`. An `auto` Gate counts as `passed`.
-- The Plan Gate `passed` is typed as `node ${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs run-state gate <slug> plan passed`: no quotes, single spaces, the slug as is (it is a checked slug). Only that exact form is the one the plan Gate mod recognises and checks before it runs; a quoted form still runs but the mod does not see it.
+- The Plan Gate `passed` is typed as `node ${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs run-state gate '<slug>' plan passed`: the name exactly as printed by `work-folder`, single-quoted, single spaces otherwise. Only that form is the one the plan Gate mod recognises and checks before it runs.
 - `ceo`: after each CEO form is shown, `run-state ceo '<slug>' '<brief|plan|ship|none>' '<n>'` (`n` 1 to 20). `needs-ceo` questions are held until the wave ends and go out as one form, never one at a time (`references/ceo-pack.md`).
 - `end`: when the Ship Gate work is done (`ship`) or the CEO stops the run (`abort`).
 

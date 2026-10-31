@@ -11,6 +11,8 @@ argument-hint: intake <client request> | handoff
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook client` first; exit not 0 → show its output line and stop.
 
 Run with `aico:pipeline`; run `check-role <role>` before each dispatch (§2). Set `engagement: client` in `.company/project.md`, and the client's license and jurisdiction.
+
+`<slug>` is the work folder name from `aico:pipeline` Setup item 1.
 Anything sent to the client always asks at the Ship Gate, whatever the settings say (`aico:pipeline` §4).
 
 ## intake

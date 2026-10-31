@@ -147,7 +147,8 @@ function gitShow(spec) {
 // v0.18.0 text reached through the call forms that changed since: run.mjs resolver (plugin-root v1), full base id and run ref (dispatch-prompt v3.6), judging diff.
 const toCurrentCalls = (s) => s
   .replace(/scripts\/([a-z][a-z-]*)\.mjs"/g, 'scripts/run.mjs" $1')
-  .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run <slug>` and `list` (`rule-check` v1.1)')
+  .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run \'<slug>\'` and `list` (`rule-check` v1.1)')
+  .replace('ledger add <slug> step', "ledger add '<slug>' step")
   .replace('over the diff (`<sha>` = the Base commit)', 'over the judging diff (rule git.M-SEC4)');
 
 test("pre-filter, handoff-lint and full-suite text is byte-identical to v0.18.0 (AC8)", (t) => {

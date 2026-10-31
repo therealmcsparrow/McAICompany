@@ -47,7 +47,7 @@ test('hooks.json keeps its own direct script paths', () => {
 
 test('the Plan Gate command is in the run.mjs form the plan-gate mod judges', async () => {
   const runState = fs.readFileSync(path.join(ROOT, 'skills', 'pipeline', 'references', 'run-state.md'), 'utf8')
-  const m = runState.match(/node \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs run-state gate <slug> plan passed/)
+  const m = runState.match(/node \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs run-state gate '<slug>' plan passed/)
   assert.ok(m, 'run-state reference names the plan gate command')
   const { parseGateCommand } = await import('../mods/lib/plan-gate.mjs')
   const command = m[0].replace('${CLAUDE_PLUGIN_ROOT}', '/p/cache/aico/aico/0.20.0').replace('<slug>', 'run-one')
