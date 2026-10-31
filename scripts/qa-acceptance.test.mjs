@@ -528,7 +528,7 @@ const HAND_OVER_CHANGES = {
     added: [
       /^Run with `aico:pipeline`\. Roles and lanes run per the tier set \(aico:pipeline references\/tier-path\.md\)\. A fix starts low only through a trusted triage record \(tier-path\.md step 2\); without one it starts at medium\. No Brief Gate and no Plan Gate in any run/,
       /^A CEO decision that used to wait for a Gate is one form when it arises, not a Gate: /,
-      /^\*\*Build plan input:\*\* the argument is one token with no whitespace ending `plan.md`. /,
+      /^\*\*Build plan input:\*\* the argument is `\.company\/work\/<name>\/plan\.md`, `<name>` a work folder name that may hold spaces, with at most one surrounding pair of single quotes\. /,
       /^1\. `aico:qa`: reproduce the bug, write a failing regression test, and name the suspected Module\. With a build plan, QA reproduces from the plan's tickets first/,
       /^2\. The engineer who owns that Module \(backend\/frontend\/desktop\/ai-data\/game\): root cause via `aico:debugging`, fix via `aico:tdd`\. After its commit, tier-set\.mjs sync --diff \(tier-path\.md step 8\)\. With a build plan/,
       "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.",
