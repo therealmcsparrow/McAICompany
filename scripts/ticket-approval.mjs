@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.1). Node built-ins only.
+// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.2). Node built-ins only.
 // Run and helper folder names come only from ../mods/lib/work-folder.mjs.
 // A ticket is one plan-tasks task block; an approval counts only for the block hash it was given at.
 // Plan text and arguments are untrusted: files are read by the real-path rule, sizes are capped before decoding,
@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readPlanLines } from './plan-markdown.mjs';
-import { helperName, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, helperName, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -39,8 +39,6 @@ const FILE_NAME = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - [A-Za-z0-9 -]{1,60}\.md$/;
 const DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const ZERO = '000000000000';
-const WIN = process.platform === 'win32';
-const CASE_FOLD = WIN || process.platform === 'darwin';
 
 const PICKS = ['approve', 'change', 'park'];
 const EXTRA_KEYS = {
@@ -71,7 +69,6 @@ class PlanProblem extends Error {}
 class RecordError extends Error {}
 
 const sha12 = (data) => crypto.createHash('sha256').update(data).digest('hex').slice(0, 12);
-const fold = (p) => (CASE_FOLD ? p.toLowerCase() : p);
 
 // ---------------------------------------------------------------- safe files
 
@@ -90,7 +87,7 @@ const isPlain = (st) => st.isFile() && st.nlink === 1;
 function realMatches(root, parts) {
   const abs = path.join(root, ...parts);
   const real = fs.realpathSync.native(abs);
-  return fold(real) === fold(path.join(fs.realpathSync.native(root), ...parts));
+  return real === path.join(fs.realpathSync.native(root), ...parts);
 }
 
 // Reads root/parts as a plain file by the real-path rule. Returns null when it does not exist.
@@ -455,8 +452,19 @@ function appliedLines(rec, tickets) {
 
 // ---------------------------------------------------------------- commands
 
-function checkSlug(value) {
+// The typed folder (and file) spelled exactly as listed on disk; another ASCII letter case is refused.
+function checkExact(env, rel) {
+  try {
+    exactWorkPath({ fs, path }, env.root, rel);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
+}
+
+function checkSlug(value, env) {
   if (typeof value !== 'string' || !isWorkFolder(value)) throw new Refusal('bad slug');
+  checkExact(env, [value]);
   return value;
 }
 
@@ -472,10 +480,11 @@ function validPlanRef(ref) {
   return cut > 0 && isWorkFolder(ref.slice(0, cut)) && PLAN_NAME.test(ref.slice(cut + 1));
 }
 
-function planRefOf(slug, arg) {
+function planRefOf(slug, arg, env) {
   if (typeof arg !== 'string') throw new Refusal('bad plan');
   const ref = arg.includes('/') ? arg : `${slug}/${arg}`;
   if (!validPlanRef(ref)) throw new Refusal('bad plan');
+  checkExact(env, ref.split('/'));
   return ref;
 }
 
@@ -488,8 +497,8 @@ function currentPlan(env, rec) {
 
 function cmdTickets(args, env) {
   if (args.length !== 4 || args[2] !== '--phase' || !['d', 'f'].includes(args[3])) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
-  const ref = planRefOf(slug, args[1]);
+  const slug = checkSlug(args[0], env);
+  const ref = planRefOf(slug, args[1], env);
   const phase = args[3];
   const plan = readPlan(env.root, ref);
   const rec = loadRecord(env.root, slug);
@@ -513,7 +522,7 @@ function cmdTickets(args, env) {
 
 function cmdTicket(args, env) {
   if (args.length !== 3) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env);
   const id = checkId(args[1]);
   if (!PICKS.includes(args[2])) throw new Refusal('pick must be approve, change or park');
   const rec = loadRecord(env.root, slug);
@@ -534,7 +543,7 @@ function roadmapTitle(raw, id) {
 
 function cmdParkTicket(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env);
   const id = checkId(args[1]);
   const rec = loadRecord(env.root, slug);
   const { plan } = currentPlan(env, rec);
@@ -561,7 +570,7 @@ function cmdParkTicket(args, env) {
 
 function cmdBuildPlan(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env);
   const buildSlug = helperName(slug, 'Build');
   if (buildSlug === null) throw new Refusal('no build folder name for this flow');
   const planPath = `.company/work/${buildSlug}/plan.md`;
@@ -587,7 +596,7 @@ function cmdBuildPlan(args, env) {
 
 function cmdRead(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env);
   const rec = loadRecord(env.root, slug);
   if (rec.events.length === 0) return { code: 0, lines: ['state none'] };
   const ref = lastPlanRef(rec);
