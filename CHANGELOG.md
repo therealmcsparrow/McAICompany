@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-31
+
+Rollback: node scripts/stable.mjs 0.24.0
+
 ### Added
 - **Work folders get date and topic names.** Every Playbook now makes its run folder with `work-folder new`, named `YYYY-MM-DD HH.MM - Topic` in local start time (for example `2026-10-30 23.45 - Login Redesign`), so `.company/work/` scans by date and topic like the roadmap and research files. A Topic is ASCII letters and digits, single spaces or hyphens, at most 60 characters and 5 words, Title Case; one that fails falls back to the Playbook name with no repair. Helper folders add one word (`Build` or `Draft`) on top of that cap. A name already taken in the same minute gets a number 2 to 9 and the old folder is untouched. Every script, mod and Playbook reads both forms: existing folders with a lowercase slug keep working and are never renamed or moved. Branches and worktrees use a derived branch id (`aico/2026-10-30-2345-login-redesign`), because a git ref cannot hold a space. Names are single-quoted on every shell line. Contract `work-folder-name` v1 (new), ADR 0051.
 - **`lead-handover read` prints the recorded base and tier.** Four lines follow `running:`: `base-commit`, `risk-tier`, `tier-path` and `tier-set`, from the Lead's records only; a value that is not recorded says `unknown`. The rule to use only the recorded base after a hand-over now applies to every run, not only feature and fix. Contract `lead-handoff` v1.3.
