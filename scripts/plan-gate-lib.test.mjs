@@ -19,7 +19,7 @@ test('a command that only looks similar is not judged', () => {
     `${A};`, `${A} && x`, `${A} | x`, `${A}\n`, `${A}\r`, `${A} `, ` ${A}`, `${A} #`, `FOO=1 ${A}`, `& ${A}`,
     `"node" ${ROOT}/scripts/run-state.mjs gate run-one plan passed`,
     `node "${ROOT}/scripts/run-state.mjs" gate run-one plan passed`,
-    `node ${ROOT}/scripts/run-state.mjs gate 'run-one' plan passed`,
+    `node ${ROOT}/scripts/run-state.mjs gate "run-one" plan passed`,
     `node ${ROOT}/scripts/other.mjs gate run-one plan passed`,
     `node ${ROOT}/scripts/run-state.mjs gate run-one plan changed`,
     `node ${ROOT}/scripts/run-state.mjs gate run-one brief passed`,

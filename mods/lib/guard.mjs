@@ -1,7 +1,12 @@
 // Allow-list guards for the JSON the mods read from the plugin scripts.
 // Pure: no engine object, no Node import, no npm package.
+import { isWorkFolder } from './work-folder.mjs';
 
 export const MAX_STDOUT = 262144;
+const MAX_OUTPUT_TEXT = 65536;
+const MAX_OUTPUT_LINE = 300;
+// The folder part is cut at a slash and checked by isWorkFolder; only the shape of the rest is read here.
+const OUTPUT_LINE = /^Output: \.company\/work\/([^/]{1,120})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/;
 const MAX_DEPTH = 32;
 const DANGEROUS = new Set(['__proto__', 'constructor', 'prototype']);
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g;
@@ -136,7 +141,27 @@ export function interpretRun(result, guard) {
 }
 
 const ROLE_KEY = /^[a-z][a-z0-9-]{0,40}$/;
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+// A run name as the scripts print it: a new work folder name or a legacy slug.
+export const workFolder = (v) => (typeof v === 'string' && v.length <= 120 && isWorkFolder(v) ? v : undefined);
+
+// The first `Output:` dispatch line of a text: { slug, step, role }, or null. One trailing CR is dropped from a line,
+// a line over 300 characters is skipped, and the folder must pass isWorkFolder.
+export function parseOutputText(text) {
+  if (typeof text !== 'string') return null;
+  const head = text.length > MAX_OUTPUT_TEXT ? text.slice(0, MAX_OUTPUT_TEXT) : text;
+  for (const raw of head.split('\n')) {
+    const found = parseOutputLine(raw.endsWith('\r') ? raw.slice(0, -1) : raw);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+// One line, no line end: { slug, step, role } when it is an `Output:` dispatch line with a work folder name, else null.
+export function parseOutputLine(line) {
+  if (typeof line !== 'string' || line.length > MAX_OUTPUT_LINE) return null;
+  const m = OUTPUT_LINE.exec(line);
+  return m !== null && isWorkFolder(m[1]) ? { slug: m[1], step: m[2], role: m[3] } : null;
+}
 const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const askWarn = oneOf(['ask', 'warn']);
 const paneMode = oneOf(['auto', 'command']);
@@ -156,7 +181,7 @@ export const guardSettings = obj({
 
 const runView = obj({
   v: int(1, 1),
-  slug: pattern(SLUG),
+  slug: workFolder,
   state: oneOf(['running', 'ended', 'stale', 'none']),
   started: opt(stamp),
   ended: opt(stamp),
@@ -177,7 +202,7 @@ const runView = obj({
 });
 
 // `run-state.mjs active --json`.
-export const guardRunActive = obj({ slug: opt(pattern(SLUG)), view: opt(runView) });
+export const guardRunActive = obj({ slug: opt(workFolder), view: opt(runView) });
 
 // `review-depth.mjs … --json`.
 export const guardReviewDepth = obj({

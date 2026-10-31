@@ -1,4 +1,4 @@
-# Contract: reflect v1
+# Contract: reflect v1.1
 
 Provider: `scripts/reflect.mjs` (Node built-ins only, deterministic, no model call). Consumer: the Reflect mod (`aico-mods` v1).
 Reads only: the given Step file, the run's Step files (frontmatter and `## Blocking`), `handoff-lint.mjs` `lint()`, the `ledger.mjs` report data (imported, not spawned; the same numbers as `report --json --live`) and `run-state` v1. Writes nothing.
@@ -8,7 +8,7 @@ Reads only: the given Step file, the run's Step files (frontmatter and `## Block
 |---|---|
 | `step <slug> <file> --json` | the step check below |
 | `retro <slug> --json` | the retrospective below |
-`<slug>` as `run-state` v1; `<file>` must be a `^\d{2}-[a-z0-9-]+\.md$` file directly in `.company/work/<slug>/` (resolved with `lstat`, no symlink, at most 64 KiB), else refused.
+`<slug>` is a work folder name (`work-folder-name` v1: a new name `YYYY-MM-DD HH.MM - Topic` or a legacy slug, checked by `isWorkFolder`), else `refused: run must be a work folder name`; `<file>` must be a `^\d{2}-[a-z0-9-]+\.md$` file directly in `.company/work/<slug>/` (resolved with `lstat`, no symlink, at most 64 KiB), else refused.
 
 ## Step check
 ```json

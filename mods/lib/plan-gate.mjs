@@ -1,5 +1,6 @@
 // Pure logic for the plan Gate mod: which commands and files it judges, and what a `plan-check verify --json` answer means.
 // Nothing here runs a process or touches a file. Allow-lists only: anything not matched exactly is not judged.
+import { isWorkFolder } from './work-folder.mjs';
 
 const MAX_COMMAND = 4096;
 const MAX_PATH = 4096;
@@ -32,19 +33,36 @@ function isScript(file, name) {
   return path === `scripts/${name}` || path.endsWith(`/scripts/${name}`);
 }
 
-// The slug when the command is, token for token, one of the two recorded forms of the plan Gate; else null.
-//   node <path>/scripts/run-state.mjs gate <slug> plan passed
-//   node <path>/scripts/run.mjs run-state gate <slug> plan passed
-// Single spaces only: a quote, a chain, an env prefix, a redirect, a newline or any other character is not judged.
+const GATE_TAIL = ' plan passed';
+
+// The run name when `rest` (the text after `gate `) is one single-quoted work folder name or one unquoted legacy
+// slug, then exactly ` plan passed`; else null.
+function gateName(rest) {
+  if (rest.startsWith("'")) {
+    const close = rest.indexOf("'", 1);
+    if (close < 0 || rest.slice(close + 1) !== GATE_TAIL) return null;
+    const name = rest.slice(1, close);
+    return isWorkFolder(name) ? name : null;
+  }
+  if (!rest.endsWith(GATE_TAIL)) return null;
+  const name = rest.slice(0, -GATE_TAIL.length);
+  return isSlug(name) ? name : null;
+}
+
+// The run name when the command is, character for character, one of the two recorded forms of the plan Gate; else null.
+//   node <path>/scripts/run-state.mjs gate '<name>' plan passed
+//   node <path>/scripts/run.mjs run-state gate '<name>' plan passed
+// The name is one single-quoted token with no quote inside and passes isWorkFolder; the old unquoted form with a legacy
+// slug is still judged. Single spaces only: a double quote, a chain, an env prefix, a redirect, a newline, a second
+// quoted token or any other character is not judged.
 export function parseGateCommand(command) {
-  if (typeof command !== 'string' || command.length > MAX_COMMAND) return null;
-  const argv = command.split(' ');
-  if (argv.length === 6 && argv[0] === 'node' && isScript(argv[1], 'run-state.mjs')) {
-    return argv[2] === 'gate' && argv[4] === 'plan' && argv[5] === 'passed' && isSlug(argv[3]) ? argv[3] : null;
-  }
-  if (argv.length === 7 && argv[0] === 'node' && isScript(argv[1], 'run.mjs') && argv[2] === 'run-state') {
-    return argv[3] === 'gate' && argv[5] === 'plan' && argv[6] === 'passed' && isSlug(argv[4]) ? argv[4] : null;
-  }
+  if (typeof command !== 'string' || command.length > MAX_COMMAND || !command.startsWith('node ')) return null;
+  const end = command.indexOf(' ', 5);
+  if (end < 0) return null;
+  const script = command.slice(5, end);
+  const rest = command.slice(end + 1);
+  if (isScript(script, 'run-state.mjs') && rest.startsWith('gate ')) return gateName(rest.slice(5));
+  if (isScript(script, 'run.mjs') && rest.startsWith('run-state gate ')) return gateName(rest.slice(15));
   return null;
 }
 
@@ -53,7 +71,7 @@ export function recordPath(path) {
   if (typeof path !== 'string' || path.length > MAX_PATH) return null;
   const found = RECORD_PATH.exec(path.replaceAll('\\', '/'));
   if (found === null) return null;
-  return { slug: isSlug(found[1]) ? found[1] : null };
+  return { slug: isWorkFolder(found[1]) ? found[1] : null };
 }
 
 export function writeTarget(input) {
