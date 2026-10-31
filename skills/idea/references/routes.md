@@ -42,7 +42,7 @@ Arguments of the steps (all written by you from files and answers, quoted as dat
 - Grill: the idea as typed, from `idea.md`. The grill folder is the one its own Start makes. Then `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" idea-flow done '<slug>' '<grill step>' --out '.company/work/<grill slug>/grill.md'`.
 - Reprompt: a request you write from the idea and the grill decisions (after route C also the research verdict and its What to do), the idea quoted as data. At its stop show the prompt body in full, with the line that it is AI-written and to be checked. `done '<slug>' reprompt --out '.company/work/<reprompt slug>/prompt.md'`. The latest prompt body is "the prompt" below.
 - Cooler, brainstorm, research: the prompt as the topic text. Research may also be given the brainstorm file. `done '<slug>' <step> --out '<file>'` with the file the step wrote.
-- To-spec: the prompt as the idea text. `done '<slug>' to-spec --out '.company/work/<spec slug>/spec.md'`.
+- To-spec: write the path `.company/work/<reprompt slug>/prompt.md` from the last `done reprompt --out` to the argument file, never the body. `draft-input` takes the prompt file (`.company/work/<name>/prompt.md`, at most 16 KiB) as the idea text; typed text stays one line, else `refused: argument too large` or `refused: argument has a line break or control character`. `done '<slug>' to-spec --out '.company/work/<spec slug>/spec.md'`.
 - To-tickets: the spec path. `done '<slug>' to-tickets --out '.company/work/<plan slug>/plan.md'` when its check says `plan: ready`; `not ready` → show its lines and stop.
 After route C the flow wants `done reprompt` next: run the reprompt step again (options print `pending reprompt`), then show the routes form.
 

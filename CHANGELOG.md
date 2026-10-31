@@ -22,6 +22,7 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ### Fixed
 - **`reprompt` no longer fails on a big plugin tree or on its own run log.** A tree over the check limit used to end the run with `refused: tree too large` and no way on; now `snap` exits 4 and the Lead asks once: **Walk less** (in the plugin cache, only the active plugin versions are checked) or **Raise the limit** (up to 100,000 entries and 16 MiB of git output, a fixed 2x bound), and the pick holds for the session. And the check no longer reports the run's own `run-state.jsonl` as a changed file; other runs' logs and look-alike names are still flagged. Contract `reprompt` v2.2, ADR 0052.
+- **The spec draft takes the reprompt prompt file whole.** `to-spec` now reads `.company/work/<name>/prompt.md` (at most 16 KiB) as the idea text, and the idea route hands it the path, never the body. Typed argument refusals say why: `argument too large` or `argument has a line break or control character`. Contract `draft-input` v1.3.
 
 ## [0.23.0] - 2026-10-30
 
