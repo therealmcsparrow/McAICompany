@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Never-cited report (contract: docs/contracts/cited-report.md v1.1). Node built-ins only.
+// Never-cited report (contract: docs/contracts/cited-report.md v1.2). Node built-ins only.
 // Read-only: nothing is written. Step files are untrusted text: each is size-capped, read without following links, and
 // matched with anchored patterns of bounded length. Output holds Role names from the plugin's agents folder, never file text.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs';
