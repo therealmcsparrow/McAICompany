@@ -1,4 +1,6 @@
-# Contract: lead-handoff v1.4
+# Contract: lead-handoff v1.5
+
+v1.5 (task draft-input-folder-case-draft; additive): `read`, `write`, `begin` and `base` check the letter case of `.company`, `work` and `<slug>` against the folder entries on disk (`work-folder-name` v1.1, `exactWorkPath`); a spelling that matches a folder only in another ASCII letter case is `refused: wrong letter case` (exit 3), with nothing read or written. The case-fold in the folder real-path compare is removed. A name missing in every case keeps `refused: no run`. Uses `run-state` v1.7.
 
 v1.4 (task idea-20261030-2242-build-draft; additive): `<slug>` is a work folder name (`work-folder-name` v1, through `isWorkFolder`): a new name `<YYYY-MM-DD HH.MM> - <Topic>` or a legacy slug, which is never renamed. The Handoff `slug` line accepts either shape. The `resume` fixed line prints the name single-quoted: `aico lead hand-over: run lead-handover read '<name>' first, then follow skills/pipeline/references/lead-handover.md.` (the quotes keep a name with spaces one argument). A folder is used only when its real path is the folder of that name inside the real `.company/work`. Uses `run-state` v1.6. Every other name is `refused: bad slug`, with no echo.
 
@@ -38,7 +40,7 @@ Frontmatter, derived and validated by the script only, in this order: `slug`; `p
 - `base <slug> <id>`: the Lead runs it once at Step 01 after resolving the base commit. The id is 40 or 64 lowercase hex, not all zeros, else `refused: bad base`; a second call → `refused: base set`. Prints `recorded`.
 - `read <slug>`: prints `handovers <n>`, `resumes hook <a> ceo <b>`, `last <file|none>`, then the `gate`, `form`, `step` and `running` lines `write` would use, then `base-commit`, `risk-tier`, `tier-path` and `tier-set` (`unknown` when not recorded).
 - Every argument is at most 4096 characters without a character of category Cc, Cf, Zl or Zp, else `refused: argument is not accepted`, exit 3.
-- Refusals exit 3: `usage`, `argument is not accepted`, `bad slug`, `bad playbook`, `bad base`, `base set`, `no run`, `step running`. Fail loud, exit 1: `broken record`, `link`, `not a regular file`, `hard-linked`, `too large`. In the hooks every error is exit 0 and silent, except the one exit 2 above.
+- Refusals exit 3: `usage`, `argument is not accepted`, `bad slug`, `wrong letter case` (v1.5), `bad playbook`, `bad base`, `base set`, `no run`, `step running`. Fail loud, exit 1: `broken record`, `link`, `not a regular file`, `hard-linked`, `too large`. In the hooks every error is exit 0 and silent, except the one exit 2 above.
 
 ## Personal data and destinations
 The record and the Handoff hold enums, numbers, a base commit and file names; no transcript text and no CEO words. Destinations: the Handoff text goes to the Claude model of the next context (inside the fixed header); token counts go to the local record only; nothing else leaves the machine and McSparrow adds no recipient. Location `.company/work/<slug>/`, git-ignored where the product ignores `.company/`; archived, never deleted early; an erasure request overrides (CEO decides). Keep only what the decision needs (GDPR Art. 5(1)(c)).
@@ -49,4 +51,4 @@ The record and the Handoff hold enums, numbers, a base commit and file names; no
 - Open Gate or form: never taken from the Handoff's `gate` or `form` lines alone; the Lead reads `run-state` and `idea-flow options` and shows the form again.
 
 ## Compatibility
-New Contract, v1; v1.1 to v1.4 are additive. An added event, key or command needs a new version.
+New Contract, v1; v1.1 to v1.5 are additive. An added event, key or command needs a new version.

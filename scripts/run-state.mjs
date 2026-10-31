@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.6). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (run-state v1.7). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -11,7 +11,9 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import * as nodeFs from 'node:fs';
+import * as nodePath from 'node:path';
 
 export const MAX_FILE = 64 * 1024;
 export const MAX_LINE = 256;
@@ -56,6 +58,15 @@ const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } }
 class Refusal extends Error {}
 const refuse = reason => { throw new Refusal(reason); };
 
+// Name shape first, then the exact letter case of the folder on disk; a missing folder passes (start makes it).
+function checkSlug(root, slug) {
+  if (!isWorkFolder(slug)) refuse('bad slug');
+  try { exactWorkPath({ fs: nodeFs, path: nodePath }, root, [slug]); } catch (e) {
+    if (e instanceof WorkFolderRefusal) refuse(e.message);
+    throw e;
+  }
+}
+
 function paths(root, slug) {
   const dir = join(root, '.company', 'work', slug);
   return { dir, file: join(dir, 'run-state.jsonl') };
@@ -66,7 +77,7 @@ function insideWork(root, dir) {
   try {
     const want = join(realpathSync.native(join(root, '.company', 'work')), basename(dir));
     const real = realpathSync.native(dir);
-    return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() === want.toLowerCase() : real === want;
+    return real === want;
   } catch { return false; }
 }
 
@@ -244,7 +255,7 @@ function load(root, slug, now) {
 }
 
 export function show(root, slug, { now = Date.now() } = {}) {
-  if (!isWorkFolder(slug)) refuse('bad slug');
+  checkSlug(root, slug);
   return load(root, slug, now).view;
 }
 
@@ -268,7 +279,7 @@ export function active(root, { now = Date.now() } = {}) {
 
 // Validates, checks the open segment and limits, then appends one line. Returns the record written.
 export function append(root, slug, fields, { now = Date.now() } = {}) {
-  if (!isWorkFolder(slug)) refuse('bad slug');
+  checkSlug(root, slug);
   const { dir, file } = paths(root, slug);
   const dst = lstatOrNull(dir);
   if (dst && (!dst.isDirectory() || !insideWork(root, dir))) refuse('run folder is not a directory');
@@ -465,7 +476,7 @@ export function triage(root, args, { now = Date.now() } = {}) {
 // The plan Gate under plan_check.policy block: every plan in the run folder is scanned again, and no record is read.
 // Settings and the plan check load only here. Throws Refusal on anything but a clean pass.
 function planGate(root, slug, home) {
-  if (!isWorkFolder(slug)) refuse('bad slug');
+  checkSlug(root, slug);
   let result;
   try {
     const load = createRequire(import.meta.url);
