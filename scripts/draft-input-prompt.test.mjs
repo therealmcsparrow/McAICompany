@@ -174,7 +174,8 @@ describe('a prompt file gets the same refusals as a draft file', () => {
   const same = (label, kind, name, forPath) => {
     const spec = outcome('spec.md', kind, name, forPath);
     const prompt = outcome('prompt.md', kind, name, forPath);
-    assert.deepEqual(prompt.argR, spec.argR, `${label}: arg`);
+    const swap = (line) => line.replace('/spec.md', '/prompt.md');
+    assert.deepEqual(prompt.argR, { ...spec.argR, lines: spec.argR.lines.map(swap) }, `${label}: arg`);
     assert.equal(spec.takeR.code, 3, `${label}: spec.md take is refused`);
     assert.deepEqual(prompt.takeR, spec.takeR, `${label}: take`);
     assert.deepEqual(prompt.after, prompt.before, `${label}: nothing written`);
@@ -210,7 +211,9 @@ describe('a prompt file gets the same refusals as a draft file', () => {
     };
     const s = mk('spec.md');
     const p = mk('prompt.md');
-    assert.deepEqual(arg(p.root, 'to-spec', p.rel), arg(s.root, 'to-spec', s.rel), 'arg');
+    const sArg = arg(s.root, 'to-spec', s.rel);
+    const swap = (line) => line.replace('/spec.md', '/prompt.md');
+    assert.deepEqual(arg(p.root, 'to-spec', p.rel), { ...sArg, lines: sArg.lines.map(swap) }, 'arg');
     const sTake = take(s.root, s.rel);
     const pTake = take(p.root, p.rel);
     assert.equal(pTake.code, sTake.code, 'take exit');
