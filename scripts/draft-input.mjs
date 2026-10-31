@@ -450,7 +450,7 @@ function takeFile(rest, forWhat, root, now) {
   if (forWhat === 'feature' && !(src && DRAFT_FILE.test(src.rest))) throw new Refused('not a draft file');
   if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(src.name))) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);
-  const isPrompt = forWhat === 'to-spec' && src !== null && src.rest === 'prompt.md';
+  const isPrompt = forWhat === 'to-spec' && src !== null && sameName(src.rest, 'prompt.md');
   const bytes = readFile(realRoot, rel, isPrompt ? PROMPT_CAP : MAX_BYTES);
   const text = bytes.toString('utf8');
   const c = classify(text);
