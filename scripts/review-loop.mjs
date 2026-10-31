@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Review loop (contract: docs/contracts/review-loop.md v1.1). Node built-ins only.
+// Review loop (contract: docs/contracts/review-loop.md v1.2). Node built-ins only.
 // uses: docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v1
 // Keeps the retry and "not run" count of review dispatches and the run-branch commit each repair round starts from in one
 // append-only record, and decides churn from git hunks of the judging diff. Arguments, the record, review-file text and
