@@ -117,6 +117,13 @@ describe('drift-report lint', () => {
     assert.ok(r.out.trimEnd().endsWith('errors'), r.out);
   });
 
+  test('a folder that is not a work folder name keeps the old refusal', () => {
+    const root = fixture({ ...files(), '.company/work/notes/drift-2026-10-29.md': REPORT });
+    const r = run(root, 'lint', '.company/work/NOTES/drift-2026-10-29.md');
+    assert.equal(r.code, 3, r.all);
+    assert.equal(r.out, 'refused: report must be .company/work/<work folder>/drift-<YYYY-MM-DD>.md\n');
+  });
+
   test('a report missing in every case keeps the old answer', () => {
     const root = fixture(files());
     const r = run(root, 'lint', `.company/work/${DISK}/drift-2026-10-30.md`);

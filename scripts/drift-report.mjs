@@ -310,7 +310,9 @@ function lint(args, root) {
     const r = path.relative(realRoot, args[0]);
     rel = r.split(path.sep).join('/');
   }
-  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel)) {
+  const shaped = rel.split('/');
+  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel) && shaped.length === 4
+    && isWorkFolder(shaped[2]) && REPORT_NAME.test(shaped[3])) {
     if (!rel.startsWith(REPORT_PREFIX)) throw new Refused('wrong letter case');
     try { exactWorkPath({ fs, path }, realRoot, rel.split('/').slice(2)); } catch (error) {
       if (error instanceof WorkFolderRefusal) throw new Refused(error.message);

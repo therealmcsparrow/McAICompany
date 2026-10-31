@@ -1108,7 +1108,7 @@ export function main(args, options = {}) {
     }
     if (!isDir) throw new Refusal('bad root');
     if (judging) exactOrRefuse(root, [slug]);
-    const a ={ root, packs: opts['--packs'], base, run: slug, positional, handoff: null, write: opts['--write'] === true };
+    const a = { root, packs: opts['--packs'], base, run: slug, positional, handoff: null, write: opts['--write'] === true };
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);
       const inside = path.relative(root, abs);
