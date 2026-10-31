@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-// Never-cited report (contract: docs/contracts/cited-report.md v1). Node built-ins only.
+// Never-cited report (contract: docs/contracts/cited-report.md v1.1). Node built-ins only.
 // Read-only: nothing is written. Step files are untrusted text: each is size-capped, read without following links, and
 // matched with anchored patterns of bounded length. Output holds Role names from the plugin's agents folder, never file text.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 // Frozen here: nothing read from a Handoff can change it.
 export const KEEP_LANES = Object.freeze(['security', 'pentester', 'vuln-scanner', 'legal', 'accessibility-tester', 'senior-engineer']);
 
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const FOLD = process.platform === 'win32' || process.platform === 'darwin';
 const STEP_RE = /^(\d{2,3})-((?:spike-)?([a-z][a-z-]{0,39}))\.md$/;
 const PLAN_RE = /^(?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md$/;
 // A cite names a Step by `NN-role` (a file name, a path ending in it, or a bare id), or by prose `Step NN`; read_next entries match the same way.
@@ -63,7 +64,7 @@ function knownRoles(agentsDir) {
 function runFolders(root, state) {
   const work = join(root, '.company', 'work');
   let names;
-  try { names = readdirSync(work).filter(n => SLUG_RE.test(n)).sort().slice(0, MAX_RUN_DIRS); } catch { return []; }
+  try { names = [...new Map(readdirSync(work).filter(isWorkFolder).sort().map(n => [FOLD ? n.toLowerCase() : n, n])).values()].slice(0, MAX_RUN_DIRS); } catch { return []; }
   const dirs = [];
   for (const slug of names) {
     const dir = join(work, slug);

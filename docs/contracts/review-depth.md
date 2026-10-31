@@ -1,4 +1,6 @@
-# Contract: review-depth v1.1
+# Contract: review-depth v1.2
+
+v1.2 (`docs/adr/0007-contract-minor-versions.md`): `--run` takes a run name. A run name is a work folder name of `work-folder-name` v1 (new name or legacy slug, `isWorkFolder`); the run ref is `refs/heads/aico/` plus `branchId(name)` (the legacy slug unchanged, never the literal new name). The id is checked against `^[a-z0-9][a-z0-9-]{0,127}$` before any git call. A new-name run on its own branch is not `head not on run branch`.
 
 v1.1 (task v020-gate-roadmap, T2; `docs/adr/0007-contract-minor-versions.md`): base mode takes the full base id and `--run <slug>` and reads the diff as the judging diff of rule git.M-SEC4 (the call form is in `rule-check` v1.1, "Judging diff and run ref"); `## Core` and `## Modules` come from `.company/project.md` at the base commit; a grafts file, a HEAD that is not the run ref or an unreadable base profile gives `full`; `--staged` and `--worktree` carry every judging flag. A v1 caller (`<sha>` without `--run`) gets `full` with `reason: no run ref`.
 
@@ -6,7 +8,7 @@ Provider: `scripts/review-depth.mjs`. Consumer: `aico:pipeline` §2 (the `Review
 Depth follows the touched paths, never the builder's label (AC24).
 
 ## CLI
-`node review-depth.mjs <full base id> --run <slug> [--risk low|medium|high]` → stdout first line `full` or `standard`, then one `reason: <path> — <rule>` line per path that forced `full`; exit 0. A base that is not `^[0-9a-f]{40}$` or `^[0-9a-f]{64}$`, a bad `--run` slug or a bad `--risk` → `refused: <reason>`, exit 2. Paths come from the judging diff `-z --name-only --no-renames` from the base to `refs/heads/aico/<slug>`, run by `execFile` (no shell) from the top level with grafts and replace refs off and every inherited `GIT_*` key dropped. `--run` belongs to base mode only; `--staged` and `--worktree` refuse it.
+`node review-depth.mjs <full base id> --run '<name>' [--risk low|medium|high]` → stdout first line `full` or `standard`, then one `reason: <path> — <rule>` line per path that forced `full`; exit 0. A base that is not `^[0-9a-f]{40}$` or `^[0-9a-f]{64}$`, a bad `--run` name or a bad `--risk` → `refused: <reason>`, exit 2. Paths come from the judging diff `-z --name-only --no-renames` from the base to `refs/heads/aico/<slug>`, run by `execFile` (no shell) from the top level with grafts and replace refs off and every inherited `GIT_*` key dropped. `--run` belongs to base mode only; `--staged` and `--worktree` refuse it.
 
 ### Part M additions (additive, still unshipped; the text output above is unchanged)
 - `node review-depth.mjs --staged [--risk …] [--repo <dir>]`: paths from the judging diff with `--cached` (no HEAD yet: every staged path).

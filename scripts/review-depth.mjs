@@ -1,16 +1,15 @@
 #!/usr/bin/env node
-// Usage: node scripts/review-depth.mjs (<base> --run <slug> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json]
-// Review depth follows the paths a diff touches (contract review-depth v1.1), never the builder's label.
+// Usage: node scripts/review-depth.mjs (<base> --run <name> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json]
+// Review depth follows the paths a diff touches (contract review-depth v1.2), never the builder's label.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gitTopLevel, openGit } from './rule-check.mjs';
+import { gitTopLevel, openGit, runRef } from './rule-check.mjs';
 
 const MAX_PATHS = 500;
 const MAX_PROFILE = 1024 * 1024;
 const MAX_BASE_PROFILE = 64 * 1024;
 const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const RISKS = ['low', 'medium', 'high'];
 const SEC_WORDS = ['auth', 'login', 'session', 'token', 'secret', 'crypt', 'password', 'payment', 'billing', 'permission'];
 const CONTRACT_FILE = /^(openapi|asyncapi)\./;
@@ -135,7 +134,7 @@ function parseArgs(argv) {
     } else if (a === '--run') {
       if (opts.run !== undefined) refuse('unexpected argument');
       opts.run = argv[++i];
-      if (typeof opts.run !== 'string' || !SLUG.test(opts.run)) refuse('--run needs a run slug');
+      if (typeof opts.run !== 'string' || runRef(opts.run) === null) refuse('--run needs a run name');
     } else if (a === '--staged') flag('staged');
     else if (a === '--worktree') flag('worktree');
     else if (a === '--json') flag('json');
@@ -204,7 +203,7 @@ function hasHead(git) {
 }
 
 function readPaths(opts, git) {
-  if (opts.sha !== undefined) return listPaths(git, [], [opts.sha, `refs/heads/aico/${opts.run}`]);
+  if (opts.sha !== undefined) return listPaths(git, [], [opts.sha, runRef(opts.run)]);
   const staged = () => listPaths(git, ['--cached'], []);
   if (opts.staged) return staged();
   if (!hasHead(git)) return [...new Set([...staged(), ...untrackedPaths(git)])];
@@ -236,7 +235,7 @@ function answer(argv, seam) {
   if (!opened.ok) return full(opts, head, opened.reason === 'git unavailable' ? 'diff unavailable' : opened.reason);
   const { git } = opened;
   if (source === 'base') {
-    if (git.head() !== `refs/heads/aico/${opts.run}\n`) return full(opts, head, 'head not on run branch');
+    if (git.head() !== `${runRef(opts.run)}\n`) return full(opts, head, 'head not on run branch');
     const length = git.objectLength();
     if (length !== 0 && opts.sha.length !== length) return full(opts, head, 'diff unavailable');
   }
