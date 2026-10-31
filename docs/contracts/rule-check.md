@@ -1,4 +1,6 @@
-# Contract: rule-check v1.2
+# Contract: rule-check v1.3
+
+v1.3 (task Draft Input Folder Case Draft, T11; additive, `docs/adr/0007-contract-minor-versions.md`): `run` and `text` run `exactWorkPath` (`work-folder-name` v1.1) on `--run` after the shape check and the root check, and `--handoff` inside `.company/work` does the same for its folder and file (and refuses `.company` or `work` typed in another case). A name or path in another letter case than the one on disk prints `refused: wrong letter case`, exit 3. A run with no folder in any case behaves as before.
 
 v1.2 (`docs/adr/0007-contract-minor-versions.md`): `--run` takes a run name, not only a slug. A run name is a work folder name of `work-folder-name` v1 (new name or legacy slug, `isWorkFolder`); the run ref is `refs/heads/aico/` plus `branchId(name)` (the legacy slug unchanged, never the literal new name). The id is checked against `^[a-z0-9][a-z0-9-]{0,127}$` before any git call. Check ids and rule ids keep their own patterns. A caller quotes the value (`--run '<name>'`) because a new name holds spaces.
 
