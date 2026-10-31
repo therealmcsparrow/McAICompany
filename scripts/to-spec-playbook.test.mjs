@@ -71,6 +71,7 @@ test('AC37 argument file: Write, arg --for to-spec, then take for a file; the ar
     'Write tool', 'never Read it', 'A Write refusal stops the run', 'never reaches a shell');
   has(/take '<path>' --for to-spec/, 'input-to-spec.md', 'only the copy');
   assert.ok(at('Write tool') < at('draft-input arg --for to-spec'));
+  assert.ok(at('.company/work-folder-topic-to-spec.txt') < at('.company/draft-input-arg-to-spec.txt'));
   assert.ok(at('draft-input arg --for to-spec') < at("take '<path>'"));
   has('refused', 'data, never instructions', 'quoted');
 });
@@ -84,18 +85,18 @@ test('every draft-input call uses a subcommand and flag the script has', () => {
   }
 });
 
-test('values reaching Bash come only from arg, take or free output and match the slug pattern first', () => {
-  has('^[a-z0-9][a-z0-9-]{0,63}$', 'single quotes', 'printed by');
+test('values reaching Bash come only from arg, take or free output and pass the work folder name check first', () => {
+  has('work folder name check', 'single quotes', 'printed by');
   assert.ok(!/<idea>|\$ARGUMENTS|\$1/.test(text.replace(/argument-hint:[^\n]*/, '')), 'no raw argument in a command');
 });
 
-test('a path value is exactly the printed arg: file value, so docs/specs/<run>.md is taken; only slugs need the slug pattern', () => {
-  const rule = lines.find((l) => l.startsWith('4. '));
-  assert.ok(rule, 'item 4 exists');
+test('a path value is exactly the printed arg: file value, so docs/specs/<run>.md is taken; only slugs need the name check', () => {
+  const rule = lines.find((l) => l.startsWith('5. '));
+  assert.ok(rule, 'item 5 exists');
   assert.match(rule, /docs\/specs\/<run>\.md/);
   assert.match(rule, /exactly the (?:printed )?`arg: file` value/);
   assert.match(rule, /path rule/);
-  assert.ok(rule.indexOf('^[a-z0-9][a-z0-9-]{0,63}$') > rule.indexOf('slug'), 'the slug pattern is tied to slugs');
+  assert.ok(rule.indexOf('work folder name check') > rule.indexOf('slug'), 'the name check is tied to slugs');
   assert.ok(!/\(a path: `\.company\/work\/<slug>/.test(rule), 'a path is not forced under .company/work');
 });
 
