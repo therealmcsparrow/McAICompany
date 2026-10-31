@@ -13,11 +13,13 @@ const DEADLINE_MS = 4000;
 const CALL_MS = 3000;
 const PHASES = new Set(['start', 'stop']);
 const SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+// Agent file names are role ids: lower-case words joined by single hyphens.
+const AGENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_AGENT_NAME = 64;
 
 function agentSlugs(dir) {
   try {
-    return new Set(readdirSync(dir).filter((n) => n.endsWith('.md')).map((n) => n.slice(0, -3)).filter((s) => SLUG_RE.test(s)));
+    return new Set(readdirSync(dir).filter((n) => n.endsWith('.md')).map((n) => n.slice(0, -3)).filter((s) => s.length <= MAX_AGENT_NAME && AGENT_RE.test(s)));
   } catch {
     return new Set();
   }
