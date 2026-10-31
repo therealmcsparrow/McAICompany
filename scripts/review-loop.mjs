@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Review loop (contract: docs/contracts/review-loop.md v1). Node built-ins only.
-// uses: docs/contracts/handoff.md v2.0
+// Review loop (contract: docs/contracts/review-loop.md v1.1). Node built-ins only.
+// uses: docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v1
 // Keeps the retry and "not run" count of review dispatches and the run-branch commit each repair round starts from in one
 // append-only record, and decides churn from git hunks of the judging diff. Arguments, the record, review-file text and
 // git output are untrusted: values are allow-listed before use, sizes are capped before parsing, and any failed or
@@ -12,12 +12,12 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { contests, parseLocations } from './handoff-lint.mjs';
+import { isWorkFolder, branchId } from '../mods/lib/work-folder.mjs';
 
 export const REVIEW_ROLES = ['code-reviewer', 'fresh-reviewer', 'qa', 'security', 'pentester', 'vuln-scanner', 'senior-engineer',
   'accessibility-tester', 'hands-on-tester', 'persona-tester', 'legal'];
 const SECURITY_LANES = new Set(['security', 'pentester', 'vuln-scanner']);
 const REASONS = ['crash', 'no-handoff', 'lint'];
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const STEP = /^\d{2,3}$/;
 const ROUND = /^[0-5]$/;
 const CONTROLS = /[\u0000-\u001f\u007f]/;
@@ -138,7 +138,7 @@ function loadRecord(root, slug) {
 }
 
 export function readReviewLoop(root, slug) {
-  if (typeof slug !== 'string' || !SLUG.test(slug)) throw new TypeError('review-loop: bad slug');
+  if (!isWorkFolder(slug)) throw new TypeError('review-loop: bad slug');
   return loadRecord(root, slug).events;
 }
 
@@ -368,7 +368,7 @@ function churn(root, slug, round, base) {
     const hex = git.hexLength();
     git.commit(base, hex);
     const markCommit = git.commit(mark.commit, hex);
-    const ref = `refs/heads/aico/${slug}`;
+    const ref = runRef(slug);
     const head = git.call(['symbolic-ref', '--quiet', 'HEAD']);
     if (head.code !== 0 || head.out.toString('utf8') !== `${ref}\n`) return unknown;
     const tip = git.commit(git.line(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]), hex);
@@ -409,8 +409,11 @@ function churn(root, slug, round, base) {
 
 // ---------------------------------------------------------------- commands
 
+// The run branch ref: the branch id of the work folder name, never the name itself.
+const runRef = (slug) => `refs/heads/aico/${branchId(slug)}`;
+
 const checkSlug = (s) => {
-  if (typeof s !== 'string' || !SLUG.test(s)) throw new Refusal('slug must match ^[a-z0-9][a-z0-9-]{0,63}$');
+  if (!isWorkFolder(s)) throw new Refusal('slug must be a work folder name');
   return s;
 };
 const checkRound = (s) => {
@@ -457,7 +460,7 @@ function markCmd(args, env) {
     const git = new Git(env.root);
     const hex = git.hexLength();
     git.commit(base, hex);
-    const ref = `refs/heads/aico/${slug}`;
+    const ref = runRef(slug);
     const head = git.call(['symbolic-ref', '--quiet', 'HEAD']);
     if (head.code !== 0 && head.code !== 1) throw new GitUnknown('symbolic-ref');
     if (head.code !== 0 || head.out.toString('utf8') !== `${ref}\n`) throw new Refusal(`HEAD is not ${ref}`);
