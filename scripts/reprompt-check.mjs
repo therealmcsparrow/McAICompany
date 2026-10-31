@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Checker for the reprompt Playbook (reprompt v2.1). Three subcommands, run from the product root:
-//   snap <name> [raise]               records the run and a baseline of the watched files before a dispatch
+// Checker for the reprompt Playbook (reprompt v2.2). Three subcommands, run from the product root:
+//   snap <name> [walk-less|raise|both]          records the run and a baseline of the watched files before a dispatch
 //   arm <name> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
 //   reply <name> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
 // A run is a reprompt run only when `snap` recorded it in the user's own folder (never in the repo), so no folder
@@ -315,7 +315,7 @@ function claudeJsonFingerprint(file) {
 }
 
 // (b) the watch set, walked recursively.
-// `plugins` is null for the full plugins/ walk, or the sorted roots of Walk less.
+// `plugins` is null for the full plugins/ walk, or the sorted active roots of Walk less (they replace the walk of plugins/cache only).
 function watchSet(loc, skip, budget, plugins) {
   const m = new Manifest(skip, budget);
   for (const n of ['.company', '.claude', 'CLAUDE.md', 'CLAUDE.local.md', '.mcp.json']) m.walk(join(loc.root, n));
@@ -327,8 +327,11 @@ function watchSet(loc, skip, budget, plugins) {
     let names = [];
     try { names = readdirSync(pluginsDir); } catch { /* none */ }
     for (const name of names) {
-      const st = lstatOrNull(join(pluginsDir, name));
-      if (st && (!st.isDirectory() || st.isSymbolicLink())) m.entry(join(pluginsDir, name));
+      const full = join(pluginsDir, name);
+      const st = lstatOrNull(full);
+      // Only a real cache folder is narrowed (to the active versions below); everything else is walked in full.
+      if (name === 'cache' && st && st.isDirectory() && !st.isSymbolicLink()) m.entry(full);
+      else m.walk(full, { skipDirs: ['node_modules', '.git'] });
     }
     for (const root of plugins) m.walk(root, { skipDirs: ['node_modules', '.git'] });
   }
@@ -358,7 +361,7 @@ function collect(loc, env, runDir, info, budget, plugins) {
 const MAX_INSTALLED = 1024 * KIB;
 const foldCase = p => (process.platform === 'win32' || process.platform === 'darwin' ? p.toLowerCase() : p);
 
-// Walk less: the installed plugin folders inside plugins/cache; null (the full walk) when installed_plugins.json is unusable.
+// Walk less: the installed plugin folders inside plugins/cache (the rest of plugins/ is still walked); null (the full walk) when installed_plugins.json is unusable.
 function activePluginRoots(loc) {
   const file = join(loc.config, 'plugins', 'installed_plugins.json');
   const st = lstatOrNull(file);

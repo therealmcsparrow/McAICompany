@@ -1,4 +1,4 @@
-// Regression tests for reprompt v2.2, T2: an over-limit snap asks for a pick (exit 4) and Raise doubles the bound.
+// Regression tests for reprompt v2.2: an over-limit snap asks for a pick (exit 4) and Raise doubles the bound.
 // Suspected Module: scripts/reprompt-check.mjs (run, snap, reply, git, readBaseline).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -272,3 +272,45 @@ test('baseline size cap is 64 MiB on the read side', () => {
   const r2 = call(p, ['reply', SLUG, '01', crypto.createHash('sha256').update(huge).digest('hex'), '1']);
   assert.equal(r2.json.refused, 'refused: baseline changed');
 });
+
+// Walk less narrows only plugins/cache to the active versions; every other top-level entry under plugins/ stays watched.
+function pluginsTree(p) {
+  const pl = path.join(p.env.CLAUDE_CONFIG_DIR, 'plugins');
+  const active = path.join(pl, 'cache', 'mk', 'a', '1');
+  put(path.join(active, 'x.txt'), 'x');
+  put(path.join(pl, 'cache', 'mk', 'a', '0', 'old.txt'), 'x');
+  put(path.join(pl, 'data', 'a', 'state.json'), '{}');
+  put(path.join(pl, 'synced', 'a', 's.txt'), 's');
+  put(path.join(pl, 'marketplaces', 'mk', 'm.txt'), 'm');
+  put(path.join(pl, 'loose.txt'), 'l');
+  fs.writeFileSync(path.join(pl, 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'a@mk': [{ installPath: active }] } }));
+  return pl;
+}
+function replyAfter(p, token, change) {
+  const s = call(p, ['snap', SLUG, token]);
+  assert.equal(s.code, 0, s.out);
+  assert.equal(call(p, ['arm', SLUG, '01']).code, 0);
+  change();
+  put(path.join(p.dir, '01-reprompter.md'), handoff());
+  put(path.join(p.dir, 'prompt.md'), PROMPT);
+  return call(p, ['reply', SLUG, '01', s.json.snap, '1']);
+}
+
+for (const token of ['walk-less', 'both']) {
+  for (const [name, rel] of [['data', 'data/a/state.json'], ['synced', 'synced/a/s.txt'], ['marketplaces', 'marketplaces/mk/m.txt'], ['loose file', 'loose.txt'], ['active version', 'cache/mk/a/1/x.txt']]) {
+    test(`${token}: a change under plugins/${name} still shows as changed`, () => {
+      const p = project();
+      const pl = pluginsTree(p);
+      const r = replyAfter(p, token, () => put(path.join(pl, ...rel.split('/')), 'changed'));
+      assert.equal(r.code, 2, r.out);
+      assert.equal(r.json.tree, 'changed');
+      assert.ok(r.json.paths.some(x => x.endsWith(rel)), r.out);
+    });
+  }
+  test(`${token}: a change in a non-active cached version is not watched`, () => {
+    const p = project();
+    const pl = pluginsTree(p);
+    const r = replyAfter(p, token, () => put(path.join(pl, 'cache', 'mk', 'a', '0', 'old.txt'), 'changed'));
+    assert.equal(r.json.tree, 'ok', r.out);
+  });
+}
