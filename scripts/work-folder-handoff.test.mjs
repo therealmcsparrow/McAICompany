@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -143,4 +143,21 @@ test('--applied lists the exception of a new-name run', () => {
   const r = spawnSync(process.execPath, [SCRIPT, '--applied', run], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /exceptions on file for .*: confirm each is yours \(1\)/);
+});
+
+// A case alias of the run folder (case-insensitive disk) must not pick up exceptions planted under the alias name.
+test('a case alias of the run folder never applies a planted exception', () => {
+  const ALIAS = '2026-10-30 22.42 - CACHE WARMUP';
+  const run = secRun(NAME, exc(ALIAS));
+  const alias = join(run, '..', ALIAS);
+  if (!existsSync(alias)) return; // case-sensitive disk: the alias is no folder
+  assert.equal(contests(alias).states.get(KEY), 'open');
+  assert.deepEqual(contests(alias).excepted, []);
+  assert.equal(contests(run).states.get(KEY), 'open');
+  const root = join(run, '..', '..', '..');
+  const r = spawnSync(process.execPath, [SCRIPT, '--applied', alias], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /CACHE WARMUP\//);
+  assert.equal(exceptionsFor(root, ALIAS).line, 'exceptions on file: 1');
+  assert.equal(exceptionsFor(root, NAME).line, 'exceptions on file: 1');
 });

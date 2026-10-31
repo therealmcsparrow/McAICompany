@@ -668,7 +668,11 @@ function runContext(runAbs) {
   const company = dirname(work);
   if (basename(work) !== 'work' || basename(company) !== '.company') return null;
   const root = dirname(company);
-  try { return { root, realRoot: realpathSync.native(root), reads: 0, cache: new Map() }; } catch { return null; }
+  try {
+    // The run folder name must be the on-disk name: a case alias would pick up lines filed under the alias (proj.M-SEC8).
+    const canon = basename(realpathSync.native(runAbs)) === basename(runAbs);
+    return { root, realRoot: realpathSync.native(root), reads: 0, cache: new Map(), canon };
+  } catch { return null; }
 }
 
 function lineCount(text) {
@@ -842,6 +846,7 @@ function exceptionLines(text) {
 function readExceptions(ctx, slug, warnings, sink = null) {
   const found = new Set();
   if (!ctx || !isWorkFolder(slug)) return found;
+  if (!ctx.canon) { warnings.push('warning: run folder name is not its on-disk name; no exceptions applied'); return found; }
   const got = readInside(ctx.realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return found;
   if (got.status !== 'ok' && sink) sink.failed = sink.failed ?? 'cannot read standards.md';
@@ -883,7 +888,7 @@ function readExceptions(ctx, slug, warnings, sink = null) {
 // CEO rulings: `## Rulings` of .company/work/<slug>/rulings.md. The last line for a key counts. Returns Map key -> { verb, at }.
 function readRulings(ctx, slug, warnings, sink = null) {
   const rulings = new Map();
-  if (!ctx || !isWorkFolder(slug)) return rulings;
+  if (!ctx || !isWorkFolder(slug) || !ctx.canon) return rulings;
   const got = readInside(ctx.realRoot, ['.company', 'work', slug, 'rulings.md'], MAX_RULINGS);
   if (got.status === 'missing') return rulings;
   if (got.status !== 'ok') {
@@ -915,7 +920,7 @@ export function exceptionsFor(root, slug) {
   const got = readInside(realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return { code: 0, line: 'exceptions on file: 0' };
   if (got.status !== 'ok') return { code: 1, line: 'ERROR cannot read standards.md' };
-  return { code: 0, line: `exceptions on file: ${exceptionLines(got.text).filter(e => e.slug === slug).length}` };
+  return { code: 0, line: `exceptions on file: ${exceptionLines(got.text).filter(e => e.slug !== null && e.slug.toLowerCase() === slug.toLowerCase()).length}` };
 }
 
 // The state table of a run folder: { states: Map key -> state, unresolved, escalated, ruled, excepted, lineages, warnings, errors }.
@@ -1058,7 +1063,7 @@ export function applied(runFolder) {
   const runAbs = resolve(runFolder);
   const ctx = runContext(runAbs);
   const slug = basename(runAbs);
-  if (!ctx || !isWorkFolder(slug)) return { code: 2, lines: [] };
+  if (!ctx || !ctx.canon || !isWorkFolder(slug)) return { code: 2, lines: [] };
   const sink = { rulings: [], exceptions: [], failed: null };
   const r = contests(runAbs, sink);
   if (sink.failed) return { code: 1, lines: ['ERROR ' + sink.failed] };
