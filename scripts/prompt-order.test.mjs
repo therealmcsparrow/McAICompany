@@ -103,8 +103,8 @@ test('each Step is linted, then recorded in the ledger from the notification int
 });
 
 test('the ledger is reconciled and the cost line built before the Ship Gate, shown at Ship only', () => {
-  has(pipeline, 'run.mjs" ledger reconcile <slug>', 'run.mjs" ledger ship <slug> <acs> <fix_rounds> <high_blockers>', 'run.mjs" ledger report <slug> --acs <acs>');
-  assert.ok(pipeline.indexOf('run.mjs" ledger report <slug> --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
+  has(pipeline, 'run.mjs" ledger reconcile \'<slug>\'', 'run.mjs" ledger ship \'<slug>\' <acs> <fix_rounds> <high_blockers>', 'run.mjs" ledger report \'<slug>\' --acs <acs>');
+  assert.ok(pipeline.indexOf('run.mjs" ledger report \'<slug>\' --acs') < pipeline.indexOf('After the Ship Gate is approved** (and'), 'cost line comes before ship');
   has(pipeline, 'After the Ship Gate is approved', 'scorecard line', '00-summary.md', 'never stops the run');
   has(pipeline, 'spend', 'cache read', 'per shipped AC', 'context at end (not cost)', 'at the Ship Gate only');
 });
@@ -252,10 +252,10 @@ const planReview = read('skills/pipeline/references/plan-review.md');
 const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
-test('the Contract is v4.2 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v4.2$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.2');
-  has(contract, 'v4.1 is additive', 'v4.2 is additive', 'A Role that gets a v4.0 prompt behaves as before');
+test('the Contract is v4.3 and the fixture is stamped with it', () => {
+  assert.match(contract, /^# Contract: dispatch-prompt v4.3$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.3');
+  has(contract, 'v4.1 is additive', 'v4.2 is additive', 'v4.3 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 
 test('the plan review dispatch block has the three review lines in order and no other path line', () => {
