@@ -57,17 +57,54 @@ test('the three files use LF line ends only', () => {
   for (const rel of [CONTRACT, TO_SPEC, ROUTES]) assert.ok(!read(rel).includes('\r'), `${rel} has no CR`);
 });
 
-test('the changelog lists the fix under Unreleased, Fixed', () => {
-  const log = read('CHANGELOG.md');
-  const start = log.indexOf('## [Unreleased]');
-  assert.ok(start !== -1, 'an Unreleased section');
-  const next = log.indexOf('\n## [', start + 1);
-  const unreleased = log.slice(start, next === -1 ? undefined : next);
-  const at = unreleased.indexOf('\n### Fixed');
-  assert.ok(at !== -1, 'a Fixed heading under Unreleased');
-  const after = unreleased.slice(at + 1);
+// release.mjs rolls [Unreleased] into the new version section before npm test runs, so the fix
+// bullet sits under ### Fixed of [Unreleased] before a release and of the newest versioned section after.
+function sectionsToCheck(log) {
+  const parts = log.split(/^(?=## \[)/m).filter((p) => p.startsWith('## ['));
+  const unreleased = parts.find((p) => p.startsWith('## [Unreleased]'));
+  const newest = parts.find((p) => /^## \[\d+\.\d+\.\d+\]/.test(p));
+  return [unreleased, newest].filter((p) => p !== undefined);
+}
+
+function fixedBlock(section) {
+  const at = section.indexOf('\n### Fixed');
+  if (at === -1) return null;
+  const after = section.slice(at + 1);
   const end = after.indexOf('\n### ', 1);
-  const fixed = after.slice(0, end === -1 ? undefined : end);
-  assert.match(fixed, /draft-input` v1\.3/);
-  assert.match(fixed, /prompt file/);
+  return after.slice(0, end === -1 ? undefined : end);
+}
+
+function hasFix(log) {
+  return sectionsToCheck(log).some((s) => {
+    const fixed = fixedBlock(s);
+    return fixed !== null && /draft-input` v1\.3/.test(fixed) && /prompt file/.test(fixed);
+  });
+}
+
+test('the changelog lists the fix under Fixed of Unreleased or the newest version', () => {
+  assert.ok(hasFix(read('CHANGELOG.md')), 'draft-input v1.3 and prompt file under ### Fixed of [Unreleased] or the newest versioned section');
+});
+
+const FIX = '### Fixed\n- **The spec draft takes the reprompt prompt file whole.** Contract `draft-input` v1.3.\n';
+const OLD = '## [0.24.0] - 2026-10-30\n\n### Added\n- Old.\n';
+const mk = (unreleased, ...versions) => `# Changelog\n\n## [Unreleased]\n\n${unreleased}\n${versions.join('\n')}`;
+
+test('changelog check: passes before release (fix under Unreleased)', () => {
+  assert.equal(hasFix(mk(FIX, OLD)), true);
+});
+
+test('changelog check: passes after release (fix under the newest version, Unreleased empty)', () => {
+  assert.equal(hasFix(mk('', `## [0.25.0] - 2026-10-31\n\nRollback: node scripts/stable.mjs 0.24.0\n\n${FIX}`, OLD)), true);
+});
+
+test('changelog check: fails when the fix sits only in an older version', () => {
+  assert.equal(hasFix(mk('', '## [0.25.0] - 2026-10-31\n\n### Added\n- x.\n', `## [0.24.0] - 2026-10-30\n\n${FIX}`)), false);
+});
+
+test('changelog check: fails when the bullet is not under Fixed', () => {
+  assert.equal(hasFix(mk('### Added\n- The prompt file, Contract `draft-input` v1.3.\n', OLD)), false);
+});
+
+test('changelog check: fails when the fix is missing', () => {
+  assert.equal(hasFix(mk('', OLD)), false);
 });
