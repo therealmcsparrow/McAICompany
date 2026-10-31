@@ -24,6 +24,9 @@ Rollback: node scripts/stable.mjs 0.23.0
 - **One home for the name check.** `mods/lib/work-folder.mjs` is the only place that checks, builds or maps a work folder name; `scripts/work-folder-guard.test.mjs` fails on a second copy of the old pattern, on an unquoted placeholder on a skill or agent shell line, and on a `work-folder new` call whose `--topic` is not `file` or `none`.
 - **No `mattpocock-skills` dependency.** aico no longer installs or names the `mattpocock-skills` plugin; only `superpowers` stays a dependency. `aico:tdd` now carries what a good test is, implementation-coupled tests and mocking at system boundaries; `aico:debugging` carries the full loop-first diagnosis (feedback loop, minimise, ranked falsifiable hypotheses, tagged instrumentation, regression test, cleanup); `aico:sourcing` traces every claim to the source that owns it. The research presence check no longer asks for a plugin skill. Contract `skills-manifest` v2.2.
 
+### Fixed
+- **`reprompt` no longer fails on a big plugin tree or on its own run log.** A tree over the check limit used to end the run with `refused: tree too large` and no way on; now `snap` exits 4 and the Lead asks once: **Walk less** (in the plugin cache, only the active plugin versions are checked) or **Raise the limit** (up to 100,000 entries and 16 MiB of git output, a fixed 2x bound), and the pick holds for the session. And the check no longer reports the run's own `run-state.jsonl` as a changed file; other runs' logs and look-alike names are still flagged. Contract `reprompt` v2.2, ADR 0052.
+
 ## [0.23.0] - 2026-10-30
 
 Rollback: node scripts/stable.mjs 0.22.0

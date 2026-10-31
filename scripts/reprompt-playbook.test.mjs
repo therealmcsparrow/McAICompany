@@ -100,7 +100,7 @@ test('the Playbook sets Round and Asks left itself; the reply check is an allow-
 });
 
 test('v2.0: a question line needs a why part and a reply with no open question ends the rounds', () => {
-  has('Contract: `reprompt` v2.1', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
+  has('Contract: `reprompt` v2.2', 'A line without `— why:` is malformed', 'a `— why:` reason of 10 to 120 characters without `|`');
   has('`noOpenQuestion`', 'say "No open question left"', 'hold no further question round', "that option's description only");
   assert.ok(section('4. Question form').includes('`(Recommended)` one first and its `why` as that option'));
   assert.doesNotMatch(text, /Contract v1\b|`reprompt` v1\.2/);
@@ -236,4 +236,26 @@ test('Use it and the image hand-over start aico:lead with the Skill tool, with a
 
 test('shell calls use the plugin root variable', () => {
   for (const m of text.matchAll(/node "([^"]+)"/g)) assert.ok(m[1].startsWith('${CLAUDE_PLUGIN_ROOT}/scripts/'));
+});
+
+test('snap exit 4 asks the limit form once and passes the pick on', () => {
+  const s2 = section('2. Dispatch (reprompter)');
+  assert.match(s2, /Exit 4/, 'section 2 handles snap exit 4');
+  assert.ok(s2.includes('"kind":"pick"') || s2.includes('`kind` `pick`') || /kind[^\n]{0,20}pick/.test(s2), 'names the pick result');
+  // First form: exactly these two options with their one-line effects (in Language:).
+  assert.ok(s2.includes('**Walk less**'));
+  assert.ok(s2.includes('Check only the active version of each cached plugin; older cached versions are skipped.'));
+  assert.ok(s2.includes('**Raise the limit**'));
+  assert.ok(s2.includes('Check everything up to 100,000 entries and 16 MiB of git output; a bigger tree is still refused.'));
+  // Re-ask form: Raise the limit / Stop.
+  assert.ok(s2.includes('**Stop**') && s2.includes('End this reprompt run.'));
+  // The pick is a session value like <hex>, passed as the third snap argument on every later snap, with the token enum.
+  for (const token of ['walk-less', 'raise', 'both']) assert.ok(s2.includes(`\`${token}\``), `token ${token}`);
+  assert.match(s2, /third argument|3rd argument/);
+  assert.match(s2, /every later `snap`|every `snap`|each later `snap`/);
+  assert.match(s2, /Other[^\n]*dismissed|dismissed[^\n]*Other/);
+  assert.match(s2, /end '<slug>' abort/);
+  // The shell-token line at the end gains the limit enum; reply keeps its call without a limit argument.
+  assert.match(text, /Shell calls take only tokens you made:[^\n]*(walk-less\|raise\|both|`walk-less`)/);
+  assert.ok(text.includes("reprompt-check reply '<slug>' '<NN>' '<hex>' '<asks>'"));
 });
