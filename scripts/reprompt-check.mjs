@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checker for the reprompt Playbook (reprompt v2.1). Three subcommands, run from the product root:
-//   snap <name>                      records the run and a baseline of the watched files before a dispatch
+//   snap <name> [raise]               records the run and a baseline of the watched files before a dispatch
 //   arm <name> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
 //   reply <name> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
 // A run is a reprompt run only when `snap` recorded it in the user's own folder (never in the repo), so no folder
@@ -29,8 +29,7 @@ const MAX_LEAD_FILE = 33 * KIB;
 const MAX_HANDOFF = 64 * KIB;
 const MAX_PROMPT = 16 * KIB;
 const MAX_OUT = 64 * KIB;
-const MAX_ENTRIES = 50000;
-const MAX_GIT_OUT = 8 * 1024 * KIB;
+const MAX_BASELINE = 64 * 1024 * KIB;
 const MAX_CLAUDE_JSON = 32 * 1024 * KIB;
 const GIT_MS = 10000;
 const MAX_PATHS = 20;
@@ -39,6 +38,15 @@ const MAX_LINE = 1000;
 const TARGETS = new Set(['claude-code', 'ai-chat', 'other-ai', 'unknown']);
 const SIX_EN = ['Goal', 'Context', 'Inputs', 'Constraints', 'Output format', 'Done when'];
 const MCP_KEYS = ['mcpServers', 'enabledMcpjsonServers', 'disabledMcpjsonServers', 'enableAllProjectMcpServers', 'allowedTools'];
+
+// The base limits and the one fixed ceiling of Raise the limit (reprompt v2.2).
+export const LIMITS = Object.freeze({ entries: 50000, gitOut: 8 * 1024 * KIB });
+export const CEILING = 2;
+const LIMIT_TOKEN_RE = /^raise$/;
+const LIMIT_KINDS = ['none', 'walk-less', 'raise', 'both'];
+
+// Over the active bound: an internal signal, not a refusal, so `snap` can pick exit 4 or exit 3.
+class OverLimit extends Error {}
 
 class Refused extends Error {
   constructor(reason, paths) { super(reason); this.paths = paths; }
@@ -145,7 +153,7 @@ class Manifest {
   set(p, fp) {
     if (p === this.skip) return;
     const k = key(p);
-    if (!this.map.has(k) && ++this.budget.n > MAX_ENTRIES) refuse('tree too large');
+    if (!this.map.has(k) && ++this.budget.n > this.budget.max) throw new OverLimit('tree too large');
     this.map.set(k, fp);
   }
   // Walks one path without following links; a missing path adds nothing.
@@ -173,22 +181,23 @@ class Manifest {
 }
 
 // ---------- git ----------
-function git(args, cwd, env) {
+function git(args, cwd, env, cap) {
   const r = spawnSync('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args], {
     cwd, env: { ...env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' },
-    maxBuffer: MAX_GIT_OUT, timeout: GIT_MS, windowsHide: true, shell: false,
+    maxBuffer: cap, timeout: GIT_MS, windowsHide: true, shell: false,
   });
   if (r.error) {
     if (r.error.code === 'ENOENT') return null;
-    refuse(r.error.code === 'ENOBUFS' ? 'tree too large' : 'git failed');
+    if (r.error.code === 'ENOBUFS') throw new OverLimit('tree too large');
+    refuse('git failed');
   }
   return r;
 }
 
 // Top level, git dir and common dir as absolute paths; null when the folder is not in a work tree.
 function gitInfo(loc, env) {
-  let r = git(['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-dir', '--git-common-dir'], loc.root, env);
-  if (r && r.status !== 0) r = git(['rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], loc.root, env);
+  let r = git(['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-dir', '--git-common-dir'], loc.root, env, loc.gitOut);
+  if (r && r.status !== 0) r = git(['rev-parse', '--show-toplevel', '--git-dir', '--git-common-dir'], loc.root, env, loc.gitOut);
   if (!r || r.status !== 0) return null;
   const lines = r.stdout.toString('utf8').split('\n').filter(l => l !== '');
   if (lines.length !== 3) return null;
@@ -200,7 +209,7 @@ const expandHome = (loc, v) => (v === '~' ? loc.home : /^~[\\/]/.test(v) ? join(
 
 // The config files git read, every include path (present or not) and the hooks folder, from `git config --list --show-origin -z`.
 function configFiles(loc, env) {
-  const r = git(['config', '--list', '--show-origin', '-z'], loc.root, env);
+  const r = git(['config', '--list', '--show-origin', '-z'], loc.root, env, loc.gitOut);
   if (!r || r.status !== 0) refuse('git failed');
   const parts = r.stdout.toString('utf8').split('\0');
   const out = [];
@@ -263,8 +272,8 @@ function porcelain(buf, wantIgnored) {
 // (c) and (d): what git reports as changed, untracked or ignored.
 function gitView(loc, env, top, skip, budget) {
   const m = new Manifest(skip, budget);
-  const changed = git(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=all'], loc.root, env);
-  const ignored = git(['status', '--porcelain=v1', '-z', '--ignored=traditional', '--untracked-files=normal', '--ignore-submodules=all'], loc.root, env);
+  const changed = git(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=all'], loc.root, env, loc.gitOut);
+  const ignored = git(['status', '--porcelain=v1', '-z', '--ignored=traditional', '--untracked-files=normal', '--ignore-submodules=all'], loc.root, env, loc.gitOut);
   if (!changed || !ignored || changed.status !== 0 || ignored.status !== 0) refuse('git failed');
   const add = ({ xy, rel }) => {
     const abs = join(top, ...rel.split('/'));
@@ -640,14 +649,16 @@ function pairs(list) {
 function readBaseline(runDir, hex) {
   const file = join(runDir, '.tree.json');
   const st = lstatOrNull(file);
-  if (!st || !st.isFile() || st.size > MAX_GIT_OUT * 2) refuse('baseline changed');
+  if (!st || !st.isFile() || st.size > MAX_BASELINE) refuse('baseline changed');
   const buf = readFileSync(file);
   if (createHash('sha256').update(buf).digest('hex') !== hex) refuse('baseline changed');
   let doc;
   try { doc = JSON.parse(buf.toString('utf8')); } catch { refuse('baseline changed'); }
   if (doc === null || typeof doc !== 'object' || doc.v !== 2 || typeof doc.git !== 'boolean') refuse('baseline changed');
   if (!Array.isArray(doc.control) || !doc.control.every(p => typeof p === 'string')) refuse('baseline changed');
+  if (Object.hasOwn(doc, 'limit') && !LIMIT_KINDS.includes(doc.limit)) refuse('baseline changed');
   return {
+    limit: Object.hasOwn(doc, 'limit') ? doc.limit : 'none',
     git: doc.git,
     control: doc.control,
     centries: pairs(doc.centries),
@@ -672,18 +683,37 @@ function checkRunFolder(dir) {
   }
 }
 
-function snap(loc, env, slug) {
+// The active bound: the base, or exactly CEILING times the base for raise and both.
+function bound(base, limit) {
+  const k = limit === 'raise' || limit === 'both' ? CEILING : 1;
+  return { entries: base.entries * k, gitOut: base.gitOut * k };
+}
+
+function snap(loc0, env, slug, base, limit) {
+  const active = bound(base, limit);
+  const loc = { ...loc0, gitOut: active.gitOut };
   const dir = runFolder(loc, slug);
   checkRunFolder(dir);
   writeRecord(loc, slug);
-  const budget = { n: 0 };
+  const budget = { n: 0, max: active.entries };
+  try {
+    return snapWrite(loc, env, dir, budget, limit);
+  } catch (e) {
+    if (!(e instanceof OverLimit)) throw e;
+    if (limit === 'raise' || limit === 'both') refuse('tree too large');
+    return { json: { kind: 'pick', offer: limit === 'walk-less' ? ['raise'] : ['walk-less', 'raise'] }, code: 4 };
+  }
+}
+
+function snapWrite(loc, env, dir, budget, limit) {
   const info = gitInfo(loc, env);
   const control = controlPaths(loc, env, info);
   const { watch, view } = collect(loc, env, dir, info, budget);
   const centries = walkControl(loc, control, budget);
   const buf = Buffer.from(JSON.stringify({
-    v: 2, git: Boolean(info), control, centries: [...centries], watch: [...watch], view: [...view],
+    v: 2, limit, git: Boolean(info), control, centries: [...centries], watch: [...watch], view: [...view],
   }));
+  if (buf.length > MAX_BASELINE) refuse('tree too large');
   writeFileSync(join(dir, '.tree.json'), buf);
   return { json: { snap: createHash('sha256').update(buf).digest('hex') }, code: 0 };
 }
@@ -700,14 +730,16 @@ function arm(loc, slug, nn) {
   return { json: { armed: nn }, code: 0 };
 }
 
-function reply(loc, env, slug, nn, hex, asks) {
-  const dir = runFolder(loc, slug);
-  requireRecord(loc, slug);
+function reply(loc0, env, slug, nn, hex, asks, baseLimits) {
+  const dir = runFolder(loc0, slug);
+  requireRecord(loc0, slug);
   const base = readBaseline(dir, hex);
+  const active = bound(baseLimits, base.limit);
+  const loc = { ...loc0, gitOut: active.gitOut };
   const runKey = key(dir);
 
   // The files git reads come first, before any git command can run under them.
-  const nowControl = walkControl(loc, base.control, { n: 0 });
+  const nowControl = walkControl(loc, base.control, { n: 0, max: active.entries });
   const controlMoved = diff(base.centries, nowControl).sort();
   if (controlMoved.length) refuse('git config changed', controlMoved);
 
@@ -717,7 +749,7 @@ function reply(loc, env, slug, nn, hex, asks) {
     refuse('write gate not active');
   }
 
-  const budget = { n: 0 };
+  const budget = { n: 0, max: active.entries };
   let info = null;
   if (base.git) {
     info = gitInfo(loc, env);
@@ -745,18 +777,33 @@ function reply(loc, env, slug, nn, hex, asks) {
 }
 
 // Returns { code, out }; `out` is one JSON line.
-export function run(argv, { cwd = process.cwd(), env = process.env } = {}) {
+// The test-only `limits` may only lower the base values.
+function baseLimits(limits) {
+  if (limits === undefined) return LIMITS;
+  if (limits === null || typeof limits !== 'object') refuse(USAGE);
+  const out = { ...LIMITS };
+  for (const k of Object.keys(LIMITS)) {
+    if (!Object.hasOwn(limits, k)) continue;
+    const v = limits[k];
+    if (!Number.isSafeInteger(v) || v < 1 || v > LIMITS[k]) refuse(USAGE);
+    out[k] = v;
+  }
+  return out;
+}
+
+export function run(argv, { cwd = process.cwd(), env = process.env, limits } = {}) {
   try {
     const [cmd, slug, ...rest] = argv;
     if (typeof slug !== 'string' || !isRunName(slug)) refuse(USAGE);
+    const base = baseLimits(limits);
     const loc = locations(cwd, env);
     let res;
-    if (cmd === 'snap' && rest.length === 0) {
-      res = snap(loc, env, slug);
+    if (cmd === 'snap' && (rest.length === 0 || (rest.length === 1 && LIMIT_TOKEN_RE.test(rest[0])))) {
+      res = snap(loc, env, slug, base, rest.length ? rest[0] : 'none');
     } else if (cmd === 'arm' && rest.length === 1 && NN_RE.test(rest[0])) {
       res = arm(loc, slug, rest[0]);
     } else if (cmd === 'reply' && rest.length === 3 && NN_RE.test(rest[0]) && HEX_RE.test(rest[1]) && ASKS_RE.test(rest[2])) {
-      res = reply(loc, env, slug, rest[0], rest[1], rest[2]);
+      res = reply(loc, env, slug, rest[0], rest[1], rest[2], base);
     } else {
       refuse(USAGE);
     }
@@ -764,7 +811,7 @@ export function run(argv, { cwd = process.cwd(), env = process.env } = {}) {
     if (Buffer.byteLength(out) > MAX_OUT) refuse('output too large');
     return { code: res.code, out };
   } catch (e) {
-    const why = e instanceof Refused ? e.message : 'checker failed';
+    const why = e instanceof Refused || e instanceof OverLimit ? e.message : 'checker failed';
     const json = { refused: `refused: ${why}` };
     if (e instanceof Refused && e.paths) {
       try {
