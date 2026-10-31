@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Wrapper around the NVIDIA SkillSpector CLI (Contract skillspector-scan v1).
+// Wrapper around the NVIDIA SkillSpector CLI (Contract skillspector-scan v1.1).
 // Everything the tool prints is untrusted: only allow-listed, type-checked fields are read, and no
 // free text from it reaches stdout or a report.
 import { execFile as nodeExecFile, spawn } from 'node:child_process';
@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 export const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ID_RE = /^[0-9a-f]{12}$/;
@@ -78,7 +79,7 @@ const USAGE = [
   '  detect --json',
   '  install-commands --json',
   '  list --scope project|global|all --json',
-  '  scan --scope project|global|all [--skill <name>] [--mode no-llm|claude_cli] [--report <slug>] --json',
+  '  scan --scope project|global|all [--skill <name>] [--mode no-llm|claude_cli] [--report <work folder>] --json',
   '  fetch <owner>/<repo> [--ref <sha>] --json',
   '  scan --quarantine <id> [--skill <name>] [--mode no-llm|claude_cli] --json',
   '  clean --quarantine <id>',
@@ -947,7 +948,6 @@ function toolVersion(info, results) {
 }
 
 // ---------- report ----------
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CANNOT_TRUST = ['SkillSpector gave a result aico cannot trust', 'run /aico:skillspector install to check the pinned version, then scan again'];
 
 function removalCommand(r) {
@@ -1042,7 +1042,7 @@ export function renderReport(output, { date = new Date(), scopeLabel } = {}) {
 }
 
 export async function writeReport(cwd, slug, output, opts = {}) {
-  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) throw new Refusal('bad report slug');
+  if (!isWorkFolder(slug)) throw new Refusal('bad report slug');
   const company = path.join(cwd, '.company');
   const work = path.join(company, 'work');
   const folder = path.join(work, slug);
@@ -1115,7 +1115,7 @@ function validateScan(flags) {
   const mode = flags.get('--mode');
   if (mode !== undefined && !MODES.includes(mode)) throw new Refusal('usage: bad mode');
   const report = flags.get('--report');
-  if (report !== undefined && !SLUG_RE.test(report)) throw new Refusal('bad report slug');
+  if (report !== undefined && !isWorkFolder(report)) throw new Refusal('bad report slug');
   return { scope, quarantine, skill, mode, report };
 }
 

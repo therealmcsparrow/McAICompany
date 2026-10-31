@@ -1,4 +1,4 @@
-# Contract: skill-recommendation v1
+# Contract: skill-recommendation v1.1
 
 Provider: the `skill-researcher` Role (`agents/skill-researcher.md`), in its Handoff. Lint, gating scan and install check: `scripts/skill-picks.mjs`. Consumers: the Lead (`skills/lead/references/skill-picks.md`: the approve form, the Install / Skip form, the project record, the post-install checks), the CEO.
 Uses: `skillspector-scan` v1 (`vetCandidate`, the post-install `scan`), `design-skills-section` v1.1 (field allow-list and the `design` record), `skills-section` v1 (the record for the other areas), `research-report` v1 "Researcher Handoff extension" (`fetches`, `depth`, `## Findings`, `## Sources`).
@@ -40,7 +40,7 @@ The whole line matches `^- area: (stack|product-type|company-type|design); name:
 | `vet <handoff> --json` | runs `lint`, then scans each pick, then prints `{ "v":1, "area", "mode", "lines":[…as lint], "picks":[{ …as lint, "scan": <skillspector-scan results[] entry> \| null, "scan_refused": <reason> \| null, "hash": <64 hex> \| null, "approvable": bool, "reject_code": <code> \| null }] }`. Progress lines go to stderr (`vet: <i>/<k> <name> <verdict>`). |
 | `check-install --name <n> --hash <h> --json` (Fix round 2) | `{ "v":1, "name", "bound": bool, "reason": null \| "no-lock" \| "no-entry" \| "hash-mismatch" }`. `<n>` = the skill name allow-list, `<h>` = `^[0-9a-f]{64}$`, both taken from `vet` output; else `refused: usage …`. Reads `<cwd>/skills-lock.json` only: `lstat` a regular file ≤ 1 MiB that parses as a JSON object with an object `skills` → else `no-lock`; `Object.hasOwn(skills, <n>)` with an object entry whose `computedHash` is a string → else `no-entry`; `computedHash === <h>` → `bound: true`, else `hash-mismatch`. Nothing from the file is echoed. |
 
-- `<handoff>` must match `^\.company/work/[a-z0-9][a-z0-9-]{0,63}/\d{2}-skill-researcher\.md$` and be a regular file ≤ 256 KiB. More than 5 lines → lines 6+ fail with `too many entries`.
+- `<handoff>` must match `.company/work/<work folder>/<NN>-skill-researcher.md` (`<NN>` two digits; the path is split at its slashes and the folder passes `isWorkFolder` of `work-folder-name` v1, a new name or a legacy slug; at most 300 characters; v1.1 is additive) and be a regular file ≤ 256 KiB. More than 5 lines → lines 6+ fail with `too many entries`.
 - **Scan per pick in `vet`** (mode from settings; `vet` never passes `--mode`):
   - repo: `vetCandidate({ source, commit, name })` (`skillspector-scan` v1): reachability, fetch at that commit into a quarantine, the link check, the bound folder, its hash, the scan of that one folder, clean. One fetch per distinct `(source, commit)`. `hash` = the returned `hash`.
   - command: not scanned. `scan: null`, `hash: null`, `scan_refused: "command source cannot be pinned"`, `approvable: false`, `reject_code: scan-not-possible`. (A name match against an installed copy proves nothing about what the command fetches, proj.M-SEC3.)

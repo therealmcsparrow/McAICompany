@@ -1,4 +1,4 @@
-# Contract: skillspector-scan v1
+# Contract: skillspector-scan v1.1
 
 Provider: `scripts/skillspector.mjs` (Node built-ins only, proj.S1). Consumers: the `/aico:skillspector` Playbook (`skills/skillspector/SKILL.md`), `scripts/skill-picks.mjs vet` (the Lead's pre-approval scan, `skill-recommendation` v1), the Lead's post-install scan (`skills/lead/references/skill-picks.md`).
 The third-party tool is NVIDIA SkillSpector (Apache-2.0), run as its CLI only. Rationale: `docs/adr/0018-skillspector-through-a-tested-wrapper.md`, `docs/adr/0019-lead-runs-the-gating-scan.md`, `docs/adr/0020-bind-the-scan-to-the-installed-bytes.md`. Facts about the tool: `.company/work/skill-researcher-scan/02-tech-researcher.md` (v2.12.0), spikes SP1 (`06-spike-backend-engineer.md`) and SP2 (`04-spike-backend-engineer.md`), and the installed v2.13.1 source read in Fix round 1 (`26-architect.md`). Facts about the skills CLI 1.7.4: its `dist/cli.mjs`, read in Fix round 2 (`40-architect.md`). Still v1 and unreleased; Fix rounds 1 to 3 are folded in.
@@ -21,13 +21,13 @@ Everything the tool prints is untrusted (AC13): only the fields named under "Sha
 | `detect --json` | `{ "v":1, "installed":bool, "version":str\|null, "commit":str\|null, "uv":bool }`. Runs `skillspector --version` and `uv --version` (10 s each). `installed: false` when the spawn emits `error` with `code: 'ENOENT'`. `commit` from the tool's `direct_url.json` under `uv tool dir` when found, else `null`. Always exit 0. |
 | `install-commands --json` | `{ "v":1, "install":[…], "rollback":[…] }`, the constants below |
 | `list --scope project\|global\|all --json` | `{ "v":1, "skills":[{ "name", "scope", "root" }], "skipped_invalid":n, "truncated":n, "roots_refused":n }`; at most 200 skills per run, the rest counted in `truncated`. Only names that pass the allow-list are printed. |
-| `scan --scope project\|global\|all [--skill <n>] [--mode no-llm\|claude_cli] [--report <slug>] --json` | scans every skill in scope, or every match of `<n>` (must be in the `list` output for that scope, else `refused: skill not found`) |
+| `scan --scope project\|global\|all [--skill <n>] [--mode no-llm\|claude_cli] [--report '<work folder>'] --json` | scans every skill in scope, or every match of `<n>` (must be in the `list` output for that scope, else `refused: skill not found`) |
 | `fetch <owner>/<repo> [--ref <sha>] --json` | new quarantine, see "Quarantine"; `{ "v":1, "id", "commit", "skills":[names], "skipped_invalid":n }` |
 | `scan --quarantine <id> [--skill <n>] [--mode …] --json` | scans skills inside that quarantine; with `--skill`, only the bound folder of `<n>` ("Bound skill folder") |
 | `clean --quarantine <id>` | removes it; `fetch` also removes `aico-quarantine-*` folders older than 24 h |
 | `help`, `--help` | one usage line per command above on stdout, exit 0 |
 
-Arguments are a fixed grammar: an unknown or repeated flag, an extra positional, or `scan` with neither or both of `--scope` and `--quarantine` → `refused: usage …`. `<owner>/<repo>` = the `design-skills-section` v1 repo pattern; `<sha>` = `^[0-9a-f]{40}$`; `<slug>` = `^[a-z0-9][a-z0-9-]{0,63}$`.
+Arguments are a fixed grammar: an unknown or repeated flag, an extra positional, or `scan` with neither or both of `--scope` and `--quarantine` → `refused: usage …`. `<owner>/<repo>` = the `design-skills-section` v1 repo pattern; `<sha>` = `^[0-9a-f]{40}$`; `<work folder>` = `isWorkFolder` of `work-folder-name` v1 (a new name or a legacy slug; v1.1 is additive). Skill names keep `^[a-z0-9][a-z0-9-]{0,63}$`; they are not work folder names.
 Callers never put user text on a command line: the Playbook matches the CEO's argument by string equality against `list` output and passes the listed name (AC8).
 - **Export for `skill-picks.mjs` (Fix rounds 1 and 2):** `vetCandidate({ source, commit, name, mode })` = `fetch <source> --ref <commit>`, then the bound folder of `<name>`, its `hash`, and `scan --quarantine <id> --skill <name>`, then `clean --quarantine <id>` in a `finally`, so a quarantine never outlives the call. Returns `{ commit, hash, result }` (`hash` = 64 lowercase hex, "Folder hash"; `result` = one `results[]` entry below) or `{ refused: <reason> }`, reason one of: `fetch failed`, `candidate too large`, `commit not in repo`, `candidate has a link or submodule`, `skill not in repo`, `skill not bound (root skill)`, `skill not bound (unreadable name)`, `skill not bound (same name twice)`, `skill not bound (name differs from folder)`, `git missing`, `skillspector missing`. Inputs are re-validated with the patterns above.
 
@@ -101,8 +101,8 @@ Evidence: a recursive v2.12.0 scan of this repo's own skills (Fix round 1) had 2
 - `issues`: at most 50 per skill; `id` `^[A-Za-z0-9._:-]{1,64}$`, `category` `^[A-Za-z0-9_-]{1,40}$`, `file` `^[A-Za-z0-9._/-]{1,200}$` (no space; Fix round 1), `line` int ≥ 0; a value that fails becomes `?`.
 - `tool.version`: `detect`'s `version` when it passes `^\d+\.\d+\.\d+([.+-][0-9A-Za-z.]{1,20})?$`, else the first result's `metadata.skillspector_version` when it passes, else `?`. One value per run, the same in the JSON and the report. `commit` is `detect`'s, when known.
 
-## Report (`--report <slug>`; AC9, the only file a scan writes)
-`.company/work/<slug>/skillspector-report.md`, built only from the output JSON and the fixed texts below; the folder is created when missing and refused when it, or the file, is a symlink (`lstat`); atomic write; LF. Lists, no tables, verdicts as words (proj.S2).
+## Report (`--report '<work folder>'`; AC9, the only file a scan writes)
+`.company/work/<work folder>/skillspector-report.md`, built only from the output JSON and the fixed texts below; the folder is created when missing and refused when it, or the file, is a symlink (`lstat`); atomic write; LF. Lists, no tables, verdicts as words (proj.S2).
 ```markdown
 # SkillSpector scan
 - Date: <UTC>; tool: skillspector <version>[@<commit7>]; mode: <mode>; scope: <scope or one skill>
@@ -188,7 +188,7 @@ The skills CLI 1.7.4 does not pick by folder name. `add <owner>/<repo>#<sha> -s 
 - **MCP:** aico never calls the SkillSpector MCP tool; the registration is for the CEO's own use. Any aico text that shows `scan_skill` passes `use_llm: false` explicitly; no agent lists an `mcp__skillspector` tool (pinned tests).
 
 ## Error cases
-- Bad arguments, a name that fails the allow-list, a name not in scope, a bad id, slug or repo → `refused: <reason>` (input never echoed), exit 2, nothing scanned or written.
+- Bad arguments, a name that fails the allow-list, a name not in scope, a bad id, work folder name or repo → `refused: <reason>` (input never echoed), exit 2, nothing scanned or written.
 - Tool missing → `scan` and `fetch` print `refused: skillspector missing`, exit 3, no report written; callers then offer the Install form (AC3, AC10). Both run the `detect` probe first, so a run never stops halfway. An ENOENT on a later per-skill spawn is that skill's `spawn-failed`.
 - A commit not reachable from the named repo's branches or tags, a link or submodule entry, or a skill that is not bound → `refused: <reason>` from the list under "Export", exit 2, the quarantine removed, nothing scanned.
 - A per-skill failure, including a failed temp-dir removal, is that skill's `error` verdict or nothing; the run goes on with the next skill and still exits 0.

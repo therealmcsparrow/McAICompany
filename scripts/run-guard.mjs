@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Run guard (contract: docs/contracts/run-guard.md v1). Node built-ins only; cwd = product root. Read-only.
-// uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/worktree.md v1 docs/contracts/run-state.md v1.5
+// Run guard (contract: docs/contracts/run-guard.md v1.1). Node built-ins only; cwd = product root. Read-only.
+// uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/worktree.md v1.1 docs/contracts/run-state.md v1.5 docs/contracts/work-folder-name.md v1
 // Prints the two Ship Gate guardrail lines as counts. Records are read only through readParallel, readWorktrees and
 // run-state show; record text never reaches the output, only a cut, escaped reader message when a record is broken.
 import path from 'node:path';
@@ -9,12 +9,12 @@ import { pathToFileURL } from 'node:url';
 import { readParallel, ParallelRecordError } from './plan-tasks.mjs';
 import { readWorktrees, WorktreeRecordError } from './worktree.mjs';
 import { show } from './run-state.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const MAX_ARG_CHARS = 4096;
 const MAX_MESSAGE_CHARS = 120;
-const USAGE = 'usage: run-guard gate <slug>';
+const USAGE = 'usage: run-guard gate <work folder>';
 
 class Refusal extends Error {}
 
@@ -56,7 +56,7 @@ function handoverLine(root, slug) {
 }
 
 function cmdGate(rest, env) {
-  if (rest.length !== 1 || !SLUG.test(rest[0])) throw new Refusal(rest.length === 1 ? 'bad slug' : USAGE);
+  if (rest.length !== 1 || !isWorkFolder(rest[0])) throw new Refusal(rest.length === 1 ? 'bad slug' : USAGE);
   const slug = rest[0];
   return { code: 0, lines: [filesLine(env.root, slug), handoverLine(env.root, slug)] };
 }

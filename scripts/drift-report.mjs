@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Drift report (contract: docs/contracts/drift-report.md v1). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1
+// Drift report (contract: docs/contracts/drift-report.md v1.1). Node built-ins only.
+// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v1
 // `pick` lists the Contracts with a script Provider that were checked longest ago; `lint` checks the shape
 // of one report. Neither writes anything. Report text, file names and arguments are untrusted: every
 // pattern is anchored over a character class, sizes are capped before parsing, every file is read by the
@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
+import { isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KINDS = ['missing-feature', 'incomplete-model', 'logic-shortcut', 'architectural-divergence'];
 const MAX_ARG = 4096;
@@ -23,9 +24,20 @@ const MAX_REPORTS = 500;
 const MAX_ERRORS_SHOWN = 50;
 const DEFAULT_PICK = 8;
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const REPORT_NAME = /^drift-(\d{4}-\d{2}-\d{2})\.md$/;
-const REPORT_REL = /^\.company\/work\/([a-z0-9][a-z0-9-]{0,63})\/(drift-\d{4}-\d{2}-\d{2}\.md)$/;
+const REPORT_PREFIX = '.company/work/';
+const MAX_REPORT_REL = 300;
+
+// [work folder, report file name] of `.company/work/<work folder>/drift-<date>.md`, or null.
+function splitReportRel(rel) {
+  if (typeof rel !== 'string' || rel.length > MAX_REPORT_REL || !rel.startsWith(REPORT_PREFIX)) return null;
+  const rest = rel.slice(REPORT_PREFIX.length);
+  const cut = rest.indexOf('/');
+  if (cut < 1) return null;
+  const folder = rest.slice(0, cut);
+  const file = rest.slice(cut + 1);
+  return isWorkFolder(folder) && REPORT_NAME.test(file) ? [folder, file] : null;
+}
 const CONTRACT_NAME = /^[a-z][a-z0-9-]{0,60}$/;
 const PROVIDER = /^Provider: `(scripts\/[A-Za-z0-9._-]{1,100}\.mjs)`/;
 const PATH_CHARS = '[A-Za-z0-9._@+\\/-]';
@@ -176,7 +188,7 @@ function realRootOf(root) {
 function lastChecked(realRoot, known) {
   const last = new Map();
   let seen = 0;
-  const slugs = listPlainDir(realRoot, ['.company', 'work'], MAX_SLUGS).filter((e) => e.dir && SLUG.test(e.name));
+  const slugs = listPlainDir(realRoot, ['.company', 'work'], MAX_SLUGS).filter((e) => e.dir && isWorkFolder(e.name));
   for (const s of slugs) {
     const reports = listPlainDir(realRoot, ['.company', 'work', s.name], MAX_REPORTS_PER_SLUG).filter((e) => e.file && REPORT_NAME.test(e.name));
     for (const r of reports) {
@@ -301,9 +313,9 @@ function lint(args, root) {
     const r = path.relative(realRoot, args[0]);
     rel = r.split(path.sep).join('/');
   }
-  const m = REPORT_REL.exec(rel);
-  const name = m ? REPORT_NAME.exec(m[2]) : null;
-  if (!m || !name || !validDate(name[1])) throw new Refused('report must be .company/work/<slug>/drift-<YYYY-MM-DD>.md');
+  const parts = splitReportRel(rel);
+  const name = parts ? REPORT_NAME.exec(parts[1]) : null;
+  if (!parts || !name || !validDate(name[1])) throw new Refused('report must be .company/work/<work folder>/drift-<YYYY-MM-DD>.md');
   const res = readPlain(realRoot, rel.split('/'), MAX_REPORT_BYTES);
   if (res.text === undefined) return { code: 1, lines: ['drift-report: report unreadable'] };
   const errors = [];

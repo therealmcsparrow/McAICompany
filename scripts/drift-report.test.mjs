@@ -380,7 +380,7 @@ describe('maintain Playbook', () => {
 describe('Contract file', () => {
   test('exists with the header and Provider line the index needs', () => {
     const text = fs.readFileSync(path.join(PLUGIN, 'docs', 'contracts', 'drift-report.md'), 'utf8');
-    assert.match(text.split('\n')[0], /^# Contract: drift-report v1$/);
+    assert.match(text.split('\n')[0], /^# Contract: drift-report v1\.1$/);
     assert.match(text, /^Provider: `scripts\/drift-report\.mjs`/m);
     assert.ok(!text.includes('\r'));
   });

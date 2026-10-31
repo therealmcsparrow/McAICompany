@@ -4,7 +4,7 @@ Load this only when the argument is exactly `drift`. The check is informational:
 
 ## Lead
 1. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" drift-report pick`. `pick: none` → say so in the report under Minor and dispatch nothing.
-2. Dispatch `aico:architect` once, in parallel with the routine checks. Goal: the picked Contract names (the first word of each `pick` line), the output file `.company/work/<slug>/drift-<YYYY-MM-DD>.md` (today's date) and the rules below. Input Handoffs: none: first Step, quoting the CEO's request.
+2. Dispatch `aico:architect` once, in parallel with the routine checks. Goal: the picked Contract names (the first word of each `pick` line), the output file `.company/work/<work folder>/drift-<YYYY-MM-DD>.md` (the run's own work folder, today's date) and the rules below. Input Handoffs: none: first Step, quoting the CEO's request.
 3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" drift-report lint <report>`. Exit 2 → send the `ERROR` lines back to the Architect once, then lint again. Still failing, or exit 1 → link the report as "report failed lint" and copy no item.
 4. Link the report under Minor in `maintenance-report.md` with its item count. A report with `- none` is linked as "no drift found".
 
