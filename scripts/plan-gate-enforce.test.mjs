@@ -221,7 +221,18 @@ describe('hostile cases under block with one open decision', () => {
     e.plan(CLEAN, '03-plan.md');
     assert.deepEqual(e.check('verify', SLUG).lines, ['plan-check (block): error unreadable']);
     assert.equal(e.state('start', SLUG).code, 0);
-    assertAllRefused(e, { next: true });
+    // plan-tasks v1.6: `begin` with a plan name typed in another letter case than the file on disk is
+    // refused as `wrong letter case` before the Gate; the other commands still refuse at the Gate.
+    const rs0 = e.read('run-state.jsonl');
+    const pl0 = e.read('parallel.jsonl');
+    refusedGate(e.state('gate', SLUG, 'plan', 'passed'));
+    const b = e.begin();
+    assert.equal(b.code, 3, JSON.stringify(b));
+    assert.equal(b.out ?? b.lines.join('\n'), 'refused: wrong letter case');
+    refusedGate(e.tasks('next', SLUG));
+    refusedGate(e.tasks('start', SLUG, 'T1'));
+    assert.equal(e.read('run-state.jsonl'), rs0, 'run-state unchanged');
+    assert.equal(e.read('parallel.jsonl'), pl0, 'parallel unchanged');
     assert.equal(e.begin('03-plan.md').code, 3);
   });
 

@@ -151,13 +151,15 @@ test('a case alias of the run folder never applies a planted exception', () => {
   const run = secRun(NAME, exc(ALIAS));
   const alias = join(run, '..', ALIAS);
   if (!existsSync(alias)) return; // case-sensitive disk: the alias is no folder
-  assert.equal(contests(alias).states.get(KEY), 'open');
+  // handoff v2.2: an alias typed in another letter case is refused and reads nothing, so no exception applies.
   assert.deepEqual(contests(alias).excepted, []);
   assert.equal(contests(run).states.get(KEY), 'open');
   const root = join(run, '..', '..', '..');
   const r = spawnSync(process.execPath, [SCRIPT, '--applied', alias], { encoding: 'utf8' });
-  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /ERROR wrong letter case/);
   assert.doesNotMatch(r.stdout, /CACHE WARMUP\//);
-  assert.equal(exceptionsFor(root, ALIAS).line, 'exceptions on file: 1');
-  assert.equal(exceptionsFor(root, NAME).line, 'exceptions on file: 1');
+  assert.deepEqual(exceptionsFor(root, ALIAS), { code: 2, line: 'ERROR wrong letter case' });
+  // The planted line names the alias, so the exact folder name counts none.
+  assert.equal(exceptionsFor(root, NAME).line, 'exceptions on file: 0');
 });
