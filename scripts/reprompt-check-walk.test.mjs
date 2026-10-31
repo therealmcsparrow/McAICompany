@@ -1,4 +1,4 @@
-// Regression tests for reprompt v2.2, T3: Walk less keeps only the active plugin versions, for snap and reply alike.
+// Regression tests for reprompt v2.2: Walk less keeps only the active plugin versions, for snap and reply alike.
 // Suspected Module: scripts/reprompt-check.mjs (watchSet, snap, reply, run).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -73,8 +73,8 @@ function project({ installed = 'ok', inactive = 40 } = {}) {
   fill(v.old, inactive);
   fill(v.active, 5);
   fill(v.newer, inactive);
-  fill(path.join(plugins, 'marketplaces', 'mkt'), inactive);
-  fill(path.join(plugins, 'temp_git_123_abc'), inactive);
+  fill(path.join(plugins, 'marketplaces', 'mkt'), 5);
+  fill(path.join(plugins, 'temp_git_123_abc'), 5);
   const record = { version: 2, plugins: { 'plug@mkt': [{ scope: 'user', installPath: v.active, version: '2.0.0' }] } };
   if (installed === 'ok') fs.writeFileSync(path.join(plugins, 'installed_plugins.json'), JSON.stringify(record));
   else if (installed === 'garbage') fs.writeFileSync(path.join(plugins, 'installed_plugins.json'), '{not json');
@@ -139,8 +139,8 @@ test('walk less keeps only active plugin versions and reply uses the same watch 
   assert.ok(under(keys, p.v.active).length >= 5, 'the installed version is walked');
   assert.equal(under(keys, p.v.old).length, 0);
   assert.equal(under(keys, p.v.newer).length, 0);
-  assert.equal(under(keys, path.join(p.plugins, 'marketplaces')).length, 0);
-  assert.equal(under(keys, path.join(p.plugins, 'temp_git_123_abc')).length, 0);
+  assert.ok(under(keys, path.join(p.plugins, 'marketplaces')).length >= 5, 'marketplaces stays watched');
+  assert.ok(under(keys, path.join(p.plugins, 'temp_git_123_abc')).length >= 5, 'other folders under plugins stay watched');
   assert.ok(keys.includes(slash(path.join(p.plugins, 'installed_plugins.json'))), 'installed_plugins.json stays watched');
   assert.ok(keys.includes(slash(path.join(p.plugins, 'known_marketplaces.json'))), 'known_marketplaces.json stays watched');
 
@@ -150,7 +150,6 @@ test('walk less keeps only active plugin versions and reply uses the same watch 
   put(path.join(p.dir, 'prompt.md'), PROMPT);
   put(path.join(p.v.old, 'file-0.js'), '// changed in an inactive version\n');
   put(path.join(p.v.newer, 'extra.js'), '// new file in an inactive version\n');
-  put(path.join(p.plugins, 'temp_git_123_abc', 'x.js'), '// clone moved\n');
   const r = call(p, ['reply', SLUG, '01', s.json.snap, '1'], lim(limit));
   assert.equal(r.code, 0, r.out);
   assert.equal(r.json.tree, 'ok');
@@ -193,7 +192,7 @@ test('walk less: only absolute folders inside plugins/cache count; others are no
   assert.equal(doc.plugins.length, 1, JSON.stringify(doc.plugins));
   const keys = watchKeys(p);
   assert.equal(under(keys, p.v.old).length, 0);
-  assert.equal(under(keys, inMarket).length, 0);
+  assert.ok(under(keys, inMarket).length > 0, 'marketplaces is watched on its own, not as an install path');
   assert.equal(under(keys, outside).length, 0);
 });
 
@@ -207,7 +206,7 @@ test('walk less: every scope and plugin is kept, deduplicated and sorted', () =>
     },
   };
   fs.writeFileSync(path.join(p.plugins, 'installed_plugins.json'), JSON.stringify(record));
-  const limit = referenceEntries(p) - 50;
+  const limit = referenceEntries(p) - 20;
   const s = call(p, ['snap', SLUG, 'walk-less'], lim(limit));
   assert.equal(s.code, 0, s.out);
   const doc = readTree(p);
