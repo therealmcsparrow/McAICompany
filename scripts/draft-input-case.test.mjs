@@ -47,6 +47,15 @@ describe('take', () => {
     assert.deepEqual(tree(root), before);
   });
 
+  test('take of a typed .Company or WORK prefix is refused wrong letter case', () => {
+    const root = fixture({ [`.company/work/${DISK}/grill.md`]: BRIEF });
+    const before = tree(root);
+    for (const pre of ['.Company/work/', '.company/WORK/', '.COMPANY/Work/']) {
+      wrong(take(root, `${pre}${DISK}/grill.md`, 'to-spec'));
+    }
+    assert.deepEqual(tree(root), before);
+  });
+
   test('an exact draft file is taken: slug and input lines name the folder as on disk', () => {
     const root = fixture({ [`.company/work/${DISK}/plan.md`]: PLAN });
     const r = take(root, `.company/work/${DISK}/plan.md`, 'feature');

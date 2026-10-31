@@ -191,7 +191,9 @@ const OUTPUT = { grill: 'grill.md', 'to-spec': 'spec.md', 'to-tickets': 'plan.md
 function checkPath(text) {
   const p = text.replaceAll('\\', '/');
   if (!p.startsWith(WORK_PREFIX)) {
-    return p.slice(0, WORK_PREFIX.length).toLowerCase() === WORK_PREFIX ? { ok: false, reason: 'bad character' } : normalizePath(p);
+    // ASCII-only fold: it only picks the refusal words and never grants access.
+    if (p.slice(0, WORK_PREFIX.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_PREFIX) throw new Refused('wrong letter case');
+    return normalizePath(p);
   }
   if (p.length > MAX_WORK_PATH) return { ok: false, reason: 'too long' };
   const cut = p.indexOf('/', WORK_PREFIX.length);
