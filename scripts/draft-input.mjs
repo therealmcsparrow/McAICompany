@@ -181,11 +181,9 @@ function checkArgs(args) {
   }
 }
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const WORK_PREFIX = '.company/work/';
 const MAX_WORK_PATH = 400;
 const DRAFT_FILE = /^(?:grill|spec|plan)\.md$/;
-const LEGACY_BUILD = /^[a-z0-9][a-z0-9-]{0,57}-build$/;
 const DRAFT_NAMES = new Set(['grill.md', 'spec.md', 'plan.md']);
 const OUTPUT = { grill: 'grill.md', 'to-spec': 'spec.md', 'to-tickets': 'plan.md' };
 
@@ -271,11 +269,11 @@ function legacyNames(slug) {
   const b = cutSlug(slug);
   const names = [slug];
   for (let n = 2; n <= 9; n++) names.push(`${b}-${n}`);
-  return names.filter((c) => SLUG.test(c));
+  return names.filter((c) => isLegacySlug(c));
 }
 
 function pickFree(realRoot, slug, forWhat) {
-  if (!SLUG.test(slug)) throw new Refused('bad slug');
+  if (!isLegacySlug(slug)) throw new Refused('bad slug');
   const found = legacyNames(slug).find((c) => isFree(realRoot, c, forWhat));
   if (!found) throw new Refused('no free slug');
   return found;
@@ -430,7 +428,7 @@ function dropTopic(root, forWhat) {
   }
 }
 
-const isBuildName = (name) => LEGACY_BUILD.test(name) || parseName(name)?.suffix === 'Build';
+const isBuildName = (name) => (isLegacySlug(name) && name.endsWith('-build')) || parseName(name)?.suffix === 'Build';
 
 function take(args, root, now) {
   const { rest, forWhat } = parseFor(args);
