@@ -36,6 +36,13 @@ test('ledger exit 4 routes to one fresh check Step, never a Fix round', () => {
   has(ref, '## Context readings', 'ledger agent-ctx', 'lead-handover ctx', 'measure');
 });
 
+test('check Step rules follow plan R-8 and R-17, Fix group has a Role side', () => {
+  const s = ref.slice(ref.indexOf('## Ledger exit 4'), ref.indexOf('## Step groups'));
+  has(s, "the over-cap Handoff plus that Step's original inputs", 'check and finish Step <NN> (over cap): confirm or correct each Did, Decisions and Blocking line', 'continue as is, split, stop', 'No third Step');
+  has(s, 'The task stays started (no new `start`)', '`Worktree:`', 'may change code inside `Files:`', 'test-first', 'not `plan-tasks done`');
+  has(ref.slice(ref.indexOf('## Step groups')), 'fix only the rows listed in <group path>', 'fixes only those `<handoff>:<line>` rows', "owns the group's paths");
+});
+
 test('one Step per review or Fix group through step-split, without --risk', () => {
   has(line(pipeline, '- **One Step per review or Fix group'), 'step-split', 'dispatch-prompt', 'v4.4', 'references/lead-handover.md');
   const s = ref.slice(ref.indexOf('## Step groups'));
