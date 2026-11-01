@@ -317,7 +317,7 @@ function walk(dir) {
 }
 
 // A line may name SendMessage only to forbid it.
-const forbids = (line) => /\b(never|not|refused)\b/i.test(line);
+const forbids = (line) => /\b(never|refused|do not|don't|must not|forbidden)\b/i.test(line);
 function sendMessageOffenders(files) {
   const bad = [];
   for (const file of files) {
@@ -331,8 +331,8 @@ describe('R-21: SendMessage appears in skills and agents only as a prohibition',
   test('the detector flags an instruction and passes a prohibition', () => {
     const sb = sandbox();
     const a = path.join(sb.dir, 'a.md');
-    fs.writeFileSync(a, 'Use SendMessage to answer the Step.\nNever SendMessage a Step.\n');
-    assert.deepEqual(sendMessageOffenders([a]).map((x) => x.split(':').pop()), ['1']);
+    fs.writeFileSync(a, 'Use SendMessage to answer the Step.\nNever SendMessage a Step.\nUse SendMessage, not email.\n');
+    assert.deepEqual(sendMessageOffenders([a]).map((x) => x.split(':').pop()), ['1', '3']);
   });
 
   test('no file under skills/ or agents/ tells anyone to use SendMessage', () => {
