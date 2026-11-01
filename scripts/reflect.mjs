@@ -249,7 +249,7 @@ function ledgerReport(slug) {
 
 // An absolute path may reach the run folder through a symlinked parent (macOS /var -> /private/var); compare real paths.
 function realOr(p) {
-  try { return fs.realpathSync(p); } catch { return p; }
+  try { return fs.realpathSync(p); } catch { throw new Refusal('file must be in the run folder'); }
 }
 
 function resolveStepFile(dir, file) {
@@ -267,7 +267,11 @@ function resolveStepFile(dir, file) {
     }
     const parts = path.relative(path.join(process.cwd(), '.company', 'work'), abs).split(path.sep);
     if (parts[0] !== '..' && !path.isAbsolute(parts[0])) {
+      // path.relative folds with toLowerCase on win32 (U+212A becomes k), so inside means nothing until the typed spelling is exact.
+      if (top[0] !== '.company' || top[1] !== 'work') throw new Refusal('file must be in the run folder');
       try {
+        // The slug segment must be listed as typed; 'missing' (a look-alike such as U+212A) is refused.
+        if (exactWorkPath({ fs, path }, process.cwd(), parts.slice(0, 1)) !== 'exact') throw new Refusal('file must be in the run folder');
         exactWorkPath({ fs, path }, process.cwd(), parts);
       } catch (error) {
         if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);

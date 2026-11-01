@@ -80,6 +80,30 @@ describe('reflect', () => {
     }
   });
 
+  test('a U+212A look-alike in the work segment or the slug is refused, nothing is read', () => {
+    const K = 'K';
+    const root = fixture({ [`.company/work/2026-10-31 09.15 - Kelvin Work/01-qa.md`]: STEP });
+    const slug = '2026-10-31 09.15 - Kelvin Work';
+    const lookalike = '2026-10-31 09.15 - Kelvin Wor' + K;
+    const cases = [
+      [slug, `.company/wor${K}/${slug}/01-qa.md`],
+      [slug, `.company/work/${lookalike}/01-qa.md`],
+      [slug, path.join(root, '.company', `wor${K}`, slug, '01-qa.md')],
+      [slug, path.join(root, '.company', 'work', lookalike, '01-qa.md')],
+    ];
+    for (const [s, file] of cases) {
+      const r = run(root, 'step', s, file, '--json');
+      assert.equal(r.code, 2, `${file}: ${r.all}`);
+      assert.ok(r.out.startsWith('refused: '), `${file}: ${r.out}`);
+    }
+  });
+
+  test('an ASCII-case work segment keeps the wrong letter case words', () => {
+    const root = fixture(files());
+    const r = run(root, 'step', DISK, `.company/WORK/${DISK}/01-qa.md`, '--json');
+    assert.equal(r.out, `refused: ${WRONG}\n`);
+  });
+
   test('the exact run folder is reflected as before', () => {
     const root = fixture(files());
     const r = run(root, 'retro', DISK, '--json');
