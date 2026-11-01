@@ -213,6 +213,33 @@ test('a poll still running at the next 10 s mark starts no second poll', async (
   expect(keys.length).toBeLessThanOrEqual(3)
 })
 
+test('the counts come from state: a fresh mount draws them with no new call', async ($, on) => {
+  const w = makeWorld()
+  w.agents = running(1)
+  const clock = await boot($, on, w)
+  await clock.advance(10_000)
+  const agentCalls = w.agentCalls.length
+  const leadCalls = w.leadCalls.length
+  const first = await rows($)
+  const second = await rows($)
+  expect(second).toEqual(first)
+  expect(first[0]).toBe('Lead ctx 42.0k')
+  expect(first.some(r => r.endsWith('ctx 90.0k near cap'))).toBe(true)
+  expect(w.agentCalls.length).toBe(agentCalls)
+  expect(w.leadCalls.length).toBe(leadCalls)
+})
+
+test('a failed Lead read is tried again on the next tick', async ($, on) => {
+  const w = makeWorld()
+  w.leadAnswer = fail
+  const clock = await boot($, on, w)
+  const before = w.leadCalls.length
+  w.leadAnswer = ok(JSON.stringify({ v: 1, ctx: 42000, peak: 50000, at: '2026-10-26T10:05:00Z' }))
+  await clock.advance(2000)
+  expect(w.leadCalls.length).toBeGreaterThan(before)
+  expect((await rows($))[0]).toBe('Lead ctx 42.0k')
+})
+
 test('the status line is unchanged by the ctx rows', async ($, on) => {
   const w = makeWorld()
   w.agents = running(1)

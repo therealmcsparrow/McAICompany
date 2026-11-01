@@ -20,7 +20,7 @@ v1.6 (task context-cap-enforcement, additive): the Fresh Step mod (`mods/fresh-s
 
 ## Shape
 - One hooks module for the plugin; one file per mod: `mods/savvy.tsx`, `mods/cache-tax.tsx`, `mods/reflect.tsx`, `mods/blast-radius.ts`, `mods/plan-gate.ts` (v1.3), `mods/fresh-step.ts` (v1.6); shared code in `mods/shared/*.ts` (incl. `status.ts`, the status composer); pure logic (parsers, formatters, the status line builder, the git-commit detector, the cache clock, JSON guards, the Lesson text rule `lesson-text.mjs`, the progress bars `bars.mjs` (v1.1), the context rows `ctx-row.mjs` (v1.6)) in `mods/lib/*.mjs` with no `$`, no Node import and no npm package, so `npm test` covers it. The write gate is `mods/reprompt-gate.ts` with `mods/lib/reprompt-gate.mjs`; M6's logic is `mods/lib/fresh-step.mjs`.
-- `types/index.d.ts` declares `interface PluginState { aico: … }`; `plugin.json` names it under `"types"`. State keys (all `Shaped<…>`, shape tag `v1`): `settings`, `run`, `agents` (a family keyed by `agentId`), `cost`, `cacheClock`, `reflect`, `blast`. The status parts are not a state key (see "Status line").
+- `types/index.d.ts` declares `interface PluginState { aico: … }`; `plugin.json` names it under `"types"`. State keys (all `Shaped<…>`, shape tag `v1`): `settings`, `run`, `agents` (a family keyed by `agentId`), `cost`, `cacheClock`, `reflect`, `blast`, `ctx` (v1.6, the Savvy context counts: `lead` and `agents[{id, ctx}]`, int or null). The status parts are not a state key (see "Status line").
 - No `import()`, no module-level state the views draw from (a reload loses it), no `$.fs.write`, no network. Module-level bookkeeping that no view draws from is allowed: the script caller's availability (`run-script.ts`) and the status composer's parts (`status.ts`).
 - Validator rules (SP-M1, Claude Code 2.1.310): `$` is passed only to functions declared at the top level of a module file (or imported from the mod's own files), never to a closure declared inside `register`; keep `register` thin. `$.ui.invalidate('ui.render')` takes the event name and is called directly, never bound or optional-chained. `$.plugin.root` is a string property; `$.session.root()` is a call. `update` works only on an atom declared in the same file.
 - Surfaces: views draw on `terminal` and `desktop`; on `vscode` and `mobile` every `ui.render` hook returns `next(e)`. The Blast Radius gate is not a view and acts on every surface.
@@ -32,8 +32,8 @@ v1.6 (task context-cap-enforcement, additive): the Fresh Step mod (`mods/fresh-s
 | Resolved settings (`aico-settings` v1.1 `mods`, `roles.<role>.name`) | `settings.mjs get` | all |
 | Run view (`run-state` v1) | `run-state.mjs active --json` | Savvy, Reflect, Blast Radius (tier), Cache Tax (active run), Fresh Step (own call, `slug` only) |
 | Ledger (`token-ledger` v1.1) | `ledger.mjs report <run> --json --live` | Cache Tax, Reflect retrospective |
-| Subagent context (`token-ledger` v1.8, v1.6) | `ledger.mjs agent-ctx <ids> --json` | Savvy |
-| Lead context (`lead-handoff` v1.6, v1.6) | `lead-handover.mjs ctx '<slug>' --json` | Savvy |
+| Subagent context (`token-ledger` v1.8, since aico-mods v1.6) | `ledger.mjs agent-ctx <ids> --json` | Savvy |
+| Lead context (`lead-handoff` v1.6, since aico-mods v1.6) | `lead-handover.mjs ctx '<slug>' --json` | Savvy |
 | The plugin's own `.claude-plugin/plugin.json` (`version` only, via `$.fs`, regular file ≤ 64 KiB) | `mods/shared/shell.ts` → `parseVersion` (`mods/lib/version.mjs`) | status `version` part, ready toast |
 | Handoffs of the active run | `reflect.mjs` (below), `run-state.mjs` | Reflect, Savvy |
 | Touched paths, tier, depth (`review-depth` v1) | `review-depth.mjs … --json` | Blast Radius |
@@ -193,7 +193,7 @@ Steps are never resumed (pipeline §2, `docs/adr/0054-steps-never-resumed-hook.m
 - **Shared state.** M6 has none: the give-up state of `run-script.ts` (three failures with no success) belongs to the other mods and never reaches M6, so failures elsewhere cannot lock or unlock it. Each judged event spawns one run-state process.
 - "A run is active" is `run-state active`, which keeps an unended run active for 12 h after its last activity; `run-state end` clears it.
 - The model sees a refusal wrapped by the engine: `Not sent: a plugin hook refused it (<reason>).` for a send, `a plugin declined the resume: <reason>` for a resume. Hook reasons stay unwrapped.
-- Tests: `mods/test/fresh-step.test.tsx` (both surfaces, every step of the order, every failure) and `scripts/fresh-step-lib.test.mjs` (`npm test`, hostile cases first, the registration order). The synchronous `TypeError` of step 3 cannot be produced in the test kit (it answers a missing process as a refused call); step 3 is covered by reading the code.
+- Tests: `mods/test/fresh-step.test.tsx` (both surfaces, every step of the order, every failure) and `scripts/fresh-step-lib.test.mjs` (`npm test`, hostile cases first, the registration order). Step 3 (the synchronous `TypeError` at the call) is tested by calling the exported `runStateVerdict` with a fake `$` that has no `process` key.
 
 ## Tokens (AC37)
 No mod adds a system-prompt section, a context block, a `$.session.append` row, a `$.prompt.submit` or a dispatch. The only model call is Reflect `model` mode (off by default, user level only), ledgered. The one text a mod puts before the model is a Blast Radius refusal or ask reason (≤ 600 characters), which AC48 requires.

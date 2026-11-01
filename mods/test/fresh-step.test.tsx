@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { resetScriptCaller } from '../shared/run-script'
+import { runStateVerdict } from '../fresh-step'
+import { resetScriptCaller, runScript } from '../shared/run-script'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const ROOT = '/work'
@@ -141,11 +142,64 @@ for (const surface of SURFACES) {
   })
 }
 
+// Three timed-out calls through the shared caller, from another mod's script, until it gives up.
+async function breakSharedCaller() {
+  resetScriptCaller()
+  let processCalls = 0
+  const other = {
+    session: { root: async () => ROOT },
+    plugin: { root: '/plugin' },
+    clock: { sleep: (ms: number) => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))) },
+    process: { run: () => (processCalls++, new Promise(() => undefined)) },
+  }
+  const guard = (value: unknown) => value
+  for (let i = 0; i < 3; i++) expect(await runScript(other as never, 'ledger', ['report', 'x'], 1000, guard)).toEqual({ ok: false, reason: 'timeout' })
+  expect(await runScript(other as never, 'ledger', ['report', 'x'], 1000, guard)).toEqual({ ok: false, reason: 'unavailable' })
+  expect(processCalls).toBe(3)
+}
+
 test('timed-out script calls elsewhere never change the answer of this mod', async ($, on) => {
   const t = await boot($, on, 'terminal')
-  resetScriptCaller()
+  await breakSharedCaller()
+  t.calls.length = 0
   const r = await t.model()
   expect(r.isDelivered).toBe(false)
   expect(r.reason).toBe(REASON)
   expect(t.calls.length).toBe(1)
+})
+
+test('the same given-up shared caller still delivers when no run is active', async ($, on) => {
+  const t = await boot($, on, 'terminal', { answer: { exitCode: 0, stdout: IDLE } })
+  await breakSharedCaller()
+  t.calls.length = 0
+  expect((await t.model()).isDelivered).toBe(true)
+  expect((await t.resume()).agentId).toBe('a1')
+  expect(t.calls.length).toBe(2)
+})
+
+test('a surface where the process call throws a TypeError at the call passes', async () => {
+  const seen: string[] = []
+  const $ = {
+    session: { root: async () => ROOT },
+    fs: { stat: async (path: string) => (seen.push(path), DIR) },
+    plugin: { root: '/plugin' },
+    clock: { sleep: () => new Promise(() => undefined) },
+  }
+  expect(await runStateVerdict($ as never)).toBe('pass')
+  expect(seen).toEqual([`${ROOT}/.company/work`])
+})
+
+test('a non-TypeError throw at the process call is unreadable', async () => {
+  const $ = {
+    session: { root: async () => ROOT },
+    fs: { stat: async () => DIR },
+    plugin: { root: '/plugin' },
+    clock: { sleep: () => new Promise(() => undefined) },
+    process: {
+      run: () => {
+        throw new Error('boom')
+      },
+    },
+  }
+  expect(await runStateVerdict($ as never)).toBe('unreadable')
 })

@@ -22,7 +22,7 @@ async function hasWorkFolder($: EngineInterface, root: string): Promise<boolean>
 // `node <plugin>/scripts/run-state.mjs active --json`, no shell, its own call (not the shared script caller, whose
 // give-up state belongs to the other mods). A surface without `$.process` throws a TypeError at the call itself: 'pass'.
 // Every other failure is 'unreadable'.
-async function runStateVerdict($: EngineInterface): Promise<Verdict> {
+export async function runStateVerdict($: EngineInterface): Promise<Verdict> {
   const stop = new AbortController()
   try {
     const cwd = await $.session.root()

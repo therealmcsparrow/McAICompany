@@ -9,7 +9,7 @@ import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
 import { setStatusPart } from './shared/status'
 import { isViewSurface } from './shared/surface'
-import type { AgentRow, RunState, RunView, SettingsState } from '../types'
+import type { AgentRow, CtxState, RunState, RunView, SettingsState } from '../types'
 
 const PANE = 'aico-run'
 const COMMAND = 'aico-run'
@@ -20,15 +20,15 @@ const SHOWN_AGENTS = 10
 const DEFAULT_WIDTH = 39
 const PROMPT_HEAD = 65536
 
-type CtxState = { lead: number | null; agents: { id: string; ctx: number | null }[] }
-
 // The validator reads a state key from an atom declared in the file that uses it.
 const run = atom({ plugin: 'aico', key: 'run' } as const, { known: true, slug: null, view: null } as RunState, { shape: 'v1' })
 const EMPTY_AGENT: AgentRow = { step: null, role: null, name: null, baseCommit: null, tier: null, startedMs: 0, isRunning: false }
 const agents = atom({ plugin: 'aico', key: 'agents' } as const, EMPTY_AGENT, { shape: 'v1' })
 
-// Timers and bookkeeping; the context counts are the only values a view draws from here, and they are plain numbers.
-let held: CtxState = { lead: null, agents: [] }
+const EMPTY_CTX: CtxState = { lead: null, agents: [] }
+const ctx = atom({ plugin: 'aico', key: 'ctx' } as const, EMPTY_CTX, { shape: 'v1' })
+
+// Timers and bookkeeping only; no view draws from these.
 let timer: { cancel: () => unknown } | undefined
 let isForced = false
 let lastSignature = ''
@@ -187,7 +187,7 @@ async function gather($: EngineInterface): Promise<{ settings: SettingsState; st
     const row = await read($, memberOf(agents, { requestId: info.id }))
     entries.push({ id: String(info.id), type: String(info.type), row })
   }
-  return { settings, state, entries, nowMs, counts: held }
+  return { settings, state, entries, nowMs, counts: await read($, ctx) }
 }
 
 async function drawPane($: EngineInterface, e: RenderInput) {
@@ -231,10 +231,10 @@ async function signature($: EngineInterface, root: string, slug: string): Promis
 async function refreshLead($: EngineInterface, root: string, slug: string): Promise<void> {
   const key = `${slug}|${await stamp($, `${root}/.company/work/${slug}/lead-context.json`)}`
   if (key === lastLeadKey) return
-  lastLeadKey = key
   const out = await runScript($, 'lead-handover', ['ctx', slug, '--json'], TIMEOUT_MS.leadCtx, guardLeadCtx)
+  if (out.ok) lastLeadKey = key
   const lead = out.ok ? out.value.ctx : null
-  held = { ...held, lead }
+  await update($, ctx, prev => ({ ...prev, lead }))
 }
 
 // Running subagents' context in chunks, one call after another; a poll still running skips the next one.
@@ -251,7 +251,7 @@ async function pollAgents($: EngineInterface): Promise<void> {
       const out = await runScript($, 'ledger', ['agent-ctx', ...chunk, '--json'], TIMEOUT_MS.agentCtx, guardAgentCtx)
       found.push(...pairUp(chunk, out.ok ? out.value : null))
     }
-    held = { ...held, agents: found }
+    await update($, ctx, prev => ({ ...prev, agents: found }))
     await $.ui.invalidate('ui.render')
   } catch {
     // The rows keep their last counts; the next poll tries again.
@@ -355,6 +355,14 @@ async function begin($: EngineInterface): Promise<void> {
   }
 }
 
+async function resetCounts($: EngineInterface): Promise<void> {
+  try {
+    await update($, ctx, () => EMPTY_CTX)
+  } catch {
+    // The counts stay as they were; the next poll replaces them.
+  }
+}
+
 async function afterTurnStart($: EngineInterface): Promise<void> {
   try {
     await $.clock.sleep(1500)
@@ -416,7 +424,7 @@ export function registerSavvy(on: On): void {
     lastSignature = ''
     lastPollMs = 0
     lastLeadKey = ''
-    held = { lead: null, agents: [] }
+    void resetCounts($)
     void begin($)
     return next(e)
   })
