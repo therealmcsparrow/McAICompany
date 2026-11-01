@@ -40,7 +40,10 @@ test('check Step rules follow plan R-8 and R-17, Fix group has a Role side', () 
   const s = ref.slice(ref.indexOf('## Ledger exit 4'), ref.indexOf('## Step groups'));
   has(s, "the over-cap Handoff plus that Step's original inputs", 'check and finish Step <NN> (over cap): confirm or correct each Did, Decisions and Blocking line', 'continue as is, split, stop', 'No third Step');
   has(s, 'The task stays started (no new `start`)', '`Worktree:`', 'may change code inside `Files:`', 'test-first', 'not `plan-tasks done`');
-  has(ref.slice(ref.indexOf('## Step groups')), 'fix only the rows listed in <group path>', 'fixes only those `<handoff>:<line>` rows', "owns the group's paths");
+  has(ref.slice(ref.indexOf('## Step groups')), 'fix only the rows listed in <group path>', 'fixes only those `<handoff>:<line>` rows');
+  const role = line(ref, '- Fix round without a parallel record');
+  has(role, "is the owner of the group's areas in the Architect's Module map", 'same source as `references/parallel.md`', 'Several owners, no owner, or the `unplaced` group', 'whose earlier Handoff in this run lists the row\'s path in `files-touched`', 'still none or several → an ask form, never a pick from row text');
+  hasNot(role, "owns the group's paths");
 });
 
 test('one Step per review or Fix group through step-split, without --risk', () => {
