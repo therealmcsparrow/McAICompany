@@ -241,8 +241,9 @@ function blockingLines(text) {
 export function parseRow(text) {
   const m = ROW.exec(text);
   if (!m) return null;
-  const rest = m[2];
-  if (rest[0] === ' ') return null;
+  if (m[2][0] === ' ') return null;
+  // A path ends within MAX_PATH characters of its start, so only that window is searched.
+  const rest = m[2].slice(0, MAX_PATH + 24);
   const colon = /:(\d+)/.exec(rest);
   const dash = rest.indexOf(' — ');
   const cuts = [colon ? colon.index : -1, dash].filter((n) => n >= 0);
@@ -268,8 +269,20 @@ function readHandoff(root, runDir, run, name) {
   const file = path.join(runDir, base);
   const st = stat(file);
   if (st === null) refuse('handoff not found');
-  if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_HANDOFF_BYTES) refuse('handoff is not a plain file within the size limit');
-  return { name: base, text: fs.readFileSync(file, 'utf8') };
+  const plain = (s) => !s.isSymbolicLink() && s.isFile() && s.nlink === 1 && s.size <= MAX_HANDOFF_BYTES;
+  if (!plain(st)) refuse('handoff is not a plain file within the size limit');
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const own = fs.fstatSync(fd);
+    if (!plain(own) || own.ino !== st.ino || own.dev !== st.dev) refuse('handoff is not a plain file within the size limit');
+    return { name: base, text: fs.readFileSync(fd, 'utf8') };
+  } catch (error) {
+    if (error instanceof Refused) throw error;
+    return refuse('handoff unreadable');
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
 }
 
 function fix(args, root) {
