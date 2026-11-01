@@ -228,17 +228,17 @@ describe('begin env warning', () => {
 
   test('another value, bad JSON and an oversize file still warn and never echo values', () => {
     const cases = [
-      { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '12345', TOKEN: 'sk-SECRET' } },
+      { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'zq-settings-val', TOKEN: 'sk-SECRET' } },
       'not json sk-SECRET',
       `{"pad":"${'x'.repeat(70 * 1024)}","env":{"CLAUDE_CODE_AUTO_COMPACT_WINDOW":"98500"}}`,
     ];
     for (const c of cases) {
       const fx = fixture();
       settings(fx, c);
-      const r = begin(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '77' });
+      const r = begin(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'zq-env-val' });
       assert.equal(r.code, 0);
       assert.equal(r.out, `begun\n${warn(path.join(fx.claudeDir, 'settings.json'))}\n`);
-      assert.ok(!r.out.includes('SECRET') && !r.out.includes('12345') && !r.out.includes('77'));
+      assert.ok(!r.out.includes('SECRET') && !r.out.includes('zq-settings-val') && !r.out.includes('zq-env-val'));
     }
   });
 
@@ -259,6 +259,19 @@ describe('read refuses what is not exactly the named file (proj.M-SEC7)', () => 
     const other = path.join(fx.base, 'other.json');
     fs.writeFileSync(other, body);
     fs.linkSync(other, fx.file);
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+  });
+
+  test('a symlinked reading file pointing outside the run is unknown', (t) => {
+    const fx = fixture();
+    const other = path.join(fx.base, 'other.json');
+    fs.writeFileSync(other, body);
+    try {
+      fs.symlinkSync(other, fx.file);
+    } catch {
+      t.skip('symlinks not available');
+      return;
+    }
     assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
   });
 

@@ -214,6 +214,21 @@ test('hostile: show refuses a hard-linked split file (proj.M-SEC7)', () => {
   assert.match(r.out, /refused: split file is not a plain file/);
 });
 
+test('hostile: show refuses a symlinked split file (proj.M-SEC7)', (t) => {
+  const p = project();
+  fs.mkdirSync(p.split('f1'), { recursive: true });
+  fs.writeFileSync(path.join(p.d, 'outside.txt'), 'a\nb\n');
+  try {
+    fs.symlinkSync(path.join(p.d, 'outside.txt'), path.join(p.split('f1'), 'g1.txt'));
+  } catch {
+    t.skip('symlinks not available');
+    return;
+  }
+  const r = main(['show', RUN, 'f1'], { root: p.d });
+  assert.equal(r.code, 2);
+  assert.match(r.out, /refused: split file is not a plain file/);
+});
+
 test('hostile: show refuses a hard-linked architect file', () => {
   const p = project();
   fs.mkdirSync(p.split('f1'), { recursive: true });
