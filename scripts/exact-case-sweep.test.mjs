@@ -36,9 +36,12 @@ const BANNED = /\b(sameName|CASE_FOLD|CI_FS|sameReal|FOLD)\b/;
 // Allow-list of the folds that remain: [file, snippet in the line, reason]. A fold is allowed only if it never
 // grants access to a work path: it picks a refusal word, or it works on a non-work path or a storage key.
 const ALLOW = [
-  ['scripts/draft-input.mjs', ".toLowerCase() === WORK_PREFIX", 'only turns a case variant of the work prefix into a refusal (bad character)'],
+  ['scripts/draft-input.mjs', ".replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_PREFIX", 'ASCII fold that only picks the refusal wording (wrong letter case); never grants access'],
   ['scripts/draft-input.mjs', '/^GIT_/i', 'environment variable names'],
   ['scripts/grill.mjs', '/^grill\\.md$/i', 'recognises a grill.md variant so readGrill refuses it with wrong letter case'],
+  ['scripts/grill.mjs', ".replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_PREFIX", 'ASCII fold that only picks the refusal wording (wrong letter case); never grants access'],
+  ['scripts/spec-check.mjs', ".replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_DIR", 'ASCII fold that only picks the refusal wording (wrong letter case); never grants access'],
+  ['scripts/reflect.mjs', 'const ascii = x => x.replace(/[A-Z]/g, c => c.toLowerCase());', 'ASCII fold helper that only picks the refusal wording (wrong letter case); never grants access'],
   ['scripts/spec-check.mjs', 'EXTENSIONS.has(', 'file extension list'],
   ['scripts/ticket-approval.mjs', '/^(?:con|prn|aux|nul', 'Windows device names'],
   ['scripts/ticket-approval.mjs', 'return p.toLowerCase();', 'repo path key for ticket file lists, outside the work folder name rule'],
