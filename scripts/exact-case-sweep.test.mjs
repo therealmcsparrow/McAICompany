@@ -1,7 +1,7 @@
 // AC5 sweep for exact letter case of work paths (ADR 0053, work-folder-name v1.1).
 // Static scan of the real source files, no mocks. Fails on: a work-path case fold outside the allow-list,
 // an in-scope script that does not call the one shared `exactWorkPath`, a Contract without `wrong letter case`,
-// or ADR 0053 not `proposed`.
+// or ADR 0053 not `accepted (CEO, 2026-11-01)`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -178,10 +178,10 @@ test('AC5 every Contract of an in-scope script names `wrong letter case`', () =>
   assert.deepEqual(lacking, []);
 });
 
-test('AC5 ADR 0053 exists with status proposed', () => {
+test('AC5 ADR 0053 exists with status accepted', () => {
   const adr = read('docs/adr/0053-exact-letter-case-work-paths.md');
   assert.match(adr, /^# Exact letter case for work folder paths\r?$/m);
-  assert.match(adr, /^Status: proposed\r?$/m);
+  assert.match(adr, /^Status: accepted \(CEO, 2026-11-01\)\r?$/m);
 });
 
 test('AC5 the CHANGELOG Unreleased section has a Security entry naming the refusal', () => {
