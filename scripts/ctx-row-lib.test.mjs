@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { fmtCtx, ctxCell, leadRow, idChunks, pairUp, NEAR_CAP, OVER_CAP } from '../mods/lib/ctx-row.mjs';
+import { fmtCtx, ctxCell, leadRow, worstNote, idChunks, pairUp, NEAR_CAP, OVER_CAP } from '../mods/lib/ctx-row.mjs';
 import { guardAgentCtx, guardLeadCtx } from '../mods/lib/guard.mjs';
 
 const own = (name) => readFileSync(fileURLToPath(new URL(`../mods/lib/${name}`, import.meta.url)), 'utf8');
@@ -102,4 +102,13 @@ test('ctx-row.mjs imports only format.mjs and guard.mjs: no engine object, no No
   const imports = own('ctx-row.mjs').match(/^import .* from '.*';$/gm) ?? [];
   assert.deepEqual(imports, ["import { UNKNOWN } from './format.mjs';", "import { AGENT_ID, MAX_CTX } from './guard.mjs';"]);
   assert.doesNotMatch(own('ctx-row.mjs'), /\$\.|node:|require\(/);
+});
+
+test('worstNote: over cap beats near cap, nothing below the line, unknowns ignored', () => {
+  assert.equal(worstNote([40000, null, 'x']), '');
+  assert.equal(worstNote([85500]), '');
+  assert.equal(worstNote([85501, 1]), 'near cap');
+  assert.equal(worstNote([90000, 95001]), 'over cap');
+  assert.equal(worstNote([]), '');
+  assert.equal(worstNote('nope'), '');
 });

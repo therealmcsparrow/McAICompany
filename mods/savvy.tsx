@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
-import { ctxCell, idChunks, leadRow, pairUp } from './lib/ctx-row.mjs'
+import { ctxCell, idChunks, leadRow, pairUp, worstNote } from './lib/ctx-row.mjs'
 import { guardAgentCtx, guardLeadCtx, guardRunActive, parseOutputText } from './lib/guard.mjs'
 import { progressRows } from './lib/bars.mjs'
 import { fit, fmtDuration, fmtMinutes, UNKNOWN } from './lib/format.mjs'
@@ -18,6 +18,7 @@ const POLL_MS = 10000
 const MAX_AGENTS = 40
 const SHOWN_AGENTS = 10
 const DEFAULT_WIDTH = 39
+const MIN_HEAD = 12
 const PROMPT_HEAD = 65536
 
 // The validator reads a state key from an atom declared in the file that uses it.
@@ -42,7 +43,7 @@ const TIER_LINE = /^Risk tier: (low|medium|high)$/m
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
 
 type Entry = { id: string; type: string; row: AgentRow }
-type AgentLine = { head: string; tail: string }
+type AgentLine = { head: string; units: string[] }
 type Model = {
   slug: string
   state: string
@@ -103,13 +104,16 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const elapsed = fmtDuration((isEnded && !Number.isNaN(endedMs) ? endedMs : nowMs) - startedMs)
 
   const lines: AgentLine[] = []
+  const counted: (number | null)[] = [counts.lead]
   let current: { step: string; role: string | null; name: string } | undefined
   for (const { id, type, row } of entries) {
     const role = roleOf(type, row)
     const name = shown(row.name, roles, role)
     const startedAt = row.startedMs > 0 ? fmtDuration(nowMs - row.startedMs) : UNKNOWN
     const found = counts.agents.find(one => one.id === id)
-    lines.push({ head: whoLabel(row.step, role, name), tail: `${startedAt} ${ctxCell(found === undefined ? null : found.ctx)}` })
+    const ctxValue = found === undefined ? null : found.ctx
+    counted.push(ctxValue)
+    lines.push({ head: whoLabel(row.step, role, name), units: [startedAt, ...splitCell(ctxCell(ctxValue))] })
     if (row.step !== null && (current === undefined || row.step > current.step)) current = { step: row.step, role, name }
   }
   if (current === undefined) {
@@ -123,9 +127,42 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const status = isEnded
     ? `ended ${view.outcome ?? UNKNOWN} ${minutes}`
     : view.state === 'running'
-      ? `W${wave} S${stepNumber} ${shortRole(current?.role ?? null)}${minutes}`
+      ? capped(worstNote(counted), `W${wave} S${stepNumber}`, `${shortRole(current?.role ?? null)}${minutes}`)
       : view.state
   return { slug, state: label, wave, step, round, gates, view, elapsed, agents: lines, lead, status }
+}
+
+// `ctx 90.0k near cap` as `ctx 90.0k` and `near cap`, so a narrow pane breaks between them and never inside the note.
+function splitCell(cell: string): string[] {
+  const at = cell.indexOf(' cap')
+  return at < 0 ? [cell] : [cell.slice(0, at - 5), cell.slice(at - 4)]
+}
+
+// With a note the status part is `W1 S3 near cap`; without one it is the usual form, byte for byte.
+function capped(note: string, front: string, rest: string): string {
+  return note === '' ? `${front} ${rest}` : `${front} ${note}`
+}
+
+function agentRows(one: AgentLine, width: number): string[] {
+  const tail = one.units.join(' ')
+  const room = Math.max(1, width - tail.length - 1)
+  if (room >= MIN_HEAD) return [`${fit(one.head, room)} ${tail}`]
+  // Narrow: the label on its own row, then the units packed whole into rows that fit.
+  return [fit(one.head, width), ...packUnits(one.units, width)]
+}
+
+function packUnits(units: string[], width: number): string[] {
+  const out: string[] = []
+  let line = ''
+  for (const unit of units) {
+    if (line !== '' && line.length + 1 + unit.length <= width) line += ` ${unit}`
+    else {
+      if (line !== '') out.push(line)
+      line = unit
+    }
+  }
+  if (line !== '') out.push(line)
+  return out
 }
 
 function labelled(label: string, value: string): string {
@@ -134,7 +171,7 @@ function labelled(label: string, value: string): string {
 
 function renderRows(model: Model, width: number): string[] {
   const rows: string[] = [
-    ...(model.lead === undefined ? [] : [model.lead]),
+    ...(model.lead === undefined ? [] : packUnits(['Lead', ...splitCell(model.lead.slice(5))], width)),
     labelled('Run', model.slug),
     labelled('State', model.state),
     labelled('Wave', model.wave),
@@ -149,8 +186,7 @@ function renderRows(model: Model, width: number): string[] {
   } else {
     rows.push(`Running subagents (${model.agents.length})`)
     for (const one of model.agents.slice(0, SHOWN_AGENTS)) {
-      const room = Math.max(1, width - one.tail.length - 1)
-      rows.push(`${fit(one.head, room)} ${one.tail}`)
+      rows.push(...agentRows(one, width))
     }
     if (model.agents.length > SHOWN_AGENTS) rows.push(`+${model.agents.length - SHOWN_AGENTS} more`)
   }

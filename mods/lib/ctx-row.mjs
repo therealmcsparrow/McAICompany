@@ -19,6 +19,18 @@ function capNote(n) {
   return '';
 }
 
+// The one note for the status part: `over cap` beats `near cap`; anything that is not a count is ignored.
+export function worstNote(counts) {
+  if (!Array.isArray(counts)) return '';
+  let note = '';
+  for (const n of counts) {
+    if (!Number.isInteger(n)) continue;
+    if (n > OVER_CAP) return 'over cap';
+    if (n > NEAR_CAP) note = 'near cap';
+  }
+  return note;
+}
+
 // `ctx 90.0k near cap`, or `ctx ?` for anything that is not a count.
 export function ctxCell(n) {
   const text = fmtCtx(n);

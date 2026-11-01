@@ -248,3 +248,44 @@ test('the status line is unchanged by the ctx rows', async ($, on) => {
   expect(w.statuses.filter(t => t !== undefined && t.includes('ctx'))).toEqual([])
   expect(w.statuses.some(t => t !== undefined && /^W1 S\? /.test(t))).toBe(true)
 })
+
+test('at 20 columns the cap note stays whole and no row is cut', async ($, on) => {
+  const w = makeWorld()
+  w.agents = running(1)
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 96000 }] }))
+  const clock = await boot($, on, w)
+  await clock.advance(10_000)
+  for (const width of [20, 24, 12]) {
+    const all = await rows($, width)
+    expect(all.some(r => r.includes('over cap'))).toBe(true)
+    expect(all.some(r => r.includes('ctx 96.0k'))).toBe(true)
+    expect(all.filter(r => r.includes('…') && /ctx|cap|over/.test(r))).toEqual([])
+  }
+})
+
+test('the savvy status part carries over cap, near cap or nothing', async ($, on) => {
+  const w = makeWorld()
+  w.agents = running(2)
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 90000 }, { agent: ids[1], ctx: 96000 }] }))
+  const clock = await boot($, on, w)
+  await clock.advance(10_000)
+  expect(w.statuses.some(t => t !== undefined && t.includes('over cap'))).toBe(true)
+  expect(w.statuses.some(t => t !== undefined && t.includes('near cap'))).toBe(false)
+})
+
+test('a low count leaves the status line as it was', async ($, on) => {
+  const w = makeWorld()
+  w.agents = running(1)
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 12000 }] }))
+  const clock = await boot($, on, w)
+  await clock.advance(10_000)
+  expect(w.statuses.filter(t => t !== undefined && t.includes('cap'))).toEqual([])
+})
+
+test('a Lead near cap with no agent in state shows near cap in the status part', async ($, on) => {
+  const w = makeWorld()
+  w.leadAnswer = ok(JSON.stringify({ v: 1, ctx: 90000, peak: 90000, at: '2026-10-26T10:05:00Z' }))
+  const clock = await boot($, on, w)
+  await clock.advance(10_000)
+  expect(w.statuses.some(t => t !== undefined && t.includes('near cap'))).toBe(true)
+})
