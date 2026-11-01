@@ -12,16 +12,22 @@ const LABEL_WORD = /\b(label|labels|option|options)\b/i;
 const CODE_WORD = /\b(letter|letters|number|numbers|id|ids|code|codes)\b/gi;
 const ORDER_WORD = /\b(first|before|prefix)\b/i;
 const BOLD_FIRST = /\*\*[A-Za-z0-9]\*\*\s+[A-Za-z]/;
+const CODE_SPAN = /`[^`]*`/g;
+const FORBIDS_CODE = /\bno\s+$/i;
 
 // Scan: a sentence that puts a letter, number, id or code before an option label.
+// Code spans are printed formats, not rule words, so they are blanked at their own
+// length and the 40-character window keeps its reach. "no <code>" forbids the code.
 function scanText(text) {
   const hits = [];
   text.split(/\r?\n/).forEach((line, i) => {
     for (const s of line.split(/(?<=[.!?])\s+/)) {
       let bad = BOLD_FIRST.test(s);
-      if (!bad && LABEL_WORD.test(s)) {
-        for (const m of s.matchAll(CODE_WORD)) {
-          const win = s.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
+      const words = s.replace(CODE_SPAN, (span) => ' '.repeat(span.length));
+      if (!bad && LABEL_WORD.test(words)) {
+        for (const m of words.matchAll(CODE_WORD)) {
+          if (FORBIDS_CODE.test(words.slice(0, m.index))) continue;
+          const win = words.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
           if (ORDER_WORD.test(win)) { bad = true; break; }
         }
       }
@@ -63,6 +69,15 @@ function toForm(cwd, depth) {
   if (depth >= 2) { flow(cwd, 'pick', 's', 'D'); flow(cwd, 'done', 's', 'to-spec'); flow(cwd, 'done', 's', 'to-tickets'); }
 }
 const FORMS = [['grill', 0], ['routes', 1], ['tickets', 2]];
+// Outside a software company, after Research: the form that holds Stop.
+function stopFormOptions() {
+  const c = tmp();
+  fs.mkdirSync(path.join(c, '.company'), { recursive: true });
+  fs.writeFileSync(path.join(c, '.company', 'project.md'), 'company_type: research\n');
+  toForm(c, 1);
+  flow(c, 'pick', 's', 'C'); flow(c, 'done', 's', 'research'); flow(c, 'done', 's', 'reprompt');
+  return opts(c, 's');
+}
 
 test('plain labels: scan flags the old sentence, spares a plain one', () => {
   const old = 'Build the form from those lines only, the label from the `route` lines below, the letter first.';
@@ -70,7 +85,22 @@ test('plain labels: scan flags the old sentence, spares a plain one', () => {
   assert.equal(scanText('Put the recommended one first.').length, 0);
 });
 
-test('plain labels: no form rule in skills/ puts a code before a label (T1, all hits listed)', () => {
+test('plain labels: scan spares a label word in a code span and a code the rule forbids', () => {
+  assert.equal(scanText('Keep the id from the first line (`company type: <id> (<label>)`).').length, 0);
+  assert.equal(scanText('Reply in lines, no IDs or bullets before a label: I: <idea>.').length, 0);
+});
+
+test('plain labels: a code span does not bring a far order word into the window', () => {
+  assert.equal(scanText(`The option letter \`${'x'.repeat(50)}\` comes first.`).length, 0);
+});
+
+test('plain labels: scan still flags a code-first rule beside a code span or a forbidden code', () => {
+  assert.ok(scanText('Each label comes from the `route` line, the number first.').length > 0);
+  assert.ok(scanText('Show no bullets, each label with its id before it.').length > 0);
+  assert.ok(scanText('**A** water cooler').length > 0);
+});
+
+test('plain labels: no form rule in skills/ puts a code before a label (all hits listed)', () => {
   const all = [];
   for (const f of walk(path.join(root, 'skills'))) {
     for (const h of scanText(fs.readFileSync(f, 'utf8'))) all.push(`${rel(f)}:${h.line} ${h.text}`);
@@ -93,7 +123,8 @@ test('plain labels: tickets and approval labels (AC3)', () => {
 
 test('plain labels: labels in each form are distinct, Stop and Park the idea included (AC7)', () => {
   const labels = routeLabels();
-  const forms = { stopForm: [['E', 'park-idea'], ['S', 'stop']] };
+  const forms = { stopForm: stopFormOptions() };
+  assert.deepEqual(forms.stopForm.map(([, r]) => r), ['park-idea', 'stop']);
   for (const [name, depth] of FORMS) { const c = tmp(); toForm(c, depth); forms[name] = opts(c, 's'); }
   for (const [name, list] of Object.entries(forms)) {
     const ls = list.map(([, r]) => { assert.ok(labels.has(r), `${name}: no label for ${r}`); return plain(labels.get(r)); });

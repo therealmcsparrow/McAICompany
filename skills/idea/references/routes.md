@@ -9,7 +9,7 @@ Load this file from the Playbook's Start step. The Playbook names the kind (`ide
 4. Show the grill form (Forms).
 
 ## Forms
-Every ask is an AskUserQuestion form with 2 to 4 options, the recommended one first, in plain text. The allowed picks come from `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" idea-flow options '<slug>'`: one `option <letter> <route>` line each, never from your own text. Build the form from those lines only, the label from the `route` lines below, the letter first. `pending <step>` or `ended` printed → no form.
+Every ask is an AskUserQuestion form with 2 to 4 options, the recommended one first, in plain text. The allowed picks come from `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" idea-flow options '<slug>'`: one `option <letter> <route>` line each, never from your own text. Build the form from those lines only. A label is the route's words alone: the text of its `route` line below, up to the first period; the rest of that line is the option description. Exactly one option carries "(Recommended)" and comes first, so you may reorder the option lines. Each letter stays with its route and is used only in `pick`. Labels in one form stay distinct, also after translation to the CEO's `Language:`. `pending <step>` or `ended` printed → no form.
 - The CEO's answer is a letter in the form. "Other" text, or anything that is not a letter you showed, is not a letter: ask again. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" idea-flow pick '<slug>' '<letter>'` with that one letter. `refused: not an allowed pick` → show it and ask again.
 - Route labels, in the CEO's `Language:`:
 - route `grilling`: Grilling (Recommended). Repo and web facts are looked up, the rest is asked.
