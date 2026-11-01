@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,26 +12,28 @@ const LABEL_WORD = /\b(label|labels|option|options)\b/i;
 const CODE_WORD = /\b(letter|letters|number|numbers|id|ids|code|codes)\b/gi;
 const ORDER_WORD = /\b(first|before|prefix)\b/i;
 const BOLD_FIRST = /\*\*[A-Za-z0-9]\*\*\s+[A-Za-z]/;
-const CODE_SPAN = /`[^`]*`/g;
-const FORBIDS_CODE = /\bno\s+$/i;
+
+// Sentences the scan hits that are no option form, by exact path and sentence:
+// a new or edited sentence fails closed.
+const KNOWN_NON_FORM = [
+  ['skills/help/SKILL.md', 'Keep the id from the first line (`company type: <id> (<label>)…`) and the `playbooks:` line (a comma list); list and explain only commands in `playbooks`.'],
+  ['skills/brainstorm/references/format-2.md', 'Reply for its Round: and Pass:, one item per line, text in your Language, labels in English, no IDs or bullets before a label: I: <idea> (0–3 lines), Risk: <biggest risk or cost> (exactly 1; optional in pass full), Q [blocking|nice-to-have]: <one sentence> | options: <a> / <b> | default: <a> | why: <reason, 10–120 characters> (0–2 lines, only when the answer changes the plan, never one already under Questions:), Re: @<role> on I-<round>.<n>: agree|challenge|build-on — <at most 25 words> (an ID Input: shows for that Role, never your own).'],
+];
+const isKnown = (file, sentence) => KNOWN_NON_FORM.some(([f, s]) => f === file && s === sentence);
 
 // Scan: a sentence that puts a letter, number, id or code before an option label.
-// Code spans are printed formats, not rule words, so they are blanked at their own
-// length and the 40-character window keeps its reach. "no <code>" forbids the code.
 function scanText(text) {
   const hits = [];
   text.split(/\r?\n/).forEach((line, i) => {
     for (const s of line.split(/(?<=[.!?])\s+/)) {
       let bad = BOLD_FIRST.test(s);
-      const words = s.replace(CODE_SPAN, (span) => ' '.repeat(span.length));
-      if (!bad && LABEL_WORD.test(words)) {
-        for (const m of words.matchAll(CODE_WORD)) {
-          if (FORBIDS_CODE.test(words.slice(0, m.index))) continue;
-          const win = words.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
+      if (!bad && LABEL_WORD.test(s)) {
+        for (const m of s.matchAll(CODE_WORD)) {
+          const win = s.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
           if (ORDER_WORD.test(win)) { bad = true; break; }
         }
       }
-      if (bad) hits.push({ line: i + 1, text: s.trim().slice(0, 120) });
+      if (bad) hits.push({ line: i + 1, text: s.trim() });
     }
   });
   return hits;
@@ -55,9 +57,12 @@ function routeLabels() {
 }
 const plain = (l) => l.replace(/\s*\(Recommended\)\s*/, '').trim();
 const formsRule = () => routesText.slice(routesText.indexOf('## Forms'), routesText.indexOf('## Inline steps'));
+const answerRule = () => formsRule().split('\n').find((l) => l.startsWith("- The CEO's answer"));
 
 const flow = (cwd, ...a) => main(a, cwd);
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'form-labels-'));
+const tmps = [];
+after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
+const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'form-labels-')); tmps.push(d); return d; };
 function opts(cwd, slug) {
   const r = flow(cwd, 'options', slug);
   return r.out.split('\n').filter((l) => l.startsWith('option ')).map((l) => l.split(' ').slice(1));
@@ -85,13 +90,18 @@ test('plain labels: scan flags the old sentence, spares a plain one', () => {
   assert.equal(scanText('Put the recommended one first.').length, 0);
 });
 
-test('plain labels: scan spares a label word in a code span and a code the rule forbids', () => {
-  assert.equal(scanText('Keep the id from the first line (`company type: <id> (<label>)`).').length, 0);
-  assert.equal(scanText('Reply in lines, no IDs or bullets before a label: I: <idea>.').length, 0);
+test('plain labels: an exception needs the exact path and the exact sentence', () => {
+  for (const [file, sentence] of KNOWN_NON_FORM) {
+    assert.deepEqual(scanText(sentence).map((h) => h.text), [sentence], file);
+    assert.ok(isKnown(file, sentence), file);
+    assert.ok(!isKnown('skills/idea/references/routes.md', sentence), file);
+    assert.ok(!isKnown(file, `${sentence} `), file);
+    assert.ok(!isKnown(file, sentence.replace(/.$/, ', the letter first.')), file);
+  }
 });
 
-test('plain labels: a code span does not bring a far order word into the window', () => {
-  assert.equal(scanText(`The option letter \`${'x'.repeat(50)}\` comes first.`).length, 0);
+test('plain labels: a far order word stays out of the window', () => {
+  assert.equal(scanText('Each option id goes to the record file, and the ticket plan on disk is read first.').length, 0);
 });
 
 test('plain labels: scan still flags a code-first rule beside a code span or a forbidden code', () => {
@@ -100,12 +110,23 @@ test('plain labels: scan still flags a code-first rule beside a code span or a f
   assert.ok(scanText('**A** water cooler').length > 0);
 });
 
+test('plain labels: scan flags a rule word inside a code span or after "no"', () => {
+  assert.ok(scanText('Put `<letter>` first in each option label.').length > 0);
+  assert.ok(scanText('Build each `label` from the route line, the letter first.').length > 0);
+  assert.ok(scanText('A label with no letter first is refused.').length > 0);
+});
+
 test('plain labels: no form rule in skills/ puts a code before a label (all hits listed)', () => {
   const all = [];
+  const seen = new Set();
   for (const f of walk(path.join(root, 'skills'))) {
-    for (const h of scanText(fs.readFileSync(f, 'utf8'))) all.push(`${rel(f)}:${h.line} ${h.text}`);
+    for (const h of scanText(fs.readFileSync(f, 'utf8'))) {
+      if (isKnown(rel(f), h.text)) seen.add(`${rel(f)} ${h.text}`);
+      else all.push(`${rel(f)}:${h.line} ${h.text}`);
+    }
   }
   assert.deepEqual(all, [], `scan hits:\n${all.join('\n')}`);
+  assert.equal(seen.size, KNOWN_NON_FORM.length, 'an exception no longer matches its sentence');
 });
 
 test('plain labels: route lines hold the words alone (AC1, AC2)', () => {
@@ -118,7 +139,7 @@ test('plain labels: tickets and approval labels (AC3)', () => {
   const labels = routeLabels();
   assert.equal(plain(labels.get('build')), 'Build');
   assert.equal(plain(labels.get('park-roadmap')), 'Park all tickets');
-  for (const w of ['Approve', 'Change', 'Park']) assert.ok(routesText.includes(w), w);
+  for (const w of ['Approve (Recommended) / Change', 'Approve (Recommended) / Park / Change']) assert.ok(routesText.includes(w), w);
 });
 
 test('plain labels: labels in each form are distinct, Stop and Park the idea included (AC7)', () => {
@@ -142,6 +163,16 @@ test('plain labels: the Forms rule says what a label holds and where the letter 
   assert.match(f, /only in `pick`/);
 });
 
+test('plain labels: a route line holds no Lead note, the notes stay in Forms', () => {
+  const lines = formsRule().split('\n').filter((l) => l.startsWith('- route `'));
+  assert.ok(lines.length >= 11);
+  for (const l of lines) assert.doesNotMatch(l, /`pick`|→|the script|Offered only|a pick of it/i, l);
+  const notes = formsRule().split('\n').find((l) => l.startsWith('Lead notes'));
+  assert.ok(notes);
+  assert.match(notes, /Offered only in a software company/);
+  assert.match(notes, /Stop → `pick` its letter/);
+});
+
 test('pick mapping: label to route to letter runs the one letter (AC5)', () => {
   const labels = routeLabels();
   for (const [name, depth] of FORMS) {
@@ -161,10 +192,20 @@ test('pick mapping: label to route to letter runs the one letter (AC5)', () => {
 test('pick mapping: the Forms rule maps a label, and Other or an unshown label asks again (AC6)', () => {
   const f = formsRule();
   assert.match(f, /answer is a label/i);
-  assert.match(f, /\(Recommended\)[^.]*removed|removed[^.]*\(Recommended\)/i);
   assert.match(f, /"Other" text[^.]*no pick[^.]*ask again/i);
-  assert.match(f, /another form[^.]*no letter/i);
+  assert.match(f, /a label not in the open form/);
+  assert.doesNotMatch(f, /another form/);
   assert.match(f, /not an allowed pick/);
+});
+
+test('pick mapping: the whole answer must equal one shown label, marker removed', () => {
+  const a = answerRule();
+  assert.match(a, /whole answer[^.]*recommended marker removed[^.]*exactly equal to a shown label/i);
+  assert.doesNotMatch(a, /\(Recommended\)/);
+});
+
+test('pick mapping: an answer that matches two labels asks again with distinct labels', () => {
+  assert.match(answerRule(), /matches two labels is no pick: make them distinct and ask again/);
 });
 
 test('pick mapping: a label or Other text is never an allowed pick of the open form (AC6)', () => {
