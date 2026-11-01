@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Destination spec check (contract: docs/contracts/destination-spec.md v1.2). Node built-ins only.
+// Destination spec check (contract: docs/contracts/destination-spec.md v1.3). Node built-ins only.
 // `check` reports a spec that holds a code block, a file path, a bad frontmatter or a wrong heading list;
 // `stamp` fills the two pending frontmatter values once. Spec text and arguments are untrusted: sizes are
 // capped before parsing, every pattern is anchored over a character class or replaced by a single scan, the
@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
 const MAX_BYTES = 64 * 1024;
@@ -26,7 +26,6 @@ const EXTENSIONS = new Set(
 const FENCE = /^ {0,3}(?:`{3,}|~{3,})/;
 const SEPARATORS = new Set(' \t\r\n\f\v`()[]{}<>"\',;'.split(''));
 const WIN = process.platform === 'win32';
-const CASE_FOLD = WIN || process.platform === 'darwin';
 
 class Refused extends Error {}
 
@@ -48,8 +47,6 @@ const validDate = (text) => {
   return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
 };
 
-const sameName = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
-
 function realRootOf(root) {
   try {
     return fs.realpathSync.native(root);
@@ -62,7 +59,18 @@ function realRootOf(root) {
 function relOf(realRoot, arg) {
   let rel = arg.replace(/\\/g, '/');
   if (path.isAbsolute(arg)) rel = path.relative(realRoot, arg).split(path.sep).join('/');
+  if (!rel.startsWith(WORK_DIR) && rel.slice(0, WORK_DIR.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_DIR) {
+    throw new Refused('wrong letter case');
+  }
   if (!isSpecRel(rel)) throw new Refused('spec must be docs/specs/<name>.md or .company/work/<name>/spec.md');
+  if (rel.startsWith(WORK_DIR)) {
+    try {
+      exactWorkPath({ fs, path }, realRoot, rel.slice(WORK_DIR.length).split('/'));
+    } catch (error) {
+      if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+      throw error;
+    }
+  }
   return rel;
 }
 
@@ -76,7 +84,7 @@ function plainSpec(realRoot, rel) {
   } catch {
     return null;
   }
-  if (!sameName(real, lexical)) return null;
+  if (real !== lexical) return null;
   const canon = path.relative(realRoot, real).split(path.sep).join('/');
   if (!isSpecRel(canon)) return null;
   return { file: real, dir: path.dirname(real) };

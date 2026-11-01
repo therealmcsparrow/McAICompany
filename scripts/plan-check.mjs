@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan check (contract: docs/contracts/plan-check.md v1.3). Node built-ins; `verify` also loads the settings script.
+// Plan check (contract: docs/contracts/plan-check.md v1.4). Node built-ins; `verify` also loads the settings script.
 // Scans the Steps, Tasks, Wave, Phase, Fix round, T<n> and M<n> sections of a plan for open decisions, and keeps a per-run record of the
 // scans in .company/work/<slug>/plan-check.jsonl. The record holds counts, enums, a file name and
 // times only, never plan text (GDPR Art. 5(1)(c)). Plan text and CLI arguments are untrusted data.
@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { MAX_LINE_CHARS, readPlanLines } from './plan-markdown.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -240,8 +240,15 @@ function runDir(root, slug) {
   return dir;
 }
 
-function checkSlug(slug) {
+// The name shape first, then the exact spelling of the folder (and a plan file) on disk.
+function checkSlug(slug, root, file) {
   if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new Refusal('bad slug');
+  try {
+    exactWorkPath({ fs, path }, root, file === undefined ? [slug] : [slug, file]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------- record
@@ -458,7 +465,7 @@ function cmdGate(args, env) {
   const { positional, flags } = takeFlags(args, { '--policy': 'value', '--json': 'bool' });
   if (positional.length !== 2 || !Object.hasOwn(flags, '--policy')) throw new Refusal(USAGE);
   const [slug, name] = positional;
-  checkSlug(slug);
+  checkSlug(slug, env.root, typeof name === 'string' && PLAN_NAME.test(name) ? name : undefined);
   const policy = flags['--policy'];
   if (!POLICIES.includes(policy)) throw new Refusal('policy must be warn or block');
   const dir = runDir(env.root, slug);
@@ -503,7 +510,7 @@ function cmdGate(args, env) {
 
 function cmdOff(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  checkSlug(args[0]);
+  checkSlug(args[0], env.root);
   appendRecord(env.root, args[0], { v: 1, at: utc(env.now), ev: 'off', policy: 'off' });
   return { code: 0, lines: ['plan-check: off'] };
 }
@@ -511,7 +518,7 @@ function cmdOff(args, env) {
 function cmdWave(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
   const [slug, count] = args;
-  checkSlug(slug);
+  checkSlug(slug, env.root);
   if (typeof count !== 'string' || !WAVE_COUNT.test(count)) throw new Refusal('count must be a whole number');
   const n = Number(count);
   let scanFindings;
@@ -529,7 +536,7 @@ function cmdWave(args, env) {
 
 function cmdRead(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  checkSlug(args[0]);
+  checkSlug(args[0], env.root);
   try {
     return { code: 0, lines: [JSON.stringify(readRecord(env.root, args[0]))] };
   } catch (error) {
@@ -653,7 +660,7 @@ function cmdVerify(args, env) {
   const { positional, flags } = takeFlags(args, { '--json': 'bool' });
   if (positional.length < 1 || positional.length > 2) throw new Refusal(USAGE);
   const [slug, plan] = positional;
-  checkSlug(slug);
+  checkSlug(slug, env.root, typeof plan === 'string' && PLAN_NAME.test(plan) ? plan : undefined);
   let full;
   try {
     full = scanPlans({ root: env.root, home: env.home, slug, plan });

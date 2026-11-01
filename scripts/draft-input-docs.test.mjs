@@ -25,19 +25,19 @@ test('contract and both guides name the same inputs and refusals', () => {
   }
 });
 
-test('the contract is v1.3 with a history line', () => {
+test('the contract is v1.4 with a history line', () => {
   const text = read(CONTRACT);
-  assert.equal(text.split('\n')[0], '# Contract: draft-input v1.3');
+  assert.equal(text.split('\n')[0], '# Contract: draft-input v1.4');
   const compat = text.slice(text.indexOf('## Compatibility'));
   const lines = compat.split('\n');
-  assert.ok(lines.some((l) => l.startsWith('v1.3 (minor')), 'a v1.3 (minor line');
-  assert.ok(lines.some((l) => l.startsWith('v1.2 (minor')), 'the v1.2 line stays');
+  assert.ok(lines.some((l) => l.startsWith('v1.4 (minor')), 'a v1.4 (minor line');
+  assert.ok(lines.some((l) => l.startsWith('v1.3 (minor')), 'the v1.3 line stays');
   assert.ok(lines.some((l) => l.startsWith('v1.1 (minor')), 'the v1.1 line stays');
   assert.ok(text.includes('### take --for to-spec of a prompt file (v1.3)'), 'the take section');
   assert.ok(text.includes('argument is not accepted'), 'command-line arguments keep the old refusal');
 });
 
-test('to-spec cites draft-input v1.3', () => {
+test('to-spec cites draft-input v1.4', () => {
   const text = read(TO_SPEC);
   assert.match(text, /draft-input` v1\.3/);
   assert.doesNotMatch(text, /draft-input` v1\.2/);

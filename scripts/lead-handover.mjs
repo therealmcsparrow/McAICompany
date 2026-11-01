@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1.4
-// uses: docs/contracts/run-state.md v1.6 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
+// contract: docs/contracts/lead-handoff.md v1.5
+// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point and a SessionStart hook that
 // injects it after compaction, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { active, show } from './run-state.mjs';
 import { main as flow } from './idea-flow.mjs';
 import { readTierPath } from './tier-set.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const CAP = 95000;
 export const AUTO_COMPACT_WINDOW = 98500;
@@ -71,7 +71,7 @@ function insideWork(root, dir) {
   try {
     const want = path.join(fs.realpathSync.native(path.join(root, '.company', 'work')), path.basename(dir));
     const real = fs.realpathSync.native(dir);
-    return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() === want.toLowerCase() : real === want;
+    return real === want;
   } catch { return false; }
 }
 
@@ -487,7 +487,14 @@ export function resume(text, options) {
   }
 }
 
-function checkSlug(s) { if (!isWorkFolder(s)) refuse('bad slug'); }
+// Name shape first, then the exact letter case of the folder on disk; a missing folder keeps the caller's own refusal.
+function checkSlug(s, root) {
+  if (!isWorkFolder(s)) refuse('bad slug');
+  try { exactWorkPath({ fs, path }, root, [s]); } catch (e) {
+    if (e instanceof WorkFolderRefusal) refuse(e.message);
+    throw e;
+  }
+}
 
 function stateLines(st) {
   return [`gate: ${st.gate}`, `form: ${st.form}`, `step: ${st.step}`, `running: ${st.running ? 'step' : 'none'}`];
@@ -516,7 +523,7 @@ function exec(argv, root, env) {
   switch (cmd) {
     case 'write': case 'read': {
       if (rest.length !== 0) refuse('usage');
-      checkSlug(slug);
+      checkSlug(slug, root);
       const dir = runExists(root, slug);
       if (!dir) refuse('no run');
       const events = loadRecord(dir);
@@ -532,7 +539,7 @@ function exec(argv, root, env) {
     }
     case 'begin': {
       if (rest.length !== 1) refuse('usage');
-      checkSlug(slug);
+      checkSlug(slug, root);
       const playbook = rest[0];
       if (!PLAYBOOK.test(playbook) || !lstatOrNull(path.join(HERE, '..', 'skills', playbook, 'SKILL.md'))?.isFile()) refuse('bad playbook');
       const dir = runExists(root, slug);
@@ -543,7 +550,7 @@ function exec(argv, root, env) {
     }
     case 'base': {
       if (rest.length !== 1) refuse('usage');
-      checkSlug(slug);
+      checkSlug(slug, root);
       if (!validBase(rest[0])) refuse('bad base');
       const dir = runExists(root, slug);
       if (!dir) refuse('no run');

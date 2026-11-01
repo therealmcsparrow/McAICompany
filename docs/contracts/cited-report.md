@@ -1,4 +1,6 @@
-# Contract: cited-report v1.1
+# Contract: cited-report v1.2
+
+v1.2 (task Draft Input Folder Case Draft, T12; `docs/adr/0007-contract-minor-versions.md`): folder names are listed as the directory returns them, with no case fold or dedupe. Where two folders differ only in letter case (a case-sensitive file system) both count as runs; on win32 and darwin the directory never returns case twins, so the report is unchanged there. The report format and arguments are unchanged.
 
 v1.1 (`docs/adr/0007-contract-minor-versions.md`): run folders are new and legacy work folder names (`work-folder-name` v1); the report format is unchanged.
 
@@ -10,7 +12,7 @@ Rationale: a Role that no later Handoff of its run ever names is a candidate for
 `node scripts/cited.mjs report --runs <N>` from the product root. `<N>` is digits only, 1 to 50. Any other argument shape or value: `refused: ...`, exit 3. Exit 0 otherwise.
 
 ## What is read
-- Run folders `.company/work/<name>` (a name `isWorkFolder` accepts: new name or legacy slug; other names are ignored; names compare case-folded on win32 and darwin), newest first by folder time, at most the `<N>` newest that hold a Step. A linked folder is skipped and counted.
+- Run folders `.company/work/<name>` (a name `isWorkFolder` accepts: new name or legacy slug; other names are ignored; names are listed as on disk, with no case fold), newest first by folder time, at most the `<N>` newest that hold a Step. A linked folder is skipped and counted.
 - Step files in a run: `^(\d{2,3})-((?:spike-)?<role>)\.md$` with `<role>` an `agents/*.md` name. `00-*` files, plan files (`NN-architect-plan.md`) and other names are not Steps. A Step file that is a link, not a plain single-link file, over 256 KiB, not valid UTF-8, or names no known Role is skipped and counted. At most 500 files per run and 8 MiB in all; the rest is skipped and counted.
 
 ## Cites (a later Handoff of the same run: a higher `NN`)

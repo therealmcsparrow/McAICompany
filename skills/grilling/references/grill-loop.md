@@ -43,4 +43,4 @@ Take the first entry of the `work:` line the Type: step printed; the `playbooks:
 - A pick the type does not list is not shown. The Stop pick ends the Playbook.
 
 ## Check the tree
-Run `git status --porcelain` and compare with the baseline. New entries must lie only under `.company/work/<name>/` and the Topic file, which `draft-input` removes. Anything else → name the paths, change nothing, and ask the CEO in a form how to proceed. No branch, no commit, no push. The files stay in `.company/work/<slug>/`; aico never commits them (grill-file v1.2 Personal data). Archive them, never delete; an erasure request overrides the archive rule (CEO decides).
+Run `git status --porcelain` and compare with the baseline. New entries must lie only under `.company/work/<name>/` and the Topic file, which `draft-input` removes. Anything else → name the paths, change nothing, and ask the CEO in a form how to proceed. No branch, no commit, no push. The files stay in `.company/work/<slug>/`; aico never commits them (grill-file v1.3 Personal data). Archive them, never delete; an erasure request overrides the archive rule (CEO decides).

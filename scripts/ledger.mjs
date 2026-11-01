@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.6). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.7). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -12,7 +12,7 @@ import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { costText, readCost } from './cost-source.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 import { readTierPath } from './tier-set.mjs';
 import * as settings from './settings.mjs';
 
@@ -101,6 +101,10 @@ function timeMs(text) {
 
 function checkRun(run) {
   if (!isRun(run)) throw new Refusal('run must be a work folder name or a legacy slug');
+  try { exactWorkPath({ fs, path }, env.root, [run]); } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
   return run;
 }
 

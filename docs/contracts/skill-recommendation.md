@@ -1,4 +1,6 @@
-# Contract: skill-recommendation v1.1
+# Contract: skill-recommendation v1.2
+
+v1.2 (task input-fix, T10; additive): `lint` and `vet` check the exact letter case of the work folder and Handoff file in `<handoff>` with `exactWorkPath` of `work-folder-name` v1.1, before the link checks. Another letter case → `refused: wrong letter case`, exit 2. A Handoff missing in every case keeps `refused: handoff not found`.
 
 Provider: the `skill-researcher` Role (`agents/skill-researcher.md`), in its Handoff. Lint, gating scan and install check: `scripts/skill-picks.mjs`. Consumers: the Lead (`skills/lead/references/skill-picks.md`: the approve form, the Install / Skip form, the project record, the post-install checks), the CEO.
 Uses: `skillspector-scan` v1 (`vetCandidate`, the post-install `scan`), `design-skills-section` v1.1 (field allow-list and the `design` record), `skills-section` v1 (the record for the other areas), `research-report` v1 "Researcher Handoff extension" (`fetches`, `depth`, `## Findings`, `## Sources`).

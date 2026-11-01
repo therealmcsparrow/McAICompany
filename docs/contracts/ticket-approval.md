@@ -1,7 +1,7 @@
-# Contract: ticket-approval v1.1
+# Contract: ticket-approval v1.2
 
 New Contract (task reprompt-20261030-1309-draft-2-draft, T7); v1.1 is additive (work folder names, the `plan:` line). Provider: `scripts/ticket-approval.mjs` (Node built-ins only; `main(args, { now, root })` exported). Writer of the record: the Lead of `aico:idea` and `aico:bug`, only through the CLI and only at the CEO's pick in the main session. Consumers: the Lead (its own forms and the Ship Gate summary of a build run). No Gate and no Playbook reads this record to skip anything; it exists for the approve-once rule and the duplicate-approval metric.
-Uses: `work-folder-name` v1 (`isWorkFolder`, `helperName`, from `mods/lib/work-folder.mjs`, read only). `<slug>` below is any work folder name: a legacy slug or a new name (spaces allowed inside it).
+Uses: `work-folder-name` v1.1 (`isWorkFolder`, `helperName`, `exactWorkPath`, from `mods/lib/work-folder.mjs`, read only). `<slug>` below is any work folder name: a legacy slug or a new name (spaces allowed inside it).
 Uses: `plan-tasks` v1.3 (a ticket is one task block; the task ID pattern, the `files:`, `depends-on:` and `role:` field lines, the level 2-4 block rule) through the exports of `scripts/plan-markdown.mjs`. If `readPlanLines` is not exported there, the script is blocked; it never reads fences or headings itself and never edits that file.
 
 ## Ticket and hash
@@ -12,7 +12,7 @@ Uses: `plan-tasks` v1.3 (a ticket is one task block; the task ID pattern, the `f
 - Plan words never count. A ticket whose text says "approved", holds a JSON line that looks like a record event, or names the Lead is a ticket like any other: only an `approve` event of the record, with the block's current hash, approves.
 
 ## Record `.company/work/<slug>/tickets.jsonl`
-Slug: a work folder name (`isWorkFolder`: legacy `^[a-z0-9][a-z0-9-]{0,63}$` or a name `parseName` accepts); any other value is `refused: bad slug`. A `plan` event's `<slug>/<plan file name>` is checked the same way (name by `isWorkFolder`, file by the plan name rule, one `/`). Append-only (`O_APPEND`; the first append creates the file with `O_CREAT|O_EXCL`), LF, one JSON object per line, a line at most 8 KiB, the file at most 1 MiB and 5000 lines. The run folder and the file follow the real-path read rule (`proj.M-SEC7`): `realpathSync.native` of the lexical path equals it (case-insensitive on win32 and darwin) and lies inside the real product root; `lstat` shows a regular file with one hard link; the opened handle has the same `dev` and `ino`; UTF-8 with a fatal decoder. A link, junction or hard link is refused.
+Slug: a work folder name (`isWorkFolder`: legacy `^[a-z0-9][a-z0-9-]{0,63}$` or a name `parseName` accepts); any other value is `refused: bad slug`. A `plan` event's `<slug>/<plan file name>` is checked the same way (name by `isWorkFolder`, file by the plan name rule, one `/`). Append-only (`O_APPEND`; the first append creates the file with `O_CREAT|O_EXCL`), LF, one JSON object per line, a line at most 8 KiB, the file at most 1 MiB and 5000 lines. The run folder and the file follow the real-path read rule (`proj.M-SEC7`): `realpathSync.native` of the lexical path equals it (exact, v1.2) and lies inside the real product root; `lstat` shows a regular file with one hard link; the opened handle has the same `dev` and `ino`; UTF-8 with a fatal decoder. A link, junction or hard link is refused.
 
 | Key | Value | On |
 |---|---|---|
@@ -54,4 +54,5 @@ Plan unreadable (exit 1), unknown ticket ID (exit 3), broken record (exit 1, fai
 Ticket blocks and roadmap files hold CEO and model text. They stay local in the product's `.company/` (git-ignored where the product ignores it), are read by the CEO's Claude model and no other recipient, and are archived, never deleted. The record holds IDs, hashes, plan references and file names only.
 
 ## Compatibility
+v1.2 (minor, additive): a slug, or the folder or file of a plan reference, typed in another letter case than on disk (`exactWorkPath`, `work-folder-name` v1.1) → `refused: wrong letter case`, exit 3, on every platform, nothing written; this runs after the `bad slug` and `bad plan` shape checks. The real-path compare is exact, not case-insensitive. A slug or plan missing in every case keeps its old refusal. No new command, output line or exit code.
 v1.1 (minor): a slug and a plan reference may be a new work folder name; `build-plan` prints a `plan:` line after `built` and after `file exists`, so a v1 reader that takes the first line and the approve lines after it must skip the `plan:` line. Legacy slugs, legacy `<slug>-build` plans and every v1 record read as before; the record format is unchanged. A future version that adds an `ev` or a key must keep this version's chain rule and status rule so an old record stays readable.

@@ -1,4 +1,6 @@
-# Contract: drift-report v1.1
+# Contract: drift-report v1.2
+
+v1.2 (task Draft Input Folder Case Draft, T11; additive, `docs/adr/0007-contract-minor-versions.md`): `lint` runs `exactWorkPath` (`work-folder-name` v1.1) on the report path. `.company`, `work`, the work folder or the file typed in another letter case than the one on disk → `refused: wrong letter case`, exit 3, nothing read. The Windows case-insensitive real-path compare is gone: the real path must equal the lexical path exactly. A report missing in every case keeps `drift-report: report unreadable`.
 
 Provider: `scripts/drift-report.mjs` (Node built-ins only; read-only, writes nothing). Writer of the report: the Architect, in the one drift Step of `/aico:maintain drift`. Consumers: the Lead of `aico:maintain` (`pick`, `lint`) and the maintenance report (a link under Minor). Uses: `contract-index` v1 (`buildIndex`). Rationale: `docs/adr/0042-drift-report-informational.md`.
 The report is informational. It never changes an exit code of `check`, a Gate or CI, and no `check` script or CI file reads it; the deterministic Contract drift check (`contract-index` v1) stays the one that can fail CI.

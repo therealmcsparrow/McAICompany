@@ -1,4 +1,4 @@
-# Contract: run-state v1.6
+# Contract: run-state v1.7
 
 Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
@@ -9,6 +9,8 @@ v1.5 is additive (task plan-gate-enforce, task run-state-ceo-sub): it adds the `
 v1.4 is additive (task low-tier-path): the triage record also proves an approved low-risk fix route, and `triage check` takes `--route fix`. Every v1.3 call behaves as before.
 
 v1.6 is additive (task idea-20261030-2242-build-draft): `<slug>` also accepts a work folder name of `work-folder-name` v1 (`<YYYY-MM-DD HH.MM> - <Topic>`, with the Build or Draft suffix and a Draft number), through its `isWorkFolder`; the legacy slug shape stays valid and a legacy folder is never renamed. Every other name is `refused: bad slug`, without the name echoed. A run folder is used only when its real path is the folder of that name inside the real `.company/work`. Every v1.5 call and file behaves as before.
+
+v1.7 is additive (task draft-input-folder-case-draft): every command that takes `<slug>` (and `show`, and the `gate <slug> plan passed` scan) checks the letter case of `.company`, `work` and `<slug>` against the folder entries on disk (`work-folder-name` v1.1, `exactWorkPath`), after the `bad slug` shape check. A spelling that matches a folder only in another ASCII letter case is `refused: wrong letter case` (exit 2), with no run folder, line or file written. The case-fold in the run folder real-path compare is removed. A folder missing in every case behaves as before (`start` makes it). Every v1.6 call with the exact spelling behaves as before.
 
 ## Storage
 - `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a work folder name (`isWorkFolder` of `mods/lib/work-folder.mjs`, `work-folder-name` v1): a new name or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. The name holds spaces and dots, so a shell line quotes it in single quotes.

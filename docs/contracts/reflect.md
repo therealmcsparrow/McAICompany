@@ -1,4 +1,6 @@
-# Contract: reflect v1.1
+# Contract: reflect v1.2
+
+v1.2 (task input-fix, T10; additive): after the work folder name check, `<slug>` and a `<file>` given as a path inside `.company/work` must match the folder and file names on disk in exact letter case (`exactWorkPath` of `work-folder-name` v1.1). Another letter case → `refused: wrong letter case`, exit 2, nothing read. A run folder missing in every case keeps `refused: no run folder for <slug>`.
 
 Provider: `scripts/reflect.mjs` (Node built-ins only, deterministic, no model call). Consumer: the Reflect mod (`aico-mods` v1).
 Reads only: the given Step file, the run's Step files (frontmatter and `## Blocking`), `handoff-lint.mjs` `lint()`, the `ledger.mjs` report data (imported, not spawned; the same numbers as `report --json --live`) and `run-state` v1. Writes nothing.

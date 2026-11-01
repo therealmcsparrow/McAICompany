@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.2).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.3).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run as companyType } from './company-type.mjs';
-import { isWorkFolder, isLegacySlug } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, isLegacySlug, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const FINAL_NAME = /^[a-z0-9][a-z0-9-]{2,65}$/;
@@ -209,7 +209,11 @@ function append(cwd, slug, ev, create) {
   } finally { fs.closeSync(fd); }
 }
 
-function checkSlug(s) { if (!isWorkFolder(s)) refuse('bad slug'); }
+function checkSlug(s, cwd) {
+  if (!isWorkFolder(s)) refuse('bad slug');
+  // Exact letter case of the folder, before any read or write; a missing folder keeps the old behaviour.
+  try { exactWorkPath({ fs, path }, cwd, [s]); } catch (e) { if (e instanceof WorkFolderRefusal) refuse(e.message); throw e; }
+}
 
 // Collects regular files of the work folder; links are skipped, caps fail before anything is created.
 function scan(dir, rel, depth, acc) {
@@ -280,7 +284,7 @@ function exec(argv, cwd) {
   switch (cmd) {
     case 'start': {
       if (rest.length !== 2 || rest[0] !== '--kind') usage();
-      checkSlug(slug);
+      checkSlug(slug, cwd);
       if (!KINDS.includes(rest[1])) refuse('bad kind');
       append(cwd, slug, { e: 'start', kind: rest[1] }, true);
       lines.push('started');
@@ -288,7 +292,7 @@ function exec(argv, cwd) {
     }
     case 'options': case 'state': case 'read': {
       if (rest.length !== 0) usage();
-      checkSlug(slug);
+      checkSlug(slug, cwd);
       const { events, state } = load(cwd, slug);
       if (cmd === 'options') {
         const o = optionsOf(state, cwd);
@@ -301,7 +305,7 @@ function exec(argv, cwd) {
     }
     case 'pick': {
       if (rest.length !== 1) usage();
-      checkSlug(slug);
+      checkSlug(slug, cwd);
       const { state } = load(cwd, slug);
       const hit = optionsOf(state, cwd).find(([l]) => l === rest[0]);
       if (!hit) refuse('not an allowed pick');
@@ -311,7 +315,7 @@ function exec(argv, cwd) {
     }
     case 'done': {
       if (rest.length < 1) usage();
-      checkSlug(slug);
+      checkSlug(slug, cwd);
       const [step, ...flags] = rest;
       if (!STEPS.includes(step)) refuse('bad step');
       const opt = parseDone(flags);
@@ -332,7 +336,7 @@ function exec(argv, cwd) {
     }
     case 'park-idea': {
       if (rest.length !== 1) usage();
-      checkSlug(slug);
+      checkSlug(slug, cwd);
       const { state } = load(cwd, slug);
       if (state.form !== 'pending' || state.pending !== 'park-idea') fail('step out of order');
       const name = rest[0];

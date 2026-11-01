@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { lint } from './handoff-lint.mjs';
 import { main as ledgerMain } from './ledger.mjs';
 import { checkText, ROLE_RE } from './lessons.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const MAX_BYTES = 64 * 1024;
 const MAX_STEPS = 200;
@@ -190,6 +190,13 @@ function workDir(slug) {
   const company = path.join(process.cwd(), '.company');
   const work = path.join(company, 'work');
   const dir = path.join(work, slug);
+  // Exact letter case first; a missing folder keeps the `no run folder` refusal below.
+  try {
+    exactWorkPath({ fs, path }, process.cwd(), [slug]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
   if (!plainDir(company) || !plainDir(work) || !plainDir(dir)) throw new Refusal(`no run folder for ${slug}`);
   return dir;
 }
@@ -242,7 +249,7 @@ function ledgerReport(slug) {
 
 // An absolute path may reach the run folder through a symlinked parent (macOS /var -> /private/var); compare real paths.
 function realOr(p) {
-  try { return fs.realpathSync(p); } catch { return p; }
+  try { return fs.realpathSync(p); } catch { throw new Refusal('file must be in the run folder'); }
 }
 
 function resolveStepFile(dir, file) {
@@ -250,6 +257,28 @@ function resolveStepFile(dir, file) {
   const abs = path.resolve(process.cwd(), file);
   const name = path.basename(abs);
   const bare = !file.includes('/') && !file.includes('\\');
+  if (!bare) {
+    // A path into the work folder root must keep the exact letter case of every segment.
+    // path.relative ignores case on win32, so the .company/work pair is checked first (ASCII fold only, as handoff-lint does).
+    const top = path.relative(process.cwd(), abs).split(path.sep);
+    const ascii = x => x.replace(/[A-Z]/g, c => c.toLowerCase());
+    if (ascii(top[0]) === '.company' && ascii(top[1] ?? '') === 'work' && (top[0] !== '.company' || top[1] !== 'work')) {
+      throw new Refusal('wrong letter case');
+    }
+    const parts = path.relative(path.join(process.cwd(), '.company', 'work'), abs).split(path.sep);
+    if (parts[0] !== '..' && !path.isAbsolute(parts[0])) {
+      // path.relative folds with toLowerCase on win32 (U+212A becomes k), so inside means nothing until the typed spelling is exact.
+      if (top[0] !== '.company' || top[1] !== 'work') throw new Refusal('file must be in the run folder');
+      try {
+        // The slug segment must be listed as typed; 'missing' (a look-alike such as U+212A) is refused.
+        if (exactWorkPath({ fs, path }, process.cwd(), parts.slice(0, 1)) !== 'exact') throw new Refusal('file must be in the run folder');
+        exactWorkPath({ fs, path }, process.cwd(), parts);
+      } catch (error) {
+        if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+        throw error;
+      }
+    }
+  }
   if (!bare && path.relative(realOr(dir), realOr(path.dirname(abs))) !== '') throw new Refusal('file must be in the run folder');
   if (!FILE_RE.test(name)) throw new Refusal('file must match ^\\d{2}-[a-z0-9-]+\\.md$');
   return { name, full: path.join(dir, name) };

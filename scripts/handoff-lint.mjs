@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v2.1): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.2): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
 import { show as showRun } from './run-state.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 export const MAX_BYTES = 64 * 1024;
 const MAX_LINE = 1000;
@@ -580,7 +580,6 @@ export function evidencePath(item) {
 
 const REF_RE = /^([^:#]{1,300})(?::(\d{1,6})(?:-(\d{1,6}))?)?$/;
 const CONTEST_HEAD_RE = new RegExp(`^(${KEY_PART}) — (\\S.*)$`);
-const CI_FS = process.platform === 'win32' || process.platform === 'darwin';
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
 
 // `<path>[:<n>[-<n>]]` or `<path>#<test name>`, 1 to 3 refs joined by `;`. Returns null when any ref is malformed.
@@ -625,7 +624,27 @@ function parseContest(body) {
   return refs ? { key: m[1], kind: 'evidence', refs } : { key: m[1], kind: 'none' };
 }
 
-const sameReal = (a, b) => (CI_FS ? a.toLowerCase() === b.toLowerCase() : a === b);
+// A path with `.company/work` in it must be spelled as on disk (handoff v2.2): the segments from `.company` on are
+// compared with the directory entries. True when one is only in another letter case. Paths without the pair pass.
+function wrongWorkCase(target) {
+  const segs = resolve(target).split(sep);
+  const fold = x => x.toLowerCase();
+  let at = -1;
+  for (let i = 0; i + 1 < segs.length; i++) if (fold(segs[i]) === '.company' && fold(segs[i + 1]) === 'work') at = i;
+  if (at < 0) return false;
+  if (segs[at] !== '.company' || segs[at + 1] !== 'work') return true;
+  const head = segs.slice(0, at).join(sep);
+  const root = head === '' || head.endsWith(':') ? head + sep : head;
+  try {
+    exactWorkPath({ fs: { readdirSync }, path: { join } }, root, segs.slice(at + 2));
+    return false;
+  } catch (e) {
+    if (e instanceof WorkFolderRefusal) return true;
+    throw e;
+  }
+}
+
+const WRONG_CASE = 'ERROR wrong letter case';
 
 // Reads a regular file below `realRoot`. The real path of the lexical path must equal it, the file must have one link and
 // the opened handle must be the file that was checked. A miss is refused; the lexical path is never read as a fallback.
@@ -639,8 +658,7 @@ function readInside(realRoot, segments, cap) {
   }
   let real;
   try { real = realpathSync.native(lexical); } catch { return { status: 'refused' }; }
-  const inside = CI_FS ? real.toLowerCase().startsWith((realRoot + sep).toLowerCase()) : real.startsWith(realRoot + sep);
-  if (!sameReal(real, lexical) || !inside) return { status: 'refused' };
+  if (real !== lexical || !real.startsWith(realRoot + sep)) return { status: 'refused' };
   if (!lst.isFile() || lst.nlink !== 1 || lst.size > cap) return { status: 'refused' };
   let fd;
   try {
@@ -915,12 +933,13 @@ function readRulings(ctx, slug, warnings, sink = null) {
 // The number of `## Exceptions` lines that name `<slug>/`, any date. Returns { code, line }.
 export function exceptionsFor(root, slug) {
   if (!isWorkFolder(slug)) return { code: 2, line: 'ERROR slug must be a work folder name' };
+  if (wrongWorkCase(join(root, '.company', 'work', slug))) return { code: 2, line: WRONG_CASE };
   let realRoot;
   try { realRoot = realpathSync.native(root); } catch { return { code: 1, line: 'ERROR cannot read standards.md' }; }
   const got = readInside(realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return { code: 0, line: 'exceptions on file: 0' };
   if (got.status !== 'ok') return { code: 1, line: 'ERROR cannot read standards.md' };
-  return { code: 0, line: `exceptions on file: ${exceptionLines(got.text).filter(e => e.slug !== null && e.slug.toLowerCase() === slug.toLowerCase()).length}` };
+  return { code: 0, line: `exceptions on file: ${exceptionLines(got.text).filter(e => e.slug !== null && e.slug === slug).length}` };
 }
 
 // The state table of a run folder: { states: Map key -> state, unresolved, escalated, ruled, excepted, lineages, warnings, errors }.
@@ -1081,6 +1100,7 @@ function main(argv) {
   const args = argv.slice(2);
   if (args[0] === '--applied') {
     if (args.length !== 2 || args[1].startsWith('--')) { console.log(USAGE); return 2; }
+    if (wrongWorkCase(args[1])) { console.log(WRONG_CASE); return 1; }
     const r = applied(args[1]);
     if (r.code === 2) { console.log(USAGE); return 2; }
     r.lines.forEach(l => console.log(l));
@@ -1094,6 +1114,7 @@ function main(argv) {
   }
   if (args[0] === '--contests') {
     if (args.length !== 2 || args[1].startsWith('--')) { console.log(USAGE); return 2; }
+    if (wrongWorkCase(args[1])) { console.log(WRONG_CASE); return 1; }
     const r = contests(args[1]);
     r.errors.forEach(e => console.log(`ERROR ${e}`));
     r.warnings.forEach(w => console.log(w));
@@ -1111,6 +1132,7 @@ function main(argv) {
   if (files.length !== 1 || flags.some(f => f !== '--require-top' && f !== '--findings')
     || (wantLedger && requireTop)) { console.log(USAGE); return 2; }
   const file = files[0];
+  if (wrongWorkCase(file)) { console.log(WRONG_CASE); return 1; }
   let text;
   try {
     if (statSync(file).size > MAX_BYTES) { console.log('ERROR file too large'); return 1; }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Drift report (contract: docs/contracts/drift-report.md v1.1). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v1
+// Drift report (contract: docs/contracts/drift-report.md v1.2). Node built-ins only.
+// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v1.1
 // `pick` lists the Contracts with a script Provider that were checked longest ago; `lint` checks the shape
 // of one report. Neither writes anything. Report text, file names and arguments are untrusted: every
 // pattern is anchored over a character class, sizes are capped before parsing, every file is read by the
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KINDS = ['missing-feature', 'incomplete-model', 'logic-shortcut', 'architectural-divergence'];
 const MAX_ARG = 4096;
@@ -47,7 +47,6 @@ const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 // C0, DEL, C1, zero-width and bidi marks, line and paragraph separators, BOM.
 const BAD_TEXT = new RegExp("[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]");
 const CONTROL = /[\u0000-\u001f\u007f]/;
-const WIN = process.platform === 'win32';
 
 class Refused extends Error {}
 
@@ -70,8 +69,6 @@ function segmentsOf(rel) {
   return segs;
 }
 
-const sameName = (a, b) => (WIN ? a.toLowerCase() === b.toLowerCase() : a === b);
-
 // The lexical path under the real root, when its real path equals it (no link anywhere on it); else null.
 function plainPath(realRoot, segs) {
   const lexical = path.join(realRoot, ...segs);
@@ -81,7 +78,7 @@ function plainPath(realRoot, segs) {
   } catch {
     return null;
   }
-  if (!sameName(real, lexical)) return null;
+  if (real !== lexical) return null;
   const rel = path.relative(realRoot, real);
   if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return null;
   return lexical;
@@ -312,6 +309,15 @@ function lint(args, root) {
   if (path.isAbsolute(args[0])) {
     const r = path.relative(realRoot, args[0]);
     rel = r.split(path.sep).join('/');
+  }
+  const shaped = rel.split('/');
+  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel) && shaped.length === 4
+    && isWorkFolder(shaped[2]) && REPORT_NAME.test(shaped[3])) {
+    if (!rel.startsWith(REPORT_PREFIX)) throw new Refused('wrong letter case');
+    try { exactWorkPath({ fs, path }, realRoot, rel.split('/').slice(2)); } catch (error) {
+      if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+      throw error;
+    }
   }
   const parts = splitReportRel(rel);
   const name = parts ? REPORT_NAME.exec(parts[1]) : null;

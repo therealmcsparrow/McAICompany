@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1.3). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v1.4). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
 import { show } from './run-state.mjs';
-import { branchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_DATA_BYTES = 16 * KiB;
@@ -680,9 +680,20 @@ const oneOf = (list, v, label) => {
   return v;
 };
 
-function slugArg(positional, count) {
+// The exact spelling of the run folder on disk; a letter-case variant is refused before any read or write.
+function exactSlug(root, slug) {
+  try {
+    exactWorkPath({ fs, path }, root, [slug]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
+}
+
+function slugArg(positional, count, root) {
   if (positional.length !== count) throw new Refusal(USAGE);
   if (!isWorkFolder(positional[0])) throw new Refusal('bad slug');
+  exactSlug(root, positional[0]);
   return positional[0];
 }
 
@@ -723,7 +734,7 @@ function cmdSets(args, env) {
 
 function cmdPreview(args, env, write) {
   const { flags, positional } = takeFlags(args, { values: ['--playbook', '--triage', '--short', '--base', '--ceo'] });
-  const slug = slugArg(positional, 1);
+  const slug = slugArg(positional, 1, env.root);
   if (write) {
     if (!Object.hasOwn(flags, '--base') || !SHA.test(flags['--base'])) throw new Refusal('base must be a commit sha');
   } else if (Object.hasOwn(flags, '--base')) throw new Refusal(USAGE);
@@ -812,7 +823,7 @@ function checkLines(check) {
 
 function cmdSync(args, env) {
   const { flags, positional } = takeFlags(args, { values: ['--plan', '--base'], bools: ['--diff'] });
-  const slug = slugArg(positional, 1);
+  const slug = slugArg(positional, 1, env.root);
   if (Object.hasOwn(flags, '--plan') && !PLAN_NAME.test(flags['--plan'])) throw new Refusal('bad plan name');
   if (Object.hasOwn(flags, '--base')) {
     if (!Object.hasOwn(flags, '--plan') && flags['--diff'] !== true) throw new Refusal(USAGE);
@@ -858,7 +869,7 @@ function cmdSync(args, env) {
 function cmdRaise(args, env) {
   const { positional } = takeFlags(args, {});
   if (positional.length !== 2) throw new Refusal(USAGE);
-  const slug = slugArg([positional[0]], 1);
+  const slug = slugArg([positional[0]], 1, env.root);
   const tier = oneOf(['medium', 'high'], positional[1], 'tier');
   const cur = loadRecord(env.root, slug);
   if (cur.records.length === 0) throw new Refusal('no begin record for this run');
@@ -874,7 +885,7 @@ function cmdRaise(args, env) {
 
 function cmdRead(args, env) {
   const { positional } = takeFlags(args, {});
-  const slug = slugArg(positional, 1);
+  const slug = slugArg(positional, 1, env.root);
   const cur = loadRecord(env.root, slug);
   if (cur.records.length === 0) return { code: 0, lines: [JSON.stringify({ v: 1, slug, state: 'none' })] };
   return { code: 0, lines: [JSON.stringify(buildView(slug, cur.records))] };

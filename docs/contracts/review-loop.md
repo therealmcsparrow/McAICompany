@@ -1,7 +1,8 @@
-# Contract: review-loop v1.1
+# Contract: review-loop v1.2
 
-Provider: `scripts/review-loop.mjs` (Node built-ins only; `main(args, { root, now })`, `readReviewLoop(root, slug)` exported). Writer of the record: the script, for the Lead. Consumers: the Lead (pipeline reference `review-loop`), the Ship Gate list. Uses: `handoff` v2.0 (`contests`, `parseLocations`), `work-folder-name` v1 (`isWorkFolder`, `branchId`).
+Provider: `scripts/review-loop.mjs` (Node built-ins only; `main(args, { root, now })`, `readReviewLoop(root, slug)` exported). Writer of the record: the script, for the Lead. Consumers: the Lead (pipeline reference `review-loop`), the Ship Gate list. Uses: `handoff` v2.0 (`contests`, `parseLocations`), `work-folder-name` v1.1 (`isWorkFolder`, `branchId`, `exactWorkPath`).
 v1.1: the slug is a work folder name, new or legacy; the run ref is built from its branch id. Rationale: `docs/adr/0041-review-loop-record.md`.
+v1.2 (additive): `attempt`, `mark`, `churn` and `gate` check the spelling of `.company`, `work` and the slug against the directory entries before any read or write. A slug that exists only in another ASCII letter case → `refused: wrong letter case` (exit 3), nothing written; a slug missing in every case keeps its old behaviour. The Handoff-head real-path compare is exact on every platform (no case fold).
 A reviewer that did not run is never a clean pass. A forged record can only add Gate items or end Fix rounds early; it can never mark a review clean.
 
 ## Record

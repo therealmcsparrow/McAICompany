@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Grill file check (contract: docs/contracts/grill-file.md v1.2). Node built-ins only.
+// Grill file check (contract: docs/contracts/grill-file.md v1.3). Node built-ins only.
 // `check` lists the shape errors of a grill file; `status` prints the answered count and the open branches.
 // File text and arguments are untrusted: the size is capped before decoding, every pattern is anchored and
 // runs per line, the file is read by the real-path rule, and output holds only fixed words, ids, numbers,
@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
 const WORK_PREFIX = '.company/work/';
@@ -29,7 +29,7 @@ const FIELD = /^- ([A-Za-z]+):(?: (.*))?$/;
 const QUESTION_FIELDS = ['Question', 'Options', 'Answer', 'Decision', 'Opens', 'Closes'];
 const FACT_FIELDS = ['Fact', 'Source', 'Closes'];
 const WIN = process.platform === 'win32';
-const CASE_FOLD = WIN || process.platform === 'darwin';
+const io = { fs, path, platform: process.platform };
 
 class Refused extends Error {}
 
@@ -223,15 +223,13 @@ export function parseGrill(text) {
   return result;
 }
 
-// True for `.company/work/<work folder name>/grill.md`: the prefix and the file name are fixed words and the
+// True for `.company/work/<work folder name>/grill.md` (the file name in any ASCII case; readGrill refuses a variant): the prefix and the file name are fixed words and the
 // name in between is split off first, so no pattern runs over the name.
 function isGrillRel(rel) {
   if (typeof rel !== 'string' || rel.length > MAX_ARG || !rel.startsWith(WORK_PREFIX)) return false;
   const parts = rel.slice(WORK_PREFIX.length).split('/');
-  return parts.length === 2 && parts[1] === 'grill.md' && isWorkFolder(parts[0]);
+  return parts.length === 2 && /^grill\.md$/i.test(parts[1]) && isWorkFolder(parts[0]);
 }
-
-const sameName = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 function checkArgs(args) {
   for (const a of args) {
@@ -247,13 +245,28 @@ function relOf(realRoot, arg) {
     if (r === '' || r.startsWith('..') || path.isAbsolute(r)) throw new Refused('outside the product root');
     rel = r.split(path.sep).join('/');
   }
-  if (!isGrillRel(rel)) throw new Refused('not a grill path');
+  if (!isGrillRel(rel)) {
+    // A prefix that differs from `.company/work/` only in ASCII letter case is a case variant, not another path.
+    if (typeof rel === 'string' && rel.length <= MAX_ARG && rel.slice(0, WORK_PREFIX.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_PREFIX
+      && !rel.startsWith(WORK_PREFIX) && isGrillRel(WORK_PREFIX + rel.slice(WORK_PREFIX.length))) {
+      throw new Refused('wrong letter case');
+    }
+    throw new Refused('not a grill path');
+  }
   return rel;
 }
 
 // Reads the grill file by the real-path rule. Returns the decoded text or throws Refused.
 function readGrill(realRoot, rel) {
   const lexical = path.join(realRoot, ...rel.split('/'));
+  // Exact letter case of every segment from `.company` down, before any read; a missing path keeps `missing` below.
+  try {
+    exactWorkPath(io, realRoot, rel.slice(WORK_PREFIX.length).split('/'));
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+    throw error;
+  }
+  if (!rel.endsWith('/grill.md')) throw new Refused('not a grill path');
   let real;
   try {
     real = fs.realpathSync.native(lexical);
@@ -265,7 +278,7 @@ function readGrill(realRoot, rel) {
     }
     throw new Refused('missing');
   }
-  if (!sameName(real, lexical)) throw new Refused('link');
+  if (real !== lexical) throw new Refused('link');
   const back = path.relative(realRoot, real);
   if (back === '' || back.startsWith('..') || path.isAbsolute(back)) throw new Refused('outside the product root');
   if (!isGrillRel(back.split(path.sep).join('/'))) throw new Refused('not a grill path');

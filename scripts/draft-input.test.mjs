@@ -123,15 +123,11 @@ describe('read rule (hostile files)', () => {
     refused(take(root, 'big.md'), 'too large');
   });
 
-  test('an upper-case PROMPT.md of 16385 bytes is too large on a case-folding host', (t) => {
-    if (process.platform !== 'win32' && process.platform !== 'darwin') {
-      t.skip('names are case-sensitive on this host');
-      return;
-    }
-    const rel = '.company/work/2026-10-31 09.15 - Reprompt/PROMPT.md';
+  test('an upper-case PROMPT.md is refused as wrong letter case on every host', () => {
+    const rel = '.company/work/2026-10-31 09.15 - Reprompt/prompt.md';
     const root = fixture({ [rel]: `${BRIEF}${'a'.repeat(16385 - BRIEF.length)}` });
     const before = tree(root);
-    refused(take(root, rel), 'too large');
+    refused(take(root, rel.replace('prompt.md', 'PROMPT.md')), 'wrong letter case');
     assert.deepEqual(tree(root), before, 'nothing written');
   });
 

@@ -1,4 +1,6 @@
-# Contract: token-ledger v1.6
+# Contract: token-ledger v1.7
+
+v1.7 (task Draft Input Folder Case Draft, T11; additive, `docs/adr/0007-contract-minor-versions.md`): every command that takes a run (`add`, `add-mod`, `reconcile`, `import`, `ship`, `scorecard`, `receipt`, `report`, the verdicts and their baseline lists) runs `exactWorkPath` (`work-folder-name` v1.1) after the shape check. A run folder that exists only in another letter case is refused with `refused: wrong letter case` (exit 2, nothing written); a run with no folder in any case behaves as before. Every exact name behaves as before.
 
 
 Provider: `scripts/ledger.mjs`. Writers: the Lead (`aico:pipeline` after each Step, `aico:brainstorm` after each round); from part M, Reflect `model` mode through `add-mod` only (`aico-mods` v1). Consumers: the Ship Gate cost line (`aico:pipeline` §6), the run scorecard (`aico:pipeline` §6, v1.1), `aico:feedback` (the next 3 runs, the scorecard from v1.1, `parallel-verdict` from v1.3 and `low-path-verdict` from v1.4), the replay and baseline reports (AC15, AC26), and the Cache Tax and Reflect mods (`report --json`).

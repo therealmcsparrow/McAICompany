@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1.5). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.6). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { readPlanLines } from './plan-markdown.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -125,11 +125,11 @@ function keyOf(p) {
 }
 
 // A path under the run folder. The folder name may hold spaces, which the path rule refuses, so the folder part is matched as
-// a whole (case-insensitively, as the key is) and only the rest goes through the path rule. null when the path is not under it.
+// a whole (exact letter case) and only the rest goes through the path rule. null when the path is not under it.
 function inRunFolder(item, prefix) {
   if (typeof item !== 'string' || item.length > MAX_PATH_CHARS) return null;
   const p = item.replaceAll('\\', '/');
-  if (!p.toLowerCase().startsWith(prefix)) return null;
+  if (!p.startsWith(prefix)) return null;
   const rest = normalizePath(p.slice(prefix.length));
   if (!rest.ok) return rest;
   return { ok: true, path: p.slice(0, prefix.length) + rest.path, key: prefix + rest.key, dir: rest.dir };
@@ -938,8 +938,15 @@ function takeFlags(args, spec) {
   return { positional, flags };
 }
 
-function checkSlug(slug) {
+// The name shape first, then the exact spelling of the folder (and a plan file) on disk.
+function checkSlug(slug, root, file) {
   if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new Refusal('bad slug');
+  try {
+    exactWorkPath({ fs, path }, root, file === undefined ? [slug] : [slug, file]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
   return slug;
 }
 
@@ -979,7 +986,7 @@ function planFor(env, slug, name) {
 function cmdCheck(args, env) {
   const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value' });
   if (positional.length !== 2) throw new Refusal(USAGE);
-  const slug = checkSlug(positional[0]);
+  const slug = checkSlug(positional[0], env.root, isPlanName(positional[1]) ? positional[1] : undefined);
   const { cap, mode } = capAndMode(flags);
   const handover = handoverFlag(flags);
   const { parsed } = planFor(env, slug, positional[1]);
@@ -1008,7 +1015,7 @@ function planGate(env, slug) {
 function cmdBegin(args, env) {
   const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value' });
   if (positional.length !== 2) throw new Refusal(USAGE);
-  const slug = checkSlug(positional[0]);
+  const slug = checkSlug(positional[0], env.root, isPlanName(positional[1]) ? positional[1] : undefined);
   const { cap, mode } = capAndMode(flags);
   const handover = handoverFlag(flags);
   planGate(env, slug);
@@ -1053,7 +1060,7 @@ function nextView(env, slug) {
 function cmdNext(args, env) {
   const { positional, flags } = takeFlags(args, { '--json': 'bool' });
   if (positional.length !== 1) throw new Refusal(USAGE);
-  const slug = checkSlug(positional[0]);
+  const slug = checkSlug(positional[0], env.root);
   planGate(env, slug);
   const { st, tasks, outcomes, doneCount, complete } = nextView(env, slug);
   const roleOf = new Map(tasks.map((t) => [t.id, t.role ?? '?']));
@@ -1080,13 +1087,13 @@ function cmdNext(args, env) {
   return { code: 0, lines };
 }
 
-function twoArgs(args) {
+function twoArgs(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
-  return [checkSlug(args[0]), checkId(args[1])];
+  return [checkSlug(args[0], env.root), checkId(args[1])];
 }
 
 function cmdStart(args, env) {
-  const [slug, id] = twoArgs(args);
+  const [slug, id] = twoArgs(args, env);
   planGate(env, slug);
   const { st, tasks, outcomes } = nextView(env, slug);
   if (!outcomes.some((e) => e.id === id && e.outcome === 'start')) throw new Refusal('not a start line of next');
@@ -1097,7 +1104,7 @@ function cmdStart(args, env) {
 }
 
 function cmdDone(args, env) {
-  const [slug, id] = twoArgs(args);
+  const [slug, id] = twoArgs(args, env);
   const st = needState(env, slug);
   if (!st.running.includes(id)) throw new Refusal('task is not running');
   let ow = [];
@@ -1112,7 +1119,7 @@ function cmdDone(args, env) {
 }
 
 function cmdLines(args, env) {
-  const [slug, id] = twoArgs(args);
+  const [slug, id] = twoArgs(args, env);
   const st = needState(env, slug);
   const tasks = roundTasks(needPlan(env, slug, st, { strict: true }).tasks, st);
   const task = tasks.find((t) => t.id === id);
@@ -1176,7 +1183,7 @@ export function taskBrief(text, id, planName) {
 }
 
 function cmdBrief(args, env) {
-  const [slug, id] = twoArgs(args);
+  const [slug, id] = twoArgs(args, env);
   const st = needState(env, slug);
   const plan = readPlan(env.root, slug, st.plan);
   if (plan.hash !== st.hash) throw new Refusal('plan changed since begin');
@@ -1219,7 +1226,7 @@ function cmdBrief(args, env) {
 
 function cmdMerged(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const ids = args[1].split(',');
   if (ids.length > MAX_TASKS) throw new Refusal('more than 100 tasks');
   ids.forEach(checkId);
@@ -1238,7 +1245,7 @@ function cmdMerged(args, env) {
 function cmdScope(args, env) {
   const { head, tail } = splitDash(args);
   if (tail === null || head.length !== 2) throw new Refusal(USAGE);
-  const [slug, id] = twoArgs(head);
+  const [slug, id] = twoArgs(head, env);
   const candidates = checkPaths(tail);
   const st = needState(env, slug);
   if (!st.running.includes(id)) throw new Refusal('task is not running');
@@ -1246,8 +1253,7 @@ function cmdScope(args, env) {
   const setOf = (taskId) => [...(tasks.find((t) => t.id === taskId)?.keys ?? []), ...(st.extras.get(taskId) ?? [])];
   const own = setOf(id);
   const others = st.running.filter((r) => r !== id).map((r) => ({ id: r, keys: setOf(r) }));
-  const folder = `.company/work/${slug}/`;
-  const prefix = folder.toLowerCase();
+  const prefix = `.company/work/${slug}/`;
   const lines = [];
   const extra = [];
   const sibling = [];
@@ -1279,7 +1285,7 @@ function cmdRound(args, env) {
   if (tail === null) throw new Refusal(USAGE);
   const { positional, flags } = takeFlags(head, { '--loose': 'value' });
   if (positional.length !== 2) throw new Refusal(USAGE);
-  const slug = checkSlug(positional[0]);
+  const slug = checkSlug(positional[0], env.root);
   if (!/^[1-5]$/.test(positional[1])) throw new Refusal('round must be a whole number from 1 to 5');
   const n = Number(positional[1]);
   let loose = 0;
@@ -1329,7 +1335,7 @@ function cmdRound(args, env) {
 
 function cmdRead(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  return { code: 0, lines: [JSON.stringify(readParallel(env.root, checkSlug(args[0])))] };
+  return { code: 0, lines: [JSON.stringify(readParallel(env.root, checkSlug(args[0], env.root)))] };
 }
 
 const HANDLERS = {

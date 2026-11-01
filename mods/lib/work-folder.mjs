@@ -1,4 +1,4 @@
-// Work folder names (contract: docs/contracts/work-folder-name.md v1). Pure logic, no imports:
+// Work folder names (contract: docs/contracts/work-folder-name.md v1.1). Pure logic, no imports:
 // every file call goes through the `io` object the caller passes ({ fs, path, platform }).
 // Every pattern is anchored and every input is length-capped before a pattern runs.
 
@@ -168,10 +168,35 @@ export function helperName(parent, suffix, { stamp, fallback, isTaken = () => fa
   return free !== undefined && parseName(free) ? free : null;
 }
 
+const asciiFold = text => text.replace(/[A-Z]/g, c => String.fromCharCode(c.charCodeAt(0) + 32));
+
+// Exact-spelling check for `.company`, `work` and then each part of `rel` under `.company/work`, compared with the
+// directory entries (same rule on every file system). 'exact': every part is listed as typed. 'missing': a part is
+// not listed in any letter case. A part listed only in another ASCII letter case throws `wrong letter case`; the
+// ASCII fold only picks these words, it never grants access. When twins exist the typed spelling wins.
+export function exactWorkPath(io, root, rel = []) {
+  const { fs, path } = io;
+  let dir = root;
+  for (const part of ['.company', 'work', ...rel]) {
+    let names;
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      return 'missing';
+    }
+    if (!names.includes(part)) {
+      const want = asciiFold(part);
+      if (names.some(n => asciiFold(n) === want)) return refuse('wrong letter case');
+      return 'missing';
+    }
+    dir = path.join(dir, part);
+  }
+  return 'exact';
+}
+
 // Real directory (no link) whose real path is where it should be.
 function realDir(io, root, realRoot, rel) {
   const { fs, path } = io;
-  const ci = io.platform === 'win32' || io.platform === 'darwin';
   const full = path.join(root, ...rel);
   let real;
   try {
@@ -183,7 +208,7 @@ function realDir(io, root, realRoot, rel) {
     return refuse('bad topic path');
   }
   const want = path.join(realRoot, ...rel);
-  if (ci ? real.toLowerCase() !== want.toLowerCase() : real !== want) refuse('bad topic path');
+  if (real !== want) refuse('bad topic path');
   return full;
 }
 
@@ -195,6 +220,7 @@ export function checkWorkDirs(io, root) {
   } catch {
     return refuse('bad topic path');
   }
+  if (exactWorkPath(io, root) === 'missing') return refuse('bad topic path');
   const company = realDir(io, root, realRoot, ['.company']);
   const work = realDir(io, root, realRoot, ['.company', 'work']);
   return { company, work, realRoot };
@@ -205,7 +231,6 @@ function topicEntry(io, root, id) {
   const { company, realRoot } = checkWorkDirs(io, root);
   const { fs, path } = io;
   const file = path.join(company, `work-folder-topic-${id}.txt`);
-  const ci = io.platform === 'win32' || io.platform === 'darwin';
   let parent;
   try {
     parent = fs.realpathSync.native(path.dirname(file));
@@ -213,7 +238,7 @@ function topicEntry(io, root, id) {
     return refuse('bad topic path');
   }
   const want = path.join(realRoot, '.company');
-  if (ci ? parent.toLowerCase() !== want.toLowerCase() : parent !== want) refuse('bad topic path');
+  if (parent !== want) refuse('bad topic path');
   let st = null;
   try {
     st = fs.lstatSync(file, { bigint: true });

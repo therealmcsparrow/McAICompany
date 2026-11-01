@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Worktree (contract: docs/contracts/worktree.md v1.1).Node built-ins only; cwd = product root.
+// Worktree (contract: docs/contracts/worktree.md v1.2).Node built-ins only; cwd = product root.
 // uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/tier-sets.md v1.1
 // One git worktree per parallel task, merged back into the run branch in plan order. Every git call is a fixed argument
 // list run without a shell, in a scrubbed environment, with replace refs and grafts off; branches, worktree folders,
@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readParallel, sortByVisit, normalizePath, ParallelRecordError } from './plan-tasks.mjs';
-import { branchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
 const ID =/^(?:t\d{1,3}[a-z]?|proto)$/;
@@ -441,8 +441,19 @@ function printable(p) {
 
 // ---------------------------------------------------------------- checks
 
-function checkSlug(value) {
+// The exact spelling of the run folder on disk; a letter-case variant is refused before any read or write.
+function exactSlug(root, slug) {
+  try {
+    exactWorkPath({ fs, path }, root, [slug]);
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
+}
+
+function checkSlug(value, root) {
   if (typeof value !== 'string' || !isWorkFolder(value)) throw new Refusal('slug must be lowercase letters, digits and hyphens');
+  exactSlug(root, value);
   return value;
 }
 
@@ -516,7 +527,7 @@ export function isGitattributesName(p) {
 function cmdAdd(args, env) {
   const { positional, flags } = takeFlags(args, { '--base': 'value' });
   if (positional.length !== 2 || !flags['--base']) throw new Refusal(USAGE);
-  const slug = checkSlug(positional[0]);
+  const slug = checkSlug(positional[0], env.root);
   const id = checkId(positional[1]);
   const base = flags['--base'];
   if (!FULL_ID.test(base)) throw new Refusal('--base must be a full commit id');
@@ -550,7 +561,7 @@ function cmdAdd(args, env) {
 
 function cmdChanged(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const id = checkId(args[1]);
   const ctx = openGit(env);
   const rec = loadRecord(env.root, slug);
@@ -630,7 +641,7 @@ function mergeOne(ctx, env, slug, ID_, id) {
 
 function cmdMerge(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const ctx = openGit(env);
   const rec = loadRecord(env.root, slug);
   const bad = recordMismatches(ctx, slug, rec);
@@ -905,7 +916,7 @@ function cleanOne(ctx, env, slug, id, st, archive) {
 function cmdCleanup(args, env) {
   const { positional, flags } = takeFlags(args, { '--archive': 'bool' });
   if (positional.length !== 1) throw new Refusal(USAGE);
-  const slug = checkSlug(positional[0]);
+  const slug = checkSlug(positional[0], env.root);
   const archive = flags['--archive'] === true;
   const ctx = openGit(env);
   const rec = loadRecord(env.root, slug);
@@ -965,7 +976,7 @@ function protoCommits(ctx, slug, st) {
 
 function cmdProtocheck(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
-  const slug = checkSlug(args[0]);
+  const slug = checkSlug(args[0], env.root);
   const rec = loadRecord(env.root, slug);
   const st = rec.ids.get('proto');
   if (!st) return { code: 0, lines: ['prototype: none'] };

@@ -1,6 +1,6 @@
-# Contract: run-guard v1.1
+# Contract: run-guard v1.2
 
-Provider: `scripts/run-guard.mjs` (Node built-ins only; cwd = product root; `main(args, { root })` exported). Read-only: it writes nothing. Consumers: the Lead of `aico:pipeline` (Ship Gate). Uses: `plan-tasks` v1.3 (`readParallel`), `worktree` v1.1 (`readWorktrees`), `run-state` v1.5 (`show`), `work-folder-name` v1 (`isWorkFolder`). v1.1 is additive: the run argument may be a new work folder name; a legacy slug is accepted as before.
+Provider: `scripts/run-guard.mjs` (Node built-ins only; cwd = product root; `main(args, { root })` exported). Read-only: it writes nothing. Consumers: the Lead of `aico:pipeline` (Ship Gate). Uses: `plan-tasks` v1.3 (`readParallel`), `worktree` v1.1 (`readWorktrees`), `run-state` v1.7 (`show`), `work-folder-name` v1.1 (`isWorkFolder`, `exactWorkPath`). v1.1 is additive: the run argument may be a new work folder name; a legacy slug is accepted as before. v1.2 is additive: a name that matches a folder on disk only in another ASCII letter case is `refused: wrong letter case` (exit 3), checked after the name shape and before any record is read.
 The two lines are information for the Ship Gate. They never block a ship and never change an exit code of another command.
 
 ## Command

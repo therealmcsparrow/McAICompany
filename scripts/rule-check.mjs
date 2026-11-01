@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.2). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.3). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { branchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MiB = 1024 * KiB;
@@ -1083,6 +1083,14 @@ function parseArgs(args) {
   return { command, opts, positional: positional[0] };
 }
 
+// A work folder path in another letter case is refused (work-folder-name v1.1); nothing else changes.
+function exactOrRefuse(root, rel) {
+  try { exactWorkPath({ fs, path }, root, rel); } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message, 3);
+    throw error;
+  }
+}
+
 export function main(args, options = {}) {
   try {
     const { command, opts, positional } = parseArgs(args);
@@ -1099,11 +1107,19 @@ export function main(args, options = {}) {
       isDir = false;
     }
     if (!isDir) throw new Refusal('bad root');
+    if (judging) exactOrRefuse(root, [slug]);
     const a = { root, packs: opts['--packs'], base, run: slug, positional, handoff: null, write: opts['--write'] === true };
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);
       const inside = path.relative(root, abs);
-      if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside) || !isFile(abs)) throw new Refusal('bad handoff');
+      if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside)) throw new Refusal('bad handoff');
+      const segs = inside.split(path.sep);
+      // Letter case first, so a wrong-case path is refused the same on case-sensitive and case-insensitive filesystems.
+      if (/^\.company$/i.test(segs[0]) && /^work$/i.test(segs[1] ?? '')) {
+        if (segs[0] !== '.company' || segs[1] !== 'work') throw new Refusal('wrong letter case', 3);
+        exactOrRefuse(root, segs.slice(2));
+      }
+      if (!isFile(abs)) throw new Refusal('bad handoff');
       a.handoff = abs;
     }
     const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift, 'fill-security': cmdFillSecurity };
