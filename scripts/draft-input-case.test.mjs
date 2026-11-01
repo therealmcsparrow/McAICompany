@@ -56,6 +56,15 @@ describe('take', () => {
     assert.deepEqual(tree(root), before);
   });
 
+  test('arg of a typed .Company or WORK prefix is refused wrong letter case', () => {
+    // One token with no space, so the path rule (rule 3) sees it.
+    const root = fixture({ '.company/work/flow-x/grill.md': BRIEF });
+    for (const pre of ['.Company/work/', '.company/WORK/', '.COMPANY\\Work\\']) {
+      fs.writeFileSync(path.join(root, '.company', 'draft-input-arg-to-spec.txt'), `${pre}flow-x/grill.md`);
+      wrong(cli('draft-input.mjs', ['arg', '--for', 'to-spec'], { cwd: root }));
+    }
+  });
+
   test('an exact draft file is taken: slug and input lines name the folder as on disk', () => {
     const root = fixture({ [`.company/work/${DISK}/plan.md`]: PLAN });
     const r = take(root, `.company/work/${DISK}/plan.md`, 'feature');
