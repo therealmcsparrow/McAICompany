@@ -104,7 +104,7 @@ test('shared loop: one question per form, status after each log, close rules, re
     'Header `<n> answered, <k> open`', 'fixed number of questions', '`question_rounds` is not used',
     `node "${RUN}" grill status '<name>'`, 'Rewrite `.company/work/<name>/grill.md` whole with the Write tool',
     'format: 1', '## Closed branches', '## Proposals', 'status: stopped', 'status: done',
-    'closed by stop', 'git status --porcelain', 'grill-file v1.2 Personal data',
+    'closed by stop', 'git status --porcelain', 'grill-file v1.3 Personal data',
     'an erasure request overrides the archive rule (CEO decides)', 'resume <name>',
   ];
   for (const n of need) assert.ok(loop.includes(n), `loop missing: ${n}`);
@@ -117,7 +117,7 @@ test('every Playbook names the loop file and the loop file names the three answe
   for (const m of ['lookup', 'ask-all', 'docs']) assert.ok(loop.includes(`\`${m}\``), `mode ${m}`);
 });
 
-const GRILL_SKILL_SHA256 = 'f532bfd9f15e2d17efdd6be85bf589bb512914eda2dabaff0936c714464942dc';
+const GRILL_SKILL_SHA256 = '1eaf85d46d4d45fd87680b9f92419b6581cc50c384a0ec1b1fa42eadcf01df68';
 
 test('aico:grill SKILL.md matches the pinned hash apart from the Help-line path', () => {
   const now = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8')
