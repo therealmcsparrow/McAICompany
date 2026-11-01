@@ -149,6 +149,8 @@ const toCurrentCalls = (s) => s
   .replace(/scripts\/([a-z][a-z-]*)\.mjs"/g, 'scripts/run.mjs" $1')
   .replace('run --base <sha>` and `list` (`rule-check` v1)', 'run --base <Base commit> --run \'<slug>\'` and `list` (`rule-check` v1.1)')
   .replace('ledger add <slug> step', "ledger add '<slug>' step")
+  .replace('Exit 1 → re-dispatch the same Step with the errors, no Fix round.', 'Exit 1 → redo the same Step as a fresh Step (next `NN`, same Role and Round) with the old Handoff and the errors as input, no Fix round.')
+  .replace('numbers never block a Step. (3)', 'exit 4 is the next bullet. (3)')
   .replace('over the diff (`<sha>` = the Base commit)', 'over the judging diff (rule git.M-SEC4)');
 
 test("pre-filter, handoff-lint and full-suite text is byte-identical to v0.18.0 (AC8)", (t) => {

@@ -5,7 +5,7 @@ description: Use when the aico code-reviewer reviews a builder's work. Judges sp
 
 # Review
 
-**Scope: the judging diff** (rule git.M-SEC4, below; the dispatch `Base commit:`, never `HEAD~1`), added and changed lines only; older code is Debt. Fresh reviewer (`Review mode:`): `references/fresh-review.md`. Pre-filter findings are advisory; only you close a review.
+**Scope: the judging diff** (rule git.M-SEC4, below; the dispatch `Base commit:`, never `HEAD~1`), added and changed lines only; older code is Debt. Fresh reviewer (`Review mode:`): `references/fresh-review.md`. Pre-filter findings are advisory; only you close a review. `Review group:` line → also read `references/review-group.md`.
 
 **Judging diff** (rule git.M-SEC4): the one diff form, from the dispatch's full `Base commit:` to `<ref>` = `refs/heads/` plus the `branch:` value `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" work-folder branch '<run>'` prints (`<run>` is in `Output:`), as is; it already starts with `aico/`, so never prefix `aico/` again. Run from the top level:
 `GIT_NO_REPLACE_OBJECTS=1 GIT_LITERAL_PATHSPECS=1 git --no-replace-objects --literal-pathspecs -c core.fsmonitor=false -c diff.ignoreSubmodules=none diff --no-ext-diff --no-textconv --no-color --no-relative --ignore-submodules=none [-z --name-only | --numstat …] --end-of-options <Base commit> <ref>`
