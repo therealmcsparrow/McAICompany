@@ -1,0 +1,251 @@
+import { test, describe, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { CAP, measure, main } from './lead-handover.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const SCRIPT = path.join(here, 'lead-handover.mjs');
+
+const tmps = [];
+after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
+
+const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+// One product root and one Claude config dir per test; nothing reads the real home.
+function fixture({ slug = 'demo-run' } = {}) {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-context-'));
+  tmps.push(base);
+  const root = path.join(base, 'product');
+  const claudeDir = path.join(base, 'claude');
+  const dir = path.join(root, '.company', 'work', slug);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(path.join(claudeDir, 'projects', 'p1'), { recursive: true });
+  const now = Date.now();
+  fs.writeFileSync(path.join(dir, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(now - 60000), ev: 'start' })}\n`);
+  return { base, root, claudeDir, dir, slug, file: path.join(dir, 'lead-context.json') };
+}
+
+function transcript(fx, total) {
+  const file = path.join(fx.claudeDir, 'projects', 'p1', 'session.jsonl');
+  const usage = total === null ? {} : { input_tokens: 1000, cache_read_input_tokens: total - 1500, output_tokens: 500 };
+  const rows = [
+    { type: 'user', message: { role: 'user', content: 'SECRET-PHRASE from the CEO' } },
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'SECRET-PHRASE reply' }], usage } },
+  ];
+  fs.writeFileSync(file, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+  return file;
+}
+
+const stop = (file, extra = {}) => JSON.stringify({ hook_event_name: 'Stop', transcript_path: file, ...extra });
+const opts = (fx, env = {}) => ({ root: fx.root, claudeDir: fx.claudeDir, env });
+const stored = (fx) => JSON.parse(fs.readFileSync(fx.file, 'utf8'));
+const leftovers = (fx) => fs.readdirSync(fx.dir).filter((n) => n.includes('lead-context'));
+
+describe('measure', () => {
+  test('writes ctx, peak and time, small, LF only, no temp file left', () => {
+    const fx = fixture();
+    const r = measure(stop(transcript(fx, 40000)), opts(fx));
+    assert.deepEqual(r, { code: 0, err: '' });
+    const o = stored(fx);
+    assert.deepEqual(Object.keys(o), ['v', 'ctx', 'peak', 'at']);
+    assert.equal(o.v, 1);
+    assert.equal(o.ctx, 40000);
+    assert.equal(o.peak, 40000);
+    assert.match(o.at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    assert.ok(fs.statSync(fx.file).size <= 256);
+    assert.ok(!fs.readFileSync(fx.file, 'utf8').includes('\r'));
+    assert.deepEqual(leftovers(fx), ['lead-context.json']);
+  });
+
+  test('peak is the largest reading so far', () => {
+    const fx = fixture();
+    measure(stop(transcript(fx, 60000)), opts(fx));
+    measure(stop(transcript(fx, 20000)), opts(fx));
+    assert.equal(stored(fx).ctx, 20000);
+    assert.equal(stored(fx).peak, 60000);
+    measure(stop(transcript(fx, 70000)), opts(fx));
+    assert.equal(stored(fx).peak, 70000);
+  });
+
+  test('a corrupt old file counts as no peak', () => {
+    const fx = fixture();
+    fs.writeFileSync(fx.file, '{"v":1,"ctx":1,"peak":"huge"}\n');
+    measure(stop(transcript(fx, 30000)), opts(fx));
+    assert.equal(stored(fx).peak, 30000);
+  });
+
+  test('a subagent payload writes nothing', () => {
+    const fx = fixture();
+    measure(stop(transcript(fx, 40000), { agent_id: 'abc' }), opts(fx));
+    assert.ok(!fs.existsSync(fx.file));
+  });
+
+  test('another event, bad JSON, an array and an oversize payload write nothing', () => {
+    const fx = fixture();
+    const t = transcript(fx, 40000);
+    const bodies = [
+      JSON.stringify({ hook_event_name: 'PreCompact', transcript_path: t }),
+      '{not json', '[]', 'null',
+      stop(t, { pad: 'x'.repeat(70 * 1024) }),
+    ];
+    for (const b of bodies) assert.deepEqual(measure(b, opts(fx)), { code: 0, err: '' });
+    assert.ok(!fs.existsSync(fx.file));
+  });
+
+  test('unknown tokens write nothing and keep the old file', () => {
+    const fx = fixture();
+    measure(stop(transcript(fx, 50000)), opts(fx));
+    const before = fs.readFileSync(fx.file, 'utf8');
+    measure(stop(transcript(fx, null)), opts(fx));
+    measure(stop('relative/path.jsonl'), opts(fx));
+    measure(stop(path.join(fx.base, 'missing.jsonl')), opts(fx));
+    assert.equal(fs.readFileSync(fx.file, 'utf8'), before);
+  });
+
+  test('a transcript outside the projects folder is refused', () => {
+    const fx = fixture();
+    const outside = path.join(fx.base, 'outside.jsonl');
+    fs.copyFileSync(transcript(fx, 40000), outside);
+    measure(stop(outside), opts(fx));
+    assert.ok(!fs.existsSync(fx.file));
+  });
+
+  test('no active run writes nothing', () => {
+    const fx = fixture();
+    fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
+    measure(stop(transcript(fx, 40000)), opts(fx));
+    assert.ok(!fs.existsSync(fx.file));
+  });
+
+  test('a directory in the place of the file does not throw and leaves no temp file', () => {
+    const fx = fixture();
+    fs.mkdirSync(fx.file);
+    assert.deepEqual(measure(stop(transcript(fx, 40000)), opts(fx)), { code: 0, err: '' });
+    assert.ok(fs.statSync(fx.file).isDirectory());
+    assert.deepEqual(leftovers(fx), ['lead-context.json']);
+  });
+
+  test('a linked file in the place of the target is not written through', (t) => {
+    const fx = fixture();
+    const victim = path.join(fx.base, 'victim.txt');
+    fs.writeFileSync(victim, 'keep');
+    try { fs.symlinkSync(victim, fx.file); } catch { t.skip('no symlink right'); return; }
+    measure(stop(transcript(fx, 40000)), opts(fx));
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'keep');
+  });
+
+  test('the process hook exits 0 and writes the file', () => {
+    const fx = fixture();
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, HOME: fx.base, USERPROFILE: fx.base, MCSPARROW_HOME: fx.base };
+    const r = spawnSync(process.execPath, [SCRIPT, 'measure'], { cwd: fx.root, input: stop(transcript(fx, 41000)), env, encoding: 'utf8' });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, '');
+    assert.equal(stored(fx).ctx, 41000);
+  });
+});
+
+describe('read and ctx', () => {
+  const lines = (out) => out.split('\n').filter(Boolean);
+  const AT = '2026-11-01T10:00:00Z';
+
+  test('read prints unknown without a file', () => {
+    const fx = fixture();
+    const l = lines(main(['read', fx.slug], fx.root, {}).out);
+    assert.ok(l.includes('lead ctx unknown'));
+    assert.ok(l.includes('lead peak unknown'));
+  });
+
+  test('read prints ctx and peak, with over cap past CAP', () => {
+    const fx = fixture();
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 50000, peak: CAP + 1, at: AT })}\n`);
+    const l = lines(main(['read', fx.slug], fx.root, {}).out);
+    assert.ok(l.includes('lead ctx 50000'));
+    assert.ok(l.includes(`lead peak ${CAP + 1} over cap`));
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: CAP, peak: CAP, at: AT })}\n`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes(`lead peak ${CAP}`));
+  });
+
+  test('read treats a hostile file as unknown', () => {
+    const fx = fixture();
+    const bodies = [
+      `{"v":1,"ctx":-1,"peak":2,"at":"${AT}"}`,
+      `{"v":2,"ctx":1,"peak":2,"at":"${AT}"}`,
+      '{"v":1,"ctx":1,"peak":2,"at":"\\u001b[31m"}',
+      'nope',
+      JSON.stringify({ v: 1, ctx: 1, peak: 2, at: AT, pad: 'x'.repeat(300) }),
+    ];
+    for (const body of bodies) {
+      fs.writeFileSync(fx.file, body);
+      const l = lines(main(['read', fx.slug], fx.root, {}).out);
+      assert.ok(l.includes('lead ctx unknown'), body);
+      assert.ok(l.includes('lead peak unknown'), body);
+    }
+  });
+
+  test('ctx --json prints the stored reading or null fields', () => {
+    const fx = fixture();
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 5, peak: 9, at: AT })}\n`);
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: 5, peak: 9, at: AT });
+  });
+
+  test('ctx refuses a missing flag, a bad slug and a missing run', () => {
+    const fx = fixture();
+    assert.equal(main(['ctx', fx.slug], fx.root, {}).code, 3);
+    assert.equal(main(['ctx', '../x', '--json'], fx.root, {}).code, 3);
+    assert.equal(main(['ctx', 'missing-run', '--json'], fx.root, {}).code, 3);
+  });
+});
+
+describe('begin env warning', () => {
+  const warn = (p) => `warning: CLAUDE_CODE_AUTO_COMPACT_WINDOW=98500 not found in env or ${p}; set it in that file's env block`;
+  const settings = (fx, body) => fs.writeFileSync(path.join(fx.claudeDir, 'settings.json'), typeof body === 'string' ? body : JSON.stringify(body));
+  const begin = (fx, env) => main(['begin', fx.slug, 'feature'], fx.root, { CLAUDE_CONFIG_DIR: fx.claudeDir, ...env });
+
+  test('warns when neither env nor settings hold 98500', () => {
+    const fx = fixture();
+    const r = begin(fx, {});
+    assert.equal(r.code, 0);
+    assert.equal(r.out, `begun\n${warn(path.join(fx.claudeDir, 'settings.json'))}\n`);
+  });
+
+  test('the env value alone silences it', () => {
+    const fx = fixture();
+    assert.equal(begin(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500' }).out, 'begun\n');
+  });
+
+  test('the settings value silences it, as a string or a number', () => {
+    for (const v of ['98500', 98500]) {
+      const fx = fixture();
+      settings(fx, { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: v } });
+      assert.equal(begin(fx, {}).out, 'begun\n');
+    }
+  });
+
+  test('another value, bad JSON and an oversize file still warn and never echo values', () => {
+    const cases = [
+      { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '12345', TOKEN: 'sk-SECRET' } },
+      'not json sk-SECRET',
+      `{"pad":"${'x'.repeat(70 * 1024)}","env":{"CLAUDE_CODE_AUTO_COMPACT_WINDOW":"98500"}}`,
+    ];
+    for (const c of cases) {
+      const fx = fixture();
+      settings(fx, c);
+      const r = begin(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '77' });
+      assert.equal(r.code, 0);
+      assert.equal(r.out, `begun\n${warn(path.join(fx.claudeDir, 'settings.json'))}\n`);
+      assert.ok(!r.out.includes('SECRET') && !r.out.includes('12345') && !r.out.includes('77'));
+    }
+  });
+
+  test('a refused begin prints no warning', () => {
+    const fx = fixture();
+    const r = main(['begin', fx.slug, 'no-such-playbook'], fx.root, { CLAUDE_CONFIG_DIR: fx.claudeDir });
+    assert.equal(r.code, 3);
+    assert.ok(!r.out.includes('warning'));
+  });
+});

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1.5
+// contract: docs/contracts/lead-handoff.md v1.6
 // uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
-// Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point and a SessionStart hook that
-// injects it after compaction, plus a small CLI. Every hook payload, transcript line, record line and Step
+// Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a SessionStart hook that
+// injects it after compaction, a Stop hook that keeps the Lead's context reading, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
 // Handoff holds only values derived from the run records. No transcript text is stored or echoed.
 import fs from 'node:fs';
@@ -37,6 +37,9 @@ const MAX_TAIL = 1024 * 1024;
 const MAX_TOKENS = 10_000_000;
 const MAX_RUN_STATE = 64 * 1024;
 const MAX_STEP_FILE = 8 * 1024;
+const MAX_READING = 256;
+const MAX_SETTINGS = 64 * 1024;
+const READING_FILE = 'lead-context.json';
 const MAX_HANDOFF = 8 * 1024;
 const MAX_LINES = 1000;
 const MAX_LINE = 512;
@@ -459,6 +462,58 @@ export function watch(text, options) {
   }
 }
 
+// The stored context reading of a run, or null when it is missing or not exactly the shape this script writes.
+function readReading(dir) {
+  const text = readSmall(path.join(dir, READING_FILE), MAX_READING);
+  if (text === null) return null;
+  let o;
+  try { o = JSON.parse(text); } catch { return null; }
+  if (o === null || typeof o !== 'object' || Array.isArray(o) || Object.keys(o).join(',') !== 'v,ctx,peak,at') return null;
+  const num = (x) => Number.isInteger(x) && x >= 0 && x <= MAX_TOKENS;
+  if (o.v !== 1 || !num(o.ctx) || !num(o.peak) || typeof o.at !== 'string' || !AT_RE.test(o.at)) return null;
+  return { ctx: o.ctx, peak: o.peak, at: o.at };
+}
+
+// Writes the reading through a temp file and a rename; nothing is written when the target is not a regular one-link file.
+function writeReading(dir, reading) {
+  const file = path.join(dir, READING_FILE);
+  const l = lstatOrNull(file);
+  if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return;
+  const text = `${JSON.stringify({ v: 1, ...reading })}\n`;
+  if (Buffer.byteLength(text) > MAX_READING) return;
+  const tmp = path.join(dir, `.${READING_FILE}.${process.pid}.tmp`);
+  const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+  try {
+    try { fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+    throw e;
+  }
+}
+
+// Stop adapter. Keeps the newest context reading and the peak of the active run; always { code: 0, err: '' }.
+export function measure(text, options) {
+  const { root, claudeDir, now } = defaults(options);
+  const quiet = { code: 0, err: '' };
+  try {
+    const p = parsePayload(text);
+    if (!p || p.event !== 'Stop' || p.subagent) return quiet;
+    const slug = findRun(root, now);
+    if (!slug) return quiet;
+    exactWorkPath({ fs, path }, root, [slug]);
+    const dir = runExists(root, slug);
+    if (!dir) return quiet;
+    const ctx = transcriptTokens(p.transcript, claudeDir);
+    if (ctx === null) return quiet;
+    const old = readReading(dir);
+    writeReading(dir, { ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now) });
+    return quiet;
+  } catch {
+    return quiet;
+  }
+}
+
 // SessionStart adapter. Returns { code: 0, out }; out is the hook JSON or empty.
 export function resume(text, options) {
   const { root, now } = defaults(options);
@@ -516,6 +571,28 @@ function recordedLines(root, slug, st) {
   ];
 }
 
+const overCap = (n) => (n > CAP ? ' over cap' : '');
+
+function readingLines(dir) {
+  const r = readReading(dir);
+  return [`lead ctx ${r ? r.ctx + overCap(r.ctx) : 'unknown'}`, `lead peak ${r ? r.peak + overCap(r.peak) : 'unknown'}`];
+}
+
+// The warning line when the compaction window is set neither in the env nor in the user settings file; values are never echoed.
+function windowWarning(env) {
+  if (env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW === String(AUTO_COMPACT_WINDOW)) return '';
+  const file = path.join(claudeDirOf(env), 'settings.json');
+  const text = readSmall(file, MAX_SETTINGS);
+  if (text !== null) {
+    try {
+      const v = JSON.parse(text)?.env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+      if ((typeof v === 'string' || typeof v === 'number') && String(v) === String(AUTO_COMPACT_WINDOW)) return '';
+    } catch { /* unreadable settings */ }
+  }
+  const shown = BAD_CHAR.test(file) ? 'the user settings file' : file;
+  return `warning: CLAUDE_CODE_AUTO_COMPACT_WINDOW=${AUTO_COMPACT_WINDOW} not found in env or ${shown}; set it in that file's env block\n`;
+}
+
 function exec(argv, root, env) {
   for (const a of argv) if (typeof a !== 'string' || a.length > MAX_ARG || BAD_CHAR.test(a)) refuse('argument is not accepted');
   const [cmd, slug, ...rest] = argv;
@@ -535,7 +612,15 @@ function exec(argv, root, env) {
       const hs = events.filter((e) => e.ev === 'handover');
       const rs = events.filter((e) => e.ev === 'resume');
       return [`handovers ${hs.length}`, `resumes hook ${rs.filter((e) => e.via === 'hook').length} ceo ${rs.filter((e) => e.via === 'ceo').length}`,
-        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st), ...recordedLines(root, slug, st)].join('\n') + '\n';
+        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st), ...recordedLines(root, slug, st), ...readingLines(dir)].join('\n') + '\n';
+    }
+    case 'ctx': {
+      if (rest.length !== 1 || rest[0] !== '--json') refuse('usage');
+      checkSlug(slug, root);
+      const dir = workDir(root, slug);
+      if (!dir) refuse('no run');
+      const r = readReading(dir) ?? { ctx: null, peak: null, at: null };
+      return `${JSON.stringify({ v: 1, ctx: r.ctx, peak: r.peak, at: r.at })}\n`;
     }
     case 'begin': {
       if (rest.length !== 1) refuse('usage');
@@ -546,7 +631,7 @@ function exec(argv, root, env) {
       if (!dir) refuse('no run');
       const events = loadRecord(dir);
       appendEvent(dir, events, { ev: 'begin', playbook }, now);
-      return 'begun\n';
+      return `begun\n${windowWarning(env)}`;
     }
     case 'base': {
       if (rest.length !== 1) refuse('usage');
@@ -598,6 +683,9 @@ async function hook(kind) {
     const r = watch(text);
     if (r.err) process.stderr.write(r.err);
     process.exitCode = r.code;
+  } else if (kind === 'measure') {
+    measure(text);
+    process.exitCode = 0;
   } else {
     const r = resume(text);
     if (r.out) process.stdout.write(r.out);
@@ -607,7 +695,7 @@ async function hook(kind) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [cmd] = process.argv.slice(2);
-  if ((cmd === 'watch' || cmd === 'resume') && process.argv.length === 3) {
+  if ((cmd === 'watch' || cmd === 'resume' || cmd === 'measure') &&process.argv.length === 3) {
     hook(cmd).catch(() => { process.exitCode = 0; });
   } else {
     const r = main(process.argv.slice(2));

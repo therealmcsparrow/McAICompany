@@ -197,7 +197,7 @@ test('hooks.json entries carry timeout 5 and only the plugin root variable', () 
   assert.ok(!raw.includes('\r'));
   const cfg = JSON.parse(raw);
   assert.ok(Array.isArray(cfg.modules));
-  assert.deepEqual(Object.keys(cfg.hooks).sort(), ['PreCompact', 'SessionStart', 'SubagentStart', 'SubagentStop']);
+  assert.deepEqual(Object.keys(cfg.hooks).sort(), ['PreCompact', 'SessionStart', 'Stop', 'SubagentStart', 'SubagentStop']);
   for (const [event, phase] of [['SubagentStart', 'start'], ['SubagentStop', 'stop']]) {
     const groups = cfg.hooks[event];
     assert.equal(groups.length, 1);
