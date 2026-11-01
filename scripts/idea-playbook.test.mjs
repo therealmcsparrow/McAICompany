@@ -147,7 +147,7 @@ describe('routes.md', () => {
 
   test('allowed picks come from options output only', () => {
     has(routes, /option <letter> <route>/, /never from your own text/i, /not an allowed pick/);
-    has(routes, /Other/, /not a letter/i);
+    has(routes, /Other/, /no pick/i);
   });
 
   test('the build Playbook is allow-listed and starts only after the F pick', () => {
