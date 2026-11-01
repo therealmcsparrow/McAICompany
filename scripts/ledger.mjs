@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.7). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.8). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -25,6 +25,8 @@ const MAX_BASELINE_BYTES = MiB;
 const MAX_REQUESTS = 100000;
 const MAX_LIVE_AGENTS = 500;
 const MAX_COUNT = 1000000000;
+const CTX_CAP = 95000;
+const MAX_AGENT_IDS = 8;
 const MAX_COMPARE_FILES = 500;
 const MAX_PLUGIN_JSON_BYTES = 64 * 1024;
 const MAX_VERDICT_BYTES = 32 * MiB;
@@ -75,6 +77,7 @@ const USAGE = [
   '  scorecard <run> [--baseline <run>,<run>,<run>]',
   '  receipt <run> [--baseline <run>,<run>,<run>]',
   '  report <run> [--baseline <run>,<run>,<run>] [--acs <n>] [--json] [--live]',
+  '  agent-ctx <agent>... [--json]',
   '  brainstorm-report <run> [--against <run>]',
   '  model-verdict [--runs <3-50>]',
   '  parallel-verdict [--runs <3-50>]',
@@ -300,8 +303,9 @@ function findTranscript(claudeHome, agent) {
 }
 
 // Calls onLine(buffer) for every line; throws SizeError for a line over the cap.
-function forEachLine(file, onLine) {
-  const fd = fs.openSync(file, 'r');
+// With openFd the caller owns the handle and closes it.
+function forEachLine(file, onLine, openFd) {
+  const fd = openFd ?? fs.openSync(file, 'r');
   try {
     const chunk = Buffer.alloc(MiB);
     let pending = Buffer.alloc(0);
@@ -320,7 +324,7 @@ function forEachLine(file, onLine) {
     }
     if (pending.length > 0) onLine(pending);
   } finally {
-    fs.closeSync(fd);
+    if (openFd === undefined) fs.closeSync(fd);
   }
 }
 
@@ -329,8 +333,8 @@ function usageInt(usage, name) {
 }
 
 // Only type, requestId/message.id/uuid, message.model and four integer usage fields are read.
-export function readTranscript(file) {
-  if (fs.statSync(file).size > MAX_TRANSCRIPT_BYTES) throw new SizeError('file');
+export function readTranscript(file, openFd) {
+  if ((openFd === undefined ? fs.statSync(file) : fs.fstatSync(openFd)).size > MAX_TRANSCRIPT_BYTES) throw new SizeError('file');
   const byRequest = new Map();
   let model;
   forEachLine(file, (buf) => {
@@ -354,7 +358,7 @@ export function readTranscript(file) {
     byRequest.set(key, Object.fromEntries(TOKEN_KEYS.map((k) => [k, counts[k] ?? 0])));
     if (byRequest.size > MAX_REQUESTS) throw new SizeError('requests');
     if (typeof o.message.model === 'string' && MODEL.test(o.message.model)) model = o.message.model;
-  });
+  }, openFd);
   if (byRequest.size === 0) return null;
   const tokens = { in: 0, cache_write: 0, cache_read: 0, out: 0 };
   let last;
@@ -388,6 +392,47 @@ function transcriptFor(note, claudeHome) {
     model: result.model
   }));
   return { rec };
+}
+
+// ---------- agent-ctx ----------
+
+const AGENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+// The context size at the end of one agent's transcript, or null for any failure. Only a regular file that the
+// opened handle and the link-free lstat agree on, inside the projects folder, is read. Writes nothing.
+function agentCtx(claudeHome, agent) {
+  let fd;
+  try {
+    const file = findTranscript(claudeHome, agent);
+    if (!file) return null;
+    const projects = fs.realpathSync(path.join(claudeHome, 'projects'));
+    const real = fs.realpathSync(file);
+    if (path.relative(projects, real).startsWith('..') || path.isAbsolute(path.relative(projects, real))) return null;
+    const before = fs.lstatSync(file, { bigint: true });
+    if (!before.isFile()) return null;
+    fd = fs.openSync(file, 'r');
+    const after = fs.fstatSync(fd, { bigint: true });
+    if (!after.isFile() || after.dev !== before.dev || after.ino !== before.ino) return null;
+    const result = readTranscript(file, fd);
+    return result && result.ctx_end !== undefined ? result.ctx_end : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function cmdAgentCtx(args) {
+  const usage = 'usage: agent-ctx <agent>... [--json]';
+  const json = args.filter((a) => a === '--json');
+  if (json.length > 1) throw new Refusal(usage);
+  const ids = args.filter((a) => a !== '--json');
+  if (ids.length < 1 || ids.length > MAX_AGENT_IDS) throw new Refusal(usage);
+  if (!ids.every((id) => AGENT_ID.test(id) && !id.startsWith('-'))) throw new Refusal('agent must match [A-Za-z0-9_-]{1,64} and not start with -');
+  const claudeHome = claudeHomeDir();
+  const agents = ids.map((agent) => ({ agent, ctx: agentCtx(claudeHome, agent) }));
+  if (json.length === 1) return [JSON.stringify({ v: 1, agents })];
+  return agents.map((a) => `${a.agent} ${a.ctx === null ? '?' : a.ctx}`);
 }
 
 function cmdReconcile(args) {
@@ -431,6 +476,7 @@ function cmdAdd(args) {
   rec.t1 = isoSec(t1);
   if (rec.ms !== undefined) rec.t0 = isoSec(t1 - Math.floor(rec.ms / 1000) * 1000);
   appendRecord(JSON.parse(JSON.stringify(rec)));
+  if (rec.ctx_end > CTX_CAP) return { code: 4, lines: [`over cap: ${kind} ${id} ${role} ctx_end ${rec.ctx_end} > ${CTX_CAP}`] };
   return [];
 }
 
@@ -818,6 +864,8 @@ function cmdReport(args) {
     out.push('spend: n/a (nothing reconciled)', 'cache read: n/a (nothing reconciled)');
   }
   out.push(`not reconciled: ${sum.unreconciled.length}`);
+  const over = stored.filter((r) => r.src === 'notification' && r.kind !== 'total' && r.ctx_end > CTX_CAP);
+  if (over.length > 0) out.push(`over cap: ${over.length} steps (max ${Math.max(...over.map((r) => r.ctx_end))})`);
   if (baselineRuns.length) {
     const spends = [];
     const reads = [];
@@ -1487,11 +1535,12 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
     const handlers = {
       add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard, receipt: cmdReceipt,
       report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict,
-      'low-path-verdict': cmdLowPathVerdict
+      'low-path-verdict': cmdLowPathVerdict, 'agent-ctx': cmdAgentCtx
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
     if (['report', 'brainstorm-report', 'scorecard', 'receipt'].includes(command) && rest.length === 0) throw new Refusal(USAGE);
-    return { code: 0, lines: handlers[command](rest, env) };
+    const result = handlers[command](rest, env);
+    return Array.isArray(result) ? { code: 0, lines: result } : result;
   } catch (error) {
     if (error instanceof Refusal) return { code: 2, lines: [`refused: ${error.message}`] };
     throw error;
