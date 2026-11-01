@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readInside } from './handoff-lint.mjs';
 import { WorkFolderRefusal, checkWorkDirs, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const MAX_LINES = 1200;
@@ -25,6 +26,8 @@ const EXEC_TIMEOUT_MS = 60000;
 const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const ROUND = /^(?:0|[1-9]\d{0,2})$/;
 const LIMIT = /^[1-9]\d{0,6}$/;
+// C0/C1 controls, line and paragraph separators and bidi controls never reach stdout or a group file.
+const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
 const HANDOFF_NAME = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}\.md$/;
 const ROW = /^- \[(contract|spec|security|test|comprehension)\] (?:[RT]-\d{1,4} )?(.+)$/;
 const USAGE = "usage: review '<run>' <base> <round> [--max-lines <n>] [--max-files <n>] | fix '<run>' <round> <handoff>... | show '<run>' <r|f><round>";
@@ -178,7 +181,7 @@ function runDepth(base, run, root, exec) {
   if (json.truncated) refuse('no full path list (truncated)');
   if (json.paths.length === 0) refuse('no full path list (paths: [])');
   return json.paths.map((p) => {
-    const ok = p && typeof p.path === 'string' && p.path.length > 0 && p.path.length <= MAX_PATH_LISTED && !/[\r\n]/.test(p.path)
+    const ok = p && typeof p.path === 'string' && p.path.length > 0 && p.path.length <= MAX_PATH_LISTED && !UNSAFE_CHARS.test(p.path)
       && Number.isSafeInteger(p.lines) && p.lines >= 0;
     if (!ok) refuse('no full path list (bad path entry)');
     return { path: p.path, lines: p.lines, module: typeof p.module === 'string' ? p.module : null };
@@ -254,6 +257,20 @@ export function parseRow(text) {
   return { tag: m[1], file, line: colon && colon.index === at ? colon[1] : null };
 }
 
+// Text of a file below the real root (proj.M-SEC7: real path equals the path, one link, handle ties to lstat); null when absent.
+function readPlain(root, segments, cap) {
+  let realRoot;
+  try {
+    realRoot = checkWorkDirs({ fs, path }, root).realRoot;
+  } catch {
+    return refuse('split folder unreadable');
+  }
+  const r = readInside(realRoot, segments, cap);
+  if (r.status === 'missing') return null;
+  if (r.status !== 'ok') refuse(segments.includes('split') ? 'split file is not a plain file within the size limit' : 'handoff is not a plain file within the size limit');
+  return r.text;
+}
+
 function readHandoff(root, runDir, run, name) {
   const base = name.replace(/\\/g, '/').split('/').pop();
   const prefix = `.company/work/${run}/`;
@@ -266,23 +283,9 @@ function readHandoff(root, runDir, run, name) {
     if (error instanceof WorkFolderRefusal) refuse(error.message);
     throw error;
   }
-  const file = path.join(runDir, base);
-  const st = stat(file);
-  if (st === null) refuse('handoff not found');
-  const plain = (s) => !s.isSymbolicLink() && s.isFile() && s.nlink === 1 && s.size <= MAX_HANDOFF_BYTES;
-  if (!plain(st)) refuse('handoff is not a plain file within the size limit');
-  let fd;
-  try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const own = fs.fstatSync(fd);
-    if (!plain(own) || own.ino !== st.ino || own.dev !== st.dev) refuse('handoff is not a plain file within the size limit');
-    return { name: base, text: fs.readFileSync(fd, 'utf8') };
-  } catch (error) {
-    if (error instanceof Refused) throw error;
-    return refuse('handoff unreadable');
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
+  const r = readPlain(root, ['.company', 'work', run, base], MAX_HANDOFF_BYTES);
+  if (r === null) refuse('handoff not found');
+  return { name: base, text: r };
 }
 
 function fix(args, root) {
@@ -329,11 +332,9 @@ function fix(args, root) {
 
 // ---- show ----
 
-function countEntries(file) {
-  const st = stat(file);
-  if (st === null) return null;
-  if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_GROUP_BYTES) refuse('split file is not a plain file within the size limit');
-  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).length;
+function countEntries(root, run, which, name) {
+  const text = readPlain(root, ['.company', 'work', run, 'split', which, name], MAX_GROUP_BYTES);
+  return text === null ? null : text.split('\n').filter(Boolean).length;
 }
 
 function show(args, root) {
@@ -355,9 +356,9 @@ function show(args, root) {
   }
   const nums = names.map((n) => /^g([1-9]\d{0,3})\.txt$/.exec(n)).filter(Boolean).map((x) => Number(x[1])).sort((a, b) => a - b);
   const out = [`groups: ${nums.length}`];
-  for (const n of nums) out.push(`group ${n}: ${countEntries(path.join(folder, `g${n}.txt`))} entries`, `  ${rel(run, which, `g${n}.txt`)}`);
+  for (const n of nums) out.push(`group ${n}: ${countEntries(root, run, which, `g${n}.txt`)} entries`, `  ${rel(run, which, `g${n}.txt`)}`);
   if (m[1] === 'f' && names.includes('architect.txt')) {
-    out.push(`architect: ${countEntries(path.join(folder, 'architect.txt'))} rows`, `  ${rel(run, which, 'architect.txt')}`);
+    out.push(`architect: ${countEntries(root, run, which, 'architect.txt')} rows`, `  ${rel(run, which, 'architect.txt')}`);
   }
   return `${out.join('\n')}\n`;
 }

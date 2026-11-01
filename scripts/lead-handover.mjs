@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { active, show } from './run-state.mjs';
 import { main as flow } from './idea-flow.mjs';
 import { readTierPath } from './tier-set.mjs';
+import { readInside } from './handoff-lint.mjs';
 import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const CAP = 95000;
@@ -464,8 +465,14 @@ export function watch(text, options) {
 
 // The stored context reading of a run, or null when it is missing or not exactly the shape this script writes.
 function readReading(dir) {
-  const text = readSmall(path.join(dir, READING_FILE), MAX_READING);
-  if (text === null) return null;
+  let text;
+  try {
+    const realDir = fs.realpathSync.native(dir);
+    const realRoot = path.dirname(path.dirname(path.dirname(realDir)));
+    const r = readInside(realRoot, ['.company', 'work', path.basename(realDir), READING_FILE], MAX_READING);
+    if (r.status !== 'ok') return null;
+    text = r.text;
+  } catch { return null; }
   let o;
   try { o = JSON.parse(text); } catch { return null; }
   if (o === null || typeof o !== 'object' || Array.isArray(o) || Object.keys(o).join(',') !== 'v,ctx,peak,at') return null;

@@ -648,7 +648,7 @@ const WRONG_CASE = 'ERROR wrong letter case';
 
 // Reads a regular file below `realRoot`. The real path of the lexical path must equal it, the file must have one link and
 // the opened handle must be the file that was checked. A miss is refused; the lexical path is never read as a fallback.
-function readInside(realRoot, segments, cap) {
+export function readInside(realRoot, segments, cap) {
   const lexical = join(realRoot, ...segments);
   let lst;
   try {

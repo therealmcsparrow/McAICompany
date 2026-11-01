@@ -249,3 +249,23 @@ describe('begin env warning', () => {
     assert.ok(!r.out.includes('warning'));
   });
 });
+
+describe('read refuses what is not exactly the named file (proj.M-SEC7)', () => {
+  const AT = '2026-11-01T10:00:00Z';
+  const body = `${JSON.stringify({ v: 1, ctx: 5, peak: 9, at: AT })}\n`;
+
+  test('a hard-linked reading file is unknown', () => {
+    const fx = fixture();
+    const other = path.join(fx.base, 'other.json');
+    fs.writeFileSync(other, body);
+    fs.linkSync(other, fx.file);
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+  });
+
+  test('a file whose real name differs in letter case is unknown', (t) => {
+    const fx = fixture();
+    fs.writeFileSync(path.join(fx.dir, 'LEAD-CONTEXT.JSON'), body);
+    if (fs.existsSync(path.join(fx.dir, 'lead-context.json')) === false) { t.skip('case-sensitive folder'); return; }
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+  });
+});

@@ -203,3 +203,39 @@ test('only ## Blocking counts: bullets in other sections are ignored', () => {
   fs.writeFileSync(path.join(p.run, '10-qa.md'), '## Did\n- [spec] a/b.mjs:1 — no\n\n## Blocking\n- none\n\n## Next\n- [spec] c/d.mjs:1 — no\n');
   assert.match(main(['fix', RUN, '1', '10-qa.md'], { root: p.d }).out, /no blocking rows/);
 });
+
+test('hostile: show refuses a hard-linked split file (proj.M-SEC7)', () => {
+  const p = project();
+  fs.mkdirSync(p.split('f1'), { recursive: true });
+  fs.writeFileSync(path.join(p.d, 'outside.txt'), 'a\nb\n');
+  fs.linkSync(path.join(p.d, 'outside.txt'), path.join(p.split('f1'), 'g1.txt'));
+  const r = main(['show', RUN, 'f1'], { root: p.d });
+  assert.equal(r.code, 2);
+  assert.match(r.out, /refused: split file is not a plain file/);
+});
+
+test('hostile: show refuses a hard-linked architect file', () => {
+  const p = project();
+  fs.mkdirSync(p.split('f1'), { recursive: true });
+  fs.writeFileSync(path.join(p.split('f1'), 'g1.txt'), 'a\n');
+  fs.writeFileSync(path.join(p.d, 'outside.txt'), 'a\n');
+  fs.linkSync(path.join(p.d, 'outside.txt'), path.join(p.split('f1'), 'architect.txt'));
+  const r = main(['show', RUN, 'f1'], { root: p.d });
+  assert.equal(r.code, 2);
+  assert.match(r.out, /refused: split file is not a plain file/);
+});
+
+test('show still counts a plain split file', () => {
+  const p = project();
+  fs.mkdirSync(p.split('r1'), { recursive: true });
+  fs.writeFileSync(path.join(p.split('r1'), 'g1.txt'), 'a\nb\n');
+  assert.match(main(['show', RUN, 'r1'], { root: p.d }).out, /group 1: 2 entries/);
+});
+
+test('control and bidi characters in a listed path are refused', () => {
+  const exec = () => JSON.stringify({ v: 1, truncated: false, reasons: [], paths: [{ path: 'a/b\u202e.mjs', lines: 1, module: null }] });
+  const p = project();
+  const r = main(['review', RUN, 'a'.repeat(40), '0'], { root: p.d, exec });
+  assert.equal(r.code, 2);
+  assert.match(r.out, /bad path entry/);
+});
