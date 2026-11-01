@@ -1112,12 +1112,14 @@ export function main(args, options = {}) {
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);
       const inside = path.relative(root, abs);
-      if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside) || !isFile(abs)) throw new Refusal('bad handoff');
+      if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside)) throw new Refusal('bad handoff');
       const segs = inside.split(path.sep);
+      // Letter case first, so a wrong-case path is refused the same on case-sensitive and case-insensitive filesystems.
       if (/^\.company$/i.test(segs[0]) && /^work$/i.test(segs[1] ?? '')) {
         if (segs[0] !== '.company' || segs[1] !== 'work') throw new Refusal('wrong letter case', 3);
         exactOrRefuse(root, segs.slice(2));
       }
+      if (!isFile(abs)) throw new Refusal('bad handoff');
       a.handoff = abs;
     }
     const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift, 'fill-security': cmdFillSecurity };

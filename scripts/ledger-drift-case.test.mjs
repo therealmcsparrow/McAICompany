@@ -83,6 +83,18 @@ describe('rule-check', () => {
     assert.equal(r.out, `refused: ${WRONG}\n`);
   });
 
+  test('a --handoff wrong-case path is refused before existence, on any OS', () => {
+    const { root, base } = repo();
+    for (const p of [`.company/work/${TYPED}/99-missing.md`, `.company/WORK/${DISK}/99-missing.md`]) {
+      const r = run(root, 'run', '--base', base, '--run', DISK, '--handoff', p);
+      assert.equal(r.code, 3, r.all);
+      assert.equal(r.out, `refused: ${WRONG}\n`);
+    }
+    const missing = run(root, 'run', '--base', base, '--run', DISK, '--handoff', `.company/work/${DISK}/99-missing.md`);
+    assert.equal(missing.code, 2, missing.all);
+    assert.equal(missing.out, 'refused: bad handoff\n');
+  });
+
   test('the exact run folder is judged as before', () => {
     const { root, base } = repo();
     const r = run(root, 'text', '--base', base, '--run', DISK);
