@@ -61,6 +61,8 @@ export type ReflectState = { pending: { role: string; text: string }[] }
 
 export type BlastState = { warn: { category: 'core' | 'contract' | 'security'; count: number; untilMs: number } | null }
 
+export type CtxState = { lead: number | null; agents: { id: string; ctx: number | null }[] }
+
 declare module 'claude-code' {
   interface PluginState {
     aico: {
@@ -71,6 +73,7 @@ declare module 'claude-code' {
       cacheClock: Shaped<CacheClockState>
       reflect: Shaped<ReflectState>
       blast: Shaped<BlastState>
+      ctx: Shaped<CtxState>
     }
   }
 }

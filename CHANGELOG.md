@@ -4,6 +4,17 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **Context cap enforcement.** Steps now stay under the fixed 95000 cap (handover at 85500) because the plugin checks it, not only the Lead.
+  - **No resume.** "Steps are never resumed". While a run is active, `session.send` from the model returns `{ isDelivered: false, reason }` and `agent.spawn` with `resume` returns `{ deny: reason }`. The reason reads `aico: Steps are never resumed; dispatch a fresh Step (next NN) with the old Handoff as input (pipeline §2)`. A failed lint, a CEO answer or a follow-up all go to a fresh Step. Always on, no setting. ADR 0054.
+  - **Over-cap Steps are flagged.** `ledger add` with `ctx_end` above 95000 still writes the record, then prints `over cap: <kind> <id> <role> ctx_end <n> > 95000` and exits 4. The Lead treats that as a failed Step and a fresh, smaller Step re-checks the work. An over-cap reviewer Handoff never closes a review.
+  - **Ledger report.** The text `report` prints `over cap: <count> steps (max <n>)` right after `not reconciled:`, only when a Step went over, and nothing for 0.
+  - **Live context in the overview pane.** Each running agent row shows its current context (`62k`, `?` when unknown) and a Lead row. A row past 85500 reads `near cap`, past 95000 `over cap`, in text, not colour alone. While any row is past 85500 the status part reads `W<wave> S<step> <note>`, for example `W3 S12 over cap`. Only the four usage counts are read; a missing or locked transcript shows `?`.
+  - **Lead context.** A Stop hook keeps the Lead's reading in `lead-context.json`; `lead-handover read` adds `lead ctx` and `lead peak`, each followed by ` over cap` above 95000.
+  - **Large reviews and Fix rounds are grouped.** `step-split review` and `step-split fix` write area groups, one Step each. The dispatch prompt gets the `Review group: <i>/<n> <path>` and `Fix group: <i>/<n> <path>` lines, and a review closes when every group's Handoff is done.
+  - **Setup warning.** `lead-handover begin` adds `warning: CLAUDE_CODE_AUTO_COMPACT_WINDOW=98500 not found in env or <settings path>; set it in that file's env block` when the setting is missing. The run continues.
+  - Contracts: `token-ledger`, `aico-mods`, `lead-handoff` and `dispatch-prompt` bump additively; `step-split` v1 is new.
+
 ### Security
 - **A work folder typed in the wrong letter case is refused.** Every script that takes a work folder name or path now checks `.company`, `work`, the folder and the file against the directory entries and prints `refused: wrong letter case` (the refusal form and exit code each script already uses) before it reads or writes anything. Before, win32 and darwin accepted `.company/work/2026-10-31 23.56 - draft input folder case draft` for the real folder, and the real-path compare ignored case. A name missing in every case keeps its old refusal. ADR 0053.
 - **Contract versions for the exact letter case** (each is additive; an exact spelling behaves as before):

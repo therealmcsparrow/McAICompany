@@ -23,9 +23,10 @@ const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
 const PRE = {
   // review +256 B and code-reviewer +35 B for the goldfish first pass (dispatch-prompt v3.6).
   // review +2001 B, code-reviewer +967 B and senior-engineer +971 B for the judging diff, the run-ref and graft refusals and the binary row rules (rule git.M-SEC4, dispatch-prompt v4.0).
+  // review +65 B for the Review group pointer (dispatch-prompt v4.4).
   // review +87 B more (fix round 1): a failing binary-content read and a non-UTF-8 path name are Blocking [security] rows, and the grafts check names the git.M-SEC4 (2) query.
   // handoff: 5844 + 348 B for the Worktree rule in Starting a Step rule 6 (a task works in its own worktree, never the product tree; handoff v1.3). The file stays at 70 lines.
-  'skills/handoff/SKILL.md': 6192, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4392,
+  'skills/handoff/SKILL.md': 6192, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4457,
   // review: 1899 + 149 B for the open-decision Nit paragraph (plan-check v1, v0.16).
   // code-reviewer: +232 B for the judging diff paragraph and the finding ID row rule (rule git.M-SEC4, handoff v1.2).
   // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
@@ -64,7 +65,7 @@ test('byte budget: each pilot Role loads at most the pre-run sum, references/pil
     const now = files.reduce((n, f) => n + bytes(f), 0) + bytes(PILOT);
     assert.ok(now <= pre, `${agent} loads ${now} B, pre-run ${pre} B`);
   }
-  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 19686);
+  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 19751);
 });
 
 test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () => {

@@ -1,4 +1,6 @@
-# Contract: review-depth v1.2
+# Contract: review-depth v1.3
+
+v1.3 (task context-cap-enforcement T3; additive): `--json --lines` adds `lines` to every `paths[]` entry: added plus deleted lines from the numstat of the judging diff (same flags and endpoints as the path list), a binary file counts 0. Base mode with `--lines` and no usable profile at the base (missing, over 64 KiB or no `## Core`) still lists every changed path (`module: null`, `categories` as with an empty Core list, `lines`, the 500 cap and `truncated` as usual) while `depth` stays `full` and `reasons` stays the one row `{ "path": "*", "rule": "core unknown at base" }`; depth is never lowered. `--lines` without `--json` is `refused: --lines needs --json`. Without `--lines` every output is byte-unchanged. Consumer: `step-split` v1.
 
 v1.2 (`docs/adr/0007-contract-minor-versions.md`): `--run` takes a run name. A run name is a work folder name of `work-folder-name` v1 (new name or legacy slug, `isWorkFolder`); the run ref is `refs/heads/aico/` plus `branchId(name)` (the legacy slug unchanged, never the literal new name). The id is checked against `^[a-z0-9][a-z0-9-]{0,127}$` before any git call. A new-name run on its own branch is not `head not on run branch`.
 

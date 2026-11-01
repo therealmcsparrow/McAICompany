@@ -3,6 +3,9 @@
 import { isWorkFolder } from './work-folder.mjs';
 
 export const MAX_STDOUT = 262144;
+export const MAX_CTX = 10000000;
+// A subagent id: the ledger's pattern, without a leading dash so it can never read as an option in argv.
+export const AGENT_ID = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 const MAX_OUTPUT_TEXT = 65536;
 const MAX_OUTPUT_LINE = 300;
 // The folder part is cut at a slash and checked by isWorkFolder; only the shape of the rest is read here.
@@ -218,4 +221,21 @@ export const guardReviewDepth = obj({
   }), 500),
   reasons: opt(arr(obj({ path: str(300), rule: str(120) }), 500, true)),
   truncated: bool
+});
+
+// A count, or null: a missing key is not allowed.
+const ctxCount = (v) => (v === null ? null : int(0, MAX_CTX)(v));
+
+// `ledger.mjs agent-ctx <ids> --json`.
+export const guardAgentCtx = obj({
+  v: int(1, 1),
+  agents: arr(obj({ agent: pattern(AGENT_ID), ctx: ctxCount }), 8)
+});
+
+// `lead-handover.mjs ctx <slug> --json`.
+export const guardLeadCtx = obj({
+  v: int(1, 1),
+  ctx: ctxCount,
+  peak: ctxCount,
+  at: (v) => (v === null ? null : stamp(v))
 });

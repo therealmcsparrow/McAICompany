@@ -1,14 +1,15 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
-import { guardRunActive, parseOutputText } from './lib/guard.mjs'
+import { ctxCell, idChunks, leadRow, pairUp, worstNote } from './lib/ctx-row.mjs'
+import { guardAgentCtx, guardLeadCtx, guardRunActive, parseOutputText } from './lib/guard.mjs'
 import { progressRows } from './lib/bars.mjs'
 import { fit, fmtDuration, fmtMinutes, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
 import { setStatusPart } from './shared/status'
 import { isViewSurface } from './shared/surface'
-import type { AgentRow, RunState, RunView, SettingsState } from '../types'
+import type { AgentRow, CtxState, RunState, RunView, SettingsState } from '../types'
 
 const PANE = 'aico-run'
 const COMMAND = 'aico-run'
@@ -17,6 +18,7 @@ const POLL_MS = 10000
 const MAX_AGENTS = 40
 const SHOWN_AGENTS = 10
 const DEFAULT_WIDTH = 39
+const MIN_HEAD = 12
 const PROMPT_HEAD = 65536
 
 // The validator reads a state key from an atom declared in the file that uses it.
@@ -24,18 +26,24 @@ const run = atom({ plugin: 'aico', key: 'run' } as const, { known: true, slug: n
 const EMPTY_AGENT: AgentRow = { step: null, role: null, name: null, baseCommit: null, tier: null, startedMs: 0, isRunning: false }
 const agents = atom({ plugin: 'aico', key: 'agents' } as const, EMPTY_AGENT, { shape: 'v1' })
 
+const EMPTY_CTX: CtxState = { lead: null, agents: [] }
+const ctx = atom({ plugin: 'aico', key: 'ctx' } as const, EMPTY_CTX, { shape: 'v1' })
+
 // Timers and bookkeeping only; no view draws from these.
 let timer: { cancel: () => unknown } | undefined
 let isForced = false
 let lastSignature = ''
 let lastPollMs = 0
+let lastLeadKey = ''
+let agentTimer: { cancel: () => unknown } | undefined
+let isPolling = false
 
 const BASE_LINE = /^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$/m
 const TIER_LINE = /^Risk tier: (low|medium|high)$/m
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
 
-type Entry = { type: string; row: AgentRow }
-type AgentLine = { head: string; tail: string }
+type Entry = { id: string; type: string; row: AgentRow }
+type AgentLine = { head: string; units: string[] }
 type Model = {
   slug: string
   state: string
@@ -46,6 +54,7 @@ type Model = {
   view: RunView | null
   elapsed: string
   agents: AgentLine[]
+  lead: string | undefined
   status: string | undefined
 }
 
@@ -73,15 +82,16 @@ function whoLabel(step: string | null, role: string | null, name: string): strin
 }
 
 // The model of the run view: strings only, every unknown field a `?`.
-function buildModel(state: RunState, entries: Entry[], roles: Record<string, string>, nowMs: number): Model | undefined {
+function buildModel(state: RunState, entries: Entry[], roles: Record<string, string>, nowMs: number, counts: CtxState): Model | undefined {
   const view: RunView | null = state.view
   if (state.slug === null) {
     if (state.known) return undefined
-    return { slug: UNKNOWN, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], status: undefined }
+    return { slug: UNKNOWN, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], lead: undefined, status: undefined }
   }
   const slug = state.slug
+  const lead = leadRow(counts.lead)
   if (view === null) {
-    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], status: `W${UNKNOWN} S${UNKNOWN} ${UNKNOWN}` }
+    return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], lead, status: `W${UNKNOWN} S${UNKNOWN} ${UNKNOWN}` }
   }
   const wave = typeof view.wave === 'number' ? String(view.wave) : UNKNOWN
   const round = typeof view.round === 'number' ? String(view.round) : UNKNOWN
@@ -94,12 +104,16 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const elapsed = fmtDuration((isEnded && !Number.isNaN(endedMs) ? endedMs : nowMs) - startedMs)
 
   const lines: AgentLine[] = []
+  const counted: (number | null)[] = [counts.lead]
   let current: { step: string; role: string | null; name: string } | undefined
-  for (const { type, row } of entries) {
+  for (const { id, type, row } of entries) {
     const role = roleOf(type, row)
     const name = shown(row.name, roles, role)
     const startedAt = row.startedMs > 0 ? fmtDuration(nowMs - row.startedMs) : UNKNOWN
-    lines.push({ head: whoLabel(row.step, role, name), tail: startedAt })
+    const found = counts.agents.find(one => one.id === id)
+    const ctxValue = found === undefined ? null : found.ctx
+    counted.push(ctxValue)
+    lines.push({ head: whoLabel(row.step, role, name), units: [startedAt, ...splitCell(ctxCell(ctxValue))] })
     if (row.step !== null && (current === undefined || row.step > current.step)) current = { step: row.step, role, name }
   }
   if (current === undefined) {
@@ -113,9 +127,42 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const status = isEnded
     ? `ended ${view.outcome ?? UNKNOWN} ${minutes}`
     : view.state === 'running'
-      ? `W${wave} S${stepNumber} ${shortRole(current?.role ?? null)}${minutes}`
+      ? capped(worstNote(counted), `W${wave} S${stepNumber}`, `${shortRole(current?.role ?? null)}${minutes}`)
       : view.state
-  return { slug, state: label, wave, step, round, gates, view, elapsed, agents: lines, status }
+  return { slug, state: label, wave, step, round, gates, view, elapsed, agents: lines, lead, status }
+}
+
+// `ctx 90.0k near cap` as `ctx 90.0k` and `near cap`, so a narrow pane breaks between them and never inside the note.
+function splitCell(cell: string): string[] {
+  const at = cell.indexOf(' cap')
+  return at < 0 ? [cell] : [cell.slice(0, at - 5), cell.slice(at - 4)]
+}
+
+// With a note the status part is `W1 S3 near cap`; without one it is the usual form, byte for byte.
+function capped(note: string, front: string, rest: string): string {
+  return note === '' ? `${front} ${rest}` : `${front} ${note}`
+}
+
+function agentRows(one: AgentLine, width: number): string[] {
+  const tail = one.units.join(' ')
+  const room = Math.max(1, width - tail.length - 1)
+  if (room >= MIN_HEAD) return [`${fit(one.head, room)} ${tail}`]
+  // Narrow: the label on its own row, then the units packed whole into rows that fit.
+  return [fit(one.head, width), ...packUnits(one.units, width)]
+}
+
+function packUnits(units: string[], width: number): string[] {
+  const out: string[] = []
+  let line = ''
+  for (const unit of units) {
+    if (line !== '' && line.length + 1 + unit.length <= width) line += ` ${unit}`
+    else {
+      if (line !== '') out.push(line)
+      line = unit
+    }
+  }
+  if (line !== '') out.push(line)
+  return out
 }
 
 function labelled(label: string, value: string): string {
@@ -124,6 +171,7 @@ function labelled(label: string, value: string): string {
 
 function renderRows(model: Model, width: number): string[] {
   const rows: string[] = [
+    ...(model.lead === undefined ? [] : packUnits(['Lead', ...splitCell(model.lead.slice(5))], width)),
     labelled('Run', model.slug),
     labelled('State', model.state),
     labelled('Wave', model.wave),
@@ -138,8 +186,7 @@ function renderRows(model: Model, width: number): string[] {
   } else {
     rows.push(`Running subagents (${model.agents.length})`)
     for (const one of model.agents.slice(0, SHOWN_AGENTS)) {
-      const room = Math.max(1, width - one.tail.length - 1)
-      rows.push(`${fit(one.head, room)} ${one.tail}`)
+      rows.push(...agentRows(one, width))
     }
     if (model.agents.length > SHOWN_AGENTS) rows.push(`+${model.agents.length - SHOWN_AGENTS} more`)
   }
@@ -159,7 +206,7 @@ function guardShow(value: unknown): RunView | undefined {
   return checked === undefined || checked.view === null ? undefined : checked.view
 }
 
-async function gather($: EngineInterface): Promise<{ settings: SettingsState; state: RunState; entries: Entry[]; nowMs: number }> {
+async function gather($: EngineInterface): Promise<{ settings: SettingsState; state: RunState; entries: Entry[]; nowMs: number; counts: CtxState }> {
   const settings = await readSettings($)
   const state = await read($, run)
   const nowMs = await $.clock.now()
@@ -174,15 +221,15 @@ async function gather($: EngineInterface): Promise<{ settings: SettingsState; st
     if (entries.length >= MAX_AGENTS) break
     if (info.status !== 'running') continue
     const row = await read($, memberOf(agents, { requestId: info.id }))
-    entries.push({ type: String(info.type), row })
+    entries.push({ id: String(info.id), type: String(info.type), row })
   }
-  return { settings, state, entries, nowMs }
+  return { settings, state, entries, nowMs, counts: await read($, ctx) }
 }
 
 async function drawPane($: EngineInterface, e: RenderInput) {
-  const { settings, state, entries, nowMs } = await gather($)
+  const { settings, state, entries, nowMs, counts } = await gather($)
   if (!settings.mods.savvy.enabled) return undefined
-  const model = buildModel(state, entries, settings.roles, nowMs)
+  const model = buildModel(state, entries, settings.roles, nowMs, counts)
   if (model === undefined) return undefined
   const { Box, Text } = $.ui.resolve(e)
   const rows = renderRows(model, paneWidth(e))
@@ -196,8 +243,8 @@ async function drawPane($: EngineInterface, e: RenderInput) {
 }
 
 async function publish($: EngineInterface): Promise<void> {
-  const { settings, state, entries, nowMs } = await gather($)
-  const model = buildModel(state, entries, settings.roles, nowMs)
+  const { settings, state, entries, nowMs, counts } = await gather($)
+  const model = buildModel(state, entries, settings.roles, nowMs, counts)
   await setStatusPart($, 'savvy', model?.status)
   if (model !== undefined) await $.ui.invalidate('ui.render')
 }
@@ -214,6 +261,39 @@ async function stamp($: EngineInterface, path: string): Promise<string> {
 async function signature($: EngineInterface, root: string, slug: string): Promise<string> {
   const dir = `${root}/.company/work/${slug}`
   return `${await stamp($, dir)}|${await stamp($, `${dir}/run-state.jsonl`)}`
+}
+
+// The Lead's context, read again only when `lead-context.json` changes.
+async function refreshLead($: EngineInterface, root: string, slug: string): Promise<void> {
+  const key = `${slug}|${await stamp($, `${root}/.company/work/${slug}/lead-context.json`)}`
+  if (key === lastLeadKey) return
+  const out = await runScript($, 'lead-handover', ['ctx', slug, '--json'], TIMEOUT_MS.leadCtx, guardLeadCtx)
+  if (out.ok) lastLeadKey = key
+  const lead = out.ok ? out.value.ctx : null
+  await update($, ctx, prev => ({ ...prev, lead }))
+}
+
+// Running subagents' context in chunks, one call after another; a poll still running skips the next one.
+async function pollAgents($: EngineInterface): Promise<void> {
+  if (isPolling) return
+  isPolling = true
+  try {
+    if (!(await readSettings($)).mods.savvy.enabled) return
+    if ((await read($, run)).slug === null) return
+    const list = (await $.agent.list()) as { id: string; status: string }[]
+    const ids = list.filter(info => info.status === 'running').slice(0, MAX_AGENTS).map(info => String(info.id))
+    const found: CtxState['agents'] = []
+    for (const chunk of idChunks(ids)) {
+      const out = await runScript($, 'ledger', ['agent-ctx', ...chunk, '--json'], TIMEOUT_MS.agentCtx, guardAgentCtx)
+      found.push(...pairUp(chunk, out.ok ? out.value : null))
+    }
+    await update($, ctx, prev => ({ ...prev, agents: found }))
+    await $.ui.invalidate('ui.render')
+  } catch {
+    // The rows keep their last counts; the next poll tries again.
+  } finally {
+    isPolling = false
+  }
 }
 
 async function openPane($: EngineInterface): Promise<void> {
@@ -269,6 +349,8 @@ async function tickOnce($: EngineInterface): Promise<void> {
     if (isFollowing || (await $.fs.exists(`${root}/.company/work`))) isDue = true
   }
   if (isDue) await refreshRun($, current, settings.mods.savvy.pane, root)
+  const after = await read($, run)
+  if (after.slug !== null) await refreshLead($, root, after.slug)
   await publish($)
 }
 
@@ -283,6 +365,8 @@ async function tick($: EngineInterface): Promise<void> {
 function stopTimer(): void {
   if (timer !== undefined) void timer.cancel()
   timer = undefined
+  if (agentTimer !== undefined) void agentTimer.cancel()
+  agentTimer = undefined
 }
 
 async function ensureTimer($: EngineInterface): Promise<void> {
@@ -290,6 +374,7 @@ async function ensureTimer($: EngineInterface): Promise<void> {
   const settings = await readSettings($)
   if (!settings.mods.savvy.enabled) return
   timer = $.clock.every(TICK_MS, () => tick($))
+  agentTimer = $.clock.every(POLL_MS, () => pollAgents($))
 }
 
 // Settings arrive from a script after start-up: wait a little for them, then run on the defaults.
@@ -303,6 +388,14 @@ async function begin($: EngineInterface): Promise<void> {
     await tick($)
   } catch {
     // Savvy stays quiet when it cannot start.
+  }
+}
+
+async function resetCounts($: EngineInterface): Promise<void> {
+  try {
+    await update($, ctx, () => EMPTY_CTX)
+  } catch {
+    // The counts stay as they were; the next poll replaces them.
   }
 }
 
@@ -366,6 +459,8 @@ export function registerSavvy(on: On): void {
     stopTimer()
     lastSignature = ''
     lastPollMs = 0
+    lastLeadKey = ''
+    void resetCounts($)
     void begin($)
     return next(e)
   })

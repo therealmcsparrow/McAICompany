@@ -90,6 +90,8 @@ async function boot($: Env[0], on: Env[1], world: World, surface: 'terminal' | '
       if (e.argv[2] === 'show') return world.show
       return typeof world.active === 'function' ? world.active() : ok(world.active)
     }
+    if (script === 'lead-handover.mjs') return ok(JSON.stringify({ v: 1, ctx: 42000, peak: 50000, at: '2026-10-26T10:05:00Z' }))
+    if (script === 'ledger.mjs') return ok(JSON.stringify({ v: 1, agents: [{ agent: 'a1', ctx: 12000 }] }))
     return { value: { exitCode: 2, stdout: '', stderr: '' } }
   }) as never)
   await $.session.start({ cwd: '/work', surface, isInteractive: true })
@@ -122,6 +124,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await clock.advance(2100)
     const ui = await $.ui.mount(pane(surface))
     const text = (await lines(ui)).join('\n')
+    expect(text.split('\n')[0]).toBe('Lead ctx 42.0k')
     expect(text).toContain('Run      demo')
     expect(text).toContain('Wave     2')
     expect(text).toContain('Step     06 frontend-engineer (Freya)')

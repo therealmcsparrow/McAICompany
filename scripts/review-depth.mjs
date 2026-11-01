@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Usage: node scripts/review-depth.mjs (<base> --run <name> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json]
-// Review depth follows the paths a diff touches (contract review-depth v1.2), never the builder's label.
+// Review depth (contract: docs/contracts/review-depth.md v1.3). Node built-ins only.
+// Usage: node scripts/review-depth.mjs (<base> --run <name> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json [--lines]]
+// Review depth follows the paths a diff touches, never the builder's label.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,14 +97,14 @@ export function moduleFor(file, modules) {
   return null;
 }
 
-export function analyze(paths, { core = [], modules = [], risk, limit = MAX_PATHS } = {}) {
+export function analyze(paths, { core = [], modules = [], risk, limit = MAX_PATHS, lines } = {}) {
   const { depth } = classify(paths, { core, risk });
   const listed = [];
   const reasons = [];
   if (risk === 'high') reasons.push({ path: '*', rule: 'risk tier — high' });
   paths.forEach((p, i) => {
     const rules = rulesFor(p, core);
-    if (i < limit) listed.push({ path: p, categories: rules.map((r) => r.category), module: moduleFor(p, modules) });
+    if (i < limit) listed.push({ path: p, categories: rules.map((r) => r.category), module: moduleFor(p, modules), ...(lines ? { lines: lines.get(p) ?? 0 } : {}) });
     if (rules.length && reasons.length < limit) reasons.push({ path: p, rule: rules[0].rule });
   });
   return { depth, paths: listed, reasons, truncated: paths.length > limit };
@@ -116,7 +117,7 @@ function refuse(msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { sha: undefined, run: undefined, staged: false, worktree: false, json: false, repo: undefined, risk: undefined };
+  const opts = { sha: undefined, run: undefined, staged: false, worktree: false, json: false, lines: false, repo: undefined, risk: undefined };
   const flag = (key) => {
     if (opts[key]) refuse('unexpected argument');
     opts[key] = true;
@@ -138,12 +139,14 @@ function parseArgs(argv) {
     } else if (a === '--staged') flag('staged');
     else if (a === '--worktree') flag('worktree');
     else if (a === '--json') flag('json');
+    else if (a === '--lines') flag('lines');
     else if (opts.sha === undefined && !a.startsWith('-')) opts.sha = a;
     else refuse('unexpected argument');
   }
   const modes = (opts.sha !== undefined) + opts.staged + opts.worktree;
   if (modes !== 1) refuse('give one of <base>, --staged, --worktree');
   if (opts.sha !== undefined && !FULL_SHA.test(opts.sha)) refuse('base must be a full object id (40 or 64 hex)');
+  if (opts.lines && !opts.json) refuse('--lines needs --json');
   if (opts.sha === undefined && opts.run !== undefined) refuse('--run goes with a base');
   return opts;
 }
@@ -189,6 +192,27 @@ function listPaths(git, mode, endpoints) {
   const r = git.diff(['-z', '--name-only', '--no-renames', ...mode], endpoints);
   if (r.failed || r.status !== 0 || r.overflow) throw new Error('git failed');
   return r.out.toString('utf8').split('\0').filter(Boolean);
+}
+
+// Added plus deleted lines per path from the judging numstat; a binary file counts 0. Map(path -> lines).
+function listLines(git, mode, endpoints) {
+  const r = git.diff(['-z', '--numstat', '--no-renames', ...mode], endpoints);
+  if (r.failed || r.status !== 0 || r.overflow) throw new Error('git failed');
+  const out = new Map();
+  for (const rec of r.out.toString('utf8').split('\0')) {
+    const m = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(rec);
+    if (m) out.set(m[3], (m[1] === '-' ? 0 : Number(m[1])) + (m[2] === '-' ? 0 : Number(m[2])));
+  }
+  return out;
+}
+
+function readLines(opts, git) {
+  if (opts.sha !== undefined) return listLines(git, [], [opts.sha, runRef(opts.run)]);
+  const staged = () => listLines(git, ['--cached'], []);
+  if (opts.staged || !hasHead(git)) return staged();
+  const out = listLines(git, [], ['HEAD']);
+  for (const [p, n] of staged()) if (!out.has(p)) out.set(p, n);
+  return out;
 }
 
 function untrackedPaths(git) {
@@ -245,11 +269,23 @@ function answer(argv, seam) {
   } catch {
     return full(opts, head, 'diff unavailable');
   }
+  let lines;
+  if (opts.lines) {
+    try {
+      lines = readLines(opts, git);
+    } catch {
+      return full(opts, head, 'diff unavailable');
+    }
+  }
   const profile = source === 'base' ? profileAtBase(git, opts.sha) : readProfile();
+  if (profile === null && opts.lines) {
+    const a = analyze(paths, { lines });
+    return JSON.stringify({ ...head, depth: 'full', paths: a.paths, reasons: [{ path: '*', rule: 'core unknown at base' }], truncated: a.truncated }) + '\n';
+  }
   if (profile === null) return full(opts, head, 'core unknown at base');
   const core = coreFromProject(profile);
   if (opts.json) {
-    const a = analyze(paths, { core, modules: modulesFromProject(profile), risk: opts.risk });
+    const a = analyze(paths, { core, modules: modulesFromProject(profile), risk: opts.risk, lines });
     return JSON.stringify({ ...head, depth: a.depth, paths: a.paths, reasons: a.reasons, truncated: a.truncated }) + '\n';
   }
   const { depth, reasons } = classify(paths, { core, risk: opts.risk });
