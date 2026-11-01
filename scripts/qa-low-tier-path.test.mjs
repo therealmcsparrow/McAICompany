@@ -919,7 +919,11 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
     for (const run of runs) {
       // the scorecard gained a last segment in v1.5; with it cut off the line is the v0.18.0 line
       const noCost = (r) => ({ ...r, lines: r.lines.map((x) => x.replace(/ \| cost: not recorded$/, '')) });
-      assert.deepEqual(ledger(['report', run], opts), oldMain(['report', run], opts), `report ${run}`);
+      // v1.8 adds a last report line `over cap: <n> steps (max <n>)` when a Step is above 95000 (CEO decision: v1.3 fixtures too).
+      // Derived from fixture data; only triage-hardening has such Steps (4, max 190796).
+      const oldReport = oldMain(['report', run], opts);
+      if (run === 'triage-hardening') oldReport.lines = [...oldReport.lines, 'over cap: 4 steps (max 190796)'];
+      assert.deepEqual(ledger(['report', run], opts), oldReport, `report ${run}`);
       assert.deepEqual(noCost(ledger(['scorecard', run], opts)), oldMain(['scorecard', run], opts), `scorecard ${run}`);
     }
     for (const cmd of ['model-verdict', 'parallel-verdict']) assert.deepEqual(ledger([cmd], opts), oldMain([cmd], opts), cmd);
