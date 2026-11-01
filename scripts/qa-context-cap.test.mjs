@@ -304,7 +304,7 @@ describe('the Lead Handoff still resumes after measure wrote lead-context.json',
   });
 });
 
-// ---------- R-21: no skill or agent tells a Role to SendMessage ----------
+// ---------- no skill or agent tells a Role to SendMessage ----------
 
 function walk(dir) {
   const out = [];
@@ -342,7 +342,7 @@ describe('R-21: SendMessage appears in skills and agents only as a prohibition',
   });
 });
 
-// ---------- AC12: Contract drift ----------
+// ---------- Contract drift ----------
 
 describe('AC12: the Contract bumps pass the drift check', () => {
   test('check.mjs --drift reports 0 errors', () => {
