@@ -233,8 +233,16 @@ function parsePlan(text) {
       const field = FIELD.exec(lines[i].line);
       if (field && !fields.has(field[1])) fields.set(field[1], field[2].trim());
     }
-    const block = lines.slice(index, end).map((l) => l.line.replace(/[ \t]+$/, ''));
+    const raw = lines.slice(index, end);
+    const block = raw.map((l) => l.line.replace(/[ \t]+$/, ''));
     while (block.length > 1 && block[block.length - 1] === '') block.pop();
+    // Fields are read from the raw line but the block is hashed and written trimmed: refuse a line whose kind changes.
+    const trimmed = readPlanLines(block.join('\n')).lines;
+    for (let i = 0; i < block.length; i++) {
+      if (!trimmed[i] || trimmed[i].kind !== raw[i].kind || trimmed[i].level !== raw[i].level) {
+        throw new PlanProblem(`line ${raw[i].no} changes kind when trailing spaces are removed`);
+      }
+    }
     for (let i = index; i < end; i++) inBlock[i] = true;
     const blockText = `${block.join('\n')}\n`;
     tickets.push({
@@ -252,7 +260,7 @@ function parsePlan(text) {
   const rest = [];
   lines.forEach((entry, i) => {
     if (inBlock[i]) return;
-    if (HIDDEN.test(entry.line.replaceAll('\t', ''))) throw new PlanProblem(`line ${entry.no} holds an invisible or control character`);
+    if (HIDDEN.test(entry.line.replaceAll('\t', ''))) throw new PlanProblem(`line ${entry.no} holds an invisible or control character (a visible emoji can hold one)`);
     if (entry.kind === 'heading' && entry.level === 1 && title === null) {
       title = entry.line.trim();
       return;
@@ -649,8 +657,9 @@ function cmdBuildPlan(args, env) {
   // The written text must read back as exactly the approved tickets, one `## Tasks`, no open fence.
   const written = text.endsWith('\n') ? text : `${text}\n`;
   const back = parsePlan(written);
-  const tasksHeads = readPlanLines(written).lines.filter((l) => l.kind === 'heading' && l.level === 2 && /^tasks$/i.test(l.title.trim()));
-  if (back.tickets.map((t) => t.id).join(' ') !== approved.map((t) => t.id).join(' ') || back.openFence || tasksHeads.length !== 1) {
+  const tasksHeads = readPlanLines(written).lines.filter((l) => l.kind === 'heading' && l.level === 2 && TASKS_TITLE.test(l.title.trim()));
+  const same = back.tickets.length === approved.length && back.tickets.every((t, i) => t.id === approved[i].id && t.hash === approved[i].hash);
+  if (!same || back.sections.text !== plan.sections.text || back.openFence || tasksHeads.length !== 1) {
     throw new PlanProblem('build plan does not read back as the approved tickets');
   }
   const applied = appliedLines(rec, [...plan.tickets, plan.sections]);

@@ -129,6 +129,10 @@ describe('routes.md', () => {
     lacks(routes, /node (?:\.\/)?scripts\//, /node "scripts\//);
   });
 
+  test('exit 1 on tickets has a route: re-dispatch architect with the line number, one round', () => {
+    has(routes, '`ticket-approval tickets` exit 1', 're-dispatch `architect` once', 'fix plan line <n>', 'exit 1 a second time');
+  });
+
   test('every idea-flow and ticket-approval command it names exists', () => {
     const flowCmds = new Set(['start', 'options', 'pick', 'done', 'park-idea', 'state', 'read']);
     const apprCmds = new Set(['tickets', 'ticket', 'park-ticket', 'build-plan', 'read']);

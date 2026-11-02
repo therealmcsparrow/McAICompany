@@ -5,6 +5,7 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ## [Unreleased]
 
 ### Added
+- **Plan approval refuses hidden characters.** `ticket-approval` stops with exit 1 `plan line <n> holds an invisible or control character (a visible emoji can hold one)` when a plan line outside a ticket block holds one (zero-width, bidi, variation selector); it also refuses a ticket block line that trimming trailing spaces would turn into another kind (for example a padded heading). Nothing is changed or written.
 - **Context cap enforcement.** Steps now stay under the fixed 95000 cap (handover at 85500) because the plugin checks it, not only the Lead.
   - **No resume.** "Steps are never resumed". While a run is active, `session.send` from the model returns `{ isDelivered: false, reason }` and `agent.spawn` with `resume` returns `{ deny: reason }`. The reason reads `aico: Steps are never resumed; dispatch a fresh Step (next NN) with the old Handoff as input (pipeline §2)`. A failed lint, a CEO answer or a follow-up all go to a fresh Step. Always on, no setting. ADR 0054.
   - **Over-cap Steps are flagged.** `ledger add` with `ctx_end` above 95000 still writes the record, then prints `over cap: <kind> <id> <role> ctx_end <n> > 95000` and exits 4. The Lead treats that as a failed Step and a fresh, smaller Step re-checks the work. An over-cap reviewer Handoff never closes a review.

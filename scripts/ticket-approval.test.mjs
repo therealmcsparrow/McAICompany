@@ -632,6 +632,20 @@ describe('build-plan', () => {
     assert.match(r.lines.join(NL), /line 2: bad id/);
   });
 
+  describe('a ticket block line that trimming would change in kind is refused', () => {
+    const pad = ' '.repeat(4100);
+    for (const [name, line] of [['a padded heading', '## Notes' + pad], ['a padded core file line', '- files: src/core/evil.mjs' + pad]]) {
+      test(name + ': tickets and build-plan refuse, nothing is written', () => {
+        const fx = fixture(planText(ticket('T1', { extra: [line] })));
+        const r = tryPlan(fx);
+        assert.equal(r.code, 1);
+        assert.match(r.lines.join(NL), /plan line [0-9]+ changes kind when trailing spaces are removed/);
+        assert.notEqual(fx.run('build-plan', fx.slug).code, 0);
+        assert.equal(fs.existsSync(buildPath(fx)), false);
+      });
+    }
+  });
+
   describe('invisible characters outside ticket blocks are refused, never stripped', () => {
     const ZW = '\u200B';
     const long = (s) => s + ZW.repeat(4100);
@@ -661,7 +675,7 @@ describe('build-plan', () => {
         const r = tryPlan(fx);
         assert.equal(r.code, 1);
         assert.equal(r.lines.length, 1);
-        assert.match(r.lines[0], new RegExp(`^ticket-approval: plan line ${lineNo} holds an invisible or control character$`));
+        assert.match(r.lines[0], new RegExp(`^ticket-approval: plan line ${lineNo} holds an invisible or control character [(]a visible emoji can hold one[)]$`));
         assert.equal(fx.run('build-plan', fx.slug).code, 1);
         assert.equal(fs.existsSync(buildPath(fx)), false);
       });
