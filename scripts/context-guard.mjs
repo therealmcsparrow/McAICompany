@@ -9,12 +9,19 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { show } from './run-state.mjs';
 import {
   HANDOVER_AT, findRun, transcriptTokens, claudeDirOf, workDir, lstatOrNull, openRegular, readSmall, iso,
+  loadRecord, contextHandover, newSessionCommand,
 } from './lead-handover.mjs';
 
 export const STEP_REASON = 'aico context cap: this Step reached the hand-over point. Write your Handoff with status: handover to your Output path now, then end. Every other tool is refused.';
 export const STOP_REASON = 'aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.';
+
+export const FREEZE_REASON = 'aico context cap: the Lead Handoff is written and this session is frozen. Call lead_new_session, or show the CEO this command for a new session:';
+export const WAIT_REASON = 'aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.';
+export const FROZEN_LINE = 'aico context cap: this session is frozen. Start a new session in the product folder with:';
+export const NEW_SESSION_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
 
 const MAX_STDIN = 4 * 1024 * 1024;
 const MAX_ARG = 4096;
@@ -40,6 +47,7 @@ function parse(text) {
   return {
     event: str(o, 'hook_event_name'),
     transcript: str(o, 'transcript_path'),
+    session: str(o, 'session_id'),
     agent: str(o, 'agent_id'),
     hasAgent: Object.hasOwn(o, 'agent_id'),
     tool: str(o, 'tool_name'),
@@ -144,7 +152,8 @@ export function pre(text, opts) {
     const { root, claudeDir, env, now } = options(opts);
     if (env?.AICO_CONTEXT_GUARD === 'off') return silent;
     const p = parse(text);
-    if (!p || p.event !== 'PreToolUse' || !p.hasAgent) return silent;
+    if (!p || p.event !== 'PreToolUse') return silent;
+    if (!p.hasAgent) return lead(p, root, claudeDir, now);
     const file = stepFile(p.transcript, p.agent);
     if (!file) return silent;
     const tokens = transcriptTokens(file, claudeDir, true);
@@ -163,6 +172,34 @@ export function pre(text, opts) {
     if (!rec.lines.some((l) => l.ev === 'deny' && l.id === id)) appendGuard(run.dir, rec.count, { ev: 'deny', id }, now);
     return deny(STEP_REASON);
   } catch { return silent; }
+}
+
+// Lead branch (no agent_id): freeze at the hand-over point, nothing else is ever refused but Agent and Task.
+function lead(p, root, claudeDir, now) {
+  if (typeof p.session !== 'string' || p.session.length === 0 || p.session.length > 512) return silent;
+  if (typeof p.transcript !== 'string' || p.transcript.length > MAX_ARG) return silent;
+  const tokens = transcriptTokens(p.transcript, claudeDir, false);
+  if (tokens === null || tokens < HANDOVER_AT) return silent;
+  const run = runOf(root, now);
+  if (!run) return silent;
+  const base = mainRoot(root);
+  const session = hash12(p.session);
+  const command = newSessionCommand(run.slug);
+  const tail = command ? ` ${command}` : '';
+  const isTool = p.tool === NEW_SESSION_TOOL;
+  const events = loadRecord(run.dir);
+  if (events.some((e) => e.ev === 'handover' && e.trigger === 'context' && e.session === session)) {
+    if (isTool) return silent;
+    const line = `${FROZEN_LINE}${tail}`;
+    return { code: 0, out: `${JSON.stringify({ continue: false, stopReason: line, systemMessage: line })}
+`, err: `${line}
+` };
+  }
+  if (show(base, run.slug, { now }).subs.some((s) => s.start !== null && s.stop === null)) {
+    return p.tool === 'Agent' || p.tool === 'Task' ? deny(WAIT_REASON) : silent;
+  }
+  try { contextHandover(base, run.slug, { tokens, session, now }); } catch { return silent; }
+  return isTool ? silent : deny(`${FREEZE_REASON}${tail}`);
 }
 
 // SubagentStop adapter: blocks the stop once for a Step that was refused tools and announced no Handoff file.

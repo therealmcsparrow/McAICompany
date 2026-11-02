@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import * as lead from './lead-handover.mjs';
 import {
-  HANDOVER_AT, COMPACT_RESERVE, AUTO_COMPACT_WINDOW, CAP, HEADER, watch, resume, main,
+  HANDOVER_AT, CAP, HEADER, watch, resume, main, contextHandover, newSessionCommand,
 } from './lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -57,30 +58,31 @@ function transcript(fx, usage, extra = []) {
 const USAGE_85500 = { input_tokens: 1000, cache_creation_input_tokens: 4000, cache_read_input_tokens: 80000, output_tokens: 500 };
 const preCompact = (file, extra = {}) => JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'auto', transcript_path: file, ...extra });
 const sessionStart = (extra = {}) => JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact', ...extra });
-const opts = (fx, env = {}) => ({ root: fx.root, claudeDir: fx.claudeDir, env });
+// Most tests below cover the v1.6 rule, which `AICO_CONTEXT_GUARD=off` keeps; `optsOn` is the v1.7 default.
+const opts = (fx, env = {}) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_CONTEXT_GUARD: 'off', ...env } });
+const optsOn = (fx, env = {}) => ({ root: fx.root, claudeDir: fx.claudeDir, env });
 const handoffFile = (fx, n = 1) => path.join(fx.dir, `lead-handoff-${n}.md`);
 const records = (fx) => fs.readFileSync(path.join(fx.dir, 'lead-handover.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
 describe('calibration', () => {
-  test('the window minus the reserve is the hand-over point', () => {
-    assert.equal(AUTO_COMPACT_WINDOW - COMPACT_RESERVE, HANDOVER_AT);
+  test('the hand-over point is fixed; the window constants are gone', () => {
     assert.equal(HANDOVER_AT, 85500);
     assert.equal(CAP, 95000);
-    assert.equal(AUTO_COMPACT_WINDOW, 98500);
+    assert.equal(lead.AUTO_COMPACT_WINDOW, undefined);
+    assert.equal(lead.COMPACT_RESERVE, undefined);
   });
 
-  test('the Contract holds the setting name and the window', () => {
+  test('the Contract is v1.7 and holds the hand-over point, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1\.6$/m);
-    assert.ok(text.includes('CLAUDE_CODE_AUTO_COMPACT_WINDOW'));
-    assert.ok(text.includes('98500'));
+    assert.match(text, /^# Contract: lead-handoff v1\.7$/m);
     assert.ok(text.includes('85500'));
+    assert.ok(text.includes('no setup'));
     assert.ok(!text.includes('\r'));
   });
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.6');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.7');
     assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
@@ -426,7 +428,7 @@ describe('finding the run', () => {
     fs.mkdirSync(path.join(work, 'zzz-open'), { recursive: true });
     fs.writeFileSync(path.join(work, 'zzz-open', 'idea-flow.jsonl'), `${JSON.stringify({ e: 'start', kind: 'idea', ts: '2026-10-30T10:00:00.000Z' })}\n`);
     const fx = { root, claudeDir, dir: path.join(work, 'zzz-open'), slug: 'zzz-open' };
-    watch(preCompact(transcript(fx, USAGE_85500)), { root, claudeDir, env: {} });
+    watch(preCompact(transcript(fx, USAGE_85500)), { root, claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
     assert.ok(fs.existsSync(path.join(work, 'zzz-open', 'lead-handoff-1.md')));
   });
 });
@@ -579,12 +581,133 @@ describe('CLI', () => {
 
   test('the process end to end: watch writes, resume injects', () => {
     const fx = fixture({ subs: ['stopped'] });
-    const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500' };
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500', AICO_CONTEXT_GUARD: 'off' };
     const w = spawnSync(process.execPath, [SCRIPT, 'watch'], { cwd: fx.root, input: preCompact(transcript(fx, USAGE_85500)), encoding: 'utf8', env });
     assert.equal(w.status, 0);
     const r = spawnSync(process.execPath, [SCRIPT, 'resume'], { cwd: fx.root, input: sessionStart(), encoding: 'utf8', env });
     assert.equal(r.status, 0);
     assert.ok(JSON.parse(r.stdout).hookSpecificOutput.additionalContext.includes('tokens-at-handover: 85500'));
+  });
+});
+
+describe('v1.7 watch by trigger', () => {
+  const manual = (file) => preCompact(file, { trigger: 'manual' });
+
+  test('auto in an active run exits 2 with one fixed line and writes nothing, whatever the tokens or Step state', () => {
+    for (const subs of [[], ['running'], ['stopped']]) {
+      const fx = fixture({ subs });
+      for (const usage of [USAGE_85500, { ...USAGE_85500, cache_read_input_tokens: 90000 }, { input_tokens: 5 }]) {
+        const r = watch(preCompact(transcript(fx, usage)), optsOn(fx));
+        assert.equal(r.code, 2);
+        assert.match(r.err, /^aico: automatic compaction is blocked during a run; [^\n]{1,120}\n$/);
+      }
+      assert.equal(watch(preCompact(path.join(fx.base, 'missing.jsonl')), optsOn(fx)).code, 2);
+      assert.ok(!fs.existsSync(handoffFile(fx)));
+      assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-handover.jsonl')));
+    }
+  });
+
+  test('auto without an active run, or from a subagent, stays silent', () => {
+    const fx = fixture();
+    fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
+    assert.deepEqual(watch(preCompact(transcript(fx, USAGE_85500)), optsOn(fx)), { code: 0, err: '' });
+    const fx2 = fixture();
+    assert.deepEqual(watch(preCompact(transcript(fx2, USAGE_85500), { agent_id: 'a1' }), optsOn(fx2)), { code: 0, err: '' });
+  });
+
+  test('manual is never blocked: a clean point writes, a running Step writes nothing', () => {
+    const fx = fixture({ subs: ['stopped'] });
+    assert.equal(watch(manual(transcript(fx, USAGE_85500)), optsOn(fx)).code, 0);
+    assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^trigger: manual$/m);
+    for (const usage of [{ ...USAGE_85500, cache_read_input_tokens: 10000 }, USAGE_85500, { input_tokens: 5 }]) {
+      const fy = fixture({ subs: ['running'] });
+      assert.deepEqual(watch(manual(transcript(fy, usage)), optsOn(fy)), { code: 0, err: '' });
+      assert.ok(!fs.existsSync(handoffFile(fy)));
+    }
+  });
+
+  test('AICO_CONTEXT_GUARD=off returns watch to the v1.6 rule', () => {
+    const fx = fixture({ subs: ['running'] });
+    assert.equal(watch(preCompact(transcript(fx, USAGE_85500)), optsOn(fx, { AICO_CONTEXT_GUARD: 'off' })).code, 2);
+    assert.equal(watch(preCompact(transcript(fx, USAGE_85500)), optsOn(fx, { AICO_CONTEXT_GUARD: 'OFF' })).code, 2);
+    const big = { ...USAGE_85500, cache_read_input_tokens: 90000 };
+    assert.equal(watch(preCompact(transcript(fx, big)), optsOn(fx, { AICO_CONTEXT_GUARD: 'off' })).code, 0);
+    const fy = fixture({ subs: ['stopped'] });
+    assert.equal(watch(preCompact(transcript(fy, USAGE_85500)), optsOn(fy, { AICO_CONTEXT_GUARD: 'off' })).code, 0);
+    assert.match(fs.readFileSync(handoffFile(fy), 'utf8'), /^trigger: auto$/m);
+  });
+});
+
+describe('v1.7 contextHandover', () => {
+  const SESSION = 'abcdef012345';
+  const call = (fx, o = {}) => contextHandover(fx.root, fx.slug, { tokens: 86000, session: SESSION, now: fx.now, ...o });
+
+  test('writes the Handoff with the new-session line and a handover event with session', () => {
+    const fx = fixture({ subs: ['stopped'] });
+    assert.equal(call(fx), 'lead-handoff-1.md');
+    const text = fs.readFileSync(handoffFile(fx), 'utf8');
+    assert.match(text, /^tokens-at-handover: 86000$/m);
+    assert.match(text, /^window: unknown$/m);
+    assert.match(text, /^trigger: context$/m);
+    assert.ok(text.endsWith(`- New session command: ${newSessionCommand(fx.slug)}\n`));
+    assert.ok(!text.includes('\r'));
+    const rec = records(fx).find((e) => e.ev === 'handover');
+    assert.deepEqual(Object.keys(rec), ['v', 'n', 'at', 'ev', 'file', 'tokens', 'window', 'trigger', 'session']);
+    assert.equal(rec.session, SESSION);
+    assert.equal(rec.window, null);
+    assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-freeze.lock')));
+  });
+
+  test('a running Step, a bad session or a held lock writes nothing and throws', () => {
+    const fx = fixture({ subs: ['running'] });
+    assert.throws(() => call(fx));
+    assert.ok(!fs.existsSync(handoffFile(fx)));
+    assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-freeze.lock')));
+    const fy = fixture({ subs: ['stopped'] });
+    assert.throws(() => call(fy, { session: 'not-a-hash' }));
+    fs.writeFileSync(path.join(fy.dir, 'lead-freeze.lock'), '');
+    assert.throws(() => call(fy));
+    assert.ok(!fs.existsSync(handoffFile(fy)));
+    assert.ok(fs.existsSync(path.join(fy.dir, 'lead-freeze.lock')), 'a lock another process holds stays');
+  });
+
+  test('a lock older than 30 seconds is replaced and removed after the event', () => {
+    const fx = fixture({ subs: ['stopped'] });
+    const lock = path.join(fx.dir, 'lead-freeze.lock');
+    fs.writeFileSync(lock, '');
+    const old = new Date(fx.now - 31000);
+    fs.utimesSync(lock, old, old);
+    assert.equal(call(fx), 'lead-handoff-1.md');
+    assert.ok(!fs.existsSync(lock));
+  });
+
+  test('the same session is never handed over twice; a new session may be', () => {
+    const fx = fixture({ subs: ['stopped'] });
+    call(fx);
+    assert.throws(() => call(fx));
+    assert.equal(call(fx, { session: '111111111111' }), 'lead-handoff-2.md');
+    assert.equal(records(fx).filter((e) => e.ev === 'handover').length, 2);
+  });
+
+  test('the context Handoff resumes with via ceo', () => {
+    const fx = fixture({ subs: ['stopped'] });
+    call(fx);
+    const r = resume(sessionStart(), { ...optsOn(fx), now: fx.now });
+    assert.ok(JSON.parse(r.out).hookSpecificOutput.additionalContext.includes('trigger: context'));
+    assert.equal(records(fx).find((e) => e.ev === 'resume').via, 'ceo');
+  });
+
+  test('a context event without a session, or a session on another trigger, breaks the record', () => {
+    const fx = fixture({ subs: ['stopped'] });
+    call(fx);
+    const file = path.join(fx.dir, 'lead-handover.jsonl');
+    const good = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(file, good.replace(/,"session":"[0-9a-f]{12}"/, ''));
+    assert.equal(main(['read', fx.slug], fx.root, {}).code, 1);
+    fs.writeFileSync(file, good.replace('"trigger":"context"', '"trigger":"manual"'));
+    assert.equal(main(['read', fx.slug], fx.root, {}).code, 1);
+    fs.writeFileSync(file, good);
+    assert.equal(main(['read', fx.slug], fx.root, {}).code, 0);
   });
 });
 
@@ -661,7 +784,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.6'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.7'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {

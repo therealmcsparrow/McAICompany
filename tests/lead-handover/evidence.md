@@ -58,3 +58,21 @@ Side facts
 - The Lead used PowerShell, not Bash, on win32; match hooks on `*`, never on `Bash`.
 
 Plan decisions: question 1 is yes, so T3 proceeds. Question 5 is yes, so T5 proceeds (points-only). Question 4 changes T4: `stopReason` does not reach the model-visible `result`; T4 must test where the command surfaces.
+
+## T5 live check, lead-session tool name (2026-11-02)
+- Claude Code 2.1.316, Node v26.7.0, win32. Command: `claude -p "say ok" --plugin-dir <repo> --output-format stream-json --verbose --max-turns 1`, tool list of the `init` line.
+- The tool shows as `mcp__plugin_aico_lead-session__lead_new_session`, as in `docs/contracts/lead-session-mcp.md`. The server started from the root `.mcp.json` and listed its one tool.
+- The tool was only listed, not called: a call needs a permission prompt and a context-hand-over record, which the contract tests cover.
+
+## T4 live test, which route the CEO sees (2026-11-02)
+
+Installed: Claude Code 2.1.316, aico 0.26.0; branch `context-guard` v1, `lead-handoff` v1.7. Model alias haiku, `claude -p --output-format stream-json --verbose`, throwaway plugin via `--plugin-dir` in a temp dir, deleted after. The real guard needs a 85500-token transcript, so a stub PreToolUse hook printed the exact output shapes of the Lead branch with marker words (one run per shape). Synthetic data only. Interactive terminal not tested (no TTY here): `-p` shows what the stream carries, not the TUI.
+
+| Output shape | Reached the model | Reached the stream the CEO's UI is built from |
+|---|---|---|
+| Frozen: stdout `{"continue":false,"stopReason":..,"systemMessage":..}` plus stderr, exit 0 | The turn ended: `result` success, `stop_reason` `tool_use`, `result` text empty | `systemMessage` only: a `system` row, subtype `informational`, level `notice`, content `PreToolUse:<tool> says: <systemMessage>`. `stopReason` and stderr text did not appear anywhere in the stream. |
+| Clean point: `permissionDecision` `deny` with the freeze reason | The model got the full reason, quoted it back as `PreToolUse:Read hook error: <reason>` and relayed the command in its answer | Only through the model's answer and the tool error; no `systemMessage` row (none was sent) |
+
+- Result: the CEO-visible route for the command is `systemMessage`. The model route is the deny reason. `stopReason` and stderr are kept per the Contract but cannot be relied on.
+- The Read tool still returned its content in the frozen run: `continue:false` ends the turn but did not stop the tool call the hook fired for. Harmless here (read-only freeze), noted.
+- Gap for the Architect: the first freeze (clean point) is a deny without `systemMessage`, so the CEO sees the command only if the model repeats it. Adding `systemMessage` with the same text to that deny would give the CEO a direct route; this needs a `context-guard` bump (output shape), so it is not done.

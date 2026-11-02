@@ -201,50 +201,27 @@ describe('read and ctx', () => {
   });
 });
 
-describe('begin env warning', () => {
-  const warn = (p) => `warning: CLAUDE_CODE_AUTO_COMPACT_WINDOW=98500 not found in env or ${p}; set it in that file's env block`;
-  const settings = (fx, body) => fs.writeFileSync(path.join(fx.claudeDir, 'settings.json'), typeof body === 'string' ? body : JSON.stringify(body));
-  const begin = (fx, env) => main(['begin', fx.slug, 'feature'], fx.root, { CLAUDE_CONFIG_DIR: fx.claudeDir, ...env });
+describe('begin prints no window warning (v1.7)', () => {
+  const begin = (fx, env, playbook = 'feature') => main(['begin', fx.slug, playbook], fx.root, { CLAUDE_CONFIG_DIR: fx.claudeDir, ...env });
 
-  test('warns when neither env nor settings hold 98500', () => {
+  test('begin prints only begun, with or without the window setting in env or user settings', () => {
     const fx = fixture();
-    const r = begin(fx, {});
-    assert.equal(r.code, 0);
-    assert.equal(r.out, `begun\n${warn(path.join(fx.claudeDir, 'settings.json'))}\n`);
+    assert.deepEqual(begin(fx, {}), { code: 0, out: 'begun\n' });
+    const fy = fixture();
+    fs.writeFileSync(path.join(fy.claudeDir, 'settings.json'), JSON.stringify({ env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'zq-settings-val', TOKEN: 'sk-SECRET' } }));
+    const r = begin(fy, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'zq-env-val' });
+    assert.deepEqual(r, { code: 0, out: 'begun\n' });
   });
 
-  test('the env value alone silences it', () => {
-    const fx = fixture();
-    assert.equal(begin(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500' }).out, 'begun\n');
-  });
-
-  test('the settings value silences it, as a string or a number', () => {
-    for (const v of ['98500', 98500]) {
-      const fx = fixture();
-      settings(fx, { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: v } });
-      assert.equal(begin(fx, {}).out, 'begun\n');
-    }
-  });
-
-  test('another value, bad JSON and an oversize file still warn and never echo values', () => {
-    const cases = [
-      { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'zq-settings-val', TOKEN: 'sk-SECRET' } },
-      'not json sk-SECRET',
-      `{"pad":"${'x'.repeat(70 * 1024)}","env":{"CLAUDE_CODE_AUTO_COMPACT_WINDOW":"98500"}}`,
-    ];
-    for (const c of cases) {
-      const fx = fixture();
-      settings(fx, c);
-      const r = begin(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'zq-env-val' });
-      assert.equal(r.code, 0);
-      assert.equal(r.out, `begun\n${warn(path.join(fx.claudeDir, 'settings.json'))}\n`);
-      assert.ok(!r.out.includes('SECRET') && !r.out.includes('zq-settings-val') && !r.out.includes('zq-env-val'));
-    }
+  test('begin reads no settings file', () => {
+    const src = fs.readFileSync(path.join(here, 'lead-handover.mjs'), 'utf8');
+    assert.ok(!src.includes('settings.json'));
+    assert.ok(!src.includes('windowWarning'));
   });
 
   test('a refused begin prints no warning', () => {
     const fx = fixture();
-    const r = main(['begin', fx.slug, 'no-such-playbook'], fx.root, { CLAUDE_CONFIG_DIR: fx.claudeDir });
+    const r = begin(fx, {}, 'no-such-playbook');
     assert.equal(r.code, 3);
     assert.ok(!r.out.includes('warning'));
   });
