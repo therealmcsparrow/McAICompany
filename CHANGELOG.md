@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-02
+
+Rollback: node scripts/stable.mjs 0.25.0
+
 ### Added
 - **Plan approval refuses hidden characters.** `ticket-approval` stops with exit 1 `plan line <n> holds an invisible or control character (a visible emoji can hold one)` when a plan line outside a ticket block holds one (zero-width, bidi, variation selector); it also refuses a ticket block line that trimming trailing spaces would turn into another kind (for example a padded heading). Nothing is changed or written.
 - **Context cap enforcement.** Steps now stay under the fixed 95000 cap (handover at 85500) because the plugin checks it, not only the Lead.
