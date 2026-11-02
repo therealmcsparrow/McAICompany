@@ -6,7 +6,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test \"scripts/*.test.mjs\"",
+    "test": "node --test \"scripts/*.test.mjs\" \"tests/context-guard/*.test.mjs\" \"tests/lead-session-mcp/*.test.mjs\"",
     "check": "node scripts/check.mjs",
     "release": "node scripts/release.mjs",
     "stable": "node scripts/stable.mjs",

@@ -85,7 +85,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. The plan sections before the tasks are approved the same way as one item, `S0`. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.4.
 
-**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a `PreCompact` hook writes from the run's records at a clean point, and a `SessionStart` hook returns after compaction, so the Lead continues without the CEO. Needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` set to `98500` once. Contract `lead-handoff` v1; ADR 0049.
+**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at 85500 tokens, after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v1.7, `context-guard` v1; ADR 0049, ADR 0056.
 
 **Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 

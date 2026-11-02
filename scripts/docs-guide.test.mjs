@@ -35,13 +35,14 @@ test('cap text reads 95000 and 85500 in every place, no old cap', () => {
   for (const f of [...FILES, ...CONCEPT_FILES]) assert.doesNotMatch(read(f), /150000|150k|120000/, `${f} old cap`);
 });
 
-test('setup page pins the one-time setup name and value', () => {
+test('setup page says no setup is needed and names the hard hand-over', () => {
   const t = read('documentation/start/setup.md');
-  assert.match(t, /^# One-time setup: the compaction point$/m);
-  assert.ok(t.includes('"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"'));
-  assert.ok(t.includes('~/.claude/settings.json'));
-  assert.match(t, /`env` block/);
-  assert.match(t, /Restart Claude Code/);
+  assert.match(t, /^# No setup needed: the hand-over point$/m);
+  assert.ok(t.includes('lead_new_session'));
+  assert.ok(t.includes('AICO_CONTEXT_GUARD=off'));
+  assert.ok(t.includes('85500'));
+  assert.doesNotMatch(t, /"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"/);
+  for (const f of ['README.md', 'GLOSSARY.md', 'skills/pipeline/references/lead-handover.md']) assert.doesNotMatch(read(f), /One-time setup|"98500"|set to `98500`|= `98500`/, f);
 });
 
 test('GLOSSARY has Idea flow, Ticket approval, Lead Handoff', () => {

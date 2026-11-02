@@ -24,7 +24,7 @@ aico is a Claude Code plugin that runs a small software company for you. You are
    /aico:setup go react        # optional stack groups: go, react, tanstack, auth
    ```
 
-3. Optional but recommended: do the [one-time setup](setup.md), so the Lead can hand over to itself before Claude Code compacts.
+3. No setup is needed for the Lead hand-over; see [setup](setup.md).
 
 Update later with `/plugin marketplace update aico`, then `/reload-plugins`. `/aico:version` shows which version you have. Not sure what a command does? `/aico:help` lists them all, and `/aico:help <command>` (or `/aico:<command> help`) explains its options without running it.
 
@@ -85,7 +85,7 @@ Then run `/plugin install aico@aico` as above. The tag form was checked with the
 
 ### The context cap
 
-Every Role works under one fixed cap: 95000 tokens, with a hand-over at 85500. The old `context_cap` setting has no effect. The Lead's own hand-over needs the [one-time setup](setup.md).
+Every Role works under one fixed cap: 95000 tokens, with a hand-over at 85500. The old `context_cap` setting has no effect. The Lead's own hand-over needs [no setup](setup.md).
 
 ### Tune the company
 

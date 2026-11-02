@@ -23,6 +23,7 @@ Your dispatch carries `Context cap: <cap> handover <n>`, always `95000 handover 
 - Absent → cap 95000, handover at 85500. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v4).
 - Big reads, long diffs and test logs add up: read slices, grep first. Near `<n>` (or you can't tell and have done a lot of reading), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
 - Write `status: handover`: `## Did` what's finished, `## Next` what's left, in order, with file paths, so a fresh Role of the same type continues without re-reading. Commit-ready work only. A handover is not a failure or a blocker; never cut scope or skip checks to squeeze under the budget.
+- **Forced hand-over** (`context-guard` v1, `docs/contracts/context-guard.md`): a hook enforces `<n>` while a run is active. At or over `<n>`, every tool of your Step is refused except one `Write` of a new `<NN>-<role>.md` Handoff in the run folder. The refusal reads `aico context cap: this Step reached the hand-over point. Write your Handoff with status: handover to your Output path now, then end. Every other tool is refused.` Write that Handoff at once, with `status: handover`, `## Did` and `## Next`, then end. A stop without one is blocked once (`aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.`). The reading lags one tool result, so keep reads small and hand over early by yourself.
 
 ## Finishing a Step
 
