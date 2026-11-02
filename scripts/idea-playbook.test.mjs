@@ -162,6 +162,22 @@ describe('routes.md', () => {
     lacks(g, 'build-plan', 'idea-flow done');
   });
 
+  test('route G leaves out the S0 line and parks ticket IDs only', () => {
+    const g = routes.slice(at(routes, '## Route G'), at(routes, '## Route E'));
+    has(g, 'the S0 line', 'S0 cannot be parked', 'ticket IDs only');
+  });
+
+  test('S0 Change has its own Goal: only lines outside ticket blocks, every block byte-identical', () => {
+    const d = routes.slice(at(routes, '## Route D'), at(routes, '## Route F'));
+    has(d, 'Revise the plan sections', 'Change only lines outside the ticket blocks', 'every ticket block', 'byte-identical');
+    has(d, 'Goal (for a ticket id)');
+  });
+
+  test('route F skips the S0 question when every ticket is parked', () => {
+    const f = routes.slice(at(routes, '## Route F'), at(routes, '## Route G'));
+    has(f, 'do not ask S0');
+  });
+
   test('every route and step name the scripts print has a label line', () => {
     const names = ['grilling', 'grill-me', 'grill-with-docs', 'cooler', 'brainstorm', 'research', 'to-spec', 'park-idea',
       'build', 'park-roadmap'];
@@ -248,8 +264,10 @@ describe('scripts walk in route order', () => {
     assert.deepEqual(optionLines(f('options', 'idea-g')).map((l) => l.split(' ')[2]), ['build', 'park-roadmap', 'park-idea']);
     const t = a('tickets', 'idea-g', 'idea-g-plan/plan.md', '--phase', 'f');
     assert.equal(t.code, 0, t.lines.join('\n'));
-    assert.deepEqual(t.lines.filter((l) => l.startsWith('ask ')).map((l) => l.split(' ')[1]), ['T1', 'T2', 'T3']);
+    assert.deepEqual(t.lines.filter((l) => l.startsWith('ask ')).map((l) => l.split(' ')[1]), ['T1', 'T2', 'T3', 'S0']);
     assert.match(f('pick', 'idea-g', 'G').out, /picked G park-roadmap/);
+    // Route G parks ticket IDs only: S0 cannot be parked
+    assert.equal(a('ticket', 'idea-g', 'S0', 'park').code, 3);
     // forward order is refused while a dependent is unparked
     assert.equal(a('ticket', 'idea-g', 'T1', 'park').code, 0);
     assert.equal(a('park-ticket', 'idea-g', 'T1').code, 3);

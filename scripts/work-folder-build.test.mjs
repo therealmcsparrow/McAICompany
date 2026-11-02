@@ -30,7 +30,10 @@ function flow(name, { approve = true } = {}) {
   fs.writeFileSync(path.join(dir, 'plan.md'), PLAN);
   const run = (...args) => main(args, { now: NOW, root });
   assert.equal(run('tickets', name, 'plan.md', '--phase', 'd').code, 0);
-  if (approve) assert.equal(run('ticket', name, 'T1', 'approve').code, 0);
+  if (approve) {
+    assert.equal(run('ticket', name, 'T1', 'approve').code, 0);
+    assert.equal(run('ticket', name, 'S0', 'approve').code, 0);
+  }
   const work = path.join(root, '.company', 'work');
   return { base, root, dir, run, work, events: () => fs.readFileSync(path.join(dir, 'tickets.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) };
 }
@@ -91,14 +94,14 @@ describe('build plan folder name', () => {
     const fx = flow('demo');
     fx.run('build-plan', 'demo');
     const r = fx.run('tickets', 'demo', 'demo-build/plan.md', '--phase', 'f');
-    assert.deepEqual(r.lines, ['tickets 1 phase f', 'skip T1 approved']);
+    assert.deepEqual(r.lines, ['tickets 1 phase f', 'skip T1 approved', 'skip S0 approved']);
   });
 
   test('a new-name build plan is read as a plan and the record keeps the name', () => {
     const fx = flow(NEW);
     fx.run('build-plan', NEW);
     const r = fx.run('tickets', NEW, `${NEW} Build/plan.md`, '--phase', 'f');
-    assert.deepEqual(r.lines, ['tickets 1 phase f', 'skip T1 approved']);
+    assert.deepEqual(r.lines, ['tickets 1 phase f', 'skip T1 approved', 'skip S0 approved']);
     assert.equal(fx.events().findLast((e) => e.ev === 'plan').plan, `${NEW} Build/plan.md`);
     const read = fx.run('read', NEW);
     assert.equal(read.code, 0, read.lines.join('\n'));
@@ -218,12 +221,12 @@ describe('skill text', () => {
     assert.ok(fix.split('\n').length <= 125);
   });
 
-  test('the contract is v1.2 and names the helper rule', () => {
+  test('the contract is v1.4 and names the helper rule', () => {
     const c = read('docs/contracts/ticket-approval.md');
-    assert.match(c, /^# Contract: ticket-approval v1\.2/);
+    assert.match(c, /^# Contract: ticket-approval v1\.4/);
     assert.match(c, /helperName/);
     assert.match(c, /plan: <path>/);
-    assert.match(read('scripts/ticket-approval.mjs'), /ticket-approval\.md v1\.2/);
+    assert.match(read('scripts/ticket-approval.mjs'), /ticket-approval\.md v1\.4/);
   });
 
   test('no CR byte in the touched text files', () => {
