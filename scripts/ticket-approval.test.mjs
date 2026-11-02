@@ -10,6 +10,7 @@ import * as markdown from './plan-markdown.mjs';
 // Local time, the way the script names a roadmap file.
 const NOW = new Date(2026, 9, 30, 13, 9, 0).getTime();
 const BASE = 'a'.repeat(40);
+const NL = '\n';
 const ZERO = '000000000000';
 
 const roots = [];
@@ -495,7 +496,7 @@ describe('build-plan', () => {
       ticket('T2', { extra: ['```', '### T7 inside a fence', '```'] }),
       ticket('T3'),
       ticket('T4')
-    ));
+    ).replace('## Tasks', '## Context\nWhy we build this.\n\n## Tasks'));
     startPlan(fx);
     fx.run('ticket', fx.slug, 'T1', 'approve');
     fx.run('ticket', fx.slug, 'T2', 'approve');
@@ -503,10 +504,10 @@ describe('build-plan', () => {
     return fx;
   }
 
-  test('writes title, base commit, plan-wide Decided lines and approved blocks only', () => {
+  test('writes title, base commit, Decided lines, the other sections and approved blocks only', () => {
     const fx = approvedPlan();
     const r = fx.run('build-plan', fx.slug);
-    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(r.code, 0, r.lines.join(NL));
     assert.equal(r.lines[0], 'built 2 tickets');
     const text = fs.readFileSync(buildPath(fx), 'utf8');
     assert.equal(text, [
@@ -514,11 +515,12 @@ describe('build-plan', () => {
       `Base commit: ${BASE}`, '',
       '- Decided: keep it small, because the CEO said so.',
       '- Decided: no emoji.', '',
+      '## Context', 'Why we build this.', '',
       '## Tasks', '',
       '### T1 title of T1', '- role: backend-engineer', '- files: src/t1.mjs', '- depends-on: none', 'Body one.', '',
       '### T2 title of T2', '- role: backend-engineer', '- files: src/t2.mjs', '- depends-on: none', '```', '### T7 inside a fence', '```',
       ''
-    ].join('\n'));
+    ].join(NL));
     assert.equal(text.includes('T3'), false);
     assert.equal(text.includes('T4'), false);
     assert.equal(text.includes('\r'), false);
@@ -526,6 +528,26 @@ describe('build-plan', () => {
     assert.equal(r.lines[1], 'plan: .company/work/demo-build/plan.md');
     assert.deepEqual(r.lines.slice(2), [stored[1], stored[2]]);
     assert.deepEqual(fx.events().at(-1).ids, ['T1', 'T2']);
+  });
+
+  test('section text is data: a Tasks line or a ticket heading in a section is not taken as a ticket', () => {
+    const fx = fixture([
+      '# Plan: demo', '', `Base commit: ${BASE}`, '',
+      '## Notes', 'keep me', '### T9 unapproved', 'body', '## Tasks', 'prose', '```', '### T6 fenced', '```', '',
+      '## Tasks', '', ticket('T1'), ticket('T2')
+    ].join(NL));
+    startPlan(fx);
+    fx.run('ticket', fx.slug, 'T1', 'approve');
+    assert.equal(fx.run('build-plan', fx.slug).code, 0);
+    const text = fs.readFileSync(buildPath(fx), 'utf8');
+    assert.equal(text.includes('T9'), false);
+    assert.equal(text.includes('T2'), false);
+    assert.equal(text.match(/^## Tasks$/gm).length, 1);
+    assert.ok(text.includes(`keep me${NL}`));
+    assert.ok(text.includes(`\## Tasks${NL}prose${NL}`));
+    assert.ok(text.includes(`${NL}### T6 fenced${NL}`));
+    const r = fx.run('tickets', fx.slug, `${fx.slug}-build/plan.md`, '--phase', 'f');
+    assert.deepEqual(r.lines, ['tickets 1 phase f', 'skip T1 approved']);
   });
 
   test('approved blocks keep their hash in the build plan', () => {

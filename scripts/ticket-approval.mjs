@@ -198,7 +198,7 @@ function keysOverlap(a, b) {
 
 // Splits the plan into ticket blocks through plan-markdown's line reader. Throws PlanProblem.
 function parsePlan(text) {
-  const { lines } = readPlanLines(text);
+  const { lines, openFence } = readPlanLines(text);
   const heads = [];
   lines.forEach((entry, index) => {
     if (entry.kind === 'heading') heads.push(index);
@@ -245,15 +245,44 @@ function parsePlan(text) {
   let title = null;
   let base = null;
   const decided = [];
+  const rest = [];
   lines.forEach((entry, i) => {
     if (inBlock[i]) return;
-    if (entry.kind === 'heading' && entry.level === 1 && title === null) title = entry.line.replace(CONTROLS, ' ').trim();
+    if (entry.kind === 'heading' && entry.level === 1 && title === null) {
+      title = entry.line.replace(CONTROLS, ' ').trim();
+      return;
+    }
+    rest.push(entry);
     if (entry.kind !== 'text') return;
     const b = BASE_LINE.exec(entry.line);
     if (b && base === null) base = b[1];
     if (DECIDED_LINE.test(entry.line)) decided.push(entry.line.replace(/[ \t]+$/, ''));
   });
-  return { tickets, title: title ?? '# Build plan', base, decided };
+  return { tickets, title: title ?? '# Build plan', base, decided, rest, openFence };
+}
+
+// The source plan's text outside every ticket block, as data only. The Base commit and Decided lines
+// are written once at the top, so they are dropped here (a section left empty goes with them). A heading
+// that a reader would take as a ticket or as the Tasks section is written as plain text (leading backslash).
+function otherSections(rest) {
+  const chunks = [[]];
+  for (const entry of rest) {
+    if (entry.kind === 'heading') chunks.push([]);
+    chunks.at(-1).push(entry);
+  }
+  const out = [];
+  for (const chunk of chunks) {
+    const kept = chunk.filter((e) => !(e.kind === 'text' && (BASE_LINE.test(e.line) || DECIDED_LINE.test(e.line))));
+    const body = kept.filter((e) => e.kind !== 'heading');
+    if (!body.some((e) => e.line.trim() !== '')) continue;
+    for (const e of kept) {
+      const task = e.kind === 'heading' && ((e.level >= 2 && e.level <= 4 && TASK_HEAD.test(e.title.trim())) || /^tasks$/i.test(e.title.trim().replace(/\s*#+\s*$/, '')));
+      out.push(task ? '\\' + e.line : e.line);
+    }
+  }
+  while (out.length && out[0].trim() === '') out.shift();
+  while (out.length && out.at(-1).trim() === '') out.pop();
+  return out;
 }
 
 function depsOf(value) {
@@ -579,7 +608,9 @@ function cmdBuildPlan(args, env) {
   const approved = plan.tickets.filter((t) => statusOf(rec, t) === 'approved');
   if (approved.length === 0) throw new Refusal('no approved ticket');
   if (plan.base === null) throw new PlanProblem('no Base commit line');
-  const text = [plan.title, '', `Base commit: ${plan.base}`, '', ...(plan.decided.length ? [...plan.decided, ''] : []), '## Tasks', '', ...approved.map((t) => `${t.text}`)]
+  if (plan.openFence) throw new PlanProblem('unclosed code fence');
+  const others = otherSections(plan.rest);
+  const text = [plan.title, '', `Base commit: ${plan.base}`, '', ...(plan.decided.length ? [...plan.decided, ''] : []), ...(others.length ? [...others, ''] : []), '## Tasks', '', ...approved.map((t) => `${t.text}`)]
     .join('\n');
   const applied = appliedLines(rec, plan.tickets);
   ensureDir(env.root, ['.company', 'work']);
