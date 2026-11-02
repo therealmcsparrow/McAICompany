@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Step split (contract: docs/contracts/step-split.md v1). Node built-ins only.
+// Step split (contract: docs/contracts/step-split.md v1.1). Node built-ins only.
 // uses: docs/contracts/review-depth.md v1.3 docs/contracts/work-folder-name.md v1
 // Usage: node scripts/step-split.mjs review '<run>' <base> <round> [--max-lines <n>] [--max-files <n>]
 //        node scripts/step-split.mjs fix '<run>' <round> <handoff>...
@@ -309,7 +309,9 @@ function fix(args, root) {
         unplaced.push({ area: 'unplaced', name: entry, size: 1 });
         continue;
       }
-      const key = `${parsed.tag} ${parsed.file}${parsed.line === null ? '' : `:${parsed.line}`}`;
+      // Finding text = the row after the tag and R-/T- id, whitespace collapsed; equal tag, path, line and text is one row.
+      const finding = ROW.exec(row.text)[2].replace(/\s+/g, ' ').trim();
+      const key = `${parsed.tag} ${finding}`;
       if (keys.has(key)) continue;
       keys.add(key);
       if (parsed.tag === 'comprehension') architect.push(entry);

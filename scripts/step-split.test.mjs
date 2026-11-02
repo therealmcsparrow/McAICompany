@@ -245,7 +245,7 @@ test('parseRow: path ends at the first :digits or the first em dash', () => {
   assert.equal(parseRow(`- [spec] ${'a'.repeat(300)}:1`).file.length, 300);
 });
 
-test('fix: groups blockers by area, merges equal keys, routes comprehension and unplaced', () => {
+test('fix: groups blockers by area, merges identical rows, routes comprehension and unplaced', () => {
   const s = stubbed(depth());
   handoff(s.d, '10-code-reviewer.md', [
     '- [spec] R-1 scripts/a.mjs:10 — one',
@@ -255,7 +255,7 @@ test('fix: groups blockers by area, merges equal keys, routes comprehension and 
     'prose line that is not a bullet',
     '- loose bullet without a tag'
   ]);
-  handoff(s.d, '11-security.md', ['- [spec] R-9 scripts/a.mjs:10 — same key', '- [security] scripts/a.mjs:11 — new key', '- none']);
+  handoff(s.d, '11-security.md', ['- [spec] R-9 scripts/a.mjs:10 — one', '- [security] scripts/a.mjs:11 — new key', '- none']);
   const r = main(['fix', SLUG, '1', '10-code-reviewer.md', '11-security.md'], { root: s.d });
   assert.equal(r.code, 0, r.out);
   const f = files(path.join(splitDirOf(s.d), 'f1'));

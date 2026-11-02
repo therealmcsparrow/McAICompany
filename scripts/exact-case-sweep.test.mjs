@@ -44,6 +44,7 @@ const ALLOW = [
   ['scripts/reflect.mjs', 'const ascii = x => x.replace(/[A-Z]/g, c => c.toLowerCase());', 'ASCII fold helper that only picks the refusal wording (wrong letter case); never grants access'],
   ['scripts/spec-check.mjs', 'EXTENSIONS.has(', 'file extension list'],
   ['scripts/ticket-approval.mjs', '/^(?:con|prn|aux|nul', 'Windows device names'],
+  ['scripts/ticket-approval.mjs', 'TASKS_TITLE =', 'plan heading text'],
   ['scripts/ticket-approval.mjs', 'return p.toLowerCase();', 'repo path key for ticket file lists, outside the work folder name rule'],
   ['scripts/plan-review.mjs', "trimAlias(first).toLowerCase() === '.company'", 'detects a case variant of .company so it is refused'],
   ['scripts/plan-review.mjs', '/^none\\b/i', 'Blocking row text'],

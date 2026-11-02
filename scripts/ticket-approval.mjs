@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.2). Node built-ins only.
+// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.4). Node built-ins only.
 // Run and helper folder names come only from ../mods/lib/work-folder.mjs.
 // A ticket is one plan-tasks task block; an approval counts only for the block hash it was given at.
 // Plan text and arguments are untrusted: files are read by the real-path rule, sizes are capped before decoding,
@@ -38,6 +38,11 @@ const HASH = /^[0-9a-f]{12}$/;
 const FILE_NAME = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - [A-Za-z0-9 -]{1,60}\.md$/;
 const DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+// Outside ticket blocks a plan line may not hold a control character other than tab, a format character,
+// a line or paragraph separator, or any default-ignorable (invisible) character. Such a line is refused, never changed.
+const HIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u;
+const TASKS_TITLE = /^tasks(?:[ \t]+#+)?$/i;
+const SECTIONS_ID = 'S0';
 const ZERO = '000000000000';
 
 const PICKS = ['approve', 'change', 'park'];
@@ -198,7 +203,7 @@ function keysOverlap(a, b) {
 
 // Splits the plan into ticket blocks through plan-markdown's line reader. Throws PlanProblem.
 function parsePlan(text) {
-  const { lines } = readPlanLines(text);
+  const { lines, openFence } = readPlanLines(text);
   const heads = [];
   lines.forEach((entry, index) => {
     if (entry.kind === 'heading') heads.push(index);
@@ -228,8 +233,16 @@ function parsePlan(text) {
       const field = FIELD.exec(lines[i].line);
       if (field && !fields.has(field[1])) fields.set(field[1], field[2].trim());
     }
-    const block = lines.slice(index, end).map((l) => l.line.replace(/[ \t]+$/, ''));
+    const raw = lines.slice(index, end);
+    const block = raw.map((l) => l.line.replace(/[ \t]+$/, ''));
     while (block.length > 1 && block[block.length - 1] === '') block.pop();
+    // Fields are read from the raw line but the block is hashed and written trimmed: refuse a line whose kind changes.
+    const trimmed = readPlanLines(block.join('\n')).lines;
+    for (let i = 0; i < block.length; i++) {
+      if (!trimmed[i] || trimmed[i].kind !== raw[i].kind || trimmed[i].level !== raw[i].level) {
+        throw new PlanProblem(`line ${raw[i].no} changes kind when trailing spaces are removed`);
+      }
+    }
     for (let i = index; i < end; i++) inBlock[i] = true;
     const blockText = `${block.join('\n')}\n`;
     tickets.push({
@@ -241,19 +254,71 @@ function parsePlan(text) {
       deps: depsOf(fields.get('depends-on'))
     });
   }
-  if (tickets.length === 0) throw new PlanProblem('no tickets');
   let title = null;
   let base = null;
   const decided = [];
+  const rest = [];
   lines.forEach((entry, i) => {
     if (inBlock[i]) return;
-    if (entry.kind === 'heading' && entry.level === 1 && title === null) title = entry.line.replace(CONTROLS, ' ').trim();
+    if (HIDDEN.test(entry.line.replaceAll('\t', ''))) throw new PlanProblem(`line ${entry.no} holds an invisible or control character (a visible emoji can hold one)`);
+    if (entry.kind === 'heading' && entry.level === 1 && title === null) {
+      title = entry.line.trim();
+      return;
+    }
+    rest.push(entry);
     if (entry.kind !== 'text') return;
     const b = BASE_LINE.exec(entry.line);
     if (b && base === null) base = b[1];
     if (DECIDED_LINE.test(entry.line)) decided.push(entry.line.replace(/[ \t]+$/, ''));
   });
-  return { tickets, title: title ?? '# Build plan', base, decided };
+  if (tickets.length === 0) throw new PlanProblem('no tickets');
+  const plan = { tickets, title: title ?? '# Build plan', base, decided, rest, openFence };
+  const head = headLines(plan);
+  const headText = `${head.join('\n')}\n`;
+  plan.sections = { id: SECTIONS_ID, text: headText, hash: sha12(headText) };
+  return plan;
+}
+
+// The source plan's text outside every ticket block, as data only. The Base commit and Decided lines
+// are written once at the top, so they are dropped here. A heading is kept when its own text is not empty
+// or when a deeper heading under it keeps text; a section left wholly empty is dropped. A heading titled
+// Tasks is renamed so the build plan holds one `## Tasks`. No text is changed here: parsePlan refused hidden characters.
+function otherSections(rest) {
+  const chunks = [{ head: null, entries: [] }];
+  for (const entry of rest) {
+    if (entry.kind === 'heading') chunks.push({ head: entry, entries: [] });
+    chunks.at(-1).entries.push(entry);
+  }
+  for (const c of chunks) {
+    c.kept = c.entries.filter((e) => !(e.kind === 'text' && (BASE_LINE.test(e.line) || DECIDED_LINE.test(e.line))));
+    c.keep = c.kept.some((e) => e.kind !== 'heading' && e.line.trim() !== '');
+  }
+  // One pass: the stack holds the open headings (strictly rising levels, at most six), so a chunk with text
+  // marks its parents in constant time.
+  const open = [];
+  for (let i = 1; i < chunks.length; i++) {
+    const level = chunks[i].head.level;
+    while (open.length && chunks[open.at(-1)].head.level >= level) open.pop();
+    if (chunks[i].keep) for (const j of open) chunks[j].keep = true;
+    open.push(i);
+  }
+  const out = [];
+  for (const c of chunks) {
+    if (!c.keep) continue;
+    for (const e of c.kept) {
+      const tasks = e.kind === 'heading' && TASKS_TITLE.test(e.title.trim());
+      out.push(tasks ? `${'#'.repeat(e.level)} Tasks (source)` : e.line);
+    }
+  }
+  while (out.length && out[0].trim() === '') out.shift();
+  while (out.length && out.at(-1).trim() === '') out.pop();
+  return out;
+}
+
+// Everything the build plan holds before `## Tasks`: this text is what the sections item (S0) approves.
+function headLines(plan) {
+  const others = otherSections(plan.rest);
+  return [plan.title, '', `Base commit: ${plan.base ?? 'none'}`, '', ...(plan.decided.length ? [...plan.decided, ''] : []), ...(others.length ? [...others, ''] : [])];
 }
 
 function depsOf(value) {
@@ -341,7 +406,8 @@ function checkEvent(slug, rec, n, prevText) {
   if (typeof rec.at !== 'string' || !TIME.test(rec.at) || Number.isNaN(Date.parse(rec.at))) throw badLine(slug, n, 'bad time');
   if (ev === 'plan' && !(typeof rec.plan === 'string' && validPlanRef(rec.plan))) throw badLine(slug, n, 'bad plan');
   if (ev !== 'plan' && ev !== 'build') {
-    if (typeof rec.id !== 'string' || !TICKET_ID.test(rec.id)) throw badLine(slug, n, 'bad id');
+    const sectionsOk = rec.id === SECTIONS_ID && (ev === 'approve' || ev === 'change');
+    if (typeof rec.id !== 'string' || !(TICKET_ID.test(rec.id) || sectionsOk)) throw badLine(slug, n, 'bad id');
     if (typeof rec.hash !== 'string' || !HASH.test(rec.hash)) throw badLine(slug, n, 'bad hash');
   }
   if (ev === 'parked' && !(typeof rec.file === 'string' && FILE_NAME.test(rec.file))) throw badLine(slug, n, 'bad file');
@@ -468,8 +534,8 @@ function checkSlug(value, env) {
   return value;
 }
 
-function checkId(value) {
-  if (typeof value !== 'string' || !TICKET_ID.test(value)) throw new Refusal('bad ticket id');
+function checkId(value, { sections = false } = {}) {
+  if (typeof value !== 'string' || !(TICKET_ID.test(value) || (sections && value === SECTIONS_ID))) throw new Refusal('bad ticket id');
   return value;
 }
 
@@ -517,17 +583,21 @@ function cmdTickets(args, env) {
     if (flags.core) lines.push(`core ${t.id}`);
     if (flags.contract) lines.push(`contract ${t.id}`);
   }
+  const sStatus = statusOf(rec, plan.sections);
+  if (phase === 'f' && sStatus === 'approved') lines.push(`skip ${SECTIONS_ID} approved`);
+  else lines.push(`ask ${SECTIONS_ID} ${phase === 'd' ? 'new' : sStatus}`);
   return { code: 0, lines };
 }
 
 function cmdTicket(args, env) {
   if (args.length !== 3) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env);
-  const id = checkId(args[1]);
+  const id = checkId(args[1], { sections: true });
   if (!PICKS.includes(args[2])) throw new Refusal('pick must be approve, change or park');
+  if (id === SECTIONS_ID && args[2] === 'park') throw new Refusal('the plan sections cannot be parked');
   const rec = loadRecord(env.root, slug);
   const { plan } = currentPlan(env, rec);
-  const ticket = plan.tickets.find((t) => t.id === id);
+  const ticket = id === SECTIONS_ID ? plan.sections : plan.tickets.find((t) => t.id === id);
   if (!ticket) throw new Refusal(`unknown ticket ${id}`);
   appendEvent(env, slug, rec, { ev: args[2], id, hash: ticket.hash });
   return { code: 0, lines: [`${args[2]} ${id}`] };
@@ -579,13 +649,24 @@ function cmdBuildPlan(args, env) {
   const approved = plan.tickets.filter((t) => statusOf(rec, t) === 'approved');
   if (approved.length === 0) throw new Refusal('no approved ticket');
   if (plan.base === null) throw new PlanProblem('no Base commit line');
-  const text = [plan.title, '', `Base commit: ${plan.base}`, '', ...(plan.decided.length ? [...plan.decided, ''] : []), '## Tasks', '', ...approved.map((t) => `${t.text}`)]
-    .join('\n');
-  const applied = appliedLines(rec, plan.tickets);
+  if (plan.openFence) throw new PlanProblem('unclosed code fence');
+  const sStatus = statusOf(rec, plan.sections);
+  if (sStatus === 'new') throw new Refusal('the plan sections (S0) are not approved: show them to the CEO and run ticket <slug> S0 approve');
+  if (sStatus !== 'approved') throw new Refusal('the plan sections (S0) changed since the CEO answered: ask again and run ticket <slug> S0 approve');
+  const text = [...headLines(plan), '## Tasks', '', ...approved.map((t) => `${t.text}`)].join('\n');
+  // The written text must read back as exactly the approved tickets, one `## Tasks`, no open fence.
+  const written = text.endsWith('\n') ? text : `${text}\n`;
+  const back = parsePlan(written);
+  const tasksHeads = readPlanLines(written).lines.filter((l) => l.kind === 'heading' && l.level === 2 && TASKS_TITLE.test(l.title.trim()));
+  const same = back.tickets.length === approved.length && back.tickets.every((t, i) => t.id === approved[i].id && t.hash === approved[i].hash);
+  if (!same || back.sections.text !== plan.sections.text || back.openFence || tasksHeads.length !== 1) {
+    throw new PlanProblem('build plan does not read back as the approved tickets');
+  }
+  const applied = appliedLines(rec, [...plan.tickets, plan.sections]);
   ensureDir(env.root, ['.company', 'work']);
   const dir = ensureDir(env.root, ['.company', 'work', buildSlug], { create: true });
   try {
-    createNew(dir, 'plan.md', text.endsWith('\n') ? text : `${text}\n`);
+    createNew(dir, 'plan.md', written);
   } catch (error) {
     if (error instanceof Refusal && error.message === 'file exists') throw new Refusal(error.message, [`plan: ${planPath}`]);
     throw error;
@@ -603,7 +684,7 @@ function cmdRead(args, env) {
   const head = ['state on', `plan ${ref ?? 'none'}`, `events ${rec.events.length}`, `dup ${dupCount(rec)}`];
   if (ref === null) return { code: 0, lines: [...head, 'approved 0'] };
   const plan = readPlan(env.root, ref);
-  const applied = appliedLines(rec, plan.tickets);
+  const applied = appliedLines(rec, [...plan.tickets, plan.sections]);
   return { code: 0, lines: [...head, `approved ${applied.length}`, ...applied] };
 }
 

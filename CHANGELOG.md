@@ -5,6 +5,7 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ## [Unreleased]
 
 ### Added
+- **Plan approval refuses hidden characters.** `ticket-approval` stops with exit 1 `plan line <n> holds an invisible or control character (a visible emoji can hold one)` when a plan line outside a ticket block holds one (zero-width, bidi, variation selector); it also refuses a ticket block line that trimming trailing spaces would turn into another kind (for example a padded heading). Nothing is changed or written.
 - **Context cap enforcement.** Steps now stay under the fixed 95000 cap (handover at 85500) because the plugin checks it, not only the Lead.
   - **No resume.** "Steps are never resumed". While a run is active, `session.send` from the model returns `{ isDelivered: false, reason }` and `agent.spawn` with `resume` returns `{ deny: reason }`. The reason reads `aico: Steps are never resumed; dispatch a fresh Step (next NN) with the old Handoff as input (pipeline §2)`. A failed lint, a CEO answer or a follow-up all go to a fresh Step. Always on, no setting. ADR 0054.
   - **Over-cap Steps are flagged.** `ledger add` with `ctx_end` above 95000 still writes the record, then prints `over cap: <kind> <id> <role> ctx_end <n> > 95000` and exits 4. The Lead treats that as a failed Step and a fresh, smaller Step re-checks the work. An over-cap reviewer Handoff never closes a review.
@@ -22,6 +23,11 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ### Changed
 - **Skill installs and removals run with telemetry off, from a folder aico owns.** Pinned installs at project scope no longer run from your project folder. `--remove` also runs with telemetry off. `skills-manifest` v2.4 (not additive).
 - **Behaviour change: a manifest command such as `impeccable` is no longer run at project scope.** Setup prints `manual <cmd>` and a warning to run it only in a repo you trust. It is not counted as failed, and the run exits 0. Pinned CLI installs still run beside it. Run the command yourself if you want it. User scope is unchanged.
+- **Behaviour change: the plan sections are approved as one form item.** A build plan keeps the other plan sections (title, Base commit, Decided lines and any further sections), and the CEO approves them together as item `S0`, last in the ticket form. An in-flight flow is asked once more: `tickets` prints `ask S0 new`, and `build-plan` refuses (`refused: the plan sections (S0) are not approved`, nothing written) until `ticket <slug> S0 approve` runs. A section edited after approval is asked again. S0 cannot be parked. `ticket-approval` v1.4.
+
+### Fixed
+- **`step-split fix` keeps different findings on one line.** Findings that share a line are no longer merged or dropped.
+- **`draft-input stale` accepts folder names with spaces.**
 
 ### Removed
 - **The third-party writing clean-up skill is no longer a dependency.** It is gone from the skills manifest, setup, docs and tests. Shipped release records for 0.20.0 to 0.25.0 keep their old entries.

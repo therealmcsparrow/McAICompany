@@ -628,8 +628,10 @@ function planOrder(text) {
 function stale(args, root) {
   const { rest } = parseFor(args, { needFor: false });
   if (rest.length !== 1) throw new Refused('usage');
-  const norm = normalizePath(rest[0]);
+  const norm = checkPath(rest[0]);
   if (!norm.ok) throw new Refused(`path ${norm.reason}`);
+  const src = workSource(norm.path);
+  if (src !== null) checkExact(realRootOf(root), src);
   const text = readFile(realRootOf(root), norm.path).toString('utf8');
   if (classify(text).kind !== 'plan') throw new Refused('not a plan');
   const base = baseCommit(splitLines(text));

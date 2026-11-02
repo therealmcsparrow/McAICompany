@@ -101,6 +101,8 @@ Calls and codes (R-14), in order:
    - `<id>` is the task id.
 3. Last line `draft-input stale: <s> stale, <c> changed`; exit 2 when s > 0, else 0.
 
+A plan folder or file typed in another letter case is `refused: wrong letter case`, exit 3, as in `take` (v1.4); the read rule's refusal reasons include it.
+
 Any other exit code from any call (128 included), a timeout, a spawn error or output that is not one full hex id → one line `error: git <exit <code> | timeout | not found | bad output>`, exit 1, never a `draft-input stale:` line (fail closed, git.M4).
 
 ## Plan Gate use in `aico:feature` (R-13)
@@ -117,6 +119,7 @@ Any other exit code from any call (128 included), a timeout, a spawn error or ou
 
 ## Compatibility
 v1.2 (minor): new-form work folder names. `arg`, `free` and `take` print new names (spaces inside) where a slug stood; `arg` and `take` take `.company/work/<name>/…` paths for any work folder name and consume the Topic file; `main(args, { root, now })` takes the run's start time. A legacy slug source keeps its `-2` … `-9` draft chain. Where v1 built a slug from CEO text or a file stem, v1.2 builds a new primary name from the Topic or the `--for` fallback. New exit code: none; new refusals: `too many runs this minute`, `bad name`, `bad topic path`.
+v1.4 note: `stale` prints the same `refused: wrong letter case` line as `take` (same read rule); it is a refusal word already in rule (b), so no consumer changes.
 v1.4 (minor, additive): `take` refuses a work folder or work file typed in another letter case with `refused: wrong letter case` (exit 3) on every platform; the case-insensitive compares on win32 and darwin (read rule, folder creation, prompt file name) are exact now. No new command, kind, output line or exit code.
 v1.3 (minor): new input, a reprompt prompt file `.company/work/<name>/prompt.md` for `--for to-spec`. For the argument file only, `refused: argument too large` and `refused: argument has a line break or control character` replace `refused: argument is not accepted`; command-line arguments keep the old word. No new command, kind, output line or exit code; every refusal keeps exit 3.
 v1.1 (minor, additive): the `--for` word `fix` for `arg`, `free` and `take`. A new command, kind, output line or exit code needs a new version.
