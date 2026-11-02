@@ -4,6 +4,12 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **Session hand-off.** `aico:handoff` can write a summary for a fresh agent to the OS temp folder, on request, with a "suggested skills" section.
+
+### Changed
+- **Handoffs link instead of repeat, and redact.** Role Handoffs must not duplicate specs, plans, ADRs, issues, commits or diffs, and must redact secrets and personal data.
+
 ## [0.26.0] - 2026-11-02
 
 Rollback: node scripts/stable.mjs 0.25.0

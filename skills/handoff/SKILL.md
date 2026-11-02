@@ -60,6 +60,8 @@ By: <role id>
 
 - `needs-ceo`: a decision only the CEO can make (a change to Core, a breaking Contract change, a scope change); put the question under Blocking.
 - Only when `aico:ruleset` asks: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old violations), before `## Next`.
+- Do not duplicate content already captured in other artifacts (specs, plans, ADRs, issues, commits, diffs). Reference them by path or URL instead.
+- Redact any sensitive information, such as API keys, passwords, or personally identifiable information.
 - Under ~60 lines; link to files, don't paste code. Your final reply to the Lead is one line: `<status> — <output path>`.
 
 ## Language
@@ -68,3 +70,15 @@ Your dispatch carries `Language: <tag>`. Write prose in `<tag>`: Handoffs, forms
 - **Code comments**: in `<tag>`, unless the product's Ruleset or the existing comments in that codebase use another language; then follow the codebase. Identifiers, code, log keys and API names stay code. Product UI and user docs follow `languages:` in `.company/project.md`, never `Language:`.
 - `Language:` absent → `en`. Value not a valid tag → `en` and a Nit `invalid Language <value>` (echo at most 35 characters).
 - `Design skills:` (UI Roles only): load each named skill with the Skill tool. One not available → `missing design skill: <name>` under `## Next`; never skip silently. Absent → `none`.
+
+## Session hand-off
+
+Only when the user asks for a session hand-off. A Role finishing a Step skips this section and writes its Output as above.
+
+Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the temporary directory of the user's OS ($TMPDIR, else /tmp; %TEMP% on Windows) - not the current workspace.
+
+Include a "suggested skills" section in the document, naming which skills the next agent should call the Skill tool for.
+
+The duplication and redaction rules of `## Finishing a Step` apply.
+
+If the user passed arguments, treat them as a description of what the next session will focus on and tailor the doc accordingly.
