@@ -20,7 +20,7 @@ aico is a Claude Code plugin that runs a small software company for you. You are
 2. Optional: install the standalone and stack skills the Roles draw on.
 
    ```
-   /aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
+   /aico:setup                 # standalone skills: hallmark, find-skills, impeccable, …
    /aico:setup go react        # optional stack groups: go, react, tanstack, auth
    ```
 

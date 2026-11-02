@@ -644,6 +644,37 @@ test('AC7 the incident Playbook keeps its mitigation and report Ship Gates and e
   for (const d of ['early warning (24 h)', 'notification (72 h)', 'GDPR breach notice to the authority (72 h)', '14 days', '1 month']) assert.ok(text.includes(d), d);
 });
 
+// Allowed golden moves: one retired skill name leaves tests/golden/legal.md and that file's size in
+// tests/golden/baseline.json follows. Nothing else under tests/golden may move. The name is derived from the diff, never written here.
+function assertGoldenMoves() {
+  const changed = git('diff', '--name-only', BASE, 'HEAD', '--', 'tests/golden').split('\n').filter(Boolean).sort();
+  const allowed = ['tests/golden/baseline.json', 'tests/golden/legal.md'];
+  assert.deepEqual(changed.filter(f => !allowed.includes(f)), [], 'a golden file other than legal.md and baseline.json changed');
+  const lines = (ref, f) => git('show', `${ref}:${f}`).split('\n');
+  const differing = f => {
+    const a = lines(BASE, f), b = lines('HEAD', f);
+    assert.equal(b.length, a.length, `${f}: line count`);
+    return a.map((l, i) => [l, b[i]]).filter(([x, y]) => x !== y);
+  };
+  if (changed.includes('tests/golden/legal.md')) {
+    const d = differing('tests/golden/legal.md');
+    assert.equal(d.length, 1, 'legal.md: exactly one line changed');
+    const [was, now] = d[0];
+    // The cut can sit anywhere in a run of equal characters, so look for a spot where cutting one name and its comma gives the new line.
+    const n = was.length - now.length;
+    const spots = [...Array(now.length + 1).keys()].filter(k => was.slice(0, k) + was.slice(k + n) === now && /^`[a-z][a-z0-9-]*`, $/.test(was.slice(k, k + n)));
+    assert.ok(n > 0 && spots.length > 0, 'legal.md: the new line is the old one minus exactly one backticked skill name and its comma');
+  }
+  if (changed.includes('tests/golden/baseline.json')) {
+    const d = differing('tests/golden/baseline.json');
+    assert.equal(d.length, 1, 'baseline.json: exactly one line changed');
+    for (const l of d[0]) assert.match(l, /^\s*"bytes": \d+,?$/, 'baseline.json: only a bytes figure changed');
+    const find = o => (o && typeof o === 'object') ? (o['legal.md'] ?? Object.values(o).map(find).find(Boolean)) : undefined;
+    const entry = find(JSON.parse(read('tests/golden/baseline.json')));
+    assert.equal(entry.bytes, Buffer.byteLength(read('tests/golden/legal.md')), 'baseline.json: the bytes figure is the size of legal.md');
+  }
+}
+
 test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates', { skip: skipNoBase }, () => {
   for (const sb of [sandbox(), sandbox({ projectMd: '# Project\nproduct_type: web\n' })]) {
     const t = sb.typeJson(['resolve']);
@@ -653,8 +684,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
     const lines = sb.run('company-type.mjs', ['resolve']).out.split('\n');
     assert.equal(lines[0], `company type: software (${manifest('software').label}), default: no company_type line`);
   }
-  // The golden Handoffs and their baseline did not move.
-  assert.equal(git('diff', '--name-only', BASE, 'HEAD', '--', 'tests/golden').trim(), '');
+  // The golden Handoffs and their baseline did not move, except the two paths that may change (pinned in assertGoldenMoves).
+  assertGoldenMoves();
   // The software Playbooks are the v0.12.0 ones in what matters: the same set, and every step and Gate line untouched.
   // Only the changes ADR 0026 allows are tolerated, each pinned exactly (see the helpers above this test).
   const soft = ['audit', 'feature', 'fix', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'standards', 'usability-test', 'vulnscan'];

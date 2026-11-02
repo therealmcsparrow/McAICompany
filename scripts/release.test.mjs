@@ -97,7 +97,7 @@ function sandbox(t, { changelog = CHANGELOG, marketplace = null } = {}) {
   return { root, origin, marker, claude, claudeLog };
 }
 
-const SKILLS = { core: [{ name: 'find-skills', source: 'vercel-labs/skills' }, { include: 'extra' }], extra: [{ name: 'humanizer', source: 'blader/humanizer' }] };
+const SKILLS = { core: [{ name: 'find-skills', source: 'vercel-labs/skills' }, { include: 'extra' }], extra: [{ name: 'island-skill', source: 'example/island-skill' }] };
 const SHA512 = 'sha512-' + Buffer.alloc(64, 7).toString('base64');
 const LOCK = {
   lockfileVersion: 3,
@@ -334,7 +334,7 @@ test('a release writes a CycloneDX 1.6 SBOM with the plugin, every skill and the
   assert.match(bom.serialNumber, /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(bom.metadata.component.name, 'aico');
   assert.equal(bom.metadata.component.version, '0.11.0');
-  assert.deepEqual(bom.components.map((c) => c.name).sort(), ['@sc/tool', 'find-skills', 'humanizer', 'leaf']);
+  assert.deepEqual(bom.components.map((c) => c.name).sort(), ['@sc/tool', 'find-skills', 'island-skill', 'leaf']);
   assert.ok(!('vulnerabilities' in bom));
   const committed = git(s.root, 'show', '--name-only', '--format=', 'HEAD').split('\n');
   assert.ok(committed.includes('releases/0.11.0/sbom.cdx.json'));

@@ -33,6 +33,8 @@ _Avoid_: orchestrator (use Lead).
 
 **Voice preset** — one of three named writing voices (*clear*: friendly, no hype; *bold*: playful and punchy; *technical*: precise and formal). Each Project profile picks one.
 
+**Voice profile** — the style features of a product's writing: tone, sentence length, person, preferred and avoided terms. Learned fresh each run from its shipped docs and README, printed and never stored, with no names or quotes. With no such text the writing pass uses the Project profile's voice line and says so. Proposed in ADR 0055.
+
 **Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After the Fix-round limit (2 by default, 0–5 in settings) on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded, never looped.
 
 **Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate, or, in feature and fix, which have no Plan Gate, at the Ship Gate. Nothing enters Core without that approval. The approved Core list enters `.company/project.md` after Ship Gate approval in feature and fix; until then reviewers judge Core against the list in the Architect's Handoff.
