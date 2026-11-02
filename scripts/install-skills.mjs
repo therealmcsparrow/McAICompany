@@ -3,7 +3,7 @@
 // Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
 //       node install-skills.mjs --retired | --remove <name> [--dry-run]
 //   default group: core. Groups `design` and `skills` need --project. Contract: docs/contracts/skills-manifest.md.
-import { readFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
@@ -254,18 +254,34 @@ export function skillsEnv(base = process.env) {
   return { ...base, DO_NOT_TRACK: '1', DISABLE_TELEMETRY: '1', NoDefaultCurrentDirectoryInExePath: '1' };
 }
 
-// PATH for a skills CLI child: absolute entries only, none inside the product root, and no node_modules/.bin of the
-// product root or of a folder above it. The folder lookups of the CLI's own children (git, gh) then cannot reach the repo.
+// Real spelling of a path: links, junctions and subst drives resolved (the nearest existing folder, when the entry itself
+// does not exist yet), and case folded where the file system does (Windows, macOS).
+function canon(p) {
+  let abs = resolve(p);
+  const tail = [];
+  for (;;) {
+    try { abs = join(realpathSync.native(abs), ...tail); break; } catch {
+      const up = dirname(abs);
+      if (up === abs) break;
+      tail.unshift(basename(abs));
+      abs = up;
+    }
+  }
+  return process.platform === 'win32' || process.platform === 'darwin' ? abs.toLowerCase() : abs;
+}
+
+// PATH for a skills CLI child: absolute entries only, none inside the product root (one folder or a list), and no
+// node_modules/.bin of the product root or of a folder above it. Entries and roots are compared by real path.
+// The folder lookups of the CLI's own children (git, gh) then cannot reach the repo.
 // binOnly (user scope, root = home): only node_modules/.bin folders are dropped, so a per-user git or node stays reachable.
 export function cleanPath(pathVar, root, binOnly = false) {
-  const fold = s => (process.platform === 'win32' ? s.toLowerCase() : s);
-  const rootAbs = fold(resolve(root));
+  const roots = [].concat(root).map(canon);
   const inside = (p, dir) => p === dir || p.startsWith(dir + sep);
   return String(pathVar ?? '').split(delimiter).filter(entry => {
     if (!entry || !isAbsolute(entry)) return false;
-    const p = fold(resolve(entry));
-    if (!binOnly && inside(p, rootAbs)) return false;
-    if (basename(p) === '.bin' && basename(dirname(p)) === 'node_modules' && inside(rootAbs, dirname(dirname(p)))) return false;
+    const p = canon(entry);
+    if (!binOnly && roots.some(r => inside(p, r))) return false;
+    if (basename(p) === '.bin' && basename(dirname(p)) === 'node_modules' && roots.some(r => inside(r, dirname(dirname(p))))) return false;
     return true;
   }).join(delimiter);
 }
@@ -286,24 +302,34 @@ function skillsArgs(cmd, argv) {
   return cmd.startsWith(head) ? cmd.slice(head.length).split(' ').map(t => (t === '"*"' ? '*' : t)) : null;
 }
 
-// npm-cli.js beside the running node: npm is started as `node npm-cli.js`, never through a shim found on PATH.
-function npmCli() {
-  const dir = dirname(process.execPath);
-  const found = [join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')].find(existsSync);
-  if (!found) throw new Error('npm-cli.js not found beside node');
+// npm-cli.js for the running node: npm is started as `node npm-cli.js`, never through a shim found on PATH. Only fixed
+// system layouts are looked at, never the working folder; a candidate inside `banned` (the product root) is skipped.
+// Layouts: official tarball and Windows (<node dir>/node_modules/npm), Homebrew (<prefix>/lib/node_modules/npm, also
+// beside the real path of a Cellar node), NodeSource, Fedora and Arch (/usr/lib/node_modules/npm), Debian's own
+// package (/usr/share/nodejs/npm), and /usr/local/lib/node_modules/npm.
+export function npmCli(execPath = process.execPath, has = existsSync, banned = []) {
+  const tail = ['npm', 'bin', 'npm-cli.js'];
+  const dirs = [dirname(execPath)];
+  try { const real = dirname(realpathSync.native(execPath)); if (!dirs.includes(real)) dirs.push(real); } catch { /* execPath is not a real file */ }
+  const candidates = [];
+  for (const dir of dirs) candidates.push(join(dir, 'node_modules', ...tail), join(dir, '..', 'lib', 'node_modules', ...tail));
+  candidates.push(join(sep, 'usr', 'lib', 'node_modules', ...tail), join(sep, 'usr', 'share', 'nodejs', ...tail), join(sep, 'usr', 'local', 'lib', 'node_modules', ...tail));
+  const bans = banned.map(canon);
+  const found = candidates.find(c => has(c) && !bans.some(r => canon(c) === r || canon(c).startsWith(r + sep)));
+  if (!found) throw new Error(`npm-cli.js not found; looked beside node (${dirs.join(', ')}) and in ${candidates.map(c => dirname(dirname(c))).filter((v, i, a2) => a2.indexOf(v) === i).join(', ')}`);
   return found;
 }
 
 // Fetches the pinned package into a folder aico owns (no install scripts, working folder = that folder) and returns the
 // absolute path of its bin file. Nothing in a product folder is read: npm and the package both come from here.
-function fetchSkillsCli(home, runners) {
+function fetchSkillsCli(home, runners, root = home) {
   const [name, version] = SKILLS_CLI.split('@');
   const dir = join(home, '.mcsparrow', 'cli', `${name}-${version}`);
   mkdirSync(dir, { recursive: true });
   if (!existsSync(join(dir, 'package.json'))) writeFileSync(join(dir, 'package.json'), '{"private":true}\n');
-  const opts = { cwd: dir, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(dir), stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
+  const opts = { cwd: dir, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv([dir, root], resolve(root) === resolve(home)), stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
   try {
-    runners.execFileSync(process.execPath, [npmCli(), 'install', '--prefix', dir, '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', SKILLS_CLI], opts);
+    runners.execFileSync(process.execPath, [npmCli(process.execPath, existsSync, [root]), 'install', '--prefix', dir, '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', SKILLS_CLI], opts);
   } catch (e) {
     if (e?.code === 'ETIMEDOUT') throw e;
     throw new Error(`could not fetch ${SKILLS_CLI}: ${errorText(e)}`);
@@ -328,7 +354,7 @@ export function installExec(home, runners = { execSync, execFileSync }) {
   return (cmd, cwd, argv) => {
     const args = skillsArgs(cmd, argv);
     if (args) {
-      const bin = fetchSkillsCli(home, runners);
+      const bin = fetchSkillsCli(home, runners, cwd ?? home);
       return runners.execFileSync(process.execPath, [bin, ...args], { cwd, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(cwd, resolve(cwd) === resolve(home)), stdio: 'inherit' });
     }
     if (resolve(cwd ?? home) !== resolve(home)) throw new Error('this command cannot run in a product folder');
