@@ -1,0 +1,698 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:5cf60c85-655c-4308-972c-02f4fce250b2",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-02T15:37:14.305Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "aico-sbom",
+          "version": "0.26.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/aico@0.26.0",
+      "name": "aico",
+      "version": "0.26.0",
+      "purl": "pkg:generic/aico@0.26.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "UNLICENSED"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "skill:find-skills@vercel-labs/skills",
+      "name": "find-skills",
+      "group": "vercel-labs/skills",
+      "purl": "pkg:github/vercel-labs/skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core,research"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:hallmark@nutlope/hallmark",
+      "name": "hallmark",
+      "group": "nutlope/hallmark",
+      "purl": "pkg:github/nutlope/hallmark",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:impeccable@local",
+      "name": "impeccable",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:frontend-ui-engineering@addyosmani/agent-skills",
+      "name": "frontend-ui-engineering",
+      "group": "addyosmani/agent-skills",
+      "purl": "pkg:github/addyosmani/agent-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:security-and-hardening@addyosmani/agent-skills",
+      "name": "security-and-hardening",
+      "group": "addyosmani/agent-skills",
+      "purl": "pkg:github/addyosmani/agent-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:security-review@getsentry/skills",
+      "name": "security-review",
+      "group": "getsentry/skills",
+      "purl": "pkg:github/getsentry/skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:auth-implementation-patterns@wshobson/agents",
+      "name": "auth-implementation-patterns",
+      "group": "wshobson/agents",
+      "purl": "pkg:github/wshobson/agents",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:golang-*@samber/cc-skills-golang",
+      "name": "golang-*",
+      "group": "samber/cc-skills-golang",
+      "purl": "pkg:github/samber/cc-skills-golang",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "go"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:vercel-react-best-practices@vercel-labs/agent-skills",
+      "name": "vercel-react-best-practices",
+      "group": "vercel-labs/agent-skills",
+      "purl": "pkg:github/vercel-labs/agent-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "react"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:vercel-composition-patterns@vercel-labs/agent-skills",
+      "name": "vercel-composition-patterns",
+      "group": "vercel-labs/agent-skills",
+      "purl": "pkg:github/vercel-labs/agent-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "react"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:typescript-advanced-types@wshobson/agents",
+      "name": "typescript-advanced-types",
+      "group": "wshobson/agents",
+      "purl": "pkg:github/wshobson/agents",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "react"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:tanstack-query@tanstack-skills/tanstack-skills",
+      "name": "tanstack-query",
+      "group": "tanstack-skills/tanstack-skills",
+      "purl": "pkg:github/tanstack-skills/tanstack-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "tanstack"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:tanstack-router@tanstack-skills/tanstack-skills",
+      "name": "tanstack-router",
+      "group": "tanstack-skills/tanstack-skills",
+      "purl": "pkg:github/tanstack-skills/tanstack-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "tanstack"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:tanstack-form@tanstack-skills/tanstack-skills",
+      "name": "tanstack-form",
+      "group": "tanstack-skills/tanstack-skills",
+      "purl": "pkg:github/tanstack-skills/tanstack-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "tanstack"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:tanstack-table@tanstack-skills/tanstack-skills",
+      "name": "tanstack-table",
+      "group": "tanstack-skills/tanstack-skills",
+      "purl": "pkg:github/tanstack-skills/tanstack-skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "tanstack"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "skill:two-factor-authentication-best-practices@better-auth/skills",
+      "name": "two-factor-authentication-best-practices",
+      "group": "better-auth/skills",
+      "purl": "pkg:github/better-auth/skills",
+      "properties": [
+        {
+          "name": "aico:groups",
+          "value": "auth"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code@2.1.311",
+      "name": "@anthropic-ai/claude-code",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "ed28018ad8a2d59b1c75b4495cb72e6fb56fda97ef1f7c28ed1ac22a0e2f66992521fcfd1e08a02451491888c263a8f3a0f0ef6d0730c2e82f9b703c3d37a3cf"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN README.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-darwin-arm64@2.1.311",
+      "name": "@anthropic-ai/claude-code-darwin-arm64",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-darwin-arm64@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "3c7c6a5a95c9ec40fa643fb6c4d8937e23e82bd02ae6c88f32167694b1f00351c1d745e5b873f875227a612036e076f8703fcfde74e584531aba4d953dd30c34"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-darwin-arm64/-/claude-code-darwin-arm64-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-darwin-x64@2.1.311",
+      "name": "@anthropic-ai/claude-code-darwin-x64",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-darwin-x64@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "0c43009e8224eaa55a67bafea3f42c147e77d8738ef5ce88fb4984d96b93ca0ab91fc1abee3833a4aec7541e9dd71cc0ba58aee8c130df61bea28fff818bafab"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-darwin-x64/-/claude-code-darwin-x64-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-linux-arm64@2.1.311",
+      "name": "@anthropic-ai/claude-code-linux-arm64",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-linux-arm64@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "c99c039ad5e6a197057028c26a8ce738aaa3ae38dd43273a3d5ba1e9bac036a41c68aa4ff96646b8596052381087ceaef070726c764107ad1658eba62a93bab9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-arm64/-/claude-code-linux-arm64-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-linux-arm64-musl@2.1.311",
+      "name": "@anthropic-ai/claude-code-linux-arm64-musl",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-linux-arm64-musl@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "ca648673abefd1009c5506420b6246d373ffba92eb6a8c7e897006d437e7514d4e64108847d42773120d044a7a4209ca6eacb0c11dbf89cdc60fc840cf44e2a3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-arm64-musl/-/claude-code-linux-arm64-musl-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-linux-x64@2.1.311",
+      "name": "@anthropic-ai/claude-code-linux-x64",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-linux-x64@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "764d6554cb7b9fe36562e70a33b74ba7f3dfacadf6a5aff8a0a42469c7dace54a3f2b1be8641faef09c39da146f46b366a5dce8caf0f4d51e06765861d7a1652"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-linux-x64-musl@2.1.311",
+      "name": "@anthropic-ai/claude-code-linux-x64-musl",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-linux-x64-musl@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "fd263c2a1b55ab91d121d26ee8ec35226900a6580be3a27cf23f2f847e454d968d3d5063ca4e00e32b8814c832cbc75568d8155f19698d72049df5f7f6e0eae5"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64-musl/-/claude-code-linux-x64-musl-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-win32-arm64@2.1.311",
+      "name": "@anthropic-ai/claude-code-win32-arm64",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-win32-arm64@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "19cf68eb4262e51b8feb19bb30126c2d4244fc01b29aaf07175d627444c100d1e72ea838b884c3e0eded74e144d3247bcbacc4cf6c25e43ffb9f8365ad8d7a62"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-win32-arm64/-/claude-code-win32-arm64-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40anthropic-ai/claude-code-win32-x64@2.1.311",
+      "name": "@anthropic-ai/claude-code-win32-x64",
+      "version": "2.1.311",
+      "purl": "pkg:npm/%40anthropic-ai/claude-code-win32-x64@2.1.311",
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "7ca5e706ab003f155e21cdb49027732381b39e1b82271ba6cb565bc24c887e0651b195ca1f331a6b2ac9fd1a363be0df6ffb3dac6fe002a1a4a890ac03716026"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "SEE LICENSE IN LICENSE.md"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-win32-x64/-/claude-code-win32-x64-2.1.311.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "aico:dev",
+          "value": "true"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/aico@0.26.0",
+      "dependsOn": [
+        "skill:find-skills@vercel-labs/skills",
+        "skill:hallmark@nutlope/hallmark",
+        "skill:impeccable@local",
+        "skill:frontend-ui-engineering@addyosmani/agent-skills",
+        "skill:security-and-hardening@addyosmani/agent-skills",
+        "skill:security-review@getsentry/skills",
+        "skill:auth-implementation-patterns@wshobson/agents",
+        "skill:golang-*@samber/cc-skills-golang",
+        "skill:vercel-react-best-practices@vercel-labs/agent-skills",
+        "skill:vercel-composition-patterns@vercel-labs/agent-skills",
+        "skill:typescript-advanced-types@wshobson/agents",
+        "skill:tanstack-query@tanstack-skills/tanstack-skills",
+        "skill:tanstack-router@tanstack-skills/tanstack-skills",
+        "skill:tanstack-form@tanstack-skills/tanstack-skills",
+        "skill:tanstack-table@tanstack-skills/tanstack-skills",
+        "skill:two-factor-authentication-best-practices@better-auth/skills",
+        "pkg:npm/%40anthropic-ai/claude-code@2.1.311"
+      ]
+    },
+    {
+      "ref": "skill:find-skills@vercel-labs/skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:hallmark@nutlope/hallmark",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:impeccable@local",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:frontend-ui-engineering@addyosmani/agent-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:security-and-hardening@addyosmani/agent-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:security-review@getsentry/skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:auth-implementation-patterns@wshobson/agents",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:golang-*@samber/cc-skills-golang",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:vercel-react-best-practices@vercel-labs/agent-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:vercel-composition-patterns@vercel-labs/agent-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:typescript-advanced-types@wshobson/agents",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:tanstack-query@tanstack-skills/tanstack-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:tanstack-router@tanstack-skills/tanstack-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:tanstack-form@tanstack-skills/tanstack-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:tanstack-table@tanstack-skills/tanstack-skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "skill:two-factor-authentication-best-practices@better-auth/skills",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code@2.1.311",
+      "dependsOn": [
+        "pkg:npm/%40anthropic-ai/claude-code-darwin-arm64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-darwin-x64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-arm64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-arm64-musl@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-x64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-x64-musl@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-win32-arm64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-win32-x64@2.1.311"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-darwin-arm64@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-darwin-x64@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-linux-arm64@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-linux-arm64-musl@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-linux-x64@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-linux-x64-musl@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-win32-arm64@2.1.311",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40anthropic-ai/claude-code-win32-x64@2.1.311",
+      "dependsOn": []
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "complete",
+      "assemblies": [
+        "pkg:npm/%40anthropic-ai/claude-code@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-darwin-arm64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-darwin-x64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-arm64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-arm64-musl@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-x64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-linux-x64-musl@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-win32-arm64@2.1.311",
+        "pkg:npm/%40anthropic-ai/claude-code-win32-x64@2.1.311"
+      ]
+    },
+    {
+      "aggregate": "unknown",
+      "assemblies": [
+        "skill:find-skills@vercel-labs/skills",
+        "skill:hallmark@nutlope/hallmark",
+        "skill:impeccable@local",
+        "skill:frontend-ui-engineering@addyosmani/agent-skills",
+        "skill:security-and-hardening@addyosmani/agent-skills",
+        "skill:security-review@getsentry/skills",
+        "skill:auth-implementation-patterns@wshobson/agents",
+        "skill:golang-*@samber/cc-skills-golang",
+        "skill:vercel-react-best-practices@vercel-labs/agent-skills",
+        "skill:vercel-composition-patterns@vercel-labs/agent-skills",
+        "skill:typescript-advanced-types@wshobson/agents",
+        "skill:tanstack-query@tanstack-skills/tanstack-skills",
+        "skill:tanstack-router@tanstack-skills/tanstack-skills",
+        "skill:tanstack-form@tanstack-skills/tanstack-skills",
+        "skill:tanstack-table@tanstack-skills/tanstack-skills",
+        "skill:two-factor-authentication-best-practices@better-auth/skills"
+      ]
+    }
+  ]
+}

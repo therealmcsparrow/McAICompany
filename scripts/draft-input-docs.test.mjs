@@ -57,13 +57,10 @@ test('the three files use LF line ends only', () => {
   for (const rel of [CONTRACT, TO_SPEC, ROUTES]) assert.ok(!read(rel).includes('\r'), `${rel} has no CR`);
 });
 
-// release.mjs rolls [Unreleased] into the new version section before npm test runs, so the fix
-// bullet sits under ### Fixed of [Unreleased] before a release and of the newest versioned section after.
+// release.mjs rolls [Unreleased] into a new version section, and later releases push it further
+// down, so the fix bullet may sit under ### Fixed of [Unreleased] or of any versioned section.
 function sectionsToCheck(log) {
-  const parts = log.split(/^(?=## \[)/m).filter((p) => p.startsWith('## ['));
-  const unreleased = parts.find((p) => p.startsWith('## [Unreleased]'));
-  const newest = parts.find((p) => /^## \[\d+\.\d+\.\d+\]/.test(p));
-  return [unreleased, newest].filter((p) => p !== undefined);
+  return log.split(/^(?=## \[)/m).filter((p) => /^## \[(Unreleased|\d+\.\d+\.\d+)\]/.test(p));
 }
 
 function fixedBlock(section) {
@@ -81,7 +78,7 @@ function hasFix(log) {
   });
 }
 
-test('the changelog lists the fix under Fixed of Unreleased or the newest version', () => {
+test('the changelog lists the fix under Fixed of Unreleased or a versioned section', () => {
   assert.ok(hasFix(read('CHANGELOG.md')), 'draft-input v1.3 and prompt file under ### Fixed of [Unreleased] or the newest versioned section');
 });
 
@@ -97,8 +94,8 @@ test('changelog check: passes after release (fix under the newest version, Unrel
   assert.equal(hasFix(mk('', `## [0.25.0] - 2026-10-31\n\nRollback: node scripts/stable.mjs 0.24.0\n\n${FIX}`, OLD)), true);
 });
 
-test('changelog check: fails when the fix sits only in an older version', () => {
-  assert.equal(hasFix(mk('', '## [0.25.0] - 2026-10-31\n\n### Added\n- x.\n', `## [0.24.0] - 2026-10-30\n\n${FIX}`)), false);
+test('changelog check: passes when the fix sits in an older version', () => {
+  assert.equal(hasFix(mk('', '## [0.25.0] - 2026-10-31\n\n### Added\n- x.\n', `## [0.24.0] - 2026-10-30\n\n${FIX}`)), true);
 });
 
 test('changelog check: fails when the bullet is not under Fixed', () => {
