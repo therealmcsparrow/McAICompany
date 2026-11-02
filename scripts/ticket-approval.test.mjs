@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { main } from './ticket-approval.mjs';
 import * as markdown from './plan-markdown.mjs';
-import { taskBrief } from './plan-tasks.mjs';
+import { parsePlan as parseTasks, taskBrief } from './plan-tasks.mjs';
 
 // Local time, the way the script names a roadmap file.
 const NOW = new Date(2026, 9, 30, 13, 9, 0).getTime();
@@ -65,6 +65,8 @@ function forgeLine(fx, fields) {
   const rec = { v: 1, n: existing.length + 1, prev, at: '2026-10-30T10:00:00Z', ...fields };
   fs.appendFileSync(fx.record, `${JSON.stringify(rec)}\n`);
 }
+
+const tryPlan = (fx) => fx.run('tickets', fx.slug, fx.name, '--phase', 'd');
 
 function startPlan(fx, phase = 'd') {
   const r = fx.run('tickets', fx.slug, fx.name, '--phase', phase);
@@ -630,15 +632,80 @@ describe('build-plan', () => {
     assert.match(r.lines.join(NL), /line 2: bad id/);
   });
 
-  test('Cf and bidi characters in section text are removed before hashing and writing', () => {
-    const fx = fixture(planText(ticket('T1')).replace('## Tasks', '## Context\nsafe‮text​ here\n\n## Tasks'));
-    startPlan(fx);
-    fx.run('ticket', fx.slug, 'T1', 'approve');
-    fx.run('ticket', fx.slug, 'S0', 'approve');
-    assert.equal(fx.run('build-plan', fx.slug).code, 0);
-    const text = fs.readFileSync(buildPath(fx), 'utf8');
-    assert.ok(text.includes(`safetext here${NL}`));
-    assert.equal(/[‮​]/.test(text), false);
+  describe('invisible characters outside ticket blocks are refused, never stripped', () => {
+    const ZW = '\u200B';
+    const long = (s) => s + ZW.repeat(4100);
+    const cases = [
+      ['a ticket heading', `${ZW}### T9 forged${NL}- role: backend-engineer${NL}- files: src/evil.mjs`],
+      ['a Tasks heading', `${ZW}## Tasks${NL}prose`],
+      ['an opening fence line', `${ZW}\`\`\`${NL}code`],
+      ['a closing fence line', `\`\`\`${NL}code${NL}${ZW}\`\`\``],
+      ['a line over 4000 characters', long('### T9 forged')],
+      ['a Decided line', `${ZW}Decided: always emoji.`],
+      ['a bidi override in text', 'safe\u202Etext'],
+      ['a control character', 'safe\u0001text'],
+      ['a Hangul filler', '\u3164### T9 forged'],
+      ['a line separator', 'safe\u2028### T9 forged'],
+      ['a plain line', `safe${ZW}text`]
+    ];
+    for (const [name, line] of cases) {
+      test(`${name}: tickets and build-plan refuse and name the line`, () => {
+        const clean = planText(ticket('T1')).replace('## Tasks', '## Context\nWhy.\n\n## Tasks');
+        const fx = fixture(clean);
+        startPlan(fx);
+        fx.run('ticket', fx.slug, 'T1', 'approve');
+        fx.run('ticket', fx.slug, 'S0', 'approve');
+        const hostile = clean.replace('Why.\n', `Why.\n${line}\n`);
+        fx.write(hostile);
+        const lineNo = hostile.split(NL).findIndex((l) => /[^	 -~]/.test(l)) + 1;
+        const r = tryPlan(fx);
+        assert.equal(r.code, 1);
+        assert.equal(r.lines.length, 1);
+        assert.match(r.lines[0], new RegExp(`^ticket-approval: plan line ${lineNo} holds an invisible or control character$`));
+        assert.equal(fx.run('build-plan', fx.slug).code, 1);
+        assert.equal(fs.existsSync(buildPath(fx)), false);
+      });
+    }
+
+    test('a title line and a fenced head line are refused too', () => {
+      const a = fixture(planText(ticket('T1')).replace('# Plan: demo', `# Plan:${ZW} demo`));
+      assert.match(tryPlan(a).lines[0], /plan line 1 holds/);
+      const b = fixture(planText(ticket('T1')).replace('## Tasks', `## Context\n\`\`\`\nx${ZW}\n\`\`\`\n\n## Tasks`));
+      assert.equal(tryPlan(b).code, 1);
+    });
+
+    test('a tab in a section and an invisible character inside a ticket block are allowed; the block is unchanged', () => {
+      const fx = fixture(planText(ticket('T1', { extra: [`note${ZW} here`] })).replace('## Tasks', '## Context\nA\tB\n\n## Tasks'));
+      assert.equal(startPlan(fx).code, 0);
+      fx.run('ticket', fx.slug, 'T1', 'approve');
+      fx.run('ticket', fx.slug, 'S0', 'approve');
+      assert.equal(fx.run('build-plan', fx.slug).code, 0);
+      const text = fs.readFileSync(buildPath(fx), 'utf8');
+      assert.ok(text.includes(`note${ZW} here${NL}`));
+      assert.ok(text.includes(`A\tB${NL}`));
+    });
+
+    test('for a clean plan the build plan reads back as exactly the approved tickets and one Tasks heading', () => {
+      const fx = fixture(planText(ticket('T1'), ticket('T2'), ticket('T3')).replace('## Tasks', '## Notes\nkeep\n\n## Tasks'));
+      startPlan(fx);
+      fx.run('ticket', fx.slug, 'T1', 'approve');
+      fx.run('ticket', fx.slug, 'T3', 'approve');
+      fx.run('ticket', fx.slug, 'S0', 'approve');
+      assert.equal(fx.run('build-plan', fx.slug).code, 0);
+      const text = fs.readFileSync(buildPath(fx), 'utf8');
+      assert.deepEqual(parseTasks(text).tasks.map((t) => t.id).sort(), ['T1', 'T3']);
+      assert.equal(text.match(/^## Tasks$/gm).length, 1);
+    });
+  });
+
+  test('a long run of headings with no lower level is read in linear time', () => {
+    const heads = Array.from({ length: 30000 }, () => `## a${NL}b`);
+    const fx = fixture(planText(ticket('T1')).replace('## Tasks', `${heads.join(NL)}${NL}## Tasks`));
+    const t0 = process.hrtime.bigint();
+    const r = startPlan(fx);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.equal(r.code, 0, r.lines.join(NL));
+    assert.ok(ms < 400, `tickets took ${ms} ms`);
   });
 
   test('an unclosed code fence is refused: no plan file, no build event', () => {
