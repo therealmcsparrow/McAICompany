@@ -278,3 +278,15 @@ describe('stale git exit codes', () => {
     assert.deepEqual(r.lines, ['stale T1 a.txt gone', 'stale T2 b.txt gone', 'draft-input stale: 2 stale, 0 changed']);
   });
 });
+
+describe('stale work folder with spaces (regression)', () => {
+  test('a plan in a new-form work folder name is checked', () => {
+    const root = repo({ 'a.txt': 'one\n' });
+    const base = commit(root, 'base');
+    const rel = '.company/work/2026-11-02 14.20 - Plan And Draft Tools/plan.md';
+    put(root, rel, plan(base, task('T1', 'a.txt')));
+    const r = stale(root, rel);
+    assert.deepEqual(r.lines, ['draft-input stale: 0 stale, 0 changed']);
+    assert.equal(r.code, 0);
+  });
+});
