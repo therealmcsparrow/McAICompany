@@ -127,13 +127,25 @@ test('unplaced rows never join a parsed area group', () => {
 test('a duplicate row (R-2) is counted once', () => {
   const p = project();
   p.write('10-code-reviewer.md', ['- [spec] R-2 scripts/a.mjs:10 — one']);
-  p.write('11-security.md', ['- [spec] scripts/a.mjs:10 — again']);
+  p.write('11-security.md', ['- [spec] scripts/a.mjs:10 —  one']);
   const r = main(['fix', RUN, '1', '10-code-reviewer.md', '11-security.md'], { root: p.d });
   assert.match(r.out, /group 1: 1 blockers/);
   assert.equal(p.read('f1', 'g1.txt'), '10-code-reviewer.md:8\n');
   const q = project();
   q.write('10-a.md', ['- [spec] scripts/a.mjs:10 — x', '- [test] scripts/a.mjs:10 — x', '- [spec] scripts/a.mjs:11 — x']);
   assert.match(main(['fix', RUN, '1', '10-a.md'], { root: q.d }).out, /group 1: 3 blockers/);
+});
+
+test('same tag, path and line with different finding text stay two rows', () => {
+  const p = project();
+  p.write('10-qa.md', ['- [spec] scripts/a.mjs:10 — one']);
+  p.write('11-security.md', ['- [spec] scripts/a.mjs:10 — another finding']);
+  const r = main(['fix', RUN, '1', '10-qa.md', '11-security.md'], { root: p.d });
+  assert.match(r.out, /group 1: 2 blockers/);
+  assert.equal(p.read('f1', 'g1.txt'), '10-qa.md:8\n11-security.md:8\n');
+  const q = project();
+  q.write('10-a.md', ['- [spec] scripts/a.mjs:10 — one', '- [spec] scripts/a.mjs:10 — two']);
+  assert.match(main(['fix', RUN, '1', '10-a.md'], { root: q.d }).out, /group 1: 2 blockers/);
 });
 
 test('a spaced path with two lines gives two rows with lines 26 and 76', () => {
