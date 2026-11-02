@@ -58,6 +58,15 @@ function plan(base, ...tasks) {
 const stale = (root, rel = '.company/work/x/plan.md') => main(['stale', rel], { root });
 
 describe('stale', () => {
+  test('a wrong-case plan file is refused as wrong letter case', () => {
+    const root = repo({ 'a.txt': 'one\n' });
+    const base = commit(root, 'base');
+    put(root, '.company/work/x/plan.md', plan(base, task('T1', 'a.txt')));
+    const r = stale(root, '.company/work/x/PLAN.md');
+    assert.equal(r.code, 3);
+    assert.deepEqual(r.lines, ['refused: wrong letter case']);
+  });
+
   test('deleted path is stale', () => {
     const root = repo({ 'a.txt': 'one\n', 'keep.txt': 'k\n' });
     const base = commit(root, 'base');
