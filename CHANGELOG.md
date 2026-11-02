@@ -22,6 +22,11 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ### Changed
 - **Skill installs and removals run with telemetry off, from a folder aico owns.** Pinned installs at project scope no longer run from your project folder. `--remove` also runs with telemetry off. `skills-manifest` v2.4 (not additive).
 - **Behaviour change: a manifest command such as `impeccable` is no longer run at project scope.** Setup prints `manual <cmd>` and a warning to run it only in a repo you trust. It is not counted as failed, and the run exits 0. Pinned CLI installs still run beside it. Run the command yourself if you want it. User scope is unchanged.
+- **Behaviour change: the plan sections are approved as one form item.** A build plan keeps the other plan sections (title, Base commit, Decided lines and any further sections), and the CEO approves them together as item `S0`, last in the ticket form. An in-flight flow is asked once more: `tickets` prints `ask S0 new`, and `build-plan` refuses (`refused: the plan sections (S0) are not approved`, nothing written) until `ticket <slug> S0 approve` runs. A section edited after approval is asked again. S0 cannot be parked. `ticket-approval` v1.4.
+
+### Fixed
+- **`step-split fix` keeps different findings on one line.** Findings that share a line are no longer merged or dropped.
+- **`draft-input stale` accepts folder names with spaces.**
 
 ### Removed
 - **The third-party writing clean-up skill is no longer a dependency.** It is gone from the skills manifest, setup, docs and tests. Shipped release records for 0.20.0 to 0.25.0 keep their old entries.

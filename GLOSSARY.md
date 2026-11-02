@@ -83,7 +83,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Idea flow** — the route of `/aico:idea` and `/aico:bug`: capture, a grill, a reprompt, then the routes A to E, ticket approval and the tickets form F, G, E. Both kinds share one route; the kind decides the build Playbook (`aico:feature` for an idea, `aico:fix` for a bug). The allowed picks come from the `idea-flow` script. Record: `.company/work/<slug>/idea-flow.jsonl`. Contract `idea-flow` v1.1.
 
-**Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.
+**Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. The plan sections before the tasks are approved the same way as one item, `S0`. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.4.
 
 **Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a `PreCompact` hook writes from the run's records at a clean point, and a `SessionStart` hook returns after compaction, so the Lead continues without the CEO. Needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` set to `98500` once. Contract `lead-handoff` v1; ADR 0049.
 

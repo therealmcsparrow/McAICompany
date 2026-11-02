@@ -134,7 +134,7 @@ The script gives every pick in a form a letter, and the forms show the route nam
 - `idea-flow pick <slug> <letter>`: the letter must be one of the open form's options, else `refused: not an allowed pick`, exit 3, nothing written. Prints `picked <letter> <route>`.
 - `idea-flow state <slug>`: its `build:` line decides the build Playbook. Only `aico:feature` or `aico:fix` is ever started; the idea, grill and ticket text never choose it.
 - `idea-flow park-idea <slug> <name>`: prints `parked <final-name>`. `name refused` or `name taken` exits 1.
-- `ticket-approval tickets`, `ticket` and `build-plan`: ticket approval, one hash per ticket (the first 12 hex of SHA-256 over its task block). The record is `.company/work/<slug>/tickets.jsonl`; no Gate reads it. Contract `ticket-approval` v1.
+- `ticket-approval tickets`, `ticket` and `build-plan`: ticket approval, one hash per ticket (the first 12 hex of SHA-256 over its task block) plus one hash for the plan sections before `## Tasks`, approved as item `S0`. `build-plan` refuses until S0 is approved. The record is `.company/work/<slug>/tickets.jsonl`; no Gate reads it. Contract `ticket-approval` v1.4.
 - Refusals print `refused: <reason>` and exit 3. Fail-loud errors (`unknown slug`, `exists`, `step out of order`, `broken record` and others) exit 1. A broken record makes the Lead show it and stop.
 - Every argument is at most 4096 characters, else `refused: argument is not accepted`, exit 3, before any command runs.
 
