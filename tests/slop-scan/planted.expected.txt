@@ -1,0 +1,22 @@
+tests/slop-scan/planted.md:3 W01 inflated verb: leverage, delve, showcase
+tests/slop-scan/planted.md:5 W02 grand abstract word: tapestry, landscape, pivotal
+tests/slop-scan/planted.md:7 W03 sales hype: game-changer, cutting-edge
+tests/slop-scan/planted.md:9 W04 filler opener that announces a point
+tests/slop-scan/planted.md:11 W05 stacked hedge: might perhaps, could possibly
+tests/slop-scan/planted.md:13 W06 chat residue: offer, praise, sign-off
+tests/slop-scan/planted.md:15 W07 empty intensifier: very, really, truly
+tests/slop-scan/planted.md:17 W08 signpost or summary announcer
+tests/slop-scan/planted.md:19 S01 contrast: not X but Y, isn’t X it’s Y
+tests/slop-scan/planted.md:21 S01 contrast: not X but Y, isn’t X it’s Y
+tests/slop-scan/planted.md:23 S02 dash-heavy paragraph: more than 2 em dashes
+tests/slop-scan/planted.md:25 S03 two or more lists of three in one paragraph
+tests/slop-scan/planted.md:27 S04 staged reveal: short tease, then the answer
+tests/slop-scan/planted.md:29 S05 one-line closer that restates the paragraph
+tests/slop-scan/planted.md:31 S06 bold label opens a list item
+tests/slop-scan/planted.md:33 S07 question asked and answered at once
+tests/slop-scan/planted.md:35 S08 flat rhythm: 4 sentences of near-equal length
+tests/slop-scan/planted.md:37 S02 dash-heavy paragraph: more than 2 em dashes
+tests/slop-scan/planted.md:40 W04 filler opener that announces a point
+tests/slop-scan/planted.md:43 S09 emoji in a heading or list item
+tests/slop-scan/planted.md:44 S09 emoji in a heading or list item
+slop-scan: 21 tells, 173 words, 121.4 per 1000 words

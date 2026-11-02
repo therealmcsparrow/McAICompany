@@ -1,7 +1,6 @@
 {
   "core": [
     { "name": "find-skills", "source": "vercel-labs/skills" },
-    { "name": "humanizer", "source": "blader/humanizer" },
     { "name": "hallmark", "source": "nutlope/hallmark" },
     { "name": "impeccable", "install": "npx -y impeccable skills install" },
     { "name": "frontend-ui-engineering", "source": "addyosmani/agent-skills" },
