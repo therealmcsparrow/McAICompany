@@ -57,11 +57,11 @@ class Broken extends Error {}
 const refuse = (why) => { throw new Refusal(why); };
 const broken = (why = 'broken record') => { throw new Broken(why); };
 
-const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
-const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { return null; } };
+export const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+export const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { return null; } };
 
 // The work folder of a name when every folder on its path is a real directory inside the real work folder, else null.
-function workDir(root, slug) {
+export function workDir(root, slug) {
   let p = root;
   for (const part of ['.company', 'work', slug]) {
     p = path.join(p, part);
@@ -80,7 +80,7 @@ function insideWork(root, dir) {
 }
 
 // Opens a regular file with one link and re-checks the handle against the lstat; null when it is not safe.
-function openRegular(file, flags) {
+export function openRegular(file, flags) {
   const l = lstatOrNull(file);
   if (!l || l.isSymbolicLink() || !l.isFile() || l.nlink !== 1) return null;
   const fd = fs.openSync(file, flags | NOFOLLOW);
@@ -101,7 +101,7 @@ function readFd(fd, from, len) {
 }
 
 // Whole file as text, or null when it is missing, unsafe or over the cap.
-function readSmall(file, max) {
+export function readSmall(file, max) {
   let h;
   try { h = openRegular(file, fs.constants.O_RDONLY); } catch { return null; }
   if (!h) return null;
@@ -183,7 +183,7 @@ function flowState(root, slug) {
 }
 
 // The newest run that is open: run-state first, else the newest open idea flow.
-function findRun(root, now) {
+export function findRun(root, now) {
   const a = active(root, { now });
   if (a.slug) return a.slug;
   const work = path.join(root, '.company', 'work');
@@ -385,7 +385,8 @@ function usageTotal(u) {
   return total > 0 ? total : null;
 }
 
-function transcriptTokens(p, claudeDir) {
+// sidechain false: the Lead (main chain rows); true: a Step file (sidechain rows only).
+export function transcriptTokens(p, claudeDir, sidechain = false) {
   if (typeof p !== 'string' || p.length === 0 || p.length > MAX_ARG || p.includes('\0') || !path.isAbsolute(p)) return null;
   try {
     const real = fs.realpathSync.native(p);
@@ -402,7 +403,7 @@ function transcriptTokens(p, claudeDir) {
     for (let i = lines.length - 1; i >= 0; i--) {
       let o;
       try { o = JSON.parse(lines[i]); } catch { continue; }
-      if (o === null || typeof o !== 'object' || o.type !== 'assistant' || o.isSidechain === true) continue;
+      if (o === null || typeof o !== 'object' || o.type !== 'assistant' || (o.isSidechain === true) !== sidechain) continue;
       const t = usageTotal(o.message?.usage);
       if (t !== null) return t;
     }
@@ -429,9 +430,15 @@ function windowOf(env) {
   return typeof v === 'string' && /^[1-9]\d{0,6}$/.test(v) ? Number(v) : null;
 }
 
-function claudeDirOf(env) {
+export function claudeDirOf(env) {
   const c = env?.CLAUDE_CONFIG_DIR;
   return typeof c === 'string' && c.length > 0 && c.length <= MAX_ARG && path.isAbsolute(c) ? c : path.join(os.homedir(), '.claude');
+}
+
+// The command that starts a new Lead session on a run; text only. Null for a bad name.
+export function newSessionCommand(slug) {
+  if (typeof slug !== 'string' || !isWorkFolder(slug) || /[%^&|<>"]/.test(slug)) return null;
+  return `claude "aico lead hand-over: run lead-handover read '${slug}' first, then follow skills/pipeline/references/lead-handover.md."`;
 }
 
 const defaults = (o = {}) => {
