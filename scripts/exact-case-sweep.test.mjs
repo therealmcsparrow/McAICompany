@@ -185,12 +185,20 @@ test('AC5 ADR 0053 exists with status accepted', () => {
   assert.match(adr, /^Status: accepted \(CEO, 2026-11-01\)\r?$/m);
 });
 
-test('AC5 the CHANGELOG Unreleased section has a Security entry naming the refusal', () => {
+// True when any `### Security` block, in any release section, names the refusal.
+function hasSecurityRefusal(log) {
+  const blocks = log.split(/\r?\n(?=#{2,3} )/).filter((b) => /^### Security\b/.test(b));
+  return blocks.some((b) => /wrong letter case/.test(b));
+}
+
+test('AC5 the CHANGELOG has a Security entry naming the refusal, before or after a release rolls it', () => {
   const log = read('CHANGELOG.md');
-  const at = log.indexOf('## [Unreleased]');
-  assert.ok(at >= 0, 'Unreleased heading');
-  const next = log.indexOf('\n## [', at + 5);
-  const section = log.slice(at, next < 0 ? undefined : next);
-  assert.match(section, /### Security/);
-  assert.match(section, /wrong letter case/);
+  assert.ok(log.includes('## [Unreleased]'), 'Unreleased heading');
+  assert.ok(hasSecurityRefusal(log), 'Security entry naming wrong letter case');
+  // A release moves the entry under a version heading; the check must still find it.
+  const rolled = log.replace('## [Unreleased]', '## [Unreleased]\n\n## [9.9.9] - 2099-01-01');
+  assert.ok(hasSecurityRefusal(rolled), 'found after the release roll');
+  // Removing the entry must still fail.
+  assert.ok(!hasSecurityRefusal(rolled.replace(/wrong letter case/g, 'x')), 'missing entry is detected');
+  assert.ok(!hasSecurityRefusal(rolled.replace(/^### Security\r?$/gm, '### Fixed')), 'missing heading is detected');
 });
