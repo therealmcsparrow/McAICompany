@@ -38,3 +38,23 @@ Refusal run (run 8): `running.txt` held a Step id. `PreCompact` exit 2 five time
 4. Pass: all four state values and the post-reset nonce in the final answer.
 
 Open point: the hand-over fires near context 85.5k only through the window variable (window 98500, rule window minus 13000). Observed at trigger: hook usage 68k to 70k plus one 8k read, `pre_tokens` 73k to 75k (without the fixed prompt). The exact 85500 figure is not confirmed; T14 calibrates the window in its own test. Candidate B was not tried: A passed.
+
+## T1 spike, context-cap hard hand-over (2026-11-02)
+
+Installed: Claude Code 2.1.316, aico 0.26.0 (plugin cache). Branch: `.claude-plugin/plugin.json` 0.26.0. Model alias haiku, `claude -p --output-format json`, throwaway plugin in a temp dir (`--plugin-dir`, never installed), deleted after. Synthetic data only. Hook logged stdin fields, not transcript text. Win32 spawn question skipped: cut, T5 ships points-only.
+
+| # | Question | Answer | Evidence |
+|---|---|---|---|
+| 1 | Does a subagent PreToolUse deny fire, with `agent_id`? | Yes | Subagent `t1:probe` calls (PowerShell, Glob) reached the hook with `agent_id` and `agent_type` `t1:probe`; the hook denied; the agent reported both calls refused. Lead calls carry no `agent_id`. Stdin keys for subagent: session_id, transcript_path, cwd, prompt_id, permission_mode, agent_id, agent_type, effort, hook_event_name, tool_name, tool_input, tool_use_id. |
+| 2 | Subagent transcript path? | Not in stdin; derivable | `transcript_path` in a subagent call is the parent session file. Subagent file is `<session-dir>/subagents/agent-<agent_id>.jsonl` (session dir = `transcript_path` minus `.jsonl`), next to `agent-<id>.meta.json`. |
+| 3 | `isSidechain` value? | true in the subagent file, false in the parent | Subagent file first line `"isSidechain":true`. Parent file entries read by the hook gave false (first lines may be null: metadata rows). Read the last assistant usage row of the subagent file, not line 1. |
+| 4 | Effect of `continue:false` from PreToolUse (Lead)? | Yes, stops the turn | Result `terminal_reason: hook_stopped`, `stop_reason: tool_use`, `result` empty, exit 0, `subtype: success`. `stopReason` text did not appear in `result`; the new-session command must be shown another way (the hook must print it to stderr or `systemMessage`, untested). |
+| 5 | Plugin MCP tool name, cwd? | `mcp__plugin_<plugin>_<server>__<tool>`; cwd = session cwd | Test: `mcp__plugin_t1_t1srv__lead_new_session`, loaded from the plugin `.mcp.json` with `${CLAUDE_PLUGIN_ROOT}`; server process cwd was the session cwd. PreToolUse stdin for it adds `mcp_server`. For aico (plugin `aico`) the name will be `mcp__plugin_aico_<server>__lead_new_session`. |
+| 6 | Permission prompt for the plugin tool? | Yes | Without `--allowedTools`/skip-permissions in `-p`, the call landed in `permission_denials`; with it, the call ran. The plugin cannot pre-approve; expect one prompt interactively. |
+
+Side facts
+- Hook cwd equals the session cwd (the scratch work dir). Worktree case (Nit in the plan) not tested: no worktree session was started. T3 should still resolve the run from the main tree.
+- A plugin agent with a `tools:` frontmatter line reported Bash unavailable in run 1; without the line it inherits tools. Name when dispatched: `<plugin>:<agent>`, bare name did not resolve to it.
+- The Lead used PowerShell, not Bash, on win32; match hooks on `*`, never on `Bash`.
+
+Plan decisions: question 1 is yes, so T3 proceeds. Question 5 is yes, so T5 proceeds (points-only). Question 4 changes T4: `stopReason` does not reach the model-visible `result`; T4 must test where the command surfaces.
