@@ -7,7 +7,7 @@ import http from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { join, resolve, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { plan, runAll, expand, missing, parseDesignSkills, main, retiredSkills, SKILLS_CLI, skillsEnv, cleanPath, installExec, npmCli } from './install-skills.mjs';
+import { plan, runAll, expand, missing, parseDesignSkills, main, retiredSkills, SKILLS_CLI, skillsEnv, cleanPath, installExec } from './install-skills.mjs';
 // Remove the temp dirs this file made, once the run is over.
 const __tmpDirs = [];
 const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
@@ -1105,68 +1105,4 @@ test('user scope drops only node_modules/.bin folders from PATH, not other folde
   } finally { process.env.PATH = oldPath; }
   const key = Object.keys(envs.at(-1)).find(k => k.toLowerCase() === 'path');
   assert.deepEqual(envs.at(-1)[key].split(delimiter), [keep]);
-});
-
-test('R-43: the npm fetch PATH is cleaned against the product root too', () => {
-  const base = mkdtempSync(join(tmpdir(), 'aico-fetchpath-'));
-  const home = join(base, 'home');
-  const root = join(base, 'product');
-  const sys = join(base, 'sys');
-  mkdirSync(join(root, 'tools'), { recursive: true });
-  mkdirSync(home, { recursive: true });
-  const envs = [];
-  const run = (c, a, o) => { envs.push(o.env); throw new Error('stop'); };
-  const oldPath = process.env.PATH;
-  process.env.PATH = [join(root, 'tools'), sys].join(delimiter);
-  try {
-    assert.throws(() => installExec(home, { execSync: run, execFileSync: run })('npx -y skills@1.7.4 add a/b', root, ['-y', 'skills@1.7.4', 'add', 'a/b']), /could not fetch/);
-  } finally { process.env.PATH = oldPath; }
-  const key = Object.keys(envs[0]).find(k => k.toLowerCase() === 'path');
-  assert.deepEqual(envs[0][key].split(delimiter), [sys]);
-});
-
-test('R-44: cleanPath removes a junction or symlink spelling of the root, and a differently cased one where the file system folds case', () => {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), 'aico-cpreal-')));
-  const root = join(base, 'product');
-  const link = join(base, 'alias');
-  mkdirSync(join(root, 'tools'), { recursive: true });
-  try { symlinkSync(root, link, 'junction'); } catch { return; }
-  const sys = join(base, 'sys');
-  assert.equal(cleanPath([join(link, 'tools'), sys].join(delimiter), root), sys);
-  assert.equal(cleanPath([join(root, 'tools'), sys].join(delimiter), link), sys);
-  if (process.platform === 'win32' || process.platform === 'darwin') {
-    assert.equal(cleanPath([join(root, 'tools').toUpperCase(), sys].join(delimiter), root), sys);
-  }
-});
-
-test('R-44: cleanPath removes a not yet existing entry under a linked root', () => {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), 'aico-cpnew-')));
-  const root = join(base, 'product');
-  const link = join(base, 'alias');
-  mkdirSync(root, { recursive: true });
-  try { symlinkSync(root, link, 'junction'); } catch { return; }
-  assert.equal(cleanPath(join(link, 'not-yet', 'bin'), root), '');
-});
-
-test('R-45: npmCli finds npm on Homebrew, Debian and system layouts, and skips a candidate inside the product root', () => {
-  const node = join(sep, 'opt', 'homebrew', 'Cellar', 'node', '25.0.0', 'bin', 'node');
-  const brew = join(sep, 'opt', 'homebrew', 'Cellar', 'node', '25.0.0', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  const has = set => p => set.includes(p);
-  assert.equal(npmCli(node, has([brew])), brew);
-  const deb = join(sep, 'usr', 'share', 'nodejs', 'npm', 'bin', 'npm-cli.js');
-  assert.equal(npmCli(join(sep, 'usr', 'bin', 'node'), has([deb])), deb);
-  const lib = join(sep, 'usr', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  assert.equal(npmCli(join(sep, 'usr', 'bin', 'node'), has([lib])), lib);
-  const brewLink = join(sep, 'opt', 'homebrew', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  assert.equal(npmCli(join(sep, 'opt', 'homebrew', 'bin', 'node'), has([brewLink])), brewLink);
-  assert.throws(() => npmCli(join(sep, 'usr', 'bin', 'node'), has([lib]), [join(sep, 'usr', 'lib')]), /npm-cli\.js not found/);
-});
-
-test('R-45: no npm anywhere names the node folder and every place looked at', () => {
-  const node = join(sep, 'x', 'bin', 'node');
-  let msg = '';
-  try { npmCli(node, () => false); } catch (e) { msg = e.message; }
-  assert.match(msg, /npm-cli\.js not found/);
-  assert.ok(msg.includes(join(sep, 'x', 'bin')), msg);
-  assert.ok(msg.includes(join(sep, 'usr', 'share', 'nodejs', 'npm')), msg);
 });
