@@ -20,7 +20,7 @@ A Claude Code plugin that runs a small software company. You are the **CEO**. A 
    `superpowers` installs automatically as a plugin dependency.
 2. Optional: install the standalone and stack skills the Roles use:
    ```
-   /aico:setup                 # standalone skills: hallmark, find-skills, humanizer, impeccable, …
+   /aico:setup                 # standalone skills: hallmark, find-skills, impeccable, …
    /aico:setup go react        # optional stack groups: go, react, tanstack, auth
    ```
 3. Check it worked: `/aico:version` shows the installed version and its latest changelog entry. `/aico:help` lists every command.

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Installs the standalone skills aico points to (deps/skills.json) that are not installed yet.
 // Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
+//       node install-skills.mjs --retired | --remove <name> [--dry-run]
 //   default group: core. Groups `design` and `skills` need --project. Contract: docs/contracts/skills-manifest.md.
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { join, resolve, dirname, basename } from 'node:path';
+import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
@@ -226,7 +227,7 @@ export function runAll(items, exec) {
   for (const item of items) {
     const { cmd, cwd, argv } = typeof item === 'string' ? { cmd: item } : item;
     try { exec(cmd, cwd, argv); ok.push(cmd); }
-    catch (e) { failed.push({ cmd, error: String(e?.message ?? e) }); }
+    catch (e) { failed.push({ cmd, error: e?.code === 'ETIMEDOUT' ? TIMEOUT_TEXT : String(e?.message ?? e) }); }
   }
   return { ok, failed };
 }
@@ -235,6 +236,193 @@ function installedSkills(home, projectRoot) {
   const dirs = [join(home, '.claude', 'skills')];
   if (projectRoot) dirs.push(join(projectRoot, '.claude', 'skills'), join(projectRoot, '.agents', 'skills'));
   return new Set(dirs.filter(existsSync).flatMap(d => readdirSync(d)));
+}
+
+const REMOVE_TIMEOUT_MS = 120_000;
+const INSTALL_TIMEOUT_MS = 600_000;
+const MAX_SBOM_BYTES = 2 * 1024 * 1024;
+const SKILL_REF_RE = /^skill:([^@]+)@/;
+// Platforms where the skills CLI `remove` was proven to run without a prompt; elsewhere the command is only printed.
+const REMOVE_PLATFORMS = new Set(['win32']);
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/g;
+const TIMEOUT_TEXT = 'timed out, it may still finish';
+
+// Environment of every skills CLI child. DO_NOT_TRACK and DISABLE_TELEMETRY switch off its two telemetry calls
+// (/tele/t and /tele/audit, dist/cli.mjs:2809). NoDefaultCurrentDirectoryInExePath stops cmd.exe from picking
+// npx.cmd out of the working folder, which is the product root for a project install.
+export function skillsEnv(base = process.env) {
+  return { ...base, DO_NOT_TRACK: '1', DISABLE_TELEMETRY: '1', NoDefaultCurrentDirectoryInExePath: '1' };
+}
+
+// PATH for a skills CLI child: absolute entries only, none inside the product root, and no node_modules/.bin of the
+// product root or of a folder above it. The folder lookups of the CLI's own children (git, gh) then cannot reach the repo.
+// binOnly (user scope, root = home): only node_modules/.bin folders are dropped, so a per-user git or node stays reachable.
+export function cleanPath(pathVar, root, binOnly = false) {
+  const fold = s => (process.platform === 'win32' ? s.toLowerCase() : s);
+  const rootAbs = fold(resolve(root));
+  const inside = (p, dir) => p === dir || p.startsWith(dir + sep);
+  return String(pathVar ?? '').split(delimiter).filter(entry => {
+    if (!entry || !isAbsolute(entry)) return false;
+    const p = fold(resolve(entry));
+    if (!binOnly && inside(p, rootAbs)) return false;
+    if (basename(p) === '.bin' && basename(dirname(p)) === 'node_modules' && inside(rootAbs, dirname(dirname(p)))) return false;
+    return true;
+  }).join(delimiter);
+}
+
+function cleanEnv(root, binOnly = false) {
+  const env = skillsEnv();
+  const key = Object.keys(env).find(k => k.toLowerCase() === 'path') ?? 'PATH';
+  const value = cleanPath(env[key], root, binOnly);
+  for (const k of Object.keys(env)) if (k.toLowerCase() === 'path') delete env[k];
+  env[key] = value;
+  return env;
+}
+
+// Arguments after the pinned CLI name when the command is an `add` of the pinned skills CLI, else null.
+function skillsArgs(cmd, argv) {
+  if (argv) return argv[0] === '-y' && argv[1] === SKILLS_CLI ? argv.slice(2) : null;
+  const head = `npx -y ${SKILLS_CLI} `;
+  return cmd.startsWith(head) ? cmd.slice(head.length).split(' ').map(t => (t === '"*"' ? '*' : t)) : null;
+}
+
+// npm-cli.js beside the running node: npm is started as `node npm-cli.js`, never through a shim found on PATH.
+function npmCli() {
+  const dir = dirname(process.execPath);
+  const found = [join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')].find(existsSync);
+  if (!found) throw new Error('npm-cli.js not found beside node');
+  return found;
+}
+
+// Fetches the pinned package into a folder aico owns (no install scripts, working folder = that folder) and returns the
+// absolute path of its bin file. Nothing in a product folder is read: npm and the package both come from here.
+function fetchSkillsCli(home, runners) {
+  const [name, version] = SKILLS_CLI.split('@');
+  const dir = join(home, '.mcsparrow', 'cli', `${name}-${version}`);
+  mkdirSync(dir, { recursive: true });
+  if (!existsSync(join(dir, 'package.json'))) writeFileSync(join(dir, 'package.json'), '{"private":true}\n');
+  const opts = { cwd: dir, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(dir), stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
+  try {
+    runners.execFileSync(process.execPath, [npmCli(), 'install', '--prefix', dir, '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', SKILLS_CLI], opts);
+  } catch (e) {
+    if (e?.code === 'ETIMEDOUT') throw e;
+    throw new Error(`could not fetch ${SKILLS_CLI}: ${errorText(e)}`);
+  }
+  const pkgDir = join(dir, 'node_modules', name);
+  let pkg;
+  try { pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')); } catch { throw new Error(`${SKILLS_CLI} is not in the aico folder`); }
+  const rel = typeof pkg?.bin === 'string' ? pkg.bin : pkg?.bin?.[name];
+  const bin = typeof rel === 'string' ? resolve(pkgDir, rel) : '';
+  const inPkg = bin && !relative(pkgDir, bin).startsWith('..') && !isAbsolute(relative(pkgDir, bin));
+  if (pkg?.version !== version || !inPkg || !isPlainFile(bin, Infinity)) throw new Error(`${SKILLS_CLI} bin file is missing`);
+  return bin;
+}
+
+// Home path rules for the one shell form left (Windows cmd, or /bin/sh): it sits in double quotes, so only plain characters pass.
+const HOME_SHELL_RE = /^[A-Za-z0-9 _.:\\/()@+-]+$/;
+
+// Runs one install command. The pinned skills CLI never goes through npx or a shell: node runs its bin file by absolute
+// path with the working folder (product root for project scope) as cwd and a PATH without product folders. Any other
+// manifest command runs through npx from the home folder only.
+export function installExec(home, runners = { execSync, execFileSync }) {
+  return (cmd, cwd, argv) => {
+    const args = skillsArgs(cmd, argv);
+    if (args) {
+      const bin = fetchSkillsCli(home, runners);
+      return runners.execFileSync(process.execPath, [bin, ...args], { cwd, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(cwd, resolve(cwd) === resolve(home)), stdio: 'inherit' });
+    }
+    if (resolve(cwd ?? home) !== resolve(home)) throw new Error('this command cannot run in a product folder');
+    if (!cmd.startsWith('npx ')) return runners.execSync(cmd, { cwd, timeout: INSTALL_TIMEOUT_MS, env: skillsEnv(), stdio: 'inherit' });
+    if (!HOME_SHELL_RE.test(home) || home.endsWith('\\')) throw new Error('home folder cannot be used in a command');
+    return runners.execSync(`npx --prefix "${home}" ${cmd.slice(4)}`, { cwd, timeout: INSTALL_TIMEOUT_MS, env: skillsEnv(), stdio: 'inherit' });
+  };
+}
+
+function manifestMatches(manifest, name) {
+  for (const entries of Object.values(manifest)) {
+    for (const e of Array.isArray(entries) ? entries : []) {
+      if (typeof e?.name !== 'string') continue;
+      if (e.name.endsWith('*') ? name.startsWith(e.name.slice(0, -1)) : e.name === name) return true;
+    }
+  }
+  return false;
+}
+
+function isPlainFile(p, maxBytes) {
+  try { const st = lstatSync(p); return st.isFile() && st.size <= maxBytes; } catch { return false; }
+}
+
+// Skill names in the shipped release SBOMs that the current manifest no longer lists, sorted.
+// SBOM files are untrusted: links, oversized files and bad JSON are skipped, and a name that is not a plain skill name is dropped.
+export function retiredSkills(manifest, releasesDir) {
+  const names = new Set();
+  let dirs = [];
+  try { dirs = readdirSync(releasesDir); } catch { return []; }
+  for (const d of dirs) {
+    const dir = join(releasesDir, d);
+    try { if (!lstatSync(dir).isDirectory()) continue; } catch { continue; }
+    const file = join(dir, 'sbom.cdx.json');
+    if (!isPlainFile(file, MAX_SBOM_BYTES)) continue;
+    let doc;
+    try { doc = JSON.parse(readFileSync(file, 'utf8')); } catch { continue; }
+    for (const c of Array.isArray(doc?.components) ? doc.components : []) {
+      const m = typeof c?.['bom-ref'] === 'string' ? SKILL_REF_RE.exec(c['bom-ref']) : null;
+      if (m && NAME_RE.test(m[1])) names.add(m[1]);
+    }
+  }
+  return [...names].filter(n => !manifestMatches(manifest, n)).sort();
+}
+
+// Retired names that sit in <home>/.claude/skills as a folder or a link (a listing entry; nothing is followed).
+function retiredInstalled(manifest, releasesDir, home) {
+  const dir = join(home, '.claude', 'skills');
+  let listed;
+  try { listed = new Set(readdirSync(dir)); } catch { return []; }
+  return retiredSkills(manifest, releasesDir).filter(n => listed.has(n));
+}
+
+// Runs a command with stdin ignored and stdout and stderr piped and held. `standIn` swaps the program in tests.
+function captureExec(cmd, cwd, argv, standIn, timeout) {
+  const opts = { cwd, timeout, env: skillsEnv(), killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
+  if (standIn) return execFileSync(standIn.file, standIn.args ?? [], opts);
+  return argv ? execFileSync('npx', argv, opts) : execSync(cmd, opts);
+}
+
+function errorText(e) {
+  const err = e?.stderr == null ? '' : String(e.stderr);
+  const first = err.split(/\r?\n/).find(l => l.trim() !== '');
+  const text = e?.code === 'ETIMEDOUT' ? TIMEOUT_TEXT : (first ?? String(e?.status ?? e?.code ?? 'unknown error'));
+  return text.replace(CONTROL_RE, ' ').slice(0, 200);
+}
+
+function entryExists(p) {
+  try { lstatSync(p); return true; } catch { return false; }
+}
+
+function removeRetired(name, opts) {
+  const { manifest, releasesDir, home, dry, platform, log, exec, standIn, timeoutMs } = opts;
+  if (!NAME_RE.test(name) || !retiredInstalled(manifest, releasesDir, home).includes(name)) {
+    log('ERROR not a retired installed skill');
+    return 1;
+  }
+  const argv = ['-y', SKILLS_CLI, 'remove', name, '-g', '-a', 'claude-code', '-y'];
+  const cmd = `npx ${argv.join(' ')}`;
+  if (dry) { log(`[dry-run] ${cmd}`); return 0; }
+  if (!REMOVE_PLATFORMS.has(platform)) { log(`manual ${cmd}`); return 0; }
+  try {
+    // Run from the home folder: a repo's node_modules or .npmrc must not steer npx (CWE-427). The global remove needs no product folder.
+    if (exec) exec(cmd, home, platform === 'win32' ? undefined : argv);
+    else captureExec(cmd, home, platform === 'win32' ? undefined : argv, standIn, timeoutMs);
+  } catch (e) {
+    log(`FAILED ${cmd}: ${errorText(e)}`);
+    return 1;
+  }
+  if (entryExists(join(home, '.claude', 'skills', name))) {
+    log(`FAILED ${cmd}: still installed`);
+    return 1;
+  }
+  log(`removed ${name}`);
+  return 0;
 }
 
 function loadProject(p, cwd, today, manifest) {
@@ -252,16 +440,18 @@ function loadProject(p, cwd, today, manifest) {
 // Returns the exit code. Everything outside is injectable so tests never run npx or touch the real home.
 export function main(args, env = {}) {
   const log = env.log ?? console.log;
-  const exec = env.exec ?? ((cmd, cwd, argv) => (argv ? execFileSync('npx', argv, { cwd, stdio: 'inherit' }) : execSync(cmd, { cwd, stdio: 'inherit' })));
+  const exec = env.exec ?? installExec(env.home ?? homedir());
   const cwd = env.cwd ?? process.cwd();
   const platform = env.platform ?? process.platform;
   try {
-    let dry = false, listMissing = false, projectArg = null;
+    let dry = false, listMissing = false, projectArg = null, retired = false, removeName = null, remove = false;
     const groups = [];
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
       if (a === '--dry-run') dry = true;
       else if (a === '--missing') listMissing = true;
+      else if (a === '--retired') retired = true;
+      else if (a === '--remove') { remove = true; removeName = args[++i] ?? ''; }
       else if (a === '--project') {
         projectArg = args[++i];
         if (!projectArg || projectArg.startsWith('--')) throw new Error('--project must point to <root>/.company/project.md');
@@ -269,6 +459,13 @@ export function main(args, env = {}) {
       else groups.push(a);
     }
     const manifest = env.manifest ?? JSON.parse(readFileSync(join(ROOT, 'deps', 'skills.json'), 'utf8'));
+    if (retired || remove) {
+      if ((retired && remove) || listMissing || projectArg || groups.length) throw new Error('--retired and --remove take no group or other mode flag');
+      const home = env.home ?? homedir();
+      const releasesDir = env.releasesDir ?? join(ROOT, 'releases');
+      if (retired) { retiredInstalled(manifest, releasesDir, home).forEach(n => log(`retired ${n}`)); return 0; }
+      return removeRetired(removeName, { manifest, releasesDir, home, dry, platform, log, exec: env.exec, standIn: env.standIn, timeoutMs: env.timeoutMs ?? REMOVE_TIMEOUT_MS });
+    }
     // Parse first: a bad design or skills line stops everything, nothing is installed in any group.
     const project = projectArg ? loadProject(projectArg, cwd, env.today ?? new Date(), manifest) : null;
     const installed = installedSkills(env.home ?? homedir(), project?.root);
@@ -282,7 +479,14 @@ export function main(args, env = {}) {
     const show = ({ cmd, cwd: c }) => `${c ? `(in ${c}) ` : ''}${cmd}`;
     cmds.forEach(c => log(`${dry ? '[dry-run] ' : '$ '}${show(c)}`));
     if (dry) return 0;
-    const { ok, failed } = runAll(cmds, exec);
+    // User-scope installs have no product folder; run them from home so a repo's node_modules or .npmrc cannot steer npx.
+    const homeDir = env.home ?? homedir();
+    // A manifest command at project scope is never run from the product folder: it is printed for the CEO to run by hand.
+    const manual = cmds.filter(c => c.cwd && !skillsArgs(c.cmd, c.argv));
+    const runnable = cmds.filter(c => !manual.includes(c));
+    const { ok, failed } = runAll(runnable.map(c => (c.cwd ? c : { ...c, cwd: homeDir })), exec);
+    manual.forEach(c => log(`manual ${c.cmd}`));
+    if (manual.length) log(`Not run: it would start in the product folder, where the repo can steer it. Run it by hand only in a repo you trust.`);
     failed.forEach(f => log(`FAILED ${f.cmd}: ${f.error}`));
     log(`${ok.length} installed, ${failed.length} failed`);
     return failed.length ? 1 : 0;
