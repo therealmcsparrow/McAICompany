@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { measure, start } from './lead-handover.mjs';
+import { contextHandover, measure, start } from './lead-handover.mjs';
 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const HANDOVER = pathToFileURL(path.join(import.meta.dirname, 'lead-handover.mjs')).href;
@@ -175,4 +175,89 @@ test('the lock is released when the write fails', () => {
     assert.deepEqual(fs.readdirSync(fx.dir).filter((n) => n.endsWith('.tmp')), []);
     assert.equal(reading(fx).peak, 10000);
   } finally { fs.renameSync = real; fs.rmSync(fx.base, { recursive: true, force: true }); }
+});
+
+test('a folder at the lock name costs no wait and measure still records', () => {
+  const fx = fixture();
+  try {
+    const opts = optsOf(fx);
+    measure(stopBody(transcript(fx, 10000)), opts);
+    fs.mkdirSync(fx.lock);
+    const t0 = Date.now();
+    measure(stopBody(transcript(fx, 70000)), opts);
+    assert.ok(Date.now() - t0 < 100, 'no lock wait');
+    assert.equal(reading(fx).peak, 70000);
+    assert.equal(fs.statSync(fx.lock).isDirectory(), true, 'the folder is left alone');
+    measure(stopBody(transcript(fx, 80000)), opts);
+    assert.equal(reading(fx).peak, 80000, 'later readings still record');
+  } finally { fs.rmSync(fx.base, { recursive: true, force: true }); }
+});
+
+test('a link at the lock name costs no wait and measure still records', () => {
+  const fx = fixture();
+  try {
+    const opts = optsOf(fx);
+    measure(stopBody(transcript(fx, 10000)), opts);
+    const target = path.join(fx.base, 'elsewhere');
+    fs.mkdirSync(target);
+    fs.symlinkSync(target, fx.lock, 'junction');
+    const t0 = Date.now();
+    measure(stopBody(transcript(fx, 70000)), opts);
+    assert.ok(Date.now() - t0 < 100, 'no lock wait');
+    assert.equal(reading(fx).peak, 70000);
+    assert.equal(fs.lstatSync(fx.lock).isSymbolicLink(), true, 'the link is left alone');
+    assert.deepEqual(fs.readdirSync(target), []);
+  } finally { fs.rmSync(fx.base, { recursive: true, force: true }); }
+});
+
+test('start writes its reading while the lock stays held, and leaves that lock alone', () => {
+  const fx = fixture();
+  try {
+    const opts = optsOf(fx);
+    measure(stopBody(transcript(fx, 60000)), opts);
+    const before = reading(fx);
+    fs.writeFileSync(fx.lock, '');
+    const t0 = Date.now();
+    start(startBody, opts);
+    const took = Date.now() - t0;
+    const r = reading(fx);
+    assert.match(r.session, /^[0-9a-f]{12}$/);
+    assert.notEqual(r.session, before.session, 'the new session is recorded');
+    assert.equal(r.ctx, null);
+    assert.equal(r.peak, 60000);
+    assert.equal(fs.existsSync(fx.lock), true);
+    assert.ok(took < 2000, `the wait is bounded (${took} ms)`);
+    assert.deepEqual(fs.readdirSync(fx.dir).filter((n) => n.endsWith('.tmp')), []);
+  } finally { fs.rmSync(fx.base, { recursive: true, force: true }); }
+});
+
+test('a freeze lock dated more than 30 seconds ahead is replaced and removed', () => {
+  const fx = fixture();
+  try {
+    const slug = '2026-11-03-0712-demo';
+    const runDir = path.join(fx.root, '.company', 'work', slug);
+    fs.renameSync(fx.dir, runDir);
+    const lock = path.join(runDir, 'lead-freeze.lock');
+    fs.writeFileSync(lock, '');
+    const future = new Date(Date.now() + 3600 * 1000);
+    fs.utimesSync(lock, future, future);
+    contextHandover(fx.root, slug, { tokens: 86000, session: 'abcdef012345' });
+    assert.equal(fs.existsSync(lock), false);
+    assert.ok(fs.readdirSync(runDir).some((n) => n.startsWith('lead-handoff-')), 'the Handoff was written');
+  } finally { fs.rmSync(fx.base, { recursive: true, force: true }); }
+});
+
+test('a freeze lock dated within 30 seconds ahead still counts as held', () => {
+  const fx = fixture();
+  try {
+    const slug = '2026-11-03-0712-demo';
+    const runDir = path.join(fx.root, '.company', 'work', slug);
+    fs.renameSync(fx.dir, runDir);
+    const lock = path.join(runDir, 'lead-freeze.lock');
+    fs.writeFileSync(lock, '');
+    const near = new Date(Date.now() + 5000);
+    fs.utimesSync(lock, near, near);
+    assert.throws(() => contextHandover(fx.root, slug, { tokens: 86000, session: 'abcdef012345' }));
+    assert.equal(fs.existsSync(lock), true);
+  } finally { fs.rmSync(fx.base, { recursive: true, force: true }); }
 });
