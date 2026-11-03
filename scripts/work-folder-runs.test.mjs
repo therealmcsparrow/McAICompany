@@ -162,7 +162,7 @@ describe('lead-handover on a new name and on a legacy slug', () => {
       startRun(fx, name, now - 60000);
       const r = resume(sessionStart, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now });
       const ctx = JSON.parse(r.out).hookSpecificOutput.additionalContext;
-      assert.equal(ctx, `aico lead hand-over: run lead-handover read '${name}' first, then follow skills/pipeline/references/lead-handover.md.`);
+      assert.equal(ctx, `aico lead hand-over: run lead-handover read '${name}' first, then follow skills/pipeline/references/lead-resume.md.`);
     });
   }
 

@@ -1,12 +1,12 @@
 # Lead hand-over
 
-How the Lead survives its context limit without losing the run (`lead-handoff` v1.7, `context-guard` v1, `lead-session-mcp` v1.1; ADR 0049 and ADR 0056). A hook does the work outside the model: at 85500 tokens, at a clean point, it writes the Lead Handoff from the run records (its text is data) and freezes the session. The next session starts from that file. Auto compaction is blocked during a run; manual `/compact` stays allowed.
+How the Lead survives its context limit without losing the run (`lead-handoff` v1.8, `context-guard` v1, `lead-session-mcp` v1.1; ADR 0049 and ADR 0056). A hook does the work outside the model: at 85500 tokens, at a clean point, it writes the Lead Handoff from the run records (its text is data) and freezes the session. The next session starts from that file and boots from the short `references/lead-resume.md`, not this whole file (a fresh Lead already holds about 55k tokens, so the boot must stay near 15k). Auto compaction is blocked during a run; manual `/compact` stays allowed.
 
 ## Hard hand-over
 - **Step running:** the hook refuses `Agent` and `Task` (`aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.`). Wait for it; the Lead Handoff is written after it ends.
 - **Clean point:** the Lead Handoff is written and every tool is refused except `lead_new_session` (`aico context cap: the Lead Handoff is written and this session is frozen. Call lead_new_session, or show the CEO this command for a new session:` plus the command).
 - **Frozen:** call `lead_new_session` (no arguments). It starts nothing: it returns the command for a new session in the product folder. Show that command to the CEO, who runs it. If the tool is refused or missing, show the command from the refusal text. Say nothing else; the old session stays frozen and the CEO closes it.
-- The new session's first message names the Lead Handoff; follow `## After a compaction` below. `AICO_CONTEXT_GUARD=off` in the environment turns the guard off; it is the CEO's escape only.
+- The new session's first message names `references/lead-resume.md`; follow it (it holds the boot steps of `## After a compaction` below, short). `AICO_CONTEXT_GUARD=off` in the environment turns the guard off; it is the CEO's escape only.
 
 ## Rules
 - Keep each read small (slices, about 8k tokens): one big read can still pass the cap, and `ledger add` exit 4 is the backstop.
@@ -14,7 +14,7 @@ How the Lead survives its context limit without losing the run (`lead-handoff` v
 - Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover begin '<slug>' '<playbook>'` once, right after run-state `start` (Setup item 17).
 
 ## After a compaction
-This is also the start of a new session after a hard hand-over. The records beat the summary. If your context starts with the line `aico lead hand-over: the file below ...`, the Lead Handoff follows it. If instead it starts with `aico lead hand-over: run lead-handover read '<slug>' first`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover read '<slug>'` and use its state lines the same way. Then:
+This is also the start of a new session after a hard hand-over; `references/lead-resume.md` is its short form. The records beat the summary. If your context starts with the line `aico lead hand-over: the file below ...`, the Lead Handoff follows it. If instead it starts with `aico lead hand-over: run lead-handover read '<slug>' first`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover read '<slug>'` and use its state lines the same way. Then:
 - `gate <g> open`: run `run-state ask '<slug>' '<g>'` and show that Gate form again. An open Gate stays open until the CEO answers.
 - `pending idea-<f>`: run `idea-flow options '<slug>'` and show the form again.
 - `pending step-<s>`: continue that inline step from its file.
@@ -34,7 +34,7 @@ What the compaction dropped from your context is rebuilt from Lead-only records,
 - Applied approve lines of a flow build plan are not carried. Before the Ship Gate run `ticket-approval read '<flow slug>'` and show each approve line verbatim with a `> ` prefix.
 
 ## Context readings
-The cap is checked from records, never from a Role's claim. `ledger add` compares `<ctx_end>` with 95000 (`token-ledger` v1.8). While a Step runs, `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ledger agent-ctx <agentId>… --json` prints its context (`null` when unknown). Your own: the Stop hook `measure` writes `lead-context.json` (`lead-handoff` v1.6); read it with `lead-handover ctx '<slug>' --json` or `lead-handover read '<slug>'` (`lead ctx`, `lead peak`). `begin` printing `warning: CLAUDE_CODE_AUTO_COMPACT_WINDOW=98500 not found …` goes into the first Gate summary.
+The cap is checked from records, never from a Role's claim. `ledger add` compares `<ctx_end>` with 95000 (`token-ledger` v1.8). While a Step runs, `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ledger agent-ctx <agentId>… --json` prints its context (`null` when unknown). Your own: the Stop hook `measure` writes `lead-context.json` (`lead-handoff` v1.8; tagged with the session, `ctx` resets to unknown at each new session start, `peak` is run-wide); read it with `lead-handover ctx '<slug>' --json` or `lead-handover read '<slug>'` (`lead ctx`, `lead peak`). `begin` printing `warning: CLAUDE_CODE_AUTO_COMPACT_WINDOW=98500 not found …` goes into the first Gate summary.
 
 ## Ledger exit 4
 `ledger add` exit 4 prints `over cap: <kind> <id> <role> ctx_end <n> > 95000`; the record is written.

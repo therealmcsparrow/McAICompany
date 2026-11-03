@@ -5,7 +5,11 @@
 // dispatched. Session 45d64ef2d458 went 55558 -> 87240 in 37 seconds and was frozen 3 seconds after `begin`.
 // Suspected Module: scripts/context-guard.mjs `lead` (measures total context against HANDOVER_AT) with
 // scripts/lead-handover.mjs `transcriptTokens` (last row only, no baseline).
-// Design-neutral invariant tested: a session that has grown by only the boot reading (32k above its own first row) is not frozen.
+// Fix (CEO decision: lean boot, the 85500 point stays): the new-session command, the resume line and the header point to
+// skills/pipeline/references/lead-resume.md, so a fresh or resumed Lead reads the pipeline skill and one short file, not the
+// Playbook skill and the full hand-over reference. The boot adds about 15k (55558 -> ~71k), not 32k.
+// The two original boot tests (55558 -> 87240, 53619 -> 86858) encoded "a 32k boot is not frozen". That contradicts the kept
+// 85500 point, so they are replaced by the lean boot readings; the control is unchanged.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -44,16 +48,35 @@ function fixture(readings) {
   return { input, opts: { root, claudeDir, env: {}, now: NOW }, record };
 }
 
+const repo = path.join(import.meta.dirname, '..', '..');
+const read = (...p) => fs.readFileSync(path.join(repo, ...p), 'utf8');
+
+describe('Lead hand-over loop: lean boot path', () => {
+  test('the resume file exists, is short, and tells the Lead not to load the Playbook skill or the full reference', () => {
+    const t = read('skills', 'pipeline', 'references', 'lead-resume.md');
+    assert.ok(Buffer.byteLength(t) <= 3500, 'lead-resume.md must stay short');
+    assert.match(t, /## Do not load at boot/);
+    assert.match(t, /Playbook skill/);
+  });
+
+  test('the new-session command, the resume line and the header all point to the resume file', () => {
+    const src = read('scripts', 'lead-handover.mjs');
+    assert.equal((src.match(/references\/lead-resume\.md/g) ?? []).length >= 3, true);
+    assert.ok(!src.includes('references/lead-handover.md of the skill'));
+    assert.ok(!src.includes('Follow skills/pipeline/references/lead-handover.md'));
+  });
+});
+
 describe('Lead hand-over loop: a fresh session is not frozen by its own boot reading', () => {
-  test('boot reading only (55558 -> 87240, the first real session) writes no hand-over and stays silent', () => {
-    const f = fixture([55558, 60177, 75333, 82641, 87240]);
+  test('lean boot reading (55558 -> 71000) writes no hand-over and stays silent, with real headroom left', () => {
+    const f = fixture([55558, 60177, 65333, 71000]);
     const r = pre(f.input, f.opts);
     assert.deepEqual(r, { code: 0, out: '', err: '' });
     assert.equal(f.record().filter((e) => e.ev === 'handover').length, 0);
   });
 
-  test('boot reading only (53619 -> 86858, the third real session) is not frozen', () => {
-    const f = fixture([53619, 67759, 86858]);
+  test('lean boot reading (53619 -> 70500) is not frozen', () => {
+    const f = fixture([53619, 62000, 70500]);
     const r = pre(f.input, f.opts);
     assert.deepEqual(r, { code: 0, out: '', err: '' });
     assert.equal(f.record().filter((e) => e.ev === 'handover').length, 0);

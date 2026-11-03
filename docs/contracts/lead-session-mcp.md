@@ -40,7 +40,7 @@ Success, one text content, two lines:
 Open a new terminal in the product folder and run:
 <command>
 ```
-`<command>` = `newSessionCommand(slug)`: `claude "aico lead hand-over: run lead-handover read '<name>' first, as set out in references/lead-handover.md of the skill aico:pipeline, then follow that file."`, the `lead-handoff` v1.7 new-session line inside double quotes. The name shape (`work-folder-name` v1.1) rules out quotes, `$`, backtick, `%`, `\` and control characters, so the line is one safe argument in cmd, PowerShell and POSIX shells when the CEO pastes it. Calling again returns the same text: no state, no record written.
+`<command>` = `newSessionCommand(slug)`: `claude "aico lead hand-over: run lead-handover read '<name>' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`, the `lead-handoff` v1.7 new-session line inside double quotes. The name shape (`work-folder-name` v1.1) rules out quotes, `$`, backtick, `%`, `\` and control characters, so the line is one safe argument in cmd, PowerShell and POSIX shells when the CEO pastes it. Calling again returns the same text: no state, no record written.
 
 ## Limits (not enforceable)
 - Tools are model-called: nothing forces the Lead to call it. A hook cannot call it. The `context-guard` routes hold without it.

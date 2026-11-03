@@ -173,7 +173,7 @@ describe('lead_new_session refusals', () => {
 });
 
 describe('lead_new_session success', () => {
-  const want = (slug) => `Open a new terminal in the product folder and run:\nclaude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-handover.md of the skill aico:pipeline, then follow that file."`;
+  const want = (slug) => `Open a new terminal in the product folder and run:\nclaude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`;
 
   test('returns the two-line text with the fixed command, the same on every call, and writes nothing', () => {
     const fx = fixture();
