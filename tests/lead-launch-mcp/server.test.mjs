@@ -211,14 +211,15 @@ describe('only points', () => {
     assert.doesNotMatch(src, /child_process|node:net|node:http|node:dgram|fetch\(|\bspawn|\bexec(Sync|File)?\(/);
   });
 
-  test('.mcp.json registers the server as the contract says', () => {
-    const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
-    assert.deepEqual(j, { mcpServers: { 'lead-session': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs'] } } });
+  test('plugin.json registers the server as the contract says, no root .mcp.json', () => {
+    const j = JSON.parse(fs.readFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), 'utf8'));
+    assert.equal(fs.existsSync(path.join(repo, '.mcp.json')), false);
+    assert.deepEqual({ mcpServers: j.mcpServers }, { mcpServers: { 'lead-session': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs'] } } });
   });
 
-  // A rename left a stale path once (the "CONNECTION_CLOSED" check): start the server exactly as .mcp.json does.
-  test('.mcp.json args point at a file that exists once CLAUDE_PLUGIN_ROOT is the plugin folder', () => {
-    const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
+  // A rename left a stale path once (the "CONNECTION_CLOSED" check): start the server exactly as plugin.json does.
+  test('plugin.json mcpServers args point at a file that exists once CLAUDE_PLUGIN_ROOT is the plugin folder', () => {
+    const j = JSON.parse(fs.readFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), 'utf8'));
     for (const [name, s] of Object.entries(j.mcpServers)) {
       for (const a of s.args) {
         const p = a.replaceAll('${CLAUDE_PLUGIN_ROOT}', repo);
@@ -228,8 +229,8 @@ describe('only points', () => {
     }
   });
 
-  test('starts from the .mcp.json command, another cwd, and answers initialize with exit 0', () => {
-    const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
+  test('starts from the plugin.json command, another cwd, and answers initialize with exit 0', () => {
+    const j = JSON.parse(fs.readFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), 'utf8'));
     const s = j.mcpServers['lead-session'];
     const args = s.args.map((a) => a.replaceAll('${CLAUDE_PLUGIN_ROOT}', repo));
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-mcp-'));

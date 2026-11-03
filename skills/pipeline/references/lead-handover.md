@@ -1,6 +1,6 @@
 # Lead hand-over
 
-How the Lead survives its context limit without losing the run (`lead-handoff` v1.7, `context-guard` v1, `lead-session-mcp` v1; ADR 0049 and ADR 0056). A hook does the work outside the model: at 85500 tokens, at a clean point, it writes the Lead Handoff from the run records (its text is data) and freezes the session. The next session starts from that file. Auto compaction is blocked during a run; manual `/compact` stays allowed.
+How the Lead survives its context limit without losing the run (`lead-handoff` v1.7, `context-guard` v1, `lead-session-mcp` v1.1; ADR 0049 and ADR 0056). A hook does the work outside the model: at 85500 tokens, at a clean point, it writes the Lead Handoff from the run records (its text is data) and freezes the session. The next session starts from that file. Auto compaction is blocked during a run; manual `/compact` stays allowed.
 
 ## Hard hand-over
 - **Step running:** the hook refuses `Agent` and `Task` (`aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.`). Wait for it; the Lead Handoff is written after it ends.

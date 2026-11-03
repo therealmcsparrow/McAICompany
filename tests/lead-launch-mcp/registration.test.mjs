@@ -63,7 +63,8 @@ describe('project-scope load of the root .mcp.json (cwd = this repo, CLAUDE_PLUG
     }
   });
 
-  test('without a root .mcp.json the plugin must still register lead-session (plugin.json mcpServers)', { skip: fs.existsSync(MCP) && 'root .mcp.json exists' }, () => {
+  test('without a root .mcp.json the plugin must still register lead-session (plugin.json mcpServers)', () => {
+    assert.equal(fs.existsSync(MCP), false, 'a root .mcp.json is read twice in this repo and dies at project scope; register in plugin.json');
     const pj = JSON.parse(fs.readFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), 'utf8'));
     assert.ok(pj.mcpServers && pj.mcpServers['lead-session'], 'lead-session registered nowhere');
   });

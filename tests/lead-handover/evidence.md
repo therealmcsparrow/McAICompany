@@ -61,7 +61,7 @@ Plan decisions: question 1 is yes, so T3 proceeds. Question 5 is yes, so T5 proc
 
 ## T5 live check, lead-session tool name (2026-11-02)
 - Claude Code 2.1.316, Node v26.7.0, win32. Command: `claude -p "say ok" --plugin-dir <repo> --output-format stream-json --verbose --max-turns 1`, tool list of the `init` line.
-- The tool shows as `mcp__plugin_aico_lead-session__lead_new_session`, as in `docs/contracts/lead-session-mcp.md`. The server started from the root `.mcp.json` and listed its one tool.
+- The tool shows as `mcp__plugin_aico_lead-session__lead_new_session`, as in `docs/contracts/lead-session-mcp.md`. The server started from the plugin registration (then the root `.mcp.json`, since moved to `plugin.json` `mcpServers`, contract v1.1) and listed its one tool.
 - The tool was only listed, not called: a call needs a permission prompt and a context-hand-over record, which the contract tests cover.
 
 ## T4 live test, which route the CEO sees (2026-11-02)
