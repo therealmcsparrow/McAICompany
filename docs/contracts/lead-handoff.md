@@ -1,6 +1,6 @@
 # Contract: lead-handoff v1.7
 
-v1.7 (task 2026-11-02 18.32 - Context Cap Hand Over, T2; `docs/adr/0056-hard-handover-outside-agent.md`, partly supersedes ADR 0049): new trigger `context`, written by `context-guard` v1 at `HANDOVER_AT`; `handover` gains `session` for that trigger only; `## Next` gains the new-session line for it. `watch` blocks every `auto` compaction during a run (exit 2) and never blocks a `manual` one. `begin` no longer warns about `CLAUDE_CODE_AUTO_COMPACT_WINDOW`; the one-time setup is gone. New exports `transcriptTokens`, `findRun`, `contextHandover`, `newSessionCommand`. Every v1.6 record stays valid. The clause below calls this a minor bump, but it reverses ADR 0049 behaviour: flagged for the Gate. Uses `run-state` v1.7.
+v1.7 (task 2026-11-02 18.32 - Context Cap Hand Over, T2; `docs/adr/0056-hard-handover-outside-agent.md`, partly supersedes ADR 0049): new trigger `context`, written by `context-guard` v1 at `HANDOVER_AT`; `handover` gains `session` for that trigger only; `## Next` gains the new-session line for it. `watch` blocks every `auto` compaction during a run (exit 2) and never blocks a `manual` one. `begin` no longer warns about `CLAUDE_CODE_AUTO_COMPACT_WINDOW`; the one-time setup is gone. New exports: see `## Exports for the guard and the MCP server`. Every v1.6 record stays valid. The clause below calls this a minor bump, but it reverses ADR 0049 behaviour: flagged for the Gate. Uses `run-state` v1.7.
 
 v1.6 (task context-cap-enforcement T2; additive): a Stop hook adapter `measure` keeps the Lead's context reading in `.company/work/<slug>/lead-context.json`; `read` adds `lead ctx` and `lead peak`; new `ctx <slug> --json`; `begin` warned when `CLAUDE_CODE_AUTO_COMPACT_WINDOW=98500` was set neither in the env nor in the user settings (removed in v1.7). The Lead Handoff frontmatter is unchanged. Uses `run-state` v1.7.
 
@@ -50,10 +50,18 @@ Frontmatter, derived and validated by the script only, in this order: `slug`; `p
 
 ## Exports for the guard and the MCP server (v1.7)
 No CLI command. Importing the script has no side effect.
-- `transcriptTokens(path, claudeDir, { sidechain })`: the `watch` token rule; `sidechain` true reads rows with `isSidechain` true (a Step file), false the main chain. Returns an integer or null.
+- `transcriptTokens(path, claudeDir, sidechain = false)`: the `watch` token rule; `sidechain` is a positional boolean, true reads rows with `isSidechain` true (a Step file), false the main chain. Returns an integer or null.
 - `findRun(root, now)`: the active-run rule above; a name or null.
 - `contextHandover(root, slug, { tokens, session, now })`: writes the Lead Handoff and the `handover` event with trigger `context` and `session`, under the rules above. Serialised by an exclusive-create lock `.company/work/<slug>/lead-freeze.lock`, removed after the event; a lock older than 30 seconds is replaced. Holding no lock, or a Step running, it writes nothing and throws.
-- `newSessionCommand(slug)`: `claude "<the v1.4 fixed line>"`, the slug checked with `isWorkFolder`, else null. It is text only.
+- `newSessionCommand(slug)`: `claude "<the new-session line>"`, the slug checked with `isWorkFolder`, else null. It is text only. The new-session line: `aico lead hand-over: run lead-handover read '<name>' first, as set out in references/lead-handover.md of the skill aico:pipeline, then follow that file.` It is for an empty session in a product folder, where no plugin path resolves. The v1.4 `resume` fixed line stays as it is.
+- `claudeDirOf(env)`: an absolute `CLAUDE_CONFIG_DIR`-style config dir from `env`, else `<home>/.claude`.
+- `workDir(root, slug)`: the folder path when every folder on its path passes the `lstat` checks above and its real path is inside the real work folder; else null.
+- `lstatOrNull(path)`: the `lstat` result, or null on any error.
+- `openRegular(file, flags)`: `{ fd, size }` under the record's open checks (regular file, one link, same `dev` and `ino`); null when it is not safe; throws when the open fails. The caller closes `fd`.
+- `readSmall(file, max)`: the whole file as text under those checks; null when missing, unsafe or over `max` bytes.
+- `iso(ms)`: UTC time to the second, the record's `at` shape.
+- `loadRecord(dir)`: the validated events of `lead-handover.jsonl` in `dir`; empty when the file is missing; throws on a broken record.
+- `main(argv, root, env)`: the CLI without a process exit; returns an object with `code` and `out`. `lead-session-mcp` calls it for `read` only, and matches the `running:` line of `read`.
 
 ## Personal data and destinations
 The record and the Handoff hold enums, numbers, a base commit, file names and (v1.7) a truncated session hash; no transcript text and no CEO words. Destinations: the Handoff text goes to the Claude model of the next context (inside the fixed header); token counts go to the local record only; nothing else leaves the machine and McSparrow adds no recipient. Location `.company/work/<slug>/`, git-ignored where the product ignores `.company/`; archived, never deleted early; an erasure request overrides (CEO decides). Keep only what the decision needs (GDPR Art. 5(1)(c)).
