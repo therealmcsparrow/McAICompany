@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import * as lead from '../../scripts/lead-handover.mjs';
+import { contextHandover, main as handoverMain } from '../../scripts/lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..', '..');
@@ -45,6 +45,9 @@ function run(input, cwd = repo) {
 const rpc = (id, method, params) => `${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })}\n`;
 const call = (id, args) => rpc(id, 'tools/call', { name: 'lead_new_session', ...(args === undefined ? {} : { arguments: args }) });
 const text = (m) => m.result.content[0].text;
+const SESSION = 'abcdef012345';
+// Every file of a folder with its bytes, to prove a call changed nothing.
+const snapshot = (dir) => Object.fromEntries(fs.readdirSync(dir).sort().map((f) => [f, fs.readFileSync(path.join(dir, f)).toString('base64')]));
 
 describe('protocol', () => {
   test('initialize echoes a date protocol version and reports the plugin version', () => {
@@ -141,6 +144,20 @@ describe('lead_new_session refusals', () => {
     refused(run(call(1), fx.root), 'broken record');
   });
 
+  test('broken record is refused before step running, for a bad line, an oversize file and a folder', () => {
+    const bad = {
+      'a bad line': (file) => fs.writeFileSync(file, 'not json\n'),
+      'an oversize record': (file) => fs.writeFileSync(file, `${'x'.repeat(600 * 1024)}\n`),
+      'a folder at the record path': (file) => fs.mkdirSync(file),
+    };
+    for (const [name, make] of Object.entries(bad)) {
+      const fx = fixture({ running: true });
+      make(path.join(fx.dir, 'lead-handover.jsonl'));
+      const r = run(call(1), fx.root);
+      assert.equal(text(r.out[0]), 'refused: broken record', name);
+    }
+  });
+
   test('an empty arguments object is accepted', () => {
     const r = run(call(1, {}), fixture().root);
     assert.equal(r.out[0].result.isError, true);
@@ -148,20 +165,35 @@ describe('lead_new_session refusals', () => {
 });
 
 describe('lead_new_session success', () => {
-  // The `context` trigger is validated by the lead-handover.mjs change of T3; skip until that export exists.
-  const landed = typeof lead.contextHandover === 'function';
+  const want = (slug) => `Open a new terminal in the product folder and run:\nclaude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-handover.md of the skill aico:pipeline, then follow that file."`;
 
-  test('returns the two-line text with the fixed command, the same on every call', { skip: !landed && 'lead-handover.mjs has no context trigger yet' }, () => {
-    const fx = fixture({ handover: 'context' });
-    const before = fs.readdirSync(fx.dir).sort();
+  test('returns the two-line text with the fixed command, the same on every call, and writes nothing', () => {
+    const fx = fixture();
+    contextHandover(fx.root, fx.slug, { tokens: 85600, session: SESSION });
+    const before = snapshot(fx.dir);
     const r = run(call(1) + call(2), fx.root);
-    const want = `Open a new terminal in the product folder and run:\nclaude "aico lead hand-over: run lead-handover read '${fx.slug}' first, then follow skills/pipeline/references/lead-handover.md."`;
     assert.equal(r.out[0].result.isError, undefined);
-    assert.equal(text(r.out[0]), want);
-    assert.equal(text(r.out[1]), want);
+    assert.equal(text(r.out[0]), want(fx.slug));
+    assert.equal(text(r.out[1]), want(fx.slug));
     assert.equal(text(r.out[0]).split('\n').length, 2);
     assert.equal(r.out[0].result.content.length, 1);
-    assert.deepEqual(fs.readdirSync(fx.dir).sort(), before);
+    assert.deepEqual(snapshot(fx.dir), before);
+  });
+
+  test('the newest handover decides: context then manual is refused, manual then context succeeds', () => {
+    const a = fixture();
+    contextHandover(a.root, a.slug, { tokens: 85600, session: SESSION });
+    assert.equal(handoverMain(['write', a.slug], a.root, {}).code, 0);
+    const ra = run(call(1), a.root);
+    assert.equal(text(ra.out[0]), 'refused: no context handover');
+    assert.equal(ra.out[0].result.isError, true);
+
+    const b = fixture();
+    assert.equal(handoverMain(['write', b.slug], b.root, {}).code, 0);
+    contextHandover(b.root, b.slug, { tokens: 85600, session: SESSION });
+    const rb = run(call(1), b.root);
+    assert.equal(rb.out[0].result.isError, undefined);
+    assert.equal(text(rb.out[0]), want(b.slug));
   });
 });
 
