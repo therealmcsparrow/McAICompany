@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.3). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.4). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
@@ -17,7 +17,8 @@ const MAX_TEXT_BYTES = 256 * KiB;
 const MAX_SCAN_BYTES = 64 * MiB;
 const MAX_OUTPUT = MiB;
 const TOOL_TIMEOUT_MS = 120000;
-const NODE_TEST_TIMEOUT_MS = 300000;
+export const NODE_TEST_TIMEOUT_MS = 480000;
+export const NODE_TEST_OUTPUT = 16 * MiB;
 const CUT = 120;
 
 const RULE_ID = /^[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+$/;
@@ -201,14 +202,15 @@ function resolveCommand(file, args) {
   return { file, args };
 }
 
-function runTool(file, args, { cwd, timeout }) {
+function runTool(file, args, { cwd, timeout, maxBuffer = MAX_OUTPUT }) {
   const command = resolveCommand(file, args);
   if (!command) return { failed: 'cannot find the program' };
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
   const r = spawnSync(command.file, command.args, {
-    cwd, env, timeout, encoding: 'utf8', maxBuffer: MAX_OUTPUT, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
+    cwd, env, timeout, encoding: 'utf8', maxBuffer, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
   });
+  if (r.error?.code === 'ETIMEDOUT') return { failed: `timed out after ${timeout / 1000} s` };
   if (r.error) return { failed: r.error.code ?? 'spawn error' };
   if (r.status === null) return { failed: `signal ${r.signal ?? 'unknown'}` };
   return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
@@ -576,7 +578,7 @@ function failingTestName(output) {
 }
 
 function checkNodeTest(ctx) {
-  const r = runTool('npm', ['test'], { cwd: ctx.root, timeout: ctx.nodeTestTimeout });
+  const r = runTool('npm', ['test'], { cwd: ctx.root, timeout: ctx.nodeTestTimeout, maxBuffer: NODE_TEST_OUTPUT });
   if (r.failed) return r;
   if (r.status === 0) return { findings: [] };
   const name = failingTestName(`${r.out}\n${r.err}`);
