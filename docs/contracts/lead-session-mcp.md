@@ -1,11 +1,11 @@
 # Contract: lead-session-mcp v1
 
-New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/lead-session-mcp.mjs` (Node built-ins only, no MCP SDK), registered by the plugin root file `.mcp.json`. Consumer: the frozen Lead (`context-guard` v1 allows this one tool). Uses `lead-handoff` v1.7 (`findRun`, `newSessionCommand`, `readSmall`, and `main` for `read`) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`.
+New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/lead-launch-mcp.mjs` (Node built-ins only, no MCP SDK), registered by the plugin root file `.mcp.json`. Consumer: the frozen Lead (`context-guard` v1 allows this one tool). Uses `lead-handoff` v1.7 (`findRun`, `newSessionCommand`, `readSmall`, and `main` for `read`) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`.
 
 A convenience on top of the hook: it gives the Lead the command for a new session, on every OS. **It only points.** It returns the command and starts nothing: no `node:child_process` in this script, no console, no terminal. The hand-over itself never needs it.
 
 ## Registration
-`.mcp.json` at the plugin root: `{"mcpServers":{"lead-session":{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}/scripts/lead-session-mcp.mjs"]}}}`.
+`.mcp.json` at the plugin root: `{"mcpServers":{"lead-session":{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs"]}}}`.
 The tool name in Claude Code is `mcp__plugin_aico_lead-session__lead_new_session` (pattern `mcp__plugin_<plugin>_<server>__<tool>`, spike T1 with a server name without a hyphen; T5 confirms this exact name once in a live run and records it in `tests/lead-handover/evidence.md`). Server cwd = session cwd (spike T1), so the run is found from the cwd. The plugin cannot pre-approve the tool: expect one permission prompt per the CEO's settings. A refused prompt loses nothing, the command is also in the `context-guard` routes.
 
 ## Protocol

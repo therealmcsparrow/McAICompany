@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// lead-session-mcp v1: MCP over stdio, one tool, `lead_new_session`. It only points: it returns the command
+// lead-session-mcp v1 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It only points: it returns the command
 // for a new Lead session and starts nothing. Node built-ins only; no process start, no network, no write.
 import fs from 'node:fs';
 import path from 'node:path';

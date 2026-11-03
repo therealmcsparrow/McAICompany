@@ -9,7 +9,7 @@ import { contextHandover, main as handoverMain } from '../../scripts/lead-handov
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..', '..');
-const SERVER = path.join(repo, 'scripts', 'lead-session-mcp.mjs');
+const SERVER = path.join(repo, 'scripts', 'lead-launch-mcp.mjs');
 const pluginVersion = JSON.parse(fs.readFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), 'utf8')).version;
 
 const tmps = [];
@@ -213,6 +213,6 @@ describe('only points', () => {
 
   test('.mcp.json registers the server as the contract says', () => {
     const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
-    assert.deepEqual(j, { mcpServers: { 'lead-session': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/scripts/lead-session-mcp.mjs'] } } });
+    assert.deepEqual(j, { mcpServers: { 'lead-session': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs'] } } });
   });
 });
