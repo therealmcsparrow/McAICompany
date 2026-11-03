@@ -10,6 +10,23 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ### Changed
 - **Handoffs link instead of repeat, and redact.** Role Handoffs must not duplicate specs, plans, ADRs, issues, commits or diffs, and must redact secrets and personal data.
 
+## [0.26.1] - 2026-11-03
+
+Rollback: node scripts/stable.mjs 0.26.0
+
+### Added
+- **Hard hand-over at 85500 tokens.** Subagents are denied every tool except writing their Handoff. The Lead freezes, and the hook writes the Lead Handoff. Auto-compaction is blocked during a run. ADR 0056.
+- **MCP launcher.** `scripts/lead-launch-mcp.mjs` starts the new Lead session on win32 and gives only the command on other systems.
+- Contracts: `context-guard` (new), `lead-session-mcp` (new).
+
+### Changed
+- Contracts: `lead-handoff` v1.7, `rule-check` v1.4 (480 s suite limit, 16 MiB output).
+
+### Known issues
+- The repo-root `.mcp.json` fails as a project-scope server because `${CLAUDE_PLUGIN_ROOT}` is not expanded there. It works at plugin scope.
+- The `node-test` timeout in the pre-filter comes from the installed 0.26.0 plugin and clears once this release is installed.
+- Open nits: R-16 raw newlines at `scripts/context-guard.mjs:211-213` and `:221-222`; R-17 no control-byte test; R-18 header form of `scripts/lead-launch-mcp.mjs`; R-22 `skills/pipeline/SKILL.md:72` should give the pre-filter call a 600000 ms Bash timeout; R-24 `rule-check.md:31` says "error code" but also covers `cannot find the program` and `signal`.
+
 ## [0.26.0] - 2026-11-02
 
 Rollback: node scripts/stable.mjs 0.25.0
