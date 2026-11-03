@@ -13,7 +13,7 @@ import { append } from '../../scripts/run-state.mjs';
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'context-guard.mjs');
 const SLUG = '2026-11-02 18.32 - Lead Guard Test';
 const SESSION = 'sess-lead-1';
-const NOW = Date.parse('2026-11-02T18:40:00Z');
+const NOW = Math.floor(Date.now() / 1000) * 1000;
 const hash12 = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 12);
 const usage = (n) => ({ input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: n - 15 });
 const quiet = { code: 0, out: '', err: '' };
@@ -96,6 +96,7 @@ describe('Lead clean point', () => {
     assert.equal(d.hookEventName, 'PreToolUse');
     assert.equal(d.permissionDecision, 'deny');
     assert.equal(d.permissionDecisionReason, `${FREEZE_REASON} ${COMMAND}`);
+    assert.equal(JSON.parse(r.out).systemMessage, `${FROZEN_LINE} ${COMMAND}`);
     const ev = fx.record().find((e) => e.ev === 'handover');
     assert.equal(ev.trigger, 'context');
     assert.equal(ev.session, hash12(SESSION));
@@ -114,13 +115,23 @@ describe('Lead clean point', () => {
     assert.deepEqual(pre(fx.input({ tool_name: NEW_SESSION_TOOL }), fx.opts), quiet);
   });
 
-  test('a failed write allows the tool; the next call retries', () => {
+  test('a lost race (lock held) allows the tool; the next call retries', () => {
     const fx = fixture();
     fs.writeFileSync(path.join(fx.dir, 'lead-freeze.lock'), '');
     assert.deepEqual(pre(fx.input(), fx.opts), quiet);
     assert.deepEqual(fx.record(), []);
     fs.rmSync(path.join(fx.dir, 'lead-freeze.lock'));
     assert.equal(decision(pre(fx.input(), fx.opts)).permissionDecision, 'deny');
+  });
+
+  test('a failed Handoff write allows the tool, releases the lock and records no handover', () => {
+    const fx = fixture();
+    // Handoff number 9999 exists, so the next one is too large and writeHandoff throws.
+    fs.writeFileSync(path.join(fx.dir, 'lead-handoff-9999.md'), 'x');
+    assert.deepEqual(pre(fx.input(), fx.opts), quiet);
+    assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-freeze.lock')));
+    assert.deepEqual(fx.record().filter((e) => e.ev === 'handover'), []);
+    assert.deepEqual(fs.readdirSync(fx.dir).filter((n) => /^lead-handoff-/.test(n)), ['lead-handoff-9999.md']);
   });
 
   test('a broken Lead record fails open', () => {
@@ -143,8 +154,9 @@ describe('Lead frozen', () => {
     for (const tool of ['Read', 'Agent', 'Write', 'PowerShell']) {
       const r = pre(fx.input({ tool_name: tool }), fx.opts);
       assert.equal(r.code, 0);
-      assert.deepEqual(JSON.parse(r.out), { continue: false, stopReason: line, systemMessage: line });
-      assert.deepEqual(Object.keys(JSON.parse(r.out)), ['continue', 'stopReason', 'systemMessage']);
+      const out = { continue: false, stopReason: line, systemMessage: line, hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: line } };
+      assert.deepEqual(JSON.parse(r.out), out);
+      assert.deepEqual(Object.keys(JSON.parse(r.out)), ['continue', 'stopReason', 'systemMessage', 'hookSpecificOutput']);
       assert.equal(r.err, `${line}\n`);
     }
     assert.equal(fx.record().filter((e) => e.ev === 'handover').length, 1);
@@ -157,7 +169,7 @@ describe('Lead frozen', () => {
 
   test('a frozen session stays frozen with a Step running, and a new session is not frozen by the old record', () => {
     const fx = frozen();
-    fs.appendFileSync(path.join(fx.dir, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: '2026-11-02T18:39:30Z', ev: 'sub', role: 'qa', id: '000000000009', phase: 'start' })}\n`);
+    fs.appendFileSync(path.join(fx.dir, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: new Date(NOW - 30000).toISOString().replace(/\.\d{3}Z$/, 'Z'), ev: 'sub', role: 'qa', id: '000000000009', phase: 'start' })}\n`);
     assert.equal(JSON.parse(pre(fx.input(), fx.opts).out).continue, false);
     const other = pre(fx.input({ session_id: 'sess-lead-2' }), fx.opts);
     assert.equal(other.out, '');

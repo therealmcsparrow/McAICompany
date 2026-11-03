@@ -73,8 +73,11 @@ export function handle(line, root = process.cwd(), now = Date.now()) {
       const protocolVersion = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : DEFAULT_PROTOCOL;
       return ok(id, { protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'lead-session', version: pluginVersion() } });
     }
-    case 'ping': return ok(id, {});
+    case 'ping':
+      if (!paramsOk) return err(id, -32602, 'invalid params');
+      return ok(id, {});
     case 'tools/list':
+      if (!paramsOk) return err(id, -32602, 'invalid params');
       return ok(id, { tools: [{ name: TOOL, description: DESCRIPTION, inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] });
     case 'tools/call': {
       if (!isPlain(params) || typeof params.name !== 'string' || params.name !== TOOL) return err(id, -32602, 'invalid params');
