@@ -553,25 +553,31 @@ function readReading(dir) {
 
 // Takes the reading lock, waiting up to READING_LOCK_WAIT_MS; a lock left by a crash is replaced after LOCK_STALE_MS.
 // Null when it stays held, or when the lock name is a folder or link (the wait is then skipped).
+function foreignLock(dir) {
+  const l = lstatOrNull(path.join(dir, READING_LOCK));
+  return !!l && !l.isFile();
+}
+
 function lockReading(dir) {
   const pause = new Int32Array(new SharedArrayBuffer(4));
   const end = Date.now() + READING_LOCK_WAIT_MS;
   for (;;) {
     const lock = takeLock(dir, Date.now(), READING_LOCK);
-    if (lock || Date.now() >= end) return lock;
+    if (lock || Date.now() >= end || foreignLock(dir)) return lock;
     Atomics.wait(pause, 0, 0, 10);
   }
 }
 
 // Read-modify-write of the reading: `build(old)` returns the new reading. The lock keeps writers apart. The old
 // reading is read once, so a writer without the lock (needLock false, or a stale-lock steal by two waiters) can still be
-// overwritten by a lower peak; the next write repairs it. With needLock true nothing is written when no lock is taken.
+// overwritten by a lower peak; that lower peak stays until a later reading passes it. With needLock true nothing is written
+// when a regular lock file stays held; a folder or link at the lock name can have no holder, so the write goes ahead.
 // Writes through a temp file and a rename; nothing is written when the target is not a regular one-link file.
 function writeReading(dir, build, needLock = false) {
   const file = path.join(dir, READING_FILE);
   const lock = lockReading(dir);
   try {
-    if (!lock && needLock) return;
+    if (!lock && needLock && !foreignLock(dir)) return;
     const l = lstatOrNull(file);
     if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return;
     const tmp = path.join(dir, `.${READING_FILE}.${process.pid}.tmp`);
