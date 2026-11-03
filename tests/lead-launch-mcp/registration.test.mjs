@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url';
 //   2. as the project-scope file of the session cwd (`lead-session`), CLAUDE_PLUGIN_ROOT NOT set -> the
 //      args stay `${CLAUDE_PLUGIN_ROOT}/scripts/...` (or expand to an empty prefix), node exits 1,
 //      the client shows `lead-session (CONNECTION_CLOSED)`.
-// Fix-agnostic: the root file may change (a `${VAR:-default}` fallback) or go away (registration moves to
-// plugin.json `mcpServers`); in every case no server Claude Code can load from the repo root may die at start.
+// The Contract (lead-session-mcp) forbids a root `.mcp.json` in this repo: registration lives in plugin.json
+// `mcpServers`. The root-file tests below only guard against the file coming back; they run only if it exists.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..', '..');
 const MCP = path.join(repo, '.mcp.json');
@@ -27,7 +27,7 @@ function expand(s, env) {
 
 const rpc = (id, method, params) => `${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`;
 
-describe('project-scope load of the root .mcp.json (cwd = this repo, CLAUDE_PLUGIN_ROOT unset)', () => {
+describe('guard if a root .mcp.json is ever added back (cwd = this repo, CLAUDE_PLUGIN_ROOT unset)', () => {
   const env = { ...process.env };
   delete env.CLAUDE_PLUGIN_ROOT;
 

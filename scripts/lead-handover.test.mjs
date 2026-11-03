@@ -402,9 +402,10 @@ describe('Handoff content', () => {
     assert.equal(lines[8], 'risk-tier: high');
     assert.equal(lines[9], 'tier-path: feature full');
     assert.match(lines[10], /^tier-set: \[[a-z0-9-]+(, [a-z0-9-]+)*\]$/);
-    assert.equal(lines.length, 13);
+    assert.equal(lines.length, 14);
     assert.equal(lines[11], 'lead ctx unknown');
     assert.equal(lines[12], 'lead peak unknown');
+    assert.equal(lines[13], 'lead session unknown');
   });
 
   test('read prints the Lead-only base before a tier-path record exists', () => {

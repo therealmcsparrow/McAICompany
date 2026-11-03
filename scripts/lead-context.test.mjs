@@ -171,6 +171,19 @@ describe('read and ctx', () => {
     assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes(`lead peak ${CAP}`));
   });
 
+  test('read prints the session tag of the stored reading, none for an untagged one', () => {
+    const fx = fixture();
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, session: 'abc123def456', ctx: 5, peak: 6, at: AT })}
+`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes('lead session abc123def456'));
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, session: null, ctx: null, peak: 6, at: AT })}
+`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes('lead session none'));
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 5, peak: 6, at: AT })}
+`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes('lead session none'));
+  });
+
   test('read treats a hostile file as unknown', () => {
     const fx = fixture();
     const bodies = [
@@ -185,6 +198,7 @@ describe('read and ctx', () => {
       const l = lines(main(['read', fx.slug], fx.root, {}).out);
       assert.ok(l.includes('lead ctx unknown'), body);
       assert.ok(l.includes('lead peak unknown'), body);
+      assert.ok(l.includes('lead session unknown'), body);
     }
   });
 

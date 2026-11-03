@@ -669,7 +669,8 @@ const overCap = (n) => (n > CAP ? ' over cap' : '');
 
 function readingLines(dir) {
   const r = readReading(dir);
-  return [`lead ctx ${r && r.ctx !== null ? r.ctx + overCap(r.ctx) : 'unknown'}`, `lead peak ${r ? r.peak + overCap(r.peak) : 'unknown'}`];
+  return [`lead ctx ${r && r.ctx !== null ? r.ctx + overCap(r.ctx) : 'unknown'}`, `lead peak ${r ? r.peak + overCap(r.peak) : 'unknown'}`,
+    `lead session ${r ? (r.session || 'none') : 'unknown'}`];
 }
 
 function exec(argv, root, env) {
