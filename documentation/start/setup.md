@@ -16,7 +16,7 @@ Claude Code may ask once to allow the `lead_new_session` tool. Automatic compact
 ## Technical details
 
 - **The numbers.** Every Role works under one fixed cap: 95000 tokens, with a hand-over at 85500.
-- **The hooks.** A PreToolUse hook reads token counts from the local transcript and stores none of its text; at 85500 it refuses tools (`context-guard` v1). A SubagentStop hook blocks a Role's stop once if no Handoff was written. A PreCompact hook blocks auto compaction during a run, and the Lead Handoff `lead-handoff-<n>.md` is written by the script. Contract `lead-handoff` v1.7, ADR 0056.
+- **The hooks.** A PreToolUse hook reads token counts from the local transcript and stores none of its text; at 85500 it refuses tools (`context-guard` v1). A SubagentStop hook blocks a Role's stop once if no Handoff was written. A PreCompact hook blocks auto compaction during a run, and the Lead Handoff `lead-handoff-<n>.md` is written by the script. Contract `lead-handoff` v1.8, ADR 0056.
 - **The tool.** `lead_new_session` starts nothing and writes nothing. It returns the command for a new session (`lead-session-mcp` v1.1).
 - **Escape.** `AICO_CONTEXT_GUARD=off` in the environment of Claude Code turns the guard off.
 - **Where the text goes.** The Lead Handoff is a local file. The Claude model you configured reads it, like the rest of the Lead's work. Nothing is pushed or published. See [Where your words go](../concepts/where-your-words-go.md).

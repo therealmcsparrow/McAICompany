@@ -1,21 +1,14 @@
-// Regression: the Lead hand-over loop (run "2026-11-03 07.12 - Lead Session Mcp Connect").
-// Evidence: every fresh Lead session starts at about 55k tokens (system prompt, tools, skill and agent listings: first main
-// assistant row 55558 / 53579 / 53619 / 55513 in the four sessions) and the playbook boot reading (aico:fix, aico:pipeline,
-// references) adds about 30k, so the context-guard `lead` branch freezes at HANDOVER_AT (85500) before the first Step is
-// dispatched. Session 45d64ef2d458 went 55558 -> 87240 in 37 seconds and was frozen 3 seconds after `begin`.
-// Suspected Module: scripts/context-guard.mjs `lead` (measures total context against HANDOVER_AT) with
-// scripts/lead-handover.mjs `transcriptTokens` (last row only, no baseline).
-// Fix (CEO decision: lean boot, the 85500 point stays): the new-session command, the resume line and the header point to
-// skills/pipeline/references/lead-resume.md, so a fresh or resumed Lead reads the pipeline skill and one short file, not the
-// Playbook skill and the full hand-over reference. The boot adds about 15k (55558 -> ~71k), not 32k.
-// The two original boot tests (55558 -> 87240, 53619 -> 86858) encoded "a 32k boot is not frozen". That contradicts the kept
-// 85500 point, so they are replaced by the lean boot readings; the control is unchanged.
+// A fresh Lead session holds about 55k tokens before it reads anything (system prompt, tools, skill and agent listings),
+// and the context-guard `lead` branch freezes at HANDOVER_AT (85500). The boot path (new-session command, resume line,
+// header) must therefore point to the short skills/pipeline/references/lead-resume.md, and what that path loads must stay
+// small enough to leave real headroom below the point.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pre } from '../../scripts/context-guard.mjs';
+import { newSessionCommand, HEADER, resume } from '../../scripts/lead-handover.mjs';
 import { append } from '../../scripts/run-state.mjs';
 
 const SLUG = '2026-11-03 07.12 - Lead Fresh Session Test';
@@ -51,37 +44,46 @@ function fixture(readings) {
 const repo = path.join(import.meta.dirname, '..', '..');
 const read = (...p) => fs.readFileSync(path.join(repo, ...p), 'utf8');
 
+const BASELINE = 55600;      // measured first reading of a fresh Lead session
+const BYTES_PER_TOKEN = 3;   // conservative: real text is nearer 4
+const BOOT_HEADROOM_AT = 71000;
+
 describe('Lead hand-over loop: lean boot path', () => {
-  test('the resume file exists, is short, and tells the Lead not to load the Playbook skill or the full reference', () => {
+  test('what the resume path loads (resume file plus pipeline skill) keeps the boot reading near 71k', () => {
+    const bytes = ['skills/pipeline/references/lead-resume.md', 'skills/pipeline/SKILL.md']
+      .reduce((n, f) => n + Buffer.byteLength(read(...f.split('/'))), 0);
+    const tokens = BASELINE + Math.ceil(bytes / BYTES_PER_TOKEN);
+    assert.ok(tokens <= BOOT_HEADROOM_AT, `boot reading ${tokens} must stay at or below ${BOOT_HEADROOM_AT} (${bytes} bytes loaded)`);
+  });
+
+  test('the resume file tells the Lead not to load the Playbook skill or the full reference', () => {
     const t = read('skills', 'pipeline', 'references', 'lead-resume.md');
-    assert.ok(Buffer.byteLength(t) <= 3500, 'lead-resume.md must stay short');
     assert.match(t, /## Do not load at boot/);
     assert.match(t, /Playbook skill/);
   });
 
-  test('the new-session command, the resume line and the header all point to the resume file', () => {
-    const src = read('scripts', 'lead-handover.mjs');
-    assert.equal((src.match(/references\/lead-resume\.md/g) ?? []).length >= 3, true);
-    assert.ok(!src.includes('references/lead-handover.md of the skill'));
-    assert.ok(!src.includes('Follow skills/pipeline/references/lead-handover.md'));
+  test('the new-session command names the resume file, not the full reference', () => {
+    const c = newSessionCommand(SLUG);
+    assert.match(c, /references\/lead-resume\.md/);
+    assert.ok(!c.includes('lead-handover.md'));
+  });
+
+  test('HEADER names the resume file, not the full reference', () => {
+    assert.match(HEADER, /skills\/pipeline\/references\/lead-resume\.md/);
+    assert.ok(!HEADER.includes('lead-handover.md'));
+  });
+
+  test('resume() output after a compact names the resume file', () => {
+    const f = fixture([55558]);
+    const payload = JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact', session_id: SESSION });
+    const r = resume(payload, { root: f.opts.root, now: NOW });
+    const ctx = JSON.parse(r.out).hookSpecificOutput.additionalContext;
+    assert.match(ctx, /references\/lead-resume\.md/);
+    assert.ok(!ctx.includes('lead-handover.md'));
   });
 });
 
-describe('Lead hand-over loop: a fresh session is not frozen by its own boot reading', () => {
-  test('lean boot reading (55558 -> 71000) writes no hand-over and stays silent, with real headroom left', () => {
-    const f = fixture([55558, 60177, 65333, 71000]);
-    const r = pre(f.input, f.opts);
-    assert.deepEqual(r, { code: 0, out: '', err: '' });
-    assert.equal(f.record().filter((e) => e.ev === 'handover').length, 0);
-  });
-
-  test('lean boot reading (53619 -> 70500) is not frozen', () => {
-    const f = fixture([53619, 62000, 70500]);
-    const r = pre(f.input, f.opts);
-    assert.deepEqual(r, { code: 0, out: '', err: '' });
-    assert.equal(f.record().filter((e) => e.ev === 'handover').length, 0);
-  });
-
+describe('Lead hand-over loop: the guard still freezes a session over the point', () => {
   test('control: a session far over the point (55558 -> 150000) is still frozen', () => {
     const f = fixture([55558, 100000, 150000]);
     const r = pre(f.input, f.opts);
