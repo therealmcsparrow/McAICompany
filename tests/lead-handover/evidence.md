@@ -74,5 +74,28 @@ Installed: Claude Code 2.1.316, aico 0.26.0; branch `context-guard` v1, `lead-ha
 | Clean point: `permissionDecision` `deny` with the freeze reason | The model got the full reason, quoted it back as `PreToolUse:Read hook error: <reason>` and relayed the command in its answer | Only through the model's answer and the tool error; no `systemMessage` row (none was sent) |
 
 - Result: the CEO-visible route for the command is `systemMessage`. The model route is the deny reason. `stopReason` and stderr are kept per the Contract but cannot be relied on.
-- The Read tool still returned its content in the frozen run: `continue:false` ended the turn but did not stop the tool call the hook fired for. This was measured on the first shape (no `permissionDecision`) and with a read-only tool only. It is not harmless for a writing tool or a Step dispatch: the frozen output now also carries a `permissionDecision` deny (`context-guard`, branch text), but whether the writing tool then stays unrun has not been checked live. Open live check: frozen deny with a writing tool.
+- The Read tool still returned its content in the frozen run: `continue:false` ended the turn but did not stop the tool call the hook fired for. This was measured on the first shape (no `permissionDecision`) and with a read-only tool only. It is not harmless for a writing tool or a Step dispatch: the frozen output now also carries a `permissionDecision` deny (`context-guard`, branch text), but whether the writing tool then stays unrun has not been checked live. Open live check: frozen deny with a writing tool. Closed on 2026-11-03, see "Step 21 live checks" below: the writing tool stayed unrun.
 - Gap, now closed in the Contract text: the first freeze (clean point) is a deny, and it now also carries `systemMessage` with the frozen line, so the CEO gets a direct route. Not yet re-measured live.
+
+## Step 21 live checks (QA, 2026-11-03)
+
+Installed: Claude Code 2.1.317, aico 0.26.0 (installed plugin, no context guard). Branch: `context-guard` v1, `lead-session-mcp` v1, `lead-handoff` v1.7 (branch text, Contract bodies edited without a bump). Node v26.7.0, win32 (Git Bash missing, hooks ran in PowerShell). Model alias haiku, `claude -p --output-format stream-json --verbose`. Synthetic data, throwaway folders under the temp dir.
+
+### A. Frozen deny with a writing tool: PASS (stub hook, not the real guard)
+- The real guard needs a transcript at 85500 tokens, which a subagent cannot build live. A stub PreToolUse hook (`--plugin-dir`, temp dir) printed the exact frozen shape of `scripts/context-guard.mjs` (`continue:false`, `stopReason`, `systemMessage`, `hookSpecificOutput` deny with `permissionDecisionReason`, same text on stderr, exit 0). The frozen text in the stub was a stand-in line, not the real one.
+- Prompt: create `marker.txt` with the `Write` tool (allowed in `--allowedTools`). The model issued `Write` to `<temp>\work\marker.txt`.
+- Result: the tool stayed unrun. The folder had no `marker.txt`. The tool result was `is_error` with `PreToolUse:Write hook error: <line>`. A `system` row (`informational`, `notice`) carried `PreToolUse:Write says: <line>`. The run ended `result` success, `stop_reason` `tool_use`.
+- Limit: this proves Claude Code honours the deny shape for `Write`. It does not prove the real guard emits it at 85500 tokens; the test suites cover that (`tests/context-guard/lead.test.mjs`).
+
+### B. New session with the new-session line, folder without plugin source: PASS
+- Folder: temp git repo with `.company/work/2026-11-03 10.00 - Qa Live` (run started with `run-state start`, one manual Lead Handoff written by the branch `lead-handover write`). No `skills/` or plugin files in it; plugin only via the installed cache.
+- Prompt: the exact body of `newSessionCommand(slug)` from the branch, passed as `claude -p "<body>"` (the same text the command passes as its first message).
+- Result: the session loaded skill `aico:pipeline`, read `references/lead-handover.md` from the installed cache, then ran `node <cache>/scripts/run.mjs lead-handover read '2026-11-03 10.00 - Qa Live'`, which printed `handovers 1 / resumes hook 0 ceo 0 / last lead-handoff-1.md ...`. It then read the Handoff and the two record files. The run stopped on `error_max_turns` (8), not an error in the line.
+- First attempt (tools `Bash`, no `PowerShell`) reached the same read command and was held by the permission prompt in `-p` mode; second attempt allowed `PowerShell` for the read.
+- Limit: not an interactive terminal; the Handoff used was a manual one, not a `context` trigger one, so the `- New session command:` line inside the file was not exercised live. The `claude "<line>"` shell launch was run as `claude -p`, not through `lead_new_session` and a real terminal. Not run: `lead_new_session` MCP call (needs a permission prompt and the hand-over record).
+
+### C. Timing of `context-guard.mjs pre`, win32: PASS (under the 200 ms target)
+- Method: 30 runs each after 3 warm-up, `spawnSync(node)` with a PreToolUse Read payload, transcript missing (the fast path: tokens unknown, exit 0, silent), same machine, same minute.
+- Bare `node -e ""`: median 32.4 ms, p90 34.1 ms, max 107.6 ms.
+- `node scripts/context-guard.mjs pre`: median 51.3 ms, p90 109.0 ms, max 127.3 ms.
+- Overhead over bare node at the median: 18.9 ms. Target: 200 ms per call (`docs/contracts/context-guard.md:22`). Met at median, p90 and max (127.3 ms absolute). The p90 spread is machine noise (bare node also hit 107 ms once); one run, not a controlled benchmark. Only the fast path was timed, which is the path of every call below the hand-over point.

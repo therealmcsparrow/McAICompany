@@ -172,7 +172,7 @@ describe('lead-handover on a new name and on a legacy slug', () => {
     startRun(fx, NEW, now - 60000);
     const file = path.join(fx.claudeDir, 'projects', 'p1', 's.jsonl');
     fs.writeFileSync(file, '');
-    const payload = JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'auto', transcript_path: file });
+    const payload = JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'manual', transcript_path: file });
     assert.deepEqual(watch(payload, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now }), { code: 0, err: '' });
     assert.ok(fs.existsSync(path.join(fx.work, NEW, 'lead-handoff-1.md')));
   });
