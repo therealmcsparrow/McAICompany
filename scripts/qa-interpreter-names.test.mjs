@@ -1,4 +1,4 @@
-// Bare `node` interpreter inventory and win32 cwd-lookup probes (run 2026-11-03 lead-session-mcp-connect).
+// Bare `node` interpreter inventory and win32 cwd-lookup probes.
 // Every place a plugin config names its interpreter must be known here; a new one needs a security look.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -32,25 +32,33 @@ test('inventory: no other plugin-level config files name an interpreter', () => 
 
 // Probes: a copy of the real node.exe sits in a temp cwd and reports its own path.
 // The copy is harmless (same binary); a hijack shows as execPath inside the temp dir.
-test('win32 probe: direct spawn of `node` ignores the cwd (how MCP servers start)', { skip: process.platform !== 'win32' }, () => {
+const ND = 'NoDefaultCurrentDirectoryInExePath'
+// libuv reads the PARENT's env for the lookup, so the parent env is controlled here and restored.
+const withParentNd = (value, fn) => {
+  const saved = process.env[ND]
+  if (value === undefined) delete process.env[ND]; else process.env[ND] = value
+  try { return fn() } finally { if (saved === undefined) delete process.env[ND]; else process.env[ND] = saved }
+}
+
+test('win32 probe: direct spawn of `node` is no guard; only ND=1 in the parent stops the cwd copy (hazard + guard)', { skip: process.platform !== 'win32' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-node-probe-'))
   try {
     copyFileSync(process.execPath, join(dir, 'node.exe'))
-    const env = { ...process.env }
-    delete env.NoDefaultCurrentDirectoryInExePath
-    const r = spawnSync('node', ['-p', 'process.execPath'], { cwd: dir, env, encoding: 'utf8' })
-    assert.ok(!r.stdout.trim().toLowerCase().startsWith(dir.toLowerCase()), r.stdout)
+    const run = (nd) => withParentNd(nd, () => spawnSync('node', ['-p', 'process.execPath'], { cwd: dir, encoding: 'utf8' }).stdout.trim().toLowerCase())
+    assert.ok(!run('1').startsWith(dir.toLowerCase()), 'ND=1 in the parent must stop the cwd lookup')
+    // Hazard: without ND=1 in the parent, the cwd copy wins even for a direct spawn.
+    assert.ok(run(undefined).startsWith(dir.toLowerCase()), 'without ND=1 a direct spawn picks the cwd node.exe')
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('win32 probe: cmd.exe honours NoDefaultCurrentDirectoryInExePath=1 (Claude Code sets it for children)', { skip: process.platform !== 'win32' }, () => {
+test('win32 probe: cmd.exe honours NoDefaultCurrentDirectoryInExePath=1', { skip: process.platform !== 'win32' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-node-probe-'))
   try {
     writeFileSync(join(dir, 'node.cmd'), '@echo HIJACK\r\n')
     const run = (nd) => {
       const env = { ...process.env }
-      delete env.NoDefaultCurrentDirectoryInExePath
-      if (nd) env.NoDefaultCurrentDirectoryInExePath = '1'
+      delete env[ND]
+      if (nd) env[ND] = '1'
       return spawnSync('node -p "process.execPath"', { cwd: dir, env, shell: true, encoding: 'utf8' }).stdout
     }
     assert.ok(!run(true).includes('HIJACK'), 'ND=1 must stop the cwd lookup')
