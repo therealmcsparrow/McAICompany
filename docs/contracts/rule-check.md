@@ -1,6 +1,6 @@
 # Contract: rule-check v1.4
 
-v1.4 (task 2026-11-02 18.32 - Context Cap Hand Over; additive, `docs/adr/0007-contract-minor-versions.md`): the `node-test` limit rises from 300 s to 480 s, and its output cap from 1 MiB to 16 MiB. Reason: this repo's own green suite took 315.9 s at a2a08f8, so `node-test` timed out with no failing test; the same run printed 8499 lines, about 0.75 MiB (estimate from line count), close to the old cap, which would fail the same way next. 480 s is about 1.5 times the measured time, and it stays under the 600 s a Claude Code Bash call may wait at most (unverified, from memory), so the Lead's `run` call ends with a row and is not killed silently. A check that hits its limit now prints `tool failed: <check-id> (timed out after <n> s)` in place of the raw error code. No argument, binding, row shape or exit code changes.
+v1.4 (task 2026-11-02 18.32 - Context Cap Hand Over; additive, `docs/adr/0007-contract-minor-versions.md`): the `node-test` limit rises from 300 s to 480 s, and its output cap from 1 MiB to 16 MiB. Reason: this repo's own green suite took 315.9 s at a2a08f8, so `node-test` timed out with no failing test; the same run printed 8499 lines, about 0.75 MiB (estimate from line count), close to the old cap, which would fail the same way next. 480 s is about 1.5 times the measured time, and it stays under the 600 s a Claude Code Bash call may wait at most (600000 ms in the Bash tool definition), so the Lead's `run` call ends with a row and is not killed silently. A check that runs a program (`aico-check`, `node-test`, `handoff-lint`, every `argv` check) and hits its limit now prints `tool failed: <check-id> (timed out after <n> s)` in place of the raw error code; `lf` runs no program and reports any git failure, a timeout included, as `tool failed: lf (git failed)`. No argument, binding, row shape or exit code changes.
 
 v1.3 (task Draft Input Folder Case Draft, T11; additive, `docs/adr/0007-contract-minor-versions.md`): `run` and `text` run `exactWorkPath` (`work-folder-name` v1.1) on `--run` after the shape check and the root check, and `--handoff` inside `.company/work` does the same for its folder and file (and refuses `.company` or `work` typed in another case). A name or path in another letter case than the one on disk prints `refused: wrong letter case`, exit 3. A run with no folder in any case behaves as before.
 
@@ -28,7 +28,7 @@ Rationale: `docs/adr/0010-tool-checks-by-id.md`, `docs/adr/0012-ruleset-stays-lo
   - `node-test`: runs `npm test`, timeout 480 s and output cap 16 MiB (v1.4, constants `NODE_TEST_TIMEOUT_MS` and `NODE_TEST_OUTPUT`); one row when it exits non-zero, naming the first failing test (cut to 120 characters). Hitting the limit is `tool failed: node-test (timed out after 480 s)`, whether or not a test failed before it.
   - `handoff-lint`: `scripts/handoff-lint.mjs` over the Step's Handoff.
 - **Project IDs** carry `argv`: run with `execFile`, no shell, cwd = `<root>`, 120 s timeout, 1 MiB output cap. Rule text is never executed or interpolated into a command.
-- **Timeouts** (v1.4): every check that hits its limit, built-in or `argv`, gives `tool failed: <check-id> (timed out after <n> s)`, `<n>` = the limit in seconds. Other spawn errors keep their error code in the brackets.
+- **Timeouts** (v1.4): every check that runs a program (`aico-check`, `node-test`, `handoff-lint` and every `argv` check) and hits its limit gives `tool failed: <check-id> (timed out after <n> s)`, `<n>` = the limit in seconds. Other spawn errors keep their error code in the brackets. `lf` runs no program: it reads blobs through git, and any git failure, a git timeout included, gives `tool failed: lf (git failed)`.
 
 ## CLI
 Every command takes `--root <dir>` (default: the current directory, which the Lead sets to the repo root). Tests pass a temp dir with fixture files (proj.M8) and never run `node-test` against the real repo, so the suite never calls itself.
@@ -120,7 +120,7 @@ A stale binding is a ruleset bookkeeping fault, not a builder's fault, so it nev
 - `--root` not an existing directory → `refused: bad root`, exit 2.
 - Malformed `checks.json` (bad JSON, unknown key, `argv` not a list of strings, > 64 KiB) → exit 2 with the reason; the pre-filter reports it to the reviewer as `T-0 tool config invalid`.
 - `slices --write` refusals (bad task ID, unknown rule, over 6 KiB, unexpected entry in `rules/`) → exit 1, nothing written.
-- A check over its limit → `tool failed: <check-id> (timed out after <n> s)` (v1.4), never silence.
+- A check that runs a program and goes over its limit → `tool failed: <check-id> (timed out after <n> s)` (v1.4); `lf` → `tool failed: lf (git failed)` on any git failure, a git timeout included. Never silence.
 
 ## Compatibility
 Minor bump (`docs/adr/0007-contract-minor-versions.md`): a changed limit or a sharper `tool failed` reason. Major bump: a changed row shape, exit code or argument. A suite that outgrows 480 s needs a new limit through a plan, not a silent constant change.

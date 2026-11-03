@@ -11,7 +11,7 @@ The tool name in Claude Code is `mcp__plugin_aico_lead-session__lead_new_session
 ## Protocol
 MCP over stdio: one JSON-RPC 2.0 object per line, UTF-8, LF. A line over 64 KiB is dropped and answered with `-32700`, id null. Only protocol lines on stdout; stderr stays silent. End of stdin: exit 0.
 - `initialize`: answers the client's `protocolVersion` when it is a `YYYY-MM-DD` string, else `2025-06-18`; `capabilities` `{"tools":{}}`; `serverInfo` `{"name":"lead-session","version":<plugin.json version>}`.
-- `notifications/initialized` and any other notification (an object with no `id`, whatever else it holds): no answer.
+- `"notifications/initialized"` and any other notification (an object with no `id`, whatever else it holds): no answer.
 - `ping`: empty result.
 - `"tools/list"`: the one tool below.
 - `"tools/call"`: below.
