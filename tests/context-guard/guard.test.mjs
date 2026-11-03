@@ -205,6 +205,7 @@ describe('subagent', () => {
     const before = fs.readFileSync(rec);
     assert.equal(decision(pre(fx.input(), fx.opts)).permissionDecision, 'deny');
     assert.deepEqual(pre(fx.input({ tool_name: 'Write', tool_input: { file_path: path.join(fx.dir, '03-x.md') } }), fx.opts), quiet);
+    assert.deepEqual(pre(fx.input({ tool_name: 'Write', tool_input: { file_path: path.join(fx.dir, '05-x.findings.md'), content: 'x' } }), fx.opts), quiet, 'new ledger allowed, unrecorded');
     assert.ok(before.equals(fs.readFileSync(rec)), 'nothing appended');
     const stop = JSON.stringify({ hook_event_name: 'SubagentStop', transcript_path: fx.transcript, agent_id: AGENT, stop_hook_active: false });
     assert.equal(subagentStop(stop, fx.opts).out, '');
