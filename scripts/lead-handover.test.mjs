@@ -72,9 +72,9 @@ describe('calibration', () => {
     assert.equal(lead.COMPACT_RESERVE, undefined);
   });
 
-  test('the Contract is v1.7 and holds the hand-over point, not the window setup', () => {
+  test('the Contract is v1.8 and holds the hand-over point, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1\.7$/m);
+    assert.match(text, /^# Contract: lead-handoff v1\.8$/m);
     assert.ok(text.includes('85500'));
     assert.ok(text.includes('no setup'));
     assert.ok(!text.includes('\r'));
@@ -82,7 +82,7 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.7');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.8');
     assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
@@ -402,9 +402,10 @@ describe('Handoff content', () => {
     assert.equal(lines[8], 'risk-tier: high');
     assert.equal(lines[9], 'tier-path: feature full');
     assert.match(lines[10], /^tier-set: \[[a-z0-9-]+(, [a-z0-9-]+)*\]$/);
-    assert.equal(lines.length, 13);
+    assert.equal(lines.length, 14);
     assert.equal(lines[11], 'lead ctx unknown');
     assert.equal(lines[12], 'lead peak unknown');
+    assert.equal(lines[13], 'lead session unknown');
   });
 
   test('read prints the Lead-only base before a tier-path record exists', () => {
@@ -720,9 +721,11 @@ describe('hooks.json and source', () => {
     assert.ok(!('matcher' in pre[0]));
     assert.deepEqual(pre[0].hooks, [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" watch', timeout: 5 }]);
     const ss = cfg.hooks.SessionStart;
-    assert.equal(ss.length, 1);
+    assert.equal(ss.length, 2);
     assert.equal(ss[0].matcher, 'compact');
     assert.deepEqual(ss[0].hooks, [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" resume', timeout: 5 }]);
+    assert.equal(ss[1].matcher, 'startup|resume|clear');
+    assert.deepEqual(ss[1].hooks, [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" start', timeout: 5 }]);
   });
 
   test('no PostToolUse hook and the step-times entries are unchanged', () => {
@@ -784,7 +787,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.7'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.8'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {

@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CAP, measure, main } from './lead-handover.mjs';
+import crypto from 'node:crypto';
+import { CAP, measure, start, main } from './lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(here, 'lead-handover.mjs');
@@ -51,7 +52,8 @@ describe('measure', () => {
     const r = measure(stop(transcript(fx, 40000)), opts(fx));
     assert.deepEqual(r, { code: 0, err: '' });
     const o = stored(fx);
-    assert.deepEqual(Object.keys(o), ['v', 'ctx', 'peak', 'at']);
+    assert.deepEqual(Object.keys(o), ['v', 'session', 'ctx', 'peak', 'at']);
+    assert.equal(o.session, null);
     assert.equal(o.v, 1);
     assert.equal(o.ctx, 40000);
     assert.equal(o.peak, 40000);
@@ -169,6 +171,19 @@ describe('read and ctx', () => {
     assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes(`lead peak ${CAP}`));
   });
 
+  test('read prints the session tag of the stored reading, none for an untagged one', () => {
+    const fx = fixture();
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, session: 'abc123def456', ctx: 5, peak: 6, at: AT })}
+`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes('lead session abc123def456'));
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, session: null, ctx: null, peak: 6, at: AT })}
+`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes('lead session none'));
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 5, peak: 6, at: AT })}
+`);
+    assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes('lead session none'));
+  });
+
   test('read treats a hostile file as unknown', () => {
     const fx = fixture();
     const bodies = [
@@ -183,6 +198,7 @@ describe('read and ctx', () => {
       const l = lines(main(['read', fx.slug], fx.root, {}).out);
       assert.ok(l.includes('lead ctx unknown'), body);
       assert.ok(l.includes('lead peak unknown'), body);
+      assert.ok(l.includes('lead session unknown'), body);
     }
   });
 
@@ -257,5 +273,93 @@ describe('read refuses what is not exactly the named file (proj.M-SEC7)', () => 
     fs.writeFileSync(path.join(fx.dir, 'LEAD-CONTEXT.JSON'), body);
     if (fs.existsSync(path.join(fx.dir, 'lead-context.json')) === false) { t.skip('case-sensitive folder'); return; }
     assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+  });
+});
+
+// Lead hand-over loop fix: the reading is tagged with the session (first 12 hex of sha256 of the session id).
+const tag = (id) => crypto.createHash('sha256').update(id).digest('hex').slice(0, 12);
+const begin = (extra = {}) => JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', session_id: 'sess-b', ...extra });
+
+describe('per-session reading', () => {
+  test('measure stores the session tag, never the session id', () => {
+    const fx = fixture();
+    measure(stop(transcript(fx, 40000), { session_id: 'sess-a' }), opts(fx));
+    const o = stored(fx);
+    assert.equal(o.session, tag('sess-a'));
+    assert.ok(!fs.readFileSync(fx.file, 'utf8').includes('sess-a'));
+  });
+
+  test('a new session keeps the run-wide peak and takes its own ctx', () => {
+    const fx = fixture();
+    measure(stop(transcript(fx, 147000), { session_id: 'sess-a' }), opts(fx));
+    measure(stop(transcript(fx, 60000), { session_id: 'sess-b' }), opts(fx));
+    const o = stored(fx);
+    assert.equal(o.session, tag('sess-b'));
+    assert.equal(o.ctx, 60000);
+    assert.equal(o.peak, 147000);
+  });
+
+  test('start: a fresh session resets ctx to unknown, keeps peak, tags the session', () => {
+    const fx = fixture();
+    measure(stop(transcript(fx, 147000), { session_id: 'sess-a' }), opts(fx));
+    assert.deepEqual(start(begin(), opts(fx)), { code: 0, err: '' });
+    const o = stored(fx);
+    assert.deepEqual(Object.keys(o), ['v', 'session', 'ctx', 'peak', 'at']);
+    assert.equal(o.session, tag('sess-b'));
+    assert.equal(o.ctx, null);
+    assert.equal(o.peak, 147000);
+    const read = main(['read', fx.slug], fx.root, {}).out.split('\n');
+    assert.ok(read.includes('lead ctx unknown'), read.join('|'));
+    assert.ok(read.includes('lead peak 147000 over cap'));
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: 147000, at: o.at });
+  });
+
+  test('start works for resume and clear, writes a peak of 0 on a first run, and ignores compact and subagents', () => {
+    for (const source of ['resume', 'clear']) {
+      const fx = fixture();
+      start(begin({ source }), opts(fx));
+      assert.deepEqual([stored(fx).ctx, stored(fx).peak], [null, 0]);
+    }
+    const fx = fixture();
+    measure(stop(transcript(fx, 50000), { session_id: 'sess-a' }), opts(fx));
+    const before = fs.readFileSync(fx.file, 'utf8');
+    start(begin({ source: 'compact' }), opts(fx));
+    start(begin({ agent_id: 'x' }), opts(fx));
+    start(begin({ session_id: 7 }), opts(fx));
+    start('{not json', opts(fx));
+    assert.equal(fs.readFileSync(fx.file, 'utf8'), before);
+  });
+
+  test('start with no active run writes nothing', () => {
+    const fx = fixture();
+    fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
+    start(begin(), opts(fx));
+    assert.ok(!fs.existsSync(fx.file));
+  });
+
+  test('a v1.7 file with four keys is still read (no session), and the next measure rewrites it tagged', () => {
+    const fx = fixture();
+    fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 90000, peak: 120000, at: '2026-11-03T07:43:00Z' })}
+`);
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: 90000, peak: 120000, at: '2026-11-03T07:43:00Z' });
+    measure(stop(transcript(fx, 30000), { session_id: 'sess-a' }), opts(fx));
+    assert.equal(stored(fx).peak, 120000);
+    assert.equal(stored(fx).session, tag('sess-a'));
+  });
+
+  test('the process hook start exits 0 and writes the reset', () => {
+    const fx = fixture();
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, HOME: fx.base, USERPROFILE: fx.base, MCSPARROW_HOME: fx.base };
+    const r = spawnSync(process.execPath, [SCRIPT, 'start'], { cwd: fx.root, input: begin(), env, encoding: 'utf8' });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, '');
+    assert.equal(stored(fx).ctx, null);
+  });
+
+  test('hooks.json wires start to SessionStart startup|resume|clear', () => {
+    const cfg = JSON.parse(fs.readFileSync(path.join(here, '..', 'hooks', 'hooks.json'), 'utf8'));
+    const e = cfg.hooks.SessionStart.find((x) => x.matcher === 'startup|resume|clear');
+    assert.ok(e);
+    assert.match(e.hooks[0].command, /lead-handover\.mjs" start$/);
   });
 });

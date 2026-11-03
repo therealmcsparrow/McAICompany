@@ -233,7 +233,7 @@ describe('subagent', () => {
   });
 
   test('newSessionCommand is text for a good name only', () => {
-    assert.equal(newSessionCommand(SLUG), `claude "aico lead hand-over: run lead-handover read '${SLUG}' first, as set out in references/lead-handover.md of the skill aico:pipeline, then follow that file."`);
+    assert.equal(newSessionCommand(SLUG), `claude "aico lead hand-over: run lead-handover read '${SLUG}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`);
     for (const bad of ['../x', 'a"b', '2026-11-02 18.32 - A&B', 5, null]) assert.equal(newSessionCommand(bad), null);
   });
 });

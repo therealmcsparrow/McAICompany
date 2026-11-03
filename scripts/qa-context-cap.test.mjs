@@ -273,7 +273,7 @@ describe('the Lead Handoff still resumes after measure wrote lead-context.json',
     const { sb, file } = leadRun();
     assert.equal(hook(sb, 'measure', { hook_event_name: 'Stop', transcript_path: file }).code, 0);
     const reading = JSON.parse(fs.readFileSync(path.join(sb.work, 'lead-context.json'), 'utf8'));
-    assert.deepEqual(Object.keys(reading), ['v', 'ctx', 'peak', 'at']);
+    assert.deepEqual(Object.keys(reading), ['v', 'session', 'ctx', 'peak', 'at']);
     assert.equal(reading.ctx, 85500);
     assert.equal(hook(sb, 'watch', { hook_event_name: 'PreCompact', trigger: 'manual', transcript_path: file }).code, 0);
     const written = fs.readFileSync(path.join(sb.work, 'lead-handoff-1.md'), 'utf8');
