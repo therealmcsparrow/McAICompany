@@ -23,6 +23,8 @@ const V16_RETRY_LINE = 'aico: a Step is still running, so the Lead hand-over wai
 const BLOCK_LINE = 'aico: automatic compaction is blocked during a run; the context guard hands over at the hand-over point.\n';
 const LOCK_FILE = 'lead-freeze.lock';
 const LOCK_STALE_MS = 30 * 1000;
+const READING_LOCK = 'lead-context.lock';
+const READING_LOCK_WAIT_MS = 500;
 const SESSION_RE = /^[0-9a-f]{12}$/;
 
 const HERE = import.meta.dirname;
@@ -455,8 +457,8 @@ export function newSessionCommand(slug) {
 }
 
 // Exclusive-create lock around the context hand-over; a lock older than 30 s is replaced. Null when not taken.
-function takeLock(dir, now) {
-  const file = path.join(dir, LOCK_FILE);
+function takeLock(dir, now, name = LOCK_FILE) {
+  const file = path.join(dir, name);
   for (let i = 0; i < 2; i++) {
     try {
       const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
@@ -547,21 +549,44 @@ function readReading(dir) {
   return { session: tagged ? o.session : null, ctx: o.ctx, peak: o.peak, at: o.at };
 }
 
-// Writes the reading through a temp file and a rename; nothing is written when the target is not a regular one-link file.
-function writeReading(dir, reading) {
+// Takes the reading lock, waiting up to READING_LOCK_WAIT_MS; a lock left by a crash is replaced after LOCK_STALE_MS.
+// Null when it stays held: the write then goes ahead and relies on the peak merge in writeReading.
+function lockReading(dir) {
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  const end = Date.now() + READING_LOCK_WAIT_MS;
+  for (;;) {
+    const lock = takeLock(dir, Date.now(), READING_LOCK);
+    if (lock || Date.now() >= end) return lock;
+    Atomics.wait(pause, 0, 0, 10);
+  }
+}
+
+// Read-modify-write of the reading: `build(old)` returns the new reading. The lock keeps writers apart; the peak is
+// merged again after the temp file exists, so a writer that got in without the lock is never overwritten by a lower peak.
+// Writes through a temp file and a rename; nothing is written when the target is not a regular one-link file.
+function writeReading(dir, build) {
   const file = path.join(dir, READING_FILE);
-  const l = lstatOrNull(file);
-  if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return;
-  const text = `${JSON.stringify({ v: 1, ...reading })}\n`;
-  if (Buffer.byteLength(text) > MAX_READING) return;
-  const tmp = path.join(dir, `.${READING_FILE}.${process.pid}.tmp`);
-  const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+  const lock = lockReading(dir);
   try {
-    try { fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
-    fs.renameSync(tmp, file);
-  } catch (e) {
-    try { fs.unlinkSync(tmp); } catch { /* already gone */ }
-    throw e;
+    const l = lstatOrNull(file);
+    if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return;
+    const tmp = path.join(dir, `.${READING_FILE}.${process.pid}.tmp`);
+    const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+    try {
+      try {
+        const reading = build(readReading(dir));
+        const text = `${JSON.stringify({ v: 1, ...reading })}
+`;
+        if (Buffer.byteLength(text) > MAX_READING) { fs.closeSync(fd); fs.unlinkSync(tmp); return; }
+        fs.writeSync(fd, text);
+      } finally { try { fs.closeSync(fd); } catch { /* already closed */ } }
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+      throw e;
+    }
+  } finally {
+    if (lock) { try { fs.unlinkSync(lock); } catch { /* already gone */ } }
   }
 }
 
@@ -579,8 +604,7 @@ export function measure(text, options) {
     if (!dir) return quiet;
     const ctx = transcriptTokens(p.transcript, claudeDir);
     if (ctx === null) return quiet;
-    const old = readReading(dir);
-    writeReading(dir, { session: p.session, ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now) });
+    writeReading(dir, (old) => ({ session: p.session, ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now) }));
     return quiet;
   } catch {
     return quiet;
@@ -600,8 +624,7 @@ export function start(text, options) {
     exactWorkPath({ fs, path }, root, [slug]);
     const dir = runExists(root, slug);
     if (!dir) return quiet;
-    const old = readReading(dir);
-    writeReading(dir, { session: p.session, ctx: null, peak: old ? old.peak : 0, at: iso(now) });
+    writeReading(dir, (old) => ({ session: p.session, ctx: null, peak: old ? old.peak : 0, at: iso(now) }));
     return quiet;
   } catch {
     return quiet;
