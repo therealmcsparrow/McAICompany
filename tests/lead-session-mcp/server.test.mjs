@@ -99,6 +99,14 @@ describe('protocol', () => {
     assert.deepEqual(r.out.map((m) => m.error?.code), [-32602, -32602, -32602, -32602, -32602, -32602, -32602]);
   });
 
+  test('ping and tools/list with non-object params give -32602', () => {
+    const bad = ['str', 5, null, [], true];
+    const cases = bad.flatMap((p, i) => [rpc(i * 2 + 1, 'ping', p), rpc(i * 2 + 2, 'tools/list', p)]);
+    const r = run(cases.join(''));
+    assert.equal(r.out.length, cases.length);
+    assert.ok(r.out.every((m) => m.error?.code === -32602), JSON.stringify(r.out));
+  });
+
   test('a line over 64 KiB is dropped with -32700 and the next line still works', () => {
     const big = `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping', pad: 'x'.repeat(70 * 1024) })}\n`;
     const r = run(`${big}${rpc(2, 'ping')}`);
