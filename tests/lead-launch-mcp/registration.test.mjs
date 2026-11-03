@@ -5,7 +5,6 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// Regression: task "2026-11-03 07.12 - Lead Session Mcp Connect".
 // This repo is the plugin source AND a product folder. Claude Code reads the root `.mcp.json` twice:
 //   1. as the plugin's registration (`plugin:aico:lead-session`), CLAUDE_PLUGIN_ROOT set -> connects;
 //   2. as the project-scope file of the session cwd (`lead-session`), CLAUDE_PLUGIN_ROOT NOT set -> the
