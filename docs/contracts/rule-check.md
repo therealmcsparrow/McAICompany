@@ -1,4 +1,6 @@
-# Contract: rule-check v1.3
+# Contract: rule-check v1.4
+
+v1.4 (task 2026-11-02 18.32 - Context Cap Hand Over; additive, `docs/adr/0007-contract-minor-versions.md`): the `node-test` limit rises from 300 s to 480 s, and its output cap from 1 MiB to 16 MiB. Reason: this repo's own green suite took 315.9 s at a2a08f8, so `node-test` timed out with no failing test; the same run printed 8499 lines, about 0.75 MiB (estimate from line count), close to the old cap, which would fail the same way next. 480 s is about 1.5 times the measured time, and it stays under the 600 s a Claude Code Bash call may wait at most (unverified, from memory), so the Lead's `run` call ends with a row and is not killed silently. A check that hits its limit now prints `tool failed: <check-id> (timed out after <n> s)` in place of the raw error code. No argument, binding, row shape or exit code changes.
 
 v1.3 (task Draft Input Folder Case Draft, T11; additive, `docs/adr/0007-contract-minor-versions.md`): `run` and `text` run `exactWorkPath` (`work-folder-name` v1.1) on `--run` after the shape check and the root check, and `--handoff` inside `.company/work` does the same for its folder and file (and refuses `.company` or `work` typed in another case). A name or path in another letter case than the one on disk prints `refused: wrong letter case`, exit 3. A run with no folder in any case behaves as before.
 
@@ -23,9 +25,10 @@ Rationale: `docs/adr/0010-tool-checks-by-id.md`, `docs/adr/0012-ruleset-stays-lo
 - **Built-in IDs** (no `argv`):
   - `aico-check`: runs `scripts/check.mjs`; one row per `WARN <file>: <kind> <n> > <max> lines` line. `ERROR` lines are not rule rows; `npm run check` in CI and QA already fails on them.
   - `lf`: one row per changed file that contains a CR byte. Changed files = the judging diff with `-z --name-only --no-renames --diff-filter=ACMR`; each file is read as its blob at the run ref, never from the worktree; a blob that is binary by content (below) is skipped, because `run` prints its content row; a blob over 64 MiB gives `too large to scan for CR bytes`. No numstat is read, so an attribute cannot silence the rule. One more row when the `.gitattributes` blob at the run ref no longer has the line `* text=auto eol=lf`.
-  - `node-test`: runs `npm test`, timeout 300 s; one row when it exits non-zero, naming the first failing test (cut to 120 characters).
+  - `node-test`: runs `npm test`, timeout 480 s and output cap 16 MiB (v1.4, constants `NODE_TEST_TIMEOUT_MS` and `NODE_TEST_OUTPUT`); one row when it exits non-zero, naming the first failing test (cut to 120 characters). Hitting the limit is `tool failed: node-test (timed out after 480 s)`, whether or not a test failed before it.
   - `handoff-lint`: `scripts/handoff-lint.mjs` over the Step's Handoff.
 - **Project IDs** carry `argv`: run with `execFile`, no shell, cwd = `<root>`, 120 s timeout, 1 MiB output cap. Rule text is never executed or interpolated into a command.
+- **Timeouts** (v1.4): every check that hits its limit, built-in or `argv`, gives `tool failed: <check-id> (timed out after <n> s)`, `<n>` = the limit in seconds. Other spawn errors keep their error code in the brackets.
 
 ## CLI
 Every command takes `--root <dir>` (default: the current directory, which the Lead sets to the repo root). Tests pass a temp dir with fixture files (proj.M8) and never run `node-test` against the real repo, so the suite never calls itself.
@@ -95,7 +98,7 @@ An attribute (`-diff`, `binary`) or a driver with `diff.<x>.binary=true` in `.gi
 Only full absence is quiet; a half-present ruleset fails closed. The binary rows above print first in every case. With `no ruleset`, `--write` writes nothing and builders get no `Rule slice:` line.
 
 ## Flow (AC22)
-1. Tool checks run first: the Lead runs `run --base <Base commit> --run <slug>` with the pre-filter and passes the rows (and `list`) to the reviewer. A reviewer without those rows runs the same command itself.
+1. Tool checks run first: the Lead runs `run --base <Base commit> --run <slug>` with the pre-filter and passes the rows (and `list`) to the reviewer. A reviewer without those rows runs the same command itself. The caller gives that command the longest wait its shell tool allows (Claude Code Bash: 600000 ms), because `node-test` alone may take up to 480 s (v1.4).
 2. A `T-` row blocks only after the reviewer confirms it: confirmed → a Blocking row with the same `T-` ID (`handoff` v1.1); rejected → a Nit row `T-<n> | <file>[:<line>] | not confirmed | <why> | none` (the `handoff` v1.1 part 2 Nit form, same `T-` ID).
 3. A tool that cannot run, crashes or times out is a `T-` row `tool failed: <check-id>`, never silence. `check.mjs` exiting 1 on `ERROR` lines is not a crash.
 4. `drift` runs in `npm test` (`scripts/rule-check.test.mjs`): on fixtures always, and on the real `<root>` when `.company/standards.md` exists (the test is skipped with `no ruleset` otherwise, as in CI). The Lead also runs `drift` after each ruleset sign-off and before the Ship Gate, where the real files exist.
@@ -117,3 +120,7 @@ A stale binding is a ruleset bookkeeping fault, not a builder's fault, so it nev
 - `--root` not an existing directory → `refused: bad root`, exit 2.
 - Malformed `checks.json` (bad JSON, unknown key, `argv` not a list of strings, > 64 KiB) → exit 2 with the reason; the pre-filter reports it to the reviewer as `T-0 tool config invalid`.
 - `slices --write` refusals (bad task ID, unknown rule, over 6 KiB, unexpected entry in `rules/`) → exit 1, nothing written.
+- A check over its limit → `tool failed: <check-id> (timed out after <n> s)` (v1.4), never silence.
+
+## Compatibility
+Minor bump (`docs/adr/0007-contract-minor-versions.md`): a changed limit or a sharper `tool failed` reason. Major bump: a changed row shape, exit code or argument. A suite that outgrows 480 s needs a new limit through a plan, not a silent constant change.

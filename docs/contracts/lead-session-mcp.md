@@ -13,12 +13,14 @@ MCP over stdio: one JSON-RPC 2.0 object per line, UTF-8, LF. A line over 64 KiB 
 - `initialize`: answers the client's `protocolVersion` when it is a `YYYY-MM-DD` string, else `2025-06-18`; `capabilities` `{"tools":{}}`; `serverInfo` `{"name":"lead-session","version":<plugin.json version>}`.
 - `notifications/initialized` and any other notification (an object with no `id`, whatever else it holds): no answer.
 - `ping`: empty result.
-- `tools/list`: the one tool below.
-- `tools/call`: below.
+- `"tools/list"`: the one tool below.
+- `"tools/call"`: below.
 - Bad JSON: `-32700`, id null.
 - `-32600`: valid JSON that is not an object, id null; an `id` that is neither a string nor a number (`null` included), id null; a `method` that is not a string, with the request's id.
 - `-32601`: unknown method with a valid `id`, whatever its `params`.
-- `-32602`: on `initialize`, `ping` or `tools/list`, `params` present and not an object; on `tools/call`, `params` not an object, an unknown tool name or any argument given.
+- `-32602`: on `initialize`, `ping` or `"tools/list"`, `params` present and not an object; on `"tools/call"`, `params` not an object, an unknown tool name or any argument given.
+
+Method names are written in quotes inside the code marks, so the drift check never reads them as file paths.
 
 ## Tool `lead_new_session`
 No arguments: `inputSchema` `{"type":"object","properties":{},"additionalProperties":false}`. The slug comes from the active run, never from the model. Description: `Returns the command that starts a new Lead session after a context hand-over. Starts nothing.`
