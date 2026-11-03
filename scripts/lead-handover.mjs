@@ -456,7 +456,8 @@ export function newSessionCommand(slug) {
   return `claude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`;
 }
 
-// Exclusive-create lock around the context hand-over; a lock older than 30 s is replaced. Null when not taken.
+// Exclusive-create lock; a lock older than 30 s, or dated more than 30 s ahead, is replaced. Null when not taken.
+// The replace is lstat then unlink, so two waiters that see the same stale lock can both end up holding one.
 function takeLock(dir, now, name = LOCK_FILE) {
   const file = path.join(dir, name);
   for (let i = 0; i < 2; i++) {
@@ -467,7 +468,8 @@ function takeLock(dir, now, name = LOCK_FILE) {
     } catch (e) {
       if (e.code !== 'EEXIST') return null;
       const l = lstatOrNull(file);
-      if (!(l && l.isFile() && now - l.mtimeMs > LOCK_STALE_MS)) return null;
+      // A lock that is not a plain file is foreign and never replaced; a future mtime counts as stale.
+      if (!(l && l.isFile() && (now - l.mtimeMs > LOCK_STALE_MS || l.mtimeMs > now + LOCK_STALE_MS))) return null;
       try { fs.unlinkSync(file); } catch { return null; }
     }
   }
@@ -550,7 +552,7 @@ function readReading(dir) {
 }
 
 // Takes the reading lock, waiting up to READING_LOCK_WAIT_MS; a lock left by a crash is replaced after LOCK_STALE_MS.
-// Null when it stays held: the write then goes ahead and relies on the peak merge in writeReading.
+// Null when it stays held, or when the lock name is a folder or link (the wait is then skipped).
 function lockReading(dir) {
   const pause = new Int32Array(new SharedArrayBuffer(4));
   const end = Date.now() + READING_LOCK_WAIT_MS;
@@ -561,26 +563,29 @@ function lockReading(dir) {
   }
 }
 
-// Read-modify-write of the reading: `build(old)` returns the new reading. The lock keeps writers apart; the peak is
-// merged again after the temp file exists, so a writer that got in without the lock is never overwritten by a lower peak.
+// Read-modify-write of the reading: `build(old)` returns the new reading. The lock keeps writers apart. The old
+// reading is read once, so a writer without the lock (needLock false, or a stale-lock steal by two waiters) can still be
+// overwritten by a lower peak; the next write repairs it. With needLock true nothing is written when no lock is taken.
 // Writes through a temp file and a rename; nothing is written when the target is not a regular one-link file.
-function writeReading(dir, build) {
+function writeReading(dir, build, needLock = false) {
   const file = path.join(dir, READING_FILE);
   const lock = lockReading(dir);
   try {
+    if (!lock && needLock) return;
     const l = lstatOrNull(file);
     if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return;
     const tmp = path.join(dir, `.${READING_FILE}.${process.pid}.tmp`);
     const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+    let oversize = false;
     try {
       try {
         const reading = build(readReading(dir));
-        const text = `${JSON.stringify({ v: 1, ...reading })}
-`;
-        if (Buffer.byteLength(text) > MAX_READING) { fs.closeSync(fd); fs.unlinkSync(tmp); return; }
-        fs.writeSync(fd, text);
-      } finally { try { fs.closeSync(fd); } catch { /* already closed */ } }
-      fs.renameSync(tmp, file);
+        const text = `${JSON.stringify({ v: 1, ...reading })}\n`;
+        if (Buffer.byteLength(text) > MAX_READING) oversize = true;
+        else fs.writeSync(fd, text);
+      } finally { fs.closeSync(fd); }
+      if (oversize) fs.unlinkSync(tmp);
+      else fs.renameSync(tmp, file);
     } catch (e) {
       try { fs.unlinkSync(tmp); } catch { /* already gone */ }
       throw e;
@@ -604,7 +609,7 @@ export function measure(text, options) {
     if (!dir) return quiet;
     const ctx = transcriptTokens(p.transcript, claudeDir);
     if (ctx === null) return quiet;
-    writeReading(dir, (old) => ({ session: p.session, ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now) }));
+    writeReading(dir, (old) => ({ session: p.session, ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now) }), true);
     return quiet;
   } catch {
     return quiet;
