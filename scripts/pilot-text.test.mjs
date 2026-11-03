@@ -21,12 +21,14 @@ const bytes = (p) => Buffer.byteLength(read(p), 'utf8');
 
 // Byte budget: pre-run = base bea3242, from `git show bea3242:<path> | wc -c`.
 const PRE = {
+  // handoff +876 B, and +64 B in LOAD_EXTRA for the slack it used, for the session hand-off section and the two Finishing rules (CEO's placement).
   // review +256 B and code-reviewer +35 B for the goldfish first pass (dispatch-prompt v3.6).
   // review +2001 B, code-reviewer +967 B and senior-engineer +971 B for the judging diff, the run-ref and graft refusals and the binary row rules (rule git.M-SEC4, dispatch-prompt v4.0).
   // review +65 B for the Review group pointer (dispatch-prompt v4.4).
   // review +87 B more (fix round 1): a failing binary-content read and a non-UTF-8 path name are Blocking [security] rows, and the grafts check names the git.M-SEC4 (2) query.
   // handoff: 5844 + 348 B for the Worktree rule in Starting a Step rule 6 (a task works in its own worktree, never the product tree; handoff v1.3). The file stays at 70 lines.
-  'skills/handoff/SKILL.md': 6192, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4457,
+  // handoff: 7068 + 638 B for the two context-guard bullets in Context budget (context-guard v1, hard hand-over); both loads carry them through this cap, LOAD_EXTRA unchanged.
+  'skills/handoff/SKILL.md': 7706, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4457,
   // review: 1899 + 149 B for the open-decision Nit paragraph (plan-check v1, v0.16).
   // code-reviewer: +232 B for the judging diff paragraph and the finding ID row rule (rule git.M-SEC4, handoff v1.2).
   // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
@@ -41,7 +43,7 @@ const PRE = {
 // Loads of the reviewer and the senior engineer carry 884 B and 654 B more for the finding ID rows and the contest rule (handoff v1.2) in the shared skills and pilot.md; the budget counts the shared files once per Role, net of the handoff and ruleset text that shrank.
 // Both loads carry 348 B more for the handoff Worktree rule (counted in the handoff cap above) and 225 B for the finding exception form
 // beside the rule form in aico:ruleset (handoff v1.3); the ruleset file itself stays under its own cap.
-const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654 + 146 + 79 + 100 + 654 + 225, 'agents/code-reviewer.md': 127 + 654 + 146 + 79 + 100 + 652 + 225 };
+const LOAD_EXTRA = { 'agents/senior-engineer.md': 132 + 654 + 146 + 79 + 100 + 654 + 225 + 64, 'agents/code-reviewer.md': 127 + 654 + 146 + 79 + 100 + 652 + 225 + 64 };
 const LOAD = {
   'agents/code-reviewer.md': ['agents/code-reviewer.md', 'skills/handoff/SKILL.md', 'skills/review/SKILL.md', 'skills/ruleset/SKILL.md'],
   'agents/senior-engineer.md': ['agents/senior-engineer.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md', 'skills/standards/SKILL.md'],
@@ -65,7 +67,7 @@ test('byte budget: each pilot Role loads at most the pre-run sum, references/pil
     const now = files.reduce((n, f) => n + bytes(f), 0) + bytes(PILOT);
     assert.ok(now <= pre, `${agent} loads ${now} B, pre-run ${pre} B`);
   }
-  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 19751);
+  assert.equal(LOAD['agents/code-reviewer.md'].reduce((n, f) => n + PRE[f], 0), 21265);
 });
 
 test('pilot text lives in references/pilot.md; SKILL.md keeps one pointer', () => {

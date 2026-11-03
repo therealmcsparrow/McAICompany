@@ -15,7 +15,7 @@ The guide is split by topic. Each page has the same three parts: a short plain s
 
 | Folder | What it covers |
 |---|---|
-| [start](start/getting-started.md) | Install, your first run, how a job flows, the three Gates where you approve, the [one-time setup](start/setup.md), and [one walk-through from a rough idea to a merged release](start/idea-to-ship.md) |
+| [start](start/getting-started.md) | Install, your first run, how a job flows, the three Gates where you approve, the [hand-over note](start/setup.md), and [one walk-through from a rough idea to a merged release](start/idea-to-ship.md) |
 | [commands](commands/README.md) | Every `/aico:*` command (the Playbooks), what it does and when to reach for it |
 | [roles](roles/README.md) | All 36 Role agents, grouped by department, and what each one is for |
 | [mods](mods/README.md) | The four mods (Savvy, Cache Tax, Reflect, Blast Radius): what each shows, the shared status line, the cache clock, every `mods.*` setting and the three locks |
@@ -34,7 +34,7 @@ Everything the company produces for a given job lands under `.company/` in your 
 
 ### Version
 
-**Current: 0.26.0** (36 Role agents).
+**Current: 0.26.1** (36 Role agents).
 
 Update an installed copy with:
 

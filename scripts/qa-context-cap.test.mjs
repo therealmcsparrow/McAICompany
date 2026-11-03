@@ -265,7 +265,6 @@ describe('the Lead Handoff still resumes after measure wrote lead-context.json',
     const rows = [{ type: 'user', message: { role: 'user', content: 'hello' } },
       { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }], usage: USAGE } }];
     fs.writeFileSync(file, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
-    sb.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '98500';
     return { sb, file };
   }
   const hook = (sb, cmd, payload) => node(sb, lead, [cmd], { input: JSON.stringify(payload) });
@@ -276,7 +275,7 @@ describe('the Lead Handoff still resumes after measure wrote lead-context.json',
     const reading = JSON.parse(fs.readFileSync(path.join(sb.work, 'lead-context.json'), 'utf8'));
     assert.deepEqual(Object.keys(reading), ['v', 'ctx', 'peak', 'at']);
     assert.equal(reading.ctx, 85500);
-    assert.equal(hook(sb, 'watch', { hook_event_name: 'PreCompact', trigger: 'auto', transcript_path: file }).code, 0);
+    assert.equal(hook(sb, 'watch', { hook_event_name: 'PreCompact', trigger: 'manual', transcript_path: file }).code, 0);
     const written = fs.readFileSync(path.join(sb.work, 'lead-handoff-1.md'), 'utf8');
     const keys = written.split('\n').slice(1, written.split('\n').indexOf('---', 1)).map((l) => l.split(':')[0]);
     assert.deepEqual(keys, ['slug', 'playbook', 'step', 'round', 'base-commit', 'risk-tier', 'tier-path', 'tier-set', 'gate', 'form', 'records', 'running', 'tokens-at-handover', 'window', 'trigger']);
@@ -368,7 +367,8 @@ const TRACE = {
   AC11: [['scripts/ledger-cap.test.mjs', 'agent-ctx refuses hostile ids'], ['mods/test/savvy-ctx.test.tsx', 'failures draw ctx ? and never block the pane']],
   AC12: [['scripts/qa-context-cap.test.mjs', 'check.mjs --drift reports 0 errors']],
   AC13: [['scripts/context-cap-text.test.mjs', 'Ship Gate shows over cap and the Lead peak'], ['scripts/lead-context.test.mjs', 'read prints ctx and peak, with over cap past CAP']],
-  AC14: [['scripts/lead-context.test.mjs', 'warns when neither env nor settings hold 98500']]
+  // lead-handoff v1.7 removed the window warning (ADR 0056); AC14 now holds that begin prints none
+  AC14: [['scripts/lead-context.test.mjs', 'begin prints only begun, with or without the window setting']]
 };
 
 describe('trace: AC1 to AC14 each name a test that exists', () => {

@@ -70,7 +70,7 @@ Most commands run through the shared pipeline, so a few conventions hold everywh
 
 Nothing is pushed or published by these commands.
 
-**Hand-over of the Lead.** A long run can fill the Lead's context. A PreCompact hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records; it reads token counts from the local transcript and stores none of its text. A SessionStart hook with source `compact` injects the newest one after compaction. There is no PostToolUse hook. It needs `CLAUDE_CODE_AUTO_COMPACT_WINDOW` set to `98500` in the `env` block of your user settings; a plugin cannot set it. Without it the Lead hands over only at Claude Code's default point. See [One-time setup](../start/setup.md).
+**Hand-over of the Lead.** A long run can fill the Lead's context. At 85500 tokens a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then freezes that session; it reads token counts from the local transcript and stores none of its text. The `lead_new_session` tool returns the command for a new session, which continues from that file. Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md).
 
 ### Build and change
 | Command | What it does |

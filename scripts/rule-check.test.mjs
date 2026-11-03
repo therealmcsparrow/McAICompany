@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { BINARY_TYPES, escapeBytes, isRealBinaryType, main, parseRuleLine, sha256 } from './rule-check.mjs';
+import { BINARY_TYPES, NODE_TEST_OUTPUT, NODE_TEST_TIMEOUT_MS, escapeBytes, isRealBinaryType, main, parseRuleLine, sha256 } from './rule-check.mjs';
 // Remove the temp dirs this file made, once the run is over.
 const __tmpDirs = [];
 const __mkdtemp = fs.mkdtempSync;
@@ -399,6 +399,26 @@ test('run node-test: a green fixture suite gives no row, a red one gives one row
   assert.ok(rows[0].split(' | ')[2].length <= 160, rows[0]);
 });
 
+test('node-test limits: 480 s and 16 MiB, written in the Contract', () => {
+  assert.equal(NODE_TEST_TIMEOUT_MS, 480000);
+  assert.equal(NODE_TEST_OUTPUT, 16 * MiB);
+  const doc = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'rule-check.md'), 'utf8');
+  assert.ok(doc.includes('timeout 480 s and output cap 16 MiB'));
+});
+
+test('run node-test: a suite past the time limit gives "tool failed" with the limit in seconds', () => {
+  const r = npmFixture('node slow.mjs');
+  write(r, 'slow.mjs', 'setTimeout(() => process.exit(0), 3000);\n');
+  const out = main([...runArgs(r), '--root', r], { timeoutMs: 400 });
+  assert.match(out.lines.join('\n'), /tool failed: node-test \(timed out after 0\.4 s\)/);
+});
+
+test('run node-test: 2 MiB of output from a passing suite gives no row', () => {
+  const r = npmFixture('node loud.mjs');
+  write(r, 'loud.mjs', `process.stdout.write('x'.repeat(${2 * MiB}));\n`);
+  assert.equal(cli(r, [...runArgs(r), '--root', r]).out.trim(), '');
+});
+
 // ---------- run: argv checks ----------
 
 function argvRoot(argv, extra = {}) {
@@ -429,7 +449,7 @@ test('run argv check: exit 0 gives no row; a missing program, a timeout and a fl
   root = argvRoot([process.execPath, '-e', 'setInterval(() => {}, 1000)']);
   const slow = main([...runArgs(root), '--root', root], { timeoutMs: 400 });
   assert.equal(slow.code, 0);
-  assert.match(slow.lines.join('\n'), /tool failed: probe/);
+  assert.match(slow.lines.join('\n'), /tool failed: probe \(timed out after 0\.4 s\)/);
 
   root = argvRoot([process.execPath, '-e', `process.stdout.write('x'.repeat(${2 * MiB}))`]);
   assert.match(cli(root, [...runArgs(root), '--root', root]).out, /tool failed: probe/);

@@ -1,0 +1,1 @@
+{"mcpServers":{"lead-session":{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs"]}}}

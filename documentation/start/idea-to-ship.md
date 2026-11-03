@@ -156,7 +156,7 @@ The script gives every pick in a form a letter, and the forms show the route nam
 
 ### Contexts and hand-overs
 
-Every Role works under one cap: 95000 tokens, with a hand-over at 85500. The Lead hands over by itself through hooks, which needs a [one-time setup](setup.md). You never need to clear a session or type "resume" for it.
+Every Role works under one cap: 95000 tokens, with a hand-over at 85500. The Lead hands over through hooks and points you to a new session; it needs [no setup](setup.md). You never need to clear a session or type "resume" for it.
 
 ### Coming in the next release
 
