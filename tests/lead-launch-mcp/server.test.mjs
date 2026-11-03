@@ -215,4 +215,31 @@ describe('only points', () => {
     const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
     assert.deepEqual(j, { mcpServers: { 'lead-session': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs'] } } });
   });
+
+  // A rename left a stale path once (the "CONNECTION_CLOSED" check): start the server exactly as .mcp.json does.
+  test('.mcp.json args point at a file that exists once CLAUDE_PLUGIN_ROOT is the plugin folder', () => {
+    const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
+    for (const [name, s] of Object.entries(j.mcpServers)) {
+      for (const a of s.args) {
+        const p = a.replaceAll('${CLAUDE_PLUGIN_ROOT}', repo);
+        assert.doesNotMatch(p, /\$\{/, `${name}: unexpanded variable in ${a}`);
+        assert.ok(fs.existsSync(p), `${name}: ${a} does not exist`);
+      }
+    }
+  });
+
+  test('starts from the .mcp.json command, another cwd, and answers initialize with exit 0', () => {
+    const j = JSON.parse(fs.readFileSync(path.join(repo, '.mcp.json'), 'utf8'));
+    const s = j.mcpServers['lead-session'];
+    const args = s.args.map((a) => a.replaceAll('${CLAUDE_PLUGIN_ROOT}', repo));
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-mcp-'));
+    tmps.push(cwd);
+    const r = spawnSync(s.command, args, { cwd, input: rpc(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'x', version: '1' } }), encoding: 'utf8', timeout: 10000, env: { ...process.env, CLAUDE_PLUGIN_ROOT: repo } });
+    assert.equal(r.error, undefined);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    const m = JSON.parse(r.stdout.split('\n').filter(Boolean)[0]);
+    assert.equal(m.id, 1);
+    assert.equal(m.result.serverInfo.name, 'lead-session');
+  });
 });
