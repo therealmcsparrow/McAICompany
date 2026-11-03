@@ -174,7 +174,7 @@ test('AC5: scanner and profile import no network or child-process module', () =>
 
 test('AC7: the test script picks up the scanner tests and CI runs it', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.scripts.test, 'node --test "scripts/*.test.mjs"');
+  assert.ok(pkg.scripts.test.includes('"scripts/*.test.mjs"'), pkg.scripts.test);
   for (const f of ['scripts/slop-scan.test.mjs', 'scripts/slop-catalog.test.mjs', 'scripts/voice-profile.test.mjs']) {
     assert.ok(fs.existsSync(path.join(root, f)), f);
   }

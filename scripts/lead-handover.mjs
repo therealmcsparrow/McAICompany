@@ -339,7 +339,7 @@ const FM_KEYS = [
   ['tokens-at-handover', /^(\d{1,8}|unknown)$/], ['window', /^(\d{1,8}|unknown)$/], ['trigger', /^(auto|manual|context)$/],
 ];
 const NEXT_LINE = /^- (Gate (brief|plan|ship) is open\. Run run-state ask for it and show that Gate form again\.|Form (grill|routes|tickets) is open\. Run idea-flow options and show the form again\.|Step [a-z-]{1,20} is in progress\. Continue it from its file\.|Continue the run from the newest Step Handoff\.|The run records beat this summary\.)$/;
-const SESSION_LINE = /^- New session command: claude "aico lead hand-over: run lead-handover read '[^'%^&|<>"]{1,200}' first, then follow skills\/pipeline\/references\/lead-handover\.md\."$/;
+const SESSION_LINE = /^- New session command: claude "aico lead hand-over: run lead-handover read '[^'%^&|<>"]{1,200}' first, as set out in references\/lead-handover\.md of the skill aico:pipeline, then follow that file\."$/;
 
 // True when the text is exactly a Handoff this script writes for the slug and trigger.
 function validHandoff(text, slug, trigger) {
@@ -448,7 +448,7 @@ export function claudeDirOf(env) {
 // The command that starts a new Lead session on a run; text only. Null for a bad name.
 export function newSessionCommand(slug) {
   if (typeof slug !== 'string' || !isWorkFolder(slug) || /[%^&|<>"]/.test(slug)) return null;
-  return `claude "aico lead hand-over: run lead-handover read '${slug}' first, then follow skills/pipeline/references/lead-handover.md."`;
+  return `claude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-handover.md of the skill aico:pipeline, then follow that file."`;
 }
 
 // Exclusive-create lock around the context hand-over; a lock older than 30 s is replaced. Null when not taken.

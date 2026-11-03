@@ -20,6 +20,6 @@
 ## Technical details
 **You get.** The standalone and stack skills available to the Roles, the company type in your project profile, and, if you approved any, recorded skill picks.
 
-For the one-time Claude Code setting that goes with the Lead hand-over, see [One-time setup](../start/setup.md).
+No setup is needed for the Lead hand-over; see [No setup needed](../start/setup.md).
 
 **Example.** `/aico:setup go react` · `/aico:setup type`

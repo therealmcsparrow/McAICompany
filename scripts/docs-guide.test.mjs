@@ -42,7 +42,7 @@ test('setup page says no setup is needed and names the hard hand-over', () => {
   assert.ok(t.includes('AICO_CONTEXT_GUARD=off'));
   assert.ok(t.includes('85500'));
   assert.doesNotMatch(t, /"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"/);
-  for (const f of ['README.md', 'GLOSSARY.md', 'skills/pipeline/references/lead-handover.md']) assert.doesNotMatch(read(f), /One-time setup|"98500"|set to `98500`|= `98500`/, f);
+  for (const f of ['README.md', 'GLOSSARY.md', 'documentation/commands/setup.md','skills/pipeline/references/lead-handover.md']) assert.doesNotMatch(read(f), /One-time setup|"98500"|set to `98500`|= `98500`/, f);
 });
 
 test('GLOSSARY has Idea flow, Ticket approval, Lead Handoff', () => {
