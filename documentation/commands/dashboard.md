@@ -17,7 +17,7 @@ One local server, no Roles, no Gates, no branch or commit. It reads run data and
 2. The board refreshes by itself. A change to the active run shows within 5 seconds; any other change, including a new run, within 35 seconds. "Pause updates" stops the refreshing until you press it again.
 3. Stop the server by stopping the background task. It also ends itself after 60 idle minutes. Then the page says: `Dashboard server stopped. Run /aico:dashboard for a new link.`
 
-## Options
+**Options.**
 - **Start:** `/aico:dashboard`. The server listens on this computer only (127.0.0.1). The port is chosen by the system; `--port <1024-65535>` pins one.
 - **Stop:** stop the background task, or let the idle timeout end it.
 - **`--lan`:** also listens on every network interface (IPv4), so another device can open the link. The server prints this warning and the page shows a banner:
