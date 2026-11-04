@@ -161,7 +161,7 @@ test('AC18: docs name start, stop, token link, --lan and the warning', () => {
 test('AC18: the skill repeats the --lan warning and names the launch command', () => {
   const skill = read('skills/dashboard/SKILL.md');
   assert.match(skill, /--lan/);
-  assert.match(skill, /dashboard-server\.mjs/);
+  assert.match(skill, /run\.mjs"? dashboard-server serve/);
   assert.match(skill, /warning/i);
   assert.match(skill, /link/i);
 });
