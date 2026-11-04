@@ -268,14 +268,42 @@ test('three failed polls in a row stop the page with no fourth fetch', async () 
   const env = await boot({ responses: [ok(board({})), { status: 500 }, new Error('down'), { status: 404 }] });
   await env.fire();
   assert.match(env.byId('conn').textContent, /Connection lost\. Showing data from \d\d:\d\d:\d\d\. Retrying\./);
+  assert.match(env.byId('status').textContent, /^Connection lost/);
   await env.fire();
-  assert.equal(env.byId('status').textContent, '');
+  assert.match(env.byId('status').textContent, /^Connection lost/);
   await env.fire();
   assert.equal(env.fetches.length, 4);
   assert.equal(env.byId('status').textContent, STOPPED);
   await env.fire();
   await env.fire();
   assert.equal(env.fetches.length, 4);
+});
+
+test('connection loss is announced once in #status, restore once on the next success', async () => {
+  const env = makeEnv({ responses: [ok(board({}), '"a"'), { status: 500 }, { status: 500 }, ok(board({}), '"b"'), { status: 304 }] });
+  const status = env.byId('status');
+  const writes = [];
+  Object.defineProperty(status, 'textContent', {
+    get() { return status.own; },
+    set(v) { writes.push(String(v)); status.own = String(v); },
+    configurable: true
+  });
+  env.ctx.aicoLive.start();
+  await tick();
+  await tick();
+  assert.deepEqual(writes, []);
+  await env.fire(); // 1st failure
+  assert.equal(writes.filter((w) => /^Connection lost/.test(w)).length, 1);
+  assert.match(status.textContent, /^Connection lost/);
+  await env.fire(); // 2nd failure: no repeat
+  assert.equal(writes.filter((w) => /^Connection lost/.test(w)).length, 1);
+  assert.equal(writes.filter((w) => /Connection restored/.test(w)).length, 0);
+  await env.fire(); // success
+  assert.equal(status.textContent, 'Connection restored');
+  assert.equal(writes.filter((w) => /Connection restored/.test(w)).length, 1);
+  await env.fire(); // 304 is a success too: no second announcement
+  assert.equal(writes.filter((w) => /Connection restored/.test(w)).length, 1);
+  assert.equal(writes.filter((w) => /^Connection lost/.test(w)).length, 1);
 });
 
 test('a success between failures resets the count', async () => {
