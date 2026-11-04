@@ -41,8 +41,8 @@ The documentation says: "Before v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` came firs
 ### Choosing models for your Roles
 The shipped models follow one split. Opus does the work that judges or shapes code: `architect` (high effort), `senior-engineer` (medium), `code-reviewer` and `fresh-reviewer` (high). Sonnet at medium effort does the work that writes code: `backend-engineer`, `frontend-engineer`, `desktop-engineer`, `game-engineer`, `ai-data-engineer`, `devops` and `qa`.
 
-A builder gets a planned, test-first task. The architect has already set its Contracts and the senior engineer has mapped the ruleset rules to it, and two reviewers check its diff afterwards. Sonnet is enough for that and costs less than Opus, so keep the defaults unless a run shows otherwise:
-- **The same builder keeps needing Fix rounds.** Raise its `roles.<role>.effort` to `high` first. That costs less than a model change.
+A builder gets a planned, test-first task. The architect has already set its Contracts and the senior engineer has mapped the ruleset rules to it, and two reviewers check its diff afterwards. Sonnet is enough for that, so keep the defaults unless a run shows otherwise:
+- **The same builder keeps needing Fix rounds.** Raise its `roles.<role>.effort` to `high` first. It is the smaller change.
 - **The domain is hard,** for example a game engine core, concurrency, or LLM retrieval and evals. Set that one Role, such as `game-engineer` or `ai-data-engineer`, to `opus`. Do it as a project override in `.company/settings.json` so other products keep Sonnet.
 - **The work is simple or bulk,** for example CRUD endpoints or glue code. Lower the builder's effort to `low`.
 
