@@ -5,6 +5,7 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ## [Unreleased]
 
 ### Added
+- **`/aico:dashboard`.** A read-only local board of all runs with a drawer per run. Each start makes a new link; `--lan` makes run data readable on the local network over plain HTTP. Pull request links call github.com when a drawer opens.
 - **Session hand-off.** `aico:handoff` can write a summary for a fresh agent to the OS temp folder, on request, with a "suggested skills" section.
 
 ### Changed

@@ -132,6 +132,7 @@ These four commands belong to the research, marketing and design companies. In a
 | [`/aico:setup`](setup.md) | Installs skills, sets the company type |
 | [`/aico:language`](language.md) | Shows or sets the language aico writes in |
 | [`/aico:settings`](settings.md) | Opens the local settings page |
+| [`/aico:dashboard`](dashboard.md) | Starts a read-only local board of all runs |
 | [`/aico:help`](help.md) | Lists or explains commands |
 | [`/aico:version`](version.md) | Shows the installed version |
 
