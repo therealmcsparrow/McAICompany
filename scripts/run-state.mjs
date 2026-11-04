@@ -54,6 +54,7 @@ const OPTIONAL = { start: ['aico'], sub: ['session'] };
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
+const lstatBigOrNull = p => { try { return lstatSync(p, { bigint: true }); } catch { return null; } };
 
 class Refusal extends Error {}
 const refuse = reason => { throw new Refusal(reason); };
@@ -82,9 +83,10 @@ function insideWork(root, dir) {
 }
 
 // True when the opened handle is a regular file with one hard link and, when an lstat is given, the same dev and ino.
+// `st` must come from lstat with { bigint: true }: 64-bit file ids lose digits as Numbers.
 export function verifyOpened(fd, st) {
-  const f = fstatSync(fd);
-  return f.isFile() && f.nlink === 1 && (!st || (f.dev === st.dev && f.ino === st.ino));
+  const f = fstatSync(fd, { bigint: true });
+  return f.isFile() && f.nlink === 1n && (!st || (f.dev === st.dev && f.ino === st.ino));
 }
 
 // `expect` (an lstat taken just before) turns on the re-check of the opened handle.
@@ -328,7 +330,7 @@ function normalizeRequest(text) {
   return t.length >= 2 && t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1).trim() : t;
 }
 // A plain file: a regular file with exactly one hard link.
-const isPlain = st => st.isFile() && st.nlink === 1;
+const isPlain = st => st.isFile() && Number(st.nlink) === 1;
 
 function validTriageRecord(o) {
   if (o === null || typeof o !== 'object' || Array.isArray(o)) return false;
@@ -349,7 +351,7 @@ function triageFolder(root) {
   }
   mkdirSync(dir, { recursive: true });
   const ig = join(dir, '.gitignore');
-  const ist = lstatOrNull(ig);
+  const ist = lstatBigOrNull(ig);
   if (ist && !isPlain(ist)) refuse('triage folder is a link');
   let same = false;
   if (ist) {
@@ -362,7 +364,7 @@ function triageFolder(root) {
 // Reads and always deletes request.txt. Returns the text, or null when missing or unreadable.
 function takeRequest(dir) {
   const file = join(dir, 'request.txt');
-  const st = lstatOrNull(file);
+  const st = lstatBigOrNull(file);
   if (!st) return null;
   try {
     if (!isPlain(st) || st.size > MAX_FILE) return null;
@@ -374,7 +376,7 @@ function takeRequest(dir) {
 
 // Returns the valid records of records.jsonl; a link or an oversize file is refused.
 function readTriageRecords(file) {
-  const st = lstatOrNull(file);
+  const st = lstatBigOrNull(file);
   if (!st) return { records: [], raw: '' };
   if (!isPlain(st) || st.size > MAX_FILE) refuse('triage record unreadable');
   let raw;
@@ -408,7 +410,7 @@ function pruneTriage(dir, file, recs, raw, now) {
 function appendTriage(file, kept, record, now) {
   const line = `${JSON.stringify({ v: 1, at: iso(now), ...record })}\n`;
   if (kept.count >= MAX_LINES || kept.size + Buffer.byteLength(line, 'utf8') > MAX_FILE) refuse('triage record full');
-  const before = lstatOrNull(file);
+  const before = lstatBigOrNull(file);
   if (before && !isPlain(before)) refuse('triage record unreadable');
   const fd = openSync(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
   try {
