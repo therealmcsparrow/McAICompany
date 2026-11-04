@@ -55,13 +55,22 @@ function didSummary(folder, realFolder, file) {
   try {
     if (typeof file !== 'string' || !STEP_FILE.test(file)) return null;
     const full = path.join(folder, file);
-    const st = fs.lstatSync(full);
-    if (!st.isFile() || st.nlink !== 1 || st.size > MAX_DID_FILE) return null;
+    const st = fs.lstatSync(full, { bigint: true });
+    if (!st.isFile() || st.nlink !== 1n || st.size > BigInt(MAX_DID_FILE)) return null;
     if (fs.realpathSync.native(full) !== path.join(realFolder, file)) return null;
     fd = fs.openSync(full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const ft = fs.fstatSync(fd);
-    if (!ft.isFile() || ft.nlink !== 1 || ft.dev !== st.dev || ft.ino !== st.ino || ft.size > MAX_DID_FILE) return null;
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(fd));
+    const ft = fs.fstatSync(fd, { bigint: true });
+    if (!ft.isFile() || ft.nlink !== 1n || ft.dev !== st.dev || ft.ino !== st.ino || ft.size > BigInt(MAX_DID_FILE)) return null;
+    // Reads at most cap+1 bytes so a file that grows after fstat cannot pass the cap.
+    const buf = Buffer.alloc(MAX_DID_FILE + 1);
+    let off = 0;
+    while (off < buf.length) {
+      const n = fs.readSync(fd, buf, off, buf.length - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    if (off > MAX_DID_FILE) return null;
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(buf.subarray(0, off));
     const lines = text.split(/\r\n|\r|\n/);
     const start = lines.findIndex((l) => /^##[ \t]+Did[ \t]*$/.test(l));
     if (start < 0) return null;

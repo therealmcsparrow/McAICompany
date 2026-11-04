@@ -79,3 +79,53 @@ test('a .company/work folder linked outside the product does not resolve', (t) =
   }
   assert.equal(resolveRunSlug(root, encodeURIComponent(NAME)), null);
 });
+
+// Round 2: dev/ino are compared as BigInt and reads are bounded through the handle.
+import { run } from './dashboard-run.mjs';
+
+function summaryOf(root, file) {
+  const show = () => ({ steps: [{ step: 1, role: 'qa', status: 'done', round: 1, file }] });
+  return run(root, NAME, { deps: { show, active: () => null, readLedger: () => [] } }).then((v) => v && v.steps[0].summary);
+}
+
+function patched(t, name, wrap) {
+  const orig = fs[name];
+  fs[name] = wrap(orig);
+  t.after(() => { fs[name] = orig; });
+}
+
+test('did summary stats use bigint dev and ino', async (t) => {
+  const root = makeRoot(t);
+  fs.writeFileSync(path.join(root, '.company', 'work', NAME, '01-qa.md'), '## Did\n- ok\n');
+  const seen = [];
+  for (const name of ['lstatSync', 'fstatSync']) {
+    patched(t, name, (orig) => function (target, opts) {
+      if (typeof target !== 'number' || name === 'fstatSync') seen.push([name, opts && opts.bigint === true]);
+      return orig.apply(this, arguments);
+    });
+  }
+  assert.equal(await summaryOf(root, '01-qa.md'), 'ok');
+  const mine = seen.filter(([n]) => n === 'fstatSync');
+  assert.ok(mine.length > 0 && mine.every(([, b]) => b), 'fstat must use bigint');
+  assert.ok(seen.filter(([n]) => n === 'lstatSync').some(([, b]) => b), 'lstat must use bigint');
+});
+
+test('a file that grows past the cap after fstat is refused', async (t) => {
+  const root = makeRoot(t);
+  const big = '## Did\n- ok\n' + 'x'.repeat(40 * 1024);
+  fs.writeFileSync(path.join(root, '.company', 'work', NAME, '01-qa.md'), big);
+  const lie = (orig) => function (target, opts) {
+    const st = orig.apply(this, arguments);
+    if (typeof target !== 'number') return st;
+    return new Proxy(st, { get: (o, k) => (k === 'size' ? (opts && opts.bigint ? 10n : 10) : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
+  };
+  patched(t, 'fstatSync', lie);
+  const lst = fs.lstatSync;
+  patched(t, 'lstatSync', (orig) => function (target, opts) {
+    const st = orig.apply(this, arguments);
+    if (!String(target).endsWith('01-qa.md')) return st;
+    return new Proxy(st, { get: (o, k) => (k === 'size' ? (opts && opts.bigint ? 10n : 10) : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
+  });
+  void lst;
+  assert.equal(await summaryOf(root, '01-qa.md'), null);
+});

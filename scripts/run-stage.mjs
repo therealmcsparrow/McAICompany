@@ -61,7 +61,7 @@ function validRecord(text) {
 function openRegular(file, flags) {
   let lst;
   try {
-    lst = fs.lstatSync(file);
+    lst = fs.lstatSync(file, { bigint: true });
   } catch (error) {
     return { code: error.code === 'ENOENT' ? 'ENOENT' : 'EREFUSED' };
   }
@@ -73,8 +73,8 @@ function openRegular(file, flags) {
     return { code: 'EREFUSED' };
   }
   try {
-    const st = fs.fstatSync(fd);
-    if (!st.isFile() || st.nlink !== 1 || st.dev !== lst.dev || st.ino !== lst.ino) {
+    const st = fs.fstatSync(fd, { bigint: true });
+    if (!st.isFile() || st.nlink !== 1n || st.dev !== lst.dev || st.ino !== lst.ino) {
       fs.closeSync(fd);
       return { code: 'EREFUSED' };
     }
@@ -83,6 +83,19 @@ function openRegular(file, flags) {
     fs.closeSync(fd);
     return { code: 'EREFUSED' };
   }
+}
+
+// Reads at most MAX_FILE + 1 bytes through the handle; throws when the file is over the cap (it grew after fstat).
+function readCapped(fd) {
+  const buf = Buffer.alloc(MAX_FILE + 1);
+  let off = 0;
+  while (off < buf.length) {
+    const n = fs.readSync(fd, buf, off, buf.length - off, off);
+    if (n === 0) break;
+    off += n;
+  }
+  if (off > MAX_FILE) throw new Error('too large');
+  return buf.toString('utf8', 0, off);
 }
 
 export function readStage(root, slug) {
@@ -96,8 +109,8 @@ export function readStage(root, slug) {
   if (opened.code) return bad;
   let raw;
   try {
-    if (opened.st.size > MAX_FILE) return bad;
-    raw = fs.readFileSync(opened.fd, 'utf8');
+    if (opened.st.size > BigInt(MAX_FILE)) return bad;
+    raw = readCapped(opened.fd);
   } catch {
     return bad;
   } finally {
@@ -136,8 +149,8 @@ export function setStage(root, slug, stage, now = new Date()) {
   }
   if (opened.code) return unreadable;
   try {
-    if (opened.st.size + line.length > MAX_FILE) return { reason: 'stage file full' };
-    const raw = fs.readFileSync(opened.fd, 'utf8');
+    if (opened.st.size + BigInt(line.length) > BigInt(MAX_FILE)) return { reason: 'stage file full' };
+    const raw = readCapped(opened.fd);
     if (raw.length > 0 && !raw.endsWith(NL)) return unreadable;
     if (raw.split(NL).length - 1 >= MAX_LINES) return { reason: 'stage file full' };
     fs.writeSync(opened.fd, line);

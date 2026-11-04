@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readStage, setStage, main, STAGES } from './run-stage.mjs';
+import { readStage, setStage, main, STAGES, MAX_FILE } from './run-stage.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run-stage.mjs');
 const SLUG = '2026-11-04 01.19 - Skillset Dashboard Draft';
@@ -274,5 +274,46 @@ describe('usage', () => {
       assert.equal(r.code, 2);
       assert.match(r.text, /^usage:/);
     }
+  });
+});
+
+describe('round 2: bigint identity and bounded reads', () => {
+  const NAME2 = '2026-11-04 01.19 - Skillset Dashboard Draft';
+  function mk(t) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stage-r2-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    fs.mkdirSync(path.join(root, '.company', 'work', NAME2), { recursive: true });
+    return root;
+  }
+  function patch(t, name, wrap) {
+    const orig = fs[name];
+    fs[name] = wrap(orig);
+    t.after(() => { fs[name] = orig; });
+  }
+
+  test('lstat and fstat of the stage file use bigint', (t) => {
+    const root = mk(t);
+    assert.deepEqual(setStage(root, NAME2, 'build'), { ok: true });
+    const seen = [];
+    for (const name of ['lstatSync', 'fstatSync']) {
+      patch(t, name, (orig) => function (target, opts) {
+        if (name === 'fstatSync' || String(target).endsWith('stage.jsonl')) seen.push([name, !!(opts && opts.bigint)]);
+        return orig.apply(this, arguments);
+      });
+    }
+    assert.equal(readStage(root, NAME2).state, 'recorded');
+    assert.ok(seen.some(([n]) => n === 'lstatSync') && seen.some(([n]) => n === 'fstatSync'));
+    assert.ok(seen.every(([, b]) => b), JSON.stringify(seen));
+  });
+
+  test('a stage file that grows past the cap after fstat is refused', (t) => {
+    const root = mk(t);
+    const file = path.join(root, '.company', 'work', NAME2, 'stage.jsonl');
+    fs.writeFileSync(file, 'x'.repeat(MAX_FILE * 2));
+    patch(t, 'fstatSync', (orig) => function (fd, opts) {
+      const st = orig.apply(this, arguments);
+      return new Proxy(st, { get: (o, k) => (k === 'size' ? (opts && opts.bigint ? 5n : 5) : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
+    });
+    assert.equal(readStage(root, NAME2).state, 'unreadable');
   });
 });
