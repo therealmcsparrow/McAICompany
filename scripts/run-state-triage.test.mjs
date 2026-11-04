@@ -542,11 +542,30 @@ test('verifyOpened accepts the same plain file and refuses another file or a sec
   fs.writeFileSync(b, 'b');
   const fda = fs.openSync(a, 'r');
   try {
-    assert.equal(verifyOpened(fda, fs.lstatSync(a)), true);
-    assert.equal(verifyOpened(fda, fs.lstatSync(b)), false);
+    assert.equal(verifyOpened(fda, fs.lstatSync(a, { bigint: true })), true);
+    assert.equal(verifyOpened(fda, fs.lstatSync(b, { bigint: true })), false);
     assert.equal(verifyOpened(fda, null), true);
     if (hardlink(t, a, path.join(base, 'vo-c.txt'))) assert.equal(verifyOpened(fda, null), false);
   } finally { fs.closeSync(fda); }
+});
+
+// File ids are 64-bit on NTFS: the check compares them as bigint, so an id one apart is never "the same file".
+test('verifyOpened compares dev and ino exactly as bigint', () => {
+  const a = path.join(base, 'vo-big.txt');
+  fs.writeFileSync(a, 'a');
+  const fd = fs.openSync(a, 'r');
+  try {
+    const st = fs.lstatSync(a, { bigint: true });
+    assert.equal(typeof st.ino, 'bigint');
+    assert.equal(verifyOpened(fd, st), true);
+    for (const delta of [1n, -1n]) {
+      assert.equal(verifyOpened(fd, { dev: st.dev, ino: st.ino + delta }), false, `ino ${delta}`);
+    }
+    assert.equal(verifyOpened(fd, { dev: st.dev + 1n, ino: st.ino }), false);
+    assert.equal(verifyOpened(fd, { dev: st.dev, ino: st.ino }), true);
+    // Number stats are lossy for 64-bit ids and are no longer accepted as the lstat.
+    assert.equal(verifyOpened(fd, fs.lstatSync(a)), false);
+  } finally { fs.closeSync(fd); }
 });
 
 // Fix route (v1.4): the fix line is recorded by issue and checked only with --route fix.

@@ -4,12 +4,26 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-11-04
+
+Rollback: node scripts/stable.mjs 0.26.1
+
 ### Added
 - **`/aico:dashboard`.** A read-only local board of all runs with a drawer per run. Each start makes a new link; `--lan` makes run data readable on the local network over plain HTTP. Pull request links call github.com when a drawer opens.
 - **Session hand-off.** `aico:handoff` can write a summary for a fresh agent to the OS temp folder, on request, with a "suggested skills" section.
+- **A guide to choosing models for your Roles.** `documentation/concepts/model-choice.md` has a new section, "Choosing models for your Roles": the shipped Opus/Sonnet split, when to raise a builder's effort, when to set one Role to `opus` in `.company/settings.json`, and when to lower effort.
 
 ### Changed
 - **Handoffs link instead of repeat, and redact.** Role Handoffs must not duplicate specs, plans, ADRs, issues, commits or diffs, and must redact secrets and personal data.
+- **Lead hand-over starts lean.** A Lead started from a hand-over boots from the new `skills/pipeline/references/lead-resume.md` (state lines, newest Handoff, next Step) instead of loading the full hand-over rules, so a fresh Lead stays well under the hand-over point. The new-session line and the `resume` header name that file. Contracts: `lead-handoff` v1.8, `lead-session-mcp` v1.1, `context-guard` (text only, uses `lead-handoff` v1.8).
+- **The Lead reading is kept per session.** `lead-context.json` now carries a `session` tag, and a new `SessionStart` hook (`lead-handover start`, for `startup`, `resume` and `clear`) resets the current reading for the new session while the run-wide peak stays. `lead-handover read` adds a `lead session` line after `lead peak`.
+- **Docs.** `documentation/start/setup.md` and `documentation/concepts/lead-handover.md` cite the new contract versions.
+
+### Fixed
+- **The lead-session MCP server registers from the plugin manifest.** It is now under `mcpServers` in `.claude-plugin/plugin.json`, and the repo-root `.mcp.json` is removed. The 0.26.1 Known issue about the root `.mcp.json` is resolved: Claude Code no longer reads it a second time as a project-scope server, where the `CLAUDE_PLUGIN_ROOT` variable is not expanded and node exited 1. The server is registered once, at plugin scope.
+- **The Lead reading no longer drops its peak.** Two writers racing on `lead-context.json` could overwrite a higher peak with a lower one. Writes now take an exclusive lock (`lead-context.lock`, waits up to 500 ms, a stale lock is replaced). A folder or link at the lock name is never waited on, and the peak is not lost. A lock dated more than 30 s ahead is treated as stale for the freeze lock too.
+- **A Lead started from a hand-over no longer loops.** A fresh session read the old session's context as its own and handed over again at once; the session tag and the reset above stop that.
+- **The file identity re-check is exact on Windows.** `run-state.mjs` (triage record and request reads) and `cost-source.mjs` compared 64-bit file ids as plain numbers, so two different files could look the same on NTFS and a swapped file could pass the check. Both now compare the ids as BigInt. This also fixes a rare failing Windows test run.
 
 ## [0.26.1] - 2026-11-03
 

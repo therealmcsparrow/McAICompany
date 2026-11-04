@@ -187,7 +187,7 @@ export function readCost(root, run, { limits } = {}) {
   const file = metricsPath();
   let lst;
   try {
-    lst = fs.lstatSync(file);
+    lst = fs.lstatSync(file, { bigint: true });
   } catch (error) {
     return none(error?.code === 'ENOENT' || error?.code === 'ENOTDIR' ? 'no-file' : 'unreadable');
   }
@@ -197,14 +197,14 @@ export function readCost(root, run, { limits } = {}) {
   } catch {
     return none('unreadable');
   }
-  if (!dir.isDirectory() || !lst.isFile() || lst.nlink !== 1) return none('unreadable');
+  if (!dir.isDirectory() || !lst.isFile() || lst.nlink !== 1n) return none('unreadable');
   if (lst.size > caps.file) return none('too-large');
   const acc = { micros: 0n, points: 0, skipped: 0, cumulative: false };
   let fd;
   try {
     fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const st = fs.fstatSync(fd);
-    if (!st.isFile() || st.nlink !== 1 || (lst.ino !== 0 && (st.ino !== lst.ino || st.dev !== lst.dev))) return none('unreadable');
+    const st = fs.fstatSync(fd, { bigint: true });
+    if (!st.isFile() || st.nlink !== 1n || (lst.ino !== 0n && (st.ino !== lst.ino || st.dev !== lst.dev))) return none('unreadable');
     eachLine(fd, caps, (buf) => {
       const text = buf.toString('utf8').trim();
       if (text === '') return;
