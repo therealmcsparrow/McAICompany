@@ -1,6 +1,6 @@
-# Contract: run-state v1.7
+# Contract: run-state v1.8
 
-Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`.
+Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`; from v1.8 the `dashboard` v1 Modules, through the exported `list`, `active` and `show` only.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
 v1.1 is additive (minor bump, `docs/adr/0007-contract-minor-versions.md`; rationale `docs/adr/0024-reprompt-playbook-owns-the-flow.md`): it adds the `pick` event and the view's `picks` list, so the CEO's answer to the reprompt form can be counted (success metric), and it bounds the view's `round` to what the mods accept. Every v1 file is a valid v1.1 file and gives the same view plus `"picks": []`. A v1 reader skips a `pick` line with its usual `line <n> skipped` warning; `reflect.mjs` ignores it.
 v1.2 is additive (rationale `docs/adr/0027-triage-record.md`): it adds the triage record ("Triage record"), the commands `triage issue` and `triage check <nonce>`, and the folder `.company/triage/`. Run files, records, the run view, `show` and `active` are unchanged; `active` never reads `.company/triage/`.
@@ -11,6 +11,8 @@ v1.4 is additive (task low-tier-path): the triage record also proves an approved
 v1.6 is additive (task idea-20261030-2242-build-draft): `<slug>` also accepts a work folder name of `work-folder-name` v1 (`<YYYY-MM-DD HH.MM> - <Topic>`, with the Build or Draft suffix and a Draft number), through its `isWorkFolder`; the legacy slug shape stays valid and a legacy folder is never renamed. Every other name is `refused: bad slug`, without the name echoed. A run folder is used only when its real path is the folder of that name inside the real `.company/work`. Every v1.5 call and file behaves as before.
 
 v1.7 is additive (task draft-input-folder-case-draft): every command that takes `<slug>` (and `show`, and the `gate <slug> plan passed` scan) checks the letter case of `.company`, `work` and `<slug>` against the folder entries on disk (`work-folder-name` v1.1, `exactWorkPath`), after the `bad slug` shape check. A spelling that matches a folder only in another ASCII letter case is `refused: wrong letter case` (exit 2), with no run folder, line or file written. The case-fold in the run folder real-path compare is removed. A folder missing in every case behaves as before (`start` makes it). Every v1.6 call with the exact spelling behaves as before.
+
+v1.8 is additive (task 2026-11-04 01.19 - Skillset Dashboard Draft; rationale `docs/adr/0057-dashboard-reads-script-json-only.md`): it adds the command `list --json` and the exported `list` ("Run list"), exports `active` beside `show`, and adds the view keys `waves` and `open_ask` and the step keys `verdict` and `gate`. Records, storage, writes and every v1.7 command are unchanged; no new event is written. A v1.7 reader of the view ignores the new keys. Every v1.7 file gives the same view plus `"waves": [...]`, `"open_ask": ...` and, on each step, `"verdict": null, "gate": null` unless the Handoff frontmatter carries them.
 
 ## Storage
 - `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a work folder name (`isWorkFolder` of `mods/lib/work-folder.mjs`, `work-folder-name` v1): a new name or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. The name holds spaces and dots, so a shell line quotes it in single quotes.
@@ -50,6 +52,7 @@ v1.7 is additive (task draft-input-folder-case-draft): every command that takes 
 | `end <slug> <ship\|abort>` | appends `end`, closing the segment. Refused without an open segment. |
 | `show <slug> --json` | prints the run view (below), exit 0 even for a missing or damaged file |
 | `active --json` | prints `{ "slug": <slug or null>, "view": <run view or null> }` for the active run, exit 0 |
+| `list --json` | (v1.8) prints the run list (below), exit 0; reads only, writes nothing |
 | `triage issue` | (v1.2) reads and deletes `request.txt`, appends an `issue` record, prints `{"nonce":"<32 hex>","type":"<type>"}` (Triage record) |
 | `triage check <nonce> [--route fix]` | (v1.2; `--route fix` v1.4) reads and deletes `request.txt`, prints `{"trusted":true,"type":"<type>"}` and appends `used`, or `{"trusted":false,"reason":"<reason>"}`; exit 0 both (Triage record) |
 
@@ -63,19 +66,36 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
   "ceo": [{ "gate": "ship", "n": 3, "at": "<at>" }],
   "subs": [{ "role": "qa", "id": "<12 hex>", "start": "<at>", "stop": "<at>|null", "ms": 5000 }],
   "sessions": ["<uuid>"],
+  "waves": [{ "wave": 1, "at": "<at>" }],
+  "open_ask": { "gate": "plan", "at": "<at>" },
   "round": 1, "tier": "low|medium|high|unknown",
-  "steps": [{ "step": "05", "role": "backend-engineer", "status": "done", "round": 0, "file": "05-backend-engineer.md", "mtime": "<at>" }],
+  "steps": [{ "step": "05", "role": "backend-engineer", "status": "done", "round": 0, "file": "05-backend-engineer.md", "mtime": "<at>", "verdict": null, "gate": null }],
   "warnings": ["line 7 skipped"] }
 ```
 - `picks` (v1.1): every `pick` of the last segment, in file order; `[]` when none. Placed directly after `gates`.
-- `wait` (v1.3): whole seconds from the latest `ask` for the same Gate that comes after the previous `gate` entry for that Gate (or after the segment `start`) to this entry's `at`; `null` when there is no such `ask` (an `auto` Gate, or a v1.2 file) or the result would be negative. `ask` lines appear nowhere else in the view.
+- `wait` (v1.3): whole seconds from the latest `ask` for the same Gate that comes after the previous `gate` entry for that Gate (or after the segment `start`) to this entry's `at`; `null` when there is no such `ask` (an `auto` Gate, or a v1.2 file) or the result would be negative. `ask` lines appear nowhere else in the view, except in `open_ask` (v1.8).
 - `ceo`, `subs`, `sessions` (v1.5): of the last segment; `[]` when none. `ceo`: every `ceo` in file order. `subs`: a `start` opens an entry; a `stop` closes the latest open entry with the same `id` (`stop`, and `ms` = whole milliseconds, never negative); a `stop` with no open entry is its own entry with `start` and `ms` `null`; a `start` never stopped has `stop` and `ms` `null`. `sessions`: the distinct `session` values, first-seen order. `report`, `scorecard`, `receipt` and the Gate Report never print a session.
+- `waves` (v1.8): every `wave` record of the last segment, in file order, as `{ "wave", "at" }`; `[]` when none. The older `wave` key (the latest wave) is unchanged.
+- `open_ask` (v1.8): `{ "gate": "brief|plan|ship", "at": "<at>" }` for the latest `ask` of the last segment that has no `gate` record for the same Gate after it in file order; `null` when there is none. It says a Gate form is shown and not yet answered. A v1.7 reader ignores the key.
 - `steps`: every `^\d{2}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`; a step's `round` is allowed as a whole number 0–99 (v1.1; a reprompt run's edits have no cap, so its rounds can pass 99).
+- Step keys `verdict` and `gate` (v1.8): `verdict` is the frontmatter `verdict:` when it is `approve`, `changes` or `blocked`; `gate` is the frontmatter `gate:` when it is `pass` or `fail`. Absent, or any other value → `null`. Both are read inside the same 8 KiB frontmatter limit; nothing else of the Handoff is read.
 - `round` = highest numeric `round:` among `steps` (so 0–99), else `0`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
 - Times and order come from the file; the view uses only the last segment (from the last `start`).
 
 ## Active run
-`active` picks, among `.company/work/*/run-state.jsonl` (at most 200 folders), the one whose last segment has no `end` and whose newest activity (last record, or newest Step file mtime) is the most recent. A segment with no activity for 12 hours is `stale` and never active. No candidate → `{ "slug": null, "view": null }`.
+`active` picks, among `.company/work/*/run-state.jsonl` (at most 200 folders), the one whose last segment has no `end` and whose newest activity (last record, or newest Step file mtime) is the most recent. A segment with no activity for 12 hours is `stale` and never active. No candidate → `{ "slug": null, "view": null }`. (v1.8) `active(root, { now })` exported by `scripts/run-state.mjs` returns the same object as `active --json`.
+
+## Run list (v1.8)
+`list --json`, and `list(root, { now })` exported by `scripts/run-state.mjs`, give every run of the product as one object:
+```json
+{ "v": 1, "runs": [{ "slug": "x", "state": "running|ended|stale|none|unreadable", "started": "<at>|null",
+  "ended": "<at>|null", "outcome": "ship|abort|null", "tier": "low|medium|high|unknown|null", "round": 0 }],
+  "warnings": [] }
+```
+- Entries: every work folder in `.company/work` (no recursion) that holds `run-state.jsonl`, at most 200 folders, checked like `show` (`isWorkFolder`, exact letter case, `lstat` folder, real path inside the real `.company/work`); a folder that fails is left out with no name in any warning. Order: newest `started` first; entries with a `null` `started` last, then by slug.
+- Fields come from the run view of that folder (`show`): `slug`, `state`, `started`, `ended`, `outcome`, `tier`, `round`.
+- `state` is the view `state`, or `unreadable` when `show` gives `state: none` with the warning `run-state unreadable` (the file is a link, not a regular file, or over 64 KiB). An `unreadable` entry has every other field but `slug` set to `null` and is its own entry; it never makes the whole list fail. Bad lines alone are skipped as in `show` and do not make an entry `unreadable`.
+- `warnings`: `over 200 runs` when folders were left out by the cap; nothing else. No CEO text, Handoff text or step list is in the list.
 
 ## How the pipeline uses it (`aico:pipeline`, Core)
 - Setup, once the slug is known: `start <slug> <aico>` (v1.5, `<aico>` read from `plugin.json`; omitted when unreadable).
@@ -86,6 +106,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - A run resumed with "resume <slug>" after an `end` runs `start <slug>` again.
 - (v1.5) Needs-ceo questions from Steps of one wave are held until the wave ends and shown as one form; at a Gate they join that Gate's form (`skills/pipeline/references/ceo-pack.md`). After each form: `ceo <slug> <gate> <n>`. A prompt outside any form is recorded as `ceo <slug> none <n>`. The older "ask each `needs-ceo` at once" rule no longer applies.
 - (v1.5) The pipeline never writes `sub`; the `step-times` hook does.
+- (v1.8) The pipeline never runs `list`; it adds no write. The dashboard derives a waiting Gate from `open_ask`, so no new Lead record is needed.
 - The Lead never edits the file by hand; a refused command is reported in the next Gate summary and the run goes on (run-state never blocks a Step or a Gate, except `gate <slug> plan passed` under `plan_check.policy` `block`; the Lead then stops the run at the Plan Gate and does not report and skip that refusal).
 - (v1.1) The pipeline never writes `pick`; only `aico:reprompt` does (`reprompt` v1, Lead flow step 7).
 - (v1.2) The pipeline never runs `triage`; only `aico:triage` (`issue`) and `aico:lead` (`check`) do (`company-type` v1.3 "Trust rule").
@@ -134,6 +155,7 @@ No request text, no route or tier, no names: hashes, an event and a time only.
 ## Error cases
 - Missing file → `state: none`, empty `gates` and `picks`, `steps` still listed.
 - Bad line (invalid JSON, unknown key, over 256 bytes, CR byte) → skipped, `warnings: ["line <n> skipped"]`.
-- File over 64 KiB or a symlink → `state: none`, `warnings: ["run-state unreadable"]`; writes refused.
+- File over 64 KiB or a symlink → `state: none`, `warnings: ["run-state unreadable"]`; writes refused. (v1.8) In `list` that run is one entry with `state: unreadable`.
+- (v1.8) `list`: no `.company/work` folder, or it is a link → `{ "v": 1, "runs": [], "warnings": [] }`, exit 0. A failure on one folder never ends the list.
 - Bad `<slug>`, unknown gate (on `gate`, `ask` or `ceo`), result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3, `n` outside 1–20, a bad `sub` role, id, phase or session, a bad `aico` → `refused`, nothing written.
 - (v1.2) `triage`: a link in the path, or `.gitignore` or `records.jsonl` with more than one hard link ("Plain files only"; a hard-linked `request.txt` is not a refusal: it counts as missing, `check` exits 0 with `no request`), `records.jsonl` unreadable or over 64 KiB when read (checked before pruning), a bad nonce, or any other error → `refused: <reason>`, exit 2, nothing appended. `request.txt` is still deleted once read. After a refusal for a link at `.company` or `.company/triage`, the unlink of the name `request.txt` is resolved through that link and reaches the link target; it is never read, and it happens only when it is a regular file with one hard link whose mtime is within the last 10 minutes (the Write just made it), else it is left in place. A refusal for a hard-linked `.gitignore` follows the same rule. A refused `issue` means no direct route (`company-type` v1.3); a refused `check` means untrusted. The rest of run-state is unaffected.
