@@ -32,7 +32,9 @@ One local server, no Roles, no Gates, no branch or commit. It reads run data and
 - The link is in your session transcript.
 - Anyone who has the link can read the runs, including names in Handoffs, until the server stops.
 
-**Where data goes.** Without `--lan`, nothing leaves your computer except the pull request and issue links in a run's drawer, which call github.com through the `gh` tool when you open the drawer. With `--lan`, run data is readable on your local network. The server stores no run or PR data on disk.
+**Where data goes.** Without `--lan`, run data stays on your computer. The one exception is the pull request and issue links in a run's drawer: when you open the drawer, the `gh` tool calls github.com. With `--lan`, run data is readable on your local network. The server stores no run or PR data on disk.
+
+**Personal data and `--lan`.** Handoffs can name people, and names are personal data under the GDPR. With `--lan` those names are readable by anyone on your network who has the link, over plain HTTP. You are responsible for that, or your client is if the run is for a client. If a run holds client data, check the client contract (confidentiality or data processing agreement) before you use `--lan`.
 
 **Token use.** The card shows tokens ("tokens, not cost"), not money. Dollars appear only where a cost source has them.
 

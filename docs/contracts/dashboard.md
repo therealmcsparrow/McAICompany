@@ -11,7 +11,7 @@ Why it exists: the CEO sees every run, its stage, the Gate it waits on and its t
 - No dashboard Module parses `run-state.jsonl`, `stage.jsonl`, `intake.jsonl` or a ledger file itself.
 
 ## Board: `board(root, { now, deps })`
-Exported by `dashboard-data.mjs`; `board` exported by `scripts/dashboard-data.mjs`. `deps` replaces the reader functions in tests; the defaults are the providers under Uses.
+`board` is exported by `scripts/dashboard-data.mjs`. `deps` replaces the reader functions in tests; the defaults are the providers under Uses.
 ```json
 { "v": 1, "generated": "<at>", "active": "<slug>|null", "inflight": 0,
   "columns": [{ "id": "intake|brief|plan|build|review|ship-gate|needs-ceo|done", "cards": [] }],
@@ -48,10 +48,10 @@ Exported by `dashboard-data.mjs`; `board` exported by `scripts/dashboard-data.mj
 `stageNote` is `null` unless rule 4 placed the card. A `stale` run keeps its column.
 
 ### `refreshActive(root, prev, { now, deps })`
-Exported by `dashboard-data.mjs`; returns a new board equal to `prev` except the active run's card, `active` and `inflight`, recomputed from run-state `show`, `readStage` and `readLedger` for `prev.active` only. A run started since `prev` appears at the next full `board()`.
+Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` except the active run's card, `active` and `inflight`, recomputed from run-state `show`, `readStage` and `readLedger` for `prev.active` only. A run started since `prev` appears at the next full `board()`.
 
 ## Token reader: `readLedger(root, slug, { spawn, timeoutMs, cache })`
-`readLedger` exported by `scripts/dashboard-tokens.mjs`. Resolves to `{ "state": "ok|none|unavailable", "totals": { "spend", "cacheRead" }|null, "overCap": [{ "step", "role", "ctxEnd" }] }`.
+`readLedger` is exported by `scripts/dashboard-tokens.mjs`. It resolves to `{ "state": "ok|none|unavailable", "totals": { "spend", "cacheRead" }|null, "overCap": [{ "step", "role", "ctxEnd" }] }`.
 - `.company/ledger/<slug>.jsonl` missing by `lstat` (a link counts as missing) → `none`, no spawn.
 - Else spawns `process.execPath` with `[<ledger.mjs beside this script>, "report", <slug>, "--json"]`, `shell: false`, cwd `root`, timeout 5 s (`timeoutMs`), stdout at most 1 MiB; at most 4 children at once, others wait.
 - Non-zero exit, timeout, stdout over 1 MiB, unparsable JSON or `v` other than 1 → `unavailable`.
@@ -59,7 +59,7 @@ Exported by `dashboard-data.mjs`; returns a new board equal to `prev` except the
 - Cache key: slug, ledger `mtimeMs` and `size`. A result, failures included, is reused while the key is unchanged, so an unchanged ledger is never spawned twice.
 
 ## Run: `run(root, slug, { now, deps })`
-`run` and `routing` exported by `scripts/dashboard-run.mjs`.
+`run`, `routing` and `resolveRunSlug` are exported by `scripts/dashboard-run.mjs`.
 ```json
 { "v": 1, "slug": "<slug>", "steps": [{ "step": "05", "role": "qa", "status": "done", "round": 0, "summary": "…"|null }],
   "rounds": [{ "round": 0, "gate": "pass|fail"|null, "review": "approve|changes|blocked"|null }],
@@ -99,7 +99,7 @@ Every request, in this order:
 Token: 32 bytes of `crypto.randomBytes`, base64url without padding (43 characters), made at each start, held only in memory, printed only inside the URL lines, never written to disk, logged, or put in any response body or header. It applies in both modes.
 
 ## HTTP API (paths after the prefix)
-- `` (empty: the page `index.html`), `board.js`, `drawer.js`, `live.js`: the page assets.
+- the bare prefix `/t/<token>/` (the page `index.html`), `board.js`, `drawer.js`, `live.js`: the page assets.
 - `api/board`: the `board()` result plus the top-level key `"lan": <boolean>` (`true` only when started with `--lan`), always present and part of the `ETag` input. `board()` itself takes no flag.
 - `api/run/<slug>`: the `run()` result. `api/run/<slug>/links`: the pr-links v1 `lookup()` result.
 - `<slug>` goes through `resolveRunSlug`; `null` → 404. Any other path, `/t/<token>` without the last `/` included → 404.

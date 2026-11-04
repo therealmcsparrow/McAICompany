@@ -17,4 +17,4 @@ Read-only, starts nothing, no Gates.
 ## Technical details
 **You get.** A short explanation in the terminal. The list shows only the commands of your [company type](../concepts/company-types.md).
 
-**Example.** `/aico:help pentest` · `/aico:cooler help`
+**Example.** `/aico:help pentest` · `/aico:cooler help` · `/aico:help dashboard` (the read-only board of your runs; see [dashboard](dashboard.md))
