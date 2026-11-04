@@ -6,14 +6,14 @@ argument-hint: "[help] [--lan] [--port <1024-65535>]"
 
 # Playbook: dashboard
 
-**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/dashboard.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options (start, stop, `--lan` and its warning), what it does and an example, in the language of `aico:pipeline` §1.6; start nothing, and stop.
+**Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/dashboard.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook dashboard` first; exit not 0 → show its output line and stop.
 
 The dashboard is a small read-only local server. It writes no file and changes no run. Run it from the product repo (the current directory).
 
-1. Allow only the flags `--lan` and `--port <1024-65535>`. Anything else → show the usage line `node --disable-proto=delete "${CLAUDE_PLUGIN_ROOT}/scripts/dashboard-server.mjs" serve [--lan] [--port <1024-65535>]` and stop.
-2. Run `node --disable-proto=delete "${CLAUDE_PLUGIN_ROOT}/scripts/dashboard-server.mjs" serve` plus the flags, with the Bash tool's `run_in_background`. It does not exit on its own, so do not wait for it.
+1. Allow only the flags `--lan` and `--port <1024-65535>`. Anything else → show the usage line `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" dashboard-server serve [--lan] [--port <1024-65535>]` and stop.
+2. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" dashboard-server serve` plus the flags, with the Bash tool's `run_in_background`. It does not exit on its own, so do not wait for it.
 3. Read the background output for the line `aico dashboard: <url>` (with `--lan` also `aico dashboard (LAN): <url>` lines). If it does not appear, or the process exits, show what it printed and stop.
 4. Give the CEO each complete `<url>`, including the `/t/<token>/` part; never shorten it. The server does not open a browser.
 5. With `--lan`, repeat the server's `WARNING:` line unchanged.

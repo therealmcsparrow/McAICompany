@@ -40,7 +40,7 @@ One local server, no Roles, no Gates, no branch or commit. It reads run data and
 
 **Page texts.** `Updates paused`, `Updates resumed`, and the stopped text above are fixed.
 
-**Launch command** (the skill runs it): `node --disable-proto=delete "<plugin root>/scripts/dashboard-server.mjs" serve [--lan] [--port <n>]`.
+**Launch command** (the skill runs it): `node "<plugin root>/scripts/run.mjs" dashboard-server serve [--lan] [--port <n>]`.
 
 **You get.** The full link in the terminal, and a read-only board in your browser.
 
