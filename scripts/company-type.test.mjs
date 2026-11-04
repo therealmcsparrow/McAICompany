@@ -419,7 +419,7 @@ test('registry lookup never touches the file system with the project value', () 
 
 // Behaviour.
 
-test('software is every agent but the editor: 35 Roles, 24 Playbooks, 33 commands with ALWAYS', () => {
+test('software is every agent but the editor: 35 Roles, 25 Playbooks, 34 commands with ALWAYS', () => {
   const r = json(['resolve'], project(null));
   assert.equal(r.code, 0);
   const out = JSON.parse(r.out);
@@ -432,9 +432,9 @@ test('software is every agent but the editor: 35 Roles, 24 Playbooks, 33 command
   const agents = fs.readdirSync(path.join(REAL_ROOT, 'agents')).map(f => f.slice(0, -3));
   assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor').sort());
   assert.equal(ALWAYS.length, 9);
-  assert.equal(out.playbooks.length, 33);
-  assert.deepEqual(out.playbooks.slice(24), ALWAYS);
-  assert.deepEqual(out.playbooks.slice(0, 24), ['audit', 'brainstorm', 'bug', 'client', 'cooler', 'feature', 'feedback', 'fix', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'idea', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan']);
+  assert.equal(out.playbooks.length, 34);
+  assert.deepEqual(out.playbooks.slice(25), ALWAYS);
+  assert.deepEqual(out.playbooks.slice(0, 25), ['audit', 'brainstorm', 'bug', 'client', 'cooler', 'dashboard', 'feature', 'feedback', 'fix', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'idea', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan']);
   assert.deepEqual(out.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
   assert.deepEqual(out.skill_search, { hints: [] });
   assert.deepEqual(out.work, ['feature', 'fix']);

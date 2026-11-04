@@ -14,7 +14,7 @@ const script = path.join(root, 'scripts', 'company-type.mjs');
 
 const ROLES = ['product-manager', 'account-manager', 'marketer', 'writer', 'brand-artist', 'prompt-artist',
   'motion-artist', 'localizer', 'market-researcher', 'persona-tester', 'accessibility-tester', 'legal', 'editor', 'skill-researcher', 'reprompter'];
-const PLAYBOOKS = ['campaign', 'content', 'research', 'client', 'feedback', 'brainstorm', 'cooler', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'idea'];
+const PLAYBOOKS = ['campaign', 'content', 'research', 'client', 'feedback', 'brainstorm', 'cooler', 'dashboard', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'idea'];
 
 const temps = [];
 after(() => { for (const d of temps) fs.rmSync(d, { recursive: true, force: true }); });
