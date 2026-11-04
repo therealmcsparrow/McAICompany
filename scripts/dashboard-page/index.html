@@ -66,6 +66,18 @@ button[aria-pressed="true"] { background: var(--accent); color: var(--accent-tex
 #empty h3 { background: none; border: 0; padding: 0; }
 .more { margin-top: var(--s2); }
 .roadmap li { overflow-wrap: anywhere; padding: var(--s1) 0; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; inset-inline-start: auto; width: min(36rem, 100vw); max-width: 100%; overflow-y: auto; overflow-wrap: anywhere; background: var(--surface); color: var(--text); border-left: 1px solid var(--control-border); padding: var(--s4); z-index: 10; }
+.drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s3); }
+.drawer-head h2 { margin: 0; }
+.drawer-sec { margin: var(--s4) 0; }
+.drawer-sec h3 { margin: 0 0 var(--s2); }
+.drawer-error { color: var(--err); }
+.drawer .close { margin-top: var(--s3); }
+.drawer ul.plain, .drawer ul.links, .drawer ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.drawer .did { white-space: pre-wrap; margin: var(--s1) 0 0; }
+.drawer .step { padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
+.drawer .step-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: 0; }
+.links a { display: block; min-height: 2.75rem; padding: var(--s2) 0; }
 @media (forced-colors: active) {
   .card, .status { border: 1px solid CanvasText; }
   :focus-visible { outline: 3px solid Highlight; }
@@ -76,8 +88,8 @@ button[aria-pressed="true"] { background: var(--accent); color: var(--accent-tex
 <a class="skip" href="#board">Skip to board</a>
 <header>
   <h1>aico dashboard</h1>
-  <p id="summary">Loading runs...</p>
-  <p id="conn">Loading runs...</p>
+  <p id="summary">Counting runs...</p>
+  <p id="conn">Connecting...</p>
   <p><button type="button" id="pause" aria-pressed="false">Pause updates</button><span id="paused" hidden>Paused</span></p>
 </header>
 <main id="board" tabindex="-1" aria-busy="true">
