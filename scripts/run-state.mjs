@@ -283,7 +283,7 @@ export function active(root, { now = Date.now() } = {}) {
   let best = null;
   if (wst && wst.isDirectory()) {
     let names;
-    try { names = readdirSync(work).filter(isWorkFolder).sort(); } catch { names = []; }
+    try { names = readdirSync(work).filter(isWorkFolder).sort().reverse(); } catch { names = []; }
     for (const slug of names.slice(0, MAX_FOLDERS)) {
       const f = lstatOrNull(join(work, slug, 'run-state.jsonl'));
       if (!f || !f.isFile()) continue;
@@ -295,14 +295,14 @@ export function active(root, { now = Date.now() } = {}) {
   return best ? { slug: best.slug, view: best.view } : { slug: null, view: null };
 }
 
-// Every run of the product, newest start first; a run whose state file cannot be read is one `unreadable` entry.
+// Every run of the product, newest start first (past the folder cap the newest folders are kept); a run whose state file cannot be read is one `unreadable` entry.
 export function list(root, { now = Date.now() } = {}) {
   const out = { v: 1, runs: [], warnings: [] };
   const work = join(root, '.company', 'work');
   const wst = lstatOrNull(work);
   if (!wst || !wst.isDirectory()) return out;
   let names;
-  try { names = readdirSync(work).filter(isWorkFolder).sort(); } catch { return out; }
+  try { names = readdirSync(work).filter(isWorkFolder).sort().reverse(); } catch { return out; }
   const found = [];
   for (const slug of names) {
     try { checkSlug(root, slug); } catch { continue; }

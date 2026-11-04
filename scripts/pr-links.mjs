@@ -67,6 +67,9 @@ function runGh(spawn, args, timeoutMs) {
   });
 }
 
+// Validators for untrusted `gh` output. goodNumber mirrors the PR/issue number printed in the page text; goodUrl mirrors the
+// `<a href>` the page builds and the browser URL parser. Covers: non-integer or oversized numbers, non-https schemes
+// (javascript:, data:), other hosts, userinfo, whitespace and control characters (open redirect, script injection, CWE-79, CWE-601).
 const goodNumber = (n) => Number.isInteger(n) && NUMBER.test(String(n));
 const goodUrl = (u) => typeof u === 'string' && URL_OK.test(u);
 

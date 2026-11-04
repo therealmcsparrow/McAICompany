@@ -173,8 +173,6 @@ export async function startServer({
   }
 
   const server = http.createServer((req, res) => {
-    state.last = Date.now();
-    resetIdle();
     if (!hosts.has(req.headers.host)) return fail(req, res, 421);
     if (req.method !== 'GET' && req.method !== 'HEAD') return fail(req, res, 405, { Allow: 'GET, HEAD' });
     const target = req.url ?? '';
@@ -182,6 +180,8 @@ export async function startServer({
     const head = target.slice(0, PREFIX.length + TOKEN_LENGTH + 1);
     if (!head.startsWith(PREFIX) || head.length !== PREFIX.length + TOKEN_LENGTH + 1 || head.endsWith('/') === false) return fail(req, res, 404);
     if (!sameToken(head.slice(PREFIX.length, -1), token)) return fail(req, res, 404);
+    state.last = Date.now();
+    resetIdle();
     route(req, res, target.slice(head.length)).catch((err) => {
       logFailure(err);
       if (!res.headersSent) fail(req, res, 500);

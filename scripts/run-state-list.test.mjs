@@ -76,6 +76,22 @@ test('list caps at 200 folders with a warning', () => {
   assert.deepEqual(r.warnings, ['over 200 runs']);
 });
 
+test('list over the cap keeps the newest runs', () => {
+  const root = repo();
+  for (let i = 0; i < 201; i++) {
+    const slug = `2026-10-01 ${String(Math.floor(i / 60)).padStart(2, '0')}.${String(i % 60).padStart(2, '0')} - Run Build`;
+    fs.mkdirSync(dir(root, slug), { recursive: true });
+    fs.writeFileSync(path.join(dir(root, slug), 'run-state.jsonl'), '');
+  }
+  const newest = '2026-11-03 09.00 - Newest Build';
+  fs.mkdirSync(dir(root, newest), { recursive: true });
+  go(root, ['start', newest], 0);
+  const r = list(root, { now: T0 + 1000 });
+  assert.equal(r.runs.length, 200);
+  assert.ok(r.runs.some(x => x.slug === newest));
+  assert.equal(active(root, { now: T0 + 1000 }).slug, newest);
+});
+
 test('show has waves in file order', () => {
   const root = repo();
   go(root, ['start', SLUG_A], 0);

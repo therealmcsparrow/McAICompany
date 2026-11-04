@@ -113,3 +113,17 @@ test('refreshActive without an active run returns an equal board', async () => {
   assert.deepEqual(next.columns, prev.columns);
   assert.equal(next.active, null);
 });
+
+test('refreshActive clears active and inflight when the active run is gone or unknown', async () => {
+  const first = makeDeps({ runs: [entry('a2')], views: { a2: view() }, active: 'a2' });
+  const prev = await board('/x', { now: NOW, deps: first.deps });
+  assert.equal(prev.active, 'a2');
+  const gone = makeDeps({ runs: [], active: null, views: { a2: view({ state: 'ended' }) } });
+  const next = await refreshActive('/x', prev, { now: NOW + 1000, deps: gone.deps });
+  assert.equal(next.active, null);
+  assert.equal(next.inflight, 0);
+  const unknown = makeDeps({ runs: [], active: 'not-on-board', views: { a2: view() } });
+  const other = await refreshActive('/x', prev, { now: NOW + 1000, deps: unknown.deps });
+  assert.equal(other.active, null);
+  assert.equal(other.inflight, 0);
+});

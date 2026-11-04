@@ -18,6 +18,8 @@ const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 const IO = { fs, path };
 
 // The slug when `raw` (a URL path part, still encoded) names a real run folder inside `.company/work`, else null.
+// Validator for untrusted URL input; mirrors the path resolver (fs.realpath/lstat). Covers: oversize, double
+// decoding, traversal, case-fold collisions, symlink/junction escapes of the folder or of `.company/work` (CWE-22, CWE-59).
 export function resolveRunSlug(root, raw) {
   try {
     if (typeof raw !== 'string' || raw.length === 0 || raw.length > MAX_SLUG) return null;
@@ -27,7 +29,9 @@ export function resolveRunSlug(root, raw) {
     const work = path.join(root, '.company', 'work');
     const folder = path.join(work, slug);
     if (!fs.lstatSync(folder).isDirectory()) return null;
-    if (fs.realpathSync.native(folder) !== path.join(fs.realpathSync.native(work), slug)) return null;
+    const realWork = path.join(fs.realpathSync.native(root), '.company', 'work');
+    if (fs.realpathSync.native(work) !== realWork) return null;
+    if (fs.realpathSync.native(folder) !== path.join(realWork, slug)) return null;
     return slug;
   } catch {
     return null;
@@ -43,14 +47,21 @@ export function routing(steps) {
   return out;
 }
 
+// Reads the Did section of one Step file named by an untrusted run record.
+// Validator for untrusted file names and bodies; mirrors the file opener (fs.open) and a plain-text renderer.
+// Covers: name pattern, links and hard links, swap between check and open, oversize, invalid UTF-8, control characters (CWE-22, CWE-59, CWE-367).
 function didSummary(folder, realFolder, file) {
+  let fd = null;
   try {
     if (typeof file !== 'string' || !STEP_FILE.test(file)) return null;
     const full = path.join(folder, file);
     const st = fs.lstatSync(full);
     if (!st.isFile() || st.nlink !== 1 || st.size > MAX_DID_FILE) return null;
     if (fs.realpathSync.native(full) !== path.join(realFolder, file)) return null;
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(full));
+    fd = fs.openSync(full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const ft = fs.fstatSync(fd);
+    if (!ft.isFile() || ft.nlink !== 1 || ft.dev !== st.dev || ft.ino !== st.ino || ft.size > MAX_DID_FILE) return null;
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(fd));
     const lines = text.split(/\r\n|\r|\n/);
     const start = lines.findIndex((l) => /^##[ \t]+Did[ \t]*$/.test(l));
     if (start < 0) return null;
@@ -66,6 +77,8 @@ function didSummary(folder, realFolder, file) {
     return picked.join(' ').replace(CONTROL, '').slice(0, MAX_SUMMARY);
   } catch {
     return null;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
   }
 }
 

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readStage, main, STAGES } from './run-stage.mjs';
+import { readStage, setStage, main, STAGES } from './run-stage.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run-stage.mjs');
 const SLUG = '2026-11-04 01.19 - Skillset Dashboard Draft';
@@ -233,6 +233,36 @@ describe('readStage', () => {
     fs.writeFileSync(target, '{"v":1,"at":"2026-11-04T01:19:00Z","stage":"build"}\n');
     if (!trySymlink(target, stageFile(root), 'file')) return t.skip('no links');
     assert.equal(readStage(root, SLUG).state, 'unreadable');
+  });
+});
+
+describe('hard-linked stage file', () => {
+  const REC = '{"v":1,"at":"2026-11-04T01:19:00Z","stage":"build"}\n';
+
+  function linked(t) {
+    const root = repo();
+    const other = path.join(tmp, `h${n++}.txt`);
+    fs.writeFileSync(other, REC);
+    try {
+      fs.linkSync(other, stageFile(root));
+    } catch {
+      t.skip('no hard links');
+      return null;
+    }
+    return { root, other };
+  }
+
+  test('readStage refuses it', t => {
+    const l = linked(t);
+    if (!l) return;
+    assert.equal(readStage(l.root, SLUG).state, 'unreadable');
+  });
+
+  test('setStage refuses it and leaves the other name untouched', t => {
+    const l = linked(t);
+    if (!l) return;
+    assert.deepEqual(setStage(l.root, SLUG, 'review'), { reason: 'stage file unreadable' });
+    assert.equal(fs.readFileSync(l.other, 'utf8'), REC);
   });
 });
 

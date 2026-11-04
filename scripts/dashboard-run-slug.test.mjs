@@ -61,3 +61,21 @@ test('a legacy slug resolves', (t) => {
   fs.mkdirSync(path.join(root, '.company', 'work', legacy));
   assert.equal(resolveRunSlug(root, legacy), legacy);
 });
+
+test('a .company/work folder linked outside the product does not resolve', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-slug-root-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-slug-out-'));
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+  fs.mkdirSync(path.join(outside, NAME), { recursive: true });
+  fs.mkdirSync(path.join(root, '.company'), { recursive: true });
+  try {
+    fs.symlinkSync(outside, path.join(root, '.company', 'work'), 'junction');
+  } catch (error) {
+    t.skip(`links not permitted: ${error.code}`);
+    return;
+  }
+  assert.equal(resolveRunSlug(root, encodeURIComponent(NAME)), null);
+});

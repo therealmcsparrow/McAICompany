@@ -12,6 +12,7 @@ export const MAX_LINES = 200;
 
 const AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const KEYS = ['v', 'at', 'stage'];
+const NL = '\n';
 const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 const io = { fs, path };
 
@@ -55,44 +56,58 @@ function validRecord(text) {
   return rec;
 }
 
+// Opens `file` without following a link; the handle must be the regular, single-link file lstat saw (same dev and ino).
+// Returns { fd, st } or { code } when the file is missing (ENOENT) or refused.
+function openRegular(file, flags) {
+  let lst;
+  try {
+    lst = fs.lstatSync(file);
+  } catch (error) {
+    return { code: error.code === 'ENOENT' ? 'ENOENT' : 'EREFUSED' };
+  }
+  if (lst.isSymbolicLink() || !lst.isFile()) return { code: 'EREFUSED' };
+  let fd;
+  try {
+    fd = fs.openSync(file, flags | NOFOLLOW);
+  } catch {
+    return { code: 'EREFUSED' };
+  }
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.nlink !== 1 || st.dev !== lst.dev || st.ino !== lst.ino) {
+      fs.closeSync(fd);
+      return { code: 'EREFUSED' };
+    }
+    return { fd, st };
+  } catch {
+    fs.closeSync(fd);
+    return { code: 'EREFUSED' };
+  }
+}
+
 export function readStage(root, slug) {
   const run = resolveRun(root, slug);
   if (run.reason === 'bad slug' || run.reason === 'wrong letter case') return view(null, null, null, 'none');
   if (run.reason) return view(slug, null, null, 'none');
   const file = path.join(run.dir, 'stage.jsonl');
-  let st;
-  try {
-    st = fs.lstatSync(file);
-  } catch (error) {
-    return view(slug, null, null, error.code === 'ENOENT' ? 'none' : 'unreadable');
-  }
   const bad = view(slug, null, null, 'unreadable');
-  if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_FILE) return bad;
+  const opened = openRegular(file, fs.constants.O_RDONLY);
+  if (opened.code === 'ENOENT') return view(slug, null, null, 'none');
+  if (opened.code) return bad;
   let raw;
   try {
-    raw = fs.readFileSync(file, 'utf8');
+    if (opened.st.size > MAX_FILE) return bad;
+    raw = fs.readFileSync(opened.fd, 'utf8');
   } catch {
     return bad;
+  } finally {
+    fs.closeSync(opened.fd);
   }
   if (raw.length === 0) return view(slug, null, null, 'none');
-  const lines = raw.endsWith('\n') ? raw.slice(0, -1).split('\n') : raw.split('\n');
+  const lines = raw.endsWith(NL) ? raw.slice(0, -1).split(NL) : raw.split(NL);
   if (lines.length > MAX_LINES) return bad;
   const rec = validRecord(lines[lines.length - 1]);
   return rec ? view(slug, rec.stage, rec.at, 'recorded') : bad;
-}
-
-function append(file, line, existing) {
-  const flags = existing
-    ? fs.constants.O_WRONLY | fs.constants.O_APPEND | NOFOLLOW
-    : fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_EXCL;
-  const fd = fs.openSync(file, flags, 0o644);
-  try {
-    if (!fs.fstatSync(fd).isFile()) return false;
-    fs.writeSync(fd, line);
-    return true;
-  } finally {
-    fs.closeSync(fd);
-  }
 }
 
 // Returns { ok: true } or { reason }.
@@ -102,29 +117,35 @@ export function setStage(root, slug, stage, now = new Date()) {
   if (typeof stage !== 'string' || !STAGES.includes(stage)) return { reason: 'unknown stage' };
   const file = path.join(run.dir, 'stage.jsonl');
   const at = now.toISOString().replace(/\.\d+Z$/, 'Z');
-  const line = `${JSON.stringify({ v: 1, at, stage })}\n`;
-  let st = null;
-  try {
-    st = fs.lstatSync(file);
-  } catch (error) {
-    if (error.code !== 'ENOENT') return { reason: 'stage file unreadable' };
-  }
-  if (st) {
-    if (st.isSymbolicLink() || !st.isFile()) return { reason: 'stage file unreadable' };
-    if (st.size + line.length > MAX_FILE) return { reason: 'stage file full' };
-    let raw;
+  const line = `${JSON.stringify({ v: 1, at, stage })}${NL}`;
+  const unreadable = { reason: 'stage file unreadable' };
+  const opened = openRegular(file, fs.constants.O_RDWR | fs.constants.O_APPEND);
+  if (opened.code === 'ENOENT') {
     try {
-      raw = fs.readFileSync(file, 'utf8');
+      const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o644);
+      try {
+        if (!fs.fstatSync(fd).isFile()) return unreadable;
+        fs.writeSync(fd, line);
+        return { ok: true };
+      } finally {
+        fs.closeSync(fd);
+      }
     } catch {
-      return { reason: 'stage file unreadable' };
+      return unreadable;
     }
-    if (raw.length > 0 && !raw.endsWith('\n')) return { reason: 'stage file unreadable' };
-    if (raw.split('\n').length - 1 >= MAX_LINES) return { reason: 'stage file full' };
   }
+  if (opened.code) return unreadable;
   try {
-    return append(file, line, st !== null) ? { ok: true } : { reason: 'stage file unreadable' };
+    if (opened.st.size + line.length > MAX_FILE) return { reason: 'stage file full' };
+    const raw = fs.readFileSync(opened.fd, 'utf8');
+    if (raw.length > 0 && !raw.endsWith(NL)) return unreadable;
+    if (raw.split(NL).length - 1 >= MAX_LINES) return { reason: 'stage file full' };
+    fs.writeSync(opened.fd, line);
+    return { ok: true };
   } catch {
-    return { reason: 'stage file unreadable' };
+    return unreadable;
+  } finally {
+    fs.closeSync(opened.fd);
   }
 }
 

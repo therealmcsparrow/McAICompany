@@ -70,6 +70,8 @@ function runChild(spawn, root, slug, timeoutMs) {
 }
 
 // Builds the result from untrusted report output, reading only the allow-listed keys.
+// Validator for the JSON the report child prints; mirrors the JSON.parse consumer and the board's number rendering.
+// Covers: malformed JSON, wrong version, non-object shapes, non-finite or negative counts, oversized row lists, unknown keys.
 function parseReport(text) {
   let report;
   try { report = JSON.parse(text); } catch { return unavailable(); }

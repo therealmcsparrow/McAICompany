@@ -188,7 +188,7 @@ export async function refreshActive(root, prev, { now = Date.now(), deps: given 
   if (known(act?.slug)) {
     next.active = act.slug;
     next.inflight = inflightOf(act.view, now);
-  } else if (prev.active === null) {
+  } else {
     next.active = null;
     next.inflight = 0;
   }
