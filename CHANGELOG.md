@@ -4,12 +4,14 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **`/aico:dashboard`.** A read-only local board of all runs with a drawer per run. Each start makes a new link; `--lan` makes run data readable on the local network over plain HTTP. Pull request links call github.com when a drawer opens.
+
 ## [0.26.2] - 2026-11-04
 
 Rollback: node scripts/stable.mjs 0.26.1
 
 ### Added
-- **`/aico:dashboard`.** A read-only local board of all runs with a drawer per run. Each start makes a new link; `--lan` makes run data readable on the local network over plain HTTP. Pull request links call github.com when a drawer opens.
 - **Session hand-off.** `aico:handoff` can write a summary for a fresh agent to the OS temp folder, on request, with a "suggested skills" section.
 - **A guide to choosing models for your Roles.** `documentation/concepts/model-choice.md` has a new section, "Choosing models for your Roles": the shipped Opus/Sonnet split, when to raise a builder's effort, when to set one Role to `opus` in `.company/settings.json`, and when to lower effort.
 
