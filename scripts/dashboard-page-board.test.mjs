@@ -37,6 +37,8 @@ class FakeNode {
   }
   replaceChildren(...kids) { for (const c of this.children) c.parentNode = null; this.children = []; this.append(...kids); }
   remove() {
+    const a = this.doc.activeElement;
+    if (a) for (let n = a; n; n = n.parentNode) if (n === this) { this.doc.activeElement = null; break; }
     if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this);
     this.parentNode = null;
   }
@@ -343,6 +345,20 @@ test('done column shows ten and expands with a button that keeps focus', async (
   assert.equal(ul().children.length, 12);
   assert.equal(more.textContent, 'Show fewer');
   assert.equal(env.doc.activeElement, more);
+});
+
+test('focus stays on the done column when the focused tenth card is pushed out', async () => {
+  const mk = (i) => card({ slug: `d${i}`, title: `Run ${i}`, state: 'ended', ended: '2026-11-04T02:00:00Z', live: false });
+  const first = Array.from({ length: 12 }, (_, i) => mk(i));
+  const second = [mk(99)].concat(first);
+  const env = await boot({ responses: [ok(board({ done: first }), '"1"'), ok(board({ done: second }), '"2"')] });
+  const ul = env.byId('columns').find((n) => n.tagName === 'ul')[7];
+  const btn = ul.children[9].find((n) => n.tagName === 'button')[0];
+  btn.focus();
+  await env.fire();
+  const act = env.doc.activeElement;
+  assert.ok(act, 'focus not lost to body');
+  assert.notEqual(act, btn);
 });
 
 test('page files: relative urls only, no storage, no location, no html sinks, no inline handlers', () => {

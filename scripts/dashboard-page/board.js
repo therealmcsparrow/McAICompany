@@ -193,6 +193,7 @@
   }
 
   function layout() {
+    var lostFocus = null, lostCol = '';
     COLUMNS.forEach(function (c) {
       var col = cols[c[0]];
       var list = desired[c[0]] || [];
@@ -205,7 +206,11 @@
         col.ul.insertBefore(node, col.ul.children[i] || null);
         if (focused && within(node, focused)) focused.focus();
       });
-      while (col.ul.children.length > want.length) col.ul.children[col.ul.children.length - 1].remove();
+      while (col.ul.children.length > want.length) {
+        var gone = col.ul.children[col.ul.children.length - 1];
+        if (doc.activeElement && within(gone, doc.activeElement)) { lostFocus = doc.activeElement; lostCol = c[0]; }
+        gone.remove();
+      }
       setText(col.h, c[1] + ', ' + list.length + (list.length === 1 ? ' run' : ' runs'));
       if (c[0] === 'done') {
         var extra = list.length - DONE_CAP;
@@ -214,6 +219,12 @@
         col.more.setAttribute('aria-expanded', String(doneOpen));
       }
     });
+    // a focused card that left the view (Done keeps ten) hands focus to the column's button or heading
+    if (lostFocus && doc.activeElement !== lostFocus) {
+      var lc = cols[lostCol];
+      if (within(doc.getElementById('columns'), lostFocus)) lostFocus.focus();
+      else (lostCol === 'done' && lc.more && !lc.more.hidden ? lc.more : lc.h).focus();
+    }
   }
 
   function renderRoadmap(items) {

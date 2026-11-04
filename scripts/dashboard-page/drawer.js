@@ -196,6 +196,9 @@
     else if (doc.getElementById('board')) doc.getElementById('board').focus();
   }
 
+  // Validator entry point (websec.M1). Mirrors its consumer: the browser URL parser and the <a href> it feeds.
+  // Threats covered: javascript:/data: schemes, non-https, look-alike or userinfo hosts (only github.com),
+  // path tricks and control characters (strict PR_URL shape first, then URL re-parse; returns the normalised href).
   function validUrl(u) {
     if (typeof u !== 'string' || !PR_URL.test(u)) return null;
     try {
