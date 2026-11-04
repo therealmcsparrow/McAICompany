@@ -22,6 +22,7 @@ Rollback: node scripts/stable.mjs 0.26.1
 - **The lead-session MCP server registers from the plugin manifest.** It is now under `mcpServers` in `.claude-plugin/plugin.json`, and the repo-root `.mcp.json` is removed. The 0.26.1 Known issue about the root `.mcp.json` is resolved: Claude Code no longer reads it a second time as a project-scope server, where the `CLAUDE_PLUGIN_ROOT` variable is not expanded and node exited 1. The server is registered once, at plugin scope.
 - **The Lead reading no longer drops its peak.** Two writers racing on `lead-context.json` could overwrite a higher peak with a lower one. Writes now take an exclusive lock (`lead-context.lock`, waits up to 500 ms, a stale lock is replaced). A folder or link at the lock name is never waited on, and the peak is not lost. A lock dated more than 30 s ahead is treated as stale for the freeze lock too.
 - **A Lead started from a hand-over no longer loops.** A fresh session read the old session's context as its own and handed over again at once; the session tag and the reset above stop that.
+- **The file identity re-check is exact on Windows.** `run-state.mjs` (triage record and request reads) and `cost-source.mjs` compared 64-bit file ids as plain numbers, so two different files could look the same on NTFS and a swapped file could pass the check. Both now compare the ids as BigInt. This also fixes a rare failing Windows test run.
 
 ## [0.26.1] - 2026-11-03
 

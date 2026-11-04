@@ -542,8 +542,8 @@ test('verifyOpened accepts the same plain file and refuses another file or a sec
   fs.writeFileSync(b, 'b');
   const fda = fs.openSync(a, 'r');
   try {
-    assert.equal(verifyOpened(fda, fs.lstatSync(a)), true);
-    assert.equal(verifyOpened(fda, fs.lstatSync(b)), false);
+    assert.equal(verifyOpened(fda, fs.lstatSync(a, { bigint: true })), true);
+    assert.equal(verifyOpened(fda, fs.lstatSync(b, { bigint: true })), false);
     assert.equal(verifyOpened(fda, null), true);
     if (hardlink(t, a, path.join(base, 'vo-c.txt'))) assert.equal(verifyOpened(fda, null), false);
   } finally { fs.closeSync(fda); }
