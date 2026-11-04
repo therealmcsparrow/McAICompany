@@ -212,7 +212,7 @@ test('v1.4 file: same view plus the new empty keys', () => {
   assert.deepEqual([v.ceo, v.subs, v.sessions, v.warnings], [[], [], [], []]);
   const reader = oldReader();
   if (reader) {
-    const { ceo, subs, sessions, state, ...rest } = v;
+    const { ceo, subs, sessions, state, waves, open_ask, ...rest } = v;
     const { state: oldState, ...oldRest } = oldView(reader, root);
     assert.deepEqual(rest, oldRest);
   }
