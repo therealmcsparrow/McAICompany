@@ -107,10 +107,12 @@
     var results = await Promise.all([pollBoard(), pollRun()]);
     busy = false;
     if (results[0]) {
+      if (fails > 0) announce('Connection restored');
       fails = 0;
     } else {
       fails++;
       if (fails >= MAX_FAILS) { stop(); return; }
+      if (fails === 1) announce('Connection lost. Retrying.');
       setConn('Connection lost. ' + (lastData ? 'Showing data from ' + lastData + '. ' : '') + 'Retrying.');
     }
     if (paused || stopped) return;
