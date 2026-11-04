@@ -1082,9 +1082,9 @@ test('company types: ALWAYS commands need no Type line', () => {
   assert.ok(!check(root).errors.some(e => e.includes('skills/help/')));
 });
 
-test('company types: software must be every agent but editor and the 24 Playbooks; a Playbook in no type is an error', () => {
+test('company types: software must be every agent but editor and the 25 Playbooks; a Playbook in no type is an error', () => {
   const errors = check(typeFixture()).errors;
-  assert.ok(errors.some(e => e.includes('software.json') && e.includes('playbooks must be the 24')), errors.join('\n'));
+  assert.ok(errors.some(e => e.includes('software.json') && e.includes('playbooks must be the 25')), errors.join('\n'));
   assert.ok(!errors.some(e => e.includes('roles must be every agent except editor')));
   const withEditor = check(typeFixture({ manifest: { roles: ['qa', 'skill-researcher', 'reprompter', 'editor'] } })).errors;
   assert.ok(withEditor.some(e => e.includes('roles must be every agent except editor')));

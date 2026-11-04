@@ -34,7 +34,7 @@ Everything the company produces for a given job lands under `.company/` in your 
 
 ### Version
 
-**Current: 0.26.2** (36 Role agents).
+**Current: 0.27.0** (36 Role agents).
 
 Update an installed copy with:
 
@@ -45,6 +45,7 @@ Update an installed copy with:
 
 ### What's new
 
+- **Unreleased, dashboard**: [`/aico:dashboard`](commands/dashboard.md) starts a read-only local board of all runs. Each start makes a new link; `--lan` makes it readable on your network.
 - **0.14.0**: A new Role, the reprompter (Lynn), and [`/aico:reprompt`](commands/reprompt.md), which turns a rough prompt into a complete one and never runs it (the prompt is saved as a local file, and it is AI-written, so check it).
 - **Unreleased, company types and personalities**: Pick a [company type](concepts/company-types.md) for a project in [`/aico:setup`](commands/setup.md): software (the default, as before), research consultancy, marketing and content agency, or design studio. Each type has its own Roles and Playbooks and its own meaning of "ship". New Playbooks: [`/aico:report`](commands/report.md), [`/aico:campaign`](commands/campaign.md), [`/aico:content`](commands/content.md) and [`/aico:design`](commands/design.md). A new Role, the [editor](roles/README.md) (Edith), checks that every claim is cited. Every Role also gets a [personality](concepts/personalities.md), used only in cooler chats and brainstorms. The settings page has a new look and a Personality tab with a Role filter. The marketing and design checks record Legal's statement; they are not legal advice or a compliance certificate.
 - **Unreleased**: A new Role, the skill-researcher (Selin), which finds and vets third-party skills (the Lead scans each pick, installs pin the scanned commit, and a bad scan after the install stops the run) and records approved ones under `## Skills` in `.company/project.md` (see [research and skills](concepts/research-and-skills.md)); [`/aico:skillspector`](commands/skillspector.md), which scans installed skills with SkillSpector (`--project`, `--global` or `--all`; pinned v2.13.1; the install changes your user-scope config and always asks; scan mode `no-llm` by default, set in `/aico:settings` under Skill scan; both modes send dependency names and versions to OSV.dev); and Gates and Steps bars in the [Savvy](mods/savvy.md) pane. Also: cheaper brainstorms (a [format 2](commands/brainstorm.md) digest, a question queue, crossfire debate) and cheaper runs: a [max context](concepts/context-budget.md) setting, a counts-only [token ledger](concepts/token-cost.md) with a cost line at Ship, an opt-in Handoff v1.1 pilot (`pipeline.review_format: pilot`, default `plain`, about 5.7k more tokens per re-review), four [mods](mods/README.md) (Savvy run progress, Cache Tax with a cache clock, Reflect suggested Lessons, and a Blast Radius check before risky commits), tool checks bound to rule IDs, and a release script (`npm run release <x.y.z>`, never pushes). Savings come from reading less; brainstorm Roles keep one constant prompt per run. No saving percentage is claimed yet.

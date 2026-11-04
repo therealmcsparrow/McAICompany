@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.7). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (run-state v1.8). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -27,6 +27,8 @@ const STEP_FILE_RE = /^\d{2}-[a-z0-9-]+\.md$/;
 const STEP_RE = /^\d{1,3}$/;
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const WAVE_RE = /^[1-9]\d?$/;
+const VERDICTS = new Set(['approve', 'changes', 'blocked']);
+const GATE_VERDICTS = new Set(['pass', 'fail']);
 const GATES = new Set(['brief', 'plan', 'ship']);
 const CEO_GATES = new Set(['brief', 'plan', 'ship', 'none']);
 const CEO_N_RE = /^(?:[1-9]|1\d|20)$/;
@@ -161,6 +163,16 @@ function lastSegment(records) {
 
 const segmentOpen = seg => seg.length > 0 && !seg.some(r => r.ev === 'end');
 
+// A frontmatter key read as an enum: any value outside the set is null.
+function fmEnum(fmText, key, allowed) {
+  for (const line of fmText.split(String.fromCharCode(10))) {
+    if (!line.startsWith(`${key}:`)) continue;
+    const value = line.slice(key.length + 1).trim();
+    return allowed.has(value) ? value : null;
+  }
+  return null;
+}
+
 function readSteps(dir, warnings) {
   const steps = [];
   let names;
@@ -193,6 +205,8 @@ function readSteps(dir, warnings) {
       tier: Object.hasOwn(TIER_RANK, routing['risk-tier']) ? routing['risk-tier'] : 'unknown',
       file: name,
       mtime: iso(st.mtimeMs),
+      verdict: fmEnum(fmText, 'verdict', VERDICTS),
+      gate: fmEnum(fmText, 'gate', GATE_VERDICTS),
     });
   }
   return steps;
@@ -201,7 +215,7 @@ function readSteps(dir, warnings) {
 function load(root, slug, now) {
   const { dir, file } = paths(root, slug);
   const view = {
-    v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [], picks: [], ceo: [], subs: [], sessions: [],
+    v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [], picks: [], ceo: [], subs: [], sessions: [], waves: [], open_ask: null,
     round: 0, tier: 'unknown', steps: [], warnings: [],
   };
   const dst = lstatOrNull(dir);
@@ -228,12 +242,14 @@ function load(root, slug, now) {
     view.started = seg[0].at;
     // Latest ask per Gate since that Gate's previous entry (or the segment start).
     const asked = new Map();
+    const open = new Map();
     for (const r of seg) {
-      if (r.ev === 'wave') view.wave = r.wave;
-      else if (r.ev === 'ask') asked.set(r.gate, Date.parse(r.at));
+      if (r.ev === 'wave') { view.wave = r.wave; view.waves.push({ wave: r.wave, at: r.at }); }
+      else if (r.ev === 'ask') { asked.set(r.gate, Date.parse(r.at)); open.delete(r.gate); open.set(r.gate, r.at); }
       else if (r.ev === 'gate') {
         const from = asked.get(r.gate);
         asked.delete(r.gate);
+        open.delete(r.gate);
         const wait = from === undefined ? null : Math.floor((Date.parse(r.at) - from) / 1000);
         view.gates.push({ gate: r.gate, result: r.result, at: r.at, wait: wait === null || wait < 0 ? null : wait });
       }
@@ -250,6 +266,8 @@ function load(root, slug, now) {
       }
       else if (r.ev === 'end') { view.ended = r.at; view.outcome = r.outcome; }
     }
+    const last = [...open].pop();
+    if (last) view.open_ask = { gate: last[0], at: last[1] };
     if (!segmentOpen(seg)) view.state = 'ended';
     else view.state = now - activity > STALE_MS ? 'stale' : 'running';
   }
@@ -267,7 +285,7 @@ export function active(root, { now = Date.now() } = {}) {
   let best = null;
   if (wst && wst.isDirectory()) {
     let names;
-    try { names = readdirSync(work).filter(isWorkFolder).sort(); } catch { names = []; }
+    try { names = readdirSync(work).filter(isWorkFolder).sort().reverse(); } catch { names = []; }
     for (const slug of names.slice(0, MAX_FOLDERS)) {
       const f = lstatOrNull(join(work, slug, 'run-state.jsonl'));
       if (!f || !f.isFile()) continue;
@@ -277,6 +295,37 @@ export function active(root, { now = Date.now() } = {}) {
     }
   }
   return best ? { slug: best.slug, view: best.view } : { slug: null, view: null };
+}
+
+// Every run of the product, newest start first (past the folder cap the newest folders are kept); a run whose state file cannot be read is one `unreadable` entry.
+export function list(root, { now = Date.now() } = {}) {
+  const out = { v: 1, runs: [], warnings: [] };
+  const work = join(root, '.company', 'work');
+  const wst = lstatOrNull(work);
+  if (!wst || !wst.isDirectory()) return out;
+  let names;
+  try { names = readdirSync(work).filter(isWorkFolder).sort().reverse(); } catch { return out; }
+  const found = [];
+  for (const slug of names) {
+    try { checkSlug(root, slug); } catch { continue; }
+    const dst = lstatOrNull(join(work, slug));
+    if (!dst || !dst.isDirectory() || !insideWork(root, join(work, slug))) continue;
+    if (!lstatOrNull(join(work, slug, 'run-state.jsonl'))) continue;
+    found.push(slug);
+  }
+  if (found.length > MAX_FOLDERS) out.warnings.push(`over ${MAX_FOLDERS} runs`);
+  for (const slug of found.slice(0, MAX_FOLDERS)) {
+    const { view } = load(root, slug, now);
+    if (view.state === 'none' && view.warnings.includes('run-state unreadable')) {
+      out.runs.push({ slug, state: 'unreadable', started: null, ended: null, outcome: null, tier: null, round: null });
+    } else {
+      out.runs.push({ slug, state: view.state, started: view.started, ended: view.ended, outcome: view.outcome, tier: view.tier, round: view.round });
+    }
+  }
+  out.runs.sort((a, b) => (a.started === null) - (b.started === null)
+    || (a.started === b.started ? 0 : a.started < b.started ? 1 : -1)
+    || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+  return out;
 }
 
 // Validates, checks the open segment and limits, then appends one line. Returns the record written.
@@ -505,7 +554,7 @@ function agentSlugs() {
 }
 
 function usage() {
-  return 'usage: start <slug> [<aico version>] | ceo <slug> <brief|plan|ship|none> <1-20> | sub <slug> <start|stop> <role> <id> [<session>] | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | triage issue | triage check <nonce> [--route fix]';
+  return 'usage: start <slug> [<aico version>] | ceo <slug> <brief|plan|ship|none> <1-20> | sub <slug> <start|stop> <role> <id> [<session>] | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | list --json | triage issue | triage check <nonce> [--route fix]';
 }
 
 // Returns { out, code }.
@@ -567,6 +616,9 @@ export function run(argv, { root = process.cwd(), now = Date.now(), home } = {})
       case 'active':
         if (rest.length !== 1 || rest[0] !== '--json') refuse(usage());
         return { out: JSON.stringify(active(root, opts)), code: 0 };
+      case 'list':
+        if (rest.length !== 1 || rest[0] !== '--json') refuse(usage());
+        return { out: JSON.stringify(list(root, opts)), code: 0 };
       case 'triage':
         return { out: triage(root, rest, opts), code: 0 };
       default:

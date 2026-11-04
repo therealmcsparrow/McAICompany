@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-04
+
+Rollback: node scripts/stable.mjs 0.26.2
+
+### Added
+- **`/aico:dashboard`.** A read-only local board of all runs with a drawer per run. Each start makes a new link; `--lan` makes run data readable on the local network over plain HTTP. Pull request links call github.com when a drawer opens.
+
 ## [0.26.2] - 2026-11-04
 
 Rollback: node scripts/stable.mjs 0.26.1

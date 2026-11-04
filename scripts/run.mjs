@@ -26,6 +26,8 @@ const found = fs.readdirSync(HERE, { withFileTypes: true })
   .find((d) => d.isFile() && d.name === `${name}.mjs`)
 if (!found) refuse(2, 'unknown script')
 
-const child = spawn(process.execPath, [path.join(HERE, found.name), ...args], { stdio: 'inherit', shell: false })
+// dashboard-server takes untrusted requests: run it with prototype delete disabled.
+const NODE_FLAGS = name === 'dashboard-server' ? ['--disable-proto=delete'] : []
+const child = spawn(process.execPath, [...NODE_FLAGS, path.join(HERE, found.name), ...args], { stdio: 'inherit', shell: false })
 child.on('error', () => refuse(1, 'could not start script'))
 child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)))

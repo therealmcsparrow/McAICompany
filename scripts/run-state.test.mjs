@@ -308,7 +308,7 @@ test('show: a missing file is state none with the Steps still listed; exit 0', (
   assert.equal(v.state, 'none');
   assert.deepEqual(v.gates, []);
   assert.equal(v.steps.length, 1);
-  assert.deepEqual(v.steps[0], { step: '05', role: 'backend-engineer', status: 'done', round: 0, file: '05-backend-engineer.md', mtime: v.steps[0].mtime });
+  assert.deepEqual(v.steps[0], { step: '05', role: 'backend-engineer', status: 'done', round: 0, file: '05-backend-engineer.md', mtime: v.steps[0].mtime, verdict: null, gate: null });
   assert.equal(run(['show', 'nothing-here', '--json'], { root }).code, 0);
 });
 
@@ -320,7 +320,7 @@ test('show: view shape for a running run', () => {
   const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 3000 }).out);
   assert.deepEqual(v, {
     v: 1, slug: 'x', state: 'running', started: at(T0), ended: null, outcome: null, wave: 2,
-    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], ceo: [], subs: [], sessions: [], round: 0, tier: 'unknown', steps: [], warnings: [],
+    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], ceo: [], subs: [], sessions: [], waves: [{ wave: 2, at: at(T0 + 1000) }], open_ask: null, round: 0, tier: 'unknown', steps: [], warnings: [],
   });
   assert.deepEqual(Object.keys(v).slice(6, 9), ['wave', 'gates', 'picks']);
 });
@@ -620,7 +620,8 @@ test('ask: the view has no ask entry anywhere', () => {
   const v = show(root, 'x', { now: T0 + 2000 });
   assert.deepEqual(v.gates, []);
   assert.deepEqual(v.picks, []);
-  assert.equal(JSON.stringify(v).includes('ask'), false);
+  assert.deepEqual(v.open_ask, { gate: 'brief', at: at(T0 + 1000) });
+  assert.equal(Object.keys(v).filter(k => k !== 'open_ask').join().includes('ask') || JSON.stringify(v.gates).includes('ask'), false);
 });
 
 test('wait: whole seconds from the ask to the gate entry', () => {
