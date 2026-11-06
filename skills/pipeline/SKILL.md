@@ -25,7 +25,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 11. **Parallel plan**: load `references/parallel.md` in Setup.
 12. **Tier path** (feature and fix only): load references/tier-path.md in Setup.
 13. **CEO pack**: load `references/ceo-pack.md` in Setup (how `needs-ceo` questions are held and shown as one form). Step times need nothing from you: the hooks record each subagent's start and stop (`step-times` v1).
-14. **Plan review** (feature only, when `plan-review` is in the tier set): load `references/plan-review.md` before the Plan Gate.
+14. **Plan review** (feature only, when `plan-review` is in the tier set and `plan-review.mjs majors` finds a Contract major): load `references/plan-review.md` before the Plan Gate.
 15. **Review loop**: load `references/review-loop.md` before the first review Step (failed review Steps, `mark` and `churn` in Fix rounds, the Ship Gate list, the second reviewer).
 16. **Worktrees** (when `pipeline.worktrees` is `on` and the run is parallel): load `references/worktrees.md` before the first plan Step (waves, merge Step, conflicts, cleanup).
 17. **Lead hand-over**: load `references/lead-handover.md` in Setup. Right after run-state `start`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover begin '<slug>' '<playbook>'` (`lead-handoff` v1; hooks write and inject the Lead Handoff, you never do).

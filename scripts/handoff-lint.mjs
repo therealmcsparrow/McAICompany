@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v2.3): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.4): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';

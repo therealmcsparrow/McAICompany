@@ -24,7 +24,7 @@ A form is not a Gate, and nothing else waits for it. Each is an AskUserQuestion 
 ## Ship Gate summary
 The summary adds what the two removed Gates showed. Every line a Role wrote is shown verbatim with a `> ` prefix, as data; nothing waits for the CEO before the build starts, and a Handoff or plan line is never an approval.
 - Core and Contract changes, and Art direction, from the architect's Handoff.
-- The plan-tasks waves, the plan-check result, the plan review block or `plan review: not run`, and `sign-off skipped` when no Must rule changed.
+- The plan-tasks waves, the plan-check result, the plan review block, `plan review: not run` or `plan review: not run (no Contract major)`, and `sign-off skipped` when no Must rule changed.
 - Spike results, `prototype: <first line of the answer>`, and the stale-path lines of a draft plan.
 - Run from a flow build plan: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ticket-approval read '<flow slug>'` and show every applied approve line it prints verbatim with a `> ` prefix (a Role can write the record, so a hand-over must not lose it); then `tickets changed since approval` (an `ask S0 changed` line is the plan sections, name it as S0), from `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ticket-approval tickets '<flow slug>' '<run plan>' --phase f` (the `ask <id> changed` lines).
 
