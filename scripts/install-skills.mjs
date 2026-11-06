@@ -2,7 +2,7 @@
 // Installs the standalone skills aico points to (the baseline, deps/3rdpartyskills.json) that are not installed yet.
 // Usage: node install-skills.mjs [group ...] [--dry-run | --missing]
 //       node install-skills.mjs --retired | --remove <name> [--dry-run]
-//       node install-skills.mjs --selected [--dry-run] | --status
+//       node install-skills.mjs --selected [--dry-run] [--skill=<name> ...] | --status
 //   default group: core. Groups are the baseline's own; `design` and `skills` are not among them.
 //   A command entry (skillinstaller) is printed, never run. contract: docs/contracts/skills-manifest.md v4.0
 import { readFileSync, readdirSync, existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -492,14 +492,20 @@ async function runSelected(args, env) {
   const log = env.log ?? console.log;
   try {
     let dry = false, status = false, install = false;
+    const only = new Set();
     for (const a of args) {
-      if (a === '--dry-run') dry = true;
+      if (a.startsWith('--skill=')) {
+        const n = a.slice('--skill='.length);
+        if (!NAME_RE.test(n)) throw new Error('--skill takes one skill name: lowercase letters, digits and hyphens');
+        only.add(n);
+      } else if (a === '--dry-run') dry = true;
       else if (a === '--selected') install = true;
       else if (a === '--status') status = true;
-      else throw new Error('--selected and --status take only --dry-run');
+      else throw new Error('--selected and --status take only --dry-run, and --selected also --skill=<name>');
     }
     if (install === status) throw new Error('use --selected or --status, not both');
     if (status && dry) throw new Error('--status has no dry run');
+    if (status && only.size) throw new Error('--status takes no --skill');
     const home = env.home ?? userInfo().homedir;
     const productRoot = env.productRoot ?? process.cwd();
     const catOpts = env.home ? { home: env.home } : {};
@@ -509,6 +515,10 @@ async function runSelected(args, env) {
     catalog.errors.forEach(e => log(e));
     const byName = new Map(catalog.entries.map(e => [e.skillname, e]));
     const chosen = selection(settings);
+    if (only.size) {
+      const stray = [...only].filter(n => !chosen.has(n));
+      if (stray.length) throw new Error(`not in the selection: ${stray.join(', ')}, nothing installed`);
+    }
     const scopeOf = sel => (sel.user ? 'user' : 'project');
     if (status) {
       for (const [name, sel] of chosen) {
@@ -525,6 +535,7 @@ async function runSelected(args, env) {
     const today = env.today ?? new Date().toISOString().slice(0, 10);
     let done = 0, failed = 0;
     for (const [name, sel] of chosen) {
+      if (only.size && !only.has(name)) continue;
       const entry = byName.get(name);
       if (!entry || !selectable(entry).ok) { log(`not in the catalog: ${name}`); continue; }
       if (entry.skillplugin !== undefined) { log(`plugin ${name}: skipped, enable it with /plugin`); continue; }

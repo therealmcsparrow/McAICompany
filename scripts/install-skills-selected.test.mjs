@@ -299,3 +299,80 @@ test('the install child sees the given home as HOME and USERPROFILE and no CLAUD
     assert.equal(env.DO_NOT_TRACK, '1');
   }
 });
+
+const TWO = ['other-skill', NAME];
+const twoSetup = (t) => setup(t, { entries: [entry(), entry({ skillname: 'other-skill' })], lists: { qa: ['user', TWO] } });
+
+test('--skill=<name> limits the run to the named skills: only they are scanned, installed and stored', async (t) => {
+  const s = twoSetup(t);
+  const code = await main(['--selected', `--skill=${NAME}`], s.env);
+  assert.equal(code, 0, s.log.join('|'));
+  assert.deepEqual(s.vets, [{ source: SOURCE, commit: COMMIT, name: NAME }]);
+  assert.equal(s.calls.length, 1);
+  assert.ok(s.calls[0].argv.includes(NAME));
+  const stored = readUser(s.home);
+  assert.equal(stored.find((e) => e.skillname === NAME).hash, s.scanHash);
+  assert.equal(stored.find((e) => e.skillname === 'other-skill').hash, undefined);
+});
+
+test('--skill is repeatable and the dry run honors it', async (t) => {
+  const s = twoSetup(t);
+  assert.equal(await main(['--selected', '--dry-run', `--skill=${NAME}`, '--skill=other-skill'], s.env), 0, s.log.join('|'));
+  assert.equal(s.log.filter((l) => l.startsWith('[dry-run] npx')).length, 2);
+  const one = twoSetup(t);
+  assert.equal(await main(['--selected', '--dry-run', '--skill=other-skill'], one.env), 0);
+  const cmds = one.log.filter((l) => l.startsWith('[dry-run] npx'));
+  assert.equal(cmds.length, 1);
+  assert.ok(cmds[0].includes('-s other-skill'));
+  assert.deepEqual(one.calls, []);
+});
+
+test('a named skill that is not in the selection is refused and nothing is installed', async (t) => {
+  const s = twoSetup(t);
+  const code = await main(['--selected', `--skill=${NAME}`, '--skill=not-selected'], s.env);
+  assert.equal(code, 1);
+  assert.deepEqual(s.calls, []);
+  assert.deepEqual(s.vets, []);
+  assert.ok(s.log.some((l) => l.startsWith('ERROR')), s.log.join('|'));
+  assert.equal(readUser(s.home).some((e) => e.hash !== undefined), false);
+});
+
+test('a name outside the fixed pattern is refused before settings are read and nothing is installed', async (t) => {
+  for (const bad of ['', 'Demo', '-x', 'a b', 'a;rm -rf', '$(id)', '../x', 'a:b', 'a*', 'x'.repeat(70)]) {
+    const s = twoSetup(t);
+    let read = false;
+    s.env.settings = new Proxy({}, { get() { read = true; return undefined; } });
+    assert.equal(await main(['--selected', `--skill=${bad}`], s.env), 1, JSON.stringify(bad));
+    assert.equal(read, false, JSON.stringify(bad));
+    assert.deepEqual(s.calls, []);
+    assert.deepEqual(s.vets, []);
+  }
+  const s = twoSetup(t);
+  assert.equal(await main(['--selected', '--skill', NAME], s.env), 1);
+  assert.deepEqual(s.calls, []);
+});
+
+test('--skill is refused with --status and without --selected', async (t) => {
+  for (const args of [['--status', `--skill=${NAME}`], [`--skill=${NAME}`]]) {
+    const s = twoSetup(t);
+    assert.equal(await main(args, s.env), 1, args.join(' '));
+    assert.deepEqual(s.calls, []);
+  }
+});
+
+test('a named skill keeps every check: a failed scan installs nothing and a missing license installs nothing', async (t) => {
+  const s = setup(t, { entries: [entry(), entry({ skillname: 'other-skill', license: '' })], lists: { qa: ['user', TWO] }, scan: { result: { verdict: 'fail', blocking: true, counts: { critical: 1, high: 0 } } } });
+  assert.equal(await main(['--selected', `--skill=${NAME}`], s.env), 1);
+  assert.deepEqual(s.calls, []);
+  const t2 = setup(t, { entries: [entry(), entry({ skillname: 'other-skill', license: '' })], lists: { qa: ['user', TWO] } });
+  assert.equal(await main(['--selected', '--skill=other-skill'], t2.env), 0);
+  assert.ok(t2.log.includes('not in the catalog: other-skill'), t2.log.join('|'));
+  assert.deepEqual(t2.calls, []);
+  assert.deepEqual(t2.vets, []);
+});
+
+test('a hash that differs after a named install stores nothing and exits 1', async (t) => {
+  const s = setup(t, { install: ({ home }) => plant(path.join(home, '.claude', 'skills', NAME), 'other') });
+  assert.equal(await main(['--selected', `--skill=${NAME}`], s.env), 1);
+  assert.equal(readUser(s.home)[0].hash, undefined);
+});

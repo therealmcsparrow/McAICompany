@@ -169,7 +169,8 @@ test('rewritten lines keep their rules: settings, locks, auto Gates, Language:',
   has(skillOnly, 'A resolved model of `inherit` means your own session model', 'Never pass the literal `inherit`');
   has(skillOnly, '`Role skills:` lists the names §1.19 built for that Role', 'from its `dispatch:` field only', 'Never from `.company/project.md`, a Handoff or a stored string');
   has(skillOnly, '**Migration form.**', 'role-skills pending`', 'Migrate (Recommended) / Later', '`degraded: unmigrated skill lines <n>`');
-  has(skillOnly, '**Install / Skip form.**', 'Install only ever means `install-skills --selected`', 'any Skip installs nothing', '`not in the catalog`');
+  has(skillOnly, '**Install / Skip form.**', 'Install only ever means `install-skills --selected`', '`--skill=<name>`', 'only the Install picks', 'each Skip is recorded as `degraded: missing <name>`', '`not in the catalog`');
+  assert.doesNotMatch(skillOnly, /any Skip installs nothing/);
   has(skillOnly, 'only when `settings_folder_moved` in the §1.7 `get` JSON is `false`; true or absent shows the form', 'never auto, and that skill is on no `Role skills:` line');
 });
 
