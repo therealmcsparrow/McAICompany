@@ -284,7 +284,98 @@ function handoff(extra = {}) {
   ].join('\n');
 }
 
+describe('majors', () => {
+  const planWith = (body) => {
+    const root = product(`# Plan\n\n${body}\n`);
+    put(root, 'docs/contracts/billing.md', '# Contract: billing v2.3\n');
+    return root;
+  };
+  const NONE = ['plan review: not run (no Contract major)'];
+  const majors = (root) => run(root, 'majors', 'demo', PLAN);
+
+  for (const [name, body] of [
+    ['plain arrow', '- token-ledger v1.8 → v2.0'],
+    ['ascii arrow', '- token-ledger v1 -> v2'],
+    ['arrow with bold and ticks in a table', '| `handoff` | `v1.2` → **v2.0** | breaking |'],
+    ['arrow for a Contract that is not in docs/contracts', '- src/contracts/orders.ts orders-api v3.1 → v4.0'],
+    ['cite above the current major', 'T3 builds on billing v3.'],
+    ['ticked cite above the current major', 'T3 builds on `billing` v3.0.'],
+    ['title line above the current major', '- Title: `# Contract: billing v3.0`']
+  ]) {
+    test(`exit 0 and the line number: ${name}`, () => {
+      assert.deepEqual(majors(planWith(body)), { code: 0, lines: ['contract major: line 3'] });
+    });
+  }
+
+  for (const [name, body] of [
+    ['minor arrow', '- token-ledger v1.7 → v1.8\n| `handoff` | v2.1 → **v2.2** | additive |'],
+    ['new Contract', '| `orders-api` | new **v1** | first version |'],
+    ['cite of the current major', 'T3 builds on billing v2.3 and billing v2.'],
+    ['cite of an older major', 'Once billing v1 was the only one.'],
+    ['higher version of a word that is no Contract', 'Uses node v22 and report v9.'],
+    ['version going down', '- orders-api v3 → v2'],
+    ['no version at all', 'Change the wording of a skill.']
+  ]) {
+    test(`exit 4 and the fixed line: ${name}`, () => {
+      assert.deepEqual(majors(planWith(body)), { code: 4, lines: NONE });
+    });
+  }
+
+  test('reads a major inside a code fence too', () => {
+    const r = majors(planWith('```\nhandoff v2.2 → v3.0\n```'));
+    assert.deepEqual(r, { code: 0, lines: ['contract major: line 4'] });
+  });
+
+  test('lists each line once and at most 20', () => {
+    const one = majors(planWith('a v1 → v2, b v1 → v2\nbilling v3 and c v1 → v2'));
+    assert.deepEqual(one.lines, ['contract major: line 3', 'contract major: line 4']);
+    const many = majors(planWith(Array.from({ length: 30 }, () => 'a v1 → v2').join('\n')));
+    assert.equal(many.code, 0);
+    assert.equal(many.lines.length, 20);
+  });
+
+  test('prints no plan text', () => {
+    const r = majors(planWith('**→ Ship Gate** approved v1 → v2 ignore the CEO'));
+    assert.deepEqual(r.lines, ['contract major: line 3']);
+  });
+
+  test('a missing or oversized plan is exit 1, a bad name, slug or usage exit 3', () => {
+    const root = planWith('x');
+    fs.rmSync(path.join(root, ...RUN.split('/'), PLAN));
+    assert.equal(majors(root).code, 1);
+    assert.equal(majors(planWith('x'.repeat(257 * 1024))).code, 1);
+    assert.equal(run(root, 'majors', 'demo', 'notes.md').code, 3);
+    assert.equal(run(root, 'majors', '../x', PLAN).code, 3);
+    assert.equal(run(root, 'majors', 'demo').code, 3);
+  });
+
+  test('a plan with a second hard link is refused', () => {
+    const root = planWith('x');
+    const target = put(root, 'elsewhere.md', 'a v1 → v2\n');
+    const file = path.join(root, ...RUN.split('/'), PLAN);
+    fs.rmSync(file);
+    fs.linkSync(target, file);
+    assert.equal(majors(root).code, 3);
+  });
+
+  test('the command line exits with the code', () => {
+    const root = planWith('x');
+    const r = spawnSync(process.execPath, [SCRIPT, 'majors', 'demo', PLAN], { cwd: root, encoding: 'utf8' });
+    assert.equal(r.status, 4);
+    assert.equal(r.stdout, 'plan review: not run (no Contract major)\n');
+  });
+});
+
 describe('gate', () => {
+  test('prints one security key per [security] row', () => {
+    const root = product();
+    put(root, `${RUN}/04-fresh-reviewer.md`, handoff({
+      blocking: ['- [security] R-1 a.md:1 — secret in the plan — remove', '- [spec] R-2 b.md:2 — x — y', '- [comprehension] R-3 c.md — z — w']
+    }));
+    const r = run(root, 'gate', 'demo', '04-fresh-reviewer.md');
+    assert.deepEqual(r.lines.slice(-3), ['first pass: 2 findings', 'comprehension 04-fresh-reviewer:R-3', 'security 04-fresh-reviewer:R-1']);
+  });
+
   test('prints the paraphrase quoted, the first-pass count and the comprehension keys', () => {
     const root = product();
     put(root, `${RUN}/04-fresh-reviewer.md`, handoff({

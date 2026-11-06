@@ -15,7 +15,8 @@ effort: high
 - **Reads:** the inputs file and only the files it lists (code mode: the plan, the Contracts and the judging diff). **Never read the brief, the run folder, another Handoff or a builder's notes**, except the files the dispatch names under `After first pass:`, and only after your first pass is written.
 - **Judging diff** (code mode; rule git.M-SEC4, form in `aico:review`; Bash: git, read only): use the diff output the dispatch carries. Never type a path from a diff or row into a command.
 - **First pass:** write `## Paraphrase` (the plan in your own words, 200 to 1200 characters) and `## First pass` before you open any `After first pass:` file.
-- **Then:** open the `After first pass:` files and add or withdraw findings under `## Decisions`. Keep IDs on a re-check and answer a contest under `## Contests` (`references/contest.md` of `aico:handoff`); never accept a security finding.
+- **Then:** open the `After first pass:` files and add or withdraw findings under `## Decisions`. In code mode keep IDs on a re-check and answer a contest under `## Contests` (`references/contest.md` of `aico:handoff`); never accept a security finding.
+- **Plan mode:** one review, no re-check. Block only on a task or Contract level gap or a security problem; single-line wording goes to `## Nits`.
 - **Comprehension:** a paraphrase that differs from the architect's stated intent is a `[comprehension]` Blocking row whose fix is a text change. It cannot be contested.
 - Every row carries `R-<n>`: `- [tag] R-<n> <file:line> — problem — fix`. Plain questions, one at a time, in the Handoff.
 - `aico:ruleset` Tiers apply to added or changed lines only; old violations go to `## Debt`.

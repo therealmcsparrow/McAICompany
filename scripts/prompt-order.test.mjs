@@ -273,7 +273,7 @@ test('the plan review dispatch block has the three review lines in order and no 
 });
 
 test('plan-review.md runs lines before every fresh-reviewer dispatch and keeps the Lead flow', () => {
-  has(planReview, 'plan-review', 'lines', 'right before every', 'round-1 re-check', 'Round: 1', 'gate', 'handoff-lint --contests', 'plan review: not run', 'escalated', 'No second revision', '`handoff` v2.0');
+  has(planReview, 'plan-review', 'lines', 'right before every', 'majors', 'no Contract major', 'No re-check', 'closes only by a fix or a CEO exception', 'gate', 'handoff-lint --contests', 'plan review: not run', 'escalated', 'No second revision', '`handoff` v2.0');
   has(planReview, 'a plan fix, a contest with evidence or an escalation');
 });
 
@@ -319,6 +319,7 @@ test('feature and fix name the plan review and the second reviewer; the architec
   const fix = read('skills/fix/SKILL.md');
   has(fix, 'second-reviewer', 'references/review-loop.md');
   const architect = read('agents/architect.md');
+  assert.match(architect, /^tools: .*, Edit$/m);
   has(architect, 'a plan fix, a contest with evidence or an escalation');
   assert.ok(architect.replace(/\n$/, '').split('\n').length <= 50);
 });

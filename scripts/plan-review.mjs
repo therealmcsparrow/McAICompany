@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Plan review (contract: docs/contracts/plan-review.md v1.2). Node built-ins only.
+// Plan review (contract: docs/contracts/plan-review.md v1.3). Node built-ins only.
 // uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v1
 // `lines` writes the inputs file a reviewer reads, `gate` prints the reviewer's paraphrase for the CEO,
-// `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
+// `majors` says whether a plan raises a Contract's major version, `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
 // every pattern is anchored over a character class, sizes are capped before parsing, every file is read by
 // the real-path rule (no link, junction or second hard link on the path), and output holds only fixed words,
 // counts and paths that passed the path rule. The script runs no git and no shell.
@@ -28,6 +28,7 @@ const MAX_CANDIDATES = 5000;
 const MAX_CASES = 100;
 const MAX_PARAPHRASE = 1200;
 const MAX_ROW = 1000;
+const MAX_MAJOR_LINES = 20;
 
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 const HANDOFF_NAME = /^\d{2,3}-[a-z][a-z0-9-]{0,40}\.md$/;
@@ -37,13 +38,15 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const CONTRACT_TOKEN = /docs\/contracts\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.md(?![\w-])/g;
 const CITE = /(^|[^A-Za-z0-9_-])([a-z][a-z0-9]*(?:-[a-z0-9]+)*) v\d+(?:\.\d+)?(?!\w|\.\d)/g;
+const VERSION_ARROW = /(?<![A-Za-z0-9_.-])v(\d{1,4})(?:\.\d{1,4})?[`*]{0,3}[ \t]{0,3}(?:→|->)[ \t]{0,3}[`*]{0,3}v(\d{1,4})(?:\.\d{1,4})?(?!\w|\.\d)/g;
+const VERSION_CITE = /(?:^|[^A-Za-z0-9_-])`?([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`? [`*]{0,3}v(\d{1,4})(?:\.\d{1,4})?(?!\w|\.\d)/g;
 const TICKED = /`([^`\n]{1,200})`/g;
 const FILES_LINE = /^\s{0,3}[-*]\s+files:[ \t]*(.{0,4000})$/;
 const FENCE = /^\s{0,3}(?:`{3,}|~{3,})/;
 const TAGS = ['contract', 'spec', 'security', 'test', 'comprehension'];
 const KIND_FILES = { plan: ['tests', 'plan-review', 'eval.jsonl'], code: ['tests', 'code-review', 'eval.jsonl'] };
 
-const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan|code --after <file>[,<file>…] | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
+const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan|code --after <file>[,<file>…] | majors <slug> <plan> | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
 
 class Refused extends Error {}
 class Unreadable extends Error {}
@@ -370,6 +373,37 @@ function cmdLines(args, env) {
   };
 }
 
+// ---------------------------------------------------------------- majors
+
+// A line raises a major when it writes a version arrow to a higher major, or cites an indexed Contract above its
+// current major. The arrow needs no index, because a product may keep its Contracts outside docs/contracts.
+function raisesMajor(line, index) {
+  for (const m of line.matchAll(VERSION_ARROW)) if (Number(m[2]) > Number(m[1])) return true;
+  for (const m of line.matchAll(VERSION_CITE)) {
+    const entry = index.get(m[1]);
+    if (entry && Number(m[2]) > entry.major) return true;
+  }
+  return false;
+}
+
+function cmdMajors(args, env) {
+  if (args.length !== 2) throw new Refused(USAGE);
+  const slug = needSlug(args[0]);
+  const planName = args[1];
+  if (!PLAN_NAME.test(planName)) throw new Refused('bad plan name');
+  const realRoot = realRootOf(env.root);
+  exactNames(realRoot, slug, [planName]);
+  const text = planFile(realRoot, slug, planName, MAX_PLAN_BYTES);
+  const index = buildIndex(realRoot);
+  const lines = [];
+  for (const [i, line] of text.split(/\r\n|\n|\r/).entries()) {
+    if (lines.length === MAX_MAJOR_LINES) break;
+    if (raisesMajor(line, index)) lines.push(`contract major: line ${i + 1}`);
+  }
+  if (lines.length === 0) return { code: 4, lines: ['plan review: not run (no Contract major)'] };
+  return { code: 0, lines };
+}
+
 // ---------------------------------------------------------------- Handoff reading
 
 function frontmatter(lines) {
@@ -456,7 +490,10 @@ function cmdGate(args, env) {
   const first = (sections.get('First pass') ?? []).filter((l) => /^- R-\d{1,4}(?: |$)/.test(l)).length;
   const stem = name.slice(0, -3);
   const lines = ['paraphrase:', ...shown, `first pass: ${first} findings`];
-  for (const r of blockingRows(sections)) if (r.tag === 'comprehension' && r.n !== null) lines.push(`comprehension ${stem}:R-${r.n}`);
+  const rows = blockingRows(sections).filter((r) => r.n !== null);
+  for (const tag of ['comprehension', 'security']) {
+    for (const r of rows) if (r.tag === tag) lines.push(`${tag} ${stem}:R-${r.n}`);
+  }
   return { code: 0, lines };
 }
 
@@ -622,7 +659,7 @@ function cmdScore(args, env) {
 
 // ---------------------------------------------------------------- main
 
-const HANDLERS = { lines: cmdLines, gate: cmdGate, score: cmdScore };
+const HANDLERS = { lines: cmdLines, majors: cmdMajors, gate: cmdGate, score: cmdScore };
 
 export function main(args, { root, now } = {}) {
   const env = {

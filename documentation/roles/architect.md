@@ -13,7 +13,7 @@ Ava, the architect (CTO), designs *how* a product is built: the Core list, the M
 - Agent file: `agents/architect.md`
 - Default name: Ava
 - Model: opus. Effort: high. Protected Role: it never runs below opus. Set the model with `roles.<role>.model` in `/aico:settings`; see [Which model a Role runs on](../concepts/model-choice.md).
-- Tools: Read, Grep, Glob, Skill, Write
+- Tools: Read, Grep, Glob, Skill, Write, Edit
 - Inputs: the Input Handoffs named in the dispatch. Output: one Handoff file at the Output path.
 - Writes only ADRs and Contract definitions. Adds an S/M/L estimate in a brainstorm. See [Core, Modules and Contracts](../concepts/core-modules-contracts.md).
 

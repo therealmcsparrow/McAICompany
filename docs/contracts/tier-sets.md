@@ -1,7 +1,8 @@
-# Contract: tier-sets v1.4
+# Contract: tier-sets v1.5
 
 Provider: `scripts/tier-set.mjs` (data file loader, tier and path decision, forced-high path check, run record writer and reader; Node built-ins only) and the plugin data file `company/tier-sets.json`. Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/tier-path.md`), only through the CLI, only for `aico:feature` and `aico:fix` runs. Consumers: the Lead (which Roles and lanes to dispatch, the `Risk tier:` of each later dispatch, the Gate summary lines), and `scripts/ledger.mjs` `ship` through the exported `readTierPath` (`token-ledger` v1.4).
 Uses: `run-state` v1.3 `show(root, slug)` (the view's `tier`, read only), `plan-tasks` v1 exports `parsePlan` and `normalizePath` and its plan file name rule, `aico-settings` v1.8 `pipeline.short_path` (passed in by the caller as `--short`; the script reads no settings), `run-state` v1.4 `triage check --route fix` (only through the caller's `--triage` value), `git` (object format and base resolution at `begin`; object format, the base check, Core and the diff at `sync`), run as the "Git" paragraph below says (v1.1; `rule-check` v1.1 and `review-depth` v1.1 run their git the same way).
+v1.5 is additive: the `plan-review` condition also needs a Contract major in the plan (`plan-review` v1.3 `majors`). Sets, tiers and the data file are unchanged.
 v1.4 is additive (task Draft Input Folder Case Draft, T9; `docs/adr/0007-contract-minor-versions.md`, uses `work-folder-name` v1.1 `exactWorkPath`): after the name-shape check and before any file, record or git call, every command (`preview`, `begin`, `sync`, `raise`, `read`) checks the slug against the directory entries of `.company/work`. A slug that exists only in another letter case is refused with `refused: wrong letter case`, exit 3, and no record is written. A slug missing in every case behaves as before. Every other refusal is unchanged.
 v1.3 is additive (task idea-20261030-2242-build-draft, T14): the slug argument may be a new work folder name (`work-folder-name` v1, `isWorkFolder`), and `sync --diff` reads the run ref `refs/heads/aico/<branch id>` where `<branch id>` is `branchId(<slug>)` re-checked against `^[a-z0-9][a-z0-9-]{0,127}$` (a legacy slug is its own id, so its ref is unchanged). The run folder and the record keep the run name. Every refusal stays: a name that is not a work folder is `bad slug`, exit 3, before any file or git call.
 v1.2 is additive (task elephant-goldfish, T3): the route gains `prototype`, `plan-review`, `second-reviewer` and `destination-spec` (table below), the data file `rev` is 2, and `plan-review` and `second-reviewer` are in no low set. A trust rule is unchanged: a set never adds a Role the route would not run.
@@ -49,7 +50,7 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 | feature | `senior-engineer-research` | 2c | a pack missing, stale or new | |
 | feature | `senior-engineer-map` | 2c | otherwise | |
 | feature | `ruleset-sign-off` | 2d | Must rules added or changed | |
-| feature | `plan-review` | 2e | the architect ran; after `ruleset-sign-off` (v1.2) | |
+| feature | `plan-review` | 2e | the architect ran and `plan-review` `majors` finds a Contract major (v1.5); after `ruleset-sign-off` (v1.2) | |
 | feature | `builders` | 3 | always | yes |
 | feature | `asset-artists` | 3b | the build needs Assets | |
 | feature | `code-reviewer` | 4 | always | yes |
