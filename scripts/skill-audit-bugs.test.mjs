@@ -150,7 +150,7 @@ test('R-brainstorm-step the "after step N (the commit)" number is the step that 
 test('R-brainstorm-limit the kickoff topic limit equals format 2 and the script limit (brainstorm:25)', () => {
   const skill = read('skills/brainstorm/SKILL.md').match(/`topic` is the idea as one plain line of at most (\d+) characters/);
   const f2 = read('skills/brainstorm/references/format-2.md').match(/"topic": "<one line, at most (\d+) characters>"/);
-  const script = read('scripts/brainstorm.mjs').match(/t\.length > (\d+)/);
+  const script = read('scripts/brainstorm.mjs').match(/t\.length > (\d+)[^\n]*topic must be one plain line of 1 to \d+ characters/); // newFile, not the 300-char checks above it
   assert.ok(skill && f2 && script, 'all three limits found');
   assert.equal(skill[1], script[1], 'SKILL limit vs brainstorm.mjs newFile');
   assert.equal(skill[1], f2[1], 'SKILL limit vs format-2.md');
