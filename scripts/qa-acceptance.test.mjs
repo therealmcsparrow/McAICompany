@@ -711,8 +711,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
   // 27 removed lines (the Lead budget line is reworded in place to the fixed 95000 cap): the ten above, plus the Context cap line (fixed 95000/85500, dispatch-prompt v4.2) and the Gate line (no Brief or Plan Gate in feature and fix, ADR 0050) reworded in place, plus the Task slug line (the exceptions-on-file refusal, v0.21.0), the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
   // 28 since the work folder names: the Setup slug and branch lines, the ledger and rule-check calls and the push lines now quote the run name, and the Branch line takes the printed branch value.
-  // 29 since the skill audit bugs: the Plan check bullet (B6) is reworded in place. B5 only adds lines (Setup item 18, one Gate bullet). Counted on committed text (git diff BASE HEAD).
-  assert.equal(Number(removedFromPipeline), 29);
+  // Still 28 after the skill audit bugs: the Plan check bullet (B6) was added after v0.12.0, so rewording it removes no v0.12.0 line. B5 only adds lines (Setup item 18, one Gate bullet).
+  assert.equal(Number(removedFromPipeline), 28);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 
