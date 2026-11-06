@@ -514,7 +514,7 @@ const HAND_OVER_CHANGES = {
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
       // The prototype step and the destination spec at ship (v0.21.0).
       /^5a\. `aico:product-manager`: destination spec, checked by `spec-check\.mjs`/,
-      /^\*\*Draft input:\*\* the argument is one token with no whitespace ending/,
+      /^\*\*Draft input:\*\* the argument is a path ending `grill\.md`, `spec\.md` or `plan\.md` under a `\.company\/work\/<name>\/` folder/,
     ],
   },
   fix: {
@@ -534,6 +534,13 @@ const HAND_OVER_CHANGES = {
       "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.",
       "   **→ Ship Gate** (after sync --diff; added lanes first)",
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
+    ],
+  },
+  // Vulnscan gains one notice line (skill audit S7): dependency names go to public sources, said to the CEO before the scan.
+  vulnscan: {
+    removed: [],
+    added: [
+      /^\*\*Notice to the CEO\*\*, in your first message and before the scan starts: .*dependency names and versions to public sources/,
     ],
   },
   incident: {
@@ -704,7 +711,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
   // 27 removed lines (the Lead budget line is reworded in place to the fixed 95000 cap): the ten above, plus the Context cap line (fixed 95000/85500, dispatch-prompt v4.2) and the Gate line (no Brief or Plan Gate in feature and fix, ADR 0050) reworded in place, plus the Task slug line (the exceptions-on-file refusal, v0.21.0), the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
   // 28 since the work folder names: the Setup slug and branch lines, the ledger and rule-check calls and the push lines now quote the run name, and the Branch line takes the printed branch value.
-  assert.equal(Number(removedFromPipeline), 28);
+  // 29 since the skill audit bugs: the Plan check bullet (B6) is reworded in place. B5 only adds lines (Setup item 18, one Gate bullet). Counted on committed text (git diff BASE HEAD).
+  assert.equal(Number(removedFromPipeline), 29);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 

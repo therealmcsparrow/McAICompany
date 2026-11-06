@@ -53,6 +53,10 @@ confirm() {
 
 # write_env KEY VALUE: sets KEY in $ENV_FILE, replacing an existing line.
 write_env() {
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! git check-ignore -q -- "$ENV_FILE"; then
+    say "Refusing to write $1: git does not ignore $ENV_FILE. Add it to .gitignore first."
+    return 1
+  fi
   touch "$ENV_FILE"
   local tmp
   tmp="$(mktemp)"
@@ -65,7 +69,7 @@ write_env() {
 
 # set_secret NAME VALUE / set_var NAME VALUE: GitHub Actions secret or variable via gh.
 set_secret() {
-  printf '%s' "$2" | gh secret set "$1" --body -
+  printf '%s' "$2" | gh secret set "$1"
   DONE+=("GitHub secret: $1")
   step "Set GitHub secret $1"
 }

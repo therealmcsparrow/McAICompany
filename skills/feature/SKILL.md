@@ -10,7 +10,7 @@ argument-hint: <feature description | draft file>
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook feature` first; exit not 0 → show its output line and stop.
 
-**Draft input:** the argument is one token with no whitespace ending `grill.md`, `spec.md` or `plan.md` → follow `## Draft inputs` of `references/intake-and-ship.md` before Setup item 1. Any other argument is the CEO's request, as today.
+**Draft input:** the argument is a path ending `grill.md`, `spec.md` or `plan.md` under a `.company/work/<name>/` folder (`<name>` a work folder name that may hold spaces, with at most one surrounding pair of single quotes) → follow `## Draft inputs` of `references/intake-and-ship.md` before Setup item 1. Any other argument is the CEO's request, as today.
 
 Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline references/tier-path.md); an entry not in the set: line is skipped and named in the Ship Gate summary. No Brief Gate and no Plan Gate in any run, a direct call included: nothing waits for the CEO before the build, and the Ship Gate always runs. A CEO decision that used to wait for a Gate is one form when it arises (`references/intake-and-ship.md` `## Forms`). Steps (∥ = dispatch in parallel):
 

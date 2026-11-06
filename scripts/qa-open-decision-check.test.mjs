@@ -692,9 +692,10 @@ test('AC8 block with findings exits 2 and still writes the scan record; block wi
   assert.equal(readRecordLines(c.root, 'clean')[0].findings, 0);
 });
 
-test('AC8 the pipeline text says the Plan Gate treats block like warn in this version', () => {
+test('AC8 the pipeline text says exit 2 (block) makes the scripts refuse the Plan Gate, not that it is treated like warn', () => {
   const ref = fs.readFileSync(path.join(repoRoot, 'skills', 'pipeline', 'references', 'plan-check.md'), 'utf8');
-  assert.match(ref, /exit 2[^\n]*(warn|treated)|block[^\n]*(like|as|treated)[^\n]*warn/i);
+  assert.match(ref, /Exit 2 \(`block`\) means the scripts refuse the Plan Gate/);
+  assert.doesNotMatch(ref, /shown like `warn`|Gate can be approved/);
 });
 
 test('the gate command refuses bad arguments with exit 3 and writes nothing', async (t) => {

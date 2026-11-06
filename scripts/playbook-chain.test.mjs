@@ -191,7 +191,7 @@ test('AC-chain-3b: brainstorm close option 1 (Build it) starts the main-work Pla
   assert.ok(cmdOf(l), `option 1 must give a backticked /aico:<Playbook> fallback command: ${l}`);
   assert.ok(/`work:`/.test(l), 'the Playbook is still the first of the type\'s `work:` line');
   assert.ok(/status: built/.test(l), 'option 1 keeps status: built');
-  assert.ok(/After step 5 \(the commit\)/.test(l), `option 1 starts the Playbook only after the commit: ${l}`);
+  assert.ok(/After step 4 \(the commit\)/.test(l), `option 1 starts the Playbook only after the commit: ${l}`);
 });
 
 test('AC-chain-3c: research pick Start starts the main-work Playbook with the Skill tool and falls back to the command', () => {

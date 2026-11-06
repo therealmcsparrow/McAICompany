@@ -29,8 +29,9 @@ test('section 1.7 names plan_check and its fallback', () => {
   has(pipeline, '`plan_check` (`policy`, `runs`)', '`plan_check` `warn`, runs 5');
 });
 
-test('section 4 says the Plan Gate shows the block and never blocks in this version', () => {
-  has(pipeline, '**Plan Gate** also shows the Plan check block (`references/plan-check.md`); in v0.16 it never blocks the Gate.');
+test('section 4 says the Plan Gate shows the block; it never blocks under warn and off, the scripts refuse under block', () => {
+  has(pipeline, '**Plan Gate** also shows the Plan check block (`references/plan-check.md`); under `warn` and `off` it never blocks the Gate, under `block` the scripts refuse a Plan Gate with open decisions (plan-check step 7).');
+  assert.ok(!pipeline.includes('in v0.16 it never blocks'));
 });
 
 test('section 6 names which rounds fix_rounds counts', () => {
@@ -45,7 +46,8 @@ test('the reference runs gate or off at the Plan Gate, wave after the form, read
     'run.mjs" plan-check read \'<slug>\'',
     'Plan check: mark warnings as noise',
     '`plan-check marker: <state, or the error line>`',
-    'exit 2 (`block`) is shown like `warn`');
+    'Exit 2 (`block`) means the scripts refuse the Plan Gate (step 7)');
+  assert.ok(!reference.includes('is shown like `warn`'));
   assert.ok(!/<plugin root>/.test(reference));
 });
 

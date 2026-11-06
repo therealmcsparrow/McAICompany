@@ -126,7 +126,7 @@ It writes nothing to the repo or `.company/` (AC12) and prints to stdout only. `
 - Record unwritable (a link, over a limit, run folder missing) → `refused: <reason>`, exit 3; the Gate shows the line and goes on.
 - `verdict` with `git` missing or failing → runs are ordered by mtime and every Step time is its `mtime` (one warning). `history` with `git` missing or failing → only the working-tree source, one warning, exit 0; it exits 1 only when neither source can be read.
 - A ledger file that is unreadable → no recorded value for that run (it is left out with the warning above); the ledger is never repaired or written.
-- Nothing here ever blocks a v0.16 Gate. Exit 2 exists for the later hook-run Gate; in v0.16 the Plan Gate treats it as warn.
+- Under `warn` and `off` nothing here blocks a Gate. Under `block` exit 2 is real: `run-state gate plan passed` and `plan-tasks begin`, `next` and `start` refuse a plan with open decisions (`plan-check verify`, v1.2), and the pipeline text says so (`skills/pipeline/references/plan-check.md` step 7).
 
 ## Compatibility
 - New Contract. A run folder without `plan-check.jsonl` reads as state `none`.
