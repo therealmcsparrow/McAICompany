@@ -118,6 +118,12 @@ h2 { font-size: var(--fs-lg); font-weight: 600; line-height: 1.3; margin: var(--
 .pfield .hint { margin: var(--s1) 0 0; }
 .pfield .hint.held { color: var(--warn); }
 .plevel button { margin-top: var(--s3); }
+.sk-list { list-style: none; margin: var(--s3) 0 0; padding: 0; }
+.sk-row { display: flex; gap: var(--s3); align-items: flex-start; min-height: 44px; padding: var(--s2) 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.sk-row input { width: 24px; height: 24px; margin: 2px 0 0; flex: none; }
+.sk-row .sk-text { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.sk-row label { font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+.sk-row .ro { display: block; }
 .peff { margin-top: var(--s4); background: var(--head); border-radius: var(--r1); padding: var(--s3); }
 .peff h4 { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
 .peff dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--s4); margin: 0; }
@@ -192,6 +198,7 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
   <div id="notices" role="status" aria-live="polite"></div>
   <div role="tablist" aria-label="Settings">
     <button role="tab" id="tab-roles" aria-controls="panel-roles" aria-selected="true">Roles</button>
+    <button role="tab" id="tab-skills" aria-controls="panel-skills" aria-selected="false" tabindex="-1">Skills</button>
     <button role="tab" id="tab-personality" aria-controls="panel-personality" aria-selected="false" tabindex="-1">Personality</button>
     <button role="tab" id="tab-language" aria-controls="panel-language" aria-selected="false" tabindex="-1">Language &amp; profile</button>
     <button role="tab" id="tab-pipeline" aria-controls="panel-pipeline" aria-selected="false" tabindex="-1">Pipeline</button>
@@ -200,7 +207,8 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
     <button role="tab" id="tab-mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button>
   </div>
   <section role="tabpanel" id="panel-roles" aria-labelledby="tab-roles"></section>
-  <section role="tabpanel" id="panel-personality" aria-labelledby="tab-personality" hidden></section>
+  <section role="tabpanel" id="panel-skills" aria-labelledby="tab-skills" hidden><p class="hint" role="status">Loading skills...</p></section>
+  <section role="tabpanel" id="panel-personality"aria-labelledby="tab-personality" hidden></section>
   <section role="tabpanel" id="panel-language" aria-labelledby="tab-language" hidden></section>
   <section role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden></section>
   <section role="tabpanel" id="panel-gates" aria-labelledby="tab-gates" hidden></section>
@@ -346,9 +354,11 @@ function initialLanguage() {
 }
 function resetDraft() {
   touched = new Set();
+  buildSkillIndex();
+  skillBase = { user: withoutStaleSkills(clone(state.user)), project: withoutStaleSkills(clone(state.project)) };
   draft = {
-    user: clone(state.user),
-    project: clone(state.project),
+    user: withoutStaleSkills(clone(state.user)),
+    project: withoutStaleSkills(clone(state.project)),
     profile: clone(state.resolved.profile.fields),
     language: initialLanguage()
   };
@@ -397,7 +407,7 @@ function clearedIgnored(level) {
   }
   return n;
 }
-const levelChanges = (level) => diffCount(outgoing(level), state[level]) + clearedIgnored(level);
+const levelChanges = (level) => diffCount(outgoing(level), skillBase[level] ?? state[level]) + clearedIgnored(level);
 function unsavedCount() {
   return levelChanges('user') + levelChanges('project')
     + Object.keys(changedProfile()).length + Object.keys(changedLanguage()).length;
@@ -1022,6 +1032,12 @@ function mapRefusals(lines) {
   const marked = [];
   const plan = [];
   for (const line of lines) {
+    const km = REFUSED_SKILLS.exec(line);
+    const krec = km && skRecs.find((r) => r.level === km[1] && r.role === km[2]);
+    if (krec) {
+      rest.push(markSkillRefused(krec, line));
+      continue;
+    }
     const pm = REFUSED_PLAN_CHECK.exec(line);
     const prec = pm && planRecs.find((r) => r.level === pm[1] && r.key === pm[2]);
     if (prec) {
@@ -1546,6 +1562,291 @@ function renderScan(panel) {
   panel.append(el('p', { class: 'hint', id: 'scan-note' }, SCAN_NOTE));
 }
 
+// ---------- Skills tab ----------
+const MAX_SKILLS = 5;
+const SKILL_NAME_RE = /^[a-z0-9][a-z0-9:-]{0,63}$/;
+const SKILL_CAP_TEXT = 'Limit reached: a Role can have 5 skills. Clear one first.';
+const SKILL_INFO = 'Choosing a skill installs nothing. aico asks before it installs, at the start of a run. Status is read when this page loads; reload to check again. aico never runs a skill\'s command.';
+const SKILL_ADD_HINT = 'You have not added skills of your own. Add one with /aico:add-skill in your Claude Code session.';
+const SKILL_NONE_HINT = 'No skills match this Role\'s categories. Add one with /aico:add-skill in your Claude Code session.';
+const SKILL_PROTECTED = 'Protected Role: skills are chosen at User level only. A project value is ignored.';
+const SKILL_IGNORED = 'Ignored: this stored skill is not in the list or not in this Role\'s categories. It stays in the file until you save a change at this level, and that save removes it.';
+const SKILL_NOT_FOUND = 'Not found is not proof: an installer may write elsewhere.';
+const SKILL_NOT_SELECTABLE = 'Not selectable: this entry stands for a group of skills.';
+const SKILL_MOVED = 'The settings folder is not your user home, so User level skills are not counted.';
+const REFUSED_SKILLS = /^(user|project) roles\.([a-z0-9-]+)\.skills(?:\[\d+\]\.name)?: /;
+
+let skRoles = {};   // per Role: details, summary parts and level records of the Skills tab
+let skRecs = [];    // one record per Role and level with controls, in page order
+let skFilter = '';  // the Role filter on the Skills tab; never saved or sent
+let skFilterUI = null;
+let skillBase = { user: null, project: null }; // the stored layers without stale skill names: what "changed" compares to
+let skIndex = new Map(); // catalog name -> entry
+const skillCat = {};     // "role|level" -> chosen category filter; survives a re-render
+const openSkillRoles = new Set();
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+function skillEntries() {
+  const list = state.catalog?.entries;
+  if (!Array.isArray(list)) return [];
+  return list.filter((e) => isObj(e) && typeof e.name === 'string' && Array.isArray(e.roles));
+}
+function buildSkillIndex() {
+  skIndex = new Map(skillEntries().map((e) => [e.name, e]));
+}
+const skillEligible = (role, name) => {
+  const e = skIndex.get(name);
+  return e !== undefined && e.selectable === true && e.roles.includes(role);
+};
+// A stored name the catalog does not offer this Role is dropped from the draft; the server drops it on the next save.
+// A list left empty by that is removed, not stored as an explicit empty choice.
+function withoutStaleSkills(layer) {
+  if (skIndex.size === 0 || !isObj(layer?.roles)) return layer;
+  for (const [role, entry] of Object.entries(layer.roles)) {
+    if (!isObj(entry) || !Array.isArray(entry.skills)) continue;
+    const kept = entry.skills.filter((i) => isObj(i) && skillEligible(role, i.name));
+    if (kept.length === entry.skills.length) continue;
+    if (kept.length === 0) delete entry.skills; else entry.skills = kept;
+    if (Object.keys(entry).length === 0) delete layer.roles[role];
+  }
+  if (Object.keys(layer.roles).length === 0) delete layer.roles;
+  return layer;
+}
+const skillList = (level, role) => {
+  const v = getIn(draft[level], ['roles', role, 'skills']);
+  return Array.isArray(v) ? v : undefined;
+};
+// Stored items at a level the page cannot offer: by name when it is plainly a name, else by position.
+function staleSkills(level, role) {
+  const stored = getIn(state[level], ['roles', role, 'skills']);
+  if (!Array.isArray(stored) || skIndex.size === 0) return [];
+  const prot = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
+  const out = [];
+  stored.forEach((item, n) => {
+    if (!prot && isObj(item) && skillEligible(role, item.name)) return;
+    out.push(isObj(item) && typeof item.name === 'string' && SKILL_NAME_RE.test(item.name) ? item.name : `stored value ${n + 1}`);
+  });
+  return out;
+}
+const skillEffective = (role) => {
+  const prot = state.resolved?.roles?.[role]?.protected === true;
+  const moved = state.resolved?.settings_folder_moved === true;
+  const p = prot ? undefined : skillList('project', role);
+  const u = moved ? undefined : skillList('user', role);
+  if (p !== undefined) return { list: p, source: 'project' };
+  if (u !== undefined) return { list: u, source: 'user' };
+  return { list: [], source: '' };
+};
+const sourceText = (e) => (e.kind === 'repo' ? `repo${typeof e.commit === 'string' ? ` at ${e.commit.slice(0, 7)}` : ''}` : e.kind === 'command' ? 'command (manual)' : 'plugin');
+
+function describeIds(rec, row) {
+  const ids = [`${row.id}-d1`, `${row.id}-d2`, `${row.id}-d3`];
+  if (row.e.selectable !== true) ids.push(`${row.id}-d4`);
+  if (rec.refusedRow === row && rec.message) ids.push(rec.err.id);
+  return ids.join(' ');
+}
+function say(text) {
+  const live = document.getElementById('field-live');
+  live.textContent = '';
+  live.textContent = text;
+}
+function refuseSkill(rec, row, text) {
+  rec.message = text;
+  rec.refusedRow = row;
+  say(text);
+  refresh();
+}
+function markSkillRefused(rec, line) {
+  const reason = line.includes('at most') ? 'a Role can have 5 skills.'
+    : line.includes('protected Role') ? 'skills are chosen at User level only.'
+    : 'a skill in the list is not available for this Role.';
+  rec.refused = true;
+  rec.message = `Error: Skills for ${rec.role}, ${rec.level} level, were refused: ${reason}`;
+  rec.refusedRow = null;
+  skRoles[rec.role].details.open = true;
+  openSkillRoles.add(rec.role);
+  refresh();
+  return `${roleLabel(rec.role)}, ${rec.level} level, Skills: the server refused the list: ${reason}`;
+}
+function toggleSkill(rec, row) {
+  const list = [...(skillList(rec.level, rec.role) ?? [])];
+  const at = list.findIndex((i) => i.name === row.e.name);
+  if (row.cb.checked && at === -1) {
+    if (list.length >= MAX_SKILLS) { row.cb.checked = false; refuseSkill(rec, row, SKILL_CAP_TEXT); return; }
+    list.push({ name: row.e.name });
+  } else if (!row.cb.checked && at !== -1) {
+    list.splice(at, 1);
+  }
+  rec.message = '';
+  rec.refused = false;
+  rec.refusedRow = null;
+  const had = getIn(skillBase[rec.level], ['roles', rec.role, 'skills']) !== undefined;
+  setIn(draft[rec.level], ['roles', rec.role, 'skills'], list.length > 0 || had ? list : undefined);
+  refresh();
+}
+
+function skillRow(rec, e) {
+  const id = `sk-${rec.role}-${rec.level}-${e.name}`;
+  const cb = el('input', { type: 'checkbox', id, disabled: e.selectable !== true });
+  const vetted = typeof e.vetted === 'string' && e.vetted !== '' ? `vetted ${e.vetted}` : 'not vetted';
+  const status = `${typeof e.status === 'string' ? e.status : 'not found'}${typeof e.place === 'string' && e.place !== '' ? `, ${e.place}` : ''}`;
+  const warnish = e.status === 'folder not recognized' || e.status === 'not found';
+  const row = { e, id, cb };
+  const info = [
+    el('span', { class: 'ro', id: `${id}-d1` }, `${e.category}, ${sourceText(e)}`),
+    el('span', { class: 'ro', id: `${id}-d2` }, 'Status: ', el('span', { class: warnish ? 'pill ign' : 'pill' }, status)),
+    el('span', { class: 'ro', id: `${id}-d3` }, `${typeof e.license === 'string' ? e.license : 'no license on record'}, ${vetted}`)
+  ];
+  if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}-d4` }, SKILL_NOT_SELECTABLE));
+  cb.addEventListener('change', () => toggleSkill(rec, row));
+  row.li = el('li', { class: 'sk-row' }, cb, el('div', { class: 'sk-text' }, el('label', { for: id }, e.name), info));
+  return row;
+}
+
+function skillLevel(role, level, entries, cats) {
+  const key = `${role}|${level}`;
+  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
+  if (level === 'project' && !projectOn()) {
+    box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'));
+    return box;
+  }
+  const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
+    count: el('p', { class: 'hint', id: `sk-${key.replace('|', '-')}-count`, 'aria-live': 'polite' }),
+    err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}-err`, hidden: true }) };
+  skRecs.push(rec);
+  skRoles[role].recs.push(rec);
+  const stale = staleSkills(level, role);
+  const protectedHere = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
+  if (protectedHere) {
+    box.append(el('p', { class: 'lockwhy locked' }, SKILL_PROTECTED));
+  } else if (entries.length === 0) {
+    box.append(el('p', { class: 'hint' }, SKILL_NONE_HINT));
+  } else {
+    if (cats.length > 1) {
+      const sel = el('select', { id: `sk-${role}-${level}-cat` }, el('option', { value: '' }, 'All categories'), cats.map((c) => el('option', { value: c }, c)));
+      sel.value = skillCat[key] ?? '';
+      sel.addEventListener('change', () => { skillCat[key] = sel.value; refresh(); });
+      box.append(el('div', { class: 'pfield' }, el('label', { for: sel.id }, 'Category'), sel));
+    } else {
+      box.append(el('p', { class: 'hint' }, `Category: ${cats[0]}`));
+    }
+    box.append(rec.count);
+    rec.rows = entries.map((e) => skillRow(rec, e));
+    box.append(el('ul', { class: 'sk-list' }, rec.rows.map((r) => r.li)));
+    if (entries.some((e) => e.status === 'not found')) box.append(el('p', { class: 'hint' }, SKILL_NOT_FOUND));
+    box.append(rec.err);
+  }
+  if (stale.length) {
+    box.append(el('p', { class: 'lockwhy locked' }, el('span', { class: 'pill ign' }, 'ignored'), ' ', SKILL_IGNORED),
+      el('ul', { class: 'hint' }, stale.map((s) => el('li', {}, s))));
+  }
+  rec.stale = stale.length;
+  return box;
+}
+
+function skillCard(role, entries, cats) {
+  const details = el('details', { class: 'pcard' });
+  details.open = openSkillRoles.has(role);
+  details.addEventListener('toggle', () => { if (details.open) openSkillRoles.add(role); else openSkillRoles.delete(role); });
+  const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
+  const reg = { role, details, entries, sum: el('span', { class: 'psum' }), eff: el('dl'), recs: [],
+    pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
+  skRoles[role] = reg;
+  details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
+  const grid = el('div', { class: 'pgrid' }, ['user', 'project'].map((level) => skillLevel(role, level, entries, cats)));
+  details.append(el('div', { class: 'pbody' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
+  return details;
+}
+
+function syncSkills() {
+  for (const reg of Object.values(skRoles)) {
+    const dated = (level, name) => {
+      const hit = (getIn(state[level], ['roles', reg.role, 'skills']) ?? []).find((i) => isObj(i) && i.name === name);
+      return typeof hit?.approved === 'string' ? hit.approved : null;
+    };
+    for (const rec of reg.recs) {
+      const names = new Set((skillList(rec.level, rec.role) ?? []).map((i) => i.name));
+      const cat = skillCat[rec.key] ?? '';
+      let outside = 0;
+      for (const row of rec.rows) {
+        const on = names.has(row.e.name);
+        row.cb.checked = on;
+        const inCat = cat === '' || row.e.category === cat;
+        row.li.hidden = !inCat && !on;
+        if (on && !inCat) outside++;
+        row.cb.setAttribute('aria-describedby', describeIds(rec, row));
+        if (rec.refusedRow === row && rec.message) row.cb.setAttribute('aria-invalid', 'true'); else row.cb.removeAttribute('aria-invalid');
+      }
+      rec.count.textContent = `${names.size} of ${MAX_SKILLS} selected${outside ? `, ${outside} selected ${outside === 1 ? 'entry' : 'entries'} shown outside this category` : ''}`;
+      rec.err.textContent = rec.message;
+      rec.err.hidden = rec.message === '';
+    }
+    const eff = skillEffective(reg.role);
+    const dates = [...new Set(eff.list.map((i) => dated(eff.source, i.name)).filter(Boolean))];
+    const undated = eff.list.some((i) => dated(eff.source, i.name) === null);
+    const reviewed = eff.list.length === 0 ? 'none' : `${dates.length ? dates.join(', ') : 'not reviewed yet'}${undated && dates.length ? ', new picks are dated on save' : ''}`;
+    reg.eff.replaceChildren(
+      el('dt', {}, 'Skills'), el('dd', {}, eff.list.length ? `${eff.list.map((i) => i.name).join(', ')} (${eff.source})` : 'none'),
+      el('dt', {}, 'Reviewed'), el('dd', {}, reviewed));
+    const count = (level) => (skillList(level, reg.role) ?? []).length;
+    reg.sum.textContent = reg.entries.length === 0 ? 'none available' : `${count('user')} selected (user), ${count('project')} (project)`;
+    const changed = ['user', 'project'].some((level) => JSON.stringify(skillList(level, reg.role)) !== JSON.stringify(getIn(skillBase[level], ['roles', reg.role, 'skills'])));
+    reg.pills.changed.hidden = !changed;
+    reg.pills.refused.hidden = !reg.recs.some((r) => r.refused);
+    reg.pills.ign.hidden = !reg.recs.some((r) => r.stale > 0);
+  }
+}
+
+function applySkillFilter() {
+  if (!skFilterUI) return;
+  const q = skFilter.trim().toLowerCase();
+  const total = Object.keys(skRoles).length;
+  let shown = 0;
+  for (const reg of Object.values(skRoles)) {
+    const match = q === '' || [reg.role, reg.dept].some((s) => String(s).toLowerCase().includes(q));
+    reg.details.hidden = !match;
+    if (match) shown++;
+  }
+  for (const { label, regs } of skFilterUI.labels) label.hidden = regs.every((r) => r.details.hidden);
+  skFilterUI.count.textContent = shown === 0 ? 'No Role matches the filter.' : `Showing ${shown} of ${total} Roles`;
+}
+
+function renderSkills(panel) {
+  skFilterUI = null;
+  panel.append(el('h2', {}, 'Skills'));
+  if (!isObj(state.catalog) || !Array.isArray(state.catalog.entries)) {
+    panel.append(el('p', { class: 'hint' }, 'The settings server sent no skill data.'));
+    return;
+  }
+  const errors = Array.isArray(state.catalog.errors) ? state.catalog.errors.filter((s) => typeof s === 'string') : [];
+  if (errors.length) panel.append(el('div', { class: 'notice err' }, el('strong', {}, 'Skill list problems'), el('ul', {}, errors.map((s) => el('li', {}, s)))));
+  if (state.resolved?.settings_folder_moved === true) panel.append(el('p', { class: 'notice warn' }, SKILL_MOVED));
+  const entries = skillEntries();
+  const hasOwn = entries.some((e) => e.layer === 'user');
+  panel.append(el('p', { class: 'notice info', id: 'skills-info' }, SKILL_INFO, hasOwn ? '' : ` ${SKILL_ADD_HINT}`));
+  const input = el('input', { type: 'text', id: 'skfilter', autocomplete: 'off', 'aria-describedby': 'skfilter-hint' });
+  input.value = skFilter;
+  input.addEventListener('input', () => { skFilter = input.value; applySkillFilter(); });
+  skFilterUI = { input, count: el('p', { id: 'skcount', role: 'status' }), labels: [] };
+  panel.append(el('div', { class: 'pfilter' }, el('label', { for: 'skfilter' }, 'Filter Roles'), input,
+    el('p', { class: 'hint', id: 'skfilter-hint' }, 'Name or department')), skFilterUI.count);
+  for (const [dept, roles] of roleGroups()) {
+    const label = el('h3', { class: 'dept-label' }, dept);
+    panel.append(label);
+    const regs = [];
+    for (const role of roles) {
+      const mine = entries.filter((e) => e.roles.includes(role));
+      const cats = [...new Set(mine.map((e) => String(e.category)))];
+      panel.append(skillCard(role, mine, cats));
+      skRoles[role].dept = dept;
+      regs.push(skRoles[role]);
+    }
+    skFilterUI.labels.push({ label, regs });
+  }
+  syncers.push(syncSkills);
+  applySkillFilter();
+}
+
 // ---------- page ----------
 function renderNotices() {
   const box = document.getElementById('notices');
@@ -1562,8 +1863,10 @@ function render() {
   pRecs = [];
   planRecs = [];
   pRoles = {};
+  skRoles = {};
+  skRecs = [];
   renderNotices();
-  const renderers = { roles: renderRoles, personality: renderPersonality, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
+  const renderers = { roles: renderRoles, skills: renderSkills, personality: renderPersonality, language: renderLanguage, pipeline: renderPipeline, gates: renderGates, scan: renderScan, mods: renderMods };
   for (const [name, fn] of Object.entries(renderers)) {
     const panel = document.getElementById(`panel-${name}`);
     panel.replaceChildren();
@@ -1662,10 +1965,11 @@ async function save() {
   }
 }
 
-// The Roles tab clears every Role key except personality; the Personality tab clears only personality.
+// The Roles tab clears every Role key except personality and skills; the Personality tab clears only
+// personality; the Skills tab clears only skills.
 function clearRoles(level) {
   for (const [role, entry] of Object.entries(draft[level].roles ?? {})) {
-    for (const key of Object.keys(entry)) if (key !== 'personality') delete entry[key];
+    for (const key of Object.keys(entry)) if (key !== 'personality' && key !== 'skills') delete entry[key];
     if (Object.keys(entry).length === 0) delete draft[level].roles[role];
   }
   if (draft[level].roles && Object.keys(draft[level].roles).length === 0) delete draft[level].roles;
@@ -1678,8 +1982,16 @@ function clearPersonality(level) {
   }
   if (draft[level].roles && Object.keys(draft[level].roles).length === 0) delete draft[level].roles;
 }
+function clearSkills(level) {
+  for (const [role, entry] of Object.entries(draft[level].roles ?? {})) {
+    delete entry.skills;
+    if (Object.keys(entry).length === 0) delete draft[level].roles[role];
+  }
+  if (draft[level].roles && Object.keys(draft[level].roles).length === 0) delete draft[level].roles;
+}
 function clearLevel(level) {
   if (activeTab === 'roles') clearRoles(level);
+  else if (activeTab === 'skills') clearSkills(level);
   else if (activeTab === 'personality') clearPersonality(level);
   else if (activeTab === 'pipeline') { delete draft[level].pipeline; delete draft[level].reprompt; delete draft[level].plan_check; }
   else if (activeTab === 'mods') delete draft[level].mods;
@@ -1715,7 +2027,7 @@ function selectTab(name, focus = false) {
     if (on && focus) tab.focus();
   }
 }
-const TAB_NAMES = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+const TAB_NAMES = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
 for (const tab of document.querySelectorAll('[role="tab"]')) {
   tab.addEventListener('click', () => selectTab(tab.id.slice(4)));
   tab.addEventListener('keydown', (e) => {

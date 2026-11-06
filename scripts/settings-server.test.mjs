@@ -475,7 +475,7 @@ test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row
   const at = (needle) => html.indexOf(needle);
   assert.ok(at('id="tab-gates"') < at('id="tab-scan"') && at('id="tab-scan"') < at('id="tab-mods"'));
   assert.ok(at('id="panel-gates"') < at('id="panel-scan"') && at('id="panel-scan"') < at('id="panel-mods"'));
-  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
+  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
   const mods = html.slice(at('function renderMods'), at('const SCAN_NOTE'));
   assert.ok(!mods.includes('skillspector') && !mods.includes('SkillSpector'));
   const scan = html.slice(at('const SCAN_NOTE'), at('// ---------- page'));
@@ -659,7 +659,7 @@ function loadPage(initialState, { saveReply } = {}) {
   doc.documentElement = make('html');
   for (const id of ['notices', 'field-live', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
   ids.save.disabled = true;
-  const names = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+  const names = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
     ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
@@ -1039,7 +1039,7 @@ const idOf = (n) => n.id;
 test('layout: the tabs come in the Contract order and each has its panel', () => {
   const html = pageHtml();
   const tabs = [...html.matchAll(/<button role="tab" id="tab-([a-z]+)" aria-controls="panel-([a-z]+)"/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(tabs.map(([a]) => a), ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods']);
+  assert.deepEqual(tabs.map(([a]) => a), ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods']);
   for (const [tab, panel] of tabs) assert.equal(tab, panel);
   const panels = [...html.matchAll(/<section role="tabpanel" id="panel-([a-z]+)"/g)].map((m) => m[1]);
   assert.deepEqual(panels, tabs.map(([a]) => a));
@@ -1710,4 +1710,22 @@ test('save round-trips a skills list, dates it by the server and refuses a bad o
   const today = new Date().toISOString().slice(0, 10);
   assert.deepEqual(after.resolved.roles.qa.skills, [{ name: 'qa-helper', approved: today }]);
   assert.equal(after.resolved.roles.qa.source.skills, 'user');
+});
+
+test('a sixth skill is refused by the server with the field named and nothing written, and the served page has the Skills tab', async (t) => {
+  const s = sandbox(t);
+  const picks = ['qa-one', 'qa-two', 'qa-three', 'qa-four', 'qa-five', 'qa-six'].map((skillname, n) => ({ ...QA_PICK, skillname, skillrepo: `someone/${skillname}`, skillcommit: String(n + 1).repeat(40) }));
+  userCatalog(s, picks);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const names = picks.map((p) => ({ name: p.skillname }));
+  const six = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: names } } } });
+  assert.equal(six.status, 400);
+  assert.match((await six.json()).refused.join(' '), /roles\.qa\.skills: must be at most 5 skills/);
+  assert.equal(read(s.config), null);
+  const five = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: names.slice(0, 5) } } } });
+  assert.equal(five.status, 200);
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  assert.match(html, /<button role="tab" id="tab-skills" aria-controls="panel-skills"/);
+  assert.match(html, /<section role="tabpanel" id="panel-skills"/);
 });
