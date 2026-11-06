@@ -2,7 +2,7 @@
 name: setup
 description: Install the standalone skills aico relies on (hallmark, find-skills, impeccable, security and frontend skills), plus optional stack groups. Offers to remove skills aico no longer uses. Also sets the company type and searches for skills that fit it. Use after installing the plugin, after an update that changes the skill list, or to set the company type.
 disable-model-invocation: true
-argument-hint: [core] [research] [go] [react] [tanstack] [auth] [type]
+argument-hint: "[core] [research] [go] [react] [tanstack] [auth] [type]"
 ---
 
 # Setup

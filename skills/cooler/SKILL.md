@@ -1,7 +1,7 @@
 ---
 name: cooler
 description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Random colleagues chat at the water cooler about the project, unmoderated, swapping thoughts, ideas and problems; others walk up or leave. Recorded, nothing built.
-argument-hint: [topic] [turns=N | listen]
+argument-hint: "[topic] [turns=N | listen]"
 ---
 
 # Playbook: cooler

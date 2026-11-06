@@ -383,6 +383,7 @@ test('R-9 the scanner reads registry and audit-registry before an audit tool, re
   assert.match(t, /before you run an audit tool, read the project's `registry` and `audit-registry` settings with the tool's own command only/);
   assert.match(t, /Never open a `\.npmrc`/, 'the scanner may open the raw file');
   assert.match(t, /report that setting as not verified/);
+  assert.match(t, /Where a tool has no such command, or its command can print a stored password \(pip, go\), do not run it and report that setting as not verified/);
   assert.match(t, /Report the scheme and host only, never a token, user or password/);
   assert.match(t, /`protected` refusal[^.]*non-default registry, not clean/);
   assert.match(t, /unset `audit-registry` counts as the default/);

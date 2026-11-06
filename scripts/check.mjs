@@ -818,6 +818,8 @@ export function check(root, { today } = {}) {
     if (u.kind === 'agent') { agentFm.set(u.expected, { model: fm.model, effort: fm.effort }); agentDescs.push({ rel, name: u.expected, text }); }
     if (u.kind === 'skill') skills.push({ rel, name: u.expected, flagged: fm['disable-model-invocation'] === 'true' });
     if (u.kind === 'skill' && fm['argument-hint']) playbooks.push({ rel, name: u.expected, text, description: fm.description ?? '' });
+    const hint = text.split(/\r?\n/).slice(1, text.split(/\r?\n/).indexOf('---', 1)).find(l => l.startsWith('argument-hint:'));
+    if (hint && hint.slice('argument-hint:'.length).trim().startsWith('[')) errors.push(`ERROR ${rel}: argument-hint starts with [ and is not quoted; strict YAML rejects it, quote the value`);
     if (fm.name !== u.expected) errors.push(`ERROR ${rel}: name mismatch (${fm.name} vs ${u.expected})`);
     if (!fm.description) errors.push(`ERROR ${rel}: missing description`);
     else if (fm.description.length > LIMITS.description) errors.push(`ERROR ${rel}: description too long (${fm.description.length} > ${LIMITS.description})`);
