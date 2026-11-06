@@ -53,8 +53,21 @@ confirm() {
 
 # write_env KEY VALUE: sets KEY in $ENV_FILE, replacing an existing line.
 write_env() {
-  if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! git check-ignore -q -- "$ENV_FILE"; then
-    say "Refusing to write $1: git does not ignore $ENV_FILE. Add it to .gitignore first."
+  local dir root="" target
+  dir="$(cd "$(dirname "$ENV_FILE")" 2>/dev/null && pwd -P)" || {
+    say "Refusing to write $1: the folder of $ENV_FILE does not exist."
+    return 1
+  }
+  target="$dir/$(basename "$ENV_FILE")"
+  while :; do
+    if [ -e "$dir/.git" ]; then root="$dir"; break; fi
+    [ "$(dirname "$dir")" = "$dir" ] && break
+    dir="$(dirname "$dir")"
+  done
+  # Inside a repo, write only when git answers that the file is ignored.
+  # Any other answer (not ignored, git failed, unsafe owner) refuses.
+  if [ -n "$root" ] && ! git -C "$root" check-ignore -q -- "$target" >/dev/null 2>&1; then
+    say "Refusing to write $1: git did not confirm that $ENV_FILE is ignored. Add it to .gitignore first."
     return 1
   fi
   touch "$ENV_FILE"
