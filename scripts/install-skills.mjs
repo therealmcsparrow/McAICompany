@@ -2,14 +2,16 @@
 // Installs the standalone skills aico points to (the baseline, deps/3rdpartyskills.json) that are not installed yet.
 // Usage: node install-skills.mjs [group ...] [--dry-run | --missing]
 //       node install-skills.mjs --retired | --remove <name> [--dry-run]
+//       node install-skills.mjs --selected [--dry-run] | --status
 //   default group: core. Groups are the baseline's own; `design` and `skills` are not among them.
 //   A command entry (skillinstaller) is printed, never run. contract: docs/contracts/skills-manifest.md v4.0
 import { readFileSync, readdirSync, existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readBaseline, readCatalog } from './skill-catalog.mjs';
+import { readBaseline, readCatalog, skillStatus, boundedFolderHash, approvable, setBoundHash, clearBound, selectable } from './skill-catalog.mjs';
+import { vetCandidate } from './skillspector.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
@@ -277,8 +279,14 @@ export function cleanPath(pathVar, root, binOnly = false) {
   }).join(delimiter);
 }
 
-function cleanEnv(root, binOnly = false) {
+// pinHome: the child sees the given home as HOME and USERPROFILE and no CLAUDE_CONFIG_DIR in any letter case.
+function cleanEnv(root, binOnly = false, pinHome = null) {
   const env = skillsEnv();
+  if (pinHome !== null) {
+    for (const k of Object.keys(env)) if (/^(home|userprofile|claude_config_dir)$/i.test(k)) delete env[k];
+    env.HOME = pinHome;
+    env.USERPROFILE = pinHome;
+  }
   const key = Object.keys(env).find(k => k.toLowerCase() === 'path') ?? 'PATH';
   const value = cleanPath(env[key], root, binOnly);
   for (const k of Object.keys(env)) if (k.toLowerCase() === 'path') delete env[k];
@@ -303,12 +311,12 @@ function npmCli() {
 
 // Fetches the pinned package into a folder aico owns (no install scripts, working folder = that folder) and returns the
 // absolute path of its bin file. Nothing in a product folder is read: npm and the package both come from here.
-function fetchSkillsCli(home, runners) {
+function fetchSkillsCli(home, runners, pinHome = null) {
   const [name, version] = SKILLS_CLI.split('@');
   const dir = join(home, '.mcsparrow', 'cli', `${name}-${version}`);
   mkdirSync(dir, { recursive: true });
   if (!existsSync(join(dir, 'package.json'))) writeFileSync(join(dir, 'package.json'), '{"private":true}\n');
-  const opts = { cwd: dir, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(dir), stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
+  const opts = { cwd: dir, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(dir, false, pinHome), stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
   try {
     runners.execFileSync(process.execPath, [npmCli(), 'install', '--prefix', dir, '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', SKILLS_CLI], opts);
   } catch (e) {
@@ -331,12 +339,13 @@ const HOME_SHELL_RE = /^[A-Za-z0-9 _.:\\/()@+-]+$/;
 // Runs one install command. The pinned skills CLI never goes through npx or a shell: node runs its bin file by absolute
 // path with the working folder (product root for project scope) as cwd and a PATH without product folders. Any other
 // manifest command runs through npx from the home folder only.
-export function installExec(home, runners = { execSync, execFileSync }) {
+export function installExec(home, runners = { execSync, execFileSync }, { pinHome = false } = {}) {
+  const pin = pinHome ? home : null;
   return (cmd, cwd, argv) => {
     const args = skillsArgs(cmd, argv);
     if (args) {
-      const bin = fetchSkillsCli(home, runners);
-      return runners.execFileSync(process.execPath, [bin, ...args], { cwd, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(cwd, resolve(cwd) === resolve(home)), stdio: 'inherit' });
+      const bin = fetchSkillsCli(home, runners, pin);
+      return runners.execFileSync(process.execPath, [bin, ...args], { cwd, timeout: INSTALL_TIMEOUT_MS, env: cleanEnv(cwd, resolve(cwd) === resolve(home), pin), stdio: 'inherit' });
     }
     if (resolve(cwd ?? home) !== resolve(home)) throw new Error('this command cannot run in a product folder');
     if (!cmd.startsWith('npx ')) return runners.execSync(cmd, { cwd, timeout: INSTALL_TIMEOUT_MS, env: skillsEnv(), stdio: 'inherit' });
@@ -434,8 +443,151 @@ function removeRetired(name, opts) {
   return 0;
 }
 
+// ---------- selected skills ----------
+
+const SAFE_NAME_RE = /^[a-z0-9][a-z0-9:*-]{0,64}$/;
+const SAFE_ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
+const MAX_SELECTED = 500;
+const SETTINGS_TIMEOUT_MS = 30_000;
+
+function readSettingsJson(root) {
+  const file = join(ROOT, 'scripts', 'settings.mjs');
+  const out = execFileSync(process.execPath, [file, 'get'], { cwd: root, encoding: 'utf8', timeout: SETTINGS_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'], env: process.env });
+  return JSON.parse(out);
+}
+
+// name -> { roles, user }: the skills the resolved settings select. A skill selected at user level by any Role is a user skill.
+function selection(settings) {
+  const byName = new Map();
+  const roles = settings !== null && typeof settings === 'object' && settings.roles !== null && typeof settings.roles === 'object' ? settings.roles : {};
+  for (const role of Object.keys(roles)) {
+    if (!SAFE_ROLE_RE.test(role)) continue;
+    const r = roles[role];
+    const list = Array.isArray(r?.skills) ? r.skills.slice(0, 5) : [];
+    for (const item of list) {
+      if (typeof item?.name !== 'string' || !SAFE_NAME_RE.test(item.name)) continue;
+      if (!byName.has(item.name) && byName.size >= MAX_SELECTED) continue;
+      const got = byName.get(item.name) ?? { roles: [], user: false };
+      got.roles.push(role);
+      if (r?.source?.skills === 'user') got.user = true;
+      byName.set(item.name, got);
+    }
+  }
+  return new Map([...byName].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+function vettedText(entry, st) {
+  if (st.vetted === null) return 'not vetted';
+  const own = entry.layer === 'user' || entry.pinned === true;
+  return own && typeof entry.hash !== 'string' ? `vetted ${st.vetted}, from the old list, not scanned here` : `vetted ${st.vetted}`;
+}
+
+function dispatchWord(entry, st) {
+  if (entry.skillplugin !== undefined) return 'session list';
+  return st.status === 'installed' || st.status === 'installed (name only)' ? 'yes' : 'no';
+}
+
+// `--status` and `--selected`: the skills the resolved settings select, looked up in the catalog by name only.
+async function runSelected(args, env) {
+  const log = env.log ?? console.log;
+  try {
+    let dry = false, status = false, install = false;
+    for (const a of args) {
+      if (a === '--dry-run') dry = true;
+      else if (a === '--selected') install = true;
+      else if (a === '--status') status = true;
+      else throw new Error('--selected and --status take only --dry-run');
+    }
+    if (install === status) throw new Error('use --selected or --status, not both');
+    if (status && dry) throw new Error('--status has no dry run');
+    const home = env.home ?? userInfo().homedir;
+    const productRoot = env.productRoot ?? process.cwd();
+    const catOpts = env.home ? { home: env.home } : {};
+    const settings = env.settings ?? readSettingsJson(productRoot);
+    if (settings?.settings_folder_moved !== false) log('settings folder moved');
+    const catalog = readCatalog(catOpts);
+    catalog.errors.forEach(e => log(e));
+    const byName = new Map(catalog.entries.map(e => [e.skillname, e]));
+    const chosen = selection(settings);
+    const scopeOf = sel => (sel.user ? 'user' : 'project');
+    if (status) {
+      for (const [name, sel] of chosen) {
+        const entry = byName.get(name);
+        const roles = sel.roles.join(', ');
+        if (!entry || !selectable(entry).ok) { log(`${name} | roles: ${roles} | not in the catalog | place: - | license: no license on record | not vetted | dispatch: no`); continue; }
+        const st = skillStatus(entry, { home, productRoot, scope: scopeOf(sel) });
+        log(`${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${st.license} | ${vettedText(entry, st)} | dispatch: ${dispatchWord(entry, st)}`);
+      }
+      return 0;
+    }
+    const exec = env.exec ?? installExec(home, undefined, { pinHome: true });
+    const vet = env.vet ?? vetCandidate;
+    const today = env.today ?? new Date().toISOString().slice(0, 10);
+    let done = 0, failed = 0;
+    for (const [name, sel] of chosen) {
+      const entry = byName.get(name);
+      if (!entry || !selectable(entry).ok) { log(`not in the catalog: ${name}`); continue; }
+      if (entry.skillplugin !== undefined) { log(`plugin ${name}: skipped, enable it with /plugin`); continue; }
+      if (typeof entry.skillinstaller === 'string') {
+        log(`manual ${entry.skillinstaller}`);
+        log(`WARNING: ${name} is a third-party installer that aico has not inspected, so it was not run and is not vetted. To install it, run it yourself from your home folder only. Run it only if you trust it.`);
+        continue;
+      }
+      const scope = scopeOf(sel);
+      const root = scope === 'user' ? home : productRoot;
+      const cur = skillStatus(entry, { home, productRoot, scope });
+      if (typeof entry.skillcommit !== 'string') {
+        log(`needs a pin: ${name}, run /aico:add-skill to pin a commit${cur.status === 'installed (name only)' ? ' (installed, name only)' : ''}`);
+        continue;
+      }
+      const { skillrepo: source, skillcommit: commit } = entry;
+      if (typeof source !== 'string' || !validRepo(source) || !SHA_RE.test(commit) || !NAME_RE.test(name)) { log(`ERROR invalid catalog entry: ${name}`); failed++; continue; }
+      if (typeof entry.license !== 'string' || entry.license.trim() === '') { log(`no license: ${name}, nothing installed`); failed++; continue; }
+      if (cur.status === 'installed') { log(`installed ${name} (${scope})`); done++; continue; }
+      const argv = ['-y', SKILLS_CLI, 'add', `${source}#${commit}`, '-s', name, ...(scope === 'user' ? ['-g'] : []), '-a', 'claude-code', '-y'];
+      const cmd = `npx ${argv.join(' ')}`;
+      const removeCmd = `npx -y ${SKILLS_CLI} remove ${name}${scope === 'user' ? ' -g' : ''} -a claude-code -y`;
+      if (dry) {
+        log(`[dry-run] scan ${source} at ${commit}, then:`);
+        log(`[dry-run] ${cmd}`);
+        log(`[dry-run] working folder: ${root}`);
+        continue;
+      }
+      let v;
+      try { v = await vet({ source, commit, name }); } catch { v = { refused: 'scan error' }; }
+      if (!v || v.refused !== undefined || v.commit !== commit || !approvable(v.result, v.hash)) {
+        clearBound(name, catOpts);
+        log(`scan failed: ${name}, nothing installed, missing`);
+        failed++;
+        continue;
+      }
+      const folders = [join(root, '.agents', 'skills', name), join(root, '.claude', 'skills', name)];
+      const proven = () => folders.some(f => boundedFolderHash(f) === v.hash);
+      if (!proven()) {
+        log(`$ ${cmd}`);
+        try { exec(cmd, root, argv); } catch (e) { log(`FAILED ${cmd}: ${errorText(e)}`); failed++; continue; }
+      }
+      if (!proven()) {
+        log(`hash differs: ${name}, nothing stored. The folder stays until you remove it: ${removeCmd}`);
+        failed++;
+        continue;
+      }
+      const w = setBoundHash(name, v.hash, today, catOpts);
+      if (!w.ok) { log(w.error); failed++; continue; }
+      log(`installed ${name} (${scope}, vetted ${today})`);
+      done++;
+    }
+    log(`${done} installed, ${failed} failed`);
+    return failed ? 1 : 0;
+  } catch (e) {
+    log(`ERROR ${e?.message ?? e}`);
+    return 1;
+  }
+}
+
 // Returns the exit code. Everything outside is injectable so tests never run npx or touch the real home.
 export function main(args, env = {}) {
+  if (args.includes('--selected') || args.includes('--status')) return runSelected(args, env);
   const log = env.log ?? console.log;
   const exec = env.exec ?? installExec(env.home ?? homedir());
   const platform = env.platform ?? process.platform;
@@ -497,5 +649,5 @@ export function main(args, env = {}) {
 }
 
 if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) {
-  process.exit(main(process.argv.slice(2)));
+  Promise.resolve(main(process.argv.slice(2))).then(code => process.exit(code));
 }
