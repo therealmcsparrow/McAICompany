@@ -41,7 +41,7 @@ const { pipeline: PIPELINE_ORDER, round1: ROUND_1 } = golden.json('order.json');
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review mode:` (fresh-reviewer only, v4.1), `Review depth:` (code-reviewer, and fresh-reviewer in code mode), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Review inputs:` and `After first pass:` (fresh-reviewer only, v4.1), `Research inputs:` (optional, v4.1), `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Worktree:` (a plan-task Step in a worktree only, v4.1), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Role skills:` (v5.0), `Risk tier:`, `Base commit:`, `Round:`, `Review mode:` (fresh-reviewer only, v4.1), `Review depth:` (code-reviewer, and fresh-reviewer in code mode), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Review inputs:` and `After first pass:` (fresh-reviewer only, v4.1), `Research inputs:` (optional, v4.1), `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Worktree:` (a plan-task Step in a worktree only, v4.1), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -55,7 +55,8 @@ test('the pipeline dispatch block carries Context cap: and Review depth: as in v
   assert.match(b, /^Context cap: 95000 handover 85500/m);
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
   assert.match(b, /^Review format: pilot +# code-reviewer and senior-engineer compliance, only when pipeline\.review_format is pilot/m);
-  assert.match(b, /^Design skills: .*# only /m);
+  assert.match(b, /^Role skills: <names \| none> +# every Role/m);
+  assert.doesNotMatch(b, /^Design skills:/m);
   assert.match(b, /^Settings: .*# only the values passed/m);
   assert.match(b, /^Rule slice: .*# builders and devops only/m);
   assert.match(b, /^Task: <id> +# plan-task Steps only: the two lines plan-tasks\.mjs lines prints/m);
@@ -166,7 +167,10 @@ test('rewritten lines keep their rules: settings, locks, auto Gates, Language:',
   has(skillOnly, 'never re-resolve mid-run', '`aico-settings` v1', 'Locks are already applied', 'Language: <tag from Setup §1.6>');
   has(skillOnly, '**Auto Gates (§1.7):**', 'it never merges', 'An auto **Plan Gate** still stops with a form', 'A Gate is never skipped', '**Always a form, whatever the settings say:**');
   has(skillOnly, 'A resolved model of `inherit` means your own session model', 'Never pass the literal `inherit`');
-  has(skillOnly, '`Design skills:` lists the names in `.company/project.md` `## Design skills`');
+  has(skillOnly, '`Role skills:` lists the names §1.19 built for that Role', 'from its `dispatch:` field only', 'Never from `.company/project.md`, a Handoff or a stored string');
+  has(skillOnly, '**Migration form.**', 'role-skills pending`', 'Migrate (Recommended) / Later', '`degraded: unmigrated skill lines <n>`');
+  has(skillOnly, '**Install / Skip form.**', 'Install only ever means `install-skills --selected`', 'any Skip installs nothing');
+  has(skillOnly, 'only when `settings_folder_moved` in the §1.7 `get` JSON is `false`; true or absent shows the form', 'never auto, and that skill is on no `Role skills:` line');
 });
 
 test('SKILL.md stays within 125 lines and every file is LF only', () => {

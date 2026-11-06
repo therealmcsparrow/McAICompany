@@ -197,17 +197,18 @@ test('setup and language Playbooks are exempt from the Language rule; others sti
   assert.ok(r.errors.some(e => e.includes('skills/other/SKILL.md') && e.includes('Language rule')), r.errors.join('\n'));
 });
 
-test('the 5 UI agents carry the Design skills line (AC23)', () => {
-  for (const a of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist']) {
+test('the 5 UI agents and the editor carry the Role skills line (AC23)', () => {
+  for (const a of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist', 'editor']) {
     const t = readFileSync(join(REPO, 'agents', `${a}.md`), 'utf8');
-    assert.match(t, /`Design skills:`/, a);
-    assert.match(t, /missing design skill: <name>/, a);
+    assert.match(t, /`Role skills:`/, a);
+    assert.match(t, /missing role skill: <name>/, a);
+    assert.doesNotMatch(t, /Design skills:/, a);
   }
 });
 
-test('project template has ## Design skills in the empty form (DS)', () => {
+test('project template has no old skill sections', () => {
   const t = readFileSync(join(REPO, 'skills', 'lead', 'references', 'project-template.md'), 'utf8');
-  assert.match(t, /^## Design skills\r?\n<!--[^\n]*-->\r?\n- \(none yet; the design-researcher proposes them\)\r?$/m);
+  assert.doesNotMatch(t, /^## (Design skills|Skills)\r?$/m);
   assert.doesNotMatch(t, /aico_language:/);
 });
 

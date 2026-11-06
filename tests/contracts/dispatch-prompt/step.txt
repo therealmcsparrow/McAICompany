@@ -3,6 +3,7 @@ Company profile: company/PROFILE.md
 Language: en
 Settings: effort=high
 Context cap: 95000 handover 85500
+Role skills: none
 Risk tier: high
 Base commit: 0123456789abcdef0123456789abcdef01234567
 Round: 0

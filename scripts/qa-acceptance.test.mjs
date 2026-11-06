@@ -1202,7 +1202,7 @@ test('AC15 an uncited claim in a research or marketing run blocks Ship with a sp
   const editor = read('agents/editor.md');
   assert.match(editor, /`## Blocking`, tag `\[spec\]`/);
   assert.match(editor, /Never:\*\* rewrite/);
-  assert.deepEqual(frontmatter(editor).tools.split(',').map(s => s.trim()), ['Read', 'Grep', 'Glob', 'Write'], 'the editor has no Bash and no web');
+  assert.deepEqual(frontmatter(editor).tools.split(',').map(s => s.trim()), ['Read', 'Grep', 'Glob', 'Skill', 'Write'], 'the editor has no Bash and no web');
   for (const name of ['report', 'campaign', 'content']) {
     const text = read(`skills/${name}/SKILL.md`);
     assert.match(text, /aico:editor/, name);

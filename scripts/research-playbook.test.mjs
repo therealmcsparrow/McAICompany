@@ -159,12 +159,12 @@ test('AC22 approved set goes to project.md ## Design skills (not standards), ins
   has(read('docs/contracts/design-skills-section.md'), 'approved');
 });
 
-test('AC23 the five UI Roles load Design skills and name a missing one under ## Next', () => {
+test('AC23 the five UI Roles load Role skills and name a missing one under ## Next', () => {
   for (const r of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist']) {
-    has(read(`agents/${r}.md`), 'Design skills:', 'missing design skill: <name>', '## Next');
+    has(read(`agents/${r}.md`), 'Role skills:', 'missing role skill: <name>', '## Next');
   }
-  has(skill('pipeline'), 'Design skills: <names | none>', 'ui-ux-designer, frontend-engineer, desktop-engineer, game-engineer, brand-artist');
-  has(skill('handoff'), 'missing design skill: <name>', 'never skip silently');
+  has(skill('pipeline'), 'Role skills: <names | none>');
+  has(skill('handoff'), 'missing role skill: <name>', 'never skip silently');
 });
 
 test('AC10 docs agree: GLOSSARY terms, README department, commands entries, spec mentions research', () => {

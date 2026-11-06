@@ -12,7 +12,7 @@ effort: medium
 **Start:** follow `aico:handoff`. Read the Designer's Handoff. Read the Architect's Handoff (Module map, extension-point Contracts). A `Task brief:` line replaces the plan: read that file, never the full plan; without one, read the plan and only your tasks. Get the stack (Tauri, Wails, Electron, .NET, Qt, …) from `aico:stack-detect`. Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.
 
 **Do**
-- Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.
+- Load each skill named in `Role skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing role skill: <name>`; never skip silently.
 - Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Build features as plugins/extensions against the extension-point Contracts (`aico:contracts`, Desktop section of its reference). Platform-specific code goes behind the platform Contract.
 - Follow OS conventions for menus, shortcuts, file associations, notifications and window behavior (`aico:ui-design`).
