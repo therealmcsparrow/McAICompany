@@ -329,7 +329,7 @@ test('S7b vulnscan notice is a general notice: kinds of destinations, examples o
 });
 
 test('R-3 the manifest-command warning says home folder only, never a product folder, in every place that states it', () => {
-  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md', 'skills/research/SKILL.md', 'skills/feature/SKILL.md', 'skills/lead/references/skill-picks.md']) {
+  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'skills/research/SKILL.md', 'skills/feature/SKILL.md', 'skills/lead/references/skill-picks.md']) {
     const t = read(f);
     assert.match(t, /home folder/, f + ': no home-folder rule');
     assert.doesNotMatch(t, /\(`cd ~ && <cmd>`\)/, f + ': a cd ~ && form that fails in cmd.exe and Windows PowerShell 5.1');
@@ -391,14 +391,12 @@ test('R-9 the scanner reads registry and audit-registry before an audit tool, re
   assert.match(t, /that tool's result is not counted as clean/);
 });
 
-test('R-12 both contracts hold the sentence the installer prints in the WARNING line', () => {
+test('R-12 the manifest Contract holds the sentence the installer prints in the WARNING line', () => {
   const printed = 'First change to your home folder, then run: <cmd>';
   const src = read('scripts/install-skills.mjs');
   assert.ok(src.includes('First change to your home folder, then run: '), 'the installer no longer prints the sentence');
-  for (const f of ['docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md']) {
-    const t = read(f);
-    assert.ok(t.includes(printed), f + ': does not state the printed sentence');
-    assert.ok(!t.includes('the home path the WARNING line prints'), f + ': names a path the WARNING does not print');
-  }
+  const t = read('docs/contracts/skills-manifest.md');
+  assert.ok(t.includes(printed), 'does not state the printed sentence');
+  assert.ok(!t.includes('the home path the WARNING line prints'), 'names a path the WARNING does not print');
   assert.ok(!read('docs/contracts/skills-manifest.md').includes('Step 1: cd <home folder path>. Step 2: <cmd>`, and exits'), 'old two-step text is still the stated WARNING');
 });

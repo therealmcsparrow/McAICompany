@@ -486,6 +486,10 @@ const HAND_OVER_CHANGES = {
       "   **→ Brief Gate**",
       "1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.",
       "2a. Spikes per `aico:pipeline` if the Architect listed any (show the result at the Plan Gate).",
+      '   a. Dispatch `aico:design-researcher` (inputs per its Role). It recommends at most 5 skills and installs nothing.',
+      '   b. One form for the CEO: approve the set / change / skip. Nothing is written before the answer.',
+      "   c. Approved: the Lead writes `## Design skills` lines in the exact DS format, with today's `approved:` date. Never write a line that fails the DS allow-list (`source` is a repo, a plugin, or a backticked command byte-identical to a `deps/skills.json` `install` with the same `name`); drop it and say so.",
+      "   e. Install artifacts (`.agents/`, `.claude/skills/`, `skills-lock.json`) are never committed; the summary names them. Commit the `## Design skills` change with the run's other work.",
       "   d. Run `node \"${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" install-skills design --project .company/project.md --dry-run`. Show the printed commands, the telemetry line from `skills-manifest` v2, and ask one form: Install (Recommended) / Skip. Only when `gates.installs` is `auto` (`aico:pipeline` §1.7), install without that form and name the commands in your next message; the set approval in b stays a form. Install: same command without `--dry-run` (project scope, product root), then tell the CEO to `/reload-plugins`. Skip: record `degraded: missing <name>, <name>` in the Handoff and Gate summary. An `ERROR design skill line <n>` means: install nothing, send `Design skills: none`, name line `<n>` in the Gate summary. The run continues either way.",
       '2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate. A rejected rule goes back to the Senior Engineer once; still rejected → the CEO decides at the Plan Gate.',
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).",
@@ -498,14 +502,18 @@ const HAND_OVER_CHANGES = {
     ],
     added: [
       "argument-hint: <feature description | draft file>",
-      /^1a\. Design skills \(`design-skills-section` v2\), only when the product has UI/,
+      /^1a\. Design skills \(`skill-recommendation` v2, `skill-catalog` v1\), only when the product has UI/,
       /^Run with `aico:pipeline`\. Roles and lanes run per the tier set .* No Brief Gate and no Plan Gate in any run, a direct call included: .* Steps \(∥ = dispatch in parallel\):$/,
       /^1\. `aico:product-manager`: brief and acceptance criteria from the CEO's request\. No Gate: the Lead runs references\/tier-path\.md step 4/,
       /^1b\. Prototype, only after a Run it answer on the prototype form;/,
       /^2a\. Spikes per `aico:pipeline` if the Architect listed any \(the result goes in the Ship Gate summary\)\.$/,
       /^2d\. `aico:architect`: ruleset sign-off, only when Must rules were added or changed\. Otherwise say "sign-off skipped" in the Ship Gate summary\./,
       /^   d1. Warnings from the dry run: show every `WARNING:` line/,
-      /^   d\. Run `node .*install-skills design --project .company\/project\.md --dry-run`\. Show the printed commands, the telemetry line from `skills-manifest` v4,/,
+      /^   a\. Run `\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/lead\/references\/skill-picks\.md` §1, then dispatch `aico:design-researcher`/,
+      /^   b\. `vet` the Handoff, then one form for the CEO: approve the set \/ change \/ skip/,
+      /^   c\. Approved: the license questions, then `role-skills record` with the CEO's Roles/,
+      "   e. Install artifacts (`.agents/`, `.claude/skills/`, `skills-lock.json`) are never committed; the summary names them.",
+      /^   d\. Install \/ Skip: the form of `aico:pipeline` §1\.19 b .*the telemetry line from `skills-manifest` v4\./,
       /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/,
       /^5b\. Ship Gate summary: the Gate items that used to show earlier/,
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
@@ -1189,7 +1197,7 @@ test('AC14 the installer fetches the commit that was scanned and a hash mismatch
   assert.doesNotMatch(section, /npx|git clone|curl|wget|Invoke-WebRequest|install-skills/);
   assert.match(section, /same source, commit and folder/);
   const picks = read('skills/lead/references/skill-picks.md');
-  assert.match(picks, /Go on only when `check-install` printed `bound: true`/);
+  assert.match(picks, /Go on only when the skill's line shows no `FAILED`, `hash differs` or `missing`/);
   assert.match(picks, /Every other outcome \*\*stops the run\*\*/);
 });
 

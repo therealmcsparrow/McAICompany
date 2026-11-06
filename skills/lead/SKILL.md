@@ -59,7 +59,7 @@ Unsure of the size or risk, or whether a request even needs a full Playbook, and
 | Known-vulnerability (CVE) scan of deps/code (on demand) | `aico:vuln-scanner` |
 | Market, competitors, demand, pricing signals (online research) | `aico:market-researcher` |
 | Technical feasibility, libraries, APIs, licenses (online research) | `aico:tech-researcher` |
-| Find and vet UI/UX design skills | `aico:design-researcher` |
+| Find and vet UI/UX design skills (picks per `references/skill-picks.md`) | `aico:design-researcher` |
 | Find and vet third-party skills for the stack, product type, company type or design; the Lead scans each pick (online research; picks per `references/skill-picks.md`) | `aico:skill-researcher` |
 | Privacy, terms, licenses, GDPR | `aico:legal` |
 | Check that every claim in a report or public text is cited; blocks, never rewrites | `aico:editor` |

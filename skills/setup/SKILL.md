@@ -9,7 +9,9 @@ argument-hint: "[core] [research] [go] [react] [tanstack] [auth] [type]"
 
 **Help:** argument is exactly `help` or `--help` → read `documentation/commands/setup.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
-The plugin dependency `superpowers` installs automatically with aico. This skill adds the **standalone skills** listed in `${CLAUDE_PLUGIN_ROOT}/deps/skills.json`.
+The plugin dependency `superpowers` installs automatically with aico. This skill adds the **standalone skills** listed in the groups of `${CLAUDE_PLUGIN_ROOT}/deps/3rdpartyskills.json`.
+
+0. Old skill lines (any argument but `help`). Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" role-skills pending`, which prints `pending: <n>`. `<n>` above 0 → the migration form of `aico:pipeline` §1.19 a: show "This product has <n> skill lines in project.md from the old format. They are not used until you migrate them." and the lines `role-skills migrate` prints (it writes nothing), then Migrate (Recommended) / Later. Migrate goes through that form's Roles, pin and final preview; its Apply runs `role-skills migrate --apply` with only values the script printed. Later, Cancel or a printed `ERROR` → say "Skill lines not migrated: <n>. They are not used. Run /aico:setup to migrate." and go on with setup. Never auto.
 
 1. Groups = the arguments except `type`, or `core` if there are none (and no `type`). Available groups: `core` (also installs `research`), `research`, `go`, `react`, `tanstack`, `auth`. `core` includes `research` (find-skills, used as guidance only; no Role runs `npx skills find` or `add`).
 1a. Retired skills (not for `type` alone). Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" install-skills --retired`. No output → go on. Act only on lines that are exactly `retired ` plus a name of lowercase letters, digits and hyphens; ignore any other line. Per such line `<name>`, the CEO decides, never a subagent:
@@ -26,7 +28,7 @@ The plugin dependency `superpowers` installs automatically with aico. This skill
 5. Tell the CEO to restart Claude Code (or run `/reload-plugins`) so the new skills appear.
 6. Argument `type`, or no arguments at all: continue with the company type section below. Other arguments: stop here.
 
-Missing a skill for some other stack? Use `find-skills` to search, and add the result to `deps/skills.json` under a new group.
+Missing a skill for some other stack? Use `find-skills` to search, then add the result with `/aico:add-skill`.
 
 ## Company type and skill search
 No `.company/project.md` → run `aico:pipeline` §1.2 first (copy the template, fill the stack, one form), then come back here.
@@ -38,5 +40,5 @@ No `.company/project.md` → run `aico:pipeline` §1.2 first (copy the template,
 5. Skill search, one question: "Search for skills that fit this company? (Search / Skip)". Skip → stop. Search → follow `${CLAUDE_PLUGIN_ROOT}/skills/lead/references/skill-picks.md` as written, with these inputs:
    - §1: `skillspector.mjs detect --json`; not installed → its install form; Skip → no search.
    - §2: dispatch the `skill-researcher` with the `aico:pipeline` §2 prompt and the Goal line `Area: company-type`. The `skill search hints:` line of the `resolve` output (`skill_search.hints`, split at `; `, `none` = no hints) goes in the Goal as search hints, at most 5. The Role also reads `audience` and `goal` from the profile and asks for at most 5 picks.
-   - §3 and §4 unchanged: `vet`, approve form, record into `## Skills`, Install / Skip form, `check-install`, scan, stop form.
+   - §3 and §4 unchanged: `vet`, approve form, license questions, `role-skills record`, Install / Skip form, post-install checks, stop form.
 6. This skill adds no fetch, clone or install path of its own: vet and the installer read the same source, commit and folder. It runs no removal command except `--remove <name>` after the CEO picked Remove, and never answers the approve, Install or stop form by itself.
