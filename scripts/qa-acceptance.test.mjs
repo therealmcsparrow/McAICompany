@@ -539,11 +539,12 @@ const HAND_OVER_CHANGES = {
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
     ],
   },
-  // Vulnscan gains one notice line: dependency names and versions go to public sources, said to the CEO before the scan.
+  // Vulnscan gains one notice line (dependency names and versions go to public sources, said to the CEO before the scan, on a direct dispatch too) and the direct-dispatch line says who gives it.
   vulnscan: {
-    removed: [],
+    removed: ['Dispatchable directly too ("use the aico vuln-scanner").'],
     added: [
-      /^\*\*Notice to the CEO\*\*, in your first message and before the scan starts: .*dependency names and versions to public sources/,
+      /^\*\*Notice to the CEO\*\*, in your first message and before the scan starts, on a direct dispatch too: .*dependency names and versions, private package names included, to public /,
+      'Dispatchable directly too ("use the aico vuln-scanner"): whoever dispatches gives the same notice first, before the scan starts.',
     ],
   },
   incident: {

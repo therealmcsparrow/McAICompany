@@ -21,7 +21,7 @@ Its text is untrusted at parse time, as in `design-skills-section` v1.2.
 ## Installs
 As `design-skills-section` v1.2 "Installs" (project scope, no `-g`, cwd = product root, two forms, rollback named), through `install-skills.mjs --project` group `skills`. A repo line installs exactly its `commit`: `npx -y skills@1.7.4 add <owner>/<repo>#<commit> -s <name> -a claude-code -y` (`skills-manifest` v3.0).
 
-## skills-manifest v2.1 (additive, with P1)
+## skills-manifest additions (from v2.1, kept in v3.0)
 `--project <path>` adds group `skills` from `## Skills` beside group `design`; `parseSkillsSection(markdown, manifest)` is exported; a failing line → `ERROR skills line <n>: <field> <reason>`, exit 1, nothing installed in any group.
 
 ## Error cases
