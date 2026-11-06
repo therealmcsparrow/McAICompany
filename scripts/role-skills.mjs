@@ -418,7 +418,7 @@ export function pending(options = {}) {
 }
 
 // True when no design skill is selected for a Role that takes design skills, or the newest approval
-// is over 180 days old or has no valid date. Reports only; a re-approval is the CEO's answer.
+// is over 180 days old or has no valid date. Reports only; approving again is not done here.
 export function stale(options = {}) {
   const opts = normalize(options);
   const baseline = readBaseline();
