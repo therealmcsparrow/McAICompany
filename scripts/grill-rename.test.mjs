@@ -84,7 +84,8 @@ test('idea and bug route to grill, not grilling', () => {
 
 test('flow scripts, check and Lead name grill, not grilling', () => {
   for (const f of ['scripts/idea-flow.mjs', 'scripts/lead-handover.mjs', 'scripts/check.mjs', 'scripts/company-type.mjs', 'skills/lead/SKILL.md']) {
-    assert.ok(!/grilling/.test(read(f)), `${f} still says grilling`);
+    const t = read(f).split('\n').filter((l) => !(f === 'scripts/idea-flow.mjs' && /^\s*if \(o && o\.(step|e === 'pick' && o\.route) === 'grilling'\)/.test(l)));
+    assert.ok(!/grilling/.test(t.join('\n')),`${f} still says grilling`);
   }
 });
 

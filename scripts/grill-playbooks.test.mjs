@@ -103,7 +103,7 @@ test('shared loop: one question per form, status after each log, close rules, re
     'Header `<n> answered, <k> open`', 'fixed number of questions', '`question_rounds` is not used',
     `node "${RUN}" grill status '<name>'`, 'Rewrite `.company/work/<name>/grill.md` whole with the Write tool',
     'format: 1', '## Closed branches', '## Proposals', 'status: stopped', 'status: done',
-    'closed by stop', 'git status --porcelain', 'grill-file v1.3 Personal data',
+    'closed by stop', 'git status --porcelain', 'grill-file v1.4 Personal data',
     'an erasure request overrides the archive rule (CEO decides)', 'resume <name>',
   ];
   for (const n of need) assert.ok(loop.includes(n), `loop missing: ${n}`);

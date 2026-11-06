@@ -185,7 +185,9 @@ function load(cwd, slug) {
     if (Buffer.byteLength(l) > MAX_LINE) fail('broken record');
     let o;
     try { o = JSON.parse(l); } catch { fail('broken record'); }
-    if (o && o.step === 'grill' + 'ing') o.step = 'grill'; // v1.4: logs from before the rename
+    // v1.4: logs from before the rename say the old word
+    if (o && o.step === 'grilling') o.step = 'grill';
+    if (o && o.e === 'pick' && o.route === 'grilling') o.route = 'grill';
     if (!checkEvent(o)) fail('broken record');
     return o;
   });
