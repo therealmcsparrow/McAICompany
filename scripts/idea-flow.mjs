@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.3).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.4).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -185,6 +185,7 @@ function load(cwd, slug) {
     if (Buffer.byteLength(l) > MAX_LINE) fail('broken record');
     let o;
     try { o = JSON.parse(l); } catch { fail('broken record'); }
+    if (o && o.step === 'grill' + 'ing') o.step = 'grill'; // v1.4: logs from before the rename
     if (!checkEvent(o)) fail('broken record');
     return o;
   });
