@@ -12,7 +12,7 @@ argument-hint: (no arguments)
 
 Run with `aico:pipeline`, **read-only**: no builders, no code changes, no Gates until the report is ready. On demand only — not part of the default `/aico:feature`, `/aico:audit` or `/aico:maintain` flows.
 
-**Notice to the CEO**, in your first message and before the scan starts: the scan sends dependency names and versions to public sources and other third parties, private package names included, so the CEO should know a private name such as `@acme-internal/x` can leave the repo. Destinations: the web search tool and fetched advisory pages (NVD, OSV, GitHub Advisories, CISA KEV, the ecosystem DB, vendor sites), and the audit tool the scanner runs: `npm audit` (the npm registry), `pip-audit` (PyPI and OSV), `cargo audit` (the RustSec database on GitHub), `osv-scanner` (api.osv.dev), `govulncheck` (vuln.go.dev). Data sent: package names, versions, and short fact queries. Private or unresolvable packages are listed as unscanned and are not queried by the scanner itself; an audit tool may still send a name it reads from a lockfile. The Claude model you configured for aico is also a recipient: it reads the repo (manifests, lockfiles and code) to run the scan.
+**Notice to the CEO**, in your first message and before the scan starts, on a direct dispatch too: the scan sends dependency names and versions, private package names included, to public vulnerability databases, package registries and web search, and the audit tools the scanner runs may do the same. A private name such as `@acme-internal/x` can leave the repo. Examples, not a complete list: OSV, NVD, GitHub Advisories, CISA KEV, npm, PyPI, crates.io, deps.dev. Data sent: package names, versions, ecosystems and short fact queries. The Claude model you configured for aico is also a recipient: it reads the repo (manifests, lockfiles and code) to run the scan.
 
 1. `aico:vuln-scanner`: enumerate dependencies and versions (`aico:stack-detect`), cross-reference NVD/CVE, OSV, GitHub Advisories, the ecosystem DB, vendor advisories and CISA KEV. Output `.company/work/<slug>/vuln-report.md` with `## Report` (Critical/High, KEV/exploited) and `## Upgrade set` (safe Medium/Low fixed-in bumps).
 2. You (the Lead) present it to the CEO and ask in one form (`aico:pipeline`):
@@ -21,4 +21,4 @@ Run with `aico:pipeline`, **read-only**: no builders, no code changes, no Gates 
    - The `## Upgrade set` → offer one `/aico:maintain` run that applies those bumps.
    Never start a run yourself.
 
-Dispatchable directly too ("use the aico vuln-scanner").
+Dispatchable directly too ("use the aico vuln-scanner"): whoever dispatches gives the same notice first, before the scan starts.
