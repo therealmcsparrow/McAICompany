@@ -355,6 +355,12 @@ function sanitizeSkills(value, at, reasons) {
   return out;
 }
 
+// A wrong-shape skills list warns as `roles.<role>.skills: ignored, <reason>`; any other stored field keeps the file prefix.
+const storedWarning = (file) => (r) => {
+  const m = /^(roles\.[^.\s]+\.skills): (.*)$/s.exec(r);
+  return m ? `${m[1]}: ignored, ${m[2]}` : `${file}: ignoring ${r}`;
+};
+
 const sameFolder = (a, b) => {
   const x = path.resolve(a);
   const y = path.resolve(b);
@@ -612,7 +618,7 @@ function loadLayer(level, ctx, roleNames, floor = 'opus') {
   }
   if (!Object.hasOwn(data, KEY)) return { raw: bytes, layer: empty, warnings: [], reasons: [] };
   const { clean, reasons } = sanitize(data[KEY], roleNames, floor);
-  return { raw: bytes, layer: clean, warnings: reasons.map((r) => `${file}: ignoring ${r}`), reasons };
+  return { raw: bytes, layer: clean, warnings: reasons.map(storedWarning(file)), reasons };
 }
 
 // The code-reviewer floor from the model floor file; an unreadable file gives opus.

@@ -2144,7 +2144,8 @@ test('wrong shapes fall back with a warning and never echo the value', (t) => {
     s.project({ roles: { qa: { skills: bad } } });
     const r = resolveSettings(s.ctx);
     assert.deepEqual(r.roles.qa.skills.map((x) => x.name), ['qa-helper']);
-    assert.ok(r.warnings.some((w) => w.includes('roles.qa.skills')));
+    assert.ok(r.warnings.some((w) => w.startsWith('roles.qa.skills: ignored, ')), JSON.stringify(r.warnings));
+    assert.equal(r.warnings.some((w) => w.includes('ignoring roles.qa.skills')), false);
     assert.equal(JSON.stringify(r).includes('SECRET-VALUE'), false);
   }
 });
