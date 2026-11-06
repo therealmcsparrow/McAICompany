@@ -46,11 +46,11 @@ test('AC5 the Lead asks the approve form before the Install / Skip form; Skip in
 });
 
 // ---------- skill-recommendation v1 ----------
-test('AC6 skill-recommendation v1 names area, keeps the source/name allow-list by reusing the design-skills-section parser', () => {
+test('AC6 skill-recommendation v1 names area, keeps the source/name allow-list by reusing the design-skills-section allow-list', () => {
   const c = read('docs/contracts/skill-recommendation.md');
   assert.match(c, /^# Contract: skill-recommendation v2/);
   assert.match(c, /area: \(stack\|product-type\|company-type\|design\)/);
-  assert.match(c, /parseDesignSkills/);
+  assert.match(c, /`design-skills-section` v2\.0 \(field allow-list\)/);
   assert.match(c, /\| `vet <handoff> --json` \|/);
   assert.match(c, /commit: \(\[\^;\]\+\)/);
   assert.ok(read('docs/contracts/design-skills-section.md').includes('# Contract: design-skills-section v2'), 'v2 not bumped');
