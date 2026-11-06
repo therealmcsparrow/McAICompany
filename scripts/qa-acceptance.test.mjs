@@ -481,6 +481,7 @@ const HAND_OVER_CHANGES = {
     desc: 'Build a feature or new product end to end, from request to shipped, with the Ship Gate and no Brief or Plan Gate.',
     removed: [
       "argument-hint: <feature description>",
+      "1a. Design skills (`design-skills-section` v1), only when the product has UI (`product_type` web, desktop or game, or the brief has UI work) and `## Design skills` in `.company/project.md` is stale (empty, or newest `approved:` over 180 days old). Otherwise skip silently.",
       "Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):",
       "   **→ Brief Gate**",
       "1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.",
@@ -497,13 +498,14 @@ const HAND_OVER_CHANGES = {
     ],
     added: [
       "argument-hint: <feature description | draft file>",
+      /^1a\. Design skills \(`design-skills-section` v2\), only when the product has UI/,
       /^Run with `aico:pipeline`\. Roles and lanes run per the tier set .* No Brief Gate and no Plan Gate in any run, a direct call included: .* Steps \(∥ = dispatch in parallel\):$/,
       /^1\. `aico:product-manager`: brief and acceptance criteria from the CEO's request\. No Gate: the Lead runs references\/tier-path\.md step 4/,
       /^1b\. Prototype, only after a Run it answer on the prototype form;/,
       /^2a\. Spikes per `aico:pipeline` if the Architect listed any \(the result goes in the Ship Gate summary\)\.$/,
       /^2d\. `aico:architect`: ruleset sign-off, only when Must rules were added or changed\. Otherwise say "sign-off skipped" in the Ship Gate summary\./,
       /^   d1. Warnings from the dry run: show every `WARNING:` line/,
-      /^   d\. Run `node .*install-skills design --project .company\/project\.md --dry-run`\. Show the printed commands, the telemetry line from `skills-manifest` v3,/,
+      /^   d\. Run `node .*install-skills design --project .company\/project\.md --dry-run`\. Show the printed commands, the telemetry line from `skills-manifest` v4,/,
       /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/,
       /^5b\. Ship Gate summary: the Gate items that used to show earlier/,
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
@@ -1171,18 +1173,9 @@ test('AC13 setup searches skills for the type, at most 5, each vetted, nothing i
 });
 
 test('AC14 the installer fetches the commit that was scanned and a hash mismatch blocks the record', () => {
-  // A recorded repo pick installs exactly its commit.
-  const sha = 'a'.repeat(40);
-  const sb = sandbox({ projectMd: `# P\n## Skills\n<!-- approved -->\n- area: company-type; name: copy-helper; source: acme/copy-helper; license: MIT; vetted: 2026-10-26; commit: ${sha}; why: fits a marketing agency; approved: 2026-10-26\n` });
-  const dry = sb.run('install-skills.mjs', ['skills', '--project', '.company/project.md', '--dry-run']);
-  assert.equal(dry.code, 0, dry.out);
-  assert.match(dry.out, new RegExp(`add acme/copy-helper#${sha} -s copy-helper -a claude-code -y`));
-  // A pick without a pinned commit is refused and nothing is planned.
-  fs.writeFileSync(sb.profile, fs.readFileSync(sb.profile, 'utf8').replace(`commit: ${sha}`, 'commit: -'));
-  const loose = sb.run('install-skills.mjs', ['skills', '--project', '.company/project.md', '--dry-run']);
-  assert.equal(loose.code, 1);
-  assert.match(loose.out, /^ERROR skills line \d+: commit invalid/m);
-  assert.doesNotMatch(loose.out, /\[dry-run\]/);
+  const sb = sandbox();
+  // The installer no longer reads picks from a product file: a project path is an unknown flag.
+  assert.equal(sb.run('install-skills.mjs', ['skills', '--project', '.company/project.md', '--dry-run']).code, 1);
   // The installed folder's hash is compared with the scanned one.
   const scanned = 'b'.repeat(64);
   fs.writeFileSync(path.join(sb.repo, 'skills-lock.json'), JSON.stringify({ version: 1, skills: { 'copy-helper': { computedHash: 'c'.repeat(64) } } }));
