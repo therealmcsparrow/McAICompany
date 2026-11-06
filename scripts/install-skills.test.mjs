@@ -1069,7 +1069,7 @@ test('main: a manifest command at project scope is printed as manual, never run,
     assert.equal(res.code, 0, res.out);
     assert.deepEqual(res.calls, []);
     assert.match(res.out, /^manual npx -y impeccable skills install$/m);
-    assert.match(res.out, /^WARNING: impeccable .*third-party.*run it yourself: npx -y impeccable skills install/m);
+    assert.match(res.out, /^WARNING: impeccable .*third-party.*home folder only, never from a product folder.*cd ~ && npx -y impeccable skills install/m);
     assert.doesNotMatch(res.out, /FAILED/);
     assert.match(res.out, /0 installed, 0 failed/);
   } finally { s.done(); }
@@ -1094,7 +1094,10 @@ test('main: a manifest command at user scope is printed as manual with a WARNING
   assert.match(w[0], /^WARNING: impeccable /);
   assert.match(w[0], /third.party/);
   assert.match(w[0], /not inspected/);
-  assert.ok(w[0].includes(`run it yourself: ${PINNED_IMPECCABLE}`), w[0]);
+  assert.match(w[0], /home folder only, never from a product folder/);
+  assert.match(w[0], /repo's own copy/);
+  assert.match(w[0], /only if you trust it/);
+  assert.ok(w[0].endsWith(`cd ~ && ${PINNED_IMPECCABLE}`), w[0]);
   assert.ok(!out.join('').includes(''));
   assert.ok(out.includes('1 installed, 0 failed'), out.join('|'));
 });
@@ -1104,6 +1107,69 @@ test('main: the WARNING line is ANSI yellow only when colour is on', () => {
   assert.ok(on.startsWith('[33mWARNING: ') && on.endsWith('[0m'), JSON.stringify(on));
   const off = userScopeRun(false).out.find(l => l.includes('WARNING'));
   assert.ok(off.startsWith('WARNING: '), JSON.stringify(off));
+});
+
+const PINNED_MANIFEST = { core: [{ name: 'impeccable', install: PINNED_IMPECCABLE }] };
+const OLD_LINE = line({ name: 'impeccable', source: '`npx -y impeccable skills install`' });
+
+test('main: the old unpinned impeccable line is accepted and printed as manual with the pinned command', () => {
+  for (const groups of [['design'], ['core', 'design']]) {
+    const s = sandbox();
+    try {
+      const res = s.run([...groups, '--project', s.projectFile], doc(OLD_LINE), { manifest: PINNED_MANIFEST });
+      assert.equal(res.code, 0, res.out);
+      assert.deepEqual(res.calls, []);
+      assert.match(res.out, new RegExp(`^manual ${PINNED_IMPECCABLE}$`, 'm'));
+      assert.match(res.out, /^WARNING: impeccable .*cd ~ && npx -y impeccable@4\.8\.0 skills install$/m);
+      assert.doesNotMatch(res.out, /ERROR|FAILED/);
+    } finally { s.done(); }
+  }
+});
+
+test('main: an unpinned line for a name the manifest does not hold stays an error', () => {
+  const s = sandbox();
+  try {
+    const res = s.run(['design', '--project', s.projectFile], doc(line({ name: 'other', source: '`npx -y impeccable skills install`' })), { manifest: PINNED_MANIFEST });
+    assert.equal(res.code, 1);
+    assert.match(res.out, /source not a manifest command/);
+    assert.deepEqual(res.calls, []);
+  } finally { s.done(); }
+});
+
+test('main: a dry run marks a manifest command manual and still shows the WARNING line', () => {
+  const s = sandbox();
+  try {
+    const res = s.run(['design', '--project', s.projectFile, '--dry-run'], doc(OLD_LINE), { manifest: PINNED_MANIFEST, color: false });
+    assert.equal(res.code, 0, res.out);
+    assert.deepEqual(res.calls, []);
+    assert.match(res.out, new RegExp(`^manual ${PINNED_IMPECCABLE}$`, 'm'));
+    assert.doesNotMatch(res.out, /^\[dry-run\] .*impeccable/m);
+    assert.match(res.out, /^WARNING: impeccable .*cd ~ && npx -y impeccable@4\.8\.0 skills install$/m);
+  } finally { s.done(); }
+});
+
+// The colour rule reads process.stdout.isTTY and NO_COLOR itself when env.color is not given.
+function colourRun({ tty, noColor }) {
+  const was = { tty: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'), nc: process.env.NO_COLOR };
+  Object.defineProperty(process.stdout, 'isTTY', { value: tty, configurable: true, writable: true });
+  if (noColor === undefined) delete process.env.NO_COLOR; else process.env.NO_COLOR = noColor;
+  try {
+    const out = [];
+    main(['core'], { manifest: PINNED_MANIFEST, home: '/h', cwd: '/repo', platform: 'linux', log: x => out.push(x), exec: () => {} });
+    return out.find(l => l.includes('WARNING'));
+  } finally {
+    if (was.tty) Object.defineProperty(process.stdout, 'isTTY', was.tty); else delete process.stdout.isTTY;
+    if (was.nc === undefined) delete process.env.NO_COLOR; else process.env.NO_COLOR = was.nc;
+  }
+}
+
+test('main: WARNING colour rule without env.color: TTY is yellow, NO_COLOR is plain, a pipe is plain', () => {
+  const yellow = colourRun({ tty: true, noColor: undefined });
+  assert.ok(yellow.startsWith('\u001b[33mWARNING: ') && yellow.endsWith('\u001b[0m'), JSON.stringify(yellow));
+  const plainEnv = colourRun({ tty: true, noColor: '1' });
+  assert.ok(plainEnv.startsWith('WARNING: ') && !plainEnv.includes('\u001b'), JSON.stringify(plainEnv));
+  const pipe = colourRun({ tty: undefined, noColor: undefined });
+  assert.ok(pipe.startsWith('WARNING: ') && !pipe.includes('\u001b'), JSON.stringify(pipe));
 });
 
 test('main: the pinned CLI still runs at project scope next to a manual command', () => {

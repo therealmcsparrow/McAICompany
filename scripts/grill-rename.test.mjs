@@ -4,9 +4,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// End-state tests for scope (d) of the skill audit run: the old aico:grill skill is removed and aico:grilling is
+// End-state tests: the old aico:grill skill is removed and aico:grilling is
 // renamed to aico:grill. The command /aico:grilling stops existing; skills/grilling and its references/grill-loop.md
-// move to skills/grill. Historic CHANGELOG entries stay. Each test fails on base commit 8df1228.
+// move to skills/grill. Historic CHANGELOG entries stay.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const exists = (p) => existsSync(join(root, p));

@@ -4,9 +4,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Regression tests for the skill audit round 2 bugs (report 2026-11-06, section 2 numbers 1-11, S7, section 4
-// wrong references). Each test fails on base commit 8df1228 and names the report item it covers. Scope (d), the
-// grill rename, is not covered here.
+// Regression tests for the wizard, cooler, vulnscan and other skill text fixes (items B1-B6, S7, wrong references).
+// Each test names the item it covers. The grill rename is not covered here.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const lines = (t) => t.split('\n');
@@ -142,6 +141,27 @@ test('S7 vulnscan tells the CEO, before the scan, that dependency names go to pu
   const notice = lines(t).find((l) => /dependenc\w+ names?/i.test(l) && /public/i.test(l) && /(CEO|notice)/i.test(l));
   assert.ok(notice, 'no notice line (dependency names, public sources, CEO)');
   assert.ok(t.indexOf(notice) < t.indexOf('1. `aico:vuln-scanner`'), 'the notice comes after the scan starts');
+});
+
+test('S7b vulnscan notice names every destination and the model, in the skill and its doc page', () => {
+  for (const f of ['skills/vulnscan/SKILL.md', 'documentation/commands/vulnscan.md']) {
+    const t = read(f);
+    for (const need of ['web search', 'CISA KEV', 'ecosystem', 'npm audit', 'pip-audit', 'cargo audit', 'osv-scanner', 'govulncheck', 'private package names']) {
+      assert.ok(t.includes(need), f + ': notice misses ' + need);
+    }
+    assert.match(t, /Claude model[^.]*recipient/, f + ': the model is not named as a recipient');
+    assert.doesNotMatch(t, /nothing else leaves the repo/i, f + ': the nothing-else claim is untrue');
+  }
+});
+
+test('R-3 the manifest-command warning says home folder only, never a product folder, in every place that states it', () => {
+  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md']) {
+    const t = read(f);
+    assert.match(t, /cd ~ &&/, f + ': no home-folder command form');
+    assert.match(t, /never from a product folder/, f + ': no product-folder ban');
+    assert.match(t, /repo's own copy/, f + ': does not say a repo copy runs');
+    assert.doesNotMatch(t, /only in a repo (you|they) trust/, f + ': old trust-the-repo wording');
+  }
 });
 
 test('R-campaign-content fix rounds point at aico:pipeline section 5, not 3 (campaign:29, content:27)', () => {
