@@ -135,7 +135,13 @@ _Avoid_: orchestrator (use Lead).
 
 **aico language** — `aico_language`: the BCP 47 tag of the language aico writes in (Handoff prose, forms, reports, summaries). Set with `/aico:language`, as your default or per project. Distinct from `languages:`, which lists the product's UI locales. Machine-read parts stay English.
 
-**Design skills** — the approved set of UI/UX skills for one product, at most five, in `## Design skills` of `.company/project.md`. Each line has its source, license, vetted and approval dates. Installed only after you approve the exact commands.
+**Design skills** — _Replaced_ by **Role skill**: the old per-product list of UI/UX skills in `## Design skills` of `.company/project.md`, at most five. A migration form moves its lines into the **Catalog** and each Role's selection; lines you have not migrated are not used.
+
+**Catalog** — `3rdpartyskills.json`, baseline plus user entries: every third-party skill a Role may be given, with its category. Replaces `deps/skills.json`.
+
+**Baseline entry** — a read-only **Catalog** entry shipped with the plugin.
+
+**Role skill** — a **Catalog** skill the CEO selected for one Role in settings and named on that Role's `Role skills:` dispatch line.
 
 **Effort** — how long a Role thinks before acting: `low | medium | high | xhigh | max`. Each Role's default is in its agent file; the CEO can change it in Settings.
 
