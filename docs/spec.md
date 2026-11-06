@@ -23,7 +23,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Product Manager | product-manager | Nora | opus | medium | read-only + Write |
 | Reprompter | reprompter | Lynn | sonnet | medium | Read, Skill, Write |
 | Account Manager | account-manager | Carmen | sonnet | low | read-only + Write |
-| Architect | architect | Ava | opus | high | read-only + Write |
+| Architect | architect | Ava | opus | high | read-only + Write, Edit |
 | Legal/Compliance | legal | Leila | sonnet | medium | read-only + Write |
 | Backend Engineer | backend-engineer | Ben | sonnet | medium | full |
 | Frontend Engineer | frontend-engineer | Freya | sonnet | medium | full |
@@ -57,7 +57,7 @@ Vocabulary: see `GLOSSARY.md`. Decisions: `docs/adr/`.
 | Skill Researcher | skill-researcher | Selin | sonnet | medium | read-only + WebSearch/WebFetch + Write; no Bash; the Lead scans its picks; never installs |
 | Editor | editor | Edith | sonnet | medium | Read, Grep, Glob, Write (own Handoff only); no Bash, no web; blocks, never rewrites |
 
-"read-only + Write" = Read, Grep, Glob, Skill, Write; Write is for its Handoff only. Exceptions: the Architect also writes ADRs and Contract definition files (interfaces/schemas, no implementation); Code Reviewer, Security and Legal also have Bash for read-only commands (git diff, audits).
+"read-only + Write" = Read, Grep, Glob, Skill, Write; Write is for its Handoff only. Exceptions: the Architect also writes ADRs and Contract definition files (interfaces/schemas, no implementation) and has Edit for its plan, ADR and Contract files; Code Reviewer, Security and Legal also have Bash for read-only commands (git diff, audits).
 "full" = Read, Grep, Glob, Skill, Write, Edit, Bash.
 
 ## Practices (skills)
