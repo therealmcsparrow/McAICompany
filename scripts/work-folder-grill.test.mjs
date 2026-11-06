@@ -180,9 +180,8 @@ describe('grill Playbook text', () => {
   const FILES = [
     'skills/grill/SKILL.md',
     'skills/grill-me/SKILL.md',
-    'skills/grilling/SKILL.md',
     'skills/grill-with-docs/SKILL.md',
-    'skills/grilling/references/grill-loop.md',
+    'skills/grill/references/grill-loop.md',
   ];
   const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
   const TOPIC = '.company/work-folder-topic-grill.txt';
@@ -197,10 +196,11 @@ describe('grill Playbook text', () => {
   });
 
   test('the Topic file is written before arg and named by the --for word', () => {
-    for (const f of ['skills/grill/SKILL.md', 'skills/grilling/references/grill-loop.md']) {
+    for (const f of ['skills/grill/SKILL.md', 'skills/grill/references/grill-loop.md']) {
       const text = read(f);
       assert.ok(text.includes(TOPIC), f);
-      assert.ok(text.indexOf(TOPIC) < text.indexOf('draft-input arg --for grill'), f);
+      // the first shell command, not the first mention of it in the sentence that orders the Topic write
+      assert.ok(text.indexOf(TOPIC) < text.indexOf('run.mjs" draft-input arg --for grill'), f);
       assert.ok(text.includes(CLEAR), f);
     }
     for (const f of FILES) {
@@ -209,7 +209,7 @@ describe('grill Playbook text', () => {
   });
 
   test('the three loop Playbooks point at the loop file and the Topic rule', () => {
-    for (const f of ['skills/grill-me/SKILL.md', 'skills/grilling/SKILL.md', 'skills/grill-with-docs/SKILL.md']) {
+    for (const f of ['skills/grill/SKILL.md', 'skills/grill-me/SKILL.md', 'skills/grill-with-docs/SKILL.md']) {
       const text = read(f);
       assert.ok(text.includes(TOPIC), f);
       assert.ok(text.includes(CLEAR), f);
@@ -251,9 +251,9 @@ describe('grill Playbook text', () => {
     }
   });
 
-  test('the contract is v1.3 in the script and the doc; the Playbooks cite v1.3', () => {
-    assert.match(fs.readFileSync(SCRIPT, 'utf8'), /grill-file\.md v1\.3/);
-    assert.match(read('docs/contracts/grill-file.md'), /^# Contract: grill-file v1\.3$/m);
-    for (const f of FILES.filter((x) => x.endsWith('SKILL.md'))) assert.ok(read(f).includes('`grill-file` v1.3'), f);
+  test('the contract is v1.4 in the script and the doc; the Playbooks cite v1.4', () => {
+    assert.match(fs.readFileSync(SCRIPT, 'utf8'), /grill-file\.md v1\.4/);
+    assert.match(read('docs/contracts/grill-file.md'), /^# Contract: grill-file v1\.4$/m);
+    for (const f of FILES.filter((x) => x.endsWith('SKILL.md'))) assert.ok(read(f).includes('`grill-file` v1.4'), f);
   });
 });

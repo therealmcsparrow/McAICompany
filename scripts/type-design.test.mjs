@@ -32,7 +32,7 @@ test('manifest: ship fields, lanes and checks', () => {
 });
 
 test('manifest: the roles and Playbooks of the contract', () => {
-  assert.deepEqual(manifest.playbooks, ['design', 'research', 'client', 'feedback', 'brainstorm', 'cooler', 'dashboard', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'idea']);
+  assert.deepEqual(manifest.playbooks, ['design', 'research', 'client', 'feedback', 'brainstorm', 'cooler', 'dashboard', 'grill', 'grill-me', 'grill-with-docs', 'idea']);
   for (const r of ['ui-ux-designer', 'code-reviewer', 'security', 'legal', 'skill-researcher', 'frontend-engineer']) {
     assert.ok(manifest.roles.includes(r), r);
   }

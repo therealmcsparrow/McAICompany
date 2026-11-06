@@ -5,17 +5,16 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
 
-// Text pins for the three grill Playbooks that share skills/grilling/references/grill-loop.md,
+// Text pins for the three grill Playbooks that share skills/grill/references/grill-loop.md,
 // plus a run of scripts/grill.mjs over a file shaped as each Playbook writes it.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const NAMES = ['grilling', 'grill-me', 'grill-with-docs'];
+const NAMES = ['grill', 'grill-me', 'grill-with-docs'];
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const skills = Object.fromEntries(NAMES.map((n) => [n, read(`skills/${n}/SKILL.md`)]));
-const loop = read('skills/grilling/references/grill-loop.md');
+const loop = read('skills/grill/references/grill-loop.md');
 const RUN = '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs';
-const LOOP_PATH = '${CLAUDE_PLUGIN_ROOT}/skills/grilling/references/grill-loop.md';
+const LOOP_PATH = '${CLAUDE_PLUGIN_ROOT}/skills/grill/references/grill-loop.md';
 
 const front = (text) => {
   const lines = text.split('\n');
@@ -73,8 +72,8 @@ for (const name of NAMES) {
   });
 }
 
-test('answer source: grilling looks facts up and may send web search queries', () => {
-  const t = skills.grilling;
+test('answer source: grill looks facts up and may send web search queries', () => {
+  const t = skills.grill;
   assert.ok(t.includes('Web search: yes'));
   assert.ok(t.includes('the idea and the CEO\'s answers may become web search queries sent to the web search tool'));
 });
@@ -117,15 +116,6 @@ test('every Playbook names the loop file and the loop file names the three answe
   for (const m of ['lookup', 'ask-all', 'docs']) assert.ok(loop.includes(`\`${m}\``), `mode ${m}`);
 });
 
-const GRILL_SKILL_SHA256 = '1eaf85d46d4d45fd87680b9f92419b6581cc50c384a0ec1b1fa42eadcf01df68';
-
-test('aico:grill SKILL.md matches the pinned hash apart from the Help-line path', () => {
-  const now = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8')
-    .replace(/\r\n/g, '\n')
-    .replace('read `documentation/commands/grill.md`', 'read the `### /aico:grill` entry of `documentation/commands.md`');
-  assert.equal(createHash('sha256').update(now).digest('hex'), GRILL_SKILL_SHA256);
-});
-
 const GRILL = (extra) => `---
 slug: demo-idea
 started: 2026-10-30 14:05
@@ -150,7 +140,7 @@ ${extra.entry}## Proposals
 ${extra.proposals}`;
 
 const FIXTURES = {
-  grilling: {
+  grill: {
     ref: 'F-1',
     entry: '### F-1 — B-2\n- Fact: The store is a folder.\n- Source: https://example.com/doc\n- Closes: B-2\n',
     proposals: '- GLOSSARY: idea — a rough thought\n',
@@ -184,9 +174,9 @@ test('each grill playbook writes grill-file v1: grill status accepts its file', 
 
 test('grill-file contract lists the new writers and the web search set', () => {
   const c = read('docs/contracts/grill-file.md');
-  assert.ok(c.startsWith('# Contract: grill-file v1.3'));
-  for (const n of ['aico:grilling', 'aico:grill-me', 'aico:grill-with-docs']) assert.ok(c.includes(n), n);
-  assert.ok(c.includes('the fact lookups of `aico:grill` and `aico:grilling` may send web search queries'));
+  assert.ok(c.startsWith('# Contract: grill-file v1.4'));
+  for (const n of ['aico:grill', 'aico:grill-me', 'aico:grill-with-docs']) assert.ok(c.includes(n), n);
+  assert.ok(c.includes('the fact lookups of `aico:grill` may send web search queries'));
   assert.ok(c.includes('`aico:grill-me` and `aico:grill-with-docs` send no web search query'));
   assert.ok(c.includes('## Personal data'));
   assert.ok(!c.includes('\r'));

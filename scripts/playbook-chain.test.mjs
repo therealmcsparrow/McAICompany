@@ -103,7 +103,7 @@ function sites(filter) {
 // ---- the detector itself is not vacuous ----
 test('detector: the hidden set is read from frontmatter and equals CEO_ONLY', () => {
   const only = ceoOnly();
-  assert.deepEqual([...only].sort(), ['bug', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'help', 'idea', 'language', 'pentest', 'settings', 'setup', 'skillspector', 'to-spec', 'to-tickets', 'version'].sort(), 'CEO_ONLY is the contract list');
+  assert.deepEqual([...only].sort(), ['bug', 'grill', 'grill-me', 'grill-with-docs', 'help', 'idea', 'language', 'pentest', 'settings', 'setup', 'skillspector', 'to-spec', 'to-tickets', 'version'].sort(), 'CEO_ONLY is the contract list');
   assert.ok(Object.isFrozen(only), 'CEO_ONLY is frozen');
   assert.deepEqual([...hidden].sort(), [...only].sort(), 'exactly the CEO_ONLY skills carry disable-model-invocation: true');
   for (const n of ['research', 'feature', 'fix', 'brainstorm', 'lead', 'triage', 'audit', 'report', 'design', 'content', 'campaign']) {

@@ -74,7 +74,7 @@ describe('calibration', () => {
 
   test('the Contract is v1.8 and holds the hand-over point, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v1\.8$/m);
+    assert.match(text, /^# Contract: lead-handoff v1\.9$/m);
     assert.ok(text.includes('85500'));
     assert.ok(text.includes('no setup'));
     assert.ok(!text.includes('\r'));
@@ -82,7 +82,7 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.8');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v1.9');
     assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2');
   });
 });
@@ -341,6 +341,17 @@ describe('Handoff content', () => {
     watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
     text = fs.readFileSync(handoffFile(fx, 2), 'utf8');
     assert.match(text, /^playbook: feature$/m);
+  });
+
+  test('a pending grill step is recorded as step-grill (idea-flow v1.4 step name)', () => {
+    const fx = fixture();
+    const ts = '2026-10-30T10:00:00.000Z';
+    const ev = [{ e: 'start', kind: 'idea', ts }, { e: 'pick', letter: '1', route: 'grill', ts }];
+    fs.writeFileSync(path.join(fx.dir, 'idea-flow.jsonl'), ev.map((e) => `${JSON.stringify(e)}\n`).join(''));
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    const text = fs.readFileSync(handoffFile(fx), 'utf8');
+    assert.match(text, /^form: pending step-grill$/m);
+    assert.doesNotMatch(text, /step-grilling/);
   });
 
   test('the file stays small and holds only fixed words under Next', () => {
@@ -787,7 +798,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.8'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v1.9'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {

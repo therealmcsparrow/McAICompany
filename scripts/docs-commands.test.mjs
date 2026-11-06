@@ -7,7 +7,7 @@ import { docFolder, commandPage } from './doc-pages.mjs';
 
 const root = path.join(import.meta.dirname, '..');
 const text = docFolder(root, 'commands');
-const NEW = ['idea', 'bug', 'grilling', 'grill-me', 'grill-with-docs'];
+const NEW = ['idea', 'bug', 'grill', 'grill-me', 'grill-with-docs'];
 const entry = name => commandPage(root, name);
 
 describe('reference', () => {
@@ -32,7 +32,7 @@ describe('reference', () => {
 
   it('route table names every new command', async () => {
     const rows = text.split('\n').filter(l => l.startsWith('| ') && l.includes('/aico:'));
-    for (const n of NEW) assert.ok(rows.some(r => r.includes(`/aico:${n}`)), n);
+    for (const n of NEW) assert.ok(rows.some(r => new RegExp(`/aico:${n}(?![-\\w])`).test(r)), n);
   });
 
   it('feature and fix say they keep only the Ship Gate', async () => {
@@ -44,10 +44,10 @@ describe('reference', () => {
     }
   });
 
-  it('data destinations: grill-me and grill-with-docs never search the web, grilling may', async () => {
+  it('data destinations: grill-me and grill-with-docs never search the web, grill may', async () => {
     assert.match(entry('grill-me'), /No web search ever/);
     assert.match(entry('grill-with-docs'), /No web search/);
-    assert.match(entry('grilling'), /web search queries/);
+    assert.match(entry('grill'), /web search queries/);
     assert.match(text, /^\*\*Where your text goes\.\*\*/m);
     assert.match(text, /store none of its text|They store none of its text/);
     assert.doesNotMatch(text, /nothing leaves/i);

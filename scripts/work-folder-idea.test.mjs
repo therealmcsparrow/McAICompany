@@ -99,7 +99,7 @@ test('a legacy flow still resumes', () => {
   const slug = 'bug-20261030-2242';
   ok(run(cwd, 'start', slug, '--kind', 'bug'));
   ok(run(cwd, 'pick', slug, '1'));
-  ok(run(cwd, 'done', slug, 'grilling'));
+  ok(run(cwd, 'done', slug, 'grill'));
   assert.match(ok(run(cwd, 'state', slug)).out, /build: fix/);
   assert.match(ok(run(cwd, 'read', slug)).out, /1 start kind=bug/);
 });
@@ -109,7 +109,7 @@ test('a new-name flow runs from start to parked', () => {
   mkWork(cwd, NEW);
   ok(run(cwd, 'start', NEW, '--kind', 'idea'));
   ok(run(cwd, 'pick', NEW, '1'));
-  ok(run(cwd, 'done', NEW, 'grilling'));
+  ok(run(cwd, 'done', NEW, 'grill'));
   ok(run(cwd, 'done', NEW, 'reprompt', '--out', `.company/work/${NEW} Draft/prompt.md`));
   assert.match(ok(run(cwd, 'options', NEW)).out, /option E park-idea/);
   ok(run(cwd, 'pick', NEW, 'E'));
@@ -147,9 +147,9 @@ for (const name of ['idea', 'bug']) {
 
 test('the contract names v1.2 and both name forms', () => {
   const text = read('docs/contracts/idea-flow.md');
-  assert.match(text, /^# Contract: idea-flow v1\.3/);
+  assert.match(text, /^# Contract: idea-flow v1\.4/);
   assert.match(text, /work-folder-name/);
   assert.match(text, /unknown slug/);
   assert.ok(!text.includes('\r'));
-  assert.match(read('scripts/idea-flow.mjs'), /contract idea-flow v1\.3/);
+  assert.match(read('scripts/idea-flow.mjs'), /contract idea-flow v1\.4/);
 });
