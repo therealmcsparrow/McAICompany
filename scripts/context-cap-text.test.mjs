@@ -36,6 +36,12 @@ test('ledger exit 4 routes to one fresh check Step, never a Fix round', () => {
   has(ref, '## Context readings', 'ledger agent-ctx', 'lead-handover ctx', 'measure');
 });
 
+test('a check Step runs only for Blocking rows or changed code files', () => {
+  const s = ref.slice(ref.indexOf('## Ledger exit 4'), ref.indexOf('## Step groups'));
+  has(s, 'A check Step runs only when', '`## Blocking` row', '`## Did`', '`files-touched`', 'A code file is any changed file that is not a doc, plan, Contract or Handoff', 'still shows at the Ship Gate', 'no check Step');
+  has(line(pipeline, '- **Ledger exit 4'), 'only when', '`## Blocking` rows', 'changed code files');
+});
+
 test('check Step rules follow plan R-8 and R-17, Fix group has a Role side', () => {
   const s = ref.slice(ref.indexOf('## Ledger exit 4'), ref.indexOf('## Step groups'));
   has(s, "the over-cap Handoff plus that Step's original inputs", 'check and finish Step <NN> (over cap): confirm or correct each Did, Decisions and Blocking line', 'continue as is, split, stop', 'No third Step');
