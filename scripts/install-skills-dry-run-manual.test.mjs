@@ -45,7 +45,11 @@ test('vulnscan notice and docs page are general: kinds of destinations and priva
   }
   const a = readFileSync(new URL('../agents/vuln-scanner.md', import.meta.url), 'utf8');
   assert.match(a, /no code text/i);
-  assert.match(readFileSync(new URL('../documentation/concepts/where-your-words-go.md', import.meta.url), 'utf8'), /aico:vulnscan/);
+  const page = readFileSync(new URL('../documentation/concepts/where-your-words-go.md', import.meta.url), 'utf8');
+  const bullet = page.split('\n').find((l) => l.includes('/aico:vulnscan'));
+  assert.ok(bullet, 'no vulnscan bullet');
+  assert.match(bullet, /Claude model/, 'the vulnscan bullet does not name the Claude model');
+  assert.match(bullet, /vendor and advisory sites/, 'the vulnscan bullet does not name the vendor and advisory sites');
 });
 
 test('triage names a fitting work: Playbook and checks the fix fallback against playbooks', () => {
