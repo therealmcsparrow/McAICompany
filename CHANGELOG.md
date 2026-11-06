@@ -4,6 +4,24 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-06
+
+Rollback: node scripts/stable.mjs 0.27.0
+
+### Added
+- **Architect gets the Edit tool.** The architect can change a plan or spec in place.
+
+### Changed
+- **One plan review, only for Contract majors.** The plan review runs once, with no re-check, and only when a Contract major is bumped. `plan-review majors` reads `<name> v1.2 → v2.0` (with the arrow) and skips a major written without it. Each `[security]` plan row gets a CEO form before builders.
+- **The over-cap check Step runs only for blockers or changed code.** Whether the work holds "code" is a Lead judgement. An over-cap reviewer Handoff with no Blocking rows can close a review.
+- **`aico:grill` is removed and `aico:grilling` is renamed to `aico:grill`.** `/aico:grilling` no longer exists; use `/aico:grill`.
+- Contracts: `skills-manifest` v3.0, `company-type` v2.0, `idea-flow` v2.0, `lead-handoff` v2.0.
+
+### Fixed
+- **Skill audit bugs (PR #56).** Wrong references and text bugs in skills are fixed, argument hints are quoted, bug reports are read as data, and the env write guard refuses on git errors and no longer reads env files.
+- **`gh secret set` fix.** The secret is no longer put where it can leak.
+- **Impeccable install warning.** The plugin warns about the impeccable install and no longer runs the installer itself.
+
 ## [0.27.0] - 2026-11-04
 
 Rollback: node scripts/stable.mjs 0.26.2
