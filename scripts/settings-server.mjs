@@ -8,6 +8,7 @@ import http from 'node:http';
 import path from 'node:path';
 import * as check from './check.mjs';
 import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
+import { eligibleRoles, readBaseline, readCatalog, selectable, skillStatus } from './skill-catalog.mjs';
 import {
   Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
@@ -94,6 +95,40 @@ function personalitiesState(ctx, plugin, user, project) {
   };
 }
 
+const sourceKind = (e) => (e.skillrepo !== undefined ? 'repo' : e.skillplugin !== undefined ? 'plugin' : 'command');
+
+// The catalog for the Skills tab: each entry with the Roles that may select it, and its status, license and
+// vetted texts from skillStatus. Entry texts are validated by the catalog module; no path, hash or home folder
+// leaves here. An unreadable catalog gives no entries and a fixed error line.
+function catalogState(ctx) {
+  try {
+    const { entries, errors, clashes } = readCatalog({ home: ctx.home });
+    const { categories } = readBaseline();
+    const out = entries.map((e) => {
+      const pick = selectable(e);
+      const status = skillStatus(e, { home: ctx.home, productRoot: ctx.cwd ?? process.cwd() });
+      const row = {
+        name: e.skillname,
+        category: e.skillcategory,
+        kind: sourceKind(e),
+        layer: e.layer,
+        roles: eligibleRoles(e, categories),
+        selectable: pick.ok,
+        status: status.status,
+        place: status.place,
+        license: status.license,
+        vetted: status.vetted
+      };
+      if (!pick.ok) row.reason = pick.reason;
+      if (e.skillcommit !== undefined) row.commit = e.skillcommit;
+      return row;
+    });
+    return { entries: out, errors, clashes: clashes.map((c) => ({ name: c.skillname, pinned: c.pinned })) };
+  } catch {
+    return { entries: [], errors: ['ERROR baseline catalog'], clashes: [] };
+  }
+}
+
 function state(ctx) {
   const plugin = pluginDefaults(ctx.pluginRoot);
   const user = readLayer('user', ctx).layer;
@@ -103,6 +138,7 @@ function state(ctx) {
     user,
     project,
     resolved: resolveSettings(ctx),
+    catalog: catalogState(ctx),
     language: storedLanguage(ctx),
     hasProject: hasCompany(ctx.cwd),
     personalities: personalitiesState(ctx, plugin, user, project)

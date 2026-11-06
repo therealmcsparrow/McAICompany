@@ -81,8 +81,8 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
   assert.deepEqual(d.brainstorm, { film_script: false, debate: 'crossfire' });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 95000, floor: 'sonnet', protected: false,
-    source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' }
+    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 95000, floor: 'sonnet', protected: false, skills: [],
+    source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin', skills: 'plugin' }
   });
   assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, second_reviewer_model_effective: 'opus' });
   assert.deepEqual(r.gates, GATE_DEFAULTS);
@@ -100,8 +100,8 @@ test('project beats user beats plugin, per field', (t) => {
   s.project({ roles: { qa: { effort: 'high' } }, pipeline: { fix_rounds: 0, lanes: { legal: 'on' } } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 95000, floor: 'sonnet', protected: false,
-    source: { name: 'plugin', model: 'user', effort: 'project', context_cap: 'plugin' }
+    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 95000, floor: 'sonnet', protected: false, skills: [],
+    source: { name: 'plugin', model: 'user', effort: 'project', context_cap: 'plugin', skills: 'plugin' }
   });
   assert.equal(r.pipeline.fix_rounds, 0);
   assert.equal(r.pipeline.dispatch, 'parallel');
@@ -212,7 +212,7 @@ test('broken config.json falls back to defaults with a warning', (t) => {
   const s = sandbox(t);
   fs.writeFileSync(s.config, '{broken');
   let r = resolveSettings(s.ctx);
-  assert.deepEqual(r.roles.qa.source, { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin' });
+  assert.deepEqual(r.roles.qa.source, { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin', skills: 'plugin' });
   assert.equal(r.warnings.length, 1);
   assert.match(r.warnings[0], /not valid JSON/);
 
@@ -286,7 +286,7 @@ test('get CLI prints JSON', (t) => {
   assert.equal(r.code, 0);
   assert.equal(r.err, '');
   const data = JSON.parse(r.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'settings_folder_moved', 'skillspector', 'unlocked', 'warnings']);
   assert.equal(Object.keys(data.roles).length, fs.readdirSync(path.join(import.meta.dirname, '..', 'agents')).filter((f) => f.endsWith('.md')).length);
   assert.equal(data.roles.architect.name, 'Ava');
 });
@@ -1448,7 +1448,7 @@ test('get shows floor and protected per Role', (t) => {
   assert.equal(r.roles.security.floor, 'opus');
   assert.equal(r.roles.security.protected, true);
   assert.equal(r.roles.qa.protected, false);
-  assert.deepEqual(Object.keys(r.roles.qa).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'source']);
+  assert.deepEqual(Object.keys(r.roles.qa).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'skills', 'source']);
 });
 
 test('protected lock: a lower model at any level is not applied, with a warning', (t) => {
@@ -2045,4 +2045,180 @@ test('the shipped plugin: six protected names and an effective opus by default',
   assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
   assert.equal(r.roles['fresh-reviewer'].protected, true);
   assert.equal(loadModelFloor().protected.length, 6);
+});
+
+// ---------- role skills ----------
+
+const SHA = 'a'.repeat(40);
+const QA_ENTRY = { skillname: 'qa-helper', skillcategory: 'quality', skillrepo: 'someone/qa-helper', skillcommit: SHA, license: 'MIT' };
+const QA_ENTRY_2 = { skillname: 'qa-second', skillcategory: 'quality', skillrepo: 'someone/qa-second', skillcommit: SHA, license: 'MIT' };
+const todayUtc = () => new Date().toISOString().slice(0, 10);
+
+function withCatalog(s, entries = [QA_ENTRY, QA_ENTRY_2]) {
+  const dir = path.join(s.home, '.mcsparrow');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries }));
+}
+const pick2 = (names, approved = '2026-01-01') => names.map((name) => ({ name, approved }));
+const skillsOf = (s, role = 'qa') => plain(resolveSettings(s.ctx).roles[role]);
+
+test('roles carry skills and source.skills; plugin when nothing is stored', (t) => {
+  const s = sandbox(t);
+  const r = skillsOf(s);
+  assert.deepEqual(r.skills, []);
+  assert.equal(r.source.skills, 'plugin');
+  assert.equal(resolveSettings(s.ctx).settings_folder_moved, false);
+});
+
+test('a user list resolves with the catalog name and its date', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper']) } } });
+  const r = skillsOf(s);
+  assert.deepEqual(r.skills, [{ name: 'qa-helper', approved: '2026-01-01' }]);
+  assert.equal(r.source.skills, 'user');
+});
+
+test('a project list replaces the user list; [] replaces too', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper']) } } });
+  s.project({ roles: { qa: { skills: pick2(['qa-second']) } } });
+  assert.deepEqual(skillsOf(s).skills.map((x) => x.name), ['qa-second']);
+  assert.equal(skillsOf(s).source.skills, 'project');
+  s.project({ roles: { qa: { skills: [] } } });
+  assert.deepEqual(skillsOf(s).skills, []);
+  assert.equal(skillsOf(s).source.skills, 'project');
+});
+
+test('a stale or ineligible name is ignored by path and does not break the layer', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper']) } }, gates: { ship: 'auto' }, unlocked: ['ship'] });
+  s.project({ roles: { qa: { skills: [{ name: 'gone-skill-xyz', approved: '2026-01-01' }, { name: 'auth-implementation-patterns', approved: '2026-01-01' }] } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(r.roles.qa.skills.map((x) => x.name), ['qa-helper']);
+  assert.equal(r.roles.qa.source.skills, 'user');
+  assert.ok(r.ignored.includes('roles.qa.skills[0].name: not selectable for this Role'));
+  assert.ok(r.ignored.includes('roles.qa.skills[1].name: not selectable for this Role'));
+  assert.equal(JSON.stringify(r).includes('gone-skill-xyz'), false);
+  assert.equal(r.gates.ship, 'auto');
+});
+
+test('a wildcard, a repeat and a name from another category are not selectable', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper', 'qa-helper', 'golang-*']) } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(r.roles.qa.skills.map((x) => x.name), ['qa-helper']);
+  assert.equal(r.ignored.filter((x) => x.includes('not selectable')).length, 2);
+});
+
+test('a project list for a protected Role is ignored and the user list stands', (t) => {
+  const s = sandbox(t);
+  s.user({ roles: { security: { skills: pick2(['security-review']) } } });
+  s.project({ roles: { security: { skills: pick2(['security-and-hardening']) } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(r.roles.security.skills.map((x) => x.name), ['security-review']);
+  assert.equal(r.roles.security.source.skills, 'user');
+  assert.ok(r.ignored.includes('roles.security.skills: a project cannot set this for a protected Role'));
+  s.project({ roles: { security: { skills: [] } } });
+  assert.deepEqual(resolveSettings(s.ctx).roles.security.skills.map((x) => x.name), ['security-review']);
+});
+
+test('a project list with every name ignored falls back to the user list', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper']) } } });
+  s.project({ roles: { qa: { skills: pick2(['stale-name']) } } });
+  const r = skillsOf(s);
+  assert.deepEqual(r.skills.map((x) => x.name), ['qa-helper']);
+  assert.equal(r.source.skills, 'user');
+});
+
+test('wrong shapes fall back with a warning and never echo the value', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper']) } } });
+  for (const bad of ['SECRET-VALUE', pick2(['qa-helper', 'qa-second', 'a', 'b', 'c', 'd']), ['SECRET-VALUE'], [{ name: 'qa-second', approved: '2026-01-01', extra: 1 }]]) {
+    s.project({ roles: { qa: { skills: bad } } });
+    const r = resolveSettings(s.ctx);
+    assert.deepEqual(r.roles.qa.skills.map((x) => x.name), ['qa-helper']);
+    assert.ok(r.warnings.some((w) => w.includes('roles.qa.skills')));
+    assert.equal(JSON.stringify(r).includes('SECRET-VALUE'), false);
+  }
+});
+
+test('a broken project layer still holds an unlocked Gate at ask', (t) => {
+  const s = sandbox(t);
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'] });
+  s.project({ roles: { qa: { skills: 'x' } } });
+  assert.equal(resolveSettings(s.ctx).gates.ship, 'ask');
+});
+
+test('an invalid or future approved date is no date', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: [{ name: 'qa-helper', approved: '2999-01-01' }, { name: 'qa-second', approved: '2026-02-31' }] } } });
+  assert.deepEqual(skillsOf(s).skills, [{ name: 'qa-helper', approved: null }, { name: 'qa-second', approved: null }]);
+});
+
+test('hostile Role keys never reach a prototype', (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(s.config, '{"aico_settings":{"version":1,"roles":{"__proto__":{"skills":[{"name":"x"}]},"constructor":{"skills":[]}}}}');
+  const r = resolveSettings(s.ctx);
+  assert.equal(Object.hasOwn(r.roles, '__proto__'), false);
+  assert.equal({}.skills, undefined);
+});
+
+test('user lists are not counted while the settings folder is elsewhere; get says so', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: pick2(['qa-helper']) } } });
+  const r = s.cli('get');
+  const data = JSON.parse(r.out);
+  assert.equal(data.settings_folder_moved, true);
+  assert.deepEqual(data.roles.qa.skills, []);
+  assert.equal(data.roles.qa.source.skills, 'plugin');
+  assert.ok(data.warnings.some((w) => w.includes('user level')));
+  assert.equal(s.cli('get', 'settings_folder_moved').out.trim(), 'true');
+});
+
+test('save: skills get today on a changed Role only; client dates are dropped', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: [{ name: 'qa-helper', approved: '2026-01-01' }] } } });
+  const layer = () => JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings;
+  writeLayer('user', { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2030-01-01' }] }, architect: { name: 'Zed' } } }, s.ctx);
+  assert.deepEqual(layer().roles.qa.skills, [{ name: 'qa-helper', approved: '2026-01-01' }]);
+  writeLayer('user', { version: 1, roles: { qa: { skills: [{ name: 'qa-second', approved: '1999-01-01' }, { name: 'qa-helper' }] } } }, s.ctx);
+  assert.deepEqual(layer().roles.qa.skills, [{ name: 'qa-second', approved: todayUtc() }, { name: 'qa-helper', approved: todayUtc() }]);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: pick2(['qa-second', 'qa-helper']) } } } }));
+  writeLayer('user', { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }, { name: 'qa-second' }] } } }, s.ctx);
+  assert.deepEqual(layer().roles.qa.skills.map((x) => x.approved), ['2026-01-01', '2026-01-01']);
+});
+
+test('save refuses over 5, a repeat, an unselectable name and a project list for a protected Role, naming the field only', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  const msg = (level, layer) => { try { writeLayer(level, layer, s.ctx); } catch (e) { return e instanceof Refusal ? e.message : 'other'; } return null; };
+  assert.match(msg('user', { version: 1, roles: { qa: { skills: pick2(['a', 'b', 'c', 'd', 'e', 'f']) } } }), /roles\.qa\.skills: must be at most 5 skills/);
+  assert.match(msg('user', { version: 1, roles: { qa: { skills: pick2(['qa-helper', 'qa-helper']) } } }), /roles\.qa\.skills\[1\]\.name: not selectable for this Role/);
+  const m = msg('user', { version: 1, roles: { qa: { skills: pick2(['SECRET-NAME']) } } });
+  assert.match(m, /roles\.qa\.skills\[0\]\.name: not selectable for this Role/);
+  assert.equal(m.includes('SECRET-NAME'), false);
+  assert.match(msg('user', { version: 1, roles: { qa: { skills: pick2(['auth-implementation-patterns']) } } }), /not selectable for this Role/);
+  assert.match(msg('project', { version: 1, roles: { security: { skills: pick2(['security-review']) } } }), /roles\.security\.skills: a project cannot set this for a protected Role/);
+  assert.equal(fs.existsSync(s.config), false);
+  assert.equal(fs.existsSync(s.projectFile), false);
+  assert.deepEqual(checkLayers({ version: 1 }, { version: 1, roles: { security: { skills: [] } } }, s.ctx), ['project roles.security.skills: a project cannot set this for a protected Role']);
+});
+
+test('a user save may set a protected Role list; a project save for an ordinary Role works', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  writeLayer('user', { version: 1, roles: { security: { skills: [{ name: 'security-review' }] } } }, s.ctx);
+  writeLayer('project', { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } }, s.ctx);
+  assert.equal(skillsOf(s, 'security').skills[0].approved, todayUtc());
+  assert.equal(skillsOf(s).source.skills, 'project');
 });

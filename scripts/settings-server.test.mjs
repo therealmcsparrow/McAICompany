@@ -165,7 +165,7 @@ test('GET /api/state returns plugin defaults, raw layers, resolved, stored langu
   fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { model: 'haiku' } } } }));
   const { state } = await start(t, s);
   const st = await state();
-  assert.deepEqual(Object.keys(st).sort(), ['hasProject', 'language', 'personalities', 'plugin', 'project', 'resolved', 'user']);
+  assert.deepEqual(Object.keys(st).sort(), ['catalog', 'hasProject', 'language', 'personalities', 'plugin', 'project', 'resolved', 'user']);
   assert.equal(st.plugin.roles.qa.model, 'sonnet');
   assert.deepEqual(st.user, { version: 1, roles: { qa: { model: 'haiku' } } });
   assert.deepEqual(st.project, { version: 1 });
@@ -1658,4 +1658,56 @@ test('the ignored class follows the project select value, so picking off or blan
   const html = pageHtml();
   const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
   assert.ok(row.includes("control.classList.toggle('ignored', ignored && control.value === 'on')"));
+});
+
+// ---------- role skills ----------
+
+function userCatalog(s, entries) {
+  const dir = path.join(s.home, '.mcsparrow');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries }));
+}
+const QA_PICK = { skillname: 'qa-helper', skillcategory: 'quality', skillrepo: 'someone/qa-helper', skillcommit: 'b'.repeat(40), license: 'MIT stated by me', vetted: '2026-01-02' };
+
+test('GET /api/state carries the catalog with license, vetted, status and eligible Roles, and no home path', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK, { skillname: 'cmd-tool', skillcategory: 'quality', skillinstaller: 'npx tool@1.2.3', license: 'ISC', vetted: '2026-01-02' }]);
+  const { state } = await start(t, s);
+  const st = await state();
+  assert.ok(Array.isArray(st.catalog.entries));
+  const byName = Object.fromEntries(st.catalog.entries.map((e) => [e.name, e]));
+  assert.deepEqual(byName['qa-helper'].roles, ['qa', 'code-reviewer', 'fresh-reviewer', 'hands-on-tester', 'persona-tester', 'accessibility-tester']);
+  assert.equal(byName['qa-helper'].license, 'MIT stated by me, as stated, not checked');
+  assert.equal(byName['qa-helper'].vetted, '2026-01-02');
+  assert.equal(byName['qa-helper'].status, 'missing');
+  assert.equal(byName['qa-helper'].selectable, true);
+  assert.equal(byName['cmd-tool'].vetted, null);
+  assert.equal(byName['golang-*'].selectable, false);
+  assert.equal(byName['vercel-react-best-practices'].license, 'no license on record');
+  assert.equal(byName['find-skills'].layer, 'baseline');
+  assert.equal(JSON.stringify(st.catalog).includes(s.home), false);
+  assert.equal(JSON.stringify(st.catalog).includes(os.homedir()), false);
+  assert.equal(st.resolved.settings_folder_moved, false);
+});
+
+test('save round-trips a skills list, dates it by the server and refuses a bad one with nothing written', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const bad = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'SECRET-NAME' }] } } } });
+  assert.equal(bad.status, 400);
+  const refused = (await bad.json()).refused.join(' ');
+  assert.match(refused, /roles\.qa\.skills\[0\]\.name: not selectable for this Role/);
+  assert.equal(refused.includes('SECRET-NAME'), false);
+  assert.equal(read(s.config), null);
+  const prot = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { architect: { skills: [] } } } });
+  assert.equal(prot.status, 400);
+  assert.equal(read(s.projectFile), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '1999-01-01' }] } } } });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  const today = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(after.resolved.roles.qa.skills, [{ name: 'qa-helper', approved: today }]);
+  assert.equal(after.resolved.roles.qa.source.skills, 'user');
 });
