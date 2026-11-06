@@ -1069,10 +1069,41 @@ test('main: a manifest command at project scope is printed as manual, never run,
     assert.equal(res.code, 0, res.out);
     assert.deepEqual(res.calls, []);
     assert.match(res.out, /^manual npx -y impeccable skills install$/m);
-    assert.match(res.out, /only in a repo you trust/);
+    assert.match(res.out, /^WARNING: impeccable .*third-party.*run it yourself: npx -y impeccable skills install/m);
     assert.doesNotMatch(res.out, /FAILED/);
     assert.match(res.out, /0 installed, 0 failed/);
   } finally { s.done(); }
+});
+
+const PINNED_IMPECCABLE = 'npx -y impeccable@4.8.0 skills install';
+function userScopeRun(color) {
+  const out = [], calls = [];
+  const m = { core: [{ name: 'hallmark', source: 'nutlope/hallmark' }, { name: 'impeccable', install: PINNED_IMPECCABLE }] };
+  const code = main(['core'], { manifest: m, home: '/h', cwd: '/repo', platform: 'linux', color, log: x => out.push(x), exec: c => { calls.push(c); } });
+  return { code, out, calls };
+}
+
+test('main: a manifest command at user scope is printed as manual with a WARNING line, never run (B4)', () => {
+  const { code, out, calls } = userScopeRun(false);
+  assert.equal(code, 0, out.join('|'));
+  assert.equal(calls.length, 1);
+  assert.ok(calls.every(c => !c.includes('impeccable')), calls.join('|'));
+  assert.ok(out.includes(`manual ${PINNED_IMPECCABLE}`), out.join('|'));
+  const w = out.filter(l => l.includes('WARNING'));
+  assert.equal(w.length, 1, out.join('|'));
+  assert.match(w[0], /^WARNING: impeccable /);
+  assert.match(w[0], /third.party/);
+  assert.match(w[0], /not inspected/);
+  assert.ok(w[0].includes(`run it yourself: ${PINNED_IMPECCABLE}`), w[0]);
+  assert.ok(!out.join('').includes(''));
+  assert.ok(out.includes('1 installed, 0 failed'), out.join('|'));
+});
+
+test('main: the WARNING line is ANSI yellow only when colour is on', () => {
+  const on = userScopeRun(true).out.find(l => l.includes('WARNING'));
+  assert.ok(on.startsWith('[33mWARNING: ') && on.endsWith('[0m'), JSON.stringify(on));
+  const off = userScopeRun(false).out.find(l => l.includes('WARNING'));
+  assert.ok(off.startsWith('WARNING: '), JSON.stringify(off));
 });
 
 test('main: the pinned CLI still runs at project scope next to a manual command', () => {

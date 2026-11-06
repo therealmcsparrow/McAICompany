@@ -109,7 +109,7 @@ test('a plugin source line has commit - and is accepted for design; its record h
   assert.ok(!records(r)[0].includes('commit:'));
 });
 test('a manifest command source passes with commit -, in design (no commit field) and in stack (commit: -)', (t) => {
-  const cmd = '`npx -y impeccable skills install`';
+  const cmd = '`npx -y impeccable@4.8.0 skills install`';
   const d = run(t, [line({ area: 'design', name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: '-' })], { area: 'design' });
   assert.equal(d.json.picks[0].kind, 'command');
   assert.ok(!records(d)[0].includes('commit:'));
@@ -118,9 +118,9 @@ test('a manifest command source passes with commit -, in design (no commit field
   assert.match(records(s)[0], /; vetted: 2026-10-20; commit: -; why: /);
 });
 test('a command source with a sha, and a command that is not the manifest command, fail', (t) => {
-  const cmd = '`npx -y impeccable skills install`';
+  const cmd = '`npx -y impeccable@4.8.0 skills install`';
   assert.equal(run(t, [line({ name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: SHA })]).json.lines[0].ok, false);
-  assert.equal(run(t, [line({ name: 'impeccable', source: '`npx -y impeccable skills install && calc`', license: 'Apache-2.0', commit: '-' })]).json.lines[0].ok, false);
+  assert.equal(run(t, [line({ name: 'impeccable', source: '`npx -y impeccable@4.8.0 skills install && calc`', license: 'Apache-2.0', commit: '-' })]).json.lines[0].ok, false);
 });
 test('the old empty-set wording, and the line with extra text, are lint lines and not an empty set', (t) => {
   for (const text of ['- (none: no candidate passed vetting and scan)', `${NONE_LINE} `, '- (none)', '- (none: no candidate passed vetting); x']) {
@@ -406,7 +406,7 @@ test('vet: one fetch per distinct (source, commit); a second commit or repo is a
   assert.ok(out.picks.every((p) => p.approvable));
 });
 test('vet: a command pick is never approvable and nothing is scanned or fetched for it', async (t) => {
-  const cmd = '`npx -y impeccable skills install`';
+  const cmd = '`npx -y impeccable@4.8.0 skills install`';
   const l = line({ name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: '-' });
   const s = fakeScanners();
   const p = (await vetRun(t, [l], s)).out.picks[0];
@@ -416,7 +416,7 @@ test('vet: a command pick is never approvable and nothing is scanned or fetched 
 });
 test('vet: a command pick does not read the installed copy, whatever deps offer', async (t) => {
   const { vet } = await mod();
-  const cmd = '`npx -y impeccable skills install`';
+  const cmd = '`npx -y impeccable@4.8.0 skills install`';
   const cwd = repo(t, handoff([line({ name: 'impeccable', source: cmd, license: 'Apache-2.0', commit: '-' })]));
   const deps = { ...fakeScanners().deps, scanInstalled: async () => assert.fail('an installed copy must not be scanned') };
   const out = await vet(REL, { cwd, deps, progress: () => {} });

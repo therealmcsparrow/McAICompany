@@ -481,12 +481,17 @@ export function main(args, env = {}) {
     if (dry) return 0;
     // User-scope installs have no product folder; run them from home so a repo's node_modules or .npmrc cannot steer npx.
     const homeDir = env.home ?? homedir();
-    // A manifest command at project scope is never run from the product folder: it is printed for the CEO to run by hand.
-    const manual = cmds.filter(c => c.cwd && !skillsArgs(c.cmd, c.argv));
+    // A manifest command (impeccable) is never run at any scope: it is third-party and uninspected. Print it and a warning for the CEO to run by hand.
+    const manual = cmds.filter(c => !skillsArgs(c.cmd, c.argv));
     const runnable = cmds.filter(c => !manual.includes(c));
     const { ok, failed } = runAll(runnable.map(c => (c.cwd ? c : { ...c, cwd: homeDir })), exec);
-    manual.forEach(c => log(`manual ${c.cmd}`));
-    if (manual.length) log(`Not run: it would start in the product folder, where the repo can steer it. Run it by hand only in a repo you trust.`);
+    const color = env.color ?? (process.stdout.isTTY && !process.env.NO_COLOR);
+    manual.forEach(c => {
+      log(`manual ${c.cmd}`);
+      const name = Object.values(manifest).flat().find(e => e?.install === c.cmd)?.name ?? 'This command';
+      const text = `WARNING: ${name} is a third-party installer that aico has not inspected, so it was not run. To install it, run it yourself: ${c.cmd}`;
+      log(color ? `[33m${text}[0m` : text);
+    });
     failed.forEach(f => log(`FAILED ${f.cmd}: ${f.error}`));
     log(`${ok.length} installed, ${failed.length} failed`);
     return failed.length ? 1 : 0;

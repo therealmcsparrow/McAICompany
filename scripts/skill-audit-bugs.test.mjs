@@ -58,6 +58,19 @@ test('B3b cooler topic slug is an allow-list, not a deny-list (cooler:16)', () =
   assert.ok(!/no `\\ \/ : \* \?/.test(file), 'the deny-list of characters is gone ($, backtick and ; passed through it)');
 });
 
+test('B4 impeccable is never run by setup at any scope: pinned command, manual line, WARNING (deps/skills.json:5)', async () => {
+  const groups = JSON.parse(read('deps/skills.json'));
+  const imp = groups.core.find(e => e.name === 'impeccable');
+  assert.equal(imp.install, 'npx -y impeccable@4.8.0 skills install');
+  const { main } = await import('./install-skills.mjs');
+  const out = [], calls = [];
+  const code = main(['core'], { manifest: { core: [imp] }, home: '/h', cwd: '/repo', platform: 'linux', color: false, log: x => out.push(x), exec: c => { calls.push(c); } });
+  assert.equal(code, 0, out.join('|'));
+  assert.deepEqual(calls, [], 'nothing ran');
+  assert.ok(out.includes(`manual ${imp.install}`), out.join('|'));
+  assert.ok(out.some(l => /^WARNING: /.test(l) && l.includes(imp.install)), out.join('|'));
+});
+
 test('B4 no auto-installed skill runs an unpinned npx package (deps/skills.json:5)', () => {
   const groups = JSON.parse(read('deps/skills.json'));
   const installs = [];

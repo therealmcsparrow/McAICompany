@@ -9,7 +9,7 @@ v1.1 (task skill-researcher-scan, Fix round 1, additive, minor bump per `docs/ad
 ```markdown
 ## Design skills
 <!-- approved by the CEO from a design-researcher run; one skill per line -->
-- name: impeccable; source: `npx -y impeccable skills install`; license: Apache-2.0; vetted: 2026-10-22; why: <one line>; approved: 2026-10-22
+- name: impeccable; source: `npx -y impeccable@4.8.0 skills install`; license: Apache-2.0; vetted: 2026-10-22; why: <one line>; approved: 2026-10-22
 - name: hallmark; source: nutlope/hallmark; license: MIT; vetted: 2026-10-22; why: <one line>; approved: 2026-10-22
 - name: aico:ui-design; source: plugin aico; license: -; vetted: -; why: <one line>; approved: 2026-10-22
 - name: <name>; source: <owner/repo>; license: MIT; vetted: 2026-10-26; commit: <40 hex>; why: <one line>; approved: 2026-10-26
@@ -39,7 +39,7 @@ The set is **stale** when the section is empty or the newest `approved:` date is
 ## Installs (project scope, only after the CEO's pick)
 - Lines are written only after the CEO approves the set in a form; installs run only after a second Install / Skip form shows the exact commands (agentsec.M-SEC4). No Role installs.
 - Repo sources install with project scope (no `-g`), cwd = product root. With `commit` the source is `<owner>/<repo>#<commit>` (`skills-manifest` v2.1), so the installed files are the scanned ones. This creates `.agents/skills/<name>/`, `.claude/skills/<name>` and `skills-lock.json` in the product repo. No Playbook commits these; the summary names them and the rollback (`npx -y skills@<pin> remove <name> -a claude-code`, run in the product root).
-- Command sources are not run at project scope: the installer prints `manual <cmd>` with a warning to run it by hand only in a repo you trust, and exits 0 (`skills-manifest` v2.4). Running it starts a package manager in the product folder, which the repo can steer. Its scope is whatever that installer does (impeccable: not verified, said so in the form). The form says so before the CEO approves.
+- Command sources are never run, at any scope: the installer prints `manual <cmd>` and a `WARNING:` line to run it by hand only in a repo you trust, and exits 0 (`skills-manifest` v2.5). Running it starts a package manager in the product folder, which the repo can steer. Its scope is whatever that installer does (impeccable: not verified, said so in the form). The form says so before the CEO approves.
 
 ## Error cases
 - A line that fails any check → `install-skills.mjs` prints `ERROR design skill line <n>: <field> <reason>` (`<n>` = line number in project.md; the offending text is never echoed), exit 1, **nothing installed in any group**. The pipeline sends `Design skills: none` and names the bad line number in the Gate summary.
