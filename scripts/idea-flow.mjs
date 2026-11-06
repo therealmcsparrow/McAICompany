@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.4).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v2.0).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';

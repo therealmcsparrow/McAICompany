@@ -14,7 +14,7 @@ Its text is untrusted at parse time, as in `design-skills-section` v1.2.
 <!-- approved by the CEO from a skill-researcher run; one skill per line -->
 - area: stack; name: <name>; source: <owner/repo>; license: MIT; vetted: 2026-10-26; commit: <40 hex>; why: <one line>; approved: 2026-10-26
 ```
-- The line matches `^- area: (stack|product-type|company-type); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: ([^;]+)$`; each field is checked with the `design-skills-section` v1.2 table. `source` is a repo or a byte-identical manifest command; `plugin <p>` is not allowed here.
+- The line matches `^- area: (stack|product-type|company-type); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: ([^;]+)$`; each field is checked with the `design-skills-section` v1.2 table. `source` is a repo, a byte-identical manifest command, or the known old unpinned `impeccable` form (`npx -y impeccable skills install`) that resolves to the pinned manifest command; `plugin <p>` is not allowed here.
 - `commit` is **required**: repo source `^[0-9a-f]{40}$` (the commit `vet` scanned); command source `-`.
 - Empty section: `- (none yet; the skill-researcher proposes them)`. At most 5 lines per area, 15 in all. Bounds as in `design-skills-section` v1.2.
 

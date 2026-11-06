@@ -131,6 +131,25 @@ test('B2c write_env cannot be steered by an exported CDPATH, GIT_DIR or GIT_WORK
   const hostile = envCase(gitVars, call + '; r=$?; test -f "$W/tree/config/.env" && echo "WROTE:yes" || echo "WROTE:no"; (exit $r)');
   assert.equal(hostile.rc, '1', 'GIT_DIR: ' + hostile.out);
   assert.match(hostile.out, /WROTE:no/, 'GIT_DIR: file exists: ' + hostile.out);
+  // The repo does not ignore config/.env; a decoy repo ignores everything and is named through the environment.
+  const decoy = 'mkdir -p config "$W/decoy" && git init -q "$W/decoy" >/dev/null 2>&1; printf "*\n" > "$W/decoy/.git/info/exclude"';
+  const wrote = call + '; r=$?; test -f config/.env && echo "WROTE:yes" || echo "WROTE:no"; (exit $r)';
+  const steer = {
+    'GIT_DIR alone (decoy ignores all)': decoy + '; export GIT_DIR="$W/decoy/.git"',
+    'GIT_DIR with GIT_WORK_TREE': decoy + '; export GIT_DIR="$W/decoy/.git" GIT_WORK_TREE="$W/repo"',
+    'non-bare GIT_DIR in another repo': decoy + '; export GIT_DIR="$W/decoy/.git" GIT_WORK_TREE="$W/decoy"',
+    'GIT_CONFIG_COUNT with core.excludesFile': 'mkdir -p config; printf "*\n" > "$W/all-ignored"; export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0="$W/all-ignored"',
+  };
+  for (const [name, setup] of Object.entries(steer)) {
+    const r = envCase(setup, wrote);
+    assert.equal(r.rc, '1', name + ': ' + r.out);
+    assert.match(r.out, /WROTE:no/, name + ': file exists: ' + r.out);
+    assert.match(r.out, /Refusing to write KEY/, name);
+  }
+  // A tracked, ignored file stays refused when GIT_INDEX_FILE points at a missing index.
+  const idx = envCase(ign + '; mkdir -p config; printf "config/.env\n" > .gitignore; : > config/.env; git add -f config/.env >/dev/null 2>&1; export GIT_INDEX_FILE="$W/no-such-index"', call + '; r=$?; echo "CONTENT:$(cat config/.env)"; (exit $r)');
+  assert.equal(idx.rc, '1', 'GIT_INDEX_FILE: ' + idx.out);
+  assert.doesNotMatch(idx.out, /dummy-value/, 'GIT_INDEX_FILE: tracked file overwritten: ' + idx.out);
 });
 
 test('B2c set_secret pipes the value to gh on stdin and keeps it out of argv (stub gh)', { skip: !bashOk }, () => {
@@ -282,6 +301,10 @@ test('S7b vulnscan notice is a general notice: kinds of destinations, examples o
       assert.ok(t.includes(need), f + ': notice misses ' + need);
     }
     assert.match(t, /Claude model[^.]*recipient/, f + ': the model is not named as a recipient');
+    assert.match(t, /Data sent includes /, f + ': the data list reads as complete');
+    assert.doesNotMatch(t, /Data sent:/, f + ': unmarked data list');
+    assert.match(t, /file hashes/, f + ': file hashes missing from the data list');
+    assert.match(t, /no search or fetch query[^.]*unscanned/, f + ': private-name rule missing');
     assert.doesNotMatch(t, /nothing else leaves the repo/i, f + ': the nothing-else claim is untrue');
     assert.doesNotMatch(t, /never queried|not queried|CEO was told|you are told before/i, f + ': claim the notice cannot back');
   }
@@ -329,4 +352,30 @@ test('R-brainstorm-limit the kickoff topic limit equals format 2 and the script 
 test('R-research-name research synthesis dispatch no longer lists the removed Name: field (research:54)', () => {
   const t = read('skills/research/SKILL.md');
   assert.ok(!t.includes('`Name:`'), 'dispatch-prompt v4 removed the Name: line');
+});
+
+test('R-592 the scanner agent keeps a private name out of every search and fetch query and lists it as unscanned', () => {
+  const t = read('agents/vuln-scanner.md');
+  assert.match(t, /you know or suspect is private/, 'no private-name instruction');
+  assert.match(t, /goes in no search or fetch query/, 'private names may be queried');
+  assert.match(t, /list it as unscanned/, 'a private name is not listed as unscanned');
+});
+
+test('R-9 the scanner reads registry and audit-registry before an audit tool, reports a non-default one and does not count it clean', () => {
+  const t = read('agents/vuln-scanner.md');
+  assert.match(t, /before you run an audit tool, read the project's `registry` and `audit-registry` settings/);
+  assert.match(t, /not the ecosystem's default public registry is reported in `## Report`/);
+  assert.match(t, /that tool's result is not counted as clean/);
+});
+
+test('R-12 both contracts hold the sentence the installer prints in the WARNING line', () => {
+  const printed = 'First change to your home folder, then run: <cmd>';
+  const src = read('scripts/install-skills.mjs');
+  assert.ok(src.includes('First change to your home folder, then run: '), 'the installer no longer prints the sentence');
+  for (const f of ['docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md']) {
+    const t = read(f);
+    assert.ok(t.includes(printed), f + ': does not state the printed sentence');
+    assert.ok(!t.includes('the home path the WARNING line prints'), f + ': names a path the WARNING does not print');
+  }
+  assert.ok(!read('docs/contracts/skills-manifest.md').includes('Step 1: cd <home folder path>. Step 2: <cmd>`, and exits'), 'old two-step text is still the stated WARNING');
 });

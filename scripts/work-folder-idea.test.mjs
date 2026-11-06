@@ -147,9 +147,9 @@ for (const name of ['idea', 'bug']) {
 
 test('the contract names v1.2 and both name forms', () => {
   const text = read('docs/contracts/idea-flow.md');
-  assert.match(text, /^# Contract: idea-flow v1\.4/);
+  assert.match(text, /^# Contract: idea-flow v2\.0$/m);
   assert.match(text, /work-folder-name/);
   assert.match(text, /unknown slug/);
   assert.ok(!text.includes('\r'));
-  assert.match(read('scripts/idea-flow.mjs'), /contract idea-flow v1\.4/);
+  assert.match(read('scripts/idea-flow.mjs'), /contract idea-flow v2\.0/);
 });
