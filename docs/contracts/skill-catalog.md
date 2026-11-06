@@ -26,15 +26,15 @@ Baseline: `{ "schema": 1, "categories": {…}, "groups": {…}, "entries": […]
 | source, exactly one of | `skillrepo` `^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$`, repo part not `.` or `..`; `skillinstaller`; `skillplugin` `^[a-z0-9][a-z0-9-]{0,63}$`, equal to `<p>` |
 | `skillinstaller` | at most 200 characters, tokens `^[A-Za-z0-9@._/:=+-]+$` joined by single spaces (so no shell operator or control character), and one token exactly `[@scope/]<pkg>@<x.y.z>` |
 | `skillcommit` | `^[0-9a-f]{40}$`. Required on a user `skillrepo` entry; optional on a baseline one; refused on the other kinds |
-| `license` | text of 1 to 64 characters after trimming, with no control character; any other text is accepted, with no check against a list or the repo. Required on every user entry, as the CEO states it; nothing checks it. Optional on a baseline entry, and never inferred or filled in |
-| `vetted` | real date not after today. Optional. On a user entry: the installer writes it with `hash` after a clean scan and clears both after a failed scan; migration moves the old value; a researcher record writes none. A command entry is never scanned and shows as not vetted, even if the file holds a date |
+| `license` | text of 1 to 64 characters after trimming, stored trimmed, with no control character, so whitespace only counts as empty; any other text is accepted, with no check against a list or the repo. Required on every user entry, as the CEO states it; nothing checks it. Optional on a baseline entry, and never inferred or filled in |
+| `vetted` | real date not after today. Optional. On a user entry: the installer writes it with `hash` after a clean scan and clears both after a failed or errored scan; migration moves the old value; a researcher record writes none. A command entry is never scanned and shows as not vetted, even if the file holds a date |
 | `hash` | `^[0-9a-f]{64}$`, written only by the installer after a scan |
 
 Baseline carries `license` as a sourced value only (the run's Step 17 table, read 2026-11-06), and `vetted` on the `research` group's entries, as the old manifest did. With no license value, under a CEO exception (agentsec.M-SEC6, `.company/standards.md`): `vercel-react-best-practices`, `vercel-composition-patterns`, `two-factor-authentication-best-practices`. `aico:ui-design`, aico's own plugin, is a baseline entry with no license, in no group, so it adds no `/aico:setup` command. A license adds nothing to and changes nothing in a command.
 
 Bounds: user file a regular file (`lstat`, a link is refused), at most 256 KiB, at most 200 entries. A bad file → empty user layer, `ERROR user catalog: <file too large|link|bad JSON>`. A bad entry → `ERROR user catalog entry <n>: <field> <reason>`, its text never echoed; it cannot be selected and nothing from it installs. Baseline entries still work. A bad baseline → `check.mjs` fails; at run time `ERROR baseline catalog`, exit 1.
 
-**Merge:** on a name clash the baseline wins and the clash is reported, except a user entry with the same source and a `skillcommit`, which pins that baseline entry for Role skill installs only. `/aico:setup` groups read the baseline alone, so their commands never change with the user file.
+**Merge:** on a name clash the baseline wins and the clash is reported, except a user entry with the same source and a `skillcommit`, which pins that baseline entry for Role skill installs only. `/aico:setup` groups read the baseline alone, so their commands never change with the user file. A pin holds its own license and vetted date, from the old line or the CEO's form, never the baseline's, and `skillStatus` shows those.
 
 **One commit per name** in the user file, for `addUserEntry`, migration and `role-skills record`: an equal entry writes nothing; another commit is refused unless a CEO form chose Move (`{ moveCommit: true }`), which sets the commit and license and clears `hash` and `vetted`, keeps the category and every selection, and other products then read `not verified` until reinstalled; another source is refused.
 
@@ -44,7 +44,7 @@ Bounds: user file a regular file (`lstat`, a link is refused), at most 256 KiB, 
 ## Selected install (`install-skills --selected`)
 | Kind | What happens |
 |---|---|
-| Repo with a commit (user entry or user pin) | No license → `no license`, nothing installed. Scan at the commit; failed or not approvable → `clearBound`, nothing installed, the skill reported `missing`. Folder already equal to the scan hash → bind, no install. Else install `#<commit>` from `<user home>`, compare `boundedFolderHash` with the scan hash; equal → `setBoundHash` with today; different → `hash differs`, nothing stored, the remove command printed |
+| Repo with a commit (user entry or user pin) | No license → `no license`, nothing installed. Scan at the commit; failed, errored or not approvable → `clearBound`, nothing installed, the skill reported `missing`. Folder already equal to the scan hash → bind, no install. Else install `#<commit>` from `<user home>`, compare `boundedFolderHash` with the scan hash; equal → `setBoundHash` with today; different → `hash differs`, nothing stored, the remove command printed |
 | Unpinned baseline repo | Never scanned or installed here; `needs a pin` naming `/aico:add-skill`. `installed (name only)` counts as present |
 | Installer | `manual` line and warning only |
 | Plugin | Skipped, one `/plugin` line |
