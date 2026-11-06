@@ -1,8 +1,9 @@
-# Contract: research-report v1
+# Contract: research-report v2.0
 
 Provider: `product-manager` (synthesis Step of `aico:research`). Inputs: researcher Handoffs (below). Consumers: the CEO, `aico:feature` and `aico:brainstorm` (accept the report as their request/idea), the success metric (`outcome:`).
 File: `.company/research/YYYY-MM-DD HH.MM - <Short Topic>.md` (local start time; Short Topic rule below).
-Version note: v1, revised 2026-10-22 with the Short Topic allow-list. This is an additive tightening: every topic the allow-list accepts was already valid, and consumers still read report files written before the revision, so the version stays v1.
+Version note: v1, revised 2026-10-22 with the Short Topic allow-list. This is an additive tightening: every topic the allow-list accepts was already valid, and consumers still read report files written before the revision, so the version stayed v1.
+v2.0 (task role-skills-file, major, per `docs/adr/0007-contract-minor-versions.md`; rationale ADR 0062): picks a researcher recommends record into the skill catalog and Role selections (`skill-recommendation` v2.0, `skill-catalog` v1), not into `## Design skills` or `## Skills`. Report files written before v2.0 stay valid.
 
 ## Short Topic
 - Pattern (JavaScript, `u` flag): `^[\p{L}\p{N}]+([ -][\p{L}\p{N}]+)*$`. That means Unicode letters, digits, single spaces and single hyphens only, never at the start or end. At most 60 characters and at most 5 space-separated words, in Title Case.
@@ -31,7 +32,7 @@ label: AI-generated research
 ## Open questions
 ## Sources
 ```
-- Headings exactly these, in this order, always English (`dispatch-prompt` v2); prose in `Language:`. Frontmatter values are English too (proj.M9), including `topic` and `question`; the question in `Language:` is repeated as the first line of `## Verdict` when it differs.
+- Headings exactly these, in this order, always English (`dispatch-prompt` v5.0); prose in `Language:`. Frontmatter values are English too (proj.M9), including `topic` and `question`; the question in `Language:` is repeated as the first line of `## Verdict` when it differs.
 - `## Verdict`: verdict word, confidence, reason in ≤ 3 lines; cites only sourced claims.
 - `## What to do`: ordered list, rank 1 first.
 - `## Low-hanging fruit`: ordered list, sorted by impact/effort, each `<item> — impact: high|medium|low — effort: S|M|L — [S#]`. Lists, not tables (Persona 3); a table may only repeat a list.
@@ -45,7 +46,7 @@ label: AI-generated research
 - Frontmatter adds `fetches: <n>` and `depth: quick | deep`. No `files-touched`.
 - `## Findings`: one line each, `<claim> — [S#] — confidence high|medium|low`, or `(unverified)`.
 - `## Sources`: same line format as the report; the PM renumbers when merging.
-- design-researcher also writes `## Candidates` (table: name, source repo, license, last commit, installs/stars, API key y/n, vetted y/n, fit, verdict) and `## Recommended set` (list, ≤ 5, each in the `design-skills-section` v1 line format with `approved: pending`, plus overlap with `aico:ui-design` named). Every row of the table is also in `## Recommended set` or in a `## Rejected` list with its reason (Persona 3).
+- design-researcher also writes `## Candidates` (table: name, source repo, license, last commit, installs/stars, API key y/n, vetted y/n, fit, verdict) and `## Recommended set` (list, ≤ 5, each in the `skill-recommendation` v2.0 recommended line format with `area: design` and `approved: pending`, so each repo pick carries a commit, plus overlap with `aico:ui-design` named). Every row of the table is also in `## Recommended set` or in a `## Rejected` list with its reason (Persona 3).
 - Install counts and stars are shown as found, never used to rank and never a trust signal (S1: counts can be inflated). Ranking is fit first, then vetting evidence.
 - Only fully vetted candidates (agentsec.M-SEC5: original repo, SPDX license, every bundled file read) may be in `## Recommended set`. When a `quick` budget runs out first, the candidate stays in `## Candidates` with `vetted: n` and the reason `not vetted within quick budget`.
 
