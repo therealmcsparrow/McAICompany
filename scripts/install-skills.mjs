@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// Installs the standalone skills aico points to (deps/skills.json) that are not installed yet.
-// Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
+// Installs the standalone skills aico points to (the baseline, deps/3rdpartyskills.json) that are not installed yet.
+// Usage: node install-skills.mjs [group ...] [--dry-run | --missing]
 //       node install-skills.mjs --retired | --remove <name> [--dry-run]
-//   default group: core. Groups `design` and `skills` need --project. contract: docs/contracts/skills-manifest.md v3.0
-import { readFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
+//   default group: core. Groups are the baseline's own; `design` and `skills` are not among them.
+//   A command entry (skillinstaller) is printed, never run. contract: docs/contracts/skills-manifest.md v4.0
+import { readFileSync, readdirSync, existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readBaseline, readCatalog } from './skill-catalog.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
@@ -28,7 +30,6 @@ const LINE_RE = /^- name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([
 const WHY_BAD_RE = /[`<>\u0000-\u001f\u007f]/;
 const SKILLS_LINE_RE = /^- area: (stack|product-type|company-type); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: ([^;]+)$/;
 const MAX_SKILLS_TOTAL = 15;
-const PROJECT_GROUPS = ['design', 'skills'];
 const DESIGN_SECTION = { heading: '## Design skills', label: 'design skill', none: '- (none yet; the design-researcher proposes them)', re: LINE_RE, keys: ['name', 'source', 'license', 'vetted', 'commit', 'why', 'approved'], areas: false, plugins: true, commitRequired: false };
 const SKILLS_SECTION = { heading: '## Skills', label: 'skills', none: '- (none yet; the skill-researcher proposes them)', re: SKILLS_LINE_RE, keys: ['area', 'name', 'source', 'license', 'vetted', 'commit', 'why', 'approved'], areas: true, plugins: false, commitRequired: true };
 const MAX_FILE_BYTES = 256 * 1024;
@@ -40,7 +41,6 @@ class DesignSkillError extends Error {}
 const failIn = (label, n, field, reason) => {
   throw new DesignSkillError(n ? `${label} line ${n}: ${field} ${reason}` : `${label} file: ${field} ${reason}`);
 };
-const fail = (n, field, reason) => failIn(DESIGN_SECTION.label, n, field, reason);
 
 function validRepo(source) {
   if (!REPO_RE.test(source)) return false;
@@ -148,7 +148,7 @@ export function parseSkillsSection(markdown, manifest = {}, today = new Date()) 
   return parseSection(markdown, manifest, today, SKILLS_SECTION);
 }
 
-// Expands includes into a flat entry list; entries from groups `design` and `skills` carry scope 'project'.
+// Expands includes into a flat entry list. A group name is looked up by own key only.
 export function expand(manifest, groups) {
   const out = [];
   const visit = (g, stack) => {
@@ -156,7 +156,7 @@ export function expand(manifest, groups) {
     if (stack.includes(g)) throw new Error(`include cycle ${[...stack.slice(stack.indexOf(g)), g].join(' -> ')}`);
     for (const e of manifest[g]) {
       if (e && e.include !== undefined) visit(e.include, [...stack, g]);
-      else if (e && typeof e.name === 'string') out.push({ ...e, scope: PROJECT_GROUPS.includes(g) ? 'project' : 'user' });
+      else if (e && typeof e.name === 'string') out.push({ ...e });
       else throw new Error(`invalid manifest entry in group ${g}`);
     }
   };
@@ -176,54 +176,55 @@ export function missing(manifest, groups, installed) {
   return expand(manifest, groups).filter(e => {
     if (e.plugin !== undefined || e.name.includes(':')) return false;
     if (isInstalled(e, installed)) return false;
-    const key = `${e.scope}|${e.name}|${e.source ?? e.install}`;
+    const key = `${e.name}|${e.source ?? e.install}`;
     return seen.has(key) ? false : (seen.add(key), true);
   });
 }
 
 function commandFor(e, platform) {
   if (typeof e.install === 'string') return e.install;
-  if (typeof e.source !== 'string' || !(e.scope === 'project' ? NAME_RE : MANIFEST_NAME_RE).test(e.name) || !validRepo(e.source)) {
+  if (typeof e.source !== 'string' || !MANIFEST_NAME_RE.test(e.name) || !validRepo(e.source)) {
     throw new Error('invalid manifest entry');
   }
   const star = platform === 'win32' ? '"*"' : "'*'";
   const skill = e.name.endsWith('*') ? star : e.name;
-  return `npx -y ${SKILLS_CLI} add ${sourceToken(e)} -s ${skill}${e.scope === 'project' ? '' : ' -g'} -a claude-code -y`;
-}
-
-// A project entry with a commit installs exactly that commit; the skills CLI reads `#<ref>`.
-function sourceToken(e) {
-  if (e.commit === undefined || e.scope !== 'project') return e.source;
-  if (typeof e.commit !== 'string' || !SHA_RE.test(e.commit)) throw new Error('invalid manifest entry');
-  return `${e.source}#${e.commit}`;
+  return `npx -y ${SKILLS_CLI} add ${e.source} -s ${skill} -g -a claude-code -y`;
 }
 
 // Off Windows the same command runs as argv with no shell (node.M-SEC1); the wildcard is a bare `*`.
 function argvFor(e) {
   const skill = e.name.endsWith('*') ? '*' : e.name;
-  return ['-y', SKILLS_CLI, 'add', sourceToken(e), '-s', skill, ...(e.scope === 'project' ? [] : ['-g']), '-a', 'claude-code', '-y'];
+  return ['-y', SKILLS_CLI, 'add', e.source, '-s', skill, '-g', '-a', 'claude-code', '-y'];
 }
 
-// Groups `design` and `skills` exist only when --project supplied them: { root, design, skills }.
-function withDesign(manifest, project) {
-  const eff = { ...manifest };
-  for (const g of PROJECT_GROUPS) {
-    delete eff[g];
-    if (project) eff[g] = project[g].map(e => ({ ...e }));
+// Turns the baseline into the group map the planner reads: { group: [{ name, source | install } | { include }] }.
+// Only a group's own names are listed; an entry in no group (a plugin) is never reached. A license, hash or
+// category changes no command, and a user catalog is never read here.
+export function manifestFromBaseline(baseline) {
+  const byName = new Map(baseline.entries.map(e => [e.skillname, e]));
+  const out = {};
+  for (const [g, items] of Object.entries(baseline.groups)) {
+    out[g] = [];
+    for (const item of items) {
+      if (typeof item !== 'string') { out[g].push({ include: item.include }); continue; }
+      const e = byName.get(item);
+      if (!e) continue;
+      if (typeof e.skillrepo === 'string') out[g].push({ name: e.skillname, source: e.skillrepo });
+      else if (typeof e.skillinstaller === 'string') out[g].push({ name: e.skillname, install: e.skillinstaller });
+    }
   }
-  return eff;
+  return out;
 }
 
-// Returns [{ cmd, cwd?, argv? }]. Project-group commands carry the product root as cwd.
-export function plan(manifest, groups, installed, platform = process.platform, project = null) {
+// Returns [{ cmd, argv?, manual? }]. A command entry is marked manual by its kind: it is printed, never run.
+export function plan(manifest, groups, installed, platform = process.platform) {
   const seen = new Set();
   const cmds = [];
-  for (const e of missing(withDesign(manifest, project), groups, installed)) {
+  for (const e of missing(manifest, groups, installed)) {
     const item = { cmd: commandFor(e, platform) };
-    if (typeof e.install !== 'string' && platform !== 'win32') item.argv = argvFor(e);
-    if (e.scope === 'project') item.cwd = project.root;
-    const key = `${item.cwd ?? ''}|${item.cmd}`;
-    if (!seen.has(key)) { seen.add(key); cmds.push(item); }
+    if (typeof e.install === 'string') { item.manual = true; item.name = e.name; }
+    else if (platform !== 'win32') item.argv = argvFor(e);
+    if (!seen.has(item.cmd)) { seen.add(item.cmd); cmds.push(item); }
   }
   return cmds;
 }
@@ -239,10 +240,9 @@ export function runAll(items, exec) {
   return { ok, failed };
 }
 
-function installedSkills(home, projectRoot) {
-  const dirs = [join(home, '.claude', 'skills')];
-  if (projectRoot) dirs.push(join(projectRoot, '.claude', 'skills'), join(projectRoot, '.agents', 'skills'));
-  return new Set(dirs.filter(existsSync).flatMap(d => readdirSync(d)));
+function installedSkills(home) {
+  const dir = join(home, '.claude', 'skills');
+  return new Set(existsSync(dir) ? readdirSync(dir) : []);
 }
 
 const REMOVE_TIMEOUT_MS = 120_000;
@@ -361,7 +361,8 @@ function isPlainFile(p, maxBytes) {
 
 // Skill names in the shipped release SBOMs that the current manifest no longer lists, sorted.
 // SBOM files are untrusted: links, oversized files and bad JSON are skipped, and a name that is not a plain skill name is dropped.
-export function retiredSkills(manifest, releasesDir) {
+// Names in `skip` (the user catalog's) are never retired.
+export function retiredSkills(manifest, releasesDir, skip = []) {
   const names = new Set();
   let dirs = [];
   try { dirs = readdirSync(releasesDir); } catch { return []; }
@@ -377,15 +378,16 @@ export function retiredSkills(manifest, releasesDir) {
       if (m && NAME_RE.test(m[1])) names.add(m[1]);
     }
   }
-  return [...names].filter(n => !manifestMatches(manifest, n)).sort();
+  const own = new Set(skip);
+  return [...names].filter(n => !manifestMatches(manifest, n) && !own.has(n)).sort();
 }
 
 // Retired names that sit in <home>/.claude/skills as a folder or a link (a listing entry; nothing is followed).
-function retiredInstalled(manifest, releasesDir, home) {
+function retiredInstalled(manifest, releasesDir, home, skip = []) {
   const dir = join(home, '.claude', 'skills');
   let listed;
   try { listed = new Set(readdirSync(dir)); } catch { return []; }
-  return retiredSkills(manifest, releasesDir).filter(n => listed.has(n));
+  return retiredSkills(manifest, releasesDir, skip).filter(n => listed.has(n));
 }
 
 // Runs a command with stdin ignored and stdout and stderr piped and held. `standIn` swaps the program in tests.
@@ -407,8 +409,8 @@ function entryExists(p) {
 }
 
 function removeRetired(name, opts) {
-  const { manifest, releasesDir, home, dry, platform, log, exec, standIn, timeoutMs } = opts;
-  if (!NAME_RE.test(name) || !retiredInstalled(manifest, releasesDir, home).includes(name)) {
+  const { manifest, releasesDir, home, dry, platform, log, exec, standIn, timeoutMs, skip } = opts;
+  if (!NAME_RE.test(name) || !retiredInstalled(manifest, releasesDir, home, skip).includes(name)) {
     log('ERROR not a retired installed skill');
     return 1;
   }
@@ -432,26 +434,13 @@ function removeRetired(name, opts) {
   return 0;
 }
 
-function loadProject(p, cwd, today, manifest) {
-  const abs = resolve(cwd, p);
-  if (basename(abs) !== 'project.md' || basename(dirname(abs)) !== '.company') {
-    throw new Error('--project must point to <root>/.company/project.md');
-  }
-  const root = dirname(dirname(abs));
-  if (!existsSync(abs)) return { root, design: [], skills: [] };
-  if (statSync(abs).size > MAX_FILE_BYTES) fail(0, 'file', 'too large');
-  const text = readFileSync(abs, 'utf8');
-  return { root, design: parseDesignSkills(text, manifest, today), skills: parseSkillsSection(text, manifest, today) };
-}
-
 // Returns the exit code. Everything outside is injectable so tests never run npx or touch the real home.
 export function main(args, env = {}) {
   const log = env.log ?? console.log;
   const exec = env.exec ?? installExec(env.home ?? homedir());
-  const cwd = env.cwd ?? process.cwd();
   const platform = env.platform ?? process.platform;
   try {
-    let dry = false, listMissing = false, projectArg = null, retired = false, removeName = null, remove = false;
+    let dry = false, listMissing = false, retired = false, removeName = null, remove = false;
     const groups = [];
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
@@ -459,46 +448,44 @@ export function main(args, env = {}) {
       else if (a === '--missing') listMissing = true;
       else if (a === '--retired') retired = true;
       else if (a === '--remove') { remove = true; removeName = args[++i] ?? ''; }
-      else if (a === '--project') {
-        projectArg = args[++i];
-        if (!projectArg || projectArg.startsWith('--')) throw new Error('--project must point to <root>/.company/project.md');
-      } else if (a.startsWith('--')) throw new Error('unknown flag');
+      else if (a.startsWith('--')) throw new Error('unknown flag');
       else groups.push(a);
     }
-    const manifest = env.manifest ?? JSON.parse(readFileSync(join(ROOT, 'deps', 'skills.json'), 'utf8'));
+    const manifest = env.manifest ?? manifestFromBaseline(readBaseline());
     if (retired || remove) {
-      if ((retired && remove) || listMissing || projectArg || groups.length) throw new Error('--retired and --remove take no group or other mode flag');
+      if ((retired && remove) || listMissing || groups.length) throw new Error('--retired and --remove take no group or other mode flag');
       const home = env.home ?? homedir();
       const releasesDir = env.releasesDir ?? join(ROOT, 'releases');
-      if (retired) { retiredInstalled(manifest, releasesDir, home).forEach(n => log(`retired ${n}`)); return 0; }
-      return removeRetired(removeName, { manifest, releasesDir, home, dry, platform, log, exec: env.exec, standIn: env.standIn, timeoutMs: env.timeoutMs ?? REMOVE_TIMEOUT_MS });
+      // A name in the user catalog is the CEO's own, so it is never offered as retired.
+      const skip = readCatalog(env.home ? { home: env.home } : {}).entries.filter(e => e.layer === 'user').map(e => e.skillname);
+      if (retired) { retiredInstalled(manifest, releasesDir, home, skip).forEach(n => log(`retired ${n}`)); return 0; }
+      return removeRetired(removeName, { manifest, releasesDir, home, dry, platform, log, exec: env.exec, standIn: env.standIn, timeoutMs: env.timeoutMs ?? REMOVE_TIMEOUT_MS, skip });
     }
-    // Parse first: a bad design or skills line stops everything, nothing is installed in any group.
-    const project = projectArg ? loadProject(projectArg, cwd, env.today ?? new Date(), manifest) : null;
-    const installed = installedSkills(env.home ?? homedir(), project?.root);
+    const installed = installedSkills(env.home ?? homedir());
     const want = groups.length ? groups : ['core'];
     if (listMissing) {
-      missing(withDesign(manifest, project), want, installed).forEach(e => log(`missing ${e.name}`));
+      missing(manifest, want, installed).forEach(e => log(`missing ${e.name}`));
       return 0;
     }
-    const cmds = plan(manifest, want, installed, platform, project);
+    const cmds = plan(manifest, want, installed, platform);
     if (!cmds.length) { log('All skills already installed.'); return 0; }
-    const show = ({ cmd, cwd: c }) => `${c ? `(in ${c}) ` : ''}${cmd}`;
-    // A manifest command (impeccable) is never run at any scope: it is third-party and uninspected. Print it and a warning for the CEO to run by hand, in a dry run too.
-    const manual = cmds.filter(c => !skillsArgs(c.cmd, c.argv));
+    const show = ({ cmd }) => cmd;
+    // A command entry (impeccable) is never run: it is third-party and uninspected. It is told apart by its kind, never by its text.
+    // Print it and a warning for the CEO to run by hand, in a dry run too.
+    const manual = cmds.filter(c => c.manual);
     const runnable = cmds.filter(c => !manual.includes(c));
     const color = env.color ?? (process.stdout.isTTY && !process.env.NO_COLOR);
     const printManual = () => manual.forEach(c => {
       log(`manual ${c.cmd}`);
-      const name = Object.values(manifest).flat().find(e => e?.install === c.cmd)?.name ?? 'This command';
+      const name = c.name ?? 'This command';
       const text = `WARNING: ${name} is a third-party installer that aico has not inspected, so it was not run. To install it, run it yourself from your home folder only, never from a product folder, because a repo's own copy of the package would run instead. Run it only if you trust it. First change to your home folder, then run: ${c.cmd}`;
       log(color ? `[33m${text}[0m` : text);
     });
     runnable.forEach(c => log(`${dry ? '[dry-run] ' : '$ '}${show(c)}`));
     if (dry) { printManual(); return 0; }
-    // User-scope installs have no product folder; run them from home so a repo's node_modules or .npmrc cannot steer npx.
+    // Installs have no product folder; run them from home so a repo's node_modules or .npmrc cannot steer npx.
     const homeDir = env.home ?? homedir();
-    const { ok, failed } = runAll(runnable.map(c => (c.cwd ? c : { ...c, cwd: homeDir })), exec);
+    const { ok, failed } = runAll(runnable.map(c => ({ ...c, cwd: homeDir })), exec);
     printManual();
     failed.forEach(f => log(`FAILED ${f.cmd}: ${f.error}`));
     log(`${ok.length} installed, ${failed.length} failed`);
