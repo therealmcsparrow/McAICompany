@@ -1,16 +1,17 @@
 # Contract: skill-catalog v1
 
-Provider: the module scripts/skill-catalog.mjs (read, validate, status; imports no `node:child_process`) and the baseline file deps/3rdpartyskills.json. Consumers: `install-skills.mjs`, `settings.mjs`, `settings-server.mjs`, `skill-picks.mjs`, `sbom.mjs`, `check.mjs`, the migration and add commands in scripts/role-skills.mjs. Rationale: ADR 0062.
+Provider: the module scripts/skill-catalog.mjs (read, validate, status; imports no `node:child_process`) and the baseline file deps/3rdpartyskills.json. Consumers: `install-skills.mjs`, `settings.mjs`, `settings-server.mjs`, `skill-picks.mjs`, `sbom.mjs`, `check.mjs`, the migration, add and record commands in scripts/role-skills.mjs. Rationale: ADR 0062.
 
 ## Layers
 | Layer | Path | Writer | Holds |
 |---|---|---|---|
 | Baseline | deps/3rdpartyskills.json, located from `import.meta.url`, never from `CLAUDE_PLUGIN_ROOT` or the working folder | a plugin release | `categories`, `groups`, `entries`; read-only; repo-owned, so a command here is trusted as text only and is still never run |
-| User | `<user home>/.mcsparrow/3rdpartyskills.json` | `/aico:add-skill`, migration, the Lead's researcher record, the installer's `hash` write | `entries` only |
+| User | `<user home>/.mcsparrow/3rdpartyskills.json` | `/aico:add-skill`, migration, `role-skills record`, the installer's `hash` and `vetted` write | `entries` only |
 
 - **User home** = `os.userInfo().homedir`, the operating system's answer. `os.homedir()` is not used: it reads `HOME` and `USERPROFILE`, which a repo's `.claude/settings.json` `env` can set. A throw → no user layer, one warning.
 - **`MCSPARROW_HOME` set** and not resolving to `<user home>/.mcsparrow` → the user catalog and user-level selections are not read or written, one warning `role skills: MCSPARROW_HOME is set, the user catalog is not read`. The read path never moves.
-- Nothing is read from a product folder: no catalog file, no project setting and no env value supplies an entry, a command or a path. A project selects by name only (`aico-settings`).
+- **Settings folder moved** by any env (`HOME` and `USERPROFILE` too, since `settings.mjs` follows `os.homedir()`): user-level selections are not counted, `--selected` installs from `<user home>` and takes no `gates.installs: auto` answer. Other settings and `/aico:setup` are unchanged.
+- Nothing is read from a product folder: no catalog file, no project setting and no env value supplies an entry, a command or a path. A project selects by name only (`aico-settings`). One exception, migration: an old `.company/project.md` section line becomes a user entry only after a CEO form that shows its validated name, source, commit, license, `vetted` and `approved` per line. A value that fails its pattern is never shown and its line stays. Migration keeps the old `approved` date: it only decides whether a research Step runs, never trust or install.
 - Tests pass `{ home }` to the exported functions. No env value is a seam.
 
 ## Schema (`"schema": 1`; unknown keys refused)
@@ -25,7 +26,9 @@ Baseline: `{ "schema": 1, "categories": {…}, "groups": {…}, "entries": […]
 | source, exactly one of | `skillrepo` `^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$`, repo part not `.` or `..`; `skillinstaller`; `skillplugin` `^[a-z0-9][a-z0-9-]{0,63}$`, equal to `<p>` |
 | `skillinstaller` | at most 200 characters, tokens `^[A-Za-z0-9@._/:=+-]+$` joined by single spaces (so no shell operator or control character), and one token exactly `[@scope/]<pkg>@<x.y.z>` |
 | `skillcommit` | `^[0-9a-f]{40}$`. Required on a user `skillrepo` entry; optional on a baseline one; refused on the other kinds |
-| `license`, `vetted`, `hash` | optional: as in `design-skills-section` (license id, real date not after today); `hash` `^[0-9a-f]{64}$`, written only by the installer after a scan |
+| `license` | license id, as in `design-skills-section`. Required on every user entry, as the CEO states it; nothing checks it. Optional on a baseline entry |
+| `vetted` | real date not after today. Optional. On a user entry: the installer writes it with `hash` after a clean scan; a researcher record brings the `vet` scan date; migration moves the old value. A command entry is never scanned and shows as not vetted |
+| `hash` | `^[0-9a-f]{64}$`, written only by the installer after a scan |
 
 Baseline carries `license` and `vetted` on the `research` group's entries, as the old manifest did.
 
@@ -33,15 +36,27 @@ Bounds: user file a regular file (`lstat`, a link is refused), at most 256 KiB, 
 
 **Merge:** on a name clash the baseline wins and the clash is reported, except a user entry with the same source and a `skillcommit`, which pins that baseline entry for Role skill installs only. `/aico:setup` groups read the baseline alone, so their commands never change with the user file.
 
+**One commit per name** in the user file, for `addUserEntry`, migration and `role-skills record`: an equal entry writes nothing; another commit is refused unless a CEO form chose Move (`{ moveCommit: true }`), which sets the commit and clears `hash` and `vetted`, and other products then read `not verified` until reinstalled; another source is refused.
+
 ## Exports
-`userCatalogPath({ home })`, `readBaseline()`, `readCatalog({ home })` → `{ entries, errors, clashes }`, `validateEntry(entry, layer)`, `expandGroups(baseline, groups)`, `eligibleRoles(entry, categories)`, `selectable(entry)`, `approvable(scan, hash)`, `boundedFolderHash(dir)`, `skillStatus(entry, { home, productRoot })`, `addUserEntry(entry, { home })`, `setBoundHash(name, hash, { home })`. Writes are atomic (temp file, then rename) and keep every other entry's values.
+`userCatalogPath({ home })`, `readBaseline()`, `readCatalog({ home })` → `{ entries, errors, clashes }`, `validateEntry(entry, layer)`, `expandGroups(baseline, groups)`, `eligibleRoles(entry, categories)`, `selectable(entry)`, `approvable(scan, hash)`, `boundedFolderHash(dir)`, `skillStatus(entry, { home, productRoot })`, `addUserEntry(entry, { home, moveCommit })`, `setBoundHash(name, hash, vetted, { home })` (writes both or neither). Writes are atomic (temp file, then rename) and keep every other entry's values.
+
+## Selected install (`install-skills --selected`)
+| Kind | What happens |
+|---|---|
+| Repo with a commit (user entry or user pin) | No license → `no license`, nothing installed. Scan at the commit; not approvable → nothing installed. Folder already equal to the scan hash → bind, no install. Else install `#<commit>` from `<user home>`, compare `boundedFolderHash` with the scan hash; equal → `setBoundHash` with today; different → `hash differs`, nothing stored, the remove command printed |
+| Unpinned baseline repo | Never scanned or installed here; `needs a pin` naming `/aico:add-skill`. `installed (name only)` counts as present |
+| Installer | `manual` line and warning only |
+| Plugin | Skipped, one `/plugin` line |
+| Wildcard | Cannot be selected, so never reached |
 
 ## Status (`skillStatus`; only `lstat`, `readdir` and file reads)
 No child process, no parsing of `skillinstaller`, no network, no link followed. Place checked: `<product root>` first, then `<user home>`, under `.claude/skills/<name>` and `.agents/skills/<name>`.
-- Repo entry with commit: `installed` = a real folder (`lstat`; the CLI's `.claude/skills/<name>` is usually a link, so `.agents/skills/<name>` is the one hashed) whose `boundedFolderHash` equals `hash`; `not verified` = present, but the hash differs, none is bound, it is a link with no real folder, or it is over the bound; `missing` = nothing there.
+- Repo entry with commit: `installed` = a real folder (`lstat`; the CLI's `.claude/skills/<name>` is usually a link, so `.agents/skills/<name>` is the one hashed) whose `boundedFolderHash` equals `hash`; `not verified` = present, but the hash differs, none is bound, it is a link with no real folder, or it is over the bound; `missing` = nothing there. `--selected` treats `not verified` like `missing`.
 - Installer or unpinned baseline repo entry: `installed (name only)` = a folder or link of that name, version not checked; `not found` = none, which is not proof, since an installer may write elsewhere.
 - Plugin entry: `checked at run start`.
+- An entry with no `vetted` date shows `not vetted` beside its status.
 - `boundedFolderHash`: the same files, order and bytes as `skillFolderHash` of `skillspector-scan` (a test holds them equal); refuses a link at the top, at most 2000 files and 64 MiB, over → null.
 
 ## Error cases
-A stored selection outside the catalog or the Role's categories: `aico-settings` `ignored`, never dispatched. Any stop before Save in `/aico:add-skill` writes nothing. A user catalog that cannot be written → `ERROR user catalog: cannot write`, nothing changed.
+A stored selection outside the catalog or the Role's categories: `aico-settings` `ignored` by field path, never its value, and never dispatched. Any stop before Save in `/aico:add-skill` writes nothing. A user catalog that cannot be written → `ERROR user catalog: cannot write`, nothing changed. Free text reaches `role-skills add` and `role-skills record` only as one line of JSON on stdin, never on a command line.
