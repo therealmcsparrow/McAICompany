@@ -543,7 +543,7 @@ const HAND_OVER_CHANGES = {
   vulnscan: {
     removed: ['Dispatchable directly too ("use the aico vuln-scanner").'],
     added: [
-      /^\*\*Notice to the CEO\*\*, in your first message and before the scan starts, on a direct dispatch too: .*dependency names and versions, private package names included, to public /,
+      /^\*\*Notice to the CEO\*\*, in your first message and before the scan starts, on a direct dispatch too: .*dependency names and versions to public .*audit tools the scanner runs may send private package names too/,
       'Dispatchable directly too ("use the aico vuln-scanner"): whoever dispatches gives the same notice first, before the scan starts.',
     ],
   },

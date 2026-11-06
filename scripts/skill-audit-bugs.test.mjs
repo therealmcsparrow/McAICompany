@@ -146,6 +146,21 @@ test('B2c write_env cannot be steered by an exported CDPATH, GIT_DIR or GIT_WORK
     assert.match(r.out, /WROTE:no/, name + ': file exists: ' + r.out);
     assert.match(r.out, /Refusing to write KEY/, name);
   }
+  // Global and system config, HOME and XDG sources must not decide the answer. Paths inside config files use pwd -W (native form): git cannot resolve /p/... there.
+  const nat = 'WN="$(cd "$W" && (pwd -W 2>/dev/null || pwd))"; mkdir -p config; printf "*\\n" > "$W/all-ignored"; printf "[core]\\n\\texcludesFile = %s/all-ignored\\n" "$WN" > "$W/ign.cfg"; unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM';
+  const cfg = {
+    'GIT_CONFIG_GLOBAL': nat + '; export GIT_CONFIG_GLOBAL="$WN/ign.cfg"',
+    'GIT_CONFIG_SYSTEM': nat + '; export GIT_CONFIG_SYSTEM="$WN/ign.cfg"',
+    'HOME with .gitconfig': nat + '; mkdir -p "$W/home"; cp "$W/ign.cfg" "$W/home/.gitconfig"; export HOME="$W/home" USERPROFILE="$W/home"; unset XDG_CONFIG_HOME',
+    'XDG_CONFIG_HOME with git/config': nat + '; mkdir -p "$W/xdg/git" "$W/nohome"; cp "$W/ign.cfg" "$W/xdg/git/config"; export XDG_CONFIG_HOME="$W/xdg" HOME="$W/nohome" USERPROFILE="$W/nohome"',
+    'XDG_CONFIG_HOME with default git/ignore': nat + '; mkdir -p "$W/xdg/git" "$W/nohome"; cp "$W/all-ignored" "$W/xdg/git/ignore"; export XDG_CONFIG_HOME="$W/xdg" HOME="$W/nohome" USERPROFILE="$W/nohome"',
+  };
+  for (const [name, setup] of Object.entries(cfg)) {
+    const r = envCase(setup, wrote);
+    assert.equal(r.rc, '1', name + ': ' + r.out);
+    assert.match(r.out, /WROTE:no/, name + ': file exists: ' + r.out);
+    assert.match(r.out, /Refusing to write KEY/, name);
+  }
   // A tracked, ignored file stays refused when GIT_INDEX_FILE points at a missing index.
   const idx = envCase(ign + '; mkdir -p config; printf "config/.env\n" > .gitignore; : > config/.env; git add -f config/.env >/dev/null 2>&1; export GIT_INDEX_FILE="$W/no-such-index"', call + '; r=$?; echo "CONTENT:$(cat config/.env)"; (exit $r)');
   assert.equal(idx.rc, '1', 'GIT_INDEX_FILE: ' + idx.out);
@@ -359,11 +374,18 @@ test('R-592 the scanner agent keeps a private name out of every search and fetch
   assert.match(t, /you know or suspect is private/, 'no private-name instruction');
   assert.match(t, /goes in no search or fetch query/, 'private names may be queried');
   assert.match(t, /list it as unscanned/, 'a private name is not listed as unscanned');
+  assert.doesNotMatch(t, /private package names included/, 'the Data out sentence sends private names to search');
+  assert.match(t, /audit tools you run may send private package names too/, 'audit-tool leak not said');
 });
 
 test('R-9 the scanner reads registry and audit-registry before an audit tool, reports a non-default one and does not count it clean', () => {
   const t = read('agents/vuln-scanner.md');
-  assert.match(t, /before you run an audit tool, read the project's `registry` and `audit-registry` settings/);
+  assert.match(t, /before you run an audit tool, read the project's `registry` and `audit-registry` settings with the tool's own command only/);
+  assert.match(t, /Never open a `\.npmrc`/, 'the scanner may open the raw file');
+  assert.match(t, /report that setting as not verified/);
+  assert.match(t, /Report the scheme and host only, never a token, user or password/);
+  assert.match(t, /`protected` refusal[^.]*non-default registry, not clean/);
+  assert.match(t, /unset `audit-registry` counts as the default/);
   assert.match(t, /not the ecosystem's default public registry is reported in `## Report`/);
   assert.match(t, /that tool's result is not counted as clean/);
 });

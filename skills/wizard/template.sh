@@ -66,7 +66,7 @@ write_env() {
   done
   # Inside a repo, write only when git answers that the file is ignored.
   # Any other answer (not ignored, git failed, unsafe owner) refuses.
-  if [ -n "$root" ] && ! ( unset $(git rev-parse --local-env-vars); git -C "$root" check-ignore -q -- "$target" ) >/dev/null 2>&1; then
+  if [ -n "$root" ] && ! ( unset $(git rev-parse --local-env-vars); git -c core.excludesFile= -C "$root" check-ignore -q -- "$target" ) >/dev/null 2>&1; then
     say "Refusing to write $1: git did not confirm that $ENV_FILE is ignored. Add it to .gitignore first."
     return 1
   fi
