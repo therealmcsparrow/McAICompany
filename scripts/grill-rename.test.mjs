@@ -4,9 +4,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// End-state tests: the old aico:grill skill is removed and aico:grilling is
-// renamed to aico:grill. The command /aico:grilling stops existing; skills/grilling and its references/grill-loop.md
-// move to skills/grill. Historic CHANGELOG entries stay.
+// Checks that aico:grill is the one grill skill: no skills/grilling folder and no /aico:grilling command,
+// references/grill-loop.md under skills/grill, and old CHANGELOG entries left as written.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const exists = (p) => existsSync(join(root, p));

@@ -13,7 +13,7 @@ argument-hint: [topic] [turns=N | listen]
 An unmanaged chat. You are the Lead, but you only set the scene, pass the turns and take the minutes; you never steer, summarize mid-chat or pick a winner. Roles think aloud; nobody builds. No Gates, no branch, no `.company/work/` Handoffs: this Playbook skips `aico:pipeline` setup except the Project and Company profile, the language and the settings (§1.2, §1.4, §1.6, §1.7); pass each Role's `model` and `effort` per `aico:pipeline` §2. Read-only for every Role: no code, no file edits.
 
 ## File
-`.company/cooler/YYYYMMDD-HHMM-<topic-slug>.md` (local time at start; slug at most 5 words, matching `^[a-z0-9][a-z0-9-]*$`: anything else is replaced by a hyphen or dropped).
+`.company/cooler/YYYYMMDD-HHMM-<topic-slug>.md` (local time at start; slug at most 5 words, matching `^[a-z0-9]+(-[a-z0-9]+){0,4}$`; a topic that gives no such slug uses `chat`).
 
 ```markdown
 ---

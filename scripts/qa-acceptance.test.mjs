@@ -501,6 +501,7 @@ const HAND_OVER_CHANGES = {
       /^1b\. Prototype, only after a Run it answer on the prototype form;/,
       /^2a\. Spikes per `aico:pipeline` if the Architect listed any \(the result goes in the Ship Gate summary\)\.$/,
       /^2d\. `aico:architect`: ruleset sign-off, only when Must rules were added or changed\. Otherwise say "sign-off skipped" in the Ship Gate summary\./,
+      /^   d1. Warnings from the dry run: show every `WARNING:` line/,
       /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/,
       /^5b\. Ship Gate summary: the Gate items that used to show earlier/,
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
