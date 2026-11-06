@@ -1,7 +1,7 @@
-# Grill loop (shared by aico:grilling, aico:grill-me, aico:grill-with-docs)
+# Grill loop (shared by aico:grill, aico:grill-me, aico:grill-with-docs)
 
 Load this file from the Playbook's Start step. The Playbook sets the answer source `mode`:
-- `lookup` (aico:grilling): facts the repo or the web can answer are looked up, the rest is asked.
+- `lookup` (aico:grill): facts the repo or the web can answer are looked up, the rest is asked.
 - `ask-all` (aico:grill-me): every branch is asked. No lookup of any kind, so no F entry.
 - `docs` (aico:grill-with-docs): repo docs are searched first. No web search.
 

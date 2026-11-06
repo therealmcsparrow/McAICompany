@@ -34,7 +34,7 @@ const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const HANDOFF_RE = /^lead-handoff-([1-9]\d{0,3})\.md$/;
 const GATES = ['brief', 'plan', 'ship'];
 const RESULTS = ['passed', 'changed', 'stopped'];
-const FORM_STEPS = ['grilling', 'grill-me', 'grill-with-docs', 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build', 'park-idea'];
+const FORM_STEPS = ['grill', 'grill-me', 'grill-with-docs', 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build', 'park-idea'];
 const RECORD_FILES = ['run-state.jsonl', 'idea-flow.jsonl', 'tickets.jsonl', 'lead-handover.jsonl'];
 
 const MAX_ARG = 4096;
