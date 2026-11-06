@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v1.8
-// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v1.1 docs/contracts/tier-sets.md v1.2
+// contract: docs/contracts/lead-handoff.md v2.0
+// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a SessionStart hook that
 // injects it after compaction, a Stop hook that keeps the Lead's context reading, a SessionStart hook that resets the current reading for a new session, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
@@ -34,7 +34,7 @@ const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const HANDOFF_RE = /^lead-handoff-([1-9]\d{0,3})\.md$/;
 const GATES = ['brief', 'plan', 'ship'];
 const RESULTS = ['passed', 'changed', 'stopped'];
-const FORM_STEPS = ['grilling', 'grill-me', 'grill-with-docs', 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build', 'park-idea'];
+const FORM_STEPS = ['grill', 'grill-me', 'grill-with-docs', 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build', 'park-idea'];
 const RECORD_FILES = ['run-state.jsonl', 'idea-flow.jsonl', 'tickets.jsonl', 'lead-handover.jsonl'];
 
 const MAX_ARG = 4096;

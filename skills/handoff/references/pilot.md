@@ -8,7 +8,7 @@ Contract: `docs/contracts/handoff.md`. Lint: `handoff-lint.mjs --require-top`; a
 - Nit: `- <ID> | <file>[:<line>] | <problem> | <why> | <fix>`
 - `<ID>`: `R-<n>` review, `C-<n>` compliance, `T-<n>` tool check; stable across Fix rounds, never reused. `why` never empty; no `|` in a field.
 
-**Findings ledger** `<NN>-<role>.findings.md` beside your Handoff, only with `status: handover`: once your context passes 75% of `<n>` (60% of `<cap>`; 90000 without a valid `Context cap:`), or you can't tell and have read over 15 files, decide whether you will finish; if not, start it, keep it current and return `handover`. A `done`, `blocked` or `needs-ceo` Handoff writes none; a `handover` Handoff always has it.
+**Findings ledger** `<NN>-<role>.findings.md` beside your Handoff, only with `status: handover`: once your context passes 64125 tokens (75% of the fixed hand-over point 85500, `<n>`), or you can't tell and have read over 15 files, decide whether you will finish; if not, start it, keep it current and return `handover`. A `done`, `blocked` or `needs-ceo` Handoff writes none; a `handover` Handoff always has it.
 - Layout: the Handover line of your agent; statuses `open|fixed|withdrawn`; no `|` inside a field; a Nit's Handoff row drops `[nit]`. Rows are appended or change status, never deleted.
 - A handover or Fix-round reviewer continues the same file, appends every new finding before its Handoff, and re-checks only open rows plus the new diff. Check: `handoff-lint.mjs --findings <file>`.
 - No ledger: keep the IDs of rows you re-report, list closed ones in `## Did` (`fixed R-2`), number new findings from 1 + the highest `R-<n>`/`C-<n>` in any earlier Handoff of the task.

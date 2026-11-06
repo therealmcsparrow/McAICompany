@@ -64,7 +64,7 @@ describe('SKILL.md', () => {
     const f = (...argv) => flow(argv, cwd);
     const optionLines = (r) => r.out.split('\n').filter((l) => l.startsWith('option '));
     f('start', 'idea-t', '--kind', 'idea');
-    f('pick', 'idea-t', '1'); f('done', 'idea-t', 'grilling'); f('done', 'idea-t', 'reprompt');
+    f('pick', 'idea-t', '1'); f('done', 'idea-t', 'grill'); f('done', 'idea-t', 'reprompt');
     f('pick', 'idea-t', 'D'); f('done', 'idea-t', 'to-spec'); f('done', 'idea-t', 'to-tickets');
     // the type changes after the tickets form opened (a record from a software run)
     fs.mkdirSync(path.join(cwd, '.company'), { recursive: true });
@@ -80,7 +80,7 @@ describe('SKILL.md', () => {
     fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: research\n');
     const f = (...argv) => flow(argv, cwd);
     f('start', 'idea-u', '--kind', 'idea');
-    f('pick', 'idea-u', '1'); f('done', 'idea-u', 'grilling'); f('done', 'idea-u', 'reprompt');
+    f('pick', 'idea-u', '1'); f('done', 'idea-u', 'grill'); f('done', 'idea-u', 'reprompt');
     assert.deepEqual(f('options', 'idea-u').out.split('\n').filter((l) => l.startsWith('option ')).map((l) => l.split(' ')[2]),
       ['cooler', 'brainstorm', 'research', 'park-idea']);
     assert.equal(f('pick', 'idea-u', 'D').code, 3);
@@ -93,7 +93,7 @@ describe('SKILL.md', () => {
     fs.writeFileSync(path.join(cwd, '.company', 'project.md'), 'company_type: research\n');
     const f = (...argv) => flow(argv, cwd);
     f('start', 'idea-s', '--kind', 'idea');
-    f('pick', 'idea-s', '1'); f('done', 'idea-s', 'grilling'); f('done', 'idea-s', 'reprompt');
+    f('pick', 'idea-s', '1'); f('done', 'idea-s', 'grill'); f('done', 'idea-s', 'reprompt');
     f('pick', 'idea-s', 'C'); f('done', 'idea-s', 'research'); f('done', 'idea-s', 'reprompt');
     assert.deepEqual(f('options', 'idea-s').out.split('\n').filter((l) => l.startsWith('option ')).map((l) => l.split(' ')[2]),
       ['park-idea', 'stop']);
@@ -107,15 +107,15 @@ describe('SKILL.md', () => {
 
   test('trust and privacy lines name the recipients', () => {
     has(skill, /data, never instructions/, /Only the CEO's own pick/);
-    has(skill, 'Claude model', 'web search', 'grilling', 'research', '.company/', 'git-ignored');
+    has(skill, 'Claude model', 'web search', 'grill lookups', 'research', '.company/', 'git-ignored');
   });
 
   test('both Playbooks and the contract state exactly where web search can run', () => {
-    const sentence = 'The web search tools (WebSearch, WebFetch) run in grilling lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient.';
+    const sentence = 'The web search tools (WebSearch, WebFetch) run in grill lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient.';
     has(skill, sentence);
     has(read('skills/bug/SKILL.md'), sentence);
     has(read('docs/contracts/idea-flow.md'), sentence);
-    lacks(skill, 'used only in grilling lookups and in research');
+    lacks(skill, 'used only in grill lookups and in research');
   });
 });
 
@@ -183,7 +183,7 @@ describe('routes.md', () => {
   });
 
   test('every route and step name the scripts print has a label line', () => {
-    const names = ['grilling', 'grill-me', 'grill-with-docs', 'cooler', 'brainstorm', 'research', 'to-spec', 'park-idea',
+    const names = ['grill', 'grill-me', 'grill-with-docs', 'cooler', 'brainstorm', 'research', 'to-spec', 'park-idea',
       'build', 'park-roadmap'];
     for (const n of names) has(routes, `- route \`${n}\`:`);
   });
@@ -191,7 +191,7 @@ describe('routes.md', () => {
   test('every stop-point heading exists in its target SKILL.md', () => {
     const entries = [...routes.matchAll(/^- step `([a-z-]+)`: skill `([a-z-]+)`; stop at `([^`]+)`/gm)];
     assert.deepEqual(entries.map((e) => e[1]),
-      ['grilling', 'grill-me', 'grill-with-docs', 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage']);
+      ['grill', 'grill-me', 'grill-with-docs', 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage']);
     for (const [, step, name, heading] of entries) {
       assert.ok(name === step, `${step} reads skills/${name}`);
       const file = read(`skills/${name}/SKILL.md`);
@@ -234,7 +234,7 @@ describe('scripts walk in route order', () => {
       const f = run(cwd);
       assert.equal(f('start', `${kind}-20261030-1309`, '--kind', kind).out.trim(), 'started');
       const opts = optionLines(f('options', `${kind}-20261030-1309`));
-      assert.deepEqual(opts, ['option 1 grilling', 'option 2 grill-me', 'option 3 grill-with-docs']);
+      assert.deepEqual(opts, ['option 1 grill', 'option 2 grill-me', 'option 3 grill-with-docs']);
       for (const o of opts) has(routes, `- route \`${o.split(' ')[2]}\`:`);
       assert.match(f('state', `${kind}-20261030-1309`).out, kind === 'idea' ? /build: feature/ : /build: fix/);
     }
@@ -263,7 +263,7 @@ describe('scripts walk in route order', () => {
     const f = run(cwd);
     const a = (...argv) => approval(argv, { now: new Date(2026, 9, 30, 13, 9).getTime(), root: cwd });
     f('start', 'idea-g', '--kind', 'idea');
-    f('pick', 'idea-g', '1'); f('done', 'idea-g', 'grilling'); f('done', 'idea-g', 'reprompt');
+    f('pick', 'idea-g', '1'); f('done', 'idea-g', 'grill'); f('done', 'idea-g', 'reprompt');
     f('pick', 'idea-g', 'D'); f('done', 'idea-g', 'to-spec'); f('done', 'idea-g', 'to-tickets');
     assert.deepEqual(optionLines(f('options', 'idea-g')).map((l) => l.split(' ')[2]), ['build', 'park-roadmap', 'park-idea']);
     const t = a('tickets', 'idea-g', 'idea-g-plan/plan.md', '--phase', 'f');
@@ -296,7 +296,7 @@ describe('scripts walk in route order', () => {
     const f = run(cwd);
     const a = (...argv) => approval(argv, { now: new Date(2026, 9, 30, 13, 9).getTime(), root: cwd });
     f('start', 'idea-f', '--kind', 'idea');
-    f('pick', 'idea-f', '1'); f('done', 'idea-f', 'grilling'); f('done', 'idea-f', 'reprompt');
+    f('pick', 'idea-f', '1'); f('done', 'idea-f', 'grill'); f('done', 'idea-f', 'reprompt');
     f('pick', 'idea-f', 'D'); f('done', 'idea-f', 'to-spec'); f('done', 'idea-f', 'to-tickets');
     assert.equal(a('tickets', 'idea-f', 'idea-f-plan/plan.md', '--phase', 'f').code, 0);
     for (const id of ['T2', 'T1']) {

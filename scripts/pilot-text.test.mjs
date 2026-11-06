@@ -145,7 +145,7 @@ test('builder agents: search before you read a file you will edit', () => {
 
 test('ledger timing: written only near a handover (60% of the cap or a decision to hand over), IDs without a ledger', () => {
   const p = read(PILOT);
-  has(p, 'only with `status: handover`', '75% of `<n>` (60% of `<cap>`', '90000', 'status: handover', 'writes none', 'always has it',
+  has(p, 'only with `status: handover`', '64125 tokens (75% of the fixed hand-over point 85500, `<n>`)', 'status: handover', 'writes none', 'always has it',
     'fixed R-2', '1 + the highest');
   assert.doesNotMatch(read('agents/code-reviewer.md') + read('skills/review/SKILL.md'), /before the first file|from the first file/);
 });

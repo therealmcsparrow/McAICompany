@@ -2,7 +2,7 @@
 // Installs the standalone skills aico points to (deps/skills.json) that are not installed yet.
 // Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
 //       node install-skills.mjs --retired | --remove <name> [--dry-run]
-//   default group: core. Groups `design` and `skills` need --project. Contract: docs/contracts/skills-manifest.md.
+//   default group: core. Groups `design` and `skills` need --project. contract: docs/contracts/skills-manifest.md v3.0
 import { readFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -17,6 +17,8 @@ export const SKILLS_CLI = 'skills@1.7.4';
 // Allow-lists (agentsec.M-SEC7, ADR 0005). Every check is a full-match, anchored pattern.
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+// Command lines that were valid before the manifest pinned them (design-skills-section v1.2).
+const OLD_COMMANDS = { impeccable: 'npx -y impeccable skills install' };
 const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
 const PLUGIN_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
@@ -100,6 +102,11 @@ function parseSection(markdown, manifest, today, cfg) {
     let kind, plugin, cmd;
     if (source.length >= 3 && source.startsWith('`') && source.endsWith('`')) {
       kind = 'command'; cmd = source.slice(1, -1);
+      // The unpinned impeccable line was valid before the manifest pinned it: it resolves to the pinned command.
+      if (OLD_COMMANDS[name] === cmd) {
+        const cur = manifestCmds.find(([nm]) => nm === name);
+        if (cur) cmd = cur[1];
+      }
       if (!manifestCmds.some(([nm, c]) => nm === name && c === cmd)) fail(n, 'source', 'not a manifest command');
       if (!NAME_RE.test(name)) fail(n, 'name', 'invalid');
     } else if (source.startsWith('plugin ')) {
@@ -477,16 +484,22 @@ export function main(args, env = {}) {
     const cmds = plan(manifest, want, installed, platform, project);
     if (!cmds.length) { log('All skills already installed.'); return 0; }
     const show = ({ cmd, cwd: c }) => `${c ? `(in ${c}) ` : ''}${cmd}`;
-    cmds.forEach(c => log(`${dry ? '[dry-run] ' : '$ '}${show(c)}`));
-    if (dry) return 0;
+    // A manifest command (impeccable) is never run at any scope: it is third-party and uninspected. Print it and a warning for the CEO to run by hand, in a dry run too.
+    const manual = cmds.filter(c => !skillsArgs(c.cmd, c.argv));
+    const runnable = cmds.filter(c => !manual.includes(c));
+    const color = env.color ?? (process.stdout.isTTY && !process.env.NO_COLOR);
+    const printManual = () => manual.forEach(c => {
+      log(`manual ${c.cmd}`);
+      const name = Object.values(manifest).flat().find(e => e?.install === c.cmd)?.name ?? 'This command';
+      const text = `WARNING: ${name} is a third-party installer that aico has not inspected, so it was not run. To install it, run it yourself from your home folder only, never from a product folder, because a repo's own copy of the package would run instead. Run it only if you trust it. First change to your home folder, then run: ${c.cmd}`;
+      log(color ? `[33m${text}[0m` : text);
+    });
+    runnable.forEach(c => log(`${dry ? '[dry-run] ' : '$ '}${show(c)}`));
+    if (dry) { printManual(); return 0; }
     // User-scope installs have no product folder; run them from home so a repo's node_modules or .npmrc cannot steer npx.
     const homeDir = env.home ?? homedir();
-    // A manifest command at project scope is never run from the product folder: it is printed for the CEO to run by hand.
-    const manual = cmds.filter(c => c.cwd && !skillsArgs(c.cmd, c.argv));
-    const runnable = cmds.filter(c => !manual.includes(c));
     const { ok, failed } = runAll(runnable.map(c => (c.cwd ? c : { ...c, cwd: homeDir })), exec);
-    manual.forEach(c => log(`manual ${c.cmd}`));
-    if (manual.length) log(`Not run: it would start in the product folder, where the repo can steer it. Run it by hand only in a repo you trust.`);
+    printManual();
     failed.forEach(f => log(`FAILED ${f.cmd}: ${f.error}`));
     log(`${ok.length} installed, ${failed.length} failed`);
     return failed.length ? 1 : 0;

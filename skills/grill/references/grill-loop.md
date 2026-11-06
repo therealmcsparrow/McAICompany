@@ -1,7 +1,7 @@
-# Grill loop (shared by aico:grilling, aico:grill-me, aico:grill-with-docs)
+# Grill loop (shared by aico:grill, aico:grill-me, aico:grill-with-docs)
 
 Load this file from the Playbook's Start step. The Playbook sets the answer source `mode`:
-- `lookup` (aico:grilling): facts the repo or the web can answer are looked up, the rest is asked.
+- `lookup` (aico:grill): facts the repo or the web can answer are looked up, the rest is asked.
 - `ask-all` (aico:grill-me): every branch is asked. No lookup of any kind, so no F entry.
 - `docs` (aico:grill-with-docs): repo docs are searched first. No web search.
 
@@ -43,4 +43,4 @@ Take the first entry of the `work:` line the Type: step printed; the `playbooks:
 - A pick the type does not list is not shown. The Stop pick ends the Playbook.
 
 ## Check the tree
-Run `git status --porcelain` and compare with the baseline. New entries must lie only under `.company/work/<name>/` and the Topic file, which `draft-input` removes. Anything else → name the paths, change nothing, and ask the CEO in a form how to proceed. No branch, no commit, no push. The files stay in `.company/work/<slug>/`; aico never commits them (grill-file v1.3 Personal data). Archive them, never delete; an erasure request overrides the archive rule (CEO decides).
+Run `git status --porcelain` and compare with the baseline. New entries must lie only under `.company/work/<name>/` and the Topic file, which `draft-input` removes. Anything else → name the paths, change nothing, and ask the CEO in a form how to proceed. No branch, no commit, no push. The files stay in `.company/work/<slug>/`; aico never commits them (grill-file v1.4 Personal data). Archive them, never delete; an erasure request overrides the archive rule (CEO decides).

@@ -1,7 +1,7 @@
 ---
 name: audit
 description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Assess an existing codebase for quality, tests, security, licenses and architecture, and produce one prioritized report. Changes no code.
-argument-hint: [path or scope]
+argument-hint: "[path or scope]"
 ---
 
 # Playbook: audit

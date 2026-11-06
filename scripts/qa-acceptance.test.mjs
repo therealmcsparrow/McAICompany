@@ -485,6 +485,7 @@ const HAND_OVER_CHANGES = {
       "   **→ Brief Gate**",
       "1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.",
       "2a. Spikes per `aico:pipeline` if the Architect listed any (show the result at the Plan Gate).",
+      "   d. Run `node \"${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" install-skills design --project .company/project.md --dry-run`. Show the printed commands, the telemetry line from `skills-manifest` v2, and ask one form: Install (Recommended) / Skip. Only when `gates.installs` is `auto` (`aico:pipeline` §1.7), install without that form and name the commands in your next message; the set approval in b stays a form. Install: same command without `--dry-run` (project scope, product root), then tell the CEO to `/reload-plugins`. Skip: record `degraded: missing <name>, <name>` in the Handoff and Gate summary. An `ERROR design skill line <n>` means: install nothing, send `Design skills: none`, name line `<n>` in the Gate summary. The run continues either way.",
       '2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate. A rejected rule goes back to the Senior Engineer once; still rejected → the CEO decides at the Plan Gate.',
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).",
       "2c. `aico:senior-engineer`: mode **research** if any pack is missing, stale or new to the project, else **map** (`aico:ruleset`).",
@@ -501,6 +502,8 @@ const HAND_OVER_CHANGES = {
       /^1b\. Prototype, only after a Run it answer on the prototype form;/,
       /^2a\. Spikes per `aico:pipeline` if the Architect listed any \(the result goes in the Ship Gate summary\)\.$/,
       /^2d\. `aico:architect`: ruleset sign-off, only when Must rules were added or changed\. Otherwise say "sign-off skipped" in the Ship Gate summary\./,
+      /^   d1. Warnings from the dry run: show every `WARNING:` line/,
+      /^   d\. Run `node .*install-skills design --project .company\/project\.md --dry-run`\. Show the printed commands, the telemetry line from `skills-manifest` v3,/,
       /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/,
       /^5b\. Ship Gate summary: the Gate items that used to show earlier/,
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
@@ -514,7 +517,7 @@ const HAND_OVER_CHANGES = {
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
       // The prototype step and the destination spec at ship (v0.21.0).
       /^5a\. `aico:product-manager`: destination spec, checked by `spec-check\.mjs`/,
-      /^\*\*Draft input:\*\* the argument is one token with no whitespace ending/,
+      /^\*\*Draft input:\*\* the argument is a path ending `grill\.md`, `spec\.md` or `plan\.md` under a `\.company\/work\/<name>\/` folder/,
     ],
   },
   fix: {
@@ -534,6 +537,14 @@ const HAND_OVER_CHANGES = {
       "3. `aico:code-reviewer` ∥ `aico:qa` (re-run the regression test and the affected test files only, no full suite) ∥ `aico:security` (if the bug touches auth, input handling or data, when `lanes.security` is on (`aico:pipeline` §1.7) and security is in the tier set), with Fix rounds per `aico:pipeline`.",
       "   **→ Ship Gate** (after sync --diff; added lanes first)",
       /^   - `aico:fresh-reviewer` \(set entry `second-reviewer`\) beside the Code Reviewer/,
+    ],
+  },
+  // Vulnscan gains one notice line (dependency names and versions go to public sources, said to the CEO before the scan, on a direct dispatch too) and the direct-dispatch line says who gives it.
+  vulnscan: {
+    removed: ['Dispatchable directly too ("use the aico vuln-scanner").'],
+    added: [
+      /^\*\*Notice to the CEO\*\*, in your first message and before the scan starts, on a direct dispatch too: .*dependency names and versions to public .*audit tools the scanner runs may send private package names too/,
+      'Dispatchable directly too ("use the aico vuln-scanner"): whoever dispatches gives the same notice first, before the scan starts.',
     ],
   },
   incident: {
@@ -697,13 +708,14 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   const baseSet = playbookSet(BASE);
   assert.deepEqual(baseSet.filter(f => !nowSet.includes(f)), [], 'a v0.12.0 Playbook is gone');
   const softwarePlaybooks = manifest('software').playbooks;
-  const addedByGrillSpecTickets = ['dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grilling', 'grill-me', 'grill-with-docs'];
+  const addedByGrillSpecTickets = ['dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs'];
   assert.deepEqual(nowSet.filter(f => !baseSet.includes(f)).map(f => f.split('/')[1]).filter(n => softwarePlaybooks.includes(n) && !addedByGrillSpecTickets.includes(n)), [], 'a Playbook the software type offers is new');
   for (const name of soft) assertV012Playbook(name);
   // The pipeline only gained lines, except ten lines reworded in place: Setup §1.7 Settings (lists the plan_check, parallel_cap and short_path settings), Setup §1.9 Run state (the five run-state commands), the "Parallel by default" dispatch rule (now the capped, script-driven one), the "After each Step" line and the "Commit only that Step's files" line (ledger times, plan-task scope and done), the Gate stop line (run-state ask before each Gate form), the "One Fix round" line (the round command and the cap) and the "Before the Ship Gate" line (report --acs; ship moved after the approval), the dispatch block's Risk tier comment (the source for feature and fix) and the Finish Debt sentence. The Ship Gate text is the one it was.
   const [, removedFromPipeline] = git('diff', '--numstat', BASE, 'HEAD', '--', 'skills/pipeline/SKILL.md').trim().split(/\s+/);
   // 27 removed lines (the Lead budget line is reworded in place to the fixed 95000 cap): the ten above, plus the Context cap line (fixed 95000/85500, dispatch-prompt v4.2) and the Gate line (no Brief or Plan Gate in feature and fix, ADR 0050) reworded in place, plus the Task slug line (the exceptions-on-file refusal, v0.21.0), the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
   // 28 since the work folder names: the Setup slug and branch lines, the ledger and rule-check calls and the push lines now quote the run name, and the Branch line takes the printed branch value.
+  // Still 28: the Plan check bullet (B6) was added after v0.12.0, so rewording it removes no v0.12.0 line. B5 only adds lines (Setup item 18, one Gate bullet).
   assert.equal(Number(removedFromPipeline), 28);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
@@ -826,7 +838,7 @@ test('AC7 a profile without read permission is refused as unreadable', { skip: (
 
 test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the reprompter and ship meaning', () => {
   const m = manifest('software');
-  const expectedPlaybooks = ['audit', 'brainstorm', 'bug', 'client', 'cooler', 'dashboard', 'feature', 'feedback', 'fix', 'grill', 'grill-me', 'grill-with-docs', 'grilling', 'idea', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan'];
+  const expectedPlaybooks = ['audit', 'brainstorm', 'bug', 'client', 'cooler', 'dashboard', 'feature', 'feedback', 'fix', 'grill', 'grill-me', 'grill-with-docs', 'idea', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan'];
   assert.deepEqual([...m.playbooks].sort(), expectedPlaybooks);
   assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
   assert.equal(m.roles.length, 35);
@@ -834,7 +846,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
   const t = sb.typeJson(['resolve']);
-  assert.equal(t.playbooks.length, 34);
+  assert.equal(t.playbooks.length, 33);
   assert.deepEqual([...t.playbooks].sort(), [...expectedPlaybooks, ...ALWAYS].sort());
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
@@ -843,7 +855,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();
-    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grilling', 'grill-me', 'grill-with-docs'].includes(n)).sort(), basePlaybooks);
+    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs'].includes(n)).sort(), basePlaybooks);
   }
 });
 

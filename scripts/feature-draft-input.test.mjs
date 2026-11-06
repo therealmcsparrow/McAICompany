@@ -47,7 +47,8 @@ test('a triage-lined request starts exactly as today', () => {
 
 test('argument file, arg and take run before Setup item 1; the printed slug is the task slug', () => {
   has(draft, '.company/draft-input-arg-feature.txt', 'Write tool', 'arg --for feature', 'arg: file',
-    'take --for feature', 'before Setup item 1', 'task slug', 'never builds a slug');
+    'take --for feature', 'before Setup item 1', 'task slug', 'never builds a slug',
+    'at most one surrounding pair of single quotes', 'that pair removed');
   has(draft, "node \"${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" draft-input");
 });
 

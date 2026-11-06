@@ -4,11 +4,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Text pins for the grill Playbook. SKILL.md is the public interface of the Playbook, so each rule
-// it states is pinned here.
+// Text pins for the grill Playbook. SKILL.md is the public interface of the Playbook; the loop, the
+// file shape, Close, Resume and the End form live in references/grill-loop.md, which it loads. A
+// rule stated in either file is pinned here against the two files together.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const skill = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8');
+const skillOnly = readFileSync(join(root, 'skills/grill/SKILL.md'), 'utf8');
+const loop = readFileSync(join(root, 'skills/grill/references/grill-loop.md'), 'utf8');
+const skill = `${skillOnly}\n${loop}`;
 const lines = skill.split('\n');
+const skillLines = skillOnly.split('\n');
 const has = (...needles) => {
   for (const n of needles) assert.ok(n instanceof RegExp ? n.test(skill) : skill.includes(n), `missing: ${n}`);
 };
@@ -16,10 +20,10 @@ const lacks = (...needles) => {
   for (const n of needles) assert.ok(n instanceof RegExp ? !n.test(skill) : !skill.includes(n), `must not contain: ${n}`);
 };
 const fm = () => {
-  assert.equal(lines[0], '---');
-  const end = lines.indexOf('---', 1);
+  assert.equal(skillLines[0], '---');
+  const end = skillLines.indexOf('---', 1);
   assert.ok(end > 0, 'frontmatter closes');
-  return { end, map: new Map(lines.slice(1, end).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2)])) };
+  return { end, map: new Map(skillLines.slice(1, end).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2)])) };
 };
 const RUN = '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs';
 
@@ -33,21 +37,26 @@ test('frontmatter: exact keys, CEO-only flag, hint, no allowed-tools', () => {
   assert.ok(map.get('description').length <= 1024);
 });
 
-test('size: at most 125 lines, LF only', () => {
-  assert.ok(lines.length <= 126, `lines: ${lines.length}`);
+test('size: SKILL.md at most 125 lines, LF only in both files', () => {
+  assert.ok(skillLines.length <= 126, `lines: ${skillLines.length}`);
   assert.ok(!skill.includes('\r'));
+});
+
+test('SKILL.md loads the shared loop file and runs it in mode lookup', () => {
+  assert.ok(skillOnly.includes('${CLAUDE_PLUGIN_ROOT}/skills/grill/references/grill-loop.md'));
+  assert.ok(skillOnly.includes('mode `lookup`'));
 });
 
 test('Help line, empty line, Type line in that order', () => {
   const { end } = fm();
-  const h = lines.findIndex((l) => l.startsWith('**Help:**'));
+  const h = skillLines.findIndex((l) => l.startsWith('**Help:**'));
   assert.ok(h > end);
-  assert.ok(lines[h].includes('`documentation/commands/grill.md`'));
-  assert.ok(lines[h].includes('change nothing, start nothing, and stop'));
-  assert.equal(lines[h + 1], '');
-  assert.ok(lines[h + 2].startsWith('**Type:**'));
-  assert.ok(lines[h + 2].includes(`node "${RUN}" company-type check-playbook grill`));
-  assert.ok(lines[h + 2].includes('exit not 0 → show its output line and stop'));
+  assert.ok(skillLines[h].includes('`documentation/commands/grill.md`'));
+  assert.ok(skillLines[h].includes('change nothing, start nothing, and stop'));
+  assert.equal(skillLines[h + 1], '');
+  assert.ok(skillLines[h + 2].startsWith('**Type:**'));
+  assert.ok(skillLines[h + 2].includes(`node "${RUN}" company-type check-playbook grill`));
+  assert.ok(skillLines[h + 2].includes('exit not 0 → show its output line and stop'));
 });
 
 test('AC40 one question per form, 2-4 options, recommended first with a one-line reason', () => {
@@ -56,14 +65,14 @@ test('AC40 one question per form, 2-4 options, recommended first with a one-line
 
 test('AC41 open-branch list, no fixed count, header from status, facts looked up and cited', () => {
   has('open branches', 'fixed number of questions', 'Header `<n> answered, <k> open`', 'copied from the `grill: <n> answered, <k> open` line');
-  has('looked up', 'Cite the source', 'F-<n>');
+  has('looked up', 'cite the source', 'F-<n>');
   has('`question_rounds` is not used');
 });
 
 test('AC42 Write whole file, then status, before the next question; resume', () => {
   has('Write tool', 'whole file', `node "${RUN}" grill status '<name>'`, 'before the next question');
   has('resume <name>', 'arg: resume');
-  has('exit 2', 'show the `ERROR` lines');
+  has('Exit 2', 'show the `ERROR` lines');
 });
 
 test('R-1 argument goes through Write to the argument file, then arg; never Read, never a shell word', () => {
@@ -144,5 +153,5 @@ test('no Role names a display name', () => {
 
 test('R-14 files stay in the work folder, never claimed git-ignored; erasure overrides archive', () => {
   lacks('git-ignored');
-  has('stay in `.company/work/<name>/`; aico never commits them (grill-file v1.3 Personal data)', 'an erasure request overrides the archive rule (CEO decides)');
+  has('stay in `.company/work/<slug>/`; aico never commits them (grill-file v1.4 Personal data)', 'an erasure request overrides the archive rule (CEO decides)');
 });

@@ -53,6 +53,28 @@ confirm() {
 
 # write_env KEY VALUE: sets KEY in $ENV_FILE, replacing an existing line.
 write_env() {
+  local dir root="" target
+  dir="$(CDPATH= cd "$(dirname "$ENV_FILE")" 2>/dev/null && pwd -P)" || {
+    say "Refusing to write $1: the folder of $ENV_FILE does not exist."
+    return 1
+  }
+  target="$dir/$(basename "$ENV_FILE")"
+  while :; do
+    if [ -e "$dir/.git" ]; then root="$dir"; break; fi
+    [ "$(dirname "$dir")" = "$dir" ] && break
+    dir="$(dirname "$dir")"
+  done
+  # Inside a repo, write only when git answers that the file is ignored.
+  # Any other answer (not ignored, git failed, unsafe owner) refuses.
+  if [ -n "$root" ] && ! ( unset $(git rev-parse --local-env-vars); git -c core.excludesFile= -C "$root" check-ignore -q -- "$target" ) >/dev/null 2>&1; then
+    say "Refusing to write $1: git did not confirm that $ENV_FILE is ignored. Add it to .gitignore first."
+    return 1
+  fi
+  # An exported GIT_DIR or GIT_WORK_TREE can put the file in a repo with no .git in the tree: ask git.
+  if [ -z "$root" ] && [ -n "${GIT_DIR:-}${GIT_WORK_TREE:-}" ] && ! git check-ignore -q -- "$target" >/dev/null 2>&1; then
+    say "Refusing to write $1: git did not confirm that $ENV_FILE is ignored. Add it to .gitignore first."
+    return 1
+  fi
   touch "$ENV_FILE"
   local tmp
   tmp="$(mktemp)"
@@ -65,7 +87,7 @@ write_env() {
 
 # set_secret NAME VALUE / set_var NAME VALUE: GitHub Actions secret or variable via gh.
 set_secret() {
-  printf '%s' "$2" | gh secret set "$1" --body -
+  printf '%s' "$2" | gh secret set "$1"
   DONE+=("GitHub secret: $1")
   step "Set GitHub secret $1"
 }

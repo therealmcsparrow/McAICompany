@@ -17,7 +17,7 @@ const rec = (cwd, slug) => path.join(cwd, '.company', 'work', slug, 'idea-flow.j
 function toRoutes(cwd, slug, kind) {
   ok(run(cwd, 'start', slug, '--kind', kind));
   ok(run(cwd, 'pick', slug, '1'));
-  ok(run(cwd, 'done', slug, 'grilling'));
+  ok(run(cwd, 'done', slug, 'grill'));
   ok(run(cwd, 'done', slug, 'reprompt'));
 }
 function toTickets(cwd, slug, kind) {
@@ -65,7 +65,7 @@ test('follow-up forms offer only allowed routes', async (t) => {
       ok(run(cwd, 'pick', 's', '2'));
       assert.match(run(cwd, 'options', 's').out, /pending grill-me/);
       assert.equal(run(cwd, 'pick', 's', 'A').code, 3);
-      assert.equal(run(cwd, 'done', 's', 'grilling').code, 1);
+      assert.equal(run(cwd, 'done', 's', 'grill').code, 1);
       ok(run(cwd, 'done', 's', 'grill-me'));
       assert.match(run(cwd, 'options', 's').out, /pending reprompt/);
       ok(run(cwd, 'done', 's', 'reprompt'));
@@ -410,4 +410,48 @@ test('a broken company_type line fails the tickets form loud and writes nothing'
     assert.equal(r.out, 'error: company type\n');
   }
   assert.equal(fs.readFileSync(rec(cwd, 'b'), 'utf8'), before);
+});
+
+// v1.4: the step `grilling` was renamed `grill`. A log written before the rename must still read.
+const OLD_STEP = 'grilling';
+const oldTs = '"ts":"2026-11-01T10:00:00.000Z"';
+const oldLog = (...events) => events.join('\n') + '\n';
+const oldStart = `{"e":"start","kind":"idea",${oldTs}}`;
+
+test('an old log with a done event for step grilling reads as grill', () => {
+  const cwd = root();
+  ok(run(cwd, 'start', 'old', '--kind', 'idea'));
+  const text = oldLog(oldStart, `{"e":"pick","letter":"1","route":"grill",${oldTs}}`, `{"e":"done","step":"${OLD_STEP}",${oldTs}}`);
+  fs.writeFileSync(rec(cwd, 'old'), text);
+  assert.equal(ok(run(cwd, 'options', 'old')).out, 'pending reprompt\n');
+  assert.match(ok(run(cwd, 'state', 'old')).out, /^form: pending reprompt$/m);
+  const read = ok(run(cwd, 'read', 'old')).out;
+  assert.match(read, /^3 done grill$/m);
+  assert.doesNotMatch(read, new RegExp(OLD_STEP));
+  assert.equal(fs.readFileSync(rec(cwd, 'old'), 'utf8'), text, 'reading never rewrites the log');
+  ok(run(cwd, 'done', 'old', 'reprompt'));
+  assert.deepEqual(letters(run(cwd, 'options', 'old')), ['A', 'B', 'C', 'D', 'E']);
+});
+
+test('an old log as the old script wrote it (pick route and done step grilling) still reads', () => {
+  const cwd = root();
+  ok(run(cwd, 'start', 'old2', '--kind', 'idea'));
+  fs.writeFileSync(rec(cwd, 'old2'), oldLog(
+    oldStart,
+    `{"e":"pick","letter":"1","route":"${OLD_STEP}",${oldTs}}`,
+    `{"e":"done","step":"${OLD_STEP}",${oldTs}}`,
+  ));
+  const r = run(cwd, 'options', 'old2');
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.out, 'pending reprompt\n');
+  assert.match(ok(run(cwd, 'read', 'old2')).out, /^2 pick 1 grill$/m);
+});
+
+test('an old log stopped after the pick of grilling still reads as pending grill', () => {
+  const cwd = root();
+  ok(run(cwd, 'start', 'old3', '--kind', 'idea'));
+  fs.writeFileSync(rec(cwd, 'old3'), oldLog(oldStart, `{"e":"pick","letter":"1","route":"${OLD_STEP}",${oldTs}}`));
+  const r = run(cwd, 'options', 'old3');
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.out, 'pending grill\n');
 });

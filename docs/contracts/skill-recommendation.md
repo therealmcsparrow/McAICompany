@@ -1,9 +1,11 @@
-# Contract: skill-recommendation v1.2
+# Contract: skill-recommendation v1.3
+
+v1.3 (task skill-audit-bugs, minor, per `docs/adr/0007-contract-minor-versions.md`): the cited contracts moved to `design-skills-section` v1.2, `skills-section` v1.1 and `skills-manifest` v3.0. The old unpinned `impeccable` line is accepted on a `skills` group line too, as the same known old form. Nothing in a recommendation line changes.
 
 v1.2 (task input-fix, T10; additive): `lint` and `vet` check the exact letter case of the work folder and Handoff file in `<handoff>` with `exactWorkPath` of `work-folder-name` v1.1, before the link checks. Another letter case → `refused: wrong letter case`, exit 2. A Handoff missing in every case keeps `refused: handoff not found`.
 
 Provider: the `skill-researcher` Role (`agents/skill-researcher.md`), in its Handoff. Lint, gating scan and install check: `scripts/skill-picks.mjs`. Consumers: the Lead (`skills/lead/references/skill-picks.md`: the approve form, the Install / Skip form, the project record, the post-install checks), the CEO.
-Uses: `skillspector-scan` v1 (`vetCandidate`, the post-install `scan`), `design-skills-section` v1.1 (field allow-list and the `design` record), `skills-section` v1 (the record for the other areas), `research-report` v1 "Researcher Handoff extension" (`fetches`, `depth`, `## Findings`, `## Sources`).
+Uses: `skillspector-scan` v1 (`vetCandidate`, the post-install `scan`), `design-skills-section` v1.2 (field allow-list and the `design` record), `skills-section` v1.1 (the record for the other areas), `research-report` v1 "Researcher Handoff extension" (`fetches`, `depth`, `## Findings`, `## Sources`).
 Still v1 and unreleased. **Fix round 1 (CEO decision 1, security B3, ADR 0019):** the Role no longer scans. The scan that gates the forms is run by the Lead through `skill-picks.mjs vet`, a deterministic tool, on the exact commit the Role vetted; the install pins that commit; a bad post-install scan stops the run. **Fix round 2 (ADR 0020):** the verdict is bound to the installed bytes. `vet` scans only the folder the skills CLI will install, only for a commit on a branch or tag of the named repo, and records that folder's hash; after install, `check-install` compares it with `skills-lock.json`. Command-source picks are no longer approvable, because aico cannot pin what their command fetches.
 
 ## Input
@@ -25,7 +27,7 @@ Still v1 and unreleased. **Fix round 1 (CEO decision 1, security B3, ADR 0019):*
 The whole line matches `^- area: (stack|product-type|company-type|design); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: pending$` (anchored, no nested quantifiers), each line ≤ 500 characters, then each field:
 | Field | Allowed |
 |---|---|
-| `name`, `source`, `license`, `vetted`, `why` | exactly the `design-skills-section` v1.1 field allow-list. The lint builds the record line and passes it to `install-skills.mjs`'s exported `parseDesignSkills` (`skills-manifest` v2.1), so there is one implementation. |
+| `name`, `source`, `license`, `vetted`, `why` | exactly the `design-skills-section` v1.2 field allow-list. The lint builds the record line and passes it to `install-skills.mjs`'s exported `parseDesignSkills` (`skills-manifest` v3.0), so there is one implementation. |
 | `commit` | repo source: `^[0-9a-f]{40}$`, the commit whose files the Role read (from the GitHub page or the keyless API, agentsec.S2); command or plugin source: `-` |
 
 ## Rejected line
@@ -38,7 +40,7 @@ The whole line matches `^- area: (stack|product-type|company-type|design); name:
 ## `scripts/skill-picks.mjs` (Node built-ins, cwd = product repo; refusals `refused: <reason>` on **stdout**, exit 2, like `skillspector-scan`)
 | Command | stdout (exit 0) |
 |---|---|
-| `lint <handoff>` | `{ "v":1, "area", "lines":[{ "n", "ok", "field"?, "reason"? }], "picks":[{ "n", "kind":"repo\|command\|plugin", "name", "source", "commit", "record" }] }`. One `picks` entry per passing line. `record` is the line the Lead writes after approval: the `design-skills-section` v1.1 line for `design`, the `skills-section` v1 line otherwise, each with `commit` and `approved: <today>`. `n` is the line number; offending text is never echoed. |
+| `lint <handoff>` | `{ "v":1, "area", "lines":[{ "n", "ok", "field"?, "reason"? }], "picks":[{ "n", "kind":"repo\|command\|plugin", "name", "source", "commit", "record" }] }`. One `picks` entry per passing line. `record` is the line the Lead writes after approval: the `design-skills-section` v1.2 line for `design`, the `skills-section` v1.1 line otherwise, each with `commit` and `approved: <today>`. `n` is the line number; offending text is never echoed. |
 | `vet <handoff> --json` | runs `lint`, then scans each pick, then prints `{ "v":1, "area", "mode", "lines":[…as lint], "picks":[{ …as lint, "scan": <skillspector-scan results[] entry> \| null, "scan_refused": <reason> \| null, "hash": <64 hex> \| null, "approvable": bool, "reject_code": <code> \| null }] }`. Progress lines go to stderr (`vet: <i>/<k> <name> <verdict>`). |
 | `check-install --name <n> --hash <h> --json` (Fix round 2) | `{ "v":1, "name", "bound": bool, "reason": null \| "no-lock" \| "no-entry" \| "hash-mismatch" }`. `<n>` = the skill name allow-list, `<h>` = `^[0-9a-f]{64}$`, both taken from `vet` output; else `refused: usage …`. Reads `<cwd>/skills-lock.json` only: `lstat` a regular file ≤ 1 MiB that parses as a JSON object with an object `skills` → else `no-lock`; `Object.hasOwn(skills, <n>)` with an object entry whose `computedHash` is a string → else `no-entry`; `computedHash === <h>` → `bound: true`, else `hash-mismatch`. Nothing from the file is echoed. |
 
@@ -55,7 +57,7 @@ The whole line matches `^- area: (stack|product-type|company-type|design); name:
 1. `vet` the Handoff (the path from the dispatch, never typed from Role text). A failing lint line is dropped and named by number, never repaired. Commands use tokens from `vet` output only.
 2. **Approve form** (never auto): the approvable picks, each with the Lead's scan in words (`no-llm scan of commit abc1234, 0 critical, 0 high, 1 medium`), and the not-approvable ones with their `reject_code` and reason. Approve the set (Recommended) / Change / Skip. Skip writes nothing.
 3. Record: the approved picks' `record` lines into `## Design skills` (design) or `## Skills` (other areas).
-4. **Install / Skip form**: the exact commands from `install-skills.mjs … --dry-run`, which install the recorded `commit` (`skills-manifest` v2.1). The form also says that `npx skills update` would move a skill off the scanned commit. Nothing installs unless the approve form says yes and the Install form says yes; only a user-level `gates.installs: auto` (`aico-settings` v1.2 lock) answers the Install form, never the approve form (AC5).
+4. **Install / Skip form**: the exact commands from `install-skills.mjs … --dry-run`, which install the recorded `commit` (`skills-manifest` v3.0). The form also says that `npx skills update` would move a skill off the scanned commit. Nothing installs unless the approve form says yes and the Install form says yes; only a user-level `gates.installs: auto` (`aico-settings` v1.2 lock) answers the Install form, never the approve form (AC5).
 5. **Post-install checks**, for each approved repo pick, after the install commands ran (whatever their exit code):
    1. `skill-picks.mjs check-install --name <name> --hash <hash> --json`, both from `vet` output.
    2. `skillspector.mjs scan --scope project --skill <name> --json`.

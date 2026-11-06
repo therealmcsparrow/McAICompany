@@ -2,7 +2,7 @@
 name: help
 description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does.
 disable-model-invocation: true
-argument-hint: [command]
+argument-hint: "[command]"
 ---
 
 # Help

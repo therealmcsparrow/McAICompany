@@ -40,7 +40,7 @@ Expected result: a work folder and the grill form.
 
 You pick one of three ways to be interviewed, one question at a time, until every branch is closed:
 
-- **Grilling (recommended).** Facts the repo or the web can answer are looked up. The rest is asked. Web lookups can use short queries built from your idea.
+- **Grill (recommended).** Facts the repo or the web can answer are looked up. The rest is asked. Web lookups can use short queries built from your idea.
 - **Grill me.** Every question is asked. Nothing is looked up, not in the repo and not on the web.
 - **Grill with docs.** The repo docs (`docs/`, `GLOSSARY.md`, `docs/adr/`) are searched first, and each answer from a doc cites it. No web search.
 
@@ -110,8 +110,8 @@ The script updates the version and changelog and never pushes. For the release r
 
 You want users to export their data as CSV.
 
-1. `/aico:idea users should export their data as CSV`. The Lead saves your words and shows the grill form. You pick Grilling.
-2. Grilling looks up how exports work in the repo and asks you three questions. You pick Research on the routes form. The report says go-with-conditions and ranks "export patient list" first.
+1. `/aico:idea users should export their data as CSV`. The Lead saves your words and shows the grill form. You pick Grill.
+2. The grill looks up how exports work in the repo and asks you three questions. You pick Research on the routes form. The report says go-with-conditions and ranks "export patient list" first.
 3. The Lead rewrites the prompt with the verdict. You read it, and pick Spec and tickets.
 4. The spec and three tickets appear. You approve two and change one: you add that the file lists only the admin's clinic. The Architect revises that ticket and you approve it.
 5. At the tickets form you pick Build. The Lead sizes the work as M with risk high, because patient data is personal data, and starts `/aico:feature`.
@@ -149,7 +149,7 @@ The script gives every pick in a form a letter, and the forms show the route nam
 ### Where your text goes
 
 - The Claude model you configured reads your idea, bug, grill, ticket and Lead Handoff text.
-- The web search tools (WebSearch, WebFetch) run in grilling lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient. `/aico:grill-me` never searches the web. `/aico:grill-with-docs` does not either.
+- The web search tools (WebSearch, WebFetch) run in grill lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient. `/aico:grill-me` never searches the web. `/aico:grill-with-docs` does not either.
 - Everything else is local files: the folders above and `.company/draft-input-arg-*.txt`. aico writes no ignore rule; they are git-ignored only where your product ignores `.company/`.
 - The Lead hand-over hooks read token counts from the local Claude Code transcript and store none of its text.
 - Nothing in the idea flow is pushed or published.

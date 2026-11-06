@@ -2,7 +2,7 @@
   "core": [
     { "name": "find-skills", "source": "vercel-labs/skills" },
     { "name": "hallmark", "source": "nutlope/hallmark" },
-    { "name": "impeccable", "install": "npx -y impeccable skills install" },
+    { "name": "impeccable", "install": "npx -y impeccable@4.8.0 skills install" },
     { "name": "frontend-ui-engineering", "source": "addyosmani/agent-skills" },
     { "name": "security-and-hardening", "source": "addyosmani/agent-skills" },
     { "name": "security-review", "source": "getsentry/skills" },

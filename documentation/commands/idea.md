@@ -12,7 +12,7 @@
 **When to use it.** You have an idea and want the company to lead you through questions, a route and tickets. For a bug use [`/aico:bug`](bug.md).
 
 ## How it works
-1. The idea is saved as `idea.md` in `.company/work/<slug>/`, then a form asks which grill to use: grilling (recommended), grill-me or grill-with-docs.
+1. The idea is saved as `idea.md` in `.company/work/<slug>/`, then a form asks which grill to use: grill (recommended), grill-me or grill-with-docs.
 2. After the grill, a reprompt step turns the idea and the decisions into one prompt. It is shown in full, marked as AI-written.
 3. The routes form offers five routes (four outside a software company, which has no Spec and tickets). The letters on offer come from the `idea-flow` script, never from the Lead's own text.
    - Water cooler: colleagues chat about it, nothing is built.
@@ -29,6 +29,6 @@ Each step runs in the same session by reading that Playbook up to its stop point
 ## Technical details
 **You get.** Local files under `.company/work/<slug>/`, a parked copy under `.company/ideas/<name>/` or roadmap files under `.company/roadmap/`, or a feature built through the Ship Gate.
 
-**Your data.** The Claude model you configured reads the idea, grill, ticket and Handoff text. The web search tools (WebSearch, WebFetch) run in grilling lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient. Files are local, archived and never deleted; an erasure request overrides that.
+**Your data.** The Claude model you configured reads the idea, grill, ticket and Handoff text. The web search tools (WebSearch, WebFetch) run in grill lookups and in research, and in the Water cooler and Brainstorm routes when a Role that holds them (market-researcher, tech-researcher, design-researcher, skill-researcher, senior-engineer or vuln-scanner) joins; those two routes do not forbid it, and a request can carry words from the idea. No other recipient. Files are local, archived and never deleted; an erasure request overrides that.
 
 **Example.** `/aico:idea let customers pause their subscription`

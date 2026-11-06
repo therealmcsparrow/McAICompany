@@ -58,6 +58,36 @@ test('missing description is an error', () => {
   assert.ok(r.errors.some(e => e.includes('missing description')));
 });
 
+const hinted = (name, hint) => `---\nname: ${name}\ndescription: Use when testing.\nargument-hint: ${hint}\n---\nBody.\n`;
+
+test('unquoted argument-hint starting with [ is an error; quoted or other shapes are clean', () => {
+  const bad = check(fixture({ skills: { a: hinted('a', '[topic] [turns=N | listen]'), b: hinted('b', '[command]') } }));
+  assert.ok(bad.errors.some(e => e.includes('skills/a/SKILL.md') && e.includes('argument-hint')));
+  assert.ok(bad.errors.some(e => e.includes('skills/b/SKILL.md') && e.includes('argument-hint')));
+  const ok = check(fixture({ skills: { a: hinted('a', '"[topic] [turns=N | listen]"'), b: hinted('b', '<what you want done>'), c: hinted('c', 'intake <x> | handoff') } }));
+  assert.deepEqual(ok.errors.filter(e => e.includes('argument-hint')), []);
+});
+
+test('argument-hint rule also covers agents', () => {
+  const a = `---\nname: qa\ndescription: Dispatch when testing.\ntools: Read\nmodel: sonnet\neffort: low\nargument-hint: [x]\n---\nBody.\n`;
+  const r = check(fixture({ agents: { qa: a } }));
+  assert.ok(r.errors.some(e => e.includes('agents/qa.md') && e.includes('argument-hint')));
+});
+
+test('no real skill or agent has an unquoted argument-hint starting with [', () => {
+  const bad = [];
+  const dirs = [['skills', d => join(d, 'SKILL.md')], ['agents', null]];
+  for (const [dir, pick] of dirs) {
+    for (const e of readdirSync(join(REPO, dir))) {
+      const f = pick ? pick(join(REPO, dir, e)) : join(REPO, dir, e);
+      if (!f.endsWith('.md') || !existsSync(f)) continue;
+      const m = readFileSync(f, 'utf8').match(/^argument-hint:[ \t]*(.*)$/m);
+      if (m && m[1].startsWith('[')) bad.push(`${dir}/${e}`);
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
 test('unknown aico reference is an error', () => {
   const r = check(fixture({ skills: { a: skill('a', 'Load aico:missing now.') } }));
   assert.ok(r.errors.some(e => e.includes('unknown reference aico:missing')));

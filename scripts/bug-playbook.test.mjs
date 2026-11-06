@@ -73,7 +73,7 @@ describe('SKILL.md', () => {
   });
 
   test('trust and privacy lines name the same recipients as aico:idea', () => {
-    has(skill, 'Claude model', 'web search', 'grilling', 'research', '.company/', 'git-ignored');
+    has(skill, 'Claude model', 'web search', 'grill lookups', 'research', '.company/', 'git-ignored');
   });
 
   test('does not edit routes or to-spec: only the one route file is read', () => {

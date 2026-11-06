@@ -29,6 +29,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 15. **Review loop**: load `references/review-loop.md` before the first review Step (failed review Steps, `mark` and `churn` in Fix rounds, the Ship Gate list, the second reviewer).
 16. **Worktrees** (when `pipeline.worktrees` is `on` and the run is parallel): load `references/worktrees.md` before the first plan Step (waves, merge Step, conflicts, cleanup).
 17. **Lead hand-over**: load `references/lead-handover.md` in Setup. Right after run-state `start`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-handover begin '<slug>' '<playbook>'` (`lead-handoff` v1; hooks write and inject the Lead Handoff, you never do).
+18. **Contests**: load `references/contest.md` in Setup (it holds the `handoff-lint --contests` calls that run before every Gate).
 
 ## 2. Dispatch a Step
 Number Steps `01, 02, …` in run order. Dispatch the Role subagent (`aico:<role>`) with this prompt and nothing more:
@@ -91,13 +92,14 @@ At **Brief**, **Plan** and **Ship**, stop. Directly before each Gate form run `r
 - **Plan Gate** must show the Architect's Core list and Contracts (`aico:contracts`). Approved Core goes into `.company/project.md`.
 - **Ship Gate**, feature and fix (no Plan Gate): after Approve, write the approved Core into `.company/project.md` and commit it. Feature: the Architect's Core list, which reviewers judge Core against until then. Fix has no Architect: its Ship Gate summary lists the Core changes and the CEO's Approve of the Ship Gate is the approval.
 - **Ruleset sign-off:** when the Architect's Handoff signs the ruleset off, you write `signed-off: <date> (architect)` in `.company/standards.md` and commit it with that Step. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" rule-check drift`; exit 1 → the Senior Engineer fixes the binding (no Fix round).
-- **Plan Gate** also shows the Plan check block (`references/plan-check.md`); in v0.16 it never blocks the Gate.
+- **Plan Gate** also shows the Plan check block (`references/plan-check.md`); under `warn` and `off` it never blocks the Gate, under `block` the scripts refuse a Plan Gate with open decisions (plan-check step 7).
 - **Plan Gate** also shows the Parallel plan block (`references/parallel.md` step 3); it never blocks the Gate.
 - **Ship Gate** of a feature or fix run also shows the tier-path lines (references/tier-path.md step 9); feature and fix have no Brief or Plan Gate (ADR 0050).
 - **Plan Gate** also shows one Ruleset line: packs used, Must rules added or changed (signed off by the Architect, or "sign-off skipped: no Must changed"), and any exception requests.
 - **Ship Gate, company types other than `software`** (`company-type` v1, from the §1.0 type lines: `company type:`, `ship:`, `ship lanes:`, `ship checks:`): the summary's first line is `Ship means: <ship.meaning>`; every lane in `ship.lanes` runs whatever `pipeline.lanes` says; each item in `ship.checks` without its satisfying Handoff (`company-type` v1 check table) is an open blocker, shown with the check's finding. For `software` none of this applies.
 - **Ship Gate** also shows `over cap` (the `ledger report` line) and `lead peak` (`lead-handover read`); neither blocks the Gate (`references/lead-handover.md`).
 - **Every Gate** runs `worktree leftovers`; the Ship Gate also shows `run-guard gate` and `worktree protocheck` (`references/worktrees.md` step 7).
+- **Every Gate** first runs `handoff-lint --contests` after each reviewer Step (`references/contest.md`); its `unresolved`, `escalated` and `excepted` lines go into the summary as that file says.
 - **Ship Gate** comes before any push, merge, deploy, publish or message to a client, user or authority. Its summary names every optional lane the settings turned off ("skipped by settings: accessibility").
 
 ## 5. Fix rounds

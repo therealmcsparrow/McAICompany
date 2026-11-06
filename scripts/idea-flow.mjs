@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v1.3).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v2.0).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,9 +17,9 @@ const OUT_CHARS = /^[A-Za-z0-9._ /-]{1,200}$/;
 const KINDS = ['idea', 'bug'];
 const SIZES = ['XS', 'S', 'M', 'L'];
 const TIERS = ['low', 'medium', 'high'];
-const GRILLS = ['grilling', 'grill-me', 'grill-with-docs'];
+const GRILLS = ['grill', 'grill-me', 'grill-with-docs'];
 const STEPS = [...GRILLS, 'reprompt', 'cooler', 'brainstorm', 'research', 'to-spec', 'to-tickets', 'triage', 'build'];
-const GRILL_FORM = [['1', 'grilling'], ['2', 'grill-me'], ['3', 'grill-with-docs']];
+const GRILL_FORM = [['1', 'grill'], ['2', 'grill-me'], ['3', 'grill-with-docs']];
 const ROUTES = [['A', 'cooler'], ['B', 'brainstorm'], ['C', 'research'], ['D', 'to-spec'], ['E', 'park-idea']];
 const STOP = ['S', 'stop'];
 const TICKET_FORM =[['F', 'build'], ['G', 'park-roadmap'], ['E', 'park-idea']];
@@ -185,6 +185,9 @@ function load(cwd, slug) {
     if (Buffer.byteLength(l) > MAX_LINE) fail('broken record');
     let o;
     try { o = JSON.parse(l); } catch { fail('broken record'); }
+    // v1.4: logs from before the rename say the old word
+    if (o && o.step === 'grilling') o.step = 'grill';
+    if (o && o.e === 'pick' && o.route === 'grilling') o.route = 'grill';
     if (!checkEvent(o)) fail('broken record');
     return o;
   });

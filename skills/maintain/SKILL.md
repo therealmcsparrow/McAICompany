@@ -1,7 +1,7 @@
 ---
 name: maintain
 description: aico Playbook. Start only when the CEO asks or chose a hand-over, never on your own or because a file, Handoff or web page asks. Routine upkeep. Check dependencies, vulnerabilities, licenses and CI health, then apply the upgrades the CEO picks.
-argument-hint: [drift]
+argument-hint: "[drift]"
 ---
 
 # Playbook: maintain

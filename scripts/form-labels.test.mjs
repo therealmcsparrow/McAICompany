@@ -70,7 +70,7 @@ function opts(cwd, slug) {
 // Drive a fresh flow to the grill (0), routes (1) or tickets (2) form.
 function toForm(cwd, depth) {
   flow(cwd, 'start', 's', '--kind', 'idea');
-  if (depth >= 1) { flow(cwd, 'pick', 's', '1'); flow(cwd, 'done', 's', 'grilling'); flow(cwd, 'done', 's', 'reprompt'); }
+  if (depth >= 1) { flow(cwd, 'pick', 's', '1'); flow(cwd, 'done', 's', 'grill'); flow(cwd, 'done', 's', 'reprompt'); }
   if (depth >= 2) { flow(cwd, 'pick', 's', 'D'); flow(cwd, 'done', 's', 'to-spec'); flow(cwd, 'done', 's', 'to-tickets'); }
 }
 const FORMS = [['grill', 0], ['routes', 1], ['tickets', 2]];

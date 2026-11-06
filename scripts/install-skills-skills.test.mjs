@@ -29,9 +29,9 @@ function sandbox() {
   const projectFile = join(root, '.company', 'project.md');
   const calls = [];
   const out = [];
-  const run = (args, md) => {
+  const run = (args, md, over = {}) => {
     if (md !== undefined) writeFileSync(projectFile, md);
-    const code = main(args, { manifest, home, cwd: base, today: TODAY, platform: 'linux', log: s => out.push(s), exec: (c, cwd, argv) => calls.push([c, cwd, argv]) });
+    const code = main(args, { manifest, ...over, home, cwd: base, today: TODAY, platform: 'linux', log: s => out.push(s), exec: (c, cwd, argv) => calls.push([c, cwd, argv]) });
     return { code, out: out.join('\n'), calls };
   };
   return { base, root, projectFile, run, done: () => rmSync(base, { recursive: true, force: true }) };
@@ -202,5 +202,17 @@ test('installed detection covers the product root for group skills', () => {
     mkdirSync(join(s.root, '.agents', 'skills', 'golang-testing'), { recursive: true });
     const res = s.run(['skills', '--missing', '--project', s.projectFile], doc(line(), line({ name: 'other', source: 'o/other' })));
     assert.equal(res.out, 'missing other');
+  } finally { s.done(); }
+});
+
+test('group skills: the old unpinned impeccable line resolves to the pinned manifest command and is printed as manual, nothing runs', () => {
+  const PINNED = 'npx -y impeccable@4.8.0 skills install';
+  const s = sandbox();
+  try {
+    const res = s.run(['skills', '--project', s.projectFile], doc(line({ name: 'impeccable', source: '`npx -y impeccable skills install`', commit: '-' })), { manifest: { core: [{ name: 'impeccable', install: PINNED }] } });
+    assert.equal(res.code, 0, res.out);
+    assert.deepEqual(res.calls, []);
+    assert.match(res.out, new RegExp(`^manual ${PINNED}$`, 'm'));
+    assert.doesNotMatch(res.out, /ERROR|FAILED/);
   } finally { s.done(); }
 });
