@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan check (contract: docs/contracts/plan-check.md v1.4). Node built-ins; `verify` also loads the settings script.
+// Plan check (contract: docs/contracts/plan-check.md v1.5). Node built-ins; `verify` also loads the settings script.
 // Scans the Steps, Tasks, Wave, Phase, Fix round, T<n> and M<n> sections of a plan for open decisions, and keeps a per-run record of the
 // scans in .company/work/<slug>/plan-check.jsonl. The record holds counts, enums, a file name and
 // times only, never plan text (GDPR Art. 5(1)(c)). Plan text and CLI arguments are untrusted data.

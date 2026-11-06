@@ -40,7 +40,6 @@ Details: [`documentation/start/getting-started.md`](documentation/start/getting-
 | `/aico:idea <idea\|resume <slug>>` | Guides an idea with forms: capture, a grill (grill, grill-me or grill-with-docs), a reprompt, then cooler, brainstorm, research, or spec and tickets. You approve tickets one by one; then build through `/aico:feature`, park the tickets on the roadmap, or park the idea |
 | `/aico:bug <bug report\|resume <slug>>` | The same route as `/aico:idea`, but the build step is always `/aico:fix`. See [From idea to shipped code](documentation/start/idea-to-ship.md) |
 | `/aico:feature <desc\|draft file>` | Plan (Core + Contracts) → build per Module → review, QA, security → Ship. No Brief or Plan Gate; the Ship Gate always runs. Takes a grill, spec or plan draft as its argument |
-| `/aico:grill <idea\|file\|resume <slug>>` | You start it. Interviews you one question at a time until the branches of an idea are closed; saves `grill.md`. Builds nothing |
 | `/aico:grill <idea\|file\|resume <slug>>` | The grill with lookups: repo and web facts are looked up (the web search tool may get queries built from your idea), the rest is asked. Builds nothing |
 | `/aico:grill-me <idea\|file\|resume <slug>>` | The grill with no lookups: every question is asked. Builds nothing |
 | `/aico:grill-with-docs <idea\|file\|resume <slug>>` | The grill that searches repo docs first (`docs/`, `GLOSSARY.md`, `docs/adr/`) and cites them. No web search. Builds nothing |
