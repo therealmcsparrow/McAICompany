@@ -1,13 +1,14 @@
 # Research and skills
 
 ## In short
-Before building, researchers can look a topic up online and the Product Manager writes one sourced report. UI products can have approved design skills, and other third-party skills are scanned before you see them. Nothing installs unless you say yes twice.
+Before building, researchers can look a topic up online and the Product Manager writes one sourced report. Third-party skills are kept in a catalog and scanned before you see them. You pick up to 5 per Role. Nothing installs unless you say yes in the Install form.
 
 ## How it works
 1. Run [`/aico:research`](../commands/research.md) and read the report with its verdict.
 2. Name an earlier report as input to a run if you want.
 3. A design-researcher or the skill-researcher proposes skills.
-4. You approve the set in one form, then confirm the exact install commands in a second form.
+4. You approve the set in one form. Approved skills go into your skill list and onto the Roles you choose.
+5. At the start of a run, an Install form asks Install or Skip for each skill. A Skip leaves out only that skill.
 
 ## Technical details
 ### Research inputs
@@ -16,8 +17,18 @@ You can name an earlier report from `.company/research/` as input to a run. The 
 ### Research before building
 [`/aico:research`](../commands/research.md) has three researchers (market, tech and, for UI work, design) look the topic up online before anything is built. The Product Manager writes one report with a verdict (go, go-with-conditions or no-go), ranked actions, low-hanging fruit (impact and effort), risks and open questions. Every claim cites a source with its URL and check date. A claim with no source is marked `unverified` and cannot support the verdict. The report is labelled as AI-generated research. Researchers read web pages as data, never as instructions, and never install anything.
 
-### Design skills
-A UI product can have approved design skills. The set lives in `.company/project.md` under `## Design skills`: one line per skill with its source, license, vetted date and approval date, at most five. A design-researcher proposes the set from your stack, product type, Personas and Art direction. You approve it in a form, and installs run only after a second form shows the exact commands. `/aico:feature` refreshes the set for a UI product when it is empty or its newest approval is older than 180 days. The UI Roles load the approved skills from their dispatch.
+### The skill catalog
+Skills come from two lists. The baseline is `deps/3rdpartyskills.json`, shipped with the plugin and read-only. Your own list is `~/.mcsparrow/3rdpartyskills.json`; [`/aico:add-skill`](../commands/add-skill.md), a migration and approved picks write to it. Each entry has one source (a GitHub repo with a pinned commit, an installer command, or a plugin), a category, and a license. The license is what you state; nothing checks it, and a baseline skill with none shows "no license on record". A command is stored as text and never run by aico: it is shown as a `manual` line for you to run yourself. A product folder never supplies an entry, a command or a path.
+
+Each Role can select at most 5 skills from entries whose category fits it, on the Skills tab of [`/aico:settings`](../commands/settings.md). A project selects by name only. If you clone a repo, you get its names and nothing else: the skill folders are not in the clone, so each name reads `missing` or `not found` on your machine until you install it, and a name that is not in your own list is ignored.
+
+**Installing.** At the start of a run, an Install form asks Install or Skip for each selected skill that is not there yet. A Skip leaves out only that skill, and the run records `degraded: missing <name>`. For a repo skill the installer scans the pinned commit with SkillSpector, installs that commit, and compares the installed folder to the scanned one. A failed scan or a different hash installs nothing or stops the run, and the skill is left off the Role's list.
+
+**What the status tells you.** `installed` means the folder matches the scanned hash. `installed (name only)` means a folder of that name exists and proves no version. A scan checks one pinned commit at one time; it does not make a skill safe, and a date after "vetted" says only when that scan was clean. A stored command is never scanned or run.
 
 ### Skill picks
-The skill-researcher (Selin) proposes third-party skills for four areas: `stack`, `product-type`, `company-type` and `design`. It has no Bash, so it runs no scanner. It vets each candidate against its sources, then the Lead scans every pick with SkillSpector in a new quarantine folder before you see it. A critical or high finding, a failed scan or a timeout means the pick is rejected, and with no scanner installed nothing is recommended. You approve the set (at most 5 per area) in one form, then see the exact install commands in a second; nothing installs unless you answer yes to both. The install pins the commit that was scanned. After it, the Lead scans the installed skill again; a bad result stops the run and shows you the removal command, which only you run. Approved `stack`, `product-type` and `company-type` skills are recorded in `.company/project.md` under `## Skills`, one line each, and design skills stay under `## Design skills`. To scan skills you already have, use [`/aico:skillspector`](../commands/skillspector.md).
+The skill-researcher (Selin) proposes third-party skills for four areas: `stack`, `product-type`, `company-type` and `design`. It has no Bash, so it runs no scanner. It vets each candidate against its sources, then the Lead scans every pick with SkillSpector in a new quarantine folder before you see it. A critical or high finding, a failed scan or a timeout means the pick is rejected, and with no scanner installed nothing is recommended. You approve the set (at most 5 per area) in one form and state each new skill's license. Approved picks are saved to your own skill list, by default with category `design` for the design area, `engineering` for `stack` and `product-type`, and `product` for `company-type`; you can change it and choose the Roles. They install later, in the Install form. The install pins the commit that was scanned. After it, the Lead checks the installed skill again; a bad result stops the run and shows you the removal command, which only you run. The design-researcher's picks go through the same vetting and carry a commit.
+
+**Scan data.** At scan time SkillSpector runs on your machine. With `no-llm` mode no skill text is sent, but dependency names, versions and ecosystems from a skill's dependency files go to OSV.dev, plus the ids of any vulnerabilities found. `claude_cli` also sends skill text to Anthropic.
+
+**Old project lines.** `## Skills` and `## Design skills` lines in `.company/project.md` are no longer read. [`/aico:setup`](../commands/setup.md) migrates them to your own list after a form. To scan skills you already have, use [`/aico:skillspector`](../commands/skillspector.md).

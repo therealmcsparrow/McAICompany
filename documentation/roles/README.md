@@ -43,7 +43,7 @@ The tech-researcher runs on Sonnet; every other Role keeps the model it had in v
 | **design-researcher** | sonnet | medium | Daria | Finds and vets UI/UX and design skills that fit your stack, product type, Personas and Art direction, judges the installed ones, and recommends at most 5. Never installs. [Page](design-researcher.md) |
 | **skill-researcher** | sonnet | medium | Selin | Finds and vets third-party skills for your stack, product type, company type or design, and recommends at most 5. Has no Bash: the Lead scans every pick in a quarantine before you see it. Never adds a skill; the Lead does that after your approval, pinned to the scanned commit. [Page](skill-researcher.md) |
 
-The first three researchers run in parallel inside [`/aico:research`](../commands/research.md). The Product Manager writes the report from their Handoffs. The design-researcher also runs in [`/aico:feature`](../commands/feature.md) for UI products whose design skills are missing or stale. The skill-researcher runs when you ask for skill picks.
+The first three researchers run in parallel inside [`/aico:research`](../commands/research.md). The Product Manager writes the report from their Handoffs. The design-researcher also runs in [`/aico:feature`](../commands/feature.md) for UI products whose design skill selections are missing or older than 180 days. The skill-researcher runs when you ask for skill picks.
 
 ### Engineering
 | Role | Model | Effort | Name | What it's for |
