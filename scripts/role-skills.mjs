@@ -380,7 +380,13 @@ function writeSettings(s, opts, adds) {
   for (const [role, list] of adds) {
     if (!isPlain(layer.roles[role])) layer.roles[role] = {};
     const have = Array.isArray(layer.roles[role].skills) ? layer.roles[role].skills : [];
-    layer.roles[role].skills = [...have, ...list];
+    const next = have.slice();
+    for (const item of list) {
+      const at = next.findIndex((x) => isPlain(x) && x.name === item.name);
+      if (at === -1) next.push(item);
+      else next[at] = { ...next[at], approved: item.approved };
+    }
+    layer.roles[role].skills = next;
   }
   data[KEY] = layer;
   const userLayer = readLayer('user', { home: opts.settingsHome }).layer;
@@ -444,6 +450,210 @@ export function stale(options = {}) {
   return { stale: reason !== null, reason, names: [...names].sort() };
 }
 
+// ---------- add and record ----------
+
+const MAX_INPUT = 64 * 1024;
+const MAX_ROLES_IN = 40;
+const ADD_KEYS = ['name', 'repo', 'command', 'category', 'commit', 'license'];
+const ADD_FLAGS = ['save', 'move'];
+const ROLE_ONE_RE = /^[a-z][a-z0-9-]{0,40}$/;
+const PROBE = { skillcategory: 'engineering', skillrepo: 'a/a', skillcommit: '0'.repeat(40), license: 'x' };
+const USER_FILE_TEXT = '~/.mcsparrow/3rdpartyskills.json';
+
+// One line of JSON from stdin. More than one non-empty line or more than 64 KiB is refused.
+function readInput(ctx) {
+  let text;
+  if (typeof ctx.stdin === 'string') text = ctx.stdin;
+  else {
+    const chunks = [];
+    const buf = Buffer.alloc(8192);
+    let total = 0;
+    for (;;) {
+      let n;
+      try { n = fs.readSync(0, buf, 0, buf.length, null); } catch { break; }
+      if (n === 0) break;
+      total += n;
+      if (total > MAX_INPUT) throw new Stop('input is too large');
+      chunks.push(Buffer.from(buf.subarray(0, n)));
+    }
+    text = Buffer.concat(chunks).toString('utf8');
+  }
+  if (Buffer.byteLength(text) > MAX_INPUT) throw new Stop('input is too large');
+  const lines = text.split('\n').map((l) => l.replace(/\r$/, '')).filter((l) => l.trim() !== '');
+  if (lines.length === 0) throw new Stop('input is empty');
+  if (lines.length > 1) throw new Stop('input has more than one line');
+  let data;
+  try { data = JSON.parse(lines[0]); } catch { throw new Stop('input is not valid JSON'); }
+  if (!isPlain(data)) throw new Stop('input is not a JSON object');
+  return data;
+}
+
+// Checks one field alone by building an entry around it from valid stand-ins.
+function checkField(field, value) {
+  let e;
+  if (field === 'name') {
+    if (/[:*]/.test(value)) return 'bad value';
+    e = { ...PROBE, skillname: value };
+  } else if (field === 'repo') e = { ...PROBE, skillname: 'probe', skillrepo: value };
+  else if (field === 'command') e = { skillname: 'probe', skillcategory: 'engineering', skillinstaller: value, license: 'x' };
+  else if (field === 'category') e = { ...PROBE, skillname: 'probe', skillcategory: value };
+  else if (field === 'commit') e = { ...PROBE, skillname: 'probe', skillcommit: value };
+  else e = { ...PROBE, skillname: 'probe', license: value };
+  const v = validateEntry(e, 'user');
+  return v.ok ? null : v.reason;
+}
+
+const sameSrc = (a, b) => (a.skillrepo ?? null) === (b.skillrepo ?? null) && (a.skillinstaller ?? null) === (b.skillinstaller ?? null) && (a.skillplugin ?? null) === (b.skillplugin ?? null);
+
+// The name's standing against your list and the baseline for one source.
+function standing(name, src, commit, catalog, baseline) {
+  const user = catalog.entries.find((x) => x.skillname === name && (x.layer === 'user' || x.pinned === true));
+  if (user) {
+    if (!sameSrc(user, src)) return { error: 'taken' };
+    if (src.skillrepo === undefined || commit === undefined) return src.skillrepo === undefined ? { error: 'taken' } : { user };
+    return user.skillcommit === commit ? { error: 'taken' } : { pin: user };
+  }
+  const base = baseline.entries.find((x) => x.skillname === name);
+  if (base) {
+    if (base.skillrepo !== undefined && src.skillrepo === base.skillrepo) return { base };
+    return { error: 'taken' };
+  }
+  return {};
+}
+
+export function add(input, options = {}) {
+  const home = options.home;
+  const catalog = readCatalog({ home });
+  if (catalog.warnings.some((w) => w.includes('MCSPARROW_HOME'))) return { ok: false, lines: [catalog.warnings.find((w) => w.includes('MCSPARROW_HOME'))] };
+  if (catalog.warnings.length > 0) return { ok: false, lines: ['ERROR user catalog: no home'] };
+  if (catalog.errors.length > 0) return { ok: false, lines: [catalog.errors[0]] };
+  const baseline = readBaseline();
+  const fail = (line) => ({ ok: false, lines: [line] });
+
+  for (const k of Object.keys(input)) if (!ADD_KEYS.includes(k) && !ADD_FLAGS.includes(k)) return fail('ERROR input: unknown field');
+  for (const k of ADD_FLAGS) if (Object.hasOwn(input, k) && typeof input[k] !== 'boolean') return fail(`ERROR ${k}: bad value`);
+  const given = {};
+  for (const k of ADD_KEYS) {
+    if (!Object.hasOwn(input, k)) continue;
+    const v = input[k];
+    if (typeof v !== 'string') return fail(`ERROR ${k}: bad value`);
+    if (/[\r\n]/.test(v)) return fail(`ERROR ${k}: line break`);
+    if (v === '') continue;
+    const reason = checkField(k, v);
+    if (reason !== null) return fail(`ERROR ${k}: ${reason}`);
+    given[k] = v;
+  }
+  if (given.repo !== undefined && given.command !== undefined) return fail('ERROR command: a skill has one source, a repo or a command');
+  if (given.commit !== undefined && given.repo === undefined) return fail('ERROR commit: needs a repo');
+  const src = given.repo !== undefined ? { skillrepo: given.repo } : given.command !== undefined ? { skillinstaller: given.command } : null;
+
+  const lines = [`ok: ${Object.keys(given).join(', ') || 'nothing yet'}`];
+  let st = {};
+  if (given.name !== undefined && src !== null) {
+    st = standing(given.name, src, given.commit, catalog, baseline);
+    if (st.error) return fail('ERROR name: taken');
+  }
+  if (st.pin) lines.push(`pin: ${st.pin.skillcommit.slice(0, 7)} -> ${given.commit.slice(0, 7)}`);
+
+  const missing = [];
+  if (given.name === undefined) missing.push('name');
+  if (src === null) missing.push('repo or command');
+  if (given.repo !== undefined && given.commit === undefined) missing.push('commit');
+  if (given.category === undefined) missing.push('category');
+  if (given.license === undefined) missing.push('license');
+  if (missing.length > 0) {
+    if (input.save === true) return fail(`ERROR input: missing ${missing.join(', ')}`);
+    lines.push(`missing: ${missing.join(', ')}`);
+    return { ok: true, lines };
+  }
+  if (input.move === true && !st.pin) return fail('ERROR move: no other commit in your list');
+
+  const entry = { skillname: given.name, skillcategory: given.category, ...src, license: given.license };
+  if (given.commit !== undefined) entry.skillcommit = given.commit;
+  const v = validateEntry(entry, 'user');
+  if (!v.ok) return fail(`ERROR ${v.field} ${v.reason}`);
+  const category = st.pin ? st.pin.skillcategory : v.entry.skillcategory;
+  const roles = eligibleRoles({ skillcategory: category }, baseline.categories);
+  lines.push('preview',
+    `Name: ${given.name}`,
+    ...(given.repo !== undefined ? [`Repo: ${given.repo}`, `Commit: ${given.commit}`] : [`Command: ${given.command} (stored text, aico never runs it)`]),
+    `Category: ${category}`,
+    `Roles that can select it: ${roles.join(', ')}`,
+    `License: ${v.entry.license}, as you stated it; nothing checks it.`,
+    given.repo !== undefined ? 'The scan runs when you install it. It stays not vetted until an install scans it clean.' : 'A skill added as a command is never scanned and shows as not vetted.',
+    st.pin ? `Saving moves it to this commit in your list, ${USER_FILE_TEXT}, and clears its hash and vetted date; its category and selections stay; it installs nothing.`
+      : `Saving adds it to your list, ${USER_FILE_TEXT}; it installs nothing.`);
+  if (input.save !== true) return { ok: true, lines };
+  if (st.pin && input.move !== true) return fail('ERROR name: another commit, set move to save it');
+  const w = addUserEntry(v.entry, { home, moveCommit: input.move === true });
+  if (!w.ok) return fail(w.error);
+  return { ok: true, lines: [`saved: ${given.name}`] };
+}
+
+export function record(input, options = {}) {
+  const opts = normalize(options);
+  const fail = (line) => ({ ok: false, lines: [line] });
+  try {
+    for (const k of Object.keys(input)) if (k !== 'entry' && k !== 'license' && k !== 'roles') return fail('ERROR input: unknown field');
+    const { entry, license, roles } = input;
+    if (!isPlain(entry)) return fail('ERROR entry: bad value');
+    for (const k of ['license', 'vetted', 'hash']) if (Object.hasOwn(entry, k)) return fail(`ERROR entry: ${k} not allowed`);
+    const v = validateEntry(entry, 'baseline');
+    if (!v.ok) return fail(`ERROR entry: ${v.field} ${v.reason}`);
+    const e = v.entry;
+    if (!Array.isArray(roles) || roles.length > MAX_ROLES_IN || roles.some((r) => typeof r !== 'string' || !ROLE_ONE_RE.test(r))) return fail('ERROR roles: bad value');
+    if (license !== undefined && typeof license !== 'string') return fail('ERROR license: bad value');
+    const chosen = [...new Set(roles)];
+
+    const first = preflight(opts);
+    if (first !== null) return fail(first);
+    const catalog = readCatalog({ home: opts.home });
+    const baseline = readBaseline();
+    const user = catalog.entries.find((x) => x.skillname === e.skillname && (x.layer === 'user' || x.pinned === true));
+    const base = baseline.entries.find((x) => x.skillname === e.skillname);
+    const same = (x) => sameSrc(x, e) && (x.skillcommit ?? null) === (e.skillcommit ?? null);
+    const existing = user ?? base;
+    const needEntry = !(existing && same(existing));
+    if (needEntry && e.skillrepo === undefined && !(existing && sameSrc(existing, e))) return fail('ERROR entry: source differs from the list');
+
+    const guarded = protectedRoles(opts.pluginRoot);
+    const category = (existing ?? e).skillcategory;
+    const offered = eligibleRoles({ skillcategory: category }, baseline.categories);
+    const project = projectList(opts.cwd);
+    for (const r of chosen) {
+      if (!offered.includes(r) || guarded.has(r)) return fail('ERROR roles: a Role is not offered for this skill');
+      const have = roleNames(project.data, r);
+      if (!have.includes(e.skillname) && have.length >= MAX_ROLE_SKILLS) return fail('ERROR roles: a Role already has 5');
+    }
+
+    const out = [];
+    if (needEntry) {
+      const text = typeof license === 'string' ? license.trim() : '';
+      if (text === '' || text === '-') return { ok: true, lines: [`no license stated: ${e.skillname}`] };
+      const u = validateEntry({ ...e, license: text }, 'user');
+      if (!u.ok) return fail(`ERROR license: ${u.reason}`);
+      const w = addUserEntry(u.entry, { home: opts.home });
+      if (!w.ok) return fail(w.error);
+      out.push(w.changed ? `entry added: ${e.skillname}` : `entry unchanged: ${e.skillname}`);
+    }
+    if (chosen.length > 0) {
+      const adds = new Map(chosen.map((r) => [r, [{ name: e.skillname, approved: opts.today }]]));
+      writeSettings({ project }, opts, adds);
+    }
+    out.push(`recorded: ${e.skillname}${chosen.length ? `, Roles ${chosen.join(', ')}` : ''}`);
+    return { ok: true, lines: out };
+  } catch (err) {
+    return fail(`ERROR ${err instanceof Stop ? err.message : 'record failed'}`);
+  }
+}
+
+const USAGE = [
+  'role-skills add      one line of JSON on stdin: { name, repo | command, commit, category, license, save, move }',
+  'role-skills record   one line of JSON on stdin: { entry, license, roles }',
+  'role-skills migrate | pending | stale',
+  'Values never go on the command line.'
+];
+
 // ---------- command line ----------
 
 // Mirrors: the shell words of this command line. Only line numbers, skill names and Role ids in fixed patterns pass;
@@ -488,7 +698,15 @@ export function main(args, ctx = {}) {
       r.lines.forEach(log);
       return r.ok ? 0 : 1;
     }
-    log('ERROR usage: role-skills migrate | pending | stale');
+    if (cmd === 'help' && rest.length === 0) { USAGE.forEach(log); return 0; }
+    if (cmd === 'add' || cmd === 'record') {
+      if (rest.length > 0) { log(`ERROR usage: role-skills ${cmd} takes its values as one line of JSON on stdin, not on the command line`); return 1; }
+      const input = readInput(ctx);
+      const r = cmd === 'add' ? add(input, base) : record(input, base);
+      r.lines.forEach(log);
+      return r.ok ? 0 : 1;
+    }
+    log('ERROR usage: role-skills add | record | migrate | pending | stale | help');
     return 1;
   } catch (e) {
     log(`ERROR ${e instanceof Stop ? e.message : 'role-skills failed'}`);

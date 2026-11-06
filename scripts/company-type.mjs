@@ -12,8 +12,8 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_PLUGIN_ROOT = path.join(import.meta.dirname, '..');
 
 export const TYPE_ORDER = Object.freeze(['software', 'research', 'marketing', 'design']);
-export const ALWAYS = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'reprompt']);
-export const CEO_ONLY = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs']);
+export const ALWAYS = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'add-skill', 'reprompt']);
+export const CEO_ONLY = Object.freeze(['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs', 'add-skill']);
 
 const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const HINT_LINE_RE = /^argument-hint:[ 	]*\S/;

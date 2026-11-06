@@ -165,7 +165,7 @@ const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(tex
 // Every Playbook: a skill whose frontmatter has an argument-hint line.
 const PLAYBOOK_SKILLS = fs.readdirSync(path.join(root, 'skills'))
   .filter(n => exists(`skills/${n}/SKILL.md`) && frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint']).sort();
-const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'reprompt'];
+const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'add-skill', 'reprompt'];
 const TYPES = ['software', 'research', 'marketing', 'design'];
 const manifest = id => json(`company/types/${id}.json`);
 
@@ -846,7 +846,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
   const t = sb.typeJson(['resolve']);
-  assert.equal(t.playbooks.length, 33);
+  assert.equal(t.playbooks.length, 34);
   assert.deepEqual([...t.playbooks].sort(), [...expectedPlaybooks, ...ALWAYS].sort());
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
@@ -855,7 +855,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();
-    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs'].includes(n)).sort(), basePlaybooks);
+    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs', 'add-skill'].includes(n)).sort(), basePlaybooks);
   }
 });
 
