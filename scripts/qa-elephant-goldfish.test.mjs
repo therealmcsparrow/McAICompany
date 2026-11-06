@@ -1499,7 +1499,7 @@ describe('AC15 without the drift argument no drift Step is dispatched', () => {
   const maintain = read('skills', 'maintain', 'SKILL.md');
 
   test('the Playbook runs the drift Step only when the argument is exactly drift', () => {
-    assert.match(maintain, /^argument-hint: \[drift\]$/m);
+    assert.match(maintain, /^argument-hint: "\[drift\]"$/m);
     assert.match(maintain, /The only argument besides `help` is `drift`/);
     assert.match(maintain, /only when the argument is exactly `drift`; without it, no drift Step is dispatched and `pick` is not run/);
   });

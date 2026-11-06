@@ -350,7 +350,7 @@ describe('maintain Playbook', () => {
     assert.match(mentions[0], /only when the argument is exactly `drift`/);
     assert.match(mentions[0], /without it, no drift Step is dispatched and `pick` is not run/);
     assert.match(mentions[0], /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run\.mjs" drift-report pick/);
-    assert.match(skill, /^argument-hint: \[drift\]$/m);
+    assert.match(skill, /^argument-hint: "\[drift\]"$/m);
   });
 
   test('the routine steps do not mention the report', () => {
