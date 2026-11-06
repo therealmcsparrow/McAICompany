@@ -176,7 +176,7 @@ test('AC22 skill-picks asks each new entry\'s license, then records one pick per
 
 test('skill-picks: post-install reads --selected and scans catalog scope user as global', () => {
   const p = read('skills/lead/references/skill-picks.md');
-  has(p, 'the form of `aico:pipeline` §1.19 b', '`install-skills --selected` output', '--scope <project, or global for a skill whose scope is user>', 'stores no hash');
+  has(p, 'the form of `aico:pipeline` §1.19 b', 'each approved repo pick that got Install', 'A pick that got Skip has no install line and no checks', '`install-skills --selected` output', '--scope <project, or global for a skill whose scope is user>', 'stores no hash');
   assert.ok(!p.includes('check-install'), 'Role skill installs have no lock file to check');
   assert.ok(!p.includes('--scope project --skill'), 'a user scope skill is not scanned at project scope');
   assert.ok(!/## (Design skills|Skills)`/.test(p), 'no old section is written');
