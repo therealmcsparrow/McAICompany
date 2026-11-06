@@ -2,7 +2,7 @@
 // Installs the standalone skills aico points to (deps/skills.json) that are not installed yet.
 // Usage: node install-skills.mjs [group ...] [--project <root>/.company/project.md] [--dry-run | --missing]
 //       node install-skills.mjs --retired | --remove <name> [--dry-run]
-//   default group: core. Groups `design` and `skills` need --project. contract: docs/contracts/skills-manifest.md v2.6
+//   default group: core. Groups `design` and `skills` need --project. contract: docs/contracts/skills-manifest.md v3.0
 import { readFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -491,7 +491,7 @@ export function main(args, env = {}) {
     const printManual = () => manual.forEach(c => {
       log(`manual ${c.cmd}`);
       const name = Object.values(manifest).flat().find(e => e?.install === c.cmd)?.name ?? 'This command';
-      const text = `WARNING: ${name} is a third-party installer that aico has not inspected, so it was not run. To install it, run it yourself from your home folder only, never from a product folder, because a repo's own copy of the package would run instead. Run it only if you trust it: cd ~ && ${c.cmd}`;
+      const text = `WARNING: ${name} is a third-party installer that aico has not inspected, so it was not run. To install it, run it yourself from your home folder only, never from a product folder, because a repo's own copy of the package would run instead. Run it only if you trust it. First change to your home folder, then run: ${c.cmd}`;
       log(color ? `[33m${text}[0m` : text);
     });
     runnable.forEach(c => log(`${dry ? '[dry-run] ' : '$ '}${show(c)}`));

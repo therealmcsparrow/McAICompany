@@ -37,15 +37,14 @@ test('the Playbooks that show the dry run tell the Lead to mark the WARNING line
   }
 });
 
-test('vulnscan notice, docs page and agent name the audit destinations and private names', () => {
+test('vulnscan notice and docs page are general: kinds of destinations and private names, no exact list', () => {
   for (const f of ['skills/vulnscan/SKILL.md', 'documentation/commands/vulnscan.md']) {
     const t = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     assert.doesNotMatch(t, /nothing else leaves/, f);
-    for (const w of ['npm audit', 'pip-audit', 'cargo audit', 'osv-scanner', 'govulncheck', 'private package names', 'web search']) assert.ok(t.includes(w), `${f}: ${w}`);
+    for (const w of ['vulnerability databases', 'package registries', 'web search', 'private package names']) assert.ok(t.includes(w), `${f}: ${w}`);
   }
   const a = readFileSync(new URL('../agents/vuln-scanner.md', import.meta.url), 'utf8');
-  assert.match(a, /unscanned and never queried/);
-  assert.match(a, /no code text/);
+  assert.match(a, /no code text/i);
   assert.match(readFileSync(new URL('../documentation/concepts/where-your-words-go.md', import.meta.url), 'utf8'), /aico:vulnscan/);
 });
 

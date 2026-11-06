@@ -121,6 +121,18 @@ test('B2c write_env judges the file by its real repo, from outside the repo and 
   assert.match(missing.out, /does not exist/);
 });
 
+test('B2c write_env cannot be steered by an exported CDPATH, GIT_DIR or GIT_WORK_TREE (hostile environment)', { skip: !bashOk }, () => {
+  const call = 'ENV_FILE=config/.env write_env KEY dummy-value';
+  const cdpath = envCase('mkdir -p config "$W/other/config"; export CDPATH="$W/other"', call + '; r=$?; test -f config/.env && echo "WROTE:yes" || echo "WROTE:no"; (exit $r)');
+  assert.equal(cdpath.rc, '1', 'CDPATH: ' + cdpath.out);
+  assert.match(cdpath.out, /Refusing to write KEY/);
+  assert.match(cdpath.out, /WROTE:no/, 'CDPATH: file exists: ' + cdpath.out);
+  const gitVars = 'mkdir -p "$W/tree/config" "$W/bare" && git init -q --bare "$W/bare" >/dev/null 2>&1; cd "$W/tree"; export GIT_DIR="$W/bare" GIT_WORK_TREE="$W/tree"';
+  const hostile = envCase(gitVars, call + '; r=$?; test -f "$W/tree/config/.env" && echo "WROTE:yes" || echo "WROTE:no"; (exit $r)');
+  assert.equal(hostile.rc, '1', 'GIT_DIR: ' + hostile.out);
+  assert.match(hostile.out, /WROTE:no/, 'GIT_DIR: file exists: ' + hostile.out);
+});
+
 test('B2c set_secret pipes the value to gh on stdin and keeps it out of argv (stub gh)', { skip: !bashOk }, () => {
   const stub = 'printf "%s\\n" "$@" > "$W_REC/argv"; cat > "$W_REC/stdin"';
   const body = prelude + 'REC="$W/rec"; mkdir -p "$REC"; export W_REC="$REC"\n'
@@ -145,7 +157,9 @@ test('B12 a dry-run WARNING is shown to the CEO in feature and in the skill-pick
   assert.ok(d1, 'feature has the warnings line');
   assert.match(d1, /every `WARNING:` line/);
   assert.match(d1, /`gates\.installs` is `auto`/, 'the auto path shows them too');
-  assert.match(d1, /cd ~ &&/);
+  assert.match(d1, /change to the home folder first, then run the printed command/);
+  assert.doesNotMatch(d1, /\(`cd ~ && <cmd>`\)/);
+  assert.match(d1, /no Install form/, 'manual-only dry run offers no Install');
   assert.match(d1, /never from a product folder/);
   const picks = read('skills/lead/references/skill-picks.md');
   assert.match(picks, /show every `WARNING:` line from the dry run/);
@@ -166,8 +180,11 @@ test('B3b cooler topic slug is an allow-list, not a deny-list (cooler:16)', () =
   assert.ok(file, 'File line exists');
   assert.ok(file.includes('`^[a-z0-9]+(-[a-z0-9]+){0,4}$`'), `slug rule is the anchored allow-list regex: ${file}`);
   assert.match(file, /uses `chat`/, `a topic with no usable slug falls back to chat: ${file}`);
-  const re = /^[a-z0-9]+(-[a-z0-9]+){0,4}$/;
-  for (const bad of ['', '-a', 'a-', 'a--b', 'a-b-c-d-e-f', 'a$b', '`x`']) assert.ok(!re.test(bad), `"${bad}" must not pass`);
+  const src = /matching `(\^[^`]+\$)`/.exec(file);
+  assert.ok(src, `the slug regex is quoted in the File line: ${file}`);
+  const re = new RegExp(src[1]);
+  for (const bad of ['', '-a', 'a-', 'a--b', 'a-b-c-d-e-f', 'a$b', '`x`', 'a;b', 'A']) assert.ok(!re.test(bad), `"${bad}" must not pass`);
+  for (const good of ['login', 'a-b-c-d-e', 'chat', 'v2-plan']) assert.ok(re.test(good), `"${good}" must pass`);
   assert.ok(!/no `\\ \/ : \* \?/.test(file), 'the deny-list of characters is gone ($, backtick and ; passed through it)');
 });
 
@@ -258,21 +275,26 @@ test('S7 vulnscan tells the CEO, before the scan, that dependency names go to pu
   assert.ok(t.indexOf(notice) < t.indexOf('1. `aico:vuln-scanner`'), 'the notice comes after the scan starts');
 });
 
-test('S7b vulnscan notice names every destination and the model, in the skill and its doc page', () => {
+test('S7b vulnscan notice is a general notice: kinds of destinations, examples only, the model, and a direct dispatch', () => {
   for (const f of ['skills/vulnscan/SKILL.md', 'documentation/commands/vulnscan.md']) {
     const t = read(f);
-    for (const need of ['web search', 'CISA KEV', 'ecosystem', 'npm audit', 'pip-audit', 'cargo audit', 'osv-scanner', 'govulncheck', 'private package names']) {
+    for (const need of ['vulnerability databases', 'package registries', 'web search', 'private package names', 'Examples, not a complete list', 'direct']) {
       assert.ok(t.includes(need), f + ': notice misses ' + need);
     }
     assert.match(t, /Claude model[^.]*recipient/, f + ': the model is not named as a recipient');
     assert.doesNotMatch(t, /nothing else leaves the repo/i, f + ': the nothing-else claim is untrue');
+    assert.doesNotMatch(t, /never queried|not queried|CEO was told|you are told before/i, f + ': claim the notice cannot back');
   }
+  const skill = read('skills/vulnscan/SKILL.md');
+  assert.match(skill, /on a direct dispatch too/, 'the notice is not required on a direct dispatch');
+  assert.match(skill, /whoever dispatches gives the same notice first/, 'the direct-dispatch line does not carry the notice');
 });
 
 test('R-3 the manifest-command warning says home folder only, never a product folder, in every place that states it', () => {
-  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md']) {
+  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md', 'skills/research/SKILL.md', 'skills/feature/SKILL.md', 'skills/lead/references/skill-picks.md']) {
     const t = read(f);
-    assert.match(t, /cd ~ &&/, f + ': no home-folder command form');
+    assert.match(t, /home folder/, f + ': no home-folder rule');
+    assert.doesNotMatch(t, /\(`cd ~ && <cmd>`\)/, f + ': a cd ~ && form that fails in cmd.exe and Windows PowerShell 5.1');
     assert.match(t, /never from a product folder/, f + ': no product-folder ban');
     assert.match(t, /repo's own copy/, f + ': does not say a repo copy runs');
     assert.doesNotMatch(t, /only in a repo (you|they) trust/, f + ': old trust-the-repo wording');

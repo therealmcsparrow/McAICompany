@@ -1069,7 +1069,7 @@ test('main: a manifest command at project scope is printed as manual, never run,
     assert.equal(res.code, 0, res.out);
     assert.deepEqual(res.calls, []);
     assert.match(res.out, /^manual npx -y impeccable skills install$/m);
-    assert.match(res.out, /^WARNING: impeccable .*third-party.*home folder only, never from a product folder.*cd ~ && npx -y impeccable skills install/m);
+    assert.match(res.out, /^WARNING: impeccable .*third-party.*home folder only, never from a product folder.*then run: npx -y impeccable skills install$/m);
     assert.doesNotMatch(res.out, /FAILED/);
     assert.match(res.out, /0 installed, 0 failed/);
   } finally { s.done(); }
@@ -1097,7 +1097,7 @@ test('main: a manifest command at user scope is printed as manual with a WARNING
   assert.match(w[0], /home folder only, never from a product folder/);
   assert.match(w[0], /repo's own copy/);
   assert.match(w[0], /only if you trust it/);
-  assert.ok(w[0].endsWith(`cd ~ && ${PINNED_IMPECCABLE}`), w[0]);
+  assert.ok(w[0].endsWith(`then run: ${PINNED_IMPECCABLE}`), w[0]);
   assert.ok(!out.join('').includes(''));
   assert.ok(out.includes('1 installed, 0 failed'), out.join('|'));
 });
@@ -1120,7 +1120,7 @@ test('main: the old unpinned impeccable line is accepted and printed as manual w
       assert.equal(res.code, 0, res.out);
       assert.deepEqual(res.calls, []);
       assert.match(res.out, new RegExp(`^manual ${PINNED_IMPECCABLE}$`, 'm'));
-      assert.match(res.out, /^WARNING: impeccable .*cd ~ && npx -y impeccable@4\.8\.0 skills install$/m);
+      assert.match(res.out, /^WARNING: impeccable .*then run: npx -y impeccable@4\.8\.0 skills install$/m);
       assert.doesNotMatch(res.out, /ERROR|FAILED/);
     } finally { s.done(); }
   }
@@ -1144,7 +1144,7 @@ test('main: a dry run marks a manifest command manual and still shows the WARNIN
     assert.deepEqual(res.calls, []);
     assert.match(res.out, new RegExp(`^manual ${PINNED_IMPECCABLE}$`, 'm'));
     assert.doesNotMatch(res.out, /^\[dry-run\] .*impeccable/m);
-    assert.match(res.out, /^WARNING: impeccable .*cd ~ && npx -y impeccable@4\.8\.0 skills install$/m);
+    assert.match(res.out, /^WARNING: impeccable .*then run: npx -y impeccable@4\.8\.0 skills install$/m);
   } finally { s.done(); }
 });
 
