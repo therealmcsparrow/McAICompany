@@ -1520,7 +1520,7 @@ describe('AC25 no dispatch carries a Name: line; names appear only to the CEO', 
 
   test('the dispatch Contract is v4.0 and says the Name: line is removed and ignored when present', () => {
     const text = read('docs', 'contracts', 'dispatch-prompt.md');
-    assert.match(text.split('\n')[0], /^# Contract: dispatch-prompt v4\.\d$/);
+    assert.match(text.split('\n')[0], /^# Contract: dispatch-prompt v5\.\d$/);
     assert.match(text, /v4\.0 is \*\*breaking\*\*[^\n]*the `Name:` line is removed from every prompt and order/);
     assert.match(text, /`Name:` present[^\n]*the Role ignores the line and uses its Role id/);
     const pipeline = read('skills', 'pipeline', 'SKILL.md');

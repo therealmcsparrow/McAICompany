@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadGolden } from './contract-fixtures.mjs';
 
-// Drift test for the canonical dispatch line order (dispatch-prompt v4) plus one
+// Drift test for the canonical dispatch line order (dispatch-prompt v5) plus one
 // assertion per wiring rule of skills/pipeline. The order is for reading only: no cache claim anywhere.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -225,7 +225,7 @@ test('no canonical order in the Contract lists Name:, and the fixture order has 
   assert.equal(orders.length, 3);
   for (const l of orders) assert.ok(!l.includes('`Name:`'), l.slice(0, 60));
   assert.ok(!PIPELINE_ORDER.includes('Name') && !ROUND_1.includes('Name'));
-  assert.match(contract, /^# Contract: dispatch-prompt v4\.\d$/m);
+  assert.match(contract, /^# Contract: dispatch-prompt v5\.\d$/m);
 });
 
 test('a Name: line in a prompt is ignored and the Role id is used (error case)', () => {
@@ -253,8 +253,8 @@ const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
 test('the Contract is v4.4 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v4.4$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.4');
+  assert.match(contract, /^# Contract: dispatch-prompt v5.0$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '5.0');
   has(contract, 'v4.1 is additive', 'v4.2 is additive', 'v4.3 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 

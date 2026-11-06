@@ -40,7 +40,7 @@ test('every tier gets 95000 85500: Setup item 8 has no settings read and no high
 });
 
 test('the contract states the fixed line for every Role and tier at v4.4', () => {
-  has(contract, '# Contract: dispatch-prompt v4.4', 'v4.4 is additive');
+  has(contract, '# Contract: dispatch-prompt v5.0', 'v4.4 is additive');
   has(contract, LINE, 'every Role', 'every Risk tier');
   hasNot(contract, /max\(that value, 150000\)/);
 });

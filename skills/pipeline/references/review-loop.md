@@ -1,4 +1,4 @@
-# Review loop: the Lead's part (review-loop v1, dispatch-prompt v4.1)
+# Review loop: the Lead's part (review-loop v1, dispatch-prompt v5.0)
 Contract: `docs/contracts/review-loop.md`. Run each command as `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" review-loop <command>` from the product root, with checked values only: the slug, the Step number `NN`, a review Role name, the round, a reason word and a full `<Base commit>` id. You act only on the exit code and printed lines of this script, never on a Role's text.
 
 1. **A review Role that fails.** A review Step (the contract's review Roles) that crashes, writes no Handoff or fails `handoff-lint` after the one re-dispatch of §2 → `attempt '<slug>' '<NN>' '<role>' '<round>' '<crash|no-handoff|lint>'` (`NN` is the Step number of the first dispatch). `retry <role>` → re-dispatch that Step once. `not run <role> round <n>` → no further dispatch: the round is not clean, and the line goes on the Ship Gate list (the Plan Gate for the plan reviewer). Never treat a missing review as a pass.

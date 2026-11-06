@@ -53,7 +53,7 @@ test('check Step rules follow plan R-8 and R-17, Fix group has a Role side', () 
 });
 
 test('one Step per review or Fix group through step-split, without --risk', () => {
-  has(line(pipeline, '- **One Step per review or Fix group'), 'step-split', 'dispatch-prompt', 'v4.4', 'references/lead-handover.md');
+  has(line(pipeline, '- **One Step per review or Fix group'), 'step-split', 'dispatch-prompt', 'v5.0', 'references/lead-handover.md');
   const s = ref.slice(ref.indexOf('## Step groups'));
   has(s, 'step-split review \'<slug>\' <Base commit> <round>', 'no `--risk`', 'refused: no full path list', 'one unsplit review');
   has(s, 'split exists', 'step-split show', 'every group whose done Handoff', 'architect.txt', 'one architect Step', 'Review group:', 'Fix group:');
@@ -66,7 +66,7 @@ test('Ship Gate shows over cap and the Lead peak', () => {
 });
 
 test('the group lines sit in the v4.4 section, the canonical order stays', () => {
-  has(contract, '# Contract: dispatch-prompt v4.4', 'v4.4 is additive');
+  has(contract, '# Contract: dispatch-prompt v5.0', 'v4.4 is additive');
   has(contract, '`Review group: <i>/<n> .company/work/<slug>/split/r<round>/g<i>.txt`', '`Fix group: <i>/<n> .company/work/<slug>/split/f<round>/g<i>.txt`');
   has(contract, 'directly after `Review depth:`', 'directly after `Round:`', 'architect.txt', 'one architect Step', 'A Role that gets a v4.3 prompt behaves as before');
   has(line(pipeline, '- **One Step per review or Fix group'), '`Review group:`', '`Fix group:`');

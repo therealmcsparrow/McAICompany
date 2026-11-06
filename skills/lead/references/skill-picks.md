@@ -1,6 +1,6 @@
-# Skill picks (the Lead's side of `skill-recommendation` v1)
+# Skill picks (the Lead's side of `skill-recommendation` v2)
 
-Load when the route has a `skill-researcher` Step. Contracts: `docs/contracts/skill-recommendation.md`, `skillspector-scan` v1, `skills-section` v1, `design-skills-section` v1. The Role finds and vets by reading and has no Bash. You scan every pick (`vet`), and only you add skills, and only after both forms below (agentsec.M-SEC4).
+Load when the route has a `skill-researcher` Step. Contracts: `docs/contracts/skill-recommendation.md`, `skillspector-scan` v1, `skills-section` v2, `design-skills-section` v2. The Role finds and vets by reading and has no Bash. You scan every pick (`vet`), and only you add skills, and only after both forms below (agentsec.M-SEC4).
 
 ## 1. Before the dispatch
 Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" skillspector detect --json`. `installed: false` → offer the SkillSpector install form from `skills/skillspector/SKILL.md` (always asked, whatever `gates.installs` says). Skip → no dispatch; the Gate summary says "no skill picks without the scanner".
