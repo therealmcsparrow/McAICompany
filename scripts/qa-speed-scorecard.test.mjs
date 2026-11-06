@@ -1087,8 +1087,8 @@ function releaseBox(t) {
   w('CHANGELOG.md', CHANGELOG);
   w('scripts/check.mjs', 'console.log("check ok");\n');
   w('scripts/ok.mjs', 'console.log("tests ok");\n');
-  // The release builds its SBOM from the skill list and the lockfile of the product it runs in.
-  for (const rel of ['deps/skills.json', 'tools/claude-cli/package-lock.json']) w(rel, fs.readFileSync(path.join(repoRoot, rel), 'utf8'));
+  // The release builds its SBOM from the baseline catalog and the lockfile of the product it runs in.
+  for (const rel of ['deps/3rdpartyskills.json', 'tools/claude-cli/package-lock.json']) w(rel, fs.readFileSync(path.join(repoRoot, rel), 'utf8'));
   w('package.json', '{ "name": "t", "type": "module", "scripts": { "test": "node scripts/ok.mjs" } }\n');
   git(root, env, 'add', '-A');
   git(root, env, 'commit', '-q', '-m', 'init');

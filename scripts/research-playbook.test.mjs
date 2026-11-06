@@ -57,14 +57,15 @@ test('AC6 quick caps fetches at 10; deep needs 3 independent primary sources', (
 });
 
 test('AC7 research group holds find-skills with license and vetted, core includes it; no mattpocock plugin', () => {
-  const m = JSON.parse(read('deps/skills.json'));
-  assert.ok(m.core.some((e) => e.include === 'research'));
-  assert.ok(Array.isArray(m.research) && m.research.length >= 1);
-  for (const e of m.research) {
-    assert.ok(e.license && e.vetted, `research entry ${e.name} needs license and vetted`);
+  const b = JSON.parse(read('deps/3rdpartyskills.json'));
+  assert.ok(b.groups.core.some((e) => e.include === 'research'));
+  assert.ok(Array.isArray(b.groups.research) && b.groups.research.length >= 1);
+  for (const n of b.groups.research) {
+    const e = b.entries.find((x) => x.skillname === n);
+    assert.ok(e && e.license && e.vetted, `research entry ${n} needs license and vetted`);
     assert.ok(!/api[-_ ]?key/i.test(JSON.stringify(e)));
   }
-  assert.ok(m.research.some((e) => e.name === 'find-skills'));
+  assert.ok(b.groups.research.includes('find-skills'));
   has(research, 'anthropic-skills:deep-research', 'optional, never shown');
 });
 

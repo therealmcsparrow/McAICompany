@@ -7,7 +7,7 @@
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
+import { manifestFromBaseline, parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
 import { NAME_RE, settingsMode, vetCandidates } from './skillspector.mjs';
 import { approvable, readBaseline, validateEntry } from './skill-catalog.mjs';
 import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
@@ -71,8 +71,9 @@ function frontmatterArea(lines) {
   return null;
 }
 
+// The baseline's group map. An unreadable baseline stops the run, so no command line is judged against an empty list.
 function loadManifest() {
-  try { return JSON.parse(readFileSync(join(ROOT, 'deps', 'skills.json'), 'utf8')); } catch { return {}; }
+  try { return manifestFromBaseline(readBaseline()); } catch { throw new Refused('baseline catalog unreadable'); }
 }
 
 const verdict = (n, ok, field, reason) => {

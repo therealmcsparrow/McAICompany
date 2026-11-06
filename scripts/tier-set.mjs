@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1.5). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v1.6). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha

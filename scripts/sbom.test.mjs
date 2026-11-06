@@ -12,15 +12,33 @@ const SHA1 = Buffer.alloc(20, 0x12);
 const sri512 = `sha512-${SHA512.toString('base64')}`;
 const sri1 = `sha1-${SHA1.toString('base64')}`;
 
-const SKILLS = {
-  core: [
-    { name: 'find-skills', source: 'vercel-labs/skills' },
-    { name: 'impeccable', install: 'npx -y impeccable skills install' },
-    { include: 'research' }
-  ],
-  research: [{ name: 'find-skills', source: 'vercel-labs/skills', license: 'MIT' }],
-  go: [{ name: 'golang-*', source: 'samber/cc-skills-golang' }]
+const CATEGORIES = {
+  engineering: ['architect', 'devops'],
+  design: ['ui-ux-designer'],
+  security: ['security'],
+  quality: ['qa'],
+  product: ['product-manager'],
+  research: ['skill-researcher'],
+  content: ['writer']
 };
+
+function catalog({ groups, entries }) {
+  return { schema: 1, categories: CATEGORIES, groups, entries };
+}
+
+const SKILLS = catalog({
+  groups: {
+    core: ['find-skills', 'impeccable', { include: 'research' }],
+    research: ['find-skills'],
+    go: ['golang-*']
+  },
+  entries: [
+    { skillname: 'find-skills', skillcategory: 'research', skillrepo: 'vercel-labs/skills', license: 'MIT' },
+    { skillname: 'impeccable', skillcategory: 'design', skillinstaller: 'npx -y impeccable@4.8.0 skills install', license: 'Apache-2.0' },
+    { skillname: 'golang-*', skillcategory: 'engineering', skillrepo: 'samber/cc-skills-golang' },
+    { skillname: 'aico:ui-design', skillcategory: 'design', skillplugin: 'aico' }
+  ]
+});
 
 const LOCK = {
   lockfileVersion: 3,
@@ -50,7 +68,7 @@ function project(t, { skills = SKILLS, lock = LOCK, plugin = { name: 'aico', ver
     fs.writeFileSync(path.join(root, rel), typeof v === 'string' ? v : JSON.stringify(v));
   };
   put('.claude-plugin/plugin.json', plugin);
-  put('deps/skills.json', skills);
+  put('deps/3rdpartyskills.json', skills);
   put('tools/claude-cli/package-lock.json', lock);
   return { root, put };
 }
@@ -86,7 +104,7 @@ function checkBom(bom) {
   }
 }
 
-test('the SBOM lists the plugin, every skills entry once and every lockfile package', (t) => {
+test('the SBOM lists the plugin, every grouped skill once and every lockfile package', (t) => {
   const { root } = project(t);
   const bom = buildSbom({ root });
   checkBom(bom);
@@ -98,6 +116,46 @@ test('the SBOM lists the plugin, every skills entry once and every lockfile pack
   ]);
   const find = bom.components.find((c) => c.name === 'find-skills');
   assert.equal(find.properties[0].value, 'core,research');
+});
+
+test('a skill in no group adds no component, and the old file is not read', (t) => {
+  const { root, put } = project(t);
+  put('deps/skills.json', { core: [{ name: 'only-in-old-file', source: 'a/b' }] });
+  const refs = buildSbom({ root }).components.map((c) => c['bom-ref']).filter((r) => r.startsWith('skill:')).sort();
+  assert.deepEqual(refs, ['skill:find-skills@vercel-labs/skills', 'skill:golang-*@samber/cc-skills-golang', 'skill:impeccable@local']);
+});
+
+test('the SBOM reads the baseline only: a planted user file never reaches it', (t) => {
+  const { root, put } = project(t);
+  put('.mcsparrow/3rdpartyskills.json', { schema: 1, entries: [{ skillname: 'secret-token-abc123', skillrepo: 'evil/repo', license: 'MIT' }] });
+  const env = { ...process.env, HOME: root, USERPROFILE: root, MCSPARROW_HOME: path.join(root, '.mcsparrow') };
+  const res = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env });
+  assert.equal(res.status, 0, res.stderr);
+  assert.ok(!res.stdout.includes('secret-token-abc123') && !res.stdout.includes('evil/repo'));
+});
+
+test('a component keeps the wildcard and command forms, and takes its licence from the baseline', (t) => {
+  const bom = buildSbom({ root: project(t).root });
+  const wild = bom.components.find((c) => c.name === 'golang-*');
+  assert.equal(wild.purl, 'pkg:github/samber/cc-skills-golang');
+  assert.equal(wild.licenses, undefined);
+  const cmd = bom.components.find((c) => c.name === 'impeccable');
+  assert.equal(cmd.purl, undefined);
+  assert.deepEqual(cmd.licenses, [{ license: { id: 'Apache-2.0' } }]);
+});
+
+test('the shipped baseline gives the bom-ref set the old inventory gave', () => {
+  const bom = buildSbom({ root: path.join(import.meta.dirname, '..') });
+  const refs = bom.components.map((c) => c['bom-ref']).filter((r) => r.startsWith('skill:')).sort();
+  assert.deepEqual(refs, [
+    'skill:auth-implementation-patterns@wshobson/agents', 'skill:find-skills@vercel-labs/skills', 'skill:frontend-ui-engineering@addyosmani/agent-skills',
+    'skill:golang-*@samber/cc-skills-golang', 'skill:hallmark@nutlope/hallmark', 'skill:impeccable@local', 'skill:security-and-hardening@addyosmani/agent-skills',
+    'skill:security-review@getsentry/skills', 'skill:tanstack-form@tanstack-skills/tanstack-skills', 'skill:tanstack-query@tanstack-skills/tanstack-skills',
+    'skill:tanstack-router@tanstack-skills/tanstack-skills', 'skill:tanstack-table@tanstack-skills/tanstack-skills',
+    'skill:two-factor-authentication-best-practices@better-auth/skills', 'skill:typescript-advanced-types@wshobson/agents',
+    'skill:vercel-composition-patterns@vercel-labs/agent-skills', 'skill:vercel-react-best-practices@vercel-labs/agent-skills'
+  ].sort());
+  assert.ok(!refs.some((r) => r.includes('ui-design')));
 });
 
 test('npm purls encode the scope and use the lockfile version', (t) => {
@@ -184,14 +242,16 @@ test('hostile inputs stop the build', (t) => {
     'lock too many': { lockfileVersion: 3, packages: Object.fromEntries(Array.from({ length: 5001 }, (_, i) => [`node_modules/p${i}`, { version: '1.0.0' }])) }
   };
   for (const [label, lock] of Object.entries(cases)) assert.throws(() => buildSbom({ root: project(t, { lock }).root }), SbomError, label);
+  const entry = (e) => catalog({ groups: { core: ['a'] }, entries: [{ skillname: 'a', skillcategory: 'engineering', skillrepo: 'o/r', ...e }] });
   const skills = {
-    'skills not object': [],
-    'skills group not list': { core: {} },
-    'skills bad name': { core: [{ name: 'a b' }] },
-    'skills bad source': { core: [{ name: 'a', source: '../x' }] },
-    'skills entry not object': { core: [5] }
+    'baseline not object': [],
+    'baseline group not list': catalog({ groups: { core: {} }, entries: SKILLS.entries }),
+    'baseline bad name': entry({ skillname: 'a b' }),
+    'baseline bad source': entry({ skillrepo: '../x' }),
+    'baseline entry not object': catalog({ groups: { core: [] }, entries: [5] }),
+    'baseline unknown key': { ...SKILLS, extra: 1 },
+    'baseline text not json': 'not json'
   };
-  for (const [label, s] of Object.entries(skills)) assert.throws(() => buildSbom({ root: project(t, { skills: s }).root }), SbomError, label);
   assert.throws(() => buildSbom({ root: project(t, { plugin: { name: 'aico', version: '1.2' } }).root }), SbomError);
   const big = project(t);
   big.put('tools/claude-cli/package-lock.json', ' '.repeat(9 * 1024 * 1024));

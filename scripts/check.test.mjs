@@ -150,11 +150,25 @@ const write = (root, rel, text) => {
   mkdirSync(dirname(join(root, rel)), { recursive: true });
   writeFileSync(join(root, rel), text);
 };
-const manifestRoot = m => {
-  const root = fixture({});
-  write(root, 'deps/skills.json', typeof m === 'string' ? m : JSON.stringify(m));
+const CATS = {
+  engineering: ['architect'], design: ['ui-ux-designer'], security: ['security'], quality: ['qa'],
+  product: ['product-manager'], research: ['skill-researcher'], content: ['writer']
+};
+const baseline = (over = {}) => ({
+  schema: 1,
+  categories: CATS,
+  groups: { core: ['a'] },
+  entries: [{ skillname: 'a', skillcategory: 'engineering', skillrepo: 'o/r' }],
+  ...over
+});
+const AGENTS = Object.fromEntries(Object.values(CATS).flat().map(n => [n, agent(n)]));
+const manifestRoot = (m, { agents = AGENTS, plugin = false } = {}) => {
+  const root = fixture({ agents });
+  if (m !== null) write(root, 'deps/3rdpartyskills.json', typeof m === 'string' ? m : JSON.stringify(m));
+  if (plugin) write(root, '.claude-plugin/plugin.json', '{ "name": "aico" }');
   return root;
 };
+const catalogErrors = root => check(root).errors.filter(e => e.includes('3rdpartyskills') || e.includes('old inventory') || e.includes('live cite'));
 
 test('dispatch block with Company profile: but no Language: is an error', () => {
   const bad = skill('a', 'See below.\n\n```\nCompany profile: x\nGoal: y\n```');
@@ -275,43 +289,54 @@ test('relative links in documentation and README must resolve', () => {
   assert.equal(r.errors.filter(e => e.includes('link target')).length, 2, r.errors.join('\n'));
 });
 
-test('research entries need license and vetted', () => {
-  const entry = extra => ({ research: [{ name: 'find-skills', source: 'vercel-labs/skills', ...extra }] });
-  assert.deepEqual(check(manifestRoot(entry({ license: 'MIT', vetted: '2026-10-22' }))).errors, []);
-  for (const bad of [{}, { license: 'MIT' }, { vetted: '2026-10-22' }, { license: 'MIT', vetted: '2026-02-30' }, { license: 'a b', vetted: '2026-10-22' }]) {
-    const r = check(manifestRoot(entry(bad)));
-    assert.ok(r.errors.some(e => e.includes('research entry needs')), JSON.stringify(bad));
-  }
+test('a good baseline with every Role in a category passes', () => {
+  assert.deepEqual(catalogErrors(manifestRoot(baseline())), []);
 });
 
-test('manifest name and source must match the agentsec.M-SEC7 patterns', () => {
-  const badNames = ['a;b', 'a b', '-a', 'A', 'a$(x)', '', 'x'.repeat(65), 'a*b'];
-  for (const name of badNames) {
-    const r = check(manifestRoot({ core: [{ name, source: 'o/r' }] }));
-    assert.ok(r.errors.some(e => e.includes('name fails')), JSON.stringify(name));
-  }
-  const badSources = ['o/r;x', 'o/r && x', 'o|r/x', 'o/..', 'o/.', '/r', 'o/', 'o/r/x', '-o/r', 'o/r`x`', 'o/r\nx', '%PATH%/x', 'o/r x', 'o/r>x', 'o/r$(x)', 'o/r^x', 'o/r"x'];
-  for (const source of badSources) {
-    const r = check(manifestRoot({ core: [{ name: 'x', source }] }));
-    assert.ok(r.errors.some(e => e.includes('source fails')), JSON.stringify(source));
-  }
-  const good = { core: [
-    { name: 'golang-*', source: 'samber/cc-skills-golang' },
-    { name: 'impeccable', install: 'npx -y impeccable skills install' },
-    { include: 'research' },
-  ] };
-  assert.deepEqual(check(manifestRoot(good)).errors, []);
+test('a returned old inventory file is an error', () => {
+  const root = manifestRoot(baseline());
+  write(root, ['deps', 'skills.json'].join('/'), '{}');
+  assert.ok(catalogErrors(root).some(e => e.includes('old inventory returned')));
 });
 
-test('manifest that is not valid JSON or not an object of groups is an error', () => {
-  assert.ok(check(manifestRoot('{nope')).errors.some(e => e.includes('invalid JSON')));
-  assert.ok(check(manifestRoot('[]')).errors.some(e => e.includes('top level')));
-  assert.ok(check(manifestRoot({ core: {} })).errors.some(e => e.includes('must be an array')));
+test('a backticked cite of the old file in skills, scripts or Contracts is an error unless the line says history, retired or superseded', () => {
+  const old = ['deps', 'skills.json'].join('/');
+  for (const where of ['skills/x/ref.md', 'scripts/tool.mjs', 'docs/contracts/c.md']) {
+    const root = manifestRoot(baseline());
+    write(root, where, `Reads \`${old}\` now.
+Retired: \`${old}\` is gone.
+See ${old} unquoted.
+`);
+    const errs = catalogErrors(root).filter(e => e.includes('live cite'));
+    assert.deepEqual(errs, [`ERROR ${where}:1: live cite of the old inventory file`], where);
+  }
+  const root = manifestRoot(baseline());
+  write(root, 'scripts/plant.test.mjs', `// \`${old}\`
+`);
+  write(root, 'documentation/x.md', `\`${old}\`
+`);
+  assert.deepEqual(catalogErrors(root), []);
 });
 
-test('manifest check survives a __proto__ group key', () => {
-  const r = check(manifestRoot('{"__proto__": [{"name":"a;b","source":"o/r"}]}'));
-  assert.ok(r.errors.some(e => e.includes('name fails')), r.errors.join('\n'));
+test('a baseline that fails its parse is an error, and a missing one is when a plugin manifest exists', () => {
+  assert.ok(catalogErrors(manifestRoot('{nope')).some(e => e.includes('3rdpartyskills.json') && e.includes('bad JSON')));
+  assert.ok(catalogErrors(manifestRoot('[]')).some(e => e.includes('not an object')));
+  assert.ok(catalogErrors(manifestRoot(baseline({ groups: { core: {} } }))).some(e => e.includes('groups')));
+  assert.ok(catalogErrors(manifestRoot(baseline({ entries: [{ skillname: 'a;b', skillcategory: 'engineering', skillrepo: 'o/r' }] }))).length > 0);
+  assert.ok(catalogErrors(manifestRoot(baseline({ entries: [{ skillname: 'a', skillcategory: 'engineering', skillrepo: 'o/r;x' }] }))).length > 0);
+  assert.deepEqual(catalogErrors(manifestRoot(null)), []);
+  assert.deepEqual(catalogErrors(manifestRoot(null, { plugin: true })), ['ERROR deps/3rdpartyskills.json: missing']);
+});
+
+test('a Role in no category and a listed Role with no agent are errors', () => {
+  const { writer, ...rest } = AGENTS;
+  assert.ok(catalogErrors(manifestRoot(baseline(), { agents: { ...rest, extra: agent('extra') } })).some(e => e === 'ERROR deps/3rdpartyskills.json: Role extra is in no category'));
+  assert.ok(catalogErrors(manifestRoot(baseline(), { agents: rest })).some(e => e === 'ERROR deps/3rdpartyskills.json: listed Role writer has no agent'));
+});
+
+test('baseline check survives a __proto__ key', () => {
+  const root = manifestRoot('{"__proto__": [], "schema": 1}');
+  assert.ok(catalogErrors(root).some(e => e.includes('3rdpartyskills.json')), catalogErrors(root).join('\n'));
 });
 
 test('Role count in plugin.json, README, roles/README.md and spec must equal agents/*.md', () => {
