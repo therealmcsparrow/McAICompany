@@ -15,11 +15,11 @@ Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the 
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`. Reviewer rows carry `R-<n>`; to contest, escalate or answer one, and the `fresh-reviewer` shape: `references/contest.md`.
 5. Never start an aico Playbook with the Skill tool; name the Playbook you need under `## Next` for the Lead.
-6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v5): other Steps may be working in the same tree. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. A `Worktree: <path>` line → change files only under that path, run git only as `git -C <path>`, never read or change the main tree's working files; every limit above applies inside it. Absolute paths only, never `cd` or `Set-Location` into it; worktrees share one stash list. `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v4) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
+6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v5): other Steps may be working in the same tree. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. A `Worktree: <path>` line → change files only under that path, run git only as `git -C <path>`, never read or change the main tree's working files; every limit above applies inside it. Use absolute paths only, never `cd` or `Set-Location` into it, never `git stash` (worktrees share one stash list). `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v4) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
 
 ## Context budget: the `Context cap:` line
 
-Your dispatch carries `Context cap: <cap> handover <n>`, always `95000 handover 85500`: `<cap>` is your context limit, `<n>` the handover point. Past the cap quality drops; hand over to a clean Step.
+Your dispatch carries `Context cap: <cap> handover <n>`, always `95000 handover 85500`: `<cap>` is your context limit, `<n>` the handover point. You never compute them. Past the cap quality drops; hand over to a clean Step.
 - Absent → cap 95000, handover at 85500. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v5).
 - Big reads, long diffs and test logs add up: read slices, grep first. Near `<n>` (or you can't tell and have done a lot of reading), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
 - Write `status: handover`: `## Did` what's finished, `## Next` what's left, in order, with file paths, so a fresh Role of the same type continues without re-reading. Commit-ready work only. A handover is not a failure or a blocker; never cut scope or skip checks to squeeze under the budget.
@@ -62,8 +62,8 @@ By: <role id>
 
 - `needs-ceo`: a decision only the CEO can make (a change to Core, a breaking Contract change, a scope change); put the question under Blocking.
 - Only when `aico:ruleset` asks: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old violations), before `## Next`.
-- Do not duplicate content already captured in other artifacts (specs, plans, ADRs, issues, commits, diffs). Reference them by path or URL instead.
-- Redact any sensitive information, such as API keys, passwords, or personally identifiable information.
+- Don't duplicate content held in other artifacts (specs, plans, ADRs, issues, commits, diffs); reference it by path or URL.
+- Redact sensitive information such as API keys, passwords or personal data.
 - Under ~60 lines; link to files, don't paste code. Your final reply to the Lead is one line: `<status> — <output path>`.
 
 ## Language
