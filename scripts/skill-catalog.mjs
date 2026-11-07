@@ -27,13 +27,18 @@ const PACKAGE_RE = /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 const HASH_RE = /^[0-9a-f]{64}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const LICENSE_EDGE_RE = /^\p{Zs}+|\p{Zs}+$/gu;
+const SPACE_SEPARATOR_RE = /^\p{Zs}$/u;
 const LICENSE_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u180e\u2065\u{e0000}-\u{e007f}]/u;
 
 // A license as typed: plain space separators (Zs) are cut at the edges; any other invisible character,
 // at the edge or inside, gives null instead of being trimmed away. Blank text comes back as ''.
 export function licenseAsTyped(raw) {
-  const text = raw.replace(LICENSE_EDGE_RE, '');
+  // A linear scan from both ends: a regex with a trailing run is quadratic on a long inner run of spaces.
+  let start = 0;
+  let end = raw.length;
+  while (start < end && SPACE_SEPARATOR_RE.test(raw[start])) start++;
+  while (end > start && SPACE_SEPARATOR_RE.test(raw[end - 1])) end--;
+  const text = raw.slice(start, end);
   return LICENSE_BAD_RE.test(text) ? null : text;
 }
 const ENTRY_KEYS = new Set(['skillname', 'skillcategory', 'skillrepo', 'skillinstaller', 'skillplugin', 'skillcommit', 'license', 'vetted', 'hash']);
@@ -59,7 +64,7 @@ function realDate(s) {
 // ---------- locations ----------
 
 // The operating system's answer. os.homedir() follows HOME and USERPROFILE, which a repo can set.
-export function userHome() {
+function userHome() {
   return os.userInfo().homedir;
 }
 
@@ -378,39 +383,64 @@ export function boundedFolderHash(dir) {
 
 // ---------- status ----------
 
-// The real skills folders under a root: every segment is lstat'ed and a link, junction included, is not followed.
-function skillsDirs(root) {
+const SKILL_ROOTS = ['.agents', '.claude'];
+
+// The skills folders under a root as { dir, through }. Every segment is lstat'ed. A link, junction included,
+// is not followed unless `followLinks` is set; then the folder is listed with `through: true`, so a caller
+// can count what is in it without ever proving it.
+function skillsDirs(root, followLinks = false) {
   const out = [];
-  for (const first of ['.agents', '.claude']) {
+  for (const first of SKILL_ROOTS) {
     let cur = root;
+    let through = false;
     let ok = true;
     for (const seg of [first, 'skills']) {
       cur = path.join(cur, seg);
       let st;
       try { st = fs.lstatSync(cur); } catch { ok = false; break; }
-      if (st.isSymbolicLink() || !st.isDirectory()) { ok = false; break; }
+      if (st.isSymbolicLink()) {
+        if (!followLinks) { ok = false; break; }
+        through = true;
+        try { st = fs.statSync(cur); } catch { ok = false; break; }
+      }
+      if (!st.isDirectory()) { ok = false; break; }
     }
-    if (ok) out.push(cur);
+    if (ok) out.push({ dir: cur, through });
   }
   return out;
 }
 
-function probeName(root, name) {
+// The segments of a root that are links, as '.agents', '.agents/skills', '.claude' or '.claude/skills'.
+// A link at the first segment hides the second, so only the first is named.
+export function linkedSegments(rootDir) {
+  const out = [];
+  for (const first of SKILL_ROOTS) {
+    for (const seg of [first, `${first}/skills`]) {
+      let st;
+      try { st = fs.lstatSync(path.join(rootDir, ...seg.split('/'))); } catch { break; }
+      if (st.isSymbolicLink()) { out.push(seg); break; }
+      if (!st.isDirectory()) break;
+    }
+  }
+  return out;
+}
+
+function probeName(root, name, followLinks = false) {
   const found = [];
-  for (const dir of skillsDirs(root)) {
+  for (const { dir, through } of skillsDirs(root, followLinks)) {
     const full = path.join(dir, name);
     let st;
     try { st = fs.lstatSync(full); } catch { continue; }
-    found.push({ full, link: st.isSymbolicLink(), dir: st.isDirectory() });
+    found.push({ full, link: st.isSymbolicLink(), dir: st.isDirectory(), through });
   }
   return found;
 }
 
-function probePrefix(root, prefix) {
-  for (const dir of skillsDirs(root)) {
-    let names;
-    try { names = fs.readdirSync(dir).slice(0, MAX_LISTED_NAMES); } catch { continue; }
-    if (names.some((n) => n.startsWith(prefix) && n.length > prefix.length && NAME_RE.test(n))) return true;
+function probePrefix(root, prefix, followLinks = false) {
+  for (const { dir } of skillsDirs(root, followLinks)) {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }).slice(0, MAX_LISTED_NAMES); } catch { continue; }
+    if (entries.some((e) => (e.isDirectory() || e.isSymbolicLink()) && e.name.startsWith(prefix) && e.name.length > prefix.length && NAME_RE.test(e.name))) return true;
   }
   return false;
 }
@@ -447,18 +477,18 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
   const vetted = !has(entry, 'skillinstaller') && realDate(entry.vetted) ? entry.vetted : null;
 
   if (wildcard) {
-    for (const r of roots) if (probePrefix(r.dir, base)) return result('installed (name only)', r.label, vetted);
+    for (const r of roots) if (probePrefix(r.dir, base, r.label === 'project')) return result('installed (name only)', r.label, vetted);
     return result('not found', null, vetted);
   }
   if (!pinned) {
-    for (const r of roots) if (probeName(r.dir, name).length > 0) return result('installed (name only)', r.label, vetted);
+    for (const r of roots) if (probeName(r.dir, name, r.label === 'project').some((i) => i.dir || i.link)) return result('installed (name only)', r.label, vetted);
     return result('not found', null, vetted);
   }
   const bound = typeof entry.hash === 'string' && HASH_RE.test(entry.hash) ? entry.hash : null;
   let place = null;
   let allMatch = true;
   for (const r of roots) {
-    const got = itemsProven(r.dir, name, bound);
+    const got = itemsProven(r.dir, name, bound, { place: r.label });
     if (!got.present) continue;
     if (place === null) place = r.label;
     if (!got.ok) allMatch = false;
@@ -468,24 +498,27 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
 }
 
 // Every present item under one root must count: a real folder must hash equal to `hash`, and a link must
-// lead to the proven .agents folder of the same root. Returns { present, ok }.
-export function itemsProven(rootDir, name, hash) {
+// lead to the proven .agents folder of the same root. At place `project`, a folder reached through a linked
+// segment counts as present and never proves. Returns { present, ok }.
+export function itemsProven(rootDir, name, hash, { place } = {}) {
   const bound = typeof hash === 'string' && HASH_RE.test(hash) ? hash : null;
-  const items = probeName(rootDir, name);
+  const items = probeName(rootDir, name, place === 'project');
   if (items.length === 0) return { present: false, ok: false };
   const agents = path.join(rootDir, '.agents', 'skills', name);
   const proven = (item) => bound !== null && !item.link && item.dir && boundedFolderHash(item.full) === bound;
   let ok = true;
   for (const item of items) {
+    if (item.through) { ok = false; continue; }
     if (!item.link) { if (!proven(item)) ok = false; continue; }
-    const home = items.find((o) => !o.link && sameFolder(o.full, agents));
+    const home = items.find((o) => !o.through && !o.link && sameFolder(o.full, agents));
     if (!home || !proven(home) || !linkLeadsTo(item.full, agents)) ok = false;
   }
   return { present: true, ok };
 }
 
+// Compares where the link physically leads, not its text, so no spelling of the path needs reasoning about.
 function linkLeadsTo(link, target) {
-  try { return sameFolder(path.resolve(path.dirname(link), fs.readlinkSync(link).replace(/^\\\\[?.]\\/, '')), target); } catch { return false; }
+  try { return sameFolder(fs.realpathSync(link), fs.realpathSync(target)); } catch { return false; }
 }
 
 // ---------- writes ----------

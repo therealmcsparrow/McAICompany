@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  userCatalogPath, userHome, readBaseline, parseBaseline, readCatalog, validateEntry, expandGroups, eligibleRoles,
+  userCatalogPath, linkedSegments, itemsProven, readBaseline, parseBaseline, readCatalog, validateEntry, expandGroups, eligibleRoles,
   selectable, approvable, boundedFolderHash, skillStatus, addUserEntry, setBoundHash, clearBound, licenseAsTyped,
 } from './skill-catalog.mjs';
 import { skillFolderHash } from './skillspector.mjs';
@@ -69,7 +69,6 @@ test('the user home is the operating system answer, not HOME or USERPROFILE', as
   const real = os.userInfo().homedir;
   const planted = tmp('planted-home');
   withEnv(t, { HOME: planted, USERPROFILE: planted });
-  assert.equal(userHome(), real);
   assert.equal(userCatalogPath({}), path.join(real, '.mcsparrow', '3rdpartyskills.json'));
 });
 
@@ -463,7 +462,7 @@ test('skillStatus: scope user reads the home only', () => {
   assert.equal(skillStatus(inst, { home, productRoot: root, scope: 'user' }).status, 'installed (name only)');
 });
 
-test('skillStatus: a link at the folder is present but not recognized; a link on the way is not followed', (t) => {
+test('skillStatus: a link at the folder is present but not recognized; a link on the way holding the name is present and never proves', (t) => {
   if (!canLink(t)) return;
   const home = tmp('home');
   const root = tmp('root');
@@ -477,7 +476,7 @@ test('skillStatus: a link at the folder is present but not recognized; a link on
   fs.mkdirSync(path.join(elsewhere, 'skills'), { recursive: true });
   fs.renameSync(path.join(elsewhere, 'my-skill'), path.join(elsewhere, 'skills', 'my-skill'));
   fs.symlinkSync(elsewhere, path.join(root2, '.agents'), 'junction');
-  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root2 }).status, 'missing');
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root2 }).status, 'folder not recognized');
 });
 
 test('skillStatus: a hash that is not bound never reads installed', () => {
@@ -741,6 +740,120 @@ test('skillStatus: a link in .claude must lead to the proven .agents folder', (t
   fs.rmSync(link, { recursive: true, force: true });
   fs.symlinkSync(a, link, 'junction');
   assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+});
+
+test('skillStatus: a link whose text climbs through a helper link does not lead to the .agents folder', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  const evil = tmp('evil');
+  mkSkillDir(path.join(evil, 'my-skill'), { 'SKILL.md': '# hostile\n' });
+  fs.mkdirSync(path.join(evil, 'sub'));
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  try {
+    fs.symlinkSync(path.join(evil, 'sub'), path.join(root, '.agents', 'skills', 'x'), 'junction');
+    fs.symlinkSync('../../.agents/skills/x/../my-skill', path.join(root, '.claude', 'skills', 'my-skill'), 'dir');
+  } catch { t.diagnostic('cannot create relative links here'); return; }
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
+test('linkedSegments names a linked .claude, .claude/skills, .agents or .agents/skills', (t) => {
+  if (!canLink(t)) return;
+  const root = tmp('root');
+  assert.deepEqual(linkedSegments(root), []);
+  const other = tmp('other');
+  fs.mkdirSync(path.join(root, '.agents', 'skills'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.claude'));
+  fs.symlinkSync(other, path.join(root, '.claude', 'skills'), 'junction');
+  assert.deepEqual(linkedSegments(root), ['.claude/skills']);
+  const root2 = tmp('root');
+  fs.symlinkSync(other, path.join(root2, '.agents'), 'junction');
+  assert.deepEqual(linkedSegments(root2), ['.agents']);
+});
+
+test('a linked .claude/skills holding the name beside a proven .agents copy is not recognized at place project', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  const evil = tmp('evil');
+  mkSkillDir(path.join(evil, 'my-skill'), { 'SKILL.md': '# hostile\n' });
+  fs.mkdirSync(path.join(root, '.claude'));
+  fs.symlinkSync(evil, path.join(root, '.claude', 'skills'), 'junction');
+  assert.deepEqual(itemsProven(root, 'my-skill', hash, { place: 'project' }), { present: true, ok: false });
+  assert.deepEqual(itemsProven(root, 'my-skill', hash), { present: true, ok: true });
+  const r = skillStatus(pinned({ hash }), { home, productRoot: root });
+  assert.equal(r.status, 'folder not recognized');
+  assert.equal(r.place, 'project');
+  // the same bytes behind a link still never prove
+  fs.rmSync(path.join(evil, 'my-skill'), { recursive: true });
+  mkSkillDir(path.join(evil, 'my-skill'));
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
+test('a linked .claude/skills without the name adds nothing; an unpinned entry reads place project through a link', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  const empty = tmp('empty');
+  fs.mkdirSync(path.join(root, '.claude'));
+  fs.symlinkSync(empty, path.join(root, '.claude', 'skills'), 'junction');
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+  assert.deepEqual(linkedSegments(root), ['.claude/skills']);
+  const evil = tmp('evil');
+  mkSkillDir(path.join(evil, 'u-skill'));
+  fs.rmSync(path.join(root, '.claude', 'skills'), { recursive: true, force: true });
+  fs.symlinkSync(evil, path.join(root, '.claude', 'skills'), 'junction');
+  mkSkillDir(path.join(home, '.agents', 'skills', 'u-skill'));
+  const r = skillStatus({ skillname: 'u-skill', skillcategory: 'engineering', skillrepo: 'a/b' }, { home, productRoot: root });
+  assert.equal(r.place, 'project');
+  assert.equal(r.status, 'installed (name only)');
+});
+
+test('a linked folder under the user home stays skipped at scope user', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const dotfiles = tmp('dotfiles');
+  const a = path.join(home, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  mkSkillDir(path.join(dotfiles, 'other-skill'));
+  fs.mkdirSync(path.join(home, '.claude'));
+  fs.symlinkSync(dotfiles, path.join(home, '.claude', 'skills'), 'junction');
+  const r = skillStatus(pinned({ hash }), { home, productRoot: root, scope: 'user' });
+  assert.equal(r.status, 'installed');
+  assert.equal(r.place, 'user');
+});
+
+test('a regular file named like the skill is not an installed skill, and a pinned entry reads folder not recognized', () => {
+  const home = tmp('home');
+  const root = tmp('root');
+  fs.mkdirSync(path.join(home, '.agents', 'skills'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.agents', 'skills', 'u-skill'), 'x');
+  fs.writeFileSync(path.join(home, '.agents', 'skills', 'golang-testing'), 'x');
+  const unpinned = { skillname: 'u-skill', skillcategory: 'engineering', skillrepo: 'a/b' };
+  assert.equal(skillStatus(unpinned, { home, productRoot: root }).status, 'not found');
+  const wild = { skillname: 'golang-*', skillcategory: 'engineering', skillrepo: 'a/b' };
+  assert.equal(skillStatus(wild, { home, productRoot: root }).status, 'not found');
+  fs.writeFileSync(path.join(home, '.agents', 'skills', 'my-skill'), 'x');
+  assert.equal(skillStatus(pinned({ hash: H1 }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
+test('licenseAsTyped: a long inner run of spaces is read in linear time', () => {
+  const long = `MIT${' '.repeat(60000)}x`;
+  const start = process.hrtime.bigint();
+  assert.equal(licenseAsTyped(long), long);
+  assert.ok(Number(process.hrtime.bigint() - start) / 1e6 < 500);
+  assert.equal(licenseAsTyped(` ${' '.repeat(60000)}MIT${' '.repeat(60000)}`), 'MIT');
 });
 
 test('a catalog file planted in the working folder adds nothing to a read', (t) => {
