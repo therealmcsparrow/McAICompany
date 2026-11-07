@@ -772,7 +772,10 @@ test('skillStatus: a link whose text climbs through a helper link does not lead 
     fs.symlinkSync(path.join(evil, 'sub'), path.join(root, '.agents', 'skills', 'x'), 'junction');
     fs.symlinkSync('../../.agents/skills/x/../my-skill', path.join(root, '.claude', 'skills', 'my-skill'), 'dir');
   } catch { t.diagnostic('cannot create relative links here'); return; }
-  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+  // Windows collapses `x\..` in link text lexically before following links, so this link
+  // really reaches the proven .agents folder. Other platforms walk `x` first and land in evil.
+  const expected = process.platform === 'win32' ? 'installed' : 'folder not recognized';
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, expected);
 });
 
 test('linkedSegments names a linked .claude, .claude/skills, .agents or .agents/skills', (t) => {
