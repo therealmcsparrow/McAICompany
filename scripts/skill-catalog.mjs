@@ -411,6 +411,14 @@ function probePrefix(root, prefix) {
 
 const licenseText = (entry) => (has(entry, 'license') && typeof entry.license === 'string' && entry.license.trim() !== '' ? `${entry.license.trim()}, as stated, not checked` : NO_LICENSE_TEXT);
 
+// The vetted line as the installer's status line writes it. An entry from the old list (user layer or a pin)
+// without a scan hash was not scanned here.
+export function vettedText(entry, vetted) {
+  if (vetted === null || vetted === undefined) return 'not vetted';
+  const own = entry.layer === 'user' || entry.pinned === true;
+  return own && typeof entry.hash !== 'string' ? `vetted ${vetted}, from the old list, not scanned here` : `vetted ${vetted}`;
+}
+
 export function skillStatus(entry, { home, productRoot, scope } = {}) {
   const license = licenseText(entry);
   const result = (status, place, vetted = null) => ({ status, place, license, vetted });
@@ -441,24 +449,33 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
     return result('not found', null, vetted);
   }
   const bound = typeof entry.hash === 'string' && HASH_RE.test(entry.hash) ? entry.hash : null;
-  // Every present item counts. A real folder must hash equal; a link must lead to the proven
-  // .agents folder of the same root.
   let place = null;
   let allMatch = true;
   for (const r of roots) {
-    const items = probeName(r.dir, name);
-    if (items.length === 0) continue;
+    const got = itemsProven(r.dir, name, bound);
+    if (!got.present) continue;
     if (place === null) place = r.label;
-    const agents = path.join(r.dir, '.agents', 'skills', name);
-    const proven = (item) => bound !== null && !item.link && item.dir && boundedFolderHash(item.full) === bound;
-    for (const item of items) {
-      if (!item.link) { if (!proven(item)) allMatch = false; continue; }
-      const home = items.find((o) => !o.link && sameFolder(o.full, agents));
-      if (!home || !proven(home) || !linkLeadsTo(item.full, agents)) allMatch = false;
-    }
+    if (!got.ok) allMatch = false;
   }
   if (place === null) return result('missing', null, vetted);
   return result(allMatch ? 'installed' : 'folder not recognized', place, vetted);
+}
+
+// Every present item under one root must count: a real folder must hash equal to `hash`, and a link must
+// lead to the proven .agents folder of the same root. Returns { present, ok }.
+export function itemsProven(rootDir, name, hash) {
+  const bound = typeof hash === 'string' && HASH_RE.test(hash) ? hash : null;
+  const items = probeName(rootDir, name);
+  if (items.length === 0) return { present: false, ok: false };
+  const agents = path.join(rootDir, '.agents', 'skills', name);
+  const proven = (item) => bound !== null && !item.link && item.dir && boundedFolderHash(item.full) === bound;
+  let ok = true;
+  for (const item of items) {
+    if (!item.link) { if (!proven(item)) ok = false; continue; }
+    const home = items.find((o) => !o.link && sameFolder(o.full, agents));
+    if (!home || !proven(home) || !linkLeadsTo(item.full, agents)) ok = false;
+  }
+  return { present: true, ok };
 }
 
 function linkLeadsTo(link, target) {

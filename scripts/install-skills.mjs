@@ -10,7 +10,7 @@ import { execSync, execFileSync } from 'node:child_process';
 import { homedir, userInfo } from 'node:os';
 import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readBaseline, readCatalog, skillStatus, boundedFolderHash, approvable, setBoundHash, clearBound, selectable } from './skill-catalog.mjs';
+import { readBaseline, readCatalog, skillStatus, approvable, setBoundHash, clearBound, selectable, itemsProven, vettedText } from './skill-catalog.mjs';
 import { vetCandidate } from './skillspector.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
@@ -476,21 +476,16 @@ function selection(settings) {
   return new Map([...byName].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
-function vettedText(entry, st) {
-  if (st.vetted === null) return 'not vetted';
-  const own = entry.layer === 'user' || entry.pinned === true;
-  return own && typeof entry.hash !== 'string' ? `vetted ${st.vetted}, from the old list, not scanned here` : `vetted ${st.vetted}`;
-}
-
 function dispatchWord(entry, st) {
   if (entry.skillplugin !== undefined) return 'session list';
-  return st.status === 'installed' || st.status === 'installed (name only)' ? 'yes' : 'no';
+  if (st.status === 'installed (name only)') return st.place === 'user' ? 'yes' : 'no';
+  return st.status === 'installed' ? 'yes' : 'no';
 }
 
 // One machine-read line. The license is free text, so `|` in it is written as %7C and can never add a field.
 function statusLine(name, roles, entry, st, dispatch) {
   const license = String(st.license).replaceAll('|', '%7C');
-  return `${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${license} | ${vettedText(entry, st)} | dispatch: ${dispatch ?? dispatchWord(entry, st)}`;
+  return `${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${license} | ${vettedText(entry, st.vetted)} | dispatch: ${dispatch ?? dispatchWord(entry, st)}`;
 }
 
 // `--status` and `--selected`: the skills the resolved settings select, looked up in the catalog by name only.
@@ -591,8 +586,7 @@ async function runSelected(args, env) {
         continue;
       }
       // Every folder present at the root must equal the scan, since any of them may be the copy that loads.
-      const present = f => { try { lstatSync(f); return true; } catch { return false; } };
-      const proven = () => { const here = folders.filter(present); return here.length > 0 && here.every(f => boundedFolderHash(f) === v.hash); };
+      const proven = () => { const got = itemsProven(root, name, v.hash); return got.present && got.ok; };
       if (!proven()) {
         log(`$ ${cmd}`);
         try { exec(cmd, root, argv); } catch (e) { log(`FAILED ${cmd}: ${errorText(e)}`); failed++; continue; }

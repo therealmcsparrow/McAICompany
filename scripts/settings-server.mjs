@@ -8,7 +8,7 @@ import http from 'node:http';
 import path from 'node:path';
 import * as check from './check.mjs';
 import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
-import { eligibleRoles, readBaseline, readCatalog, selectable, skillStatus } from './skill-catalog.mjs';
+import { eligibleRoles, readBaseline, readCatalog, selectable, skillStatus, vettedText } from './skill-catalog.mjs';
 import {
   Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
@@ -93,14 +93,6 @@ function personalitiesState(ctx, plugin, user, project) {
     roles,
     ignored: resolved.ignored.map(({ level, path: at, reason }) => ({ level, path: at, reason }))
   };
-}
-
-// The vetted line as the installer's status line writes it. An entry from the old list (user layer or a pin)
-// without a scan hash was not scanned here.
-export function vettedText(entry, vetted) {
-  if (vetted === null || vetted === undefined) return 'not vetted';
-  const own = entry.layer === 'user' || entry.pinned === true;
-  return own && typeof entry.hash !== 'string' ? `vetted ${vetted}, from the old list, not scanned here` : `vetted ${vetted}`;
 }
 
 const sourceKind = (e) => (e.skillrepo !== undefined ? 'repo' : e.skillplugin !== undefined ? 'plugin' : 'command');

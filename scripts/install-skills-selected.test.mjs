@@ -376,3 +376,45 @@ test('a hash that differs after a named install stores nothing and exits 1', asy
   assert.equal(await main(['--selected', `--skill=${NAME}`], s.env), 1);
   assert.equal(readUser(s.home)[0].hash, undefined);
 });
+
+const BASE = 'find-skills';
+const statusLine = async (s) => { await main(['--status'], s.env); return s.log.find((l) => l.startsWith(BASE)); };
+
+test('name only: place project gives dispatch no, place user gives dispatch yes, status text unchanged', async (t) => {
+  const p = setup(t, { entries: [], lists: { qa: ['project', [BASE]] } });
+  plant(path.join(p.root, '.claude', 'skills', BASE));
+  const pl = await statusLine(p);
+  assert.match(pl, /\| installed \(name only\) \| place: project \|/);
+  assert.ok(pl.endsWith('dispatch: no'), pl);
+  const u = setup(t, { entries: [], lists: { qa: ['user', [BASE]] } });
+  plant(path.join(u.home, '.claude', 'skills', BASE));
+  const ul = await statusLine(u);
+  assert.match(ul, /\| installed \(name only\) \| place: user \|/);
+  assert.ok(ul.endsWith('dispatch: yes'), ul);
+});
+
+test('name only in both places at project scope reads place project and dispatch no', async (t) => {
+  const s = setup(t, { entries: [], lists: { qa: ['project', [BASE]] } });
+  plant(path.join(s.root, '.claude', 'skills', BASE));
+  plant(path.join(s.home, '.claude', 'skills', BASE));
+  const line = await statusLine(s);
+  assert.match(line, /place: project/);
+  assert.ok(line.endsWith('dispatch: no'), line);
+});
+
+test('a refused clearBound after a failed scan is logged', async (t) => {
+  const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' }), entry({ skillname: 'other-skill', license: 'MIT ' })], scan: { result: { verdict: 'fail', blocking: true, counts: { critical: 1, high: 0 } } } });
+  assert.equal(await main(['--selected'], s.env), 1);
+  assert.ok(s.log.some((l) => l.startsWith('ERROR user catalog')), s.log.join('|'));
+  assert.equal(readUser(s.home)[0].hash, 'b'.repeat(64));
+});
+
+test('after install, a hostile copy beside a proven one stops the bind', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] }, install: ({ root }) => {
+    plant(path.join(root, '.agents', 'skills', NAME));
+    plant(path.join(root, '.claude', 'skills', NAME), 'hostile');
+  } });
+  assert.equal(await main(['--selected'], s.env), 1);
+  assert.ok(s.log.some((l) => l.startsWith('hash differs')), s.log.join('|'));
+  assert.equal(readUser(s.home)[0].hash, undefined);
+});
