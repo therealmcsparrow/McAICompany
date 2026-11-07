@@ -1,4 +1,4 @@
-# Contract: token-ledger v1.9
+# Contract: token-ledger v1.10
 
 v1.10 (task QA Tests First Active; additive, `docs/adr/0007-contract-minor-versions.md`, rationale `docs/adr/0064-qa-writes-tests-first.md`): the optional `ship` key `qa` and the `qa-first-report` command, below. Uses `plan-tasks` v1.7 (`readParallel` view key `qa_first`). Every v1.9 file is a valid v1.10 file and every other command gives the same bytes for it.
 
