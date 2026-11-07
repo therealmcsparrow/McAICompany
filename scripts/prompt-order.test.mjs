@@ -175,7 +175,9 @@ test('rewritten lines keep their rules: settings, locks, auto Gates, Language:',
 });
 
 test('section 1.19 pins the category question, selected lines only and the step d rules', () => {
-  has(skillOnly, "first ask its category (pages as in `/aico:add-skill`, without `security`", "then the Roles from that line's printed `Roles:` list");
+  has(skillOnly, 'first gets its category question (only the keys printed for that line', 'pages as in `/aico:add-skill`', 'then the Roles printed with that key', 'shows its printed `Category:` as coming from the list, with no question', '[--category <n>:<name>=<key>]', 'category keys and Role ids the script printed');
+  has(skillOnly, 'then `can migrate: <k>`', 'show the printed reasons', 'no Migrate question');
+  has(skillOnly, '`place: project` gets no Install question but a form', 'Go on without it (Recommended) / Stop the run', 'never answers the place form of b', 'the project-place skill form');
   has(skillOnly, 'Question only the selected lines (`roles:` not `-`)', 'a line with `roles: -` is an unselected catalog entry, gets no question, and its `dispatch:` field is never read');
   has(skillOnly, 'only from lines with `roles:` not `-`', "the name only if the session's skill list holds it, otherwise left off", '`degraded: missing <name>` once per name in the Handoff and Gate summary', 'A name must match the catalog pattern, or it is left off too');
   has(skillOnly, 'or `none` when no name is left');
