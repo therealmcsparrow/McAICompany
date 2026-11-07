@@ -433,3 +433,47 @@ describe('numbers equal the ledger report', () => {
     assert.ok(c.wrong.includes('re-dispatch: 2'));
   });
 });
+
+describe('three-digit Step names', () => {
+  test('top rows break ties by numeric Step order', () => {
+    const rows = [
+      { id: '100', role: 'qa', spend: 500, ms: 7000 },
+      { id: '99', role: 'qa', spend: 500, ms: 7000 },
+      { id: '05', role: 'qa', spend: 100, ms: 10 }
+    ];
+    const x = buildRetro(SLUG, [], { rows }, 'ship');
+    assert.deepEqual(x.top_spend.map((r) => r.step), ['99', '100', '05']);
+    assert.deepEqual(x.top_time.map((r) => r.step), ['99', '100', '05']);
+  });
+
+  test('a Step 100 can rank first on spend', () => {
+    const rows = [
+      { id: '99', role: 'qa', spend: 10, ms: 1 },
+      { id: '100', role: 'qa', spend: 900, ms: 2 }
+    ];
+    const x = buildRetro(SLUG, [], { rows }, 'ship');
+    assert.equal(x.top_spend[0].step, '100');
+    assert.equal(x.top_time[0].step, '100');
+  });
+
+  test('retro reads Steps in numeric order: 99 before 100', (t) => {
+    const sb = sandbox(t);
+    write(sb, '100-qa.md', step('100', 'qa', 'handover'));
+    write(sb, '99-qa.md', step('99', 'qa', 'handover'));
+    const x = JSON.parse(node(sb, reflect, ['retro', SLUG, '--json']).out);
+    const cap = x.lessons.map((l) => l.text).filter((l) => l.includes('reached its context cap'));
+    assert.deepEqual(cap.map((l) => /Step (\d+)/.exec(l)[1]), ['99', '100']);
+  });
+
+  test('step accepts a 3-digit name and refuses a 4-digit one', (t) => {
+    const sb = sandbox(t);
+    write(sb, '100-qa.md', step('100', 'qa', 'done'));
+    write(sb, '1000-qa.md', step('1000', 'qa', 'done'));
+    const ok = node(sb, reflect, ['step', SLUG, '100-qa.md', '--json']);
+    assert.equal(ok.status, 0, ok.out + ok.err);
+    assert.equal(JSON.parse(ok.out).step, '100');
+    const bad = node(sb, reflect, ['step', SLUG, '1000-qa.md', '--json']);
+    assert.equal(bad.status, 2);
+    assert.match(bad.out + bad.err, /file must match/);
+  });
+});

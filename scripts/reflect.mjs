@@ -138,7 +138,7 @@ export function renderStep(check) {
 function topBy(rows, key, shape) {
   return rows
     .filter((r) => /^\d{2,3}$/.test(r.id ?? '') && Number.isInteger(r[key]))
-    .sort((a, b) => b[key] - a[key] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .sort((a, b) => b[key] - a[key] || parseInt(a.id, 10) - parseInt(b.id, 10))
     .slice(0, 3)
     .map(shape);
 }

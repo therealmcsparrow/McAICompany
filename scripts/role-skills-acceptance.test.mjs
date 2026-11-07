@@ -500,11 +500,16 @@ test('AC9: invalid answers name the field and write nothing', (t) => {
 });
 
 test('AC9: a $(...) value through add is stored as text and runs nothing', (t) => {
-  const marker = path.join(tmp(t, 'marker'), 'ran');
-  const r = run(t, 'add', addLine({ license: `$(touch ${marker})`, save: true }));
-  assert.equal(r.code, 0);
-  assert.equal(readUser(r.home)[0].license, `$(touch ${marker})`);
-  assert.equal(fs.existsSync(marker), false);
+  const work = tmp(t, 'work');
+  const start = process.cwd();
+  process.chdir(work);
+  try {
+    const r = run(t, 'add', addLine({ license: '$(touch rsa-ran)', save: true }));
+    assert.equal(r.code, 0, r.lines.join('|'));
+    assert.equal(readUser(r.home)[0].license, '$(touch rsa-ran)');
+    assert.equal(fs.existsSync(path.join(work, 'rsa-ran')), false);
+    assert.equal(fs.existsSync(path.join(r.cwd, 'rsa-ran')), false);
+  } finally { process.chdir(start); }
 });
 
 test('AC9: add and record refuse an extra argument and a second line', (t) => {
@@ -570,6 +575,28 @@ test('AC22: record writes the entry with the stated license, no vetted, and Role
   const cmdEntry = run(t, 'record', JSON.stringify({ entry: { skillname: 'evil-cmd', skillcategory: 'engineering', skillinstaller: 'npx -y evil@1.0.0 go' }, license: 'MIT', roles: [] }), { home, cwd });
   assert.equal(cmdEntry.code, 1, 'a researcher cannot introduce a command');
   assert.equal(readUser(home).some((e) => e.skillname === 'evil-cmd'), false);
+});
+
+test('AC22: a listed command is accepted only when it is byte-identical; a changed one writes nothing', (t) => {
+  const home = tmp(t, 'home');
+  const cwd = tmp(t, 'cwd');
+  fs.mkdirSync(path.join(cwd, '.company'));
+  const base = readBaseline().entries.find((e) => e.skillname === 'impeccable');
+  const same = { skillname: 'impeccable', skillcategory: base.skillcategory, skillinstaller: base.skillinstaller };
+  const ok = run(t, 'record', JSON.stringify({ entry: same, roles: ['ui-ux-designer'] }), { home, cwd });
+  assert.equal(ok.code, 0, ok.lines.join('|'));
+  assert.equal(fs.existsSync(userFile(home)), false, 'no user file for a listed command');
+  const settings = JSON.parse(fs.readFileSync(path.join(cwd, '.company', 'settings.json'), 'utf8'));
+  assert.deepEqual(settings.aico_settings.roles['ui-ux-designer'].skills, [{ name: 'impeccable', approved: TODAY }]);
+  const home2 = tmp(t, 'home');
+  const cwd2 = tmp(t, 'cwd');
+  fs.mkdirSync(path.join(cwd2, '.company'));
+  const changed = { ...same, skillinstaller: `${base.skillinstaller} --extra` };
+  const bad = run(t, 'record', JSON.stringify({ entry: changed, license: 'MIT', roles: ['ui-ux-designer'] }), { home: home2, cwd: cwd2 });
+  assert.equal(bad.code, 1);
+  assert.ok(bad.lines.join('|').includes('ERROR entry: source differs from the list'));
+  assert.equal(fs.existsSync(userFile(home2)), false);
+  assert.equal(fs.existsSync(path.join(cwd2, '.company', 'settings.json')), false);
 });
 
 // ---------- resolved selections ----------
