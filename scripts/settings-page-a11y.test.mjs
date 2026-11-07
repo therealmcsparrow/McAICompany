@@ -318,7 +318,7 @@ const ticked = async (cb, on = true) => { cb.checked = on; await cb.fire('change
 const unsaved = (page) => page.ids.count.textContent;
 
 test('each skill row is a checkbox with a label, a fieldset legend and status as words', async () => {
-  const entries = [skill('qa-helper', { status: 'folder not recognized', place: 'project', vetted: '2026-01-02' }), skill('cmd', { kind: 'command', commit: undefined })];
+  const entries = [skill('qa-helper', { status: 'folder not recognized', place: 'project', vetted: '2026-01-02', skillrepo: 'owner/name' }), skill('cmd', { kind: 'command', commit: undefined })];
   const page = loadPage(skillsState(entries));
   await settle();
   const cb = box(page, 'sk-qa-user-qa-helper');
@@ -327,10 +327,17 @@ test('each skill row is a checkbox with a label, a fieldset legend and status as
   const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.includes('qa') && n.textContent.includes('User level'));
   assert.equal(legend.parentNode.tagName, 'FIELDSET');
   const text = describedBy(cb).map((id) => byId(page, id).textContent);
-  assert.deepEqual(text, ['quality, repo at aaaaaaa', 'Status: folder not recognized, project', 'MIT, as stated, not checked, vetted 2026-01-02']);
+  assert.deepEqual(text, ['quality, repo owner/name at aaaaaaa', 'Status: folder not recognized, project', 'MIT, as stated, not checked, vetted 2026-01-02']);
   const cmd = describedBy(box(page, 'sk-qa-user-cmd')).map((id) => byId(page, id).textContent);
   assert.equal(cmd[0], 'quality, command (manual)');
   assert.equal(cmd[2], 'MIT, as stated, not checked, not vetted');
+});
+
+test('a vetted text from the server is shown as sent', async () => {
+  const text = 'vetted 2026-01-02, from the old list, not scanned here';
+  const page = loadPage(skillsState([skill('old', { vetted: '2026-01-02', vetted_text: text })]));
+  await settle();
+  assert.equal(describedBy(box(page, 'sk-qa-user-old')).map((id) => byId(page, id).textContent)[2], `MIT, as stated, not checked, ${text}`);
 });
 
 test('hostile entry text reaches the page as text only', async () => {
@@ -368,7 +375,7 @@ test('a wildcard entry is a disabled checkbox with its reason as text', async ()
   await settle();
   const cb = box(page, 'sk-qa-user-golang-*');
   assert.equal(cb.disabled, true);
-  assert.ok(describedBy(cb).some((id) => byId(page, id).textContent.startsWith('Not selectable')));
+  assert.ok(describedBy(cb).some((id) => byId(page, id).textContent === 'Not selectable: a wildcard names no one skill.'));
 });
 
 test('a protected Role has no project controls and says so', async () => {
@@ -381,6 +388,46 @@ test('a protected Role has no project controls and says so', async () => {
   assert.equal(box(page, 'sk-architect-project-shared'), null);
   assert.ok(page.panel('skills').textContent.includes('Protected Role: skills are chosen at User level only. A project value is ignored.'));
   assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
+});
+
+test('an eligible name in a protected Role project list is not part of the draft', async () => {
+  const initial = skillsState([skill('shared', { roles: ['architect', 'qa'] })]);
+  initial.project = { version: 1, roles: { architect: { skills: [{ name: 'shared' }] }, qa: { model: 'opus' } } };
+  let posted = null;
+  const fetchImpl = async (url, init) => {
+    if (init?.method === 'POST') { posted = JSON.parse(init.body); return { status: 200, json: async () => ({ state: initial }) }; }
+    return { status: 200, json: async () => structuredClone(initial) };
+  };
+  const page = loadPage(initial, fetchImpl);
+  await settle();
+  assert.equal(unsaved(page), '0 unsaved changes');
+  assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
+  await ticked(box(page, 'sk-qa-user-shared'));
+  await page.ids.save.fire('click');
+  await settle();
+  assert.equal(posted.project?.roles?.architect?.skills, undefined);
+});
+
+test('while the user layer is unread its stored names are kept, not listed as ignored', async () => {
+  const state = skillsState([skill('qa-helper')]);
+  state.user = { version: 1, roles: { qa: { skills: [{ name: 'my-own' }, { name: 'qa-helper' }] } } };
+  state.catalog.errors = ['ERROR user catalog: not valid JSON'];
+  const page = loadPage(state);
+  await settle();
+  const text = page.panel('skills').textContent;
+  assert.ok(!text.includes('Ignored: this stored skill'));
+  assert.ok(text.includes('2 selected (user)'));
+  assert.equal(unsaved(page), '0 unsaved changes');
+});
+
+test('a clash that is not a pin is named in the list problems', async () => {
+  const state = skillsState([skill('b')]);
+  state.catalog.clashes = [{ name: 'hallmark', pinned: false }, { name: 'pinned-one', pinned: true }];
+  const page = loadPage(state);
+  await settle();
+  const text = page.panel('skills').textContent;
+  assert.ok(text.includes('Skill list problems') && text.includes('skill hallmark:'));
+  assert.ok(!text.includes('pinned-one'));
 });
 
 test('a stale stored name shows as ignored without its value, and is no unsaved change', async () => {
@@ -466,7 +513,10 @@ test('a missing catalog, an empty user list, a moved folder and a bad list each 
   moved.resolved.settings_folder_moved = true;
   const page = loadPage(moved);
   await settle();
-  assert.ok(page.panel('skills').textContent.includes('User level skills are not counted'));
+  const text = page.panel('skills').textContent;
+  assert.ok(text.includes('role skills: MCSPARROW_HOME is set, the user catalog is not read'));
+  assert.equal(box(page, 'sk-qa-user-b'), null);
+  assert.ok(box(page, 'sk-qa-project-b'));
   const bad = skillsState([]);
   bad.catalog.errors = ['ERROR user catalog: entry 3: category'];
   const errs = loadPage(bad);

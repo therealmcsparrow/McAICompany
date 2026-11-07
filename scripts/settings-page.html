@@ -355,10 +355,10 @@ function initialLanguage() {
 function resetDraft() {
   touched = new Set();
   buildSkillIndex();
-  skillBase = { user: withoutStaleSkills(clone(state.user)), project: withoutStaleSkills(clone(state.project)) };
+  skillBase = { user: withoutStaleSkills(clone(state.user), 'user'), project: withoutStaleSkills(clone(state.project), 'project') };
   draft = {
-    user: withoutStaleSkills(clone(state.user)),
-    project: withoutStaleSkills(clone(state.project)),
+    user: withoutStaleSkills(clone(state.user), 'user'),
+    project: withoutStaleSkills(clone(state.project), 'project'),
     profile: clone(state.resolved.profile.fields),
     language: initialLanguage()
   };
@@ -1572,8 +1572,8 @@ const SKILL_NONE_HINT = 'No skills match this Role\'s categories. Add one with /
 const SKILL_PROTECTED = 'Protected Role: skills are chosen at User level only. A project value is ignored.';
 const SKILL_IGNORED = 'Ignored: this stored skill is not in the list or not in this Role\'s categories. It stays in the file until you save a change at this level, and that save removes it.';
 const SKILL_NOT_FOUND = 'Not found is not proof: an installer may write elsewhere.';
-const SKILL_NOT_SELECTABLE = 'Not selectable: this entry stands for a group of skills.';
-const SKILL_MOVED = 'The settings folder is not your user home, so User level skills are not counted.';
+const SKILL_NOT_SELECTABLE = 'Not selectable: a wildcard names no one skill.';
+const SKILL_MOVED = 'role skills: MCSPARROW_HOME is set, the user catalog is not read';
 const REFUSED_SKILLS = /^(user|project) roles\.([a-z0-9-]+)\.skills(?:\[\d+\]\.name)?: /;
 
 let skRoles = {};   // per Role: details, summary parts and level records of the Skills tab
@@ -1600,11 +1600,17 @@ const skillEligible = (role, name) => {
 };
 // A stored name the catalog does not offer this Role is dropped from the draft; the server drops it on the next save.
 // A list left empty by that is removed, not stored as an explicit empty choice.
-function withoutStaleSkills(layer) {
+// While the user layer was not read (moved folder, a list problem), its stored names are kept as they are.
+const skillUserUnread = () => state.resolved?.settings_folder_moved === true
+  || (Array.isArray(state.catalog?.errors) && state.catalog.errors.length > 0);
+const skillProtected = (role) => state.resolved?.roles?.[role]?.protected === true;
+function withoutStaleSkills(layer, level) {
   if (skIndex.size === 0 || !isObj(layer?.roles)) return layer;
+  if (level === 'user' && skillUserUnread()) return layer;
   for (const [role, entry] of Object.entries(layer.roles)) {
     if (!isObj(entry) || !Array.isArray(entry.skills)) continue;
-    const kept = entry.skills.filter((i) => isObj(i) && skillEligible(role, i.name));
+    const protectedHere = level === 'project' && skillProtected(role);
+    const kept = protectedHere ? [] : entry.skills.filter((i) => isObj(i) && skillEligible(role, i.name));
     if (kept.length === entry.skills.length) continue;
     if (kept.length === 0) delete entry.skills; else entry.skills = kept;
     if (Object.keys(entry).length === 0) delete layer.roles[role];
@@ -1620,7 +1626,8 @@ const skillList = (level, role) => {
 function staleSkills(level, role) {
   const stored = getIn(state[level], ['roles', role, 'skills']);
   if (!Array.isArray(stored) || skIndex.size === 0) return [];
-  const prot = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
+  if (level === 'user' && skillUserUnread()) return [];
+  const prot = level === 'project' && skillProtected(role);
   const out = [];
   stored.forEach((item, n) => {
     if (!prot && isObj(item) && skillEligible(role, item.name)) return;
@@ -1637,7 +1644,7 @@ const skillEffective = (role) => {
   if (u !== undefined) return { list: u, source: 'user' };
   return { list: [], source: '' };
 };
-const sourceText = (e) => (e.kind === 'repo' ? `repo${typeof e.commit === 'string' ? ` at ${e.commit.slice(0, 7)}` : ''}` : e.kind === 'command' ? 'command (manual)' : 'plugin');
+const sourceText = (e) => (e.kind === 'repo' ? `repo${typeof e.skillrepo === 'string' && e.skillrepo !== '' ? ` ${e.skillrepo}` : ''}${typeof e.commit === 'string' ? ` at ${e.commit.slice(0, 7)}` : ''}` : e.kind === 'command' ? 'command (manual)' : 'plugin');
 
 function describeIds(rec, row) {
   const ids = [`${row.id}-d1`, `${row.id}-d2`, `${row.id}-d3`];
@@ -1688,7 +1695,8 @@ function toggleSkill(rec, row) {
 function skillRow(rec, e) {
   const id = `sk-${rec.role}-${rec.level}-${e.name}`;
   const cb = el('input', { type: 'checkbox', id, disabled: e.selectable !== true });
-  const vetted = typeof e.vetted === 'string' && e.vetted !== '' ? `vetted ${e.vetted}` : 'not vetted';
+  const vetted = typeof e.vetted_text === 'string' && e.vetted_text !== '' ? e.vetted_text
+    : typeof e.vetted === 'string' && e.vetted !== '' ? `vetted ${e.vetted}` : 'not vetted';
   const status = `${typeof e.status === 'string' ? e.status : 'not found'}${typeof e.place === 'string' && e.place !== '' ? `, ${e.place}` : ''}`;
   const warnish = e.status === 'folder not recognized' || e.status === 'not found';
   const row = { e, id, cb };
@@ -1708,6 +1716,10 @@ function skillLevel(role, level, entries, cats) {
   const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
   if (level === 'project' && !projectOn()) {
     box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'));
+    return box;
+  }
+  if (level === 'user' && state.resolved?.settings_folder_moved === true) {
+    box.append(el('p', { class: 'lockwhy locked' }, SKILL_MOVED));
     return box;
   }
   const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
@@ -1819,6 +1831,9 @@ function renderSkills(panel) {
     return;
   }
   const errors = Array.isArray(state.catalog.errors) ? state.catalog.errors.filter((s) => typeof s === 'string') : [];
+  for (const c of Array.isArray(state.catalog.clashes) ? state.catalog.clashes : []) {
+    if (isObj(c) && c.pinned !== true && typeof c.name === 'string') errors.push(`skill ${c.name}: the entry clashes with the baseline list and is not used`);
+  }
   if (errors.length) panel.append(el('div', { class: 'notice err' }, el('strong', {}, 'Skill list problems'), el('ul', {}, errors.map((s) => el('li', {}, s)))));
   if (state.resolved?.settings_folder_moved === true) panel.append(el('p', { class: 'notice warn' }, SKILL_MOVED));
   const entries = skillEntries();
