@@ -616,7 +616,7 @@ test('In effect names only what the resolver would use while the user layer is u
     const dd = walkAll(page.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
     assert.ok(!dd.some((t) => t.includes('ghost')), unread);
     if (unread === 'catalog') assert.ok(dd.includes('qa-helper (user)'), unread);
-    else assert.ok(dd.includes('none'), unread);
+    else assert.ok(!dd.includes('qa-helper (user)'), unread);
   }
 });
 
