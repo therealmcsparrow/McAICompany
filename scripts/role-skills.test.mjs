@@ -616,3 +616,21 @@ test('record of a name that is stored stale for the Role writes the entry and da
   assert.deepEqual(JSON.parse(read(p, 'settings.json')).aico_settings.roles['backend-engineer'].skills, [{ name: 'pick-one', approved: TODAY }]);
   assert.equal(JSON.parse(fs.readFileSync(userFile(p), 'utf8')).entries.length, 1);
 });
+
+for (const [label, bad] of [['an array', ['xx-skill']], ['an object with a toString key', { toString: 1 }]]) {
+  test(`a stored name that is ${label} refuses before any write`, (t) => {
+    const p = project(t, { design: [line('xx-skill')], skills: [], settings: { aico_settings: { version: 1, roles: { 'ui-ux-designer': { skills: [{ name: bad }] } } } } });
+    const r = run(p, ['migrate', '--apply', '--line', '4:xx-skill=ui-ux-designer']);
+    assert.equal(r.code, 1, r.text);
+    assert.match(r.text, /project settings refused: .*each entry needs a name/);
+    assert.match(r.text, /done so far: nothing/);
+    assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'archive')), false);
+    assert.equal(fs.existsSync(userFile(p)), false);
+    assert.equal(read(p, 'project.md'), p.md);
+  });
+}
+
+test('role-skills.mjs holds no 0 byte', () => {
+  const buf = fs.readFileSync(new URL('./role-skills.mjs', import.meta.url));
+  assert.equal(buf.includes(0), false);
+});

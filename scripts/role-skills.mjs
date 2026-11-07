@@ -420,8 +420,14 @@ function execute(s, opts, chosen, moves, out) {
   const stopped = (e) => { out.push(`ERROR ${e.message}`, `done so far: ${note.join(', ') || 'nothing'}; project.md is unchanged`); return { ok: false, changed: note.length > 0, lines: out }; };
   try {
     // Names that become entries only after the catalog write cannot be checked yet; the write checks them again.
-    const later = new Set(done.filter((d) => d.item.res.entry).flatMap((d) => d.roles.map((r) => `${d.item.res.target.skillname} ${r}`)));
-    checkAdds(mergedLayer(s.project.data, adds, (name, role) => later.has(`${name} ${role}`)), adds, opts);
+    const later = new Map();
+    for (const d of done) {
+      if (!d.item.res.entry) continue;
+      const name = d.item.res.target.skillname;
+      if (!later.has(name)) later.set(name, new Set());
+      for (const r of d.roles) later.get(name).add(r);
+    }
+    checkAdds(mergedLayer(s.project.data, adds, (name, role) => later.get(name)?.has(role) === true), adds, opts);
   } catch (e) {
     return stopped(e instanceof Stop ? e : new Stop('cannot write'));
   }

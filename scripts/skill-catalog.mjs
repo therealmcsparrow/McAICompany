@@ -573,7 +573,7 @@ function loadForWrite(opts, { checkRows = true } = {}) {
   if (read.state === 'error') return { error: `ERROR user catalog: ${read.code}` };
   const doc = read.state === 'ok' ? read.doc : { schema: 1, entries: [] };
   // A write that adds or changes a row checks every stored row, since all are written back. clearBound passes
-  // checkRows false, the one exception to proj.M-SEC9 the CEO allowed: it writes stored rows back with only the two
+  // checkRows false, the one exception to proj.M-SEC9: it writes stored rows back with only the two
   // pin keys removed and adds no value, and a failed scan must always be able to take the pin off.
   for (let i = 0; checkRows && i < doc.entries.length; i++) {
     const v = validateEntry(doc.entries[i], 'user');
