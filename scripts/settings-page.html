@@ -1670,6 +1670,7 @@ function refuseSkill(rec, row, text) {
   rec.refusedRow = row;
   say(text);
   refresh();
+  rec.err.scrollIntoView({ block: 'nearest' });
 }
 function markSkillRefused(rec, line) {
   const reason = line.includes('at most') ? 'a Role can have 5 skills.'
@@ -1695,6 +1696,7 @@ function toggleSkill(rec, row) {
   rec.message = '';
   rec.refused = false;
   rec.refusedRow = null;
+  document.getElementById('field-live').textContent = '';
   const had = getIn(skillBase[rec.level], ['roles', rec.role, 'skills']) !== undefined;
   setIn(draft[rec.level], ['roles', rec.role, 'skills'], list.length > 0 || had ? list : undefined);
   refresh();
@@ -1932,6 +1934,7 @@ function restoreFocus(previousId, message) {
 }
 function load(newState) {
   state = newState;
+  document.getElementById('field-live').textContent = '';
   resetDraft();
   render();
 }

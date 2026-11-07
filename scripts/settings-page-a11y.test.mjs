@@ -115,6 +115,7 @@ function loadPage(initialState, fetchImpl) {
   const panels = names.map((n) => ids[`panel-${n}`]);
   return {
     ids,
+    doc,
     find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
     panel: (name) => ids[`panel-${name}`]
   };
@@ -369,6 +370,51 @@ test('the sixth pick stays unchecked, says why in the live region and the list, 
   assert.equal(unsaved(page), '1 unsaved change');
   await ticked(box(page, 'sk-qa-user-s1'), false);
   assert.equal(byId(page, 'sk-qa-user_err').hidden, true);
+});
+
+test('the refusal text leaves the live region after an untick, a tick and a save', async () => {
+  const reason = 'Limit reached: a Role can have 5 skills. Clear one first.';
+  const full = async (page) => {
+    for (const n of ['s1', 's2', 's3', 's4', 's5']) await ticked(box(page, `sk-qa-user-${n}`));
+    await ticked(box(page, 'sk-qa-user-s6'));
+    assert.equal(page.ids['field-live'].textContent, reason);
+  };
+  let page = loadPage(skillsState(SIX));
+  await settle();
+  await full(page);
+  await ticked(box(page, 'sk-qa-user-s1'), false);
+  assert.equal(page.ids['field-live'].textContent, '');
+  await ticked(box(page, 'sk-qa-user-s6'));
+  assert.equal(page.ids['field-live'].textContent, '');
+  await ticked(box(page, 'sk-qa-user-s6'), false);
+  await ticked(box(page, 'sk-qa-user-s1'));
+  await ticked(box(page, 'sk-qa-user-s6'));
+  assert.equal(page.ids['field-live'].textContent, reason);
+  const initial = skillsState(SIX);
+  const after = structuredClone(initial);
+  const fetchImpl = async (url, init) => (init?.method === 'POST'
+    ? { status: 200, json: async () => ({ state: after }) }
+    : { status: 200, json: async () => structuredClone(initial) });
+  page = loadPage(initial, fetchImpl);
+  await settle();
+  await ticked(box(page, 'sk-qa-user-s1'));
+  await full(page);
+  await page.ids.save.fire('click');
+  await settle();
+  assert.equal(page.ids['field-live'].textContent, '');
+});
+
+test('the refused sixth pick scrolls its message into view and moves no focus', async () => {
+  const page = loadPage(skillsState(SIX));
+  await settle();
+  for (const n of ['s1', 's2', 's3', 's4', 's5']) await ticked(box(page, `sk-qa-user-${n}`));
+  const sixth = box(page, 'sk-qa-user-s6');
+  sixth.focus();
+  page.doc.scrolled = [];
+  await ticked(sixth);
+  const err = byId(page, 'sk-qa-user_err');
+  assert.ok(page.doc.scrolled.some((s) => s.node === err && s.options?.block === 'nearest'));
+  assert.equal(page.doc.activeElement, sixth);
 });
 
 test('a wildcard entry is a disabled checkbox with its reason as text', async () => {
