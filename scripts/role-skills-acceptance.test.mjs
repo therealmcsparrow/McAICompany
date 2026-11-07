@@ -225,6 +225,7 @@ function setup(t, { entries = [entry()], lists = { qa: ['user', [NAME]] }, scan 
   const vets = [];
   const env = {
     home, productRoot: root, today: TODAY, log: (x) => log.push(x), settings: settingsFor(lists, moved),
+    scanInstalled: async () => ({ results: [{ verdict: 'pass', blocking: false }] }),
     vet: async (arg) => { vets.push(arg); return { commit: COMMIT, hash: scanHash, result: { verdict: 'pass', counts: { critical: 0, high: 0 } }, ...scan }; },
     exec: (cmd, cwd, argv) => {
       calls.push({ cmd, cwd, argv });
@@ -395,7 +396,7 @@ test('AC13: a command entry prints manual and WARNING, runs nothing with or with
   assert.ok(!calls.length);
 });
 
-test('AC18: status runs no child, no PATH binary and follows no link', (t) => {
+test('AC18: status starts no child, parses and runs no command text, and reads no file content through a link (where a link leads and which names are there may be looked up)', (t) => {
   const bin = tmp(t, 'bin');
   const marker = path.join(tmp(t, 'marker'), 'ran');
   fs.writeFileSync(path.join(bin, 'npx'), `#!/bin/sh\ntouch "${marker}"\n`, { mode: 0o755 });
@@ -411,9 +412,23 @@ test('AC18: status runs no child, no PATH binary and follows no link', (t) => {
   let linked = true;
   try { fs.symlinkSync(outside, path.join(root, '.claude', 'skills', NAME), 'junction'); } catch { linked = false; }
   const cmd = { skillname: 'cmd-skill', skillcategory: 'engineering', skillinstaller: `npx -y evil@1.0.0 add && touch ${marker}`, license: 'MIT' };
+  const outsideHash = boundedFolderHash(outside);
+  const linkPath = path.join(root, '.claude', 'skills', NAME);
+  const through = [outside, fs.realpathSync(outside), linkPath].map((p) => path.resolve(p));
+  const opened = [];
+  const record = (orig) => function spy(file, ...rest) {
+    if (typeof file === 'string' || file instanceof URL) opened.push(path.resolve(String(file)));
+    return orig.call(this, file, ...rest);
+  };
+  t.mock.method(fs, 'readFileSync', record(fs.readFileSync));
+  t.mock.method(fs, 'openSync', record(fs.openSync));
   skillStatus(cmd, { home, productRoot: root });
-  const st = skillStatus(entry({ hash: boundedFolderHash(outside) }), { home, productRoot: root, scope: 'project' });
-  if (linked) assert.notEqual(st.status, 'installed');
+  const st = skillStatus(entry({ hash: outsideHash }), { home, productRoot: root, scope: 'project' });
+  if (linked) {
+    assert.notEqual(st.status, 'installed');
+    const hit = opened.filter((p) => through.some((d) => p === d || p.startsWith(d + path.sep)));
+    assert.deepEqual(hit, [], 'a file under the link target or the link was read');
+  }
   assert.equal(fs.existsSync(marker), false);
 });
 

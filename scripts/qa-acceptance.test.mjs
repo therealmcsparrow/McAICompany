@@ -1197,7 +1197,7 @@ test('AC14 the installer fetches the commit that was scanned and a hash mismatch
   assert.doesNotMatch(section, /npx|git clone|curl|wget|Invoke-WebRequest|install-skills(?! --status)/);
   assert.match(section, /same source, commit and folder/);
   const picks = read('skills/lead/references/skill-picks.md');
-  assert.match(picks, /Go on only when the skill's line shows no `FAILED`, `hash differs` or `missing`/);
+  assert.match(picks, /Go on only when the skill's line is `installed <name> \(<scope>` with none of `FAILED`, `hash differs`, `scan failed` or `missing` for that skill/);
   assert.match(picks, /Every other outcome \*\*stops the run\*\*/);
 });
 

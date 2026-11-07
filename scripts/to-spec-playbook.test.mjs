@@ -64,6 +64,12 @@ test('the dispatch carries Role skills: after Context cap: and the build follows
   assert.ok(at('Role skills: <names | none>') > at('Context cap: <cap> handover <n>'));
 });
 
+test('the end prints one degraded line per left-off name, after the path', () => {
+  const end = text.slice(text.indexOf('## 5. End'));
+  assert.match(end, /`degraded: missing <name>` once per name left off `Role skills:`/);
+  assert.ok(end.indexOf('prints the path first') < end.indexOf('degraded: missing <name>'), 'the path stays first');
+});
+
 test('AC36 spec-check decides; one PM revision; then not ready with the ERROR lines, never done', () => {
   has(`${RUN} spec-check check '.company/work/<slug>/spec.md'`);
   has('exit code and the `ERROR` lines', 'never the Handoff', 'one revision', 'not ready', 'status: blocked');

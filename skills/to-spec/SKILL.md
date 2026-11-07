@@ -60,5 +60,6 @@ Then run `git status --porcelain`; any entry that was not in the baseline → st
 End by printing the path `.company/work/<slug>/spec.md` (prints the path first), the check line (`spec-check: <e> errors`) and, in `Language:`:
 - ready → the next commands: `/aico:to-tickets .company/work/<slug>/spec.md` (cut tickets) and `/aico:feature .company/work/<slug>/spec.md` (build; it keeps only the Ship Gate and writes the shipped spec). The draft is not approved by this run.
 - not ready → the ERROR lines, and that `/aico:to-spec .company/work/<slug>/spec.md` can be rerun on it.
+Then print `degraded: missing <name>` once per name left off `Role skills:`, after the path, so the path stays first.
 The next command runs only when the CEO types it (only the CEO starts it). Start nothing yourself; never use the Skill tool for it.
 Nothing is committed: the draft and the work Handoffs stay in `.company/work/<slug>/`; aico never commits them (grill-file v1 Personal data). Write nothing to `.company/lessons.md`.

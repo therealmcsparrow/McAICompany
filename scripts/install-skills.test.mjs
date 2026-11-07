@@ -871,13 +871,13 @@ test('--status prints a line for every catalog entry, roles -, dispatch no, when
   assert.ok(line.includes('roles: -') && line.endsWith('dispatch: no'), line);
 });
 
-test('--status and --selected log the catalog warnings', async () => {
+test('--selected logs the catalog warnings', async () => {
   const s = selSetup({});
   const prev = process.env.MCSPARROW_HOME;
   process.env.MCSPARROW_HOME = join(s.home, 'elsewhere');
   try {
     const { env, log } = selEnv(s, { home: undefined, settings: { settings_folder_moved: false, roles: {} } });
-    await main(['--status'], env);
+    await main(['--selected'], env);
     assert.ok(log.some((l) => /MCSPARROW_HOME/.test(l)), log.join('|'));
   } finally {
     if (prev === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = prev;

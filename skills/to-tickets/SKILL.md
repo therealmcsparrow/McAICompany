@@ -54,4 +54,4 @@ Ready comes from the exit code and the `ERROR` lines of this check, never the Ar
 4. Run `git status --porcelain`; new entries only under `.company/work/<slug>/`. Anything else → stop, name the paths, change nothing.
 
 ## 5. End
-Last line: `plan: ready` or `plan: not ready, <e> errors`. Tell the CEO the path `.company/work/<slug>/plan.md` and that `/aico:feature .company/work/<slug>/plan.md` builds from it. Nothing starts without the CEO's command. Write nothing to `.company/lessons.md`.
+Print `degraded: missing <name>` once per name left off `Role skills:`, before the last line. Last line: `plan: ready` or `plan: not ready, <e> errors`; `plan: ready` stays the last line. Tell the CEO the path `.company/work/<slug>/plan.md` and that `/aico:feature .company/work/<slug>/plan.md` builds from it. Nothing starts without the CEO's command. Write nothing to `.company/lessons.md`.

@@ -205,6 +205,23 @@ test('research dispatch and setup skill-researcher dispatch carry a built Role s
   has(skill('setup'), 'its `Role skills:` built as §1.19 d says (`install-skills --status` once, no Install form; `none` when no name is left)');
 });
 
+test('setup says each degraded line to the CEO with the search result', () => {
+  const s = skill('setup');
+  has(s, 'say each `degraded: missing <name>` to the CEO with the search result');
+  assert.ok(s.indexOf('Role skills:') < s.indexOf('say each `degraded: missing <name>`'), 'after the dispatch');
+});
+
+test('the design-researcher Goal judges the resolved selections and the catalog design entries', () => {
+  has(research, "judge the resolved selections and the catalog's design entries and recommend at most 5");
+  assert.ok(!research.includes('judge the installed design skills'), 'the old Goal is gone');
+});
+
+test("skill-picks stops only on the skill's own lines, the exit decides nothing", () => {
+  const p = read('skills/lead/references/skill-picks.md');
+  has(p, "That skill's own lines decide, not the exit", 'no `installed` line for that skill', 'for a line saying `The folder stays`', 'other `hash differs` lines: the line alone', 'under the product root', 'the check gave no usable result');
+  assert.ok(!p.includes('a non-zero exit'), 'no exit-code stop');
+});
+
 test('AC23 the five UI Roles load Role skills and name a missing one under ## Next', () => {
   for (const r of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist']) {
     has(read(`agents/${r}.md`), 'Role skills:', 'missing role skill: <name>', '## Next');

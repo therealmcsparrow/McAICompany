@@ -261,10 +261,26 @@ test('skill-picks post-install: the installer scans, the Lead runs no scan or ch
 });
 test('skill-picks post-install: every other outcome stops the run', () => {
   const t = postInstall();
-  assert.match(t, /Go on only when the skill's line shows no `FAILED`, `hash differs`, `scan failed` or `missing`/);
-  for (const stop of ['`scan failed after install`', 'refused: ', 'a non-zero exit']) {
+  assert.match(t, /Go on only when the skill's line is `installed <name> \(<scope>` with none of `FAILED`, `hash differs`, `scan failed` or `missing` for that skill/);
+  for (const stop of ['`scan failed after install`', 'no `installed` line for that skill']) {
     assert.ok(t.includes(stop), `stop case missing: ${stop}`);
   }
+  assert.ok(!t.includes('a non-zero exit'), 'the exit code decides nothing');
+  assert.ok(!t.includes('refused: '), 'no refused line stops a pick that installed');
+  assert.match(t, /That skill's own lines decide, not the exit/);
+  assert.match(t, /anything else: the line, or "the check gave no usable result"/);
+  assert.match(t, /for a line saying `The folder stays`/);
+  assert.match(t, /other `hash differs` lines: the line alone/);
+  assert.match(t, /by hand, with no command, under the product root/);
+});
+test('skill-picks post-install: a clean pick goes on while a failed pick of the same run stops', () => {
+  const t = postInstall();
+  const go = t.slice(t.indexOf('Go on only when'), t.indexOf('Every other outcome'));
+  assert.match(go, /`installed <name> \(<scope>`/);
+  assert.match(go, /That skill's own lines decide, not the exit/);
+  assert.match(go, /report that line/);
+  assert.ok(!/exit is 0|exit 0/.test(go), 'a clean pick never waits on the exit');
+  assert.match(t, /no `installed` line for that skill/);
   assert.match(t, /\*\*stops the run\*\*/);
   assert.match(t, /never auto, whatever the Gate settings/);
 });
