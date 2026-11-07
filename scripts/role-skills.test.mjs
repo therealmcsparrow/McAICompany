@@ -378,3 +378,47 @@ test('a category choice is refused for security, for a Design skills line, for a
   assert.equal(orphan.code, 1);
   assert.match(orphan.text, /^ERROR usage/);
 });
+
+test('a category whose Roles are all at 5 is not printed, and not accepted', (t) => {
+  const quality = ['qa', 'code-reviewer', 'fresh-reviewer', 'hands-on-tester', 'persona-tester', 'accessibility-tester'];
+  const five = ['a1', 'a2', 'a3', 'a4', 'a5'].map((name) => ({ name }));
+  const roles = Object.fromEntries(quality.map((r) => [r, { skills: five }]));
+  const p = project(t, { design: [], skills: [SKILLS[0]], settings: { aico_settings: { version: 1, roles } } });
+  const pre = run(p, ['migrate']);
+  const line = pre.out.find((l) => l.startsWith('line 7:'));
+  assert.ok(line, pre.text);
+  assert.match(line, /choose its category/);
+  assert.match(line, /Category: engineering; Roles: /);
+  assert.doesNotMatch(line, /Category: quality/);
+  assert.doesNotMatch(line, /Category: security/);
+
+  const r = run(p, ['migrate', '--apply', '--line', '7:stk-skill=qa', '--category', '7:stk-skill=quality']);
+  assert.match(r.text, /line 7: stays, category not offered/);
+  assert.equal(fs.existsSync(userFile(p)), false);
+});
+
+test('two lines with one name share the chosen category, and a Role outside it stays', (t) => {
+  const twice = [SKILLS[0], SKILLS[0]];
+  const share = project(t, { design: [], skills: twice });
+  const r = run(share, ['migrate', '--apply',
+    '--line', '7:stk-skill=qa', '--category', '7:stk-skill=quality',
+    '--line', '8:stk-skill=hands-on-tester']);
+  assert.equal(r.code, 0, r.text);
+  assert.match(r.text, /line 7: migrated, entry in your list, selected for qa/);
+  assert.match(r.text, /line 8: migrated, .*selected for hands-on-tester/);
+  const entries = JSON.parse(fs.readFileSync(userFile(share), 'utf8')).entries.filter((e) => e.skillname === 'stk-skill');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].skillcategory, 'quality');
+  const roles = JSON.parse(read(share, 'settings.json')).aico_settings.roles;
+  assert.deepEqual(roles['qa'].skills.map((x) => x.name), ['stk-skill']);
+  assert.deepEqual(roles['hands-on-tester'].skills.map((x) => x.name), ['stk-skill']);
+
+  const outside = project(t, { design: [], skills: twice });
+  const o = run(outside, ['migrate', '--apply',
+    '--line', '7:stk-skill=qa', '--category', '7:stk-skill=quality',
+    '--line', '8:stk-skill=senior-engineer']);
+  assert.match(o.text, /line 7: migrated/);
+  assert.match(o.text, /line 8: stays, Role not offered/);
+  assert.equal(JSON.parse(fs.readFileSync(userFile(outside), 'utf8')).entries.find((e) => e.skillname === 'stk-skill').skillcategory, 'quality');
+  assert.equal(JSON.parse(read(outside, 'settings.json')).aico_settings.roles['senior-engineer'], undefined);
+});
