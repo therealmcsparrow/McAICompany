@@ -5,6 +5,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isLegacySlug } from '../mods/lib/work-folder.mjs';
 
 const BASELINE_FILE = path.join(import.meta.dirname, '..', 'deps', '3rdpartyskills.json');
 const USER_DIR = '.mcsparrow';
@@ -19,7 +20,8 @@ const MAX_HASH_DEPTH = 32;
 const MAX_LISTED_NAMES = 5000;
 
 const CATEGORIES = Object.freeze(['engineering', 'design', 'security', 'quality', 'product', 'research', 'content']);
-const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+// Skill names take the same shape as a legacy work folder slug; that check has one home.
+const NAME_RE = Object.freeze({ test: isLegacySlug });
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
 const TOKEN_RE = /^[A-Za-z0-9@._/:=+-]+$/;
