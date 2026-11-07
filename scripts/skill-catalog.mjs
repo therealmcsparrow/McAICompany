@@ -536,7 +536,8 @@ export function itemsProven(rootDir, name, hash, { place } = {}) {
 // while POSIX and Git Bash walk `x` first. Threats: a `.` or `..` after a named segment (either separator), a
 // route through a helper link, a link that leads elsewhere. The native landing must equal the target's, and the
 // link's own text must be a plain route: leading `..` only, then named segments, none of them a link. Any read
-// error refuses. A link among the ancestors of `target`'s own spelling (a symlinked temp folder) is not a helper.
+// error refuses. The walked route must then equal the target's own spelling, native or as given, with no case
+// folding, so a segment spelled any other way (a stream suffix, another case) refuses. A link among the ancestors of `target`'s own spelling (a symlinked temp folder) is not a helper.
 function linkLeadsTo(link, target) {
   try {
     if (fs.realpathSync.native(link) !== fs.realpathSync.native(target)) return false;
@@ -561,7 +562,7 @@ function linkLeadsTo(link, target) {
       cur = path.join(cur, seg);
       if (fs.lstatSync(cur).isSymbolicLink() && !(abs && ancestors.has(cur))) return false;
     }
-    return true;
+    return cur === fs.realpathSync.native(target) || cur === path.resolve(target);
   } catch { return false; }
 }
 

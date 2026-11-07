@@ -829,7 +829,7 @@ test('skillStatus: link text with a dot segment after a named one is refused eve
   const link = path.join(root, '.claude', 'skills', 'my-skill');
   try { fs.symlinkSync(a, link, 'junction'); } catch { t.diagnostic('cannot create a link here'); return; }
   const real = fs.readlinkSync;
-  for (const text of ['../../.agents/skills/x/../my-skill', '../../.agents/skills/x\\..\\my-skill', '../../.agents/skills/./my-skill']) {
+  for (const text of ['../../.agents/skills/x/../my-skill', '../../.agents/skills/x\\..\\my-skill', '../../.agents/skills/./my-skill', '../../.agents/skills/my-skill::$INDEX_ALLOCATION', '../../.agents::$INDEX_ALLOCATION/skills/my-skill', '../../.AGENTS/skills/my-skill']) {
     t.mock.method(fs, 'readlinkSync', (p, ...rest) => (p === link ? text : real(p, ...rest)));
     assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized', text);
     t.mock.restoreAll();
