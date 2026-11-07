@@ -50,7 +50,8 @@ const APPLY = ['migrate', '--apply',
   '--line', '5:impeccable=ui-ux-designer',
   '--line', '6:fancy-ui=ui-ux-designer,brand-artist',
   '--line', '8:aico:ui-design=ui-ux-designer',
-  '--line', '12:stk-skill=backend-engineer'];
+  '--line', '12:stk-skill=backend-engineer',
+  '--category', '12:stk-skill=engineering'];
 
 const read = (p, f) => fs.readFileSync(path.join(p.cwd, '.company', f), 'utf8');
 const userFile = (p) => path.join(p.home, '.mcsparrow', '3rdpartyskills.json');
@@ -112,7 +113,7 @@ test('apply writes entries and selections, archives, clears, and a second run ch
 
 test('a section left empty gets its placeholder back', (t) => {
   const p = project(t, { design: [DESIGN[0]], skills: [SKILLS[0]] });
-  const r = run(p, ['migrate', '--apply', '--line', '4:hallmark=ui-ux-designer', '--line', '7:stk-skill=backend-engineer']);
+  const r = run(p, ['migrate', '--apply', '--line', '4:hallmark=ui-ux-designer', '--line', '7:stk-skill=backend-engineer', '--category', '7:stk-skill=engineering']);
   assert.equal(r.code, 0, r.text);
   const md = read(p, 'project.md');
   assert.match(md, /## Design skills\n- \(none yet; the design-researcher proposes them\)\n/);
@@ -134,7 +135,7 @@ test('a repo line without a commit stays unless it equals a list entry', (t) => 
 
 test('a Role not offered, or a protected Role, stays', (t) => {
   const p = project(t, { design: [DESIGN[2]], skills: [SKILLS[0]] });
-  const r = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=qa', '--line', '7:stk-skill=architect']);
+  const r = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=qa', '--line', '7:stk-skill=architect', '--category', '7:stk-skill=engineering']);
   assert.match(r.text, /line 4: stays, Role not offered/);
   assert.match(r.text, /line 7: stays, Role not offered/);
   assert.equal(fs.existsSync(userFile(p)), false);
@@ -343,9 +344,11 @@ test('a new entry from a Skills line takes a category the CEO picks, and the Rol
   assert.ok(!/choose its category/.test(six) && /; Category: design; Roles: /.test(six), 'a Design skills line shows its category and has no choice');
   assert.ok(!/Category: security/.test(pre.text));
 
-  const plain = run(p, ['migrate', '--apply', '--line', '12:stk-skill=qa']);
-  assert.match(plain.text, /line 12: stays, Role not offered/);
-  assert.equal(fs.existsSync(userFile(p)), false);
+  for (const who of ['qa', 'senior-engineer']) {
+    const plain = run(p, ['migrate', '--apply', '--line', `12:stk-skill=${who}`]);
+    assert.match(plain.text, /line 12: stays, no category chosen/);
+    assert.equal(fs.existsSync(userFile(p)), false);
+  }
 
   const r = run(p, ['migrate', '--apply', '--line', '12:stk-skill=qa', '--category', '12:stk-skill=quality']);
   assert.equal(r.code, 0, r.text);
@@ -364,7 +367,7 @@ test('a category choice is refused for security, for a Design skills line, for a
   const sec = refused(['--category', '12:stk-skill=security'], ['--line', '12:stk-skill=security']);
   assert.match(sec.r.text, /line 12: stays, category not offered/);
   const design = refused(['--category', '6:fancy-ui=quality'], ['--line', '6:fancy-ui=qa']);
-  assert.match(design.r.text, /line 6: stays, category not offered/);
+  assert.match(design.r.text, /line 6: stays, category comes from the list/);
   assert.equal(fs.existsSync(userFile(design.p)), false);
   for (const bad of ['12:stk-skill=Quality', '12:stk-skill=', 'x:stk-skill=quality', '12:stk-skill=quality;x', '12:other=quality', '12:quality']) {
     const r = refused(['--category', bad], ['--line', '12:stk-skill=qa']).r;

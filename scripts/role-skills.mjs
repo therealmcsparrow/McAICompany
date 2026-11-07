@@ -262,9 +262,10 @@ function scan(opts) {
         if (res.pickCategory) {
           const keys = categoryChoices(baseline);
           const first = res.target.skillcategory;
-          const choices = [...keys.filter((k) => k === first), ...keys.filter((k) => k !== first)]
-            .map((k) => [k, openFor({ skillcategory: k })]).filter(([, r]) => r.length > 0);
-          if (choices.length === 0) Object.assign(res, stay('no Role can take it'));
+          const ordered = [...keys.filter((k) => k === first), ...keys.filter((k) => k !== first)];
+          const choices = ordered.map((k) => [k, openFor({ skillcategory: k })]).filter(([, r]) => r.length > 0);
+          const reachable = ordered.some((k) => eligibleRoles({ skillcategory: k }, baseline.categories).some((r) => !guarded.has(r)));
+          if (choices.length === 0) Object.assign(res, stay(reachable ? 'Role already has 5' : 'no Role can take it'));
           else {
             res.choices = choices;
             res.offer = choices.find(([k]) => k === first)?.[1] ?? [];
@@ -369,11 +370,18 @@ function execute(s, opts, chosen, moves, out) {
     if (c.name !== res.e.name) { out.push(`line ${n}: stays, line changed`); continue; }
     if (res.kind === 'choice' && !moves.has(`${n}:${c.name}`)) { out.push(`line ${n}: stays, commit differs from your list`); continue; }
     let offer = res.offer;
-    const category = c.category ?? res.entry?.skillcategory;
+    let category = res.entry?.skillcategory;
     if (c.category !== undefined) {
-      const pick = res.choices?.find(([k]) => k === c.category);
+      if (!res.choices) { out.push(`line ${n}: stays, category comes from the list`); continue; }
+      const pick = res.choices.find(([k]) => k === c.category);
       if (!pick) { out.push(`line ${n}: stays, category not offered`); continue; }
+      category = c.category;
       offer = pick[1];
+    } else if (res.choices) {
+      // A same-name line after a settled one follows that category; any other line needs its own choice.
+      if (!settled.has(res.entry.skillname)) { out.push(`line ${n}: stays, no category chosen`); continue; }
+      category = settled.get(res.entry.skillname);
+      offer = res.choices.find(([k]) => k === category)?.[1] ?? [];
     }
     if (res.choices && settled.has(res.entry.skillname) && settled.get(res.entry.skillname) !== category) { out.push(`line ${n}: stays, category differs from an earlier line`); continue; }
     if (c.roles.some((r) => !offer.includes(r))) { out.push(`line ${n}: stays, Role not offered`); continue; }
@@ -743,7 +751,8 @@ export function record(input, options = {}) {
 const USAGE = [
   'role-skills add      one line of JSON on stdin: { name, repo | command, commit, category, license, save, move }',
   'role-skills record   one line of JSON on stdin: { entry, license, roles }',
-  'role-skills migrate | pending | stale',
+  'role-skills migrate  [--apply] [--line <n>:<name>=<role>[,<role>]] [--category <n>:<name>=<key>] [--move <n>:<name>]',
+  'role-skills pending | stale',
   'Values never go on the command line.'
 ];
 

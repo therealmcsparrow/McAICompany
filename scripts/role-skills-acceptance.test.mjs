@@ -845,7 +845,7 @@ test('AC20: a protected or unlisted Role stays, a Role at 5 is not offered, and 
   assert.doesNotMatch(text, /line 4:.*Roles:.*brand-artist/, 'a Role at 5 is not offered');
   assert.match(text, /line 7: stk-skill/);
   assert.doesNotMatch(text, /Roles:.*\b(architect|security|code-reviewer|pentester|vuln-scanner|fresh-reviewer)\b/);
-  const r = p.mig({ apply: true, choices: [{ n: p.skillLine(0), name: 'stk-skill', roles: ['architect'] }, { n: p.lineOf(0), name: 'fancy-ui', roles: ['brand-artist'] }] });
+  const r = p.mig({ apply: true, choices: [{ n: p.skillLine(0), name: 'stk-skill', roles: ['architect'], category: 'engineering' }, { n: p.lineOf(0), name: 'fancy-ui', roles: ['brand-artist'] }] });
   const out = r.lines.join('\n');
   assert.match(out, /line 7: stays, Role not offered/);
   assert.match(out, /line 4: stays, Role not offered/);
