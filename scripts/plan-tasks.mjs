@@ -345,7 +345,8 @@ export function parsePlan(text, { agents } = {}) {
         context: block.fields.get('context'),
         slice: block.fields.get('slice'),
         seams: block.fields.get('seams'),
-        repeated: block.repeated.filter((key) => HANDOVER_KEYS.includes(key))
+        repeated: block.repeated.filter((key) => HANDOVER_KEYS.includes(key)),
+        qa: { roleValue, planIndex: at, cover: flagged ? [] : deps.deps }
       });
       return task;
     })
@@ -444,6 +445,39 @@ function handoverReport(tasks, handover) {
     for (const reason of f.repeated.includes('seams') ? ['seams: bad value'] : seamsProblems(f.seams)) add(reason);
   }
   return { lines: [...errors, ...warnings, `plan-tasks: ${errors.length} errors (handover ${handover})`], errors: errors.length };
+}
+
+// A seams value that is exactly `none — <reason>` with a reason of 10 to 200 characters, written once.
+function seamsIsNone(f) {
+  const value = f.seams;
+  if (value === undefined || f.repeated.includes('seams') || CONTROLS.test(value)) return false;
+  const none = 'none — ';
+  if (!value.startsWith(none)) return false;
+  const reason = value.slice(none.length).trim();
+  return reason.length >= 10 && reason.length <= 200;
+}
+
+// The qa-first ERROR lines in plan order and rule order, then the count line.
+function qaFirstReport(tasks) {
+  const infos = tasks.map((t) => ({ t, f: handoverFields.get(t) })).filter((x) => x.f);
+  infos.sort((a, b) => a.f.qa.planIndex - b.f.qa.planIndex);
+  const isQa = (x) => x.f.qa.roleValue === 'qa';
+  const qaIds = new Set(infos.filter(isQa).map((x) => x.t.id));
+  const owners = infos.filter((x) => isQa(x) && x.t.filesValid);
+  const errors = [];
+  for (const x of infos) {
+    const add = (reason) => errors.push(`ERROR ${x.t.id}: qa-first: ${reason}`);
+    if (isQa(x)) {
+      if (!x.t.filesValid) add('qa files invalid');
+    } else if (!seamsIsNone(x.f) && !x.f.qa.cover.some((id) => qaIds.has(id))) {
+      add('no qa task');
+    }
+    if (!isQa(x) || x.t.filesValid) {
+      const owner = owners.find((o) => o !== x && (!isQa(x) || o.f.qa.planIndex < x.f.qa.planIndex) && tasksOverlap(o.t, x.t));
+      if (owner) add(`files overlap qa task ${owner.t.id}`);
+    }
+  }
+  return { lines: [...errors, `plan-tasks: ${errors.length} qa-first errors`], errors: errors.length };
 }
 
 // ---------------------------------------------------------------- scheduling
@@ -596,7 +630,7 @@ const EVENTS = {
 
 function newState() {
   return {
-    begun: false, plan: null, hash: null, cap: null, mode: null, round: 0, running: [], done: new Map(),
+    begun: false, qa: false, plan: null, hash: null, cap: null, mode: null, round: 0, running: [], done: new Map(),
     peak: 0, waits: new Set(), out: 0, sibling: 0, extras: new Map(), sets: null, wave: [], merged: new Map()
   };
 }
@@ -632,6 +666,7 @@ function applyEvent(st, rec) {
   if (typeof rec.ev !== 'string' || !Object.hasOwn(EVENTS, rec.ev)) return 'ev is not allowed';
   const wanted = EVENTS[rec.ev];
   for (const key of Object.keys(rec)) {
+    if (key === 'qa' && rec.ev === 'begin') continue;
     if (key !== 'v' && key !== 'at' && key !== 'ev' && !wanted.includes(key)) return `unknown key ${echoKey(key)}`;
   }
   for (const key of ['at', ...wanted]) if (!Object.hasOwn(rec, key)) return `missing key ${key}`;
@@ -648,9 +683,10 @@ function applyEvent(st, rec) {
       if (!MODES.includes(rec.mode)) return 'mode is not allowed';
       if (!isInt(rec.tasks, 0, MAX_TASKS)) return 'tasks must be an integer 0 to 100';
       if ((problem = owProblem(rec.ow))) return problem;
+      if (Object.hasOwn(rec, 'qa') && rec.qa !== true) return 'qa must be true';
       if (st.running.length) return 'begin while a task runs';
       // A begin opens a new segment at round 0, so tasks left pending when a Fix round started are offered again.
-      Object.assign(st, { begun: true, plan: rec.plan, hash: rec.hash, cap: rec.cap, mode: rec.mode, round: 0, sets: null, wave: [] });
+      Object.assign(st, { begun: true, plan: rec.plan, hash: rec.hash, cap: rec.cap, mode: rec.mode, round: 0, sets: null, wave: [], qa: rec.qa === true });
       break;
     }
     case 'start': {
@@ -786,6 +822,7 @@ function viewOf(slug, st) {
     effective_cap: st.mode === 'sequential' ? 1 : st.cap, round: st.round, running: [...st.running], done,
     peak: st.peak, waits: st.waits.size, out: st.out, sibling: st.sibling
   };
+  if (st.qa) view.qa_first = true;
   if (st.mode === 'waves') {
     view.merged = {};
     for (const round of [...st.merged.keys()].sort((a, b) => a - b)) view.merged[round] = [...st.merged.get(round)];
@@ -984,16 +1021,25 @@ function planFor(env, slug, name) {
 }
 
 function cmdCheck(args, env) {
-  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value' });
+  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value', '--qa-first': 'flag' });
   if (positional.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0], env.root, isPlanName(positional[1]) ? positional[1] : undefined);
   const { cap, mode } = capAndMode(flags);
   const handover = handoverFlag(flags);
   const { parsed } = planFor(env, slug, positional[1]);
-  const lines = gateBlock(parsed, cap, mode);
-  if (handover === null) return { code: 0, lines };
-  const report = handoverReport(parsed.tasks, handover);
-  return { code: report.errors > 0 ? 2 : 0, lines: [...lines, ...report.lines] };
+  let lines = gateBlock(parsed, cap, mode);
+  let errors = 0;
+  if (handover !== null) {
+    const report = handoverReport(parsed.tasks, handover);
+    lines = [...lines, ...report.lines];
+    errors += report.errors;
+  }
+  if (flags['--qa-first']) {
+    const qa = qaFirstReport(parsed.tasks);
+    lines = [...lines, ...qa.lines];
+    errors += qa.errors;
+  }
+  return { code: errors > 0 ? 2 : 0, lines };
 }
 
 // Under plan_check.policy block, every plan in the run folder is scanned again before begin, next or start, and no
@@ -1013,7 +1059,7 @@ function planGate(env, slug) {
 }
 
 function cmdBegin(args, env) {
-  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value' });
+  const { positional, flags } = takeFlags(args, { '--cap': 'value', '--mode': 'value', '--handover': 'value', '--qa-first': 'flag' });
   if (positional.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0], env.root, isPlanName(positional[1]) ? positional[1] : undefined);
   const { cap, mode } = capAndMode(flags);
@@ -1024,12 +1070,18 @@ function cmdBegin(args, env) {
     const { errors } = handoverReport(parsed.tasks, handover);
     if (errors > 0) throw new Refusal(`${errors} task errors`);
   }
+  if (flags['--qa-first']) {
+    const { errors } = qaFirstReport(parsed.tasks);
+    if (errors > 0) throw new Refusal(`${errors} qa-first errors`);
+  }
   const st = loadRecord(env.root, slug).state ?? newState();
   if (st.running.length) throw new Refusal('a task is running');
   const ow = overlapWaits(parsed.tasks, st.done.get(0) ?? [], [], mode === 'sequential' ? 1 : cap);
-  appendEvent(env, slug, {
+  const rec = {
     v: 1, at: utc(env.now), ev: 'begin', plan: positional[1], hash: plan.hash, cap, mode, tasks: parsed.tasks.length, ow
-  });
+  };
+  if (flags['--qa-first']) rec.qa = true;
+  appendEvent(env, slug, rec);
   return { code: 0, lines: [gateBlock(parsed, cap, mode)[0], 'begun'] };
 }
 
