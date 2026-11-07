@@ -384,8 +384,8 @@ function settingsFolderMoved(home) {
 // The catalog as a lookup by name plus the category table, or null when it cannot be read.
 function skillCatalog(home) {
   try {
-    const { entries } = readCatalog({ home });
-    return { byName: new Map(entries.map((e) => [e.skillname, e])), categories: readBaseline().categories };
+    const { entries, errors } = readCatalog({ home });
+    return { byName: new Map(entries.map((e) => [e.skillname, e])), categories: readBaseline().categories, listProblem: errors.length > 0 };
   } catch {
     return null;
   }
@@ -451,14 +451,18 @@ function applySkills(roles, user, project, { home, moved, ignored, warnings }) {
   }
 }
 
-// True when the user layer's skills cannot be read against the catalog: the settings folder is moved or the
-// catalog cannot be read. A list that repeats the stored names exactly is then taken back as it stands.
-const userUnread = (home) => settingsFolderMoved(home) || skillCatalog(home) === null;
+// True when the user layer's skills cannot be read against the catalog: the settings folder is moved, the
+// catalog cannot be read, or the user catalog reports a problem. A list that repeats the stored names exactly,
+// at either level, is then taken back as it stands.
+function userUnread(home) {
+  if (settingsFolderMoved(home)) return true;
+  const catalog = skillCatalog(home);
+  return catalog === null || catalog.listProblem;
+}
 
 const sameStoredNames = (before, names) => {
   const old = Array.isArray(before) ? before.map((e) => e.name) : [];
-  const now = [...new Set(names)];
-  return old.length === now.length && old.every((n, i) => n === now[i]);
+  return old.length === names.length && old.every((n, i) => n === names[i]);
 };
 
 // Reasons a layer's skills lists cannot be stored. Names the field, never the value.
@@ -472,7 +476,7 @@ function skillProblems(level, layer, { home, pluginRoot, stored }) {
   for (const [role, { skills }] of lists) {
     if (level === 'project' && guarded.has(role)) { reasons.push(`roles.${role}.skills: ${PROJECT_PROTECTED}`); continue; }
     if (skills.length === 0) continue;
-    if (level === 'user' && stored !== undefined) {
+    if (stored !== undefined) {
       unread ??= userUnread(home);
       if (unread && sameStoredNames(own(own(stored.roles, role), 'skills'), skills.map((e) => e.name))) continue;
     }
@@ -497,7 +501,7 @@ function skillsChanged(before, names, role, catalogOf) {
 
 // The server clock dates a pick. A Role whose list gained or lost a name gets today on every selection;
 // an unchanged Role keeps the dates already stored. A date from the caller is never used.
-function stampApproved(layer, stored, { home, level }) {
+function stampApproved(layer, stored, { home }) {
   let catalog;
   let unread;
   const catalogOf = () => (catalog === undefined ? (catalog = skillCatalog(home)) : catalog);
@@ -506,8 +510,9 @@ function stampApproved(layer, stored, { home, level }) {
     const before = own(own(stored.roles, role), 'skills');
     const had = new Map((before ?? []).map((e) => [e.name, e.approved]));
     const names = [...new Set(fields.skills.map((e) => e.name))];
-    if (level === 'user' && sameStoredNames(before, names)) unread ??= userUnread(home);
-    const changed = level === 'user' && unread === true && sameStoredNames(before, names) ? false : skillsChanged(before, names, role, catalogOf);
+    const sent = fields.skills.map((e) => e.name);
+    if (sameStoredNames(before, sent)) unread ??= userUnread(home);
+    const changed = unread === true && sameStoredNames(before, sent) ? false : skillsChanged(before, names, role, catalogOf);
     fields.skills = fields.skills.map(({ name }) => {
       const date = changed ? todayUtc() : had.get(name);
       return date === undefined ? { name } : { name, approved: date };
@@ -527,7 +532,7 @@ function movedSkillProblems(clean, stored, home) {
     const before = own(own(stored.roles, role), 'skills');
     if (next === undefined && !(Array.isArray(before) && before.length > 0)) continue;
     const names = [...new Set((next ?? []).map((e) => e.name))];
-    if (sameStoredNames(before, names)) continue;
+    if (sameStoredNames(before, (next ?? []).map((e) => e.name))) continue;
     if (skillsChanged(before, names, role, catalogOf)) reasons.push(`roles.${role}.skills: the settings folder is not the user home, the user list cannot change here`);
   }
   return reasons;
@@ -1059,7 +1064,7 @@ export function resolvePersonalities({ home, cwd, pluginRoot = DEFAULT_PLUGIN_RO
 
 // Checks a user and a project layer together, as they would be stored. Returns all reasons. Skills lists are
 // checked only for the levels named in `levels` (default both): a stale list in the level not being saved stays.
-export function checkLayers(user, project, { pluginRoot = DEFAULT_PLUGIN_ROOT, home, levels = ['user', 'project'] } = {}) {
+export function checkLayers(user, project, { pluginRoot = DEFAULT_PLUGIN_ROOT, home, cwd, levels = ['user', 'project'] } = {}) {
   const defaults = pluginDefaults(pluginRoot);
   const roleNames = new Set(Object.keys(defaults.roles));
   const floorName = reviewerFloor(pluginRoot);
@@ -1073,7 +1078,10 @@ export function checkLayers(user, project, { pluginRoot = DEFAULT_PLUGIN_ROOT, h
       const found = movedReasons.length > 0 ? movedReasons : skillProblems('user', u.clean, { home, pluginRoot, stored });
       reasons.push(...found.map((r) => `user ${r}`));
     }
-    if (levels.includes('project')) reasons.push(...skillProblems('project', p.clean, { home, pluginRoot }).map((r) => `project ${r}`));
+    if (levels.includes('project')) {
+      const stored = typeof cwd === 'string' ? loadLayer('project', { home, cwd }, roleNames, floorName).layer : undefined;
+      reasons.push(...skillProblems('project', p.clean, { home, pluginRoot, stored }).map((r) => `project ${r}`));
+    }
   }
   if (reasons.length === 0) reasons.push(...nameClashes(resolveRoles(defaults, u.clean, p.clean)));
   return reasons;
@@ -1105,7 +1113,7 @@ export function writeLayer(level, layer, { home, cwd, pluginRoot = DEFAULT_PLUGI
   }
   const skillReasons = skillProblems(level, clean, { home, pluginRoot, stored: storedLayer });
   if (skillReasons.length) throw new Refusal(skillReasons.join('; '));
-  stampApproved(clean, storedLayer, { home, level });
+  stampApproved(clean, storedLayer, { home });
   if (other === undefined) other = loadLayer(level === 'user' ? 'project' : 'user', { home, cwd }, roleNames, floorName).layer;
   else other = sanitize(other, roleNames, floorName).clean;
   const roles = level === 'user' ? resolveRoles(defaults, clean, other) : resolveRoles(defaults, other, clean);

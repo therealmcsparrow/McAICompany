@@ -1600,18 +1600,21 @@ const skillEligible = (role, name) => {
 };
 // A stored name the catalog does not offer this Role is dropped from the draft; the server drops it on the next save.
 // A list left empty by that is removed, not stored as an explicit empty choice.
-// While the user layer was not read (moved folder, a list problem), its stored names are kept as they are.
+// While the user layer was not read (moved folder, a list problem), stored names at both levels are kept as they are.
+// A protected Role has no project skills, so its project list goes even when empty. A repeated name is kept once.
 const skillUserUnread = () => state.resolved?.settings_folder_moved === true
   || (Array.isArray(state.catalog?.errors) && state.catalog.errors.length > 0);
 const skillProtected = (role) => state.resolved?.roles?.[role]?.protected === true;
 function withoutStaleSkills(layer, level) {
   if (skIndex.size === 0 || !isObj(layer?.roles)) return layer;
-  if (level === 'user' && skillUserUnread()) return layer;
+  const unread = skillUserUnread();
   for (const [role, entry] of Object.entries(layer.roles)) {
     if (!isObj(entry) || !Array.isArray(entry.skills)) continue;
     const protectedHere = level === 'project' && skillProtected(role);
-    const kept = protectedHere ? [] : entry.skills.filter((i) => isObj(i) && skillEligible(role, i.name));
-    if (kept.length === entry.skills.length) continue;
+    if (!protectedHere && unread) continue;
+    const seen = new Set();
+    const kept = protectedHere ? [] : entry.skills.filter((i) => isObj(i) && skillEligible(role, i.name) && !seen.has(i.name) && seen.add(i.name));
+    if (!protectedHere && kept.length === entry.skills.length) continue;
     if (kept.length === 0) delete entry.skills; else entry.skills = kept;
     if (Object.keys(entry).length === 0) delete layer.roles[role];
   }
@@ -1626,11 +1629,13 @@ const skillList = (level, role) => {
 function staleSkills(level, role) {
   const stored = getIn(state[level], ['roles', role, 'skills']);
   if (!Array.isArray(stored) || skIndex.size === 0) return [];
-  if (level === 'user' && skillUserUnread()) return [];
   const prot = level === 'project' && skillProtected(role);
+  if (!prot && skillUserUnread()) return [];
+  if (prot && stored.length === 0) return ['an empty skills list'];
   const out = [];
+  const seen = new Set();
   stored.forEach((item, n) => {
-    if (!prot && isObj(item) && skillEligible(role, item.name)) return;
+    if (!prot && isObj(item) && skillEligible(role, item.name) && !seen.has(item.name)) { seen.add(item.name); return; }
     out.push(isObj(item) && typeof item.name === 'string' && SKILL_NAME_RE.test(item.name) ? item.name : `stored value ${n + 1}`);
   });
   return out;

@@ -1785,9 +1785,7 @@ test('catalog rows carry the finished vetted text and the repo for a repo entry'
 test('save refuses a changed user skills list while the settings folder is moved, with nothing written', async (t) => {
   const s = sandbox(t);
   userCatalog(s, [QA_PICK]);
-  const old = process.env.MCSPARROW_HOME;
-  process.env.MCSPARROW_HOME = s.home;
-  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  movedSettingsFolder(t, s);
   const { post, state } = await start(t, s, { home: undefined });
   const before = await state();
   assert.equal(before.resolved.settings_folder_moved, true);
@@ -1802,9 +1800,7 @@ test('save refuses a changed user skills list while the settings folder is moved
 test('save takes stored user names back unchanged while the user level is unread, dates kept', async (t) => {
   const s = sandbox(t);
   userCatalog(s, [QA_PICK]);
-  const old = process.env.MCSPARROW_HOME;
-  process.env.MCSPARROW_HOME = s.home;
-  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  movedSettingsFolder(t, s);
   const stored = [{ name: 'ghost-skill', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-02-02' }];
   const file = path.join(s.home, 'config.json');
   fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
@@ -1815,4 +1811,113 @@ test('save takes stored user names back unchanged while the user level is unread
   const res = await post('/api/save', { revision: before.resolved.revision, user });
   assert.equal(res.status, 200);
   assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa.skills, stored);
+});
+
+// ---------- skills lists while the user layer is unread, repeats, protected Roles ----------
+
+// Moves the settings folder away from the (mocked) user home, so the real home is never read.
+function movedSettingsFolder(t, s) {
+  const old = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = s.home;
+  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-userhome-'));
+  t.after(() => fs.rmSync(other, { recursive: true, force: true }));
+  return t.mock.method(os, 'userInfo', () => ({ homedir: other }));
+}
+
+// The page's own skills filters in a vm, over the given state and catalog entries.
+function loadSkillFilters(state, entries) {
+  const html = pageHtml();
+  const grab = (name) => {
+    const start = html.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, name);
+    return html.slice(start, html.indexOf('\n}\n', start) + 3);
+  };
+  const lines = (from, to) => html.slice(html.indexOf(from), html.indexOf(to));
+  const code = [
+    html.split('\n').find((l) => l.startsWith('const SKILL_NAME_RE')),
+    html.split('\n').find((l) => l.startsWith('const has = ')),
+    grab('getIn'),
+    lines('const isObj = ', 'const skillList = '),
+    lines('function staleSkills', 'const skillEffective')
+  ].join('\n');
+  const ctx = vm.createContext({ state, skIndex: new Map() });
+  const fns = vm.runInContext(`${code}\nskIndex = new Map(${JSON.stringify(entries)}.map((e) => [e.name, e]));\n[withoutStaleSkills, staleSkills]`, ctx);
+  const json = (v) => JSON.parse(JSON.stringify(v));
+  return { strip: (layer, level) => json(fns[0](json(layer), level)), stale: (level, role) => json(fns[1](level, role)) };
+}
+const PAGE_ENTRIES = [{ name: 'hallmark', roles: ['qa', 'architect'], selectable: true }];
+const sk = (...names) => names.map((name) => ({ name }));
+
+test('page: a stored project skills list of a protected Role is dropped even when empty, and listed as ignored', () => {
+  const state = { resolved: { roles: { architect: { protected: true } } }, catalog: { errors: [] }, project: { roles: { architect: { skills: [] } } } };
+  const f = loadSkillFilters(state, PAGE_ENTRIES);
+  assert.deepEqual(f.strip(state.project, 'project'), {});
+  assert.equal(f.stale('project', 'architect').length, 1);
+});
+
+test('page: while the user layer is unread, project names are kept and not listed as ignored', () => {
+  for (const unread of [{ resolved: { settings_folder_moved: true }, catalog: { errors: [] } }, { resolved: {}, catalog: { errors: ['ERROR user catalog: invalid'] } }]) {
+    const state = { ...unread, project: { roles: { qa: { skills: sk('my-own', 'hallmark') } } }, user: { roles: { qa: { skills: sk('my-own') } } } };
+    const f = loadSkillFilters(state, PAGE_ENTRIES);
+    assert.deepEqual(f.strip(state.project, 'project').roles.qa.skills, sk('my-own', 'hallmark'));
+    assert.deepEqual(f.strip(state.user, 'user').roles.qa.skills, sk('my-own'));
+    assert.deepEqual(f.stale('project', 'qa'), []);
+  }
+  const read = { resolved: {}, catalog: { errors: [] }, project: { roles: { qa: { skills: sk('my-own', 'hallmark') } } } };
+  assert.deepEqual(loadSkillFilters(read, PAGE_ENTRIES).strip(read.project, 'project').roles.qa.skills, sk('hallmark'));
+});
+
+test('page: a repeated stored name is kept once and listed as ignored', () => {
+  const state = { resolved: {}, catalog: { errors: [] }, user: { roles: { qa: { skills: sk('hallmark', 'hallmark') } } } };
+  const f = loadSkillFilters(state, PAGE_ENTRIES);
+  assert.deepEqual(f.strip(state.user, 'user').roles.qa.skills, sk('hallmark'));
+  assert.deepEqual(f.stale('user', 'qa'), ['hallmark']);
+});
+
+test('save takes the stored user names back while the user catalog is unreadable, with only effort changed', async (t) => {
+  const s = sandbox(t);
+  const dir = path.join(s.home, '.mcsparrow');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '3rdpartyskills.json'), '{ not json');
+  const stored = [{ name: 'qa-helper', approved: '2025-02-02' }];
+  const file = path.join(s.home, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { effort: 'high', skills: [{ name: 'qa-helper', approved: '2030-01-01' }] } }, gates: { ship: 'ask' } } });
+  assert.equal(res.status, 200);
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa;
+  assert.deepEqual(saved.skills, stored);
+  assert.equal(saved.effort, 'high');
+});
+
+test('save takes the stored project names back while the settings folder is moved', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  const file = path.join(s.cwd, '.company', 'settings.json');
+  const stored = [{ name: 'qa-helper', approved: '2025-02-02' }, { name: 'ghost-skill', approved: '2025-03-03' }];
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const res = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { qa: { effort: 'high', skills: sk('qa-helper', 'ghost-skill') } } } });
+  assert.equal(res.status, 200);
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa;
+  assert.deepEqual(saved.skills, stored);
+});
+
+test('save refuses a repeated name over a stored single one while the settings folder is moved', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  const file = path.join(s.home, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2025-02-02' }] } } } }));
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  const body = fs.readFileSync(file, 'utf8');
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: sk('qa-helper', 'qa-helper') } }, gates: { ship: 'ask' } } });
+  assert.equal(res.status, 400);
+  assert.equal(fs.readFileSync(file, 'utf8'), body);
 });
