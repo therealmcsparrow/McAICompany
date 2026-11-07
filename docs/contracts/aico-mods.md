@@ -1,4 +1,4 @@
-# Contract: aico-mods v1.6
+# Contract: aico-mods v1.7
 
 Provider: the aico plugin's hooks module (`hooks/hooks.json` → `./register.tsx`, which imports each mod and the reprompt write gate from `mods/`). Consumers: the CEO (views, the commit question), `/aico:settings` (switches). API: the Claude Code function-hooks API of the installed build (`plugin-authoring`); `claude plugin validate` is the authority on what it accepts.
 Rationale: `docs/adr/0015-mods-thin-hooks-over-scripts.md`, `0016-run-state-record.md`, `0017-blast-radius-fail-closed.md`.
@@ -17,6 +17,8 @@ v1.4 (task elephant-goldfish, additive; CEO: "include version number"): the stat
 v1.5 (task work-folder-names, additive): every mod reads a run name through one allow-list, `isWorkFolder` of `mods/lib/work-folder.mjs` (`work-folder-name` v1: new names `YYYY-MM-DD HH.MM - Topic`, plus legacy slugs). A dispatch `Output:` line, the run view `slug`, the ledger `run` and the retrospective `slug` pass it; `mods/lib/guard.mjs` holds the one line parser (`parseOutputText`, `parseOutputLine`). The plan Gate command quotes the name (see "M5 Plan Gate"). Every v1.4 row stays as it was for a legacy name.
 
 v1.6 (task context-cap-enforcement, additive): the Fresh Step mod (`mods/fresh-step.ts`, logic in `mods/lib/fresh-step.mjs`) joins the hooks module, specified in "M6 Fresh Step". Always on, no pane, no status part, no setting; "Off" does not apply to it. The Savvy pane (M1) shows each running subagent's context and the Lead's, specified in "M1 Savvy". Every v1.5 row stays as it was.
+
+v1.7 (task role-skills-file, additive): a Step number takes 2 or 3 digits, so a run past Step 99 keeps its Steps. Four places widen from `\d{2}` to `\d{2,3}`: the dispatch `Output:` line regex (`mods/lib/guard.mjs`), the run view `step` and `file` guards (`mods/lib/guard.mjs`), the reprompt gate file names (`mods/lib/reprompt-gate.mjs`) and the Reflect mod Step id (`mods/reflect.tsx`). Savvy compares Step numbers as numbers, not as text, so Step 100 is newer than Step 99 when it picks the current Step and when it breaks a tie on equal file times (`mods/savvy.tsx`). Every v1.6 two-digit name stays valid.
 
 ## Shape
 - One hooks module for the plugin; one file per mod: `mods/savvy.tsx`, `mods/cache-tax.tsx`, `mods/reflect.tsx`, `mods/blast-radius.ts`, `mods/plan-gate.ts` (v1.3), `mods/fresh-step.ts` (v1.6); shared code in `mods/shared/*.ts` (incl. `status.ts`, the status composer); pure logic (parsers, formatters, the status line builder, the git-commit detector, the cache clock, JSON guards, the Lesson text rule `lesson-text.mjs`, the progress bars `bars.mjs` (v1.1), the context rows `ctx-row.mjs` (v1.6)) in `mods/lib/*.mjs` with no `$`, no Node import and no npm package, so `npm test` covers it. The write gate is `mods/reprompt-gate.ts` with `mods/lib/reprompt-gate.mjs`; M6's logic is `mods/lib/fresh-step.mjs`.
@@ -44,7 +46,7 @@ v1.6 (task context-cap-enforcement, additive): the Fresh Step mod (`mods/fresh-s
 | Main-loop request times (and the cache-lifetime split of their usage, when the event carries it) | `turn.start`, `turn.step`, `turn.complete` hooks (main loop only: no `agentId`) | Cache Tax (cache clock) |
 `project.md` and `docs/contracts/` are read only inside `review-depth.mjs`. File-change detection uses `$.fs.stat` on the run folder, its `run-state.jsonl`, `.company/ledger/<run>.jsonl` and `lead-context.json` (no reads). Fresh Step makes one `$.fs.stat` of `.company/work` per judged event.
 
-Prompt line regexes: `^Output: \.company/work/([^/]{1,120})/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$` (each line on its own, a line over 300 characters skipped, the folder part also passing `isWorkFolder`: a new name or a legacy slug), `^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$`, `^Risk tier: (low|medium|high)$`. No match → the field is `unknown`.
+Prompt line regexes: `^Output: \.company/work/([^/]{1,120})/(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$` (each line on its own, a line over 300 characters skipped, the folder part also passing `isWorkFolder`: a new name or a legacy slug), `^Base commit: ([0-9a-f]{40}|[0-9a-f]{64})$`, `^Risk tier: (low|medium|high)$`. No match → the field is `unknown`.
 
 Panel names (Delta L, since `dispatch-prompt` v4.0, still so in v5): Savvy and Cache Tax never read a name from a prompt; a `Name:` line in a prompt is ignored. They show the effective name for the Role id (taken from the `Output:` line, else the agent type) from the name map they read from the scripts' JSON (`settings.mjs get`, `roles.<role>.name`). A Role id with no map entry shows `unknown`. On screen the panels look as before.
 

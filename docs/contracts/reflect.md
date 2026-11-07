@@ -1,6 +1,6 @@
 # Contract: reflect v1.3
 
-v1.3 (task role-skills-file; additive): a Step file name takes 2 or 3 digits, so a run past Step 99 keeps its Steps. Every v1.2 name and output stays valid.
+v1.3 (task role-skills-file; additive): a Step file name takes 2 or 3 digits, so a run past Step 99 keeps its Steps. Every v1.2 name and output stays valid. `retro` reads at most 200 Step files; past that it keeps the newest 200 (the highest Step numbers, as `run-state` does), drops the oldest and adds the warning `only 200 Step files read`.
 
 v1.2 (task input-fix, T10; additive): after the work folder name check, `<slug>` and a `<file>` given as a path inside `.company/work` must match the folder and file names on disk in exact letter case (`exactWorkPath` of `work-folder-name` v1.1). Another letter case → `refused: wrong letter case`, exit 2, nothing read. A run folder missing in every case keeps `refused: no run folder for <slug>`.
 
@@ -34,10 +34,11 @@ Reads only: the given Step file, the run's Step files (frontmatter and `## Block
   "lessons": [{ "role": "…", "text": "…" }], "warnings": [] }
 ```
 - `top_spend` and `top_time`: the 3 largest ledger rows by `spend` and by `ms` (rows with `null` left out; ties by Step order). The numbers are the ledger's, unchanged.
-- `fix_causes`: Blocking items counted per tag over every Step file of the run whose `role` is a review Role (`code-reviewer`, `qa`, `security`, `compliance`, `accessibility-tester`); each such item is a Fix-round cause by the pipeline's rule.
+- `fix_causes`: Blocking items counted per tag over the Step files read (at most the newest 200) of the run whose `role` is a review Role (`code-reviewer`, `qa`, `security`, `compliance`, `accessibility-tester`); each such item is a Fix-round cause by the pipeline's rule.
 - `lessons` (0–3): for the tag with the highest count, `<tag> findings caused <n> Fix-round items; check the <tag> rules before review` (Role `lead`); then the step-check handover and lint rules for the Steps they apply to.
 
 ## Error cases
 - Missing ledger → `top_spend: []`, `top_time: []`, `warnings: ["no ledger"]`.
 - A Step file that cannot be read → left out, `warnings: ["<file> skipped"]`.
+- More than 200 Step files → only the newest 200 are read, `warnings: ["only 200 Step files read"]`; a Blocking item that sits only in a dropped file is not counted in `fix_causes`.
 - Always exit 0 for a valid `<slug>`.

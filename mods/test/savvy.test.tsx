@@ -56,6 +56,7 @@ function makeWorld() {
     statuses: [] as (string | undefined)[],
     opened: [] as string[],
     runStateCalls: [] as string[][],
+    spawned: 0,
   }
 }
 type World = ReturnType<typeof makeWorld>
@@ -81,7 +82,7 @@ async function boot($: Env[0], on: Env[1], world: World, surface: 'terminal' | '
     return <Box />
   })
   on('command.run', () => ({ text: 'engine' }))
-  on('agent.spawn', (() => ({ model: 'm', agentId: 'a1' })) as never)
+  on('agent.spawn', (() => ({ model: 'm', agentId: `a${++world.spawned}` })) as never)
   on('process.run', ((_: unknown, e: Call) => {
     const script = e.argv[1].replace(/\\/g, '/').split('/').pop()
     if (script === 'settings.mjs') return ok(world.settings)
@@ -196,6 +197,37 @@ for (const width of [39, 63, 89]) {
     await ui.unmount()
   })
 }
+
+test('Step 100 is the current Step over a running Step 99', async ($, on) => {
+  const w = makeWorld()
+  w.agents = [
+    { id: 'a1', description: 'x', type: 'aico:frontend-engineer', status: 'running' },
+    { id: 'a2', description: 'x', type: 'aico:backend-engineer', status: 'running' },
+  ]
+  const clock = await boot($, on, w)
+  await $.agent.spawn({ subagentType: 'aico:frontend-engineer', prompt: 'Output: .company/work/demo/99-frontend-engineer.md\n' })
+  await $.agent.spawn({ subagentType: 'aico:backend-engineer', prompt: 'Output: .company/work/demo/100-backend-engineer.md\n' })
+  await clock.advance(2100)
+  const ui = await $.ui.mount(pane('terminal'))
+  const text = (await lines(ui)).join('\n')
+  expect(text).toContain('Step     100 backend-engineer (Ben)')
+  await ui.unmount()
+})
+
+test('with no running subagent and equal times Step 100 is newer than Step 99', async ($, on) => {
+  const w = makeWorld()
+  w.active = ACTIVE(view({
+    steps: [
+      { step: '100', role: 'backend-engineer', status: 'done', round: 0, file: '100-backend-engineer.md', mtime: STAMP(START + 5000) },
+      { step: '99', role: 'architect', status: 'done', round: 0, file: '99-architect.md', mtime: STAMP(START + 5000) },
+    ],
+  }))
+  await boot($, on, w)
+  const ui = await $.ui.mount(pane('terminal'))
+  const text = (await lines(ui)).join('\n')
+  expect(text).toContain('Step     100 backend-engineer (Ben)')
+  await ui.unmount()
+})
 
 test('a Name: line in a prompt is ignored: the name comes from the Role id', async ($, on) => {
   const w = makeWorld()

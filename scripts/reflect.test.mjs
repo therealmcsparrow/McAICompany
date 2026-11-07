@@ -472,6 +472,17 @@ describe('three-digit Step names', () => {
     assert.ok(x.warnings.includes('only 200 Step files read'), JSON.stringify(x.warnings));
   });
 
+  test('retro past the Step cap keeps the newest 200 Steps, so a Blocking item in the newest file counts and one in the dropped file does not', (t) => {
+    const sb = sandbox(t);
+    for (let i = 1; i <= 201; i++) {
+      const sections = i === 1 ? { Blocking: ['- [security] a.js:1 - only in the dropped file'] } : i === 201 ? { Blocking: ['- [spec] b.js:2 - in the newest file'] } : {};
+      write(sb, `${String(i).padStart(2, '0')}-code-reviewer.md`, step(String(i), 'code-reviewer', 'done', sections));
+    }
+    const x = JSON.parse(node(sb, reflect, ['retro', SLUG, '--json']).out);
+    assert.deepEqual(x.fix_causes, { contract: 0, spec: 1, security: 0, test: 0 });
+    assert.ok(x.warnings.includes('only 200 Step files read'), JSON.stringify(x.warnings));
+  });
+
   test('retro at exactly the Step cap has no cap warning', (t) => {
     const sb = sandbox(t);
     for (let i = 1; i <= 200; i++) write(sb, `${String(i).padStart(2, '0')}-qa.md`, step(String(i), 'qa', 'done'));
