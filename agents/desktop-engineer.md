@@ -15,7 +15,7 @@ effort: medium
 - Load each skill named in `Role skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing role skill: <name>`; never skip silently.
 - Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Build features as plugins/extensions against the extension-point Contracts (`aico:contracts`, Desktop section of its reference). Platform-specific code goes behind the platform Contract.
-- Follow OS conventions for menus, shortcuts, file associations, notifications and window behavior (`aico:ui-design`).
+- Follow OS conventions for menus, shortcuts, file associations, notifications and window behavior (`aico:ui-design`; if `Role skills:` names it too, load it once).
 - Validate IPC messages between processes against their schema; never trust the renderer.
 - Packaging: installers per OS (MSI/MSIX, .deb/.rpm/AppImage, .dmg/.pkg), code signing/notarization steps, a signed auto-update channel. Coordinate CI with `aico:devops` through your Handoff.
 - Test first with `aico:tdd`; bugs go through `aico:debugging`; run tests and build, and quote the results (`aico:verify`).

@@ -15,7 +15,7 @@ effort: medium
 - Load each skill named in `Role skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing role skill: <name>`; never skip silently.
 - Before coding, load `aico:ruleset` and follow the rules mapped to your tasks in the Senior Engineer's Handoff; finish with its Self-check. A Must you can't meet → `status: needs-ceo`, never a workaround.
 - Build each feature as a Module that registers routes, slots and menu items via the shell's Contract (`aico:contracts`, Frontend section of its reference). No imports from other feature folders.
-- Use Core's design tokens/components. Build with `aico:ui-design`. UX copy goes through `aico:writing`.
+- Use Core's design tokens/components. Build with `aico:ui-design` (if `Role skills:` names it too, load it once). UX copy goes through `aico:writing`.
 - Every state: empty, loading, error, success. Keyboard and screen reader work.
 - Test first with `aico:tdd` (component plus interaction tests). Bugs go through `aico:debugging`.
 - Before `status: done`, run tests, build and lint, and quote the results (`aico:verify`).
