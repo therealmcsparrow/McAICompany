@@ -772,10 +772,85 @@ test('skillStatus: a link whose text climbs through a helper link does not lead 
     fs.symlinkSync(path.join(evil, 'sub'), path.join(root, '.agents', 'skills', 'x'), 'junction');
     fs.symlinkSync('../../.agents/skills/x/../my-skill', path.join(root, '.claude', 'skills', 'my-skill'), 'dir');
   } catch { t.diagnostic('cannot create relative links here'); return; }
-  // Windows collapses `x\..` in link text lexically before following links, so this link
-  // really reaches the proven .agents folder. Other platforms walk `x` first and land in evil.
-  const expected = process.platform === 'win32' ? 'installed' : 'folder not recognized';
-  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, expected);
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
+test('skillStatus: a link routed through a chained helper link is not recognized, though it lands in the proven folder', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  const y = path.join(root, '.agents', 'skills', 'y');
+  const link = path.join(root, '.claude', 'skills', 'my-skill');
+  try {
+    fs.symlinkSync(path.join(root, '.agents', 'skills'), y, 'junction');
+    fs.symlinkSync(path.join(y, 'my-skill'), link, 'junction');
+  } catch { t.diagnostic('cannot create a link here'); return; }
+  assert.equal(fs.realpathSync.native(link), fs.realpathSync.native(a));
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
+test('skillStatus: a link whose text has a dot segment after a named one is not recognized, helper link text included', (t) => {
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  const link = path.join(root, '.claude', 'skills', 'my-skill');
+  const texts = ['../../.agents/skills/x/../my-skill', '../../.agents/skills/./my-skill', '../../.agents/skills/x\\..\\my-skill'];
+  let made = 0;
+  for (const text of texts) {
+    fs.rmSync(link, { recursive: true, force: true });
+    try { fs.symlinkSync(text, link, 'dir'); } catch { t.diagnostic('cannot create relative links here'); return; }
+    made++;
+    assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized', text);
+  }
+  assert.equal(made, texts.length);
+  fs.rmSync(link, { recursive: true, force: true });
+  fs.symlinkSync('../../.agents/skills/my-skill', link, 'dir');
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+  fs.rmSync(link, { recursive: true, force: true });
+  fs.symlinkSync('./../../.agents/skills/my-skill', link, 'dir');
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+});
+
+test('skillStatus: link text with a dot segment after a named one is refused even where the native route is the proven folder', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  const link = path.join(root, '.claude', 'skills', 'my-skill');
+  try { fs.symlinkSync(a, link, 'junction'); } catch { t.diagnostic('cannot create a link here'); return; }
+  const real = fs.readlinkSync;
+  for (const text of ['../../.agents/skills/x/../my-skill', '../../.agents/skills/x\\..\\my-skill', '../../.agents/skills/./my-skill']) {
+    t.mock.method(fs, 'readlinkSync', (p, ...rest) => (p === link ? text : real(p, ...rest)));
+    assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized', text);
+    t.mock.restoreAll();
+  }
+  t.mock.method(fs, 'readlinkSync', (p, ...rest) => (p === link ? '../../.agents/skills/my-skill' : real(p, ...rest)));
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+  t.mock.restoreAll();
+  t.mock.method(fs, 'readlinkSync', (p) => { throw Object.assign(new Error('boom'), { code: 'EIO' }); });
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
+test('skillStatus: a junction as the skills CLI makes it stays installed', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  try { fs.symlinkSync(a, path.join(root, '.claude', 'skills', 'my-skill'), 'junction'); } catch { t.diagnostic('cannot create a link here'); return; }
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
 });
 
 test('linkedSegments names a linked .claude, .claude/skills, .agents or .agents/skills', (t) => {

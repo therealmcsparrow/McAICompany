@@ -532,10 +532,37 @@ export function itemsProven(rootDir, name, hash, { place } = {}) {
   return { present: true, ok };
 }
 
-// Compares where the link physically leads, not its text, so no spelling of the path needs reasoning about.
-// Both results are the on-disk spelling, so they compare exactly: a case fold would equate names NTFS keeps apart.
+// Mirrors every reader of a skill link: the Windows kernel collapses `x\..` in link text before following links,
+// while POSIX and Git Bash walk `x` first. Threats: a `.` or `..` after a named segment (either separator), a
+// route through a helper link, a link that leads elsewhere. The native landing must equal the target's, and the
+// link's own text must be a plain route: leading `..` only, then named segments, none of them a link. Any read
+// error refuses. A link among the ancestors of `target`'s own spelling (a symlinked temp folder) is not a helper.
 function linkLeadsTo(link, target) {
-  try { return fs.realpathSync.native(link) === fs.realpathSync.native(target); } catch { return false; }
+  try {
+    if (fs.realpathSync.native(link) !== fs.realpathSync.native(target)) return false;
+    let text = fs.readlinkSync(link);
+    if (typeof text !== 'string') return false;
+    text = text.replace(/^(?:\\\\\?\\|\\\?\?\\)/, '');
+    const abs = path.isAbsolute(text) || /^[\\/]/.test(text);
+    const root = abs ? path.parse(text).root : '';
+    let cur = abs ? root : fs.realpathSync.native(path.dirname(link));
+    const ancestors = new Set();
+    for (let p = path.resolve(target); !ancestors.has(p); p = path.dirname(p)) ancestors.add(p);
+    ancestors.delete(path.resolve(target));
+    let named = false;
+    for (const seg of text.slice(root.length).split(/[\\/]/)) {
+      if (seg === '') continue;
+      if (seg === '.' || seg === '..') {
+        if (named) return false;
+        if (seg === '..') cur = path.dirname(cur);
+        continue;
+      }
+      named = true;
+      cur = path.join(cur, seg);
+      if (fs.lstatSync(cur).isSymbolicLink() && !(abs && ancestors.has(cur))) return false;
+    }
+    return true;
+  } catch { return false; }
 }
 
 // ---------- writes ----------
