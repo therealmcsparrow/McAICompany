@@ -15,16 +15,16 @@ Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the 
 3. Something the Handoff doesn't answer and the code doesn't show is a blocker. Record it; don't invent it.
 4. `Review format: pilot` → also follow `references/pilot.md`; builders cite finding IDs in `## Did`. Reviewer rows carry `R-<n>`; to contest, escalate or answer one, and the `fresh-reviewer` shape: `references/contest.md`.
 5. Never start an aico Playbook with the Skill tool; name the Playbook you need under `## Next` for the Lead.
-6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v5): other Steps may be working in the same tree right now. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. A `Worktree: <path>` line → change files only under that path, run git only as `git -C <path>`, never read or change the main tree's working files; every limit above applies inside it. Use absolute paths only, never `cd` or `Set-Location` into it, and never `git stash` (worktrees share one stash list). `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v4) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
+6. **Task: and Files:** (a plan-task Step, `dispatch-prompt` v5): other Steps may be working in the same tree. Change only the paths in `Files:` and your Handoff; a path you must change outside them goes in `files-touched`, with the reason under `## Decisions`. Never `git stash`, and never `git checkout`, `restore`, `reset` or `clean` paths you did not change. Never kill processes by image or name (`taskkill /IM`, `pkill`, `killall`); stop only PIDs you started. Run only the test files for your paths; the Lead runs the full suite once. A `Worktree: <path>` line → change files only under that path, run git only as `git -C <path>`, never read or change the main tree's working files; every limit above applies inside it. Absolute paths only, never `cd` or `Set-Location` into it; worktrees share one stash list. `Files: none` or no `Files:` line → change only what your Goal names and list every changed path. A `Task brief:` line (v4) is your slice of the plan: read it, never the full plan; a gap → `status: blocked`, `missing plan context: <what>`.
 
 ## Context budget: the `Context cap:` line
 
-Your dispatch carries `Context cap: <cap> handover <n>`, always `95000 handover 85500`: `<cap>` is your context limit, `<n>` the handover point. You never compute them. Past the cap quality drops, so hand over to a clean Step.
+Your dispatch carries `Context cap: <cap> handover <n>`, always `95000 handover 85500`: `<cap>` is your context limit, `<n>` the handover point. Past the cap quality drops; hand over to a clean Step.
 - Absent → cap 95000, handover at 85500. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v5).
 - Big reads, long diffs and test logs add up: read slices, grep first. Near `<n>` (or you can't tell and have done a lot of reading), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
 - Write `status: handover`: `## Did` what's finished, `## Next` what's left, in order, with file paths, so a fresh Role of the same type continues without re-reading. Commit-ready work only. A handover is not a failure or a blocker; never cut scope or skip checks to squeeze under the budget.
 - At the hand-over point a hook refuses every tool except `Write` of a new Handoff and one new findings ledger in the run folder; a pilot reviewer writes the ledger first. An existing ledger can no longer be changed: put rows it lacks under `## Next` as plain lines.
-- **Forced hand-over** (`context-guard` v1, `docs/contracts/context-guard.md`): a hook enforces `<n>` while a run is active. At or over `<n>`, write the Handoff at once with `status: handover`, `## Did` and `## Next` to your Output path, then end. A stop without one is blocked once. The reading lags one tool result, so keep reads small and hand over early by yourself.
+- **Forced hand-over** (`context-guard` v1, `docs/contracts/context-guard.md`): a hook enforces `<n>` while a run is active. At or over `<n>`, write the Handoff at once with `status: handover`, `## Did` and `## Next` to your Output path, then end. A stop without one is blocked once. The reading lags one tool result: keep reads small, hand over early.
 
 ## Finishing a Step
 
@@ -75,12 +75,12 @@ Your dispatch carries `Language: <tag>`. Write prose in `<tag>`: Handoffs, forms
 
 ## Session hand-off
 
-Only when the user asks for a session hand-off. A Role finishing a Step skips this section and writes its Output as above.
+Only when the user asks for a session hand-off. A Role finishing a Step skips this section.
 
-Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the temporary directory of the user's OS ($TMPDIR, else /tmp; %TEMP% on Windows) - not the current workspace.
+Write a handoff document summarising this conversation so a fresh agent can continue. Save to the temporary directory of the user's OS ($TMPDIR, else /tmp; %TEMP% on Windows) - not the current workspace.
 
-Include a "suggested skills" section in the document, naming which skills the next agent should call the Skill tool for.
+Include a "suggested skills" section in the document, naming skills the next agent should load with the Skill tool.
 
 The duplication and redaction rules of `## Finishing a Step` apply.
 
-If the user passed arguments, treat them as a description of what the next session will focus on and tailor the doc accordingly.
+If the user passed arguments, they describe the next session's focus; tailor the doc to them.
