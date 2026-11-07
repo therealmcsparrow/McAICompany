@@ -664,3 +664,44 @@ test('row 3: a plain file named like a name-only skill through a linked .claude/
   assert.match(line, /\| installed \(name only\) \| place: project \|/, line);
   assert.ok(line.endsWith('dispatch: no'), line);
 });
+
+test('a bound hash is cleared before the scan runs, whatever the scan or the install does next', async (t) => {
+  const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' })], lists: { qa: ['user', [NAME]] } });
+  let seen = 'not called';
+  const vet = s.env.vet;
+  s.env.vet = async (arg) => { seen = readUser(s.home)[0].hash; return vet(arg); };
+  assert.equal(await main(['--selected'], s.env), 0, s.log.join('|'));
+  assert.equal(seen, undefined, 'the hash is gone when the scan starts');
+  assert.equal(readUser(s.home)[0].hash, s.scanHash, 'a clean run stores the new hash');
+});
+
+test('a dry run clears nothing', async (t) => {
+  const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' })] });
+  assert.equal(await main(['--selected', '--dry-run'], s.env), 0, s.log.join('|'));
+  assert.equal(readUser(s.home)[0].hash, 'b'.repeat(64));
+});
+
+test('when the hash cannot be cleared, nothing is scanned or installed and the skill counts as failed', async (t) => {
+  const s = setup(t, { entries: [], lists: { qa: ['user', [NAME]] } });
+  const real = tmp(t, 'real-store');
+  fs.writeFileSync(path.join(real, '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' })] }));
+  if (!link(t, real, path.join(s.home, '.mcsparrow'))) return;
+  assert.equal(await main(['--selected'], s.env), 1, s.log.join('|'));
+  assert.equal(s.vets.length, 0);
+  assert.equal(s.calls.length, 0);
+  assert.equal(s.afters.length, 0);
+  assert.ok(s.log.some((l) => l.startsWith('ERROR user catalog')), s.log.join('|'));
+  assert.ok(s.log.some((l) => l.startsWith(`scan failed: ${NAME}`)), 'the line keeps the word the Lead matches');
+  assert.equal(s.log.at(-1), '0 installed, 1 failed');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(real, '3rdpartyskills.json'), 'utf8')).entries[0].hash, 'b'.repeat(64));
+});
+
+test('the Lead text and the Contract name the dry-run lines that get no Install question, and the clear before the scan', () => {
+  const root = path.join(import.meta.dirname, '..');
+  const pipeline = fs.readFileSync(path.join(root, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
+  const contract = fs.readFileSync(path.join(root, 'docs', 'contracts', 'skill-catalog.md'), 'utf8');
+  assert.match(pipeline, /`\[dry-run\] hash differs`, `no license:` or `ERROR invalid catalog entry:` line gets no Install question/);
+  assert.match(pipeline, /an auto run does not fail into the stop form for it/);
+  assert.match(contract, /`no license:` and `ERROR invalid catalog entry:` print no command in a dry run, so the Lead asks no Install question/);
+  assert.match(contract, /`clearBound` first \(a failed clear logs its error/);
+});

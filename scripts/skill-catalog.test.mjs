@@ -984,3 +984,33 @@ test('clearBound clears a row that itself holds a banned character', () => {
   assert.equal(Object.hasOwn(row, 'hash'), false);
   assert.equal(Object.hasOwn(row, 'vetted'), false);
 });
+
+test('clearBound removes both keys from every row of the name, so the first valid row cannot keep the pin', () => {
+  const bad = repoEntry({ skillcategory: 'no-such-category' });
+  const good = repoEntry({ hash: H1, vetted: '2026-11-01' });
+  const cases = [
+    ['bad then good', [bad, good]],
+    ['bad with a pin then good', [{ ...bad, hash: H1, vetted: '2026-11-01' }, good]],
+  ];
+  for (const [label, entries] of cases) {
+    const home = tmp();
+    writeUser(home, { schema: 1, entries });
+    assert.equal(readCatalog({ home }).entries.find((e) => e.skillname === 'my-skill')?.hash, H1, `${label}: pinned before`);
+    assert.deepEqual(clearBound('my-skill', { home }), { ok: true, changed: true }, label);
+    for (const row of readUser(home).entries) {
+      assert.equal(Object.hasOwn(row, 'hash'), false, label);
+      assert.equal(Object.hasOwn(row, 'vetted'), false, label);
+    }
+    assert.equal(readCatalog({ home }).entries.find((e) => e.skillname === 'my-skill')?.hash, undefined, `${label}: no pin after`);
+  }
+});
+
+test('clearBound leaves the rows of other names alone', () => {
+  const home = tmp();
+  writeUser(home, { schema: 1, entries: [repoEntry({ hash: H1, vetted: '2026-11-01' }), repoEntry({ skillname: 'other-skill', hash: H1, vetted: '2026-11-01' })] });
+  assert.deepEqual(clearBound('my-skill', { home }), { ok: true, changed: true });
+  const [a, b] = readUser(home).entries;
+  assert.equal(Object.hasOwn(a, 'hash'), false);
+  assert.equal(b.hash, H1);
+  assert.equal(b.vetted, '2026-11-01');
+});

@@ -572,7 +572,9 @@ function loadForWrite(opts, { checkRows = true } = {}) {
   const read = readUserDoc(path.join(where.home, USER_DIR, USER_FILE));
   if (read.state === 'error') return { error: `ERROR user catalog: ${read.code}` };
   const doc = read.state === 'ok' ? read.doc : { schema: 1, entries: [] };
-  // Every stored row is rewritten, so every row must pass the checks a new one does.
+  // A write that adds or changes a row checks every stored row, since all are written back. clearBound passes
+  // checkRows false, the one exception to proj.M-SEC9 the CEO allowed: it writes stored rows back with only the two
+  // pin keys removed and adds no value, and a failed scan must always be able to take the pin off.
   for (let i = 0; checkRows && i < doc.entries.length; i++) {
     const v = validateEntry(doc.entries[i], 'user');
     if (!v.ok) return { error: `ERROR user catalog entry ${i + 1}: ${v.field} ${v.reason}` };
@@ -637,20 +639,27 @@ export function setBoundHash(name, hash, vetted, { home } = {}) {
   return w.ok ? { ok: true, changed: true } : w;
 }
 
-// Clears the scan hash and the vetted date together. No row is validated, its own included, so a failed
-// scan can always take the pin off; a file-level error still refuses.
+// Clears the scan hash and the vetted date together, from every row of the name, since readCatalog trusts the
+// first valid row. No row is validated, its own included, so a failed scan can always take the pin off; a
+// file-level error still refuses.
 export function clearBound(name, { home } = {}) {
   if (typeof name !== 'string' || !NAME_RE.test(name)) return writeFail('ERROR user catalog entry: skillname bad value');
   const loaded = loadForWrite({ home }, { checkRows: false });
   if (loaded.error) return writeFail(loaded.error);
-  const at = findRaw(loaded.doc, name);
-  if (at === -1) return writeFail('ERROR user catalog entry: skillname not found');
-  const raw = loaded.doc.entries[at];
-  if (!Object.hasOwn(raw, 'hash') && !Object.hasOwn(raw, 'vetted')) return { ok: true, changed: false };
-  const next = { ...raw };
-  delete next.hash;
-  delete next.vetted;
-  loaded.doc.entries[at] = next;
+  let found = false;
+  let changed = false;
+  loaded.doc.entries = loaded.doc.entries.map((raw) => {
+    if (!isPlain(raw) || !Object.hasOwn(raw, 'skillname') || raw.skillname !== name) return raw;
+    found = true;
+    if (!Object.hasOwn(raw, 'hash') && !Object.hasOwn(raw, 'vetted')) return raw;
+    changed = true;
+    const next = { ...raw };
+    delete next.hash;
+    delete next.vetted;
+    return next;
+  });
+  if (!found) return writeFail('ERROR user catalog entry: skillname not found');
+  if (!changed) return { ok: true, changed: false };
   const w = writeUserDoc(loaded.home, loaded.doc);
   return w.ok ? { ok: true, changed: true } : w;
 }

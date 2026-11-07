@@ -601,6 +601,12 @@ async function runSelected(args, env) {
         log(`[dry-run] working folder: ${root}`);
         continue;
       }
+      // A stored hash is taken off before anything is scanned or installed, so a failure or a kill after this point
+      // leaves no pin. Without that, a failed write could leave a hash that still reads installed.
+      if (typeof entry.hash === 'string') {
+        const pre = clearBound(name, catOpts);
+        if (!pre.ok) { log(pre.error); log(`scan failed: ${name}, nothing installed, missing`); failed++; continue; }
+      }
       let v;
       try { v = await vet({ source, commit, name }); } catch { v = { refused: 'scan error' }; }
       if (!v || v.refused !== undefined || v.commit !== commit || !approvable(v.result, v.hash)) {
