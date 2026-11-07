@@ -126,7 +126,7 @@ test('plugin defaults: get exposes floor and protected per Role, the floor being
   assert.equal(out.code, 0);
   const got = JSON.parse(out.out);
   const first = Object.values(got.roles)[0];
-  assert.deepEqual(Object.keys(first).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'source']);
+  assert.deepEqual(Object.keys(first).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'skills', 'source']);
   assert.equal(got.roles['tech-researcher'].floor, 'opus');
   assert.equal(got.roles['tech-researcher'].protected, false);
   assert.equal(got.roles['localizer'].floor, 'haiku');

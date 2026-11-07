@@ -14,7 +14,6 @@ const LEGACY_SOURCE = /\[a-z0-9\]\[a-z0-9-\]\{\d{1,3},(?:5[5-9]|6[0-5])\}/;
 
 // Each key is `<file>#<CONSTANT>`; only the line declaring that constant is exempt.
 export const ALLOW = [
-  'scripts/check.mjs#MANIFEST_NAME_RE',
   'scripts/install-skills.mjs#NAME_RE',
   'scripts/install-skills.mjs#MANIFEST_NAME_RE',
   'scripts/install-skills.mjs#PLUGIN_RE',
@@ -442,9 +441,9 @@ test('scan: the roots hold the files the guard is meant to read', () => {
 
 // The repo.
 
-test('allow-list: exactly the ten keys, each still declared in its file', () => {
-  assert.equal(ALLOW.length, 10);
-  assert.equal(new Set(ALLOW).size, 10);
+test('allow-list: exactly the nine keys, each still declared in its file', () => {
+  assert.equal(ALLOW.length, 9);
+  assert.equal(new Set(ALLOW).size, 9);
   for (const key of ALLOW) {
     const [file, constant] = key.split('#');
     const text = readFileSync(join(ROOT, file), 'utf8');
