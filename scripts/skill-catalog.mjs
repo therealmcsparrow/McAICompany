@@ -97,7 +97,7 @@ export function validateEntry(entry, layer) {
 
   const name = entry.skillname;
   if (!has(entry, 'skillname')) return fail('skillname', 'missing');
-  if (typeof name !== 'string' || name.length > 65) return fail('skillname', 'bad value');
+  if (typeof name !== 'string' || name.length > (name.includes(':') ? 129 : 65)) return fail('skillname', 'bad value');
   let plugin = null;
   let wildcard = false;
   if (name.includes(':')) {
@@ -149,7 +149,8 @@ export function validateEntry(entry, layer) {
   if (has(entry, 'license')) {
     const raw = entry.license;
     if (typeof raw !== 'string' || raw.length > 1024) return fail('license', 'bad value');
-    const text = raw.trim();
+    // The raw value is tested; only plain space separators at the edges are cut.
+    const text = raw.replace(/^\p{Zs}+|\p{Zs}+$/gu, '');
     if (text === '') return fail('license', 'bad value');
     if ([...text].length > 64 || LICENSE_BAD_RE.test(text)) return fail('license', 'bad value');
     out.license = text;
@@ -414,7 +415,7 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
   const license = licenseText(entry);
   const result = (status, place, vetted = null) => ({ status, place, license, vetted });
   if (!isPlain(entry) || typeof entry.skillname !== 'string') return result('not found', null);
-  if (has(entry, 'skillplugin')) return result('checked at run start', null);
+  if (has(entry, 'skillplugin')) return result('checked at run start', null, realDate(entry.vetted) ? entry.vetted : null);
 
   const name = entry.skillname;
   const wildcard = name.endsWith('*');
@@ -429,25 +430,39 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
 
   const repo = has(entry, 'skillrepo');
   const pinned = repo && has(entry, 'skillcommit');
-  const vetted = repo && realDate(entry.vetted) ? entry.vetted : null;
+  const vetted = !has(entry, 'skillinstaller') && realDate(entry.vetted) ? entry.vetted : null;
 
   if (wildcard) {
-    for (const r of roots) if (probePrefix(r.dir, base)) return result('installed (name only)', r.label);
-    return result('not found', null);
+    for (const r of roots) if (probePrefix(r.dir, base)) return result('installed (name only)', r.label, vetted);
+    return result('not found', null, vetted);
   }
   if (!pinned) {
     for (const r of roots) if (probeName(r.dir, name).length > 0) return result('installed (name only)', r.label, vetted);
     return result('not found', null, vetted);
   }
-  let present = false;
   const bound = typeof entry.hash === 'string' && HASH_RE.test(entry.hash) ? entry.hash : null;
+  // Every present item counts. A real folder must hash equal; a link must lead to the proven
+  // .agents folder of the same root.
+  let place = null;
+  let allMatch = true;
   for (const r of roots) {
-    for (const item of probeName(r.dir, name)) {
-      present = true;
-      if (bound !== null && !item.link && item.dir && boundedFolderHash(item.full) === bound) return result('installed', r.label, vetted);
+    const items = probeName(r.dir, name);
+    if (items.length === 0) continue;
+    if (place === null) place = r.label;
+    const agents = path.join(r.dir, '.agents', 'skills', name);
+    const proven = (item) => bound !== null && !item.link && item.dir && boundedFolderHash(item.full) === bound;
+    for (const item of items) {
+      if (!item.link) { if (!proven(item)) allMatch = false; continue; }
+      const home = items.find((o) => !o.link && sameFolder(o.full, agents));
+      if (!home || !proven(home) || !linkLeadsTo(item.full, agents)) allMatch = false;
     }
   }
-  return result(present ? 'folder not recognized' : 'missing', null, vetted);
+  if (place === null) return result('missing', null, vetted);
+  return result(allMatch ? 'installed' : 'folder not recognized', place, vetted);
+}
+
+function linkLeadsTo(link, target) {
+  try { return sameFolder(path.resolve(path.dirname(link), fs.readlinkSync(link).replace(/^\\\\[?.]\\/, '')), target); } catch { return false; }
 }
 
 // ---------- writes ----------
@@ -486,7 +501,13 @@ function loadForWrite(opts) {
   if (where.home === null) return { error: `ERROR user catalog: ${where.warning === MOVED_WARNING ? 'MCSPARROW_HOME is set' : 'no home'}` };
   const read = readUserDoc(path.join(where.home, USER_DIR, USER_FILE));
   if (read.state === 'error') return { error: `ERROR user catalog: ${read.code}` };
-  return { home: where.home, doc: read.state === 'ok' ? read.doc : { schema: 1, entries: [] } };
+  const doc = read.state === 'ok' ? read.doc : { schema: 1, entries: [] };
+  // Every stored row is rewritten, so every row must pass the checks a new one does.
+  for (let i = 0; i < doc.entries.length; i++) {
+    const v = validateEntry(doc.entries[i], 'user');
+    if (!v.ok) return { error: `ERROR user catalog entry ${i + 1}: ${v.field} ${v.reason}` };
+  }
+  return { home: where.home, doc };
 }
 
 const findRaw = (doc, name) => doc.entries.findIndex((e) => isPlain(e) && Object.hasOwn(e, 'skillname') && e.skillname === name);

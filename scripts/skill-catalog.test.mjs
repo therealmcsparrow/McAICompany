@@ -653,3 +653,120 @@ test('a bound hash and vetted date read back through the status of a pinned fold
   assert.equal(s.status, 'installed');
   assert.equal(s.vetted, '2026-11-02');
 });
+
+test('validateEntry: a plugin name may hold two 64 character parts', () => {
+  const part = 'a'.repeat(64);
+  const p = `${part}:${part}`;
+  assert.equal(validateEntry({ skillname: p, skillcategory: 'design', skillplugin: part }, 'baseline').ok, true);
+  assert.equal(validateEntry({ skillname: `${'a'.repeat(40)}:${'b'.repeat(40)}`, skillcategory: 'design', skillplugin: 'a'.repeat(40) }, 'baseline').ok, true);
+  assert.equal(validateEntry({ skillname: `${p}a`, skillcategory: 'design', skillplugin: part }, 'baseline').ok, false);
+  assert.equal(validateEntry(repoEntry({ skillname: 'a'.repeat(65) }), 'user').ok, false);
+});
+
+test('validateEntry: the raw license is tested, only plain edge spaces are trimmed', () => {
+  const ok = (l) => validateEntry(repoEntry({ license: l }), 'user');
+  for (const bad of ['MIT\n', '\nMIT', 'MIT\r', '\uFEFFMIT', 'MIT\u2028', 'MIT\u2029', 'MIT\t', 'MIT\u200b', '\u202eMIT']) {
+    assert.equal(ok(bad).ok, false, JSON.stringify(bad));
+  }
+  assert.equal(ok('\u00a0MIT\u3000').entry.license, 'MIT');
+  assert.equal(ok(' MIT ').entry.license, 'MIT');
+});
+
+test('skillStatus: a present folder that is not recognized names its place', () => {
+  const home = tmp('home');
+  const root = tmp('root');
+  mkSkillDir(path.join(home, '.claude', 'skills', 'my-skill'));
+  assert.deepEqual(
+    skillStatus(pinned({ hash: H1 }), { home, productRoot: root }),
+    { status: 'folder not recognized', place: 'user', license: 'MIT, as stated, not checked', vetted: null },
+  );
+  mkSkillDir(path.join(root, '.claude', 'skills', 'my-skill'));
+  assert.equal(skillStatus(pinned({ hash: H1 }), { home, productRoot: root }).place, 'project');
+});
+
+test('skillStatus: a plugin or wildcard entry keeps its date; an installer entry never does', () => {
+  const home = tmp('home');
+  const root = tmp('root');
+  const plug = { skillname: 'p:s', skillcategory: 'design', skillplugin: 'p', vetted: '2026-10-01' };
+  assert.equal(skillStatus(plug, { home, productRoot: root }).vetted, '2026-10-01');
+  const wild = { skillname: 'golang-*', skillcategory: 'engineering', skillrepo: 'a/b', vetted: '2026-10-02' };
+  assert.equal(skillStatus(wild, { home, productRoot: root }).vetted, '2026-10-02');
+  mkSkillDir(path.join(root, '.agents', 'skills', 'golang-testing'));
+  assert.equal(skillStatus(wild, { home, productRoot: root }).vetted, '2026-10-02');
+  const unpinned = { skillname: 'u-skill', skillcategory: 'engineering', skillrepo: 'a/b', vetted: '2026-10-03' };
+  assert.equal(skillStatus(unpinned, { home, productRoot: root }).vetted, '2026-10-03');
+  const inst = { skillname: 'inst', skillcategory: 'design', skillinstaller: 'npx pkg@1.0.0', vetted: '2026-10-01' };
+  assert.equal(skillStatus(inst, { home, productRoot: root }).vetted, null);
+});
+
+test('skillStatus: every present folder must match, a second one that differs is not recognized', () => {
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  const c = path.join(root, '.claude', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  mkSkillDir(c, { 'SKILL.md': '# hostile\n' });
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+  fs.rmSync(c, { recursive: true });
+  mkSkillDir(c);
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+  const h2 = tmp('home');
+  mkSkillDir(path.join(h2, '.claude', 'skills', 'my-skill'), { 'SKILL.md': '# other\n' });
+  assert.equal(skillStatus(pinned({ hash }), { home: h2, productRoot: root }).status, 'folder not recognized');
+});
+
+test('skillStatus: a link in .claude must lead to the proven .agents folder', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  const other = tmp('other');
+  mkSkillDir(path.join(other, 'my-skill'));
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  const link = path.join(root, '.claude', 'skills', 'my-skill');
+  fs.symlinkSync(path.join(other, 'my-skill'), link, 'junction');
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+  fs.rmSync(link, { recursive: true, force: true });
+  fs.symlinkSync(a, link, 'junction');
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
+});
+
+test('a catalog file planted in the working folder adds nothing to a read', (t) => {
+  const home = tmp();
+  const cwd = tmp('cwd');
+  fs.mkdirSync(path.join(cwd, '.mcsparrow'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, '.mcsparrow', '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries: [repoEntry({ skillname: 'planted-skill' })] }));
+  fs.writeFileSync(path.join(cwd, '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries: [repoEntry({ skillname: 'planted-skill' })] }));
+  const before = process.cwd();
+  process.chdir(cwd);
+  t.after(() => process.chdir(before));
+  const r = readCatalog({ home });
+  assert.equal(r.entries.some((e) => e.skillname === 'planted-skill'), false);
+  assert.deepEqual(r.errors, []);
+});
+
+test('clearBound and setBoundHash refuse a file holding another hostile row, and write nothing', () => {
+  const home = tmp();
+  addUserEntry(repoEntry({ hash: undefined }), { home });
+  setBoundHash('my-skill', H1, '2026-11-01', { home });
+  const doc = readUser(home);
+  doc.entries.push(repoEntry({ skillname: 'other-skill', license: 'MIT\u2028' }));
+  writeUser(home, JSON.stringify(doc));
+  const before = fs.readFileSync(userFile(home), 'utf8');
+  const c = clearBound('my-skill', { home });
+  assert.equal(c.ok, false);
+  assert.match(c.error, /entry 2: license bad value/);
+  assert.equal(setBoundHash('my-skill', H1, '2026-11-02', { home }).ok, false);
+  assert.equal(fs.readFileSync(userFile(home), 'utf8'), before);
+});
+
+test('clearBound refuses when the row itself holds a banned character', () => {
+  const home = tmp();
+  writeUser(home, JSON.stringify({ schema: 1, entries: [repoEntry({ license: 'MIT\u2028', hash: H1, vetted: '2026-11-01' })] }));
+  const before = fs.readFileSync(userFile(home), 'utf8');
+  assert.equal(clearBound('my-skill', { home }).ok, false);
+  assert.equal(fs.readFileSync(userFile(home), 'utf8'), before);
+});
