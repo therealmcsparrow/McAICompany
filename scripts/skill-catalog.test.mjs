@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   userCatalogPath, userHome, readBaseline, parseBaseline, readCatalog, validateEntry, expandGroups, eligibleRoles,
-  selectable, approvable, boundedFolderHash, skillStatus, addUserEntry, setBoundHash, clearBound,
+  selectable, approvable, boundedFolderHash, skillStatus, addUserEntry, setBoundHash, clearBound, licenseAsTyped,
 } from './skill-catalog.mjs';
 import { skillFolderHash } from './skillspector.mjs';
 
@@ -209,6 +209,15 @@ test('validateEntry: license text', () => {
     assert.equal(ok(bad).ok, false, JSON.stringify(bad));
   }
   assert.equal(ok('x'.repeat(100000)).ok, false);
+});
+
+test('licenseAsTyped: cuts edge spaces, refuses hidden characters', () => {
+  assert.equal(licenseAsTyped('  MIT  '), 'MIT');
+  assert.equal(licenseAsTyped('   '), '');
+  assert.equal(licenseAsTyped('a​b'), null);
+  assert.equal(licenseAsTyped('​MIT'), null);
+  assert.equal(licenseAsTyped('a\nb'), null);
+  assert.equal(licenseAsTyped('a\u{e0041}b'), null);
 });
 
 test('validateEntry: vetted and hash', () => {

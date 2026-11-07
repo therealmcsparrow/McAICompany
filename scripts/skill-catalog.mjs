@@ -27,7 +27,15 @@ const PACKAGE_RE = /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 const HASH_RE = /^[0-9a-f]{64}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const LICENSE_EDGE_RE = /^\p{Zs}+|\p{Zs}+$/gu;
 const LICENSE_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u180e\u2065\u{e0000}-\u{e007f}]/u;
+
+// A license as typed: plain space separators (Zs) are cut at the edges; any other invisible character,
+// at the edge or inside, gives null instead of being trimmed away. Blank text comes back as ''.
+export function licenseAsTyped(raw) {
+  const text = raw.replace(LICENSE_EDGE_RE, '');
+  return LICENSE_BAD_RE.test(text) ? null : text;
+}
 const ENTRY_KEYS = new Set(['skillname', 'skillcategory', 'skillrepo', 'skillinstaller', 'skillplugin', 'skillcommit', 'license', 'vetted', 'hash']);
 const SOURCE_KEYS = ['skillrepo', 'skillinstaller', 'skillplugin'];
 const ENTRY_ORDER = ['skillname', 'skillcategory', 'skillrepo', 'skillinstaller', 'skillplugin', 'skillcommit', 'license', 'vetted', 'hash'];
@@ -149,10 +157,8 @@ export function validateEntry(entry, layer) {
   if (has(entry, 'license')) {
     const raw = entry.license;
     if (typeof raw !== 'string' || raw.length > 1024) return fail('license', 'bad value');
-    // The raw value is tested; only plain space separators at the edges are cut.
-    const text = raw.replace(/^\p{Zs}+|\p{Zs}+$/gu, '');
-    if (text === '') return fail('license', 'bad value');
-    if ([...text].length > 64 || LICENSE_BAD_RE.test(text)) return fail('license', 'bad value');
+    const text = licenseAsTyped(raw);
+    if (text === null || text === '' || [...text].length > 64) return fail('license', 'bad value');
     out.license = text;
   } else if (user) return fail('license', 'missing');
 
