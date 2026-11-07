@@ -42,7 +42,7 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 |---|---|---|---|---|
 | feature | `product-manager` | 1 | always | yes |
 | feature | `prototype` | 1b | the CEO accepted a prototype question at the Brief Gate (v1.2) | |
-| feature | `design-researcher` | 1a | UI work and design selections stale (v1.6): among selections of a `design`-category skill (`aico-settings` v1.12 `roles.<role>.skills`), none, or the newest `approved` over 180 days old | |
+| feature | `design-researcher` | 1a | UI work and design selections stale (v1.6): among the selections of a `design`-category skill (`aico-settings` v1.12 `roles.<role>.skills`) on a UI Role (`ui-ux-designer`, `brand-artist`, `frontend-engineer`, `desktop-engineer`, `game-engineer`), none, none with a valid `approved` date, or the newest valid `approved` over 180 days old | |
 | feature | `architect` | 2 | always | |
 | feature | `ui-ux-designer` | 2 | UI work | |
 | feature | `brand-artist` | 2 | `## Art direction` empty or new Assets needed | |

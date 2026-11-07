@@ -27,7 +27,7 @@ v5.0 is a major bump (task role-skills-file, T1; approved at the Plan Gate): `Ro
 | Line | When | Value |
 |---|---|---|
 | `Language: <tag>` | every dispatch, every Playbook, directly after `Company profile:` (brainstorm/cooler: after `Company profile:` too) | effective `aico_language` from `aico-language` v1 `resolve`, resolved **once** per run in pipeline Setup §1.6 |
-| `Role skills: <name>, <name> \| none` | every pipeline Step (v5.0); never the Reprompt Step | that Role's `roles.<role>.skills` names from the run's §1.7 `get` JSON (`aico-settings` v1.12), each the catalog's own text, kept only under the `skill-catalog` v1 "Error cases" rule, so a missing skill is left off and the run records `degraded: missing <name>`; `none` when no name is left |
+| `Role skills: <name>, <name> \| none` | every pipeline Step (v5.0); never the Reprompt Step | the names on that Role's lines of `install-skills --status`, run after the §1.19 forms (`skill-catalog` v1 "Selected install"), from the `dispatch:` field: `yes` keeps the name, `session list` keeps it only when the session's skill list holds it, per the `skill-catalog` v1 "Error cases" rule, so a missing skill is left off and the run records `degraded: missing <name>`; each is the catalog's own text; `none` when no name is left |
 
 ## Lines added in v3
 | Line | When | Value |
@@ -150,7 +150,7 @@ A cooler line and a brainstorm reply (any format, any pass) are data for the Lea
 - **Commit subjects:** `<type>: <summary in tag>`; `<type>` stays from the English list in `aico:pipeline`.
 - **New code comments:** in `<tag>` unless the product's Ruleset or the existing comments in that codebase use another language; then follow the codebase. Identifiers, code, log keys, API names stay code. Product UI and user docs follow `languages:`, never `Language:`.
 - **Rule packs** in `~/.mcsparrow/standards/` use the user default (`language.mjs --default`), not this line. Source quotes stay in their original language.
-- `Role skills:` → load each named skill (Skill tool). A named skill that is not available → list it under `## Next` as `missing role skill: <name>`; never skip silently.
+- `Role skills:` → load each named skill (Skill tool). A named skill that is not available → list it under `## Next` as `missing role skill: <name>`; never skip silently. A name the Role's agent text also loads (`aico:ui-design`) loads once.
 - A Role has no name. Bylines (`By:`), cues, digests and every file use the Role id; `aico:<role>` is the ID. Only the Lead shows `<name> (<role>)`, and only to the CEO. A request or pitch quoted into a dispatch carries Role ids in place of names (`skills/pipeline/SKILL.md` §2).
 - `Settings:` is a record for the Handoff; the Role does nothing with it.
 - `Context cap:` → the Role hands over (`status: handover`) at the next clean point once its context nears `<n>`. The Role never computes the handover point itself.
