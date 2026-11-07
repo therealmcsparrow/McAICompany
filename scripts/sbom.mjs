@@ -232,6 +232,7 @@ function readBaselineAt(root) {
   let st;
   try { st = fs.lstatSync(file); } catch { return fail(`${rel} is missing`); }
   if (!st.isFile()) return fail(`${rel} is not a plain file`);
+  if (st.size > MAX_BYTES) return fail(`${rel} is larger than ${MAX_BYTES / MiB} MiB`);
   try {
     return parseBaseline(fs.readFileSync(file, 'utf8'));
   } catch (e) {

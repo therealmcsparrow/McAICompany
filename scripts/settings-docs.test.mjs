@@ -137,6 +137,9 @@ test('user docs describe the Personality tab, the Plan Gates and the Legal discl
   assert.match(concepts, /\*\*Personality\*\* — one collapsible card per Role/);
   assert.match(concepts, /Filter Roles/);
   assert.match(commands, /on the Personality tab/);
+  assert.match(readme, /\/aico:add-skill/);
+  assert.match(readme, /\*\*Tabs:\*\* Roles \([^)]*\), Skills \(/);
+  assert.ok(!readme.includes('deps/skills.json'));
   assert.match(readme, /Personality \(one collapsible card per Role/);
   for (const t of [concepts, commands])
     assert.ok(!/Personality\*\* section has one collapsible card/.test(t));

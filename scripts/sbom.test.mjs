@@ -252,7 +252,10 @@ test('hostile inputs stop the build', (t) => {
     'baseline unknown key': { ...SKILLS, extra: 1 },
     'baseline text not json': 'not json'
   };
+  for (const [label, s] of Object.entries(skills)) assert.throws(() => buildSbom({ root: project(t, { skills: s }).root }), SbomError, label);
   assert.throws(() => buildSbom({ root: project(t, { plugin: { name: 'aico', version: '1.2' } }).root }), SbomError);
+  const bigSkills = project(t, { skills: ' '.repeat(9 * 1024 * 1024) });
+  assert.throws(() => buildSbom({ root: bigSkills.root }), /larger than/);
   const big = project(t);
   big.put('tools/claude-cli/package-lock.json', ' '.repeat(9 * 1024 * 1024));
   assert.throws(() => buildSbom({ root: big.root }), /larger than/);
