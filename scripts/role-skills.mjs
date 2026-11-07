@@ -29,8 +29,8 @@ const SECTIONS = [
 
 // Lines the old sections held: name, source and license come first in both formats.
 const HEAD_RE = /^- (?:area: [^;]+; )?name: ([^;]+); source: ([^;]+); license: ([^;]+); /;
-const SPEC_RE = /^(\d{1,5}):([a-z0-9:*-]{1,65})$/;
-const CATEGORY_SPEC_RE = /^(\d{1,5}):([a-z0-9:*-]{1,65})=([a-z]{1,20})$/;
+const SPEC_RE = /^(\d{1,5}):([a-z0-9:*-]{1,129})$/;
+const CATEGORY_SPEC_RE = /^(\d{1,5}):([a-z0-9:*-]{1,129})=([a-z]{1,20})$/;
 const ROLES_RE = /^[a-z][a-z0-9-]{0,40}(?:,[a-z][a-z0-9-]{0,40}){0,39}$/;
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -248,6 +248,9 @@ function scan(opts) {
       if (res.entry && !userByName.has(res.entry.skillname)) {
         userByName.set(res.entry.skillname, res.entry);
         fresh.set(res.entry.skillname, { entry: res.entry, kind: res.kind });
+      } else if (res.kind === 'choice' && fresh.get(res.target.skillname)?.entry === res.target) {
+        // The entry exists only once an earlier line writes it, so there is no listed commit to move.
+        Object.assign(res, stay('commit differs from an earlier line'));
       } else if (res.kind === 'selection' && fresh.get(res.target.skillname)?.entry === res.target) {
         // The entry exists only once a line writes it, so whichever line is chosen writes it.
         const first = fresh.get(res.target.skillname);
@@ -256,7 +259,7 @@ function scan(opts) {
       }
       // A new entry from a Skills line has no category of its own; the CEO picks one from the closed list.
       if (res.kind === 'entry' && section.heading === '## Skills') res.pickCategory = true;
-      if (res.target) {
+      if (res.target && !res.stay) {
         const openFor = (target) => inOfferOrder(target, eligibleRoles(target, baseline.categories).filter((r) => !guarded.has(r)))
           .filter((r) => { const have = roleNames(project.data, r); return have.includes(res.target.skillname) || have.length < MAX_ROLE_SKILLS; });
         if (res.pickCategory) {
@@ -387,12 +390,12 @@ function execute(s, opts, chosen, moves, out) {
     if (c.roles.some((r) => !offer.includes(r))) { out.push(`line ${n}: stays, Role not offered`); continue; }
     const name = res.target.skillname;
     const roles = c.roles.filter((r) => roleNames(s.project.data, r).includes(name) || (adds.get(r) ?? []).some((x) => x.name === name) || count(r) < MAX_ROLE_SKILLS);
-    if (roles.length === 0) { out.push(`line ${n}: stays, Role already has 5`); continue; }
+    if (roles.length < c.roles.length) { out.push(`line ${n}: stays, Role already has 5`); continue; }
     for (const r of roles) {
       if (roleNames(s.project.data, r).includes(name) || (adds.get(r) ?? []).some((x) => x.name === name)) continue;
       adds.set(r, [...(adds.get(r) ?? []), { name, approved: res.e.approved }]);
     }
-    if (res.choices) {
+    if (res.entry) {
       res.entry.skillcategory = category;
       settled.set(res.entry.skillname, category);
     }

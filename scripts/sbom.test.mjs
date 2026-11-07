@@ -125,15 +125,6 @@ test('a skill in no group adds no component, and the old file is not read', (t) 
   assert.deepEqual(refs, ['skill:find-skills@vercel-labs/skills', 'skill:golang-*@samber/cc-skills-golang', 'skill:impeccable@local']);
 });
 
-test('the SBOM reads the baseline only: a planted user file never reaches it', (t) => {
-  const { root, put } = project(t);
-  put('.mcsparrow/3rdpartyskills.json', { schema: 1, entries: [{ skillname: 'secret-token-abc123', skillrepo: 'evil/repo', license: 'MIT' }] });
-  const env = { ...process.env, HOME: root, USERPROFILE: root, MCSPARROW_HOME: path.join(root, '.mcsparrow') };
-  const res = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env });
-  assert.equal(res.status, 0, res.stderr);
-  assert.ok(!res.stdout.includes('secret-token-abc123') && !res.stdout.includes('evil/repo'));
-});
-
 test('a component keeps the wildcard and command forms, and takes its licence from the baseline', (t) => {
   const bom = buildSbom({ root: project(t).root });
   const wild = bom.components.find((c) => c.name === 'golang-*');

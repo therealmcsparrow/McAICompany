@@ -402,10 +402,11 @@ test('an eligible name in a protected Role project list is not part of the draft
   await settle();
   assert.equal(unsaved(page), '0 unsaved changes');
   assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
-  await ticked(box(page, 'sk-qa-user-shared'));
+  await ticked(box(page, 'sk-qa-project-shared'));
   await page.ids.save.fire('click');
   await settle();
-  assert.equal(posted.project?.roles?.architect?.skills, undefined);
+  assert.ok(posted.project, 'the project layer is posted');
+  assert.equal(posted.project.roles?.architect?.skills, undefined);
 });
 
 test('while the user layer is unread its stored names are kept, not listed as ignored', async () => {

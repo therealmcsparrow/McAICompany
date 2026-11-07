@@ -422,3 +422,76 @@ test('two lines with one name share the chosen category, and a Role outside it s
   assert.equal(JSON.parse(fs.readFileSync(userFile(outside), 'utf8')).entries.find((e) => e.skillname === 'stk-skill').skillcategory, 'quality');
   assert.equal(JSON.parse(read(outside, 'settings.json')).aico_settings.roles['senior-engineer'], undefined);
 });
+
+const sameName = (commit, area = 'stack') => `- area: ${area}; name: dup-skill; source: octo/dup; license: MIT; vetted: 2026-02-03; commit: ${commit}; why: w; approved: 2026-02-04`;
+const entryIn = (p, name) => JSON.parse(fs.readFileSync(userFile(p), 'utf8')).entries.find((e) => e.skillname === name);
+
+test('a Design skills line and a Skills line of one name: the Design line settles the category', (t) => {
+  const p = project(t, { design: [`- name: dup-skill; source: octo/dup; license: MIT; vetted: 2026-02-03; commit: ${A}; why: w; approved: 2026-02-04`], skills: [sameName(A)] });
+  const r = run(p, ['migrate', '--apply', '--line', '4:dup-skill=ui-ux-designer', '--line', '7:dup-skill=backend-engineer', '--category', '7:dup-skill=engineering']);
+  assert.equal(r.code, 0, r.text);
+  assert.match(r.text, /line 4: migrated/);
+  assert.match(r.text, /line 7: stays, category differs from an earlier line/);
+  assert.doesNotMatch(r.text, /ERROR/);
+  assert.equal(entryIn(p, 'dup-skill').skillcategory, 'design');
+  assert.equal(JSON.parse(read(p, 'settings.json')).aico_settings.roles['backend-engineer'], undefined);
+});
+
+test('two Skills lines: the first chosen line settles the category before any write', (t) => {
+  const p = project(t, { design: [], skills: [sameName(A), sameName(A)] });
+  const r = run(p, ['migrate', '--apply',
+    '--line', '7:dup-skill=qa', '--category', '7:dup-skill=quality',
+    '--line', '8:dup-skill=backend-engineer', '--category', '8:dup-skill=engineering']);
+  assert.match(r.text, /line 7: migrated/);
+  assert.match(r.text, /line 8: stays, category differs from an earlier line/);
+  assert.doesNotMatch(r.text, /ERROR/);
+  assert.equal(entryIn(p, 'dup-skill').skillcategory, 'quality');
+});
+
+test('a line with another commit than an entry only this run would write offers no Move', (t) => {
+  const p = project(t, { design: [], skills: [sameName(A), sameName(B)] });
+  const pre = run(p, ['migrate']);
+  assert.match(pre.out.find((l) => l.startsWith('line 8:')), /^line 8: stays, commit differs from an earlier line$/);
+  const r = run(p, ['migrate', '--apply',
+    '--line', '7:dup-skill=qa', '--category', '7:dup-skill=quality',
+    '--line', '8:dup-skill=backend-engineer', '--move', '8:dup-skill']);
+  assert.match(r.text, /line 7: migrated/);
+  assert.match(r.text, /line 8: stays, commit differs from an earlier line/);
+  assert.equal(entryIn(p, 'dup-skill').skillcommit, A);
+  assert.match(read(p, 'project.md'), new RegExp(B));
+
+  const only = project(t, { design: [], skills: [sameName(A), sameName(B)] });
+  const o = run(only, ['migrate', '--apply', '--line', '8:dup-skill=backend-engineer', '--move', '8:dup-skill', '--category', '8:dup-skill=engineering']);
+  assert.match(o.text, /line 8: stays, commit differs from an earlier line/);
+  assert.equal(fs.existsSync(userFile(only)), false);
+});
+
+test('a line stays whole when a chosen Role reaches 5 partway through it', (t) => {
+  const three = ['impeccable', 'frontend-ui-engineering', 'aico:ui-design'].map((name) => ({ name }));
+  const design = [DESIGN[0], DESIGN[2].replace('fancy-ui', 'other-ui'), DESIGN[2]];
+  const p = project(t, { design, skills: [], settings: { aico_settings: { version: 1, roles: { 'ui-ux-designer': { skills: three } } } } });
+  const args = ['migrate', '--apply', '--line', '4:hallmark=ui-ux-designer', '--line', '5:other-ui=ui-ux-designer', '--line', '6:fancy-ui=ui-ux-designer,brand-artist'];
+  const r = run(p, args);
+  assert.match(r.text, /line 4: migrated/);
+  assert.match(r.text, /line 6: stays, Role already has 5/);
+  assert.match(read(p, 'project.md'), /name: fancy-ui/);
+  assert.equal(entryIn(p, 'fancy-ui'), undefined);
+  assert.equal(JSON.parse(read(p, 'settings.json')).aico_settings.roles['brand-artist'], undefined);
+  const again = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=brand-artist']);
+  assert.match(again.text, /line 4: migrated, entry in your list, selected for brand-artist/);
+  const names = JSON.parse(read(p, 'settings.json')).aico_settings.roles['brand-artist'].skills.map((x) => x.name);
+  assert.deepEqual(names, ['fancy-ui']);
+});
+
+test('a plugin name of the longest allowed length previews and applies', (t) => {
+  const plugin = 'a'.repeat(40);
+  const name = `${plugin}:${'b'.repeat(40)}`;
+  const line = `- name: ${name}; source: plugin ${plugin}; license: MIT; vetted: 2026-02-01; why: w; approved: 2026-02-02`;
+  const p = project(t, { design: [line], skills: [] });
+  const pre = run(p, ['migrate']);
+  assert.match(pre.out[0], new RegExp(`^line 4: ${name}, source plugin`));
+  const r = run(p, ['migrate', '--apply', '--line', `4:${name}=ui-ux-designer`]);
+  assert.equal(r.code, 0, r.text);
+  assert.match(r.text, /line 4: migrated/);
+  assert.equal(entryIn(p, name).skillplugin, plugin);
+});
