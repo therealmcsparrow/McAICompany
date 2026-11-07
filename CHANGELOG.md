@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-07
+
+Rollback: node scripts/stable.mjs 0.28.0
+
 ### Added
 - **Skills tab and `/aico:add-skill`.** Each Role gets up to 5 third-party skills, chosen on the Skills tab of `/aico:settings` from a catalog. `/aico:add-skill` adds a skill to your own list, `~/.mcsparrow/3rdpartyskills.json`, in a few form questions. Nothing is installed or run when you add one.
 - **Migration.** `/aico:setup` and the run-start form offer to move old `## Skills` and `## Design skills` lines from `.company/project.md` into your list after a form that shows each line.
