@@ -794,6 +794,7 @@ const selEnv = (s, extra = {}) => {
       home: s.home, productRoot: s.root, today: '2026-11-06', log: (x) => log.push(x),
       settings: { settings_folder_moved: false, roles: { qa: { skills: [{ name: SEL_NAME, approved: '2026-11-06' }], source: { skills: 'project' } } } },
       vet: async () => ({ commit: SEL_COMMIT, hash: boundedFolderHashOf(s.scan), result: { verdict: 'pass', counts: { critical: 0, high: 0 } } }),
+      scanInstalled: async () => ({ results: [{ verdict: 'pass', blocking: false }] }),
       exec: (cmd) => { calls.push(cmd); },
       ...extra,
     },
@@ -973,7 +974,8 @@ async function hostileProject({ plant, pathDirs = () => [], cliFiles, nested = f
       `import { boundedFolderHash } from ${JSON.stringify(new URL('./skill-catalog.mjs', import.meta.url).href)};`,
       `const hash = boundedFolderHash(${JSON.stringify(scan)});`,
       `const vet = async () => ({ commit: ${JSON.stringify(HS_COMMIT)}, hash, result: { verdict: 'pass', counts: { critical: 0, high: 0 } } });`,
-      `const out = []; const code = await main(['--selected'], { home: ${JSON.stringify(home)}, productRoot: ${JSON.stringify(root)}, settings: ${JSON.stringify(settings)}, today: '2026-11-06', vet, log: (s) => out.push(s) });`,
+      "const scanInstalled = async () => ({ results: [{ verdict: 'pass', blocking: false }] });",
+      `const out = []; const code = await main(['--selected'], { home: ${JSON.stringify(home)}, productRoot: ${JSON.stringify(root)}, settings: ${JSON.stringify(settings)}, today: '2026-11-06', vet, scanInstalled, log: (s) => out.push(s) });`,
       'console.log(out.join("\\n")); process.exit(code);'
     ].join('\n'));
     // A cold npm cache, the user config in the fake home, and the Windows lookup switch unset (its default).

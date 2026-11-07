@@ -1194,7 +1194,7 @@ test('AC14 the installer fetches the commit that was scanned and a hash mismatch
   assert.equal(JSON.parse(sb.run('skill-picks.mjs', ['check-install', '--name', 'copy-helper', '--hash', scanned, '--json']).out).bound, true);
   // Setup adds no way to fetch code of its own, and an unbound result stops the run.
   const section = read('skills/setup/SKILL.md').split('## Company type and skill search')[1];
-  assert.doesNotMatch(section, /npx|git clone|curl|wget|Invoke-WebRequest|install-skills/);
+  assert.doesNotMatch(section, /npx|git clone|curl|wget|Invoke-WebRequest|install-skills(?! --status)/);
   assert.match(section, /same source, commit and folder/);
   const picks = read('skills/lead/references/skill-picks.md');
   assert.match(picks, /Go on only when the skill's line shows no `FAILED`, `hash differs` or `missing`/);

@@ -278,7 +278,7 @@ test('the plan review dispatch block has the three review lines in order and no 
   const k = keys(b);
   assert.deepEqual(k, ['Project profile', 'Company profile', 'Language', 'Settings', 'Context cap', 'Role skills', 'Risk tier', 'Base commit', 'Round', 'Review mode', 'Input Handoffs', 'Review inputs', 'After first pass', 'Output', 'Goal', 'Follow']);
   const text = b.join('\n');
-  assert.match(text, /^Role skills: <names | none> +# fresh-reviewer's lines of `install-skills --status`, built per `aico:pipeline` §1.19 d/m);
+  assert.match(text, /^Role skills: <names \| none> +# fresh-reviewer's lines of `install-skills --status`, built per `aico:pipeline` §1.19 d/m);
   assert.match(text, /^Review mode: plan$/m);
   assert.match(text, /^Input Handoffs: none: plan review$/m);
   assert.match(text, /^Review inputs: <.*lines.*>/m);

@@ -1221,11 +1221,12 @@ export async function vetCandidate({ source, commit, name, mode } = {}, deps = {
   return one.refused !== undefined ? { refused: one.refused } : { commit: r.commit, hash: r.hashes[name], result: one };
 }
 
-// Scans an installed skill by name in every scope; returns { results } or { refused }.
-export async function scanInstalled({ name, mode } = {}, deps = {}) {
+// Scans an installed skill by name in one scope (`project` or `global`, default every scope); returns { results } or { refused }.
+export async function scanInstalled({ name, mode, scope = 'all' } = {}, deps = {}) {
   try {
     if (typeof name !== 'string' || !NAME_RE.test(name)) throw new Refusal(BAD_NAME);
-    const flags = new Map([['--scope', 'all'], ['--skill', name]]);
+    if (!SCOPES.includes(scope)) throw new Refusal('usage: bad scope');
+    const flags = new Map([['--scope', scope], ['--skill', name]]);
     if (mode !== undefined) flags.set('--mode', mode);
     const out = await runScan(flags, { progress: () => {}, ...deps });
     return { results: out.results };

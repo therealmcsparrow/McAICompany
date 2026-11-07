@@ -11,7 +11,7 @@ import { homedir, userInfo } from 'node:os';
 import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readBaseline, readCatalog, skillStatus, approvable, setBoundHash, clearBound, selectable, itemsProven, vettedText } from './skill-catalog.mjs';
-import { vetCandidate } from './skillspector.mjs';
+import { vetCandidate, scanInstalled } from './skillspector.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
@@ -540,6 +540,7 @@ async function runSelected(args, env) {
     }
     const exec = env.exec ?? installExec(home, undefined, { pinHome: true });
     const vet = env.vet ?? vetCandidate;
+    const scanAfter = env.scanInstalled ?? scanInstalled;
     const today = env.today ?? new Date().toISOString().slice(0, 10);
     let done = 0, failed = 0;
     for (const [name, sel] of chosen) {
@@ -587,12 +588,33 @@ async function runSelected(args, env) {
       }
       // Every folder present at the root must equal the scan, since any of them may be the copy that loads.
       const proven = () => { const got = itemsProven(root, name, v.hash); return got.present && got.ok; };
+      if (scope === 'project') {
+        // The home folder is read by the status too, so a differing copy there would leave the skill off every Role.
+        const other = itemsProven(home, name, v.hash, { place: 'user' });
+        if (other.present && !other.ok) {
+          log(`hash differs: ${name}, nothing installed, nothing stored. Your home folder holds another copy that differs from the scan; delete ${join(home, '.agents', 'skills', name)} and ${join(home, '.claude', 'skills', name)} by hand, then run again`);
+          failed++;
+          continue;
+        }
+      }
       if (!proven()) {
         log(`$ ${cmd}`);
         try { exec(cmd, root, argv); } catch (e) { log(`FAILED ${cmd}: ${errorText(e)}`); failed++; continue; }
       }
       if (!proven()) {
         log(`hash differs: ${name}, nothing stored. The folder stays until you remove it; ${removeHow}`);
+        failed++;
+        continue;
+      }
+      // The installed copy is scanned before the hash is bound, so a skill that fails here is never dispatched.
+      let after;
+      try { after = await scanAfter({ name, scope: scope === 'user' ? 'global' : 'project' }, { cwd: productRoot, home }); } catch (e) { after = { refused: 'scan error' }; }
+      const rs = after?.results;
+      const clean = Array.isArray(rs) && rs.length === 1 && rs[0] && (rs[0].verdict === 'pass' || rs[0].verdict === 'findings') && rs[0].blocking === false;
+      if (!clean) {
+        const c = clearBound(name, catOpts);
+        if (!c.ok) log(c.error);
+        log(`scan failed after install: ${name}, nothing stored. The folder stays until you remove it; ${removeHow}`);
         failed++;
         continue;
       }

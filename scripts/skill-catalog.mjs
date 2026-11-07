@@ -486,15 +486,15 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
   }
   const bound = typeof entry.hash === 'string' && HASH_RE.test(entry.hash) ? entry.hash : null;
   let place = null;
-  let allMatch = true;
+  let failing = null;
   for (const r of roots) {
     const got = itemsProven(r.dir, name, bound, { place: r.label });
     if (!got.present) continue;
     if (place === null) place = r.label;
-    if (!got.ok) allMatch = false;
+    if (!got.ok && failing === null) failing = r.label;
   }
   if (place === null) return result('missing', null, vetted);
-  return result(allMatch ? 'installed' : 'folder not recognized', place, vetted);
+  return result(failing === null ? 'installed' : 'folder not recognized', failing ?? place, vetted);
 }
 
 // Every present item under one root must count: a real folder must hash equal to `hash`, and a link must
