@@ -10,7 +10,7 @@ argument-hint: <topic | project | file> [quick|deep]
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook research` first; exit not 0 → show its output line and stop.
 
-You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language, the settings and the Context cap (§1.2, §1.4, §1.6, §1.7 with Setup item 8); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v2 (RR), `skills-manifest` v4 (SM), `skill-recommendation` v2 (SR), `skill-catalog` v1, `dispatch-prompt` v5 (DP), all in `docs/contracts/`.
+You are the Lead. Researchers read the web and the repo; the Product Manager writes one report; the CEO decides. Nothing is built, no Gates, no branch, no push. This Playbook skips `aico:pipeline` setup except the Project and Company profile, the language, the settings, the Context cap (§1.2, §1.4, §1.6, §1.7 with Setup item 8) and the `Role skills:` build of §1.19 d (`install-skills --status`, no forms); pass each Role's `model` and `effort` per `aico:pipeline` §2. Forms follow `aico:pipeline` (every ask is a form). Contracts: `research-report` v2 (RR), `skills-manifest` v4 (SM), `skill-recommendation` v2 (SR), `skill-catalog` v1, `dispatch-prompt` v5 (DP), all in `docs/contracts/`.
 
 ## 1. Start
 1. Argument: a topic (text), `project` (the topic is this product: read `.company/project.md`), or a file path (a brainstorm, cooler or earlier report: its idea or `## Summary` is the topic). A trailing `quick` or `deep` sets the depth; default `deep`.
@@ -46,6 +46,7 @@ Company profile: <absolute path to PROFILE.md>
 Language: <tag>
 Settings: model=<m> effort=<e>   # only the values passed on the Agent call (aico:pipeline §2); omit the line when none
 Context cap: <cap> handover <n>   # fixed, from aico:pipeline Setup item 8
+Role skills: <names | none>   # that Role's lines of --status, built per aico:pipeline §1.19 d
 Follow aico:handoff.
 ```
 Resolve the plugin root, `Language:` and the settings once (§1.4, §1.6, §1.7), and the fixed Context cap (Setup item 8). The design-researcher gets the Goal "judge the installed design skills and recommend at most 5, each as an SR line with `area: design`, a commit and `approved: pending`" with the Goal line `Area: design`, and no other input. A `blocked` researcher does not stop the run: the report notes it (RR error cases). `needs-ceo` → ask the CEO in a form, then re-dispatch that Role. `handover` → dispatch a fresh Step of the same Role (next `NN`) with the same fields, Input = the original Input plus the handover Handoff, Goal "continue from `<path>` `## Next`"; it is not `blocked`.
@@ -69,5 +70,5 @@ Show a summary of at most 10 lines: verdict, confidence, top 3 of `## What to do
 
 ## 8. Commit and summary
 Commit **only the report**. First re-check the Short Topic from the report's file name against the RR `## Short Topic` rule; it fails → the Lead commits nothing, names the file to the CEO, and the PM rewrites the report at the slug path via Write (never a shell `mv`). Build the path and the summary from the checked value only, in single quotes: `git add '<report path>' && git commit -m 'docs: research <Short Topic>'` (`docs` stays English; the summary after it (`research <Short Topic>`) is written in `Language:`, built only from the checked Short Topic; the frontmatter `topic:` never enters a shell command). Never `git add -A`. Never push. On Start or Brainstorm the commit comes before that Playbook creates its branch.
-The work Handoffs, the selections `role-skills record` wrote and the install artifacts (`.agents/`, `.claude/skills/`, `skills-lock.json`) stay uncommitted. Name each of them in the summary, with the rollback `npx -y skills@1.7.4 remove <name> -a claude-code` run in the product root (add `-g` for a skill installed at user scope).
+The work Handoffs, the selections `role-skills record` wrote and the install artifacts (`.agents/`, `.claude/skills/`, `skills-lock.json`) stay uncommitted. Name each of them in the summary, with the removal command `install-skills --remove <name> --dry-run` prints, shown and not run: a project-scope skill is removed from the product root, a user-scope one (`-g`) only from the home folder (tell the CEO to change to it first).
 Write nothing to `.company/lessons.md`. Tell the CEO the report path and that `/aico:research` can be rerun on it.

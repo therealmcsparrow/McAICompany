@@ -174,6 +174,13 @@ test('rewritten lines keep their rules: settings, locks, auto Gates, Language:',
   has(skillOnly, 'only when `settings_folder_moved` in the §1.7 `get` JSON is `false`; true or absent shows the form', 'never auto, and that skill is on no `Role skills:` line');
 });
 
+test('section 1.19 pins the category question, selected lines only and the step d rules', () => {
+  has(skillOnly, "first ask its category (pages as in `/aico:add-skill`, without `security`", "then the Roles from that line's printed `Roles:` list");
+  has(skillOnly, 'Question only the selected lines (`roles:` not `-`)', 'a line with `roles: -` is an unselected catalog entry, gets no question, and its `dispatch:` field is never read');
+  has(skillOnly, 'only from lines with `roles:` not `-`', "the name only if the session's skill list holds it, otherwise left off", '`degraded: missing <name>` once per name in the Handoff and Gate summary', 'A name must match the catalog pattern, or it is left off too');
+  has(skillOnly, 'or `none` when no name is left');
+});
+
 test('SKILL.md stays within 125 lines and every file is LF only', () => {
   assert.ok(skillOnly.replace(/\n$/, '').split('\n').length <= 125);
   for (const f of ['skills/pipeline/SKILL.md', 'scripts/prompt-order.test.mjs', 'scripts/check.mjs', 'scripts/check.test.mjs', ...refs.map(r => `skills/pipeline/references/${r}`)])
@@ -267,8 +274,9 @@ test('the plan review dispatch block has the three review lines in order and no 
   const b = blocks(planReview).find(l => l.some(x => x.startsWith('Output: .company/work/')));
   assert.ok(b, 'plan-review.md has a dispatch block');
   const k = keys(b);
-  assert.deepEqual(k, ['Project profile', 'Company profile', 'Language', 'Settings', 'Context cap', 'Risk tier', 'Base commit', 'Round', 'Review mode', 'Input Handoffs', 'Review inputs', 'After first pass', 'Output', 'Goal', 'Follow']);
+  assert.deepEqual(k, ['Project profile', 'Company profile', 'Language', 'Settings', 'Context cap', 'Role skills', 'Risk tier', 'Base commit', 'Round', 'Review mode', 'Input Handoffs', 'Review inputs', 'After first pass', 'Output', 'Goal', 'Follow']);
   const text = b.join('\n');
+  assert.match(text, /^Role skills: <names | none> +# fresh-reviewer's lines of `install-skills --status`, built per `aico:pipeline` §1.19 d/m);
   assert.match(text, /^Review mode: plan$/m);
   assert.match(text, /^Input Handoffs: none: plan review$/m);
   assert.match(text, /^Review inputs: <.*lines.*>/m);

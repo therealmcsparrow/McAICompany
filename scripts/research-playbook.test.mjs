@@ -194,6 +194,13 @@ test('setup runs the migration form before step 1 and stack text points to /aico
   assert.ok(!d.includes('deps/skills.json') && !/npx|skills add/.test(d), 'stack-detect names no install command of its own');
 });
 
+test('research dispatch and setup skill-researcher dispatch carry a built Role skills line', () => {
+  has(research, 'the `Role skills:` build of §1.19 d (`install-skills --status`, no forms)', "Role skills: <names | none>   # that Role's lines of --status, built per aico:pipeline §1.19 d");
+  assert.ok(research.indexOf('Context cap: <cap>') < research.indexOf('Role skills: <names | none>'), 'Role skills: follows Context cap:');
+  has(research, 'install-skills --remove <name> --dry-run', 'only from the home folder');
+  has(skill('setup'), 'its `Role skills:` built as §1.19 d says (`install-skills --status` once, no Install form; `none` when no name is left)');
+});
+
 test('AC23 the five UI Roles load Role skills and name a missing one under ## Next', () => {
   for (const r of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist']) {
     has(read(`agents/${r}.md`), 'Role skills:', 'missing role skill: <name>', '## Next');
