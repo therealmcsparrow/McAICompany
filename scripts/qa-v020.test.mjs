@@ -1661,7 +1661,7 @@ describe('AC29 a display name in .company or a dispatch prompt fails the drift t
     const root = path.join(sb.dir, 'drift-tree');
     const keep = (src) => !/[\\/](node_modules|\.git)([\\/]|$)/.test(src);
     fs.cpSync(SCRIPTS, path.join(root, 'scripts'), { recursive: true, filter: (src) => keep(src) && !/qa-v020|[\\/]fixtures[\\/]/.test(src) });
-    for (const d of ['skills', 'agents', 'company']) fs.cpSync(path.join(REPO, d), path.join(root, d), { recursive: true });
+    for (const d of ['skills', 'agents', 'company', 'mods']) fs.cpSync(path.join(REPO, d), path.join(root, d), { recursive: true, filter: keep });
     fs.cpSync(path.join(REPO, 'docs', 'contracts'), path.join(root, 'docs', 'contracts'), { recursive: true });
     fs.cpSync(path.join(REPO, 'tests', 'fixtures'), path.join(root, 'tests', 'fixtures'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'package.json'), path.join(root, 'package.json'));
