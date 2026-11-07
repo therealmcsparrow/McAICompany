@@ -467,9 +467,16 @@ function mergedLayer(data, adds, skip = () => false) {
   return layer;
 }
 
-// Checks the Roles the run adds to, and no others: a stale list on another Role stays as it is.
+// Checks every Role's fields, but the skill list only on the Roles the run adds to: a stale list on another Role stays as it is.
 function checkAdds(layer, adds, opts) {
-  const scoped = { ...layer, roles: Object.fromEntries(Object.entries(layer.roles).filter(([role]) => adds.has(role))) };
+  const scoped = {
+    ...layer,
+    roles: Object.fromEntries(Object.entries(layer.roles).map(([role, value]) => {
+      if (adds.has(role) || !isPlain(value)) return [role, value];
+      const { skills, ...rest } = value;
+      return [role, rest];
+    })),
+  };
   const userLayer = readLayer('user', { home: opts.settingsHome }).layer;
   const reasons = checkLayers(userLayer, scoped, { home: opts.home, pluginRoot: opts.pluginRoot, levels: ['project'] });
   if (reasons.length > 0) throw new Stop(`project settings refused: ${reasons.map((r) => r.replace(/^project /, '')).join('; ')}`);

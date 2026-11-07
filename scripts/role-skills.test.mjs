@@ -293,6 +293,20 @@ test('a stale name on another Role does not stop migration', (t) => {
   assert.equal(roles['ui-ux-designer'].skills[0].name, 'fancy-ui');
 });
 
+test('a banned character in another Role stops migrate and record and leaves settings.json whole', (t) => {
+  const settings = { aico_settings: { version: 1, roles: { 'brand-artist': { name: 'Brand‮Artist' } } } };
+  const p = project(t, { design: [DESIGN[2]], skills: [], settings });
+  const before = read(p, 'settings.json');
+  const m = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=ui-ux-designer']);
+  assert.notEqual(m.code, 0, m.text);
+  assert.equal(read(p, 'settings.json'), before);
+  const q = project(t, { design: [], skills: [], settings });
+  const beforeRecord = read(q, 'settings.json');
+  const r = record({ entry: PLUGIN_PICK, license: 'MIT', roles: ['ui-ux-designer'] }, { cwd: q.cwd, home: q.home, today: TODAY });
+  assert.equal(r.ok, false, r.lines.join('\n'));
+  assert.equal(read(q, 'settings.json'), beforeRecord);
+});
+
 test('add previews and stores a pin of a baseline entry under the baseline category', (t) => {
   const home = tmp(t);
   const input = { name: 'hallmark', repo: 'nutlope/hallmark', commit: A, category: 'quality', license: 'MIT' };
