@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { join, resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plan, runAll, expand, missing, parseDesignSkills, main, retiredSkills, manifestFromBaseline, skillsEnv, cleanPath, installExec } from './install-skills.mjs';
-import { readBaseline } from './skill-catalog.mjs';
+import { readBaseline, boundedFolderHash as boundedFolderHashOf } from './skill-catalog.mjs';
 // Remove the temp dirs this file made, once the run is over.
 const __tmpDirs = [];
 const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
@@ -765,4 +765,65 @@ test('--retired skips a name the user catalog holds and still lists the others',
     assert.equal(s.calls.length, 0);
     assert.deepEqual(retiredSkills(s.man, s.releasesDir, ['mine']), ['oldskill']);
   } finally { s.done(); }
+});
+
+// ---- selected installs: every folder present at the root must match the scan ----
+const SEL_COMMIT = 'a'.repeat(40);
+const SEL_NAME = 'demo-skill';
+function selSetup(folders) {
+  const home = mkdtempSync(join(tmpdir(), 'sel-home-'));
+  const root = mkdtempSync(join(tmpdir(), 'sel-root-'));
+  const scan = mkdtempSync(join(tmpdir(), 'sel-scan-'));
+  writeFileSync(join(scan, 'SKILL.md'), 'pinned');
+  mkdirSync(join(home, '.mcsparrow'), { recursive: true });
+  writeFileSync(join(home, '.mcsparrow', '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries: [{ skillname: SEL_NAME, skillcategory: 'engineering', skillrepo: 'octo/skills', skillcommit: SEL_COMMIT, license: 'MIT' }] }));
+  for (const [dir, body] of Object.entries(folders)) {
+    mkdirSync(join(root, dir, SEL_NAME), { recursive: true });
+    writeFileSync(join(root, dir, SEL_NAME, 'SKILL.md'), body);
+  }
+  return { home, root, scan };
+}
+const selEnv = (s, extra = {}) => {
+  const log = [];
+  const calls = [];
+  return {
+    log, calls,
+    env: {
+      home: s.home, productRoot: s.root, today: '2026-11-06', log: (x) => log.push(x),
+      settings: { settings_folder_moved: false, roles: { qa: { skills: [{ name: SEL_NAME, approved: '2026-11-06' }], source: { skills: 'project' } } } },
+      vet: async () => ({ commit: SEL_COMMIT, hash: boundedFolderHashOf(s.scan), result: { verdict: 'pass', counts: { critical: 0, high: 0 } } }),
+      exec: (cmd) => { calls.push(cmd); },
+      ...extra,
+    },
+  };
+};
+const storedHash = (home) => JSON.parse(readFileSync(join(home, '.mcsparrow', '3rdpartyskills.json'), 'utf8')).entries[0].hash;
+
+test('selected install: one folder equal to the scan and another with other bytes is not bound', async () => {
+  const s = selSetup({ '.agents/skills': 'pinned', '.claude/skills': 'other bytes' });
+  const { env, log, calls } = selEnv(s, {});
+  const code = await main(['--selected'], env);
+  assert.equal(code, 1, log.join('|'));
+  assert.equal(calls.length, 1);
+  assert.ok(log.some((l) => l.startsWith(`hash differs: ${SEL_NAME}`)), log.join('|'));
+  assert.equal(storedHash(s.home), undefined);
+});
+
+test('selected install: two folders equal to the scan are bound without an install', async () => {
+  const s = selSetup({ '.agents/skills': 'pinned', '.claude/skills': 'pinned' });
+  const { env, log, calls } = selEnv(s, {});
+  const code = await main(['--selected'], env);
+  assert.equal(code, 0, log.join('|'));
+  assert.equal(calls.length, 0);
+  assert.equal(storedHash(s.home), boundedFolderHashOf(s.scan));
+});
+
+test('selected install: a blocking scan leaves no bound hash, so --status says dispatch: no', async () => {
+  const s = selSetup({ '.agents/skills': 'pinned' });
+  const { env, log } = selEnv(s, { vet: async () => ({ commit: SEL_COMMIT, hash: boundedFolderHashOf(s.scan), result: { verdict: 'block', counts: { critical: 1, high: 0 } } }) });
+  assert.equal(await main(['--selected'], env), 1);
+  assert.equal(storedHash(s.home), undefined);
+  const out = [];
+  await main(['--status'], { ...env, log: (x) => out.push(x) });
+  assert.ok(out.some((l) => l.includes('dispatch: no')), out.join('|'));
 });

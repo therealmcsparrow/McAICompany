@@ -573,7 +573,9 @@ async function runSelected(args, env) {
         continue;
       }
       const folders = [join(root, '.agents', 'skills', name), join(root, '.claude', 'skills', name)];
-      const proven = () => folders.some(f => boundedFolderHash(f) === v.hash);
+      // Every folder present at the root must equal the scan, since any of them may be the copy that loads.
+      const present = f => { try { lstatSync(f); return true; } catch { return false; } };
+      const proven = () => { const here = folders.filter(present); return here.length > 0 && here.every(f => boundedFolderHash(f) === v.hash); };
       if (!proven()) {
         log(`$ ${cmd}`);
         try { exec(cmd, root, argv); } catch (e) { log(`FAILED ${cmd}: ${errorText(e)}`); failed++; continue; }
