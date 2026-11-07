@@ -658,7 +658,7 @@ function loadPage(initialState, { saveReply } = {}) {
   };
   doc.documentElement = make('html');
   for (const id of ['notices', 'field-live', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
-  ids.save.disabled = true;
+  ids.save.setAttribute('aria-disabled', 'true');
   const names = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
     ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
@@ -925,7 +925,7 @@ test('a cleared or replaced ignored value is one unsaved change, and an untouche
   const page = loadPage(st);
   await settle();
   assert.equal(page.ids.count.textContent, '0 unsaved changes');
-  assert.equal(page.ids.save.disabled, true);
+  assert.equal(page.ids.save.getAttribute('aria-disabled'), 'true');
   assert.match(page.ids.notices.textContent, /user roles\.qa\.personality\.creativity: must be low, medium or high/);
   const select = field(page, 'qa', 'user', 'creativity');
   assert.equal(select.value, '__ignored__');
@@ -1920,4 +1920,42 @@ test('save refuses a repeated name over a stored single one while the settings f
   const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: sk('qa-helper', 'qa-helper') } }, gates: { ship: 'ask' } } });
   assert.equal(res.status, 400);
   assert.equal(fs.readFileSync(file, 'utf8'), body);
+});
+
+test('an effort-only save with no cwd given uses the process folder, with a moved settings folder', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }] } } } }));
+  t.mock.method(process, 'cwd', () => s.cwd);
+  const { post, state } = await start(t, s, { home: undefined, cwd: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const res = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { qa: { effort: 'high', skills: [{ name: 'ghost-skill' }] } } } });
+  assert.equal(res.status, 200);
+  const res2 = await post('/api/save', { revision: (await state()).resolved.revision, project: { version: 1, roles: { qa: { effort: 'low', skills: [{ name: 'ghost-skill' }] } } } });
+  assert.equal(res2.status, 200);
+});
+
+test('an effort-only save with no cwd given uses the process folder, with a bad stored user list', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [{ skillname: 'qa-helper' }]);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }] } } } }));
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }] } } } }));
+  t.mock.method(process, 'cwd', () => s.cwd);
+  const { post, state } = await start(t, s, { cwd: undefined });
+  const before = await state();
+  const res = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { qa: { effort: 'high', skills: [{ name: 'ghost-skill' }] } } } });
+  assert.equal(res.status, 200);
+});
+
+test('a stored repeated name sent once keeps its date', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-01-01' }] } } } }));
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.roles.qa.skills, [{ name: 'qa-helper', approved: '2025-01-01' }]);
 });

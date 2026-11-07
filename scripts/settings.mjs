@@ -495,7 +495,8 @@ function skillProblems(level, layer, { home, pluginRoot, stored }) {
 // name the catalog no longer offers does not count, so dropping it is not a change.
 function skillsChanged(before, names, role, catalogOf) {
   const old = Array.isArray(before) ? before : [];
-  const kept = old.length === 0 ? [] : old.filter((e) => selectableEntry(catalogOf(), role, e.name) !== null).map((e) => e.name);
+  const keptAll = old.length === 0 ? [] : old.filter((e) => selectableEntry(catalogOf(), role, e.name) !== null).map((e) => e.name);
+  const kept = [...new Set(keptAll)];
   return kept.length !== names.length || names.some((n) => !kept.includes(n));
 }
 

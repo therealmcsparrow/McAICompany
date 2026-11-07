@@ -288,7 +288,7 @@ function openBrowser(url) {
 }
 
 export async function startServer({
-  home, cwd, pluginRoot, port = 0, idleMs = 1_800_000, open = true,
+  home, cwd = process.cwd(), pluginRoot, port = 0, idleMs = 1_800_000, open = true,
   log = (line) => process.stdout.write(`${line}\n`)
 } = {}) {
   const ctx = { home, cwd, pluginRoot };
