@@ -1573,7 +1573,7 @@ const SKILL_PROTECTED = 'Protected Role: skills are chosen at User level only. A
 const SKILL_IGNORED = 'Ignored: this stored skill is not in the list or not in this Role\'s categories. It stays in the file until you save a change at this level, and that save removes it.';
 const SKILL_NOT_FOUND = 'Not found is not proof: an installer may write elsewhere.';
 const SKILL_NOT_SELECTABLE = 'Not selectable: a wildcard names no one skill.';
-const SKILL_MOVED = 'role skills: MCSPARROW_HOME is set, the user catalog is not read';
+const SKILL_MOVED = 'role skills: the settings folder is not the user home, the user level is not counted';
 const REFUSED_SKILLS = /^(user|project) roles\.([a-z0-9-]+)\.skills(?:\[\d+\]\.name)?: /;
 
 let skRoles = {};   // per Role: details, summary parts and level records of the Skills tab
@@ -1640,20 +1640,23 @@ function staleSkills(level, role) {
   });
   return out;
 }
+// What the resolver would use: names the catalog offers this Role; a project list with none left falls back to the user list.
+const skillCounted = (role, list) => (list ?? []).filter((i) => isObj(i) && skillEligible(role, i.name));
 const skillEffective = (role) => {
   const prot = state.resolved?.roles?.[role]?.protected === true;
   const moved = state.resolved?.settings_folder_moved === true;
   const p = prot ? undefined : skillList('project', role);
   const u = moved ? undefined : skillList('user', role);
-  if (p !== undefined) return { list: p, source: 'project' };
-  if (u !== undefined) return { list: u, source: 'user' };
+  const seenOnce = (list) => { const seen = new Set(); return list.filter((i) => !seen.has(i.name) && seen.add(i.name)); };
+  if (p !== undefined && (p.length === 0 || skillCounted(role, p).length > 0)) return { list: seenOnce(skillCounted(role, p)), source: 'project' };
+  if (u !== undefined) return { list: seenOnce(skillCounted(role, u)), source: 'user' };
   return { list: [], source: '' };
 };
 const sourceText = (e) => (e.kind === 'repo' ? `repo${typeof e.skillrepo === 'string' && e.skillrepo !== '' ? ` ${e.skillrepo}` : ''}${typeof e.commit === 'string' ? ` at ${e.commit.slice(0, 7)}` : ''}` : e.kind === 'command' ? 'command (manual)' : 'plugin');
 
 function describeIds(rec, row) {
-  const ids = [`${row.id}-d1`, `${row.id}-d2`, `${row.id}-d3`];
-  if (row.e.selectable !== true) ids.push(`${row.id}-d4`);
+  const ids = [`${row.id}_d1`, `${row.id}_d2`, `${row.id}_d3`];
+  if (row.e.selectable !== true) ids.push(`${row.id}_d4`);
   if (rec.refusedRow === row && rec.message) ids.push(rec.err.id);
   return ids.join(' ');
 }
@@ -1706,11 +1709,11 @@ function skillRow(rec, e) {
   const warnish = e.status === 'folder not recognized' || e.status === 'not found';
   const row = { e, id, cb };
   const info = [
-    el('span', { class: 'ro', id: `${id}-d1` }, `${e.category}, ${sourceText(e)}`),
-    el('span', { class: 'ro', id: `${id}-d2` }, 'Status: ', el('span', { class: warnish ? 'pill ign' : 'pill' }, status)),
-    el('span', { class: 'ro', id: `${id}-d3` }, `${typeof e.license === 'string' ? e.license : 'no license on record'}, ${vetted}`)
+    el('span', { class: 'ro', id: `${id}_d1` }, `${e.category}, ${sourceText(e)}`),
+    el('span', { class: 'ro', id: `${id}_d2` }, 'Status: ', el('span', { class: warnish ? 'pill ign' : 'pill' }, status)),
+    el('span', { class: 'ro', id: `${id}_d3` }, `${typeof e.license === 'string' ? e.license : 'no license on record'}, ${vetted}`)
   ];
-  if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}-d4` }, SKILL_NOT_SELECTABLE));
+  if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}_d4` }, SKILL_NOT_SELECTABLE));
   cb.addEventListener('change', () => toggleSkill(rec, row));
   row.li = el('li', { class: 'sk-row' }, cb, el('div', { class: 'sk-text' }, el('label', { for: id }, e.name), info));
   return row;
@@ -1728,8 +1731,8 @@ function skillLevel(role, level, entries, cats) {
     return box;
   }
   const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
-    count: el('p', { class: 'hint', id: `sk-${key.replace('|', '-')}-count`, 'aria-live': 'polite' }),
-    err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}-err`, hidden: true }) };
+    count: el('p', { class: 'hint', id: `sk-${key.replace('|', '-')}_count`, 'aria-live': 'polite' }),
+    err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}_err`, hidden: true }) };
   skRecs.push(rec);
   skRoles[role].recs.push(rec);
   const stale = staleSkills(level, role);
@@ -1740,7 +1743,7 @@ function skillLevel(role, level, entries, cats) {
     box.append(el('p', { class: 'hint' }, SKILL_NONE_HINT));
   } else {
     if (cats.length > 1) {
-      const sel = el('select', { id: `sk-${role}-${level}-cat` }, el('option', { value: '' }, 'All categories'), cats.map((c) => el('option', { value: c }, c)));
+      const sel = el('select', { id: `sk-${role}-${level}_cat` }, el('option', { value: '' }, 'All categories'), cats.map((c) => el('option', { value: c }, c)));
       sel.value = skillCat[key] ?? '';
       sel.addEventListener('change', () => { skillCat[key] = sel.value; refresh(); });
       box.append(el('div', { class: 'pfield' }, el('label', { for: sel.id }, 'Category'), sel));
@@ -1794,7 +1797,8 @@ function syncSkills() {
         row.cb.setAttribute('aria-describedby', describeIds(rec, row));
         if (rec.refusedRow === row && rec.message) row.cb.setAttribute('aria-invalid', 'true'); else row.cb.removeAttribute('aria-invalid');
       }
-      rec.count.textContent = `${names.size} of ${MAX_SKILLS} selected${outside ? `, ${outside} selected ${outside === 1 ? 'entry' : 'entries'} shown outside this category` : ''}`;
+      const idle = [...names].filter((n) => !skillEligible(rec.role, n)).length;
+      rec.count.textContent = `${names.size} of ${MAX_SKILLS} selected${idle ? `, ${idle} not in effect` : ''}${outside ? `, ${outside} selected ${outside === 1 ? 'entry' : 'entries'} shown outside this category` : ''}`;
       rec.err.textContent = rec.message;
       rec.err.hidden = rec.message === '';
     }
@@ -1924,6 +1928,7 @@ function isShown(node) {
 function restoreFocus(previousId, message) {
   const same = previousId ? document.getElementById(previousId) : null;
   if (same && isShown(same)) same.focus(); else if (message) message.focus();
+  if (message) message.scrollIntoView({ block: 'nearest' });
 }
 function load(newState) {
   state = newState;

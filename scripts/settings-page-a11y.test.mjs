@@ -53,6 +53,7 @@ class FakeNode {
   removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); }
   async fire(type) { for (const fn of this.listeners[type] ?? []) await fn({ type, key: '', preventDefault() {} }); }
   focus() { this.ownerDoc.activeElement = this; }
+  scrollIntoView(options) { (this.ownerDoc.scrolled ??= []).push({ node: this, options }); }
   getBoundingClientRect() { return { height: 0 }; }
   get textContent() { return this.children.map((c) => c.textContent).join('') + this.own; }
   set textContent(v) { this.children = []; this.own = String(v); }
@@ -354,20 +355,20 @@ test('the sixth pick stays unchecked, says why in the live region and the list, 
   const page = loadPage(skillsState(SIX));
   await settle();
   for (const n of ['s1', 's2', 's3', 's4', 's5']) await ticked(box(page, `sk-qa-user-${n}`));
-  assert.equal(textOf(page, 'sk-qa-user-count'), '5 of 5 selected');
+  assert.equal(textOf(page, 'sk-qa-user_count'), '5 of 5 selected');
   const sixth = box(page, 'sk-qa-user-s6');
   assert.equal(sixth.disabled, false);
   await ticked(sixth);
   assert.equal(sixth.checked, false);
   const reason = 'Limit reached: a Role can have 5 skills. Clear one first.';
-  assert.equal(textOf(page, 'sk-qa-user-err'), reason);
+  assert.equal(textOf(page, 'sk-qa-user_err'), reason);
   assert.equal(page.ids['field-live'].textContent, reason);
-  assert.ok(describedBy(sixth).includes('sk-qa-user-err'));
+  assert.ok(describedBy(sixth).includes('sk-qa-user_err'));
   assert.equal(sixth.getAttribute('aria-invalid'), 'true');
-  assert.equal(textOf(page, 'sk-qa-user-count'), '5 of 5 selected');
+  assert.equal(textOf(page, 'sk-qa-user_count'), '5 of 5 selected');
   assert.equal(unsaved(page), '1 unsaved change');
   await ticked(box(page, 'sk-qa-user-s1'), false);
-  assert.equal(byId(page, 'sk-qa-user-err').hidden, true);
+  assert.equal(byId(page, 'sk-qa-user_err').hidden, true);
 });
 
 test('a wildcard entry is a disabled checkbox with its reason as text', async () => {
@@ -514,7 +515,7 @@ test('a server refusal of the list names the field in the summary and under the 
   await settle();
   assert.match(page.ids.status.textContent, /^Nothing was saved\. Fix 1 field:/);
   assert.ok(page.ids.status.textContent.includes('Ava (qa), user level, Skills'));
-  assert.ok(textOf(page, 'sk-qa-user-err').startsWith('Error: Skills for qa, user level'));
+  assert.ok(textOf(page, 'sk-qa-user_err').startsWith('Error: Skills for qa, user level'));
 });
 
 test('Clear on the Skills tab removes skill selections only', async () => {
@@ -550,7 +551,7 @@ test('a missing catalog, an empty user list, a moved folder and a bad list each 
   const page = loadPage(moved);
   await settle();
   const text = page.panel('skills').textContent;
-  assert.ok(text.includes('role skills: MCSPARROW_HOME is set, the user catalog is not read'));
+  assert.ok(text.includes('role skills: the settings folder is not the user home, the user level is not counted'));
   assert.equal(box(page, 'sk-qa-user-b'), null);
   assert.ok(box(page, 'sk-qa-project-b'));
   const bad = skillsState([]);
@@ -565,14 +566,58 @@ test('the category select filters rows but never hides a selected one', async ()
   const page = loadPage(skillsState([skill('q1'), skill('d1', { category: 'design' })]));
   await settle();
   await ticked(box(page, 'sk-qa-user-d1'));
-  const select = byId(page, 'sk-qa-user-cat');
+  const select = byId(page, 'sk-qa-user_cat');
   select.value = 'quality';
   await select.fire('change');
   const row = (id) => box(page, id).parentNode;
   assert.equal(row('sk-qa-user-d1').hidden, false);
-  assert.match(textOf(page, 'sk-qa-user-count'), /1 of 5 selected, 1 selected entry shown outside this category/);
+  assert.match(textOf(page, 'sk-qa-user_count'), /1 of 5 selected, 1 selected entry shown outside this category/);
   await ticked(box(page, 'sk-qa-user-d1'), false);
   assert.equal(row('sk-qa-user-d1').hidden, true);
+});
+
+test('a skill named like a fixed part keeps its own id: the label and the descriptions reach the right node', async () => {
+  const names = ['cat', 'count', 'err', 'x', 's1', 's2', 's3', 's4'];
+  const page = loadPage(skillsState(names.map((n, i) => skill(n, { category: i === 3 ? 'design' : 'quality' }))));
+  await settle();
+  for (const n of names) {
+    const cb = box(page, `sk-qa-user-${n}`);
+    assert.equal(cb.type, 'checkbox', n);
+    assert.equal(byId(page, cb.id), cb, `${n}: the first node with the id is the checkbox`);
+    const label = page.find((x) => x.tagName === 'LABEL' && x.getAttribute('for') === cb.id);
+    assert.equal(label.textContent, n);
+    for (const id of describedBy(cb)) assert.notEqual(byId(page, id), cb, `${n}: ${id}`);
+  }
+  assert.equal(byId(page, 'sk-qa-user_count').tagName, 'P');
+  assert.equal(byId(page, 'sk-qa-user_cat').tagName, 'SELECT');
+  const all = walkAll(page.panel('skills'), (x) => x.id !== '' && x.id !== undefined).map((x) => x.id);
+  assert.equal(new Set(all).size, all.length, 'every id on the tab is unique');
+  for (const n of ['s1', 's2', 's3', 's4']) await ticked(box(page, `sk-qa-user-${n}`));
+  await ticked(box(page, 'sk-qa-user-err'));
+  await ticked(box(page, 'sk-qa-user-cat'));
+  const refused = box(page, 'sk-qa-user-count');
+  await ticked(refused);
+  const ids = describedBy(refused);
+  assert.ok(ids.includes('sk-qa-user_err'));
+  assert.equal(byId(page, 'sk-qa-user_err').tagName, 'P');
+  assert.equal(byId(page, 'sk-qa-user_err').textContent, 'Limit reached: a Role can have 5 skills. Clear one first.');
+});
+
+test('In effect names only what the resolver would use while the user layer is unread', async () => {
+  for (const unread of ['moved', 'catalog']) {
+    const state = skillsState([skill('qa-helper'), skill('b')]);
+    state.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } };
+    state.project = { version: 1, roles: { qa: { skills: [{ name: 'ghost' }] } } };
+    if (unread === 'moved') state.resolved.settings_folder_moved = true; else state.catalog.errors = ['ERROR user catalog: entry 3: category'];
+    const page = loadPage(state);
+    await settle();
+    const eff = textOf(page, 'sk-qa-project_count');
+    assert.match(eff, /1 of 5 selected, 1 not in effect/, unread);
+    const dd = walkAll(page.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+    assert.ok(!dd.some((t) => t.includes('ghost')), unread);
+    if (unread === 'catalog') assert.ok(dd.includes('qa-helper (user)'), unread);
+    else assert.ok(dd.includes('none'), unread);
+  }
 });
 
 test('the Skills tab sits after Roles, wraps long text and adds no colour or fixed width', () => {

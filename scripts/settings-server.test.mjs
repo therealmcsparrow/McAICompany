@@ -633,6 +633,7 @@ class FakeNode {
   removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); }
   async fire(type) { for (const fn of this.listeners[type] ?? []) await fn({ type, key: '', preventDefault() {} }); }
   focus() { this.ownerDoc.activeElement = this; }
+  scrollIntoView(options) { (this.ownerDoc.scrolled ??= []).push({ node: this, options }); }
   getBoundingClientRect() { return { height: 0 }; }
   get textContent() { return this.children.map((c) => c.textContent).join('') + this.own; }
   set textContent(v) { this.children = []; this.own = String(v); }
@@ -1217,6 +1218,37 @@ test('layout: after a successful Save focus is not on body: the same control whe
   await page.ids.save.fire('click');
   await settle();
   assert.equal(page.document.activeElement, field(page, 'qa', 'user', 'topic'), 'the rebuilt control with the same id');
+});
+
+test('layout: a focused control that is gone after the reload hands focus to the status message, after 200 and after 409', async () => {
+  for (const status of [200, 409]) {
+    const gone = { ...namedState(), hasProject: false };
+    const page = loadPage(namedState(), { saveReply: { status, body: { state: gone } } });
+    await settle();
+    await type(field(page, 'qa', 'user', 'talk'), 'calm');
+    page.document.activeElement = page.ids['clear-project'];
+    await page.ids.save.fire('click');
+    await settle();
+    assert.equal(page.ids['clear-project'].disabled, true, `status ${status}`);
+    const active = page.document.activeElement;
+    assert.equal(active.id, 'status-message', `status ${status}`);
+    assert.equal(active.getAttribute('tabindex'), '-1', `status ${status}`);
+  }
+});
+
+test('layout: after Save and after a stale reload the status message is scrolled into view, and focus does not move', async () => {
+  for (const status of [200, 409]) {
+    const page = loadPage(namedState(), { saveReply: { status, body: { state: namedState() } } });
+    await settle();
+    await type(field(page, 'qa', 'user', 'talk'), 'calm');
+    page.document.activeElement = page.ids.save;
+    await page.ids.save.fire('click');
+    await settle();
+    assert.equal(page.document.activeElement, page.ids.save, `status ${status}`);
+    const hit = (page.document.scrolled ?? []).find((s) => s.node.id === 'status-message');
+    assert.ok(hit, `status ${status}`);
+    assert.equal(hit.options.block, 'nearest', `status ${status}`);
+  }
 });
 
 test('layout: a stale-revision reload and Done also keep focus on a real element', async () => {
