@@ -36,7 +36,7 @@ const settingsFor = (lists, moved = false) => ({
   roles: Object.fromEntries(Object.entries(lists).map(([role, [level, names]]) => [role, { skills: names.map((name) => ({ name, approved: TODAY })), source: { skills: level } }])),
 });
 
-function setup(t, { entries = [entry()], lists = { qa: ['user', [NAME]] }, scan = {}, install, moved = false } = {}) {
+function setup(t, { entries = [entry()], lists = { qa: ['user', [NAME]] }, scan = {}, install, moved = false, after } = {}) {
   const home = tmp(t, 'home');
   const root = tmp(t, 'root');
   if (entries.length) writeUser(home, entries);
@@ -46,10 +46,12 @@ function setup(t, { entries = [entry()], lists = { qa: ['user', [NAME]] }, scan 
   const log = [];
   const calls = [];
   const vets = [];
+  const afters = [];
   const env = {
     home, productRoot: root, today: TODAY, log: (x) => log.push(x),
     settings: settingsFor(lists, moved),
     vet: async (arg) => { vets.push(arg); return scan.value ?? { commit: COMMIT, hash: scanHash, result: { verdict: 'pass', counts: { critical: 0, high: 0 } }, ...scan }; },
+    scanInstalled: async (arg, deps) => { afters.push({ arg, deps }); return after ?? { results: [{ verdict: 'pass', blocking: false }] }; },
     exec: (cmd, cwd, argv) => {
       calls.push({ cmd, cwd, argv });
       if (install) install({ cmd, cwd, argv, home, root });
@@ -59,7 +61,7 @@ function setup(t, { entries = [entry()], lists = { qa: ['user', [NAME]] }, scan 
       }
     },
   };
-  return { home, root, env, log, calls, vets, scanHash };
+  return { home, root, env, log, calls, vets, afters, scanHash };
 }
 
 test('a user-scope selection scans, installs the pinned commit with -g from the home, then stores hash and date', async (t) => {
@@ -417,4 +419,80 @@ test('after install, a hostile copy beside a proven one stops the bind', async (
   assert.equal(await main(['--selected'], s.env), 1);
   assert.ok(s.log.some((l) => l.startsWith('hash differs')), s.log.join('|'));
   assert.equal(readUser(s.home)[0].hash, undefined);
+});
+
+const statusOf = async (s) => {
+  const lines = [];
+  await main(['--status'], { ...s.env, log: (x) => lines.push(x) });
+  return lines.find((l) => l.startsWith(`${NAME} |`));
+};
+
+test('the installed copy is scanned at its scope before the hash is bound, and the bind follows a clean scan', async (t) => {
+  for (const [level, scope] of [['user', 'global'], ['project', 'project']]) {
+    const s = setup(t, { lists: { qa: [level, [NAME]] } });
+    let boundWhenScanned;
+    s.env.scanInstalled = async (arg, deps) => {
+      boundWhenScanned = readUser(s.home)[0].hash;
+      s.afters.push({ arg, deps });
+      return { results: [{ verdict: 'findings', blocking: false }] };
+    };
+    assert.equal(await main(['--selected'], s.env), 0, s.log.join('|'));
+    assert.equal(boundWhenScanned, undefined, level);
+    assert.deepEqual(s.afters, [{ arg: { name: NAME, scope }, deps: { cwd: s.root, home: s.home } }], level);
+    assert.equal(readUser(s.home)[0].hash, s.scanHash, level);
+  }
+});
+
+test('a folder already equal to the scan is scanned too before it is bound', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] } });
+  plant(path.join(s.root, '.agents', 'skills', NAME));
+  assert.equal(await main(['--selected'], s.env), 0, s.log.join('|'));
+  assert.equal(s.calls.length, 0);
+  assert.equal(s.afters.length, 1);
+  assert.equal(readUser(s.home)[0].hash, s.scanHash);
+});
+
+test('a blocking, errored, refused, thrown or ambiguous scan after install binds nothing and the status says dispatch no', async (t) => {
+  const bad = {
+    blocking: { results: [{ verdict: 'findings', blocking: true }] },
+    errored: { results: [{ verdict: 'error', blocking: false }] },
+    refused: { refused: 'skillspector missing' },
+    none: { results: [] },
+    two: { results: [{ verdict: 'pass', blocking: false }, { verdict: 'pass', blocking: false }] },
+    unmarked: { results: [{ verdict: 'pass' }] },
+    thrown: null,
+  };
+  for (const [kind, out] of Object.entries(bad)) {
+    const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' })], lists: { qa: ['project', [NAME]] } });
+    s.env.scanInstalled = async () => { if (out === null) throw new Error('boom'); return out; };
+    assert.equal(await main(['--selected'], s.env), 1, kind);
+    assert.ok(s.log.some((l) => l.startsWith(`scan failed after install: ${NAME}`)), `${kind} ${s.log.join('|')}`);
+    const stored = readUser(s.home)[0];
+    assert.equal(stored.hash, undefined, kind);
+    assert.equal(stored.vetted, undefined, kind);
+    const line = await statusOf(s);
+    assert.ok(line.endsWith('dispatch: no'), `${kind} ${line}`);
+  }
+});
+
+test('a project pin with a different home copy installs nothing, stores nothing and names the home folder', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] } });
+  plant(path.join(s.home, '.claude', 'skills', NAME), 'older copy');
+  assert.equal(await main(['--selected'], s.env), 1);
+  assert.deepEqual(s.calls, []);
+  assert.equal(s.afters.length, 0);
+  const line = s.log.find((l) => l.includes('Your home folder holds another copy'));
+  assert.ok(line && line.includes(path.join(s.home, '.claude', 'skills', NAME)), s.log.join('|'));
+  assert.equal(readUser(s.home)[0].hash, undefined);
+  assert.ok(!s.log.some((l) => l.startsWith('installed ')));
+});
+
+test('a project pin with a different home copy reads folder not recognized, place user, dispatch no', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] } });
+  const hash = plant(path.join(s.root, '.agents', 'skills', NAME));
+  writeUser(s.home, [entry({ hash, vetted: TODAY })]);
+  plant(path.join(s.home, '.claude', 'skills', NAME), 'older copy');
+  const line = await statusOf(s);
+  assert.match(line, /\| folder not recognized \| place: user \|/);
+  assert.ok(line.endsWith('dispatch: no'), line);
 });
