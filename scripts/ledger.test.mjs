@@ -157,6 +157,52 @@ test('add never writes a ship-only field on a step record (reproduced case)', ()
   assert.match(run(sb, ['report', 'demo']).out, /line 1 skipped/, 'a stored bad line is skipped on read');
 });
 
+// ---------- three-digit Step ids ----------
+
+test('Step ids may have two or three digits, never one or four', () => {
+  const base = { v: 1, run: 'demo', role: 'architect', agent: 'aaa111', src: 'notification', ctx_end: 5000 };
+  for (const kind of ['step', 'replay']) {
+    for (const id of ['01', '99', '100', '101', '999']) assert.equal(validateRecord({ ...base, kind, id }).ok, true, kind + ' ' + id);
+    for (const id of ['1', '1000', '0100', '1a', '']) assert.equal(validateRecord({ ...base, kind, id }).ok, false, kind + ' ' + id);
+  }
+  const reflect = { v: 1, run: 'demo', kind: 'reflect', role: 'lead', src: 'mod', tokens: { in: 1, cache_write: 0, cache_read: 0, out: 1 } };
+  for (const id of ['07', '100', 'RT']) assert.equal(validateRecord({ ...reflect, id }).ok, true, 'reflect ' + id);
+  for (const id of ['1000', '7']) assert.equal(validateRecord({ ...reflect, id }).ok, false, 'reflect ' + id);
+});
+
+test('add writes a Step 100 record and refuses Step 1000', () => {
+  const sb = sandbox();
+  const ok = run(sb, ['add', 'demo', 'step', '100', 'architect', 'aaa111', '5000']);
+  assert.equal(ok.status, 0, ok.out);
+  assert.equal(readLines(sb, 'demo')[0].id, '100');
+  const bad = run(sb, ['add', 'demo', 'step', '1000', 'architect', 'aaa111', '5000']);
+  assert.equal(bad.status, 2);
+  assert.match(bad.out, /invalid id/);
+});
+
+// ---------- three-digit Step ids ----------
+
+test('Step ids may have two or three digits, never one or four', () => {
+  const base = { v: 1, run: 'demo', role: 'architect', agent: 'aaa111', src: 'notification', ctx_end: 5000 };
+  for (const kind of ['step', 'replay']) {
+    for (const id of ['01', '99', '100', '101', '999']) assert.equal(validateRecord({ ...base, kind, id }).ok, true, `${kind} ${id}`);
+    for (const id of ['1', '1000', '0100', '1a', '']) assert.equal(validateRecord({ ...base, kind, id }).ok, false, `${kind} ${id}`);
+  }
+  const reflect = { v: 1, run: 'demo', kind: 'reflect', role: 'lead', src: 'mod', tokens: { in: 1, cache_write: 0, cache_read: 0, out: 1 } };
+  for (const id of ['07', '100', 'RT']) assert.equal(validateRecord({ ...reflect, id }).ok, true, `reflect ${id}`);
+  for (const id of ['1000', '7']) assert.equal(validateRecord({ ...reflect, id }).ok, false, `reflect ${id}`);
+});
+
+test('add writes a Step 100 record and refuses Step 1000', () => {
+  const sb = sandbox();
+  const ok = run(sb, ['add', 'demo', 'step', '100', 'architect', 'aaa111', '5000']);
+  assert.equal(ok.status, 0, ok.out);
+  assert.equal(readLines(sb, 'demo')[0].id, '100');
+  const bad = run(sb, ['add', 'demo', 'step', '1000', 'architect', 'aaa111', '5000']);
+  assert.equal(bad.status, 2);
+  assert.match(bad.out, /invalid id/);
+});
+
 // ---------- add ----------
 
 test('add appends exactly one notification record', () => {

@@ -11,7 +11,7 @@ import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work
 
 const MAX_BYTES = 64 * 1024;
 const MAX_STEPS = 200;
-const FILE_RE = /^(\d{2})-[a-z0-9-]+\.md$/;
+const FILE_RE = /^(\d{2,3})-[a-z0-9-]+\.md$/;
 const TAGS = ['contract', 'spec', 'security', 'test'];
 const STATUSES = new Set(['done', 'blocked', 'needs-ceo', 'handover']);
 const REVIEW_ROLES = new Set(['code-reviewer', 'qa', 'security', 'compliance', 'accessibility-tester']);
@@ -137,7 +137,7 @@ export function renderStep(check) {
 
 function topBy(rows, key, shape) {
   return rows
-    .filter((r) => /^\d{2}$/.test(r.id ?? '') && Number.isInteger(r[key]))
+    .filter((r) => /^\d{2,3}$/.test(r.id ?? '') && Number.isInteger(r[key]))
     .sort((a, b) => b[key] - a[key] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .slice(0, 3)
     .map(shape);
@@ -280,7 +280,7 @@ function resolveStepFile(dir, file) {
     }
   }
   if (!bare && path.relative(realOr(dir), realOr(path.dirname(abs))) !== '') throw new Refusal('file must be in the run folder');
-  if (!FILE_RE.test(name)) throw new Refusal('file must match ^\\d{2}-[a-z0-9-]+\\.md$');
+  if (!FILE_RE.test(name)) throw new Refusal('file must match ^\\d{2,3}-[a-z0-9-]+\\.md$');
   return { name, full: path.join(dir, name) };
 }
 
@@ -300,7 +300,7 @@ function cmdRetro(args) {
   const dir = workDir(slug);
   const warnings = [];
   const steps = [];
-  const names = fs.readdirSync(dir).filter((n) => FILE_RE.test(n)).sort().slice(0, MAX_STEPS);
+  const names = fs.readdirSync(dir).filter((n) => FILE_RE.test(n)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : a > b ? 1 : 0)).slice(0, MAX_STEPS);
   for (const name of names) {
     const text = readSmall(path.join(dir, name));
     if (text === null) warnings.push(`${name} skipped`);

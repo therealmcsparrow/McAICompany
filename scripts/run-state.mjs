@@ -23,7 +23,7 @@ const MAX_FOLDERS = 200;
 const MAX_FM = 8 * 1024;
 const STALE_MS = 12 * 60 * 60 * 1000;
 const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-const STEP_FILE_RE = /^\d{2}-[a-z0-9-]+\.md$/;
+const STEP_FILE_RE = /^\d{2,3}-[a-z0-9-]+\.md$/;
 const STEP_RE = /^\d{1,3}$/;
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const WAVE_RE = /^[1-9]\d?$/;
@@ -177,7 +177,7 @@ function readSteps(dir, warnings) {
   const steps = [];
   let names;
   try { names = readdirSync(dir); } catch { return steps; }
-  names = names.filter(n => STEP_FILE_RE.test(n)).sort();
+  names = names.filter(n => STEP_FILE_RE.test(n)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : a > b ? 1 : 0));
   if (names.length > MAX_STEPS) { warnings.push(`only ${MAX_STEPS} Step files read`); names = names.slice(0, MAX_STEPS); }
   for (const name of names) {
     const file = join(dir, name);
