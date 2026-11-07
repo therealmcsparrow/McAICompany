@@ -7,10 +7,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { main as install, installExec } from './install-skills.mjs';
-import { main as roleSkills, stale } from './role-skills.mjs';
+import { main as install, installExec, retiredSkills } from './install-skills.mjs';
+import { check } from './check.mjs';
+import { buildSbom, serialize } from './sbom.mjs';
+import { main as roleSkills, stale, migrate, pending } from './role-skills.mjs';
 import { readCatalog, readBaseline, skillStatus, boundedFolderHash, userCatalogPath, validateEntry, selectable } from './skill-catalog.mjs';
 import { resolveSettings, writeLayer, Refusal } from './settings.mjs';
+import { startServer } from './settings-server.mjs';
 
 const SETTINGS = path.join(import.meta.dirname, 'settings.mjs');
 const COMMIT = 'a'.repeat(40);
@@ -38,7 +41,7 @@ function plant(dir, body = 'hello') {
 }
 const find = (home, name) => readCatalog({ home }).entries.find((e) => e.skillname === name);
 
-// ---------- AC2, AC9: validation and read bounds ----------
+// ---------- validation and read bounds ----------
 
 test('AC2: a bad user entry is named by number and field, never echoed, and cannot be selected', (t) => {
   const home = tmp(t);
@@ -110,7 +113,7 @@ test('AC9: U+202E, U+200B and U+3164 in a license are refused on read, at add an
   assert.equal(validateEntry(entry({ license: 'MIT License' }), 'user').ok, true);
 });
 
-// ---------- AC10: the read path never moves ----------
+// ---------- the read path never moves ----------
 
 test('AC10: a planted catalog file, project env and planted HOME or USERPROFILE add no entry and do not move the path', (t) => {
   const real = tmp(t, 'real');
@@ -150,7 +153,7 @@ test('AC10: with MCSPARROW_HOME elsewhere the user catalog is not read or writte
   assert.equal(fs.readFileSync(userFile(real), 'utf8'), before);
 });
 
-// ---------- AC17, AC6: status ----------
+// ---------- status ----------
 
 test('AC17: repo entry statuses, the planted folder under a user-level selection, and a good home copy beside it', (t) => {
   const home = tmp(t, 'home');
@@ -318,7 +321,7 @@ test('AC17: license and vetted texts, as stated, old list and no license on reco
   assert.match(react, /not vetted/);
 });
 
-// ---------- AC13, AC18: nothing is executed ----------
+// ---------- nothing is executed ----------
 
 test('AC13: a command entry prints manual and WARNING, runs nothing with or without --dry-run, and plants no marker', async (t) => {
   const marker = path.join(tmp(t, 'marker'), 'ran');
@@ -366,7 +369,10 @@ test('AC18: installExec pins HOME and USERPROFILE to the home and drops CLAUDE_C
   const home = tmp(t, 'home');
   const seen = [];
   const runners = { execSync: (c, o) => seen.push(o), execFileSync: (f, a, o) => seen.push(o) };
-  t.mock.method(process, 'env', { ...process.env, claude_config_dir: '/planted', CLAUDE_CONFIG_DIR: '/planted', USERPROFILE: '/planted', HOME: '/planted' });
+  const planted = { claude_config_dir: '/planted', CLAUDE_CONFIG_DIR: '/planted', USERPROFILE: '/planted', HOME: '/planted' };
+  const before = Object.fromEntries(Object.keys(planted).map((k) => [k, process.env[k]]));
+  t.after(() => { for (const [k, v] of Object.entries(before)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  Object.assign(process.env, planted);
   try { installExec(home, runners, { pinHome: true })('npx -y skills@1.7.4 add a/b -g', home, ['-y', 'skills@1.7.4', 'add', 'a/b', '-g']); } catch { /* the stand-in only records */ }
   const env = seen.map((o) => o?.env).find(Boolean);
   if (env === undefined) { t.skip('no install call reached the stand-in without a download'); return; }
@@ -411,7 +417,7 @@ test('AC9: invalid answers name the field and write nothing', (t) => {
     const home = tmp(t, 'home');
     const r = run(t, 'add', addLine({ ...extra, save: true }), { home });
     assert.equal(r.code, 1, field);
-    assert.match(r.lines.join('\n'), new RegExp(`ERROR ${field}`));
+    assert.match(r.lines.join('\n'), new RegExp(`ERROR (input: missing )?${field}`));
     assert.equal(fs.existsSync(userFile(home)), false);
   }
   const both = run(t, 'add', addLine({ command: 'npx -y thing@1.2.3', save: true }));
@@ -491,7 +497,7 @@ test('AC22: record writes the entry with the stated license, no vetted, and Role
   assert.equal(readUser(home).some((e) => e.skillname === 'evil-cmd'), false);
 });
 
-// ---------- resolved selections (AC3 to AC5, AC23) ----------
+// ---------- resolved selections ----------
 
 function resolved(t, { user, project, entries = [entry({ skillcategory: 'quality' })] } = {}) {
   const home = tmp(t, 'home');
@@ -544,22 +550,36 @@ test('AC23: a save dates only the Role it changed; client dates are dropped; an 
 test('AC23: stale at the 180-day boundary, with no date, with no design selection, and fresh after a record', (t) => {
   const design = entry({ skillname: 'des-one', skillcategory: 'design', skillrepo: 'octo/d1' });
   const daysAgo = (n) => new Date(Date.parse(`${TODAY}T00:00:00Z`) - n * 86400000).toISOString().slice(0, 10);
+  const was = process.env.MCSPARROW_HOME;
+  delete process.env.MCSPARROW_HOME;
+  t.after(() => { if (was !== undefined) process.env.MCSPARROW_HOME = was; });
+  const at = (home) => {
+    const info = t.mock.method(os, 'userInfo', () => ({ homedir: home }));
+    const dir = t.mock.method(os, 'homedir', () => home);
+    return { info, dir };
+  };
+  const setup = (project) => {
+    const r = resolved(t, { entries: [design], project });
+    at(r.home);
+    return r;
+  };
   const run1 = (approved) => {
-    const r = resolved(t, { entries: [design], project: { roles: { 'ui-ux-designer': { skills: approved === undefined ? [{ name: 'des-one' }] : [{ name: 'des-one', approved }] } } } });
-    return stale({ home: r.home, cwd: r.cwd, today: TODAY });
+    const skill = approved === undefined ? { name: 'des-one' } : { name: 'des-one', approved };
+    const r = setup({ roles: { 'ui-ux-designer': { skills: [skill] } } });
+    return stale({ cwd: r.cwd, today: TODAY });
   };
   assert.equal(run1(daysAgo(180)).stale, false);
   assert.equal(run1(daysAgo(181)).stale, true);
   assert.equal(run1(undefined).stale, true);
   assert.equal(run1('2999-01-01').stale, true);
   assert.equal(run1('2026-02-31').stale, true);
-  const none = resolved(t, { entries: [design] });
-  assert.equal(stale({ home: none.home, cwd: none.cwd, today: TODAY }).stale, true);
-  const r = resolved(t, { entries: [design], project: { roles: { 'ui-ux-designer': { skills: pick('des-one') } } } });
-  assert.equal(stale({ home: r.home, cwd: r.cwd, today: TODAY }).stale, true);
+  const none = setup(undefined);
+  assert.equal(stale({ cwd: none.cwd, today: TODAY }).stale, true);
+  const r = setup({ roles: { 'ui-ux-designer': { skills: pick('des-one') } } });
+  assert.equal(stale({ cwd: r.cwd, today: TODAY }).stale, true);
   const rec = run(t, 'record', JSON.stringify({ entry: { skillname: 'des-one', skillcategory: 'design', skillrepo: 'octo/d1', skillcommit: COMMIT }, license: 'MIT', roles: ['ui-ux-designer'] }), { home: r.home, cwd: r.cwd });
   assert.equal(rec.code, 0, rec.lines.join('|'));
-  assert.equal(stale({ home: r.home, cwd: r.cwd }).stale, false, 'a record dates the selection even when it was already there');
+  assert.equal(stale({ cwd: r.cwd }).stale, false, 'a record dates the selection even when it was already there');
 });
 
 // ---------- settings folder moved ----------
@@ -598,4 +618,350 @@ test('AC10: user selections are not counted while the settings folder is moved',
   const s = resolveSettings({ cwd });
   assert.equal(s.settings_folder_moved, true);
   assert.deepEqual(s.roles.qa.skills, []);
+});
+
+// ---------- migration of the old project text ----------
+
+const NOW = '2026-11-07';
+const OLD = {
+  hallmark: '- name: hallmark; source: nutlope/hallmark; license: MIT; vetted: 2026-01-10; why: looks; approved: 2026-01-11',
+  pin: `- name: hallmark; source: nutlope/hallmark; license: Own-Terms; vetted: 2026-01-10; commit: ${OTHER}; why: looks; approved: 2026-01-11`,
+  impeccable: '- name: impeccable; source: `npx -y impeccable skills install`; license: Apache-2.0; vetted: 2026-01-10; why: polish; approved: 2026-01-12',
+  repo: `- name: fancy-ui; source: octo/fancy; license: MIT; vetted: 2026-02-01; commit: ${COMMIT}; why: fancy; approved: 2026-02-02`,
+  nocommit: '- name: free; source: octo/free; license: MIT; vetted: 2026-02-01; why: w; approved: 2026-02-02',
+  uiDesign: '- name: aico:ui-design; source: plugin aico; license: -; vetted: -; why: own; approved: 2026-02-03',
+  otherPlugin: '- name: aico:other; source: plugin aico; license: MIT; vetted: 2026-02-01; why: own; approved: 2026-02-03',
+  command: '- name: sneaky; source: `npx -y sneaky@1.0.0 install && touch x`; license: MIT; vetted: 2026-02-01; why: w; approved: 2026-02-02',
+  bad: `- name: odd-one; source: octo/odd; license: MIT!x; vetted: 2026-02-01; commit: ${COMMIT}; why: w; approved: 2026-02-02`,
+  stk: `- area: stack; name: stk-skill; source: octo/stk; license: MIT; vetted: 2026-02-03; commit: ${OTHER}; why: w; approved: 2026-02-04`
+};
+
+function oldProject(t, { design = [], skills = [], settings } = {}) {
+  const cwd = tmp(t, 'cwd');
+  const home = tmp(t, 'home');
+  fs.mkdirSync(path.join(cwd, '.company'));
+  const md = `# P\n\n## Design skills\n${design.join('\n')}\n\n## Skills\n${skills.join('\n')}\n\n## Other\nkeep\n`;
+  fs.writeFileSync(path.join(cwd, '.company', 'project.md'), md);
+  if (settings) fs.writeFileSync(path.join(cwd, '.company', 'settings.json'), JSON.stringify(settings));
+  const lineOf = (i) => 4 + i;
+  const skillLine = (i) => 6 + design.length + i;
+  const mig = (extra = {}) => migrate({ cwd, home, today: NOW, ...extra });
+  const md0 = () => fs.readFileSync(path.join(cwd, '.company', 'project.md'), 'utf8');
+  const sel = () => JSON.parse(fs.readFileSync(path.join(cwd, '.company', 'settings.json'), 'utf8')).aico_settings.roles;
+  return { cwd, home, md, lineOf, skillLine, mig, md0, sel };
+}
+
+test('AC20: the preview names each line by number, writes nothing, and asks no license or vetted question', (t) => {
+  const p = oldProject(t, { design: [OLD.hallmark, OLD.pin, OLD.impeccable, OLD.repo, OLD.nocommit, OLD.uiDesign, OLD.otherPlugin, OLD.command, OLD.bad] });
+  const r = p.mig();
+  assert.equal(r.ok, true);
+  const text = r.lines.join('\n');
+  assert.match(text, /line 4: hallmark.*selection only/);
+  assert.match(text, /line 5: hallmark.*pin on the list entry/);
+  assert.match(text, /line 6: impeccable.*selection only/);
+  assert.match(text, /line 7: fancy-ui.*new entry in your list/);
+  assert.match(text, /line 8: stays, repo line has no commit/);
+  assert.match(text, /line 9: aico:ui-design.*selection only/);
+  assert.match(text, /line 10: aico:other.*new entry in your list/);
+  assert.match(text, /line 11: stays, command differs from the list/);
+  assert.match(text, /line 12: stays, license not valid/);
+  assert.ok(!/MIT!x|octo\/odd|odd-one|touch x/.test(text), 'a failed line is never echoed');
+  assert.equal(p.md0(), p.md);
+  assert.equal(fs.existsSync(userFile(p.home)), false);
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 6);
+});
+
+test('AC14, AC20: apply writes selections and entries, keeps old dates, archives the lines and a re-run changes nothing', (t) => {
+  const p = oldProject(t, { design: [OLD.hallmark, OLD.impeccable, OLD.repo, OLD.uiDesign, OLD.command] });
+  const choices = [
+    { n: p.lineOf(0), name: 'hallmark', roles: ['ui-ux-designer'] },
+    { n: p.lineOf(1), name: 'impeccable', roles: ['ui-ux-designer'] },
+    { n: p.lineOf(2), name: 'fancy-ui', roles: ['ui-ux-designer', 'brand-artist'] },
+    { n: p.lineOf(3), name: 'aico:ui-design', roles: ['ui-ux-designer'] }
+  ];
+  const r = p.mig({ apply: true, choices });
+  assert.equal(r.ok, true, r.lines.join('|'));
+  const roles = p.sel();
+  assert.deepEqual(roles['ui-ux-designer'].skills, [
+    { name: 'hallmark', approved: '2026-01-11' }, { name: 'impeccable', approved: '2026-01-12' },
+    { name: 'fancy-ui', approved: '2026-02-02' }, { name: 'aico:ui-design', approved: '2026-02-03' }]);
+  assert.deepEqual(roles['brand-artist'].skills, [{ name: 'fancy-ui', approved: '2026-02-02' }]);
+  const users = readUser(p.home);
+  assert.deepEqual(users.map((e) => e.skillname), ['fancy-ui']);
+  assert.equal(users[0].license, 'MIT');
+  assert.equal(users[0].vetted, '2026-02-01');
+  assert.equal(users[0].hash, undefined);
+  assert.equal(users[0].skillcategory, 'design');
+  const arch = path.join(p.cwd, '.company', 'archive');
+  const files = fs.readdirSync(arch);
+  assert.equal(files.length, 1);
+  assert.match(fs.readFileSync(path.join(arch, files[0]), 'utf8'), /name: fancy-ui/);
+  const md = p.md0();
+  assert.doesNotMatch(md, /name: fancy-ui|name: hallmark|name: impeccable|aico:ui-design/);
+  assert.match(md, /name: sneaky/, 'a line that stays remains');
+  const snap = [md, JSON.stringify(roles), fs.readFileSync(userFile(p.home), 'utf8')];
+  const again = p.mig({ apply: true, choices });
+  assert.equal(again.ok, true);
+  assert.deepEqual([p.md0(), JSON.stringify(p.sel()), fs.readFileSync(userFile(p.home), 'utf8')], snap);
+  assert.equal(fs.readdirSync(arch).length, 1);
+});
+
+test('AC20: a baseline line with a commit becomes a user pin holding the line license and vetted date, never the baseline license', (t) => {
+  const p = oldProject(t, { design: [OLD.pin] });
+  const r = p.mig({ apply: true, choices: [{ n: p.lineOf(0), name: 'hallmark', roles: ['ui-ux-designer'] }] });
+  assert.equal(r.ok, true, r.lines.join('|'));
+  const pin = readUser(p.home).find((e) => e.skillname === 'hallmark');
+  assert.equal(pin.skillcommit, OTHER);
+  assert.equal(pin.license, 'Own-Terms');
+  assert.equal(pin.vetted, '2026-01-10');
+  assert.equal(pin.hash, undefined);
+  assert.equal(pin.skillrepo, 'nutlope/hallmark');
+});
+
+test('AC20: a command line is selection-only when byte-equal to the baseline install, and the user file never gets a command', (t) => {
+  const p = oldProject(t, { design: [OLD.impeccable, OLD.command] });
+  const r = p.mig({ apply: true, choices: [{ n: p.lineOf(0), name: 'impeccable', roles: ['ui-ux-designer'] }, { n: p.lineOf(1), name: 'sneaky', roles: ['ui-ux-designer'] }] });
+  assert.equal(r.ok, true, r.lines.join('|'));
+  assert.equal(fs.existsSync(userFile(p.home)), false);
+  assert.deepEqual(p.sel()['ui-ux-designer'].skills.map((x) => x.name), ['impeccable']);
+  assert.match(p.md0(), /name: sneaky/);
+});
+
+test('AC20: a protected or unlisted Role stays, a Role at 5 is not offered, and protected Roles are never listed', (t) => {
+  const five = ['a1', 'a2', 'a3', 'a4', 'a5'].map((name) => ({ name }));
+  const p = oldProject(t, { design: [OLD.repo], skills: [OLD.stk], settings: { aico_settings: { version: 1, roles: { 'brand-artist': { skills: five } } } } });
+  const text = p.mig().lines.join('\n');
+  assert.doesNotMatch(text, /line 4:.*Roles:.*brand-artist/, 'a Role at 5 is not offered');
+  assert.match(text, /line 7: stk-skill/);
+  assert.doesNotMatch(text, /Roles:.*\b(architect|security|code-reviewer|pentester|vuln-scanner|fresh-reviewer)\b/);
+  const r = p.mig({ apply: true, choices: [{ n: p.skillLine(0), name: 'stk-skill', roles: ['architect'] }, { n: p.lineOf(0), name: 'fancy-ui', roles: ['brand-artist'] }] });
+  const out = r.lines.join('\n');
+  assert.match(out, /line 7: stays, Role not offered/);
+  assert.match(out, /line 4: stays, Role not offered/);
+  assert.equal(fs.existsSync(userFile(p.home)), false);
+  assert.match(p.md0(), /name: stk-skill/);
+});
+
+test('AC20: another commit for a name in the user file needs Move; Keep leaves the line and the entry', (t) => {
+  const p = oldProject(t, { design: [OLD.repo] });
+  writeUser(p.home, [entry({ skillname: 'fancy-ui', skillcategory: 'design', skillrepo: 'octo/fancy', skillcommit: OTHER, hash: 'd'.repeat(64), vetted: '2026-01-01' })]);
+  const choice = [{ n: p.lineOf(0), name: 'fancy-ui', roles: ['ui-ux-designer'] }];
+  const keep = p.mig({ apply: true, choices: choice });
+  assert.match(keep.lines.join('\n'), /line 4: stays, commit differs from your list/);
+  assert.equal(readUser(p.home)[0].skillcommit, OTHER);
+  assert.match(p.md0(), /name: fancy-ui/);
+  const move = p.mig({ apply: true, choices: choice, moves: [`${p.lineOf(0)}:fancy-ui`] });
+  assert.equal(move.ok, true, move.lines.join('|'));
+  const e = readUser(p.home)[0];
+  assert.equal(e.skillcommit, COMMIT);
+  assert.equal(e.hash, undefined);
+  assert.equal(e.license, 'MIT', 'Move takes the license from the line');
+  assert.equal(e.vetted, undefined, 'Move clears the vetted date');
+});
+
+test('AC21: with nobody to answer nothing changes, and pending reports the unmigrated count', (t) => {
+  const p = oldProject(t, { design: [OLD.hallmark, OLD.repo], skills: [OLD.stk] });
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 3);
+  const r = p.mig({ apply: true, choices: [] });
+  assert.equal(r.ok, true);
+  assert.equal(p.md0(), p.md);
+  assert.equal(fs.existsSync(userFile(p.home)), false);
+  assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'settings.json')), false);
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 3);
+});
+
+test('AC24: a project with no old section lines has nothing to migrate and writes nothing', (t) => {
+  const p = oldProject(t, { design: ['- (none yet; the design-researcher proposes them)'], skills: ['- (none yet; the skill-researcher proposes them)'] });
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 0);
+  const r = p.mig();
+  assert.equal(r.changed, false);
+  assert.equal(p.md0(), p.md);
+});
+
+// ---------- the settings page data and markup ----------
+
+const PAGE = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+
+function pageSandbox(t) {
+  const root = tmp(t, 'page');
+  const home = path.join(root, 'home');
+  const cwd = path.join(root, 'repo');
+  const pluginRoot = path.join(root, 'plugin');
+  for (const d of [home, path.join(cwd, '.company'), path.join(pluginRoot, 'agents'), path.join(pluginRoot, 'company'), path.join(pluginRoot, 'skills', 'lead', 'references')]) fs.mkdirSync(d, { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, '..', 'skills', 'lead', 'references', 'project-template.md'), path.join(pluginRoot, 'skills', 'lead', 'references', 'project-template.md'));
+  const floor = { architect: 'opus', qa: 'sonnet' };
+  for (const [role, model] of Object.entries(floor)) fs.writeFileSync(path.join(pluginRoot, 'agents', `${role}.md`), `---\nname: ${role}\nmodel: ${model}\neffort: high\n---\n`);
+  fs.writeFileSync(path.join(pluginRoot, 'company', 'names.json'), JSON.stringify({ architect: 'Ava', qa: 'Quinn' }));
+  fs.writeFileSync(path.join(pluginRoot, 'company', 'model-floor.json'), JSON.stringify({ v: 1, release: '0.16.0', floor, protected: ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'] }));
+  fs.writeFileSync(path.join(cwd, '.company', 'project.md'), '# Project profile\n\nproduct_type: web\nengagement: own\naudience: the CEO\nlanguages: en\nvoice: clear\n\n## Personas\n- (none)\n');
+  return { home, cwd, pluginRoot };
+}
+
+async function openPage(t, s) {
+  const server = await startServer({ home: s.home, cwd: s.cwd, pluginRoot: s.pluginRoot, open: false, log: () => {} });
+  t.after(() => server.close());
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/state`, { headers: { 'X-Aico-Token': server.token } });
+  return res.json();
+}
+
+test('AC1, AC17, AC24: a new product with no user catalog lists baseline entries with status, license and no error; a wildcard is not selectable', async (t) => {
+  const s = pageSandbox(t);
+  const st = await openPage(t, s);
+  assert.deepEqual(st.catalog.errors, []);
+  const byName = Object.fromEntries(st.catalog.entries.map((e) => [e.name, e]));
+  assert.ok(st.catalog.entries.every((e) => e.layer === 'baseline'));
+  assert.equal(byName['golang-*'].selectable, false);
+  assert.ok(byName['golang-*'].reason);
+  assert.equal(byName['vercel-react-best-practices'].license, 'no license on record');
+  assert.equal(byName['vercel-react-best-practices'].selectable, true);
+  assert.equal(byName['impeccable'].vetted, null);
+  assert.equal(byName['aico:ui-design'].status, 'checked at run start');
+  assert.ok(PAGE.includes('/aico:add-skill'), 'the page names the add command');
+  const home = JSON.stringify(st.catalog);
+  assert.ok(!home.includes(s.home) && !home.includes(s.cwd));
+});
+
+test('AC1, AC2: each Role gets only entries of its categories; a bad user entry is named by number and cannot be selected', async (t) => {
+  const s = pageSandbox(t);
+  writeUser(s.home, [entry({ skillname: 'qa-only', skillcategory: 'quality', skillrepo: 'octo/qa' }), entry({ skillname: 'secret-bad', skillcategory: 'nonsense' })]);
+  const st = await openPage(t, s);
+  const qa = st.catalog.entries.find((e) => e.name === 'qa-only');
+  assert.ok(qa.roles.includes('qa') && qa.roles.includes('code-reviewer'));
+  assert.ok(!qa.roles.includes('architect') && !qa.roles.includes('senior-engineer'));
+  assert.ok(!st.catalog.entries.some((e) => e.name.includes('secret')));
+  const errs = st.catalog.errors.join('\n');
+  assert.match(errs, /entry 2: skillcategory/);
+  assert.ok(!errs.includes('secret'));
+});
+
+test('AC15: every skill row has a label bound to its checkbox, state and status as text, wrapping text and no sideways scroll', () => {
+  assert.match(PAGE, /el\('label', \{ for: id \}, e\.name\)/);
+  assert.match(PAGE, /type: 'checkbox', id, disabled: e\.selectable !== true/);
+  assert.match(PAGE, /'Status: '/);
+  assert.match(PAGE, /aria-describedby/);
+  assert.match(PAGE, /id: 'skcount', role: 'status'/);
+  assert.match(PAGE, /\.sk-row \.sk-text \{[^}]*overflow-wrap: anywhere/);
+  assert.match(PAGE, /\.sk-row \{[^}]*min-width: 0/);
+  const rule = PAGE.match(/\.sk-(?:list|row|text)[^{]*\{[^}]*\}/g).join('\n');
+  assert.doesNotMatch(rule, /white-space:\s*nowrap|overflow-x:\s*(scroll|auto)/);
+  assert.doesNotMatch(PAGE, /body\s*\{[^}]*overflow-x:\s*scroll/);
+});
+
+test('AC24: the project template holds neither old skill section', () => {
+  const tpl = fs.readFileSync(path.join(import.meta.dirname, '..', 'skills', 'lead', 'references', 'project-template.md'), 'utf8');
+  assert.doesNotMatch(tpl, /^## Design skills\s*$/m);
+  assert.doesNotMatch(tpl, /^## Skills\s*$/m);
+});
+
+// ---------- setup commands, baseline checks, SBOM and retired names ----------
+
+const REPO_ROOT = path.join(import.meta.dirname, '..');
+const addCmd = (source, name) => `[dry-run] npx -y skills@1.7.4 add ${source} -s ${name} -g -a claude-code -y`;
+const OLD_GROUP_LINES = [
+  addCmd('vercel-labs/skills', 'find-skills'), addCmd('nutlope/hallmark', 'hallmark'),
+  addCmd('addyosmani/agent-skills', 'frontend-ui-engineering'), addCmd('addyosmani/agent-skills', 'security-and-hardening'),
+  addCmd('getsentry/skills', 'security-review'), addCmd('wshobson/agents', 'auth-implementation-patterns'),
+  addCmd('samber/cc-skills-golang', '"*"'),
+  addCmd('vercel-labs/agent-skills', 'vercel-react-best-practices'), addCmd('vercel-labs/agent-skills', 'vercel-composition-patterns'),
+  addCmd('wshobson/agents', 'typescript-advanced-types'),
+  ...['query', 'router', 'form', 'table'].map((n) => addCmd('tanstack-skills/tanstack-skills', `tanstack-${n}`)),
+  addCmd('better-auth/skills', 'two-factor-authentication-best-practices')
+];
+
+test('AC19: the setup groups print today\'s commands byte for byte with the baseline licenses in place, and the stored command is only printed', async (t) => {
+  const calls = [];
+  const lines = [];
+  const code = await install(['--dry-run', 'core', 'research', 'go', 'react', 'tanstack', 'auth'], { home: tmp(t, 'home'), log: (l) => lines.push(l), exec: (...a) => calls.push(a) });
+  assert.equal(code, 0);
+  assert.deepEqual(lines.filter((l) => l.startsWith('[dry-run]')), OLD_GROUP_LINES);
+  assert.deepEqual(lines.filter((l) => l.startsWith('manual ')), ['manual npx -y impeccable@4.8.0 skills install']);
+  assert.equal(calls.length, 0);
+});
+
+test('AC19: a user entry is never added to a setup group', async (t) => {
+  const home = tmp(t, 'home');
+  writeUser(home, [entry({ skillname: 'user-only-skill' })]);
+  const lines = [];
+  await install(['--dry-run', 'core', 'research', 'go', 'react', 'tanstack', 'auth'], { home, log: (l) => lines.push(l), exec: () => {} });
+  assert.ok(!lines.join('\n').includes('user-only-skill'));
+});
+
+test('AC19: the SBOM lists baseline skills and never a user entry', (t) => {
+  const home = tmp(t, 'home');
+  writeUser(home, [entry({ skillname: 'user-only-skill' })]);
+  const text = serialize(buildSbom({ root: REPO_ROOT, now: new Date('2026-11-07T00:00:00Z'), serial: 'urn:uuid:00000000-0000-4000-8000-000000000000' }));
+  assert.ok(!text.includes('user-only-skill'));
+  for (const n of ['skill:hallmark@', 'skill:find-skills@']) assert.ok(text.includes(n), n);
+});
+
+test('AC19: a returned deps/skills.json and a live cite of it are check errors; a user name is not retired', (t) => {
+  const root = tmp(t, 'root');
+  fs.mkdirSync(path.join(root, 'deps'));
+  fs.writeFileSync(path.join(root, 'deps', ['skills', 'json'].join('.')), '{}');
+  fs.mkdirSync(path.join(root, 'skills', 'x'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'skills', 'x', 'SKILL.md'), 'Read `deps/' + 'skills.json` for the list.\n');
+  const errors = check(root).errors ?? check(root);
+  const text = (Array.isArray(errors) ? errors : []).join('\n');
+  assert.match(text, /the old inventory returned/);
+  assert.match(text, /skills\/x\/SKILL\.md:1: live cite of the old inventory file/);
+  const rel = tmp(t, 'releases');
+  fs.mkdirSync(path.join(rel, '0.1.0'));
+  fs.writeFileSync(path.join(rel, '0.1.0', 'sbom.cdx.json'), JSON.stringify({ components: [{ 'bom-ref': 'skill:gone-one@1' }, { 'bom-ref': 'skill:mine-one@1' }] }));
+  assert.deepEqual(retiredSkills({}, rel, ['mine-one']), ['gone-one']);
+});
+
+test('AC19: deps/skills.json is gone and no live skill, script or Contract cites it as a source', () => {
+  assert.equal(fs.existsSync(path.join(REPO_ROOT, 'deps', ['skills', 'json'].join('.'))), false);
+  assert.deepEqual(check(REPO_ROOT).errors.filter((e) => /old inventory/.test(e)), []);
+});
+
+// ---------- text pins: dispatch line, add-skill, license question, Install form, auto answer ----------
+
+const read = (...p) => fs.readFileSync(path.join(REPO_ROOT, ...p), 'utf8');
+const PIPELINE = read('skills', 'pipeline', 'SKILL.md');
+const HANDOFF = read('skills', 'handoff', 'SKILL.md');
+const FEATURE = read('skills', 'feature', 'SKILL.md');
+const PICKS = read('skills', 'lead', 'references', 'skill-picks.md');
+const ADD_SKILL = read('skills', 'add-skill', 'SKILL.md');
+
+test('AC6, AC7: the dispatch text names the Role skills line and no Design skills line', () => {
+  assert.match(PIPELINE, /^Role skills: <names \| none>/m);
+  assert.match(HANDOFF, /`Role skills:`.*load each named skill with the Skill tool/);
+  assert.match(HANDOFF, /missing role skill: <name>/);
+  for (const text of [PIPELINE, HANDOFF]) assert.doesNotMatch(text, /Design skills:/);
+});
+
+test('AC8, AC16, AC9: add-skill is CEO-only with help, and takes values only through a quoted heredoc', () => {
+  assert.match(ADD_SKILL, /^disable-model-invocation: true$/m);
+  assert.match(ADD_SKILL, /argument-hint: "\[help\]"/);
+  assert.match(ADD_SKILL, /documentation\/commands\/add-skill\.md/);
+  assert.match(ADD_SKILL, /role-skills add <<'AICO_JSON'/);
+  assert.match(ADD_SKILL, /Never put an answer on the command line/);
+  assert.match(PICKS, /role-skills record <<'AICO_JSON'/);
+  assert.match(PICKS, /with the Bash tool and a quoted heredoc, never on the command line/);
+  const doc = read('documentation', 'commands', 'add-skill.md');
+  assert.match(doc, /\/aico:add-skill help/);
+  assert.match(doc, /Only you start this command/);
+});
+
+test('AC9, AC22: the pick license question always offers No license and Cancel, and Cancel runs no record', () => {
+  assert.match(PICKS, /Options: `picks\[\]\.stated_license`.*`No license, skip this skill`; `Cancel`; Other = the value/);
+  assert.match(PICKS, /`Cancel` runs no `record` for any pick/);
+});
+
+test('AC11, AC17: Install only means install-skills --selected, the Lead never runs a shown command, a command entry gets no Install question', () => {
+  assert.match(PIPELINE, /Install only ever means `install-skills --selected`, with one `--skill=<name>` per Install pick/);
+  assert.match(PIPELINE, /You never run a command shown in a/);
+  assert.match(PIPELINE, /A `manual` and `WARNING:`.*line gets no Install question: show it as is, say aico does not run it/);
+  assert.match(PIPELINE, /Options: Install \(Recommended\) \/ Skip/);
+  assert.match(PICKS, /a command shown as `manual` is not run by aico/);
+  assert.match(FEATURE, /show every `WARNING:` line to the CEO as a visibly marked warning/);
+});
+
+test('AC11: gates.installs auto skips the Install form only when settings_folder_moved is false', () => {
+  assert.match(PIPELINE, /`gates\.installs` `auto` answers Install without the form only when `settings_folder_moved` in the §1\.7 `get` JSON is `false`; true or absent shows the form/);
+  for (const [name, text] of [['feature', FEATURE], ['skill-picks', PICKS]]) {
+    assert.match(text, /settings_folder_moved/, name);
+    assert.match(text, /gates\.installs/, name);
+  }
 });
