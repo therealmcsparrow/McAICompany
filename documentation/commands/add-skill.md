@@ -29,6 +29,10 @@ No Roles, Gates, branch or commit. One question at a time, each with Cancel.
 
 **A pin for a baseline skill.** A baseline repo entry has no commit, so it is never installed and shows `needs a pin`. A name that is in the baseline with the same repo, plus a commit and a license you state, is saved as your own pin, not refused as a taken name. The baseline file is not changed.
 
+**Install status.** Each skill shows `installed`, `installed (name only)`, `missing`, `not found` or `folder not recognized`. A stale pin (the folder no longer matches its stored hash) reads `folder not recognized` and is refused. A name-only skill in your home folder is refused when the catalog has a read error or warning, and a name found in both places reads as project.
+
+**Clearing a pin.** When a later install must clear the stored hash and that would change which row of the name is read, it writes nothing and prints "clearing the pin would make this row the one read, nothing written; fix or remove it by hand".
+
 **A name in your list at another commit.** You pick Keep, Move or Cancel. Move changes the commit and license, clears the stored hash and vetted date, and keeps the category and selections. Other products read `folder not recognized` until reinstalled.
 
 **With `MCSPARROW_HOME` set elsewhere** the command prints a warning and stops before the first question.
