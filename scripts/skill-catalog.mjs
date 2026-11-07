@@ -534,7 +534,7 @@ export function itemsProven(rootDir, name, hash, { place } = {}) {
 
 // Compares where the link physically leads, not its text, so no spelling of the path needs reasoning about.
 function linkLeadsTo(link, target) {
-  try { return sameFolder(fs.realpathSync(link), fs.realpathSync(target)); } catch { return false; }
+  try { return sameFolder(fs.realpathSync.native(link), fs.realpathSync.native(target)); } catch { return false; }
 }
 
 // ---------- writes ----------
