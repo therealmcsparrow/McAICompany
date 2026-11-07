@@ -247,15 +247,20 @@ function scan(opts) {
       const res = i >= MAX_LINES ? stay('too many lines') : classify(text, section, { today, baseByName, byName, userByName });
       if (res.entry && !userByName.has(res.entry.skillname)) {
         userByName.set(res.entry.skillname, res.entry);
-        fresh.set(res.entry.skillname, { entry: res.entry, kind: res.kind });
+        fresh.set(res.entry.skillname, { entry: res.entry, kind: res.kind, e: res.e });
       } else if (res.kind === 'choice' && fresh.get(res.target.skillname)?.entry === res.target) {
         // The entry exists only once an earlier line writes it, so there is no listed commit to move.
         Object.assign(res, stay('commit differs from an earlier line'));
       } else if (res.kind === 'selection' && fresh.get(res.target.skillname)?.entry === res.target) {
         // The entry exists only once a line writes it, so whichever line is chosen writes it.
         const first = fresh.get(res.target.skillname);
-        res.entry = first.entry;
-        res.kind = first.kind;
+        const date = (v) => (v === '-' ? null : v ?? null);
+        if (res.e.license !== first.e.license) Object.assign(res, stay('license differs from an earlier line'));
+        else if (date(res.e.vetted) !== date(first.e.vetted)) Object.assign(res, stay('vetted differs from an earlier line'));
+        else {
+          res.entry = first.entry;
+          res.kind = first.kind;
+        }
       }
       // A new entry from a Skills line has no category of its own; the CEO picks one from the closed list.
       if (res.kind === 'entry' && section.heading === '## Skills') res.pickCategory = true;
@@ -365,6 +370,7 @@ function execute(s, opts, chosen, moves, out) {
   const adds = new Map();
   const count = (role) => roleNames(s.project.data, role).length + (adds.get(role)?.length ?? 0);
   const settled = new Map();
+  const moved = new Map();
   for (const item of s.items) {
     const { n, res } = item;
     const c = chosen.get(n);
@@ -372,6 +378,11 @@ function execute(s, opts, chosen, moves, out) {
     if (!c) { out.push(`line ${n}: not chosen`); continue; }
     if (c.name !== res.e.name) { out.push(`line ${n}: stays, line changed`); continue; }
     if (res.kind === 'choice' && !moves.has(`${n}:${c.name}`)) { out.push(`line ${n}: stays, commit differs from your list`); continue; }
+    if (res.kind === 'choice') {
+      const earlier = moved.get(c.name);
+      if (earlier && earlier.commit !== res.entry.skillcommit) { out.push(`line ${n}: stays, commit differs from an earlier line`); continue; }
+      if (earlier && earlier.license !== res.entry.license) { out.push(`line ${n}: stays, license differs from an earlier line`); continue; }
+    }
     let offer = res.offer;
     let category = res.entry?.skillcategory;
     if (c.category !== undefined) {
@@ -399,6 +410,7 @@ function execute(s, opts, chosen, moves, out) {
       res.entry.skillcategory = category;
       settled.set(res.entry.skillname, category);
     }
+    if (res.kind === 'choice' && !moved.has(c.name)) moved.set(c.name, { commit: res.entry.skillcommit, license: res.entry.license });
     done.push({ item, roles });
   }
   if (done.length === 0) return { ok: true, changed: false, lines: out };
@@ -727,18 +739,19 @@ export function record(input, options = {}) {
     }
 
     const out = [];
+    const adds = new Map(chosen.map((r) => [r, [{ name: e.skillname, approved: opts.today }]]));
     if (needEntry) {
       const text = typeof license === 'string' ? licenseAsTyped(license) : '';
       if (text === null) return fail('ERROR license: bad value');
       if (text === '' || text === '-') return { ok: true, lines: [`no license stated: ${e.skillname}`] };
       const u = validateEntry({ ...e, license: text }, 'user');
       if (!u.ok) return fail(`ERROR license: ${u.reason}`);
+      if (chosen.length > 0) checkAdds(mergedLayer(project.data, adds, (name) => name === e.skillname), adds, opts);
       const w = addUserEntry(u.entry, { home: opts.home });
       if (!w.ok) return fail(w.error);
       out.push(w.changed ? `entry added: ${e.skillname}` : `entry unchanged: ${e.skillname}`);
     }
     if (chosen.length > 0) {
-      const adds = new Map(chosen.map((r) => [r, [{ name: e.skillname, approved: opts.today }]]));
       writeSettings({ project }, opts, adds);
     }
     out.push(`recorded: ${e.skillname}${chosen.length ? `, Roles ${chosen.join(', ')}` : ''}`);

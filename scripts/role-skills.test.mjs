@@ -305,6 +305,7 @@ test('a banned character in another Role stops migrate and record and leaves set
   const r = record({ entry: PLUGIN_PICK, license: 'MIT', roles: ['ui-ux-designer'] }, { cwd: q.cwd, home: q.home, today: TODAY });
   assert.equal(r.ok, false, r.lines.join('\n'));
   assert.equal(read(q, 'settings.json'), beforeRecord);
+  assert.equal(fs.existsSync(userFile(q)), false);
 });
 
 test('add previews and stores a pin of a baseline entry under the baseline category', (t) => {
@@ -480,6 +481,80 @@ test('a line with another commit than an entry only this run would write offers 
   assert.equal(fs.existsSync(userFile(only)), false);
 });
 
+const dupLine = ({ commit = A, license = 'MIT', vetted = '2026-02-03' } = {}) => `- area: stack; name: dup-skill; source: octo/dup; license: ${license}; vetted: ${vetted}; commit: ${commit}; why: w; approved: 2026-02-04`;
+const pluginLine = ({ license = 'MIT', vetted = '2026-02-03' } = {}) => `- name: other-plugin:thing; source: plugin other-plugin; license: ${license}; vetted: ${vetted}; why: w; approved: 2026-02-04`;
+const dupDesign = ({ commit = A, license = 'MIT' } = {}) => `- name: dup-skill; source: octo/dup; license: ${license}; vetted: 2026-02-03; commit: ${commit}; why: w; approved: 2026-02-04`;
+
+function listed(t, { design = [], skills = [] }, skillcategory = 'engineering') {
+  const p = project(t, { design, skills });
+  fs.mkdirSync(path.join(p.home, '.mcsparrow'));
+  fs.writeFileSync(userFile(p), JSON.stringify({ schema: 1, entries: [{ skillname: 'dup-skill', skillcategory, skillrepo: 'octo/dup', skillcommit: C, license: 'MIT', vetted: '2026-01-01', hash: 'd'.repeat(64) }] }));
+  return p;
+}
+
+for (const [route, make, first, roleArg, category] of [['Skills', dupLine, 7, 'backend-engineer', 'engineering'], ['Design skills', dupDesign, 4, 'ui-ux-designer', 'design']]) {
+  const place = (lines) => (route === 'Skills' ? { design: [], skills: lines } : { design: lines, skills: [] });
+  const args = (...ns) => ['migrate', '--apply', ...ns.flatMap((n) => ['--line', `${n}:dup-skill=${roleArg}`, '--move', `${n}:dup-skill`])];
+
+  for (const [one, two] of [[A, B], [B, A]]) {
+    test(`${route}: a later Move with another commit stays (${one.slice(0, 1)} then ${two.slice(0, 1)})`, (t) => {
+      const p = listed(t, place([make({ commit: one }), make({ commit: two })]), category);
+      const r = run(p, args(first, first + 1));
+      assert.equal(r.code, 0, r.text);
+      assert.match(r.text, new RegExp(`line ${first}: migrated`));
+      assert.match(r.text, new RegExp(`line ${first + 1}: stays, commit differs from an earlier line`));
+      assert.equal(entryIn(p, 'dup-skill').skillcommit, one);
+      assert.match(read(p, 'project.md'), new RegExp(two));
+      const roles = JSON.parse(read(p, 'settings.json')).aico_settings.roles;
+      assert.equal(roles[roleArg].skills.length, 1);
+    });
+  }
+
+  for (const [one, two] of [['MIT', 'Apache-2.0'], ['Apache-2.0', 'MIT']]) {
+    test(`${route}: a later Move with the same commit and another license stays (${one} then ${two})`, (t) => {
+      const p = listed(t, place([make({ license: one }), make({ license: two })]), category);
+      const r = run(p, args(first, first + 1));
+      assert.equal(r.code, 0, r.text);
+      assert.match(r.text, new RegExp(`line ${first}: migrated`));
+      assert.match(r.text, new RegExp(`line ${first + 1}: stays, license differs from an earlier line`));
+      assert.equal(entryIn(p, 'dup-skill').license, one);
+      assert.match(read(p, 'project.md'), new RegExp(two));
+    });
+  }
+}
+
+for (const [what, a, b, reason] of [
+  ['license', { license: 'MIT' }, { license: 'Apache-2.0' }, 'license differs from an earlier line'],
+  ['license', { license: 'Apache-2.0' }, { license: 'MIT' }, 'license differs from an earlier line'],
+  ['vetted', { vetted: '2026-02-03' }, { vetted: '2026-02-04' }, 'vetted differs from an earlier line'],
+  ['vetted', { plugin: true, vetted: '2026-02-03' }, { plugin: true, vetted: '-' }, 'vetted differs from an earlier line'],
+  ['vetted', { plugin: true, vetted: '-' }, { plugin: true, vetted: '2026-02-03' }, 'vetted differs from an earlier line'],
+]) {
+  test(`a Skills line after a fresh entry with another ${what} stays (${JSON.stringify(a)} then ${JSON.stringify(b)})`, (t) => {
+    const mk = a.plugin ? pluginLine : dupLine;
+    const name = a.plugin ? 'other-plugin:thing' : 'dup-skill';
+    const [first, second, cat, role] = a.plugin ? [4, 5, 'design', 'ui-ux-designer'] : [7, 8, 'quality', 'qa'];
+    const p = project(t, a.plugin ? { design: [mk(a), mk(b)], skills: [] } : { design: [], skills: [mk(a), mk(b)] });
+    const pre = run(p, ['migrate']);
+    assert.equal(pre.out.find((l) => l.startsWith(`line ${second}:`)), `line ${second}: stays, ${reason}`);
+    const choose = a.plugin ? [] : ['--category', `${first}:${name}=${cat}`];
+    const r = run(p, ['migrate', '--apply', '--line', `${first}:${name}=${role}`, ...choose, '--line', `${second}:${name}=${role}`]);
+    assert.match(r.text, new RegExp(`line ${first}: migrated`));
+    assert.match(r.text, new RegExp(`line ${second}: stays, ${reason}`));
+    assert.equal(entryIn(p, name).license, a.license ?? 'MIT');
+    assert.match(read(p, 'project.md'), /why: w/);
+  });
+}
+
+test('lines of a fresh entry with equal license and vetted both select', (t) => {
+  const p = project(t, { design: [], skills: [dupLine(), dupLine()] });
+  const r = run(p, ['migrate', '--apply',
+    '--line', '7:dup-skill=qa', '--category', '7:dup-skill=quality',
+    '--line', '8:dup-skill=qa']);
+  assert.match(r.text, /line 7: migrated/);
+  assert.match(r.text, /line 8: migrated/);
+});
+
 test('a line stays whole when a chosen Role reaches 5 partway through it', (t) => {
   const three = ['impeccable', 'frontend-ui-engineering', 'aico:ui-design'].map((name) => ({ name }));
   const design = [DESIGN[0], DESIGN[2].replace('fancy-ui', 'other-ui'), DESIGN[2]];
@@ -498,8 +573,8 @@ test('a line stays whole when a chosen Role reaches 5 partway through it', (t) =
 });
 
 test('a plugin name of the longest allowed length previews and applies', (t) => {
-  const plugin = 'a'.repeat(40);
-  const name = `${plugin}:${'b'.repeat(40)}`;
+  const plugin = 'a'.repeat(64);
+  const name = `${plugin}:${'b'.repeat(64)}`;
   const line = `- name: ${name}; source: plugin ${plugin}; license: MIT; vetted: 2026-02-01; why: w; approved: 2026-02-02`;
   const p = project(t, { design: [line], skills: [] });
   const pre = run(p, ['migrate']);
