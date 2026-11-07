@@ -7,7 +7,7 @@
 
 **What it does.** Adds a third-party skill to your own skill list, `~/.mcsparrow/3rdpartyskills.json`, in a few form questions. Nothing is installed or run.
 
-**When to use it.** You found a skill that aico does not list and want to select it for a Role in the settings page, Skills tab.
+**When to use it.** You found a skill that aico does not list and want to select it for a Role in the settings page, Skills tab. Also when the Install step shows `needs a pin` for a baseline skill: add the same name with the same repo and a commit to pin it.
 
 **Help:** `/aico:add-skill help` explains the command without running it.
 
@@ -26,6 +26,8 @@ No Roles, Gates, branch or commit. One question at a time, each with Cancel.
 **A command is text.** A stored installer command is saved and shown. aico never runs it and never scans it; the skill shows as not vetted.
 
 **The scan.** A repo entry is scanned at install, when its files go to SkillSpector on this machine. It shows as vetted only after a clean scan.
+
+**A pin for a baseline skill.** A baseline repo entry has no commit, so it is never installed and shows `needs a pin`. A name that is in the baseline with the same repo, plus a commit and a license you state, is saved as your own pin, not refused as a taken name. The baseline file is not changed.
 
 **A name in your list at another commit.** You pick Keep, Move or Cancel. Move changes the commit and license, clears the stored hash and vetted date, and keeps the category and selections. Other products read `folder not recognized` until reinstalled.
 

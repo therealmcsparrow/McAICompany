@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
 import { checkDrift } from './contract-drift.mjs';
 import { probe } from './drift-probe.mjs';
-import { parseBaseline } from './skill-catalog.mjs';
+import { expandGroups, parseBaseline } from './skill-catalog.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -108,8 +108,15 @@ function checkCompanyTypes(root, agentNames, playbooks, skills, errors) {
 }
 
 // The old inventory path is built from parts so this file holds no live cite of it.
-const OLD_INVENTORY = ['deps', 'skills.json'].join('/');
-const OLD_CITE = new RegExp('`' + OLD_INVENTORY.replace('.', '\\.') + '`');
+const OLD_DIR = 'deps';
+const OLD_FILE = 'skills.json';
+const OLD_INVENTORY = [OLD_DIR, OLD_FILE].join('/');
+const OLD_FILE_RE = OLD_FILE.replace('.', '\\.');
+const QUOTE = '[\'"`]';
+// Prose and code: the path in backticks. Code files (.mjs, .js) also: the path in quotes, or its parts joined by a comma.
+const OLD_CITE = new RegExp('`' + OLD_DIR + '/' + OLD_FILE_RE + '`');
+const OLD_CITE_CODE = new RegExp(`${QUOTE}${OLD_DIR}/${OLD_FILE_RE}${QUOTE}|${QUOTE}${OLD_DIR}${QUOTE}\\s*,\\s*${QUOTE}${OLD_FILE_RE}${QUOTE}`);
+const CODE_EXT = /\.(mjs|js)$/;
 const OLD_CITE_EXEMPT = /history|retired|superseded/i;
 const CITE_DIRS = ['skills', 'scripts', join('docs', 'contracts')];
 const CITE_EXT = /\.(md|mjs|js|json)$/;
@@ -141,9 +148,10 @@ function checkCatalog(root, agentNames, errors) {
       if (statSync(join(root, rel)).size > CITE_MAX_BYTES) continue;
       text = readFileSync(join(root, rel), 'utf8');
     } catch { continue; }
-    if (!text.includes(OLD_INVENTORY)) continue;
+    if (!text.includes(OLD_FILE)) continue;
+    const code = CODE_EXT.test(rel);
     text.split(/\r?\n/).forEach((line, i) => {
-      if (OLD_CITE.test(line) && !OLD_CITE_EXEMPT.test(line)) errors.push(`ERROR ${rel}:${i + 1}: live cite of the old inventory file`);
+      if ((OLD_CITE.test(line) || (code && OLD_CITE_CODE.test(line))) && !OLD_CITE_EXEMPT.test(line)) errors.push(`ERROR ${rel}:${i + 1}: live cite of the old inventory file`);
     });
   }
   const file = join(root, 'deps', '3rdpartyskills.json');
@@ -159,6 +167,13 @@ function checkCatalog(root, agentNames, errors) {
   } catch (e) {
     errors.push(`ERROR deps/3rdpartyskills.json: ${String(e?.message ?? 'unreadable').replace(/^ERROR baseline catalog: /, '').slice(0, 60)}`);
     return;
+  }
+  if (Object.hasOwn(baseline.groups, 'research')) {
+    for (const e of expandGroups(baseline, ['research'])) {
+      const name = String(e.skillname).slice(0, 60);
+      if (!Object.hasOwn(e, 'license')) errors.push(`ERROR deps/3rdpartyskills.json: research entry ${name} needs a license`);
+      if (!Object.hasOwn(e, 'vetted')) errors.push(`ERROR deps/3rdpartyskills.json: research entry ${name} needs a vetted date`);
+    }
   }
   const listed = new Set(Object.values(baseline.categories).flat());
   for (const role of [...agentNames].sort()) {

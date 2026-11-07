@@ -334,9 +334,43 @@ test('a Role in no category and a listed Role with no agent are errors', () => {
   assert.ok(catalogErrors(manifestRoot(baseline(), { agents: rest })).some(e => e === 'ERROR deps/3rdpartyskills.json: listed Role writer has no agent'));
 });
 
-test('baseline check survives a __proto__ key', () => {
-  const root = manifestRoot('{"__proto__": [], "schema": 1}');
-  assert.ok(catalogErrors(root).some(e => e.includes('3rdpartyskills.json')), catalogErrors(root).join('\n'));
+test('baseline check survives a __proto__ group name', () => {
+  const root = manifestRoot(baseline({ groups: JSON.parse('{"core": ["a"], "__proto__": []}') }));
+  const errs = catalogErrors(root);
+  assert.ok(errs.some(e => e.includes('3rdpartyskills.json') && e.includes('groups')), errs.join('\n'));
+});
+
+test('every research entry needs a license and a vetted date', () => {
+  const research = over => baseline({
+    groups: { core: ['a'], research: ['r'] },
+    entries: [{ skillname: 'a', skillcategory: 'engineering', skillrepo: 'o/r' }, { skillname: 'r', skillcategory: 'research', skillrepo: 'o/s', license: 'MIT', vetted: '2026-10-22', ...over }]
+  });
+  assert.deepEqual(catalogErrors(manifestRoot(research({}))), []);
+  const noLicense = catalogErrors(manifestRoot(research({ license: undefined })));
+  assert.deepEqual(noLicense, ['ERROR deps/3rdpartyskills.json: research entry r needs a license']);
+  const noVetted = catalogErrors(manifestRoot(research({ vetted: undefined })));
+  assert.deepEqual(noVetted, ['ERROR deps/3rdpartyskills.json: research entry r needs a vetted date']);
+  assert.deepEqual(catalogErrors(manifestRoot(baseline())), []);
+});
+
+test('a returned reader of the old file is an error in the quoted and the split forms in .mjs and .js', () => {
+  const forms = {
+    single: "const f = 'deps/skills.json';",
+    double: 'const f = "deps/skills.json";',
+    split: "const f = join(ROOT, 'deps', 'skills.json');",
+    splitDouble: 'const f = path.join(root, "deps", "skills.json");'
+  };
+  for (const [name, line] of Object.entries(forms)) {
+    for (const where of [`scripts/reader-${name}.mjs`, `scripts/reader-${name}.js`]) {
+      const root = manifestRoot(baseline());
+      write(root, where, `${line}\n`);
+      assert.deepEqual(catalogErrors(root), [`ERROR ${where}:1: live cite of the old inventory file`], where);
+    }
+  }
+  const root = manifestRoot(baseline());
+  write(root, 'scripts/ok.mjs', "// retired: 'deps/skills.json'\nconst f = 'deps/other.json';\n");
+  write(root, 'skills/x/ref.md', "Mentions 'deps/skills.json' in prose.\n");
+  assert.deepEqual(catalogErrors(root), []);
 });
 
 test('Role count in plugin.json, README, roles/README.md and spec must equal agents/*.md', () => {
