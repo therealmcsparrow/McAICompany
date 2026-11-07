@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { main as install, installExec, retiredSkills } from './install-skills.mjs';
 import { check } from './check.mjs';
@@ -405,29 +406,43 @@ test('AC18: status starts no child, parses and runs no command text, and reads n
   process.env.PATH = `${bin}${path.delimiter}${was}`;
   t.after(() => { process.env.PATH = was; });
   const home = tmp(t, 'home');
-  const root = tmp(t, 'root');
-  const outside = tmp(t, 'outside');
-  fs.writeFileSync(path.join(outside, 'SKILL.md'), 'x');
-  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
-  let linked = true;
-  try { fs.symlinkSync(outside, path.join(root, '.claude', 'skills', NAME), 'junction'); } catch { linked = false; }
   const cmd = { skillname: 'cmd-skill', skillcategory: 'engineering', skillinstaller: `npx -y evil@1.0.0 add && touch ${marker}`, license: 'MIT' };
-  const outsideHash = boundedFolderHash(outside);
-  const linkPath = path.join(root, '.claude', 'skills', NAME);
-  const through = [outside, fs.realpathSync(outside), linkPath].map((p) => path.resolve(p));
+  // Each fixture links a different segment of the path to the skill folder.
+  const fixtures = {
+    'skill folder': (root) => ({ link: path.join(root, '.claude', 'skills', NAME), parent: path.join(root, '.claude', 'skills') }),
+    '.claude/skills': (root) => ({ link: path.join(root, '.claude', 'skills'), parent: path.join(root, '.claude') }),
+    '.claude': (root) => ({ link: path.join(root, '.claude'), parent: root }),
+  };
   const opened = [];
   const record = (orig) => function spy(file, ...rest) {
-    if (typeof file === 'string' || file instanceof URL) opened.push(path.resolve(String(file)));
+    const name = file instanceof URL ? fileURLToPath(file) : Buffer.isBuffer(file) ? file.toString() : file;
+    if (typeof name === 'string') opened.push(path.resolve(name));
     return orig.call(this, file, ...rest);
   };
   t.mock.method(fs, 'readFileSync', record(fs.readFileSync));
   t.mock.method(fs, 'openSync', record(fs.openSync));
-  skillStatus(cmd, { home, productRoot: root });
-  const st = skillStatus(entry({ hash: outsideHash }), { home, productRoot: root, scope: 'project' });
-  if (linked) {
-    assert.notEqual(st.status, 'installed');
-    const hit = opened.filter((p) => through.some((d) => p === d || p.startsWith(d + path.sep)));
-    assert.deepEqual(hit, [], 'a file under the link target or the link was read');
+  for (const [label, make] of Object.entries(fixtures)) {
+    const root = tmp(t, 'root');
+    const base = tmp(t, 'outside');
+    // The target holds the folder the link leads to, at the same depth the linked segment has under the root.
+    const depth = label === '.claude' ? ['skills', NAME] : label === '.claude/skills' ? [NAME] : [];
+    const outside = path.join(base, ...depth);
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, 'SKILL.md'), 'x');
+    const f = make(root);
+    fs.mkdirSync(f.parent, { recursive: true });
+    const target = label === 'skill folder' ? outside : label === '.claude/skills' ? path.dirname(outside) : path.dirname(path.dirname(outside));
+    let linked = true;
+    try { fs.symlinkSync(target, f.link, 'junction'); } catch { linked = false; }
+    if (!linked) { t.diagnostic(`no link could be made for ${label}`); continue; }
+    const hash = boundedFolderHash(outside);
+    const through = [target, fs.realpathSync(target), f.link].map((x) => path.resolve(x));
+    opened.length = 0;
+    skillStatus(cmd, { home, productRoot: root });
+    const st = skillStatus(entry({ hash }), { home, productRoot: root, scope: 'project' });
+    assert.notEqual(st.status, 'installed', label);
+    const hit = opened.filter((x) => through.some((d) => x === d || x.startsWith(d + path.sep)));
+    assert.deepEqual(hit, [], `a file under the link target or the link was read, link at ${label}`);
   }
   assert.equal(fs.existsSync(marker), false);
 });

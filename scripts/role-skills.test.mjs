@@ -584,3 +584,35 @@ test('a plugin name of the longest allowed length previews and applies', (t) => 
   assert.match(r.text, /line 4: migrated/);
   assert.equal(entryIn(p, name).skillplugin, plugin);
 });
+
+const stale2 = (role, name) => ({ aico_settings: { version: 1, roles: { [role]: { skills: [{ name }] } } } });
+const line = (name) => `- name: ${name}; source: octo/${name}; license: MIT; vetted: 2026-02-01; commit: ${A}; why: w; approved: 2026-02-02`;
+
+test('a stale stored name that a line adds for the same Role does not stop the migrate', (t) => {
+  const p = project(t, { design: [line('xx-skill'), line('yy-skill')], skills: [], settings: stale2('ui-ux-designer', 'xx-skill') });
+  const both = run(p, ['migrate', '--apply', '--line', '4:xx-skill=ui-ux-designer', '--line', '5:yy-skill=ui-ux-designer']);
+  assert.equal(both.code, 0, both.text);
+  assert.match(both.text, /line 4: migrated/);
+  assert.match(both.text, /line 5: migrated/);
+});
+
+test('a stale stored name on another Role still refuses before any write', (t) => {
+  const p = project(t, { design: [line('xx-skill')], skills: [`- area: stack; name: zz-skill; source: octo/zz; license: MIT; vetted: 2026-02-03; commit: ${B}; why: w; approved: 2026-02-04`], settings: stale2('backend-engineer', 'xx-skill') });
+  const r = run(p, ['migrate', '--apply', '--line', '4:xx-skill=ui-ux-designer', '--line', '7:zz-skill=backend-engineer', '--category', '7:zz-skill=engineering']);
+  assert.equal(r.code, 1, r.text);
+  assert.match(r.text, /done so far: nothing; project.md is unchanged/);
+  assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'archive')), false);
+  assert.equal(fs.existsSync(userFile(p)), false);
+  assert.equal(read(p, 'project.md'), p.md);
+});
+
+test('record of a name that is stored stale for the Role writes the entry and dates the selection today', (t) => {
+  const p = project(t, { settings: stale2('backend-engineer', 'pick-one') });
+  const out = [];
+  const pick = { skillname: 'pick-one', skillcategory: 'engineering', skillrepo: 'octo/pick', skillcommit: A };
+  const code = main(['record'], { cwd: p.cwd, home: p.home, today: TODAY, stdin: `${JSON.stringify({ entry: pick, license: 'MIT', roles: ['backend-engineer'] })}\n`, log: (s) => out.push(s) });
+  assert.equal(code, 0, out.join('|'));
+  assert.equal(out[0], 'entry added: pick-one');
+  assert.deepEqual(JSON.parse(read(p, 'settings.json')).aico_settings.roles['backend-engineer'].skills, [{ name: 'pick-one', approved: TODAY }]);
+  assert.equal(JSON.parse(fs.readFileSync(userFile(p), 'utf8')).entries.length, 1);
+});

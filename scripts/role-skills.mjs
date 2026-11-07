@@ -420,8 +420,8 @@ function execute(s, opts, chosen, moves, out) {
   const stopped = (e) => { out.push(`ERROR ${e.message}`, `done so far: ${note.join(', ') || 'nothing'}; project.md is unchanged`); return { ok: false, changed: note.length > 0, lines: out }; };
   try {
     // Names that become entries only after the catalog write cannot be checked yet; the write checks them again.
-    const later = new Set(done.filter((d) => d.item.res.entry).map((d) => d.item.res.target.skillname));
-    checkAdds(mergedLayer(s.project.data, adds, (name) => later.has(name)), adds, opts);
+    const later = new Set(done.filter((d) => d.item.res.entry).flatMap((d) => d.roles.map((r) => `${d.item.res.target.skillname} ${r}`)));
+    checkAdds(mergedLayer(s.project.data, adds, (name, role) => later.has(`${name} ${role}`)), adds, opts);
   } catch (e) {
     return stopped(e instanceof Stop ? e : new Stop('cannot write'));
   }
@@ -460,16 +460,16 @@ function execute(s, opts, chosen, moves, out) {
   return { ok: true, changed: true, lines: out };
 }
 
-// The project layer with the added selections, as a copy. `skip` leaves out names not to add.
+// The project layer with the added selections, as a copy. `skip(name, role)` leaves out a name for that Role, from both the stored list and the added ones.
 function mergedLayer(data, adds, skip = () => false) {
   const layer = structuredClone(isPlain(data[KEY]) ? data[KEY] : { version: 1 });
   if (!isPlain(layer.roles)) layer.roles = {};
   for (const [role, list] of adds) {
     if (!isPlain(layer.roles[role])) layer.roles[role] = {};
     const have = Array.isArray(layer.roles[role].skills) ? layer.roles[role].skills : [];
-    const next = have.slice();
+    const next = have.filter((x) => !(isPlain(x) && skip(x.name, role)));
     for (const item of list) {
-      if (skip(item.name)) continue;
+      if (skip(item.name, role)) continue;
       const at = next.findIndex((x) => isPlain(x) && x.name === item.name);
       if (at === -1) next.push(item);
       else next[at] = { ...next[at], approved: item.approved };
