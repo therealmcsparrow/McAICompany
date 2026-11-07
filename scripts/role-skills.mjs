@@ -6,7 +6,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
-import { readCatalog, readBaseline, eligibleRoles, addUserEntry, validateEntry, userCatalogPath } from './skill-catalog.mjs';
+import { readCatalog, readBaseline, eligibleRoles, addUserEntry, validateEntry, userCatalogPath, licenseAsTyped } from './skill-catalog.mjs';
 import { checkLayers, readLayer, resolveSettings, loadModelFloor, layerFileProblem } from './settings.mjs';
 
 const MAX_FILE_BYTES = 256 * 1024;
@@ -574,16 +574,6 @@ function readInput(ctx) {
   if (!isPlain(data)) throw new Stop('input is not a JSON object');
   return data;
 }
-
-// Mirrors: the license check of the skill catalog (a text of at most 64 characters with no control, format,
-// line or paragraph separator or invisible character). Only plain space characters (Zs) are cut at the edges;
-// any other invisible character, at the edge or inside, refuses the value instead of being trimmed away.
-const LICENSE_EDGE_RE = /^\p{Zs}+|\p{Zs}+$/gu;
-const LICENSE_HIDDEN_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u180e\u2065\u{e0000}-\u{e007f}]/u;
-const licenseAsTyped = (v) => {
-  const text = v.replace(LICENSE_EDGE_RE, '');
-  return LICENSE_HIDDEN_RE.test(text) ? null : text;
-};
 
 // Checks one field alone by building an entry around it from valid stand-ins.
 function checkField(field, value) {
