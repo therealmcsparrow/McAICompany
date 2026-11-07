@@ -533,8 +533,9 @@ export function itemsProven(rootDir, name, hash, { place } = {}) {
 }
 
 // Compares where the link physically leads, not its text, so no spelling of the path needs reasoning about.
+// Both results are the on-disk spelling, so they compare exactly: a case fold would equate names NTFS keeps apart.
 function linkLeadsTo(link, target) {
-  try { return sameFolder(fs.realpathSync.native(link), fs.realpathSync.native(target)); } catch { return false; }
+  try { return fs.realpathSync.native(link) === fs.realpathSync.native(target); } catch { return false; }
 }
 
 // ---------- writes ----------

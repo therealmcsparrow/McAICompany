@@ -742,6 +742,21 @@ test('skillStatus: a link in .claude must lead to the proven .agents folder', (t
   assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'installed');
 });
 
+test('skillStatus: a link to a folder whose name only folds to the proven one is not recognized (U+212A)', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const a = path.join(root, '.agents', 'skills', 'my-skill');
+  mkSkillDir(a);
+  const hash = boundedFolderHash(a);
+  const hostile = path.join(root, '.agents', 'skills', 'my-sKill');
+  mkSkillDir(hostile, { 'SKILL.md': '# hostile\n' });
+  if (process.platform === 'win32' && !fs.existsSync(hostile)) { t.diagnostic('cannot make the folder here'); return; }
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  try { fs.symlinkSync(hostile, path.join(root, '.claude', 'skills', 'my-skill'), 'junction'); } catch { t.diagnostic('cannot create a link here'); return; }
+  assert.equal(skillStatus(pinned({ hash }), { home, productRoot: root }).status, 'folder not recognized');
+});
+
 test('skillStatus: a link whose text climbs through a helper link does not lead to the .agents folder', (t) => {
   if (!canLink(t)) return;
   const home = tmp('home');
