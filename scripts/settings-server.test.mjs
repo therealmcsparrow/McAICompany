@@ -1729,3 +1729,90 @@ test('a sixth skill is refused by the server with the field named and nothing wr
   assert.match(html, /<button role="tab" id="tab-skills" aria-controls="panel-skills"/);
   assert.match(html, /<section role="tabpanel" id="panel-skills"/);
 });
+
+test('a skill selected at user level is read from the user home only, so a planted product folder does not count', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(ok.status, 200);
+  fs.mkdirSync(path.join(s.cwd, '.claude', 'skills', 'qa-helper'), { recursive: true });
+  fs.writeFileSync(path.join(s.cwd, '.claude', 'skills', 'qa-helper', 'SKILL.md'), '---\nname: qa-helper\n---\n');
+  const row = (await state()).catalog.entries.find((e) => e.name === 'qa-helper');
+  assert.equal(row.status, 'missing');
+  assert.notEqual(row.place, 'project');
+  fs.mkdirSync(path.join(s.home, '.claude', 'skills', 'qa-helper'), { recursive: true });
+  fs.writeFileSync(path.join(s.home, '.claude', 'skills', 'qa-helper', 'SKILL.md'), '---\nname: qa-helper\n---\n');
+  const home = (await state()).catalog.entries.find((e) => e.name === 'qa-helper');
+  assert.notEqual(home.status, 'missing');
+});
+
+test('a user-only save is not refused for a stale or protected list in the stored project layer, and the mirror holds', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }] }, security: { skills: [{ name: 'security-review' }] } } } }));
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(ok.status, 200);
+  fs.unlinkSync(s.projectFile);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }] } } } }));
+  const again = await state();
+  const mirror = await post('/api/save', { revision: again.resolved.revision, project: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(mirror.status, 200);
+  const bad = await post('/api/save', { revision: (await state()).resolved.revision, project: { version: 1, roles: { security: { skills: [] } } } });
+  assert.equal(bad.status, 400);
+});
+
+test('catalog rows carry the finished vetted text and the repo for a repo entry', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [
+    QA_PICK,
+    { ...QA_PICK, skillname: 'qa-scanned', skillrepo: 'someone/qa-scanned', hash: 'sha256:' + 'c'.repeat(64) },
+    { skillname: 'cmd-tool', skillcategory: 'quality', skillinstaller: 'npx tool@1.2.3', license: 'ISC' }
+  ]);
+  const { state } = await start(t, s);
+  const byName = Object.fromEntries((await state()).catalog.entries.map((e) => [e.name, e]));
+  assert.equal(byName['qa-helper'].skillrepo, 'someone/qa-helper');
+  assert.equal(byName['qa-helper'].vetted_text, 'vetted 2026-01-02, from the old list, not scanned here');
+  assert.equal(byName['cmd-tool'].vetted_text, 'not vetted');
+  assert.equal(byName['cmd-tool'].skillrepo, undefined);
+  assert.equal(byName['find-skills'].skillrepo, 'vercel-labs/skills');
+  assert.match(byName['find-skills'].vetted_text, /^(not vetted|vetted \d{4}-\d{2}-\d{2})/);
+});
+
+test('save refuses a changed user skills list while the settings folder is moved, with nothing written', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  const old = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = s.home;
+  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } }, gates: { ship: 'ask' } } });
+  assert.equal(res.status, 400);
+  const text = (await res.json()).refused.join(' ');
+  assert.match(text, /roles\.qa\.skills/);
+  assert.equal(text.includes('qa-helper'), false);
+  assert.equal(fs.existsSync(path.join(s.home, 'config.json')), false);
+});
+
+test('save takes stored user names back unchanged while the user level is unread, dates kept', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  const old = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = s.home;
+  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  const stored = [{ name: 'ghost-skill', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-02-02' }];
+  const file = path.join(s.home, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const user = { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }, { name: 'qa-helper', approved: '2030-01-01' }] } }, gates: { ship: 'ask' } };
+  const res = await post('/api/save', { revision: before.resolved.revision, user });
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa.skills, stored);
+});

@@ -2223,3 +2223,65 @@ test('a user save may set a protected Role list; a project save for an ordinary 
   assert.equal(skillsOf(s, 'security').skills[0].approved, todayUtc());
   assert.equal(skillsOf(s).source.skills, 'project');
 });
+
+test('checkLayers with levels checks skills only for the named levels', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  const stale = { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }] }, security: { skills: [{ name: 'security-review' }] } } };
+  assert.deepEqual(checkLayers({ version: 1 }, stale, { ...s.ctx, levels: ['user'] }), []);
+  assert.deepEqual(checkLayers(stale, { version: 1 }, { ...s.ctx, levels: ['project'] }), []);
+  assert.match(checkLayers({ version: 1 }, stale, { ...s.ctx, levels: ['project'] }).join(' '), /project roles\.qa\.skills\[0\]\.name/);
+  assert.match(checkLayers(stale, { version: 1 }, s.ctx).join(' '), /user roles\.qa\.skills\[0\]\.name/);
+});
+
+test('dropping a stale name keeps the dates of the names that stay', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  s.user({ roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-01-01' }] } } });
+  writeLayer('user', { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } }, s.ctx);
+  const stored = JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings;
+  assert.deepEqual(stored.roles.qa.skills, [{ name: 'qa-helper', approved: '2025-01-01' }]);
+});
+
+test('a changed user skills list is refused while the settings folder is elsewhere; an unchanged one saves', (t) => {
+  const s = sandbox(t);
+  const old = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = s.home;
+  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  const ctx = { cwd: s.cwd, pluginRoot: s.pluginRoot };
+  assert.throws(() => writeLayer('user', { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } }, ctx), (e) => e instanceof Refusal && /roles\.qa\.skills/.test(e.message) && !e.message.includes('qa-helper'));
+  assert.equal(fs.existsSync(s.config), false);
+  writeLayer('user', { version: 1, roles: { architect: { name: 'Zed' } } }, ctx);
+  assert.equal(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.roles.architect.name, 'Zed');
+});
+
+function moved(s, t) {
+  const old = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = s.home;
+  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  return { cwd: s.cwd, pluginRoot: s.pluginRoot };
+}
+
+test('checkLayers refuses a changed user skills list while the settings folder is elsewhere, naming the field only', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  const ctx = moved(s, t);
+  const reasons = checkLayers({ version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } }, { version: 1 }, { ...ctx, levels: ['user'] });
+  assert.equal(reasons.length, 1);
+  assert.ok(/roles\.qa\.skills/.test(reasons[0]) && !reasons[0].includes('qa-helper'));
+  assert.deepEqual(checkLayers({ version: 1 }, { version: 1 }, { ...ctx, levels: ['user'] }), []);
+});
+
+test('an unread user layer takes its stored names back as they are and keeps their dates', (t) => {
+  const s = sandbox(t);
+  withCatalog(s);
+  const ctx = moved(s, t);
+  const stored = [{ name: 'ghost-skill', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-02-02' }];
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const same = { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }, { name: 'qa-helper', approved: '2030-01-01' }] } } };
+  assert.deepEqual(checkLayers(same, { version: 1 }, { ...ctx, levels: ['user'] }), []);
+  writeLayer('user', same, ctx);
+  assert.deepEqual(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.roles.qa.skills, stored);
+  const added = { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }, { name: 'qa-helper' }, { name: 'qa-second' }] } } };
+  assert.equal(checkLayers(added, { version: 1 }, { ...ctx, levels: ['user'] }).length, 1);
+});
