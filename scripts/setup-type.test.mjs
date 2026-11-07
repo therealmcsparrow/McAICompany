@@ -93,13 +93,13 @@ test('AC13 and AC14 the search uses skill-picks.md unchanged and adds no fetch p
   assert.match(skill, /skill_search\.hints/);
   assert.match(skill, /skills\/lead\/references\/skill-picks\.md/);
   assert.match(skill, /at most 5/);
-  for (const word of ['vet', 'approve form', 'check-install', 'Install / Skip']) assert.ok(skill.includes(word), word);
+  for (const word of ['vet', 'approve form', 'role-skills record', 'Install / Skip']) assert.ok(skill.includes(word), word);
   const section = skill.slice(skill.indexOf('## Company type'));
   assert.doesNotMatch(section, /WebFetch|curl|wget|git clone|npx|skills add|skills find/);
   const picks = read('skills/lead/references/skill-picks.md');
   assert.match(picks, /company-type/);
-  assert.match(picks, /`bound: false`/);
-  assert.match(picks, /check-install/);
+  assert.match(picks, /`hash differs`/);
+  assert.match(picks, /install-skills --selected/);
 });
 
 test('the skill never answers a form or removes a skill by itself', () => {

@@ -181,7 +181,8 @@ test('AC5 skill-picks: approve form then install form; the stop form is never au
   const t = read(PICKS);
   order(t, ['**Approve form** (never auto', '**Install', 'Post-install scan']);
   assert.match(t, /Stop the run \(Recommended\) \/ Keep it and go on/);
-  assert.match(t, /`blocking: true`/);
+  assert.match(t, /`scan failed after install`/);
+  assert.doesNotMatch(t, /skillspector scan/, 'the installer runs the scan; the Lead runs none');
   assert.match(t, /never auto, whatever the Gate settings/);
   assert.match(t, /never answers the approve form or the stop form/);
 });
@@ -189,7 +190,8 @@ test('AC14 skill-picks: the Lead suggests the removal command and runs none', ()
   const t = read(PICKS);
   assert.match(t, /run no removal command/);
   assert.match(t, /run any removal command/);
-  assert.match(t, /npx -y skills@1\.7\.4 remove <name> -a claude-code/);
+  assert.match(t, /npx -y skills@1\.7\.4 remove <name> -g -a claude-code/);
+  assert.match(t, /project-scope skill is removed by deleting `\.agents\/skills\/<name>` and `\.claude\/skills\/<name>` by hand, with no command/);
 });
 
 // ---------- Playbook scope (--all, the scope form) ----------
@@ -250,19 +252,35 @@ const postInstall = () => {
   assert.ok(i >= 0 && j > i, 'sections 4 and 5 exist');
   return t.slice(i, j);
 };
-test('skill-picks post-install: check-install runs with the name and hash from vet, before the scan', () => {
+test('skill-picks post-install: the installer scans, the Lead runs no scan or check-install', () => {
   const t = postInstall();
-  order(t, ['run.mjs" skill-picks check-install --name \'<name>\' --hash <hash>', 'run.mjs" skillspector scan --scope project --skill \'<name>\'']);
-  assert.match(t, /`picks\[\]\.name`/);
-  assert.match(t, /`picks\[\]\.hash`/);
-  assert.match(t, /from the `vet` output only/);
+  assert.ok(!t.includes('check-install'), 'no check-install step');
+  assert.ok(!t.includes('skillspector scan'), 'no scan by the Lead');
+  assert.match(t, /you run no scan here/);
+  assert.match(t, /`install-skills --selected` output/);
 });
 test('skill-picks post-install: every other outcome stops the run', () => {
   const t = postInstall();
-  assert.match(t, /Go on only when `check-install` printed `bound: true`/);
-  for (const stop of ['`bound: false`', 'refused: ', 'a non-zero exit', 'output that is not one JSON document', 'an empty `results`']) {
+  assert.match(t, /Go on only when the skill's line is `installed <name> \(<scope>` with none of `FAILED`, `hash differs`, `scan failed` or `missing` for that skill/);
+  for (const stop of ['`scan failed after install`', 'no `installed` line for that skill']) {
     assert.ok(t.includes(stop), `stop case missing: ${stop}`);
   }
+  assert.ok(!t.includes('a non-zero exit'), 'the exit code decides nothing');
+  assert.ok(!t.includes('refused: '), 'no refused line stops a pick that installed');
+  assert.match(t, /That skill's own lines decide, not the exit/);
+  assert.match(t, /anything else: the line, or "the check gave no usable result"/);
+  assert.match(t, /for a line saying `The folder stays`/);
+  assert.match(t, /other `hash differs` lines: the line alone/);
+  assert.match(t, /by hand, with no command, under the product root/);
+});
+test('skill-picks post-install: a clean pick goes on while a failed pick of the same run stops', () => {
+  const t = postInstall();
+  const go = t.slice(t.indexOf('Go on only when'), t.indexOf('Every other outcome'));
+  assert.match(go, /`installed <name> \(<scope>`/);
+  assert.match(go, /That skill's own lines decide, not the exit/);
+  assert.match(go, /report that line/);
+  assert.ok(!/exit is 0|exit 0/.test(go), 'a clean pick never waits on the exit');
+  assert.match(t, /no `installed` line for that skill/);
   assert.match(t, /\*\*stops the run\*\*/);
   assert.match(t, /never auto, whatever the Gate settings/);
 });

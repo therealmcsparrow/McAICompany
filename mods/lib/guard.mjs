@@ -9,7 +9,7 @@ export const AGENT_ID = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 const MAX_OUTPUT_TEXT = 65536;
 const MAX_OUTPUT_LINE = 300;
 // The folder part is cut at a slash and checked by isWorkFolder; only the shape of the rest is read here.
-const OUTPUT_LINE = /^Output: \.company\/work\/([^/]{1,120})\/(\d{2})-([a-z][a-z0-9-]{0,40})\.md$/;
+const OUTPUT_LINE = /^Output: \.company\/work\/([^/]{1,120})\/(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
 const MAX_DEPTH = 32;
 const DANGEROUS = new Set(['__proto__', 'constructor', 'prototype']);
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g;
@@ -194,11 +194,11 @@ const runView = obj({
   round: or(int(0, 99), oneOf(['unknown'])),
   tier,
   steps: arr(obj({
-    step: pattern(/^\d{2}$/),
+    step: pattern(/^\d{2,3}$/),
     role: pattern(ROLE_KEY),
     status: oneOf(['done', 'blocked', 'needs-ceo', 'handover', 'unknown']),
     round: or(int(0, 99), oneOf(['unknown'])),
-    file: pattern(/^\d{2}-[a-z0-9-]{1,80}\.md$/),
+    file: pattern(/^\d{2,3}-[a-z0-9-]{1,80}\.md$/),
     mtime: stamp
   }), 200),
   warnings: arr(str(80), 64, true)

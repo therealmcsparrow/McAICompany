@@ -359,8 +359,8 @@ describe('one copy of the name rule', () => {
   });
 
   test('the contracts state the new versions and the quoted gate form', () => {
-    assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.6$/m);
-    assert.match(read('docs/contracts/reflect.md'), /^# Contract: reflect v1\.2$/m);
+    assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.7$/m);
+    assert.match(read('docs/contracts/reflect.md'), /^# Contract: reflect v1\.3$/m);
     assert.match(read('docs/contracts/plugin-root.md'), /^# Contract: plugin-root v1\.1$/m);
     assert.match(read('docs/contracts/aico-mods.md'), /gate '<name>' plan passed/);
     assert.match(read('docs/contracts/plugin-root.md'), /gate '<name>' plan passed/);

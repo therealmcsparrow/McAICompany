@@ -1242,7 +1242,12 @@ const LOCK = {
     'node_modules/gitdep': { version: '2.0.0', resolved: 'git+ssh://git@internal.example.invalid/team/gitdep.git#abc', license: 'MIT' }
   }
 };
-const SKILLS = { core: [{ name: 'find-skills', source: 'vercel-labs/skills' }] };
+const SKILLS = {
+  schema: 1,
+  categories: { engineering: ['architect'], design: ['ui-ux-designer'], security: ['security'], quality: ['qa'], product: ['product-manager'], research: ['skill-researcher'], content: ['writer'] },
+  groups: { core: ['find-skills'] },
+  entries: [{ skillname: 'find-skills', skillcategory: 'research', skillrepo: 'vercel-labs/skills' }]
+};
 const PLUGIN_JSON = (extra = {}) => `${JSON.stringify({ name: 'aico', version: '0.10.0', description: 'x', homepage: 'https://user:pw-secret@example.invalid/aico', repository: 'mailto:owner@example.invalid', ...extra }, null, 2)}\n`;
 const CHANGELOG = '# Changelog\n\nAll notable changes.\n\n## [Unreleased]\n\n### Added\n- A new thing.\n\n## [0.10.0] - 2026-10-26\n\n### Added\n- Old thing.\n';
 
@@ -1251,7 +1256,7 @@ function releaseRepo(sb) {
   r.write('.claude-plugin/plugin.json', PLUGIN_JSON());
   r.write('documentation/README.md', '# Docs\n\n**Current: 0.10.0** (32 Role agents).\n');
   r.write('CHANGELOG.md', CHANGELOG);
-  r.write('deps/skills.json', JSON.stringify(SKILLS));
+  r.write('deps/3rdpartyskills.json', JSON.stringify(SKILLS));
   r.write('tools/claude-cli/package-lock.json', JSON.stringify(LOCK));
   r.write('scripts/check.mjs', "console.log('check ok');\n");
   r.write('scripts/ok.mjs', "console.log('tests ok');\n");
@@ -1520,7 +1525,7 @@ describe('AC25 no dispatch carries a Name: line; names appear only to the CEO', 
 
   test('the dispatch Contract is v4.0 and says the Name: line is removed and ignored when present', () => {
     const text = read('docs', 'contracts', 'dispatch-prompt.md');
-    assert.match(text.split('\n')[0], /^# Contract: dispatch-prompt v4\.\d$/);
+    assert.match(text.split('\n')[0], /^# Contract: dispatch-prompt v5\.\d$/);
     assert.match(text, /v4\.0 is \*\*breaking\*\*[^\n]*the `Name:` line is removed from every prompt and order/);
     assert.match(text, /`Name:` present[^\n]*the Role ignores the line and uses its Role id/);
     const pipeline = read('skills', 'pipeline', 'SKILL.md');
@@ -1656,7 +1661,7 @@ describe('AC29 a display name in .company or a dispatch prompt fails the drift t
     const root = path.join(sb.dir, 'drift-tree');
     const keep = (src) => !/[\\/](node_modules|\.git)([\\/]|$)/.test(src);
     fs.cpSync(SCRIPTS, path.join(root, 'scripts'), { recursive: true, filter: (src) => keep(src) && !/qa-v020|[\\/]fixtures[\\/]/.test(src) });
-    for (const d of ['skills', 'agents', 'company']) fs.cpSync(path.join(REPO, d), path.join(root, d), { recursive: true });
+    for (const d of ['skills', 'agents', 'company', 'mods']) fs.cpSync(path.join(REPO, d), path.join(root, d), { recursive: true, filter: keep });
     fs.cpSync(path.join(REPO, 'docs', 'contracts'), path.join(root, 'docs', 'contracts'), { recursive: true });
     fs.cpSync(path.join(REPO, 'tests', 'fixtures'), path.join(root, 'tests', 'fixtures'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'package.json'), path.join(root, 'package.json'));

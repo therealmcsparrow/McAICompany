@@ -8,7 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { retiredSkills } from './install-skills.mjs';
+import { manifestFromBaseline, retiredSkills } from './install-skills.mjs';
+import { readBaseline } from './skill-catalog.mjs';
 import { RULES } from './slop-catalog.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,7 +36,7 @@ before(() => {
 });
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const manifest = () => JSON.parse(read('deps/skills.json'));
+const manifest = () => manifestFromBaseline(readBaseline());
 const retired = () => retiredSkills(manifest(), path.join(root, 'releases'));
 const node = (script, args, cwd) => spawnSync(process.execPath, [script, ...args], { cwd, env, encoding: 'utf8' });
 const fixtureDir = (name) => { const d = path.join(tmp, name); fs.mkdirSync(d, { recursive: true }); return d; };

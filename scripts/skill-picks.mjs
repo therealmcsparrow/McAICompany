@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-// Lints the `## Recommended set` of a skill-researcher file and, with `vet`, scans each pick itself.
-// Usage: node skill-picks.mjs lint .company/work/<work folder>/<NN>-skill-researcher.md   (cwd = product repo)
+// Lints the `## Recommended set` of a skill or design researcher file and, with `vet`, scans each pick itself.
+// Usage: node skill-picks.mjs lint .company/work/<work folder>/<NN>-skill-researcher.md or <NN>-design-researcher.md   (cwd = product repo)
 //        node skill-picks.mjs vet  .company/work/<work folder>/<NN>-skill-researcher.md --json
 //        node skill-picks.mjs check-install --name <skill> --hash <sha-256 hex> --json
 // Contract: docs/contracts/skill-recommendation.md. Offending text is never echoed; refusals go to stdout.
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
+import { manifestFromBaseline, parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
 import { NAME_RE, settingsMode, vetCandidates } from './skillspector.mjs';
+import { approvable, readBaseline, validateEntry } from './skill-catalog.mjs';
 import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const HANDOFF_PREFIX = '.company/work/';
-const HANDOFF_FILE_RE = /^\d{2}-skill-researcher\.md$/;
+const HANDOFF_FILE_RE = /^\d{2}-(?:skill|design)-researcher\.md$/;
 const MAX_HANDOFF_ARG = 300;
 const AREA_RE = /^(stack|product-type|company-type|design)$/;
 const LINE_RE = /^- area: (stack|product-type|company-type|design); name: ([^;]+); source: ([^;]+); license: ([^;]+); vetted: ([^;]+); commit: ([^;]+); why: ([^;]+); approved: pending$/;
@@ -25,6 +26,7 @@ const MAX_LOCK_BYTES = 1024 * 1024;
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_LINE_CHARS = 500;
 const MAX_ENTRIES = 5;
+const DEFAULT_CATEGORY = Object.freeze({ design: 'design', stack: 'engineering', 'product-type': 'engineering', 'company-type': 'product' });
 
 export class Refused extends Error {
   constructor(message, code = 2) { super(message); this.exitCode = code; }
@@ -33,7 +35,7 @@ export class Refused extends Error {
 const pad = (n) => String(n).padStart(2, '0');
 const localDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-// The work folder name of `.company/work/<work folder>/<NN>-skill-researcher.md`, or null.
+// The work folder name of `.company/work/<work folder>/<NN>-skill-researcher.md` or `<NN>-design-researcher.md`, or null.
 function handoffFolder(arg) {
   if (typeof arg !== 'string' || arg.length > MAX_HANDOFF_ARG || !arg.startsWith(HANDOFF_PREFIX)) return null;
   const rest = arg.slice(HANDOFF_PREFIX.length);
@@ -45,7 +47,7 @@ function handoffFolder(arg) {
 
 function readHandoff(arg, cwd) {
   const folder = handoffFolder(arg);
-  if (folder === null) throw new Refused('handoff path must be .company/work/<work folder>/<NN>-skill-researcher.md');
+  if (folder === null) throw new Refused('handoff path must be .company/work/<work folder>/<NN>-skill-researcher.md or <NN>-design-researcher.md');
   // Exact letter case of every segment; a missing path keeps `handoff not found` below.
   try { exactWorkPath({ fs: { readdirSync }, path: { join } }, cwd, [folder, arg.slice(`${HANDOFF_PREFIX}${folder}/`.length)]); } catch (e) { if (e instanceof WorkFolderRefusal) throw new Refused(e.message); throw e; }
   // No link anywhere on the way, then a regular file within the size cap.
@@ -69,8 +71,9 @@ function frontmatterArea(lines) {
   return null;
 }
 
+// The baseline's group map. An unreadable baseline stops the run, so no command line is judged against an empty list.
 function loadManifest() {
-  try { return JSON.parse(readFileSync(join(ROOT, 'deps', 'skills.json'), 'utf8')); } catch { return {}; }
+  try { return manifestFromBaseline(readBaseline()); } catch { throw new Refused('baseline catalog unreadable'); }
 }
 
 const verdict = (n, ok, field, reason) => {
@@ -95,7 +98,7 @@ function checkLine(text, n, area, today, manifest) {
   if (repo ? !COMMIT_RE.test(commit) : commit !== '-') return { field: 'commit', reason: 'invalid' };
   const approved = localDay(today);
   const head = `name: ${name}; source: ${source}; license: ${license}; vetted: ${vetted}`;
-  // The record is built here and then parsed by the same parsers the installer uses.
+  // The line is rebuilt in the shape the section parsers take and checked by them, one allow-list for both.
   const record = area === 'design'
     ? `- ${head}; ${repo ? `commit: ${commit}; ` : ''}why: ${why}; approved: ${approved}`
     : `- area: ${area}; ${head}; commit: ${commit}; why: ${why}; approved: ${approved}`;
@@ -108,8 +111,27 @@ function checkLine(text, n, area, today, manifest) {
     const f = /^(?:design skill|skills) line \d+: ([a-z]+) ([a-z ]+)$/.exec(String(e?.message));
     return { field: f ? f[1] : 'line', reason: f ? f[2] : 'malformed' };
   }
+  const kind = plugin ? 'plugin' : command ? 'command' : 'repo';
+  // Built field by field from the parsed values; nothing is spread.
+  const raw = Object.create(null);
+  raw.skillname = name;
+  raw.skillcategory = DEFAULT_CATEGORY[area];
+  if (plugin) raw.skillplugin = source.slice('plugin '.length);
+  else if (command) {
+    const installer = source.slice(1, -1);
+    // Only a command the plugin's own baseline holds, byte for byte. A user entry is not repo-owned.
+    let known;
+    try { known = readBaseline().entries.some((e) => e.skillname === name && e.skillinstaller === installer); } catch { throw new Refused('baseline catalog unreadable'); }
+    if (!known) return { field: 'source', reason: 'command not in baseline' };
+    raw.skillinstaller = installer;
+  } else {
+    raw.skillrepo = source;
+    raw.skillcommit = commit;
+  }
+  const checked = validateEntry(raw, 'baseline');
+  if (!checked.ok) return { field: 'source', reason: 'invalid' };
   const p = Object.create(null);
-  p.n = n; p.kind = plugin ? 'plugin' : command ? 'command' : 'repo'; p.name = name; p.source = source; p.commit = commit; p.record = record;
+  p.n = n; p.kind = kind; p.name = name; p.source = source; p.commit = commit; p.entry = checked.entry; p.stated_license = license;
   return { pick: p };
 }
 
@@ -136,16 +158,13 @@ export function lint(arg, today = new Date(), cwd = process.cwd()) {
 }
 
 // ---------- vet ----------
-const approvableScan = (s) => s.verdict === 'pass'
-  || (s.verdict === 'findings' && s.blocking === false && s.counts.critical === 0 && s.counts.high === 0);
-
 // A repo pick is approvable only with an approvable scan and the hash of the scanned folder.
 function judge(scan, refused, hash) {
   const out = { scan: scan ?? null, scan_refused: refused ?? null, hash: typeof hash === 'string' && HASH_RE.test(hash) ? hash : null, approvable: false, reject_code: null };
   if (scan) {
-    if (!approvableScan(scan)) out.reject_code = scan.verdict === 'error' ? 'scan-error' : 'scan-findings';
-    else if (out.hash === null) out.reject_code = 'scan-not-possible';
-    else out.approvable = true;
+    if (approvable(scan, out.hash)) out.approvable = true;
+    else if (!approvable(scan, '0'.repeat(64))) out.reject_code = scan.verdict === 'error' ? 'scan-error' : 'scan-findings';
+    else out.reject_code = 'scan-not-possible';
   } else {
     out.reject_code = refused === 'commit not in repo' ? 'commit-not-in-repo' : 'scan-not-possible';
   }

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Usage: node scripts/sbom.mjs [<out file>] (contract: docs/contracts/release.md v1.2)
-// Builds the CycloneDX 1.6 SBOM of one plugin version (contract: docs/contracts/release.md v1.2). Node built-ins only.
-// Inputs: .claude-plugin/plugin.json, deps/skills.json and tools/claude-cli/package-lock.json under the working directory.
+// Usage: node scripts/sbom.mjs [<out file>] (contract: docs/contracts/release.md v1.3)
+// Builds the CycloneDX 1.6 SBOM of one plugin version (contract: docs/contracts/release.md v1.3). Node built-ins only.
+// Inputs: .claude-plugin/plugin.json, deps/3rdpartyskills.json and tools/claude-cli/package-lock.json under the working directory.
 // Every input is untrusted data: sizes are capped, names and versions are matched against allow-lists, and anything
 // that does not match stops the build (a partial SBOM is never written).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseBaseline } from './skill-catalog.mjs';
 
 const MiB = 1024 * 1024;
 export const LOCKFILE = 'tools/claude-cli/package-lock.json';
@@ -188,26 +189,27 @@ function lockfileParts(lock) {
   return { components: [...components.values()], deps, direct, complete };
 }
 
-function skillParts(manifest) {
-  if (!isObject(manifest)) return fail('deps/skills.json is not an object');
+// Skill components come from the baseline catalog's groups only. An entry in no group (a plugin) adds none, and no user
+// file is read, so the SBOM never holds a name a user typed.
+function skillParts(baseline) {
+  const byName = new Map(baseline.entries.map((e) => [e.skillname, e]));
   const found = new Map();
-  for (const group of Object.keys(manifest)) {
-    const list = manifest[group];
-    if (!Array.isArray(list)) return fail(`deps/skills.json: group ${JSON.stringify(group.slice(0, 40))} is not a list`);
-    for (const e of list) {
-      if (!isObject(e)) return fail('deps/skills.json: an entry is not an object');
-      if (Object.hasOwn(e, 'include')) continue;
-      const name = own(e, 'name');
-      const source = own(e, 'source');
-      if (typeof name !== 'string' || !SKILL_NAME.test(name)) return fail('deps/skills.json: an entry has a bad name');
-      if (source !== undefined && (typeof source !== 'string' || !SKILL_SOURCE.test(source))) return fail(`deps/skills.json: bad source for ${name}`);
+  for (const group of Object.keys(baseline.groups)) {
+    for (const item of baseline.groups[group]) {
+      if (typeof item !== 'string') continue;
+      const e = byName.get(item);
+      if (!e) continue;
+      const name = own(e, 'skillname');
+      const source = own(e, 'skillrepo');
+      if (typeof name !== 'string' || !SKILL_NAME.test(name)) return fail('deps/3rdpartyskills.json: an entry has a bad name');
+      if (source !== undefined && (typeof source !== 'string' || !SKILL_SOURCE.test(source))) return fail(`deps/3rdpartyskills.json: bad source for ${name}`);
       const ref = `skill:${name}@${source ?? 'local'}`;
       const prior = found.get(ref);
       if (prior) {
         if (!prior.groups.includes(group)) prior.groups.push(group);
         continue;
       }
-      if (found.size >= MAX_SKILLS) return fail(`deps/skills.json lists more than ${MAX_SKILLS} skills`);
+      if (found.size >= MAX_SKILLS) return fail(`deps/3rdpartyskills.json lists more than ${MAX_SKILLS} skills`);
       const comp = { type: 'library', 'bom-ref': ref, name };
       if (source !== undefined) {
         comp.group = source;
@@ -224,12 +226,26 @@ function skillParts(manifest) {
   });
 }
 
+function readBaselineAt(root) {
+  const rel = 'deps/3rdpartyskills.json';
+  const file = path.join(root, rel);
+  let st;
+  try { st = fs.lstatSync(file); } catch { return fail(`${rel} is missing`); }
+  if (!st.isFile()) return fail(`${rel} is not a plain file`);
+  if (st.size > MAX_BYTES) return fail(`${rel} is larger than ${MAX_BYTES / MiB} MiB`);
+  try {
+    return parseBaseline(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    return fail(`${rel} is not a valid catalog (${String(e?.message ?? '').replace(/^ERROR baseline catalog: /, '').slice(0, 60)})`);
+  }
+}
+
 // The SBOM object for the version in `.claude-plugin/plugin.json` under `root`. `now` and `serial` are for tests.
 export function buildSbom({ root, now = new Date(), serial = crypto.randomUUID() } = {}) {
   const plugin = readJson(root, '.claude-plugin/plugin.json');
   const version = own(plugin, 'version');
   if (typeof version !== 'string' || !SEMVER.test(version)) return fail('.claude-plugin/plugin.json has no plain semver "version"');
-  const skills = skillParts(readJson(root, 'deps/skills.json'));
+  const skills = skillParts(readBaselineAt(root));
   const lock = lockfileParts(readJson(root, LOCKFILE));
   const home = safeUrl(own(plugin, 'homepage')) ?? safeUrl(isObject(own(plugin, 'repository')) ? own(plugin.repository, 'url') : own(plugin, 'repository'));
   const site = home ? [{ type: 'website', url: home }] : undefined;

@@ -56,6 +56,18 @@ test('architect plan step is the only Role and builds nothing', () => {
   lacks(/git (add|commit|push|checkout|branch)/);
 });
 
+test('the dispatch carries Role skills: after Context cap: and the build follows §1.19 d', () => {
+  has('Role skills: <names | none>', '§1.19 d');
+  assert.ok(idx('Role skills: <names | none>') > idx('Context cap: <cap> handover <n>'));
+});
+
+test('the end prints one degraded line per left-off name, before the last line', () => {
+  const end = text.slice(text.indexOf('## 5. End'));
+  assert.match(end, /`degraded: missing <name>` once per name left off `Role skills:`/);
+  assert.ok(end.indexOf('degraded: missing <name>') < end.indexOf('Last line:'));
+  assert.match(end, /`plan: ready` stays the last line/);
+});
+
 test('the handover check takes cap, mode and handover from the settings get JSON', () => {
   has('plan-tasks check', '--cap', '--mode', '--handover');
   has('`pipeline.parallel_cap`', 'when it is 3, 4 or 5, else 4');

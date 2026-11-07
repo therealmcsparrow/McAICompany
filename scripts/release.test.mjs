@@ -81,7 +81,7 @@ function sandbox(t, { changelog = CHANGELOG, marketplace = null } = {}) {
   if (marketplace) write(root, '.claude-plugin/marketplace.json', marketplace);
   write(root, 'documentation/README.md', '# Docs\n\n**Current: 0.10.0** (32 Role agents).\n');
   write(root, 'CHANGELOG.md', changelog);
-  write(root, 'deps/skills.json', JSON.stringify(SKILLS));
+  write(root, 'deps/3rdpartyskills.json', JSON.stringify(SKILLS));
   write(root, 'tools/claude-cli/package-lock.json', JSON.stringify(LOCK));
   write(root, 'scripts/check.mjs', "import fs from 'node:fs';\nif (fs.existsSync('FAIL')) { console.error('check failed'); process.exit(1); }\nconsole.log('check ok');\n");
   write(root, 'scripts/ok.mjs', 'console.log("tests ok");\n');
@@ -97,7 +97,20 @@ function sandbox(t, { changelog = CHANGELOG, marketplace = null } = {}) {
   return { root, origin, marker, claude, claudeLog };
 }
 
-const SKILLS = { core: [{ name: 'find-skills', source: 'vercel-labs/skills' }, { include: 'extra' }], extra: [{ name: 'island-skill', source: 'example/island-skill' }] };
+const CATEGORIES = {
+  engineering: ['architect'], design: ['ui-ux-designer'], security: ['security'], quality: ['qa'],
+  product: ['product-manager'], research: ['skill-researcher'], content: ['writer']
+};
+const SKILLS = {
+  schema: 1,
+  categories: CATEGORIES,
+  groups: { core: ['find-skills', { include: 'extra' }], extra: ['island-skill'] },
+  entries: [
+    { skillname: 'find-skills', skillcategory: 'research', skillrepo: 'vercel-labs/skills' },
+    { skillname: 'island-skill', skillcategory: 'engineering', skillrepo: 'example/island-skill' }
+  ]
+};
+const BAD_SKILLS = { ...SKILLS, entries: [{ skillname: 'x y', skillcategory: 'research', skillrepo: 'a/b' }] };
 const SHA512 = 'sha512-' + Buffer.alloc(64, 7).toString('base64');
 const LOCK = {
   lockfileVersion: 3,
@@ -347,8 +360,8 @@ test('release fails closed when the SBOM cannot be built: input missing, broken 
     ['tools/claude-cli/package-lock.json', null],
     ['tools/claude-cli/package-lock.json', '{ not json'],
     ['tools/claude-cli/package-lock.json', JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/x': { version: '1.0.0; rm -rf' } } })],
-    ['deps/skills.json', null],
-    ['deps/skills.json', JSON.stringify({ core: [{ name: 'x y', source: 'a/b' }] })]
+    ['deps/3rdpartyskills.json', null],
+    ['deps/3rdpartyskills.json', JSON.stringify(BAD_SKILLS)]
   ];
   for (const [file, text] of cases) {
     const s = sandbox(t);

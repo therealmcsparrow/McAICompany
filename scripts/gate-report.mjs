@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Usage: node scripts/gate-report.mjs <x.y.z> (contract: docs/contracts/release.md v1.2)
-// Prints the Gate Report of one plugin version (contract: docs/contracts/release.md v1.2). Node built-ins only.
+// Usage: node scripts/gate-report.mjs <x.y.z> (contract: docs/contracts/release.md v1.3)
+// Prints the Gate Report of one plugin version (contract: docs/contracts/release.md v1.3). Node built-ins only.
 // It holds only what the records of the runs of that version show: Gates with result and wait, CEO forms, Fix rounds,
 // run time and Step time per Role id. A value that was not recorded reads `not recorded`. Nothing is estimated.
 // Runs come from .company/ledger/<run>.jsonl whose last `meta` record names the version; Gates and forms from run-state.

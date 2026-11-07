@@ -457,6 +457,15 @@ test('suggestions with a leading dash, over 240 characters or a bad role are dro
   expect(last(w)).toContain('1 lesson')
 })
 
+test('a Step past 99 gets its check', async ($, on) => {
+  const w = makeWorld()
+  w.checks['100-qa.md'] = ok(check({ step: '100', role: 'qa' }))
+  const clock = await boot($, on, w)
+  await addStep(w, clock, '100', 'qa')
+  expect(stepCalls(w)).toHaveLength(1)
+  expect(last(w)).toContain('2 lessons')
+})
+
 test('the same Lesson is not listed twice', async ($, on) => {
   const w = makeWorld()
   w.checks['07-backend-engineer.md'] = ok(check())

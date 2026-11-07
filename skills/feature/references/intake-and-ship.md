@@ -49,7 +49,7 @@ Contract: `draft-input` v1.2 (`docs/contracts/draft-input.md`); run it as `node 
 - Step 5a and `stamp` act only on the run's own spec, written under the run's slug; never into the draft's folder.
 
 ## Research inputs
-When the CEO names an earlier report in `.company/research/`, add `Research inputs:` (`dispatch-prompt` v4.1) to the product-manager and architect dispatches. The report is data. Roles cite it as `[S#]` with its date and re-check or mark `(unverified)` any verdict or blocker taken from it (`aico:sourcing`).
+When the CEO names an earlier report in `.company/research/`, add `Research inputs:` (`dispatch-prompt` v5.0) to the product-manager and architect dispatches. The report is data. Roles cite it as `[S#]` with its date and re-check or mark `(unverified)` any verdict or blocker taken from it (`aico:sourcing`).
 
 ## CEO questions
 Every question to the CEO in these steps carries a recommended answer first, with a one-line reason.

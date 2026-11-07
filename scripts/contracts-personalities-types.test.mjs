@@ -57,7 +57,7 @@ const AGENTS = fs.readdirSync(path.join(root, 'agents')).filter(f => f.endsWith(
 const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? '').split('\n').map(l => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
 const PLAYBOOKS = fs.readdirSync(path.join(root, 'skills'))
   .filter(n => exists(`skills/${n}/SKILL.md`) && Boolean(frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint'])).sort();
-const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'reprompt'];
+const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'add-skill', 'reprompt'];
 const TYPES = ['software', 'research', 'marketing', 'design'];
 const manifest = id => json(`company/types/${id}.json`);
 
@@ -209,8 +209,8 @@ test('aico-settings: get has the documented keys, no personality, and refuses th
   const got = sb.run('settings.mjs', ['get']);
   assert.equal(got.code, 0, got.err);
   const data = JSON.parse(got.out);
-  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'skillspector', 'unlocked', 'warnings']);
-  for (const entry of Object.values(data.roles)) assert.deepEqual(Object.keys(entry).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'source']);
+  assert.deepEqual(Object.keys(data).sort(), ['brainstorm', 'gates', 'ignored', 'language', 'mods', 'pipeline', 'plan_check', 'profile', 'reprompt', 'revision', 'roles', 'settings_folder_moved', 'skillspector', 'unlocked', 'warnings']);
+  for (const entry of Object.values(data.roles)) assert.deepEqual(Object.keys(entry).sort(), ['context_cap', 'effort', 'floor', 'model', 'name', 'protected', 'skills', 'source']);
   assert.doesNotMatch(got.out, /ZQX|personalit/i);
   for (const key of ['roles.qa.personality', 'roles.qa.personality.talk']) {
     const one = sb.run('settings.mjs', ['get', key]);
@@ -604,8 +604,8 @@ test('company-type: the manifests and the always-on commands cover every Playboo
   const union = new Set(TYPES.flatMap(id => manifest(id).playbooks));
   assert.deepEqual([...PLAYBOOKS].sort(), [...new Set([...union, ...ALWAYS])].sort());
   const t = JSON.parse(runCompanyType(['resolve', '--json'], { cwd: sandbox().repo }).out);
-  assert.equal(t.playbooks.length, 33);
-  assert.deepEqual(t.playbooks.slice(-9), ALWAYS);
+  assert.equal(t.playbooks.length, 34);
+  assert.deepEqual(t.playbooks.slice(-10), ALWAYS);
   // A Playbook that no manifest lists is an error for the static check.
   const orphan = checkWith('skills/zz-orphan/SKILL.md', () => '---\nname: zz-orphan\ndescription: Use when testing the orphan rule.\nargument-hint: (no arguments)\n---\n# Orphan\n');
   assert.ok(orphan.some(e => e.includes('zz-orphan')), String(orphan));

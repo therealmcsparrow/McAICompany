@@ -89,6 +89,12 @@ test('the reason stays within 600 characters for 500 long hostile paths, and kee
   }
 });
 
+test('agentLabel takes a three-digit Step and refuses four digits', () => {
+  assert.equal(agentLabel('100', 'qa'), '100 qa');
+  assert.equal(agentLabel('1000', 'qa'), null);
+  assert.equal(agentLabel('1', 'qa'), null);
+});
+
 test('a subagent reason starts From subagent, the label is checked', () => {
   const hits = hitsFromDepth(depthOf([['src/auth.ts', ['security']]]));
   assert.match(buildReason(hits, 'ask', agentLabel('12', 'backend-engineer')), /^From subagent 12 backend-engineer: Blast Radius: /);

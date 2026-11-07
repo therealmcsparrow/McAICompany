@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.8). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.9). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -186,12 +186,12 @@ export function validateRecord(input) {
   }
   for (const k of SHIP_ONLY) if (Object.hasOwn(rec, k)) return fail(`${k} only on ship`);
   const idOk = {
-    step: /^\d{2}$/,
+    step: /^\d{2,3}$/,
     round: /^R\d{1,3}$/,
     crossfire: /^R\d{1,3}$/,
-    replay: /^(\d{2}|R\d{1,3})$/,
+    replay: /^(\d{2,3}|R\d{1,3})$/,
     total: /^[0-9a-f]{8}$/,
-    reflect: /^(\d{2}|RT)$/
+    reflect: /^(\d{2,3}|RT)$/
   }[rec.kind];
   if (typeof rec.id !== 'string' || !idOk.test(rec.id)) return fail('invalid id');
   if (typeof rec.role !== 'string' || !ROLE.test(rec.role)) return fail('invalid role');

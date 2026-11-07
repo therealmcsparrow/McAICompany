@@ -20,10 +20,15 @@ const depsFor = (steps, extra = {}) => ({ show: () => ({ steps, gates: [], waves
 
 async function summary(t, content, file = '05-qa.md') {
   const { root, dir } = setup(t);
-  fs.writeFileSync(path.join(dir, '05-qa.md'), content);
-  const out = await run(root, NAME, { deps: depsFor([entry('05', 'qa', file)]) });
+  fs.writeFileSync(path.join(dir, path.basename(file)), content);
+  const out = await run(root, NAME, { deps: depsFor([entry(/^\d+/.exec(file)?.[0] ?? '05', 'qa', file)]) });
   return out.steps[0].summary;
 }
+
+test('a Step file name takes 2 or 3 digits and no more', async (t) => {
+  assert.equal(await summary(t, '## Did\n- three digits\n', '100-qa.md'), 'three digits');
+  assert.equal(await summary(t, '## Did\n- four digits\n', '1000-qa.md'), null);
+});
 
 test('unresolved slug gives null', async (t) => {
   const { root } = setup(t);

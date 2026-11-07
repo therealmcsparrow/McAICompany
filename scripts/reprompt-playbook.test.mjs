@@ -190,7 +190,7 @@ test('commands/reprompt.md: step 3 names the AI notice, the framed text and the 
 
 test('handover is capped at 2 per Round', () => {
   const s3 = section('3. Read the reply');
-  assert.match(s3, /`handover` → continue per `dispatch-prompt` v4[^\n]*at most 2 handovers per `Round:`; a third → show the Handoff path, `end '<slug>' abort`, stop/);
+  assert.match(s3, /`handover` → continue per `dispatch-prompt` v5[^\n]*at most 2 handovers per `Round:`; a third → show the Handoff path, `end '<slug>' abort`, stop/);
 });
 
 test('Edit has no fixed cap and re-dispatches with Asks left 0', () => {

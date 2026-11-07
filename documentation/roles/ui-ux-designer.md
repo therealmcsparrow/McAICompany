@@ -15,6 +15,6 @@ Yuki, the UI/UX designer, designs how a product works for its users: user flows,
 - Model: sonnet. Effort: medium. Set the model with `roles.<role>.model` in `/aico:settings`.
 - Tools: Read, Grep, Glob, Skill, Write, Edit, Bash
 - Inputs: the Input Handoffs named in the dispatch. Output: one Handoff file at the Output path.
-- Loads the design skills named in the dispatch with the Skill tool.
+- Loads the skills your Skills tab selections name for her, as the dispatch lists them, with the Skill tool.
 
 Back to [all Roles](README.md).

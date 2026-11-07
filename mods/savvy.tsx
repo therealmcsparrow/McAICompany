@@ -114,10 +114,10 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
     const ctxValue = found === undefined ? null : found.ctx
     counted.push(ctxValue)
     lines.push({ head: whoLabel(row.step, role, name), units: [startedAt, ...splitCell(ctxCell(ctxValue))] })
-    if (row.step !== null && (current === undefined || row.step > current.step)) current = { step: row.step, role, name }
+    if (row.step !== null && (current === undefined || Number(row.step) > Number(current.step))) current = { step: row.step, role, name }
   }
   if (current === undefined) {
-    const files = [...view.steps].sort((a, b) => (a.mtime === b.mtime ? (a.step < b.step ? 1 : -1) : a.mtime < b.mtime ? 1 : -1))
+    const files = [...view.steps].sort((a, b) => (a.mtime === b.mtime ? (Number(a.step) < Number(b.step) ? 1 : -1) : a.mtime < b.mtime ? 1 : -1))
     if (files.length > 0) current = { step: files[0].step, role: files[0].role, name: shown(null, roles, files[0].role) }
   }
   const step = current === undefined ? UNKNOWN : whoLabel(current.step, current.role, current.name)

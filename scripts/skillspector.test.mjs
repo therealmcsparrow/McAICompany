@@ -2238,3 +2238,28 @@ test('vetCandidate refusals include the commit and bound-folder reasons, each re
   assert.deepEqual(await run(fakeGit({ populate: (repo) => { skillIn(repo, 'wanted'); writeFileSync(join(repo, 'wanted', 'SKILL.md'), FM('decoy')); } })), { refused: 'skill not in repo' });
   assert.deepEqual(quarantines(base), []);
 });
+
+// ---------- scanInstalled scope ----------
+test('scanInstalled with scope global reads only the home copy, and scope project only the product copy', async (t) => {
+  const { scanInstalled } = await mod();
+  const sb = sandbox(t);
+  skillIn(sb.project, '.agents', 'skills', 'wanted');
+  skillIn(sb.home, '.claude', 'skills', 'wanted');
+  for (const [scope, root] of [['global', sb.home], ['project', sb.project]]) {
+    const { s, deps } = inproc(sb, ok(golden('hostile-c.nobaseline.json')), { settingsMode: async () => 'no-llm' });
+    const r = await scanInstalled({ name: 'wanted', scope }, deps);
+    assert.equal(r.refused, undefined, scope);
+    assert.equal(s.calls.length, 1, scope);
+    assert.equal(r.results.length, 1, scope);
+    assert.ok(s.calls[0].argv.some((a) => String(a).startsWith(realpathSync(root))), `${scope} scans a copy under its own root`);
+  }
+});
+
+test('scanInstalled refuses a scope outside the fixed list and runs no scan', async (t) => {
+  const { scanInstalled } = await mod();
+  const sb = sandbox(t);
+  const { s, deps } = inproc(sb, ok(golden('hostile-c.nobaseline.json')));
+  const r = await scanInstalled({ name: 'wanted', scope: '../x' }, deps);
+  assert.deepEqual(r, { refused: 'usage: bad scope' });
+  assert.equal(s.calls.length, 0);
+});

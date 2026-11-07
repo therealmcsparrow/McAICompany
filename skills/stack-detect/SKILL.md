@@ -36,7 +36,7 @@ Load only those matching the task at hand:
 - Auth anywhere → `auth-implementation-patterns`
 - Anything else → general knowledge plus the project's existing code conventions.
 
-Check the available-skills list. Never assume a skill exists. If a stack's skills are missing, note in your Handoff that the CEO can run `/aico:setup <group>` (groups: go, react, tanstack, auth). Never install anything yourself.
+Check the available-skills list. Never assume a skill exists. If a stack's skills are missing, note in your Handoff that the CEO can run `/aico:setup <group>` (groups: go, react, tanstack, auth) or add one to their own list with `/aico:add-skill`. Never install anything yourself.
 
 ## 3. Tool rules
-Rules for each tool (Must/Should/May, with sources) are researched by the Senior Engineer and kept in the project ruleset; see `aico:ruleset`. Never add packs here. A missing installed skill is still proposed as a new group in `deps/skills.json` after a `find-skills` search.
+Rules for each tool (Must/Should/May, with sources) are researched by the Senior Engineer and kept in the project ruleset; see `aico:ruleset`. Never add packs here. A missing installed skill is proposed to the CEO for `/aico:add-skill` after a `find-skills` search.

@@ -46,23 +46,22 @@ test('AC5 the Lead asks the approve form before the Install / Skip form; Skip in
 });
 
 // ---------- skill-recommendation v1 ----------
-test('AC6 skill-recommendation v1 names area, keeps the source/name allow-list by reusing the design-skills-section parser', () => {
+test('AC6 skill-recommendation v1 names area, keeps the source/name allow-list by reusing the design-skills-section allow-list', () => {
   const c = read('docs/contracts/skill-recommendation.md');
-  assert.match(c, /^# Contract: skill-recommendation v1/);
+  assert.match(c, /^# Contract: skill-recommendation v2/);
   assert.match(c, /area: \(stack\|product-type\|company-type\|design\)/);
-  assert.match(c, /parseDesignSkills/);
+  assert.match(c, /`design-skills-section` v2\.0 \(field allow-list\)/);
   assert.match(c, /\| `vet <handoff> --json` \|/);
   assert.match(c, /commit: \(\[\^;\]\+\)/);
-  assert.ok(read('docs/contracts/design-skills-section.md').includes('# Contract: design-skills-section v1'), 'v1 not bumped');
+  assert.ok(read('docs/contracts/design-skills-section.md').includes('# Contract: design-skills-section v2'), 'v2 not bumped');
 });
 
 // ---------- skills-section v1 ----------
-test('skills-section v1: Contract, project template and installer agree on the ## Skills section', () => {
+test('skills-section v2: the Contract and the installer agree on the old ## Skills section', () => {
   const c = read('docs/contracts/skills-section.md');
-  assert.match(c, /^# Contract: skills-section v1/);
+  assert.match(c, /^# Contract: skills-section v2/);
   assert.match(c, /area: \(stack\|product-type\|company-type\)/);
   assert.match(c, /At most 5 lines per area, 15 in all/);
-  assert.match(read('skills/lead/references/project-template.md'), /^## Skills$/m);
   assert.match(read('scripts/install-skills.mjs'), /parseSkillsSection/);
 });
 

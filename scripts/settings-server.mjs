@@ -8,6 +8,7 @@ import http from 'node:http';
 import path from 'node:path';
 import * as check from './check.mjs';
 import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
+import { eligibleRoles, readBaseline, readCatalog, selectable, skillStatus, vettedText } from './skill-catalog.mjs';
 import {
   Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
@@ -94,15 +95,58 @@ function personalitiesState(ctx, plugin, user, project) {
   };
 }
 
+const sourceKind = (e) => (e.skillrepo !== undefined ? 'repo' : e.skillplugin !== undefined ? 'plugin' : 'command');
+
+// The catalog for the Skills tab: each entry with the Roles that may select it, and its status, license and
+// vetted texts from skillStatus. Entry texts are validated by the catalog module; no path, hash or home folder
+// leaves here. An unreadable catalog gives no entries and a fixed error line.
+function catalogState(ctx, resolved) {
+  try {
+    const { entries, errors, clashes } = readCatalog({ home: ctx.home });
+    const { categories } = readBaseline();
+    // An entry any Role selects at user level is read from the user home only, as the installer reads it.
+    const userLevel = new Set();
+    for (const r of Object.values(resolved.roles)) {
+      if (r.source?.skills === 'user') for (const x of r.skills ?? []) userLevel.add(x.name);
+    }
+    const out = entries.map((e) => {
+      const pick = selectable(e);
+      const status = skillStatus(e, { home: ctx.home, productRoot: ctx.cwd ?? process.cwd(), scope: userLevel.has(e.skillname) ? 'user' : undefined });
+      const row = {
+        name: e.skillname,
+        category: e.skillcategory,
+        kind: sourceKind(e),
+        layer: e.layer,
+        roles: eligibleRoles(e, categories),
+        selectable: pick.ok,
+        status: status.status,
+        place: status.place,
+        license: status.license,
+        vetted: status.vetted,
+        vetted_text: vettedText(e, status.vetted)
+      };
+      if (e.skillrepo !== undefined) row.skillrepo = e.skillrepo;
+      if (!pick.ok) row.reason = pick.reason;
+      if (e.skillcommit !== undefined) row.commit = e.skillcommit;
+      return row;
+    });
+    return { entries: out, errors, clashes: clashes.map((c) => ({ name: c.skillname, pinned: c.pinned })) };
+  } catch {
+    return { entries: [], errors: ['ERROR baseline catalog'], clashes: [] };
+  }
+}
+
 function state(ctx) {
   const plugin = pluginDefaults(ctx.pluginRoot);
   const user = readLayer('user', ctx).layer;
   const project = readLayer('project', ctx).layer;
+  const resolved = resolveSettings(ctx);
   return {
     plugin,
     user,
     project,
-    resolved: resolveSettings(ctx),
+    resolved,
+    catalog: catalogState(ctx, resolved),
     language: storedLanguage(ctx),
     hasProject: hasCompany(ctx.cwd),
     personalities: personalitiesState(ctx, plugin, user, project)
@@ -147,7 +191,8 @@ function save(ctx, body) {
     if (has('project') && !company) reasons.push('project: no .company/ folder');
     const user = has('user') ? body.user : readLayer('user', ctx).layer;
     const project = has('project') ? body.project : readLayer('project', ctx).layer;
-    reasons.push(...checkLayers(user, project, ctx));
+    const levels = ['user', 'project'].filter(has);
+    reasons.push(...checkLayers(user, project, { ...ctx, levels }));
   }
   if (has('user') || Object.hasOwn(language, 'user')) {
     const problem = layerFileProblem('user', ctx);
@@ -243,7 +288,7 @@ function openBrowser(url) {
 }
 
 export async function startServer({
-  home, cwd, pluginRoot, port = 0, idleMs = 1_800_000, open = true,
+  home, cwd = process.cwd(), pluginRoot, port = 0, idleMs = 1_800_000, open = true,
   log = (line) => process.stdout.write(`${line}\n`)
 } = {}) {
   const ctx = { home, cwd, pluginRoot };

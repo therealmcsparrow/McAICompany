@@ -165,7 +165,7 @@ const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(tex
 // Every Playbook: a skill whose frontmatter has an argument-hint line.
 const PLAYBOOK_SKILLS = fs.readdirSync(path.join(root, 'skills'))
   .filter(n => exists(`skills/${n}/SKILL.md`) && frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint']).sort();
-const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'reprompt'];
+const ALWAYS = ['help', 'version', 'language', 'settings', 'setup', 'lead', 'triage', 'skillspector', 'add-skill', 'reprompt'];
 const TYPES = ['software', 'research', 'marketing', 'design'];
 const manifest = id => json(`company/types/${id}.json`);
 
@@ -481,10 +481,15 @@ const HAND_OVER_CHANGES = {
     desc: 'Build a feature or new product end to end, from request to shipped, with the Ship Gate and no Brief or Plan Gate.',
     removed: [
       "argument-hint: <feature description>",
+      "1a. Design skills (`design-skills-section` v1), only when the product has UI (`product_type` web, desktop or game, or the brief has UI work) and `## Design skills` in `.company/project.md` is stale (empty, or newest `approved:` over 180 days old). Otherwise skip silently.",
       "Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):",
       "   **→ Brief Gate**",
       "1. `aico:product-manager`: brief and acceptance criteria from the CEO's request.",
       "2a. Spikes per `aico:pipeline` if the Architect listed any (show the result at the Plan Gate).",
+      '   a. Dispatch `aico:design-researcher` (inputs per its Role). It recommends at most 5 skills and installs nothing.',
+      '   b. One form for the CEO: approve the set / change / skip. Nothing is written before the answer.',
+      "   c. Approved: the Lead writes `## Design skills` lines in the exact DS format, with today's `approved:` date. Never write a line that fails the DS allow-list (`source` is a repo, a plugin, or a backticked command byte-identical to a `deps/skills.json` `install` with the same `name`); drop it and say so.",
+      "   e. Install artifacts (`.agents/`, `.claude/skills/`, `skills-lock.json`) are never committed; the summary names them. Commit the `## Design skills` change with the run's other work.",
       "   d. Run `node \"${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs\" install-skills design --project .company/project.md --dry-run`. Show the printed commands, the telemetry line from `skills-manifest` v2, and ask one form: Install (Recommended) / Skip. Only when `gates.installs` is `auto` (`aico:pipeline` §1.7), install without that form and name the commands in your next message; the set approval in b stays a form. Install: same command without `--dry-run` (project scope, product root), then tell the CEO to `/reload-plugins`. Skip: record `degraded: missing <name>, <name>` in the Handoff and Gate summary. An `ERROR design skill line <n>` means: install nothing, send `Design skills: none`, name line `<n>` in the Gate summary. The run continues either way.",
       '2d. `aico:architect`: ruleset sign-off, only when Must rules were added or changed. Otherwise say "sign-off skipped" at the Plan Gate. A rejected rule goes back to the Senior Engineer once; still rejected → the CEO decides at the Plan Gate.',
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply).",
@@ -497,13 +502,18 @@ const HAND_OVER_CHANGES = {
     ],
     added: [
       "argument-hint: <feature description | draft file>",
+      /^1a\. Design skills \(`skill-recommendation` v2, `skill-catalog` v1\), only when the product has UI/,
       /^Run with `aico:pipeline`\. Roles and lanes run per the tier set .* No Brief Gate and no Plan Gate in any run, a direct call included: .* Steps \(∥ = dispatch in parallel\):$/,
       /^1\. `aico:product-manager`: brief and acceptance criteria from the CEO's request\. No Gate: the Lead runs references\/tier-path\.md step 4/,
       /^1b\. Prototype, only after a Run it answer on the prototype form;/,
       /^2a\. Spikes per `aico:pipeline` if the Architect listed any \(the result goes in the Ship Gate summary\)\.$/,
       /^2d\. `aico:architect`: ruleset sign-off, only when Must rules were added or changed\. Otherwise say "sign-off skipped" in the Ship Gate summary\./,
       /^   d1. Warnings from the dry run: show every `WARNING:` line/,
-      /^   d\. Run `node .*install-skills design --project .company\/project\.md --dry-run`\. Show the printed commands, the telemetry line from `skills-manifest` v3,/,
+      /^   a\. Run `\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/lead\/references\/skill-picks\.md` §1, then dispatch `aico:design-researcher`/,
+      /^   b\. `vet` the Handoff, then one form for the CEO: approve the set \/ change \/ skip/,
+      /^   c\. Approved: the license questions, then `role-skills record` with the CEO's Roles/,
+      "   e. Install artifacts (`.agents/`, `.claude/skills/`, `skills-lock.json`) are never committed; the summary names them.",
+      /^   d\. Install \/ Skip: the form of `aico:pipeline` §1\.19 b .*the telemetry line from `skills-manifest` v4\./,
       /^2f\. Plan check, no Gate: plan-check and tier-path\.md step 8 check the plan/,
       /^5b\. Ship Gate summary: the Gate items that used to show earlier/,
       "2b. UI work, when `lanes.persona` is on (`aico:pipeline` §1.7): one `aico:persona-tester` per Persona, in parallel, on the design. S1 findings go back to the designer (Fix round rules apply), and persona-tester is in the tier set.",
@@ -716,7 +726,8 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   // 27 removed lines (the Lead budget line is reworded in place to the fixed 95000 cap): the ten above, plus the Context cap line (fixed 95000/85500, dispatch-prompt v4.2) and the Gate line (no Brief or Plan Gate in feature and fix, ADR 0050) reworded in place, plus the Task slug line (the exceptions-on-file refusal, v0.21.0), the needs-ceo line (held and shown as one form per wave), the Name line (dispatch-prompt v4.0), the Base commit, Review depth and pre-filter lines (full base id and run ref, dispatch-prompt v3.6), the Ship Gate checks, the resolver form of the script calls and the blank lines that moved with them.
   // 28 since the work folder names: the Setup slug and branch lines, the ledger and rule-check calls and the push lines now quote the run name, and the Branch line takes the printed branch value.
   // Still 28: the Plan check bullet (B6) was added after v0.12.0, so rewording it removes no v0.12.0 line. B5 only adds lines (Setup item 18, one Gate bullet).
-  assert.equal(Number(removedFromPipeline), 28);
+  // 31 since role skills: the dispatch line, the sentence under it and the Always-a-form line are reworded in place; the Auto Gates line had already moved.
+  assert.equal(Number(removedFromPipeline), 31);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
 
@@ -846,7 +857,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   assert.deepEqual(m.work, ['feature', 'fix']);
   const sb = sandbox();
   const t = sb.typeJson(['resolve']);
-  assert.equal(t.playbooks.length, 33);
+  assert.equal(t.playbooks.length, 34);
   assert.deepEqual([...t.playbooks].sort(), [...expectedPlaybooks, ...ALWAYS].sort());
   assert.deepEqual(t.work, ['feature', 'fix']);
   if (baseKnown) {
@@ -855,7 +866,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
     const basePlaybooks = git('ls-tree', '--name-only', BASE, 'skills/').split('\n').filter(Boolean).map(f => path.basename(f)).filter(n => {
       try { return /^disable-model-invocation: true$/m.test(git('show', `${BASE}:skills/${n}/SKILL.md`)); } catch { return false; }
     }).sort();
-    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs'].includes(n)).sort(), basePlaybooks);
+    assert.deepEqual([...t.playbooks].filter(n => !['reprompt', 'dashboard', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs', 'add-skill'].includes(n)).sort(), basePlaybooks);
   }
 });
 
@@ -1171,18 +1182,9 @@ test('AC13 setup searches skills for the type, at most 5, each vetted, nothing i
 });
 
 test('AC14 the installer fetches the commit that was scanned and a hash mismatch blocks the record', () => {
-  // A recorded repo pick installs exactly its commit.
-  const sha = 'a'.repeat(40);
-  const sb = sandbox({ projectMd: `# P\n## Skills\n<!-- approved -->\n- area: company-type; name: copy-helper; source: acme/copy-helper; license: MIT; vetted: 2026-10-26; commit: ${sha}; why: fits a marketing agency; approved: 2026-10-26\n` });
-  const dry = sb.run('install-skills.mjs', ['skills', '--project', '.company/project.md', '--dry-run']);
-  assert.equal(dry.code, 0, dry.out);
-  assert.match(dry.out, new RegExp(`add acme/copy-helper#${sha} -s copy-helper -a claude-code -y`));
-  // A pick without a pinned commit is refused and nothing is planned.
-  fs.writeFileSync(sb.profile, fs.readFileSync(sb.profile, 'utf8').replace(`commit: ${sha}`, 'commit: -'));
-  const loose = sb.run('install-skills.mjs', ['skills', '--project', '.company/project.md', '--dry-run']);
-  assert.equal(loose.code, 1);
-  assert.match(loose.out, /^ERROR skills line \d+: commit invalid/m);
-  assert.doesNotMatch(loose.out, /\[dry-run\]/);
+  const sb = sandbox();
+  // The installer no longer reads picks from a product file: a project path is an unknown flag.
+  assert.equal(sb.run('install-skills.mjs', ['skills', '--project', '.company/project.md', '--dry-run']).code, 1);
   // The installed folder's hash is compared with the scanned one.
   const scanned = 'b'.repeat(64);
   fs.writeFileSync(path.join(sb.repo, 'skills-lock.json'), JSON.stringify({ version: 1, skills: { 'copy-helper': { computedHash: 'c'.repeat(64) } } }));
@@ -1192,10 +1194,10 @@ test('AC14 the installer fetches the commit that was scanned and a hash mismatch
   assert.equal(JSON.parse(sb.run('skill-picks.mjs', ['check-install', '--name', 'copy-helper', '--hash', scanned, '--json']).out).bound, true);
   // Setup adds no way to fetch code of its own, and an unbound result stops the run.
   const section = read('skills/setup/SKILL.md').split('## Company type and skill search')[1];
-  assert.doesNotMatch(section, /npx|git clone|curl|wget|Invoke-WebRequest|install-skills/);
+  assert.doesNotMatch(section, /npx|git clone|curl|wget|Invoke-WebRequest|install-skills(?! --status)/);
   assert.match(section, /same source, commit and folder/);
   const picks = read('skills/lead/references/skill-picks.md');
-  assert.match(picks, /Go on only when `check-install` printed `bound: true`/);
+  assert.match(picks, /Go on only when the skill's line is `installed <name> \(<scope>` with none of `FAILED`, `hash differs`, `scan failed` or `missing` for that skill/);
   assert.match(picks, /Every other outcome \*\*stops the run\*\*/);
 });
 
@@ -1209,7 +1211,7 @@ test('AC15 an uncited claim in a research or marketing run blocks Ship with a sp
   const editor = read('agents/editor.md');
   assert.match(editor, /`## Blocking`, tag `\[spec\]`/);
   assert.match(editor, /Never:\*\* rewrite/);
-  assert.deepEqual(frontmatter(editor).tools.split(',').map(s => s.trim()), ['Read', 'Grep', 'Glob', 'Write'], 'the editor has no Bash and no web');
+  assert.deepEqual(frontmatter(editor).tools.split(',').map(s => s.trim()), ['Read', 'Grep', 'Glob', 'Skill', 'Write'], 'the editor has no Bash and no web');
   for (const name of ['report', 'campaign', 'content']) {
     const text = read(`skills/${name}/SKILL.md`);
     assert.match(text, /aico:editor/, name);
