@@ -24,6 +24,8 @@ Before the Code Reviewer runs, a cheap deterministic check (the same `aico-check
 ### Fix rounds
 When a reviewer, QA, Security or the Senior Engineer (compliance) finds a blocking problem, the builder is sent back — at most **twice** by default. After the last round it escalates to you. You can set the limit from 0 to 5 in [settings](settings-and-locks.md); at 0 the first blocking review comes straight to you. Nits never loop. The run's count stops at your first answer at the Ship Gate. A finding caused by a choice the plan left open is also listed as a Nit tagged `[open-decision]`; a real bug it caused stays Blocking. See [Plan check](plans.md#plan-check).
 
+**QA-first and Fix rounds.** In feature runs QA writes the failing tests before the builder starts (`plan-tasks` v1.7, see [Plans](plans.md#qa-first-in-feature-runs)). `ledger qa-first-report` prints the median Fix rounds of runs without it (`before`) and with it (`after`), plus the runs left out (`excluded`) (`token-ledger` v1.10). `after` reads `insufficient` until three runs count. Fix runs are not QA-first.
+
 ### Judging changes
 These checks apply to every run from v0.20.0.
 - **Base commit.** The `Base commit:` of a prompt is the full object id (40 or 64 hex digits), never a short sha or a ref. Reviewers judge the diff from that base to the run branch.

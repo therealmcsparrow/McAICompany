@@ -38,6 +38,14 @@ The Architect gives each plan task three more lines, which `plan-tasks check --h
 
 **Tautological tests.** A test must fail when the behaviour breaks. A test that asserts its own setup, restates the code under test, mocks the unit under test or only checks that a mock was called is a Blocking `[test]` finding.
 
+### QA-first in feature runs
+In every feature run, at every tier, the Lead passes `--qa-first` on `plan-tasks check` and `begin` (`plan-tasks` v1.7). You cannot switch it off. `fix` runs and every other Playbook never pass it.
+- A **QA task** has `role: qa`; its `files:` are the test files it owns.
+- A **build task** is any other task with testable code. It must list at least one QA task in `depends-on`, so QA writes the failing tests first.
+- One owner per test file: a task that is not a QA task may not list a QA task's files, and two QA tasks may not overlap.
+
+`check` prints one `ERROR <id>: <reason>` line per problem and exits 2. `begin` refuses with `refused: <q> qa-first errors` and writes nothing. `done` is refused with `refused: qa-owned paths` while the task's latest `out` event lists a path a QA task owns; the builder reverts it and puts the needed test change in a Blocking `[test]` line of its Handoff. Builders may still write unit tests of their own; those are not verification.
+
 ### Destination spec
 For a feature run, the Product Manager writes `docs/specs/<slug>.md` after the writer: Problem, Solution, User stories, Decisions, Testing decisions and Out of scope, with the ship date and version stamped after you approve at the Ship Gate. The spec has no file paths and no code blocks; `spec-check` reports an ERROR for either, and the Product Manager revises once. Plans keep their paths. For a client project the spec goes into the client's repo only when `.company/project.md` says `spec_in_repo: yes`; otherwise it goes into the `aico:client handoff` package. If the line is missing the Lead asks you first, with `no` as the recommended answer.
 

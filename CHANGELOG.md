@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **QA writes the tests first in every feature run.** The Lead passes `--qa-first` to `plan-tasks check` and `begin` at every tier, with no opt-out. Fix runs are unchanged. A build task needs a QA task it depends on, and one QA task owns each test file. `plan-tasks` checks both and refuses `done` for a task whose changes include a QA-owned path. `ship` records `qa` on each run, and `ledger qa-first-report` prints the median Fix rounds before and after. Contracts: `plan-tasks` v1.7, `token-ledger` v1.10.
+
 ## [0.29.0] - 2026-11-07
 
 Rollback: node scripts/stable.mjs 0.28.0
