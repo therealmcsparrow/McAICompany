@@ -82,12 +82,12 @@ select[aria-invalid="true"], input[aria-invalid="true"] { border: 2px solid var(
 .bulk { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: center; margin-bottom: var(--s3); background: var(--head); border-radius: var(--r2); padding: var(--s3); }
 .bulk label { display: flex; gap: var(--s1); align-items: center; color: var(--muted); font-size: var(--fs-sm); }
 button { font: inherit; border-radius: var(--r1); padding: 0 var(--s4); min-height: 36px; border: 1px solid var(--control-border); background: var(--surface); color: var(--text); cursor: pointer; }
-button:hover:not(:disabled) { background: var(--head); }
-button:active:not(:disabled) { background: var(--line); }
+button:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--head); }
+button:active:not(:disabled):not([aria-disabled="true"]) { background: var(--line); }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
-button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-button:disabled { opacity: .55; cursor: not-allowed; }
-button.primary:disabled { opacity: 1; background: var(--head); border-color: var(--line); color: var(--muted); }
+button.primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--accent-hover); border-color: var(--accent-hover); }
+button:disabled, button[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+button.primary:disabled, button.primary[aria-disabled="true"] { opacity: 1; background: var(--head); border-color: var(--line); color: var(--muted); }
 button.small { min-height: 32px; font-size: var(--fs-sm); }
 h2 { font-size: var(--fs-lg); font-weight: 600; line-height: 1.3; margin: var(--s5) 0 var(--s1); }
 .hint { color: var(--muted); font-size: var(--fs-sm); line-height: 1.4; margin: 0 0 var(--s3); }
@@ -220,7 +220,7 @@ dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; marg
     <span id="count">0 unsaved changes</span>
     <button type="button" id="clear-user">Clear User on this tab</button>
     <button type="button" id="clear-project">Clear Project on this tab</button>
-    <button type="button" id="save" class="primary" disabled>Save</button>
+    <button type="button" id="save" class="primary" aria-disabled="true">Save</button>
     <button type="button" id="done">Done</button>
   </div>
 </footer>
@@ -1902,7 +1902,7 @@ function refresh() {
   const count = document.getElementById('count');
   count.textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`;
   count.classList.toggle('dirty', n > 0);
-  document.getElementById('save').disabled = n === 0;
+  document.getElementById('save').setAttribute('aria-disabled', n === 0 ? 'true' : 'false');
 }
 function status(kind, title, lines = []) {
   const box = document.getElementById('status');
@@ -1946,6 +1946,7 @@ async function api(path, body) {
 const unreachable = () => status('err', 'Can\'t reach the settings server. It stops after 30 minutes idle or when you press Done; run /aico:settings again.');
 
 async function save() {
+  if (document.getElementById('save').getAttribute('aria-disabled') === 'true') return;
   const previousId = document.activeElement?.id ?? '';
   const bad = personalityProblems();
   refresh();
@@ -1962,7 +1963,7 @@ async function save() {
   const language = changedLanguage();
   if (Object.keys(language).length) body.language = language;
   const button = document.getElementById('save');
-  button.disabled = true;
+  button.setAttribute('aria-disabled', 'true');
   let res;
   try {
     res = await api('/api/save', body);

@@ -1207,9 +1207,8 @@ test('layout: after a successful Save focus is not on body: the same control whe
   page.document.activeElement = page.ids.save;
   await page.ids.save.fire('click');
   await settle();
-  const message = walk(page.ids.status, (n) => n.id === 'status-message');
-  assert.equal(message.getAttribute('tabindex'), '-1');
-  assert.equal(page.document.activeElement, message, 'the Save button is disabled after a reload');
+  assert.ok(walk(page.ids.status, (n) => n.id === 'status-message'));
+  assert.equal(page.document.activeElement, page.ids.save, 'Save stays focusable after a reload');
   const card = page.all((n) => n.tagName === 'DETAILS')[1];
   card.open = true;
   await card.fire('toggle');
@@ -1227,7 +1226,7 @@ test('layout: a stale-revision reload and Done also keep focus on a real element
   stale.document.activeElement = stale.ids.save;
   await stale.ids.save.fire('click');
   await settle();
-  assert.equal(stale.document.activeElement.id, 'status-message');
+  assert.equal(stale.document.activeElement.id, 'save');
   assert.match(stale.ids.status.textContent, /Your view was stale/);
   const page = loadPage(namedState());
   await settle();

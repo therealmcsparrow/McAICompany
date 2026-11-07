@@ -90,7 +90,7 @@ function loadPage(initialState, fetchImpl) {
   };
   doc.documentElement = make('html');
   for (const id of ['notices', 'field-live', 'lock-live', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
-  ids.save.disabled = true;
+  ids.save.setAttribute('aria-disabled', 'true');
   const names = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
     ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
@@ -465,6 +465,41 @@ test('save keeps focus on the same checkbox and shows the saved notice', async (
   const now = box(page, 'sk-qa-user-qa-helper');
   assert.equal(now.ownerDoc.activeElement, now);
   assert.ok(page.ids.status.textContent.startsWith('Saved.'));
+});
+
+test('keyboard-only save: focus on Save stays on Save, status starts Saved., and a second press posts nothing', async () => {
+  const initial = skillsState([skill('qa-helper')]);
+  const after = structuredClone(initial);
+  after.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2026-11-06' }] } } };
+  let posts = 0;
+  const fetchImpl = async (url, init) => {
+    if (init?.method === 'POST') { posts += 1; return { status: 200, json: async () => ({ state: after }) }; }
+    return { status: 200, json: async () => structuredClone(initial) };
+  };
+  const page = loadPage(initial, fetchImpl);
+  await settle();
+  const save = page.ids.save;
+  assert.equal(save.getAttribute('aria-disabled'), 'true');
+  assert.ok(!save.disabled);
+  await save.fire('click');
+  await settle();
+  assert.equal(posts, 0);
+  let card = box(page, 'sk-qa-user-qa-helper');
+  while (card.tagName !== 'DETAILS') card = card.parentNode;
+  card.open = true;
+  await card.fire('toggle');
+  await ticked(box(page, 'sk-qa-user-qa-helper'));
+  assert.equal(save.getAttribute('aria-disabled'), 'false');
+  save.focus();
+  await save.fire('click');
+  await settle();
+  assert.equal(posts, 1);
+  assert.equal(save.ownerDoc.activeElement, save);
+  assert.ok(page.ids.status.textContent.startsWith('Saved.'));
+  assert.equal(save.getAttribute('aria-disabled'), 'true');
+  await save.fire('click');
+  await settle();
+  assert.equal(posts, 1);
 });
 
 test('a server refusal of the list names the field in the summary and under the list', async () => {
