@@ -17,6 +17,11 @@ const STALE_DAYS = 180;
 const OLD_IMPECCABLE = 'npx -y impeccable skills install';
 const KEY = 'aico_settings';
 
+const UI_FIRST = ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist'];
+const inOfferOrder = (target, roles) => (target.skillcategory === 'design'
+  ? [...UI_FIRST.filter((r) => roles.includes(r)), ...roles.filter((r) => !UI_FIRST.includes(r))]
+  : roles);
+
 const SECTIONS = [
   { heading: '## Design skills', parse: parseDesignSkills, none: '- (none yet; the design-researcher proposes them)', category: () => 'design' },
   { heading: '## Skills', parse: parseSkillsSection, none: '- (none yet; the skill-researcher proposes them)', category: (area) => (area === 'company-type' ? 'product' : 'engineering') }
@@ -32,6 +37,13 @@ const todayUtc = () => new Date().toISOString().slice(0, 10);
 const stay = (reason) => ({ stay: reason });
 
 class Stop extends Error {}
+
+// The error line for an unexpected failure: a stop or a baseline catalog message passes, anything else is named by `fallback`.
+export function failLine(err, fallback) {
+  if (err instanceof Stop) return `ERROR ${err.message}`;
+  const m = err && typeof err.message === 'string' ? err.message : '';
+  return m.startsWith('ERROR baseline catalog') ? m.split('\n')[0].slice(0, 200) : `ERROR ${fallback}`;
+}
 
 // ---------- safe file access ----------
 
@@ -227,13 +239,22 @@ function scan(opts) {
   const project = projectList(cwd);
   const lines = read.text.split('\n');
   const items = [];
+  const fresh = new Map();
   for (const section of SECTIONS) {
     const body = sectionBody(lines, section.heading).filter(({ text }) => isBody(text, section.none));
     body.forEach(({ n, text }, i) => {
       const res = i >= MAX_LINES ? stay('too many lines') : classify(text, section, { today, baseByName, byName, userByName });
-      if (res.entry && !userByName.has(res.entry.skillname)) userByName.set(res.entry.skillname, res.entry);
+      if (res.entry && !userByName.has(res.entry.skillname)) {
+        userByName.set(res.entry.skillname, res.entry);
+        fresh.set(res.entry.skillname, { entry: res.entry, kind: res.kind });
+      } else if (res.kind === 'selection' && fresh.get(res.target.skillname)?.entry === res.target) {
+        // The entry exists only once a line writes it, so whichever line is chosen writes it.
+        const first = fresh.get(res.target.skillname);
+        res.entry = first.entry;
+        res.kind = first.kind;
+      }
       if (res.target) {
-        const roles = eligibleRoles(res.target, baseline.categories).filter((r) => !guarded.has(r));
+        const roles = inOfferOrder(res.target, eligibleRoles(res.target, baseline.categories).filter((r) => !guarded.has(r)));
         const open = roles.filter((r) => { const have = roleNames(project.data, r); return have.includes(res.target.skillname) || have.length < MAX_ROLE_SKILLS; });
         if (roles.length === 0) Object.assign(res, stay('no Role can take it'));
         else if (open.length === 0) Object.assign(res, stay('Role already has 5'));
@@ -341,6 +362,13 @@ function execute(s, opts, chosen, moves, out) {
   const note = [];
   const stopped = (e) => { out.push(`ERROR ${e.message}`, `done so far: ${note.join(', ') || 'nothing'}; project.md is unchanged`); return { ok: false, changed: note.length > 0, lines: out }; };
   try {
+    // Names that become entries only after the catalog write cannot be checked yet; the write checks them again.
+    const later = new Set(done.filter((d) => d.item.res.entry).map((d) => d.item.res.target.skillname));
+    checkAdds(mergedLayer(s.project.data, adds, (name) => later.has(name)), adds, opts);
+  } catch (e) {
+    return stopped(e instanceof Stop ? e : new Stop('cannot write'));
+  }
+  try {
     fs.mkdirSync(dir, { recursive: true });
     if (!realDir(dir)) throw new Stop('archive cannot be written');
     const text = SECTIONS.map((sec) => {
@@ -353,9 +381,11 @@ function execute(s, opts, chosen, moves, out) {
   } catch (e) {
     return stopped(e instanceof Stop ? e : new Stop('archive cannot be written'));
   }
+  const written = new Set();
   for (const { item } of done) {
     const { res } = item;
-    if (!res.entry) continue;
+    if (!res.entry || written.has(res.entry.skillname)) continue;
+    written.add(res.entry.skillname);
     const w = addUserEntry(res.entry, { home: opts.home, moveCommit: res.kind === 'choice' });
     if (!w.ok) return stopped(new Stop(w.error));
     note.push(`${res.entry.skillname} in your list`);
@@ -373,25 +403,38 @@ function execute(s, opts, chosen, moves, out) {
   return { ok: true, changed: true, lines: out };
 }
 
-function writeSettings(s, opts, adds) {
-  const data = s.project.data;
-  const layer = isPlain(data[KEY]) ? data[KEY] : { version: 1 };
+// The project layer with the added selections, as a copy. `skip` leaves out names not to add.
+function mergedLayer(data, adds, skip = () => false) {
+  const layer = structuredClone(isPlain(data[KEY]) ? data[KEY] : { version: 1 });
   if (!isPlain(layer.roles)) layer.roles = {};
   for (const [role, list] of adds) {
     if (!isPlain(layer.roles[role])) layer.roles[role] = {};
     const have = Array.isArray(layer.roles[role].skills) ? layer.roles[role].skills : [];
     const next = have.slice();
     for (const item of list) {
+      if (skip(item.name)) continue;
       const at = next.findIndex((x) => isPlain(x) && x.name === item.name);
       if (at === -1) next.push(item);
       else next[at] = { ...next[at], approved: item.approved };
     }
     layer.roles[role].skills = next;
   }
-  data[KEY] = layer;
+  return layer;
+}
+
+// Checks the Roles the run adds to, and no others: a stale list on another Role stays as it is.
+function checkAdds(layer, adds, opts) {
+  const scoped = { ...layer, roles: Object.fromEntries(Object.entries(layer.roles).filter(([role]) => adds.has(role))) };
   const userLayer = readLayer('user', { home: opts.settingsHome }).layer;
-  const reasons = checkLayers(userLayer, layer, { home: opts.home, pluginRoot: opts.pluginRoot });
+  const reasons = checkLayers(userLayer, scoped, { home: opts.home, pluginRoot: opts.pluginRoot, levels: ['project'] });
   if (reasons.length > 0) throw new Stop(`project settings refused: ${reasons.map((r) => r.replace(/^project /, '')).join('; ')}`);
+}
+
+function writeSettings(s, opts, adds) {
+  const data = s.project.data;
+  const layer = mergedLayer(data, adds);
+  checkAdds(layer, adds, opts);
+  data[KEY] = layer;
   writePlain(s.project.file, `${JSON.stringify(data, null, 2)}\n`, s.project.id, 'project settings');
 }
 
@@ -413,14 +456,16 @@ function clearLines(s, items) {
 
 // ---------- pending and stale ----------
 
-// How many old section lines migrate would offer. 0 with no project.md or on any problem reading it.
+// How many skill lines the old sections hold, and how many of them migrate would offer. Both 0 with no
+// project.md; any other problem reading it throws.
+export function pendingCounts(options = {}) {
+  const s = scan(normalize(options));
+  const lines = s.items.filter(({ res }) => res.stay !== 'not a skill line');
+  return { total: lines.length, migrate: lines.filter(({ res }) => !res.stay).length };
+}
+
 export function pending(options = {}) {
-  try {
-    const s = scan(normalize(options));
-    return s.items.filter(({ res }) => !res.stay).length;
-  } catch {
-    return 0;
-  }
+  return pendingCounts(options).total;
 }
 
 // True when no design skill is selected for a Role that takes design skills, or the newest approval
@@ -568,7 +613,7 @@ export function add(input, options = {}) {
   }
   if (input.move === true && !st.pin) return fail('ERROR move: no other commit in your list');
 
-  const entry = { skillname: given.name, skillcategory: given.category, ...src, license: given.license };
+  const entry = { skillname: given.name, skillcategory: st.base ? st.base.skillcategory : given.category, ...src, license: given.license };
   if (given.commit !== undefined) entry.skillcommit = given.commit;
   const v = validateEntry(entry, 'user');
   if (!v.ok) return fail(`ERROR ${v.field} ${v.reason}`);
@@ -614,7 +659,8 @@ export function record(input, options = {}) {
     const same = (x) => sameSrc(x, e) && (x.skillcommit ?? null) === (e.skillcommit ?? null);
     const existing = user ?? base;
     const needEntry = !(existing && same(existing));
-    if (needEntry && e.skillrepo === undefined && !(existing && sameSrc(existing, e))) return fail('ERROR entry: source differs from the list');
+    if (needEntry && existing && e.skillrepo === undefined) return fail('ERROR entry: source differs from the list');
+    if (needEntry && !existing && e.skillrepo === undefined && e.skillplugin === undefined) return fail('ERROR entry: a command is in no list');
 
     const guarded = protectedRoles(opts.pluginRoot);
     const category = (existing ?? e).skillcategory;
@@ -643,7 +689,7 @@ export function record(input, options = {}) {
     out.push(`recorded: ${e.skillname}${chosen.length ? `, Roles ${chosen.join(', ')}` : ''}`);
     return { ok: true, lines: out };
   } catch (err) {
-    return fail(`ERROR ${err instanceof Stop ? err.message : 'record failed'}`);
+    return fail(failLine(err, 'record failed'));
   }
 }
 
@@ -684,7 +730,12 @@ export function main(args, ctx = {}) {
   const base = { cwd: ctx.cwd, home: ctx.home, today: ctx.today, pluginRoot: ctx.pluginRoot };
   const [cmd, ...rest] = args;
   try {
-    if (cmd === 'pending' && rest.length === 0) { log(`pending: ${pending(base)}`); return 0; }
+    if (cmd === 'pending' && rest.length === 0) {
+      const c = pendingCounts(base);
+      log(`pending: ${c.total}`);
+      log(`can migrate: ${c.migrate}`);
+      return 0;
+    }
     if (cmd === 'stale' && rest.length === 0) {
       const r = stale(base);
       log(`stale: ${r.stale ? 'yes' : 'no'}${r.reason ? `, ${r.reason}` : ''}`);
@@ -709,7 +760,7 @@ export function main(args, ctx = {}) {
     log('ERROR usage: role-skills add | record | migrate | pending | stale | help');
     return 1;
   } catch (e) {
-    log(`ERROR ${e instanceof Stop ? e.message : 'role-skills failed'}`);
+    log(failLine(e, 'role-skills failed'));
     return 1;
   }
 }

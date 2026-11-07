@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { main, migrate, pending, stale } from './role-skills.mjs';
+import { main, migrate, pending, stale, add, record, failLine } from './role-skills.mjs';
 
 const TODAY = '2026-11-07';
 const A = 'a'.repeat(40);
@@ -67,7 +67,9 @@ test('preview lists every line and writes nothing', (t) => {
   assert.match(r.text, /line 13: stays, command differs from the list/);
   assert.equal(read(p, 'project.md'), p.md);
   assert.equal(fs.existsSync(userFile(p)), false);
-  assert.equal(pending({ cwd: p.cwd, home: p.home, today: TODAY }), 5);
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: TODAY }), 7);
+  const counts = run(p, ['pending']);
+  assert.deepEqual(counts.out, ['pending: 7', 'can migrate: 5']);
 });
 
 test('apply writes entries and selections, archives, clears, and a second run changes nothing', (t) => {
@@ -198,7 +200,9 @@ test('a refused settings write leaves project.md whole and a rerun adds no dupli
   const r = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=ui-ux-designer']);
   assert.equal(r.code, 1);
   assert.match(r.text, /project settings refused/);
-  assert.match(r.text, /done so far: archive written, fancy-ui in your list/);
+  assert.match(r.text, /done so far: nothing; project.md is unchanged/);
+  assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'archive')), false);
+  assert.equal(fs.existsSync(userFile(p)), false);
   assert.equal(read(p, 'project.md'), p.md);
   fs.writeFileSync(path.join(p.cwd, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1 } }));
   const again = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=ui-ux-designer']);
@@ -211,7 +215,7 @@ test('pending is 0 without project.md', (t) => {
   assert.equal(pending({ cwd, home: tmp(t), today: TODAY }), 0);
   const out = [];
   assert.equal(main(['pending'], { cwd, home: tmp(t), log: (s) => out.push(s) }), 0);
-  assert.deepEqual(out, ['pending: 0']);
+  assert.deepEqual(out, ['pending: 0', 'can migrate: 0']);
 });
 
 test('stale: none, old, undated and fresh design selections', (t) => {
@@ -240,4 +244,93 @@ test('arguments are checked against an allow-list', (t) => {
 test('migrate returns the result lines for the caller', (t) => {
   const p = project(t, { design: [], skills: [] });
   assert.deepEqual(migrate({ cwd: p.cwd, home: p.home, today: TODAY }).lines, ['nothing to migrate']);
+});
+
+test('a design line offers the five UI Roles first, in that order', (t) => {
+  const p = project(t);
+  const line = run(p, ['migrate']).out.find((l) => l.startsWith('line 4:'));
+  assert.match(line, /Roles: ui-ux-designer, frontend-engineer, desktop-engineer, game-engineer, brand-artist(,|$)/);
+});
+
+test('pending counts every skill line, prints how many can migrate, and migrate names the reasons', (t) => {
+  const stays = '- name: octo-x; source: octo/x; license: MIT; vetted: 2026-02-01; why: w; approved: 2026-02-02';
+  const p = project(t, { design: [stays], skills: [] });
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: TODAY }), 1);
+  assert.deepEqual(run(p, ['pending']).out, ['pending: 1', 'can migrate: 0']);
+  assert.match(run(p, ['migrate']).text, /line 4: stays, repo line has no commit/);
+});
+
+test('pending stops with an error on a bad project settings file, and is 0 only without project.md', (t) => {
+  const p = project(t, { design: [DESIGN[0]], skills: [] });
+  fs.writeFileSync(path.join(p.cwd, '.company', 'settings.json'), '{ nope');
+  const r = run(p, ['pending']);
+  assert.equal(r.code, 1);
+  assert.match(r.text, /^ERROR project settings/);
+  assert.throws(() => pending({ cwd: p.cwd, home: p.home, today: TODAY }));
+});
+
+test('failLine lets a baseline catalog message through and hides other errors', () => {
+  assert.equal(failLine(new Error('ERROR baseline catalog: missing'), 'x failed'), 'ERROR baseline catalog: missing');
+  assert.equal(failLine(new Error('secret detail'), 'x failed'), 'ERROR x failed');
+});
+
+test('a second line with the same name and commit writes the entry when only it is chosen', (t) => {
+  const p = project(t, { design: [DESIGN[2], DESIGN[2]], skills: [] });
+  const r = run(p, ['migrate', '--apply', '--line', '5:fancy-ui=ui-ux-designer']);
+  assert.equal(r.code, 0, r.text);
+  assert.match(r.text, /line 5: migrated, entry in your list, selected for ui-ux-designer/);
+  assert.equal(JSON.parse(fs.readFileSync(userFile(p), 'utf8')).entries.length, 1);
+  assert.equal(JSON.parse(read(p, 'settings.json')).aico_settings.roles['ui-ux-designer'].skills[0].name, 'fancy-ui');
+});
+
+test('a stale name on another Role does not stop migration', (t) => {
+  const p = project(t, { design: [DESIGN[2]], skills: [], settings: { aico_settings: { version: 1, roles: { 'brand-artist': { skills: [{ name: 'ghost-skill' }] } } } } });
+  const r = run(p, ['migrate', '--apply', '--line', '4:fancy-ui=ui-ux-designer']);
+  assert.equal(r.code, 0, r.text);
+  const roles = JSON.parse(read(p, 'settings.json')).aico_settings.roles;
+  assert.equal(roles['brand-artist'].skills[0].name, 'ghost-skill');
+  assert.equal(roles['ui-ux-designer'].skills[0].name, 'fancy-ui');
+});
+
+test('add previews and stores a pin of a baseline entry under the baseline category', (t) => {
+  const home = tmp(t);
+  const input = { name: 'hallmark', repo: 'nutlope/hallmark', commit: A, category: 'quality', license: 'MIT' };
+  const r = add(input, { home });
+  assert.equal(r.ok, true, r.lines.join('\n'));
+  assert.ok(r.lines.includes('Category: design'));
+  assert.match(r.lines.find((l) => l.startsWith('Roles that can select it:')), /ui-ux-designer/);
+  assert.doesNotMatch(r.lines.find((l) => l.startsWith('Roles that can select it:')), /qa/);
+  assert.equal(add({ ...input, save: true }, { home }).ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.mcsparrow', '3rdpartyskills.json'), 'utf8')).entries[0].skillcategory, 'design');
+});
+
+const PLUGIN_PICK = { skillname: 'other-plugin:thing', skillcategory: 'design', skillplugin: 'other-plugin' };
+
+test('record writes a new plugin pick after a license question', (t) => {
+  const p = project(t, { design: [], skills: [] });
+  const r = record({ entry: PLUGIN_PICK, license: 'MIT', roles: ['ui-ux-designer'] }, { cwd: p.cwd, home: p.home, today: TODAY });
+  assert.equal(r.ok, true, r.lines.join('\n'));
+  assert.deepEqual(r.lines, ['entry added: other-plugin:thing', 'recorded: other-plugin:thing, Roles ui-ux-designer']);
+  const e = JSON.parse(fs.readFileSync(userFile(p), 'utf8')).entries[0];
+  assert.equal(e.skillplugin, 'other-plugin');
+  assert.equal(e.license, 'MIT');
+  assert.equal(JSON.parse(read(p, 'settings.json')).aico_settings.roles['ui-ux-designer'].skills[0].name, 'other-plugin:thing');
+});
+
+test('record of a new plugin pick with no license or a dash writes nothing', (t) => {
+  const p = project(t, { design: [], skills: [] });
+  for (const license of [undefined, '-', '  ']) {
+    const r = record({ entry: PLUGIN_PICK, license, roles: ['ui-ux-designer'] }, { cwd: p.cwd, home: p.home, today: TODAY });
+    assert.deepEqual(r, { ok: true, lines: ['no license stated: other-plugin:thing'] });
+  }
+  assert.equal(fs.existsSync(userFile(p)), false);
+  assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'settings.json')), false);
+});
+
+test('record still refuses a command pick no list holds', (t) => {
+  const p = project(t, { design: [], skills: [] });
+  const r = record({ entry: { skillname: 'cmd-pick', skillcategory: 'design', skillinstaller: 'npx -y cmd-pick@1.0.0 skills install' }, license: 'MIT', roles: ['ui-ux-designer'] }, { cwd: p.cwd, home: p.home, today: TODAY });
+  assert.equal(r.ok, false);
+  assert.match(r.lines[0], /^ERROR entry: /);
+  assert.equal(fs.existsSync(userFile(p)), false);
 });
