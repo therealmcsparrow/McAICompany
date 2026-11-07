@@ -478,7 +478,7 @@ test('reprompt Playbook: the dispatch block follows the dispatch-prompt Reprompt
   const contract = read('docs/contracts/dispatch-prompt.md');
   const line = contract.split('\n').find((l) => l.startsWith('- **Reprompt Step (v3.3):**'));
   assert.ok(line, 'Reprompt Step line in the Contract');
-  const afterColon = line.slice(line.indexOf('with those two lines:') + 'with those two lines:'.length, line.indexOf('No `Design skills:`'));
+  const afterColon = line.slice(line.indexOf('with those two lines:') + 'with those two lines:'.length, line.indexOf('No `Role skills:`'));
   const expected = [...afterColon.matchAll(/`([A-Za-z ]+:)`/g)].map((m) => m[1].slice(0, -1));
   assert.deepEqual(expected.slice(0, 3), ['Project profile', 'Company profile', 'Language']);
   const block = playbook.match(/## 2\. Dispatch[\s\S]*?```\n([\s\S]*?)```/);
@@ -488,7 +488,7 @@ test('reprompt Playbook: the dispatch block follows the dispatch-prompt Reprompt
   const want = expected.filter((k) => k !== 'Settings' || keys.includes('Settings'));
   assert.deepEqual(keys.filter((k) => k !== 'Follow aico:handoff.'), want, `${[...optional]} is the only optional line`);
   assert.equal(keys.at(-1), 'Follow aico:handoff.');
-  for (const banned of ['Design skills', 'Review depth', 'Review format', 'Rule slice', 'Personality']) assert.ok(!keys.includes(banned), banned);
+  for (const banned of ['Role skills', 'Design skills', 'Review depth', 'Review format', 'Rule slice', 'Personality']) assert.ok(!keys.includes(banned), banned);
   assert.ok(keys.indexOf('Asks left') > keys.indexOf('Round') && keys.indexOf('Request') > keys.indexOf('Input Handoffs'));
 });
 

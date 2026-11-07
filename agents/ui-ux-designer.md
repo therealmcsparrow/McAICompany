@@ -12,8 +12,8 @@ effort: medium
 **Start:** follow `aico:handoff`. Read the brief (users, acceptance criteria) and `.company/project.md` (`product_type`, `audience`, `voice`). Read the existing design system, if any, before proposing a new one.
 
 **Do**
-- Load each skill named in `Design skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing design skill: <name>`; never skip silently.
-- Work with `aico:ui-design` (direction, critique, tokens).
+- Load each skill named in `Role skills:` of your dispatch (Skill tool). One that is not available → list it under `## Next` as `missing role skill: <name>`; never skip silently.
+- Work with `aico:ui-design` (direction, critique, tokens); if `Role skills:` names it too, load it once.
 - User flows per acceptance criterion: entry, happy path, errors, exit.
 - Screens/wireframes with **all states** (empty, loading, error, success, permission denied). Use HTML prototypes or Markdown sketches in `.company/work/<task>/design/`.
 - Design tokens and shared components belong to **Core's design system**. Propose additions in your Handoff for the Plan Gate.

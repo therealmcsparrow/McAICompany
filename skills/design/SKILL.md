@@ -19,7 +19,7 @@ Run with `aico:pipeline`; keep the §1.0 type lines for the run. The `design` co
 
 ## 2. Research
 Dispatch in parallel, in one message, only what the brief needs:
-- `aico:design-researcher`: references, patterns, competitor interfaces, design skills.
+- `aico:design-researcher`: references, patterns, competitor interfaces, design skills. Its Goal block carries the line `Area: design` (see `${CLAUDE_PLUGIN_ROOT}/skills/lead/references/skill-picks.md`); without it the Role stops with `missing area`.
 - `aico:ux-researcher`: user needs, tasks and journeys from the Personas.
 Findings follow `aico:sourcing`. A `blocked` researcher does not stop the run; the concepts Step notes the gap.
 

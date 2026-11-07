@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
 import { checkDrift } from './contract-drift.mjs';
 import { probe } from './drift-probe.mjs';
+import { expandGroups, parseBaseline } from './skill-catalog.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -41,9 +42,6 @@ function mdFiles(dir) {
 
 // Playbooks that dispatch no Role and only print or run a CLI: they need no language resolution.
 export const LANGUAGE_EXEMPT = new Set(['setup', 'language', 'settings']);
-const MANIFEST_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}\*?$/;
-const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
-const LICENSE_RE = /^[A-Za-z0-9.+-]{1,64}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ROLE_COUNT_RE = /\b(\d+)\s+(?:\*\*)?Role(?:\*\*)?\s+agents\b|\ball\s+(\d+)\s+Roles\b/gi;
 
@@ -109,37 +107,80 @@ function checkCompanyTypes(root, agentNames, playbooks, skills, errors) {
   }
 }
 
-// deps/skills.json: agentsec.M-SEC7 patterns on name/source, agentsec.M-SEC6 license/vetted on `research`.
-function checkManifest(root, errors) {
-  const file = join(root, 'deps', 'skills.json');
-  if (!existsSync(file)) return;
-  let manifest;
-  try { manifest = JSON.parse(readFileSync(file, 'utf8')); }
-  catch { errors.push('ERROR deps/skills.json: invalid JSON'); return; }
-  if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
-    errors.push('ERROR deps/skills.json: top level must be an object of groups');
+// The old inventory path is built from parts so this file holds no live cite of it.
+const OLD_DIR = 'deps';
+const OLD_FILE = 'skills.json';
+const OLD_INVENTORY = [OLD_DIR, OLD_FILE].join('/');
+const OLD_FILE_RE = OLD_FILE.replace('.', '\\.');
+const QUOTE = '[\'"`]';
+// Prose and code: the path in backticks. Code files (.mjs, .js) also: the path in quotes, or its parts joined by a comma.
+const OLD_CITE = new RegExp('`' + OLD_DIR + '/' + OLD_FILE_RE + '`');
+const OLD_CITE_CODE = new RegExp(`${QUOTE}${OLD_DIR}/${OLD_FILE_RE}${QUOTE}|${QUOTE}${OLD_DIR}${QUOTE}\\s*,\\s*${QUOTE}${OLD_FILE_RE}${QUOTE}`);
+const CODE_EXT = /\.(mjs|js)$/;
+const OLD_CITE_EXEMPT = /history|retired|superseded/i;
+const CITE_DIRS = ['skills', 'scripts', join('docs', 'contracts')];
+const CITE_EXT = /\.(md|mjs|js|json)$/;
+const CITE_MAX_FILES = 5000;
+const CITE_MAX_BYTES = 1024 * 1024;
+
+// Files under `dir` (relative paths with forward slashes), bounded in count; symlinks are not followed.
+function citeFiles(root, dir, out) {
+  let entries;
+  try { entries = readdirSync(join(root, dir), { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    if (out.length >= CITE_MAX_FILES) return;
+    const rel = `${dir.split(sep).join('/')}/${e.name}`;
+    if (e.isDirectory()) citeFiles(root, join(dir, e.name), out);
+    else if (e.isFile() && CITE_EXT.test(e.name) && !e.name.endsWith('.test.mjs')) out.push(rel);
+  }
+}
+
+// The baseline catalog (skill-catalog v1): a returned old inventory, a live cite of it, a bad baseline,
+// a Role in no category and a listed Role with no agent are all errors. A repo with no plugin manifest
+// and no baseline has nothing to check.
+function checkCatalog(root, agentNames, errors) {
+  if (existsSync(join(root, OLD_INVENTORY))) errors.push(`ERROR ${OLD_INVENTORY}: the old inventory returned; the baseline is deps/3rdpartyskills.json`);
+  const files = [];
+  for (const d of CITE_DIRS) citeFiles(root, d, files);
+  for (const rel of files) {
+    let text;
+    try {
+      if (statSync(join(root, rel)).size > CITE_MAX_BYTES) continue;
+      text = readFileSync(join(root, rel), 'utf8');
+    } catch { continue; }
+    if (!text.includes(OLD_FILE)) continue;
+    const code = CODE_EXT.test(rel);
+    text.split(/\r?\n/).forEach((line, i) => {
+      if ((OLD_CITE.test(line) || (code && OLD_CITE_CODE.test(line))) && !OLD_CITE_EXEMPT.test(line)) errors.push(`ERROR ${rel}:${i + 1}: live cite of the old inventory file`);
+    });
+  }
+  const file = join(root, 'deps', '3rdpartyskills.json');
+  if (!existsSync(file)) {
+    if (existsSync(join(root, '.claude-plugin', 'plugin.json'))) errors.push('ERROR deps/3rdpartyskills.json: missing');
     return;
   }
-  for (const group of Object.keys(manifest)) {
-    const entries = manifest[group];
-    if (!Array.isArray(entries)) { errors.push(`ERROR deps/skills.json: group ${group} must be an array`); continue; }
-    entries.forEach((e, i) => {
-      const at = `deps/skills.json: ${group}[${i}]`;
-      if (e === null || typeof e !== 'object') { errors.push(`ERROR ${at}: entry must be an object`); return; }
-      const isInclude = Object.hasOwn(e, 'include');
-      if (!isInclude) {
-        if (typeof e.name !== 'string' || !MANIFEST_NAME_RE.test(e.name)) errors.push(`ERROR ${at}: name fails the agentsec.M-SEC7 pattern`);
-        if (Object.hasOwn(e, 'source')) {
-          const src = e.source;
-          if (typeof src !== 'string' || !REPO_RE.test(src) || src.endsWith('/.') || src.endsWith('/..'))
-            errors.push(`ERROR ${at}: source fails the agentsec.M-SEC7 pattern`);
-        }
-        if (group === 'research') {
-          if (typeof e.license !== 'string' || !LICENSE_RE.test(e.license)) errors.push(`ERROR ${at}: research entry needs a valid license`);
-          if (typeof e.vetted !== 'string' || !realDate(e.vetted)) errors.push(`ERROR ${at}: research entry needs a valid vetted date`);
-        }
-      }
-    });
+  let baseline;
+  try {
+    const st = statSync(file);
+    if (!st.isFile()) throw new Error('not a file');
+    baseline = parseBaseline(readFileSync(file, 'utf8'));
+  } catch (e) {
+    errors.push(`ERROR deps/3rdpartyskills.json: ${String(e?.message ?? 'unreadable').replace(/^ERROR baseline catalog: /, '').slice(0, 60)}`);
+    return;
+  }
+  if (Object.hasOwn(baseline.groups, 'research')) {
+    for (const e of expandGroups(baseline, ['research'])) {
+      const name = String(e.skillname).slice(0, 60);
+      if (!Object.hasOwn(e, 'license')) errors.push(`ERROR deps/3rdpartyskills.json: research entry ${name} needs a license`);
+      if (!Object.hasOwn(e, 'vetted')) errors.push(`ERROR deps/3rdpartyskills.json: research entry ${name} needs a vetted date`);
+    }
+  }
+  const listed = new Set(Object.values(baseline.categories).flat());
+  for (const role of [...agentNames].sort()) {
+    if (!listed.has(role)) errors.push(`ERROR deps/3rdpartyskills.json: Role ${role} is in no category`);
+  }
+  if (agentNames.size) for (const role of [...listed].sort()) {
+    if (!agentNames.has(role)) errors.push(`ERROR deps/3rdpartyskills.json: listed Role ${role} has no agent`);
   }
 }
 
@@ -880,7 +921,7 @@ export function check(root, { today } = {}) {
       errors.push(`ERROR ${p.rel}: Playbook mentions neither aico:pipeline nor §1.6 (Language rule)`);
 
   checkDocPages(root, playbooks.map(p => p.name), agentNames, errors);
-  checkManifest(root, errors);
+  checkCatalog(root, agentNames, errors);
   checkCompanyTypes(root, agentNames, playbooks, skills, errors);
   checkRoleCounts(root, agentNames, errors, agentFm);
   checkNames(root, agentNames, errors);

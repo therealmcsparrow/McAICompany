@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "categories": {
+    "engineering": ["architect", "senior-engineer", "backend-engineer", "frontend-engineer", "desktop-engineer", "game-engineer", "ai-data-engineer", "devops"],
+    "design": ["ui-ux-designer", "brand-artist", "game-artist", "motion-artist", "prompt-artist", "frontend-engineer", "desktop-engineer", "game-engineer"],
+    "security": ["security", "pentester", "vuln-scanner"],
+    "quality": ["qa", "code-reviewer", "fresh-reviewer", "hands-on-tester", "persona-tester", "accessibility-tester"],
+    "product": ["product-manager", "account-manager", "ux-researcher", "legal", "reprompter"],
+    "research": ["market-researcher", "tech-researcher", "design-researcher", "skill-researcher"],
+    "content": ["writer", "editor", "marketer", "localizer", "support"]
+  },
+  "groups": {
+    "core": [
+      "find-skills",
+      "hallmark",
+      "impeccable",
+      "frontend-ui-engineering",
+      "security-and-hardening",
+      "security-review",
+      "auth-implementation-patterns",
+      { "include": "research" }
+    ],
+    "research": ["find-skills"],
+    "go": ["golang-*"],
+    "react": ["vercel-react-best-practices", "vercel-composition-patterns", "typescript-advanced-types"],
+    "tanstack": ["tanstack-query", "tanstack-router", "tanstack-form", "tanstack-table"],
+    "auth": ["two-factor-authentication-best-practices"]
+  },
+  "entries": [
+    { "skillname": "find-skills", "skillcategory": "research", "skillrepo": "vercel-labs/skills", "license": "MIT", "vetted": "2026-10-22" },
+    { "skillname": "hallmark", "skillcategory": "design", "skillrepo": "nutlope/hallmark", "license": "MIT" },
+    { "skillname": "impeccable", "skillcategory": "design", "skillinstaller": "npx -y impeccable@4.8.0 skills install", "license": "Apache-2.0" },
+    { "skillname": "frontend-ui-engineering", "skillcategory": "design", "skillrepo": "addyosmani/agent-skills", "license": "MIT" },
+    { "skillname": "security-and-hardening", "skillcategory": "security", "skillrepo": "addyosmani/agent-skills", "license": "MIT" },
+    { "skillname": "security-review", "skillcategory": "security", "skillrepo": "getsentry/skills", "license": "Apache-2.0" },
+    { "skillname": "auth-implementation-patterns", "skillcategory": "engineering", "skillrepo": "wshobson/agents", "license": "MIT" },
+    { "skillname": "golang-*", "skillcategory": "engineering", "skillrepo": "samber/cc-skills-golang", "license": "MIT" },
+    { "skillname": "vercel-react-best-practices", "skillcategory": "engineering", "skillrepo": "vercel-labs/agent-skills" },
+    { "skillname": "vercel-composition-patterns", "skillcategory": "engineering", "skillrepo": "vercel-labs/agent-skills" },
+    { "skillname": "typescript-advanced-types", "skillcategory": "engineering", "skillrepo": "wshobson/agents", "license": "MIT" },
+    { "skillname": "tanstack-query", "skillcategory": "engineering", "skillrepo": "tanstack-skills/tanstack-skills", "license": "MIT" },
+    { "skillname": "tanstack-router", "skillcategory": "engineering", "skillrepo": "tanstack-skills/tanstack-skills", "license": "MIT" },
+    { "skillname": "tanstack-form", "skillcategory": "engineering", "skillrepo": "tanstack-skills/tanstack-skills", "license": "MIT" },
+    { "skillname": "tanstack-table", "skillcategory": "engineering", "skillrepo": "tanstack-skills/tanstack-skills", "license": "MIT" },
+    { "skillname": "two-factor-authentication-best-practices", "skillcategory": "engineering", "skillrepo": "better-auth/skills" },
+    { "skillname": "aico:ui-design", "skillcategory": "design", "skillplugin": "aico" }
+  ]
+}

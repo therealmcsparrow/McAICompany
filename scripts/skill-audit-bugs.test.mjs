@@ -5,6 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { manifestFromBaseline } from './install-skills.mjs';
+import { readBaseline } from './skill-catalog.mjs';
 
 // Tests for the wizard, cooler, vulnscan and other skill text: what each skill file says, and what the wizard
 // template's env and secret helpers do when run with bash in temporary folders.
@@ -222,8 +224,8 @@ test('B3b cooler topic slug is an allow-list, not a deny-list (cooler:16)', () =
   assert.ok(!/no `\\ \/ : \* \?/.test(file), 'the deny-list of characters is gone ($, backtick and ; passed through it)');
 });
 
-test('B4 impeccable is never run by setup at any scope: pinned command, manual line, WARNING (deps/skills.json:5)', async () => {
-  const groups = JSON.parse(read('deps/skills.json'));
+test('B4 impeccable is never run by setup at any scope: pinned command, manual line, WARNING (deps/3rdpartyskills.json)', async () => {
+  const groups = manifestFromBaseline(readBaseline());
   const imp = groups.core.find(e => e.name === 'impeccable');
   assert.equal(imp.install, 'npx -y impeccable@4.8.0 skills install');
   const { main } = await import('./install-skills.mjs');
@@ -235,8 +237,8 @@ test('B4 impeccable is never run by setup at any scope: pinned command, manual l
   assert.ok(out.some(l => /^WARNING: /.test(l) && l.includes(imp.install)), out.join('|'));
 });
 
-test('B4 no auto-installed skill runs an unpinned npx package (deps/skills.json:5)', () => {
-  const groups = JSON.parse(read('deps/skills.json'));
+test('B4 no auto-installed skill runs an unpinned npx package (deps/3rdpartyskills.json)', () => {
+  const groups = manifestFromBaseline(readBaseline());
   const installs = [];
   for (const [g, entries] of Object.entries(groups)) for (const e of entries) if (e.install) installs.push([g, e.name, e.install]);
   for (const [g, name, cmd] of installs) {
@@ -329,7 +331,7 @@ test('S7b vulnscan notice is a general notice: kinds of destinations, examples o
 });
 
 test('R-3 the manifest-command warning says home folder only, never a product folder, in every place that states it', () => {
-  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md', 'skills/research/SKILL.md', 'skills/feature/SKILL.md', 'skills/lead/references/skill-picks.md']) {
+  for (const f of ['skills/setup/SKILL.md', 'documentation/commands/setup.md', 'docs/contracts/skills-manifest.md', 'skills/research/SKILL.md', 'skills/feature/SKILL.md', 'skills/lead/references/skill-picks.md']) {
     const t = read(f);
     assert.match(t, /home folder/, f + ': no home-folder rule');
     assert.doesNotMatch(t, /\(`cd ~ && <cmd>`\)/, f + ': a cd ~ && form that fails in cmd.exe and Windows PowerShell 5.1');
@@ -391,14 +393,12 @@ test('R-9 the scanner reads registry and audit-registry before an audit tool, re
   assert.match(t, /that tool's result is not counted as clean/);
 });
 
-test('R-12 both contracts hold the sentence the installer prints in the WARNING line', () => {
+test('R-12 the manifest Contract holds the sentence the installer prints in the WARNING line', () => {
   const printed = 'First change to your home folder, then run: <cmd>';
   const src = read('scripts/install-skills.mjs');
   assert.ok(src.includes('First change to your home folder, then run: '), 'the installer no longer prints the sentence');
-  for (const f of ['docs/contracts/skills-manifest.md', 'docs/contracts/design-skills-section.md']) {
-    const t = read(f);
-    assert.ok(t.includes(printed), f + ': does not state the printed sentence');
-    assert.ok(!t.includes('the home path the WARNING line prints'), f + ': names a path the WARNING does not print');
-  }
+  const t = read('docs/contracts/skills-manifest.md');
+  assert.ok(t.includes(printed), 'does not state the printed sentence');
+  assert.ok(!t.includes('the home path the WARNING line prints'), 'names a path the WARNING does not print');
   assert.ok(!read('docs/contracts/skills-manifest.md').includes('Step 1: cd <home folder path>. Step 2: <cmd>`, and exits'), 'old two-step text is still the stated WARNING');
 });

@@ -114,6 +114,19 @@ test('SKILL.md: pipeline, stages in order, checks and review lanes', () => {
   assert.match(skill.slice(skill.indexOf('## 7. Handoff package')), /AI flag[^\n]*tool, prompt and date[^\n]*copyright/);
 });
 
+test('every Playbook that dispatches the design researcher gives it the Area line', () => {
+  for (const rel of ['skills/design/SKILL.md', 'skills/feature/SKILL.md', 'skills/research/SKILL.md']) {
+    const hit = read(rel).split('\n').filter((l) => l.includes('design-researcher'));
+    assert.ok(hit.length > 0, rel);
+    assert.ok(hit.some((l) => l.includes('Area: design')), rel);
+  }
+});
+
+test('the design researcher judges the resolved selections and the catalog', () => {
+  const agent = read('agents/design-researcher.md');
+  assert.match(agent, /Judge the resolved selections and the catalog:[^\n]*`design` entries[^\n]*as read at Start/);
+});
+
 test('files are LF only', () => {
   for (const rel of ['company/types/design.json', 'skills/design/SKILL.md', 'scripts/type-design.test.mjs']) {
     assert.ok(!read(rel).includes('\r'), rel);

@@ -165,7 +165,7 @@ test('GET /api/state returns plugin defaults, raw layers, resolved, stored langu
   fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { model: 'haiku' } } } }));
   const { state } = await start(t, s);
   const st = await state();
-  assert.deepEqual(Object.keys(st).sort(), ['hasProject', 'language', 'personalities', 'plugin', 'project', 'resolved', 'user']);
+  assert.deepEqual(Object.keys(st).sort(), ['catalog', 'hasProject', 'language', 'personalities', 'plugin', 'project', 'resolved', 'user']);
   assert.equal(st.plugin.roles.qa.model, 'sonnet');
   assert.deepEqual(st.user, { version: 1, roles: { qa: { model: 'haiku' } } });
   assert.deepEqual(st.project, { version: 1 });
@@ -475,7 +475,7 @@ test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row
   const at = (needle) => html.indexOf(needle);
   assert.ok(at('id="tab-gates"') < at('id="tab-scan"') && at('id="tab-scan"') < at('id="tab-mods"'));
   assert.ok(at('id="panel-gates"') < at('id="panel-scan"') && at('id="panel-scan"') < at('id="panel-mods"'));
-  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
+  assert.ok(/scan:\s*renderScan/.test(html) && /TAB_NAMES = \['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'\]/.test(html));
   const mods = html.slice(at('function renderMods'), at('const SCAN_NOTE'));
   assert.ok(!mods.includes('skillspector') && !mods.includes('SkillSpector'));
   const scan = html.slice(at('const SCAN_NOTE'), at('// ---------- page'));
@@ -633,6 +633,7 @@ class FakeNode {
   removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); }
   async fire(type) { for (const fn of this.listeners[type] ?? []) await fn({ type, key: '', preventDefault() {} }); }
   focus() { this.ownerDoc.activeElement = this; }
+  scrollIntoView(options) { (this.ownerDoc.scrolled ??= []).push({ node: this, options }); }
   getBoundingClientRect() { return { height: 0 }; }
   get textContent() { return this.children.map((c) => c.textContent).join('') + this.own; }
   set textContent(v) { this.children = []; this.own = String(v); }
@@ -658,8 +659,8 @@ function loadPage(initialState, { saveReply } = {}) {
   };
   doc.documentElement = make('html');
   for (const id of ['notices', 'field-live', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
-  ids.save.disabled = true;
-  const names = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+  ids.save.setAttribute('aria-disabled', 'true');
+  const names = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
     ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
@@ -925,7 +926,7 @@ test('a cleared or replaced ignored value is one unsaved change, and an untouche
   const page = loadPage(st);
   await settle();
   assert.equal(page.ids.count.textContent, '0 unsaved changes');
-  assert.equal(page.ids.save.disabled, true);
+  assert.equal(page.ids.save.getAttribute('aria-disabled'), 'true');
   assert.match(page.ids.notices.textContent, /user roles\.qa\.personality\.creativity: must be low, medium or high/);
   const select = field(page, 'qa', 'user', 'creativity');
   assert.equal(select.value, '__ignored__');
@@ -1039,7 +1040,7 @@ const idOf = (n) => n.id;
 test('layout: the tabs come in the Contract order and each has its panel', () => {
   const html = pageHtml();
   const tabs = [...html.matchAll(/<button role="tab" id="tab-([a-z]+)" aria-controls="panel-([a-z]+)"/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(tabs.map(([a]) => a), ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods']);
+  assert.deepEqual(tabs.map(([a]) => a), ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods']);
   for (const [tab, panel] of tabs) assert.equal(tab, panel);
   const panels = [...html.matchAll(/<section role="tabpanel" id="panel-([a-z]+)"/g)].map((m) => m[1]);
   assert.deepEqual(panels, tabs.map(([a]) => a));
@@ -1207,9 +1208,8 @@ test('layout: after a successful Save focus is not on body: the same control whe
   page.document.activeElement = page.ids.save;
   await page.ids.save.fire('click');
   await settle();
-  const message = walk(page.ids.status, (n) => n.id === 'status-message');
-  assert.equal(message.getAttribute('tabindex'), '-1');
-  assert.equal(page.document.activeElement, message, 'the Save button is disabled after a reload');
+  assert.ok(walk(page.ids.status, (n) => n.id === 'status-message'));
+  assert.equal(page.document.activeElement, page.ids.save, 'Save stays focusable after a reload');
   const card = page.all((n) => n.tagName === 'DETAILS')[1];
   card.open = true;
   await card.fire('toggle');
@@ -1220,6 +1220,37 @@ test('layout: after a successful Save focus is not on body: the same control whe
   assert.equal(page.document.activeElement, field(page, 'qa', 'user', 'topic'), 'the rebuilt control with the same id');
 });
 
+test('layout: a focused control that is gone after the reload hands focus to the status message, after 200 and after 409', async () => {
+  for (const status of [200, 409]) {
+    const gone = { ...namedState(), hasProject: false };
+    const page = loadPage(namedState(), { saveReply: { status, body: { state: gone } } });
+    await settle();
+    await type(field(page, 'qa', 'user', 'talk'), 'calm');
+    page.document.activeElement = page.ids['clear-project'];
+    await page.ids.save.fire('click');
+    await settle();
+    assert.equal(page.ids['clear-project'].disabled, true, `status ${status}`);
+    const active = page.document.activeElement;
+    assert.equal(active.id, 'status-message', `status ${status}`);
+    assert.equal(active.getAttribute('tabindex'), '-1', `status ${status}`);
+  }
+});
+
+test('layout: after Save and after a stale reload the status message is scrolled into view, and focus does not move', async () => {
+  for (const status of [200, 409]) {
+    const page = loadPage(namedState(), { saveReply: { status, body: { state: namedState() } } });
+    await settle();
+    await type(field(page, 'qa', 'user', 'talk'), 'calm');
+    page.document.activeElement = page.ids.save;
+    await page.ids.save.fire('click');
+    await settle();
+    assert.equal(page.document.activeElement, page.ids.save, `status ${status}`);
+    const hit = (page.document.scrolled ?? []).find((s) => s.node.id === 'status-message');
+    assert.ok(hit, `status ${status}`);
+    assert.equal(hit.options.block, 'nearest', `status ${status}`);
+  }
+});
+
 test('layout: a stale-revision reload and Done also keep focus on a real element', async () => {
   const stale = loadPage(namedState(), { saveReply: { status: 409, body: { state: namedState() } } });
   await settle();
@@ -1227,7 +1258,7 @@ test('layout: a stale-revision reload and Done also keep focus on a real element
   stale.document.activeElement = stale.ids.save;
   await stale.ids.save.fire('click');
   await settle();
-  assert.equal(stale.document.activeElement.id, 'status-message');
+  assert.equal(stale.document.activeElement.id, 'save');
   assert.match(stale.ids.status.textContent, /Your view was stale/);
   const page = loadPage(namedState());
   await settle();
@@ -1658,4 +1689,304 @@ test('the ignored class follows the project select value, so picking off or blan
   const html = pageHtml();
   const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
   assert.ok(row.includes("control.classList.toggle('ignored', ignored && control.value === 'on')"));
+});
+
+// ---------- role skills ----------
+
+function userCatalog(s, entries) {
+  const dir = path.join(s.home, '.mcsparrow');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries }));
+}
+const QA_PICK = { skillname: 'qa-helper', skillcategory: 'quality', skillrepo: 'someone/qa-helper', skillcommit: 'b'.repeat(40), license: 'MIT stated by me', vetted: '2026-01-02' };
+
+test('GET /api/state carries the catalog with license, vetted, status and eligible Roles, and no home path', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK, { skillname: 'cmd-tool', skillcategory: 'quality', skillinstaller: 'npx tool@1.2.3', license: 'ISC', vetted: '2026-01-02' }]);
+  const { state } = await start(t, s);
+  const st = await state();
+  assert.ok(Array.isArray(st.catalog.entries));
+  const byName = Object.fromEntries(st.catalog.entries.map((e) => [e.name, e]));
+  assert.deepEqual(byName['qa-helper'].roles, ['qa', 'code-reviewer', 'fresh-reviewer', 'hands-on-tester', 'persona-tester', 'accessibility-tester']);
+  assert.equal(byName['qa-helper'].license, 'MIT stated by me, as stated, not checked');
+  assert.equal(byName['qa-helper'].vetted, '2026-01-02');
+  assert.equal(byName['qa-helper'].status, 'missing');
+  assert.equal(byName['qa-helper'].selectable, true);
+  assert.equal(byName['cmd-tool'].vetted, null);
+  assert.equal(byName['golang-*'].selectable, false);
+  assert.equal(byName['vercel-react-best-practices'].license, 'no license on record');
+  assert.equal(byName['find-skills'].layer, 'baseline');
+  assert.equal(JSON.stringify(st.catalog).includes(s.home), false);
+  assert.equal(JSON.stringify(st.catalog).includes(os.homedir()), false);
+  assert.equal(st.resolved.settings_folder_moved, false);
+});
+
+test('save round-trips a skills list, dates it by the server and refuses a bad one with nothing written', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const bad = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'SECRET-NAME' }] } } } });
+  assert.equal(bad.status, 400);
+  const refused = (await bad.json()).refused.join(' ');
+  assert.match(refused, /roles\.qa\.skills\[0\]\.name: not selectable for this Role/);
+  assert.equal(refused.includes('SECRET-NAME'), false);
+  assert.equal(read(s.config), null);
+  const prot = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { architect: { skills: [] } } } });
+  assert.equal(prot.status, 400);
+  assert.equal(read(s.projectFile), null);
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '1999-01-01' }] } } } });
+  assert.equal(ok.status, 200);
+  const { state: after } = await ok.json();
+  const today = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(after.resolved.roles.qa.skills, [{ name: 'qa-helper', approved: today }]);
+  assert.equal(after.resolved.roles.qa.source.skills, 'user');
+});
+
+test('a sixth skill is refused by the server with the field named and nothing written, and the served page has the Skills tab', async (t) => {
+  const s = sandbox(t);
+  const picks = ['qa-one', 'qa-two', 'qa-three', 'qa-four', 'qa-five', 'qa-six'].map((skillname, n) => ({ ...QA_PICK, skillname, skillrepo: `someone/${skillname}`, skillcommit: String(n + 1).repeat(40) }));
+  userCatalog(s, picks);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const names = picks.map((p) => ({ name: p.skillname }));
+  const six = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: names } } } });
+  assert.equal(six.status, 400);
+  assert.match((await six.json()).refused.join(' '), /roles\.qa\.skills: must be at most 5 skills/);
+  assert.equal(read(s.config), null);
+  const five = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: names.slice(0, 5) } } } });
+  assert.equal(five.status, 200);
+  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+  assert.match(html, /<button role="tab" id="tab-skills" aria-controls="panel-skills"/);
+  assert.match(html, /<section role="tabpanel" id="panel-skills"/);
+});
+
+test('a skill selected at user level is read from the user home only, so a planted product folder does not count', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(ok.status, 200);
+  fs.mkdirSync(path.join(s.cwd, '.claude', 'skills', 'qa-helper'), { recursive: true });
+  fs.writeFileSync(path.join(s.cwd, '.claude', 'skills', 'qa-helper', 'SKILL.md'), '---\nname: qa-helper\n---\n');
+  const row = (await state()).catalog.entries.find((e) => e.name === 'qa-helper');
+  assert.equal(row.status, 'missing');
+  assert.notEqual(row.place, 'project');
+  fs.mkdirSync(path.join(s.home, '.claude', 'skills', 'qa-helper'), { recursive: true });
+  fs.writeFileSync(path.join(s.home, '.claude', 'skills', 'qa-helper', 'SKILL.md'), '---\nname: qa-helper\n---\n');
+  const home = (await state()).catalog.entries.find((e) => e.name === 'qa-helper');
+  assert.notEqual(home.status, 'missing');
+});
+
+test('a user-only save is not refused for a stale or protected list in the stored project layer, and the mirror holds', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }] }, security: { skills: [{ name: 'security-review' }] } } } }));
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const ok = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(ok.status, 200);
+  fs.unlinkSync(s.projectFile);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }] } } } }));
+  const again = await state();
+  const mirror = await post('/api/save', { revision: again.resolved.revision, project: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(mirror.status, 200);
+  const bad = await post('/api/save', { revision: (await state()).resolved.revision, project: { version: 1, roles: { security: { skills: [] } } } });
+  assert.equal(bad.status, 400);
+});
+
+test('catalog rows carry the finished vetted text and the repo for a repo entry', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [
+    QA_PICK,
+    { ...QA_PICK, skillname: 'qa-scanned', skillrepo: 'someone/qa-scanned', hash: 'sha256:' + 'c'.repeat(64) },
+    { skillname: 'cmd-tool', skillcategory: 'quality', skillinstaller: 'npx tool@1.2.3', license: 'ISC' }
+  ]);
+  const { state } = await start(t, s);
+  const byName = Object.fromEntries((await state()).catalog.entries.map((e) => [e.name, e]));
+  assert.equal(byName['qa-helper'].skillrepo, 'someone/qa-helper');
+  assert.equal(byName['qa-helper'].vetted_text, 'vetted 2026-01-02, from the old list, not scanned here');
+  assert.equal(byName['cmd-tool'].vetted_text, 'not vetted');
+  assert.equal(byName['cmd-tool'].skillrepo, undefined);
+  assert.equal(byName['find-skills'].skillrepo, 'vercel-labs/skills');
+  assert.match(byName['find-skills'].vetted_text, /^(not vetted|vetted \d{4}-\d{2}-\d{2})/);
+});
+
+test('save refuses a changed user skills list while the settings folder is moved, with nothing written', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } }, gates: { ship: 'ask' } } });
+  assert.equal(res.status, 400);
+  const text = (await res.json()).refused.join(' ');
+  assert.match(text, /roles\.qa\.skills/);
+  assert.equal(text.includes('qa-helper'), false);
+  assert.equal(fs.existsSync(path.join(s.home, 'config.json')), false);
+});
+
+test('save takes stored user names back unchanged while the user level is unread, dates kept', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  const stored = [{ name: 'ghost-skill', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-02-02' }];
+  const file = path.join(s.home, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const user = { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }, { name: 'qa-helper', approved: '2030-01-01' }] } }, gates: { ship: 'ask' } };
+  const res = await post('/api/save', { revision: before.resolved.revision, user });
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa.skills, stored);
+});
+
+// ---------- skills lists while the user layer is unread, repeats, protected Roles ----------
+
+// Moves the settings folder away from the (mocked) user home, so the real home is never read.
+function movedSettingsFolder(t, s) {
+  const old = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = s.home;
+  t.after(() => { if (old === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = old; });
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-userhome-'));
+  t.after(() => fs.rmSync(other, { recursive: true, force: true }));
+  return t.mock.method(os, 'userInfo', () => ({ homedir: other }));
+}
+
+// The page's own skills filters in a vm, over the given state and catalog entries.
+function loadSkillFilters(state, entries) {
+  const html = pageHtml();
+  const grab = (name) => {
+    const start = html.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, name);
+    return html.slice(start, html.indexOf('\n}\n', start) + 3);
+  };
+  const lines = (from, to) => html.slice(html.indexOf(from), html.indexOf(to));
+  const code = [
+    html.split('\n').find((l) => l.startsWith('const SKILL_NAME_RE')),
+    html.split('\n').find((l) => l.startsWith('const has = ')),
+    grab('getIn'),
+    lines('const isObj = ', 'const skillList = '),
+    lines('function staleSkills', 'const skillEffective')
+  ].join('\n');
+  const ctx = vm.createContext({ state, skIndex: new Map() });
+  const fns = vm.runInContext(`${code}\nskIndex = new Map(${JSON.stringify(entries)}.map((e) => [e.name, e]));\n[withoutStaleSkills, staleSkills]`, ctx);
+  const json = (v) => JSON.parse(JSON.stringify(v));
+  return { strip: (layer, level) => json(fns[0](json(layer), level)), stale: (level, role) => json(fns[1](level, role)) };
+}
+const PAGE_ENTRIES = [{ name: 'hallmark', roles: ['qa', 'architect'], selectable: true }];
+const sk = (...names) => names.map((name) => ({ name }));
+
+test('page: a stored project skills list of a protected Role is dropped even when empty, and listed as ignored', () => {
+  const state = { resolved: { roles: { architect: { protected: true } } }, catalog: { errors: [] }, project: { roles: { architect: { skills: [] } } } };
+  const f = loadSkillFilters(state, PAGE_ENTRIES);
+  assert.deepEqual(f.strip(state.project, 'project'), {});
+  assert.equal(f.stale('project', 'architect').length, 1);
+});
+
+test('page: while the user layer is unread, project names are kept and not listed as ignored', () => {
+  for (const unread of [{ resolved: { settings_folder_moved: true }, catalog: { errors: [] } }, { resolved: {}, catalog: { errors: ['ERROR user catalog: invalid'] } }]) {
+    const state = { ...unread, project: { roles: { qa: { skills: sk('my-own', 'hallmark') } } }, user: { roles: { qa: { skills: sk('my-own') } } } };
+    const f = loadSkillFilters(state, PAGE_ENTRIES);
+    assert.deepEqual(f.strip(state.project, 'project').roles.qa.skills, sk('my-own', 'hallmark'));
+    assert.deepEqual(f.strip(state.user, 'user').roles.qa.skills, sk('my-own'));
+    assert.deepEqual(f.stale('project', 'qa'), []);
+  }
+  const read = { resolved: {}, catalog: { errors: [] }, project: { roles: { qa: { skills: sk('my-own', 'hallmark') } } } };
+  assert.deepEqual(loadSkillFilters(read, PAGE_ENTRIES).strip(read.project, 'project').roles.qa.skills, sk('hallmark'));
+});
+
+test('page: a repeated stored name is kept once and listed as ignored', () => {
+  const state = { resolved: {}, catalog: { errors: [] }, user: { roles: { qa: { skills: sk('hallmark', 'hallmark') } } } };
+  const f = loadSkillFilters(state, PAGE_ENTRIES);
+  assert.deepEqual(f.strip(state.user, 'user').roles.qa.skills, sk('hallmark'));
+  assert.deepEqual(f.stale('user', 'qa'), ['hallmark']);
+});
+
+test('save takes the stored user names back while the user catalog is unreadable, with only effort changed', async (t) => {
+  const s = sandbox(t);
+  const dir = path.join(s.home, '.mcsparrow');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '3rdpartyskills.json'), '{ not json');
+  const stored = [{ name: 'qa-helper', approved: '2025-02-02' }];
+  const file = path.join(s.home, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { effort: 'high', skills: [{ name: 'qa-helper', approved: '2030-01-01' }] } }, gates: { ship: 'ask' } } });
+  assert.equal(res.status, 200);
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa;
+  assert.deepEqual(saved.skills, stored);
+  assert.equal(saved.effort, 'high');
+});
+
+test('save takes the stored project names back while the settings folder is moved', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  const file = path.join(s.cwd, '.company', 'settings.json');
+  const stored = [{ name: 'qa-helper', approved: '2025-02-02' }, { name: 'ghost-skill', approved: '2025-03-03' }];
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: stored } } } }));
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const res = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { qa: { effort: 'high', skills: sk('qa-helper', 'ghost-skill') } } } });
+  assert.equal(res.status, 200);
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')).aico_settings.roles.qa;
+  assert.deepEqual(saved.skills, stored);
+});
+
+test('save refuses a repeated name over a stored single one while the settings folder is moved', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  const file = path.join(s.home, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2025-02-02' }] } } } }));
+  const { post, state } = await start(t, s, { home: undefined });
+  const before = await state();
+  const body = fs.readFileSync(file, 'utf8');
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: sk('qa-helper', 'qa-helper') } }, gates: { ship: 'ask' } } });
+  assert.equal(res.status, 400);
+  assert.equal(fs.readFileSync(file, 'utf8'), body);
+});
+
+test('an effort-only save with no cwd given uses the process folder, with a moved settings folder', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  movedSettingsFolder(t, s);
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }] } } } }));
+  t.mock.method(process, 'cwd', () => s.cwd);
+  const { post, state } = await start(t, s, { home: undefined, cwd: undefined });
+  const before = await state();
+  assert.equal(before.resolved.settings_folder_moved, true);
+  const res = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { qa: { effort: 'high', skills: [{ name: 'ghost-skill' }] } } } });
+  assert.equal(res.status, 200);
+  const res2 = await post('/api/save', { revision: (await state()).resolved.revision, project: { version: 1, roles: { qa: { effort: 'low', skills: [{ name: 'ghost-skill' }] } } } });
+  assert.equal(res2.status, 200);
+});
+
+test('an effort-only save with no cwd given uses the process folder, with a bad stored user list', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [{ skillname: 'qa-helper' }]);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }] } } } }));
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill', approved: '2025-01-01' }] } } } }));
+  t.mock.method(process, 'cwd', () => s.cwd);
+  const { post, state } = await start(t, s, { cwd: undefined });
+  const before = await state();
+  const res = await post('/api/save', { revision: before.resolved.revision, project: { version: 1, roles: { qa: { effort: 'high', skills: [{ name: 'ghost-skill' }] } } } });
+  assert.equal(res.status, 200);
+});
+
+test('a stored repeated name sent once keeps its date', async (t) => {
+  const s = sandbox(t);
+  userCatalog(s, [QA_PICK]);
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2025-01-01' }, { name: 'qa-helper', approved: '2025-01-01' }] } } } }));
+  const { post, state } = await start(t, s);
+  const before = await state();
+  const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.roles.qa.skills, [{ name: 'qa-helper', approved: '2025-01-01' }]);
 });

@@ -1,4 +1,6 @@
-# Contract: token-ledger v1.8
+# Contract: token-ledger v1.9
+
+v1.9 (additive, `docs/adr/0007-contract-minor-versions.md`): a Step id may have three digits, so a run can pass Step 99. `id` for kinds `step`, `replay` and `reflect` is `^\d{2,3}$` (`replay` also `R<n>`, `reflect` also `RT`); two-digit ids stay valid and four digits are refused.
 
 v1.8 (task Context Cap Enforcement, T1; additive, `docs/adr/0007-contract-minor-versions.md`): `add` with `ctx_end` above 95000 still writes the record, then prints `over cap: <kind> <id> <role> ctx_end <n> > 95000` and exits 4 (every refusal, exit 2, runs first and is unchanged; `ctx_end` 0 to 95000 is unchanged). The text `report` prints one line `over cap: <count> steps (max <n>)` right after `not reconciled:` and before any `--baseline` lines from the `notification` records above 95000, only when the count is above 0 (nothing is printed for 0); `report --json` is unchanged. New `agent-ctx` command. Every v1.7 file is a valid v1.8 file.
 
@@ -41,7 +43,7 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 | `v` | `1` |
 | `run` | a work folder name (`work-folder-name` v1: `isWorkFolder` from `mods/lib/work-folder.mjs`, the one check) or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$` |
 | `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect \| meta \| par` (`reflect`: part M, `src: mod` only; `meta`: v1.2; `par`: v1.3, below) |
-| `id` | Step `^\d{2}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `reflect` a Step `^\d{2}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
+| `id` | Step `^\d{2,3}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `reflect` a Step `^\d{2,3}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
 | `role` | an `agents/*.md` name, or `lead` (not on `ship`; always `lead` on `reflect`) |
 | `agent` | the Agent result's `agentId`, `^[A-Za-z0-9_-]{1,64}$`; required on `step`, `round`, `crossfire`, `replay`; the key `reconcile` uses; refused on `reflect` |
 | `src` | `notification \| transcript \| mod` (not on `ship`) |

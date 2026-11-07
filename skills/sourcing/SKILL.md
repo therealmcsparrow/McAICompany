@@ -52,13 +52,13 @@ Recommend only a candidate that passes all of these; name the commit or release 
 5. No API key, account or browser login; nothing that needs code to run (Python, bun, Chrome, binaries).
 6. A skill that fetches URLs at run time only when no offline candidate fits, with the risk named (agentsec.S3).
 Out of `quick` budget before all six are done → the candidate stays in `## Candidates` with `vetted: n`, reason `not vetted within quick budget`; it is never recommended.
-A recommended `source` is `owner/repo` matching `^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$` (not `.` or `..`) and a `name` matching `^[a-z0-9][a-z0-9-]{0,63}$`; anything else is rejected, not cleaned up (agentsec.M-SEC7). A command source is allowed only as the exact `install` string of a `deps/skills.json` entry with the same `name`.
+A recommended `source` is `owner/repo` matching `^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$` (not `.` or `..`) and a `name` matching `^[a-z0-9][a-z0-9-]{0,63}$`; anything else is rejected, not cleaned up (agentsec.M-SEC7). A command source is allowed only as the exact `skillinstaller` string of a `deps/3rdpartyskills.json` entry with the same `name`.
 
 ## Researcher Handoff extension (on top of `aico:handoff`)
 - Frontmatter adds `fetches: <n>` and `depth: quick | deep`. No `files-touched`.
 - `## Findings`: one line each, `<claim> — [S#] — confidence high|medium|low`, or `<claim> (unverified)`.
 - `## Sources`: `[S#] <title> — <URL> — checked YYYY-MM-DD — primary | secondary | blog | ai`.
 - `## Open questions` for what you could not find. Headings and frontmatter values stay English; prose follows `Language:`.
-- design-researcher also writes `## Candidates` (table: name, source repo, license, last commit, installs/stars, API key y/n, vetted y/n, fit, verdict), `## Recommended set` (at most 5 lines, `design-skills-section` v1 format with `approved: pending`, overlap with `aico:ui-design` named) and `## Rejected` (each reason). Every table row appears in the set or in `## Rejected`; nothing exists only in the table.
-- skill-researcher writes the same three sections in the `skill-recommendation` v1 format (`area`, a commit per recommended repo skill) and finds and vets by reading; it runs no scan. The Lead scans every pick before you see it (`agents/skill-researcher.md`, `skills/lead/references/skill-picks.md`).
+- design-researcher and skill-researcher write `## Candidates` (one line per candidate: name, source repo, license, last commit, installs/stars, API key y/n, vetted y/n, fit, verdict), `## Recommended set` (at most 5 lines) and `## Rejected` (each reason) in the `skill-recommendation` v2 format (`area`, a commit per recommended repo skill, `approved: pending`); design-researcher also names overlap with `aico:ui-design`. Every candidate appears in the set or in `## Rejected`; nothing exists only in the list.
+- Both find and vet by reading and run no scan. The Lead scans every pick before you see it (`agents/skill-researcher.md`, `skills/lead/references/skill-picks.md`).
 - Status `blocked` when the question cannot be answered within the caps; the PM still writes the report (RR error cases).

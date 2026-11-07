@@ -1,7 +1,8 @@
-# Contract: tier-sets v1.5
+# Contract: tier-sets v1.6
 
 Provider: `scripts/tier-set.mjs` (data file loader, tier and path decision, forced-high path check, run record writer and reader; Node built-ins only) and the plugin data file `company/tier-sets.json`. Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/tier-path.md`), only through the CLI, only for `aico:feature` and `aico:fix` runs. Consumers: the Lead (which Roles and lanes to dispatch, the `Risk tier:` of each later dispatch, the Gate summary lines), and `scripts/ledger.mjs` `ship` through the exported `readTierPath` (`token-ledger` v1.4).
 Uses: `run-state` v1.3 `show(root, slug)` (the view's `tier`, read only), `plan-tasks` v1 exports `parsePlan` and `normalizePath` and its plan file name rule, `aico-settings` v1.8 `pipeline.short_path` (passed in by the caller as `--short`; the script reads no settings), `run-state` v1.4 `triage check --route fix` (only through the caller's `--triage` value), `git` (object format and base resolution at `begin`; object format, the base check, Core and the diff at `sync`), run as the "Git" paragraph below says (v1.1; `rule-check` v1.1 and `review-depth` v1.1 run their git the same way).
+v1.6 is additive (task role-skills-file, T1): the `design-researcher` condition reads Role selections (`skill-catalog` v1, `aico-settings` v1.12), not `## Design skills`, since that section is no longer read at run time (`design-skills-section` v2.0). The 180 days are unchanged. Sets, tiers and the data file are unchanged.
 v1.5 is additive: the `plan-review` condition also needs a Contract major in the plan (`plan-review` v1.3 `majors`). Sets, tiers and the data file are unchanged.
 v1.4 is additive (task Draft Input Folder Case Draft, T9; `docs/adr/0007-contract-minor-versions.md`, uses `work-folder-name` v1.1 `exactWorkPath`): after the name-shape check and before any file, record or git call, every command (`preview`, `begin`, `sync`, `raise`, `read`) checks the slug against the directory entries of `.company/work`. A slug that exists only in another letter case is refused with `refused: wrong letter case`, exit 3, and no record is written. A slug missing in every case behaves as before. Every other refusal is unchanged.
 v1.3 is additive (task idea-20261030-2242-build-draft, T14): the slug argument may be a new work folder name (`work-folder-name` v1, `isWorkFolder`), and `sync --diff` reads the run ref `refs/heads/aico/<branch id>` where `<branch id>` is `branchId(<slug>)` re-checked against `^[a-z0-9][a-z0-9-]{0,127}$` (a legacy slug is its own id, so its ref is unchanged). The run folder and the record keep the run name. Every refusal stays: a name that is not a work folder is `bad slug`, exit 3, before any file or git call.
@@ -41,7 +42,7 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 |---|---|---|---|---|
 | feature | `product-manager` | 1 | always | yes |
 | feature | `prototype` | 1b | the CEO accepted a prototype question at the Brief Gate (v1.2) | |
-| feature | `design-researcher` | 1a | UI work and `## Design skills` stale | |
+| feature | `design-researcher` | 1a | UI work and design selections stale (v1.6): among the selections of a `design`-category skill (`aico-settings` v1.12 `roles.<role>.skills`) on a UI Role (`ui-ux-designer`, `brand-artist`, `frontend-engineer`, `desktop-engineer`, `game-engineer`), none, none with a valid `approved` date, or the newest valid `approved` over 180 days old | |
 | feature | `architect` | 2 | always | |
 | feature | `ui-ux-designer` | 2 | UI work | |
 | feature | `brand-artist` | 2 | `## Art direction` empty or new Assets needed | |

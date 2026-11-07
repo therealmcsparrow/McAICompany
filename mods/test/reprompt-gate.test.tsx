@@ -23,6 +23,8 @@ const DENY_NOT_STARTED = 'aico reprompt gate: this reprompter was not started th
 const DENY_UNKNOWN = 'aico reprompt gate: unknown agent during a reprompt run; refused'
 const FILE = { kind: 'file', size: 10, mtimeMs: 1, isLink: false }
 const TTL = 1_800_000
+// Advancing TTL of fake time fires every mod's 2 s tick about 900 times, which is real CPU work; those tests get headroom under load.
+const SLOW_MS = 30_000
 const OTHER_SLUG = 'reprompt-20260102-1000'
 
 type Env = Parameters<Parameters<typeof test>[1]>
@@ -369,7 +371,7 @@ for (const surface of SURFACES) {
     expect(t.fsCalls.length).toBe(0)
   })
 
-  test(`an armed run keeps refusing while the marker stands, the run has not ended and the timeout holds (${surface})`, async ($, on) => {
+  test(`an armed run keeps refusing while the marker stands, the run has not ended and the timeout holds (${surface})`, { timeoutMs: SLOW_MS }, async ($, on) => {
     const t = await boot($, on, surface, { rows: [], ids: ['rp1'] })
     await t.spawn()
     await t.clock.advance(TTL)
@@ -377,7 +379,7 @@ for (const surface of SURFACES) {
     expect(t.fsCalls).toEqual([`stat ${RUN}/.gate-01`, `stat ${RUN}/run-state.jsonl`, `read ${RUN}/run-state.jsonl`])
   })
 
-  test(`an armed run disarms after the timeout, then reads nothing (${surface})`, async ($, on) => {
+  test(`an armed run disarms after the timeout, then reads nothing (${surface})`, { timeoutMs: SLOW_MS }, async ($, on) => {
     const t = await boot($, on, surface, { rows: [], ids: ['rp1'] })
     await t.spawn()
     await t.clock.advance(TTL + 1)
@@ -387,7 +389,7 @@ for (const surface of SURFACES) {
     expect(t.fsCalls.length).toBe(0)
   })
 
-  test(`a new dispatch of the same run refreshes the timeout (${surface})`, async ($, on) => {
+  test(`a new dispatch of the same run refreshes the timeout (${surface})`, { timeoutMs: SLOW_MS }, async ($, on) => {
     const t = await boot($, on, surface, { rows: [], ids: ['rp1', 'rp2'] })
     await t.spawn()
     await t.clock.advance(TTL - 1000)
@@ -396,7 +398,7 @@ for (const surface of SURFACES) {
     expect((await t.check('ghost', 'Write', { file_path: '/x' })).decision).toBe('deny')
   })
 
-  test(`one expired run does not disarm another armed run (${surface})`, async ($, on) => {
+  test(`one expired run does not disarm another armed run (${surface})`, { timeoutMs: SLOW_MS }, async ($, on) => {
     const t = await boot($, on, surface, { rows: [], ids: ['rp1', 'rp2'] })
     await t.spawn()
     await t.clock.advance(TTL - 1000)
@@ -427,7 +429,7 @@ for (const surface of SURFACES) {
     })
   }
 
-  test(`after disarm the recorded reprompter keeps its allow-list and an unrecorded one is still refused (${surface})`, async ($, on) => {
+  test(`after disarm the recorded reprompter keeps its allow-list and an unrecorded one is still refused (${surface})`, { timeoutMs: SLOW_MS }, async ($, on) => {
     const rows = [{ id: 'old', type: 'aico:reprompter', description: 'd', status: 'running' }]
     const t = await boot($, on, surface, { rows, ids: ['rp1'] })
     await t.spawn()

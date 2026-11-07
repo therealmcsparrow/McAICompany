@@ -32,14 +32,14 @@ test('names.json has 36 entries and editor is named Edith', () => {
   assert.deepEqual(Object.keys(names).sort(), agents.sort());
 });
 
-test('editor agent: frontmatter, tools Read Grep Glob Write only, at most 50 lines', () => {
+test('editor agent: frontmatter, tools Read Grep Glob Skill Write only, at most 50 lines', () => {
   const text = read('agents/editor.md');
   const fm = frontmatter(text);
   assert.equal(fm.name, 'editor');
   assert.ok(fm.description.length > 0);
   assert.ok(['sonnet', 'opus', 'haiku', 'inherit'].includes(fm.model));
   assert.ok(fm.effort);
-  assert.deepEqual(fm.tools.split(',').map((t) => t.trim()), ['Read', 'Grep', 'Glob', 'Write']);
+  assert.deepEqual(fm.tools.split(',').map((t) => t.trim()), ['Read', 'Grep', 'Glob', 'Skill', 'Write']);
   assert.ok(text.split('\n').length <= 51);
   assert.ok(!text.includes('\r'));
 });

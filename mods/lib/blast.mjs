@@ -47,7 +47,7 @@ export function parseSpawnLines(prompt) {
 // `<Step> <role>` of a subagent, or null when either part is not what the dispatch line allows.
 export function agentLabel(step, role) {
   if (typeof step !== 'string' || typeof role !== 'string') return null;
-  return /^\d{2}$/.test(step) && /^[a-z][a-z0-9-]{0,40}$/.test(role) ? `${step} ${role}` : null;
+  return /^\d{2,3}$/.test(step) && /^[a-z][a-z0-9-]{0,40}$/.test(role) ? `${step} ${role}` : null;
 }
 
 // Arguments after the script name for `review-depth.mjs`, or null when a part is not safe to pass.

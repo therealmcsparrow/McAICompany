@@ -4,6 +4,22 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-07
+
+Rollback: node scripts/stable.mjs 0.28.0
+
+### Added
+- **Skills tab and `/aico:add-skill`.** Each Role gets up to 5 third-party skills, chosen on the Skills tab of `/aico:settings` from a catalog. `/aico:add-skill` adds a skill to your own list, `~/.mcsparrow/3rdpartyskills.json`, in a few form questions. Nothing is installed or run when you add one.
+- **Migration.** `/aico:setup` and the run-start form offer to move old `## Skills` and `## Design skills` lines from `.company/project.md` into your list after a form that shows each line.
+
+### Changed
+- **Breaking: skills now live in a catalog, not in `project.md`.** `deps/skills.json` is replaced by `deps/3rdpartyskills.json`, and `install-skills design` is gone. Lines under `## Skills` and `## Design skills` in `.company/project.md` are no longer read. To keep them, run `/aico:setup` and pick Migrate; protected Roles are never offered, so skills meant only for them are not migrated. Until you migrate, those skills are not used.
+- **Clone consequence.** A project selects skills by name only. A clone carries those names but not the skill folders or your list, so each name reads `missing` or `not found` until you install it on your machine, and a name that is not in your list is ignored.
+- **One Install or Skip per skill.** The install form asks per skill, and a Skip leaves out only that skill.
+- **Editor gets the Skill tool.**
+- **The `Design skills:` dispatch line is now `Role skills:`.** It lists the skills chosen for the Role; the Role loads each one.
+- Contracts: `skill-catalog` v1, `skills-manifest` v4.0, `dispatch-prompt` v5.0, `skill-recommendation` v2.0, `research-report` v2.0, `design-skills-section` v2.0, `skills-section` v2.0.
+
 ## [0.28.0] - 2026-11-06
 
 Rollback: node scripts/stable.mjs 0.27.0

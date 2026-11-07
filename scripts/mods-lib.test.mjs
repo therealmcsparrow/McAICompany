@@ -5,7 +5,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   MAX_STDOUT, MODS_DEFAULTS, trimEol, cleanText, parseJson, str, int, bool, oneOf, arr, obj, opt, rec, pattern,
-  interpretRun, guardSettings, guardRunActive, guardReviewDepth
+  interpretRun, guardSettings, guardRunActive, guardReviewDepth, parseOutputText
 } from '../mods/lib/guard.mjs';
 import { composeStatus, IDLE, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
 import { readyText } from '../mods/lib/ready.mjs';
@@ -187,6 +187,15 @@ test('guardRunActive refuses hostile values', () => {
   assert.equal(guardRunActive({ slug: 'x', view: { ...VIEW, steps: [{ ...VIEW.steps[0], file: '../../etc/passwd' }] } }), undefined);
   assert.equal(guardRunActive({ slug: 'x', view: { ...VIEW, steps: [{ ...VIEW.steps[0], role: 'A\u001b[31m' }] } }), undefined);
   assert.equal(guardRunActive('x'), undefined);
+});
+
+test('guardRunActive accepts a Step past 99 and refuses a four-digit one', () => {
+  const s100 = { ...VIEW.steps[0], step: '100', file: '100-backend-engineer.md' };
+  const some = guardRunActive({ slug: 'x', view: { ...VIEW, steps: [VIEW.steps[0], s100] } });
+  assert.equal(some.view.steps[1].step, '100');
+  assert.equal(some.view.steps[1].file, '100-backend-engineer.md');
+  assert.equal(guardRunActive({ slug: 'x', view: { ...VIEW, steps: [{ ...s100, step: '1000' }] } }), undefined);
+  assert.equal(guardRunActive({ slug: 'x', view: { ...VIEW, steps: [{ ...s100, file: '1000-backend-engineer.md' }] } }), undefined);
 });
 
 test('guardRunActive accepts a run without a wave yet', () => {
@@ -1254,6 +1263,11 @@ test('isReprompter matches the bare and the plugin-qualified name only', () => {
 test('parseOutputLine takes exactly one well-formed Output line', () => {
   assert.deepEqual(parseOutputLine(spawn().prompt), { slug: GATE_SLUG, nn: '01' });
   assert.deepEqual(parseOutputLine('Output: .company/work/reprompt-20260101-0930-9/123-reprompter.md'), { slug: 'reprompt-20260101-0930-9', nn: '123' });
+});
+
+test('guard parseOutputText takes a three-digit Output line and refuses four digits', () => {
+  assert.deepEqual(parseOutputText('Output: .company/work/demo-run/225-code-reviewer.md'), { slug: 'demo-run', step: '225', role: 'code-reviewer' });
+  assert.equal(parseOutputText('Output: .company/work/demo-run/2250-code-reviewer.md'), null);
 });
 
 test('parseOutputLine refuses every near miss', () => {

@@ -30,7 +30,7 @@ const PROMPT_HEAD = 65536
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/
 // The model id the ledger accepts; any other id is not recorded.
 const LEDGER_MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/
-const STEP_ID = /^\d{2}$/
+const STEP_ID = /^\d{2,3}$/
 // Characters the remember line never holds: controls, line and bidi separators, zero-width marks.
 const UNSAFE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/
 

@@ -284,7 +284,7 @@ function deriveState(root, slug, dir, events, now) {
     running,
     slug,
     playbook: begun ? begun.playbook : (st ? st.kind : 'unknown'),
-    step: last ? `${last.file.slice(0, 2)} ${last.role}` : 'none',
+    step: last ? `${last.file.split('-')[0]} ${last.role}` : 'none',
     round: view.round,
     baseCommit: baseOf(tp, events),
     tier: tp.kind === 'broken' ? 'high' : (tp.kind === 'ok' ? tp.tier : view.tier),

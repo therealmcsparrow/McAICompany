@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadGolden } from './contract-fixtures.mjs';
 
-// Drift test for the canonical dispatch line order (dispatch-prompt v4) plus one
+// Drift test for the canonical dispatch line order (dispatch-prompt v5) plus one
 // assertion per wiring rule of skills/pipeline. The order is for reading only: no cache claim anywhere.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -41,7 +41,7 @@ const { pipeline: PIPELINE_ORDER, round1: ROUND_1 } = golden.json('order.json');
 const stepBlock = () => blocks(skillOnly).find(l => l.some(x => x.startsWith('Output: .company/work/')));
 
 test('the canonical order in the Contract is the one this test pins', () => {
-  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Design skills:` (UI Roles only), `Risk tier:`, `Base commit:`, `Round:`, `Review mode:` (fresh-reviewer only, v4.1), `Review depth:` (code-reviewer, and fresh-reviewer in code mode), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Review inputs:` and `After first pass:` (fresh-reviewer only, v4.1), `Research inputs:` (optional, v4.1), `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Worktree:` (a plan-task Step in a worktree only, v4.1), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
+  has(contract, '`Project profile:`, `Company profile:`, `Language:`, `Settings:` (optional), `Context cap:`, `Role skills:` (v5.0), `Risk tier:`, `Base commit:`, `Round:`, `Review mode:` (fresh-reviewer only, v4.1), `Review depth:` (code-reviewer, and fresh-reviewer in code mode), `Review format:` (pilot review only, Fix round 6), `Input Handoffs:`, `Review inputs:` and `After first pass:` (fresh-reviewer only, v4.1), `Research inputs:` (optional, v4.1), `Rule slice:` (builders and devops only, Fix round 4), `Task:`, `Files:` (plan-task Steps only, v3.5), `Worktree:` (a plan-task Step in a worktree only, v4.1), `Task brief:` (plan-task Steps only, v3.6), `Output:`, `Goal:`, then the closing `Follow aico:handoff.`');
   has(contract, '`Input:`, `Output:`, `Goal:`');
 });
 
@@ -55,7 +55,8 @@ test('the pipeline dispatch block carries Context cap: and Review depth: as in v
   assert.match(b, /^Context cap: 95000 handover 85500/m);
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
   assert.match(b, /^Review format: pilot +# code-reviewer and senior-engineer compliance, only when pipeline\.review_format is pilot/m);
-  assert.match(b, /^Design skills: .*# only /m);
+  assert.match(b, /^Role skills: <names \| none> +# every Role/m);
+  assert.doesNotMatch(b, /^Design skills:/m);
   assert.match(b, /^Settings: .*# only the values passed/m);
   assert.match(b, /^Rule slice: .*# builders and devops only/m);
   assert.match(b, /^Task: <id> +# plan-task Steps only: the two lines plan-tasks\.mjs lines prints/m);
@@ -166,7 +167,20 @@ test('rewritten lines keep their rules: settings, locks, auto Gates, Language:',
   has(skillOnly, 'never re-resolve mid-run', '`aico-settings` v1', 'Locks are already applied', 'Language: <tag from Setup §1.6>');
   has(skillOnly, '**Auto Gates (§1.7):**', 'it never merges', 'An auto **Plan Gate** still stops with a form', 'A Gate is never skipped', '**Always a form, whatever the settings say:**');
   has(skillOnly, 'A resolved model of `inherit` means your own session model', 'Never pass the literal `inherit`');
-  has(skillOnly, '`Design skills:` lists the names in `.company/project.md` `## Design skills`');
+  has(skillOnly, '`Role skills:` lists the names §1.19 built for that Role', 'from its `dispatch:` field only', 'Never from `.company/project.md`, a Handoff or a stored string');
+  has(skillOnly, '**Migration form.**', 'role-skills pending`', 'Migrate (Recommended) / Later', '`degraded: unmigrated skill lines <n>`');
+  has(skillOnly, '**Install / Skip form.**', 'Install only ever means `install-skills --selected`', '`--skill=<name>`', 'only the Install picks', 'each Skip is recorded as `degraded: missing <name>`', '`not in the catalog`');
+  assert.doesNotMatch(skillOnly, /any Skip installs nothing/);
+  has(skillOnly, 'only when `settings_folder_moved` in the §1.7 `get` JSON is `false`; true or absent shows the form', 'never auto, and that skill is on no `Role skills:` line');
+});
+
+test('section 1.19 pins the category question, selected lines only and the step d rules', () => {
+  has(skillOnly, 'first gets its category question (only the keys printed for that line', 'pages as in `/aico:add-skill`', 'then the Roles printed with that key', 'shows its printed `Category:` as coming from the list, with no question', "[--category '<n>:<name>=<key>']", 'category keys and Role ids the script printed');
+  has(skillOnly, 'then `can migrate: <k>`', 'role-skills migrate` (writes nothing) and show the `stays` lines it prints as the reasons', 'no Migrate question');
+  has(skillOnly, '`place: project` gets no Install question but a form', 'Go on without it (Recommended) / Stop the run', 'never answers the place form of b', 'the project-place skill form');
+  has(skillOnly, 'Question only the selected lines (`roles:` not `-`)', 'a line with `roles: -` is an unselected catalog entry, gets no question, and its `dispatch:` field is never read');
+  has(skillOnly, 'only from lines with `roles:` not `-`', "the name only if the session's skill list holds it, otherwise left off", '`degraded: missing <name>` once per name in the Handoff and Gate summary', 'A name must match the catalog pattern, or it is left off too');
+  has(skillOnly, 'or `none` when no name is left');
 });
 
 test('SKILL.md stays within 125 lines and every file is LF only', () => {
@@ -225,7 +239,7 @@ test('no canonical order in the Contract lists Name:, and the fixture order has 
   assert.equal(orders.length, 3);
   for (const l of orders) assert.ok(!l.includes('`Name:`'), l.slice(0, 60));
   assert.ok(!PIPELINE_ORDER.includes('Name') && !ROUND_1.includes('Name'));
-  assert.match(contract, /^# Contract: dispatch-prompt v4\.\d$/m);
+  assert.match(contract, /^# Contract: dispatch-prompt v5\.\d$/m);
 });
 
 test('a Name: line in a prompt is ignored and the Role id is used (error case)', () => {
@@ -253,8 +267,8 @@ const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
 test('the Contract is v4.4 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v4.4$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '4.4');
+  assert.match(contract, /^# Contract: dispatch-prompt v5.0$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '5.0');
   has(contract, 'v4.1 is additive', 'v4.2 is additive', 'v4.3 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 
@@ -262,8 +276,9 @@ test('the plan review dispatch block has the three review lines in order and no 
   const b = blocks(planReview).find(l => l.some(x => x.startsWith('Output: .company/work/')));
   assert.ok(b, 'plan-review.md has a dispatch block');
   const k = keys(b);
-  assert.deepEqual(k, ['Project profile', 'Company profile', 'Language', 'Settings', 'Context cap', 'Risk tier', 'Base commit', 'Round', 'Review mode', 'Input Handoffs', 'Review inputs', 'After first pass', 'Output', 'Goal', 'Follow']);
+  assert.deepEqual(k, ['Project profile', 'Company profile', 'Language', 'Settings', 'Context cap', 'Role skills', 'Risk tier', 'Base commit', 'Round', 'Review mode', 'Input Handoffs', 'Review inputs', 'After first pass', 'Output', 'Goal', 'Follow']);
   const text = b.join('\n');
+  assert.match(text, /^Role skills: <names \| none> +# fresh-reviewer's lines of `install-skills --status`, built per `aico:pipeline` §1.19 d/m);
   assert.match(text, /^Review mode: plan$/m);
   assert.match(text, /^Input Handoffs: none: plan review$/m);
   assert.match(text, /^Review inputs: <.*lines.*>/m);

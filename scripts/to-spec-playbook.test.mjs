@@ -59,6 +59,17 @@ test('AC35 setup follows research: sections 1.2, 1.4, 1.6, 1.7 and Setup item 8;
   assert.ok(!/^\s*Name:/m.test(text), 'no Name: line in any dispatch');
 });
 
+test('the dispatch carries Role skills: after Context cap: and the build follows §1.19 d', () => {
+  has('Role skills: <names | none>', '§1.19 d');
+  assert.ok(at('Role skills: <names | none>') > at('Context cap: <cap> handover <n>'));
+});
+
+test('the end prints one degraded line per left-off name, after the path', () => {
+  const end = text.slice(text.indexOf('## 5. End'));
+  assert.match(end, /`degraded: missing <name>` once per name left off `Role skills:`/);
+  assert.ok(end.indexOf('prints the path first') < end.indexOf('degraded: missing <name>'), 'the path stays first');
+});
+
 test('AC36 spec-check decides; one PM revision; then not ready with the ERROR lines, never done', () => {
   has(`${RUN} spec-check check '.company/work/<slug>/spec.md'`);
   has('exit code and the `ERROR` lines', 'never the Handoff', 'one revision', 'not ready', 'status: blocked');

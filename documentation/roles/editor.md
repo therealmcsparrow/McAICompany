@@ -13,7 +13,7 @@ Edith, the editor, checks that every claim in a report or public text has a sour
 - Agent file: `agents/editor.md`
 - Default name: Edith
 - Model: sonnet. Effort: medium. Set the model with `roles.<role>.model` in `/aico:settings`.
-- Tools: Read, Grep, Glob, Write (no Bash, no web access)
+- Tools: Read, Grep, Glob, Skill, Write (no Bash, no web access)
 - Inputs: the Input Handoffs named in the dispatch. Output: one Handoff file at the Output path, and nothing else.
 
 Back to [all Roles](README.md).

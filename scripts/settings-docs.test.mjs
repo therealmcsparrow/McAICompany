@@ -131,10 +131,15 @@ test('user docs describe the Personality tab, the Plan Gates and the Legal discl
   const concepts = docFolder(root, 'concepts');
   const commands = docFolder(root, 'commands');
   const readme = read('README.md');
-  assert.match(concepts, /It has seven tabs, in this order/);
+  assert.match(concepts, /It has eight tabs, in this order/);
+  assert.ok(concepts.indexOf('**Roles** —') < concepts.indexOf('**Skills** —'));
+  assert.ok(concepts.indexOf('**Skills** —') < concepts.indexOf('**Personality** —'));
   assert.match(concepts, /\*\*Personality\*\* — one collapsible card per Role/);
   assert.match(concepts, /Filter Roles/);
   assert.match(commands, /on the Personality tab/);
+  assert.match(readme, /\/aico:add-skill/);
+  assert.match(readme, /\*\*Tabs:\*\* Roles \([^)]*\), Skills \(/);
+  assert.ok(!readme.includes('deps/skills.json'));
   assert.match(readme, /Personality \(one collapsible card per Role/);
   for (const t of [concepts, commands])
     assert.ok(!/Personality\*\* section has one collapsible card/.test(t));

@@ -57,14 +57,15 @@ test('AC6 quick caps fetches at 10; deep needs 3 independent primary sources', (
 });
 
 test('AC7 research group holds find-skills with license and vetted, core includes it; no mattpocock plugin', () => {
-  const m = JSON.parse(read('deps/skills.json'));
-  assert.ok(m.core.some((e) => e.include === 'research'));
-  assert.ok(Array.isArray(m.research) && m.research.length >= 1);
-  for (const e of m.research) {
-    assert.ok(e.license && e.vetted, `research entry ${e.name} needs license and vetted`);
+  const b = JSON.parse(read('deps/3rdpartyskills.json'));
+  assert.ok(b.groups.core.some((e) => e.include === 'research'));
+  assert.ok(Array.isArray(b.groups.research) && b.groups.research.length >= 1);
+  for (const n of b.groups.research) {
+    const e = b.entries.find((x) => x.skillname === n);
+    assert.ok(e && e.license && e.vetted, `research entry ${n} needs license and vetted`);
     assert.ok(!/api[-_ ]?key/i.test(JSON.stringify(e)));
   }
-  assert.ok(m.research.some((e) => e.name === 'find-skills'));
+  assert.ok(b.groups.research.includes('find-skills'));
   has(research, 'anthropic-skills:deep-research', 'optional, never shown');
 });
 
@@ -140,31 +141,93 @@ test('AC19/AC20 design-researcher inputs, candidate table columns, rejection rul
     'unclear license', 'API key needed', 'no commit in 12 months', 'no fit', 'at most 5', 'Name overlap with `aico:ui-design`');
   const s = skill('sourcing');
   has(s, '## Candidates', 'name, source repo, license, last commit, installs/stars, API key y/n', '`## Recommended set` (at most 5 lines',
-    '`## Rejected`', 'Every table row appears in the set or in `## Rejected`', 'Last commit within 12 months');
+    '`## Rejected`', 'Every candidate appears in the set or in `## Rejected`', 'Last commit within 12 months');
+  has(a, '`Area:` line', '`missing area`', '`skill-recommendation` v2 line', '`area: design`', 'full 40-hex commit');
+  assert.ok(!a.includes('## Design skills'), 'the Role no longer reads the old section');
 });
 
 test('AC21 design run triggers: inside research, directly, and in feature only for UI and stale/empty', () => {
   has(research, 'design-researcher', 'topic is about UI/UX or design skills');
   has(skill('lead'), '`aico:design-researcher`');
   const f = skill('feature');
-  has(f, 'only when the product has UI', 'stale (empty, or newest `approved:` over 180 days old)', 'Otherwise skip silently');
+  has(f, 'only when the product has UI', '`tier-sets` v1.6', 'role-skills stale', 'none with a valid `approved` date', 'newest valid `approved` over 180 days old', 'Otherwise skip silently');
+  assert.ok(!f.includes('## Design skills'), 'the old section is no longer the condition');
   assert.ok(f.indexOf('1a. Design skills') > 0);
 });
 
-test('AC22 approved set goes to project.md ## Design skills (not standards), install via dry-run plus Install / Skip', () => {
-  has(research, '`.company/project.md` `## Design skills`', 'approved: <today>', 'at most 5 lines', 'Install (Recommended) / Skip',
-    'Installs happen only in this step', 'Skip is recorded and the run continues', 'ERROR design skill line');
+test('AC22 approved picks go to the user catalog and Role selections (not project.md or standards), install via the shared form', () => {
+  has(research, 'skill-picks.md` §3 and §4', '`role-skills record`', 'Install / Skip form of `aico:pipeline` §1.19 b', 'Installs happen only in this step', 'Goal line `Area: design`');
+  assert.ok(!research.includes('## Design skills`'), 'research writes no old section');
+  has(read('skills/feature/SKILL.md'), 'then run §1.19 d of `aico:pipeline` again and use the new `Role skills:` lines for every later dispatch');
   assert.ok(!/standards\.md/.test(research.slice(research.indexOf('## 7. Design skills'), research.indexOf('## 8.'))));
-  has(skill('feature'), 'design --project .company/project.md --dry-run', 'Install (Recommended) / Skip', 'Install artifacts', 'never committed');
+  has(skill('feature'), 'Goal line `Area: design`', '`role-skills record`', 'the form of `aico:pipeline` §1.19 b', '`install-skills --selected --dry-run`', 'Install artifacts', 'never committed');
+  for (const t of [research, skill('feature'), read('skills/lead/references/skill-picks.md')]) assert.ok(!t.includes('install-skills design --project'), 'no call with the removed flag');
+  for (const t of [skill('feature'), read('skills/lead/references/skill-picks.md')]) has(t, 'only when', '`settings_folder_moved` in the settings `get` output is `false`');
   has(read('docs/contracts/design-skills-section.md'), 'approved');
 });
 
-test('AC23 the five UI Roles load Design skills and name a missing one under ## Next', () => {
+test('AC22 skill-picks asks each new entry\'s license, then records one pick per call on stdin', () => {
+  const p = read('skills/lead/references/skill-picks.md');
+  const order = ['**Approve form**', '**License questions**', '**Record**', '**Install / Skip form**'];
+  order.forEach((s, i) => { if (i) assert.ok(p.indexOf(order[i - 1]) < p.indexOf(s), s); });
+  has(p, '`picks[].stated_license`', '`No license, skip this skill`', '`Cancel` runs no `record` for any pick and stops before the Install / Skip form', 'Other = the value',
+    'refused and asked again before any command', 'only after every license question is answered', 'one call per approved pick',
+    "role-skills record <<'AICO_JSON'", '{ entry, license, roles }', 'send no `license`', 'prints `no license stated: <name>`', 'name each such entry');
+  assert.deepEqual([...p.matchAll(/^(\d)\. \*\*/gm)].map((m) => m[1]), ['1', '2', '3', '4', '5'], 'section 3 steps are numbered in order');
+});
+
+test('skill-picks: post-install reads --selected and scans catalog scope user as global', () => {
+  const p = read('skills/lead/references/skill-picks.md');
+  has(p, 'the form of `aico:pipeline` §1.19 b', 'each approved repo pick that got Install', 'A pick that got Skip has no install line and no checks', '`install-skills --selected` output', '`scan failed after install`', 'stores no hash for a skill that failed either check', 'run §1.19 d of `aico:pipeline` again and use the new `Role skills:` lines for every later dispatch');
+  assert.ok(!p.includes('skillspector scan --scope'), 'the Lead runs no scan after install');
+  assert.ok(!p.includes('check-install'), 'Role skill installs have no lock file to check');
+  assert.ok(!p.includes('--scope project --skill'), 'a user scope skill is not scanned at project scope');
+  assert.ok(!/## (Design skills|Skills)`/.test(p), 'no old section is written');
+});
+
+test('setup runs the migration form before step 1 and stack text points to /aico:add-skill', () => {
+  const s = skill('setup');
+  has(s, 'role-skills pending', 'migration form of `aico:pipeline` §1.19 a', 'They are not used until you migrate them', 'role-skills migrate --apply',
+    'Later, Cancel or a printed `ERROR`', 'go on with setup', 'any argument but `help`', '/aico:add-skill');
+  has(s, '`role-skills migrate` (writes nothing) and show the `stays` lines it prints as the reasons');
+  assert.ok(s.indexOf('role-skills pending') < s.indexOf('\n1. Groups ='), 'before step 1');
+  assert.ok(s.indexOf('**Help:**') < s.indexOf('role-skills pending'), 'help stops first');
+  const d = skill('stack-detect');
+  has(d, '/aico:add-skill');
+  assert.ok(!d.includes('deps/skills.json') && !/npx|skills add/.test(d), 'stack-detect names no install command of its own');
+});
+
+test('research dispatch and setup skill-researcher dispatch carry a built Role skills line', () => {
+  has(research, 'the `Role skills:` build of §1.19 d (`install-skills --status`, no forms)', "Role skills: <names | none>   # that Role's lines of --status, built per aico:pipeline §1.19 d");
+  assert.ok(research.indexOf('Context cap: <cap>') < research.indexOf('Role skills: <names | none>'), 'Role skills: follows Context cap:');
+  has(research, 'npx -y skills@1.7.4 remove <name> -g -a claude-code -y', 'only from the home folder', 'by hand, with no command');
+  assert.ok(!research.includes('install-skills --remove'), 'the removal flag answers nothing for a skill just installed');
+  has(skill('setup'), 'its `Role skills:` built as §1.19 d says (`install-skills --status` once, no Install form; `none` when no name is left)');
+});
+
+test('setup says each degraded line to the CEO with the search result', () => {
+  const s = skill('setup');
+  has(s, 'say each `degraded: missing <name>` to the CEO with the search result');
+  assert.ok(s.indexOf('Role skills:') < s.indexOf('say each `degraded: missing <name>`'), 'after the dispatch');
+});
+
+test('the design-researcher Goal judges the resolved selections and the catalog design entries', () => {
+  has(research, "judge the resolved selections and the catalog's design entries and recommend at most 5");
+  assert.ok(!research.includes('judge the installed design skills'), 'the old Goal is gone');
+});
+
+test("skill-picks stops only on the skill's own lines, the exit decides nothing", () => {
+  const p = read('skills/lead/references/skill-picks.md');
+  has(p, "That skill's own lines decide, not the exit", 'no `installed` line for that skill', 'for a line saying `The folder stays`', 'other `hash differs` lines: the line alone', 'under the product root', 'the check gave no usable result');
+  assert.ok(!p.includes('a non-zero exit'), 'no exit-code stop');
+});
+
+test('AC23 the five UI Roles load Role skills and name a missing one under ## Next', () => {
   for (const r of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist']) {
-    has(read(`agents/${r}.md`), 'Design skills:', 'missing design skill: <name>', '## Next');
+    has(read(`agents/${r}.md`), 'Role skills:', 'missing role skill: <name>', '## Next');
   }
-  has(skill('pipeline'), 'Design skills: <names | none>', 'ui-ux-designer, frontend-engineer, desktop-engineer, game-engineer, brand-artist');
-  has(skill('handoff'), 'missing design skill: <name>', 'never skip silently');
+  has(skill('pipeline'), 'Role skills: <names | none>');
+  has(skill('handoff'), 'missing role skill: <name>', 'never skip silently');
 });
 
 test('AC10 docs agree: GLOSSARY terms, README department, commands entries, spec mentions research', () => {

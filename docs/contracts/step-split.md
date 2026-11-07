@@ -2,7 +2,7 @@
 
 History: v1.1 (2026-11-02, CEO decision) `fix` merges rows only when tag, path, line and finding text are all equal; v1 merged on tag, path and line. Compatible for consumers: it can only yield more rows, never fewer than distinct findings. v1 first release (task context-cap-enforcement T3).
 
-New Contract (task context-cap-enforcement T3). Provider: `scripts/step-split.mjs` (Node built-ins only; `main(argv, { root, exec })` exported). Consumer: `aico:pipeline` (review and Fix rounds that would not fit one Step's context), the Code Reviewer lanes and builders via the `Review group:` and `Fix group:` lines of `dispatch-prompt` v4.4. Uses `review-depth` v1.3 (`--lines`) and `work-folder-name` v1 (`exactWorkPath`).
+New Contract (task context-cap-enforcement T3). Provider: `scripts/step-split.mjs` (Node built-ins only; `main(argv, { root, exec })` exported). Consumer: `aico:pipeline` (review and Fix rounds that would not fit one Step's context), the Code Reviewer lanes and builders via the `Review group:` and `Fix group:` lines of `dispatch-prompt` v5.0. Uses `review-depth` v1.3 (`--lines`) and `work-folder-name` v1 (`exactWorkPath`).
 A group is a list of paths or Blocking rows small enough for one Step to judge inside the handover point. The script never runs git itself and never writes outside the `split/` folder of the run.
 
 ## Commands

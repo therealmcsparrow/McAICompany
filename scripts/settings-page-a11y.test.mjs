@@ -53,6 +53,7 @@ class FakeNode {
   removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); }
   async fire(type) { for (const fn of this.listeners[type] ?? []) await fn({ type, key: '', preventDefault() {} }); }
   focus() { this.ownerDoc.activeElement = this; }
+  scrollIntoView(options) { (this.ownerDoc.scrolled ??= []).push({ node: this, options }); }
   getBoundingClientRect() { return { height: 0 }; }
   get textContent() { return this.children.map((c) => c.textContent).join('') + this.own; }
   set textContent(v) { this.children = []; this.own = String(v); }
@@ -80,7 +81,7 @@ function walkAll(node, pred, out = []) {
   return out;
 }
 
-function loadPage(initialState) {
+function loadPage(initialState, fetchImpl) {
   const ids = {};
   const doc = { activeElement: null };
   const make = (tag, props = {}) => {
@@ -90,8 +91,8 @@ function loadPage(initialState) {
   };
   doc.documentElement = make('html');
   for (const id of ['notices', 'field-live', 'lock-live', 'status', 'count', 'clear-user', 'clear-project', 'save', 'done', 'unlock', 'unlock-title', 'unlock-text', 'unlock-cancel', 'unlock-ok']) ids[id] = make('div', { id });
-  ids.save.disabled = true;
-  const names = ['roles', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+  ids.save.setAttribute('aria-disabled', 'true');
+  const names = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
   const tabs = names.map((name) => {
     ids[`panel-${name}`] = make('section', { id: `panel-${name}`, role: 'tabpanel' });
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
@@ -106,7 +107,7 @@ function loadPage(initialState) {
     querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : null),
     querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : [])
   });
-  const fakeFetch = async () => ({ status: 200, json: async () => structuredClone(initialState) });
+  const fakeFetch = fetchImpl ?? (async () => ({ status: 200, json: async () => structuredClone(initialState) }));
   const script = /<script>([\s\S]*)<\/script>/.exec(fs.readFileSync(PAGE_FILE, 'utf8'))[1];
   const NodeLike = class { static [Symbol.hasInstance](v) { return v instanceof FakeNode || v instanceof FakeText; } };
   const context = vm.createContext({ document: doc, window: { addEventListener() {}, confirm: () => true }, fetch: fakeFetch, Node: NodeLike });
@@ -114,6 +115,7 @@ function loadPage(initialState) {
   const panels = names.map((n) => ids[`panel-${n}`]);
   return {
     ids,
+    doc,
     find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
     panel: (name) => ids[`panel-${name}`]
   };
@@ -138,8 +140,8 @@ const byId = (page, id) => page.find((n) => n.id === id);
 const describedBy = (node) => (node.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
 const textOf = (page, id) => byId(page, id)?.textContent;
 
-async function open(overrides) {
-  const page = loadPage(pageState(overrides));
+async function open(overrides, fetchImpl) {
+  const page = loadPage(pageState(overrides), fetchImpl);
   await settle();
   return page;
 }
@@ -299,4 +301,395 @@ test('the page keeps the dialog and a separate polite live region for locks, and
   assert.match(html, /<dialog id="unlock" aria-labelledby="unlock-title">/);
   assert.ok(!/\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML/.test(html));
   assert.ok(!html.includes('content: "needs unlock"'));
+});
+
+// ---------- Skills tab ----------
+const skill = (name, extra = {}) => ({
+  name, category: 'quality', kind: 'repo', layer: 'user', roles: ['qa'], selectable: true, status: 'missing', place: null,
+  license: 'MIT, as stated, not checked', vetted: null, commit: 'a'.repeat(40), ...extra
+});
+const SIX = ['s1', 's2', 's3', 's4', 's5', 's6'].map((n) => skill(n));
+function skillsState(entries, over = {}) {
+  const base = pageState();
+  base.resolved.roles.architect.protected = true;
+  base.resolved.settings_folder_moved = false;
+  return { ...base, catalog: { entries, errors: [], clashes: [] }, ...over };
+}
+const box = (page, id) => page.find((n) => n.tagName === 'INPUT' && n.type === 'checkbox' && n.id === id);
+const ticked = async (cb, on = true) => { cb.checked = on; await cb.fire('change'); };
+const unsaved = (page) => page.ids.count.textContent;
+
+test('each skill row is a checkbox with a label, a fieldset legend and status as words', async () => {
+  const entries = [skill('qa-helper', { status: 'folder not recognized', place: 'project', vetted: '2026-01-02', skillrepo: 'owner/name' }), skill('cmd', { kind: 'command', commit: undefined })];
+  const page = loadPage(skillsState(entries));
+  await settle();
+  const cb = box(page, 'sk-qa-user-qa-helper');
+  assert.equal(cb.type, 'checkbox');
+  assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === cb.id && n.textContent === 'qa-helper'));
+  const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.includes('qa') && n.textContent.includes('User level'));
+  assert.equal(legend.parentNode.tagName, 'FIELDSET');
+  const text = describedBy(cb).map((id) => byId(page, id).textContent);
+  assert.deepEqual(text, ['quality, repo owner/name at aaaaaaa', 'Status: folder not recognized, project', 'MIT, as stated, not checked, vetted 2026-01-02']);
+  const cmd = describedBy(box(page, 'sk-qa-user-cmd')).map((id) => byId(page, id).textContent);
+  assert.equal(cmd[0], 'quality, command (manual)');
+  assert.equal(cmd[2], 'MIT, as stated, not checked, not vetted');
+});
+
+test('a vetted text from the server is shown as sent', async () => {
+  const text = 'vetted 2026-01-02, from the old list, not scanned here';
+  const page = loadPage(skillsState([skill('old', { vetted: '2026-01-02', vetted_text: text })]));
+  await settle();
+  assert.equal(describedBy(box(page, 'sk-qa-user-old')).map((id) => byId(page, id).textContent)[2], `MIT, as stated, not checked, ${text}`);
+});
+
+test('hostile entry text reaches the page as text only', async () => {
+  const evil = '<img src=x onerror=alert(1)>';
+  const entries = [skill(evil, { license: '<b>x</b>', status: '<script>', commit: '<i>' })];
+  const page = loadPage(skillsState(entries));
+  await settle();
+  const panel = page.panel('skills');
+  assert.ok(panel.textContent.includes(evil));
+  assert.equal(walk(panel, (n) => ['IMG', 'B', 'SCRIPT', 'I'].includes(n.tagName)), null);
+});
+
+test('the sixth pick stays unchecked, says why in the live region and the list, and the field is described by it', async () => {
+  const page = loadPage(skillsState(SIX));
+  await settle();
+  for (const n of ['s1', 's2', 's3', 's4', 's5']) await ticked(box(page, `sk-qa-user-${n}`));
+  assert.equal(textOf(page, 'sk-qa-user_count'), '5 of 5 selected');
+  const sixth = box(page, 'sk-qa-user-s6');
+  assert.equal(sixth.disabled, false);
+  await ticked(sixth);
+  assert.equal(sixth.checked, false);
+  const reason = 'Limit reached: a Role can have 5 skills. Clear one first.';
+  assert.equal(textOf(page, 'sk-qa-user_err'), reason);
+  assert.equal(page.ids['field-live'].textContent, reason);
+  assert.ok(describedBy(sixth).includes('sk-qa-user_err'));
+  assert.equal(sixth.getAttribute('aria-invalid'), 'true');
+  assert.equal(textOf(page, 'sk-qa-user_count'), '5 of 5 selected');
+  assert.equal(unsaved(page), '1 unsaved change');
+  await ticked(box(page, 'sk-qa-user-s1'), false);
+  assert.equal(byId(page, 'sk-qa-user_err').hidden, true);
+});
+
+test('the refusal text leaves the live region after an untick, a tick and a save', async () => {
+  const reason = 'Limit reached: a Role can have 5 skills. Clear one first.';
+  const full = async (page) => {
+    for (const n of ['s1', 's2', 's3', 's4', 's5']) await ticked(box(page, `sk-qa-user-${n}`));
+    await ticked(box(page, 'sk-qa-user-s6'));
+    assert.equal(page.ids['field-live'].textContent, reason);
+  };
+  let page = loadPage(skillsState(SIX));
+  await settle();
+  await full(page);
+  await ticked(box(page, 'sk-qa-user-s1'), false);
+  assert.equal(page.ids['field-live'].textContent, '');
+  await ticked(box(page, 'sk-qa-user-s6'));
+  assert.equal(page.ids['field-live'].textContent, '');
+  await ticked(box(page, 'sk-qa-user-s6'), false);
+  await ticked(box(page, 'sk-qa-user-s1'));
+  await ticked(box(page, 'sk-qa-user-s6'));
+  assert.equal(page.ids['field-live'].textContent, reason);
+  const initial = skillsState(SIX);
+  const after = structuredClone(initial);
+  const fetchImpl = async (url, init) => (init?.method === 'POST'
+    ? { status: 200, json: async () => ({ state: after }) }
+    : { status: 200, json: async () => structuredClone(initial) });
+  page = loadPage(initial, fetchImpl);
+  await settle();
+  await ticked(box(page, 'sk-qa-user-s1'));
+  await full(page);
+  await page.ids.save.fire('click');
+  await settle();
+  assert.equal(page.ids['field-live'].textContent, '');
+});
+
+test('the refused sixth pick scrolls its message into view and moves no focus', async () => {
+  const page = loadPage(skillsState(SIX));
+  await settle();
+  for (const n of ['s1', 's2', 's3', 's4', 's5']) await ticked(box(page, `sk-qa-user-${n}`));
+  const sixth = box(page, 'sk-qa-user-s6');
+  sixth.focus();
+  page.doc.scrolled = [];
+  await ticked(sixth);
+  const err = byId(page, 'sk-qa-user_err');
+  assert.ok(page.doc.scrolled.some((s) => s.node === err && s.options?.block === 'nearest'));
+  assert.equal(page.doc.activeElement, sixth);
+});
+
+test('a wildcard entry is a disabled checkbox with its reason as text', async () => {
+  const page = loadPage(skillsState([skill('golang-*', { selectable: false, reason: 'pattern entry' })]));
+  await settle();
+  const cb = box(page, 'sk-qa-user-golang-*');
+  assert.equal(cb.disabled, true);
+  assert.ok(describedBy(cb).some((id) => byId(page, id).textContent === 'Not selectable: a wildcard names no one skill.'));
+});
+
+test('a protected Role has no project controls and says so', async () => {
+  const entries = [skill('shared', { roles: ['architect', 'qa'] })];
+  const state = skillsState(entries);
+  state.project = { version: 1, roles: { architect: { skills: [{ name: 'shared' }] } } };
+  const page = loadPage(state);
+  await settle();
+  assert.ok(box(page, 'sk-architect-user-shared'));
+  assert.equal(box(page, 'sk-architect-project-shared'), null);
+  assert.ok(page.panel('skills').textContent.includes('Protected Role: skills are chosen at User level only. A project value is ignored.'));
+  assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
+});
+
+test('an eligible name in a protected Role project list is not part of the draft', async () => {
+  const initial = skillsState([skill('shared', { roles: ['architect', 'qa'] })]);
+  initial.project = { version: 1, roles: { architect: { skills: [{ name: 'shared' }] }, qa: { model: 'opus' } } };
+  let posted = null;
+  const fetchImpl = async (url, init) => {
+    if (init?.method === 'POST') { posted = JSON.parse(init.body); return { status: 200, json: async () => ({ state: initial }) }; }
+    return { status: 200, json: async () => structuredClone(initial) };
+  };
+  const page = loadPage(initial, fetchImpl);
+  await settle();
+  assert.equal(unsaved(page), '0 unsaved changes');
+  assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
+  await ticked(box(page, 'sk-qa-project-shared'));
+  await page.ids.save.fire('click');
+  await settle();
+  assert.ok(posted.project, 'the project layer is posted');
+  assert.equal(posted.project.roles?.architect?.skills, undefined);
+});
+
+test('while the user layer is unread its stored names are kept, not listed as ignored', async () => {
+  const state = skillsState([skill('qa-helper')]);
+  state.user = { version: 1, roles: { qa: { skills: [{ name: 'my-own' }, { name: 'qa-helper' }] } } };
+  state.catalog.errors = ['ERROR user catalog: not valid JSON'];
+  const page = loadPage(state);
+  await settle();
+  const text = page.panel('skills').textContent;
+  assert.ok(!text.includes('Ignored: this stored skill'));
+  assert.ok(text.includes('2 selected (user)'));
+  assert.equal(unsaved(page), '0 unsaved changes');
+});
+
+test('a clash that is not a pin is named in the list problems', async () => {
+  const state = skillsState([skill('b')]);
+  state.catalog.clashes = [{ name: 'hallmark', pinned: false }, { name: 'pinned-one', pinned: true }];
+  const page = loadPage(state);
+  await settle();
+  const text = page.panel('skills').textContent;
+  assert.ok(text.includes('Skill list problems') && text.includes('skill hallmark:'));
+  assert.ok(!text.includes('pinned-one'));
+});
+
+test('a stale stored name shows as ignored without its value, and is no unsaved change', async () => {
+  const state = skillsState([skill('qa-helper')]);
+  state.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }, { name: 'GONE value' }] } } };
+  const page = loadPage(state);
+  await settle();
+  const text = page.panel('skills').textContent;
+  assert.ok(text.includes('stored value 2') && !text.includes('GONE value'));
+  assert.equal(unsaved(page), '0 unsaved changes');
+  assert.equal(box(page, 'sk-qa-user-qa-helper').checked, true);
+});
+
+test('save keeps focus on the same checkbox and shows the saved notice', async () => {
+  const initial = skillsState([skill('qa-helper')]);
+  const after = structuredClone(initial);
+  after.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2026-11-06' }] } } };
+  let posted = null;
+  const fetchImpl = async (url, init) => {
+    if (init?.method === 'POST') { posted = JSON.parse(init.body); return { status: 200, json: async () => ({ state: after }) }; }
+    return { status: 200, json: async () => structuredClone(initial) };
+  };
+  const page = loadPage(initial, fetchImpl);
+  await settle();
+  let card = box(page, 'sk-qa-user-qa-helper');
+  while (card.tagName !== 'DETAILS') card = card.parentNode;
+  card.open = true;
+  await card.fire('toggle');
+  await ticked(box(page, 'sk-qa-user-qa-helper'));
+  box(page, 'sk-qa-user-qa-helper').focus();
+  await page.ids.save.fire('click');
+  await settle();
+  assert.deepEqual(posted.user.roles.qa.skills, [{ name: 'qa-helper' }]);
+  const now = box(page, 'sk-qa-user-qa-helper');
+  assert.equal(now.ownerDoc.activeElement, now);
+  assert.ok(page.ids.status.textContent.startsWith('Saved.'));
+});
+
+test('keyboard-only save: focus on Save stays on Save, status starts Saved., and a second press posts nothing', async () => {
+  const initial = skillsState([skill('qa-helper')]);
+  const after = structuredClone(initial);
+  after.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper', approved: '2026-11-06' }] } } };
+  let posts = 0;
+  const fetchImpl = async (url, init) => {
+    if (init?.method === 'POST') { posts += 1; return { status: 200, json: async () => ({ state: after }) }; }
+    return { status: 200, json: async () => structuredClone(initial) };
+  };
+  const page = loadPage(initial, fetchImpl);
+  await settle();
+  const save = page.ids.save;
+  assert.equal(save.getAttribute('aria-disabled'), 'true');
+  assert.ok(!save.disabled);
+  await save.fire('click');
+  await settle();
+  assert.equal(posts, 0);
+  let card = box(page, 'sk-qa-user-qa-helper');
+  while (card.tagName !== 'DETAILS') card = card.parentNode;
+  card.open = true;
+  await card.fire('toggle');
+  await ticked(box(page, 'sk-qa-user-qa-helper'));
+  assert.equal(save.getAttribute('aria-disabled'), 'false');
+  save.focus();
+  await save.fire('click');
+  await settle();
+  assert.equal(posts, 1);
+  assert.equal(save.ownerDoc.activeElement, save);
+  assert.ok(page.ids.status.textContent.startsWith('Saved.'));
+  assert.equal(save.getAttribute('aria-disabled'), 'true');
+  await save.fire('click');
+  await settle();
+  assert.equal(posts, 1);
+});
+
+test('a server refusal of the list names the field in the summary and under the list', async () => {
+  const initial = skillsState(SIX);
+  const fetchImpl = async (url, init) => (init?.method === 'POST'
+    ? { status: 400, json: async () => ({ refused: ['user roles.qa.skills: must be at most 5 skills'] }) }
+    : { status: 200, json: async () => structuredClone(initial) });
+  const page = loadPage(initial, fetchImpl);
+  await settle();
+  await ticked(box(page, 'sk-qa-user-s1'));
+  await page.ids.save.fire('click');
+  await settle();
+  assert.match(page.ids.status.textContent, /^Nothing was saved\. Fix 1 field:/);
+  assert.ok(page.ids.status.textContent.includes('Ava (qa), user level, Skills'));
+  assert.ok(textOf(page, 'sk-qa-user_err').startsWith('Error: Skills for qa, user level'));
+});
+
+test('Clear on the Skills tab removes skill selections only', async () => {
+  const state = skillsState([skill('qa-helper')]);
+  state.user = { version: 1, roles: { qa: { model: 'opus', skills: [{ name: 'qa-helper' }] } } };
+  const page = loadPage(state);
+  await settle();
+  await page.ids['tab-skills'].fire('click');
+  await page.ids['clear-user'].fire('click');
+  assert.equal(unsaved(page), '1 unsaved change');
+  assert.equal(box(page, 'sk-qa-user-qa-helper').checked, false);
+});
+
+test('the Roles tab Clear leaves skill selections alone', async () => {
+  const state = skillsState([skill('qa-helper')]);
+  state.user = { version: 1, roles: { qa: { model: 'opus', skills: [{ name: 'qa-helper' }] } } };
+  const page = loadPage(state);
+  await settle();
+  await page.ids['clear-user'].fire('click');
+  assert.equal(unsaved(page), '1 unsaved change');
+  assert.equal(box(page, 'sk-qa-user-qa-helper').checked, true);
+});
+
+test('a missing catalog, an empty user list, a moved folder and a bad list each say what they mean', async () => {
+  const none = loadPage(pageState());
+  await settle();
+  assert.ok(none.panel('skills').textContent.includes('The settings server sent no skill data.'));
+  const base = loadPage(skillsState([skill('b', { layer: 'baseline' })]));
+  await settle();
+  assert.ok(textOf(base, 'skills-info').includes('You have not added skills of your own. Add one with /aico:add-skill'));
+  const moved = skillsState([skill('b')]);
+  moved.resolved.settings_folder_moved = true;
+  const page = loadPage(moved);
+  await settle();
+  const text = page.panel('skills').textContent;
+  assert.ok(text.includes('role skills: the settings folder is not the user home, the user level is not counted'));
+  assert.equal(box(page, 'sk-qa-user-b'), null);
+  assert.ok(box(page, 'sk-qa-project-b'));
+  const bad = skillsState([]);
+  bad.catalog.errors = ['ERROR user catalog: entry 3: category'];
+  const errs = loadPage(bad);
+  await settle();
+  assert.ok(errs.panel('skills').textContent.includes('Skill list problems'));
+  assert.ok(errs.panel('skills').textContent.includes('entry 3: category'));
+});
+
+test('the category select filters rows but never hides a selected one', async () => {
+  const page = loadPage(skillsState([skill('q1'), skill('d1', { category: 'design' })]));
+  await settle();
+  await ticked(box(page, 'sk-qa-user-d1'));
+  const select = byId(page, 'sk-qa-user_cat');
+  select.value = 'quality';
+  await select.fire('change');
+  const row = (id) => box(page, id).parentNode;
+  assert.equal(row('sk-qa-user-d1').hidden, false);
+  assert.match(textOf(page, 'sk-qa-user_count'), /1 of 5 selected, 1 selected entry shown outside this category/);
+  await ticked(box(page, 'sk-qa-user-d1'), false);
+  assert.equal(row('sk-qa-user-d1').hidden, true);
+});
+
+test('a skill named like a fixed part keeps its own id: the label and the descriptions reach the right node', async () => {
+  const names = ['cat', 'count', 'err', 'x', 's1', 's2', 's3', 's4'];
+  const page = loadPage(skillsState(names.map((n, i) => skill(n, { category: i === 3 ? 'design' : 'quality' }))));
+  await settle();
+  for (const n of names) {
+    const cb = box(page, `sk-qa-user-${n}`);
+    assert.equal(cb.type, 'checkbox', n);
+    assert.equal(byId(page, cb.id), cb, `${n}: the first node with the id is the checkbox`);
+    const label = page.find((x) => x.tagName === 'LABEL' && x.getAttribute('for') === cb.id);
+    assert.equal(label.textContent, n);
+    for (const id of describedBy(cb)) assert.notEqual(byId(page, id), cb, `${n}: ${id}`);
+  }
+  assert.equal(byId(page, 'sk-qa-user_count').tagName, 'P');
+  assert.equal(byId(page, 'sk-qa-user_cat').tagName, 'SELECT');
+  const all = walkAll(page.panel('skills'), (x) => x.id !== '' && x.id !== undefined).map((x) => x.id);
+  assert.equal(new Set(all).size, all.length, 'every id on the tab is unique');
+  for (const n of ['s1', 's2', 's3', 's4']) await ticked(box(page, `sk-qa-user-${n}`));
+  await ticked(box(page, 'sk-qa-user-err'));
+  await ticked(box(page, 'sk-qa-user-cat'));
+  const refused = box(page, 'sk-qa-user-count');
+  await ticked(refused);
+  const ids = describedBy(refused);
+  assert.ok(ids.includes('sk-qa-user_err'));
+  assert.equal(byId(page, 'sk-qa-user_err').tagName, 'P');
+  assert.equal(byId(page, 'sk-qa-user_err').textContent, 'Limit reached: a Role can have 5 skills. Clear one first.');
+});
+
+test('In effect names only what the resolver would use while the user layer is unread', async () => {
+  for (const unread of ['moved', 'catalog']) {
+    const state = skillsState([skill('qa-helper'), skill('b')]);
+    state.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } };
+    state.project = { version: 1, roles: { qa: { skills: [{ name: 'ghost' }] } } };
+    if (unread === 'moved') state.resolved.settings_folder_moved = true; else state.catalog.errors = ['ERROR user catalog: entry 3: category'];
+    const page = loadPage(state);
+    await settle();
+    const eff = textOf(page, 'sk-qa-project_count');
+    assert.match(eff, /1 of 5 selected, 1 not in effect/, unread);
+    const dd = walkAll(page.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+    assert.ok(!dd.some((t) => t.includes('ghost')), unread);
+    if (unread === 'catalog') assert.ok(dd.includes('qa-helper (user)'), unread);
+    else assert.ok(!dd.includes('qa-helper (user)'), unread);
+  }
+});
+
+test('In effect: an empty project list masks the user list, a repeated stored name shows once, the way settings.mjs resolves', async () => {
+  const empty = skillsState([skill('qa-helper'), skill('b')]);
+  empty.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } };
+  empty.project = { version: 1, roles: { qa: { skills: [] } } };
+  const p1 = loadPage(empty);
+  await settle();
+  const dd1 = walkAll(p1.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  assert.ok(!dd1.some((t) => t.includes('qa-helper (')), 'an empty project list is a choice of none and wins');
+  const dup = skillsState([skill('qa-helper'), skill('b')]);
+  dup.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }, { name: 'b' }, { name: 'qa-helper' }] } } };
+  const p2 = loadPage(dup);
+  await settle();
+  const dd2 = walkAll(p2.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  assert.ok(dd2.includes('qa-helper, b (user)'), dd2.join('|'));
+});
+
+test('the Skills tab sits after Roles, wraps long text and adds no colour or fixed width', () => {
+  const html = fs.readFileSync(PAGE_FILE, 'utf8');
+  assert.ok(html.indexOf('id="tab-roles"') < html.indexOf('id="tab-skills"') && html.indexOf('id="tab-skills"') < html.indexOf('id="tab-personality"'));
+  assert.ok(html.includes("const TAB_NAMES = ['roles', 'skills', 'personality'"));
+  const css = html.split('\n').filter((l) => l.startsWith('.sk-')).join('\n');
+  assert.ok(css.includes('overflow-wrap: anywhere'));
+  assert.ok(!/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i.test(css));
+  assert.ok(!/(^|[^-])width: \d+(px|rem)/.test(css.replace('width: 24px; height: 24px', '')));
+  assert.ok(/min-height: 44px/.test(css));
+  assert.ok(/@media \(max-width: 600px\)[^}]*\n\s*\.pgrid \{ grid-template-columns: 1fr; \}/.test(html));
 });

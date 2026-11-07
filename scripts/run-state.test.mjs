@@ -49,6 +49,24 @@ test('show: CRLF Step file is parsed', () => {
   assert.equal(v.tier, 'medium');
 });
 
+test('show: Steps sort by number across 99 and 100, a four-digit name is left out', () => {
+  const root = repo();
+  for (const n of ['100', '99', '1000']) step(root, 'x', `${n}-a.md`, { ...FM, step: n });
+  const v = show(root, 'x');
+  assert.deepEqual(v.steps.map(s => s.file), ['99-a.md', '100-a.md']);
+});
+
+test('show: past the cap the newest Steps are kept, with a warning', () => {
+  const root = repo();
+  for (let i = 1; i <= 201; i++) step(root, 'x', `${String(i).padStart(2, '0')}-a.md`, { ...FM, step: String(i), round: i === 201 ? 3 : 0 });
+  const v = show(root, 'x');
+  assert.equal(v.steps.length, 200);
+  assert.equal(v.steps[0].file, '02-a.md');
+  assert.equal(v.steps[v.steps.length - 1].file, '201-a.md');
+  assert.equal(v.round, 3);
+  assert.ok(v.warnings.includes('only 200 Step files read'));
+});
+
 test('show: a 9 KiB frontmatter is left out with a warning', () => {
   const root = repo();
   const fm = Object.entries(FM).map(([k, v]) => `${k}: ${v}`).join('\n');

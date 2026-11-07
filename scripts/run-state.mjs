@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.8). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (run-state v1.9). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -23,7 +23,7 @@ const MAX_FOLDERS = 200;
 const MAX_FM = 8 * 1024;
 const STALE_MS = 12 * 60 * 60 * 1000;
 const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-const STEP_FILE_RE = /^\d{2}-[a-z0-9-]+\.md$/;
+const STEP_FILE_RE = /^\d{2,3}-[a-z0-9-]+\.md$/;
 const STEP_RE = /^\d{1,3}$/;
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const WAVE_RE = /^[1-9]\d?$/;
@@ -177,8 +177,8 @@ function readSteps(dir, warnings) {
   const steps = [];
   let names;
   try { names = readdirSync(dir); } catch { return steps; }
-  names = names.filter(n => STEP_FILE_RE.test(n)).sort();
-  if (names.length > MAX_STEPS) { warnings.push(`only ${MAX_STEPS} Step files read`); names = names.slice(0, MAX_STEPS); }
+  names = names.filter(n => STEP_FILE_RE.test(n)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : a > b ? 1 : 0));
+  if (names.length > MAX_STEPS) { warnings.push(`only ${MAX_STEPS} Step files read`); names = names.slice(-MAX_STEPS); }
   for (const name of names) {
     const file = join(dir, name);
     const st = lstatOrNull(file);
