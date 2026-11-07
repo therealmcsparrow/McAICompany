@@ -150,7 +150,7 @@ test('AC21 design run triggers: inside research, directly, and in feature only f
   has(research, 'design-researcher', 'topic is about UI/UX or design skills');
   has(skill('lead'), '`aico:design-researcher`');
   const f = skill('feature');
-  has(f, 'only when the product has UI', '`tier-sets` v1.6', 'role-skills stale', 'newest `approved` over 180 days old', 'Otherwise skip silently');
+  has(f, 'only when the product has UI', '`tier-sets` v1.6', 'role-skills stale', 'none with a valid `approved` date', 'newest valid `approved` over 180 days old', 'Otherwise skip silently');
   assert.ok(!f.includes('## Design skills'), 'the old section is no longer the condition');
   assert.ok(f.indexOf('1a. Design skills') > 0);
 });
