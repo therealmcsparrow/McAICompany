@@ -1,5 +1,7 @@
 # Contract: token-ledger v1.9
 
+v1.10 (task QA Tests First Active; additive, `docs/adr/0007-contract-minor-versions.md`, rationale `docs/adr/0064-qa-writes-tests-first.md`): the optional `ship` key `qa` and the `qa-first-report` command, below. Uses `plan-tasks` v1.7 (`readParallel` view key `qa_first`). Every v1.9 file is a valid v1.10 file and every other command gives the same bytes for it.
+
 v1.9 (additive, `docs/adr/0007-contract-minor-versions.md`): a Step id may have three digits, so a run can pass Step 99. `id` for kinds `step`, `replay` and `reflect` is `^\d{2,3}$` (`replay` also `R<n>`, `reflect` also `RT`); two-digit ids stay valid and four digits are refused.
 
 v1.8 (task Context Cap Enforcement, T1; additive, `docs/adr/0007-contract-minor-versions.md`): `add` with `ctx_end` above 95000 still writes the record, then prints `over cap: <kind> <id> <role> ctx_end <n> > 95000` and exits 4 (every refusal, exit 2, runs first and is unchanged; `ctx_end` 0 to 95000 is unchanged). The text `report` prints one line `over cap: <count> steps (max <n>)` right after `not reconciled:` and before any `--baseline` lines from the `notification` records above 95000, only when the count is above 0 (nothing is printed for 0); `report --json` is unchanged. New `agent-ctx` command. Every v1.7 file is a valid v1.8 file.
@@ -78,6 +80,14 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 
 **`ship` (v1.4):** optional `path` (`full | short`) and `raised` (`0 | 1`) from the same view; both refused on every other kind. `tier` = the higher of the run-state view's tier and the view's `tier` when the record is `on`. State `none` → none of the four keys (`pb`, `sets`, `path`, `raised`); a reader error, or a view value outside these allow-lists → none of the four keys, counted in the printed line's `warnings`, and `ship` still succeeds. Only integers and enums are stored: no path, text, cause or base commit.
 
+**`ship` (v1.10):** optional `qa` (`0 | 1`), refused on every other kind and with any other value. Written only by `ship`, for a run not named `brainstorm-*`, `replay-*` or `baseline-*`, from the same `readParallel(root, run)` view as the `par` line: state `on` → `1` when the view has `qa_first: true`, else `0`. State `none` → no `qa` key. A reader error → no `qa` key (already counted in `warnings` for `par`), and `ship` still succeeds. The Lead never types it.
+
+**`qa-first-report` (v1.10)**, read-only, the Fix-round measure of QA-first:
+- Set: the `.company/ledger/*.jsonl` files with a valid `<run>` name, at most 500 (the scorecard rule, warning included). Not counted at all: a file with no `ship` record. **Excluded** (counted): every `brainstorm-*`, `replay-*` and `baseline-*` file; every **release** run (the run name, after a leading `^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - ` is removed, starts with `release` in any case, followed by the end, a space or `-`); a file the reader refuses; a file whose last `ship` record has no `fix_rounds`.
+- Every other file is a run: its last `ship` record's `fix_rounds` goes to **after** when that record has `qa: 1`, else to **before**.
+- Prints exactly three lines: `before: median <m> (n=<k>)`, then `after: median <m> (n=<k>)`, or `after: insufficient (n=<k>)` while k < 3, then `excluded: <x>`. `before` with n=0 prints `before: median ? (n=0)`. Medians are exact (an even count averages the two middle values); `<m>` prints with at most one decimal, a trailing `.0` dropped (`2`, `2.5`).
+- Any argument → `refused: qa-first-report takes no arguments`, exit 2. Otherwise exit 0.
+
 
 Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a validated `<run>` or `agent`.
 
@@ -98,6 +108,7 @@ Limits: a line ≤ 512 bytes, a file ≤ 1 MiB; file names are built only from a
 | `model-verdict [--runs <3-50>]` | (v1.2) prints the one model verdict line (below), read-only. `--runs` is digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise always exit 0 |
 | `parallel-verdict [--runs <3-50>]` | (v1.3) prints the one parallel verdict line, read-only. `--runs` digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise always exit 0 |
 | `low-path-verdict [--runs <3-50>]` | (v1.4) prints exactly two lines, feature then fix, read-only. `--runs` digits only, 3 to 50, default 10; anything else → `refused: …`, exit 2. Otherwise exit 0 |
+| `qa-first-report` | (v1.10) prints exactly three lines, before, after, excluded (`ship` (v1.10) above), read-only. Takes no argument. Exit 0, or 2 for a refused argument |
 
 ### `report --json` (part M)
 One JSON object, the same numbers as the text report (unchanged in v1.1; rows carry no times):
