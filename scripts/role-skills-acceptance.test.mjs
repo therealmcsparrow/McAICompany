@@ -1030,7 +1030,7 @@ const OLD_GROUP_LINES = [
   addCmd('vercel-labs/skills', 'find-skills'), addCmd('nutlope/hallmark', 'hallmark'),
   addCmd('addyosmani/agent-skills', 'frontend-ui-engineering'), addCmd('addyosmani/agent-skills', 'security-and-hardening'),
   addCmd('getsentry/skills', 'security-review'), addCmd('wshobson/agents', 'auth-implementation-patterns'),
-  addCmd('samber/cc-skills-golang', '"*"'),
+  addCmd('samber/cc-skills-golang', process.platform === 'win32' ? '"*"' : "'*'"),
   addCmd('vercel-labs/agent-skills', 'vercel-react-best-practices'), addCmd('vercel-labs/agent-skills', 'vercel-composition-patterns'),
   addCmd('wshobson/agents', 'typescript-advanced-types'),
   ...['query', 'router', 'form', 'table'].map((n) => addCmd('tanstack-skills/tanstack-skills', `tanstack-${n}`)),
@@ -1266,7 +1266,12 @@ test('AC16: README, the settings page doc, the glossary and the changelog descri
   assert.match(read('documentation', 'commands', 'settings.md'), /Skills tab/);
   assert.match(read('GLOSSARY.md'), /\*\*Catalog\*\*.*3rdpartyskills\.json/);
   const log = read('CHANGELOG.md');
-  const unreleased = log.slice(log.indexOf('## [Unreleased]'), log.indexOf('\n## [', log.indexOf('## [Unreleased]') + 1));
+  // From Unreleased through the end of the 0.29.0 section; later releases only add sections above it.
+  const from = log.indexOf('## [Unreleased]');
+  const v29 = log.indexOf('## [0.29.0]');
+  assert.ok(from !== -1 && v29 > from);
+  const next = log.indexOf('\n## [', v29 + 1);
+  const unreleased = log.slice(from, next === -1 ? undefined : next);
   assert.match(unreleased, /\*\*Breaking: skills now live in a catalog/);
   assert.match(unreleased, /pick Migrate/);
   assert.match(unreleased, /deps\/3rdpartyskills\.json/);
