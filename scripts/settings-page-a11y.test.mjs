@@ -620,6 +620,22 @@ test('In effect names only what the resolver would use while the user layer is u
   }
 });
 
+test('In effect: an empty project list masks the user list, a repeated stored name shows once, the way settings.mjs resolves', async () => {
+  const empty = skillsState([skill('qa-helper'), skill('b')]);
+  empty.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } };
+  empty.project = { version: 1, roles: { qa: { skills: [] } } };
+  const p1 = loadPage(empty);
+  await settle();
+  const dd1 = walkAll(p1.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  assert.ok(!dd1.some((t) => t.includes('qa-helper (')), 'an empty project list is a choice of none and wins');
+  const dup = skillsState([skill('qa-helper'), skill('b')]);
+  dup.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }, { name: 'b' }, { name: 'qa-helper' }] } } };
+  const p2 = loadPage(dup);
+  await settle();
+  const dd2 = walkAll(p2.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  assert.ok(dd2.includes('qa-helper, b (user)'), dd2.join('|'));
+});
+
 test('the Skills tab sits after Roles, wraps long text and adds no colour or fixed width', () => {
   const html = fs.readFileSync(PAGE_FILE, 'utf8');
   assert.ok(html.indexOf('id="tab-roles"') < html.indexOf('id="tab-skills"') && html.indexOf('id="tab-skills"') < html.indexOf('id="tab-personality"'));

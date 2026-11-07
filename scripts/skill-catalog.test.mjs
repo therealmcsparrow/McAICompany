@@ -1014,3 +1014,14 @@ test('clearBound leaves the rows of other names alone', () => {
   assert.equal(b.hash, H1);
   assert.equal(b.vetted, '2026-11-01');
 });
+
+test('clearBound skips a row that is not an object and a row whose skillname is not the name text, and keeps both as they were', () => {
+  const home = tmp();
+  const odd = [null, 'my-skill', ['my-skill'], { skillname: ['my-skill'], hash: H1, vetted: '2026-11-01' }, { skillname: { toString: 1 }, hash: H1 }];
+  writeUser(home, { schema: 1, entries: [...odd, repoEntry({ hash: H1, vetted: '2026-11-01' })] });
+  assert.deepEqual(clearBound('my-skill', { home }), { ok: true, changed: true });
+  const rows = readUser(home).entries;
+  assert.deepEqual(rows.slice(0, odd.length), odd);
+  assert.equal(Object.hasOwn(rows.at(-1), 'hash'), false);
+  assert.equal(Object.hasOwn(rows.at(-1), 'vetted'), false);
+});
