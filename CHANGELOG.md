@@ -13,7 +13,8 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 - **Clone consequence.** A project selects skills by name only. A clone carries those names but not the skill folders or your list, so each name reads `missing` or `not found` until you install it on your machine, and a name that is not in your list is ignored.
 - **One Install or Skip per skill.** The install form asks per skill, and a Skip leaves out only that skill.
 - **Editor gets the Skill tool.**
-- Contracts: `skill-catalog` v1, `skills-manifest` v4.0.
+- **The `Design skills:` dispatch line is now `Role skills:`.** It lists the skills chosen for the Role; the Role loads each one.
+- Contracts: `skill-catalog` v1, `skills-manifest` v4.0, `dispatch-prompt` v5.0, `skill-recommendation` v2.0, `research-report` v2.0, `design-skills-section` v2.0, `skills-section` v2.0.
 
 ## [0.28.0] - 2026-11-06
 
