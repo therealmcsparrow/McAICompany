@@ -158,6 +158,7 @@ test('AC21 design run triggers: inside research, directly, and in feature only f
 test('AC22 approved picks go to the user catalog and Role selections (not project.md or standards), install via the shared form', () => {
   has(research, 'skill-picks.md` §3 and §4', '`role-skills record`', 'Install / Skip form of `aico:pipeline` §1.19 b', 'Installs happen only in this step', 'Goal line `Area: design`');
   assert.ok(!research.includes('## Design skills`'), 'research writes no old section');
+  has(read('skills/feature/SKILL.md'), 'then run §1.19 d of `aico:pipeline` again and use the new `Role skills:` lines for every later dispatch');
   assert.ok(!/standards\.md/.test(research.slice(research.indexOf('## 7. Design skills'), research.indexOf('## 8.'))));
   has(skill('feature'), 'Goal line `Area: design`', '`role-skills record`', 'the form of `aico:pipeline` §1.19 b', '`install-skills --selected --dry-run`', 'Install artifacts', 'never committed');
   for (const t of [research, skill('feature'), read('skills/lead/references/skill-picks.md')]) assert.ok(!t.includes('install-skills design --project'), 'no call with the removed flag');
@@ -177,7 +178,8 @@ test('AC22 skill-picks asks each new entry\'s license, then records one pick per
 
 test('skill-picks: post-install reads --selected and scans catalog scope user as global', () => {
   const p = read('skills/lead/references/skill-picks.md');
-  has(p, 'the form of `aico:pipeline` §1.19 b', 'each approved repo pick that got Install', 'A pick that got Skip has no install line and no checks', '`install-skills --selected` output', '--scope <project, or global for a skill whose scope is user>', 'stores no hash');
+  has(p, 'the form of `aico:pipeline` §1.19 b', 'each approved repo pick that got Install', 'A pick that got Skip has no install line and no checks', '`install-skills --selected` output', '`scan failed after install`', 'stores no hash for a skill that failed either check', 'run §1.19 d of `aico:pipeline` again and use the new `Role skills:` lines for every later dispatch');
+  assert.ok(!p.includes('skillspector scan --scope'), 'the Lead runs no scan after install');
   assert.ok(!p.includes('check-install'), 'Role skill installs have no lock file to check');
   assert.ok(!p.includes('--scope project --skill'), 'a user scope skill is not scanned at project scope');
   assert.ok(!/## (Design skills|Skills)`/.test(p), 'no old section is written');
@@ -187,6 +189,7 @@ test('setup runs the migration form before step 1 and stack text points to /aico
   const s = skill('setup');
   has(s, 'role-skills pending', 'migration form of `aico:pipeline` §1.19 a', 'They are not used until you migrate them', 'role-skills migrate --apply',
     'Later, Cancel or a printed `ERROR`', 'go on with setup', 'any argument but `help`', '/aico:add-skill');
+  has(s, '`role-skills migrate` (writes nothing) and show the `stays` lines it prints as the reasons');
   assert.ok(s.indexOf('role-skills pending') < s.indexOf('\n1. Groups ='), 'before step 1');
   assert.ok(s.indexOf('**Help:**') < s.indexOf('role-skills pending'), 'help stops first');
   const d = skill('stack-detect');
@@ -197,7 +200,8 @@ test('setup runs the migration form before step 1 and stack text points to /aico
 test('research dispatch and setup skill-researcher dispatch carry a built Role skills line', () => {
   has(research, 'the `Role skills:` build of §1.19 d (`install-skills --status`, no forms)', "Role skills: <names | none>   # that Role's lines of --status, built per aico:pipeline §1.19 d");
   assert.ok(research.indexOf('Context cap: <cap>') < research.indexOf('Role skills: <names | none>'), 'Role skills: follows Context cap:');
-  has(research, 'install-skills --remove <name> --dry-run', 'only from the home folder');
+  has(research, 'npx -y skills@1.7.4 remove <name> -g -a claude-code -y', 'only from the home folder', 'by hand, with no command');
+  assert.ok(!research.includes('install-skills --remove'), 'the removal flag answers nothing for a skill just installed');
   has(skill('setup'), 'its `Role skills:` built as §1.19 d says (`install-skills --status` once, no Install form; `none` when no name is left)');
 });
 
