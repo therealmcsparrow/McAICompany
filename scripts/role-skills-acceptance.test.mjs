@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { main as install, installExec, retiredSkills } from './install-skills.mjs';
 import { check } from './check.mjs';
 import { buildSbom, serialize } from './sbom.mjs';
-import { main as roleSkills, stale, migrate, pending } from './role-skills.mjs';
+import { main as roleSkills, stale, migrate, pending, pendingCounts } from './role-skills.mjs';
 import { readCatalog, readBaseline, skillStatus, boundedFolderHash, userCatalogPath, validateEntry, selectable } from './skill-catalog.mjs';
 import { resolveSettings, writeLayer, Refusal } from './settings.mjs';
 import { startServer } from './settings-server.mjs';
@@ -102,11 +102,15 @@ test('AC9: U+202E, U+200B and U+3164 in a license are refused on read, at add an
     const add = [];
     const code = roleSkills(['add'], { home: tmp(t), log: (l) => add.push(l), stdin: JSON.stringify({ name: 'demo', repo: SOURCE, commit: COMMIT, category: 'engineering', license: `MIT${ch}x`, save: true }) });
     assert.equal(code, 1);
+    assert.match(add.join('\n'), /^ERROR license/);
     assert.ok(!add.join('').includes(ch));
     const h2 = tmp(t);
     const rec = [];
-    const code2 = roleSkills(['record'], { home: h2, cwd: tmp(t), log: (l) => rec.push(l), stdin: JSON.stringify({ entry: { skillname: 'demo', skillcategory: 'engineering', skillrepo: SOURCE, skillcommit: COMMIT }, license: `MIT${ch}x`, roles: [] }) });
+    const cwd2 = tmp(t);
+    fs.mkdirSync(path.join(cwd2, '.company'));
+    const code2 = roleSkills(['record'], { home: h2, cwd: cwd2, log: (l) => rec.push(l), stdin: JSON.stringify({ entry: { skillname: 'demo', skillcategory: 'engineering', skillrepo: SOURCE, skillcommit: COMMIT }, license: `MIT${ch}x`, roles: [] }) });
     assert.equal(code2, 1);
+    assert.match(rec.join('\n'), /^ERROR license/);
     assert.ok(!rec.join('').includes(ch));
     assert.equal(fs.existsSync(userFile(h2)), false);
   }
@@ -674,6 +678,12 @@ test('AC23: the newest approval date counts, in either order and across UI Roles
   assert.equal(verdict({ 'ui-ux-designer': both(['des-new', fresh], ['des-old', old]) }).stale, false, 'fresh then old');
   assert.equal(verdict({ 'ui-ux-designer': sel('des-old', old), 'brand-artist': sel('des-new', fresh) }).stale, false, 'the newer date on a second UI Role');
   assert.equal(verdict({ 'ui-ux-designer': sel('des-new', fresh), 'brand-artist': sel('des-old', old) }).stale, false, 'the older date on the second UI Role');
+  for (const role of ['motion-artist', 'game-artist', 'prompt-artist']) {
+    const off = verdict({ 'ui-ux-designer': sel('des-old', old), [role]: sel('des-new', fresh) });
+    assert.equal(off.stale, true, `${role} is not a UI Role: its fresh date does not count`);
+    assert.deepEqual(off.names, ['des-old']);
+    assert.equal(verdict({ [role]: sel('des-new', fresh) }).reason, 'no design selection', role);
+  }
   const eng = verdict({ 'frontend-engineer': sel('eng-one', fresh) });
   assert.equal(eng.stale, true);
   assert.equal(eng.reason, 'no design selection');
@@ -765,7 +775,11 @@ test('AC20: the preview names each line by number, writes nothing, and asks no l
   assert.ok(!/MIT!x|octo\/odd|odd-one|touch x/.test(text), 'a failed line is never echoed');
   assert.equal(p.md0(), p.md);
   assert.equal(fs.existsSync(userFile(p.home)), false);
-  assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 6);
+  assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 9);
+  assert.deepEqual(pendingCounts({ cwd: p.cwd, home: p.home, today: NOW }), { total: 9, migrate: 6 });
+  const printed = [];
+  assert.equal(roleSkills(['pending'], { cwd: p.cwd, home: p.home, today: NOW, log: (x) => printed.push(x) }), 0);
+  assert.deepEqual(printed, ['pending: 9', 'can migrate: 6']);
 });
 
 test('AC14, AC20: apply writes selections and entries, keeps old dates, archives the lines and a re-run changes nothing', (t) => {
@@ -859,6 +873,7 @@ test('AC20: another commit for a name in the user file needs Move; Keep leaves t
 test('AC21: with nobody to answer nothing changes, and pending reports the unmigrated count', (t) => {
   const p = oldProject(t, { design: [OLD.hallmark, OLD.repo], skills: [OLD.stk] });
   assert.equal(pending({ cwd: p.cwd, home: p.home, today: NOW }), 3);
+  assert.equal(pendingCounts({ cwd: p.cwd, home: p.home, today: NOW }).migrate, 3, 'can migrate: counts the lines migrate would offer');
   const r = p.mig({ apply: true, choices: [] });
   assert.equal(r.ok, true);
   assert.equal(p.md0(), p.md);
@@ -1067,9 +1082,135 @@ test('AC11, AC17: Install only means install-skills --selected, the Lead never r
 });
 
 test('AC11: gates.installs auto skips the Install form only when settings_folder_moved is false', () => {
-  assert.match(PIPELINE, /`gates\.installs` `auto` answers Install without the form only when `settings_folder_moved` in the §1\.7 `get` JSON is `false`; true or absent shows the form/);
+  assert.match(PIPELINE, /`gates\.installs` `auto` .*answers Install without the form only when `settings_folder_moved` in the §1\.7 `get` JSON is `false`; true or absent shows the form/);
   for (const [name, text] of [['feature', FEATURE], ['skill-picks', PICKS]]) {
     assert.match(text, /settings_folder_moved/, name);
     assert.match(text, /gates\.installs/, name);
   }
+});
+
+test('AC20: name clashes, a same-source line, a plugin line with no license and a Role reaching 5 partway', (t) => {
+  const lineFor = (extra) => `- name: ${extra.name}; source: ${extra.source}; license: ${extra.license ?? 'MIT'}; vetted: 2026-02-01; ${extra.commit === false ? '' : `commit: ${extra.commit ?? COMMIT}; `}why: w; approved: 2026-02-02`;
+  const unchanged = (p, home = true) => {
+    assert.equal(p.md0(), p.md);
+    assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'settings.json')), false);
+    if (home) assert.equal(fs.existsSync(userFile(p.home)), false);
+  };
+
+  const base = oldProject(t, { design: [lineFor({ name: 'hallmark', source: 'octo/other' })] });
+  assert.match(base.mig().lines.join('\n'), /line 4: stays, name clash with the list/);
+  const baseApply = base.mig({ apply: true, choices: [{ n: 4, name: 'hallmark', roles: ['ui-ux-designer'] }] });
+  assert.match(baseApply.lines.join('\n'), /line 4: stays, name clash with the list/);
+  unchanged(base);
+
+  const other = oldProject(t, { design: [OLD.repo] });
+  writeUser(other.home, [entry({ skillname: 'fancy-ui', skillcategory: 'design', skillrepo: 'octo/else', skillcommit: COMMIT })]);
+  const otherApply = other.mig({ apply: true, choices: [{ n: 4, name: 'fancy-ui', roles: ['ui-ux-designer'] }] });
+  assert.match(otherApply.lines.join('\n'), /line 4: stays, name clash with your list/);
+  unchanged(other, false);
+  assert.deepEqual(readUser(other.home).map((e) => e.skillrepo), ['octo/else']);
+
+  const same = oldProject(t, { design: [OLD.repo] });
+  writeUser(same.home, [entry({ skillname: 'fancy-ui', skillcategory: 'design', skillrepo: 'octo/fancy', skillcommit: COMMIT })]);
+  const before = fs.readFileSync(userFile(same.home), 'utf8');
+  assert.match(same.mig().lines.join('\n'), /line 4: .*selection only/);
+  const sameApply = same.mig({ apply: true, choices: [{ n: 4, name: 'fancy-ui', roles: ['ui-ux-designer'] }] });
+  assert.equal(sameApply.ok, true, sameApply.lines.join('|'));
+  assert.equal(fs.readFileSync(userFile(same.home), 'utf8'), before, 'the user file is not rewritten');
+  assert.deepEqual(same.sel()['ui-ux-designer'].skills.map((x) => x.name), ['fancy-ui']);
+
+  const dash = oldProject(t, { design: [lineFor({ name: 'aico:other', source: 'plugin aico', license: '-', commit: false })] });
+  assert.match(dash.mig().lines.join('\n'), /line 4: stays, no license/);
+  const dashApply = dash.mig({ apply: true, choices: [{ n: 4, name: 'aico:other', roles: ['ui-ux-designer'] }] });
+  assert.match(dashApply.lines.join('\n'), /line 4: stays, no license/);
+  unchanged(dash);
+
+  const names = ['has-one', 'has-two', 'has-three', 'has-four'];
+  const four = names.map((name) => ({ name }));
+  const part = oldProject(t, { design: [OLD.repo, lineFor({ name: 'second-ui', source: 'octo/second' })], settings: { aico_settings: { version: 1, roles: { 'brand-artist': { skills: four } } } } });
+  writeUser(part.home, names.map((skillname, i) => entry({ skillname, skillcategory: 'design', skillrepo: `octo/has${i}` })));
+  const partApply = part.mig({ apply: true, choices: [{ n: 4, name: 'fancy-ui', roles: ['brand-artist'] }, { n: 5, name: 'second-ui', roles: ['brand-artist'] }] });
+  const text = partApply.lines.join('\n');
+  assert.match(text, /line 4: migrated/);
+  assert.match(text, /line 5: stays, Role already has 5/);
+  assert.equal(part.sel()['brand-artist'].skills.length, 5);
+  assert.match(part.md0(), /name: second-ui/);
+  assert.ok(!/name: fancy-ui/.test(part.md0().split('## Skills')[0].split('## Design skills')[1] ?? ''), 'the first line left project.md');
+  assert.deepEqual(readUser(part.home).map((e) => e.skillname).filter((x) => !names.includes(x)), ['fancy-ui'], 'only the migrated line wrote an entry');
+});
+
+test('AC9: a control character in a command, a line with no source, and a selection that survives Move', (t) => {
+  for (const ch of ['\u0007', '\u202E']) {
+    const home = tmp(t, 'home');
+    const r = run(t, 'add', addLine({ repo: undefined, commit: undefined, command: `npx -y thing@1.2.3 skills${ch}install`, save: true }), { home });
+    assert.equal(r.code, 1);
+    assert.match(r.lines.join('\n'), /^ERROR command: /);
+    assert.ok(!r.lines.join('').includes(ch), 'the value is never echoed');
+    assert.equal(fs.existsSync(userFile(home)), false);
+  }
+  const none = run(t, 'add', addLine({ repo: undefined, commit: undefined }));
+  assert.equal(none.code, 0);
+  assert.ok(none.lines.includes('missing: repo or command'), none.lines.join('|'));
+  const saveNone = run(t, 'add', addLine({ repo: undefined, commit: undefined, save: true }));
+  assert.equal(saveNone.code, 1);
+  assert.equal(saveNone.lines[0], 'ERROR input: missing repo or command');
+  assert.equal(fs.existsSync(userFile(saveNone.home)), false);
+
+  const r = resolved(t, { project: { roles: { qa: { skills: pick(NAME) } } } });
+  const stored = fs.readFileSync(path.join(r.cwd, '.company', 'settings.json'), 'utf8');
+  const moved = run(t, 'add', addLine({ commit: OTHER, license: 'Apache-2.0', save: true, move: true }), { home: r.home, cwd: r.cwd });
+  assert.equal(moved.code, 0, moved.lines.join('|'));
+  assert.equal(readUser(r.home)[0].skillcommit, OTHER);
+  assert.equal(fs.readFileSync(path.join(r.cwd, '.company', 'settings.json'), 'utf8'), stored, 'Move writes no selection file');
+  assert.deepEqual(r.get().roles.qa.skills.map((x) => x.name), [NAME], 'every selection stays');
+});
+
+test('AC8: the repo preview says it stays not vetted until an install scans it clean', (t) => {
+  const pre = run(t, 'add', addLine());
+  assert.equal(pre.code, 0);
+  assert.ok(pre.lines.includes('The scan runs when you install it. It stays not vetted until an install scans it clean.'), pre.lines.join('|'));
+  const cmd = run(t, 'add', addLine({ repo: undefined, commit: undefined, command: 'npx -y thing@1.2.3 skills install' }));
+  assert.ok(cmd.lines.includes('A skill added as a command is never scanned and shows as not vetted.'));
+});
+
+test('AC8: add-skill asks in the fixed order, lists the closed category pages, and ends the preview with Save / Cancel', () => {
+  const order = ['2. **Name.**', '3. **Repo.**', '4. **Installer command.**', '5. **Category.**', '6. **Commit**', '7. **License.**', '8. **Preview.**', '9. **Save:**'];
+  const at = order.map((h) => ADD_SKILL.indexOf(h));
+  assert.ok(at.every((i) => i > 0), `every step is present: ${at.join(',')}`);
+  assert.deepEqual([...at].sort((a, b) => a - b), at, 'the questions keep their order');
+  assert.match(ADD_SKILL, /Page 1: engineering, design, More\.\.\., Cancel\. Page 2: security, quality, More\.\.\., Cancel\. Page 3: product, research, content, Cancel\./);
+  assert.match(ADD_SKILL, /every question has Cancel/);
+  assert.match(ADD_SKILL, /Options: Save \/ Cancel\./);
+  assert.match(ADD_SKILL, /Keep \(Recommended\) \/ Move \/ Cancel/);
+  assert.match(ADD_SKILL, /the scan line, the file line/);
+});
+
+test('AC6, AC17: a planted product folder under a user-level security selection reads not found and is off the dispatch list', async (t) => {
+  const s = setup(t, { entries: [], lists: { security: ['user', ['security-review']] } });
+  plant(path.join(s.root, '.claude', 'skills', 'security-review'));
+  const out = [];
+  assert.equal(await install(['--status'], { ...s.env, log: (l) => out.push(l) }), 0, out.join('|'));
+  const line = out.find((l) => l.startsWith('security-review'));
+  assert.match(line, /\| not found \|/);
+  assert.match(line, /dispatch: no/);
+  assert.ok(!/dispatch: yes/.test(line));
+  assert.equal(s.calls.length, 0, 'status starts no install');
+});
+
+test('AC6: the Lead leaves a name off the Role skills line unless its dispatch field allows it, and records degraded once per name', () => {
+  const pipeline = read('skills', 'pipeline', 'SKILL.md');
+  assert.match(pipeline, /build each Role's `Role skills:` from its `dispatch:` field only, and only from lines with `roles:` not `-`: `yes` → the name; `session list` → the name only if the session's skill list holds it, otherwise left off; anything else → left off, `degraded: missing <name>` once per name in the Handoff and Gate summary/);
+});
+
+test('AC16: README, the settings page doc, the glossary and the changelog describe the skill catalog and its migration', () => {
+  const readme = read('README.md');
+  assert.match(readme, /\/aico:add-skill/);
+  assert.doesNotMatch(readme, /deps\/skills\.json/);
+  assert.match(read('documentation', 'commands', 'settings.md'), /Skills tab/);
+  assert.match(read('GLOSSARY.md'), /\*\*Catalog\*\*.*3rdpartyskills\.json/);
+  const log = read('CHANGELOG.md');
+  const unreleased = log.slice(log.indexOf('## [Unreleased]'), log.indexOf('\n## [', log.indexOf('## [Unreleased]') + 1));
+  assert.match(unreleased, /\*\*Breaking: skills now live in a catalog/);
+  assert.match(unreleased, /pick Migrate/);
+  assert.match(unreleased, /deps\/3rdpartyskills\.json/);
 });

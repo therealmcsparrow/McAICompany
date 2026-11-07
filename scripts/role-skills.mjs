@@ -30,6 +30,7 @@ const SECTIONS = [
 // Lines the old sections held: name, source and license come first in both formats.
 const HEAD_RE = /^- (?:area: [^;]+; )?name: ([^;]+); source: ([^;]+); license: ([^;]+); /;
 const SPEC_RE = /^(\d{1,5}):([a-z0-9:*-]{1,65})$/;
+const CATEGORY_SPEC_RE = /^(\d{1,5}):([a-z0-9:*-]{1,65})=([a-z]{1,20})$/;
 const ROLES_RE = /^[a-z][a-z0-9-]{0,40}(?:,[a-z][a-z0-9-]{0,40}){0,39}$/;
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -253,12 +254,28 @@ function scan(opts) {
         res.entry = first.entry;
         res.kind = first.kind;
       }
+      // A new entry from a Skills line has no category of its own; the CEO picks one from the closed list.
+      if (res.kind === 'entry' && section.heading === '## Skills') res.pickCategory = true;
       if (res.target) {
-        const roles = inOfferOrder(res.target, eligibleRoles(res.target, baseline.categories).filter((r) => !guarded.has(r)));
-        const open = roles.filter((r) => { const have = roleNames(project.data, r); return have.includes(res.target.skillname) || have.length < MAX_ROLE_SKILLS; });
-        if (roles.length === 0) Object.assign(res, stay('no Role can take it'));
-        else if (open.length === 0) Object.assign(res, stay('Role already has 5'));
-        else res.offer = open;
+        const openFor = (target) => inOfferOrder(target, eligibleRoles(target, baseline.categories).filter((r) => !guarded.has(r)))
+          .filter((r) => { const have = roleNames(project.data, r); return have.includes(res.target.skillname) || have.length < MAX_ROLE_SKILLS; });
+        if (res.pickCategory) {
+          const keys = categoryChoices(baseline);
+          const first = res.target.skillcategory;
+          const choices = [...keys.filter((k) => k === first), ...keys.filter((k) => k !== first)]
+            .map((k) => [k, openFor({ skillcategory: k })]).filter(([, r]) => r.length > 0);
+          if (choices.length === 0) Object.assign(res, stay('no Role can take it'));
+          else {
+            res.choices = choices;
+            res.offer = choices.find(([k]) => k === first)?.[1] ?? [];
+          }
+        } else {
+          const roles = inOfferOrder(res.target, eligibleRoles(res.target, baseline.categories).filter((r) => !guarded.has(r)));
+          const open = openFor(res.target);
+          if (roles.length === 0) Object.assign(res, stay('no Role can take it'));
+          else if (open.length === 0) Object.assign(res, stay('Role already has 5'));
+          else res.offer = open;
+        }
       }
       items.push({ n, section, text, res });
     });
@@ -270,6 +287,9 @@ const shown = (e) => {
   const src = e.install !== undefined ? 'command from the list' : e.plugin !== undefined ? `plugin ${e.plugin}` : e.source;
   return `${e.name}, source ${src}${e.commit ? `, commit ${e.commit}` : ''}, license ${e.license}, vetted ${e.vetted}, approved ${e.approved}`;
 };
+
+// Categories a new entry may take from a Skills line: the baseline categories, never security.
+const categoryChoices = (baseline) => Object.keys(baseline.categories).filter((c) => c !== 'security');
 
 const WHAT = { selection: 'selection only', entry: 'new entry in your list', pin: 'pin on the list entry', choice: 'commit differs from your list: keep (stays) or move' };
 
@@ -316,7 +336,8 @@ export function migrate(options = {}) {
     if (!options.apply) {
       for (const { n, res } of s.items) {
         if (res.stay) out.push(`line ${n}: stays, ${res.stay}`);
-        else out.push(`line ${n}: ${shown(res.e)}; ${WHAT[res.kind]}; Roles: ${res.offer.join(', ')}`);
+        else if (res.choices) out.push(`line ${n}: ${shown(res.e)}; ${WHAT[res.kind]}; choose its category; ${res.choices.map(([k, r]) => `Category: ${k}; Roles: ${r.join(', ')}`).join('; ')}`);
+        else out.push(`line ${n}: ${shown(res.e)}; ${WHAT[res.kind]}; Category: ${res.target.skillcategory}; Roles: ${res.offer.join(', ')}`);
       }
       return { ok: true, changed: false, lines: out };
     }
@@ -339,6 +360,7 @@ function execute(s, opts, chosen, moves, out) {
   const done = [];
   const adds = new Map();
   const count = (role) => roleNames(s.project.data, role).length + (adds.get(role)?.length ?? 0);
+  const settled = new Map();
   for (const item of s.items) {
     const { n, res } = item;
     const c = chosen.get(n);
@@ -346,13 +368,25 @@ function execute(s, opts, chosen, moves, out) {
     if (!c) { out.push(`line ${n}: not chosen`); continue; }
     if (c.name !== res.e.name) { out.push(`line ${n}: stays, line changed`); continue; }
     if (res.kind === 'choice' && !moves.has(`${n}:${c.name}`)) { out.push(`line ${n}: stays, commit differs from your list`); continue; }
-    if (c.roles.some((r) => !res.offer.includes(r))) { out.push(`line ${n}: stays, Role not offered`); continue; }
+    let offer = res.offer;
+    const category = c.category ?? res.entry?.skillcategory;
+    if (c.category !== undefined) {
+      const pick = res.choices?.find(([k]) => k === c.category);
+      if (!pick) { out.push(`line ${n}: stays, category not offered`); continue; }
+      offer = pick[1];
+    }
+    if (res.choices && settled.has(res.entry.skillname) && settled.get(res.entry.skillname) !== category) { out.push(`line ${n}: stays, category differs from an earlier line`); continue; }
+    if (c.roles.some((r) => !offer.includes(r))) { out.push(`line ${n}: stays, Role not offered`); continue; }
     const name = res.target.skillname;
     const roles = c.roles.filter((r) => roleNames(s.project.data, r).includes(name) || (adds.get(r) ?? []).some((x) => x.name === name) || count(r) < MAX_ROLE_SKILLS);
     if (roles.length === 0) { out.push(`line ${n}: stays, Role already has 5`); continue; }
     for (const r of roles) {
       if (roleNames(s.project.data, r).includes(name) || (adds.get(r) ?? []).some((x) => x.name === name)) continue;
       adds.set(r, [...(adds.get(r) ?? []), { name, approved: res.e.approved }]);
+    }
+    if (res.choices) {
+      res.entry.skillcategory = category;
+      settled.set(res.entry.skillname, category);
     }
     done.push({ item, roles });
   }
@@ -468,7 +502,7 @@ export function pending(options = {}) {
   return pendingCounts(options).total;
 }
 
-// True when no design skill is selected for a Role that takes design skills, or the newest approval
+// True when no design skill is selected for a UI Role (the five in UI_FIRST), or the newest approval
 // is over 180 days old or has no valid date. Reports only; approving again is not done here.
 export function stale(options = {}) {
   const opts = normalize(options);
@@ -478,7 +512,7 @@ export function stale(options = {}) {
   const resolved = resolveSettings({ home: opts.settingsHome, cwd: opts.cwd, pluginRoot: opts.pluginRoot });
   const names = new Set();
   let newest = null;
-  for (const role of baseline.categories.design) {
+  for (const role of UI_FIRST.filter((r) => baseline.categories.design.includes(r))) {
     for (const sel of resolved.roles[role]?.skills ?? []) {
       if (category.get(sel.name) !== 'design') continue;
       names.add(sel.name);
@@ -533,6 +567,16 @@ function readInput(ctx) {
   return data;
 }
 
+// Mirrors: the license check of the skill catalog (a text of at most 64 characters with no control, format,
+// line or paragraph separator or invisible character). Only plain space characters (Zs) are cut at the edges;
+// any other invisible character, at the edge or inside, refuses the value instead of being trimmed away.
+const LICENSE_EDGE_RE = /^\p{Zs}+|\p{Zs}+$/gu;
+const LICENSE_HIDDEN_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u180e\u2065\u{e0000}-\u{e007f}]/u;
+const licenseAsTyped = (v) => {
+  const text = v.replace(LICENSE_EDGE_RE, '');
+  return LICENSE_HIDDEN_RE.test(text) ? null : text;
+};
+
 // Checks one field alone by building an entry around it from valid stand-ins.
 function checkField(field, value) {
   let e;
@@ -584,9 +628,11 @@ export function add(input, options = {}) {
     if (typeof v !== 'string') return fail(`ERROR ${k}: bad value`);
     if (/[\r\n]/.test(v)) return fail(`ERROR ${k}: line break`);
     if (v === '') continue;
-    const reason = checkField(k, v);
+    const typed = k === 'license' ? licenseAsTyped(v) : v;
+    if (typed === null) return fail(`ERROR ${k}: bad value`);
+    const reason = checkField(k, typed);
     if (reason !== null) return fail(`ERROR ${k}: ${reason}`);
-    given[k] = v;
+    given[k] = typed;
   }
   if (given.repo !== undefined && given.command !== undefined) return fail('ERROR command: a skill has one source, a repo or a command');
   if (given.commit !== undefined && given.repo === undefined) return fail('ERROR commit: needs a repo');
@@ -674,7 +720,8 @@ export function record(input, options = {}) {
 
     const out = [];
     if (needEntry) {
-      const text = typeof license === 'string' ? license.trim() : '';
+      const text = typeof license === 'string' ? licenseAsTyped(license) : '';
+      if (text === null) return fail('ERROR license: bad value');
       if (text === '' || text === '-') return { ok: true, lines: [`no license stated: ${e.skillname}`] };
       const u = validateEntry({ ...e, license: text }, 'user');
       if (!u.ok) return fail(`ERROR license: ${u.reason}`);
@@ -706,9 +753,16 @@ const USAGE = [
 // no path, URL or free text is accepted. Threats covered: injection through values, oversize lists.
 function parseArgs(args) {
   const o = { apply: false, choices: [], moves: [] };
+  const categories = new Map();
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--apply') { o.apply = true; continue; }
+    if (a === '--category') {
+      const m = CATEGORY_SPEC_RE.exec(args[++i] ?? '');
+      if (!m || categories.has(Number(m[1]))) return null;
+      categories.set(Number(m[1]), { name: m[2], category: m[3] });
+      continue;
+    }
     if (a === '--line' || a === '--move') {
       const v = args[++i];
       if (typeof v !== 'string') return null;
@@ -721,6 +775,11 @@ function parseArgs(args) {
       continue;
     }
     return null;
+  }
+  for (const [n, { name, category }] of categories) {
+    const c = o.choices.find((x) => x.n === n && x.name === name);
+    if (!c) return null;
+    c.category = category;
   }
   return o;
 }
@@ -744,7 +803,7 @@ export function main(args, ctx = {}) {
     }
     if (cmd === 'migrate') {
       const o = parseArgs(rest);
-      if (o === null) { log('ERROR usage: migrate [--apply] [--line <n>:<name>=<role>[,<role>]]... [--move <n>:<name>]...'); return 1; }
+      if (o === null) { log('ERROR usage: migrate [--apply] [--line <n>:<name>=<role>[,<role>]]... [--category <n>:<name>=<category>]... [--move <n>:<name>]...'); return 1; }
       const r = migrate({ ...base, ...o });
       r.lines.forEach(log);
       return r.ok ? 0 : 1;

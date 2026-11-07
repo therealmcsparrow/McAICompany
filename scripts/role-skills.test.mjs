@@ -59,7 +59,7 @@ test('preview lists every line and writes nothing', (t) => {
   const p = project(t);
   const r = run(p, ['migrate']);
   assert.equal(r.code, 0);
-  assert.match(r.text, /line 4: hallmark, source nutlope\/hallmark.*selection only; Roles: .*ui-ux-designer/);
+  assert.match(r.text, /line 4: hallmark, source nutlope\/hallmark.*selection only; Category: design; Roles: .*ui-ux-designer/);
   assert.match(r.text, /line 5: impeccable.*selection only/);
   assert.match(r.text, /line 6: fancy-ui.*license MIT.*approved 2026-02-02; new entry in your list/);
   assert.match(r.text, /line 7: stays, no license/);
@@ -333,4 +333,45 @@ test('record still refuses a command pick no list holds', (t) => {
   assert.equal(r.ok, false);
   assert.match(r.lines[0], /^ERROR entry: /);
   assert.equal(fs.existsSync(userFile(p)), false);
+});
+
+test('a new entry from a Skills line takes a category the CEO picks, and the Roles follow it', (t) => {
+  const p = project(t);
+  const pre = run(p, ['migrate']);
+  assert.match(pre.out.find((l) => l.startsWith('line 12:')), /new entry in your list; choose its category; Category: engineering; Roles: .*; Category: quality; Roles: qa/);
+  const six = pre.out.find((l) => l.startsWith('line 6:'));
+  assert.ok(!/choose its category/.test(six) && /; Category: design; Roles: /.test(six), 'a Design skills line shows its category and has no choice');
+  assert.ok(!/Category: security/.test(pre.text));
+
+  const plain = run(p, ['migrate', '--apply', '--line', '12:stk-skill=qa']);
+  assert.match(plain.text, /line 12: stays, Role not offered/);
+  assert.equal(fs.existsSync(userFile(p)), false);
+
+  const r = run(p, ['migrate', '--apply', '--line', '12:stk-skill=qa', '--category', '12:stk-skill=quality']);
+  assert.equal(r.code, 0, r.text);
+  assert.match(r.text, /line 12: migrated, entry in your list, selected for qa/);
+  const entry = JSON.parse(fs.readFileSync(userFile(p), 'utf8')).entries.find((e) => e.skillname === 'stk-skill');
+  assert.equal(entry.skillcategory, 'quality');
+  assert.deepEqual(JSON.parse(read(p, 'settings.json')).aico_settings.roles['qa'].skills.map((x) => x.name), ['stk-skill']);
+});
+
+test('a category choice is refused for security, for a Design skills line, for a name in a list and for a bad value', (t) => {
+  const refused = (extra, line) => {
+    const p = project(t);
+    const r = run(p, ['migrate', '--apply', ...line, ...extra]);
+    return { p, r };
+  };
+  const sec = refused(['--category', '12:stk-skill=security'], ['--line', '12:stk-skill=security']);
+  assert.match(sec.r.text, /line 12: stays, category not offered/);
+  const design = refused(['--category', '6:fancy-ui=quality'], ['--line', '6:fancy-ui=qa']);
+  assert.match(design.r.text, /line 6: stays, category not offered/);
+  assert.equal(fs.existsSync(userFile(design.p)), false);
+  for (const bad of ['12:stk-skill=Quality', '12:stk-skill=', 'x:stk-skill=quality', '12:stk-skill=quality;x', '12:other=quality', '12:quality']) {
+    const r = refused(['--category', bad], ['--line', '12:stk-skill=qa']).r;
+    assert.equal(r.code, 1, bad);
+    assert.match(r.text, /^ERROR usage/, bad);
+  }
+  const orphan = refused(['--category', '12:stk-skill=quality'], []).r;
+  assert.equal(orphan.code, 1);
+  assert.match(orphan.text, /^ERROR usage/);
 });

@@ -145,6 +145,7 @@ test('add previews with no write, then Save writes one entry with the license an
   assert.ok(pre.out.includes('Name: my-skill'));
   assert.ok(pre.out.includes('License: MIT, as you stated it; nothing checks it.'));
   assert.ok(pre.out.some((l) => l.startsWith('Roles that can select it: architect')));
+  assert.ok(pre.out.includes('The scan runs when you install it. It stays not vetted until an install scans it clean.'));
   assert.equal(fs.existsSync(userFile(p)), false);
   const saved = run(p, ['add'], { ...FULL, save: true });
   assert.deepEqual(saved, { code: 0, out: ['saved: my-skill'] });
@@ -185,6 +186,9 @@ test('a taken name is refused once the source decides it', (t) => {
 test('a baseline name with the same repo and a commit is a pin, not a duplicate', (t) => {
   const p = setup(t);
   const pin = { name: 'hallmark', repo: 'nutlope/hallmark', commit: A, category: 'quality', license: 'MIT' };
+  const pre = run(p, ['add'], pin);
+  assert.ok(pre.out.includes('Category: design'), 'the preview shows the baseline category, not the typed one');
+  assert.ok(!pre.out.includes('Category: quality'));
   const r = run(p, ['add'], { ...pin, save: true });
   assert.deepEqual(r, { code: 0, out: ['saved: hallmark'] });
   assert.equal(entries(p)[0].skillcommit, A);
@@ -300,7 +304,7 @@ test('record refuses a hostile entry, a license inside the entry, unknown keys a
     [{ entry: PICK }, 'ERROR roles: bad value'],
     [{ entry: PICK, license: 'MIT‮', roles: [] }, 'ERROR license: bad value'],
     [{ entry: 'x', roles: [] }, 'ERROR entry: bad value'],
-    [{ entry: { skillname: 'cmd-x', skillcategory: 'engineering', skillinstaller: 'npx -y x@1.0.0 i' }, license: 'MIT', roles: [] }, 'ERROR entry: source differs from the list']
+    [{ entry: { skillname: 'cmd-x', skillcategory: 'engineering', skillinstaller: 'npx -y x@1.0.0 i' }, license: 'MIT', roles: [] }, 'ERROR entry: a command is in no list']
   ];
   for (const [payload, line] of cases) assert.deepEqual(run(p, ['record'], payload), { code: 1, out: [line] }, line);
   assert.equal(fs.existsSync(userFile(p)), false);
@@ -314,4 +318,23 @@ test('record follows the one-commit rule for a name already in your list', (t) =
   assert.match(other.out[0], /another commit/);
   assert.equal(entries(p)[0].skillcommit, A);
   assert.equal(fs.existsSync(path.join(p.cwd, '.company', 'settings.json')), false);
+});
+
+test('a license is checked as typed: an invisible character at either edge is refused, plain spaces are trimmed', (t) => {
+  const p = setup(t);
+  const edges = ['MIT\n', '\uFEFFMIT', 'MIT\u2028', 'MIT\u2029', '\tMIT', 'MIT\u200B', '\u3164MIT', 'MIT\u202E'];
+  for (const license of edges) {
+    const viaAdd = run(p, ['add'], { ...FULL, license, save: true });
+    assert.equal(viaAdd.code, 1, JSON.stringify(license));
+    assert.match(viaAdd.out[0], /^ERROR license: /, JSON.stringify(license));
+    const viaRecord = run(p, ['record'], { entry: { skillname: 'rec-skill', skillcategory: 'engineering', skillrepo: 'octo/rec', skillcommit: A }, license, roles: [] });
+    assert.equal(viaRecord.code, 1, JSON.stringify(license));
+    assert.match(viaRecord.out[0], /^ERROR license: /, JSON.stringify(license));
+  }
+  assert.deepEqual(entries(p), []);
+  assert.equal(run(p, ['add'], { ...FULL, license: '  MIT\u00A0', save: true }).code, 0);
+  assert.equal(entries(p)[0].license, 'MIT');
+  const rec = run(p, ['record'], { entry: { skillname: 'rec-skill', skillcategory: 'engineering', skillrepo: 'octo/rec', skillcommit: B }, license: ' ISC ', roles: [] });
+  assert.equal(rec.code, 0);
+  assert.equal(entries(p).find((e) => e.skillname === 'rec-skill').license, 'ISC');
 });
