@@ -816,6 +816,30 @@ test('a plain file through a linked segment reads installed (name only) at proje
   assert.equal(r.place, 'project');
 });
 
+test('row 1: an lstat error on a skills segment other than absence counts as through at project; a file there is skipped', (t) => {
+  const entryOf = { skillname: 'my-skill', skillcategory: 'engineering', skillrepo: 'a/b' };
+  const home = tmp('home');
+  const root = tmp('root');
+  fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+  const real = fs.lstatSync;
+  const guarded = path.join(root, '.claude');
+  t.mock.method(fs, 'lstatSync', (p, ...rest) => {
+    if (String(p).startsWith(guarded)) throw Object.assign(new Error('denied'), { code: 'EACCES' });
+    return real(p, ...rest);
+  });
+  const r = skillStatus(entryOf, { home, productRoot: root });
+  assert.equal(r.status, 'installed (name only)');
+  assert.equal(r.place, 'project');
+  assert.deepEqual(itemsProven(root, 'my-skill', H1, { place: 'project' }), { present: true, ok: false });
+  t.mock.restoreAll();
+  const root2 = tmp('root');
+  fs.mkdirSync(path.join(root2, '.claude'));
+  fs.writeFileSync(path.join(root2, '.claude', 'skills'), 'a file');
+  const r2 = skillStatus(entryOf, { home, productRoot: root2 });
+  assert.equal(r2.status, 'not found');
+  assert.deepEqual(itemsProven(root2, 'my-skill', H1, { place: 'project' }), { present: false, ok: false });
+});
+
 test('an lstat error on the name through a linked segment counts as present and never proves', (t) => {
   if (!canLink(t)) return;
   const root = tmp('root');

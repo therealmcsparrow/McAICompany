@@ -654,3 +654,13 @@ test('the scan failed after install line names what failed, whole line', async (
     assert.ok(s.log.includes(`scan failed after install: ${NAME}, nothing stored, ${what}. The folder stays until you remove it; delete these folders by hand: ${folders(s.root)}`), `${what} ${s.log.join('|')}`);
   }
 });
+
+test('row 3: a plain file named like a name-only skill through a linked .claude/skills reads installed (name only), place project, dispatch no', async (t) => {
+  const s = setup(t, { entries: [], lists: { qa: ['project', [BASE]] } });
+  const other = tmp(t, 'other');
+  fs.writeFileSync(path.join(other, BASE), 'a plain file');
+  if (!link(t, other, path.join(s.root, '.claude', 'skills'))) return;
+  const line = await statusLine(s);
+  assert.match(line, /\| installed \(name only\) \| place: project \|/, line);
+  assert.ok(line.endsWith('dispatch: no'), line);
+});
