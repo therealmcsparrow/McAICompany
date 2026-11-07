@@ -465,6 +465,20 @@ describe('three-digit Step names', () => {
     assert.deepEqual(cap.map((l) => /Step (\d+)/.exec(l)[1]), ['99', '100']);
   });
 
+  test('retro over the Step cap says so in warnings', (t) => {
+    const sb = sandbox(t);
+    for (let i = 1; i <= 201; i++) write(sb, `${String(i).padStart(2, '0')}-qa.md`, step(String(i), 'qa', 'done'));
+    const x = JSON.parse(node(sb, reflect, ['retro', SLUG, '--json']).out);
+    assert.ok(x.warnings.includes('only 200 Step files read'), JSON.stringify(x.warnings));
+  });
+
+  test('retro at exactly the Step cap has no cap warning', (t) => {
+    const sb = sandbox(t);
+    for (let i = 1; i <= 200; i++) write(sb, `${String(i).padStart(2, '0')}-qa.md`, step(String(i), 'qa', 'done'));
+    const x = JSON.parse(node(sb, reflect, ['retro', SLUG, '--json']).out);
+    assert.ok(!x.warnings.includes('only 200 Step files read'));
+  });
+
   test('step accepts a 3-digit name and refuses a 4-digit one', (t) => {
     const sb = sandbox(t);
     write(sb, '100-qa.md', step('100', 'qa', 'done'));

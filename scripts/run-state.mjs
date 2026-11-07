@@ -178,7 +178,7 @@ function readSteps(dir, warnings) {
   let names;
   try { names = readdirSync(dir); } catch { return steps; }
   names = names.filter(n => STEP_FILE_RE.test(n)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : a > b ? 1 : 0));
-  if (names.length > MAX_STEPS) { warnings.push(`only ${MAX_STEPS} Step files read`); names = names.slice(0, MAX_STEPS); }
+  if (names.length > MAX_STEPS) { warnings.push(`only ${MAX_STEPS} Step files read`); names = names.slice(-MAX_STEPS); }
   for (const name of names) {
     const file = join(dir, name);
     const st = lstatOrNull(file);

@@ -300,7 +300,9 @@ function cmdRetro(args) {
   const dir = workDir(slug);
   const warnings = [];
   const steps = [];
-  const names = fs.readdirSync(dir).filter((n) => FILE_RE.test(n)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : a > b ? 1 : 0)).slice(0, MAX_STEPS);
+  const all = fs.readdirSync(dir).filter((n) => FILE_RE.test(n)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || (a < b ? -1 : a > b ? 1 : 0));
+  if (all.length > MAX_STEPS) warnings.push(`only ${MAX_STEPS} Step files read`);
+  const names = all.slice(0, MAX_STEPS);
   for (const name of names) {
     const text = readSmall(path.join(dir, name));
     if (text === null) warnings.push(`${name} skipped`);

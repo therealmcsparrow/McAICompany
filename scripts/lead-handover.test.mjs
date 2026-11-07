@@ -223,6 +223,16 @@ describe('Handoff content', () => {
     assert.ok(!text.includes('evil'));
   });
 
+  test('a three-digit Handoff names its whole Step number', () => {
+    const fx = fixture();
+    fs.writeFileSync(path.join(fx.dir, '100-backend-engineer.md'), [
+      '---', 'step: 100', 'role: backend-engineer', 'task: x', 'status: done', 'round: 0',
+      'base-commit: abc1234', 'risk-tier: high', '---', 'By: backend-engineer', '## Did', '- x', '',
+    ].join('\n'));
+    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^step: 100 backend-engineer$/m);
+  });
+
   const BASE = 'ab12'.repeat(10);
   const stepFile = (fx, base) => fs.writeFileSync(path.join(fx.dir, '02-architect.md'), [
     '---', 'step: 2', 'role: architect', 'task: x', 'status: done', 'round: 1',
