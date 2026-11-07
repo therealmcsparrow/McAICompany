@@ -1025,3 +1025,37 @@ test('clearBound skips a row that is not an object and a row whose skillname is 
   assert.equal(Object.hasOwn(rows.at(-1), 'hash'), false);
   assert.equal(Object.hasOwn(rows.at(-1), 'vetted'), false);
 });
+
+const REFUSED = (n) => `ERROR user catalog entry ${n}: clearing the pin would make this row the one read, nothing written; fix or remove it by hand`;
+
+test('clearBound refuses when the strip would make a first row of the name readable, and writes nothing', () => {
+  const cases = [
+    ['a lone row with a bad hash: none before, the row after', [repoEntry({ hash: 'zz' })], 1],
+    ['a bad vetted row, then the row read with a pin', [repoEntry({ vetted: '2099-01-01' }), repoEntry({ hash: H1, vetted: '2026-11-01' })], 1],
+    ['another name first, a bad row of the name second, the row read third', [repoEntry({ skillname: 'other-skill' }), repoEntry({ vetted: '2099-01-01' }), repoEntry({ hash: H1, vetted: '2026-11-01' })], 2],
+  ];
+  for (const [label, entries, n] of cases) {
+    const home = tmp();
+    writeUser(home, { schema: 1, entries });
+    const before = fs.readFileSync(userFile(home), 'utf8');
+    assert.deepEqual(clearBound('my-skill', { home }), { ok: false, error: REFUSED(n) }, label);
+    assert.equal(fs.readFileSync(userFile(home), 'utf8'), before, label);
+  }
+});
+
+test('clearBound with no keys to strip changes nothing and still answers changed false', () => {
+  const home = tmp();
+  writeUser(home, { schema: 1, entries: [repoEntry({ skillcategory: 'no-such-category' }), repoEntry()] });
+  const before = fs.readFileSync(userFile(home), 'utf8');
+  assert.deepEqual(clearBound('my-skill', { home }), { ok: true, changed: false });
+  assert.equal(fs.readFileSync(userFile(home), 'utf8'), before);
+});
+
+test('clearBound never echoes the text of the row it refuses', () => {
+  const home = tmp();
+  writeUser(home, { schema: 1, entries: [repoEntry({ skillrepo: 'evil/payload', hash: 'zz' })] });
+  const r = clearBound('my-skill', { home });
+  assert.equal(r.ok, false);
+  assert.equal(r.error.includes('evil'), false);
+  assert.equal(r.error.includes('payload'), false);
+});

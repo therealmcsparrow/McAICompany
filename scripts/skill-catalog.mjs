@@ -574,7 +574,7 @@ function loadForWrite(opts, { checkRows = true } = {}) {
   const doc = read.state === 'ok' ? read.doc : { schema: 1, entries: [] };
   // A write that adds or changes a row checks every stored row, since all are written back. clearBound passes
   // checkRows false, the one exception to proj.M-SEC9: it writes stored rows back with only the two
-  // pin keys removed and adds no value, and a failed scan must always be able to take the pin off.
+  // pin keys removed and adds no value. It refuses on its own when that strip would change the row read.
   for (let i = 0; checkRows && i < doc.entries.length; i++) {
     const v = validateEntry(doc.entries[i], 'user');
     if (!v.ok) return { error: `ERROR user catalog entry ${i + 1}: ${v.field} ${v.reason}` };
@@ -639,16 +639,24 @@ export function setBoundHash(name, hash, vetted, { home } = {}) {
   return w.ok ? { ok: true, changed: true } : w;
 }
 
+const isRowOf = (raw, name) => isPlain(raw) && Object.hasOwn(raw, 'skillname') && raw.skillname === name;
+
+// Index of the first row of the name that passes validateEntry, or -1 for none: the row readCatalog reads.
+const firstReadRow = (entries, name) => entries.findIndex((raw) => isRowOf(raw, name) && validateEntry(raw, 'user').ok);
+
 // Clears the scan hash and the vetted date together, from every row of the name, since readCatalog trusts the
-// first valid row. No row is validated, its own included, so a failed scan can always take the pin off; a
-// file-level error still refuses.
+// first valid row. No row is validated before the strip, its own included, so a failed scan can take the pin
+// off a row that is bad; a file-level error still refuses. It also refuses, and writes nothing, when the strip
+// would change which row of the name is read first: a strip cannot make a valid row invalid, so the index can
+// only move down, and while it holds the row read keeps its source and commit.
 export function clearBound(name, { home } = {}) {
   if (typeof name !== 'string' || !NAME_RE.test(name)) return writeFail('ERROR user catalog entry: skillname bad value');
   const loaded = loadForWrite({ home }, { checkRows: false });
   if (loaded.error) return writeFail(loaded.error);
   let found = false;
   let changed = false;
-  loaded.doc.entries = loaded.doc.entries.map((raw) => {
+  const readBefore = firstReadRow(loaded.doc.entries, name);
+  const stripped = loaded.doc.entries.map((raw) => {
     if (!isPlain(raw) || !Object.hasOwn(raw, 'skillname') || raw.skillname !== name) return raw;
     found = true;
     if (!Object.hasOwn(raw, 'hash') && !Object.hasOwn(raw, 'vetted')) return raw;
@@ -660,6 +668,9 @@ export function clearBound(name, { home } = {}) {
   });
   if (!found) return writeFail('ERROR user catalog entry: skillname not found');
   if (!changed) return { ok: true, changed: false };
+  const readAfter = firstReadRow(stripped, name);
+  if (readAfter !== readBefore) return writeFail(`ERROR user catalog entry ${readAfter + 1}: clearing the pin would make this row the one read, nothing written; fix or remove it by hand`);
+  loaded.doc.entries = stripped;
   const w = writeUserDoc(loaded.home, loaded.doc);
   return w.ok ? { ok: true, changed: true } : w;
 }

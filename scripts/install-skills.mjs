@@ -476,16 +476,18 @@ function selection(settings) {
   return new Map([...byName].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
-function dispatchWord(entry, st) {
+// A name-only folder at place user dispatches only when the catalog read gave no error and no warning: the file
+// holds the only record of a refused scan, and a read that failed cannot show it.
+function dispatchWord(entry, st, readClean) {
   if (entry.skillplugin !== undefined) return 'session list';
-  if (st.status === 'installed (name only)') return st.place === 'user' ? 'yes' : 'no';
+  if (st.status === 'installed (name only)') return st.place === 'user' && readClean ? 'yes' : 'no';
   return st.status === 'installed' ? 'yes' : 'no';
 }
 
 // One machine-read line. The license is free text, so `|` in it is written as %7C and can never add a field.
-function statusLine(name, roles, entry, st, dispatch) {
+function statusLine(name, roles, entry, st, dispatch, readClean) {
   const license = String(st.license).replaceAll('|', '%7C');
-  return `${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${license} | ${vettedText(entry, st.vetted)} | dispatch: ${dispatch ?? dispatchWord(entry, st)}`;
+  return `${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${license} | ${vettedText(entry, st.vetted)} | dispatch: ${dispatch ?? dispatchWord(entry, st, readClean)}`;
 }
 
 const REASON_RE = /^[a-z0-9-]{1,30}$/;
@@ -526,9 +528,10 @@ async function runSelected(args, env) {
     const catOpts = env.home ? { home: env.home } : {};
     const settings = env.settings ?? readSettingsJson(productRoot);
     if (settings?.settings_folder_moved !== false) log('settings folder moved');
-    const catalog = readCatalog(catOpts);
+    const catalog = (env.readCatalog ?? readCatalog)(catOpts);
     catalog.errors.forEach(e => log(e));
     (catalog.warnings ?? []).forEach(w => log(w));
+    const readClean = catalog.errors.length === 0 && (catalog.warnings ?? []).length === 0;
     const byName = new Map(catalog.entries.map(e => [e.skillname, e]));
     const chosen = selection(settings);
     if (only.size) {
@@ -542,7 +545,7 @@ async function runSelected(args, env) {
         const roles = sel.roles.join(', ');
         if (!entry || !selectable(entry).ok) { log(`${name} | roles: ${roles} | not in the catalog | place: - | license: no license on record | not vetted | dispatch: no`); continue; }
         const st = skillStatus(entry, { home, productRoot, scope: scopeOf(sel) });
-        log(statusLine(name, roles, entry, st));
+        log(statusLine(name, roles, entry, st, undefined, readClean));
       }
       // A skill no Role selects reads at project scope and is never dispatched.
       for (const entry of catalog.entries) {
