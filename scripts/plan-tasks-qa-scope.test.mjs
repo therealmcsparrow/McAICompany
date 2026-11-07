@@ -128,12 +128,19 @@ describe('scope in a QA-first segment', () => {
 
   test('hostile spellings of a QA path: dot segments, absolute and drive forms are extra ? and never qa-owned', () => {
     const fx = running();
-    const r = scope(fx, 'T2', 'scripts/../scripts/a.test.mjs', './scripts/a.test.mjs', '/scripts/a.test.mjs', 'C:/x/a.test.mjs', '\\scripts\\a.test.mjs', 'scripts/a.test.mjs\u202e');
+    const r = scope(fx, 'T2', 'scripts/../scripts/a.test.mjs', './scripts/a.test.mjs', '/scripts/a.test.mjs', 'C:/x/a.test.mjs', '\\scripts\\a.test.mjs');
     assert.deepEqual(r.lines, [
-      'extra ?', 'extra ?', 'extra ?', 'extra ?', 'extra ?', 'extra ?', 'scope: 6 extra, 0 sibling, 0 qa-owned'
+      'extra ?', 'extra ?', 'extra ?', 'extra ?', 'extra ?', 'scope: 5 extra, 0 sibling, 0 qa-owned'
     ]);
     assert.deepEqual(fx.events().at(-1).qa, []);
     assert.equal(fx.run('done', SLUG, 'T2').code, 0);
+  });
+
+  test('a QA path with a control character (bidi override) is refused, plan-tasks v1.6', () => {
+    const fx = running();
+    const r = scope(fx, 'T2', 'scripts/a.test.mjs\u202e');
+    assert.equal(r.code, 3);
+    assert.deepEqual(r.lines, ['refused: argument holds a control character']);
   });
 
   test('a path under a QA folder is qa-owned', () => {
@@ -239,7 +246,7 @@ describe('Fix round in a QA-first segment', () => {
     const fx = allDone(true);
     const r = fx.run('round', SLUG, '1', '--', 'scripts/a.test.mjs');
     assert.equal(r.code, 0, r.lines.join('\n'));
-    assert.match(r.lines[0], /^round 1: T1 \(\+0 paths\)$/);
+    assert.match(r.lines[0], /^round 1: T1 \(\+1 paths\)$/);
     assert.equal(fx.run('next', SLUG).lines.some((l) => l.startsWith('wait')), false);
   });
 

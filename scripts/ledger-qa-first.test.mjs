@@ -295,7 +295,7 @@ test('brainstorm, replay and baseline files are excluded and counted', (t) => {
 test('release runs are excluded by name in any case, other names starting with release stay', (t) => {
   const sb = sandbox(t);
   addRun(sb, 'Release Version 0 26 0', { fix_rounds: 40 });
-  addRun(sb, 'release-next', { fix_rounds: 40 });
+  addRun(sb, 'Release Next', { fix_rounds: 40 });
   addRun(sb, 'RELEASE', { fix_rounds: 40, qa: 1 });
   addRun(sb, 'Release Next Version', { fix_rounds: 40 });
   addRun(sb, 'Releasing Docs', { fix_rounds: 2 });
