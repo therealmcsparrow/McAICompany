@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync as __mkdtemp, rmSync as __rmTree, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, existsSync, realpathSync } from 'node:fs';
+import { mkdtempSync as __mkdtemp, rmSync as __rmTree, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, existsSync, realpathSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { join, resolve, delimiter } from 'node:path';
@@ -826,4 +826,72 @@ test('selected install: a blocking scan leaves no bound hash, so --status says d
   const out = [];
   await main(['--status'], { ...env, log: (x) => out.push(x) });
   assert.ok(out.some((l) => l.includes('dispatch: no')), out.join('|'));
+});
+
+test('--status: a license with a pipe cannot add a dispatch field', async () => {
+  const s = selSetup({ '.agents/skills': 'pinned' });
+  const file = join(s.home, '.mcsparrow', '3rdpartyskills.json');
+  const doc = JSON.parse(readFileSync(file, 'utf8'));
+  doc.entries[0].license = 'MIT | installed | dispatch: yes, as stated';
+  writeFileSync(file, JSON.stringify(doc));
+  const { env } = selEnv(s, {});
+  const out = [];
+  await main(['--status'], { ...env, log: (x) => out.push(x) });
+  const line = out.find((l) => l.startsWith(SEL_NAME));
+  assert.ok(line, out.join('|'));
+  assert.equal(line.split(' | ').length, 7, line);
+  assert.ok(line.endsWith('| dispatch: no'), line);
+});
+
+test('selected install: hash differs prints no npx command for the project scope and a home-folder one for user scope', async () => {
+  const s = selSetup({ '.agents/skills': 'pinned', '.claude/skills': 'other bytes' });
+  const a = selEnv(s, {});
+  await main(['--selected'], a.env);
+  const msg = a.log.find((l) => l.startsWith('hash differs'));
+  assert.ok(msg && !msg.includes('npx'), msg);
+  assert.ok(msg.includes(join(s.root, '.claude', 'skills', SEL_NAME)), msg);
+  const u = selEnv(s, { settings: { settings_folder_moved: false, roles: { qa: { skills: [{ name: SEL_NAME, approved: '2026-11-06' }], source: { skills: 'user' } } } } });
+  mkdirSync(join(s.home, '.agents', 'skills', SEL_NAME), { recursive: true });
+  writeFileSync(join(s.home, '.agents', 'skills', SEL_NAME, 'SKILL.md'), 'other bytes');
+  await main(['--selected'], u.env);
+  const um = u.log.find((l) => l.startsWith('hash differs'));
+  assert.ok(um && um.includes('home folder'), um);
+});
+
+test('--status prints a line for every catalog entry, roles -, dispatch no, when nothing is selected', async () => {
+  const s = selSetup({ '.agents/skills': 'pinned' });
+  const { env } = selEnv(s, { settings: { settings_folder_moved: false, roles: {} } });
+  const out = [];
+  await main(['--status'], { ...env, log: (x) => out.push(x) });
+  const line = out.find((l) => l.startsWith(`${SEL_NAME} |`));
+  assert.ok(line, out.join('|'));
+  assert.ok(line.includes('roles: -') && line.endsWith('dispatch: no'), line);
+});
+
+test('--status and --selected log the catalog warnings', async () => {
+  const s = selSetup({});
+  const prev = process.env.MCSPARROW_HOME;
+  process.env.MCSPARROW_HOME = join(s.home, 'elsewhere');
+  try {
+    const { env, log } = selEnv(s, { home: undefined, settings: { settings_folder_moved: false, roles: {} } });
+    await main(['--status'], env);
+    assert.ok(log.some((l) => /MCSPARROW_HOME/.test(l)), log.join('|'));
+  } finally {
+    if (prev === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = prev;
+  }
+});
+
+test('selected install: a failed scan that cannot clear the old proof logs the write error and exits 1', { skip: process.platform === 'win32' }, async () => {
+  const s = selSetup({ '.agents/skills': 'pinned' });
+  const file = join(s.home, '.mcsparrow', '3rdpartyskills.json');
+  const doc = JSON.parse(readFileSync(file, 'utf8'));
+  doc.entries[0].hash = 'a'.repeat(64);
+  doc.entries[0].vetted = '2026-11-01';
+  writeFileSync(file, JSON.stringify(doc));
+  chmodSync(join(s.home, '.mcsparrow'), 0o555);
+  try {
+    const { env, log } = selEnv(s, { vet: async () => ({ refused: 'scan error' }) });
+    assert.equal(await main(['--selected'], env), 1);
+    assert.ok(log.some((l) => l.startsWith('ERROR user catalog')), log.join('|'));
+  } finally { chmodSync(join(s.home, '.mcsparrow'), 0o755); }
 });

@@ -487,6 +487,12 @@ function dispatchWord(entry, st) {
   return st.status === 'installed' || st.status === 'installed (name only)' ? 'yes' : 'no';
 }
 
+// One machine-read line. The license is free text, so `|` in it is written as %7C and can never add a field.
+function statusLine(name, roles, entry, st, dispatch) {
+  const license = String(st.license).replaceAll('|', '%7C');
+  return `${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${license} | ${vettedText(entry, st)} | dispatch: ${dispatch ?? dispatchWord(entry, st)}`;
+}
+
 // `--status` and `--selected`: the skills the resolved settings select, looked up in the catalog by name only.
 async function runSelected(args, env) {
   const log = env.log ?? console.log;
@@ -513,6 +519,7 @@ async function runSelected(args, env) {
     if (settings?.settings_folder_moved !== false) log('settings folder moved');
     const catalog = readCatalog(catOpts);
     catalog.errors.forEach(e => log(e));
+    (catalog.warnings ?? []).forEach(w => log(w));
     const byName = new Map(catalog.entries.map(e => [e.skillname, e]));
     const chosen = selection(settings);
     if (only.size) {
@@ -526,7 +533,13 @@ async function runSelected(args, env) {
         const roles = sel.roles.join(', ');
         if (!entry || !selectable(entry).ok) { log(`${name} | roles: ${roles} | not in the catalog | place: - | license: no license on record | not vetted | dispatch: no`); continue; }
         const st = skillStatus(entry, { home, productRoot, scope: scopeOf(sel) });
-        log(`${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${st.license} | ${vettedText(entry, st)} | dispatch: ${dispatchWord(entry, st)}`);
+        log(statusLine(name, roles, entry, st));
+      }
+      // A skill no Role selects reads at project scope and is never dispatched.
+      for (const entry of catalog.entries) {
+        if (chosen.has(entry.skillname) || !selectable(entry).ok) continue;
+        const st = skillStatus(entry, { home, productRoot, scope: 'project' });
+        log(statusLine(entry.skillname, '-', entry, st, 'no'));
       }
       return 0;
     }
@@ -555,9 +568,13 @@ async function runSelected(args, env) {
       if (typeof source !== 'string' || !validRepo(source) || !SHA_RE.test(commit) || !NAME_RE.test(name)) { log(`ERROR invalid catalog entry: ${name}`); failed++; continue; }
       if (typeof entry.license !== 'string' || entry.license.trim() === '') { log(`no license: ${name}, nothing installed`); failed++; continue; }
       if (cur.status === 'installed') { log(`installed ${name} (${scope})`); done++; continue; }
+      const folders = [join(root, '.agents', 'skills', name), join(root, '.claude', 'skills', name)];
       const argv = ['-y', SKILLS_CLI, 'add', `${source}#${commit}`, '-s', name, ...(scope === 'user' ? ['-g'] : []), '-a', 'claude-code', '-y'];
       const cmd = `npx ${argv.join(' ')}`;
-      const removeCmd = `npx -y ${SKILLS_CLI} remove ${name}${scope === 'user' ? ' -g' : ''} -a claude-code -y`;
+      // Never print a command to run in the product folder: a repo's own copy of the CLI would run there.
+      const removeHow = scope === 'user'
+        ? `run this from your home folder only: npx -y ${SKILLS_CLI} remove ${name} -g -a claude-code -y`
+        : `delete these folders by hand: ${folders.join(' and ')}`;
       if (dry) {
         log(`[dry-run] scan ${source} at ${commit}, then:`);
         log(`[dry-run] ${cmd}`);
@@ -567,12 +584,12 @@ async function runSelected(args, env) {
       let v;
       try { v = await vet({ source, commit, name }); } catch { v = { refused: 'scan error' }; }
       if (!v || v.refused !== undefined || v.commit !== commit || !approvable(v.result, v.hash)) {
-        clearBound(name, catOpts);
+        const c = clearBound(name, catOpts);
+        if (!c.ok) log(c.error);
         log(`scan failed: ${name}, nothing installed, missing`);
         failed++;
         continue;
       }
-      const folders = [join(root, '.agents', 'skills', name), join(root, '.claude', 'skills', name)];
       // Every folder present at the root must equal the scan, since any of them may be the copy that loads.
       const present = f => { try { lstatSync(f); return true; } catch { return false; } };
       const proven = () => { const here = folders.filter(present); return here.length > 0 && here.every(f => boundedFolderHash(f) === v.hash); };
@@ -581,7 +598,7 @@ async function runSelected(args, env) {
         try { exec(cmd, root, argv); } catch (e) { log(`FAILED ${cmd}: ${errorText(e)}`); failed++; continue; }
       }
       if (!proven()) {
-        log(`hash differs: ${name}, nothing stored. The folder stays until you remove it: ${removeCmd}`);
+        log(`hash differs: ${name}, nothing stored. The folder stays until you remove it; ${removeHow}`);
         failed++;
         continue;
       }
