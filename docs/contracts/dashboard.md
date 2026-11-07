@@ -1,7 +1,9 @@
-# Contract: dashboard v1
+# Contract: dashboard v1.1
+
+v1.1 (task role-skills-file; additive): a Step file name takes 2 or 3 digits, so a run past Step 99 keeps its Did text. Cites move to `run-state` v1.9 and `token-ledger` v1.9. Every v1 name, field and route stays valid.
 
 Providers (Node built-ins only): `scripts/dashboard-data.mjs` (board JSON), `scripts/dashboard-run.mjs` (run JSON, the Did reader, the slug resolver), `scripts/dashboard-tokens.mjs` (token reader), `scripts/dashboard-server.mjs` (HTTP API, access token, `serve` CLI). Page assets: `scripts/dashboard-page/` (`index.html`, `board.js`, `drawer.js`, `live.js`), private files of the server, not Modules. Consumer: the CEO's browser, through the HTTP API only.
-Uses: run-state v1.8 (`list`, `active`, `show`), run-stage v1 (`readStage`), intake-record v1 (`listIntake`), roadmap-list v1 (`listRoadmap`), pr-links v1 (`lookup`), token-ledger v1.8 (`report --json`, in a child process), cost-source v1 (`readCost`), work-folder-name v1.1 (`isWorkFolder`, `exactWorkPath`).
+Uses: run-state v1.9 (`list`, `active`, `show`), run-stage v1 (`readStage`), intake-record v1 (`listIntake`), roadmap-list v1 (`listRoadmap`), pr-links v1 (`lookup`), token-ledger v1.9 (`report --json`, in a child process), cost-source v1 (`readCost`), work-folder-name v1.1 (`isWorkFolder`, `exactWorkPath`).
 Why it exists: the CEO sees every run, its stage, the Gate it waits on and its token use on one live page without reading Handoffs. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md` (data only from aico script JSON, loopback by default) and `docs/adr/0058-dashboard-access-token.md` (per-start token). Read-only: nothing here writes a record, blocks a Step or a Gate.
 
 ## Sources and imports
@@ -18,7 +20,7 @@ Why it exists: the CEO sees every run, its stage, the Gate it waits on and its t
   "roadmap": [] }
 ```
 - `generated`: `now` as UTC `<at>`. `columns`: all eight, always, in the order above.
-- `active`: the `slug` of run-state v1.8 `active(root, { now })` (one running, non-stale run, the newest activity), else `null`.
+- `active`: the `slug` of run-state v1.9 `active(root, { now })` (one running, non-stale run, the newest activity), else `null`.
 - `inflight`: for the active run, the view `subs` entries with `stop: null` whose `start` is within the last 12 hours; `0` when `active` is `null`.
 - `roadmap`: the `items` of roadmap-list v1 `listRoadmap(root)`.
 - Intake lane (`columns` id `intake`): one card `{ "id", "topic", "outcome", "at" }` per intake-record v1 `listIntake` item with outcome `needs-info` or `rejected`, in that order.
@@ -29,7 +31,7 @@ Why it exists: the CEO sees every run, its stage, the Gate it waits on and its t
   "elapsedS": 0, "live": true, "tier": "high", "round": 0, "needsCeo": false, "column": "build",
   "stageNote": "stage not recorded"|null, "readable": true, "tokens": { "spend": 0, "cacheRead": 0 }|null, "usd": 0.42|null }
 ```
-- One card per run-state v1.8 `list` entry; fields from that entry and the run view (`show`) of the run.
+- One card per run-state v1.9 `list` entry; fields from that entry and the run view (`show`) of the run.
 - `title`: for a new work folder name, the text after ` - ` as on disk (Topic plus any suffix and number); for a legacy slug, the slug.
 - `state`: the list `state` (the page shows "stale" for `stale`). `live`: `state` is `running`.
 - `elapsedS`: whole seconds from `started` to `ended`, or to `now` when `ended` is `null`; `null` when `started` is `null`.
@@ -55,7 +57,7 @@ Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` ex
 - `.company/ledger/<slug>.jsonl` missing by `lstat` (a link counts as missing) → `none`, no spawn.
 - Else spawns `process.execPath` with `[<ledger.mjs beside this script>, "report", <slug>, "--json"]`, `shell: false`, cwd `root`, timeout 5 s (`timeoutMs`), stdout at most 1 MiB; at most 4 children at once, others wait.
 - Non-zero exit, timeout, stdout over 1 MiB, unparsable JSON or `v` other than 1 → `unavailable`.
-- `totals` = report `totals.spend` and `totals.cache_read`. `overCap` = every report row with `ctx_end` above 95000 (the token-ledger v1.8 over-cap threshold), as `step` = row `id`, `role`, `ctxEnd` = `ctx_end`, in file order; `[]` unless `ok`.
+- `totals` = report `totals.spend` and `totals.cache_read`. `overCap` = every report row with `ctx_end` above 95000 (the token-ledger v1.9 over-cap threshold), as `step` = row `id`, `role`, `ctxEnd` = `ctx_end`, in file order; `[]` unless `ok`.
 - Cache key: slug, ledger `mtimeMs` and `size`. A result, failures included, is reused while the key is unchanged, so an unchanged ledger is never spawned twice.
 
 ## Run: `run(root, slug, { now, deps })`
@@ -69,13 +71,13 @@ Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` ex
 ```
 - `slug` not resolved by `resolveRunSlug` → `null` (the server answers 404).
 - `steps`: view `steps` (`step`, `role`, `status`, `round`) plus `summary` (Did reader).
-- `rounds`: one entry per distinct step `round`, ascending; `gate` and `review` = the step keys `gate` and `verdict` (run-state v1.8) of the highest-numbered Step of that round that carries one, else `null`. Until Handoffs carry `gate:` and `verdict:`, every chip says "verdict not recorded".
+- `rounds`: one entry per distinct step `round`, ascending; `gate` and `review` = the step keys `gate` and `verdict` (run-state v1.9) of the highest-numbered Step of that round that carries one, else `null`. Until Handoffs carry `gate:` and `verdict:`, every chip says "verdict not recorded".
 - `routing`: `routing(steps)`, the reviewer Roles in first-seen order.
 - `active` is non-null only when `slug` equals run-state `active`. `gates` = view `gates` (`gate`, `result`, `waitS` = `wait`). `waves` = view `waves`. `roleTimes` = view `subs` grouped by `role` in first-seen order: `ms` = sum of non-null `ms`, `steps` = number of entries (open ones included). `overCap` = `readLedger` `overCap`. `fixRounds` = view `round`.
 
 ### Did reader
 - `summary` = the first 3 non-empty lines of the `## Did` section, each without its list marker, joined by one space, control characters (Cc, Cf, Zl, Zp) removed, at most 300 characters, plain text.
-- File name from view `steps[].file`, which must match `^\d{2}-[a-z0-9-]+\.md$`; at most 200 files per run; `lstat` regular file with one hard link; at most 32 KiB; real path inside the real run folder; UTF-8 decoded with `fatal: true`.
+- File name from view `steps[].file`, which must match `^\d{2,3}-[a-z0-9-]+\.md$`; at most 200 files per run; `lstat` regular file with one hard link; at most 32 KiB; real path inside the real run folder; UTF-8 decoded with `fatal: true`.
 - Any failure, or no `## Did` section → `summary: null`; the Step stays listed.
 
 ### `resolveRunSlug(root, raw)`

@@ -1,4 +1,6 @@
-# Contract: reflect v1.2
+# Contract: reflect v1.3
+
+v1.3 (task role-skills-file; additive): a Step file name takes 2 or 3 digits, so a run past Step 99 keeps its Steps. Every v1.2 name and output stays valid.
 
 v1.2 (task input-fix, T10; additive): after the work folder name check, `<slug>` and a `<file>` given as a path inside `.company/work` must match the folder and file names on disk in exact letter case (`exactWorkPath` of `work-folder-name` v1.1). Another letter case → `refused: wrong letter case`, exit 2, nothing read. A run folder missing in every case keeps `refused: no run folder for <slug>`.
 
@@ -10,7 +12,7 @@ Reads only: the given Step file, the run's Step files (frontmatter and `## Block
 |---|---|
 | `step <slug> <file> --json` | the step check below |
 | `retro <slug> --json` | the retrospective below |
-`<slug>` is a work folder name (`work-folder-name` v1: a new name `YYYY-MM-DD HH.MM - Topic` or a legacy slug, checked by `isWorkFolder`), else `refused: run must be a work folder name`; `<file>` must be a `^\d{2}-[a-z0-9-]+\.md$` file directly in `.company/work/<slug>/` (resolved with `lstat`, no symlink, at most 64 KiB), else refused.
+`<slug>` is a work folder name (`work-folder-name` v1: a new name `YYYY-MM-DD HH.MM - Topic` or a legacy slug, checked by `isWorkFolder`), else `refused: run must be a work folder name`; `<file>` must be a `^\d{2,3}-[a-z0-9-]+\.md$` file directly in `.company/work/<slug>/` (resolved with `lstat`, no symlink, at most 64 KiB), else refused.
 
 ## Step check
 ```json
