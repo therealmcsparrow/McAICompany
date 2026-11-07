@@ -27,7 +27,7 @@ v5.0 is a major bump (task role-skills-file, T1; approved at the Plan Gate): `Ro
 | Line | When | Value |
 |---|---|---|
 | `Language: <tag>` | every dispatch, every Playbook, directly after `Company profile:` (brainstorm/cooler: after `Company profile:` too) | effective `aico_language` from `aico-language` v1 `resolve`, resolved **once** per run in pipeline Setup §1.6 |
-| `Role skills: <name>, <name> \| none` | every pipeline Step (v5.0); never the Reprompt Step | the names on that Role's lines of `install-skills --status`, run after the §1.19 forms (`skill-catalog` v1 "Selected install"), from the `dispatch:` field: `yes` keeps the name, `session list` keeps it only when the session's skill list holds it, per the `skill-catalog` v1 "Error cases" rule, so a missing skill is left off and the run records `degraded: missing <name>`; each is the catalog's own text; `none` when no name is left |
+| `Role skills: <name>, <name> \| none` | every pipeline Step (v5.0); never the Reprompt Step | the names on that Role's lines of `install-skills --status`, run after the §1.19 forms (`skill-catalog` v1 "Selected install"), from the `dispatch:` field: `yes` keeps the name, `session list` keeps it only when the session's skill list holds it, per the `skill-catalog` v1 "Error cases" rule, so a missing skill is left off and the run records `degraded: missing <name>` (a Playbook with no Gate says that line to the CEO when it reports its result); each is the catalog's own text; `none` when no name is left |
 
 ## Lines added in v3
 | Line | When | Value |
