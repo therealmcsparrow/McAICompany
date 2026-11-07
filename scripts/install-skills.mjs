@@ -10,7 +10,7 @@ import { execSync, execFileSync } from 'node:child_process';
 import { homedir, userInfo } from 'node:os';
 import { join, resolve, dirname, basename, delimiter, isAbsolute, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readBaseline, readCatalog, skillStatus, approvable, setBoundHash, clearBound, selectable, itemsProven, vettedText } from './skill-catalog.mjs';
+import { readBaseline, readCatalog, skillStatus, approvable, setBoundHash, clearBound, selectable, itemsProven, linkedSegments, vettedText } from './skill-catalog.mjs';
 import { vetCandidate, scanInstalled } from './skillspector.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
@@ -488,6 +488,20 @@ function statusLine(name, roles, entry, st, dispatch) {
   return `${name} | roles: ${roles} | ${st.status} | place: ${st.place ?? '-'} | license: ${license} | ${vettedText(entry, st.vetted)} | dispatch: ${dispatch ?? dispatchWord(entry, st)}`;
 }
 
+const REASON_RE = /^[a-z0-9-]{1,30}$/;
+
+// Says why the scan of the installed copies is not clean. Only fixed words and a reason that passes the same
+// allow-list as the scanner's are printed; anything else reads as no usable result.
+function scanFailure(after) {
+  if (typeof after?.refused === 'string') return `refused: ${after.refused}`;
+  const rs = after?.results;
+  if (!Array.isArray(rs) || rs.length === 0) return 'no usable result';
+  const bad = rs.find((r) => !(r && (r.verdict === 'pass' || r.verdict === 'findings') && r.blocking === false));
+  if (bad && bad.verdict === 'findings') return 'verdict findings, blocking';
+  if (bad && bad.verdict === 'error' && typeof bad.reason === 'string' && REASON_RE.test(bad.reason)) return `verdict error ${bad.reason}`;
+  return 'no usable result';
+}
+
 // `--status` and `--selected`: the skills the resolved settings select, looked up in the catalog by name only.
 async function runSelected(args, env) {
   const log = env.log ?? console.log;
@@ -564,6 +578,16 @@ async function runSelected(args, env) {
       if (typeof source !== 'string' || !validRepo(source) || !SHA_RE.test(commit) || !NAME_RE.test(name)) { log(`ERROR invalid catalog entry: ${name}`); failed++; continue; }
       if (typeof entry.license !== 'string' || entry.license.trim() === '') { log(`no license: ${name}, nothing installed`); failed++; continue; }
       if (cur.status === 'installed') { log(`installed ${name} (${scope})`); done++; continue; }
+      // A link or a non-folder on the way to a skills folder under the product root can send the install somewhere
+      // else, so nothing is scanned or installed. Under the user home these segments are skipped, not refused.
+      if (scope === 'project') {
+        const linked = linkedSegments(root);
+        if (linked.length > 0) {
+          for (const seg of linked) log(`${dry ? '[dry-run] ' : ''}hash differs: ${name}, nothing stored. This is a link or not a folder; delete it by hand: ${seg}`);
+          if (!dry) failed++;
+          continue;
+        }
+      }
       const folders = [join(root, '.agents', 'skills', name), join(root, '.claude', 'skills', name)];
       const argv = ['-y', SKILLS_CLI, 'add', `${source}#${commit}`, '-s', name, ...(scope === 'user' ? ['-g'] : []), '-a', 'claude-code', '-y'];
       const cmd = `npx ${argv.join(' ')}`;
@@ -587,12 +611,12 @@ async function runSelected(args, env) {
         continue;
       }
       // Every folder present at the root must equal the scan, since any of them may be the copy that loads.
-      const proven = () => { const got = itemsProven(root, name, v.hash); return got.present && got.ok; };
+      const proven = () => { const got = itemsProven(root, name, v.hash, { place: scope }); return got.present && got.ok; };
       if (scope === 'project') {
         // The home folder is read by the status too, so a differing copy there would leave the skill off every Role.
         const other = itemsProven(home, name, v.hash, { place: 'user' });
         if (other.present && !other.ok) {
-          log(`hash differs: ${name}, nothing installed, nothing stored. Your home folder holds another copy that differs from the scan; delete ${join(home, '.agents', 'skills', name)} and ${join(home, '.claude', 'skills', name)} by hand, then run again`);
+          log(`hash differs: ${name}, nothing stored. Your home folder holds another copy; run this from your home folder only: npx -y ${SKILLS_CLI} remove ${name} -g -a claude-code -y`);
           failed++;
           continue;
         }
@@ -610,11 +634,11 @@ async function runSelected(args, env) {
       let after;
       try { after = await scanAfter({ name, scope: scope === 'user' ? 'global' : 'project' }, { cwd: productRoot, home }); } catch (e) { after = { refused: 'scan error' }; }
       const rs = after?.results;
-      const clean = Array.isArray(rs) && rs.length === 1 && rs[0] && (rs[0].verdict === 'pass' || rs[0].verdict === 'findings') && rs[0].blocking === false;
+      const clean = Array.isArray(rs) && rs.length >= 1 && rs.every((r) => r && (r.verdict === 'pass' || r.verdict === 'findings') && r.blocking === false);
       if (!clean) {
         const c = clearBound(name, catOpts);
         if (!c.ok) log(c.error);
-        log(`scan failed after install: ${name}, nothing stored. The folder stays until you remove it; ${removeHow}`);
+        log(`scan failed after install: ${name}, nothing stored, ${scanFailure(after)}. The folder stays until you remove it; ${removeHow}`);
         failed++;
         continue;
       }

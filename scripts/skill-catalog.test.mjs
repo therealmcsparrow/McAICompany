@@ -774,6 +774,63 @@ test('linkedSegments names a linked .claude, .claude/skills, .agents or .agents/
   assert.deepEqual(linkedSegments(root2), ['.agents']);
 });
 
+test('linkedSegments counts a file at .claude or .claude/skills, and any other lstat error, as a linked segment', (t) => {
+  const r1 = tmp('root');
+  fs.writeFileSync(path.join(r1, '.claude'), 'x');
+  assert.deepEqual(linkedSegments(r1), ['.claude']);
+  const r2 = tmp('root');
+  fs.mkdirSync(path.join(r2, '.claude'));
+  fs.writeFileSync(path.join(r2, '.claude', 'skills'), 'x');
+  assert.deepEqual(linkedSegments(r2), ['.claude/skills']);
+  const r3 = tmp('root');
+  fs.mkdirSync(path.join(r3, '.agents', 'skills'), { recursive: true });
+  assert.deepEqual(linkedSegments(r3), []);
+  const real = fs.lstatSync;
+  for (const code of ['ENOENT', 'ENOTDIR']) {
+    t.mock.method(fs, 'lstatSync', (p, ...rest) => {
+      if (String(p).endsWith('.agents')) throw Object.assign(new Error(code), { code });
+      return real(p, ...rest);
+    });
+    fs.writeFileSync(path.join(r3, '.claude'), 'x');
+    assert.deepEqual(linkedSegments(r3), ['.claude']);
+    fs.rmSync(path.join(r3, '.claude'));
+    t.mock.restoreAll();
+  }
+  t.mock.method(fs, 'lstatSync', (p, ...rest) => {
+    if (String(p).endsWith('.agents')) throw Object.assign(new Error('boom'), { code: 'EACCES' });
+    return real(p, ...rest);
+  });
+  assert.deepEqual(linkedSegments(r3), ['.agents']);
+});
+
+test('a plain file through a linked segment reads installed (name only) at project', (t) => {
+  if (!canLink(t)) return;
+  const home = tmp('home');
+  const root = tmp('root');
+  const other = tmp('other');
+  fs.writeFileSync(path.join(other, 'my-skill'), 'plain file');
+  fs.mkdirSync(path.join(root, '.claude'));
+  fs.symlinkSync(other, path.join(root, '.claude', 'skills'), 'junction');
+  const r = skillStatus({ skillname: 'my-skill', skillcategory: 'engineering', skillrepo: 'a/b' }, { home, productRoot: root });
+  assert.equal(r.status, 'installed (name only)');
+  assert.equal(r.place, 'project');
+});
+
+test('an lstat error on the name through a linked segment counts as present and never proves', (t) => {
+  if (!canLink(t)) return;
+  const root = tmp('root');
+  const other = tmp('other');
+  mkSkillDir(path.join(other, 'my-skill'));
+  fs.mkdirSync(path.join(root, '.claude'));
+  fs.symlinkSync(other, path.join(root, '.claude', 'skills'), 'junction');
+  const real = fs.lstatSync;
+  t.mock.method(fs, 'lstatSync', (p, ...rest) => {
+    if (String(p).endsWith('my-skill')) throw Object.assign(new Error('denied'), { code: 'EACCES' });
+    return real(p, ...rest);
+  });
+  assert.deepEqual(itemsProven(root, 'my-skill', H1, { place: 'project' }), { present: true, ok: false });
+});
+
 test('a linked .claude/skills holding the name beside a proven .agents copy is not recognized at place project', (t) => {
   if (!canLink(t)) return;
   const home = tmp('home');
@@ -786,7 +843,8 @@ test('a linked .claude/skills holding the name beside a proven .agents copy is n
   fs.mkdirSync(path.join(root, '.claude'));
   fs.symlinkSync(evil, path.join(root, '.claude', 'skills'), 'junction');
   assert.deepEqual(itemsProven(root, 'my-skill', hash, { place: 'project' }), { present: true, ok: false });
-  assert.deepEqual(itemsProven(root, 'my-skill', hash), { present: true, ok: true });
+  assert.deepEqual(itemsProven(root, 'my-skill', hash), { present: true, ok: false });
+  assert.deepEqual(itemsProven(root, 'my-skill', hash, { place: 'user' }), { present: true, ok: true });
   const r = skillStatus(pinned({ hash }), { home, productRoot: root });
   assert.equal(r.status, 'folder not recognized');
   assert.equal(r.place, 'project');
@@ -870,25 +928,35 @@ test('a catalog file planted in the working folder adds nothing to a read', (t) 
   assert.deepEqual(r.errors, []);
 });
 
-test('clearBound and setBoundHash refuse a file holding another hostile row, and write nothing', () => {
+test('clearBound clears both keys beside another hostile row; setBoundHash still refuses and writes nothing', () => {
   const home = tmp();
   addUserEntry(repoEntry({ hash: undefined }), { home });
   setBoundHash('my-skill', H1, '2026-11-01', { home });
   const doc = readUser(home);
-  doc.entries.push(repoEntry({ skillname: 'other-skill', license: 'MIT\u2028' }));
+  doc.entries.push(repoEntry({ skillname: 'other-skill', license: 'MIT ' }));
   writeUser(home, JSON.stringify(doc));
-  const before = fs.readFileSync(userFile(home), 'utf8');
-  const c = clearBound('my-skill', { home });
-  assert.equal(c.ok, false);
-  assert.match(c.error, /entry 2: license bad value/);
   assert.equal(setBoundHash('my-skill', H1, '2026-11-02', { home }).ok, false);
-  assert.equal(fs.readFileSync(userFile(home), 'utf8'), before);
+  const c = clearBound('my-skill', { home });
+  assert.deepEqual(c, { ok: true, changed: true });
+  const after = readUser(home);
+  assert.equal(Object.hasOwn(after.entries[0], 'hash'), false);
+  assert.equal(Object.hasOwn(after.entries[0], 'vetted'), false);
+  assert.equal(after.entries[1].license, 'MIT ');
 });
 
-test('clearBound refuses when the row itself holds a banned character', () => {
+test('clearBound refuses a file-level error and writes nothing', () => {
   const home = tmp();
-  writeUser(home, JSON.stringify({ schema: 1, entries: [repoEntry({ license: 'MIT\u2028', hash: H1, vetted: '2026-11-01' })] }));
+  writeUser(home, '{ not json');
   const before = fs.readFileSync(userFile(home), 'utf8');
   assert.equal(clearBound('my-skill', { home }).ok, false);
   assert.equal(fs.readFileSync(userFile(home), 'utf8'), before);
+});
+
+test('clearBound clears a row that itself holds a banned character', () => {
+  const home = tmp();
+  writeUser(home, JSON.stringify({ schema: 1, entries: [repoEntry({ license: 'MIT ', hash: H1, vetted: '2026-11-01' })] }));
+  assert.deepEqual(clearBound('my-skill', { home }), { ok: true, changed: true });
+  const row = readUser(home).entries[0];
+  assert.equal(Object.hasOwn(row, 'hash'), false);
+  assert.equal(Object.hasOwn(row, 'vetted'), false);
 });

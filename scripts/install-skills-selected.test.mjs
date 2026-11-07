@@ -404,11 +404,28 @@ test('name only in both places at project scope reads place project and dispatch
   assert.ok(line.endsWith('dispatch: no'), line);
 });
 
-test('a refused clearBound after a failed scan is logged', async (t) => {
-  const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' }), entry({ skillname: 'other-skill', license: 'MIT ' })], scan: { result: { verdict: 'fail', blocking: true, counts: { critical: 1, high: 0 } } } });
+test('a failed scan clears the pin even when the file holds another bad row', async (t) => {
+  const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' }), entry({ skillname: 'other-skill', license: 'MIT\u2028' })], scan: { result: { verdict: 'fail', blocking: true, counts: { critical: 1, high: 0 } } } });
   assert.equal(await main(['--selected'], s.env), 1);
-  assert.ok(s.log.some((l) => l.startsWith('ERROR user catalog')), s.log.join('|'));
-  assert.equal(readUser(s.home)[0].hash, 'b'.repeat(64));
+  assert.equal(readUser(s.home)[0].hash, undefined);
+  assert.equal(readUser(s.home)[0].vetted, undefined);
+});
+
+test('a bound pin cleared by a blocking scan after install, beside a bad row, reads dispatch no and is scanned again', async (t) => {
+  const s = setup(t, {
+    entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' }), entry({ skillname: 'other-skill', license: 'MIT\u2028' })],
+    lists: { qa: ['project', [NAME]] },
+    after: { results: [{ verdict: 'findings', blocking: true }] },
+  });
+  assert.equal(await main(['--selected'], s.env), 1);
+  assert.equal(s.vets.length, 1);
+  const stored = readUser(s.home)[0];
+  assert.equal(stored.hash, undefined);
+  assert.equal(stored.vetted, undefined);
+  assert.ok((await statusOf(s)).endsWith('dispatch: no'));
+  fs.rmSync(path.join(s.root, '.agents'), { recursive: true, force: true });
+  await main(['--selected'], s.env);
+  assert.equal(s.vets.length, 2);
 });
 
 test('after install, a hostile copy beside a proven one stops the bind', async (t) => {
@@ -458,7 +475,7 @@ test('a blocking, errored, refused, thrown or ambiguous scan after install binds
     errored: { results: [{ verdict: 'error', blocking: false }] },
     refused: { refused: 'skillspector missing' },
     none: { results: [] },
-    two: { results: [{ verdict: 'pass', blocking: false }, { verdict: 'pass', blocking: false }] },
+    oneBad: { results: [{ verdict: 'pass', blocking: false }, { verdict: 'findings', blocking: true }] },
     unmarked: { results: [{ verdict: 'pass' }] },
     thrown: null,
   };
@@ -481,8 +498,7 @@ test('a project pin with a different home copy installs nothing, stores nothing 
   assert.equal(await main(['--selected'], s.env), 1);
   assert.deepEqual(s.calls, []);
   assert.equal(s.afters.length, 0);
-  const line = s.log.find((l) => l.includes('Your home folder holds another copy'));
-  assert.ok(line && line.includes(path.join(s.home, '.claude', 'skills', NAME)), s.log.join('|'));
+  assert.ok(s.log.includes(`hash differs: ${NAME}, nothing stored. Your home folder holds another copy; run this from your home folder only: npx -y ${SKILLS_CLI} remove ${NAME} -g -a claude-code -y`), s.log.join('|'));
   assert.equal(readUser(s.home)[0].hash, undefined);
   assert.ok(!s.log.some((l) => l.startsWith('installed ')));
 });
@@ -495,4 +511,146 @@ test('a project pin with a different home copy reads folder not recognized, plac
   const line = await statusOf(s);
   assert.match(line, /\| folder not recognized \| place: user \|/);
   assert.ok(line.endsWith('dispatch: no'), line);
+});
+
+// ---------- linked segments, post-install compare, scan result lines ----------
+
+function link(t, target, at) {
+  fs.mkdirSync(path.dirname(at), { recursive: true });
+  try { fs.symlinkSync(target, at, 'junction'); return true; } catch { t.diagnostic('cannot create links here'); return false; }
+}
+const REFUSAL = (segment) => `hash differs: ${NAME}, nothing stored. This is a link or not a folder; delete it by hand: ${segment}`;
+
+test('a linked segment under the product root at scope project is refused with no scan and no install, with or without the name in it', async (t) => {
+  const cases = [
+    ['.claude', (root, other) => link(t, other, path.join(root, '.claude'))],
+    ['.claude/skills', (root, other) => { fs.mkdirSync(path.join(root, '.claude'), { recursive: true }); return link(t, other, path.join(root, '.claude', 'skills')); }],
+    ['.agents/skills', (root, other) => { fs.mkdirSync(path.join(root, '.agents'), { recursive: true }); return link(t, other, path.join(root, '.agents', 'skills')); }],
+    ['.claude', (root) => { fs.writeFileSync(path.join(root, '.claude'), 'a file'); return true; }],
+  ];
+  for (const withName of [false, true]) {
+    for (const [segment, make] of cases) {
+      const s = setup(t, { entries: [entry({ hash: 'b'.repeat(64), vetted: '2026-01-01' })], lists: { qa: ['project', [NAME]] } });
+      const other = tmp(t, 'other');
+      if (withName) plant(path.join(other, NAME));
+      if (!make(s.root, other)) return;
+      assert.equal(await main(['--selected'], s.env), 1, `${segment} ${withName}`);
+      assert.ok(s.log.includes(REFUSAL(segment)), `${segment} ${withName} ${s.log.join('|')}`);
+      assert.equal(s.vets.length, 0);
+      assert.equal(s.calls.length, 0);
+      assert.equal(s.afters.length, 0);
+      assert.equal(s.log.at(-1), '0 installed, 1 failed');
+      assert.equal(readUser(s.home)[0].hash, 'b'.repeat(64), 'the stored hash stays');
+    }
+  }
+});
+
+test('two linked segments give two lines and one failure for the skill', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] } });
+  const other = tmp(t, 'other');
+  if (!link(t, other, path.join(s.root, '.agents', 'skills'))) return;
+  link(t, other, path.join(s.root, '.claude', 'skills'));
+  assert.equal(await main(['--selected'], s.env), 1);
+  assert.ok(s.log.includes(REFUSAL('.agents/skills')) && s.log.includes(REFUSAL('.claude/skills')), s.log.join('|'));
+  assert.equal(s.log.at(-1), '0 installed, 1 failed');
+  assert.equal(s.calls.length, 0);
+});
+
+test('the dry run shows the refusal after [dry-run], prints no command and exits 0', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] } });
+  if (!link(t, tmp(t, 'other'), path.join(s.root, '.claude', 'skills'))) return;
+  assert.equal(await main(['--selected', '--dry-run'], s.env), 0, s.log.join('|'));
+  assert.ok(s.log.includes(`[dry-run] ${REFUSAL('.claude/skills')}`), s.log.join('|'));
+  assert.ok(!s.log.some((l) => l.includes('npx ')), s.log.join('|'));
+});
+
+test('a linked ~/.claude/skills at scope user is not refused', async (t) => {
+  const s = setup(t, { install: ({ home }) => plant(path.join(home, '.agents', 'skills', NAME)) });
+  if (!link(t, tmp(t, 'dotfiles'), path.join(s.home, '.claude', 'skills'))) return;
+  assert.equal(await main(['--selected'], s.env), 0, s.log.join('|'));
+  assert.ok(!s.log.some((l) => l.startsWith('hash differs')), s.log.join('|'));
+  assert.equal(s.calls.length, 1);
+});
+
+test('a proven bound .agents copy beside an empty linked .claude/skills reads installed and is not refused', async (t) => {
+  const s = setup(t, { lists: { qa: ['project', [NAME]] } });
+  const hash = plant(path.join(s.root, '.agents', 'skills', NAME));
+  writeUser(s.home, [entry({ hash, vetted: TODAY })]);
+  if (!link(t, tmp(t, 'empty'), path.join(s.root, '.claude', 'skills'))) return;
+  assert.equal(await main(['--selected'], s.env), 0, s.log.join('|'));
+  assert.ok(s.log.includes(`installed ${NAME} (project)`), s.log.join('|'));
+  assert.ok(!s.log.some((l) => l.startsWith('hash differs')), s.log.join('|'));
+  assert.equal(s.calls.length, 0);
+});
+
+test('the compare after the install reads place by scope: a link planted by the install fails at project and not at user', async (t) => {
+  let linked = true;
+  const plantLink = (root) => {
+    plant(path.join(root, '.agents', 'skills', NAME));
+    const other = tmp(t, 'other');
+    plant(path.join(other, NAME), 'hostile');
+    linked = link(t, other, path.join(root, '.claude', 'skills')) && linked;
+  };
+  const p = setup(t, { lists: { qa: ['project', [NAME]] }, install: ({ root }) => plantLink(root) });
+  assert.equal(await main(['--selected'], p.env), 1, p.log.join('|'));
+  if (!linked) return;
+  assert.ok(p.log.some((l) => l.startsWith(`hash differs: ${NAME}, nothing stored. The folder stays`)), p.log.join('|'));
+  assert.equal(readUser(p.home)[0].hash, undefined);
+  const u = setup(t, { install: ({ home }) => plantLink(home) });
+  assert.equal(await main(['--selected'], u.env), 0, u.log.join('|'));
+  assert.equal(readUser(u.home)[0].hash, u.scanHash);
+});
+
+test('two clean results after the install bind; one clean and one blocking do not', async (t) => {
+  const pass = { verdict: 'pass', blocking: false };
+  const s = setup(t, { lists: { qa: ['project', [NAME]] }, after: { results: [pass, { verdict: 'findings', blocking: false }] } });
+  assert.equal(await main(['--selected'], s.env), 0, s.log.join('|'));
+  assert.equal(readUser(s.home)[0].hash, s.scanHash);
+  const f = setup(t, { lists: { qa: ['project', [NAME]] }, after: { results: [pass, { verdict: 'findings', blocking: true }] } });
+  assert.equal(await main(['--selected'], f.env), 1);
+  assert.equal(readUser(f.home)[0].hash, undefined);
+});
+
+test('the real scan of two real project copies binds when both are clean and refuses when the second is blocking', async (t) => {
+  const { scanInstalled } = await import('./skillspector.mjs');
+  const fix = path.join(import.meta.dirname, '..', 'tests', 'fixtures', 'skillspector');
+  const cleanText = fs.readFileSync(path.join(fix, 'sp1', 'claude_cli.raw.json'), 'utf8');
+  const blockText = fs.readFileSync(path.join(fix, 'golden', 'hostile-c.nobaseline.json'), 'utf8');
+  for (const blockSecond of [false, true]) {
+    const s = setup(t, { lists: { qa: ['project', [NAME]] }, install: ({ root }) => {
+      plant(path.join(root, '.agents', 'skills', NAME));
+      plant(path.join(root, '.claude', 'skills', NAME));
+    } });
+    let runs = 0;
+    const runTool = async () => { runs++; return { exit: 0, stdout: blockSecond && runs === 2 ? blockText : cleanText }; };
+    let seen;
+    s.env.scanInstalled = async (arg, deps) => {
+      seen = await scanInstalled(arg, { ...deps, runTool, detect: async () => ({ v: 1, installed: true, version: '2.13.1', commit: null, uv: true }), settingsMode: async () => 'claude_cli' });
+      return seen;
+    };
+    const code = await main(['--selected'], s.env);
+    assert.equal(runs, 2, 'both copies are scanned');
+    assert.equal(seen.results.length, 2);
+    assert.equal(code, blockSecond ? 1 : 0, s.log.join('|'));
+    assert.equal(readUser(s.home)[0].hash, blockSecond ? undefined : s.scanHash);
+    if (blockSecond) assert.ok(s.log.some((l) => l.startsWith(`scan failed after install: ${NAME}, nothing stored, verdict findings, blocking.`)), s.log.join('|'));
+  }
+});
+
+test('the scan failed after install line names what failed, whole line', async (t) => {
+  const folders = (root) => `${path.join(root, '.agents', 'skills', NAME)} and ${path.join(root, '.claude', 'skills', NAME)}`;
+  const cases = [
+    [{ refused: 'skillspector missing' }, 'refused: skillspector missing'],
+    [{ results: [] }, 'no usable result'],
+    [{ results: [{ verdict: 'findings', blocking: true }] }, 'verdict findings, blocking'],
+    [{ results: [{ verdict: 'error', reason: 'timeout', blocking: false }] }, 'verdict error timeout'],
+    [{ results: [{ verdict: 'error', reason: 'Bad Text; rm', blocking: false }] }, 'no usable result'],
+    [{ results: [{ verdict: 'pass', blocking: false }, { verdict: 'findings', blocking: true }] }, 'verdict findings, blocking'],
+    [{ results: [{ verdict: 'pass' }] }, 'no usable result'],
+  ];
+  for (const [out, what] of cases) {
+    const s = setup(t, { lists: { qa: ['project', [NAME]] }, after: out });
+    assert.equal(await main(['--selected'], s.env), 1);
+    assert.ok(s.log.includes(`scan failed after install: ${NAME}, nothing stored, ${what}. The folder stays until you remove it; delete these folders by hand: ${folders(s.root)}`), `${what} ${s.log.join('|')}`);
+  }
 });

@@ -385,9 +385,13 @@ export function boundedFolderHash(dir) {
 
 const SKILL_ROOTS = ['.agents', '.claude'];
 
+const ABSENT_CODES = new Set(['ENOENT', 'ENOTDIR']);
+const isAbsent = (e) => Boolean(e) && ABSENT_CODES.has(e.code);
+
 // The skills folders under a root as { dir, through }. Every segment is lstat'ed. A link, junction included,
 // is not followed unless `followLinks` is set; then the folder is listed with `through: true`, so a caller
-// can count what is in it without ever proving it.
+// can count what is in it without ever proving it. A segment whose lstat fails for a reason other than
+// absence is treated as a link and listed the same way. No file content is read through a link.
 function skillsDirs(root, followLinks = false) {
   const out = [];
   for (const first of SKILL_ROOTS) {
@@ -396,12 +400,16 @@ function skillsDirs(root, followLinks = false) {
     let ok = true;
     for (const seg of [first, 'skills']) {
       cur = path.join(cur, seg);
-      let st;
-      try { st = fs.lstatSync(cur); } catch { ok = false; break; }
+      let st = null;
+      try { st = fs.lstatSync(cur); } catch (e) {
+        if (isAbsent(e) || !followLinks) { ok = false; break; }
+        through = true;
+        continue;
+      }
       if (st.isSymbolicLink()) {
         if (!followLinks) { ok = false; break; }
         through = true;
-        try { st = fs.statSync(cur); } catch { ok = false; break; }
+        continue;
       }
       if (!st.isDirectory()) { ok = false; break; }
     }
@@ -410,16 +418,19 @@ function skillsDirs(root, followLinks = false) {
   return out;
 }
 
-// The segments of a root that are links, as '.agents', '.agents/skills', '.claude' or '.claude/skills'.
-// A link at the first segment hides the second, so only the first is named.
+// The segments of a root that are not plain folders, as '.agents', '.agents/skills', '.claude' or
+// '.claude/skills': a link, a junction, a non-folder, or an lstat error other than absence. A counted first
+// segment hides its `skills`, so only the first is named. Absence ends the walk of that one root only.
 export function linkedSegments(rootDir) {
   const out = [];
   for (const first of SKILL_ROOTS) {
     for (const seg of [first, `${first}/skills`]) {
       let st;
-      try { st = fs.lstatSync(path.join(rootDir, ...seg.split('/'))); } catch { break; }
-      if (st.isSymbolicLink()) { out.push(seg); break; }
-      if (!st.isDirectory()) break;
+      try { st = fs.lstatSync(path.join(rootDir, ...seg.split('/'))); } catch (e) {
+        if (!isAbsent(e)) out.push(seg);
+        break;
+      }
+      if (st.isSymbolicLink() || !st.isDirectory()) { out.push(seg); break; }
     }
   }
   return out;
@@ -430,7 +441,10 @@ function probeName(root, name, followLinks = false) {
   for (const { dir, through } of skillsDirs(root, followLinks)) {
     const full = path.join(dir, name);
     let st;
-    try { st = fs.lstatSync(full); } catch { continue; }
+    try { st = fs.lstatSync(full); } catch (e) {
+      if (through && !isAbsent(e)) found.push({ full, link: false, dir: false, through: true });
+      continue;
+    }
     found.push({ full, link: st.isSymbolicLink(), dir: st.isDirectory(), through });
   }
   return found;
@@ -481,7 +495,7 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
     return result('not found', null, vetted);
   }
   if (!pinned) {
-    for (const r of roots) if (probeName(r.dir, name, r.label === 'project').some((i) => i.dir || i.link)) return result('installed (name only)', r.label, vetted);
+    for (const r of roots) if (probeName(r.dir, name, r.label === 'project').some((i) => i.through || i.dir || i.link)) return result('installed (name only)', r.label, vetted);
     return result('not found', null, vetted);
   }
   const bound = typeof entry.hash === 'string' && HASH_RE.test(entry.hash) ? entry.hash : null;
@@ -499,10 +513,10 @@ export function skillStatus(entry, { home, productRoot, scope } = {}) {
 
 // Every present item under one root must count: a real folder must hash equal to `hash`, and a link must
 // lead to the proven .agents folder of the same root. At place `project`, a folder reached through a linked
-// segment counts as present and never proves. Returns { present, ok }.
+// segment counts as present and never proves; a missing place reads as `project`. Returns { present, ok }.
 export function itemsProven(rootDir, name, hash, { place } = {}) {
   const bound = typeof hash === 'string' && HASH_RE.test(hash) ? hash : null;
-  const items = probeName(rootDir, name, place === 'project');
+  const items = probeName(rootDir, name, place !== 'user');
   if (items.length === 0) return { present: false, ok: false };
   const agents = path.join(rootDir, '.agents', 'skills', name);
   const proven = (item) => bound !== null && !item.link && item.dir && boundedFolderHash(item.full) === bound;
@@ -552,14 +566,14 @@ function writeUserDoc(home, doc) {
 }
 
 // Loads the user file for a write; a missing file is an empty one, an unreadable one refuses.
-function loadForWrite(opts) {
+function loadForWrite(opts, { checkRows = true } = {}) {
   const where = layerHome(opts);
   if (where.home === null) return { error: `ERROR user catalog: ${where.warning === MOVED_WARNING ? 'MCSPARROW_HOME is set' : 'no home'}` };
   const read = readUserDoc(path.join(where.home, USER_DIR, USER_FILE));
   if (read.state === 'error') return { error: `ERROR user catalog: ${read.code}` };
   const doc = read.state === 'ok' ? read.doc : { schema: 1, entries: [] };
   // Every stored row is rewritten, so every row must pass the checks a new one does.
-  for (let i = 0; i < doc.entries.length; i++) {
+  for (let i = 0; checkRows && i < doc.entries.length; i++) {
     const v = validateEntry(doc.entries[i], 'user');
     if (!v.ok) return { error: `ERROR user catalog entry ${i + 1}: ${v.field} ${v.reason}` };
   }
@@ -623,10 +637,11 @@ export function setBoundHash(name, hash, vetted, { home } = {}) {
   return w.ok ? { ok: true, changed: true } : w;
 }
 
-// Clears the scan hash and the vetted date together.
+// Clears the scan hash and the vetted date together. No row is validated, its own included, so a failed
+// scan can always take the pin off; a file-level error still refuses.
 export function clearBound(name, { home } = {}) {
   if (typeof name !== 'string' || !NAME_RE.test(name)) return writeFail('ERROR user catalog entry: skillname bad value');
-  const loaded = loadForWrite({ home });
+  const loaded = loadForWrite({ home }, { checkRows: false });
   if (loaded.error) return writeFail(loaded.error);
   const at = findRaw(loaded.doc, name);
   if (at === -1) return writeFail('ERROR user catalog entry: skillname not found');
