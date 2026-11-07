@@ -227,7 +227,7 @@ test('a settings folder that moved is printed, and a missing flag counts as move
 test('--status prints one line per skill with Roles, status, place, license, vetted text and dispatch', async (t) => {
   const s = setup(t, { lists: { qa: ['user', [NAME, 'aico:ui-design', 'impeccable']], writer: ['user', [NAME]] } });
   assert.equal(await main(['--status'], s.env), 0);
-  const lines = s.log.filter((l) => l.includes(' | '));
+  const lines = s.log.filter((l) => l.includes(' | ') && !l.includes(' | roles: - | '));
   assert.equal(lines.length, 3, s.log.join('|'));
   const demo = lines.find((l) => l.startsWith('demo-skill'));
   assert.equal(demo, 'demo-skill | roles: qa, writer | missing | place: - | license: MIT, as stated, not checked | not vetted | dispatch: no');

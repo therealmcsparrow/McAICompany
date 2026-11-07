@@ -125,15 +125,24 @@ test('AC10: a planted catalog file, project env and planted HOME or USERPROFILE 
   }
   fs.mkdirSync(path.join(cwd, '.claude'));
   fs.writeFileSync(path.join(cwd, '.claude', 'settings.json'), JSON.stringify({ env: { MCSPARROW_HOME: planted, HOME: planted, USERPROFILE: planted } }));
+  fs.mkdirSync(path.join(cwd, '.company'));
+  fs.writeFileSync(path.join(cwd, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, roles: { qa: { skills: [{ name: 'planted-skill', approved: TODAY }] } } } }));
   t.mock.method(os, 'userInfo', () => ({ homedir: real }));
   t.mock.method(os, 'homedir', () => planted);
   const was = process.env.MCSPARROW_HOME;
   delete process.env.MCSPARROW_HOME;
   t.after(() => { if (was !== undefined) process.env.MCSPARROW_HOME = was; });
-  assert.equal(userCatalogPath(), path.join(real, '.mcsparrow', '3rdpartyskills.json'));
-  const c = readCatalog();
-  assert.ok(!c.entries.some((e) => e.skillname === 'planted-skill'));
-  assert.ok(c.entries.some((e) => e.skillname === 'find-skills'));
+  const start = process.cwd();
+  process.chdir(cwd);
+  try {
+    assert.equal(userCatalogPath(), path.join(real, '.mcsparrow', '3rdpartyskills.json'));
+    const c = readCatalog();
+    assert.ok(!c.entries.some((e) => e.skillname === 'planted-skill'), 'a file in the working folder is read');
+    assert.ok(c.entries.some((e) => e.skillname === 'find-skills'));
+  } finally { process.chdir(start); }
+  // Control: the same read does see a user entry in the real home.
+  writeUser(real, [entry({ skillname: 'real-skill' })]);
+  assert.ok(readCatalog().entries.some((e) => e.skillname === 'real-skill'));
 });
 
 test('AC10: with MCSPARROW_HOME elsewhere the user catalog is not read or written', (t) => {
@@ -188,6 +197,19 @@ const settingsFor = (lists, moved = false) => ({
   settings_folder_moved: moved,
   roles: Object.fromEntries(Object.entries(lists).map(([role, [level, names]]) => [role, { skills: names.map((name) => ({ name, approved: TODAY })), source: { skills: level } }]))
 });
+
+// A fake npx and npx.cmd first on PATH that write a marker when anything starts them; the PATH is put back after the test.
+function plantNpx(t) {
+  const bin = tmp(t, 'bin');
+  const marker = path.join(tmp(t, 'marker'), 'ran');
+  fs.writeFileSync(path.join(bin, 'npx'), `#!/bin/sh\ntouch "${marker}"\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'npx.cmd'), `@echo off\r\ntype nul > "${marker}"\r\n`);
+  const was = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${was}`;
+  t.after(() => { process.env.PATH = was; });
+  return marker;
+}
+const CMD_ENTRY = { skillname: 'cmd-skill', skillcategory: 'engineering', skillinstaller: 'npx -y evil@1.0.0 go', license: 'MIT' };
 
 function setup(t, { entries = [entry()], lists = { qa: ['user', [NAME]] }, scan = {}, install: custom, moved = false } = {}) {
   const home = tmp(t, 'home');
@@ -247,6 +269,22 @@ test('AC12: a user entry with no license is not scanned or installed and the err
   assert.equal(s.calls.length, 0);
   assert.ok(s.log.some((l) => /entry 1: license/.test(l)));
   assert.equal(code, 0);
+});
+
+test('AC2: a command entry with no license or with a shell operator prints no manual line, with or without --dry-run, and the error names entry and field', async (t) => {
+  const noLicense = { skillname: 'no-license', skillcategory: 'engineering', skillinstaller: 'npx -y thing@1.2.3 go' };
+  const shellOp = { skillname: 'shell-op', skillcategory: 'engineering', skillinstaller: 'npx -y thing@1.2.3 go && touch x', license: 'MIT' };
+  for (const dry of [[], ['--dry-run']]) {
+    const s = setup(t, { entries: [noLicense, shellOp], lists: { qa: ['user', ['no-license', 'shell-op']] } });
+    await install(['--selected', ...dry], s.env);
+    const text = s.log.join('\n');
+    assert.ok(!s.log.some((l) => l.startsWith('manual ')), text);
+    assert.ok(!s.log.some((l) => l.startsWith('WARNING:')), text);
+    assert.equal(s.calls.length, 0);
+    assert.equal(s.vets.length, 0);
+    assert.match(text, /entry 1: license/);
+    assert.match(text, /entry 2: skillinstaller/);
+  }
 });
 
 test('AC12: hash differs exits 1, stores nothing and the skill is off the dispatch list', async (t) => {
@@ -335,6 +373,16 @@ test('AC13: a command entry prints manual and WARNING, runs nothing with or with
     assert.ok(s.log.some((l) => l.startsWith('WARNING:')));
     assert.equal(fs.existsSync(marker), false);
   }
+  // No exec override: a run through any other route would start the planted npx.
+  const planted = plantNpx(t);
+  for (const dry of [[], ['--dry-run']]) {
+    const s = setup(t, { entries: [CMD_ENTRY], lists: { qa: ['user', ['cmd-skill']] } });
+    delete s.env.exec;
+    assert.equal(await install(['--selected', ...dry], s.env), 0, s.log.join('|'));
+    assert.ok(s.log.includes(`manual ${CMD_ENTRY.skillinstaller}`), s.log.join('|'));
+    assert.equal(s.vets.length, 0);
+    assert.equal(fs.existsSync(planted), false, `a planted npx ran ${dry.join(' ')}`);
+  }
   const g = [];
   const calls = [];
   assert.equal(await install(['--dry-run', 'core'], { home: tmp(t), log: (l) => g.push(l), exec: (...a) => calls.push(a) }), 0);
@@ -363,6 +411,29 @@ test('AC18: status runs no child, no PATH binary and follows no link', (t) => {
   const st = skillStatus(entry({ hash: boundedFolderHash(outside) }), { home, productRoot: root, scope: 'project' });
   if (linked) assert.notEqual(st.status, 'installed');
   assert.equal(fs.existsSync(marker), false);
+});
+
+test('AC18: install --status and the page state start no PATH binary and make no network call, with a command entry selected', async (t) => {
+  const marker = plantNpx(t);
+  const realFetch = globalThis.fetch;
+  const outside = [];
+  t.mock.method(globalThis, 'fetch', (url, ...rest) => {
+    if (!String(url).startsWith('http://127.0.0.1:')) { outside.push(String(url)); throw new Error('network is off'); }
+    return realFetch(url, ...rest);
+  });
+  const s = setup(t, { entries: [CMD_ENTRY], lists: { qa: ['user', ['cmd-skill']] } });
+  delete s.env.exec;
+  delete s.env.vet;
+  assert.equal(await install(['--status'], s.env), 0, s.log.join('|'));
+  const line = s.log.find((l) => l.startsWith('cmd-skill'));
+  assert.ok(line, 'the command entry is read by --status');
+  assert.match(line, /not vetted/);
+  const sb = pageSandbox(t);
+  writeUser(sb.home, [CMD_ENTRY]);
+  const st = await openPage(t, sb);
+  assert.ok(st.catalog.entries.some((e) => e.name === 'cmd-skill'), 'the command entry is read by the page');
+  assert.deepEqual(outside, []);
+  assert.equal(fs.existsSync(marker), false, 'a planted npx ran');
 });
 
 test('AC18: installExec pins HOME and USERPROFILE to the home and drops CLAUDE_CONFIG_DIR in any case', (t) => {
@@ -580,6 +651,32 @@ test('AC23: stale at the 180-day boundary, with no date, with no design selectio
   const rec = run(t, 'record', JSON.stringify({ entry: { skillname: 'des-one', skillcategory: 'design', skillrepo: 'octo/d1', skillcommit: COMMIT }, license: 'MIT', roles: ['ui-ux-designer'] }), { home: r.home, cwd: r.cwd });
   assert.equal(rec.code, 0, rec.lines.join('|'));
   assert.equal(stale({ cwd: r.cwd }).stale, false, 'a record dates the selection even when it was already there');
+});
+
+test('AC23: the newest approval date counts, in either order and across UI Roles; a UI Role with only a non-design selection is stale', (t) => {
+  const entries = [entry({ skillname: 'des-old', skillcategory: 'design', skillrepo: 'octo/d1' }), entry({ skillname: 'des-new', skillcategory: 'design', skillrepo: 'octo/d2' }), entry({ skillname: 'eng-one', skillcategory: 'engineering', skillrepo: 'octo/e1' })];
+  const daysAgo = (n) => new Date(Date.parse(`${TODAY}T00:00:00Z`) - n * 86400000).toISOString().slice(0, 10);
+  const old = daysAgo(400);
+  const fresh = daysAgo(10);
+  const was = process.env.MCSPARROW_HOME;
+  delete process.env.MCSPARROW_HOME;
+  t.after(() => { if (was !== undefined) process.env.MCSPARROW_HOME = was; });
+  const verdict = (roles) => {
+    const r = resolved(t, { entries, project: { roles } });
+    t.mock.method(os, 'userInfo', () => ({ homedir: r.home }));
+    t.mock.method(os, 'homedir', () => r.home);
+    return stale({ cwd: r.cwd, today: TODAY });
+  };
+  const sel = (name, approved) => ({ skills: [{ name, approved }] });
+  const both = (a, b) => ({ skills: [{ name: a[0], approved: a[1] }, { name: b[0], approved: b[1] }] });
+  assert.equal(verdict({ 'ui-ux-designer': sel('des-old', old) }).stale, true, 'control: the old date alone is stale');
+  assert.equal(verdict({ 'ui-ux-designer': both(['des-old', old], ['des-new', fresh]) }).stale, false, 'old then fresh');
+  assert.equal(verdict({ 'ui-ux-designer': both(['des-new', fresh], ['des-old', old]) }).stale, false, 'fresh then old');
+  assert.equal(verdict({ 'ui-ux-designer': sel('des-old', old), 'brand-artist': sel('des-new', fresh) }).stale, false, 'the newer date on a second UI Role');
+  assert.equal(verdict({ 'ui-ux-designer': sel('des-new', fresh), 'brand-artist': sel('des-old', old) }).stale, false, 'the older date on the second UI Role');
+  const eng = verdict({ 'frontend-engineer': sel('eng-one', fresh) });
+  assert.equal(eng.stale, true);
+  assert.equal(eng.reason, 'no design selection');
 });
 
 // ---------- settings folder moved ----------
@@ -889,6 +986,11 @@ test('AC19: a user entry is never added to a setup group', async (t) => {
 test('AC19: the SBOM lists baseline skills and never a user entry', (t) => {
   const home = tmp(t, 'home');
   writeUser(home, [entry({ skillname: 'user-only-skill' })]);
+  const was = process.env.MCSPARROW_HOME;
+  delete process.env.MCSPARROW_HOME;
+  t.after(() => { if (was !== undefined) process.env.MCSPARROW_HOME = was; });
+  t.mock.method(os, 'userInfo', () => ({ homedir: home }));
+  assert.ok(readCatalog().entries.some((e) => e.skillname === 'user-only-skill'), 'control: the user entry is reachable');
   const text = serialize(buildSbom({ root: REPO_ROOT, now: new Date('2026-11-07T00:00:00Z'), serial: 'urn:uuid:00000000-0000-4000-8000-000000000000' }));
   assert.ok(!text.includes('user-only-skill'));
   for (const n of ['skill:hallmark@', 'skill:find-skills@']) assert.ok(text.includes(n), n);
@@ -923,12 +1025,18 @@ const HANDOFF = read('skills', 'handoff', 'SKILL.md');
 const FEATURE = read('skills', 'feature', 'SKILL.md');
 const PICKS = read('skills', 'lead', 'references', 'skill-picks.md');
 const ADD_SKILL = read('skills', 'add-skill', 'SKILL.md');
+const DISPATCH = read('docs', 'contracts', 'dispatch-prompt.md');
 
 test('AC6, AC7: the dispatch text names the Role skills line and no Design skills line', () => {
   assert.match(PIPELINE, /^Role skills: <names \| none>/m);
   assert.match(HANDOFF, /`Role skills:`.*load each named skill with the Skill tool/);
   assert.match(HANDOFF, /missing role skill: <name>/);
   for (const text of [PIPELINE, HANDOFF]) assert.doesNotMatch(text, /Design skills:/);
+});
+
+test('AC7: a name the agent text also loads (aico:ui-design) loads once, said in the Core skill and in the Contract', () => {
+  assert.match(HANDOFF, /A name your agent text also loads \(`aico:ui-design`\) loads once\./);
+  assert.match(DISPATCH, /A name the Role's agent text also loads \(`aico:ui-design`\) loads once\./);
 });
 
 test('AC8, AC16, AC9: add-skill is CEO-only with help, and takes values only through a quoted heredoc', () => {

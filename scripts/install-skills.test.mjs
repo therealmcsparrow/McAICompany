@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync as __mkdtemp, rmSync as __rmTree, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, existsSync, realpathSync, chmodSync } from 'node:fs';
+import { mkdtempSync as __mkdtemp, rmSync as __rmTree, copyFileSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync, existsSync, realpathSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { spawnSync } from 'node:child_process';
-import { join, resolve, delimiter } from 'node:path';
+import { spawnSync, spawn } from 'node:child_process';
+import http from 'node:http';
+import { gzipSync } from 'node:zlib';
+import { join, resolve, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plan, runAll, expand, missing, parseDesignSkills, main, retiredSkills, manifestFromBaseline, skillsEnv, cleanPath, installExec } from './install-skills.mjs';
 import { readBaseline, boundedFolderHash as boundedFolderHashOf } from './skill-catalog.mjs';
@@ -894,4 +896,187 @@ test('selected install: a failed scan that cannot clear the old proof logs the w
     assert.equal(await main(['--selected'], env), 1);
     assert.ok(log.some((l) => l.startsWith('ERROR user catalog')), log.join('|'));
   } finally { chmodSync(join(s.home, '.mcsparrow'), 0o755); }
+});
+
+// ---- project-level --selected install: the real installExec, a fake registry on 127.0.0.1, nothing from the product folder steers or runs ----
+// Ported from 3607191 (npx kept away from a hostile repo, `project install ignores: <label>`, FAILED with no bin file),
+// now through main(['--selected']) with a project-level selection. Only the scan is a stand-in; the CLI the installer
+// fetches is a local package served by the test, so nothing reaches the network and no third-party code runs.
+const HS_COMMIT = 'a'.repeat(40);
+const HS_NAME = 'projskill';
+
+function hsTgz(files) {
+  const blocks = [];
+  for (const [name, body] of Object.entries(files)) {
+    const data = Buffer.from(body);
+    const h = Buffer.alloc(512);
+    h.write(name, 0); h.write('0000644\0', 100); h.write('0000000\0', 108); h.write('0000000\0', 116);
+    h.write(data.length.toString(8).padStart(11, '0') + '\0', 124); h.write('00000000000\0', 136);
+    h.write('        ', 148); h.write('0', 156); h.write('ustar\0' + '00', 257);
+    h.write(h.reduce((a, b) => a + b, 0).toString(8).padStart(6, '0') + '\0 ', 148);
+    blocks.push(h, data, Buffer.alloc((512 - (data.length % 512)) % 512));
+  }
+  blocks.push(Buffer.alloc(1024));
+  return gzipSync(Buffer.concat(blocks));
+}
+const hsListen = (handler) => new Promise((res) => { const srv = http.createServer(handler).listen(0, '127.0.0.1', () => res(srv)); });
+const hsChild = (file, opts) => new Promise((res) => {
+  const c = spawn(process.execPath, [file], { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '', err = '';
+  c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { err += d; });
+  c.on('close', (status) => res({ status, out, err }));
+});
+
+// The stand-in CLI records where it ran and what it can reach, probes `node` (through a shell) and `git` (no shell),
+// and leaves the skill folder the scan stand-in expects.
+const HS_PROBE_CLI = [
+  '#!/usr/bin/env node',
+  "import { writeFileSync, mkdirSync } from 'node:fs'; import { spawnSync } from 'node:child_process'; import { join } from 'node:path';",
+  "const probe = `require('fs').writeFileSync(${JSON.stringify(process.env.GITMARK)}, 'x')`;",
+  "spawnSync('node', ['-v'], { shell: true, stdio: 'ignore' });",
+  "spawnSync('git', ['-p', probe], { stdio: 'ignore' });",
+  `const dir = join(process.cwd(), '.agents', 'skills', '${HS_NAME}'); mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'SKILL.md'), 'hello');`,
+  "writeFileSync(process.env.REC, JSON.stringify({ who: 'real', cwd: process.cwd(), argv: process.argv.slice(2), dnt: process.env.DO_NOT_TRACK, dt: process.env.DISABLE_TELEMETRY, path: process.env.PATH ?? process.env.Path }));"
+].join('\n') + '\n';
+
+async function hostileProject({ plant, pathDirs = () => [], cliFiles, nested = false }) {
+  const base = mkdtempSync(join(tmpdir(), 'aico-hostile-'));
+  const home = join(base, 'home'), top = nested ? join(base, 'parent') : base;
+  const root = join(top, 'product'), rec = join(base, 'rec.json');
+  mkdirSync(home);
+  mkdirSync(join(root, '.company'), { recursive: true });
+  const marks = {};
+  const mark = (n) => (marks[n] = join(base, `mark-${n}.txt`));
+  const extra = (await plant({ root, top, base, mark, listen: hsListen })) ?? {};
+  const cliPkg = JSON.stringify({ name: 'skills', version: '1.7.4', bin: { skills: 'bin/cli.mjs' } });
+  const good = hsTgz(cliFiles ?? { 'package/package.json': cliPkg, 'package/bin/cli.mjs': HS_PROBE_CLI });
+  const userReg = await hsListen((q, r) => {
+    if (q.url.endsWith('.tgz')) { r.setHeader('content-type', 'application/octet-stream'); return r.end(good); }
+    if (q.url.startsWith('/skills')) {
+      r.setHeader('content-type', 'application/json');
+      const tarball = `http://127.0.0.1:${userReg.address().port}/skills/-/skills-1.7.4.tgz`;
+      return r.end(JSON.stringify({ name: 'skills', 'dist-tags': { latest: '1.7.4' }, versions: { '1.7.4': { name: 'skills', version: '1.7.4', bin: { skills: 'bin/cli.mjs' }, dist: { tarball } } } }));
+    }
+    r.statusCode = 404; r.end('{}');
+  });
+  const run = async () => {
+    writeFileSync(join(home, '.npmrc'), `registry=http://127.0.0.1:${userReg.address().port}/\n`);
+    mkdirSync(join(home, '.mcsparrow'), { recursive: true });
+    writeFileSync(join(home, '.mcsparrow', '3rdpartyskills.json'), JSON.stringify({ schema: 1, entries: [{ skillname: HS_NAME, skillcategory: 'engineering', skillrepo: 'acme/projskill', skillcommit: HS_COMMIT, license: 'MIT' }] }));
+    const scan = join(base, 'scan');
+    mkdirSync(scan);
+    writeFileSync(join(scan, 'SKILL.md'), 'hello');
+    const settings = { settings_folder_moved: false, roles: { qa: { skills: [{ name: HS_NAME, approved: '2026-11-06' }], source: { skills: 'project' } } } };
+    const runner = join(base, 'runner.mjs');
+    writeFileSync(runner, [
+      `import { main } from ${JSON.stringify(new URL('./install-skills.mjs', import.meta.url).href)};`,
+      `import { boundedFolderHash } from ${JSON.stringify(new URL('./skill-catalog.mjs', import.meta.url).href)};`,
+      `const hash = boundedFolderHash(${JSON.stringify(scan)});`,
+      `const vet = async () => ({ commit: ${JSON.stringify(HS_COMMIT)}, hash, result: { verdict: 'pass', counts: { critical: 0, high: 0 } } });`,
+      `const out = []; const code = await main(['--selected'], { home: ${JSON.stringify(home)}, productRoot: ${JSON.stringify(root)}, settings: ${JSON.stringify(settings)}, today: '2026-11-06', vet, log: (s) => out.push(s) });`,
+      'console.log(out.join("\\n")); process.exit(code);'
+    ].join('\n'));
+    // A cold npm cache, the user config in the fake home, and the Windows lookup switch unset (its default).
+    const env = { ...process.env, REC: rec, GITMARK: mark('git-probe'), HOME: home, USERPROFILE: home, npm_config_cache: join(base, 'cache'), npm_config_userconfig: join(home, '.npmrc'), npm_config_globalconfig: join(base, 'none'), npm_config_update_notifier: 'false', npm_config_audit: 'false', npm_config_fund: 'false' };
+    delete env.NoDefaultCurrentDirectoryInExePath;
+    for (const k of Object.keys(env)) if (/^npm_config_(registry|prefix)$/i.test(k)) delete env[k];
+    const dirs = pathDirs({ root, top });
+    if (dirs.length) {
+      const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+      env[key] = [...dirs, env[key]].join(delimiter);
+    }
+    const r = await hsChild(runner, { env, cwd: base });
+    return { r, root, top, marks, extra, seen: existsSync(rec) ? JSON.parse(readFileSync(rec, 'utf8')) : null };
+  };
+  return { run, close: () => { userReg.close(); extra.close?.(); } };
+}
+
+const hsPlanted = {
+  nodeCmd: (dir, mark) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'node.cmd'), `@echo off\r\necho x> "${mark}"\r\n`); },
+  gitExe: (dir) => { mkdirSync(dir, { recursive: true }); copyFileSync(process.execPath, join(dir, 'git.exe')); },
+  posix: (dir, mark1, mark2) => {
+    mkdirSync(dir, { recursive: true });
+    for (const [n, m] of [['node', mark1], ['git', mark2]]) writeFileSync(join(dir, n), `#!/bin/sh\necho x > "${m}"\n`, { mode: 0o755 });
+  }
+};
+
+const HS_FIXTURES = {
+  'a hostile .npmrc registry, a skills package in node_modules and launchers named like the programs': {
+    plant: async ({ root, base, mark, listen }) => {
+      const hits = [];
+      const hostileReg = await listen((q, r) => { hits.push(q.url); r.statusCode = 404; r.end('{}'); });
+      writeFileSync(join(root, '.npmrc'), `registry=http://127.0.0.1:${hostileReg.address().port}/\n`);
+      mkdirSync(join(root, 'node_modules', 'skills', 'bin'), { recursive: true });
+      writeFileSync(join(root, 'node_modules', 'skills', 'package.json'), JSON.stringify({ name: 'skills', version: '1.7.4', bin: { skills: 'bin/cli.mjs' } }));
+      writeFileSync(join(root, 'node_modules', 'skills', 'bin', 'cli.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(join(base, 'rec.json'))}, JSON.stringify({ who: 'hostile' }));\n`);
+      if (process.platform === 'win32') {
+        for (const n of ['npx', 'skills']) writeFileSync(join(root, `${n}.cmd`), `@echo off\r\necho hostile> "${mark(`${n}-cmd`)}"\r\n`);
+      }
+      return { hits, close: () => hostileReg.close() };
+    }
+  },
+  'root .npmrc prefix= with a planted npx-cli.js': {
+    plant: ({ root, mark }) => {
+      const m = mark('npx-cli');
+      writeFileSync(join(root, '.npmrc'), 'prefix=evil\n');
+      const d = join(root, 'evil', 'node_modules', 'npm', 'bin'); mkdirSync(d, { recursive: true });
+      for (const f of ['npx-cli.js', 'npm-cli.js']) writeFileSync(join(d, f), `require('fs').writeFileSync(${JSON.stringify(m)}, 'x');\n`);
+    }
+  },
+  'node_modules/.bin/node.cmd in the product root': {
+    plant: ({ root, mark }) => hsPlanted.nodeCmd(join(root, 'node_modules', '.bin'), mark('node-cmd')),
+    pathDirs: ({ root }) => [join(root, 'node_modules', '.bin')]
+  },
+  'node_modules/.bin/git.exe in the product root': {
+    plant: ({ root }) => hsPlanted.gitExe(join(root, 'node_modules', '.bin')),
+    pathDirs: ({ root }) => [join(root, 'node_modules', '.bin')]
+  },
+  'POSIX node and git in node_modules/.bin of the product root': {
+    plant: ({ root, mark }) => hsPlanted.posix(join(root, 'node_modules', '.bin'), mark('posix-node'), mark('posix-git')),
+    pathDirs: ({ root }) => [join(root, 'node_modules', '.bin')]
+  },
+  'a .bin folder in a parent of the product root': {
+    nested: true,
+    plant: ({ top, mark }) => {
+      const d = join(top, 'node_modules', '.bin');
+      hsPlanted.nodeCmd(d, mark('parent-node-cmd')); hsPlanted.gitExe(d); hsPlanted.posix(d, mark('parent-posix-node'), mark('parent-posix-git'));
+    },
+    pathDirs: ({ top }) => [join(top, 'node_modules', '.bin')]
+  }
+};
+
+for (const [label, fx] of Object.entries(HS_FIXTURES)) {
+  test(`project --selected install ignores: ${label}`, { timeout: 180_000 }, async () => {
+    const h = await hostileProject(fx);
+    try {
+      const { r, seen, root, top, marks, extra } = await h.run();
+      assert.equal(r.status, 0, r.out + r.err);
+      assert.ok(seen, r.out + r.err);
+      assert.equal(seen.who, 'real');
+      assert.equal(realpathSync(seen.cwd), realpathSync(root)); // the install still lands in the product folder
+      assert.deepEqual(seen.argv, ['add', `acme/projskill#${HS_COMMIT}`, '-s', HS_NAME, '-a', 'claude-code', '-y']);
+      assert.equal(seen.dnt, '1');
+      assert.equal(seen.dt, '1');
+      if (extra.hits) assert.deepEqual(extra.hits, [], 'the repo .npmrc registry was asked');
+      for (const m of Object.values(marks)) assert.equal(existsSync(m), false, `planted program ran: ${m}`);
+      for (const p of seen.path.split(delimiter)) {
+        assert.ok(!resolve(p).toLowerCase().startsWith(resolve(top).toLowerCase() + sep), `product folder on PATH: ${p}`);
+      }
+    } finally { h.close(); }
+  });
+}
+
+test('project --selected install reports FAILED when the fetched package has no bin file, and runs nothing from the product', { timeout: 180_000 }, async () => {
+  const h = await hostileProject({
+    plant: ({ root, mark }) => hsPlanted.nodeCmd(join(root, 'node_modules', '.bin'), mark('node-cmd')),
+    pathDirs: ({ root }) => [join(root, 'node_modules', '.bin')],
+    cliFiles: { 'package/package.json': JSON.stringify({ name: 'skills', version: '1.7.4', bin: { skills: 'bin/cli.mjs' } }) }
+  });
+  try {
+    const { r, seen, marks } = await h.run();
+    assert.equal(r.status, 1, r.out + r.err);
+    assert.match(r.out, /FAILED /);
+    assert.equal(seen, null);
+    for (const m of Object.values(marks)) assert.equal(existsSync(m), false, m);
+  } finally { h.close(); }
 });
