@@ -16,6 +16,8 @@ description: Use when the aico architect or a builder turns an approved brief in
 - `- slice: <trigger> → <observable result> — demo: <path>[#test name]`: each task is one thin vertical slice of behaviour, never a layer ("all data models", "all API routes" is refused). The demo path must be in `files:`. A change that must touch many callers at once may use `- slice: wide-refactor — <why, 20-300 characters>` (expand-contract: add the new beside the old, move callers, remove the old); it is a warning at the Plan Gate, not an error.
 - `- seams: <path>[#symbol], …` (1-10): where the task's tests attach (they need not be in `files:`); `- seams: none — <reason>` when there is no testable code (docs only).
 
+**QA task (plan-tasks v1.7, feature runs).** Every build task with `seams:` depends on a task with `- role: qa` whose heading names the build task ID (`### T2 QA tests for T3`). Its `files:` are the test files only it owns; no other task lists them. The build task lists the QA task in `depends-on`. `plan-tasks check --qa-first` errors on a build task without one.
+
 **Contract versions.** Write every changed Contract as `<name> v<old> → v<new>`, with a new major for a breaking change. `plan-review` v1.3 `majors` reads these lines: a plan that raises no major gets no plan review.
 
 **Settle every choice** under the plan sections the Plan Gate check reads (Steps, Tasks, Wave, Phase, Fix round, T<n>, M<n>): no `TBD`, `TODO` or `decide later` there (the Plan Gate check lists them). A settled choice that was open or debated gets its own line `Decided: <choice> because <reason>`. Builders cite those lines under `## Decisions`.

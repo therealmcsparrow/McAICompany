@@ -25,5 +25,6 @@ effort: medium
 - A new extension point.
 
 **Never:** put feature logic in the host, edit another Module's internals, commit signing keys, or skip tests.
+**Never:** edit a QA-owned test file (plan-tasks v1.7); in a QA-first run make the QA tests pass instead.
 
 **Output:** code plus tests plus one Handoff per `aico:handoff`.

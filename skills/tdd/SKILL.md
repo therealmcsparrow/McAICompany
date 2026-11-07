@@ -19,6 +19,8 @@ description: Use when an aico builder or QA writes or changes code. Test first, 
 
 **Seams, one slice at a time** (`plan-tasks` v1.3). Test only at the task's `seams:` from the Task brief; `seams: none — <reason>` means no tests. Work in vertical slices: one behaviour from the task's `slice:` line, one failing test, run it red, minimal code to green, then the next. Never write all tests first. A test needed outside the seams goes under `## Decisions` with its reason.
 
+**QA-first runs** (plan-tasks v1.7). QA writes the failing tests before the build into qa-owned files (the QA task's `files:`). A builder makes those tests pass and never edits a QA-owned file; a test it needs changed goes to QA as a `[test]` Blocking line. Builder unit tests are optional, live only in the builder's own `files:`, and are not counted as verification of an AC.
+
 **No tautological tests.** A test must fail when the behaviour breaks. Never assert on the test's own setup or fixture, never restate the code under test in the expectation, never mock the unit under test, and never assert only that a mock was called. Expected values come from an independent source: a known literal, a worked example, the spec; never recomputed the way the code computes them.
 
 **Mock only at system boundaries:** external APIs, time and randomness, and the database or file system when a real test instance is not practical. Never mock your own modules. Pass boundary clients in rather than building them inside the code, and give each external operation its own function (`getUser`, `createOrder`) rather than one generic fetcher, so each mock returns one shape with no logic of its own. `aico:review` blocks such a test as `[test]`.
