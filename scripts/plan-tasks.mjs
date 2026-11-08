@@ -475,7 +475,7 @@ function qaFirstReport(tasks) {
     }
     if (!isQa(x) || x.t.filesValid) {
       const owner = owners.find((o) => o !== x && (!isQa(x) || o.f.qa.planIndex < x.f.qa.planIndex) && tasksOverlap(o.t, x.t));
-      if (owner) add(`files overlap qa task ${owner.t.id}`);
+      if (owner) add(x.t.filesValid ? `files overlap qa task ${owner.t.id}` : `files missing or invalid (overlaps every task, incl. qa task ${owner.t.id})`);
     }
   }
   return { lines: [...errors, `plan-tasks: ${errors.length} qa-first errors`], errors: errors.length };
