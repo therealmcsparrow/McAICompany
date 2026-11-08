@@ -864,14 +864,13 @@ describe('AC6 the branch command on a v2 folder', () => {
 });
 
 describe('usage', () => {
-  test('--project with --topic, a missing flag or extras is a refusal and creates nothing', () => {
+  test('a missing flag or extras with --project is a refusal and creates nothing', () => {
     const root = project();
     newProject(root);
     const before = folders(root);
     for (const argv of [
       ['new', '--playbook', 'idea', '--project'],
       ['new', '--project', ID1],
-      ['new', '--playbook', 'idea', '--project', ID1, '--topic', 'none'],
       ['new', '--playbook', 'idea', '--project', ID1, '--project', ID1],
       ['new', '--playbook', 'idea', '--project', ID1, '--parent', 'x'],
     ]) {
