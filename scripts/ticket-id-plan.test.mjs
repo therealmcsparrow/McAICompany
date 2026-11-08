@@ -248,7 +248,7 @@ describe('plan-tasks in a v2 folder', () => {
 
 describe('plan-check sections', () => {
   const open = (heading, level = '###') => `# Plan\n\n## Background\n\n${level} ${heading}\n- slice: TBD\n`;
-  const scan = (text) => scanText(text, PATTERNS, { file: '02-plan.md' });
+  const scan = (text) => scanText(text, PATTERNS, { file: '02-plan.md' }).findings;
 
   test('a v2 ticket heading opens a task section, with each ending a heading may have', () => {
     for (const tail of ['', ' title', ': title', '. title', ') title', '-title']) {
