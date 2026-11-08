@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.4). Node built-ins only.
+// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.5). Node built-ins only.
 // Run and helper folder names come only from ../mods/lib/work-folder.mjs.
 // A ticket is one plan-tasks task block; an approval counts only for the block hash it was given at.
 // Plan text and arguments are untrusted: files are read by the real-path rule, sizes are capped before decoding,
@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readPlanLines } from './plan-markdown.mjs';
-import { WorkFolderRefusal, exactWorkPath, helperName, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, helperName, isWorkFolder, makeRun, projectIdOf, runOf, ticketPattern } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -19,6 +19,7 @@ const MAX_RECORD_BYTES = 1024 * KiB;
 const MAX_RECORD_LINES = 5000;
 const MAX_RECORD_LINE_BYTES = 8 * KiB;
 const MAX_TICKETS = 100;
+const MAX_SUMMARY_BYTES = 8 * KiB;
 const MAX_ARG_CHARS = 4096;
 const MAX_ITEMS = 40;
 const MAX_PATH_CHARS = 200;
@@ -26,8 +27,6 @@ const MAX_CORE = 200;
 const MAX_TITLE = 60;
 
 const PLAN_NAME = /^(?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md$/;
-const TICKET_ID = /^T\d{1,3}[a-z]?$/;
-const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on):[ \t]*(.*)$/;
 const DECIDED_LINE = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided:/;
 const BASE_LINE = /^Base commit: ([0-9a-f]{40,64})[ \t]*$/;
@@ -202,7 +201,8 @@ function keysOverlap(a, b) {
 }
 
 // Splits the plan into ticket blocks through plan-markdown's line reader. Throws PlanProblem.
-function parsePlan(text) {
+function parsePlan(text, slug) {
+  const pattern = ticketPattern(slug);
   const { lines, openFence } = readPlanLines(text);
   const heads = [];
   lines.forEach((entry, index) => {
@@ -214,7 +214,7 @@ function parsePlan(text) {
   for (const index of heads) {
     const entry = lines[index];
     if (entry.level < 2 || entry.level > 4) continue;
-    const head = TASK_HEAD.exec(entry.title.trim());
+    const head = pattern.head.exec(entry.title.trim());
     if (!head) continue;
     if (tickets.length >= MAX_TICKETS) throw new PlanProblem('too many tickets');
     if (seen.has(head[1])) throw new PlanProblem(`repeated id ${head[1]}`);
@@ -225,7 +225,7 @@ function parsePlan(text) {
       if (next <= index) continue;
       const h = lines[next];
       if (h.level <= entry.level) { end = next; if (fieldEnd > next) fieldEnd = next; break; }
-      if (fieldEnd === lines.length && h.level >= 2 && h.level <= 4 && TASK_HEAD.test(h.title.trim())) fieldEnd = next;
+      if (fieldEnd === lines.length && h.level >= 2 && h.level <= 4 && pattern.head.test(h.title.trim())) fieldEnd = next;
     }
     const fields = new Map();
     for (let i = index + 1; i < fieldEnd; i++) {
@@ -251,7 +251,7 @@ function parsePlan(text) {
       text: blockText,
       hash: sha12(blockText),
       fields,
-      deps: depsOf(fields.get('depends-on'))
+      deps: depsOf(fields.get('depends-on'), pattern)
     });
   }
   let title = null;
@@ -321,9 +321,9 @@ function headLines(plan) {
   return [plan.title, '', `Base commit: ${plan.base ?? 'none'}`, '', ...(plan.decided.length ? [...plan.decided, ''] : []), ...(others.length ? [...others, ''] : [])];
 }
 
-function depsOf(value) {
+function depsOf(value, pattern) {
   if (value === undefined) return [];
-  return value.split(',').map((s) => stripTicks(s.trim())).filter((s) => TICKET_ID.test(s));
+  return value.split(',').map((s) => stripTicks(s.trim())).filter((s) => pattern.id.test(s));
 }
 
 function readPlan(root, ref) {
@@ -341,7 +341,7 @@ function readPlan(root, ref) {
   } catch {
     throw new PlanProblem('unreadable');
   }
-  return parsePlan(text);
+  return parsePlan(text, slug);
 }
 
 // Core paths of .company/project.md (## Core section list lines). Missing or unsafe file: none.
@@ -394,6 +394,7 @@ function badLine(slug, n, reason) {
 }
 
 function checkEvent(slug, rec, n, prevText) {
+  const pattern = ticketPattern(slug);
   if (rec === null || typeof rec !== 'object' || Array.isArray(rec)) throw badLine(slug, n, 'not an object');
   const ev = rec.ev;
   if (typeof ev !== 'string' || !Object.hasOwn(EXTRA_KEYS, ev)) throw badLine(slug, n, 'bad event');
@@ -407,14 +408,14 @@ function checkEvent(slug, rec, n, prevText) {
   if (ev === 'plan' && !(typeof rec.plan === 'string' && validPlanRef(rec.plan))) throw badLine(slug, n, 'bad plan');
   if (ev !== 'plan' && ev !== 'build') {
     const sectionsOk = rec.id === SECTIONS_ID && (ev === 'approve' || ev === 'change');
-    if (typeof rec.id !== 'string' || !(TICKET_ID.test(rec.id) || sectionsOk)) throw badLine(slug, n, 'bad id');
+    if (typeof rec.id !== 'string' || !(pattern.id.test(rec.id) || sectionsOk)) throw badLine(slug, n, 'bad id');
     if (typeof rec.hash !== 'string' || !HASH.test(rec.hash)) throw badLine(slug, n, 'bad hash');
   }
   if (ev === 'parked' && !(typeof rec.file === 'string' && FILE_NAME.test(rec.file))) throw badLine(slug, n, 'bad file');
   if (ev === 'build') {
     const ids = rec.ids;
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_TICKETS || new Set(ids).size !== ids.length
-      || !ids.every((x) => typeof x === 'string' && TICKET_ID.test(x))) throw badLine(slug, n, 'bad ids');
+      || !ids.every((x) => typeof x === 'string' && pattern.id.test(x))) throw badLine(slug, n, 'bad ids');
   }
 }
 
@@ -534,8 +535,8 @@ function checkSlug(value, env) {
   return value;
 }
 
-function checkId(value, { sections = false } = {}) {
-  if (typeof value !== 'string' || !(TICKET_ID.test(value) || (sections && value === SECTIONS_ID))) throw new Refusal('bad ticket id');
+function checkId(value, slug, { sections = false } = {}) {
+  if (typeof value !== 'string' || !(ticketPattern(slug).id.test(value) || (sections && value === SECTIONS_ID))) throw new Refusal('bad ticket id');
   return value;
 }
 
@@ -592,7 +593,7 @@ function cmdTickets(args, env) {
 function cmdTicket(args, env) {
   if (args.length !== 3) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env);
-  const id = checkId(args[1], { sections: true });
+  const id = checkId(args[1], slug, { sections: true });
   if (!PICKS.includes(args[2])) throw new Refusal('pick must be approve, change or park');
   if (id === SECTIONS_ID && args[2] === 'park') throw new Refusal('the plan sections cannot be parked');
   const rec = loadRecord(env.root, slug);
@@ -614,7 +615,7 @@ function roadmapTitle(raw, id) {
 function cmdParkTicket(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env);
-  const id = checkId(args[1]);
+  const id = checkId(args[1], slug);
   const rec = loadRecord(env.root, slug);
   const { plan } = currentPlan(env, rec);
   const ticket = plan.tickets.find((t) => t.id === id);
@@ -638,12 +639,44 @@ function cmdParkTicket(args, env) {
   return { code: 0, lines: [`parked ${id} ${name}`] };
 }
 
+// The Playbook id on line 3 of the parent's 00-summary.md; a missing or unsafe summary gives the default.
+function parentPlaybook(env, slug) {
+  try {
+    const file = readFileSafe(env.root, ['.company', 'work', slug, '00-summary.md'], MAX_SUMMARY_BYTES);
+    return (file && runOf(decode(file.bytes))?.playbook) || 'feature';
+  } catch {
+    return 'feature';
+  }
+}
+
+// A v2 parent's Build run folder, made by the shared maker; its refusal text is the answer.
+function makeBuildRun(env, slug) {
+  try {
+    return makeRun({ fs, path, platform: process.platform }, env.root, projectIdOf(slug), new Date(env.now), 'build', parentPlaybook(env, slug));
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
+}
+
+// A v2 Build folder whose plan.md write failed holds only its fresh summary: remove both, never more.
+function dropFreshRun(root, name) {
+  const dir = path.join(root, '.company', 'work', name);
+  try {
+    if (fs.readdirSync(dir).some((f) => f !== '00-summary.md')) return;
+    fs.rmSync(path.join(dir, '00-summary.md'), { force: true });
+    fs.rmdirSync(dir);
+  } catch {
+    // Nothing safe to remove; the folder stays.
+  }
+}
+
 function cmdBuildPlan(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env);
-  const buildSlug = helperName(slug, 'Build');
-  if (buildSlug === null) throw new Refusal('no build folder name for this flow');
-  const planPath = `.company/work/${buildSlug}/plan.md`;
+  const v2 = projectIdOf(slug) !== null;
+  let buildSlug = v2 ? null : helperName(slug, 'Build');
+  if (!v2 && buildSlug === null) throw new Refusal('no build folder name for this flow');
   const rec = loadRecord(env.root, slug);
   const { plan } = currentPlan(env, rec);
   const approved = plan.tickets.filter((t) => statusOf(rec, t) === 'approved');
@@ -656,7 +689,7 @@ function cmdBuildPlan(args, env) {
   const text = [...headLines(plan), '## Tasks', '', ...approved.map((t) => `${t.text}`)].join('\n');
   // The written text must read back as exactly the approved tickets, one `## Tasks`, no open fence.
   const written = text.endsWith('\n') ? text : `${text}\n`;
-  const back = parsePlan(written);
+  const back = parsePlan(written, slug);
   const tasksHeads = readPlanLines(written).lines.filter((l) => l.kind === 'heading' && l.level === 2 && TASKS_TITLE.test(l.title.trim()));
   const same = back.tickets.length === approved.length && back.tickets.every((t, i) => t.id === approved[i].id && t.hash === approved[i].hash);
   if (!same || back.sections.text !== plan.sections.text || back.openFence || tasksHeads.length !== 1) {
@@ -664,10 +697,12 @@ function cmdBuildPlan(args, env) {
   }
   const applied = appliedLines(rec, [...plan.tickets, plan.sections]);
   ensureDir(env.root, ['.company', 'work']);
-  const dir = ensureDir(env.root, ['.company', 'work', buildSlug], { create: true });
+  if (v2) buildSlug = makeBuildRun(env, slug);
+  const planPath = `.company/work/${buildSlug}/plan.md`;
   try {
-    createNew(dir, 'plan.md', written);
+    createNew(ensureDir(env.root, ['.company', 'work', buildSlug], { create: !v2 }), 'plan.md', written);
   } catch (error) {
+    if (v2) dropFreshRun(env.root, buildSlug);
     if (error instanceof Refusal && error.message === 'file exists') throw new Refusal(error.message, [`plan: ${planPath}`]);
     throw error;
   }

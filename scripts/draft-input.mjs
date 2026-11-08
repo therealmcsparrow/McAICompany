@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1.4). Node built-ins only.
+// Draft input (contract: docs/contracts/draft-input.md v1.5). Node built-ins only.
 // `arg` turns the argument file into a fixed result line, `free` picks a name that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 // Work folder names come only from ../mods/lib/work-folder.mjs.
@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { normalizePath, parsePlan } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isWorkFolder, parseName, readTopicFile, stampOf } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isTicketHeading, isWorkFolder, makeRun, parseName, projectIdOf, readTopicFile, runOf, stampOf, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
@@ -24,8 +24,10 @@ function cutSlug(s) {
 }
 
 const AC_LINE = /^(?:[-*] )?\**AC\d{1,3}\**:/;
-const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
 const SPEC_CAP = 64 * 1024;
+const SUMMARY_FILE = '00-summary.md';
+const MAX_SUMMARY = 8 * 1024;
+const MAX_HEAD = 120;
 
 const splitLines = (text) => text.split(/\r\n|\r|\n/);
 
@@ -41,7 +43,7 @@ function taskCount(text) {
   for (const { kind, level, title } of readPlanLines(text).lines) {
     if (kind !== 'heading') continue;
     if (level === 2 && title.trim() === 'Tasks') inTasks = true;
-    else if (inTasks && level >= 2 && level <= 4 && TASK_HEAD.test(title.trim())) count++;
+    else if (inTasks && level >= 2 && level <= 4 && isTicketHeading(title.trim())) count++;
   }
   return count;
 }
@@ -256,6 +258,7 @@ function isFree(realRoot, slug, forWhat) {
     return error && error.code === 'ENOENT';
   }
   if (forWhat === 'feature' || forWhat === 'fix' || !st.isDirectory()) return false;
+  const v2 = projectIdOf(slug) !== null;
   let names;
   try {
     names = fs.readdirSync(dir);
@@ -263,7 +266,8 @@ function isFree(realRoot, slug, forWhat) {
     return false;
   }
   for (const name of names) {
-    if (!DRAFT_NAMES.has(name) && !/^input-[a-z-]+\.md$/.test(name)) return false;
+    const summary = v2 && name === SUMMARY_FILE;
+    if (!summary && !DRAFT_NAMES.has(name) && !/^input-[a-z-]+\.md$/.test(name)) return false;
     let e;
     try {
       e = fs.lstatSync(path.join(dir, name));
@@ -377,6 +381,16 @@ function claimChain(realRoot, names, forWhat) {
 
 // A Draft helper of `parent` at the run's own start time; never an existing folder.
 function claimHelper(realRoot, parent, forWhat, now) {
+  if (projectIdOf(parent) !== null) {
+    let name;
+    try {
+      name = makeRun({ fs, path, platform: process.platform }, realRoot, projectIdOf(parent), now, 'draft', forWhat);
+    } catch (error) {
+      if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+      throw error;
+    }
+    return { name, dir: ensureFolder(realRoot, ['.company', 'work', name]) };
+  }
   const tried = new Set();
   const isTaken = takenFn(realRoot, tried);
   for (;;) {
@@ -439,7 +453,18 @@ function dropTopic(root, forWhat) {
   }
 }
 
-const isBuildName = (name) => (isLegacySlug(name) && name.endsWith('-build')) || parseName(name)?.suffix === 'Build';
+// A v2 folder is a Build run by line 3 of its summary; a legacy or v1.1 name by its suffix.
+function isBuildName(realRoot, name) {
+  if (projectIdOf(name) !== null) {
+    try {
+      return runOf(readFile(realRoot, `${WORK_PREFIX}${name}/${SUMMARY_FILE}`, MAX_SUMMARY).toString('utf8'))?.kind === 'build';
+    } catch (error) {
+      if (error instanceof Refused) return false;
+      throw error;
+    }
+  }
+  return (isLegacySlug(name) && name.endsWith('-build')) || parseName(name)?.suffix === 'Build';
+}
 
 function take(args, root, now) {
   const { rest, forWhat } = parseFor(args);
@@ -459,7 +484,7 @@ function takeFile(rest, forWhat, root, now) {
   const src = workSource(rel);
   if (src !== null) checkExact(realRootOf(root), src);
   if (forWhat === 'feature' && !(src && DRAFT_FILE.test(src.rest))) throw new Refused('not a draft file');
-  if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(src.name))) throw new Refused('not a build plan');
+  if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(realRootOf(root), src.name))) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);
   const isPrompt = forWhat === 'to-spec' && src !== null && src.rest === 'prompt.md';
   const bytes = readFile(realRoot, rel, isPrompt ? PROMPT_CAP : MAX_BYTES);
@@ -610,17 +635,29 @@ function baseCommit(lines) {
   return null;
 }
 
+// The ticket ID at the start of a heading: this folder's own form for a v2 name, else either form.
+function headId(title, pattern) {
+  const text = title.trim().slice(0, MAX_HEAD);
+  if (pattern !== null) return pattern.head.exec(text)?.[1] ?? null;
+  if (!isTicketHeading(text)) return null;
+  for (let end = Math.min(text.length, 40); end > 0; end--) {
+    if (ticketLocal(text.slice(0, end)) !== null) return text.slice(0, end);
+  }
+  return null;
+}
+
 // Task ids in heading order, named as parsePlan names them (a repeated id gets -dup<k>).
-function planOrder(text) {
+function planOrder(text, slug) {
+  const pattern = slug !== undefined && projectIdOf(slug) !== null ? ticketPattern(slug) : null;
   const seen = new Map();
   const order = [];
   for (const { kind, level, title } of readPlanLines(text).lines) {
     if (kind !== 'heading' || level < 2 || level > 4) continue;
-    const m = TASK_HEAD.exec(title.trim());
-    if (!m) continue;
-    const k = seen.get(m[1]) ?? 0;
-    seen.set(m[1], k + 1);
-    order.push(k === 0 ? m[1] : `${m[1]}-dup${k}`);
+    const id = headId(title, pattern);
+    if (id === null) continue;
+    const k = seen.get(id) ?? 0;
+    seen.set(id, k + 1);
+    order.push(k === 0 ? id : `${id}-dup${k}`);
   }
   return order;
 }
@@ -656,8 +693,8 @@ function stale(args, root) {
     if (length === undefined) throw new GitFailed('bad output');
     if (base.length !== length) throw new Refused('plan has no Base commit line');
     if (revId(root, env, `${base}^{commit}`, length) === null) return { code: 2, lines: [`base unknown ${base.slice(0, 12)}`] };
-    const rank = new Map(planOrder(text).map((id, i) => [id, i]));
-    const tasks = parsePlan(text).tasks.slice().sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+    const rank = new Map(planOrder(text, src?.name).map((id, i) => [id, i]));
+    const tasks = parsePlan(text, { slug: src?.name }).tasks.slice().sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
     const lines = [];
     let stales = 0;
     let changed = 0;

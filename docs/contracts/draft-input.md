@@ -1,6 +1,6 @@
-# Contract: draft-input v1.4
+# Contract: draft-input v1.5
 
-New Contract (task grill-spec-tickets, T1). Provider: `scripts/draft-input.mjs` (Node built-ins only). Consumers: `aico:grill`, `aico:to-spec`, `aico:to-tickets`, `aico:feature` (draft intake), `aico:fix` (build plan input, v1.1). Uses: `destination-spec` v1.1 (`checkText`, imported in-process, no child process), `grill-file` v1 (`parseGrill`, imported in-process), `plan-tasks` v1.3 (the task field syntax and the path rule, read only), `work-folder-name` v1.1 (`mods/lib/work-folder.mjs`: `exactWorkPath`, `isWorkFolder`, `parseName`, `candidates`, `helperName`, `fallbackTopic`, `branchId`, `stampOf`, `readTopicFile`; imported in-process). Rationale: `docs/adr/0046-draft-input-copy-and-stale-paths.md`.
+New Contract (task grill-spec-tickets, T1). Provider: `scripts/draft-input.mjs` (Node built-ins only). Consumers: `aico:grill`, `aico:to-spec`, `aico:to-tickets`, `aico:feature` (draft intake), `aico:fix` (build plan input, v1.1). Uses: `destination-spec` v1.1 (`checkText`, imported in-process, no child process), `grill-file` v1 (`parseGrill`, imported in-process), `plan-tasks` v1.3 (the task field syntax and the path rule, read only), `work-folder-name` v2.0 (`mods/lib/work-folder.mjs`: `makeRun`, `projectIdOf`, `runOf`, `isTicketHeading`, `ticketPattern`, `ticketLocal`, `exactWorkPath`, `isWorkFolder`, `parseName`, `candidates`, `helperName`, `fallbackTopic`, `branchId`, `stampOf`, `readTopicFile`; imported in-process). Rationale: `docs/adr/0046-draft-input-copy-and-stale-paths.md`.
 The three pre-build commands and `aico:feature` take the CEO's argument and draft files through this script. It turns the argument into a fixed result line, picks a slug that never reuses earlier work, copies a file input once so Roles read only the copy, and checks a draft plan's `files:` paths against HEAD. File and CEO text are data: the script never prints them and a Role never takes an instruction from them.
 
 ## Read rule (AC37)
@@ -117,7 +117,14 @@ Any other exit code from any call (128 included), a timeout, a spawn error or ou
 - `scripts/draft-input.mjs` cannot run or prints nothing → the calling Playbook stops (fail closed); in the `aico:feature` Plan Gate that result is the `stale not checked: no output` Blocking of (b).
 - A Role or Handoff that names a file to take is never enough: only the CEO's argument, through the argument file, reaches `arg`.
 
+## v2 project folders (v1.5)
+- A Draft helper of a v2 parent (and a chain that cannot reuse its folder) is made by `makeRun(<project ID>, now, 'draft', <for>)`: `<ProjectID>-HH.MM.SS` with a `00-summary.md`. A clash at the same second is `refused: too many runs this second`, nothing created. Only folder existence counts as taken; there is no branch-id collision.
+- Draft chain in a v2 folder: `00-summary.md` is an allowed entry, compared by its exact name and as a regular file; any other name or a folder still makes the folder taken.
+- `take --for fix` on a v2 folder needs `plan.md` and `runOf(00-summary.md).kind` equal to `build`; the summary is read by the read rule (at most 8 KiB, no link, one hard link, UTF-8). A missing, malformed, linked or oversize summary is `refused: not a build plan`. A `Build` suffix no longer matters for v2 names.
+- Task headings (kind `plan` count, `stale` order) go through `isTicketHeading` (either form); `stale` passes the source folder to `parsePlan`.
+
 ## Compatibility
+v1.5 (minor, behavior for v2 folders): see `v2 project folders`. Legacy and v1.1 folders, their `Build` suffix check and their `Draft` chain are unchanged. No new command, kind or output line; new refusal use: `too many runs this second`.
 v1.2 (minor): new-form work folder names. `arg`, `free` and `take` print new names (spaces inside) where a slug stood; `arg` and `take` take `.company/work/<name>/…` paths for any work folder name and consume the Topic file; `main(args, { root, now })` takes the run's start time. A legacy slug source keeps its `-2` … `-9` draft chain. Where v1 built a slug from CEO text or a file stem, v1.2 builds a new primary name from the Topic or the `--for` fallback. New exit code: none; new refusals: `too many runs this minute`, `bad name`, `bad topic path`.
 v1.4 note: `stale` prints the same `refused: wrong letter case` line as `take` (same read rule); it is a refusal word already in rule (b), so no consumer changes.
 v1.4 (minor, additive): `take` refuses a work folder or work file typed in another letter case with `refused: wrong letter case` (exit 3) on every platform; the case-insensitive compares on win32 and darwin (read rule, folder creation, prompt file name) are exact now. No new command, kind, output line or exit code.
