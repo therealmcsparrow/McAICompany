@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.30.2] - 2026-11-08
+
+Rollback: node scripts/stable.mjs 0.29.0
+
+### Fixed
+- **`plan-tasks` contract note.** The fix note now quotes the full old refusal line. A regression test pins the full line.
+
 ## [0.30.1] - 2026-11-08
 
 Rollback: node scripts/stable.mjs 0.29.0
