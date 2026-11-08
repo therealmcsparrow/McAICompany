@@ -1,4 +1,6 @@
-# Contract: token-ledger v1.10
+# Contract: token-ledger v1.11
+
+v1.11 (task Project Id Naming; additive, `docs/adr/0007-contract-minor-versions.md`): `qa-first-report` also leaves out a v2 run (`work-folder-name` v2.0) whose `00-summary.md` line 3 reads `Run: <kind> release` (`runOf(...).playbook`). The summary is read as a new read: a link, a file with more than one link, a file over 64 KiB, a missing file or a damaged Run line means the run is counted. The description on line 1 never decides. `RELEASE_RUN` still applies to v1.1 and legacy names. Every v1.10 file is a valid v1.11 file.
 
 v1.10 (task QA Tests First Active; additive, `docs/adr/0007-contract-minor-versions.md`, rationale `docs/adr/0064-qa-writes-tests-first.md`): the optional `ship` key `qa` and the `qa-first-report` command, below. Uses `plan-tasks` v1.7 (`readParallel` view key `qa_first`). Every v1.9 file is a valid v1.10 file and every other command gives the same bytes for it.
 
@@ -83,7 +85,7 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 **`ship` (v1.10):** optional `qa` (`0 | 1`), refused on every other kind and with any other value. Written only by `ship`, for a run not named `brainstorm-*`, `replay-*` or `baseline-*`, from the same `readParallel(root, run)` view as the `par` line: state `on` → `1` when the view has `qa_first: true`, else `0`. State `none` → no `qa` key. A reader error → no `qa` key (already counted in `warnings` for `par`), and `ship` still succeeds. The Lead never types it.
 
 **`qa-first-report` (v1.10)**, read-only, the Fix-round measure of QA-first:
-- Set: the `.company/ledger/*.jsonl` files with a valid `<run>` name, at most 500 (the scorecard rule, warning included). Not counted at all: a file with no `ship` record. **Excluded** (counted): every `brainstorm-*`, `replay-*` and `baseline-*` file; every **release** run (the run name, after a leading `^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - ` is removed, starts with `release` in any case, followed by the end, a space or `-`); a file the reader refuses; a file whose last `ship` record has no `fix_rounds`.
+- Set: the `.company/ledger/*.jsonl` files with a valid `<run>` name, at most 500 (the scorecard rule, warning included). Not counted at all: a file with no `ship` record. **Excluded** (counted): every `brainstorm-*`, `replay-*` and `baseline-*` file; every **release** run (a v2 run whose summary says `Run: <kind> release`, v1.11; for a v1.1 or legacy name, the run name, after a leading `^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - ` is removed, starts with `release` in any case, followed by the end, a space or `-`); a file the reader refuses; a file whose last `ship` record has no `fix_rounds`.
 - Every other file is a run: its last `ship` record's `fix_rounds` goes to **after** when that record has `qa: 1`, else to **before**.
 - Prints exactly three lines: `before: median <m> (n=<k>)`, then `after: median <m> (n=<k>)`, or `after: insufficient (n=<k>)` while k < 3, then `excluded: <x>`. `before` with n=0 prints `before: median ? (n=0)`. Medians are exact (an even count averages the two middle values); `<m>` prints with at most one decimal, a trailing `.0` dropped (`2`, `2.5`).
 - Any argument → `refused: qa-first-report takes no arguments`, exit 2. Otherwise exit 0.

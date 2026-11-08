@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v2.4): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.5): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
 import { show as showRun } from './run-state.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder, projectIdOf, summaryDescription, ticketPattern } from '../mods/lib/work-folder.mjs';
 
 export const MAX_BYTES = 64 * 1024;
 const MAX_LINE = 1000;
@@ -353,6 +353,22 @@ function checkProductManager(isPm, order, side, errors) {
   }
 }
 
+// In a v2 folder `task:` is the folder name or a ticket of its project; elsewhere a work folder name or a task id.
+function taskOk(task, folder) {
+  if (typeof folder === 'string' && projectIdOf(folder) !== null) return task === folder || ticketPattern(folder).id.test(task);
+  return isWorkFolder(task) || TASK_ID_RE.test(task);
+}
+
+// In a v2 folder 00-summary.md must open with a one-line description. Errors name the check, never the text.
+function checkSummary(summary, errors) {
+  if (summary?.status === 'ok') {
+    const d = summaryDescription(summary.text);
+    if (d.error) errors.push(`00-summary.md: ${d.error}`);
+  } else {
+    errors.push(summary?.status === 'missing' ? '00-summary.md: missing' : '00-summary.md: cannot be read as a plain file');
+  }
+}
+
 // Returns { errors, warnings, routing }. `routing` holds only the fields later Steps and the Lead read.
 export function lint(text, opts = {}) {
   const errors = [];
@@ -368,7 +384,8 @@ export function lint(text, opts = {}) {
   if ('depth' in fm && !DEPTH.has(fm.depth)) errors.push('frontmatter: depth must be quick|deep');
   if ('round' in fm && !/^\d{1,3}$/.test(fm.round)) errors.push('frontmatter: round must be a number');
   for (const k of LIST_KEYS) if (k in fm && list(fm[k]) === null) errors.push(`frontmatter: ${k} must be a [list]`);
-  if ('task' in fm && !isWorkFolder(fm.task) && !TASK_ID_RE.test(fm.task)) errors.push(`line ${at.task}: task must be a work folder name or a task id`);
+  if ('task' in fm && !taskOk(fm.task, opts.folder)) errors.push(`line ${at.task}: task must be a work folder name or a task id`);
+  if (typeof opts.folder === 'string' && projectIdOf(opts.folder) !== null) checkSummary(opts.summary, errors);
   if ('contracts' in fm) checkContracts(fm.contracts, opts.index, errors);
   const roleIdBy = BYLINE_ID_RE.test(lines[end + 1] ?? '');
   if (roleIdBy && !('contracts' in fm)) errors.push('frontmatter: missing contracts (required under a Role id byline, handoff v1.2)');
@@ -1095,6 +1112,17 @@ export function applied(runFolder) {
   return { code: 0, lines };
 }
 
+// The run folder of a Handoff (its on-disk name, never the frontmatter) and its 00-summary.md, read as a new read:
+// real path equal to the lexical one, one link, size cap before the read.
+function folderContext(file) {
+  const dir = dirname(resolve(file));
+  const ctx = runContext(dir);
+  if (!ctx) return {};
+  const folder = basename(realpathSync.native(dir));
+  if (projectIdOf(folder) === null) return { folder };
+  return { folder, summary: readInside(ctx.realRoot, ['.company', 'work', folder, '00-summary.md'], MAX_BYTES) };
+}
+
 function main(argv) {
   const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md> | --contests <run folder> | --applied <run folder> | --exceptions-for <slug>';
   const args = argv.slice(2);
@@ -1142,7 +1170,8 @@ function main(argv) {
     return 1;
   }
   const index = !wantLedger && /^contracts:/m.test(text) ? buildIndex(resolve(dirname(fileURLToPath(import.meta.url)), '..')) : undefined;
-  const r = wantLedger ? lintFindings(text) : lint(text, { requireTop, index });
+  const where = wantLedger ? {} : folderContext(file);
+  const r = wantLedger ? lintFindings(text) : lint(text, { requireTop, index, ...where });
   if (!wantLedger && requireTop && r.routing?.status === 'handover') r.errors.push(...checkLedger(file, r.routing.findings));
   r.errors.forEach(e => console.log(`ERROR ${e}`));
   (r.warnings ?? []).forEach(w => console.log(w));
