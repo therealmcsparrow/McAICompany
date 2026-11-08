@@ -8,7 +8,7 @@ v1.3 is additive (task elephant-goldfish): the task fields `context`, `slice` an
 v1.2 is additive (task plan-gate-enforce): under `plan_check.policy` `block`, `begin`, `next` and `start` refuse unless every plan in the run folder passes the scan. Under `warn` and `off` every command is byte-identical to v1.1.
 v1.1 is additive (task goldfish-roles): the `brief` command. The record format is unchanged; a v1 caller that never runs `brief` behaves as before.
 
-v1.7 fix (task Ship Gate Open Items, release v0.30.1): rule 3 of `## QA-first (v1.7)` names the refusal line `qa-first: files missing or invalid (overlaps every task, incl. qa task <qa id>)` for a task with missing or invalid `files:`. Before this run `check` printed `files overlap qa task <qa id>` for that task. Only the message text changed; the count and exit code are unchanged, and nothing parses the reason. No new key, event or command. Fix-line, no version change.
+v1.7 fix (task Ship Gate Open Items, release v0.30.1): rule 3 of `## QA-first (v1.7)` names the refusal line `qa-first: files missing or invalid (overlaps every task, incl. qa task <qa id>)` for a task with missing or invalid `files:`. Before this run `check` printed `qa-first: files overlap qa task <qa id>` for that task. Only the message text changed; the count and exit code are unchanged, and nothing parses the reason. No new key, event or command. Fix-line, no version change.
 
 v1.1 fix (re-begin after a Fix round): a `begin` resets the round to 0 and drops the round's task sets, so plan tasks left pending when a Fix round started are offered again; a `round` event starts its round with an empty done list, because a round number can repeat after a re-begin. The record format is unchanged.
 

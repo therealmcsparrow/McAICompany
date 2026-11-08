@@ -78,3 +78,12 @@ describe('the refusal message names the cause for a non-QA task with no files', 
     assert.match(err.join('\n'), /files? (is |are )?(missing|invalid|not valid)|(missing|invalid) files?/i);
   });
 });
+
+describe('plan-tasks v1.7 fix note quotes the old refusal line in full', () => {
+  test('the old line keeps its `qa-first: ` prefix', () => {
+    const note = read('docs/contracts/plan-tasks.md').split('\n').find((l) => /^v1\.7 fix \(task Ship Gate Open Items/.test(l));
+    assert.ok(note, 'the v1.7 fix note exists');
+    assert.ok(note.includes('`qa-first: files overlap qa task <qa id>`'), 'old line quoted as `qa-first: files overlap qa task <qa id>`');
+    assert.doesNotMatch(note, /printed `files overlap/);
+  });
+});
