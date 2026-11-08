@@ -17,6 +17,7 @@ The ideas the whole company runs on, one page per topic. Short definitions of ev
 - [Risk tier](risk-tier.md)
 - [Gates](gates.md)
 - [Plans](plans.md)
+- [Wayfinder](wayfinder.md)
 - [Parallel Steps](parallel-steps.md)
 - [Receipts and reports](receipts-and-reports.md)
 - [Guided first product](guided-first-product.md)

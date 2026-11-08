@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### New
+- **Wayfinder map.** A short decision map for work that spans sessions, kept in `.company/wayfinder/`. `wayfinder check <file>` validates its shape and pointers. The planning skill points to the format.
+
 ## [0.30.2] - 2026-11-08
 
 Rollback: node scripts/stable.mjs 0.29.0
