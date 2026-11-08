@@ -24,6 +24,7 @@ effort: medium
 - Optional `## Prototype question` (one line): a risky unknown a throwaway prototype can answer.
 - Optional `## Glossary` (`- <term> — <definition>`) and `## ADR drafts` (`- <slug> — <decision> — why: <reason>`) for new terms and hard-to-reverse choices.
 - Spec Step (5a, feature runs only): write the destination spec per `destination-spec` v1 (`docs/contracts/destination-spec.md`), `version: pending`, `shipped: pending`; no file paths, no code.
+- Unrelated tasks in one request: propose a split into separate projects in the brief, one line each; the CEO confirms at the Brief/tickets form.
 - Risks and open questions. Questions only the CEO can answer → `status: needs-ceo`; each carries a recommended answer first and a one-line reason.
 - Own product: check fit with audience and goal. Client project: trace each item to the Account Manager's intake.
 
