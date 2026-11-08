@@ -223,7 +223,7 @@ test('step-times source: self-exit deadline stays under the hook timeout, call b
   assert.ok(call < deadline, `CALL_MS ${call} < DEADLINE_MS ${deadline}`);
 });
 
-const hasClaude =spawnSync('claude', ['--version'], { shell: process.platform === 'win32' }).status === 0;
+const hasClaude = spawnSync('claude', ['--version'], { shell: process.platform === 'win32' }).status === 0;
 test('claude plugin validate --strict passes', { skip: !hasClaude }, () => {
   const r = spawnSync('claude', ['plugin', 'validate', '--strict', '.'], { cwd: repo, encoding: 'utf8', shell: process.platform === 'win32' });
   assert.equal(r.status, 0, r.stdout + r.stderr);

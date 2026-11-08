@@ -37,8 +37,7 @@ describe('feedback skill cites token-ledger v1.10 on its qa-first-report line', 
   });
 });
 
-describe('feedback pins read the line, not the file', () => {
-  const line = () => read('skills/feedback/SKILL.md').split('\n').find((l) => /ledger qa-first-report/.test(l)) ?? '';
+describe('feedback runs ledger qa-first-report once', () => {
   test('only one line in feedback runs ledger qa-first-report', () => {
     const n = read('skills/feedback/SKILL.md').split('\n').filter((l) => /ledger qa-first-report/.test(l)).length;
     assert.equal(n, 1);
@@ -54,7 +53,7 @@ describe('the refusal message names the cause for a non-QA task with no files', 
     else process.env.MCSPARROW_HOME = savedHome;
   });
   test('check --qa-first on a docs task without files: names missing or invalid files', () => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-gate-r2-'));
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-gate-files-'));
     roots.push(base);
     const home = path.join(base, 'home');
     const product = path.join(base, 'product');
