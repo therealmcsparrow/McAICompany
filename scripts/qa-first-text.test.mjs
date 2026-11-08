@@ -23,12 +23,19 @@ function walk(dir, out = []) {
   return out;
 }
 
-function unreleased() {
-  const text = read(CHANGELOG);
-  const start = text.indexOf('## [Unreleased]');
-  assert.notEqual(start, -1, 'CHANGELOG has an Unreleased section');
+// Pinned release: the entry sits in [Unreleased] until 0.30.0 ships, then in the 0.30.0 section for good.
+function section(text, heading) {
+  const start = text.indexOf(heading);
+  if (start === -1) return '';
   const next = text.indexOf('\n## [', start + 5);
   return text.slice(start, next === -1 ? undefined : next);
+}
+function unreleased() {
+  const text = read(CHANGELOG);
+  const u = section(text, '## [Unreleased]');
+  const r = section(text, '## [0.30.0]');
+  assert.ok(u || r, 'CHANGELOG has an Unreleased or 0.30.0 section');
+  return `${u}\n${r}`;
 }
 
 describe('Lead text in parallel.md', () => {
@@ -87,7 +94,7 @@ describe('qa agent text', () => {
   });
 });
 
-describe('CHANGELOG Unreleased', () => {
+describe('CHANGELOG Unreleased or 0.30.0', () => {
   it('describes QA-first with both Contract bumps', () => {
     const u = unreleased();
     assert.match(u, /QA-first|QA writes/i);
