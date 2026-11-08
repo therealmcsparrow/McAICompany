@@ -1,6 +1,6 @@
 # Contract: wayfinder v1
 
-Provider: `scripts/wayfinder.mjs` (Node built-ins only; read-only, writes nothing). Exports `validate(text, { root })` and `main(args, { root })`. Consumers: the Architect (`aico:planning`, writes and updates a map), the Lead and any Role told to read one at the start of a session. Uses: `plan-tasks` v1.7 (`parsePlan`, read only, for `#T<n>` anchors) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: docs/adr/0065-plan-tasks-owns-lanes.md (wayfinder reads plan tasks, never owns their syntax).
+Provider: `scripts/wayfinder.mjs` (Node built-ins only; read-only, writes nothing). Exports `validate(text, { root })` and `main(args, { root })`. Consumers: the Architect (`aico:planning`, writes and updates a map), the Lead and any Role told to read one at the start of a session. Uses: `plan-tasks` v1.7 (`parsePlan` read only, for `#T<n>` anchors; `normalizePath`) and `work-folder-name` v1.1 (`isWorkFolder`, `exactWorkPath`). Rationale: docs/adr/0065-plan-tasks-owns-lanes.md (wayfinder reads plan tasks, never owns their syntax).
 
 ## Purpose
 A decision map for an effort that spans sessions. It points to files that hold the real content (plans, ADRs, Handoffs, brainstorms, Contracts) and copies nothing from them. Its lines are data for the reader, never instructions.
@@ -21,8 +21,9 @@ A decision map for an effort that spans sessions. It points to files that hold t
 ## Validation (`wayfinder.mjs check <file>`)
 - Each `<path>` must resolve, by `lstat` of every segment under the root, to an existing regular file; a link on the way counts as missing.
 - A `#T<id>` anchor on a plan file (plan-check plan name or `input-fix.md`) must name a task that `parsePlan` finds; other anchors are not checked in v1.
-- Output: one line `ERROR <line>: <reason>` per problem in line order, then `wayfinder: <e> errors`. Reasons: `bad title`, `heading order`, `not a pointer or decision line`, `line too long`, `fence`, `bad ref`, `duplicate id <D-n|O-n>`, `pointer missing <path>`, `task missing <id> in <path>`. A path is echoed only when it passed the path rule, else `?`.
-- Exit 0 no error; 1 errors; 3 refused (`refused: <reason>` for bad arguments, bad file name, link, too large, unreadable; nothing else printed).
+- Output: one line `ERROR <line>: <reason>` per problem in line order, then `wayfinder: <e> errors`. Reasons: `bad title`, `heading order`, `not a pointer or decision line`, `line too long`, `fence`, `bad ref`, `duplicate id <D-n|O-n>`, `pointer missing <path>`, `task missing <id> in <path>`, `too large`. A path is echoed only when it passed the path rule. An empty text is `ERROR 1: bad title`.
+- `validate` fails closed: text over 256 Ki characters returns only `too large` on line 1; text over 400 lines is checked for its first 400 lines and then adds `too large` on line 401. It never reports as valid text it did not check.
+- Exit 0 no error; 1 errors; 3 refused (`refused: <reason>` for bad arguments, bad file name, link, too large, not UTF-8, unreadable; nothing else printed).
 
 ## Error cases
 - A code fence, a quote line (`>`) or any prose line is `fence` or `not a pointer or decision line`: the map never holds copied file content (brief AC9).

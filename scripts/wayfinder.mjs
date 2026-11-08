@@ -67,6 +67,7 @@ function parseRef(raw, root) {
   const n = normalizePath(checked);
   if (!n.ok || n.dir) return bad;
   if (segs[0].toLowerCase() === '.company' && segs[1]?.toLowerCase() === 'work') {
+    if (segs[0] !== '.company' || segs[1] !== 'work') return bad;
     try {
       exactWorkPath(io, root, segs.slice(2));
     } catch {
@@ -123,7 +124,10 @@ function readPlanText(root, segs, full) {
 export function validate(text, { root = process.cwd() } = {}) {
   const errors = [];
   if (typeof text !== 'string') return [{ line: 1, reason: 'bad title' }];
-  const lines = splitLines(text.slice(0, MAX_BYTES * 4)).slice(0, MAX_LINES);
+  if (text.length > MAX_BYTES * 4) return [{ line: 1, reason: 'too large' }];
+  const all = splitLines(text);
+  const lines = all.slice(0, MAX_LINES);
+  if (lines.length === 0) errors.push({ line: 1, reason: 'bad title' });
   const seenIds = new Set();
   const planTasks = new Map();
   let section = -1;
@@ -192,6 +196,7 @@ export function validate(text, { root = process.cwd() } = {}) {
     for (const r of refs) checkRef(n, r);
     return undefined;
   });
+  if (all.length > MAX_LINES) err(MAX_LINES + 1, 'too large');
   return errors;
 }
 
