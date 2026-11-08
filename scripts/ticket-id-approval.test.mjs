@@ -152,6 +152,42 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.equal(fs.readFileSync(path.join(f.dir(HELPER), '00-summary.md'), 'utf8'), SUMMARY('build fix', SIBLINGS));
   });
 
+  // Fails the plan.md create; extra first drops one more file into the fresh folder.
+  function failPlanWrite(extra) {
+    const real = fs.openSync;
+    fs.openSync = (p, ...rest) => {
+      if (String(p).endsWith('plan.md') && String(p).includes(HELPER)) {
+        if (extra) fs.writeFileSync(path.join(path.dirname(String(p)), extra), 'keep');
+        const e = new Error('EACCES'); e.code = 'EACCES'; throw e;
+      }
+      return real(p, ...rest);
+    };
+    return () => { fs.openSync = real; };
+  }
+
+  test('AC3: a failed plan.md write removes the fresh Build folder, nothing else changes', () => {
+    const f = fx();
+    approved(f);
+    const evBefore = f.events().length;
+    const restore = failPlanWrite(null);
+    let r;
+    try { r = f.run('build-plan', PARENT); } finally { restore(); }
+    assert.equal(r.code, 3, r.lines.join(NL));
+    assert.match(r.lines[0], /^refused: /);
+    assert.deepEqual(fs.readdirSync(f.work).sort(), [PARENT]);
+    assert.equal(f.events().length, evBefore);
+  });
+
+  test('AC3: a failed plan.md write leaves a Build folder that holds other files', () => {
+    const f = fx();
+    approved(f);
+    const restore = failPlanWrite('notes.md');
+    let r;
+    try { r = f.run('build-plan', PARENT); } finally { restore(); }
+    assert.equal(r.code, 3, r.lines.join(NL));
+    assert.deepEqual(fs.readdirSync(f.dir(HELPER)).sort(), ['00-summary.md', 'notes.md']);
+  });
+
   test('AC3: a run of the project at another second does not block the Build run', () => {
     const f = fx({ [`.company/work/${EARLIER}/00-summary.md`]: SUMMARY('draft grill') });
     approved(f);
