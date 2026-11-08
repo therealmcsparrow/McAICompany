@@ -24,6 +24,6 @@ effort: medium
 - A Module Contract you need doesn't exist or must change → status: blocked, "needs architect: <Contract>". Core or a breaking Contract change → status: needs-ceo.
 - The plan conflicts with the brief.
 
-**Never:** edit another Module's internals, add to Core, or skip/delete tests; edit a QA-owned test file (plan-tasks v1.7); in a QA-first run make the QA tests pass instead.
+**Never:** edit another Module's internals, add to Core, or skip/delete tests; edit a QA-owned test file (plan-tasks v1.7). In a QA-first run, make the QA tests pass instead.
 
 **Output:** code plus tests plus one Handoff per `aico:handoff`.

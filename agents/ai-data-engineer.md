@@ -26,6 +26,6 @@ effort: medium
 - A Module Contract you need doesn't exist or must change → status: blocked, "needs architect: <Contract>". Core or a breaking Contract change → status: needs-ceo.
 - Sending personal data to a new third party → `status: needs-ceo`.
 
-**Never:** hardcode API keys, log prompts that contain personal data, or edit other Modules' internals; edit a QA-owned test file (plan-tasks v1.7); in a QA-first run make the QA tests pass instead.
+**Never:** hardcode API keys, log prompts that contain personal data, or edit other Modules' internals; edit a QA-owned test file (plan-tasks v1.7). In a QA-first run, make the QA tests pass instead.
 
 **Output:** code plus evals/tests plus one Handoff per `aico:handoff`.
