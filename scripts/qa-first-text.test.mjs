@@ -130,3 +130,56 @@ describe('repo-wide pin search', () => {
     }
   });
 });
+
+describe('builder Never line (AC8)', () => {
+  const BUILDERS = ['backend', 'frontend', 'desktop', 'game', 'ai-data'].map((n) => `agents/${n}-engineer.md`);
+  it('every builder forbids editing a QA-owned test file and cites plan-tasks v1.7', () => {
+    for (const rel of BUILDERS) {
+      const line = read(rel).split('\n').find((l) => /^\*\*Never:\*\*/.test(l) && /qa-owned/i.test(l));
+      assert.ok(line, `${rel}: Never line with qa-owned`);
+      assert.match(line, /edit a QA-owned test file/i, rel);
+      assert.match(line, /plan-tasks v1\.7/, rel);
+      assert.match(line, /QA-first run/i, rel);
+    }
+  });
+});
+
+describe('review skill [test] rule (AC3)', () => {
+  it('makes a builder edit to a QA-owned file Blocking [test], citing plan-tasks v1.7', () => {
+    const line = read('skills/review/SKILL.md').split('\n').find((l) => /qa-owned/i.test(l));
+    assert.ok(line, 'review has a QA-owned line');
+    assert.match(line, /plan-tasks v1\.7/);
+    assert.match(line, /builder edit to a QA-owned file/i);
+    assert.match(line, /proven only by builder tests/i);
+    assert.match(line, /## Blocking`? `\[test\]`/);
+  });
+});
+
+describe('qa-first-report lines (AC7)', () => {
+  for (const rel of ['skills/feedback/SKILL.md', 'skills/feature/references/intake-and-ship.md']) {
+    it(`${rel} runs ledger qa-first-report with no arguments`, () => {
+      assert.match(read(rel), /ledger qa-first-report`/);
+    });
+  }
+  it('feedback puts the three lines under ## QA first, unchanged', () => {
+    const t = read('skills/feedback/SKILL.md');
+    assert.match(t, /## QA first/);
+    assert.match(t, /unchanged/);
+  });
+  it('intake-and-ship names before, after, excluded', () => {
+    const line = read('skills/feature/references/intake-and-ship.md').split('\n').find((l) => /qa-first-report/.test(l));
+    for (const w of ['before', 'after', 'excluded']) assert.match(line, new RegExp(`\`${w}\``));
+    assert.match(line, /token-ledger`? v1\.10/);
+  });
+});
+
+describe('worktrees.md plan-tasks red (T10)', () => {
+  it('runs plan-tasks red before the full suite and cites plan-tasks v1.7', () => {
+    const line = read('skills/pipeline/references/worktrees.md').split('\n').find((l) => /plan-tasks red/.test(l));
+    assert.ok(line, 'worktrees has a plan-tasks red line');
+    assert.match(line, /`?plan-tasks`? v1\.7/);
+    assert.match(line, /QA-first/);
+    assert.match(line, /expected/);
+    assert.ok(line.indexOf('plan-tasks red') < line.indexOf('plan-tasks merged'));
+  });
+});
