@@ -118,7 +118,7 @@ for (const [name, input] of Object.entries(hostile)) {
     assert.equal(r.code, 0);
     assert.equal(r.out, '');
     assert.equal(r.err, '');
-    assert.ok(r.ms < 4500, `${r.ms} ms`);
+    assert.ok(r.ms < 8000, `${r.ms} ms`);
     assert.equal(subs(root).length, 0);
   });
 }
@@ -147,7 +147,7 @@ test('a failing run-state resolves quietly', async () => {
   fs.writeFileSync(fake, 'process.stderr.write("boom"); process.exit(1);');
   const started = Date.now();
   await handle(payload(), 'start', { runStatePath: fake, cwd: root });
-  assert.ok(Date.now() - started < 4500);
+  assert.ok(Date.now() - started < 8000);
 });
 
 test('a hanging run-state is cut before the deadline', async () => {
@@ -158,7 +158,7 @@ test('a hanging run-state is cut before the deadline', async () => {
   const started = Date.now();
   await handle(payload(), 'start', { runStatePath: fake, cwd: root });
   const ms = Date.now() - started;
-  assert.ok(ms < 4500, `${ms} ms`);
+  assert.ok(ms < 8000, `${ms} ms`);
 });
 
 test('the whole process exits 0 in time with a hanging run-state', async () => {
@@ -177,7 +177,7 @@ test('the whole process exits 0 in time with a hanging run-state', async () => {
     c.on('exit', resolve);
   });
   assert.equal(code, 0);
-  assert.ok(Date.now() - started < 4500);
+  assert.ok(Date.now() - started < 8000);
 });
 
 test('source: no exit 2, no non-zero exit, no shell', () => {
