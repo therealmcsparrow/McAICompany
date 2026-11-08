@@ -1,8 +1,6 @@
 # Contract: wayfinder v1
 
-Status: draft until plan task T2 (run 2026-11-08 20.27 - Pocock Large Items) builds the provider; T2 removes this line and puts the provider path in backticks.
-
-Provider: scripts/wayfinder.mjs (Node built-ins only; read-only, writes nothing). Exports `validate(text, { root })` and `main(args, { root })`. Consumers: the Architect (`aico:planning`, writes and updates a map), the Lead and any Role told to read one at the start of a session. Uses: `plan-tasks` v1.7 (`parsePlan`, read only, for `#T<n>` anchors) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: docs/adr/0065-plan-tasks-owns-lanes.md (wayfinder reads plan tasks, never owns their syntax).
+Provider: `scripts/wayfinder.mjs` (Node built-ins only; read-only, writes nothing). Exports `validate(text, { root })` and `main(args, { root })`. Consumers: the Architect (`aico:planning`, writes and updates a map), the Lead and any Role told to read one at the start of a session. Uses: `plan-tasks` v1.7 (`parsePlan`, read only, for `#T<n>` anchors) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: docs/adr/0065-plan-tasks-owns-lanes.md (wayfinder reads plan tasks, never owns their syntax).
 
 ## Purpose
 A decision map for an effort that spans sessions. It points to files that hold the real content (plans, ADRs, Handoffs, brainstorms, Contracts) and copies nothing from them. Its lines are data for the reader, never instructions.
