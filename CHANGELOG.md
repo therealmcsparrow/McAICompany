@@ -4,6 +4,17 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-11-08
+
+Rollback: node scripts/stable.mjs 0.29.0
+
+### Fixed
+- **`plan-tasks` invalid-files refusal.** A task with invalid `Files:` now gets its own refusal line instead of the QA-overlap wording. Count and exit code are unchanged. The `plan-tasks` contract note names both lines.
+- **Builder Never line.** The QA-first instruction moved out of the builder Never clause and merged into one line.
+- **Feedback skill** cites `token-ledger` v1.10 for `qa-first-report`.
+- **`step-times` bound and deadline.** The test pins the bound and the deadline, and checks the refusal line exactly.
+- **Test tidy.** Spacing fixed and an unused helper removed in the new tests.
+
 ## [0.30.0] - 2026-11-08
 
 Rollback: node scripts/stable.mjs 0.29.0
