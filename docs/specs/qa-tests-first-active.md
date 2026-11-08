@@ -1,7 +1,7 @@
 ---
 slug: qa-tests-first-active
-version: pending
-shipped: pending
+version: 0.30.0
+shipped: 2026-11-08
 ---
 ## Problem
 In a feature run the builder writes the code and also writes the tests that prove it, so nobody independent decides what "done" means before the build starts. QA and the Code Reviewer only look after the fact, and mistakes surface as Fix rounds: a median of 2 per feature run over the last 30 measured runs. The user served is the CEO running an aico company, who wants a separate test author for every planned task. QA-first existed only as an opt-in idea since 2026-11-05 and no run used it, so there was no data either way.
