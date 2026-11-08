@@ -26,11 +26,14 @@ export const ALLOW = [
   'scripts/wayfinder.mjs#FILE_RE',
 ];
 
-const PLACEHOLDERS = ['<slug>', '<name>', '<run>', '<task>', '<build>', '<parent>'];
+const PLACEHOLDERS = ['<slug>', '<name>', '<run>', '<task>', '<build>', '<parent>', '<ProjectID>'];
 const SCRIPT_NAMES = readdirSync(join(ROOT, 'scripts'))
   .filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'))
   .flatMap((f) => [f, f.slice(0, -4)]);
 const FIRST_WORDS = new Set(['node', 'git', 'bash', ...SCRIPT_NAMES]);
+
+// The project ID source: the 6 to 9 digit counter class, or a P followed by the date digits.
+const PROJECT_SOURCE = /(?:\\d|\[0-9\])\{6,9\}|P\(?(?:\\d|\[0-9\])\{(?:4|8)\}/;
 
 const snip = (s) => s.trim().slice(0, SNIP);
 
@@ -47,6 +50,16 @@ export function oneHomeHits(rel, text) {
     if (!LEGACY_SOURCE.test(line)) return;
     if (exempt.some((c) => declares(line, c))) return;
     hits.push(`${rel}:${i + 1} — ${snip(line)}`);
+  });
+  return hits;
+}
+
+// One hit per line holding the project ID source, outside the home file.
+export function projectIdHits(rel, text) {
+  if (rel === HOME_FILE) return [];
+  const hits = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (PROJECT_SOURCE.test(line)) hits.push(`${rel}:${i + 1} — ${snip(line)}`);
   });
   return hits;
 }
@@ -99,7 +112,7 @@ export function badTopic(span) {
   if (!isShell(span)) return false;
   if (!/(?:^|[\s'"/])work-folder(?:\.mjs)?['"]?\s+new(?:\s|$)/.test(span)) return false;
   const m = span.match(/--topic\s+(?:'([^']*)'|"([^"]*)"|(\S+))/);
-  if (!m) return /--playbook/.test(span);
+  if (!m) return /--playbook/.test(span) && !/--project(?:\s|$)/.test(span);
   const value = m[1] ?? m[2] ?? m[3];
   return value !== 'file' && value !== 'none';
 }
@@ -158,6 +171,17 @@ export function scanOneHome(root) {
     const text = readCapped(root, rel);
     if (text === null) hits.push(`${rel} — over 1 MiB, not scanned`);
     else hits.push(...oneHomeHits(rel, text));
+  }
+  return hits;
+}
+
+export function scanProjectId(root) {
+  const hits = [];
+  const files = [...walk(root, join(root, 'scripts'), oneHomeFile), ...walk(root, join(root, 'mods'), oneHomeFile)];
+  for (const rel of files) {
+    const text = readCapped(root, rel);
+    if (text === null) hits.push(`${rel} — over 1 MiB, not scanned`);
+    else hits.push(...projectIdHits(rel, text));
   }
   return hits;
 }
@@ -327,6 +351,60 @@ test('topic: a prose mention and other commands are not a call', () => {
   assert.equal(badTopic('work-folder clear --playbook x'), false);
   assert.equal(badTopic('node x.mjs other --topic Foo'), false);
   assert.equal(badTopic('not-work-folder new --playbook x --topic Foo'), false);
+});
+
+// Project ID one-home.
+
+test('project one-home: the counter class in a new script is one hit', () => {
+  const sources = [
+    'const R = /^P(\\d{4})(\\d{2})(\\d{2})\\.(\\d{6,9})$/;',
+    'const R = /^P\\d{8}\\.\\d{6,9}$/;',
+    'const R = /^P[0-9]{8}\\.[0-9]{6,9}$/;',
+    "fail('n is \\d{6,9}');",
+  ];
+  for (const src of sources) {
+    const hits = projectIdHits('scripts/x.mjs', `a\n${src}\n`);
+    assert.equal(hits.length, 1, src);
+    assert.match(hits[0], /^scripts\/x\.mjs:2 /);
+  }
+});
+
+test('project one-home: the home file is skipped, other digit patterns are not hits', () => {
+  assert.deepEqual(projectIdHits(HOME_FILE, 'const R = /^P\\d{8}\\.\\d{6,9}$/;'), []);
+  assert.deepEqual(projectIdHits('scripts/x.mjs', 'const R = /^(?:cooler|brainstorm)-\\d{8}-\\d{4}$/;'), []);
+  assert.deepEqual(projectIdHits('scripts/x.mjs', 'const R = /^t\\d{1,3}-\\d{8}T\\d{6}Z$/;'), []);
+});
+
+test('project one-home: CRLF text and a very long line', () => {
+  const hits = projectIdHits('mods/lib/x.mjs', 'a\r\nconst R = /\\d{6,9}/;\r\n');
+  assert.equal(hits.length, 1);
+  assert.match(hits[0], /:2 /);
+  const start = Date.now();
+  const long = projectIdHits('scripts/x.mjs', `${'P'.repeat(200000)} \\d{6,9} ${'('.repeat(50000)}`);
+  assert.ok(Date.now() - start < 2000);
+  assert.equal(long.length, 1);
+  assert.ok(long[0].length < 200);
+});
+
+test('project one-home: the home file holds the project ID source', () => {
+  assert.match(readFileSync(join(ROOT, HOME_FILE), 'utf8'), PROJECT_SOURCE);
+});
+
+test('project one-home: no project ID pattern outside mods/lib/work-folder.mjs', () => {
+  assert.deepEqual(scanProjectId(ROOT), []);
+});
+
+test('placeholders: an unquoted <ProjectID> on a shell line is a hit, a quoted one passes', () => {
+  assert.deepEqual(unquotedPlaceholders('work-folder new --playbook idea --project <ProjectID>'), ['<ProjectID>']);
+  assert.deepEqual(unquotedPlaceholders("work-folder new --playbook 'idea' --project '<ProjectID>'"), []);
+});
+
+test('topic: a work-folder new with --project needs no --topic', () => {
+  const run = 'node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" work-folder new --playbook';
+  assert.equal(badTopic(`${run} 'fix' --project 'P20261108.000001'`), false);
+  assert.equal(badTopic(`${run} 'fix' --project 'P20261108.000001' --topic 'Login Bug'`), true);
+  assert.equal(badTopic(`${run} 'fix' --projectx 'P20261108.000001'`), true);
+  assert.equal(badTopic(`${run} 'fix'`), true);
 });
 
 // Contract file structure.
