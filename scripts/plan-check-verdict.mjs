@@ -9,7 +9,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, read
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateRecord } from './ledger.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, projectIdOf } from '../mods/lib/work-folder.mjs';
 import { loadPatterns, readRecord, scanText } from './plan-check.mjs';
 import { show } from './run-state.mjs';
 
@@ -218,6 +218,7 @@ function collectRuns(root, warnings) {
   const counted = [];
   for (const r of ordered) {
     const ship = lastShip(root, r.slug);
+    if (ship === null && projectIdOf(r.slug) !== null) continue;
     if (ship !== null && ship.path === 'short') continue;
     const rec = readRecord(root, r.slug);
     if (rec.state === 'error') { warnings.push(`${r.slug}: plan-check record in error state`); continue; }

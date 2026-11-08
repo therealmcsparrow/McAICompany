@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { MAX_LINE_CHARS, readPlanLines } from './plan-markdown.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isTicketHeading, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -30,6 +30,11 @@ const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const HASH = /^[0-9a-f]{12}$/;
 const WAVE_COUNT = /^(0|[1-9]\d{0,4})$/;
 const SECTION_TITLE = /^(?:steps|tasks|wave|phase|fix round|[tm]\d)/i;
+const MAX_TITLE_CHARS = 200;
+const opensSection = (title) => {
+  const text = title.trim().slice(0, MAX_TITLE_CHARS);
+  return SECTION_TITLE.test(text) || isTicketHeading(text);
+};
 const DECIDED = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided: (\S.*?) because (\S.*)$/;
 const CONTROLS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 const KEY_ECHO = /^[a-z_]{1,20}$/;
@@ -184,7 +189,7 @@ export function scanText(text, patterns, { file = '' } = {}) {
     if (kind === 'heading') {
       if (sectionLevel && level <= sectionLevel) sectionLevel = 0;
       if (!sectionLevel) {
-        if ((level === 2 || level === 3) && SECTION_TITLE.test(title.trim())) sectionLevel = level;
+        if ((level === 2 || level === 3) && opensSection(title)) sectionLevel = level;
         continue;
       }
     }

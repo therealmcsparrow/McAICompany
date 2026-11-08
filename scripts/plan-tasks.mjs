@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { readPlanLines } from './plan-markdown.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isTicketHeading, isWorkFolder, projectIdOf, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -29,13 +29,11 @@ const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 // The fix input copy is a plan name too: exact, case-sensitive.
 const isPlanName = (name) => PLAN_NAME.test(name) || name === 'input-fix.md';
 const ROLE = /^[a-z][a-z0-9-]{1,40}$/;
-const TASK_HEAD = /^(T\d{1,3}[a-z]?)(?=$|[\s:.)-])/;
-const DEP_ID = /^T\d{1,3}[a-z]?$/;
-const TASK_REC = /^(?:T\d{1,3}[a-z]?(?:-dup\d{1,3})?|U1)$/;
+const MAX_HEAD_CHARS = 200;
+const LOCAL_SHAPE = /^T\d{1,3}[a-z]?$/;
 const FIELD = /^\s{0,3}[-*]\s+(role|files|depends-on|parallel|context|slice|seams):[ \t]*(.*)$/;
 const DECIDED_LINE = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?Decided:/;
 const CONTRACTS_TITLE = /\bcontracts?\b/i;
-const ANY_TASK_TOKEN = /(?:^|[^A-Za-z0-9])T\d{1,3}[a-z]?(?![0-9a-z])/;
 const DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 const PATH_SHAPE = /^[A-Za-z0-9._@+-]+(\/[A-Za-z0-9._@+-]+)*\/?$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -169,11 +167,55 @@ function tasksOverlap(a, b) {
 
 // ---------------------------------------------------------------- plan parsing
 
+// Ticket rules of one plan: a v2 folder opens only its own project's IDs, any other folder (or none) both forms.
+// The slug is a folder name read from disk, never plan text.
+function ticketRules(slug) {
+  const own = typeof slug === 'string' && projectIdOf(slug) !== null ? ticketPattern(slug) : null;
+  if (own) {
+    return {
+      isId: (token) => typeof token === 'string' && own.id.test(token),
+      headId: (title) => own.head.exec(title.trim().slice(0, MAX_HEAD_CHARS))?.[1] ?? null
+    };
+  }
+  return {
+    isId: (token) => ticketLocal(token) !== null,
+    headId: (title) => {
+      const text = title.trim().slice(0, MAX_HEAD_CHARS);
+      if (!isTicketHeading(text)) return null;
+      for (let end = Math.min(text.length, 40); end > 0; end--) {
+        const candidate = text.slice(0, end);
+        if (ticketLocal(candidate) !== null) return candidate;
+      }
+      return null;
+    }
+  };
+}
+
+// Tests a record's task id: a plan ID of this folder, with -dup<n>, or U1.
+function taskRecTest(slug) {
+  const rules = ticketRules(slug);
+  const dupTail = /-dup\d{1,3}$/;
+  return (id) => {
+    if (typeof id !== 'string' || id.length > 80) return false;
+    return id === 'U1' || rules.isId(id) || (dupTail.test(id) && rules.isId(id.replace(dupTail, '')));
+  };
+}
+
+// Whether a heading mentions any ticket ID, bare or full, as a word.
+function mentionsTicket(title) {
+  for (const token of title.slice(0, 400).split(/[^A-Za-z0-9.-]+/)) {
+    for (const part of [token, ...token.split('-')]) {
+      if (ticketLocal(part.replace(/[.-]+$/, '')) !== null) return true;
+    }
+  }
+  return false;
+}
+
 function stripTicks(text) {
   return text.length >= 2 && text.startsWith('`') && text.endsWith('`') ? text.slice(1, -1) : text;
 }
 
-function readBlocks(text) {
+function readBlocks(text, rules) {
   const blocks = [];
   let current = null;
   let tooMany = false;
@@ -181,13 +223,13 @@ function readBlocks(text) {
     if (kind === 'heading') {
       if (current && level <= current.level) current = null;
       if (level >= 2 && level <= 4) {
-        const head = TASK_HEAD.exec(title.trim());
-        if (head) {
+        const headId = rules.headId(title);
+        if (headId !== null) {
           if (blocks.length >= MAX_TASKS) {
             tooMany = true;
             current = null;
           } else {
-            current = { id: head[1], level, fields: new Map(), repeated: [] };
+            current = { id: headId, level, fields: new Map(), repeated: [] };
             blocks.push(current);
           }
         }
@@ -226,14 +268,14 @@ function parseFiles(value) {
   return { reasons, items, keys, valid: reasons.length === 0 };
 }
 
-function parseDeps(value, known) {
+function parseDeps(value, known, rules) {
   const deps = [];
   const unknown = [];
   if (value === undefined) return { deps, unknown: ['?'] };
   const tokens = value.split(',').map((s) => stripTicks(s.trim()));
   if (tokens.length === 1 && tokens[0] === 'none') return { deps, unknown };
   for (const token of tokens) {
-    if (!DEP_ID.test(token)) {
+    if (!rules.isId(token)) {
       if (!unknown.includes('?')) unknown.push('?');
     } else if (!known.has(token)) {
       if (!unknown.includes(token)) unknown.push(token);
@@ -289,9 +331,10 @@ function cycleMembers(ids, edges) {
   return members;
 }
 
-export function parsePlan(text, { agents } = {}) {
+export function parsePlan(text, { agents, slug } = {}) {
+  const rules = ticketRules(slug);
   const roles = agents instanceof Set ? agents : new Set(Array.isArray(agents) ? agents : []);
-  const { blocks, tooMany } = readBlocks(text);
+  const { blocks, tooMany } = readBlocks(text, rules);
   const firstSeen = new Map();
   const dupCount = new Map();
   const named = blocks.map((block) => {
@@ -307,7 +350,7 @@ export function parsePlan(text, { agents } = {}) {
   const known = new Set(ids);
   const parsed = named.map((block) => {
     const files = parseFiles(block.fields.get('files'));
-    const deps = parseDeps(block.fields.get('depends-on'), known);
+    const deps = parseDeps(block.fields.get('depends-on'), known, rules);
     const roleValue = block.fields.get('role');
     const role = roleValue !== undefined && ROLE.test(roleValue) && roles.has(roleValue) ? roleValue : null;
     return { block, files, deps, role, roleValue };
@@ -629,8 +672,9 @@ const EVENTS = {
   merged: ['round', 'tasks']
 };
 
-function newState() {
+function newState(slug) {
   return {
+    isRec: taskRecTest(slug),
     begun: false, qa: false, qaOut: new Map(), plan: null, hash: null, cap: null, mode: null, round: 0, running: [], done: new Map(),
     peak: 0, waits: new Set(), out: 0, sibling: 0, extras: new Map(), sets: null, wave: [], merged: new Map()
   };
@@ -647,13 +691,13 @@ function keyProblem(list, label, { allowUnknown = false } = {}) {
   return null;
 }
 
-function owProblem(ow) {
+function owProblem(ow, st) {
   if (!Array.isArray(ow) || ow.length > MAX_TASKS + 1) return 'ow must be a list of task ids';
-  return ow.every((id) => typeof id === 'string' && TASK_REC.test(id)) ? null : 'ow holds a bad task id';
+  return ow.every((id) => st.isRec(id)) ? null : 'ow holds a bad task id';
 }
 
 function taskProblem(rec, st, { mustRun }) {
-  if (typeof rec.task !== 'string' || !TASK_REC.test(rec.task)) return 'task is not a task id';
+  if (typeof rec.task !== 'string' || !st.isRec(rec.task)) return 'task is not a task id';
   if (rec.task === 'U1' && st.round === 0) return 'U1 outside a round';
   if (!isInt(rec.round, 0, MAX_ROUND) || rec.round !== st.round) return 'round does not match';
   if (mustRun && !st.running.includes(rec.task)) return 'task is not running';
@@ -684,7 +728,7 @@ function applyEvent(st, rec) {
       if (!isInt(rec.cap, 3, 5)) return 'cap must be an integer 3 to 5';
       if (!MODES.includes(rec.mode)) return 'mode is not allowed';
       if (!isInt(rec.tasks, 0, MAX_TASKS)) return 'tasks must be an integer 0 to 100';
-      if ((problem = owProblem(rec.ow))) return problem;
+      if ((problem = owProblem(rec.ow, st))) return problem;
       if (Object.hasOwn(rec, 'qa') && rec.qa !== true) return 'qa must be true';
       if (st.running.length) return 'begin while a task runs';
       // A begin opens a new segment at round 0, so tasks left pending when a Fix round started are offered again.
@@ -693,7 +737,7 @@ function applyEvent(st, rec) {
     }
     case 'start': {
       if ((problem = taskProblem(rec, st, { mustRun: false }))) return problem;
-      if ((problem = owProblem(rec.ow))) return problem;
+      if ((problem = owProblem(rec.ow, st))) return problem;
       if (st.running.includes(rec.task)) return 'task already running';
       if (st.done.get(st.round)?.includes(rec.task)) return 'task already done in this round';
       if (st.round > 0 && !st.sets?.has(rec.task)) return 'task is not in the round';
@@ -704,7 +748,7 @@ function applyEvent(st, rec) {
     }
     case 'done': {
       if ((problem = taskProblem(rec, st, { mustRun: true }))) return problem;
-      if ((problem = owProblem(rec.ow))) return problem;
+      if ((problem = owProblem(rec.ow, st))) return problem;
       st.running = st.running.filter((id) => id !== rec.task);
       if (!st.done.has(st.round)) st.done.set(st.round, []);
       st.done.get(st.round).push(rec.task);
@@ -727,11 +771,11 @@ function applyEvent(st, rec) {
       if (!isPlainObject(rec.sets)) return 'sets must be an object';
       const sets = new Map();
       for (const key of Object.keys(rec.sets)) {
-        if (!TASK_REC.test(key)) return 'sets holds a bad task id';
+        if (!st.isRec(key)) return 'sets holds a bad task id';
         if ((problem = keyProblem(rec.sets[key], 'sets'))) return problem;
         sets.set(key, rec.sets[key]);
       }
-      if ((problem = owProblem(rec.ow))) return problem;
+      if ((problem = owProblem(rec.ow, st))) return problem;
       if (st.running.length) return 'round while a task runs';
       if (rec.round !== st.round + 1) return 'round must follow the last round';
       if (st.mode === 'waves' && st.wave.length) return 'round while a wave is open';
@@ -747,7 +791,7 @@ function applyEvent(st, rec) {
       if (st.mode !== 'waves') return 'merged outside waves mode';
       if (!isInt(rec.round, 0, MAX_ROUND) || rec.round !== st.round) return 'round does not match';
       if (!Array.isArray(rec.tasks) || rec.tasks.length < 1 || rec.tasks.length > MAX_TASKS) return 'tasks must be a list of 1 to 100 task ids';
-      if (!rec.tasks.every((id) => typeof id === 'string' && TASK_REC.test(id))) return 'tasks holds a bad task id';
+      if (!rec.tasks.every((id) => st.isRec(id))) return 'tasks holds a bad task id';
       if (st.running.length) return 'merged while a task runs';
       const ids = new Set(rec.tasks);
       if (ids.size !== rec.tasks.length || ids.size !== st.wave.length || !st.wave.every((id) => ids.has(id))) return 'tasks do not equal the open wave';
@@ -772,7 +816,7 @@ function parseRecordText(slug, text) {
   if (endsWithLf) lines.pop();
   if (lines.length > MAX_RECORD_LINES) throw fail(0, 'file over 5000 lines');
   if (!endsWithLf) throw fail(lines.length, 'no line feed at the end');
-  const st = newState();
+  const st = newState(slug);
   lines.forEach((line, index) => {
     const n = index + 1;
     if (line === '') throw fail(n, 'blank line');
@@ -851,7 +895,7 @@ export function sortByVisit(root, slug, ids) {
   try {
     const plan = readPlan(root, slug, state.plan);
     if (plan.hash !== state.hash) return null;
-    const rank = new Map(parsePlan(plan.text).tasks.map((t, i) => [t.id, i]));
+    const rank = new Map(parsePlan(plan.text, { slug }).tasks.map((t, i) => [t.id, i]));
     if (!ids.every((id) => rank.has(id))) return null;
     return [...ids].sort((x, y) => rank.get(x) - rank.get(y));
   } catch (error) {
@@ -925,7 +969,7 @@ function needState(env, slug) {
 function needPlan(env, slug, st, { strict }) {
   const plan = readPlan(env.root, slug, st.plan);
   if (strict && plan.hash !== st.hash) throw new Refusal('plan changed since begin');
-  const parsed = parsePlan(plan.text, { agents: env.agents() });
+  const parsed = parsePlan(plan.text, { agents: env.agents(), slug });
   if (parsed.tooMany) throw new PlanProblem('plan-too-large');
   return parsed;
 }
@@ -993,8 +1037,8 @@ function checkSlug(slug, root, file) {
   return slug;
 }
 
-function checkId(id) {
-  if (typeof id !== 'string' || !TASK_REC.test(id)) throw new Refusal('bad task id');
+function checkId(id, slug) {
+  if (!taskRecTest(slug)(id)) throw new Refusal('bad task id');
   return id;
 }
 
@@ -1021,9 +1065,50 @@ function checkPaths(list) {
 function planFor(env, slug, name) {
   if (typeof name !== 'string' || !isPlanName(name)) throw new PlanProblem('plan-name');
   const plan = readPlan(env.root, slug, name);
-  const parsed = parsePlan(plan.text, { agents: env.agents() });
+  const parsed = parsePlan(plan.text, { agents: env.agents(), slug });
   if (parsed.tooMany) throw new PlanProblem('plan-too-large');
+  refuseReusedTickets(env.root, slug, parsed);
   return { plan, parsed };
+}
+
+const MAX_SIBLING_FOLDERS = 200;
+const MAX_SIBLING_PLANS = 20;
+
+// In a v2 folder, a ticket ID that already heads a plan in another folder of the same project is refused.
+function refuseReusedTickets(root, slug, parsed) {
+  const project = projectIdOf(slug);
+  if (project === null) return;
+  const own = new Set(parsed.tasks.map((t) => t.id.replace(/-dup\d{1,3}$/, '')));
+  let folders;
+  try {
+    folders = fs.readdirSync(path.join(root, '.company', 'work')).slice(0, MAX_SIBLING_FOLDERS);
+  } catch {
+    return;
+  }
+  for (const other of folders) {
+    if (other === slug || projectIdOf(other) !== project) continue;
+    const dir = runDir(root, other);
+    if (dir === null || dir === 'unsafe') continue;
+    let names;
+    try {
+      names = fs.readdirSync(dir).filter(isPlanName).slice(0, MAX_SIBLING_PLANS);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      let text;
+      try {
+        text = readPlan(root, other, name).text;
+      } catch (error) {
+        if (error instanceof PlanProblem) continue;
+        throw error;
+      }
+      for (const task of parsePlan(text, { slug: other }).tasks) {
+        const id = task.id.replace(/-dup\d{1,3}$/, '');
+        if (own.has(id)) throw new Refusal(`ticket-reused: ${id} already heads a plan in ${other}`);
+      }
+    }
+  }
 }
 
 function cmdCheck(args, env) {
@@ -1080,7 +1165,7 @@ function cmdBegin(args, env) {
     const { errors } = qaFirstReport(parsed.tasks);
     if (errors > 0) throw new Refusal(`${errors} qa-first errors`);
   }
-  const st = loadRecord(env.root, slug).state ?? newState();
+  const st = loadRecord(env.root, slug).state ?? newState(slug);
   if (st.running.length) throw new Refusal('a task is running');
   const ow = overlapWaits(parsed.tasks, st.done.get(0) ?? [], [], mode === 'sequential' ? 1 : cap);
   const rec = {
@@ -1147,7 +1232,8 @@ function cmdNext(args, env) {
 
 function twoArgs(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
-  return [checkSlug(args[0], env.root), checkId(args[1])];
+  const slug = checkSlug(args[0], env.root);
+  return [slug, checkId(args[1], slug)];
 }
 
 function cmdStart(args, env) {
@@ -1189,14 +1275,15 @@ function cmdLines(args, env) {
 
 // The builder's slice of the plan: its own task block, the plan's Contracts section, every Decided line outside
 // the task blocks, and every other section whose heading names the task. Plan text goes to the file only, never to stdout.
-export function taskBrief(text, id, planName) {
+export function taskBrief(text, id, planName, slug) {
+  const rules = ticketRules(slug);
   const read = readPlanLines(text);
   const lines = read.lines;
   const own = [];
   const contracts = [];
   const decided = [];
   const named = [];
-  const idToken = new RegExp(`(^|[^A-Za-z0-9])${id}(?![0-9a-z])`);
+  const idToken = new RegExp(`(^|[^A-Za-z0-9])${id.replaceAll('.', '\\.')}(?![0-9a-z])`);
   let section = null;
   let inTask = false;
   if (read.openFence) return null;
@@ -1204,14 +1291,14 @@ export function taskBrief(text, id, planName) {
     if (entry.kind === 'heading') {
       if (section && entry.level <= section.level) section = null;
       if (!section && entry.level >= 2 && entry.level <= 4) {
-        const head = TASK_HEAD.exec(entry.title.trim());
-        if (head) {
+        const headId = rules.headId(entry.title);
+        if (headId !== null) {
           inTask = true;
-          section = { level: entry.level, into: head[1] === id ? own : null };
+          section = { level: entry.level, into: headId === id ? own : null };
         } else {
           inTask = false;
           if (idToken.test(entry.title)) section = { level: entry.level, into: named };
-          else if (ANY_TASK_TOKEN.test(entry.title)) section = { level: entry.level, into: null };
+          else if (mentionsTicket(entry.title)) section = { level: entry.level, into: null };
           else if (entry.level <= 3 && CONTRACTS_TITLE.test(entry.title)) section = { level: entry.level, into: contracts };
         }
       } else if (!section && entry.level < 2) {
@@ -1246,11 +1333,12 @@ function cmdBrief(args, env) {
   const st = needState(env, slug);
   const plan = readPlan(env.root, slug, st.plan);
   if (plan.hash !== st.hash) throw new Refusal('plan changed since begin');
-  const parsed = parsePlan(plan.text, { agents: env.agents() });
+  const parsed = parsePlan(plan.text, { agents: env.agents(), slug });
   if (parsed.tooMany) throw new PlanProblem('plan-too-large');
   if (!roundTasks(parsed.tasks, st).some((t) => t.id === id)) throw new Refusal('task is not in this round');
-  if (!DEP_ID.test(id)) throw new Refusal('task has no plan block');
-  const brief = taskBrief(plan.text, id, st.plan);
+  const local = ticketLocal(id);
+  if (!ticketRules(slug).isId(id) || local === null || !LOCAL_SHAPE.test(local)) throw new Refusal('task has no plan block');
+  const brief = taskBrief(plan.text, id, st.plan, slug);
   if (brief === null) throw new Refusal('task has no plan block or the plan has an unclosed fence');
   const dir = runDir(env.root, slug);
   if (dir === null || dir === 'unsafe') throw new Refusal('run folder missing');
@@ -1263,7 +1351,7 @@ function cmdBrief(args, env) {
     }
   }
   if (!lstatOrNull(tasksDir)?.isDirectory()) throw new Refusal('tasks folder is not a folder');
-  const file = path.join(tasksDir, `${id}.md`);
+  const file = path.join(tasksDir, `${local}.md`);
   const fst = lstatOrNull(file);
   if (fst && !isPlain(fst)) throw new Refusal('task brief is not a plain file');
   const nofollow = fs.constants.O_NOFOLLOW ?? 0;
@@ -1280,7 +1368,7 @@ function cmdBrief(args, env) {
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
-  return { code: 0, lines: [`Task brief: .company/work/${slug}/tasks/${id}.md`] };
+  return { code: 0, lines: [`Task brief: .company/work/${slug}/tasks/${local}.md`] };
 }
 
 function cmdMerged(args, env) {
@@ -1288,7 +1376,7 @@ function cmdMerged(args, env) {
   const slug = checkSlug(args[0], env.root);
   const ids = args[1].split(',');
   if (ids.length > MAX_TASKS) throw new Refusal('more than 100 tasks');
-  ids.forEach(checkId);
+  ids.forEach((id) => checkId(id, slug));
   const st = needState(env, slug);
   if (st.mode !== 'waves') throw new Refusal('not a waves run');
   if (st.wave.length === 0) throw new Refusal('no open wave');
