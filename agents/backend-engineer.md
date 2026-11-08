@@ -25,5 +25,6 @@ effort: medium
 - The plan conflicts with the brief.
 
 **Never:** edit another Module's internals, add to Core, or skip/delete tests.
+**Never:** edit a QA-owned test file (plan-tasks v1.7); in a QA-first run make the QA tests pass instead.
 
 **Output:** code plus tests plus one Handoff per `aico:handoff`.

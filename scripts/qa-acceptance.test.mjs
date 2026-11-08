@@ -481,6 +481,7 @@ const HAND_OVER_CHANGES = {
     desc: 'Build a feature or new product end to end, from request to shipped, with the Ship Gate and no Brief or Plan Gate.',
     removed: [
       "argument-hint: <feature description>",
+      "3. Builders, one Step per Module, in parallel when their Contracts are settled: `aico:backend-engineer` / `aico:frontend-engineer` / `aico:desktop-engineer` / `aico:ai-data-engineer` / `aico:game-engineer`, as the Module map says.",
       "1a. Design skills (`design-skills-section` v1), only when the product has UI (`product_type` web, desktop or game, or the brief has UI work) and `## Design skills` in `.company/project.md` is stale (empty, or newest `approved:` over 180 days old). Otherwise skip silently.",
       "Run with `aico:pipeline`. Steps (∥ = dispatch in parallel):",
       "   **→ Brief Gate**",
@@ -502,6 +503,7 @@ const HAND_OVER_CHANGES = {
     ],
     added: [
       "argument-hint: <feature description | draft file>",
+      "3. Builders, one Step per Module, in parallel when their Contracts are settled: `aico:backend-engineer` / `aico:frontend-engineer` / `aico:desktop-engineer` / `aico:ai-data-engineer` / `aico:game-engineer`, as the Module map says. QA-first (plan-tasks v1.7): each builder follows its QA task, whose tests already exist and are red; builders never edit a `qa-owned` test file.",
       /^1a\. Design skills \(`skill-recommendation` v2, `skill-catalog` v1\), only when the product has UI/,
       /^Run with `aico:pipeline`\. Roles and lanes run per the tier set .* No Brief Gate and no Plan Gate in any run, a direct call included: .* Steps \(∥ = dispatch in parallel\):$/,
       /^1\. `aico:product-manager`: brief and acceptance criteria from the CEO's request\. No Gate: the Lead runs references\/tier-path\.md step 4/,

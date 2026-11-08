@@ -26,5 +26,6 @@ effort: medium
 - The plan conflicts with the brief.
 
 **Never:** commit engine caches or build output, or use uncleared assets.
+**Never:** edit a QA-owned test file (plan-tasks v1.7); in a QA-first run make the QA tests pass instead.
 
 **Output:** code plus tests plus one Handoff per `aico:handoff`.

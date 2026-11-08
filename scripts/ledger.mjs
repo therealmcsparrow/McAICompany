@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.9). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.10). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -61,9 +61,9 @@ const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
   'v', 'run', 'kind', 'id', 'role', 'agent', 'src', 'ctx_end', 'tokens', 'reqs', 'tool_uses', 'ms', 'model',
-  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico', 'floor', 'cap', 'peak', 'waits', 'out', 'pb', 'sets', 'path', 'raised'
+  'dispatches', 'acs', 'fix_rounds', 'high_blockers', 't0', 't1', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'aico', 'floor', 'cap', 'peak', 'waits', 'out', 'pb', 'sets', 'path', 'raised', 'qa'
 ]);
-const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'path', 'raised'];
+const SHIP_ONLY = ['acs', 'fix_rounds', 'high_blockers', 'tier', 't_start', 't_ship', 'wait', 'rej_brief', 'rej_plan', 'rej_ship', 'path', 'raised', 'qa'];
 const SHIP_KEYS = new Set(['v', 'run', 'kind', ...SHIP_ONLY]);
 const REJECT_KEYS = ['rej_brief', 'rej_plan', 'rej_ship'];
 const BASELINE_FIELDS = ['first', 'dispatches', 'requests', 'in', 'cache_write', 'cache_read', 'out', 'notif_total', 'roles'];
@@ -81,7 +81,8 @@ const USAGE = [
   '  brainstorm-report <run> [--against <run>]',
   '  model-verdict [--runs <3-50>]',
   '  parallel-verdict [--runs <3-50>]',
-  '  low-path-verdict [--runs <3-50>]'
+  '  low-path-verdict [--runs <3-50>]',
+  '  qa-first-report'
 ].join('\n');
 
 class Refusal extends Error {}
@@ -169,6 +170,7 @@ export function validateRecord(input) {
     }
     if (Object.hasOwn(rec, 'path') && !PATHS.includes(rec.path)) return fail('path must be full or short');
     if (Object.hasOwn(rec, 'raised') && rec.raised !== 0 && rec.raised !== 1) return fail('raised must be 0 or 1');
+    if (Object.hasOwn(rec, 'qa') && rec.qa !== 0 && rec.qa !== 1) return fail('qa must be 0 or 1');
     if (Object.hasOwn(rec, 't_start') !== Object.hasOwn(rec, 't_ship')) return fail('t_start and t_ship come together');
     let span;
     if (Object.hasOwn(rec, 't_start')) {
@@ -583,25 +585,27 @@ function writeMeta(run, extra = {}) {
   }
 }
 
-// Appends the par line (four integers) from the run's parallel record. Returns the warnings it adds: 1 when the record
-// cannot be read or the line cannot be written, else 0 (no record: no line).
+// Appends the par line (four integers) from the run's parallel record. Returns { warnings, qa }: warnings is 1 when the
+// record cannot be read or the line cannot be written, else 0 (no record: no line); qa is 1 or 0 for a record that is on
+// (1 when it began QA-first), else undefined.
 function writePar(run) {
   let view;
   try {
     view = readParallel(env.root, run);
   } catch {
-    return 1;
+    return { warnings: 1, qa: undefined };
   }
-  if (!isObject(view) || view.state !== 'on') return 0;
+  if (!isObject(view) || view.state !== 'on') return { warnings: 0, qa: undefined };
+  const qa = view.qa_first === true ? 1 : 0;
   const rec = { v: 1, run, kind: 'par', cap: view.effective_cap, peak: view.peak, waits: view.waits, out: view.out };
-  if (!validateRecord(rec).ok) return 1;
+  if (!validateRecord(rec).ok) return { warnings: 1, qa };
   try {
     appendRecord(rec);
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
-    return 1;
+    return { warnings: 1, qa };
   }
-  return 0;
+  return { warnings: 0, qa };
 }
 
 // The tier-path keys of a run, from the tier record's reader view only: { meta, ship } with the allow-listed values, or
@@ -642,7 +646,9 @@ function cmdShip(args) {
   let extraWarnings = tiers.warnings;
   if (!excluded) {
     writeMeta(rec.run, tiers.meta);
-    extraWarnings += writePar(rec.run);
+    const par = writePar(rec.run);
+    extraWarnings += par.warnings;
+    if (par.qa !== undefined) timed.qa = par.qa;
   }
   appendRecord(validateRecord(timed).ok ? timed : rec);
   if (excluded) return ['ship recorded (excluded run)'];
@@ -1518,6 +1524,56 @@ function cmdBrainstormReport(args) {
   return out;
 }
 
+// ---------- qa-first-report ----------
+
+const RELEASE_RUN = /^(?:\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - )?release(?:$| |-)/i;
+
+// Exact median printed with at most one decimal, a trailing .0 dropped.
+function medianText(list) {
+  const sorted = [...list].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const twice = sorted.length % 2 === 1 ? sorted[mid] * 2 : sorted[mid - 1] + sorted[mid];
+  return String(twice / 2).replace(/\.0$/, '');
+}
+
+// The last ship record of every comparable ledger file: fix_rounds goes to before, or to after when the record has qa 1.
+function cmdQaFirstReport(args) {
+  if (args.length > 0) throw new Refusal('qa-first-report takes no arguments');
+  const counts = { warnings: 0 };
+  const files = comparisonFiles('', counts).sort((a, b) => b.mtime - a.mtime || (a.name < b.name ? -1 : 1));
+  const before = [];
+  const after = [];
+  let excluded = 0;
+  let bytes = 0;
+  for (const { name } of files) {
+    let size;
+    try {
+      size = fs.lstatSync(path.join(ledgerDir(), `${name}.jsonl`)).size;
+    } catch {
+      continue;
+    }
+    let ledger;
+    if (size > MAX_LEDGER_BYTES || bytes + size > MAX_VERDICT_BYTES) {
+      ledger = { records: [], warnings: ['unread'] };
+    } else {
+      bytes += size;
+      ledger = readSafe(name);
+    }
+    const ship = lastShipOf(ledger.records);
+    if (ship === undefined && ledger.warnings.length === 0) continue;
+    if (EXCLUDED_RUN.test(name) || RELEASE_RUN.test(name) || ledger.warnings.length > 0 || ship === undefined || !Object.hasOwn(ship, 'fix_rounds')) {
+      excluded += 1;
+      continue;
+    }
+    (get(ship, 'qa') === 1 ? after : before).push(ship.fix_rounds);
+  }
+  return [
+    `before: median ${before.length ? medianText(before) : '?'} (n=${before.length})`,
+    after.length < 3 ? `after: insufficient (n=${after.length})` : `after: median ${medianText(after)} (n=${after.length})`,
+    `excluded: ${excluded}`
+  ];
+}
+
 // ---------- CLI ----------
 
 // `now` (epoch ms), `root` (the product root), `pluginRoot` and `loadFloor` (the model floor reader) are for callers that
@@ -1535,7 +1591,7 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
     const handlers = {
       add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard, receipt: cmdReceipt,
       report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict,
-      'low-path-verdict': cmdLowPathVerdict, 'agent-ctx': cmdAgentCtx
+      'low-path-verdict': cmdLowPathVerdict, 'agent-ctx': cmdAgentCtx, 'qa-first-report': cmdQaFirstReport
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
     if (['report', 'brainstorm-report', 'scorecard', 'receipt'].includes(command) && rest.length === 0) throw new Refusal(USAGE);

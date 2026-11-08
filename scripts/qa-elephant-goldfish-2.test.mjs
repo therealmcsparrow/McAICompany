@@ -1061,7 +1061,7 @@ describe('AC32: the wave merges in plan order, the suite runs once, a conflict s
 
   test('the Lead runs the full suite once in the main tree after the merge, shows conflicts as [spec] findings and never merges by hand', () => {
     const w = read('skills', 'pipeline', 'references', 'worktrees.md');
-    assert.match(w, /Then run the full test suite once in the main tree, then `plan-tasks merged/);
+    assert.ok(w.includes("Then run the full test suite once in the main tree (QA-first, `plan-tasks` v1.7: first run `plan-tasks red '<slug>'`, and treat failures only in the test files it lists as expected), then `plan-tasks merged"));
     assert.match(w, /Reviewers see the merged run branch/);
     assert.match(w, /write one `\[spec\]` Blocking finding per conflicting path, for the Roles of both tasks/);
     assert.match(w, /The Lead never edits code and never drops a side/);

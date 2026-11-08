@@ -86,6 +86,7 @@ const ALLOW = [
   ['scripts/reprompt-check.mjs', 'const TRIAGE_RE =', 'prompt text pattern'],
   ['scripts/reprompt-check.mjs', '(nl < 0 ? entry : entry.slice(0, nl)).toLowerCase()', 'run-record entry key, not a path'],
   ['scripts/reprompt-check.mjs', '/^en(-|$)/i', 'language tag'],
+  ['scripts/ledger.mjs', 'const RELEASE_RUN =', 'qa-first-report: token-ledger v1.10 excludes release runs by name in any case; a filter on ledger file names, never grants access to a work path'],
   [LIB, 'isSuffixWord', 'folder name suffix words'],
   [LIB, 'part[0].toUpperCase()', 'builds a new folder name'],
   [LIB, '.slice(19).toLowerCase()', 'git ref part of a name'],

@@ -45,6 +45,9 @@ The Lead starts plan tasks with the script `plan-tasks.mjs` (Contract `plan-task
 
 **Rolling back.** When the verdict says `fail`, set `pipeline.parallel_cap` to 5 in `/aico:settings`; the verdict line names this step. If the runs already used a cap of 5, set `pipeline.dispatch` to `sequential` instead. Reviewer, QA and Security verdicts and the Gates do not change.
 
+### QA-first schedule
+With `--qa-first` (feature runs, `plan-tasks` v1.7) the visit order does not change: a build task waits for the QA task it depends on, like any dependency. Inside a Fix round, a build task that depends on a QA task of the same round still waits for it (`wait depends <qa id>`). A blocker path that is a test file goes to the QA task that owns it. In `--mode waves`, the read-only `red` command lists the test files that are expected to fail while later waves are pending; a Merge Step suite failure only in those files is expected, and any other failure is handled as before. A `qa-owned` path is never committed. See [Plans](plans.md).
+
 ### Worktrees
 Off by default. With `pipeline.worktrees` `on` (user level only), `pipeline.dispatch` parallel and a cap above 1, a wave of two or more parallel builder tasks gets one git worktree per task in a folder beside the repo, `<repo>.aico-wt`. The Lead merges the task branches in plan order, runs the full suite once in the main tree and then lets the next wave start. Reviewers see the merged result. A conflict stops the merge as a Blocking finding for the Roles of both tasks; the Lead never edits code and never drops a side. A wave of one task, `sequential` dispatch or the setting off uses the main tree as before.
 - **Allow the folder first.** Add `<parent>/<repo>.aico-wt` to `permissions.additionalDirectories` in your user settings. Without it a Step cannot read or edit there. If a Step is denied, the Lead stops the wave and tells you.
