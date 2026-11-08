@@ -1,6 +1,5 @@
-// QA-first tests for wayfinder v1 (docs/contracts/wayfinder.md), plan task T1.
-// Provider: scripts/wayfinder.mjs (built by T2). Covers brief AC8 (a broken pointer names its path)
-// and AC9 (the map never holds copied file content), plus every reason of the Contract.
+// Tests for scripts/wayfinder.mjs (docs/contracts/wayfinder.md): every reason of the Contract,
+// broken pointers that name their path, maps that never hold copied file content, and hostile input.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -105,7 +104,7 @@ describe('wayfinder v1: exports and valid maps', () => {
   });
 });
 
-describe('wayfinder v1: AC8 broken pointer names its path (slice demo)', () => {
+describe('wayfinder v1: a broken pointer names its path', () => {
   test('a pointer to a missing file: ERROR line with the path, exit 1', () => {
     const r = check(withLine(10, `- docs/missing.md ${D} gone`));
     assert.equal(r.code, 1);
@@ -305,7 +304,7 @@ describe('wayfinder v1: line shapes', () => {
   });
 });
 
-describe('wayfinder v1: AC9 no copied content (fence, quote, prose)', () => {
+describe('wayfinder v1: no copied content (fence, quote, prose)', () => {
   test('code fence lines are `fence`', () => {
     for (const f of ['```', '```js', '~~~']) {
       const r = check(insertAt(5, f));
@@ -528,6 +527,163 @@ describe('wayfinder v1: exit 3 refusals', () => {
   test('a refusal prints nothing else and a map with errors prints no `refused:` line', () => {
     const r = check(withLine(10, `- docs/missing.md ${D} gone`));
     assert.ok(!r.out.includes('refused:'));
+    assert.equal(r.code, 1);
+  });
+});
+
+describe('wayfinder v1: empty and over-limit text', () => {
+  test('an empty map file has no title: ERROR 1 bad title, exit 1', () => {
+    const r = check('');
+    assert.equal(r.code, 1, r.out);
+    assert.deepEqual(r.errors, [[1, 'bad title']]);
+    assert.equal(r.lines.at(-1), 'wayfinder: 1 errors');
+  });
+
+  test('validate of an empty string reports a bad title on line 1', () => {
+    assert.deepEqual(validate(''), [{ line: 1, reason: 'bad title' }]);
+  });
+
+  // validate is a published export: text it did not fully check must never count as valid.
+  const failsClosed = (text) => {
+    let res;
+    try {
+      res = validate(text, { root: product().root });
+    } catch {
+      return true;
+    }
+    return Array.isArray(res) && res.length > 0;
+  };
+
+  test('validate: prose after line 400 is not reported as valid', () => {
+    const lines = ['# Wayfinder: x', ...Array(419).fill(''), 'free prose on line 421'];
+    assert.equal(lines.length, 421);
+    assert.ok(failsClosed(lines.join('\n') + '\n'));
+  });
+
+  test('validate: prose after 256 Ki characters is not reported as valid', () => {
+    const text = `# Wayfinder: x\n${' '.repeat(256 * 1024 + 10)}\nfree prose after the cap\n`;
+    assert.ok(failsClosed(text));
+  });
+
+  test('validate: exactly 400 lines of a clean map is still accepted', () => {
+    const text = ['# Wayfinder: x', ...Array(399).fill('')].join('\n') + '\n';
+    assert.deepEqual(validate(text, { root: product().root }), []);
+  });
+});
+
+describe('wayfinder v1: hostile plan files behind a task anchor', () => {
+  const ref = (p) => `- ${p}#T1 ${D} plan`;
+  const tryLink = (t, fn, why) => {
+    try {
+      fn();
+      return true;
+    } catch {
+      t.skip(why);
+      return false;
+    }
+  };
+
+  test('a plan with two hard links does not count: task missing', () => {
+    const fx = product();
+    const plan = path.join(fx.root, '.company', 'work', 'demo', 'plan.md');
+    fs.linkSync(plan, path.join(fx.root, 'docs', 'twin.md'));
+    const r = check(withLine(10, ref('.company/work/demo/plan.md')), { fx });
+    assert.deepEqual(r.errors, [[10, 'task missing T1 in .company/work/demo/plan.md']]);
+    assert.equal(r.code, 1);
+  });
+
+  test('a plan hard-linked to a file outside the root does not count: task missing', () => {
+    const fx = product();
+    const outside = product();
+    const out = outside.put('plan.md', '# plan\n\n### T1 first task\n');
+    fs.rmSync(path.join(fx.root, '.company', 'work', 'demo', 'input-fix.md'));
+    fs.linkSync(out, path.join(fx.root, '.company', 'work', 'demo', 'input-fix.md'));
+    const r = check(withLine(10, ref('.company/work/demo/input-fix.md')), { fx });
+    assert.deepEqual(r.errors, [[10, 'task missing T1 in .company/work/demo/input-fix.md']]);
+  });
+
+  test('a plan that is a symlink is missing, its tasks are never read', (t) => {
+    const fx = product();
+    const outside = product();
+    const out = outside.put('plan.md', '# plan\n\n### T1 first task\n');
+    const link = path.join(fx.root, '.company', 'work', 'demo', '04-plan.md');
+    if (!tryLink(t, () => fs.symlinkSync(out, link), 'symlinks not permitted here')) return;
+    const r = check(withLine(10, ref('.company/work/demo/04-plan.md')), { fx });
+    assert.deepEqual(r.errors, [[10, 'pointer missing .company/work/demo/04-plan.md']]);
+  });
+
+  test('a work folder that is a junction to an outside folder is missing', (t) => {
+    const fx = product();
+    const outside = product();
+    outside.put('plan.md', '# plan\n\n### T1 first task\n');
+    const link = path.join(fx.root, '.company', 'work', 'elsewhere');
+    if (!tryLink(t, () => fs.symlinkSync(outside.root, link, 'junction'), 'links not permitted here')) return;
+    const r = check(withLine(10, ref('.company/work/elsewhere/plan.md')), { fx });
+    assert.deepEqual(r.errors, [[10, 'pointer missing .company/work/elsewhere/plan.md']]);
+  });
+
+  test('a plan over 1 MiB does not count: task missing', () => {
+    const fx = product();
+    fx.put('.company/work/demo/02-plan.md', `# plan\n\n### T1 first task\n${'x'.repeat(1024 * 1024 + 16)}\n`);
+    const r = check(withLine(10, ref('.company/work/demo/02-plan.md')), { fx });
+    assert.deepEqual(r.errors, [[10, 'task missing T1 in .company/work/demo/02-plan.md']]);
+  });
+});
+
+describe('wayfinder v1: letter case under .company/work/', () => {
+  test('wrong case in .company/work, the folder or the file name is a bad ref', () => {
+    const lowered = SPACED.toLowerCase();
+    for (const p of [
+      '.company/Work/demo/plan.md',
+      '.company/WORK/demo/plan.md',
+      '.company/work/Demo/plan.md',
+      '.company/work/DEMO/plan.md',
+      '.company/work/demo/Plan.md',
+      `.company/work/${lowered}/plan-wayfinder.md`,
+      `\`.company/work/${lowered}/plan-wayfinder.md\``
+    ]) {
+      const r = check(withLine(10, `- ${p} ${D} plan`));
+      assert.deepEqual(r.errors, [[10, 'bad ref']], p);
+      assert.ok(!r.out.includes('Demo') && !r.out.includes('DEMO') && !r.out.includes(lowered), p);
+    }
+  });
+
+  test('the exact case of the same refs is accepted', () => {
+    const r = check(withLine(10, `- .company/work/demo/plan.md#T1 ${D} plan`));
+    assert.equal(r.code, 0, r.out);
+  });
+});
+
+describe('wayfinder v1: worst-case input finishes fast', () => {
+  const LIMIT_MS = 5000;
+
+  test('a 400-line map of decisions with three missing refs each', () => {
+    const fx = product();
+    const lines = ['# Wayfinder: x', '## Decisions'];
+    while (lines.length < 400) lines.push(`- D-${lines.length} ${'w '.repeat(50)}${D} src: docs/m1.md, docs/m2.md, docs/m3.md`);
+    const t0 = Date.now();
+    const r = check(lines, { fx });
+    assert.ok(Date.now() - t0 < LIMIT_MS);
+    assert.equal(r.code, 1);
+    assert.equal(r.errors.length, 3 * 398);
+  });
+
+  test('lines at the length cap made of repeating separators and spaces', () => {
+    const fx = product();
+    const nasty = `- ${'`'.repeat(5)}${' '.repeat(100)}${D}${` ${D} `.repeat(30)}`.slice(0, 240);
+    const lines = ['# Wayfinder: x', '## Pointers', ...Array(380).fill(nasty)];
+    const t0 = Date.now();
+    const r = check(lines, { fx });
+    assert.ok(Date.now() - t0 < LIMIT_MS);
+    assert.ok([0, 1, 3].includes(r.code));
+  });
+
+  test('a 1 MiB plan of task-like lines behind an anchor', () => {
+    const fx = product();
+    fx.put('.company/work/demo/03-plan.md', '### T1 x\n'.repeat(Math.floor((1024 * 1024 - 64) / 9)));
+    const t0 = Date.now();
+    const r = check(withLine(10, `- .company/work/demo/03-plan.md#T999 ${D} plan`), { fx });
+    assert.ok(Date.now() - t0 < LIMIT_MS);
     assert.equal(r.code, 1);
   });
 });
