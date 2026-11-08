@@ -158,20 +158,23 @@ describe('review skill [test] rule (AC3)', () => {
     assert.match(line, /plan-tasks v1\.7/);
     assert.match(line, /builder edit to a QA-owned file/i);
     assert.match(line, /proven only by builder tests/i);
-    assert.match(line, /## Blocking`? `\[test\]`/);
+    assert.match(line, /## Blocking` `\[test\]`/);
   });
 });
 
 describe('qa-first-report lines (AC7)', () => {
   for (const rel of ['skills/feedback/SKILL.md', 'skills/feature/references/intake-and-ship.md']) {
     it(`${rel} runs ledger qa-first-report with no arguments`, () => {
-      assert.match(read(rel), /ledger qa-first-report`/);
+      const line = read(rel).split('\n').find((l) => /ledger qa-first-report/.test(l));
+      assert.ok(line, `${rel}: qa-first-report line`);
+      assert.match(line, /ledger qa-first-report`/);
     });
   }
   it('feedback puts the three lines under ## QA first, unchanged', () => {
-    const t = read('skills/feedback/SKILL.md');
-    assert.match(t, /## QA first/);
-    assert.match(t, /unchanged/);
+    const line = read('skills/feedback/SKILL.md').split('\n').find((l) => /ledger qa-first-report/.test(l));
+    assert.ok(line, 'feedback qa-first-report line');
+    assert.match(line, /## QA first/);
+    assert.match(line, /unchanged/);
   });
   it('intake-and-ship names before, after, excluded', () => {
     const line = read('skills/feature/references/intake-and-ship.md').split('\n').find((l) => /qa-first-report/.test(l));
