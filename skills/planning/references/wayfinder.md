@@ -11,10 +11,10 @@ A map for an effort that spans several sessions. It records decisions made, ques
 
 ## Decisions
 - D-1 Wayfinder ships first, the smallest slice — src: `.company/work/2026-11-08 20.27 - Pocock Large Items/03-architect.md`
-- D-2 Lane fields stay in the plan file — src: docs/adr/0065-plan-tasks-owns-lanes.md
+- D-2 Wayfinder reads plan tasks, never owns their syntax — src: docs/adr/0065-plan-tasks-owns-lanes.md
 
 ## Open
-- O-1 Which runner the second release uses — src: docs/adr/0067-afk-wsl2-runner.md
+- O-1 Whether the Lead reads a map at the start of every session — src: docs/contracts/wayfinder.md
 
 ## Pointers
 - docs/contracts/wayfinder.md — the format of this map
