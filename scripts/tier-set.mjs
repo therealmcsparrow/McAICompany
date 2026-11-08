@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
 import { show } from './run-state.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_DATA_BYTES = 16 * KiB;
@@ -27,7 +27,6 @@ const MAX_GIT_BYTES = 8 * 1024 * KiB;
 const GIT_TIMEOUT_MS = 30000;
 const MAX_HIT_LINES = 5;
 
-const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
 const PLAN_NAME = /^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$/;
 const SHA = /^[0-9a-f]{7,64}$/;
 const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -355,7 +354,7 @@ function readPlanPaths(root, slug, name) {
     if (!st || !isPlain(st) || st.size > MAX_PLAN_BYTES) return null;
     const bytes = readOpened(file, st, MAX_PLAN_BYTES);
     if (bytes.length > MAX_PLAN_BYTES) return null;
-    const parsed = parsePlan(decode(bytes));
+    const parsed = parsePlan(decode(bytes), { slug });
     if (parsed.tooMany || parsed.tasks.length === 0 || parsed.tasks.some((t) => !t.filesValid)) return null;
     return parsed.tasks.flatMap((t) => t.items);
   } catch {
@@ -470,7 +469,7 @@ const DIFF_FLAGS = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--n
 function readDiffPaths(env, base, slug) {
   if (typeof base !== 'string' || !FULL_SHA.test(base) || typeof slug !== 'string' || !isWorkFolder(slug)) return null;
   const id = branchId(slug);
-  if (typeof id !== 'string' || !BRANCH_ID.test(id)) return null;
+  if (typeof id !== 'string' || !isBranchId(id)) return null;
   const ref = `refs/heads/aico/${id}`;
   const all = new Set();
   const add = (buf) => {

@@ -1,5 +1,6 @@
-# Contract: reprompt v2.3
+# Contract: reprompt v2.4
 
+v2.4 (task Project Id Naming, T10; additive, `docs/adr/0007-contract-minor-versions.md`): the write gate's `isRunName` also accepts a v2 run name (`<ProjectID>-HH.MM.SS`, `work-folder-name` v2.0 `parseProject`). Legacy and new-form names are accepted as before; no other rule changes.
 v2.3 (task Draft Input Folder Case Draft, T12; additive, `docs/adr/0007-contract-minor-versions.md`): `snap`, `arm` and `reply` run `exactWorkPath` (`work-folder-name` v1.1) on `.company`, `work` and `<slug>` before any other run folder check. A part listed only in another ASCII letter case than on disk → `{"refused":"refused: wrong letter case"}`, exit 3, on every platform, with no baseline, `.gate` file or run record written or read. A folder missing in every case keeps `refused: run folder missing or not a plain folder`. The run record key still hashes the real root and the name (ASCII-lowercased on win32 and darwin) so existing records stay valid; it is a storage key, not an accept compare, and the name reaching it has passed the exact check. The write gate (`mods/lib/reprompt-gate.mjs`) takes no typed work folder name and is unchanged. No new command, output field or exit code.
 
 Editorial note (task reprompt-20261030-1309-draft-2-draft, docs by topic; no version change): the Help line and the docs page are now `documentation/commands/reprompt.md`; behavior, CLI and output are unchanged.

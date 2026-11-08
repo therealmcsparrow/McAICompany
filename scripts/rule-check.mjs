@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MiB = 1024 * KiB;
@@ -26,13 +26,12 @@ const RULE_LINE = /^- ([a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+) — (.*)$/;
 const RULE_ID_ANY = /[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+/g;
 const CHECK_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
 
 // The run ref of a run name (new name or legacy slug): refs/heads/aico/ plus its branch id, or null when the name is not a work folder.
 export function runRef(name) {
   if (typeof name !== 'string' || !isWorkFolder(name)) return null;
   const id = branchId(name);
-  return typeof id === 'string' && BRANCH_ID.test(id) ? `refs/heads/aico/${id}` : null;
+  return typeof id === 'string' && isBranchId(id) ? `refs/heads/aico/${id}` : null;
 }
 const HASH = /^[0-9a-f]{64}$/;
 const MARKERS = [' — why: ', ' — source: ', ' — enforced-by: ', ' — check: '];

@@ -11,9 +11,8 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readParallel, sortByVisit, normalizePath, ParallelRecordError } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isWorkFolder, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
 
-const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,127}$/;
 const ID =/^(?:t\d{1,3}[a-z]?|proto)$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -410,7 +409,7 @@ function listBranches(ctx, slug) {
 // The branch id of a run name (a legacy slug is its own id), re-checked against its allow-list before it is part of a ref or a path.
 function idOf(slug) {
   const id = isWorkFolder(slug) ? branchId(slug) : null;
-  if (typeof id !== 'string' || !BRANCH_ID.test(id)) throw new Refusal('bad run name');
+  if (typeof id !== 'string' || !isBranchId(id)) throw new Refusal('bad run name');
   return id;
 }
 
@@ -651,7 +650,8 @@ function cmdMerge(args, env) {
   const ordered = sortByVisit(env.root, slug, view.open_wave);
   if (ordered === null) throw new Refusal('open wave cannot be put in plan order: plan unreadable, changed since begin, or missing a task');
   const wave = ordered.map((ID_) => {
-    const id = ID_.toLowerCase();
+    const local = ticketPattern(slug)?.id.test(ID_) ? ticketLocal(ID_) : null;
+    const id = local === null ? '' : local.toLowerCase();
     if (!ID.test(id) || id === 'proto') throw new Refusal('open wave holds a task that cannot be merged');
     return { ID: ID_, id };
   });
@@ -941,7 +941,12 @@ function cmdLeftovers(args, env) {
   const ctx = openGit(env);
   const wtRoot = layoutOf(ctx.realRoot, 'x', 'x').wtRoot;
   const prefix = `${sameKey(wtRoot)}${path.sep}`;
-  const shape = /^[a-z0-9][a-z0-9-]{0,127}\/(?:t\d{1,3}[a-z]?|proto)$/;
+  const shape = {
+    test(text) {
+      const parts = text.split('/');
+      return parts.length === 2 && isBranchId(parts[0]) && ID.test(parts[1]);
+    }
+  };
   const lines = [];
   for (const p of listWorktrees(ctx)) {
     const key = sameKey(p);
