@@ -211,9 +211,10 @@ describe('worktree on a v2 run', () => {
   test('leftovers: a lowercase, dotted-wrong or task-less ref is shown as ?', () => {
     const r = makeRepo();
     task(r, RUN, 't1', 'one.txt');
-    r.g('branch', 'aico-wt/p20261108.000001/t1');
+    // lowercase ref under another project ID: refs are case-insensitive on Windows, so the same ID would collide
+    r.g('branch', 'aico-wt/p20261108.000002/t1');
     r.g('branch', `aico-wt/${ID}/zzz`);
-    r.g('branch', `aico-wt/${ID}.lock/t1`);
+    r.g('branch', `aico-wt/${ID}.1/t1`);
     const res = r.run('leftovers');
     assert.equal(res.code, 0);
     assert.ok(res.lines.includes(`leftover branch aico-wt/${ID}/t1`), 'control: the valid ref is shown');
