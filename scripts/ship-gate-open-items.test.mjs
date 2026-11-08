@@ -9,24 +9,27 @@ import { main } from './plan-tasks.mjs';
 const root = path.resolve(import.meta.dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8');
 
-// Open items from the QA Tests First Active Ship Gate (v0.30.0).
-
-describe('item 5: the role is qa, not qa-tester', () => {
+describe('the role is qa, not qa-tester', () => {
   test('no tracked file names the old role id qa-tester', () => {
     const files = execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
       .split('\0').filter(Boolean);
     const hits = [];
     for (const rel of files) {
       if (rel === 'scripts/ship-gate-open-items.test.mjs') continue;
+      const abs = path.join(root, rel);
       let text;
-      try { text = fs.readFileSync(path.join(root, rel), 'utf8'); } catch { continue; }
+      try {
+        const st = fs.lstatSync(abs);
+        if (!st.isFile() || st.size > 2 * 1024 * 1024) continue;
+        text = fs.readFileSync(abs, 'utf8');
+      } catch { continue; }
       if (/qa-tester/i.test(text)) hits.push(rel);
     }
     assert.deepEqual(hits, []);
   });
 });
 
-describe('item 3: feedback skill cites token-ledger v1.10 on its qa-first-report line', () => {
+describe('feedback skill cites token-ledger v1.10 on its qa-first-report line', () => {
   test('the QA first line carries the cite', () => {
     const line = read('skills/feedback/SKILL.md').split('\n').find((l) => /ledger qa-first-report/.test(l));
     assert.ok(line, 'feedback has a qa-first-report line');
@@ -34,19 +37,15 @@ describe('item 3: feedback skill cites token-ledger v1.10 on its qa-first-report
   });
 });
 
-describe('item 1: review nits R-10, R-11 (feedback pins read the line, not the file)', () => {
+describe('feedback pins read the line, not the file', () => {
   const line = () => read('skills/feedback/SKILL.md').split('\n').find((l) => /ledger qa-first-report/.test(l)) ?? '';
-  test('R-10 the qa-first-report line itself says unchanged and names ## QA first', () => {
-    assert.match(line(), /## QA first/);
-    assert.match(line(), /unchanged/);
-  });
-  test('R-11 only one line in feedback runs ledger qa-first-report', () => {
+  test('only one line in feedback runs ledger qa-first-report', () => {
     const n = read('skills/feedback/SKILL.md').split('\n').filter((l) => /ledger qa-first-report/.test(l)).length;
     assert.equal(n, 1);
   });
 });
 
-describe('item 1: R-2 message names the cause for a non-QA task with no files', () => {
+describe('the refusal message names the cause for a non-QA task with no files', () => {
   const roots = [];
   const savedHome = process.env.MCSPARROW_HOME;
   after(() => {

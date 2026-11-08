@@ -119,6 +119,13 @@ describe('hostile plans', () => {
     });
   }
 
+  test('a covered build task with no files is refused with the exact missing-files line', () => {
+    const e = env(plan(qa('T1'), task('T2', { deps: 'T1', files: null })));
+    const r = check(e);
+    assert.equal(r.code, 2);
+    assert.deepEqual(errorsOf(r), ['ERROR T2: qa-first: files missing or invalid (overlaps every task, incl. qa task T1)']);
+  });
+
   test('a qa task with invalid files is left out of the overlap rule', () => {
     const e = env(plan(qa('T1', 'tests/a.test.mjs, ../x'), task('T2', { deps: 'T1', files: 'tests/a.test.mjs' })));
     const lines = errorsOf(check(e));

@@ -210,7 +210,20 @@ test('hooks.json entries carry timeout 5 and only the plugin root variable', () 
   }
 });
 
-const hasClaude = spawnSync('claude', ['--version'], { shell: process.platform === 'win32' }).status === 0;
+test('step-times source: self-exit deadline stays under the hook timeout, call budget under the deadline', () => {
+  const src = fs.readFileSync(path.join(repo, 'scripts', 'step-times.mjs'), 'utf8');
+  const num = (name) => {
+    const m = new RegExp(`const ${name}\\s*=\\s*(\\d+)\\s*;`).exec(src);
+    assert.ok(m, `${name} is a numeric constant`);
+    return Number(m[1]);
+  };
+  const deadline = num('DEADLINE_MS');
+  const call = num('CALL_MS');
+  assert.ok(deadline <= 4000, `DEADLINE_MS ${deadline} <= 4000`);
+  assert.ok(call < deadline, `CALL_MS ${call} < DEADLINE_MS ${deadline}`);
+});
+
+const hasClaude =spawnSync('claude', ['--version'], { shell: process.platform === 'win32' }).status === 0;
 test('claude plugin validate --strict passes', { skip: !hasClaude }, () => {
   const r = spawnSync('claude', ['plugin', 'validate', '--strict', '.'], { cwd: repo, encoding: 'utf8', shell: process.platform === 'win32' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
