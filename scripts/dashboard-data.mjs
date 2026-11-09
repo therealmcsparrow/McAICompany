@@ -230,15 +230,19 @@ export async function refreshActive(root, prev, { now = Date.now(), deps: given 
     next.inflight = 0;
   }
   const slug = prev.active;
-  if (typeof slug !== 'string' || !next.columns.some((c) => c.cards.some((x) => x.slug === slug && x.kind !== 'project'))) return next;
+  if (typeof slug !== 'string') return next;
+  // A v3 run is shown by its project card, built from the newest run (runs[0]), as in `board`.
+  const hit = (x) => (x.kind === 'project' ? x.runs[0] === slug : x.slug === slug);
+  const old = next.columns.flatMap((c) => c.cards).find(hit);
+  if (old === undefined) return next;
   const view = safe(() => deps.show(root, slug, { now }), null);
-  const old = next.columns.flatMap((c) => c.cards).find((x) => x.slug === slug);
   const entry = view === null
     ? { slug, state: 'unreadable', started: old.started, ended: old.ended, tier: old.tier, round: old.round }
     : { slug, state: view.state, started: view.started, ended: view.ended, tier: view.tier, round: view.round };
-  const card = await buildCard(root, entry, view, now, deps);
+  let card = await buildCard(root, entry, view, now, deps);
+  if (old.kind === 'project') card = { ...card, kind: old.kind, id: old.id, slug: old.slug, title: old.title, description: old.description, runs: old.runs };
   for (const c of next.columns) {
-    if (c.id !== 'intake') c.cards = c.cards.filter((x) => x.slug !== slug);
+    if (c.id !== 'intake') c.cards = c.cards.filter((x) => x !== old);
   }
   const target = next.columns.find((c) => c.id === card.column);
   target.cards.push(card);
