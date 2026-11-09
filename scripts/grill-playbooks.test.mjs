@@ -174,7 +174,7 @@ test('each grill playbook writes grill-file v1: grill status accepts its file', 
 
 test('grill-file contract lists the new writers and the web search set', () => {
   const c = read('docs/contracts/grill-file.md');
-  assert.ok(c.startsWith('# Contract: grill-file v1.4'));
+  assert.ok(c.startsWith('# Contract: grill-file v1.5'));
   for (const n of ['aico:grill', 'aico:grill-me', 'aico:grill-with-docs']) assert.ok(c.includes(n), n);
   assert.ok(c.includes('the fact lookups of `aico:grill` may send web search queries'));
   assert.ok(c.includes('`aico:grill-me` and `aico:grill-with-docs` send no web search query'));

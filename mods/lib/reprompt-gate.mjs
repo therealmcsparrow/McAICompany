@@ -2,7 +2,7 @@
 // No engine object, no Node import, no npm package.
 
 import { cleanText } from './guard.mjs';
-import { parseName, parseProject } from './work-folder.mjs';
+import { parseName, parseProject, parseRun, isProjectId } from './work-folder.mjs';
 
 export const SPAWN_SCAN = 65536;
 export const MAX_PATH = 4096;
@@ -21,11 +21,12 @@ const RUN_FILE = /^(request|answers-\d+|edit-\d+|prompt|\d{2,3}-reprompter)\.md$
 const UPPER = /[A-Z]/g;
 
 // Whether a text can name a reprompt run folder: the name of a primary run in the new work folder form
-// (no Build or Draft helper suffix), or the legacy reprompt-YYYYMMDD-HHMM slug. The shape only allows a
+// (no Build or Draft helper suffix), a v3 run slug `<ProjectID>/<NN>-<playbook>`, a project ID, or the legacy reprompt-YYYYMMDD-HHMM slug. The shape only allows a
 // name; that a run is a reprompt run is the checker's record, never the name.
 export function isRunName(name) {
   if (typeof name !== 'string' || name.length === 0 || name.length > MAX_NAME) return false;
   if (LEGACY_RUN.test(name)) return true;
+  if (isProjectId(name) || parseRun(name) !== null) return true;
   if (parseProject(name) !== null) return true;
   const parsed = parseName(name);
   return parsed !== null && parsed.suffix === null;
@@ -68,15 +69,20 @@ export function cleanPath(value, ci) {
   return fold(`${prefix}/${rest.join('/')}`, ci);
 }
 
+// A name that is a run folder itself: a project ID alone names only a project folder.
+function isRunFolder(name) {
+  return isRunName(name) && !isProjectId(name);
+}
+
 // `{ slug, nn }` for an `Output:` line that names a run folder and a Handoff, else null.
 function outputSpec(line) {
   if (!line.startsWith(OUTPUT_HEAD)) return null;
   const rest = line.slice(OUTPUT_HEAD.length);
-  const cut = rest.indexOf('/');
-  if (cut < 0 || cut !== rest.lastIndexOf('/')) return null;
+  const cut = rest.lastIndexOf('/');
+  if (cut < 0) return null;
   const slug = rest.slice(0, cut);
   const tail = OUTPUT_TAIL.exec(rest.slice(cut + 1));
-  return tail !== null && isRunName(slug) ? { slug, nn: tail[1] } : null;
+  return tail !== null && isRunFolder(slug) ? { slug, nn: tail[1] } : null;
 }
 
 // The one `Output:` line of a dispatch, read from complete lines of the first 64 KiB.
@@ -119,7 +125,7 @@ function ownString(input, key) {
 export function allowsTool(tool, input, rec, pluginRoot, platform) {
   if (tool === 'Skill') return ownString(input, 'skill') === 'aico:handoff';
   if (tool !== 'Write' && tool !== 'Read') return false;
-  if (rec === null || typeof rec !== 'object' || !isRunName(rec.slug) || !NN.test(rec.nn)) return false;
+  if (rec === null || typeof rec !== 'object' || !isRunFolder(rec.slug) || !NN.test(rec.nn)) return false;
   const ci = foldsCase(rec.root, platform);
   const root = cleanPath(rec.root, ci);
   const path = cleanPath(ownString(input, 'file_path'), ci);

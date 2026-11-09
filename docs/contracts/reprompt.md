@@ -1,4 +1,6 @@
-# Contract: reprompt v2.5
+# Contract: reprompt v2.6
+
+v2.6 (task P20261109.000009, T31; additive, `docs/adr/0007-contract-minor-versions.md`): `isRunName` also accepts a v3 run slug `<ProjectID>/<NN>-<playbook>` (`parseRun` of `work-folder-name` v3.0) and a bare project ID as a name shape only; a bare project ID is never a run: the spawn check, `allowsTool` and `reprompt-check.mjs` refuse it. The `Output:` line may carry one `/` inside `<slug>` (`.company/work/<ProjectID>/<NN>-<playbook>/<NN>-reprompter.md`). `snap`, `arm` and `reply` resolve the run folder with `exactWorkPath(io, root, workParts(slug))`; the baseline `.tree.json` and the gate file `.gate-<NN>` sit in the v3 run folder and the run record is per slug. The reprompter may write only `prompt.md` and its own `<NN>-reprompter.md` of its own run folder, never the project folder or another run. A v2 name, a v1.1 name and a legacy slug give byte-identical output to v2.5.
 
 v2.5 (additive, `docs/adr/0007-contract-minor-versions.md`): the run folder may hold `00-summary.md`, written by `work-folder new` (`work-folder-name` v2.0, ADR 0066). `snap` accepts it only by that exact name, as a plain file with a single link, at most 16 KiB; anything else refuses (`unexpected entry in the run folder`, `the summary file is too large`). Any change to it during the run reads as `tree: changed`. No other rule changes.
 
