@@ -1,4 +1,4 @@
-// Tests for the work-folder v3 layout (work-folder-name v2.1, opt-in `--layout v3`).
+// Tests for the work-folder v3 layout (work-folder-name v3.0: v3 is the only layout new makes).
 // Path-shape checks stay drive-agnostic: temp dirs only, no Z:/UNC assumption.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,10 +35,10 @@ const run = (root, argv, now = NOW) => main(argv, { root, now });
 const writeTopic = (root, text, id = 'idea') => fs.writeFileSync(path.join(root, '.company', `work-folder-topic-${id}.txt`), text);
 const newV3 = (root, playbook = 'idea', now = NOW) => {
   writeTopic(root, 'Fix Login', playbook);
-  return run(root, ['new', '--playbook', playbook, '--topic', 'file', '--layout', 'v3'], now);
+  return run(root, ['new', '--playbook', playbook, '--topic', 'file'], now);
 };
 const joinV3 = (root, id, playbook = 'fix', now = NOW) =>
-  run(root, ['new', '--playbook', playbook, '--project', id, '--layout', 'v3'], now);
+  run(root, ['new', '--playbook', playbook, '--project', id], now);
 const mkV2 = (root, name, lines) => {
   fs.mkdirSync(path.join(work(root), name));
   fs.writeFileSync(path.join(work(root), name, '00-summary.md'), lines.join('\n') + '\n');
@@ -144,7 +144,7 @@ describe('slug helpers (exports of mods/lib/work-folder.mjs)', () => {
   });
 });
 
-describe('new --layout v3: first run of a new project (AC2, AC6)', () => {
+describe('new: first run of a new project (AC2, AC6)', () => {
   test('makes one project folder with 00-project.md and 01-<playbook>, prints id, run slug, branch', () => {
     const root = project();
     const r = newV3(root);
@@ -183,7 +183,7 @@ describe('new --layout v3: first run of a new project (AC2, AC6)', () => {
 
   test('--topic none uses the fallback description', () => {
     const root = project();
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'none', '--layout', 'v3']);
+    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'none']);
     assert.equal(r.code, 0);
     const first = read(root, ID, '00-project.md').split('\n')[0];
     assert.ok(first.length > 0);
@@ -220,40 +220,24 @@ describe('new --layout v3: first run of a new project (AC2, AC6)', () => {
 
   test('bad playbook refuses and creates nothing', () => {
     const root = project();
-    const r = run(root, ['new', '--playbook', '../x', '--topic', 'none', '--layout', 'v3']);
+    const r = run(root, ['new', '--playbook', '../x', '--topic', 'none']);
     assert.equal(r.code, 3);
     assert.deepEqual(r.lines, ['refused: bad playbook']);
     assert.deepEqual(top(root), []);
   });
 
-  for (const bad of ['v2', 'v4', 'V3', '', '3']) {
-    test(`--layout ${JSON.stringify(bad)} refuses (usage), creates nothing; v3 itself is accepted`, () => {
-      assert.equal(newV3(project()).code, 0);
-      const root = project();
-      const r = run(root, ['new', '--playbook', 'idea', '--topic', 'none', '--layout', bad]);
-      assert.equal(r.code, 3);
-      assert.deepEqual(r.lines, ['refused: usage']);
-      assert.deepEqual(top(root), []);
-    });
-  }
-
-  test('--layout given twice or without a value refuses (usage); v3 itself is accepted', () => {
-    assert.equal(newV3(project()).code, 0);
+  // Detailed --layout refusals live in work-folder-flip.test.mjs.
+  test('--layout v3 is no longer accepted (usage), creates nothing', () => {
     const root = project();
-    for (const argv of [
-      ['new', '--playbook', 'idea', '--topic', 'none', '--layout', 'v3', '--layout', 'v3'],
-      ['new', '--playbook', 'idea', '--topic', 'none', '--layout'],
-    ]) {
-      const r = run(root, argv);
-      assert.equal(r.code, 3);
-      assert.deepEqual(r.lines, ['refused: usage']);
-    }
+    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'none', '--layout', 'v3']);
+    assert.equal(r.code, 3);
+    assert.deepEqual(r.lines, ['refused: usage']);
     assert.deepEqual(top(root), []);
   });
 
   test('CLI process prints the three lines to stdout and exits 0', () => {
     const root = project();
-    const res = spawnSync(process.execPath, [SCRIPT, 'new', '--playbook', 'idea', '--topic', 'none', '--layout', 'v3'], { cwd: root, encoding: 'utf8' });
+    const res = spawnSync(process.execPath, [SCRIPT, 'new', '--playbook', 'idea', '--topic', 'none'], { cwd: root, encoding: 'utf8' });
     assert.equal(res.status, 0, res.stderr);
     const lines = res.stdout.trim().split('\n');
     assert.match(lines[0], /^id: P\d{8}\.\d{6}$/);
@@ -262,7 +246,7 @@ describe('new --layout v3: first run of a new project (AC2, AC6)', () => {
   });
 });
 
-describe('new --layout v3 --project: later run in a v3 project (AC5, AC9)', () => {
+describe('new --project: later run in a v3 project (AC5, AC9)', () => {
   test('makes the next NN as a sub folder, never a top-level entry', () => {
     const root = project();
     newV3(root);
@@ -364,7 +348,7 @@ describe('new --layout v3 --project: later run in a v3 project (AC5, AC9)', () =
   });
 });
 
-describe('new --layout v3 --project on a v2-only project (AC7, AC9)', () => {
+describe('new --project on a v2-only project (AC7, AC9)', () => {
   const v2 = `${ID}-10.00.00`;
 
   test('makes a v3 project folder with 01-<playbook>; v2 folder stays byte-identical', () => {
@@ -412,32 +396,31 @@ describe('new --layout v3 --project on a v2-only project (AC7, AC9)', () => {
   });
 });
 
-describe('default output unchanged without --layout (AC6, AC7)', () => {
-  test('new --topic prints a v2 name, no sub folder', () => {
+describe('default output is v3 (AC6, AC12)', () => {
+  test('new --topic with no flag prints a run slug and makes a project folder', () => {
     const root = project();
     writeTopic(root, 'Fix Login');
     const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
-    assert.deepEqual(r.lines, [`id: ${ID}`, `name: ${ID}-23.45.00`, `branch: aico/${ID}`]);
-    assert.deepEqual(top(root), [`${ID}-23.45.00`]);
-    assert.deepEqual(sub(root, `${ID}-23.45.00`), ['00-summary.md']);
+    assert.deepEqual(r.lines, [`id: ${ID}`, `name: ${ID}/01-idea`, `branch: aico/${ID}`]);
+    assert.deepEqual(top(root), [ID]);
   });
 
-  test('new --project without --layout still makes a sibling <ID>-HH.MM.SS folder', () => {
+  test('new --project on a v2-only project makes a v3 run, not a sibling <ID>-HH.MM.SS folder', () => {
     const root = project();
     mkV2(root, `${ID}-10.00.00`, ['Old work', '', 'Run: first idea']);
     const r = run(root, ['new', '--playbook', 'fix', '--project', ID]);
-    assert.deepEqual(r.lines, [`id: ${ID}`, `name: ${ID}-23.45.00`, `branch: aico/${ID}`]);
-    assert.deepEqual(top(root), [`${ID}-10.00.00`, `${ID}-23.45.00`]);
+    assert.deepEqual(r.lines, [`id: ${ID}`, `name: ${ID}/01-fix`, `branch: aico/${ID}`]);
+    assert.deepEqual(top(root), [ID, `${ID}-10.00.00`].sort());
   });
 
-  test('a v2 run still works when a v3 project of the same day exists', () => {
+  test('a v3 project of the same day counts toward the next ID, and the next new is v3 too', () => {
     const root = project();
     newV3(root);
     writeTopic(root, 'Other');
     const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file'], new Date(2026, 9, 30, 23, 50));
     assert.equal(r.code, 0);
     assert.equal(r.lines[0], `id: ${ID2}`);
-    assert.equal(r.lines[1], `name: ${ID2}-23.50.00`);
+    assert.equal(r.lines[1], `name: ${ID2}/01-idea`);
   });
 });
 
@@ -542,7 +525,7 @@ describe('hostile folders: links, files and case variants (proj.M4)', () => {
       if (which === 'work') fs.mkdirSync(path.join(root, '.company'));
       if (!link(t, out, at, 'junction')) return;
       const before = snapshot(out);
-      const a = run(root, ['new', '--playbook', 'idea', '--topic', 'none', '--layout', 'v3']);
+      const a = run(root, ['new', '--playbook', 'idea', '--topic', 'none']);
       assert.notEqual(a.code, 0);
       const b = joinV3(root, ID, 'fix');
       assert.equal(b.code, 3);
