@@ -160,14 +160,25 @@ test('00-summary.md over the size cap is refused', () => {
 });
 
 test('only the exact name is accepted: near names and other numbered files stay refused', () => {
-  for (const bad of ['00-summary.MD', '00-Summary.md', '00-summary.md.bak', '00-summary', '0-summary.md', '000-summary.md', '01-summary.md', ' 00-summary.md', '00-summary.md ', '00-summary.md.']) {
+  // Names every filesystem keeps distinct from the exact name: always asserted.
+  const always = ['00-summary.md.bak', '00-summary', '0-summary.md', '000-summary.md', '01-summary.md'];
+  // Names a case-insensitive or dot/space-stripping filesystem (Windows) may fold onto the exact name.
+  const maybeFolded = ['00-summary.MD', '00-Summary.md', ' 00-summary.md', '00-summary.md ', '00-summary.md.'];
+  const checked = [];
+  for (const bad of [...always, ...maybeFolded]) {
     const p = project();
+    // Remove the real summary first, so a folded name cannot hide behind it and the near name stands alone.
+    fs.rmSync(path.join(p.dir, SUMMARY));
     fs.writeFileSync(path.join(p.dir, bad), 'x\n');
-    // Case-insensitive or dot/space-stripping filesystems (Windows) fold this variant onto the
-    // exact name, so no distinct name exists there; only test variants this filesystem can hold apart.
-    if (fs.existsSync(path.join(p.dir, SUMMARY)) || !fs.readdirSync(p.dir).includes(bad)) continue;
+    // Skip only a name this filesystem did not keep distinct (it is stored under another name).
+    if (!fs.readdirSync(p.dir).includes(bad)) {
+      assert.ok(!always.includes(bad), `${bad} must be kept distinct on every filesystem`);
+      continue;
+    }
     refusedSnap(p, /unexpected file in the run folder/);
+    checked.push(bad);
   }
+  for (const bad of always) assert.ok(checked.includes(bad), `${bad} was not checked`);
 });
 
 test('an unrelated extra file is still refused next to 00-summary.md', () => {
