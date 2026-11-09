@@ -4,6 +4,17 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### New
+- **One Project One Folder, run 1 of 2. Nothing changes for you yet.** Every Playbook still makes the same folders, IDs and branches as in 0.32.0. This run adds the building blocks; run 2 wires them in. Until then you see no difference.
+  - `work-folder new --layout v3` is opt-in. It builds a project folder with each run nested inside it, instead of a sibling `<ID>-HH.MM.SS` folder. No Playbook passes the flag.
+  - `run-state` accepts nested run slugs, and `run-state projects --json` lists projects with their runs. `list` and `active` output is unchanged.
+  - A `join-project` reference text (`skills/pipeline/references/join-project.md`) describes the "join project or start new" form. No Playbook cites it, so it never shows.
+  - Contracts: `work-folder-name` v2.1 and `run-state` v1.10. Both are additive minors.
+
+### Improved
+- Old folders (v1.1, legacy, v2) stay where they are and stay readable.
+- `run-state` only reads `.company/work` when it is the real folder under the project root, not a link that points elsewhere.
+
 ## [0.32.0] - 2026-11-09
 
 Rollback: node scripts/stable.mjs 0.29.0
