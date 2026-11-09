@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.6). Node built-ins and git only.
+// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.7). Node built-ins and git only.
 // Read-only: nothing is written to the repository or to .company/. Output goes to stdout (one line for `verdict`).
 // git runs through execFile with a fixed argument list, no shell, in the product root. Every value taken from git output and
 // reused as an argument is matched against a strict pattern first.
@@ -9,9 +9,9 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, read
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateRecord } from './ledger.mjs';
-import { isWorkFolder, projectIdOf } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, projectIdOf, runKey, workParts } from '../mods/lib/work-folder.mjs';
 import { loadPatterns, readRecord, scanText } from './plan-check.mjs';
-import { show } from './run-state.mjs';
+import { runSlugs, show } from './run-state.mjs';
 
 const PLAN_NAME_RE = /^(?:\d{2,3}-)?(?:architect-)?plan(?:-[a-z0-9]+)?\.md$/;
 const MAX_PLAN_PATH = 200;
@@ -34,13 +34,16 @@ const RETUNE_ABOVE = 30;
 class Refusal extends Error {}
 const refuse = reason => { throw new Refusal(reason); };
 
-// `.company/work/<work folder name>/<plan file name>` as { slug, name }, or null. The text is length-capped and split on `/`,
-// and each part is checked with the shared name rule: linear cost, and a name never comes out of a pattern match.
+// `.company/work/<run slug>/<plan file name>` as { slug, name }, or null. The text is length-capped and split on `/`,
+// and the slug is checked with the shared slug rule: linear cost, and a name never comes out of a pattern match.
 function planPathParts(p) {
   if (typeof p !== 'string' || p.length > MAX_PLAN_PATH || !p.startsWith(WORK_PREFIX)) return null;
   const parts = p.slice(WORK_PREFIX.length).split('/');
-  if (parts.length !== 2 || !isWorkFolder(parts[0]) || !PLAN_NAME_RE.test(parts[1])) return null;
-  return { slug: parts[0], name: parts[1] };
+  if (parts.length < 2 || parts.length > 3) return null;
+  const name = parts.pop();
+  const slug = parts.join('/');
+  if (!isRunSlug(slug) || !PLAN_NAME_RE.test(name)) return null;
+  return { slug, name };
 }
 
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
@@ -103,7 +106,7 @@ function readBounded(file, max) {
 
 // The last valid ship record of the run's ledger file, or null.
 function lastShip(root, slug) {
-  const buf = readBounded(join(root, '.company', 'ledger', `${slug}.jsonl`), MAX_LEDGER_BYTES);
+  const buf = readBounded(join(root, '.company', 'ledger', `${runKey(slug)}.jsonl`), MAX_LEDGER_BYTES);
   if (!buf) return null;
   let ship = null;
   for (const text of buf.toString('utf8').split('\n')) {
@@ -136,10 +139,10 @@ const show1 = m => (m === null ? '?' : m.toFixed(1));
 function featureRuns(root) {
   const work = join(root, '.company', 'work');
   let names;
-  try { names = readdirSync(work).filter(isWorkFolder).sort(); } catch { return []; }
+  try { names = runSlugs(root, { max: MAX_RUNS }).slugs.sort(); } catch { return []; }
   const runs = [];
   for (const slug of names) {
-    const dir = join(work, slug);
+    const dir = join(work, ...workParts(slug));
     const st = lstatOrNull(dir);
     if (!st || !st.isDirectory()) continue;
     const summary = lstatOrNull(join(dir, '00-summary.md'));
@@ -320,10 +323,10 @@ function workingTreePlans(root) {
   const st = lstatOrNull(work);
   if (!st || !st.isDirectory()) return null;
   let names;
-  try { names = readdirSync(work).filter(isWorkFolder).sort().slice(0, MAX_RUNS); } catch { return []; }
+  try { names = runSlugs(root, { max: MAX_RUNS }).slugs.sort().slice(0, MAX_RUNS); } catch { return []; }
   const plans = [];
   for (const slug of names) {
-    const dir = join(work, slug);
+    const dir = join(work, ...workParts(slug));
     if (!lstatOrNull(dir)?.isDirectory()) continue;
     let files;
     try { files = readdirSync(dir); } catch { continue; }

@@ -1,9 +1,10 @@
-# Contract: plan-review v1.3
+# Contract: plan-review v1.4
 
 Provider: `scripts/plan-review.mjs` (Node built-ins only; cwd = product root; `main(args, { root, now })` exported by `scripts/plan-review.mjs`; runs no git and no shell). Consumers: the Lead of `aico:pipeline` (`lines`, `majors`, `gate`), the eval run before a release (`score`), `release` v1.1 (reads the eval records). Uses: `contract-index` v1 (`buildIndex`), `plan-tasks` v1 (path rule `normalizePath`), `handoff` v2.0 (`parseLocations`), `work-folder-name` v1.1 (`isWorkFolder`, `exactWorkPath`).
 v1.1: the slug is a work folder name, new or legacy; case names keep their own pattern.
 v1.2 (additive): `lines` and `gate` check the spelling of `.company`, `work`, the slug and each named plan or Handoff file against the directory entries before any read or write. A name that exists only in another ASCII letter case → `refused: wrong letter case` (exit 3), nothing written; a name missing in every case keeps its old refusal. The real-path compare is exact on every platform (no case fold).
 v1.3 (additive): the new command `majors`, and `gate` also prints one `security <NN>-<role>:R-<n>` line per `[security]` row.
+v1.4 (additive, task One Project One Id, T23): `<slug>` is accepted with `isRunSlug`, so a v3 run slug `<ProjectID>/<NN>-<playbook>` works for `lines`, `majors` and `gate`. Its folder is `exactWorkPath` over `workParts(slug)` and every file is read and written inside it; a v3 slug whose run folder is missing is `refused: run folder not found` (exit 3). The `Review inputs:` paths keep the slug as written. v2, v1.1 and legacy names give byte-identical output to v1.3.
 Exit codes: 0 done, 1 unreadable plan or record, 3 refused (`refused: <reason>`, nothing written), 4 `majors` found no Contract major. Arguments are checked values only: slug a work folder name (`isWorkFolder`: a new `YYYY-MM-DD HH.MM - <Topic>` name or a legacy `^[a-z0-9][a-z0-9-]{0,63}$` slug; any other value → `refused: bad slug`, never echoed), plan name by the `plan-check` v1 rule (`^(\d{2,3}-)?(architect-)?plan(-[a-z0-9]+)?\.md$`), Handoff file names `^\d{2,3}-[a-z][a-z0-9-]{0,40}\.md$`; an argument with a control character (Cc, Cf, Zl, Zp) or over 4096 characters, an unknown flag or a repeated flag → exit 3.
 
 ## Real-path read rule

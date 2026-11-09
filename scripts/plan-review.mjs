@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan review (contract: docs/contracts/plan-review.md v1.3). Node built-ins only.
+// Plan review (contract: docs/contracts/plan-review.md v1.4). Node built-ins only.
 // uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v2.0
 // `lines` writes the inputs file a reviewer reads, `gate` prints the reviewer's paraphrase for the CEO,
 // `majors` says whether a plan raises a Contract's major version, `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
 import { parseLocations } from './handoff-lint.mjs';
 import { normalizePath } from './plan-tasks.mjs';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_ARG = 4096;
@@ -142,15 +142,16 @@ function checkArgs(args) {
 }
 
 const needSlug = (s) => {
-  if (!isWorkFolder(s)) throw new Refused('bad slug');
+  if (!isRunSlug(s)) throw new Refused('bad slug');
   return s;
 };
 
 // Spelling of the work folder and the named files must match the directory entries; a missing one keeps its own refusal.
 function exactNames(realRoot, slug, files) {
   try {
-    exactWorkPath({ fs, path }, realRoot, [slug]);
-    for (const f of files) exactWorkPath({ fs, path }, realRoot, [slug, f]);
+    const folder = exactWorkPath({ fs, path }, realRoot, workParts(slug));
+    if (folder === 'missing' && workParts(slug).length === 2) throw new Refused('run folder not found');
+    for (const f of files) exactWorkPath({ fs, path }, realRoot, [...workParts(slug), f]);
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
     throw error;
@@ -263,7 +264,7 @@ function collectCode(realRoot, text) {
 }
 
 function planFile(realRoot, slug, name, max) {
-  const res = readPlain(realRoot, ['.company', 'work', slug, name], max);
+  const res = readPlain(realRoot, ['.company', 'work', ...workParts(slug), name], max);
   if (res.text !== undefined) return res.text;
   if (res.reason === 'path' || res.reason === 'not a plain file' || res.reason === 'changed') {
     throw new Refused(`${name} fails the real-path read rule`);
@@ -272,7 +273,7 @@ function planFile(realRoot, slug, name, max) {
 }
 
 function writeInputs(realRoot, slug, body) {
-  const run = plainDir(realRoot, ['.company', 'work', slug]);
+  const run = plainDir(realRoot, ['.company', 'work', ...workParts(slug)]);
   if (run === null) throw new Refused('run folder missing or linked');
   const dir = path.join(run, 'plan-review');
   let st = null;
@@ -288,7 +289,7 @@ function writeInputs(realRoot, slug, body) {
       if (error.code !== 'EEXIST') throw new Refused('plan-review folder cannot be made');
     }
   }
-  if (plainDir(realRoot, ['.company', 'work', slug, 'plan-review']) === null) throw new Refused('plan-review folder is not a plain folder');
+  if (plainDir(realRoot, ['.company', 'work', ...workParts(slug), 'plan-review']) === null) throw new Refused('plan-review folder is not a plain folder');
   const file = path.join(dir, 'inputs.md');
   let fst = null;
   try {
@@ -336,7 +337,7 @@ function cmdLines(args, env) {
   exactNames(realRoot, slug, [planName, ...after]);
   const text = planFile(realRoot, slug, planName, MAX_PLAN_BYTES);
   for (const f of after) {
-    const res = readPlain(realRoot, ['.company', 'work', slug, f], 0);
+    const res = readPlain(realRoot, ['.company', 'work', ...workParts(slug), f], 0);
     if (res.text === undefined) throw new Refused(`--after file ${f}: ${res.reason}`);
   }
 
@@ -475,7 +476,7 @@ function cmdGate(args, env) {
   if (!HANDOFF_NAME.test(name) || PLAN_NAME.test(name)) throw new Refused('bad Handoff name');
   const realRoot = realRootOf(env.root);
   exactNames(realRoot, slug, [name]);
-  const res = readPlain(realRoot, ['.company', 'work', slug, name], MAX_HANDOFF_BYTES);
+  const res = readPlain(realRoot, ['.company', 'work', ...workParts(slug), name], MAX_HANDOFF_BYTES);
   if (res.text === undefined) {
     if (res.reason === 'missing') throw new Refused('Handoff missing');
     throw new Refused(`Handoff ${res.reason}`);

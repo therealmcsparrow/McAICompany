@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan check (contract: docs/contracts/plan-check.md v1.6). Node built-ins; `verify` also loads the settings script.
+// Plan check (contract: docs/contracts/plan-check.md v1.7). Node built-ins; `verify` also loads the settings script.
 // Scans the Steps, Tasks, Wave, Phase, Fix round, T<n> and M<n> sections of a plan for open decisions, and keeps a per-run record of the
 // scans in .company/work/<slug>/plan-check.jsonl. The record holds counts, enums, a file name and
 // times only, never plan text (GDPR Art. 5(1)(c)). Plan text and CLI arguments are untrusted data.
@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { MAX_LINE_CHARS, readPlanLines } from './plan-markdown.mjs';
-import { WorkFolderRefusal, exactWorkPath, isTicketHeading, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, isTicketHeading, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -236,7 +236,7 @@ function lstatOrNull(p) {
 // The run folder, with no link in .company, .company/work or the slug folder. Returns null when absent.
 function runDir(root, slug) {
   let dir = root;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...(workParts(slug) ?? [])]) {
     dir = path.join(dir, part);
     const st = lstatOrNull(dir);
     if (!st) return null;
@@ -247,9 +247,10 @@ function runDir(root, slug) {
 
 // The name shape first, then the exact spelling of the folder (and a plan file) on disk.
 function checkSlug(slug, root, file) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new Refusal('bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new Refusal('bad slug');
   try {
-    exactWorkPath({ fs, path }, root, file === undefined ? [slug] : [slug, file]);
+    const parts = workParts(slug);
+    exactWorkPath({ fs, path }, root, file === undefined ? parts : [...parts, file]);
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;
@@ -365,7 +366,7 @@ function parseRecord(root, slug) {
 }
 
 function checkSlugForRead(slug) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('plan-check: bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new TypeError('plan-check: bad slug');
 }
 
 export function readRecord(root, slug) {
@@ -610,7 +611,7 @@ function planEntries(dir, plan) {
 
 // Scans the plan files itself and reads no record. Returns the result plus the decided count.
 function scanPlans({ root, home, slug, plan }) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('plan-check: bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new TypeError('plan-check: bad slug');
   // Settings load only here, so gate, off, wave and read need nothing beyond this script.
   const { resolveSettings } = createRequire(import.meta.url)('./settings.mjs');
   const policy = resolveSettings({ home, cwd: root }).plan_check.policy;
