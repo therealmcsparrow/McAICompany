@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { manifestFromBaseline, parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
 import { NAME_RE, settingsMode, vetCandidates } from './skillspector.mjs';
 import { approvable, readBaseline, validateEntry } from './skill-catalog.mjs';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const HANDOFF_PREFIX = '.company/work/';
@@ -35,23 +35,25 @@ export class Refused extends Error {
 const pad = (n) => String(n).padStart(2, '0');
 const localDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-// The work folder name of `.company/work/<work folder>/<NN>-skill-researcher.md` or `<NN>-design-researcher.md`, or null.
+// The run slug of `.company/work/<run>/<NN>-skill-researcher.md` or `<NN>-design-researcher.md` (`<run>` a work folder
+// name or a v3 `<ProjectID>/<NN>-<playbook>`), or null.
 function handoffFolder(arg) {
   if (typeof arg !== 'string' || arg.length > MAX_HANDOFF_ARG || !arg.startsWith(HANDOFF_PREFIX)) return null;
   const rest = arg.slice(HANDOFF_PREFIX.length);
-  const cut = rest.indexOf('/');
+  const cut = rest.lastIndexOf('/');
   if (cut < 1) return null;
   const folder = rest.slice(0, cut);
-  return HANDOFF_FILE_RE.test(rest.slice(cut + 1)) && isWorkFolder(folder) ? folder : null;
+  return HANDOFF_FILE_RE.test(rest.slice(cut + 1)) && isRunSlug(folder) ? folder : null;
 }
 
 function readHandoff(arg, cwd) {
   const folder = handoffFolder(arg);
   if (folder === null) throw new Refused('handoff path must be .company/work/<work folder>/<NN>-skill-researcher.md or <NN>-design-researcher.md');
   // Exact letter case of every segment; a missing path keeps `handoff not found` below.
-  try { exactWorkPath({ fs: { readdirSync }, path: { join } }, cwd, [folder, arg.slice(`${HANDOFF_PREFIX}${folder}/`.length)]); } catch (e) { if (e instanceof WorkFolderRefusal) throw new Refused(e.message); throw e; }
+  try { exactWorkPath({ fs: { readdirSync }, path: { join } }, cwd, [...workParts(folder), arg.slice(`${HANDOFF_PREFIX}${folder}/`.length)]); } catch (e) { if (e instanceof WorkFolderRefusal) throw new Refused(e.message); throw e; }
   // No link anywhere on the way, then a regular file within the size cap.
-  for (const rel of ['.company', '.company/work', `.company/work/${folder}`, arg]) {
+  const folders = workParts(folder).map((_, i, all) => `.company/work/${all.slice(0, i + 1).join('/')}`);
+  for (const rel of ['.company', '.company/work', ...folders, arg]) {
     let st;
     try { st = lstatSync(resolve(cwd, rel)); } catch { throw new Refused('handoff not found'); }
     if (st.isSymbolicLink()) throw new Refused('handoff path contains a link');

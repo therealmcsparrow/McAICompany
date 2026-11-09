@@ -1,7 +1,7 @@
 // Pure logic of the Blast Radius mod: hits from a `review-depth --json` answer, the ask/warn/deny decision,
 // the reason text and the script arguments. No engine object, no Node import, no npm package.
 import { cleanText, parseOutputLine } from './guard.mjs';
-import { isWorkFolder } from './work-folder.mjs';
+import { isRunSlug } from './work-folder.mjs';
 
 export const MAX_REASON = 600;
 export const NOBODY = 'nobody can be asked; commit refused';
@@ -56,7 +56,7 @@ export function reviewArgs(spec) {
   if (spec === null || typeof spec !== 'object') return null;
   let args;
   if (spec.source === 'worktree') args = ['--worktree', '--json'];
-  else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base) && isWorkFolder(spec.slug)) args = [spec.base, '--run', spec.slug, '--json'];
+  else if (spec.source === 'base' && typeof spec.base === 'string' && SHA.test(spec.base) && isRunSlug(spec.slug)) args = [spec.base, '--run', spec.slug, '--json'];
   else return null;
   if (spec.risk === 'low' || spec.risk === 'medium' || spec.risk === 'high') args.push('--risk', spec.risk);
   const repo = spec.repo;

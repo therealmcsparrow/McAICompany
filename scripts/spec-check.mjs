@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Destination spec check (contract: docs/contracts/destination-spec.md v1.3). Node built-ins only.
+// Destination spec check (contract: docs/contracts/destination-spec.md v1.4). Node built-ins only.
 // `check` reports a spec that holds a code block, a file path, a bad frontmatter or a wrong heading list;
 // `stamp` fills the two pending frontmatter values once. Spec text and arguments are untrusted: sizes are
 // capped before parsing, every pattern is anchored over a character class or replaced by a single scan, the
@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
 const MAX_BYTES = 64 * 1024;
@@ -29,14 +29,14 @@ const WIN = process.platform === 'win32';
 
 class Refused extends Error {}
 
-// A spec path by name: `docs/specs/<name>.md` or `.company/work/<name>/spec.md`, `<name>` a work folder name
-// (new form or legacy slug). The name is cut out by position and judged by the shared allow-list.
+// A spec path by name: `docs/specs/<name>.md` or `.company/work/<run>/spec.md`, `<name>` a work folder name (new form or
+// legacy slug), `<run>` a run slug (a v3 run is `<ProjectID>/<NN>-<playbook>`). The name is cut out by position and
+// judged by the shared allow-list.
 function isSpecRel(rel) {
   if (typeof rel !== 'string' || rel.length > MAX_ARG) return false;
-  let name = null;
-  if (rel.startsWith(SPECS_DIR) && rel.endsWith('.md')) name = rel.slice(SPECS_DIR.length, -'.md'.length);
-  else if (rel.startsWith(WORK_DIR) && rel.endsWith('/spec.md')) name = rel.slice(WORK_DIR.length, -'/spec.md'.length);
-  return name !== null && isWorkFolder(name);
+  if (rel.startsWith(SPECS_DIR) && rel.endsWith('.md')) return workParts(rel.slice(SPECS_DIR.length, -'.md'.length))?.length === 1;
+  if (rel.startsWith(WORK_DIR) && rel.endsWith('/spec.md')) return isRunSlug(rel.slice(WORK_DIR.length, -'/spec.md'.length));
+  return false;
 }
 
 const validDate = (text) => {
@@ -62,7 +62,9 @@ function relOf(realRoot, arg) {
   if (!rel.startsWith(WORK_DIR) && rel.slice(0, WORK_DIR.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_DIR) {
     throw new Refused('wrong letter case');
   }
-  if (!isSpecRel(rel)) throw new Refused('spec must be docs/specs/<name>.md or .company/work/<name>/spec.md');
+  // A backslash in a relative argument is a separator for a one-part name only; a v3 run slug is written with a slash.
+  const nested = rel.startsWith(WORK_DIR) && rel.slice(WORK_DIR.length).split('/').length > 2;
+  if (!isSpecRel(rel) || (nested && !path.isAbsolute(arg) && arg.includes('\\'))) throw new Refused('spec must be docs/specs/<name>.md or .company/work/<run>/spec.md');
   if (rel.startsWith(WORK_DIR)) {
     try {
       exactWorkPath({ fs, path }, realRoot, rel.slice(WORK_DIR.length).split('/'));
@@ -136,7 +138,7 @@ function frontmatter(lines) {
   const version = /^version: (.+)$/.exec(lines[2]);
   const shipped = /^shipped: (.+)$/.exec(lines[3]);
   if (!slug || !version || !shipped) return null;
-  if (!isWorkFolder(slug[1])) return null;
+  if (!isRunSlug(slug[1])) return null;
   if (version[1] !== 'pending' && !VERSION.test(version[1])) return null;
   if (shipped[1] !== 'pending' && !validDate(shipped[1])) return null;
   return { end: 4, version: version[1], shipped: shipped[1] };

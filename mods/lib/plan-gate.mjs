@@ -1,6 +1,6 @@
 // Pure logic for the plan Gate mod: which commands and files it judges, and what a `plan-check verify --json` answer means.
 // Nothing here runs a process or touches a file. Allow-lists only: anything not matched exactly is not judged.
-import { isWorkFolder, isLegacySlug } from './work-folder.mjs';
+import { isRunSlug, isProjectId, workParts, isLegacySlug } from './work-folder.mjs';
 
 const MAX_COMMAND = 4096;
 const MAX_PATH = 4096;
@@ -10,7 +10,7 @@ const SCRIPT_PATH = /^[A-Za-z0-9_.:/\\+@-]+$/;
 const POLICIES = ['off', 'warn', 'block'];
 const STATES = ['pass', 'open', 'error'];
 // A run-state record file under a run folder. Trailing dots, spaces and a stream suffix reach the same file on Windows.
-const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]+)\/run-state\.jsonl[. ]*(?::.*)?$/i;
+const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]+(?:\/[^/]+)?)\/run-state\.jsonl[. ]*(?::.*)?$/i;
 
 export const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 
@@ -41,7 +41,7 @@ function gateName(rest) {
     const close = rest.indexOf("'", 1);
     if (close < 0 || rest.slice(close + 1) !== GATE_TAIL) return null;
     const name = rest.slice(1, close);
-    return isWorkFolder(name) ? name : null;
+    return workParts(name) !== null ? name : null;
   }
   if (!rest.endsWith(GATE_TAIL)) return null;
   const name = rest.slice(0, -GATE_TAIL.length);
@@ -70,7 +70,9 @@ export function recordPath(path) {
   if (typeof path !== 'string' || path.length > MAX_PATH) return null;
   const found = RECORD_PATH.exec(path.replaceAll('\\', '/'));
   if (found === null) return null;
-  return { slug: isWorkFolder(found[1]) ? found[1] : null };
+  // A second segment belongs to a v3 run only under a project folder; any other nested path is not a record.
+  if (found[1].includes('/') && !isProjectId(found[1].slice(0, found[1].indexOf('/')).toUpperCase())) return null;
+  return { slug: isRunSlug(found[1]) ? found[1] : null };
 }
 
 export function writeTarget(input) {

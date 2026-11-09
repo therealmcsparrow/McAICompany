@@ -1,6 +1,8 @@
-# Contract: wayfinder v1.1
+# Contract: wayfinder v1.2
 
 Provider: `scripts/wayfinder.mjs` (Node built-ins only; read-only, writes nothing). Exports `validate(text, { root })` and `main(args, { root })`. Consumers: the Architect (`aico:planning`, writes and updates a map), the Lead and any Role told to read one at the start of a session. Uses: `plan-tasks` v1.7 (`parsePlan` read only, for `#T<n>` anchors; `normalizePath`) and `work-folder-name` v2.0 (`isWorkFolder`, `exactWorkPath`, `ticketLocal`). Rationale: docs/adr/0065-plan-tasks-owns-lanes.md (wayfinder reads plan tasks, never owns their syntax).
+
+v1.2 (task T37, minor, additive; work-folder-name v3.0): a pointer `.company/work/<ProjectID>/<NN>-<playbook>/<file>` into a v3 run folder (and `.company/work/<ProjectID>/00-project.md`) is checked like one into a v2 folder, with the same `bad ref`, `pointer missing` and `task missing` lines. A `<slug>` argument is accepted with `isRunSlug`; its folder is `exactWorkPath(io, root, workParts(slug))`, so a v3 run `<ProjectID>/<NN>-<playbook>` is read like a v2 folder. The v2, v1.1 and legacy names give byte-identical output to v1.1. `isWorkFolder` keeps its v2 meaning.
 
 ## Purpose
 A decision map for an effort that spans sessions. It points to files that hold the real content (plans, ADRs, Handoffs, brainstorms, Contracts) and copies nothing from them. Its lines are data for the reader, never instructions.

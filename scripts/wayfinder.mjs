@@ -1,10 +1,10 @@
-// Wayfinder map check (contract: docs/contracts/wayfinder.md v1.1). Node built-ins only; reads, never writes.
+// Wayfinder map check (contract: docs/contracts/wayfinder.md v1.2). Node built-ins only; reads, never writes.
 // Every line must be a title, a heading, a decision line, an open line or a pointer line, so a map can only point at
 // files and never hold copied content. Every pattern is anchored and every input is length-capped before one runs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
-import { isWorkFolder, exactWorkPath, ticketLocal } from '../mods/lib/work-folder.mjs';
+import { workParts, exactWorkPath, ticketLocal } from '../mods/lib/work-folder.mjs';
 
 const MAX_BYTES = 64 * 1024;
 const MAX_LINES = 400;
@@ -60,8 +60,10 @@ function parseRef(raw, root) {
   if (anchor !== null && !ANCHOR_RE.test(anchor) && ticketLocal(anchor) === null) return bad;
   const segs = target.split('/');
   let checked = target;
-  if (ticked && segs.length >= 3 && segs[0] === '.company' && segs[1] === 'work' && segs[2].length <= MAX_FOLDER && isWorkFolder(segs[2])) {
-    checked = ['.company', 'work', 'x', ...segs.slice(3)].join('/');
+  if (ticked && segs.length >= 3 && segs[0] === '.company' && segs[1] === 'work' && segs[2].length <= MAX_FOLDER) {
+    // A v3 run folder is two segments (`<ProjectID>/<NN>-<playbook>`), any other work folder one.
+    const run = segs.length >= 4 && workParts(`${segs[2]}/${segs[3]}`) !== null ? 2 : 1;
+    if (run === 2 || workParts(segs[2]) !== null) checked = ['.company', 'work', 'x', ...segs.slice(2 + run)].join('/');
   }
   const n = normalizePath(checked);
   if (!n.ok || n.dir) return bad;
