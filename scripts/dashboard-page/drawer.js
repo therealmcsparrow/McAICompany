@@ -134,14 +134,17 @@
     doc.body.append(root);
   }
 
+  function each(list, fn) { Array.prototype.forEach.call(list || [], fn); }
+  function lower(v) { return typeof v === 'string' ? v.toLowerCase() : ''; }
+
   function focusables() {
     var list = [parts.closeTop];
     if (!parts.back.hidden) list.push(parts.back);
-    parts.runsList.children.forEach(function (li) {
-      li.children.forEach(function (b) { if (b.tagName === 'button' && !parts.runsSec.hidden) list.push(b); });
+    each(parts.runsList.children, function (li) {
+      each(li.children, function (b) { if (lower(b.tagName) === 'button' && !parts.runsSec.hidden) list.push(b); });
     });
-    parts.prList.children.forEach(function (li) {
-      li.children.forEach(function (a) { if (a.tagName === 'a') list.push(a); });
+    each(parts.prList.children, function (li) {
+      each(li.children, function (a) { if (lower(a.tagName) === 'a') list.push(a); });
     });
     list.push(parts.closeBottom);
     return list;
@@ -165,9 +168,9 @@
   }
 
   function setBackground(on) {
-    doc.body.children.forEach(function (n) {
+    each(doc.body.children, function (n) {
       if (n === root) return;
-      var t = n.tagName;
+      var t = lower(n.tagName);
       if (t === 'header' || t === 'main' || (t === 'a' && /\bskip\b/.test(n.className || ''))) {
         if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert');
       }
