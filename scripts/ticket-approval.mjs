@@ -671,6 +671,25 @@ function dropFreshRun(root, name) {
   }
 }
 
+// An earlier Build run of the same project whose plan holds exactly these ticket IDs, from disk; its folder name or null.
+function earlierBuildRun(env, slug, ids) {
+  const id = projectIdOf(slug);
+  const names = fs.readdirSync(path.join(env.root, '.company', 'work')).filter((name) => name !== slug && projectIdOf(name) === id).sort();
+  for (const name of names) {
+    try {
+      const summary = readFileSafe(env.root, ['.company', 'work', name, '00-summary.md'], MAX_SUMMARY_BYTES);
+      if (!summary || runOf(decode(summary.bytes))?.kind !== 'build') continue;
+      const planFile = readFileSafe(env.root, ['.company', 'work', name, 'plan.md'], MAX_PLAN_BYTES);
+      if (!planFile) continue;
+      const found = parsePlan(decode(planFile.bytes), name).tickets.map((t) => t.id);
+      if (found.length === ids.length && found.every((x, i) => x === ids[i])) return name;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function cmdBuildPlan(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env);
@@ -698,9 +717,9 @@ function cmdBuildPlan(args, env) {
   const applied = appliedLines(rec, [...plan.tickets, plan.sections]);
   ensureDir(env.root, ['.company', 'work']);
   const ids = approved.map((t) => t.id);
-  // A v2 Build run folder is new on every call, so a resume is caught from the record.
-  if (v2 && rec.events.some((e) => e.ev === 'build' && Array.isArray(e.ids) && e.ids.length === ids.length && e.ids.every((id, i) => id === ids[i]))) {
-    throw new Refusal('file exists');
+  if (v2) {
+    const earlier = earlierBuildRun(env, slug, ids);
+    if (earlier !== null) throw new Refusal('file exists', [`plan: .company/work/${earlier}/plan.md`]);
   }
   if (v2) buildSlug = makeBuildRun(env, slug);
   const planPath = `.company/work/${buildSlug}/plan.md`;
