@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v2.0
+// contract: docs/contracts/lead-handoff.md v2.1
 // uses: docs/contracts/run-state.md v2.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a SessionStart hook that
 // injects it after compaction, a Stop hook that keeps the Lead's context reading, a SessionStart hook that resets the current reading for a new session, plus a small CLI. Every hook payload, transcript line, record line and Step
@@ -10,11 +10,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { active, show } from './run-state.mjs';
+import { active, show, runSlugs } from './run-state.mjs';
 import { main as flow } from './idea-flow.mjs';
 import { readTierPath } from './tier-set.mjs';
 import { readInside } from './handoff-lint.mjs';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const CAP = 95000;
 export const HANDOVER_AT = 85500;
@@ -66,18 +66,20 @@ export const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { retu
 
 // The work folder of a name when every folder on its path is a real directory inside the real work folder, else null.
 export function workDir(root, slug) {
+  const rel = typeof slug === 'string' ? workParts(slug) : null;
+  if (rel === null) return null;
   let p = root;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...rel]) {
     p = path.join(p, part);
     const l = lstatOrNull(p);
     if (!l || l.isSymbolicLink() || !l.isDirectory()) return null;
   }
-  return insideWork(root, p) ? p : null;
+  return insideWork(root, p, rel) ? p : null;
 }
 
-function insideWork(root, dir) {
+function insideWork(root, dir, rel) {
   try {
-    const want = path.join(fs.realpathSync.native(path.join(root, '.company', 'work')), path.basename(dir));
+    const want = path.join(fs.realpathSync.native(path.join(root, '.company', 'work')), ...rel);
     const real = fs.realpathSync.native(dir);
     return real === want;
   } catch { return false; }
@@ -179,7 +181,8 @@ function appendEvent(dir, events, fields, now) {
 
 // The state of the idea flow of a run: null without a record, else { kind, form }; fails closed on a broken record.
 function flowState(root, slug) {
-  if (!lstatOrNull(path.join(root, '.company', 'work', slug, 'idea-flow.jsonl'))) return null;
+  const rel = workParts(slug);
+  if (rel === null || !lstatOrNull(path.join(root, '.company', 'work', ...rel, 'idea-flow.jsonl'))) return null;
   const r = flow(['state', slug], root);
   if (r.code !== 0) broken();
   const kind = /^kind: (idea|bug)$/m.exec(r.out)?.[1];
@@ -196,10 +199,10 @@ export function findRun(root, now) {
   const l = lstatOrNull(work);
   if (!l || !l.isDirectory() || l.isSymbolicLink()) return null;
   let names;
-  try { names = fs.readdirSync(work).filter(isWorkFolder).slice(0, MAX_SCAN); } catch { return null; }
+  try { names = runSlugs(root, { max: MAX_SCAN }).slugs; } catch { return null; }
   const recent = [];
   for (const slug of names) {
-    const f = lstatOrNull(path.join(work, slug, 'idea-flow.jsonl'));
+    const f = lstatOrNull(path.join(work, ...workParts(slug), 'idea-flow.jsonl'));
     if (f && f.isFile() && now - f.mtimeMs <= FRESH_MS) recent.push({ slug, mtimeMs: f.mtimeMs });
   }
   recent.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.slug < b.slug ? -1 : 1));
@@ -333,7 +336,7 @@ function handoffText(st, { tokens, window, trigger, command }) {
 }
 
 const FM_KEYS = [
-  ['slug', { test: isWorkFolder }], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
+  ['slug', { test: isRunSlug }], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
   ['base-commit', /^([0-9a-f]{7,40}|[0-9a-f]{64}|unknown)$/], ['risk-tier', /^(low|medium|high|unknown)$/],
   ['tier-path', /^(none|broken|(feature|fix) (short|full))$/], ['tier-set', /^\[(?:[a-z][a-z0-9-]{0,40}(?:, [a-z][a-z0-9-]{0,40})*)?\]$/],
   ['gate', /^(none|(brief|plan|ship) (open|passed|changed|stopped))$/],
@@ -452,7 +455,7 @@ export function claudeDirOf(env) {
 
 // The command that starts a new Lead session on a run; text only. Null for a bad name.
 export function newSessionCommand(slug) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug) || /[%^&|<>"]/.test(slug)) return null;
+  if (typeof slug !== 'string' || !isRunSlug(slug) || /[%^&|<>"]/.test(slug)) return null;
   return `claude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`;
 }
 
@@ -610,7 +613,7 @@ export function measure(text, options) {
     if (!p || p.event !== 'Stop' || p.subagent) return quiet;
     const slug = findRun(root, now);
     if (!slug) return quiet;
-    exactWorkPath({ fs, path }, root, [slug]);
+    exactWorkPath({ fs, path }, root, workParts(slug));
     const dir = runExists(root, slug);
     if (!dir) return quiet;
     const ctx = transcriptTokens(p.transcript, claudeDir);
@@ -632,7 +635,7 @@ export function start(text, options) {
     if (!p || p.event !== 'SessionStart' || !['startup', 'resume', 'clear'].includes(p.source) || p.subagent || p.session === null) return quiet;
     const slug = findRun(root, now);
     if (!slug) return quiet;
-    exactWorkPath({ fs, path }, root, [slug]);
+    exactWorkPath({ fs, path }, root, workParts(slug));
     const dir = runExists(root, slug);
     if (!dir) return quiet;
     writeReading(dir, (old) => ({ session: p.session, ctx: null, peak: old ? old.peak : 0, at: iso(now) }));
@@ -672,8 +675,8 @@ export function resume(text, options) {
 
 // Name shape first, then the exact letter case of the folder on disk; a missing folder keeps the caller's own refusal.
 function checkSlug(s, root) {
-  if (!isWorkFolder(s)) refuse('bad slug');
-  try { exactWorkPath({ fs, path }, root, [s]); } catch (e) {
+  if (!isRunSlug(s)) refuse('bad slug');
+  try { exactWorkPath({ fs, path }, root, workParts(s)); } catch (e) {
     if (e instanceof WorkFolderRefusal) refuse(e.message);
     throw e;
   }
