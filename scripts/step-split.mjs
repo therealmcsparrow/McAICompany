@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Step split (contract: docs/contracts/step-split.md v1.1). Node built-ins only.
-// uses: docs/contracts/review-depth.md v1.3 docs/contracts/work-folder-name.md v1
+// uses: docs/contracts/review-depth.md v1.3 docs/contracts/work-folder-name.md v2.0
 // Usage: node scripts/step-split.mjs review '<run>' <base> <round> [--max-lines <n>] [--max-files <n>]
 //        node scripts/step-split.mjs fix '<run>' <round> <handoff>...
 //        node scripts/step-split.mjs show '<run>' <r|f><round>
