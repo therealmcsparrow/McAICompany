@@ -122,6 +122,13 @@ function readPlanText(root, segs, full) {
   }
 }
 
+// The run slug a plan path sits in: `<ID>/<NN>-<pb>` for a v3 run folder, else the single folder name.
+function runSlugOf(segs) {
+  if (segs[0] !== '.company' || segs[1] !== 'work') return undefined;
+  if (segs.length >= 5 && workParts(`${segs[2]}/${segs[3]}`)?.length === 2) return `${segs[2]}/${segs[3]}`;
+  return segs[2];
+}
+
 export function validate(text, { root = process.cwd() } = {}) {
   const errors = [];
   if (typeof text !== 'string') return [{ line: 1, reason: 'bad title' }];
@@ -144,7 +151,7 @@ export function validate(text, { root = process.cwd() } = {}) {
     if (ref.anchor === null || ticketLocal(ref.anchor) === null || !isPlanFile(ref.segs.at(-1))) return undefined;
     if (!planTasks.has(ref.path)) {
       const body = readPlanText(root, ref.segs, found.full);
-      planTasks.set(ref.path, body === null ? new Set() : new Set(parsePlan(body, { slug: ref.segs[0] === '.company' && ref.segs[1] === 'work' ? ref.segs[2] : undefined }).tasks.map((t) => t.id)));
+      planTasks.set(ref.path, body === null ? new Set() : new Set(parsePlan(body, { slug: runSlugOf(ref.segs) }).tasks.map((t) => t.id)));
     }
     if (!planTasks.get(ref.path).has(ref.anchor)) err(n, `task missing ${ref.anchor} in ${ref.path}`);
     return undefined;
