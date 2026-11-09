@@ -697,6 +697,11 @@ function cmdBuildPlan(args, env) {
   }
   const applied = appliedLines(rec, [...plan.tickets, plan.sections]);
   ensureDir(env.root, ['.company', 'work']);
+  const ids = approved.map((t) => t.id);
+  // A v2 Build run folder is new on every call, so a resume is caught from the record.
+  if (v2 && rec.events.some((e) => e.ev === 'build' && Array.isArray(e.ids) && e.ids.length === ids.length && e.ids.every((id, i) => id === ids[i]))) {
+    throw new Refusal('file exists');
+  }
   if (v2) buildSlug = makeBuildRun(env, slug);
   const planPath = `.company/work/${buildSlug}/plan.md`;
   try {
@@ -706,7 +711,7 @@ function cmdBuildPlan(args, env) {
     if (error instanceof Refusal && error.message === 'file exists') throw new Refusal(error.message, [`plan: ${planPath}`]);
     throw error;
   }
-  appendEvent(env, slug, rec, { ev: 'build', ids: approved.map((t) => t.id) });
+  appendEvent(env, slug, rec, { ev: 'build', ids });
   return { code: 0, lines: [`built ${approved.length} tickets`, `plan: ${planPath}`, ...applied] };
 }
 
