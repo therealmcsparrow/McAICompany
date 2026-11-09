@@ -59,10 +59,13 @@ describe('slugOfKey (AC12)', () => {
     assert.equal(lib.slugOfKey(made.name), made.name);
     assert.equal(lib.slugOfKey(`${ID}-23.45.07`), `${ID}-23.45.07`);
   });
+  test('a legacy name maps to itself (AC7)', () => {
+    for (const k of ['x', 'fix-login', 'a1-b2']) assert.equal(lib.slugOfKey(k), k);
+  });
   test('anything else is null', () => {
     const bad = [
       `${ID}~01-fix~02-fix`, `${ID}/01-fix`, `${ID}\\01-fix`, `${ID}~..`, '..', `${ID}~01-../x`,
-      `${ID}~00-fix`, `${ID}~1-fix`, `${ID}~01-Fix`, `${ID}~01-`, ID, '', 'x',
+      `${ID}~00-fix`, `${ID}~1-fix`, `${ID}~01-Fix`, `${ID}~01-`, ID, '', 'X', '-x', 'a b',
     ];
     for (const k of bad) assert.equal(lib.slugOfKey(k), null, JSON.stringify(k));
     for (const k of [null, undefined, 5, {}, []]) assert.equal(lib.slugOfKey(k), null);
