@@ -141,8 +141,13 @@ function projectDescription(root, id) {
   let fd = null;
   try {
     const file = path.join(root, '.company', 'work', id, '00-project.md');
-    if (!fs.lstatSync(file).isFile()) return '';
+    const st = fs.lstatSync(file, { bigint: true });
+    if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1n) return '';
+    const want = path.join(fs.realpathSync.native(root), '.company', 'work', id, '00-project.md');
+    if (fs.realpathSync.native(file) !== want) return '';
     fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const f = fs.fstatSync(fd, { bigint: true });
+    if (!f.isFile() || f.dev !== st.dev || f.ino !== st.ino || f.nlink !== 1n) return '';
     const buf = Buffer.alloc(MAX_PROJECT_FILE);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
     const out = summaryDescription(buf.subarray(0, n).toString('utf8').replace(/\r\n?/g, '\n'));
