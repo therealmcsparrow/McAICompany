@@ -118,7 +118,7 @@ const SUMMARY_HEAD = 2048;
 const SUMMARY_FULL = 1024 * 1024;
 const KINDS = ['first', 'later', 'build', 'draft'];
 const RUN_RE = /^Run: (first|later|build|draft) ([a-z0-9]+(?:-[a-z0-9]+)*)$/;
-const DESCRIPTION_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}᠎⁥\u{E0000}-\u{E007F}]/u;
+const DESCRIPTION_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}᠎⁥\u{E0000}-\u{E007F}]/u;
 
 function realDate(y, mo, d) {
   if (mo < 1 || mo > 12 || d < 1) return false;
@@ -172,7 +172,7 @@ export function nextProjectId(date, names) {
   return isProjectId(id) ? id : refuse('bad project');
 }
 
-// One line, 1 to 120 characters, not only spaces, none of the Cc, Cf, Zl, Zp characters or the other listed ones.
+// One line, 1 to 120 characters, not only spaces, none of the Cc, Cf, Zl, Zp or Default_Ignorable_Code_Point characters or the other listed ones.
 export function checkDescription(text) {
   if (typeof text !== 'string' || text.length === 0 || text.length > MAX_DESCRIPTION * 2) return false;
   if ([...text].length > MAX_DESCRIPTION || text.trim() === '') return false;
