@@ -1,8 +1,8 @@
-// AC23 sweep (P20261109.000009-T36, pattern scripts/exact-case-sweep.test.mjs): no script or mod resolves a run argument
+// Sweep (pattern scripts/exact-case-sweep.test.mjs): no script or mod resolves a run argument
 // with `isWorkFolder` alone. A v3 run slug `<ProjectID>/<NN>-<playbook>` fails `isWorkFolder`, so a reader that only
-// asks it refuses every v3 run. Static scan of the real source files, no mocks. Red until T37 (the last reader).
-// Fails on: an `isWorkFolder` use outside the allow-list, a T37 seam that does not use `isRunSlug` or `workParts`,
-// or a T37 Contract without the reader paragraph. `isWorkFolder` keeps its v2 meaning (work-folder-name v3.0).
+// asks it refuses every v3 run. Static scan of the real source files, no mocks.
+// Fails on: an `isWorkFolder` use outside the allow-list, a reader seam that does not use `isRunSlug` or `workParts`,
+// or a reader Contract without the reader paragraph. `isWorkFolder` keeps its v2 meaning (work-folder-name v3.0).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -44,7 +44,7 @@ function codeLines(rel) {
 
 const USE = /\bisWorkFolder\b/;
 
-test('AC23 the sweep reads the real tree', () => {
+test('the sweep reads the real tree', () => {
   assert.ok(SCANNED.length > 40, `scanned ${SCANNED.length} files`);
   for (const rel of ['scripts/run-state.mjs', 'scripts/wayfinder.mjs', 'mods/lib/guard.mjs', 'mods/lib/plan-gate.mjs']) assert.ok(SCANNED.includes(rel), rel);
   assert.ok(!SCANNED.some((f) => /\.test\.mjs$/.test(f)));
@@ -53,7 +53,7 @@ test('AC23 the sweep reads the real tree', () => {
   assert.equal(USE.test(probe.replace(/^import[\s\S]*?from\s*'[^']*';?[ \t]*$/gm, '')), true);
 });
 
-test('AC23 no script or mod resolves a run argument with isWorkFolder alone', () => {
+test('no script or mod resolves a run argument with isWorkFolder alone', () => {
   const stray = [];
   for (const rel of SCANNED) {
     for (const { no, line } of codeLines(rel)) {
@@ -64,17 +64,17 @@ test('AC23 no script or mod resolves a run argument with isWorkFolder alone', ()
   assert.deepEqual(stray, [], `isWorkFolder outside the allow-list (use isRunSlug / workParts / runSlugs):\n${stray.join('\n')}`);
 });
 
-test('AC23 the allow-list entries name a file and a reason', () => {
+test('the allow-list entries name a file and a reason', () => {
   for (const [file, snippet, why] of ALLOW) {
     assert.ok(SCANNED.includes(file), file);
     assert.ok(snippet.length > 5 && why.length > 20, `${file}: ${snippet}`);
   }
 });
 
-// The six seams of T37 must take a run slug through the shared helpers.
+// The six reader seams must take a run slug through the shared helpers.
 const SEAMS = ['scripts/wayfinder.mjs', 'scripts/skill-picks.mjs', 'scripts/spec-check.mjs', 'mods/lib/guard.mjs', 'mods/lib/blast.mjs', 'mods/lib/plan-gate.mjs'];
 
-test('AC23 every T37 seam uses isRunSlug or workParts on its run argument, and imports it from the one library', () => {
+test('every reader seam uses isRunSlug or workParts on its run argument, and imports it from the one library', () => {
   const lacking = [];
   for (const rel of SEAMS) {
     const src = read(rel);
@@ -85,7 +85,7 @@ test('AC23 every T37 seam uses isRunSlug or workParts on its run argument, and i
   assert.deepEqual(lacking, []);
 });
 
-test('AC23 no seam copies the run slug rule (no own `parseRun`, `isRunSlug` or `workParts`)', () => {
+test('no seam copies the run slug rule (no own `parseRun`, `isRunSlug` or `workParts`)', () => {
   const copies = [];
   for (const rel of [...SEAMS, ...SCANNED]) {
     if (codeLines(rel).some(({ line }) => /(function|const|let|var)\s+(parseRun|isRunSlug|workParts)\b/.test(line))) copies.push(rel);
@@ -93,7 +93,7 @@ test('AC23 no seam copies the run slug rule (no own `parseRun`, `isRunSlug` or `
   assert.deepEqual([...new Set(copies)], []);
 });
 
-test('AC23 the four T37 Contracts carry the reader paragraph', () => {
+test('the four reader Contracts carry the reader paragraph', () => {
   const want = [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.4'], ['aico-mods', '1.8']];
   const lacking = want.filter(([name, v]) => {
     const text = read(`docs/contracts/${name}.md`);

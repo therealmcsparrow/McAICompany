@@ -1,5 +1,5 @@
-// QA-first tests for T17 (dashboard v2.0 page): a v3 project is one board card, its drawer lists its runs,
-// a run opens through `api/run/<ID>%2F<NN>-<pb>` (AC8, AC16 page side, AC7 for v2 cards).
+// Tests for the dashboard v2.0 page: a v3 project is one board card, its drawer lists its runs,
+// a run opens through `api/run/<ID>%2F<NN>-<pb>`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -114,7 +114,7 @@ const titleButtons = (env) => env.doc.byId.get('columns').find((n) => n.tagName 
 const dlg = (env) => env.doc.body.children.find((n) => n.id === 'drawer');
 const runRows = (env, name) => dlg(env).find((n) => n.tagName === 'button' && n.textContent !== 'Close' && n.textContent.includes(name));
 
-test('AC8: a v3 project with three runs is one card, its runs get no card', () => {
+test('a v3 project with three runs is one card, its runs get no card', () => {
   const env = makeEnv();
   assert.ok(env.ctx.aicoBoard.render(board([projectCard()])));
   assert.equal(cardsOf(env).length, 1);
@@ -124,13 +124,13 @@ test('AC8: a v3 project with three runs is one card, its runs get no card', () =
   assert.equal(titleButtons(env).length, 1);
 });
 
-test('AC8: project card says it holds 3 runs', () => {
+test('project card says it holds 3 runs', () => {
   const env = makeEnv();
   env.ctx.aicoBoard.render(board([projectCard()]));
   assert.match(cardsOf(env)[0].textContent, /Project\b.*\b3 runs/);
 });
 
-test('AC7: v2 run card (no kind) beside a project card stays its own card, with no project line', () => {
+test('v2 run card (no kind) beside a project card stays its own card, with no project line', () => {
   const env = makeEnv();
   env.ctx.aicoBoard.render(board([projectCard(), runCard()]));
   const cards = cardsOf(env);
@@ -147,7 +147,7 @@ test('project card with an empty runs list is still one card and says 0 runs', (
   assert.match(cardsOf(env)[0].textContent, /0 runs/);
 });
 
-test('AC8: opening the project card shows a drawer listing its runs newest first', async () => {
+test('opening the project card shows a drawer listing its runs newest first', async () => {
   const env = makeEnv();
   env.ctx.aicoBoard.render(board([projectCard()]));
   await titleButtons(env)[0].click();
@@ -159,7 +159,7 @@ test('AC8: opening the project card shows a drawer listing its runs newest first
   assert.ok(at[0] < at[1] && at[1] < at[2], 'newest first');
 });
 
-test('AC8/AC16: opening a run from the project drawer requests api/run/<ID>%2F<NN>-<pb>', async () => {
+test('opening a run from the project drawer requests api/run/<ID>%2F<NN>-<pb>', async () => {
   const env = makeEnv();
   env.ctx.aicoBoard.render(board([projectCard()]));
   await titleButtons(env)[0].click();
@@ -171,7 +171,7 @@ test('AC8/AC16: opening a run from the project drawer requests api/run/<ID>%2F<N
   assert.equal(env.fetches.some((u) => String(u).startsWith(`api/run/${PID}/`)), false, 'raw slash never sent');
 });
 
-test('AC16: the run links request keeps the slash encoded as %2F', async () => {
+test('the run links request keeps the slash encoded as %2F', async () => {
   const env = makeEnv();
   env.ctx.aicoBoard.render(board([projectCard()]));
   await titleButtons(env)[0].click();
@@ -180,7 +180,7 @@ test('AC16: the run links request keeps the slash encoded as %2F', async () => {
   assert.ok(env.fetches.includes(`api/run/${PID}%2F03-fix/links`), `fetches: ${env.fetches}`);
 });
 
-test('AC7: a v2 run card still opens the single-run drawer, with no runs list', async () => {
+test('a v2 run card still opens the single-run drawer, with no runs list', async () => {
   const env = makeEnv();
   env.ctx.aicoBoard.render(board([projectCard(), runCard()]));
   assert.equal(cardsOf(env).length, 2, 'project and v2 cards both shown');

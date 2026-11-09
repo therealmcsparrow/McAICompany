@@ -1,5 +1,5 @@
-// Tests for run-guard v1.3 and run-stage v1.1 on a v3 run slug `<ProjectID>/<NN>-<playbook>` (AC21, AC7, AC12).
-// Read side: run-guard `gate` and run-stage `show`; write side: run-stage `set`. Old names stay byte-identical (AC7).
+// Tests for run-guard v1.3 and run-stage v1.1 on a v3 run slug `<ProjectID>/<NN>-<playbook>`.
+// Read side: run-guard `gate` and run-stage `show`; write side: run-stage `set`. Old names stay byte-identical.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -62,7 +62,7 @@ const BAD_SHAPES = [
   `${ID}~01-feature`, `/${SLUG}`, `${SLUG}/`, `${ID}//01-feature`, `${ID}/01-${'a'.repeat(70)}`
 ];
 
-describe('run-guard gate on a v3 slug (run-guard v1.3, AC21)', () => {
+describe('run-guard gate on a v3 slug (run-guard v1.3)', () => {
   test('an empty v3 run folder: zeros, exit 0', () => {
     const root = repo();
     mk(root, SLUG);
@@ -163,7 +163,7 @@ describe('run-guard gate on a v3 slug (run-guard v1.3, AC21)', () => {
     assert.equal(bad.stdout, 'refused: bad slug\n');
   });
 
-  test('v2 and legacy names give today\'s output unchanged (AC7)', () => {
+  test('v2 and legacy names give today\'s output unchanged', () => {
     const root = repo();
     mk(root, V2);
     handoff(root, V2, '10-backend-engineer.md', '10', 'handover');
@@ -174,7 +174,7 @@ describe('run-guard gate on a v3 slug (run-guard v1.3, AC21)', () => {
   });
 });
 
-describe('run-stage on a v3 slug (run-stage v1.1, AC21)', () => {
+describe('run-stage on a v3 slug (run-stage v1.1)', () => {
   const stageFile = (root, slug) => path.join(dirOf(root, slug), 'stage.jsonl');
 
   test('set writes stage.jsonl inside <ID>/<NN>-<pb>/ and nowhere else', () => {
@@ -323,7 +323,7 @@ describe('run-stage on a v3 slug (run-stage v1.1, AC21)', () => {
     assert.deepEqual(lines, ['refused: no run folder']);
   });
 
-  test('v2 and legacy names behave as today (AC7)', () => {
+  test('v2 and legacy names behave as today', () => {
     const root = repo();
     mk(root, V2);
     mk(root, 'demo-run');

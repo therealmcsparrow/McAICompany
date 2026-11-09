@@ -1,4 +1,4 @@
-// QA-first tests for T35 (AC22, part a): cited-report, drift-report, slop-scan and skillspector-scan on a v3 run slug
+// Tests for cited-report, drift-report, slop-scan and skillspector-scan on a v3 run slug
 // (`<ProjectID>/<NN>-<playbook>`) must behave as they do on a v2 folder. Contract delta: cited-report v1.2 -> v1.3,
 // drift-report v1.2 -> v1.3, slop-scan v1 -> v1.1, skillspector-scan v1.3 -> v1.4 (Reader rule: run-state v2.0 /
 // work-folder-name v3.0 helpers, no hand-rolled reverse). Each test builds the same content under a v2 name and a v3 slug
@@ -37,7 +37,7 @@ const stamp = (root, slug, t) => fs.utimesSync(slugDir(root, slug), t, t);
 const read = (root, rel) => fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8');
 const head = (file, n = 5) => fs.readFileSync(path.join(PLUGIN, file), 'utf8').split('\n').slice(0, n).join('\n');
 
-// ---------- contract versions (T35 flips each doc and its provider's cite together) ----------
+// ---------- contract versions (each doc and its provider's cite flip together) ----------
 describe('contract versions and the Reader rule paragraph', () => {
   const cases = [
     ['cited-report', 'scripts/cited.mjs', '1.3'],
@@ -46,13 +46,13 @@ describe('contract versions and the Reader rule paragraph', () => {
     ['skillspector-scan', 'scripts/skillspector.mjs', '1.4'],
   ];
   for (const [name, script, v] of cases) {
-    test(`AC22 ${name} doc header is v${v}`, () => {
+    test(`${name} doc header is v${v}`, () => {
       assert.match(head(`docs/contracts/${name}.md`, 1), new RegExp(`^# Contract: ${name} v${v.replace('.', '\\.')}$`));
     });
-    test(`AC22 ${script} cites ${name} v${v} in its first lines`, () => {
+    test(`${script} cites ${name} v${v} in its first lines`, () => {
       assert.match(head(script), new RegExp(`docs/contracts/${name}\\.md v${v.replace('.', '\\.')}(?![0-9])`));
     });
-    test(`AC22 ${name} doc has a v${v} paragraph saying v2, v1.1 and legacy output is byte-identical`, () => {
+    test(`${name} doc has a v${v} paragraph saying v2, v1.1 and legacy output is byte-identical`, () => {
       const text = fs.readFileSync(path.join(PLUGIN, 'docs', 'contracts', `${name}.md`), 'utf8');
       const para = text.split(/\n\n/).find((p) => p.startsWith(`v${v} `) || p.startsWith(`v${v}:`) || p.startsWith(`v${v} (`));
       assert.ok(para, `no paragraph starting v${v}`);
@@ -78,7 +78,7 @@ describe('cited-report on v3 runs', () => {
   };
   const report = (root, n = '5') => citedMain(['report', '--runs', n], { root });
 
-  test('AC22 a v3 run gives the same report lines as the same Steps in a v2 folder', () => {
+  test('a v3 run gives the same report lines as the same Steps in a v2 folder', () => {
     const a = report(build(V2));
     const b = report(build(V3));
     assert.equal(a.code, 0);
@@ -86,7 +86,7 @@ describe('cited-report on v3 runs', () => {
     assert.deepEqual(b, a);
   });
 
-  test('AC22 runs counts v3 runs, not project folders; --runs limits runs, newest first', () => {
+  test('runs counts v3 runs, not project folders; --runs limits runs, newest first', () => {
     const root = build(V3);
     put(root, `.company/work/${V3B}/01-product-manager.md`, 'x');
     put(root, `.company/work/${V3B}/02-architect.md`, 'y');
@@ -101,7 +101,7 @@ describe('cited-report on v3 runs', () => {
     assert.ok(!two.lines.some((l) => l.startsWith('cited ')), two.lines.join('\n'));
   });
 
-  test('AC22 a v3 project folder with no Step files in the project folder itself adds no run', () => {
+  test('a v3 project folder with no Step files in the project folder itself adds no run', () => {
     const root = tmp('checks-cited-');
     put(root, `.company/work/${PID}/00-project.md`, 'A project\n');
     put(root, `.company/work/${PID}/01-product-manager.md`, 'a stray file in the project folder');
@@ -123,14 +123,14 @@ describe('drift-report on v3 runs', () => {
   };
   const run = (root, ...args) => driftMain(args, { root });
 
-  test('AC22 lint of a report in a v3 run folder gives the v2 result', () => {
+  test('lint of a report in a v3 run folder gives the v2 result', () => {
     const a = run(fixture(V2), 'lint', `.company/work/${V2}/drift-2026-03-01.md`);
     const b = run(fixture(V3), 'lint', `.company/work/${V3}/drift-2026-03-01.md`);
     assert.deepEqual(a, { code: 0, lines: ['drift-report: 0 errors'] });
     assert.deepEqual(b, a);
   });
 
-  test('AC22 lint of a v3 report with a bad body reports the same errors as v2', () => {
+  test('lint of a v3 report with a bad body reports the same errors as v2', () => {
     const bad = '---\nchecked: [c01]\ndate: 2026-03-01\n---\n## Items\n- none\n- another\n';
     const r2 = fixture(V2);
     const r3 = fixture(V3);
@@ -142,13 +142,13 @@ describe('drift-report on v3 runs', () => {
     assert.deepEqual(b, a);
   });
 
-  test('AC22 lint accepts the absolute path of a v3 report', () => {
+  test('lint accepts the absolute path of a v3 report', () => {
     const root = fixture(V3);
     const r = run(root, 'lint', path.join(root, '.company', 'work', ...V3.split('/'), 'drift-2026-03-01.md'));
     assert.deepEqual(r, { code: 0, lines: ['drift-report: 0 errors'] });
   });
 
-  test('AC22 pick counts a check recorded in a v3 run: c01 is no longer never-checked', () => {
+  test('pick counts a check recorded in a v3 run: c01 is no longer never-checked', () => {
     const r = run(fixture(V3), 'pick');
     assert.equal(r.code, 0);
     const names = r.lines.filter((l) => !l.startsWith('pick:')).map((l) => l.split(' ')[0]);
@@ -156,11 +156,11 @@ describe('drift-report on v3 runs', () => {
     assert.ok(r.lines.some((l) => l.startsWith('c01 ') && l.endsWith(' 2026-03-01')), r.lines.join('\n'));
   });
 
-  test('AC22 pick gives the same lines for a v3 report as for a v2 report', () => {
+  test('pick gives the same lines for a v3 report as for a v2 report', () => {
     assert.deepEqual(run(fixture(V3), 'pick'), run(fixture(V2), 'pick'));
   });
 
-  test('AC22 a traversal or a report in the project folder itself is still refused', () => {
+  test('a traversal or a report in the project folder itself is still refused', () => {
     const root = fixture(V3);
     for (const rel of [`.company/work/${PID}/../${V3}/drift-2026-03-01.md`, `.company/work/${PID}/drift-2026-03-01.md`,
       `.company/work/${PID}/01-feature/x/drift-2026-03-01.md`]) {
@@ -180,7 +180,7 @@ describe('slop-scan on v3 runs', () => {
   };
   const strip = (s, slug) => s.split(`.company/work/${slug}/`).join('<run>/');
 
-  test('AC22 a file in a v3 run folder scans as the same file in a v2 folder', () => {
+  test('a file in a v3 run folder scans as the same file in a v2 folder', () => {
     const a = scanOf(V2);
     const b = scanOf(V3);
     assert.equal(a.res.code, 0);
@@ -189,7 +189,7 @@ describe('slop-scan on v3 runs', () => {
     assert.equal(b.res.stderr, '');
   });
 
-  test('AC22 a v3 run folder given as a directory is walked as a v2 folder is', () => {
+  test('a v3 run folder given as a directory is walked as a v2 folder is', () => {
     const a = tmp('checks-slop-');
     const b = tmp('checks-slop-');
     put(a, `.company/work/${V2}/00-summary.md`, text);
@@ -201,7 +201,7 @@ describe('slop-scan on v3 runs', () => {
     assert.equal(strip(rb.stdout, V3), strip(ra.stdout, V2));
   });
 
-  test('AC22 a v3 path typed in another letter case is refused as a missing file, like v2', () => {
+  test('a v3 path typed in another letter case is refused as a missing file, like v2', () => {
     const root = tmp('checks-slop-');
     put(root, `.company/work/${V3}/00-summary.md`, text);
     const wrong = slopMain(['--json', `.company/work/${PID}/01-FEATURE/00-summary.md`], { cwd: root });
@@ -216,7 +216,7 @@ describe('skillspector-scan report on a v3 slug', () => {
   const opts = { date: new Date('2026-10-26T10:00:00Z') };
   const mod = () => import(pathToFileURL(SKILLSPECTOR).href);
 
-  test('AC22 writeReport to a v3 slug writes the v2 bytes at <ID>/<NN>-<pb>/skillspector-report.md and nothing else', async () => {
+  test('writeReport to a v3 slug writes the v2 bytes at <ID>/<NN>-<pb>/skillspector-report.md and nothing else', async () => {
     const { writeReport } = await mod();
     const r2 = tmp('checks-ss-');
     const r3 = tmp('checks-ss-');
@@ -227,7 +227,7 @@ describe('skillspector-scan report on a v3 slug', () => {
     assert.deepEqual(fs.readdirSync(slugDir(r3, V3)), ['skillspector-report.md'], 'no temp file left behind');
   });
 
-  test('AC22 a v3 slug whose project folder exists writes into the existing run folder', async () => {
+  test('a v3 slug whose project folder exists writes into the existing run folder', async () => {
     const { writeReport } = await mod();
     const root = tmp('checks-ss-');
     put(root, `.company/work/${PID}/00-project.md`, 'A project\n');
@@ -237,7 +237,7 @@ describe('skillspector-scan report on a v3 slug', () => {
     assert.equal(read(root, `.company/work/${PID}/00-project.md`), 'A project\n');
   });
 
-  test('AC22 a v3 project folder that is a link is refused as a link and nothing is written through it', async (t) => {
+  test('a v3 project folder that is a link is refused as a link and nothing is written through it', async (t) => {
     const { writeReport } = await mod();
     const root = tmp('checks-ss-');
     const target = tmp('checks-ss-target-');
@@ -250,7 +250,7 @@ describe('skillspector-scan report on a v3 slug', () => {
     assert.deepEqual(fs.readdirSync(target), []);
   });
 
-  test('AC22 a bad v3 slug (traversal, second slash, project ID alone with a run part missing) is still refused', async () => {
+  test('a bad v3 slug (traversal, second slash, project ID alone with a run part missing) is still refused', async () => {
     const { writeReport } = await mod();
     const root = tmp('checks-ss-');
     for (const bad of [`${PID}/../x`, `${PID}/01-feature/x`, `${PID}\\01-feature`, `${PID}/1-feature`]) {
@@ -259,7 +259,7 @@ describe('skillspector-scan report on a v3 slug', () => {
     assert.ok(!fs.existsSync(path.join(root, '.company')));
   });
 
-  test('AC22 scan --report <v3 slug> passes slug validation (with the tool missing it reaches "skillspector missing")', () => {
+  test('scan --report <v3 slug> passes slug validation (with the tool missing it reaches "skillspector missing")', () => {
     const base = tmp('checks-ss-cli-');
     const project = path.join(base, 'project');
     const emptyBin = path.join(base, 'bin');

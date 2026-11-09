@@ -1,4 +1,4 @@
-// QA-first tests for P20261109.000009-T21 (plan-tasks v1.9, AC18): a v3 run slug `<ID>/<NN>-<pb>` is a folder
+// Tests for plan-tasks v1.9: a v3 run slug `<ID>/<NN>-<pb>` is a folder
 // for plan-tasks, and ticket numbers stay unique across the whole project (other v3 runs and v2 `<ID>-HH.MM.SS` folders).
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,7 +62,7 @@ function env(folders) {
 
 const text = (r) => r.lines.join('\n');
 
-describe('AC18: a v3 slug passes check and begin', () => {
+describe('a v3 slug passes check and begin', () => {
   const body = plan(task(`${ID}-T1`), task(`${ID}-T2`));
 
   test('check accepts the slug and finds both tickets', () => {
@@ -153,7 +153,7 @@ describe('AC18: a v3 slug passes check and begin', () => {
   });
 });
 
-describe('AC18: ticket numbers stay unique across the project', () => {
+describe('ticket numbers stay unique across the project', () => {
   test('run 2 reusing a ticket of run 1 with a different block is refused, naming the run slug', () => {
     const e = env({ [R1]: plan(task(`${ID}-T1`)) });
     assert.equal(e.check(R1).code, 0, 'run 1 alone is fine');

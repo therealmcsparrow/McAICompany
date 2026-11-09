@@ -130,7 +130,7 @@ test('a file that grows past the cap after fstat is refused', async (t) => {
   assert.equal(await summaryOf(root, '01-qa.md'), null);
 });
 
-// dashboard v2.0 (AC16, AC7): a v3 run slug `<ID>/<NN>-<pb>` arrives as `<ID>%2F<NN>-<pb>`.
+// dashboard v2.0: a v3 run slug `<ID>/<NN>-<pb>` arrives as `<ID>%2F<NN>-<pb>`.
 const PROJ = 'P20261109.000009';
 const V3 = `${PROJ}/01-feature`;
 
@@ -143,14 +143,14 @@ function makeV3Root(t) {
   return root;
 }
 
-test('AC16: %2F and %2f decode once to the v3 slug', (t) => {
+test('%2F and %2f decode once to the v3 slug', (t) => {
   const root = makeV3Root(t);
   assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3);
   assert.equal(resolveRunSlug(root, `${PROJ}%2f02-fix`), `${PROJ}/02-fix`);
   assert.equal(resolveRunSlug(root, NAME.replaceAll(' ', '%20')), NAME, 'a v2 name still resolves');
 });
 
-test('AC16: every other escape, a second slash, dots, backslash or a bad shape is refused', (t) => {
+test('every other escape, a second slash, dots, backslash or a bad shape is refused', (t) => {
   const root = makeV3Root(t);
   assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3, 'control: the valid slug resolves');
   const bad = [
@@ -162,7 +162,7 @@ test('AC16: every other escape, a second slash, dots, backslash or a bad shape i
   for (const raw of bad) assert.equal(resolveRunSlug(root, raw), null, raw);
 });
 
-test('AC16: a v3 slug with no run folder, a file or a missing project is refused', (t) => {
+test('a v3 slug with no run folder, a file or a missing project is refused', (t) => {
   const root = makeV3Root(t);
   assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3, 'control');
   assert.equal(resolveRunSlug(root, `${PROJ}%2F09-nothere`), null);
@@ -170,7 +170,7 @@ test('AC16: a v3 slug with no run folder, a file or a missing project is refused
   assert.equal(resolveRunSlug(root, 'P20260101.000001%2F01-feature'), null);
 });
 
-test('AC16: a linked run folder or a linked project folder does not resolve', (t) => {
+test('a linked run folder or a linked project folder does not resolve', (t) => {
   const root = makeV3Root(t);
   assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3, 'control');
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-slug-v3out-'));
@@ -188,7 +188,7 @@ test('AC16: a linked run folder or a linked project folder does not resolve', (t
   assert.equal(resolveRunSlug(root, `${PROJ}%2F04-link`), null);
 });
 
-test('AC16: run() of a v3 slug returns that run and reads its Did summary', async (t) => {
+test('run() of a v3 slug returns that run and reads its Did summary', async (t) => {
   const root = makeV3Root(t);
   fs.writeFileSync(path.join(root, '.company', 'work', PROJ, '01-feature', '01-qa.md'), '## Did\n- v3 ok\n');
   const seen = [];

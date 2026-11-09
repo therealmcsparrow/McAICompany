@@ -1,4 +1,4 @@
-// QA-first red tests for dashboard v2.0 (AC8 board data, AC16 api/run with an encoded v3 slug, AC7 old runs unchanged).
+// Tests for dashboard v2.0: board data, api/run with an encoded v3 slug, old runs unchanged.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -46,7 +46,7 @@ function mixed() {
 
 const allCards = (b) => b.columns.flatMap((c) => c.cards);
 
-test('AC8: a v3 project is one project card; its runs get no own card', async (t) => {
+test('a v3 project is one project card; its runs get no own card', async (t) => {
   const root = makeRoot(t);
   const b = await board(root, { now: NOW, deps: mixed().deps });
   const cards = allCards(b);
@@ -56,7 +56,7 @@ test('AC8: a v3 project is one project card; its runs get no own card', async (t
   assert.equal(cards.length, 4, 'two project cards plus two old runs');
 });
 
-test('AC8: the project card holds description, runs newest first and the newest run state', async (t) => {
+test('the project card holds description, runs newest first and the newest run state', async (t) => {
   const root = makeRoot(t);
   const b = await board(root, { now: NOW, deps: mixed().deps });
   const p = allCards(b).find((c) => c.kind === 'project' && c.id === PROJ);
@@ -71,7 +71,7 @@ test('AC8: the project card holds description, runs newest first and the newest 
   assert.equal(q.description, 'Second project here');
 });
 
-test('AC8: an ended newest run puts the project card in done, a running one does not', async (t) => {
+test('an ended newest run puts the project card in done, a running one does not', async (t) => {
   const root = makeRoot(t);
   const b = await board(root, { now: NOW, deps: mixed().deps });
   assert.ok(cardsOf(b).done.includes(PROJ2));
@@ -79,7 +79,7 @@ test('AC8: an ended newest run puts the project card in done, a running one does
   assert.ok(allCards(b).some((c) => c.kind === 'project' && c.id === PROJ), 'project card is on the board');
 });
 
-test('AC7: v2 and legacy runs keep own cards with the same keys and no kind, beside a project card', async (t) => {
+test('v2 and legacy runs keep own cards with the same keys and no kind, beside a project card', async (t) => {
   const root = makeRoot(t);
   const b = await board(root, { now: NOW, deps: mixed().deps });
   const cards = allCards(b);
@@ -92,7 +92,7 @@ test('AC7: v2 and legacy runs keep own cards with the same keys and no kind, bes
   }
 });
 
-test('AC7: old runs give the same cards in a mixed tree as in an old-only tree', async (t) => {
+test('old runs give the same cards in a mixed tree as in an old-only tree', async (t) => {
   const root = makeRoot(t);
   const oldOnly = makeDeps({
     runs: [entry(NEW), entry(LEGACY, OLD_ENDED)],
@@ -105,7 +105,7 @@ test('AC7: old runs give the same cards in a mixed tree as in an old-only tree',
   assert.deepEqual(pick(a), pick(b));
 });
 
-test('AC8: a project id is never read as a run (no show or cost call for it)', async (t) => {
+test('a project id is never read as a run (no show or cost call for it)', async (t) => {
   const root = makeRoot(t);
   const m = mixed();
   const b = await board(root, { now: NOW, deps: m.deps });
@@ -133,7 +133,7 @@ test('dashboard v2.0: the ledger read of a v3 run finds the runKey file', async 
   assert.equal(calls.length, 1);
 });
 
-// AC16 through the server: the raw %2F stays one path part.
+// through the server: the raw %2F stays one path part.
 async function serve(t, root) {
   const calls = { run: [], lookup: [] };
   const deps = {
@@ -147,7 +147,7 @@ async function serve(t, root) {
   return { h, calls, base: `/t/${h.token}/` };
 }
 
-test('AC16: api/run/<ID>%2F<NN>-<pb> returns that run (also %2f and /links)', async (t) => {
+test('api/run/<ID>%2F<NN>-<pb> returns that run (also %2f and /links)', async (t) => {
   const root = makeRoot(t);
   const { h, calls, base } = await serve(t, root);
   const r = await raw(h.port, { target: `${base}api/run/${PROJ}%2F01-feature` });
@@ -162,7 +162,7 @@ test('AC16: api/run/<ID>%2F<NN>-<pb> returns that run (also %2f and /links)', as
   assert.deepEqual(calls.lookup, [R1]);
 });
 
-test('AC16: malformed or escaping v3 slugs are 404 and never read', async (t) => {
+test('malformed or escaping v3 slugs are 404 and never read', async (t) => {
   const root = makeRoot(t);
   const { h, calls, base } = await serve(t, root);
   // A control request proves the server serves a valid v3 slug, so the 404s below are refusals.
@@ -184,7 +184,7 @@ test('AC16: malformed or escaping v3 slugs are 404 and never read', async (t) =>
   assert.deepEqual(calls.lookup, []);
 });
 
-test('AC16: a v3 run reached through a project folder linked outside the product is 404 and never read', async (t) => {
+test('a v3 run reached through a project folder linked outside the product is 404 and never read', async (t) => {
   const root = makeRoot(t);
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-v2-out-'));
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));

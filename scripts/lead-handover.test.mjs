@@ -827,7 +827,7 @@ describe('pipeline wiring', () => {
   });
 });
 
-// run-state v2.0 (AC14, AC7): the newest open run may be a v3 run `<ID>/<NN>-<playbook>`.
+// run-state v2.0: the newest open run may be a v3 run `<ID>/<NN>-<playbook>`.
 describe('run-state v2.0 cites and v3 runs', () => {
   test('context-guard and run-guard cite run-state v2.0 on their uses line; triage names v2.0', () => {
     const uses = (f) => fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/)[2];

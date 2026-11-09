@@ -1,4 +1,4 @@
-// T45 (QA-first for T46): `work-folder new` makes v3 only; any --layout is a usage refusal (AC12).
+// `work-folder new` makes v3 only; any --layout is a usage refusal.
 // work-folder-name v3.0. Drive-agnostic: temp dirs only.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +27,7 @@ const top = root => fs.readdirSync(work(root)).sort();
 const topic = (root, text = 'Fix Login') => fs.writeFileSync(path.join(root, '.company', 'work-folder-topic-idea.txt'), text);
 const NEW = ['new', '--playbook', 'idea', '--topic', 'file'];
 
-describe('new without --layout is v3 (AC12)', () => {
+describe('new without --layout is v3', () => {
   test('first run: project folder, 00-project.md, 01-<pb>; prints run slug', () => {
     const root = project();
     topic(root);
@@ -57,7 +57,7 @@ describe('new without --layout is v3 (AC12)', () => {
   });
 });
 
-describe('--layout with any value is refused: usage, non-zero, nothing written (AC12)', () => {
+describe('--layout with any value is refused: usage, non-zero, nothing written', () => {
   const variants = [['v2'], ['v3'], ['V3'], ['v4'], [''], ['3'], []]; // [] = flag without a value
   for (const v of variants) {
     test(`new (topic) --layout ${JSON.stringify(v[0] ?? '<none>')}`, () => {

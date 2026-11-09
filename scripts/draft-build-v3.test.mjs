@@ -1,6 +1,6 @@
-// QA-first tests for T29 (draft-input v1.6, ticket-approval v1.6, intake-record v1.1): a later draft/build run of a
-// v3 project is a sub folder of it (AC9), the parent is found by slug (AC20); a v2 parent keeps today's sibling
-// `<ID>-HH.MM.SS` folder and its bytes (AC7).
+// Tests (draft-input v1.6, ticket-approval v1.6, intake-record v1.1): a later draft/build run of a
+// v3 project is a sub folder of it, the parent is found by slug; a v2 parent keeps today's sibling
+// `<ID>-HH.MM.SS` folder and its bytes.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -76,9 +76,9 @@ const unchanged = (before, root, grown = []) => {
   }
 };
 
-// ---- AC9, AC20: draft-input in a v3 project
+// ---- draft-input in a v3 project
 
-test('AC9 AC20 draft-input: a later build (feature) run of a v3 project is a sub folder of it', () => {
+test('draft-input: a later build (feature) run of a v3 project is a sub folder of it', () => {
   const root = fixture();
   const { id, parent } = v3(root);
   const before = snapshot(root);
@@ -92,7 +92,7 @@ test('AC9 AC20 draft-input: a later build (feature) run of a v3 project is a sub
   unchanged(before, root);
 });
 
-test('AC9 AC20 draft-input: a later draft (to-tickets) run is a sub folder, and the next one is the next NN', () => {
+test('draft-input: a later draft (to-tickets) run is a sub folder, and the next one is the next NN', () => {
   const root = fixture();
   const { id, parent } = v3(root);
   const a = take(root, `${parent}/brief.md`, 'to-tickets', T1);
@@ -106,7 +106,7 @@ test('AC9 AC20 draft-input: a later draft (to-tickets) run is a sub folder, and 
   assert.ok(fs.existsSync(path.join(work(root), ...first.split('/'), 'input-to-tickets.md')));
 });
 
-test('AC9 AC20 draft-input: fix from a v3 build run plan makes a sub folder of the same project', () => {
+test('draft-input: fix from a v3 build run plan makes a sub folder of the same project', () => {
   const root = fixture();
   const { id, parent } = v3(root);
   const build = makeRunV3(IO, root, id, T1, 'build');
@@ -118,9 +118,9 @@ test('AC9 AC20 draft-input: fix from a v3 build run plan makes a sub folder of t
   assert.ok(fs.existsSync(path.join(work(root), parent, 'plan.md')));
 });
 
-// ---- AC7, AC9: a v2 parent keeps today's sibling folder
+// ---- a v2 parent keeps today's sibling folder
 
-test('AC7 draft-input: a v2 parent gives a sibling <ID>-HH.MM.SS folder, no <ID>/ is made, old bytes are equal', () => {
+test('draft-input: a v2 parent gives a sibling <ID>-HH.MM.SS folder, no <ID>/ is made, old bytes are equal', () => {
   const root = fixture();
   const { name: parent } = makeProject(IO, root, T0, 'Login page', 'feature');
   const id = parent.slice(0, parent.indexOf('-'));
@@ -136,7 +136,7 @@ test('AC7 draft-input: a v2 parent gives a sibling <ID>-HH.MM.SS folder, no <ID>
   unchanged(before, root);
 });
 
-// ---- AC9, AC20: ticket-approval in a v3 run
+// ---- ticket-approval in a v3 run
 
 function approveAll(root, slug, id) {
   const run = (...a) => approve(a, { root, now: T1.getTime() });
@@ -145,7 +145,7 @@ function approveAll(root, slug, id) {
   return run;
 }
 
-test('AC9 AC20 ticket-approval: the record sits in the v3 run folder and build-plan makes a sub folder', () => {
+test('ticket-approval: the record sits in the v3 run folder and build-plan makes a sub folder', () => {
   const root = fixture();
   const { id, parent } = v3(root);
   const run = approveAll(root, parent, id);
@@ -161,7 +161,7 @@ test('AC9 AC20 ticket-approval: the record sits in the v3 run folder and build-p
   assert.deepEqual(tops(root), [id], 'no sibling folder');
 });
 
-test('AC7 ticket-approval: a v2 parent still builds into a sibling <ID>-HH.MM.SS, no <ID>/, old bytes equal', () => {
+test('ticket-approval: a v2 parent still builds into a sibling <ID>-HH.MM.SS, no <ID>/, old bytes equal', () => {
   const root = fixture();
   const { name: parent } = makeProject(IO, root, T0, 'Login page', 'feature');
   const id = parent.slice(0, parent.indexOf('-'));
@@ -177,9 +177,9 @@ test('AC7 ticket-approval: a v2 parent still builds into a sibling <ID>-HH.MM.SS
   unchanged(before, root, ['tickets.jsonl']);
 });
 
-// ---- AC20: intake-record keeps a v3 run slug
+// ---- intake-record keeps a v3 run slug
 
-test('AC20 intake: a v3 run slug is accepted on add and set, an old name too, a bad slug is refused', () => {
+test('intake: a v3 run slug is accepted on add and set, an old name too, a bad slug is refused', () => {
   const root = fixture();
   const { id, parent } = v3(root);
   const out = [];
@@ -197,4 +197,84 @@ test('AC20 intake: a v3 run slug is accepted on add and set, an old name too, a 
   out.length = 0;
   assert.equal(intake(['list', '--json'], io), 0);
   assert.ok(out.join('').includes(JSON.stringify(parent)), out.join(''));
+});
+
+// ---- a second build-plan of a v3 project, and the cleanup of a build folder whose plan write failed
+
+test('ticket-approval: a second build-plan of the same v3 project is refused with file exists and names the first plan', () => {
+  const root = fixture();
+  const { id, parent } = v3(root);
+  const run = approveAll(root, parent, id);
+  const first = run('build-plan', parent);
+  assert.equal(first.code, 0, first.lines.join(NL));
+  const firstPlan = first.lines.find((l) => l.startsWith('plan: '));
+  const before = snapshot(root);
+  const second = run('build-plan', parent);
+  assert.notEqual(second.code, 0, second.lines.join(NL));
+  assert.ok(second.lines.some((l) => /file exists/.test(l)), second.lines.join(NL));
+  assert.ok(second.lines.includes(firstPlan), `names the earlier plan: ${second.lines.join(NL)}`);
+  assert.deepEqual([...snapshot(root).keys()].sort(), [...before.keys()].sort(), 'no new folder or file');
+  const builds = fs.readdirSync(path.join(work(root), id)).filter((n) => /-build$/.test(n));
+  assert.equal(builds.length, 1, builds.join(','));
+});
+
+test('ticket-approval: a plan write that cannot create the file removes the fresh build folder of a v3 project', (t) => {
+  const root = fixture();
+  const { id, parent } = v3(root);
+  const run = approveAll(root, parent, id);
+  const before = fs.readdirSync(path.join(work(root), id)).sort();
+  const open = fs.openSync;
+  t.mock.method(fs, 'openSync', (file, ...rest) => {
+    if (/-build[\\/]plan\.md$/.test(String(file))) throw Object.assign(new Error('denied'), { code: 'EACCES' });
+    return open(file, ...rest);
+  });
+  const r = run('build-plan', parent);
+  t.mock.restoreAll();
+  assert.notEqual(r.code, 0, r.lines.join(NL));
+  assert.deepEqual(fs.readdirSync(path.join(work(root), id)).sort(), before, 'the fresh <NN>-build folder is gone');
+  assert.deepEqual(tops(root), [id]);
+});
+
+test('ticket-approval: dropFreshRun removes a v3 build folder holding only its summary, and nothing more', async () => {
+  const { dropFreshRun } = await import('./ticket-approval.mjs');
+  const root = fixture();
+  const { id } = v3(root);
+  const slug = makeRunV3(IO, root, id, T1, 'build');
+  const dir = path.join(work(root), ...slug.split('/'));
+  assert.deepEqual(fs.readdirSync(dir), ['00-summary.md']);
+  dropFreshRun(root, slug);
+  assert.ok(!fs.existsSync(dir), 'folder removed');
+  assert.ok(fs.existsSync(path.join(work(root), id, '00-project.md')), 'the project folder stays');
+  const kept = makeRunV3(IO, root, id, T2, 'build');
+  const keptDir = path.join(work(root), ...kept.split('/'));
+  fs.writeFileSync(path.join(keptDir, 'notes.md'), 'x');
+  dropFreshRun(root, kept);
+  assert.ok(fs.existsSync(path.join(keptDir, 'notes.md')), 'a folder with another file stays');
+  for (const bad of [id, `${id}/..`, `${id}/01-to-tickets/x`, '../x']) assert.doesNotThrow(() => dropFreshRun(root, bad), bad);
+  assert.ok(fs.existsSync(path.join(work(root), id, '01-to-tickets')), 'a run that was never named stays');
+});
+
+test('ticket-approval: a plan write that fails after the file was created leaves no build folder of a v3 project', (t) => {
+  const root = fixture();
+  const { id, parent } = v3(root);
+  const run = approveAll(root, parent, id);
+  const before = fs.readdirSync(path.join(work(root), id)).sort();
+  const write = fs.writeSync;
+  const open = fs.openSync;
+  const planFds = new Set();
+  t.mock.method(fs, 'openSync', (file, ...rest) => {
+    const fd = open(file, ...rest);
+    if (/-build[\\/]plan\.md$/.test(String(file))) planFds.add(fd);
+    return fd;
+  });
+  t.mock.method(fs, 'writeSync', (fd, ...rest) => {
+    if (planFds.has(fd)) throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+    return write(fd, ...rest);
+  });
+  let thrown = null;
+  let r = null;
+  try { r = run('build-plan', parent); } catch (error) { thrown = error; }
+  t.mock.restoreAll();
+  assert.ok(thrown !== null || r.code !== 0, 'the write failure is reported');
+  assert.deepEqual(fs.readdirSync(path.join(work(root), id)).sort(), before, 'the fresh <NN>-build folder is gone');
 });

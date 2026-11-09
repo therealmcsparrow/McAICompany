@@ -1,6 +1,6 @@
-// QA-first tests (P20261109.000009-T36, AC22, AC12, AC7): wayfinder, skill-picks, spec-check and the guard, blast and
-// plan-gate mods take a v3 run slug `<ProjectID>/<NN>-<playbook>` and answer as they do for a v2 name. Red until T37.
-// Each test pairs a v3 assertion (red today) with the v2 / legacy answer (AC7: unchanged, byte for byte).
+// Tests: wayfinder, skill-picks, spec-check and the guard, blast and
+// plan-gate mods take a v3 run slug `<ProjectID>/<NN>-<playbook>` and answer as they do for a v2 name.
+// Each test pairs a v3 assertion with the v2 / legacy answer (unchanged, byte for byte).
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -40,14 +40,14 @@ const BAD_V3 = [
   `${PID}/01-${'a'.repeat(70)}`, `${PID}~01-draft`,
 ];
 
-// ---------- wayfinder (AC22, wayfinder v1.2) ----------
+// ---------- wayfinder (wayfinder v1.2) ----------
 const D = '—';
 const MAP = '.company/wayfinder/demo.md';
 const map = (ref) => `# Wayfinder: demo\n\n## Decisions\n\n## Open\n\n## Pointers\n- ${ref} ${D} plan\n`;
 const planOf = (slug) => `# plan\n\n### ${projectOf(slug)}-T1 first task\n- role: qa\n`;
 const projectOf = (slug) => (slug.includes('/') ? slug.split('/')[0] : slug.slice(0, PID.length));
 
-test('AC22 wayfinder (guard, green at base): a pointer into a v3 run folder is a clean pointer, like one into a v2 folder', () => {
+test('wayfinder: a pointer into a v3 run folder is a clean pointer, like one into a v2 folder', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/00-project.md`);
   put(cwd, `.company/work/${PID}/01-draft/plan.md`, planOf(V3));
@@ -58,7 +58,7 @@ test('AC22 wayfinder (guard, green at base): a pointer into a v3 run folder is a
   assert.deepEqual(validate(map(`\`.company/work/${V2}/plan.md\``), { root: cwd }), []);
 });
 
-test('AC22 wayfinder (guard, green at base): a v3 pointer whose file is missing says so, a v3 pointer in the wrong letter case is a bad ref', () => {
+test('wayfinder: a v3 pointer whose file is missing says so, a v3 pointer in the wrong letter case is a bad ref', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/plan.md`, planOf(V3));
   const missing = validate(map(`\`.company/work/${PID}/01-draft/nope.md\``), { root: cwd });
@@ -70,7 +70,7 @@ test('AC22 wayfinder (guard, green at base): a v3 pointer whose file is missing 
   assert.deepEqual(validate(map(`\`.company/work/${V2}/nope.md\``), { root: cwd }).map((e) => e.reason), [`pointer missing .company/work/${V2}/nope.md`]);
 });
 
-test('AC22 wayfinder (guard, green at base): a ticket anchor on a v3 plan answers as on the same plan in a v2 folder', () => {
+test('wayfinder: a ticket anchor on a v3 plan answers as on the same plan in a v2 folder', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/plan.md`, planOf(V3));
   put(cwd, `.company/work/${V2}/plan.md`, planOf(V2));
@@ -83,7 +83,7 @@ test('AC22 wayfinder (guard, green at base): a ticket anchor on a v3 plan answer
   assert.deepEqual(answer(V3, `${PID}-T2`), [`task missing ${PID}-T2 in .company/work/<run>/plan.md`]);
 });
 
-test('AC22 wayfinder (guard, green at base): hostile v3-shaped pointers are bad refs, and the CLI prints the v2 answer for a v3 map', () => {
+test('wayfinder: hostile v3-shaped pointers are bad refs, and the CLI prints the v2 answer for a v3 map', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/plan.md`, planOf(V3));
   for (const bad of BAD_V3.filter((s) => !/[\n\u202e]/.test(s))) {
@@ -96,12 +96,12 @@ test('AC22 wayfinder (guard, green at base): hostile v3-shaped pointers are bad 
   assert.deepEqual(r, { code: 0, lines: ['wayfinder: 0 errors'] });
 });
 
-// ---------- skill-picks (AC22, skill-recommendation v2.1) ----------
+// ---------- skill-picks (skill-recommendation v2.1) ----------
 const today = new Date(2026, 10, 9);
 const handoff = '---\narea: stack\n---\nBy: skill-researcher\n## Did\n- x\n';
 const picks = (folder, cwd) => lint(`.company/work/${folder}/08-skill-researcher.md`, today, cwd);
 
-test('AC22 skill-picks: lint reads a researcher Handoff in a v3 run folder, as it does in a v2 folder', () => {
+test('skill-picks: lint reads a researcher Handoff in a v3 run folder, as it does in a v2 folder', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/08-skill-researcher.md`, handoff);
   put(cwd, `.company/work/${V2}/08-skill-researcher.md`, handoff);
@@ -112,7 +112,7 @@ test('AC22 skill-picks: lint reads a researcher Handoff in a v3 run folder, as i
   assert.deepEqual(picks(LEGACY, cwd), expect);
 });
 
-test('AC22 skill-picks: a v3 path in the wrong letter case, or a nested non-run folder, is refused', () => {
+test('skill-picks: a v3 path in the wrong letter case, or a nested non-run folder, is refused', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/08-skill-researcher.md`, handoff);
   assert.deepEqual(picks(V3, cwd).picks, []);
@@ -128,11 +128,11 @@ test('AC22 skill-picks: a v3 path in the wrong letter case, or a nested non-run 
   assert.throws(() => picks('demo/x', cwd), /handoff path must be/);
 });
 
-// ---------- spec-check (AC22, destination-spec v1.4) ----------
+// ---------- spec-check (destination-spec v1.4) ----------
 const HEADINGS = ['## Problem', '## Solution', '## User stories', '## Decisions', '## Testing decisions', '## Out of scope'];
 const spec = (slug) => `---\nslug: ${slug}\nversion: pending\nshipped: pending\n---\n${HEADINGS.map((h) => `${h}\nPlain words about the result.\n`).join('\n')}`;
 
-test('AC22 spec-check: check takes a spec in a v3 run folder whose frontmatter slug is the run slug, like a v2 one', () => {
+test('spec-check: check takes a spec in a v3 run folder whose frontmatter slug is the run slug, like a v2 one', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/spec.md`, spec(V3));
   put(cwd, `.company/work/${V2}/spec.md`, spec(V2));
@@ -141,7 +141,7 @@ test('AC22 spec-check: check takes a spec in a v3 run folder whose frontmatter s
   assert.deepEqual(specCheck(['check', `.company/work/${V2}/spec.md`], { root: cwd }), { code: 0, lines: ['spec-check: 0 errors'] });
 });
 
-test('AC22 spec-check: stamp works on a v3 spec and leaves a v2 spec as before', () => {
+test('spec-check: stamp works on a v3 spec and leaves a v2 spec as before', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/spec.md`, spec(V3));
   put(cwd, `.company/work/${V2}/spec.md`, spec(V2));
@@ -153,7 +153,7 @@ test('AC22 spec-check: stamp works on a v3 spec and leaves a v2 spec as before',
   }
 });
 
-test('AC22 spec-check: a v3 spec path in the wrong letter case, a bad v3 shape, or a frontmatter slug that is no run is refused or an ERROR', () => {
+test('spec-check: a v3 spec path in the wrong letter case, a bad v3 shape, or a frontmatter slug that is no run is refused or an ERROR', () => {
   const cwd = root();
   put(cwd, `.company/work/${PID}/01-draft/spec.md`, spec(V3));
   for (const rel of [`.company/work/${PID}/01-Draft/spec.md`, `.company/work/${PID.toLowerCase()}/01-draft/spec.md`, `.Company/work/${PID}/01-draft/spec.md`]) {
@@ -176,8 +176,8 @@ test('AC22 spec-check: a v3 spec path in the wrong letter case, a bad v3 shape, 
   assert.equal(specCheck(['check', 'docs/specs/demo.md'], { root: cwd }).code, 0);
 });
 
-// ---------- guard mod (AC22, aico-mods v1.8) ----------
-test('AC22 guard: an Output line with a v3 run folder gives the run slug, a v2 line gives the folder name as before', () => {
+// ---------- guard mod (aico-mods v1.8) ----------
+test('guard: an Output line with a v3 run folder gives the run slug, a v2 line gives the folder name as before', () => {
   assert.deepEqual(parseOutputLine(`Output: .company/work/${V3}/05-qa.md`), { slug: V3, step: '05', role: 'qa' });
   assert.deepEqual(parseOutputLine(`Output: .company/work/${V2}/05-qa.md`), { slug: V2, step: '05', role: 'qa' });
   assert.deepEqual(parseOutputLine(`Output: .company/work/${LEGACY}/105-qa.md`), { slug: LEGACY, step: '105', role: 'qa' });
@@ -185,7 +185,7 @@ test('AC22 guard: an Output line with a v3 run folder gives the run slug, a v2 l
   assert.deepEqual(parseOutputText(text), { slug: V3, step: '05', role: 'qa' });
 });
 
-test('AC22 guard: Output lines with a bad v3 shape are not read', () => {
+test('guard: Output lines with a bad v3 shape are not read', () => {
   for (const bad of BAD_V3.filter((s) => s !== V3)) {
     assert.equal(parseOutputLine(`Output: .company/work/${bad}/05-qa.md`), null, bad);
   }
@@ -195,13 +195,13 @@ test('AC22 guard: Output lines with a bad v3 shape are not read', () => {
   assert.equal(parseOutputLine(`Output: .company/work/${V3}/05-QA.md`), null);
 });
 
-test('AC22 guard: workFolder takes a v3 run slug and the v2 and legacy names, nothing else', () => {
+test('guard: workFolder takes a v3 run slug and the v2 and legacy names, nothing else', () => {
   for (const ok of [V3, V2, LEGACY]) assert.equal(workFolder(ok), ok);
   for (const bad of [...BAD_V3, 42, null, undefined, '', `${V3}/${'a'.repeat(120)}`]) assert.equal(workFolder(bad), undefined, String(bad));
 });
 
-// ---------- blast mod (AC22, aico-mods v1.8) ----------
-test('AC22 blast: the spawn prompt Output line and the review-depth arguments take a v3 run slug', () => {
+// ---------- blast mod (aico-mods v1.8) ----------
+test('blast: the spawn prompt Output line and the review-depth arguments take a v3 run slug', () => {
   const prompt = `Task: x\nOutput: .company/work/${V3}/05-qa.md\nBase commit: ${SHA}\nRisk tier: high\n`;
   assert.deepEqual(parseSpawnLines(prompt), { slug: V3, step: '05', role: 'qa', base: SHA, tier: 'high' });
   assert.deepEqual(parseSpawnLines(prompt.replace(V3, V2)), { slug: V2, step: '05', role: 'qa', base: SHA, tier: 'high' });
@@ -210,7 +210,7 @@ test('AC22 blast: the spawn prompt Output line and the review-depth arguments ta
   assert.deepEqual(reviewArgs({ source: 'base', base: SHA, slug: LEGACY }), [SHA, '--run', LEGACY, '--json']);
 });
 
-test('AC22 blast: a bad v3 shape gives no review arguments and no slug', () => {
+test('blast: a bad v3 shape gives no review arguments and no slug', () => {
   for (const bad of BAD_V3.filter((s) => s !== V3)) {
     assert.equal(reviewArgs({ source: 'base', base: SHA, slug: bad }), null, bad);
     assert.equal(parseSpawnLines(`Output: .company/work/${bad}/05-qa.md\n`).slug, null, bad);
@@ -219,10 +219,10 @@ test('AC22 blast: a bad v3 shape gives no review arguments and no slug', () => {
   assert.equal(reviewArgs({ source: 'base', base: SHA, slug: undefined }), null);
 });
 
-// ---------- plan-gate mod (AC22, aico-mods v1.8) ----------
+// ---------- plan-gate mod (aico-mods v1.8) ----------
 const GATE = 'node scripts/run-state.mjs gate';
 
-test('AC22 plan-gate: the Gate command takes one single-quoted v3 run slug, like a v2 name', () => {
+test('plan-gate: the Gate command takes one single-quoted v3 run slug, like a v2 name', () => {
   assert.equal(parseGateCommand(`${GATE} '${V3}' plan passed`), V3);
   assert.equal(parseGateCommand(`node /p/scripts/run.mjs run-state gate '${V3}' plan passed`), V3);
   assert.equal(parseGateCommand(`${GATE} '${V2}' plan passed`), V2);
@@ -230,7 +230,7 @@ test('AC22 plan-gate: the Gate command takes one single-quoted v3 run slug, like
   assert.equal(parseGateCommand(`${GATE} '${LEGACY}' plan passed`), LEGACY);
 });
 
-test('AC22 plan-gate: an unquoted v3 slug, a bad v3 shape or an extra token is not judged', () => {
+test('plan-gate: an unquoted v3 slug, a bad v3 shape or an extra token is not judged', () => {
   assert.equal(parseGateCommand(`${GATE} ${V3} plan passed`), null);
   for (const bad of BAD_V3.filter((s) => s !== V3 && !/[\n]/.test(s))) {
     assert.equal(parseGateCommand(`${GATE} '${bad}' plan passed`), null, bad);
@@ -241,7 +241,7 @@ test('AC22 plan-gate: an unquoted v3 slug, a bad v3 shape or an extra token is n
   assert.equal(parseGateCommand(`${GATE} '${PID}/01-draft'\n plan passed`), null);
 });
 
-test('AC22 plan-gate: a write to the run record of a v3 run is found and names the run slug', () => {
+test('plan-gate: a write to the run record of a v3 run is found and names the run slug', () => {
   for (const p of [
     `.company/work/${PID}/01-draft/run-state.jsonl`,
     `/abs/proj/.company/work/${PID}/01-draft/run-state.jsonl`,
@@ -256,7 +256,7 @@ test('AC22 plan-gate: a write to the run record of a v3 run is found and names t
   assert.deepEqual(recordPath(`work/${LEGACY}/run-state.jsonl`), { slug: LEGACY });
 });
 
-test('AC22 plan-gate: a run record path with a bad v3 shape is still a record path, with no slug', () => {
+test('plan-gate: a run record path with a bad v3 shape is still a record path, with no slug', () => {
   for (const run of [`${PID}/01-Draft`, `${PID}/1-draft`, `${PID}/x`, `${PID.toLowerCase()}/01-draft`]) {
     assert.deepEqual(recordPath(`.company/work/${run}/run-state.jsonl`), { slug: null }, run);
   }
@@ -264,10 +264,10 @@ test('AC22 plan-gate: a run record path with a bad v3 shape is still a record pa
   assert.equal(recordPath(`.company/work/${V3}/05-qa.md`), null);
 });
 
-// ---------- Contracts (AC12, AC22) ----------
+// ---------- Contracts ----------
 const doc = (name) => fs.readFileSync(path.join(REPO, 'docs', 'contracts', `${name}.md`), 'utf8');
 for (const [name, version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.4'], ['aico-mods', '1.8']]) {
-  test(`AC12 ${name} is v${version} and says v2, v1.1 and legacy names are byte-identical`, () => {
+  test(`${name} is v${version} and says v2, v1.1 and legacy names are byte-identical`, () => {
     const text = doc(name);
     assert.ok(text.startsWith(`# Contract: ${name} v${version}\n`), text.split('\n')[0]);
     const para = text.split('\n').find((l) => new RegExp(`^v${version.replace('.', '\\.')}\\b`).test(l));
@@ -278,7 +278,7 @@ for (const [name, version] of [['wayfinder', '1.2'], ['skill-recommendation', '2
   });
 }
 
-test('AC12 the provider scripts declare the new Contract versions', () => {
+test('the provider scripts declare the new Contract versions', () => {
   const head = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8').split('\n').slice(0, 3).join('\n');
   assert.match(head('scripts/wayfinder.mjs'), /docs\/contracts\/wayfinder\.md v1\.2\b/);
   assert.match(head('scripts/spec-check.mjs'), /docs\/contracts\/destination-spec\.md v1\.4\b/);

@@ -1,4 +1,4 @@
-// QA-first red tests for T13: lead-handoff v2.1 (AC15, AC12). A Lead hand-over on a v3 run slug `<ID>/<NN>-<playbook>`:
+// Tests for lead-handoff v2.1. A Lead hand-over on a v3 run slug `<ID>/<NN>-<playbook>`:
 // the run folder is `.company/work/<ID>/<NN>-<playbook>/`; v2, v1.1 and legacy names stay byte-identical.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,7 +48,7 @@ function transcript(fx) {
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
 
-describe('AC15 the Contract and the header (lead-handoff v2.1)', () => {
+describe('the Contract and the header (lead-handoff v2.1)', () => {
   test('the Contract header is v2.1 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
     assert.match(doc, /^# Contract: lead-handoff v2\.1$/m);
@@ -61,7 +61,7 @@ describe('AC15 the Contract and the header (lead-handoff v2.1)', () => {
     assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v2\.0( |$)/);
   });
 
-  test('AC12 the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
+  test('the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
     const para = doc.split('\n').find((l) => /^v2\.1\b/.test(l));
     assert.ok(para, 'a `v2.1` paragraph exists');
@@ -71,7 +71,7 @@ describe('AC15 the Contract and the header (lead-handoff v2.1)', () => {
   });
 });
 
-describe('AC15 newSessionCommand', () => {
+describe('newSessionCommand', () => {
   test('a v3 slug gives the single-quoted command with the slug', () => {
     assert.equal(newSessionCommand(SLUG),
       `claude "aico lead hand-over: run lead-handover read '${SLUG}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`);
@@ -83,13 +83,13 @@ describe('AC15 newSessionCommand', () => {
     }
   });
 
-  test('AC12 a legacy name keeps the exact command of today', () => {
+  test('a legacy name keeps the exact command of today', () => {
     assert.equal(newSessionCommand('demo-run'),
       'claude "aico lead hand-over: run lead-handover read \'demo-run\' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."');
   });
 });
 
-describe('AC15 CLI on a v3 slug', () => {
+describe('CLI on a v3 slug', () => {
   test('read prints the state lines of the nested run', () => {
     const fx = fixture();
     const r = main(['read', SLUG], fx.root, {});
@@ -198,7 +198,7 @@ describe('AC15 CLI on a v3 slug', () => {
   });
 });
 
-describe('AC15 hooks and context hand-over on a v3 run', () => {
+describe('hooks and context hand-over on a v3 run', () => {
   test('contextHandover writes the Handoff with the new-session command for the slug', () => {
     const fx = fixture();
     const file = contextHandover(fx.root, SLUG, { tokens: 85600, session: SESSION, now: fx.now });
@@ -240,7 +240,7 @@ describe('AC15 hooks and context hand-over on a v3 run', () => {
     assert.ok(r.out.includes(`lead-handover read '${SLUG}' first`), r.out);
   });
 
-  test('AC12 a legacy run still hands over to its flat folder (byte-identical layout)', () => {
+  test('a legacy run still hands over to its flat folder (byte-identical layout)', () => {
     const fx = fixture({ slug: 'demo-run' });
     assert.equal(main(['write', 'demo-run'], fx.root, {}).out, 'wrote lead-handoff-1.md\n');
     const text = fs.readFileSync(path.join(fx.work, 'demo-run', 'lead-handoff-1.md'), 'utf8');

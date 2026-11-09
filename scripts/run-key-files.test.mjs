@@ -1,4 +1,4 @@
-// QA-first red tests for the run-named files of a v3 run (AC17, AC5): token-ledger, release (gate report), reflect, pr-links.
+// Tests for the run-named files of a v3 run: token-ledger, release (gate report), reflect, pr-links.
 // A v3 slug `<ID>/<NN>-<pb>` names its file with `runKey` (`<ID>~<NN>-<pb>`, never a `/`); two runs of one project never share
 // a file; a ledger file name is read back as its slug (`slugOfKey`); v2, v1.1 and legacy names keep today's output.
 import test from 'node:test';
@@ -41,9 +41,9 @@ function seed(root, file, run, aico) {
   fs.writeFileSync(path.join(ledgerDir(root), file), rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
 }
 
-// ---------- token-ledger (AC17, AC5) ----------
+// ---------- token-ledger ----------
 
-test('AC17: ledger add of a v3 run writes <ID>~<NN>-<pb>.jsonl, flat, no sub folder', (t) => {
+test('ledger add of a v3 run writes <ID>~<NN>-<pb>.jsonl, flat, no sub folder', (t) => {
   const root = makeRoot(t);
   const r = add(root, R1);
   assert.equal(r.code, 0, JSON.stringify(r.lines));
@@ -51,7 +51,7 @@ test('AC17: ledger add of a v3 run writes <ID>~<NN>-<pb>.jsonl, flat, no sub fol
   assert.ok(fs.statSync(path.join(ledgerDir(root), `${K1}.jsonl`)).isFile());
 });
 
-test('AC5: two runs of one project write two files and never share one', (t) => {
+test('two runs of one project write two files and never share one', (t) => {
   const root = makeRoot(t);
   assert.equal(add(root, R1, '01').code, 0);
   assert.equal(add(root, R3, '02').code, 0);
@@ -63,7 +63,7 @@ test('AC5: two runs of one project write two files and never share one', (t) => 
   for (const l of [...lines(K1), ...lines(K3)]) assert.ok([R1, R3].includes(JSON.parse(l).run), l);
 });
 
-test('AC17: ledger report of a v3 slug reads its own runKey file only', (t) => {
+test('ledger report of a v3 slug reads its own runKey file only', (t) => {
   const root = makeRoot(t);
   add(root, R1);
   const own = ledger(['report', R1, '--json'], { root, now: NOW });
@@ -76,29 +76,29 @@ test('AC17: ledger report of a v3 slug reads its own runKey file only', (t) => {
   assert.ok(other.warnings.includes('no ledger'), 'the sibling run has no file of its own');
 });
 
-test('AC17: a v3 slug never reaches the disk as a path with a slash in the ledger folder', (t) => {
+test('a v3 slug never reaches the disk as a path with a slash in the ledger folder', (t) => {
   const root = makeRoot(t);
   add(root, R1);
   assert.ok(!fs.existsSync(path.join(ledgerDir(root), PROJ)), 'no <ID>/ folder under .company/ledger');
 });
 
-test('AC7: v2 and legacy names keep their own file names', (t) => {
+test('v2 and legacy names keep their own file names', (t) => {
   const root = makeRoot(t);
   assert.equal(add(root, V2).code, 0);
   assert.equal(add(root, LEGACY).code, 0);
   assert.deepEqual(filesOf(root), [`${LEGACY}.jsonl`, `${V2}.jsonl`].sort());
 });
 
-test('AC17: ledger refuses a v3 slug with a second slash or a tilde key typed as the run', (t) => {
+test('ledger refuses a v3 slug with a second slash or a tilde key typed as the run', (t) => {
   const root = makeRoot(t);
   assert.equal(add(root, `${R1}/x`).code, 2);
   assert.equal(add(root, K1).code, 2, 'a key is a file name, not an accepted slug');
   assert.ok(!fs.existsSync(ledgerDir(root)) || filesOf(root).length === 0);
 });
 
-// ---------- release: gate report runs (AC17, AC5) ----------
+// ---------- release: gate report runs ----------
 
-test('AC17: gate report lists a v3 ledger file as its slug', (t) => {
+test('gate report lists a v3 ledger file as its slug', (t) => {
   const root = makeRoot(t);
   seed(root, `${K3}.jsonl`, R3, '0.33.0');
   assert.deepEqual(runsOf(root, '0.33.0').map((r) => r.run), [R3]);
@@ -107,7 +107,7 @@ test('AC17: gate report lists a v3 ledger file as its slug', (t) => {
   assert.ok(!text.includes(K3), 'the key never shows in the report');
 });
 
-test('AC5: two runs of one project are two sections of the gate report', (t) => {
+test('two runs of one project are two sections of the gate report', (t) => {
   const root = makeRoot(t);
   seed(root, `${K1}.jsonl`, R1, '0.33.0');
   seed(root, `${K3}.jsonl`, R3, '0.33.0');
@@ -115,7 +115,7 @@ test('AC5: two runs of one project are two sections of the gate report', (t) => 
   assert.match(gateReport({ root, version: '0.33.0' }), /Runs: 2/);
 });
 
-test('AC17: gate report skips a name with a second tilde or a slash-like part, and a v3 run of another version', (t) => {
+test('gate report skips a name with a second tilde or a slash-like part, and a v3 run of another version', (t) => {
   const root = makeRoot(t);
   seed(root, `${PROJ}~01-a~02-b.jsonl`, R1, '0.33.0');
   seed(root, `${PROJ}~..-fix.jsonl`, R1, '0.33.0');
@@ -123,7 +123,7 @@ test('AC17: gate report skips a name with a second tilde or a slash-like part, a
   assert.deepEqual(runsOf(root, '0.33.0'), []);
 });
 
-test('AC7: gate report keeps v2 and legacy names as they are beside a v3 file', (t) => {
+test('gate report keeps v2 and legacy names as they are beside a v3 file', (t) => {
   const root = makeRoot(t);
   seed(root, `${V2}.jsonl`, V2, '0.33.0');
   seed(root, `${LEGACY}.jsonl`, LEGACY, '0.33.0');
@@ -131,9 +131,9 @@ test('AC7: gate report keeps v2 and legacy names as they are beside a v3 file', 
   assert.deepEqual(runsOf(root, '0.33.0').map((r) => r.run).sort(), [R1, LEGACY, V2].sort());
 });
 
-// ---------- ledger scorecard compares against v3 files (AC17) ----------
+// ---------- ledger scorecard compares against v3 files ----------
 
-test('AC17: a legacy run scorecard counts a shipped v3 file as one comparison run and does not throw', (t) => {
+test('a legacy run scorecard counts a shipped v3 file as one comparison run and does not throw', (t) => {
   const root = makeRoot(t);
   const shipRec = (run, t1, t2) => ({ v: 1, run, kind: 'ship', acs: 2, fix_rounds: 0, t_start: t1, t_ship: t2 });
   fs.mkdirSync(ledgerDir(root), { recursive: true });
@@ -145,14 +145,14 @@ test('AC17: a legacy run scorecard counts a shipped v3 file as one comparison ru
   assert.ok(!/no baseline/.test(r.lines.join('\n')), `the v3 file is a baseline run: ${r.lines.join('\n')}`);
 });
 
-// ---------- reflect (AC17) ----------
+// ---------- reflect ----------
 
 function reflect(root, ...args) {
   const r = spawnSync(process.execPath, [reflectScript, ...args], { cwd: root, encoding: 'utf8' });
   return { status: r.status, out: r.stdout.trim(), err: r.stderr };
 }
 
-test('AC17: reflect retro of a v3 slug reads its runKey ledger file', (t) => {
+test('reflect retro of a v3 slug reads its runKey ledger file', (t) => {
   const root = makeRoot(t);
   add(root, R1);
   const r = reflect(root, 'retro', R1, '--json');
@@ -162,7 +162,7 @@ test('AC17: reflect retro of a v3 slug reads its runKey ledger file', (t) => {
   assert.ok(!data.warnings.includes('no ledger'), r.out);
 });
 
-test('AC5: reflect retro of a sibling run does not read the other run file', (t) => {
+test('reflect retro of a sibling run does not read the other run file', (t) => {
   const root = makeRoot(t);
   add(root, R1);
   const r = reflect(root, 'retro', R3, '--json');
@@ -172,7 +172,7 @@ test('AC5: reflect retro of a sibling run does not read the other run file', (t)
   assert.ok(data.warnings.includes('no ledger'), r.out);
 });
 
-test('AC7: reflect retro of a legacy run is unchanged', (t) => {
+test('reflect retro of a legacy run is unchanged', (t) => {
   const root = makeRoot(t);
   add(root, LEGACY);
   const r = reflect(root, 'retro', LEGACY, '--json');
@@ -180,7 +180,7 @@ test('AC7: reflect retro of a legacy run is unchanged', (t) => {
   assert.equal(JSON.parse(r.out).slug, LEGACY);
 });
 
-// ---------- pr-links (AC17) ----------
+// ---------- pr-links ----------
 
 function fakeSpawn(t, out) {
   return t.mock.fn(() => {
@@ -196,7 +196,7 @@ function fakeSpawn(t, out) {
   });
 }
 
-test('AC17: pr-links lookup of a v3 slug keeps the slug and asks for the project branch', async (t) => {
+test('pr-links lookup of a v3 slug keeps the slug and asks for the project branch', async (t) => {
   const root = makeRoot(t);
   const out = JSON.stringify([{ number: 7, url: 'https://github.com/o/r/pull/7', state: 'OPEN', closingIssuesReferences: [] }]);
   const spawn = fakeSpawn(t, out);
@@ -208,7 +208,7 @@ test('AC17: pr-links lookup of a v3 slug keeps the slug and asks for the project
   assert.deepEqual(spawn.mock.calls[0].arguments[1].slice(0, 4), ['pr', 'list', '--head', `aico/${PROJ}`]);
 });
 
-test('AC17: pr-links refuses a v3 slug with no folder, a second slash or a runKey', async (t) => {
+test('pr-links refuses a v3 slug with no folder, a second slash or a runKey', async (t) => {
   const root = makeRoot(t);
   for (const bad of [`${PROJ}/09-gone`, `${R1}/x`, K1]) {
     const spawn = fakeSpawn(t, '[]');
@@ -219,7 +219,7 @@ test('AC17: pr-links refuses a v3 slug with no folder, a second slash or a runKe
   }
 });
 
-test('AC7: pr-links lookup of a v2 name is unchanged', async (t) => {
+test('pr-links lookup of a v2 name is unchanged', async (t) => {
   const root = makeRoot(t);
   const r = await lookup(root, V2, { spawn: fakeSpawn(t, '[]') });
   assert.equal(r.slug, V2);

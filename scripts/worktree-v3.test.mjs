@@ -1,4 +1,4 @@
-// QA-first red tests for T25 (AC19): worktree and step-split on a v3 run slug `<ID>/<NN>-<pb>`.
+// Tests for worktree and step-split on a v3 run slug `<ID>/<NN>-<pb>`.
 // Refs and worktree folders carry the project ID only (`aico-wt/<ID>/t<n>`, no run part); the record lives in the run folder.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -63,7 +63,7 @@ function makeRepo() {
 
 const wtBranches = (r) => git(r.repo, 'branch', '--list', 'aico-wt/*').split('\n').filter(Boolean);
 
-describe('worktree on a v3 run slug (AC19)', () => {
+describe('worktree on a v3 run slug', () => {
   test('add makes aico-wt/<ID>/t<n> and a worktree folder without a run part', () => {
     const r = makeRepo();
     const res = r.run('add', RUN, 't1', '--base', r.head());
@@ -133,7 +133,7 @@ describe('worktree on a v3 run slug (AC19)', () => {
   });
 });
 
-describe('step-split on a v3 run slug (AC19)', () => {
+describe('step-split on a v3 run slug', () => {
   function stubbed() {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-v3-'));
     bases.push(d);

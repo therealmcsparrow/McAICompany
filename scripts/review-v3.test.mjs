@@ -1,7 +1,7 @@
-// QA-first tests for P20261109.000009-T26 (tier-sets v1.8, review-loop v1.3, rule-check v1.6, review-depth v1.4; AC19, AC12).
+// Tests for tier-sets v1.8, review-loop v1.3, rule-check v1.6 and review-depth v1.4 on a v3 slug.
 // A v3 run slug `<ID>/<NN>-<pb>` is accepted by tier-set, review-loop, rule-check and review-depth. The run ref is
 // `refs/heads/aico/<ID>` (no run part). Each scenario runs once on a v3 slug and once on a v2 slug of the same project
-// and the two outputs must match once the slug text is swapped (v2 stays byte-identical, AC12).
+// and the two outputs must match once the slug text is swapped (v2 stays byte-identical).
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -75,7 +75,7 @@ const depth = (ctx, ...args) => {
 };
 const loop = (ctx, ...args) => loopMain(args, { root: ctx.root, now: NOW });
 
-describe('tier-sets v1.8: tier-set on a v3 slug (AC19, AC12)', () => {
+describe('tier-sets v1.8: tier-set on a v3 slug', () => {
   test('begin then read keep the record in the v3 run folder', () => {
     const ctx = fixture([V3]);
     const r = tier(ctx, 'begin', V3, ...BEGIN, '--base', ctx.base);
@@ -134,7 +134,7 @@ describe('tier-sets v1.8: tier-set on a v3 slug (AC19, AC12)', () => {
   });
 });
 
-describe('review-loop v1.3 on a v3 slug (AC19, AC12)', () => {
+describe('review-loop v1.3 on a v3 slug', () => {
   test('attempt twice writes review-loop.jsonl in the v3 run folder', () => {
     const ctx = fixture([V3]);
     const a = loop(ctx, 'attempt', V3, '03', 'code-reviewer', '0', 'crash');
@@ -191,7 +191,7 @@ describe('review-loop v1.3 on a v3 slug (AC19, AC12)', () => {
   });
 });
 
-describe('rule-check v1.6 on a v3 slug (AC19, AC12)', () => {
+describe('rule-check v1.6 on a v3 slug', () => {
   test('runRef maps a v3 slug to the project run ref', () => {
     assert.equal(ruleRunRef(V3), `refs/heads/aico/${ID}`);
     assert.equal(ruleRunRef(V2), `refs/heads/aico/${ID}`);
@@ -216,7 +216,7 @@ describe('rule-check v1.6 on a v3 slug (AC19, AC12)', () => {
   });
 });
 
-describe('review-depth v1.4 on a v3 slug (AC19, AC12)', () => {
+describe('review-depth v1.4 on a v3 slug', () => {
   test('--run <v3 slug> reads the diff of refs/heads/aico/<ID>', () => {
     const ctx = fixture([V3], { change: 'src/auth.mjs' });
     const r = depth(ctx, ctx.base, '--run', V3, '--json');

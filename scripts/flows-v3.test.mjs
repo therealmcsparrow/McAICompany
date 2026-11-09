@@ -1,5 +1,5 @@
-// QA-first tests (P20261109.000009-T30, AC21, AC12, AC7): idea-flow, grill, reprompt-check and the reprompt gate
-// take a v3 run slug `<ProjectID>/<NN>-<playbook>` and treat it as they treat a v2 name. Red until T31.
+// Tests: idea-flow, grill, reprompt-check and the reprompt gate
+// take a v3 run slug `<ProjectID>/<NN>-<playbook>` and treat it as they treat a v2 name.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,12 +20,12 @@ const V2 = 'P20261109.000008-10.00.00';
 const work = (cwd, ...parts) => path.join(cwd, '.company', 'work', ...parts);
 const mk = (cwd, slug) => { fs.mkdirSync(work(cwd, ...slug.split('/')), { recursive: true }); return work(cwd, ...slug.split('/')); };
 
-// ---------- idea-flow (AC21, idea-flow v2.1) ----------
+// ---------- idea-flow (idea-flow v2.1) ----------
 const run = (cwd, ...argv) => flow(argv, cwd);
 const ok = (r) => { assert.equal(r.code, 0, r.out); return r; };
 const letters = (r) => r.out.split('\n').filter((l) => l.startsWith('option ')).map((l) => l.split(' ')[1]);
 
-test('AC21 idea-flow: a v3 slug runs the whole record in the run folder, a v2 name as before', () => {
+test('idea-flow: a v3 slug runs the whole record in the run folder, a v2 name as before', () => {
   const cwd = root();
   mk(cwd, V3);
   ok(run(cwd, 'start', V3, '--kind', 'idea'));
@@ -45,7 +45,7 @@ test('AC21 idea-flow: a v3 slug runs the whole record in the run folder, a v2 na
   assert.match(ok(run(cwd, 'state', V2)).out, /kind: bug\nform: grill\nbuild: fix/);
 });
 
-test('AC21 idea-flow: a v3 folder that is missing is never created (only a legacy slug is)', () => {
+test('idea-flow: a v3 folder that is missing is never created (only a legacy slug is)', () => {
   const cwd = root();
   const r = run(cwd, 'start', V3, '--kind', 'idea');
   assert.equal(r.code, 1, r.out);
@@ -60,7 +60,7 @@ test('AC21 idea-flow: a v3 folder that is missing is never created (only a legac
   ok(run(cwd, 'start', V3, '--kind', 'idea'));
 });
 
-test('AC21 idea-flow: hostile v3-shaped slugs are refused (code 3), the good one is not', async (t) => {
+test('idea-flow: hostile v3-shaped slugs are refused (code 3), the good one is not', async (t) => {
   const cwd = root();
   mk(cwd, V3);
   const bad = [
@@ -77,7 +77,7 @@ test('AC21 idea-flow: hostile v3-shaped slugs are refused (code 3), the good one
   ok(run(cwd, 'start', V3, '--kind', 'idea'));
 });
 
-test('AC21 idea-flow: wrong letter case of an existing v3 folder is refused', () => {
+test('idea-flow: wrong letter case of an existing v3 folder is refused', () => {
   const cwd = root();
   mk(cwd, `${PID}/01-IDEA`);
   const r = run(cwd, 'start', V3, '--kind', 'idea');
@@ -85,7 +85,7 @@ test('AC21 idea-flow: wrong letter case of an existing v3 folder is refused', ()
   assert.match(r.out, /wrong letter case/);
 });
 
-test('AC21 idea-flow: park-idea copies the run folder only, not the project folder', () => {
+test('idea-flow: park-idea copies the run folder only, not the project folder', () => {
   const cwd = root();
   const dir = mk(cwd, V3);
   fs.writeFileSync(work(cwd, PID, '00-project.md'), 'A project\n');
@@ -107,7 +107,7 @@ test('AC21 idea-flow: park-idea copies the run folder only, not the project fold
   assert.match(ok(run(cwd, 'state', V3)).out, /form: ended/);
 });
 
-// ---------- grill (AC21, grill-file v1.5) ----------
+// ---------- grill (grill-file v1.5) ----------
 const REC = '(recommended: it is the smaller change)';
 const qEntry = (n, branch, opens = 'none') => [
   `### Q-${n} — B-${branch}`, `- Question: Which way for part ${n}?`, `- Options: First ${REC} | Second`, '- Answer: First',
@@ -120,7 +120,7 @@ const grillText = (slug) => [
   '## Log', qEntry(1, 1, 'B-4'), qEntry(2, 2), '## Proposals', '- GLOSSARY: Grill — a decision interview', '',
 ].join('\n');
 
-test('AC21 grill: status and check read grill.md of a v3 run, a v2 name unchanged', () => {
+test('grill: status and check read grill.md of a v3 run, a v2 name unchanged', () => {
   const cwd = root();
   const dir = mk(cwd, `${PID}/02-grill`);
   fs.writeFileSync(path.join(dir, 'grill.md'), grillText(`${PID}/02-grill`));
@@ -138,7 +138,7 @@ test('AC21 grill: status and check read grill.md of a v3 run, a v2 name unchange
   assert.equal(grill(['check', `.company/work/${V2}/grill.md`], { root: cwd }).code, 0);
 });
 
-test('AC21 grill: frontmatter slug may be a v3 slug', () => {
+test('grill: frontmatter slug may be a v3 slug', () => {
   const cwd = root();
   const dir = mk(cwd, `${PID}/02-grill`);
   fs.writeFileSync(path.join(dir, 'grill.md'), grillText(`${PID}/02-grill`));
@@ -151,7 +151,7 @@ test('AC21 grill: frontmatter slug may be a v3 slug', () => {
   assert.match(bad.lines.join('\n'), /bad frontmatter/);
 });
 
-test('AC21 grill: refuses a path that is not exactly one run folder with grill.md', () => {
+test('grill: refuses a path that is not exactly one run folder with grill.md', () => {
   const cwd = root();
   const dir = mk(cwd, `${PID}/02-grill`);
   fs.writeFileSync(path.join(dir, 'grill.md'), grillText(`${PID}/02-grill`));
@@ -173,7 +173,7 @@ test('AC21 grill: refuses a path that is not exactly one run folder with grill.m
   assert.match(miss.lines[0], /missing/);
 });
 
-test('AC21 grill: wrong letter case of the v3 run folder is refused', () => {
+test('grill: wrong letter case of the v3 run folder is refused', () => {
   const cwd = root();
   const dir = mk(cwd, `${PID}/02-GRILL`);
   fs.writeFileSync(path.join(dir, 'grill.md'), grillText(`${PID}/02-grill`));
@@ -182,8 +182,8 @@ test('AC21 grill: wrong letter case of the v3 run folder is refused', () => {
   assert.match(r.lines[0], /wrong letter case/);
 });
 
-// ---------- reprompt gate (AC21, reprompt v2.6) ----------
-test('AC21 isRunName: a v3 run slug is a run name, a malformed one is not, v2 names unchanged', () => {
+// ---------- reprompt gate (reprompt v2.6) ----------
+test('isRunName: a v3 run slug is a run name, a malformed one is not, v2 names unchanged', () => {
   for (const good of [V3, `${PID}/12-reprompt`, `${PID}/999-reprompt`, PID, V2, 'reprompt-20261027-0905']) {
     assert.equal(isRunName(good), true, good);
   }
@@ -193,7 +193,7 @@ test('AC21 isRunName: a v3 run slug is a run name, a malformed one is not, v2 na
   }
 });
 
-test('AC21 parseOutputLine: a v3 Output line gives slug and nn, an extra part does not', () => {
+test('parseOutputLine: a v3 Output line gives slug and nn, an extra part does not', () => {
   const line = (s) => `Goal: x\nOutput: .company/work/${s}\n`;
   assert.deepEqual(parseOutputLine(line(`${V3}/01-reprompter.md`)), { slug: V3, nn: '01' });
   assert.deepEqual(parseOutputLine(line(`${PID}/12-reprompt/003-reprompter.md`)), { slug: `${PID}/12-reprompt`, nn: '003' });
@@ -205,7 +205,7 @@ test('AC21 parseOutputLine: a v3 Output line gives slug and nn, an extra part do
   assert.equal(parseOutputLine(`Output: .company/work/${V3}/01-reprompter.md\nOutput: .company/work/${V3}/02-reprompter.md\n`), null, 'two Output lines');
 });
 
-test('AC21 allowsTool: the recorded reprompter writes only its two files of a v3 run folder', () => {
+test('allowsTool: the recorded reprompter writes only its two files of a v3 run folder', () => {
   const rootDir = process.platform === 'win32' ? 'C:/proj' : '/proj';
   const rec = { slug: V3, nn: '01', root: rootDir };
   const run3 = `${rootDir}/.company/work/${V3}`;
@@ -226,7 +226,7 @@ test('AC21 allowsTool: the recorded reprompter writes only its two files of a v3
   assert.equal(allowsTool('Write', { file_path: `${run3}/x/prompt.md` }, { ...rec, slug: `${V3}/x` }, '/plug', process.platform), false);
 });
 
-// ---------- reprompt-check (AC21, reprompt v2.6) ----------
+// ---------- reprompt-check (reprompt v2.6) ----------
 function project() {
   const rootDir = root();
   const home = path.join(rootDir, '..', `${path.basename(rootDir)}-home`);
@@ -248,7 +248,7 @@ function runDir(p, slug) {
 }
 const check = (p, ...args) => { const r = repromptCheck(args, { cwd: p.rootDir, env: p.env }); return { code: r.code, json: JSON.parse(r.out) }; };
 
-test('AC21 reprompt-check: snap and arm work on a v3 run, the gate file sits in the run folder', () => {
+test('reprompt-check: snap and arm work on a v3 run, the gate file sits in the run folder', () => {
   const p = project();
   const dir = runDir(p, `${PID}/03-reprompt`);
   const s = check(p, 'snap', `${PID}/03-reprompt`);
@@ -263,7 +263,7 @@ test('AC21 reprompt-check: snap and arm work on a v3 run, the gate file sits in 
   assert.equal(check(p, 'arm', `${PID}/03-reprompt`, '01').json.refused, 'refused: gate already armed');
 });
 
-test('AC21 reprompt-check: a v2 name behaves as before beside a v3 run', () => {
+test('reprompt-check: a v2 name behaves as before beside a v3 run', () => {
   const p = project();
   runDir(p, V2);
   runDir(p, `${PID}/03-reprompt`);
@@ -278,7 +278,7 @@ test('AC21 reprompt-check: a v2 name behaves as before beside a v3 run', () => {
   assert.equal(check(q, 'arm', V2, '01').code, 0);
 });
 
-test('AC21 reprompt-check: hostile v3-shaped slugs and a missing run folder are refused, nothing written', () => {
+test('reprompt-check: hostile v3-shaped slugs and a missing run folder are refused, nothing written', () => {
   const p = project();
   const dir = runDir(p, `${PID}/03-reprompt`);
   assert.equal(check(p, 'snap', `${PID}/03-reprompt`).code, 0, 'the good slug is accepted');
@@ -295,7 +295,7 @@ test('AC21 reprompt-check: hostile v3-shaped slugs and a missing run folder are 
   assert.deepEqual(fs.readdirSync(dir).sort(), before);
 });
 
-test('AC21 reprompt-check: wrong letter case of the v3 run folder is refused', () => {
+test('reprompt-check: wrong letter case of the v3 run folder is refused', () => {
   const p = project();
   runDir(p, `${PID}/03-REPROMPT`);
   const r = check(p, 'snap', `${PID}/03-reprompt`);

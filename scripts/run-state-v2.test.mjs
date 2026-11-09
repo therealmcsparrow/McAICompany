@@ -1,4 +1,4 @@
-// Tests for run-state v2.0: `runSlugs`, and `list` / `active` over a tree with v3 projects and v2 folders (AC14, AC7, AC12).
+// Tests for run-state v2.0: `runSlugs`, and `list` / `active` over a tree with v3 projects and v2 folders.
 // Slugs may now hold one `/`: `<ID>/<NN>-<playbook>`.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -129,7 +129,7 @@ describe('runSlugs (run-state v2.0)', () => {
   });
 });
 
-describe('list over a mixed tree (AC14, AC7)', () => {
+describe('list over a mixed tree', () => {
   test('a v3 run appears with its nested slug; the v2 run keeps its entry exactly', () => {
     const root = repo();
     mk(root, V2_1);
@@ -179,7 +179,7 @@ describe('list over a mixed tree (AC14, AC7)', () => {
     ]);
   });
 
-  test('legacy and v2 beside a v3 project: the old entries keep their shape and slugs (AC7)', () => {
+  test('legacy and v2 beside a v3 project: the old entries keep their shape and slugs', () => {
     const root = repo();
     mk(root, 'demo-run');
     mk(root, V2_3);
@@ -215,7 +215,7 @@ describe('list over a mixed tree (AC14, AC7)', () => {
   });
 });
 
-describe('active over a mixed tree (AC14, AC7)', () => {
+describe('active over a mixed tree', () => {
   test('a running v3 run is the active run, slug `<ID>/<NN>-<pb>`', () => {
     const root = repo();
     v3(root, ID1, ['01-feature']);
@@ -266,7 +266,7 @@ describe('active over a mixed tree (AC14, AC7)', () => {
   });
 });
 
-describe('the Contract (AC12)', () => {
+describe('the Contract', () => {
   test('the doc is v2.0 and says v2, v1.1 and legacy names behave as before', () => {
     const text = fs.readFileSync(path.join(REPO, 'docs', 'contracts', 'run-state.md'), 'utf8');
     assert.match(text, /^# Contract: run-state v2\.0\r?$/m);

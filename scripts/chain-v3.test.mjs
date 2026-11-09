@@ -7,7 +7,7 @@ import { isProjectId, isWorkFolder } from '../mods/lib/work-folder.mjs';
 import { main } from './work-folder.mjs';
 import { runSlugs, projects } from './run-state.mjs';
 
-// AC4 on the flipped CLI (work-folder-name v3.0): bug, grill, reprompt x2, bug, grill, fix chained by `project:` lines
+// Chain on the flipped CLI (work-folder-name v3.0): bug, grill, reprompt x2, bug, grill, fix chained by `project:` lines
 // (`new --playbook <pb> --project <ID>`) make one top-level entry, seven runs and one branch. Public interface:
 // scripts/work-folder.mjs#main and scripts/run-state.mjs (runSlugs, projects).
 const NOW = new Date(2026, 10, 9, 16, 30, 0);
@@ -57,7 +57,7 @@ function runChain(root) {
   return { id, results };
 }
 
-describe('chain bug, grill, reprompt x2, bug, grill, fix on the v3 CLI (AC4)', () => {
+describe('chain bug, grill, reprompt x2, bug, grill, fix on the v3 CLI', () => {
   test('one top-level entry: the project folder, no v2 sibling folder', () => {
     const root = product();
     const { id } = runChain(root);

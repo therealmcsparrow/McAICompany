@@ -1,6 +1,6 @@
-// Red tests for plan-check v1.7 and plan-review v1.4 (T23): a v3 run slug `<ProjectID>/<NN>-<playbook>` is accepted by
+// Tests for plan-check v1.7 and plan-review v1.4: a v3 run slug `<ProjectID>/<NN>-<playbook>` is accepted by
 // plan-check (gate, off, wave, verify, read, readRecord), plan-check-verdict (verdict, history) and plan-review
-// (lines, majors, gate). AC18 (v3 slugs pass the checks) and AC12 (reader rule: v2, v1.1 and legacy stay byte-identical).
+// (lines, majors, gate). The v3 slugs pass the checks; the reader rule keeps v2, v1.1 and legacy byte-identical.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -47,7 +47,7 @@ function root3(slug = V3, text = TASK_PLAN) {
 
 // ---------------------------------------------------------------- plan-check
 
-describe('plan-check on a v3 slug (AC18, AC12)', () => {
+describe('plan-check on a v3 slug', () => {
   test('gate warn scans the plan in the run folder and records under the v3 folder', () => {
     const root = root3();
     const r = cli(root, ['gate', V3, PLAN, '--policy', 'warn']);
@@ -59,7 +59,7 @@ describe('plan-check on a v3 slug (AC18, AC12)', () => {
     assert.equal(fs.existsSync(path.join(root, '.company', 'work', `${ID}~01-feature`)), false);
   });
 
-  test('gate output is byte-identical for a v3 slug and a v2 slug with the same plan (AC12)', () => {
+  test('gate output is byte-identical for a v3 slug and a v2 slug with the same plan', () => {
     const a = cli(root3(V3), ['gate', V3, PLAN, '--policy', 'block']);
     const b = cli(root3(V2), ['gate', V2, PLAN, '--policy', 'block']);
     assert.deepEqual(a, b);
@@ -151,7 +151,7 @@ describe('plan-check on a v3 slug (AC18, AC12)', () => {
     assert.equal(r.stdout, 'plan-check (warn): 1 open decision, 0 decided\n02-plan.md:4 | TBD | a placeholder: the plan does not say what to build here\n');
   });
 
-  test('a v2 slug and a legacy slug keep working (AC12)', () => {
+  test('a v2 slug and a legacy slug keep working', () => {
     for (const slug of [V2, 'demo']) {
       const root = root3(slug);
       assert.equal(cli(root, ['gate', slug, PLAN, '--policy', 'warn']).code, 0);
@@ -166,7 +166,7 @@ describe('plan-check on a v3 slug (AC18, AC12)', () => {
 
 const verdict = (root, args) => verdictMain(args, { root });
 
-describe('plan-check-verdict on v3 runs (AC12)', () => {
+describe('plan-check-verdict on v3 runs', () => {
   const planPath = (slug) => work(slug, PLAN);
 
   test('history scans the plan of a v3 run from the working tree and prints its path', () => {
@@ -245,7 +245,7 @@ const handoff = () => [
   '## Decisions', '- none', '## Blocking', '- [comprehension] R-1 a.md:1 — unclear — rewrite', '## Next', '- x', ''
 ].join('\n');
 
-describe('plan-review on a v3 slug (AC12)', () => {
+describe('plan-review on a v3 slug', () => {
   test('lines writes inputs.md inside the v3 run folder and names it with the v3 path', () => {
     const root = product();
     const r = rv(root, 'lines', V3, RPLAN, '--mode', 'plan', '--after', '02-architect.md');
@@ -259,7 +259,7 @@ describe('plan-review on a v3 slug (AC12)', () => {
     assert.match(text, new RegExp(`^## Plan\\n\\.company/work/${V3}/${RPLAN}\\n`));
   });
 
-  test('lines output is identical for a v2 slug apart from the path (AC12)', () => {
+  test('lines output is identical for a v2 slug apart from the path', () => {
     const a = rv(product(V3), 'lines', V3, RPLAN, '--mode', 'plan', '--after', '02-architect.md');
     const b = rv(product(V2), 'lines', V2, RPLAN, '--mode', 'plan', '--after', '02-architect.md');
     assert.equal(a.code, 0);
@@ -299,7 +299,7 @@ describe('plan-review on a v3 slug (AC12)', () => {
     assert.equal(fs.existsSync(path.join(root, '.company', 'work', ID, '02-fix')), false);
   });
 
-  test('a v2 slug and a legacy slug keep working (AC12)', () => {
+  test('a v2 slug and a legacy slug keep working', () => {
     for (const slug of [V2, 'demo']) {
       assert.equal(rv(product(slug, '# Plan\n\nnothing\n'), 'majors', slug, RPLAN).code, 4);
     }

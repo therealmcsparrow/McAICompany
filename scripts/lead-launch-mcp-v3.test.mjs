@@ -1,4 +1,4 @@
-// QA-first red tests for T13: lead-session-mcp v1.2 (AC15, AC12). `lead_new_session` on a v3 run slug `<ID>/<NN>-<playbook>`.
+// Tests for lead-session-mcp v1.2. `lead_new_session` on a v3 run slug `<ID>/<NN>-<playbook>`.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -42,7 +42,7 @@ const tree = (d, rel = '') => fs.readdirSync(d, { withFileTypes: true }).flatMap
   ? tree(path.join(d, e.name), `${rel}${e.name}/`) : [`${rel}${e.name}`])).sort();
 const bytes = (d) => Object.fromEntries(tree(d).map((f) => [f, fs.readFileSync(path.join(d, f)).toString('base64')]));
 
-describe('AC15 the Contract and the header (lead-session-mcp v1.2)', () => {
+describe('the Contract and the header (lead-session-mcp v1.2)', () => {
   test('the Contract header is v1.2 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-session-mcp.md'), 'utf8');
     assert.match(doc, /^# Contract: lead-session-mcp v1\.2$/m);
@@ -50,7 +50,7 @@ describe('AC15 the Contract and the header (lead-session-mcp v1.2)', () => {
     assert.match(lines[1], /^\/\/ lead-session-mcp v1\.2 /);
   });
 
-  test('AC12 the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
+  test('the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-session-mcp.md'), 'utf8');
     const para = doc.split('\n').find((l) => /^v1\.2\b/.test(l));
     assert.ok(para, 'a `v1.2` paragraph exists');
@@ -59,7 +59,7 @@ describe('AC15 the Contract and the header (lead-session-mcp v1.2)', () => {
   });
 });
 
-describe('AC15 lead_new_session on a v3 run', () => {
+describe('lead_new_session on a v3 run', () => {
   test('after a context hand-over it returns the command for the slug', () => {
     const fx = fixture({ handover: 'context' });
     const r = newSession(fx.root, fx.now);
@@ -138,7 +138,7 @@ describe('AC15 lead_new_session on a v3 run', () => {
   });
 });
 
-describe('AC12 byte-identical for old names', () => {
+describe('byte-identical for old names', () => {
   test('a legacy run gives the command of today', () => {
     const fx = fixture({ slug: 'demo-run', handover: 'context' });
     const r = newSession(fx.root, fx.now);

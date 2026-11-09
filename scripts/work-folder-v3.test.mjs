@@ -144,7 +144,7 @@ describe('slug helpers (exports of mods/lib/work-folder.mjs)', () => {
   });
 });
 
-describe('new: first run of a new project (AC2, AC6)', () => {
+describe('new: first run of a new project', () => {
   test('makes one project folder with 00-project.md and 01-<playbook>, prints id, run slug, branch', () => {
     const root = project();
     const r = newV3(root);
@@ -246,7 +246,7 @@ describe('new: first run of a new project (AC2, AC6)', () => {
   });
 });
 
-describe('new --project: later run in a v3 project (AC5, AC9)', () => {
+describe('new --project: later run in a v3 project', () => {
   test('makes the next NN as a sub folder, never a top-level entry', () => {
     const root = project();
     newV3(root);
@@ -348,7 +348,7 @@ describe('new --project: later run in a v3 project (AC5, AC9)', () => {
   });
 });
 
-describe('new --project on a v2-only project (AC7, AC9)', () => {
+describe('new --project on a v2-only project', () => {
   const v2 = `${ID}-10.00.00`;
 
   test('makes a v3 project folder with 01-<playbook>; v2 folder stays byte-identical', () => {
@@ -396,7 +396,7 @@ describe('new --project on a v2-only project (AC7, AC9)', () => {
   });
 });
 
-describe('default output is v3 (AC6, AC12)', () => {
+describe('default output is v3', () => {
   test('new --topic with no flag prints a run slug and makes a project folder', () => {
     const root = project();
     writeTopic(root, 'Fix Login');

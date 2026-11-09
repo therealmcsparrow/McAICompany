@@ -1,4 +1,4 @@
-// QA-first red tests for T48: slugOfKey, v3 `siblings`, `branch` on a run slug (work-folder-name v3.0 delta; AC12, AC7).
+// Tests for slugOfKey, v3 `siblings`, `branch` on a run slug (work-folder-name v3.0 delta).
 // Built through the lib makers, so these tests do not depend on `--layout` (refused after the flip).
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,7 +38,7 @@ function snapshot(dir, rel = '') {
 const v3 = (root, description = 'Fix Login') => lib.makeProjectV3(io, root, NOW, description, 'idea');
 const v2 = (root, description = 'Old Work') => lib.makeProject(io, root, NOW, description, 'idea');
 
-describe('slugOfKey (AC12)', () => {
+describe('slugOfKey', () => {
   test('is exported', () => {
     assert.equal(typeof lib.slugOfKey, 'function');
   });
@@ -59,7 +59,7 @@ describe('slugOfKey (AC12)', () => {
     assert.equal(lib.slugOfKey(made.name), made.name);
     assert.equal(lib.slugOfKey(`${ID}-23.45.07`), `${ID}-23.45.07`);
   });
-  test('a legacy name maps to itself (AC7)', () => {
+  test('a legacy name maps to itself', () => {
     for (const k of ['x', 'fix-login', 'a1-b2']) assert.equal(lib.slugOfKey(k), k);
   });
   test('anything else is null', () => {
@@ -79,7 +79,7 @@ describe('slugOfKey (AC12)', () => {
   });
 });
 
-describe('work-folder siblings on v3 projects (AC12)', () => {
+describe('work-folder siblings on v3 projects', () => {
   function two() {
     const root = project();
     const a = v3(root, 'First Project');
@@ -178,7 +178,7 @@ describe('work-folder siblings on v3 projects (AC12)', () => {
   });
 });
 
-describe('work-folder branch on a run slug (AC12, AC7)', () => {
+describe('work-folder branch on a run slug', () => {
   test('a v3 run slug prints the project branch', () => {
     const root = project();
     const made = v3(root);
@@ -190,7 +190,7 @@ describe('work-folder branch on a run slug (AC12, AC7)', () => {
     const slug = lib.makeRunV3(io, root, made.id, NOW, 'fix');
     assert.deepEqual(run(root, ['branch', slug]), { code: 0, lines: [`branch: aico/${made.id}`] });
   });
-  test('v2 names print what they do today (AC7)', () => {
+  test('v2 names print what they do today', () => {
     const root = project();
     const old = v2(root);
     assert.deepEqual(run(root, ['branch', old.name]), { code: 0, lines: [`branch: aico/${old.id}`] });

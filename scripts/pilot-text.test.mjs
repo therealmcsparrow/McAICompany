@@ -27,7 +27,7 @@ const PRE = {
   // review +65 B for the Review group pointer (dispatch-prompt v4.4).
   // review +87 B more (fix round 1): a failing binary-content read and a non-UTF-8 path name are Blocking [security] rows, and the grafts check names the git.M-SEC4 (2) query.
   // handoff: 5844 + 348 B for the Worktree rule in Starting a Step rule 6 (a task works in its own worktree, never the product tree; handoff v1.3). The file stays at 70 lines.
-  // review: 4572 + 197 B for the join-project cite in the Judging diff run argument (one-project-one-folder run 2, AC24); raises the per-file cap and so the code-reviewer load sum.
+  // review: 4572 + 197 B for the join-project cite in the Judging diff run argument (one-project-one-folder run 2); raises the per-file cap and so the code-reviewer load sum.
   // handoff: 7068 + 638 B for the two context-guard bullets in Context budget (context-guard v1, hard hand-over); both loads carry them through this cap, LOAD_EXTRA unchanged.
   'skills/handoff/SKILL.md': 7706, 'skills/ruleset/SKILL.md': 5915, 'skills/review/SKILL.md': 4769,
   // review: 4457 + 115 B (file +119 B, 4 B old slack) for the QA-first Blocking [test] sentence (plan-tasks v1.7); this raises the per-file cap only.

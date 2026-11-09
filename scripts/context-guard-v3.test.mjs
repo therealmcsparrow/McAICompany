@@ -1,4 +1,4 @@
-// QA-first for P20261109.000009-T11 (AC15): context-guard finds the active v3 run `<ID>/<NN>-<pb>`, keeps its record in
+// Tests: context-guard finds the active v3 run `<ID>/<NN>-<pb>`, keeps its record in
 // that run folder and allows a new Handoff written directly in it. The v2 cases stay in tests/context-guard/guard.test.mjs.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,34 +46,34 @@ function fixture({ tokens = HANDOVER_AT } = {}) {
 const decision = (r) => JSON.parse(r.out).hookSpecificOutput;
 
 describe('v3 run folder', () => {
-  test('AC15: below the hand-over point stays silent with no record', () => {
+  test('below the hand-over point stays silent with no record', () => {
     const fx = fixture({ tokens: HANDOVER_AT - 1 });
     assert.deepEqual(pre(fx.input(), fx.opts), quiet);
     assert.deepEqual(fx.guard(), []);
   });
 
-  test('AC15: at the hand-over point a tool is denied and the deny is recorded in the v3 run folder', () => {
+  test('at the hand-over point a tool is denied and the deny is recorded in the v3 run folder', () => {
     const fx = fixture();
     const d = decision(pre(fx.input(), fx.opts));
     assert.equal(d.permissionDecision, 'deny');
     assert.deepEqual(fx.guard().map((l) => l.ev), ['deny']);
   });
 
-  test('AC15: a Write of a new Handoff directly in the v3 run folder is allowed and recorded', () => {
+  test('a Write of a new Handoff directly in the v3 run folder is allowed and recorded', () => {
     const fx = fixture();
     const file = path.join(fx.dir, '04-backend-engineer.md');
     assert.deepEqual(pre(fx.input({ tool_name: 'Write', tool_input: { file_path: file, content: 'x' } }), fx.opts), quiet);
     assert.deepEqual(fx.guard().map((l) => [l.ev, l.file]), [['handoff', '04-backend-engineer.md']]);
   });
 
-  test('AC15: a findings ledger in the v3 run folder is allowed once, recorded as a ledger', () => {
+  test('a findings ledger in the v3 run folder is allowed once, recorded as a ledger', () => {
     const fx = fixture();
     const w = (name) => pre(fx.input({ tool_name: 'Write', tool_input: { file_path: path.join(fx.dir, name), content: 'x' } }), fx.opts);
     assert.deepEqual(w('04-code-reviewer.findings.md'), quiet);
     assert.equal(decision(w('04-other.findings.md')).permissionDecision, 'deny');
   });
 
-  test('AC15: a Write in the project folder, a sibling run folder or a deeper path is denied', () => {
+  test('a Write in the project folder, a sibling run folder or a deeper path is denied', () => {
     const fx = fixture();
     const work = path.join(fx.root, '.company', 'work', ID);
     fs.mkdirSync(path.join(work, '02-fix'), { recursive: true });
@@ -84,7 +84,7 @@ describe('v3 run folder', () => {
     assert.ok(fx.guard().every((l) => l.ev === 'deny'));
   });
 
-  test('AC15: SubagentStop blocks once after a deny with no Handoff, and lets a Step that wrote one end', () => {
+  test('SubagentStop blocks once after a deny with no Handoff, and lets a Step that wrote one end', () => {
     const fx = fixture();
     pre(fx.input(), fx.opts);
     const block = subagentStop(JSON.stringify({ hook_event_name: 'SubagentStop', agent_id: AGENT }), fx.opts);

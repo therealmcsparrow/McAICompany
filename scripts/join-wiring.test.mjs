@@ -4,13 +4,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// QA-first pins for T39: the join rule is wired into pipeline Setup, run-state.md, worktrees.md
+// Pins: the join rule is wired into pipeline Setup, run-state.md, worktrees.md
 // and the dispatch-prompt Contract. Run 1 kept join-project.md dormant (no file cited it); run 2 drops that.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const CITE = /join-project\.md/;
 
-test('AC1: pipeline Setup item 1 cites join-project.md and hands the run-slug rule over', () => {
+test('pipeline Setup item 1 cites join-project.md and hands the run-slug rule over', () => {
   const line = read('skills/pipeline/SKILL.md').split('\n').find((l) => l.startsWith('1. **Task slug**'));
   assert.ok(line, 'Setup item 1 line not found');
   assert.match(line, CITE);
@@ -18,35 +18,35 @@ test('AC1: pipeline Setup item 1 cites join-project.md and hands the run-slug ru
   assert.doesNotMatch(line, /--layout/, 'the flipped CLI has no --layout');
 });
 
-test('AC2: pipeline Setup item 1 sends a hand-typed start with an active project through the join form', () => {
+test('pipeline Setup item 1 sends a hand-typed start with an active project through the join form', () => {
   const line = read('skills/pipeline/SKILL.md').split('\n').find((l) => l.startsWith('1. **Task slug**'));
   assert.ok(line, 'Setup item 1 line not found');
   assert.match(line, /run-state projects --json/);
   assert.match(line, /form/i);
 });
 
-test('AC3: pipeline Setup item 1 names the no-active-project path as today (no form)', () => {
+test('pipeline Setup item 1 names the no-active-project path as today (no form)', () => {
   const line = read('skills/pipeline/SKILL.md').split('\n').find((l) => l.startsWith('1. **Task slug**'));
   assert.ok(line, 'Setup item 1 line not found');
   assert.match(line, /no active project/i);
 });
 
-test('AC6: run-state.md reference cites join-project.md', () => {
+test('run-state.md reference cites join-project.md', () => {
   assert.match(read('skills/pipeline/references/run-state.md'), CITE);
 });
 
-test('AC10: worktrees.md cites join-project.md', () => {
+test('worktrees.md cites join-project.md', () => {
   assert.match(read('skills/pipeline/references/worktrees.md'), CITE);
 });
 
-test('AC11: dispatch-prompt Contract is v5.2 and cites join-project.md for the project: line', () => {
+test('dispatch-prompt Contract is v5.2 and cites join-project.md for the project: line', () => {
   const t = read('docs/contracts/dispatch-prompt.md');
   assert.match(t.split('\n')[0], /^# Contract: dispatch-prompt v5\.2$/);
   assert.match(t, CITE);
   assert.match(t, /project: <ProjectID>/);
 });
 
-test('AC25: pipeline text tells the Lead to note the AFK start in the first Gate summary', () => {
+test('pipeline text tells the Lead to note the AFK start in the first Gate summary', () => {
   const t = read('skills/pipeline/SKILL.md');
   assert.ok(t.includes('join: start new (no CEO; active <ProjectID>)'), 'AFK note missing in pipeline SKILL.md');
 });

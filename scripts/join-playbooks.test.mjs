@@ -4,14 +4,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// AC24 (QA-first for T41): each in-scope Playbook Folder paragraph cites join-project.md,
+// Each in-scope Playbook Folder paragraph cites join-project.md,
 // each hand-over ends `project: <ProjectID>`. Plain text pins; no skip paths.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => readFileSync(join(root, rel), 'utf8');
 const CITE = 'join-project.md';
 const LINE = 'project: <ProjectID>';
 
-// Every file T41 owns (pipeline Setup is T39, not here).
+// Every in-scope Playbook file (the pipeline Setup is pinned in join-wiring.test.mjs).
 const IN_SCOPE = [
   'skills/bug/SKILL.md',
   'skills/idea/SKILL.md',
@@ -36,7 +36,7 @@ const HANDS_OVER = [
 ];
 
 for (const f of IN_SCOPE) {
-  test(`AC24: ${f} cites ${CITE}`, () => {
+  test(`${f} cites ${CITE}`, () => {
     assert.ok(read(f).includes(CITE), `${f} does not cite ${CITE}`);
   });
 }
@@ -47,7 +47,7 @@ const endsWith = new RegExp(
   'i',
 );
 for (const f of HANDS_OVER) {
-  test(`AC24: ${f} hand-over ends with \`${LINE}\``, () => {
+  test(`${f} hand-over ends with \`${LINE}\``, () => {
     const t = read(f);
     assert.ok(t.includes(LINE), `${f} lacks ${LINE}`);
     assert.match(t, endsWith, `${f} does not say the hand-over ends with ${LINE}`);
@@ -56,7 +56,7 @@ for (const f of HANDS_OVER) {
 
 // bug and idea have a **Folder:** paragraph: the cite sits inside it.
 for (const f of ['skills/bug/SKILL.md', 'skills/idea/SKILL.md']) {
-  test(`AC24: ${f} Folder paragraph itself cites ${CITE}`, () => {
+  test(`${f} Folder paragraph itself cites ${CITE}`, () => {
     const para = read(f).split('\n').find((l) => l.startsWith('**Folder:**'));
     assert.ok(para, `${f} has no **Folder:** paragraph`);
     assert.ok(para.includes(CITE), `Folder paragraph of ${f} does not cite ${CITE}`);
