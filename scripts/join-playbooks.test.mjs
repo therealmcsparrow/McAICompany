@@ -33,6 +33,8 @@ const HANDS_OVER = [
   'skills/bug/SKILL.md',
   'skills/idea/references/routes.md',
   'skills/reprompt/SKILL.md',
+  'skills/grill/references/grill-loop.md',
+  'skills/research/SKILL.md',
 ];
 
 for (const f of IN_SCOPE) {
@@ -62,3 +64,28 @@ for (const f of ['skills/bug/SKILL.md', 'skills/idea/SKILL.md']) {
     assert.ok(para.includes(CITE), `Folder paragraph of ${f} does not cite ${CITE}`);
   });
 }
+
+// Receivers whose argument goes to `draft-input` leave the last `project:` line in the argument
+// file (draft-input v1.7 cuts it) and hand `--project` to `take` when `arg` printed the line.
+const PASS_THROUGH = [
+  'skills/fix/SKILL.md',
+  'skills/feature/references/intake-and-ship.md',
+  'skills/grill/references/grill-loop.md',
+  'skills/to-spec/SKILL.md',
+  'skills/to-tickets/SKILL.md',
+];
+for (const f of PASS_THROUGH) {
+  test(`${f} passes the project line through draft-input`, () => {
+    const t = read(f);
+    assert.ok(t.includes('draft-input'), `${f} names draft-input`);
+    assert.ok(t.includes(LINE), `${f} names ${LINE}`);
+    assert.match(t, /--project '<ProjectID>'/, `${f} gives take --project '<ProjectID>'`);
+    assert.match(t, /--project[^\n]{0,40}before `--for`/, `${f} puts --project before --for`);
+  });
+}
+
+test('the receivers that cut the line say it is not part of the idea or report', () => {
+  for (const f of ['skills/fix/SKILL.md', 'skills/grill/references/grill-loop.md', 'skills/to-spec/SKILL.md']) {
+    assert.match(read(f), /without (a|that) last (`project:` line|line)/, `${f} keeps the line out of the text`);
+  }
+});
