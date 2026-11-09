@@ -21,6 +21,8 @@
   var stepNodes = {};
   var rendered = false;
   var seq = 0;
+  var projectRuns = null;
+  var projectTitle = '';
 
   function str(v, max) { return typeof v === 'string' ? v.slice(0, max || 300) : ''; }
   function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
@@ -87,6 +89,15 @@
     var hint = el('p', 'muted', 'Press Escape to close.');
     head.append(closeTop, title, slug, hint);
 
+    var runsSec = section('Runs');
+    runsSec.hidden = true;
+    var runsList = el('ul', 'plain');
+    runsSec.append(runsList);
+    var back = el('button', 'close', 'Back to runs');
+    back.type = 'button';
+    back.hidden = true;
+    back.addEventListener('click', showList);
+
     var error = el('p', 'drawer-error');
     error.hidden = true;
     error.append(icon('error'), el('span', '', 'Could not read this run. Close and try again.'));
@@ -113,10 +124,10 @@
     closeBottom.type = 'button';
     var body = el('div', 'drawer-body');
     body.append(prs, rounds, routing, steps, live);
-    root.append(head, error, body, closeBottom);
+    root.append(head, runsSec, back, error, body, closeBottom);
     parts = { closeTop: closeTop, closeBottom: closeBottom, title: title, slug: slug, error: error, body: body,
       prs: prs, prList: prList, prNote: prNote, roundsList: roundsList, routingText: routingText,
-      stepList: stepList, live: live, rounds: rounds, routing: routing };
+      stepList: stepList, live: live, runsSec: runsSec, runsList: runsList, back: back, rounds: rounds, routing: routing };
     root.addEventListener('keydown', onKey);
     closeTop.addEventListener('click', close);
     closeBottom.addEventListener('click', close);
@@ -125,6 +136,10 @@
 
   function focusables() {
     var list = [parts.closeTop];
+    if (!parts.back.hidden) list.push(parts.back);
+    parts.runsList.children.forEach(function (li) {
+      li.children.forEach(function (b) { if (b.tagName === 'button' && !parts.runsSec.hidden) list.push(b); });
+    });
     parts.prList.children.forEach(function (li) {
       li.children.forEach(function (a) { if (a.tagName === 'a') list.push(a); });
     });
@@ -159,14 +174,67 @@
     });
   }
 
-  function open(slug, button) {
+  function open(slug, button, runs) {
     if (!root) build();
-    openSlug = slug;
     opener = button || null;
+    var title = opener ? str(opener.textContent, 200) : '';
+    if (Array.isArray(runs)) {
+      projectRuns = runs;
+      projectTitle = title || slug;
+      showList(slug);
+      root.hidden = false;
+      setBackground(true);
+      parts.title.focus();
+      return;
+    }
+    projectRuns = null;
+    parts.runsSec.hidden = true;
+    parts.back.hidden = true;
+    openRun(slug, title);
+    root.hidden = false;
+    setBackground(true);
+    parts.title.focus();
+  }
+
+  function showList(slug) {
+    seq++;
+    openSlug = null;
+    if (g.aicoLive) g.aicoLive.watchRun(null, null);
+    var id = typeof slug === 'string' ? slug : parts.slug.dataset.project || '';
+    parts.slug.dataset.project = id;
+    parts.title.textContent = 'Project: ' + projectTitle;
+    parts.slug.textContent = id;
+    parts.runsList.replaceChildren();
+    projectRuns.forEach(function (r) {
+      var li = el('li', '');
+      var b = el('button', 'run-row', r.slice(r.indexOf('/') + 1));
+      b.type = 'button';
+      b.addEventListener('click', function () { pick(r); });
+      li.append(b);
+      parts.runsList.append(li);
+    });
+    parts.runsSec.children[0].textContent = 'Runs (' + projectRuns.length + ')';
+    if (!projectRuns.length) parts.runsList.append(el('li', 'muted', 'No runs in this project yet'));
+    parts.runsSec.hidden = false;
+    parts.back.hidden = true;
+    parts.prs.hidden = true;
+    parts.error.hidden = true;
+    parts.body.hidden = true;
+    parts.title.focus();
+  }
+
+  function pick(run) {
+    parts.runsSec.hidden = true;
+    parts.back.hidden = false;
+    openRun(run, run.slice(run.indexOf('/') + 1));
+    parts.title.focus();
+  }
+
+  function openRun(slug, title) {
+    openSlug = slug;
     stepNodes = {};
     rendered = false;
     seq++;
-    var title = opener ? str(opener.textContent, 200) : '';
     parts.title.textContent = 'Run: ' + (title || slug);
     parts.slug.textContent = slug;
     parts.stepList.replaceChildren();
@@ -176,11 +244,8 @@
     parts.live.hidden = true;
     parts.error.hidden = true;
     parts.body.hidden = true;
-    root.hidden = false;
-    setBackground(true);
     loadLinks(slug, seq);
     if (g.aicoLive) g.aicoLive.watchRun(slug, onRun);
-    parts.title.focus();
   }
 
   function close() {
@@ -189,6 +254,7 @@
     setBackground(false);
     if (g.aicoLive) g.aicoLive.watchRun(null, null);
     openSlug = null;
+    projectRuns = null;
     seq++;
     var back = opener;
     opener = null;
