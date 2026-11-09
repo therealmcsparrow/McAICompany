@@ -12,6 +12,9 @@ const STATES = ['pass', 'open', 'error'];
 // A run-state record file under a run folder. Trailing dots, spaces and a stream suffix reach the same file on Windows.
 const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]*(?:\/[^/]*)?)\/run-state\.jsonl[. ]*(?::.*)?$/i;
 
+// A path that has a segment after the `work` folder.
+const WORK_ROOT = /(?:(?:^|\/)\.company\/|^)work\/./i;
+
 export const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 
 export const TEXT = {
@@ -65,16 +68,41 @@ export function parseGateCommand(command) {
   return null;
 }
 
-// For a path to a run-state record under `work/`: { slug } (slug is null when it is not a valid slug); else null.
-export function recordPath(path) {
-  if (typeof path !== 'string' || path.length > MAX_PATH) return null;
-  const found = RECORD_PATH.exec(path.replaceAll('\\', '/'));
+// The path with every `.` and empty segment dropped and every `..` applied to the segment before it.
+function resolveSegments(text) {
+  const out = [];
+  for (const part of text.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') out.pop();
+    else out.push(part);
+  }
+  return out.join('/');
+}
+
+// Judged when the last segment of a path under `work/` is a short (8.3) alias, or a record name with trailing dots or spaces.
+function aliasName(path) {
+  if (!WORK_ROOT.test(path)) return false;
+  const last = path.slice(path.lastIndexOf('/') + 1);
+  return last.includes('~') || (/^run-st/i.test(last) && /[. ]$/.test(last));
+}
+
+function matchRecord(path) {
+  const found = RECORD_PATH.exec(path);
   if (found === null) return null;
   // A second segment under a valid work folder (not a project folder) is a sub folder, not a record. Any other
   // one- or two-segment match that is not a run slug is judged with a null slug, since Windows may open the record.
   const first = found[1].slice(0, found[1].indexOf('/') < 0 ? undefined : found[1].indexOf('/'));
   if (found[1].includes('/') && workParts(first) !== null && !isProjectId(first.toUpperCase())) return null;
   return { slug: isRunSlug(found[1]) ? found[1] : null };
+}
+
+// For a path to a run-state record under `work/`: { slug } (slug is null when it is not a valid slug); else null.
+// The raw text and the path with its `.`, `..` and empty segments resolved are both tested, so neither form hides a record.
+export function recordPath(path) {
+  if (typeof path !== 'string' || path.length > MAX_PATH) return null;
+  const raw = path.replaceAll('\\', '/');
+  const resolved = resolveSegments(raw);
+  return matchRecord(raw) ?? matchRecord(resolved) ?? (aliasName(resolved) ? { slug: null } : null);
 }
 
 export function writeTarget(input) {
