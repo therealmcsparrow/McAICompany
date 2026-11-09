@@ -1,7 +1,7 @@
 ---
 slug: one-project-one-folder
-version: pending
-shipped: pending
+version: 0.33.0
+shipped: 2026-11-09
 ---
 ## Problem
 One CEO request breaks into many projects because every sub-flow (bug, grill, reprompt, fix and the rest) mints its own project ID and its own top-level work folder; one request recently left seven IDs. The CEO, finding, resuming and reviewing one piece of work, has to chase it across folders. The goal is one project ID and one project folder per request, with every sub-flow and later run nested inside it.
