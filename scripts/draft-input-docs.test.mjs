@@ -25,9 +25,9 @@ test('contract and both guides name the same inputs and refusals', () => {
   }
 });
 
-test('the contract is v1.5 with a history line', () => {
+test('the contract is v1.6 with a history line', () => {
   const text = read(CONTRACT);
-  assert.equal(text.split('\n')[0], '# Contract: draft-input v1.5');
+  assert.equal(text.split('\n')[0], '# Contract: draft-input v1.6');
   const compat = text.slice(text.indexOf('## Compatibility'));
   const lines = compat.split('\n');
   assert.ok(lines.some((l) => l.startsWith('v1.5 (minor')), 'a v1.5 (minor line');

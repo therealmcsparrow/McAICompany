@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1.5). Node built-ins only.
+// Draft input (contract: docs/contracts/draft-input.md v1.6). Node built-ins only.
 // `arg` turns the argument file into a fixed result line, `free` picks a name that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 // Work folder names come only from ../mods/lib/work-folder.mjs.
@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { normalizePath, parsePlan } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isTicketHeading, isWorkFolder, makeProject, makeRun, parseName, projectIdOf, readTopicFile, runOf, stampOf, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isProjectId, isTicketHeading, isWorkFolder, makeProject, makeRun, makeRunV3, parseName, parseRun, projectIdOf, readTopicFile, runOf, stampOf, ticketLocal, ticketPattern, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
@@ -198,10 +198,16 @@ function checkPath(text) {
     return normalizePath(p);
   }
   if (p.length > MAX_WORK_PATH) return { ok: false, reason: 'too long' };
-  const cut = p.indexOf('/', WORK_PREFIX.length);
+  let cut = p.indexOf('/', WORK_PREFIX.length);
   if (cut === -1 || cut === p.length - 1) return { ok: false, reason: 'bad character' };
-  const name = p.slice(WORK_PREFIX.length, cut);
-  if (!isWorkFolder(name)) return { ok: false, reason: 'bad character' };
+  let name = p.slice(WORK_PREFIX.length, cut);
+  if (isProjectId(name)) {
+    // a v3 run slug `<ProjectID>/<NN>-<playbook>` spans two path parts
+    cut = p.indexOf('/', cut + 1);
+    if (cut === -1 || cut === p.length - 1) return { ok: false, reason: 'bad character' };
+    name = p.slice(WORK_PREFIX.length, cut);
+    if (parseRun(name) === null) return { ok: false, reason: 'bad character' };
+  } else if (!isWorkFolder(name)) return { ok: false, reason: 'bad character' };
   const rest = normalizePath(p.slice(cut + 1));
   if (!rest.ok) return rest;
   return { ok: true, path: `${WORK_PREFIX}${name}/${rest.path}` };
@@ -210,14 +216,15 @@ function checkPath(text) {
 // { name, rest } for a checked path under .company/work, else null.
 function workSource(rel) {
   if (!rel.startsWith(WORK_PREFIX)) return null;
-  const cut = rel.indexOf('/', WORK_PREFIX.length);
+  let cut = rel.indexOf('/', WORK_PREFIX.length);
+  if (isProjectId(rel.slice(WORK_PREFIX.length, cut))) cut = rel.indexOf('/', cut + 1);
   return { name: rel.slice(WORK_PREFIX.length, cut), rest: rel.slice(cut + 1) };
 }
 
 // A work folder or file listed only in another letter case is refused; a missing one keeps the later refusals.
 function checkExact(realRoot, src) {
   try {
-    exactWorkPath({ fs, path }, realRoot, [src.name, ...src.rest.split('/')]);
+    exactWorkPath({ fs, path }, realRoot, [...workParts(src.name), ...src.rest.split('/')]);
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
     throw error;
@@ -381,6 +388,16 @@ function claimChain(realRoot, names, forWhat) {
 
 // A Draft helper of `parent` at the run's own start time; never an existing folder.
 function claimHelper(realRoot, parent, forWhat, now) {
+  if (parseRun(parent) !== null) {
+    let slug;
+    try {
+      slug = makeRunV3({ fs, path, platform: process.platform }, realRoot, projectIdOf(parent), now, forWhat);
+    } catch (error) {
+      if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+      throw error;
+    }
+    return { name: slug, dir: ensureFolder(realRoot, ['.company', 'work', ...workParts(slug)]) };
+  }
   if (projectIdOf(parent) !== null) {
     let name;
     try {
@@ -417,7 +434,7 @@ function claimPrimary(realRoot, forWhat, topic, now) {
 }
 
 function claimFromSource(realRoot, src, forWhat, now) {
-  const chain = forWhat !== 'feature' && forWhat !== 'fix' && (src.rest === 'grill.md' || src.rest === 'spec.md');
+  const chain = parseRun(src.name) === null && forWhat !== 'feature' && forWhat !== 'fix' && (src.rest === 'grill.md' || src.rest === 'spec.md');
   if (chain) {
     const got = claimChain(realRoot, isLegacySlug(src.name) ? legacyNames(src.name) : [src.name], forWhat);
     if (got !== null) return got;
@@ -450,6 +467,15 @@ function dropTopic(root, forWhat) {
 
 // A v2 folder is a Build run by line 3 of its summary; a legacy or v1.1 name by its suffix.
 function isBuildName(realRoot, name) {
+  const run = parseRun(name);
+  if (run !== null) {
+    try {
+      return runOf(readFile(realRoot, `${WORK_PREFIX}${name}/${SUMMARY_FILE}`, MAX_SUMMARY).toString('utf8'))?.kind === 'build' || run.playbook === 'build';
+    } catch (error) {
+      if (error instanceof Refused) return run.playbook === 'build';
+      throw error;
+    }
+  }
   if (projectIdOf(name) !== null) {
     try {
       return runOf(readFile(realRoot, `${WORK_PREFIX}${name}/${SUMMARY_FILE}`, MAX_SUMMARY).toString('utf8'))?.kind === 'build';
@@ -537,9 +563,9 @@ function argText(realRoot, forWhat) {
 }
 
 const RESUME = /^resume (.{1,120})$/;
-const WORK_DRAFT = /^\.company\/work\/([^/]{1,120})\/(?:grill|spec|plan)\.md$/;
-const PROMPT_PATH = /^\.company\/work\/([^/]{1,120})\/prompt\.md$/;
-const GRILL_PATH =/^\.company\/work\/([^/]{1,120})\/grill\.md$/;
+const WORK_DRAFT = /^\.company\/work\/([^/]{1,120}(?:\/[^/]{1,120})?)\/(?:grill|spec|plan)\.md$/;
+const PROMPT_PATH = /^\.company\/work\/([^/]{1,120}(?:\/[^/]{1,120})?)\/prompt\.md$/;
+const GRILL_PATH = /^\.company\/work\/([^/]{1,120}(?:\/[^/]{1,120})?)\/grill\.md$/;
 
 function arg(args, root, now) {
   const { rest, forWhat } = parseFor(args);
@@ -559,18 +585,18 @@ function argResult(realRoot, text, forWhat, now) {
   const slashed = text.replaceAll('\\', '/');
   if (forWhat === 'grill') {
     const name = (RESUME.exec(text) ?? GRILL_PATH.exec(slashed))?.[1];
-    if (name !== undefined && isWorkFolder(name)) {
+    if (name !== undefined && isRunSlug(name)) {
       takeTopic(realRoot, forWhat, false);
       return { code: 0, lines: [`arg: resume ${name}`] };
     }
   }
   const draft = WORK_DRAFT.exec(slashed);
-  if (draft !== null && isWorkFolder(draft[1])) {
+  if (draft !== null && isRunSlug(draft[1])) {
     takeTopic(realRoot, forWhat, false);
     return { code: 0, lines: [`arg: file ${slashed}`] };
   }
   const prompt = forWhat === 'to-spec' ? PROMPT_PATH.exec(slashed) : null;
-  if (prompt !== null && isWorkFolder(prompt[1])) return { code: 0, lines: [`arg: file ${slashed}`] };
+  if (prompt !== null && isRunSlug(prompt[1])) return { code: 0, lines: [`arg: file ${slashed}`] };
   if (!/\s/.test(text) && (/[/\\]/.test(text) || /\.(?:md|txt)$/.test(text))) {
     const norm = checkPath(text);
     if (!norm.ok) throw new Refused(`path ${norm.reason}`);

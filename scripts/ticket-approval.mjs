@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.5). Node built-ins only.
+// Ticket approval record (contract: docs/contracts/ticket-approval.md v1.6). Node built-ins only.
 // Run and helper folder names come only from ../mods/lib/work-folder.mjs.
 // A ticket is one plan-tasks task block; an approval counts only for the block hash it was given at.
 // Plan text and arguments are untrusted: files are read by the real-path rule, sizes are capped before decoding,
@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readPlanLines } from './plan-markdown.mjs';
-import { WorkFolderRefusal, exactWorkPath, helperName, isWorkFolder, makeRun, projectIdOf, runOf, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, helperName, isRunSlug, isWorkFolder, makeRun, makeRunV3, parseRun, projectIdOf, runOf, ticketPattern, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -327,10 +327,12 @@ function depsOf(value, pattern) {
 }
 
 function readPlan(root, ref) {
-  const [slug, name] = ref.split('/');
+  const cut = ref.lastIndexOf('/');
+  const slug = ref.slice(0, cut);
+  const name = ref.slice(cut + 1);
   let file;
   try {
-    file = readFileSafe(root, ['.company', 'work', slug, name], MAX_PLAN_BYTES);
+    file = readFileSafe(root, ['.company', 'work', ...workParts(slug), name], MAX_PLAN_BYTES);
   } catch (error) {
     throw new PlanProblem(error.message === 'too-large' ? 'too large' : 'unreadable');
   }
@@ -386,7 +388,7 @@ function flagsOf(ticket, core) {
 // ---------------------------------------------------------------- record
 
 function recordPath(slug) {
-  return ['.company', 'work', slug, 'tickets.jsonl'];
+  return ['.company', 'work', ...workParts(slug), 'tickets.jsonl'];
 }
 
 function badLine(slug, n, reason) {
@@ -530,8 +532,8 @@ function checkExact(env, rel) {
 }
 
 function checkSlug(value, env) {
-  if (typeof value !== 'string' || !isWorkFolder(value)) throw new Refusal('bad slug');
-  checkExact(env, [value]);
+  if (typeof value !== 'string' || !isRunSlug(value)) throw new Refusal('bad slug');
+  checkExact(env, workParts(value));
   return value;
 }
 
@@ -543,15 +545,16 @@ function checkId(value, slug, { sections = false } = {}) {
 // `<work folder name>/<plan file name>`: the name by isWorkFolder, the file by the plan name rule, one `/` only.
 function validPlanRef(ref) {
   if (typeof ref !== 'string') return false;
-  const cut = ref.indexOf('/');
-  return cut > 0 && isWorkFolder(ref.slice(0, cut)) && PLAN_NAME.test(ref.slice(cut + 1));
+  const cut = ref.lastIndexOf('/');
+  return cut > 0 && isRunSlug(ref.slice(0, cut)) && PLAN_NAME.test(ref.slice(cut + 1));
 }
 
 function planRefOf(slug, arg, env) {
   if (typeof arg !== 'string') throw new Refusal('bad plan');
   const ref = arg.includes('/') ? arg : `${slug}/${arg}`;
   if (!validPlanRef(ref)) throw new Refusal('bad plan');
-  checkExact(env, ref.split('/'));
+  const cut = ref.lastIndexOf('/');
+  checkExact(env, [...workParts(ref.slice(0, cut)), ref.slice(cut + 1)]);
   return ref;
 }
 
@@ -570,7 +573,7 @@ function cmdTickets(args, env) {
   const plan = readPlan(env.root, ref);
   const rec = loadRecord(env.root, slug);
   if (lastPlanRef(rec) !== ref) {
-    ensureDir(env.root, ['.company', 'work', slug]);
+    ensureDir(env.root, ['.company', 'work', ...workParts(slug)]);
     appendEvent(env, slug, rec, { ev: 'plan', plan: ref });
   }
   const core = coreKeys(env.root);
@@ -659,10 +662,20 @@ function makeBuildRun(env, slug) {
   }
 }
 
-// A v2 Build folder whose plan.md write failed holds only its fresh summary: remove both, never more.
+// A v3 parent's Build run folder in the same project, made by the shared maker.
+function makeBuildRunV3(env, slug) {
+  try {
+    return makeRunV3({ fs, path, platform: process.platform }, env.root, projectIdOf(slug), new Date(env.now), 'build');
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
+    throw error;
+  }
+}
+
+// A v2 or v3 Build folder whose plan.md write failed holds only its fresh summary: remove both, never more.
 export function dropFreshRun(root, name) {
-  if (typeof name !== 'string' || !isWorkFolder(name)) return; // not a work folder name: build no path from it
-  const dir = path.join(root, '.company', 'work', name);
+  if (typeof name !== 'string' || !isRunSlug(name)) return; // not a run name: build no path from it
+  const dir = path.join(root, '.company', 'work', ...workParts(name));
   try {
     if (!fs.lstatSync(dir).isDirectory()) return; // a link or file there is not ours to remove
     if (fs.readdirSync(dir).some((f) => f !== '00-summary.md')) return;
@@ -692,12 +705,37 @@ function earlierBuildRun(env, slug, ids) {
   return null;
 }
 
+// The same for a v3 project: another build run folder of it (`<ID>/<NN>-build`) whose plan holds exactly these ticket IDs.
+function earlierBuildRunV3(env, slug, ids) {
+  const id = projectIdOf(slug);
+  let names;
+  try {
+    names = fs.readdirSync(path.join(env.root, '.company', 'work', id)).sort();
+  } catch {
+    return null;
+  }
+  for (const entry of names) {
+    const name = `${id}/${entry}`;
+    if (name === slug || parseRun(name)?.playbook !== 'build') continue;
+    try {
+      const planFile = readFileSafe(env.root, ['.company', 'work', id, entry, 'plan.md'], MAX_PLAN_BYTES);
+      if (!planFile) continue;
+      const found = parsePlan(decode(planFile.bytes), name).tickets.map((t) => t.id);
+      if (found.length === ids.length && found.every((x, i) => x === ids[i])) return name;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function cmdBuildPlan(args, env) {
   if (args.length !== 1) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env);
-  const v2 = projectIdOf(slug) !== null;
-  let buildSlug = v2 ? null : helperName(slug, 'Build');
-  if (!v2 && buildSlug === null) throw new Refusal('no build folder name for this flow');
+  const v3 = parseRun(slug) !== null;
+  const v2 = !v3 && projectIdOf(slug) !== null;
+  let buildSlug = v2 || v3 ? null : helperName(slug, 'Build');
+  if (!v2 && !v3 && buildSlug === null) throw new Refusal('no build folder name for this flow');
   const rec = loadRecord(env.root, slug);
   const { plan } = currentPlan(env, rec);
   const approved = plan.tickets.filter((t) => statusOf(rec, t) === 'approved');
@@ -719,16 +757,17 @@ function cmdBuildPlan(args, env) {
   const applied = appliedLines(rec, [...plan.tickets, plan.sections]);
   ensureDir(env.root, ['.company', 'work']);
   const ids = approved.map((t) => t.id);
-  if (v2) {
-    const earlier = earlierBuildRun(env, slug, ids);
+  if (v2 || v3) {
+    const earlier = v3 ? earlierBuildRunV3(env, slug, ids) : earlierBuildRun(env, slug, ids);
     if (earlier !== null) throw new Refusal('file exists', [`plan: .company/work/${earlier}/plan.md`]);
   }
   if (v2) buildSlug = makeBuildRun(env, slug);
+  if (v3) buildSlug = makeBuildRunV3(env, slug);
   const planPath = `.company/work/${buildSlug}/plan.md`;
   try {
-    createNew(ensureDir(env.root, ['.company', 'work', buildSlug], { create: !v2 }), 'plan.md', written);
+    createNew(ensureDir(env.root, ['.company', 'work', ...workParts(buildSlug)], { create: !v2 && !v3 }), 'plan.md', written);
   } catch (error) {
-    if (v2) dropFreshRun(env.root, buildSlug);
+    if (v2 || v3) dropFreshRun(env.root, buildSlug);
     if (error instanceof Refusal && error.message === 'file exists') throw new Refusal(error.message, [`plan: ${planPath}`]);
     throw error;
   }
