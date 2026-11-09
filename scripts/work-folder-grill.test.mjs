@@ -251,9 +251,9 @@ describe('grill Playbook text', () => {
     }
   });
 
-  test('the contract is v1.4 in the script and the doc; the Playbooks cite v1.4', () => {
-    assert.match(fs.readFileSync(SCRIPT, 'utf8'), /grill-file\.md v1\.4/);
-    assert.match(read('docs/contracts/grill-file.md'), /^# Contract: grill-file v1\.4$/m);
-    for (const f of FILES.filter((x) => x.endsWith('SKILL.md'))) assert.ok(read(f).includes('`grill-file` v1.4'), f);
+  test('the contract is v1.5 in the script and the doc; the Playbooks cite v1.5', () => {
+    assert.match(fs.readFileSync(SCRIPT, 'utf8'), /grill-file\.md v1\.5/);
+    assert.match(read('docs/contracts/grill-file.md'), /^# Contract: grill-file v1\.5$/m);
+    for (const f of FILES.filter((x) => x.endsWith('SKILL.md'))) assert.ok(read(f).includes('`grill-file` v1.5'), f);
   });
 });

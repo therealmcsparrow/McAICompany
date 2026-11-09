@@ -342,7 +342,7 @@ describe('one copy of the name rule', () => {
     assert.match(read('mods/cache-tax.tsx'), /run: workFolder/);
     assert.match(read('mods/lib/blast.mjs'), /parseOutputLine/);
     assert.match(read('mods/lib/plan-gate.mjs'), /isWorkFolder/);
-    assert.match(read('scripts/reflect.mjs'), /isWorkFolder/);
+    assert.match(read('scripts/reflect.mjs'), /isRunSlug/);
   });
 
   test('mod code imports no Node module and no npm package', () => {
@@ -359,8 +359,8 @@ describe('one copy of the name rule', () => {
   });
 
   test('the contracts state the new versions and the quoted gate form', () => {
-    assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.7$/m);
-    assert.match(read('docs/contracts/reflect.md'), /^# Contract: reflect v1\.3$/m);
+    assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.8$/m);
+    assert.match(read('docs/contracts/reflect.md'), /^# Contract: reflect v1\.4$/m);
     assert.match(read('docs/contracts/plugin-root.md'), /^# Contract: plugin-root v1\.1$/m);
     assert.match(read('docs/contracts/aico-mods.md'), /gate '<name>' plan passed/);
     assert.match(read('docs/contracts/plugin-root.md'), /gate '<name>' plan passed/);
