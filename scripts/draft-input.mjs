@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { normalizePath, parsePlan } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isTicketHeading, isWorkFolder, makeRun, parseName, projectIdOf, readTopicFile, runOf, stampOf, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isTicketHeading, isWorkFolder, makeProject, makeRun, parseName, projectIdOf, readTopicFile, runOf, stampOf, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { checkText } from './spec-check.mjs';
 import { parseGrill } from './grill.mjs';
@@ -402,23 +402,18 @@ function claimHelper(realRoot, parent, forWhat, now) {
   }
 }
 
-// The name of a new primary run: the Topic, or the fallback for the --for word, then ` 2` to ` 9`.
-function primaryNames(forWhat, topic, now) {
-  const names = candidates(stampOf(now), topic ?? fallbackTopic(forWhat));
-  if (names.length === 0) throw new Refused('bad name');
-  return names;
-}
-
+// A new primary run is a new project: the Topic, or the fallback for the --for word, is its description.
 function claimPrimary(realRoot, forWhat, topic, now) {
-  const tried = new Set();
-  const isTaken = takenFn(realRoot, tried);
-  for (const name of primaryNames(forWhat, topic, now)) {
-    if (isTaken(name)) continue;
-    const dir = makeFolder(realRoot, name);
-    if (dir !== null) return { name, dir };
-    tried.add(name);
+  const description = topic ?? fallbackTopic(forWhat);
+  if (description === null) throw new Refused('bad name');
+  let name;
+  try {
+    ({ name } = makeProject({ fs, path, platform: process.platform }, realRoot, now, description, forWhat));
+  } catch (error) {
+    if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
+    throw error;
   }
-  throw new Refused('too many runs this minute');
+  return { name, dir: ensureFolder(realRoot, ['.company', 'work', name]) };
 }
 
 function claimFromSource(realRoot, src, forWhat, now) {
@@ -588,9 +583,7 @@ function argResult(realRoot, text, forWhat, now) {
     return { code: 0, lines: ['arg: idea'] };
   }
   const topic = takeTopic(realRoot, forWhat, true);
-  const isTaken = takenFn(realRoot);
-  const name = primaryNames(forWhat, topic, now).find((n) => !isTaken(n));
-  if (name === undefined) throw new Refused('too many runs this minute');
+  const { name } = claimPrimary(realRoot, forWhat, topic, now);
   return { code: 0, lines: ['arg: idea', `slug: ${name}`] };
 }
 
