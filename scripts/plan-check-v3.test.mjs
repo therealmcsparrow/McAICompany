@@ -210,12 +210,15 @@ describe('plan-check-verdict on v3 runs (AC12)', () => {
         { v: 1, at: `${d}T12:00:00Z`, ev: 'gate', gate: 'ship', result: 'passed' }
       ].map((o) => JSON.stringify(o)).join('\n') + '\n');
       if (side === 'on') put(root, `${dir}/plan-check.jsonl`, `${JSON.stringify({ v: 1, at: `${d}T08:30:00Z`, ev: 'scan', policy: 'warn', plan: PLAN, patterns: 'abcdef012345', findings: 0, decided: 0 })}\n`);
+      // Step files and summary dated before the ship gate answer, so the round counts (plan-check v1.7 handoffRounds)
+      const t = new Date(`${d}T09:00:00Z`);
+      for (const f of ['00-summary.md', PLAN, '03-backend-engineer.md']) fs.utimesSync(path.join(root, ...work(slug, f).split('/')), t, t);
       const key = slug.replace('/', '~');
       put(root, `.company/ledger/${key}.jsonl`, `${JSON.stringify({ v: 1, run: slug, kind: 'ship', acs: 3, fix_rounds: fix })}\n`);
     };
     for (let i = 0; i < 3; i += 1) mk(`P2026101${i}.00000${i + 1}/01-feature`, i, 'base', 2);
     for (let i = 0; i < 3; i += 1) mk(`P2026102${i}.00000${i + 1}/01-feature`, i + 3, 'on', 0);
-    const r = verdict(root, ['verdict']);
+    const r = verdict(root, ['verdict', '--runs', '3']);
     assert.equal(r.code, 0, r.lines.join('|'));
     assert.match(r.lines[0], /^plan-check verdict: pass \| check on: median 0\.0 \(n=3\) \| baseline: median 2\.0 \(n=3\)/);
   });
