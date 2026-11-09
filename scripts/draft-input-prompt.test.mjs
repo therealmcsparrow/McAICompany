@@ -27,6 +27,7 @@ function put(root, rel, body) {
 
 const STAMP = '2026-10-31 09.15';
 const NAME = `${STAMP} - Reprompt`;
+const PNAME = 'P20261031.000001-09.15.00'; // first project of the day, run at 09:15:00 (draft-input v1.5)
 const PROMPT = `.company/work/${NAME}/prompt.md`;
 const run = (root, ...args) => main(args, { root, now: new Date(2026, 9, 31, 9, 15) });
 const tree = (root) => {
@@ -63,7 +64,7 @@ describe('arg and take --for to-spec with a prompt file', () => {
     assert.deepEqual(arg(root, 'to-spec', PROMPT), { code: 0, lines: [`arg: file ${PROMPT}`] });
     const r = take(root, PROMPT);
     assert.equal(r.code, 0);
-    const name = `${STAMP} - To-Spec`;
+    const name = PNAME;
     assert.deepEqual(r.lines, [`slug: ${name}`, `input: .company/work/${name}/input-to-spec.md`, 'kind: text', 'text: 5 lines']);
     const copy = fs.readFileSync(path.join(root, '.company', 'work', name, 'input-to-spec.md'));
     assert.ok(copy.equals(Buffer.from(MULTI)), 'byte-equal copy');
@@ -80,7 +81,7 @@ describe('arg and take --for to-spec with a prompt file', () => {
     assert.deepEqual(arg(root, 'to-spec', '.company/work/alpha/prompt.md'), { code: 0, lines: ['arg: file .company/work/alpha/prompt.md'] });
     const r = take(root, '.company/work/alpha/prompt.md');
     assert.equal(r.code, 0);
-    assert.equal(r.lines[0], `slug: ${STAMP} - To-Spec`);
+    assert.equal(r.lines[0], `slug: ${PNAME}`);
   });
 
   test('a prompt file of 16384 bytes is read whole and 16385 bytes is too large', () => {
@@ -95,7 +96,7 @@ describe('arg and take --for to-spec with a prompt file', () => {
     assert.deepEqual(arg(ok, 'to-spec', PROMPT), { code: 0, lines: [`arg: file ${PROMPT}`] });
     const r = take(ok, PROMPT);
     assert.equal(r.code, 0);
-    const name = `${STAMP} - To-Spec`;
+    const name = PNAME;
     assert.ok(fs.readFileSync(path.join(ok, '.company', 'work', name, 'input-to-spec.md')).equals(Buffer.from(edge)), 'whole copy');
 
     const big = fixture({ [PROMPT]: over });
@@ -105,13 +106,14 @@ describe('arg and take --for to-spec with a prompt file', () => {
     assert.deepEqual(tree(big), before, 'nothing written');
   });
 
-  test('the spec run takes a new primary name from the Topic', () => {
+  test('the spec run is a new project described by the Topic', () => {
     const root = fixture({ [PROMPT]: MULTI, '.company/work-folder-topic-to-spec.txt': 'Login Idea\n' });
     assert.deepEqual(arg(root, 'to-spec', PROMPT), { code: 0, lines: [`arg: file ${PROMPT}`] });
     assert.ok(fs.existsSync(topicPath(root)), 'arg leaves the Topic file for take');
     const r = take(root, PROMPT);
-    const name = `${STAMP} - Login Idea`;
+    const name = PNAME;
     assert.equal(r.code, 0);
+    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', name, '00-summary.md'), 'utf8').split('\n')[0], 'Login Idea');
     assert.deepEqual(r.lines.slice(0, 2), [`slug: ${name}`, `input: .company/work/${name}/input-to-spec.md`]);
     assert.ok(!r.lines[0].includes('Draft'), 'no Draft helper');
     assert.ok(!fs.existsSync(topicPath(root)), 'take consumed the Topic file');
@@ -238,7 +240,7 @@ describe('only to-spec treats a prompt path as a file', () => {
   test('only to-spec treats a prompt path as a file', () => {
     // A spaced work folder name: today the text is idea text for every word but to-spec.
     const today = {
-      grill: { code: 0, lines: ['arg: idea', `slug: ${STAMP} - Grill`] },
+      grill: { code: 0, lines: ['arg: idea', `slug: ${PNAME}`] },
       'to-tickets': { code: 3, lines: ['refused: needs a file'] },
       feature: { code: 0, lines: ['arg: idea'] },
       fix: { code: 0, lines: ['arg: idea'] },

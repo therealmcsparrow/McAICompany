@@ -27,6 +27,12 @@ function put(root, rel, body) {
 }
 
 const STAMP = '2026-10-31 09.15';
+const PNAME = 'P20261031.000001-09.15.00'; // first project of the day, run at 09:15:00 (draft-input v1.5)
+// draft-input v1.5: a fresh run is made by makeProject, which needs .company/work to exist (work-folder-name step 2).
+const withWork = (root) => {
+  fs.mkdirSync(path.join(root, '.company', 'work'), { recursive: true });
+  return root;
+};
 const run = (root, ...args) => main(args, { root, now: new Date(2026, 9, 31, 9, 15) });
 const tree = (root) => {
   const out = [];
@@ -55,10 +61,10 @@ describe('take --for to-tickets', () => {
   });
 
   test('a brief is copied and counted', () => {
-    const root = fixture({ 'docs/idea.md': BRIEF });
+    const root = withWork(fixture({ 'docs/idea.md': BRIEF }));
     const r = run(root, 'take', 'docs/idea.md', '--for', 'to-tickets');
     assert.equal(r.code, 0);
-    const name = `${STAMP} - To-Tickets`;
+    const name = PNAME;
     assert.deepEqual(r.lines, [`slug: ${name}`, `input: .company/work/${name}/input-to-tickets.md`, 'kind: brief', 'brief: 2 criteria']);
     assert.equal(fs.readFileSync(path.join(root, '.company', 'work', name, 'input-to-tickets.md'), 'utf8'), BRIEF);
   });
@@ -118,7 +124,7 @@ describe('read rule (hostile files)', () => {
 
   test('256 KiB is read, one byte more is too large', () => {
     const edge = `${BRIEF}${'a'.repeat(256 * 1024 - BRIEF.length)}`;
-    const root = fixture({ 'ok.md': edge, 'big.md': `${edge}a` });
+    const root = withWork(fixture({ 'ok.md': edge, 'big.md': `${edge}a` }));
     assert.equal(take(root, 'ok.md').code, 0);
     refused(take(root, 'big.md'), 'too large');
   });
@@ -171,7 +177,7 @@ function spec({ skip = [], blank = [], extra = '' } = {}) {
 
 describe('kind and summary line', () => {
   const takeFor = (files, f = 'to-spec', rel = 'in.md') => {
-    const root = fixture(files);
+    const root = withWork(fixture(files));
     return { root, r: run(root, 'take', rel, '--for', f) };
   };
 
@@ -237,7 +243,7 @@ describe('kind and summary line', () => {
     const body = '# T\r\nAC1: a\r\n';
     const { root, r } = takeFor({ 'in.md': body });
     assert.equal(r.lines[2], 'kind: brief');
-    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', `${STAMP} - To-Spec`, 'input-to-spec.md'), 'utf8'), body);
+    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', PNAME, 'input-to-spec.md'), 'utf8'), body);
   });
 
   test('a very long line of one repeated class is classified in linear time', () => {
@@ -255,7 +261,8 @@ describe('take --for to-tickets needs', () => {
   };
 
   test('a ready spec passes', () => {
-    assert.equal(need({ 'in.md': spec() }).code, 0);
+    const root = withWork(fixture({ 'in.md': spec() }));
+    assert.equal(run(root, 'take', 'in.md', '--for', 'to-tickets').code, 0);
   });
 
   test('an empty Problem and Solution are each named, nothing is written', () => {
@@ -350,9 +357,11 @@ describe('take slug and folders', () => {
   const take = (root, rel, f) => run(root, 'take', rel, '--for', f);
 
   test('a file outside the work folder gets the fallback name of its --for word, whatever its own name', () => {
-    const root = fixture({ 'docs/My.Big_Idea.for.the.new.thing.md': BRIEF, [`docs/${'b'.repeat(64)}.md`]: BRIEF });
-    assert.equal(slugOf(take(root, 'docs/My.Big_Idea.for.the.new.thing.md', 'grill')), `slug: ${STAMP} - Grill`);
-    assert.equal(slugOf(take(root, `docs/${'b'.repeat(64)}.md`, 'grill')), `slug: ${STAMP} - Grill 2`);
+    const root = withWork(fixture({ 'docs/My.Big_Idea.for.the.new.thing.md': BRIEF, [`docs/${'b'.repeat(64)}.md`]: BRIEF }));
+    const first = slugOf(take(root, 'docs/My.Big_Idea.for.the.new.thing.md', 'grill'));
+    assert.equal(first, `slug: ${PNAME}`);
+    assert.equal(fs.readFileSync(path.join(root, '.company', 'work', PNAME, '00-summary.md'), 'utf8').split('\n')[0], 'Grill');
+    assert.equal(slugOf(take(root, `docs/${'b'.repeat(64)}.md`, 'grill')), 'slug: P20261031.000002-09.15.00');
   });
 
   test('a grill.md or spec.md file uses its folder, other files give a Draft helper', () => {
@@ -369,9 +378,9 @@ describe('take slug and folders', () => {
   test('a shipped spec in docs/specs gets a new primary name, nothing lands in a run folder', () => {
     const root = fixture({ 'docs/specs/run.md': spec(), '.company/work/run/01-product-manager.md': 'x' });
     const r = take(root, 'docs/specs/run.md', 'to-spec');
-    assert.equal(slugOf(r), `slug: ${STAMP} - To-Spec`);
+    assert.equal(slugOf(r), `slug: ${PNAME}`);
     assert.deepEqual(fs.readdirSync(path.join(root, '.company/work/run')), ['01-product-manager.md']);
-    assert.ok(fs.existsSync(path.join(root, '.company', 'work', `${STAMP} - To-Spec`, 'input-to-spec.md')));
+    assert.ok(fs.existsSync(path.join(root, '.company', 'work', PNAME, 'input-to-spec.md')));
   });
 
   test('a client run spec in a run folder with a summary and an architect plan gets <run>-2', () => {
@@ -532,11 +541,11 @@ describe('arg', () => {
   test('hostile idea text never reaches the output: quote, $(, backtick, semicolon, space, absolute path', () => {
     const cases = ['say "hello" now', 'run $(whoami) please', 'use `ls` here', 'a; b', 'two words', 'x"y', '$(id)', 'a`b'];
     for (const text of cases) {
-      const root = fixture();
+      const root = withWork(fixture());
       const r = arg(root, 'to-spec', text);
       assert.equal(r.code, 0, text);
       assert.equal(r.lines[0], 'arg: idea');
-      assert.equal(r.lines[1], `slug: ${STAMP} - To-Spec`);
+      assert.equal(r.lines[1], `slug: ${PNAME}`);
       assert.equal(r.lines.length, 2);
     }
     for (const text of ['/etc/passwd.md', 'C:\\Users\\x\\idea.md', '/abs/dir/']) {
@@ -571,26 +580,28 @@ describe('arg', () => {
     assert.deepEqual(arg(fixture(), 'grill', '.company\\work\\my-idea\\grill.md'), { code: 0, lines: ['arg: resume my-idea'] });
     assert.deepEqual(arg(fixture(), 'grill', 'resume my-idea\n'), { code: 0, lines: ['arg: resume my-idea'] });
     assert.deepEqual(arg(fixture(), 'to-spec', '.company/work/my-idea/grill.md'), { code: 0, lines: ['arg: file .company/work/my-idea/grill.md'] });
-    assert.deepEqual(arg(fixture(), 'to-spec', 'resume my-idea'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - To-Spec`] });
+    assert.deepEqual(arg(withWork(fixture()), 'to-spec', 'resume my-idea'), { code: 0, lines: ['arg: idea', `slug: ${PNAME}`] });
   });
 
   test('resume with an invalid slug is an idea; a non-canonical grill path is a file', () => {
-    assert.deepEqual(arg(fixture(), 'grill', 'resume Bad_Slug'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - Grill`] });
+    assert.deepEqual(arg(withWork(fixture()), 'grill', 'resume Bad_Slug'), { code: 0, lines: ['arg: idea', `slug: ${PNAME}`] });
     assert.deepEqual(arg(fixture(), 'grill', 'docs/grill.md'), { code: 0, lines: ['arg: file docs/grill.md'] });
   });
 
   test('without a file: to-tickets needs one, feature has no slug, grill and to-spec pick a free slug', () => {
     refused(arg(fixture(), 'to-tickets', 'make it faster'), 'needs a file');
     assert.deepEqual(arg(fixture(), 'feature', 'make it faster'), { code: 0, lines: ['arg: idea'] });
-    assert.deepEqual(arg(fixture(), 'grill', 'make it faster'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - Grill`] });
+    assert.deepEqual(arg(withWork(fixture()), 'grill', 'make it faster'), { code: 0, lines: ['arg: idea', `slug: ${PNAME}`] });
+    // A v1.1 folder of the same stamp is not a project: it does not take the ID (draft-input v1.5).
     const root = fixture({ [`.company/work/${STAMP} - To-Spec/01-product-manager.md`]: 'x' });
-    assert.deepEqual(arg(root, 'to-spec', 'make it faster'), { code: 0, lines: ['arg: idea', `slug: ${STAMP} - To-Spec 2`] });
+    assert.deepEqual(arg(root, 'to-spec', 'make it faster'), { code: 0, lines: ['arg: idea', `slug: ${PNAME}`] });
+    assert.deepEqual(arg(root, 'to-spec', 'make it faster again'), { code: 0, lines: ['arg: idea', 'slug: P20261031.000002-09.15.00'] });
   });
 
   test('the idea text never builds the name', () => {
-    const slug = (text) => arg(fixture(), 'grill', text).lines[1];
+    const slug = (text) => arg(withWork(fixture()), 'grill', text).lines[1];
     for (const text of ['One TWO three four five six seven', '!!! ???', '\u65e5\u672c\u8a9e \u30c6\u30b9\u30c8', 'a'.repeat(70)]) {
-      assert.equal(slug(text), `slug: ${STAMP} - Grill`);
+      assert.equal(slug(text), `slug: ${PNAME}`);
     }
   });
 
