@@ -61,3 +61,13 @@ test('add refuses the full ticket ID of another project', () => {
   const res = r.run('add', RUN, 'P20261108.000002-T1', '--base', r.head());
   assert.notEqual(res.code, 0);
 });
+
+test('add refuses a full ticket ID past the project ID format cap', () => {
+  const r = makeRepo();
+  const cases = [`${ID}-T1234`, `${ID}-T1${'0'.repeat(40)}`, `${ID}${'0'.repeat(30)}-T1`, `${'P'.repeat(5000)}-T1`, `${ID}-T1a${'-T1'.repeat(30)}`];
+  for (const given of cases) {
+    const res = r.run('add', RUN, given, '--base', r.head());
+    assert.notEqual(res.code, 0, given.slice(0, 40));
+  }
+  assert.equal(git(r.repo, 'branch', '--list', 'aico-wt/*'), '');
+});
