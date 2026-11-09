@@ -661,6 +661,7 @@ function makeBuildRun(env, slug) {
 
 // A v2 Build folder whose plan.md write failed holds only its fresh summary: remove both, never more.
 export function dropFreshRun(root, name) {
+  if (typeof name !== 'string' || !isWorkFolder(name)) return; // not a work folder name: build no path from it
   const dir = path.join(root, '.company', 'work', name);
   try {
     if (!fs.lstatSync(dir).isDirectory()) return; // a link or file there is not ours to remove

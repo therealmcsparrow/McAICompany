@@ -136,3 +136,19 @@ test('dropFreshRun leaves a symlink or junction at the run folder untouched', ()
   assert.equal(fs.readFileSync(path.join(target, '00-summary.md'), 'utf8'), 'keep\n');
   assert.ok(fs.lstatSync(path.join(work, name)).isSymbolicLink());
 });
+
+test('dropFreshRun refuses a name that is not a work folder name', () => {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebuild-name-')));
+  roots.push(root);
+  const company = path.join(root, '.company');
+  const nested = path.join(company, 'work', 'a', 'b');
+  const outside = path.join(company, 'x');
+  fs.mkdirSync(nested, { recursive: true });
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(nested, '00-summary.md'), 'keep\n');
+  fs.writeFileSync(path.join(outside, '00-summary.md'), 'keep\n');
+  dropFreshRun(root, '../x');
+  dropFreshRun(root, 'a/b');
+  assert.equal(fs.readFileSync(path.join(outside, '00-summary.md'), 'utf8'), 'keep\n');
+  assert.equal(fs.readFileSync(path.join(nested, '00-summary.md'), 'utf8'), 'keep\n');
+});
