@@ -4,6 +4,12 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **One project, one folder.** `work-folder new` now makes only the nested layout: a project folder `.company/work/<ID>/` with `00-project.md`, and each run as a sub folder `<NN>-<playbook>`. `--project <ID>` adds the next run. `--layout` is refused with `usage`, and nothing is written.
+  - `work-folder siblings` writes the `Siblings:` line into `00-project.md` of a nested project. `work-folder branch` accepts a run slug and prints `aico/<ID>`.
+  - Old v2, v1.1 and legacy folders stay where they are and stay readable.
+  - Contract: `work-folder-name` v3.0 (major).
+
 ## [0.33.0] - 2026-11-09
 
 Rollback: node scripts/stable.mjs 0.32.0

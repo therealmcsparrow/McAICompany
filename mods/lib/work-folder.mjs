@@ -1,4 +1,4 @@
-// Work folder names (contract: docs/contracts/work-folder-name.md v2.1). Pure logic, no imports:
+// Work folder names (contract: docs/contracts/work-folder-name.md v3.0). Pure logic, no imports:
 // every file call goes through the `io` object the caller passes ({ fs, path, platform }).
 // Every pattern is anchored and every input is length-capped before a pattern runs.
 

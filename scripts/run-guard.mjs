@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Run guard (contract: docs/contracts/run-guard.md v1.3). Node built-ins only; cwd = product root. Read-only.
-// uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/worktree.md v1.1 docs/contracts/run-state.md v2.0 docs/contracts/work-folder-name.md v2.0
+// uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/worktree.md v1.1 docs/contracts/run-state.md v2.0 docs/contracts/work-folder-name.md v3.0
 // Prints the two Ship Gate guardrail lines as counts. Records are read only through readParallel, readWorktrees and
 // run-state show; record text never reaches the output, only a cut, escaped reader message when a record is broken.
 import path from 'node:path';

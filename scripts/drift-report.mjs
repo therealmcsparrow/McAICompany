@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Drift report (contract: docs/contracts/drift-report.md v1.3). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v2.0
+// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v3.0
 // `pick` lists the Contracts with a script Provider that were checked longest ago; `lint` checks the shape
 // of one report. Neither writes anything. Report text, file names and arguments are untrusted: every
 // pattern is anchored over a character class, sizes are capped before parsing, every file is read by the
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 import { runSlugs } from './run-state.mjs';
 
 const KINDS = ['missing-feature', 'incomplete-model', 'logic-shortcut', 'architectural-divergence'];
@@ -313,8 +313,8 @@ function lint(args, root) {
     rel = r.split(path.sep).join('/');
   }
   const shaped = rel.split('/');
-  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel) && shaped.length === 4
-    && isWorkFolder(shaped[2]) && REPORT_NAME.test(shaped[3])) {
+  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel) && (shaped.length === 4 || shaped.length === 5)
+    && isRunSlug(shaped.slice(2, -1).join('/')) && REPORT_NAME.test(shaped[shaped.length - 1])) {
     if (!rel.startsWith(REPORT_PREFIX)) throw new Refused('wrong letter case');
     try { exactWorkPath({ fs, path }, realRoot, rel.split('/').slice(2)); } catch (error) {
       if (error instanceof WorkFolderRefusal) throw new Refused(error.message);
