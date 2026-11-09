@@ -1,4 +1,6 @@
-# Contract: skillspector-scan v1.3
+# Contract: skillspector-scan v1.4
+
+v1.4 (task v3 slugs, T35; additive, `docs/adr/0007-contract-minor-versions.md`): `--report` and `writeReport` accept a v3 slug; the report is `.company/work/<ProjectID>/<NN>-<playbook>/skillspector-report.md`, the letter-case check covers every part and a link on any part is refused. A run is a v3 slug `<ProjectID>/<NN>-<playbook>` (`isRunSlug`, folder through `workParts`; a walk over runs uses `runSlugs` of `run-state` v2.0). Output for v2, v1.1 and legacy names is byte-identical to the previous version; arguments, refusals and report format are unchanged.
 
 v1.3 (task role-skills-file, T1; additive): cites move to `skill-catalog` v1 and `skill-recommendation` v2.0; no command, flag, output or refusal changes. A catalog `scope` of `user` is passed as `--scope global` ("Names and roots"). `boundedFolderHash` of `skill-catalog` v1 is held equal to `skillFolderHash` ("Folder hash").
 

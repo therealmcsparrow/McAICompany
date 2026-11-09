@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Slop scan (contract: docs/contracts/slop-scan.md v1). Reads Markdown and text files and reports catalog tells. Read-only: opens inputs for reading, writes nothing, no network, no child process.
+// Slop scan (contract: docs/contracts/slop-scan.md v1.1). Reads Markdown and text files and reports catalog tells. Read-only: opens inputs for reading, writes nothing, no network, no child process.
 // Text is untrusted: masking and matching run in linear time, and every file passes the same checks (link, type, size, UTF-8).
 import * as fs from 'node:fs';
 import * as path from 'node:path';

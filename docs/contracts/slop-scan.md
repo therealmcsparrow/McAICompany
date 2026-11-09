@@ -1,4 +1,6 @@
-# Contract: slop-scan v1
+# Contract: slop-scan v1.1
+
+v1.1 (task v3 slugs, T35; additive, `docs/adr/0007-contract-minor-versions.md`): a path under `.company/work/<ProjectID>/<NN>-<playbook>/` is scanned like one under a v2 folder. A run is a v3 slug `<ProjectID>/<NN>-<playbook>` (`isRunSlug`, folder through `workParts`; a walk over runs uses `runSlugs` of `run-state` v2.0). Output for v2, v1.1 and legacy names is byte-identical to the previous version; arguments, refusals and report format are unchanged.
 
 Provider: `scripts/slop-scan.mjs` (read-only; opens inputs for reading, writes nothing); catalog data `scripts/slop-catalog.mjs`. Imports: `node:fs`, `node:path`, `node:url`, the catalog, and `exactWorkPath` from `mods/lib/work-folder.mjs` (the one shared exact-spelling check for `.company/work/` paths). No network module, no `fetch`, no child process (a test checks the imports). Consumers: writing Roles, QA, the CEO, and the `voice-profile` Module (`walk`, `readInput`, `mask`, `countWords`, `paragraphs`, `wordTerms()`). Report only: the scan never fails a run because of tells.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Wrapper around the NVIDIA SkillSpector CLI (Contract skillspector-scan v1.1).
+// Wrapper around the NVIDIA SkillSpector CLI (contract: docs/contracts/skillspector-scan.md v1.4).
 // Everything the tool prints is untrusted: only allow-listed, type-checked fields are read, and no
 // free text from it reaches stdout or a report.
 import { execFile as nodeExecFile, spawn } from 'node:child_process';
@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ID_RE = /^[0-9a-f]{12}$/;
@@ -1042,14 +1042,16 @@ export function renderReport(output, { date = new Date(), scopeLabel } = {}) {
 }
 
 export async function writeReport(cwd, slug, output, opts = {}) {
-  if (!isWorkFolder(slug)) throw new Refusal('bad report slug');
+  if (!isRunSlug(slug)) throw new Refusal('bad report slug');
+  const parts = workParts(slug);
   const company = path.join(cwd, '.company');
   const work = path.join(company, 'work');
-  const folder = path.join(work, slug);
+  const folder = path.join(work, ...parts);
   const file = path.join(folder, 'skillspector-report.md');
   // Exact letter case of the report folder, before anything is created; a missing folder is made as before.
-  try { exactWorkPath({ fs, path }, cwd, [slug]); } catch (e) { if (e instanceof WorkFolderRefusal) throw new Refusal(e.message); throw e; }
-  for (const p of [company, work, folder, file]) {
+  try { exactWorkPath({ fs, path }, cwd, parts); } catch (e) { if (e instanceof WorkFolderRefusal) throw new Refusal(e.message); throw e; }
+  const chain = parts.map((_, i) => path.join(work, ...parts.slice(0, i + 1)));
+  for (const p of [company, work, ...chain, file]) {
     let st = null;
     try { st = fs.lstatSync(p); } catch { st = null; }
     if (st?.isSymbolicLink()) throw new Refusal('report path is a link');
@@ -1117,7 +1119,7 @@ function validateScan(flags) {
   const mode = flags.get('--mode');
   if (mode !== undefined && !MODES.includes(mode)) throw new Refusal('usage: bad mode');
   const report = flags.get('--report');
-  if (report !== undefined && !isWorkFolder(report)) throw new Refusal('bad report slug');
+  if (report !== undefined && !isRunSlug(report)) throw new Refusal('bad report slug');
   return { scope, quarantine, skill, mode, report };
 }
 

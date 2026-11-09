@@ -1,4 +1,6 @@
-# Contract: drift-report v1.2
+# Contract: drift-report v1.3
+
+v1.3 (task v3 slugs, T35; additive, `docs/adr/0007-contract-minor-versions.md`): `lint` accepts `.company/work/<ProjectID>/<NN>-<playbook>/drift-<YYYY-MM-DD>.md` and `pick` reads reports in v3 runs; `exactWorkPath` checks every part. A run is a v3 slug `<ProjectID>/<NN>-<playbook>` (`isRunSlug`, folder through `workParts`; a walk over runs uses `runSlugs` of `run-state` v2.0). Output for v2, v1.1 and legacy names is byte-identical to the previous version; arguments, refusals and report format are unchanged.
 
 v1.2 (task Draft Input Folder Case Draft, T11; additive, `docs/adr/0007-contract-minor-versions.md`): `lint` runs `exactWorkPath` (`work-folder-name` v1.1) on the report path. `.company`, `work`, the work folder or the file typed in another letter case than the one on disk → `refused: wrong letter case`, exit 3, nothing read. The Windows case-insensitive real-path compare is gone: the real path must equal the lexical path exactly. A report missing in every case keeps `drift-report: report unreadable`.
 

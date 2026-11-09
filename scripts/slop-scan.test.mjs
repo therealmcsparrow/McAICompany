@@ -550,6 +550,6 @@ test('line 2 holds the contract header', () => {
   const here = dirname(fileURLToPath(import.meta.url));
   for (const file of ['slop-scan.mjs']) {
     const line2 = readFileSync(join(here, file), 'utf8').split('\n')[1];
-    assert.match(line2, /^\/\/ Slop scan \(contract: docs\/contracts\/slop-scan\.md v1\)\./);
+    assert.match(line2, /^\/\/ Slop scan \(contract: docs\/contracts\/slop-scan\.md v1.1\)\./);
   }
 });
