@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/work-folder-name.md v2.0
+// contract: docs/contracts/work-folder-name.md v2.1
 // Work folder creator: `new` makes a project's run folder and prints its ID, name and branch, `siblings` links split
 // projects, `clear` removes a stale Topic file, `branch` prints the branch of an existing folder. Node built-ins only; the naming rules live in mods/lib/work-folder.mjs.
 import fs from 'node:fs';
@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   WorkFolderRefusal, checkPlaybookId, checkWorkDirs, fallbackTopic, readTopicFile, clearTopicFile,
   checkDescription, isProjectId, makeProject, makeRun, linkSiblings, branchId, isWorkFolder, exactWorkPath,
+  makeProjectV3, makeRunV3,
 } from '../mods/lib/work-folder.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,18 +50,28 @@ function created(id, name) {
   return { code: 0, lines: [`id: ${id}`, `name: ${name}`, `branch: aico/${branchId(name)}`] };
 }
 
-function create(args, { root, now, pluginRoot }) {
+// Takes `--layout v3` out of the arguments (once, with exactly that value). Returns { v3, rest }.
+function layoutOf(args) {
+  const at = args.indexOf('--layout');
+  if (at < 0) return { v3: false, rest: args };
+  if (args.indexOf('--layout', at + 1) >= 0 || args[at + 1] !== 'v3') return refuse('usage');
+  return { v3: true, rest: [...args.slice(0, at), ...args.slice(at + 2)] };
+}
+
+function create(argv, { root, now, pluginRoot }) {
+  const { v3, rest: args } = layoutOf(argv);
   if (args.includes('--project')) {
     const { '--playbook': id, '--project': project } = flags(args, ['--playbook', '--project']);
     checkPlaybook(id, pluginRoot);
     if (!isProjectId(project)) refuse('bad project');
+    if (v3) return created(project, makeRunV3(io, root, project, now, id));
     return created(project, makeRun(io, root, project, now, 'later', id));
   }
   const { '--playbook': id, '--topic': mode } = flags(args, ['--playbook', '--topic']);
   checkPlaybook(id, pluginRoot);
   if (mode !== 'file' && mode !== 'none') refuse('usage');
   const { topic } = readTopicFile(io, root, id, mode, checkDescription);
-  const made = makeProject(io, root, now, topic ?? fallbackTopic(id), id);
+  const made = (v3 ? makeProjectV3 : makeProject)(io, root, now, topic ?? fallbackTopic(id), id);
   return created(made.id, made.name);
 }
 
