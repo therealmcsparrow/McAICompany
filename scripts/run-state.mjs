@@ -81,11 +81,13 @@ function paths(root, slug) {
   return { dir, file: join(dir, 'run-state.jsonl') };
 }
 
-// True when the folder's real path is `parts` inside the real .company/work of the root.
+// True when the folder's real path is `parts` inside `realpath(root)/.company/work`: .company and work are not links out of the root.
 function insideWork(root, parts) {
   try {
     const work = join(root, '.company', 'work');
-    const want = join(realpathSync.native(work), ...parts);
+    const realWork = realpathSync.native(work);
+    if (realWork !== join(realpathSync.native(root), '.company', 'work')) return false;
+    const want = join(realWork, ...parts);
     const real = realpathSync.native(join(work, ...parts));
     return real === want;
   } catch { return false; }
@@ -372,15 +374,20 @@ export function projects(root, { now = Date.now() } = {}) {
   try { names = readdirSync(work).sort().reverse(); } catch { return out; }
   const found = new Map();
   let read = 0;
+  let capped = false;
   const visit = (id, parts) => {
     read++;
     const at = runActivity(root, parts, now);
     if (at > 0 && at > (found.get(id) ?? 0)) found.set(id, at);
   };
   for (const name of names) {
-    if (read >= MAX_FOLDERS) { out.warnings.push(`over ${MAX_FOLDERS} runs`); break; }
+    if (capped) break;
     const p = parseProject(name);
-    if (p !== null) { visit(p.id, [name]); continue; }
+    if (p !== null) {
+      if (read >= MAX_FOLDERS) { capped = true; break; }
+      visit(p.id, [name]);
+      continue;
+    }
     if (!isProjectId(name)) continue;
     const pdir = join(work, name);
     const pst = lstatOrNull(pdir);
@@ -388,10 +395,11 @@ export function projects(root, { now = Date.now() } = {}) {
     let subs;
     try { subs = readdirSync(pdir).filter(n => RUN_SUB_RE.test(n)).sort().reverse(); } catch { continue; }
     for (const sub of subs) {
-      if (read >= MAX_FOLDERS) { out.warnings.push(`over ${MAX_FOLDERS} runs`); break; }
+      if (read >= MAX_FOLDERS) { capped = true; break; }
       if (workParts(`${name}/${sub}`) !== null) visit(name, [name, sub]);
     }
   }
+  if (capped) out.warnings.push(`over ${MAX_FOLDERS} runs`);
   out.projects = [...found].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? 1 : -1)).slice(0, 3).map(([id, at]) => ({ id, activity: iso(at) }));
   return out;
 }

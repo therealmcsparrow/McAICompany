@@ -6,18 +6,18 @@ v2.1 (task `P20261109.000009`, run 1; additive minor; the major v3.0 lands with 
 - Project folder `<ProjectID>` (the bare ID, `isProjectId`). It holds `00-project.md` and run folders only. `00-project.md`: line 1 the description (`checkDescription`), line 2 empty, optional line 3 `Siblings: <ProjectID> ...` (sorted, own ID left out).
 - Run folder `<NN>-<playbook>`: `NN` 2-3 digits, `01`-`999`, never `00`; `playbook` passes the Playbook id rule. `NN` is 1 plus the highest `NN` among the run folders of that project folder (`readdirSync`, links and non-folders skipped), else `01`. Non-recursive `mkdir`; `EEXIST` or an `NN` past 999 is `refused: too many runs`, nothing else written. Each run folder holds `00-summary.md` in the v2 shape (line 1 description copied from `00-project.md`, line 3 `Run: <kind> <playbook>`, no line 4), so `summaryDescription` and `runOf` are unchanged.
 - Run slug `<ProjectID>/<NN>-<playbook>`, always `/` (never `\`), at most 80 characters. `parseRun(slug)` returns `{ id, nn, playbook }` or null. `isRunSlug(text)`: a v3 run slug or `isWorkFolder(text)` (v2, v1.1, legacy). `isWorkFolder` is unchanged: top-level names only, so a consumer not yet moved refuses a v3 slug (`bad slug`, fail closed).
-- `workParts(slug)`: `[id, '<NN>-<playbook>']` for a v3 slug, `[slug]` otherwise, null for neither. Consumers pass it to `exactWorkPath` and join it under `.company/work`; the real path must equal `join(realpath(.company/work), ...parts)` and every part is `lstat`-checked (no link).
+- `workParts(slug)`: `[id, '<NN>-<playbook>']` for a v3 slug, `[slug]` otherwise, null for neither. Consumers pass it to `exactWorkPath` and join it under `.company/work`; the real path must equal `join(realpath(root), '.company', 'work', ...parts)` (a linked `.company` or `work` is refused, anchored to the real root) and every part is `lstat`-checked (no link).
 - `runKey(slug)`: a flat file-name key, `<ProjectID>~<NN>-<playbook>` for a v3 slug, the slug itself otherwise. Every file named after a run outside its run folder (ledger, run records, caches) uses it.
-- `projectIdOf(slug)` and `branchId(slug)` return the ID for a v3 slug or project folder name too. Branch `aico/<ProjectID>` for every run of a project.
+- Run 2 (not built in v2.1): `projectIdOf(slug)` and `branchId(slug)` return the ID for a v3 slug or project folder name too. Branch `aico/<ProjectID>` for every run of a project.
 - `nextProjectId` also counts bare project folder names (in `.company/work`, `.company/archive` and its direct subfolders).
-- Ticket IDs `<ProjectID>-T<n>`, numbered per project across the plans of its v3 run folders and its v2 folders.
+- Run 2 (not built in v2.1): Ticket IDs `<ProjectID>-T<n>`, numbered per project across the plans of its v3 run folders and its v2 folders.
 
 ## CLI (v3, opt-in behind `--layout v3`)
 - `work-folder new --layout v3 --playbook '<id>' --topic file|none` (`--layout` once, value `v3` only, else `refused: usage`): Topic file steps 1-7 as v2.0 (description). Makes `<nextProjectId>/` (`EEXIST` → next ID, at most 9 tries), writes `00-project.md` (`wx`), makes run `01-<id>` with `Run: first <id>`. Prints `id: <ProjectID>`, `name: <run slug>`, `branch: aico/<ProjectID>`.
 - `work-folder new --layout v3 --playbook '<id>' --project '<ProjectID>'`: a later run or sub-flow run (`Run: later <id>`). A v3 project → next run folder. A project with only v2 folders → makes `<ProjectID>/` with `00-project.md` lines copied from its v2 folders as `makeRun` v2.0 did, then run `01-<id>`; the v2 folders stay. No folder of that ID → `refused: unknown project`. Same three lines printed.
-- `draft-input` (`draft`) and `ticket-approval` (`build`) make their run through the same `makeRun` in the parent's project folder for a v3 parent; for a v2 parent as `--project` above.
-- `work-folder siblings` writes line 3 of `00-project.md` for a v3 project, line 4 of each `00-summary.md` for a v2 one.
-- `work-folder branch '<slug>'` accepts a run slug or a project folder name.
+- Run 2 (not built in v2.1): `draft-input` (`draft`) and `ticket-approval` (`build`) make their run through the same `makeRun` in the parent's project folder for a v3 parent; for a v2 parent as `--project` above.
+- Run 2 (not built in v2.1): `work-folder siblings` writes line 3 of `00-project.md` for a v3 project, line 4 of each `00-summary.md` for a v2 one.
+- Run 2 (not built in v2.1): `work-folder branch '<slug>'` accepts a run slug or a project folder name.
 - Refusals add `too many runs`; all others as v2.0. `helperName` for a v3 parent is not used (draft and build are runs).
 - Sessions: a sub-flow run may start while its parent run of the same project is open (one session, sequential). Two sessions on one project at once are not supported (accepted limit).
 
