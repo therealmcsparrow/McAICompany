@@ -222,6 +222,7 @@ function readBlocks(text, rules) {
   for (const { line, kind, level, title } of readPlanLines(text).lines) {
     if (kind === 'heading') {
       if (current && level <= current.level) current = null;
+      if (current) current.raw.push(line);
       if (level >= 2 && level <= 4) {
         const headId = rules.headId(title);
         if (headId !== null) {
@@ -229,13 +230,14 @@ function readBlocks(text, rules) {
             tooMany = true;
             current = null;
           } else {
-            current = { id: headId, level, fields: new Map(), repeated: [] };
+            current = { id: headId, level, fields: new Map(), repeated: [], raw: [line] };
             blocks.push(current);
           }
         }
       }
       continue;
     }
+    if (current) current.raw.push(line);
     if (kind !== 'text' || !current) continue;
     const field = FIELD.exec(line);
     if (!field) continue;
@@ -385,6 +387,7 @@ export function parsePlan(text, { agents, slug } = {}) {
         alone: reasons.length > 0,
         reasons
       };
+      blockTexts.set(task, block.raw.join('\n').trimEnd());
       handoverFields.set(task, {
         context: block.fields.get('context'),
         slice: block.fields.get('slice'),
@@ -401,6 +404,8 @@ export function parsePlan(text, { agents, slug } = {}) {
 
 // The context, slice and seams lines of each parsed task. They are read only when a caller passes a handover size.
 const handoverFields = new WeakMap();
+// The heading line and body of each parsed task, lines joined with LF.
+const blockTexts = new WeakMap();
 
 function splitRef(ref) {
   const at = ref.indexOf('#');
@@ -1074,19 +1079,24 @@ function planFor(env, slug, name) {
 const MAX_SIBLING_FOLDERS = 200;
 const MAX_SIBLING_PLANS = 20;
 
-// In a v2 folder, a ticket ID that already heads a plan in another folder of the same project is refused.
+// In a v2 folder, a ticket ID that heads a plan in another folder of the same project with a different block is refused.
 function refuseReusedTickets(root, slug, parsed) {
   const project = projectIdOf(slug);
   if (project === null) return;
-  const own = new Set(parsed.tasks.map((t) => t.id.replace(/-dup\d{1,3}$/, '')));
+  const own = new Map();
+  for (const t of parsed.tasks) {
+    const id = t.id.replace(/-dup\d{1,3}$/, '');
+    if (!own.has(id)) own.set(id, new Set());
+    own.get(id).add(blockTexts.get(t));
+  }
   let folders;
   try {
-    folders = fs.readdirSync(path.join(root, '.company', 'work')).slice(0, MAX_SIBLING_FOLDERS);
+    folders = fs.readdirSync(path.join(root, '.company', 'work'));
   } catch {
     return;
   }
+  folders = folders.filter((other) => other !== slug && projectIdOf(other) === project).slice(0, MAX_SIBLING_FOLDERS);
   for (const other of folders) {
-    if (other === slug || projectIdOf(other) !== project) continue;
     const dir = runDir(root, other);
     if (dir === null || dir === 'unsafe') continue;
     let names;
@@ -1105,7 +1115,8 @@ function refuseReusedTickets(root, slug, parsed) {
       }
       for (const task of parsePlan(text, { slug: other }).tasks) {
         const id = task.id.replace(/-dup\d{1,3}$/, '');
-        if (own.has(id)) throw new Refusal(`ticket-reused: ${id} already heads a plan in ${other}`);
+        const texts = own.get(id);
+        if (texts !== undefined && !texts.has(blockTexts.get(task))) throw new Refusal(`ticket-reused: ${id} already heads a plan in ${other}`);
       }
     }
   }
