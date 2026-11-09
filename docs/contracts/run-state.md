@@ -21,7 +21,7 @@ v1.10 is additive (one project one folder, run 1): `<slug>` also accepts the v3 
 v2.0 is a major (one project one folder, run 2): `list`, `active` and `projects` walk runs with the exported `runSlugs(root, { max = 200 })` ("Run walk"), so a v3 run is listed and can be active, and `list.runs[].slug` and `active.slug` may hold one `/` (`<ProjectID>/<NN>-<playbook>`). A consumer that uses the slug as one path part or file name breaks: it takes the folder from `workParts(slug)` and a file name from `runKey(slug)` (`work-folder-name`). `show`, `append` and `projects` output are unchanged. v2, v1.1 and legacy names give byte-identical output to v1.10.
 
 ## Storage
-- `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a work folder name (`isWorkFolder` of `mods/lib/work-folder.mjs`, `work-folder-name` v1): a new name or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. The name holds spaces and dots, so a shell line quotes it in single quotes.
+- `.company/work/<parts>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a run slug (`isRunSlug` of `mods/lib/work-folder.mjs`, `work-folder-name` v3.0): a v3 run slug `<ProjectID>/<NN>-<playbook>`, or a top-level v2, v1.1 or legacy name (`isWorkFolder`). `<parts>` is `workParts(slug)` (`<ProjectID>/<NN>-<playbook>` for a v3 slug, the name itself otherwise). The name holds spaces and dots, so a shell line quotes it in single quotes.
 - Counts, enums and times only. No prompt, reply, Handoff or CEO text (GDPR Art. 5(1)(c)).
 - Limits: a line ≤ 256 bytes, a file ≤ 64 KiB, at most 1000 lines. The file and the run folder are opened with `lstat`; a symlink is refused.
 - Committed with the run's Handoffs (it sits in the run folder). A reprompt run folder is not committed: it carries its own `.gitignore` (`reprompt` v1).
@@ -104,7 +104,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
   "ended": "<at>|null", "outcome": "ship|abort|null", "tier": "low|medium|high|unknown|null", "round": 0 }],
   "warnings": [] }
 ```
-- Entries: every run of `runSlugs` (v2.0; v1.8 to v1.10 top-level folders only) that holds `run-state.jsonl`, at most 200 runs, checked like `show` (`isWorkFolder`, exact letter case, `lstat` folder, real path inside the real `.company/work`); a folder that fails is left out with no name in any warning. Order: newest `started` first; entries with a `null` `started` last, then by slug.
+- Entries: every run of `runSlugs` (v2.0; v1.8 to v1.10 top-level folders only) that holds `run-state.jsonl`, at most 200 runs, checked like `show` (`isRunSlug` and `workParts`, exact letter case of every part (`exactWorkPath`), `lstat` folder, real path inside the real `.company/work`); a folder that fails is left out with no name in any warning. Order: newest `started` first; entries with a `null` `started` last, then by slug.
 - Fields come from the run view of that folder (`show`): `slug`, `state`, `started`, `ended`, `outcome`, `tier`, `round`.
 - `state` is the view `state`, or `unreadable` when `show` gives `state: none` with the warning `run-state unreadable` (the file is a link, not a regular file, or over 64 KiB). An `unreadable` entry has every other field but `slug` set to `null` and is its own entry; it never makes the whole list fail. Bad lines alone are skipped as in `show` and do not make an entry `unreadable`.
 - `warnings`: `over 200 runs` when runs were left out by the cap; nothing else. No CEO text, Handoff text or step list is in the list.

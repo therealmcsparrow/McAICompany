@@ -15,7 +15,7 @@ Why it exists: a request that is held for more information or declined never get
 - `id`: exactly 12 lowercase hex (6 bytes of `crypto.randomBytes`), made by `add`.
 - `outcome`: `intake | needs-info | rejected` (`intake`: taken in, a run folder follows or exists; `needs-info`: held until the CEO adds information; `rejected`: declined).
 - `topic`: the Topic grammar of `work-folder-name` v1.1 (`checkTopic`), at most 60 characters.
-- `slug`: optional; a run slug that passes `isRunSlug` (`work-folder-name` v2.0): a work folder name, or a v3 run slug `<ProjectID>/<NN>-<playbook>` (v1.1).
+- `slug`: optional; a run slug that passes `isRunSlug` (`work-folder-name` v2.1): a work folder name, or a v3 run slug `<ProjectID>/<NN>-<playbook>` (v1.1).
 
 ## Data rule (GDPR Art. 5(1)(c))
 - The Topic names the subject of the request (a feature, a bug area, a product part), never a person, client or company. `checkTopic` accepts person names, so this rule is enforced by the `aico:lead` and `aico:triage` text, not by the script.
