@@ -22,7 +22,7 @@ In a CEO-choice branch (the CEO picked the route, hand-over or step), the parent
 project: <ProjectID>
 ```
 
-The ProjectID is the `id:` line that `work-folder` printed. A run whose folder `draft-input` made uses its printed `project:` line, else the ID part of its printed `slug:`: the text before the `/`, or before the first `-` of `<ProjectID>-HH.MM.SS`. It is never CEO text and never a value the Lead made up.
+The ProjectID is the `id:` line that `work-folder` printed. A run whose folder `draft-input` made uses its printed `project:` line, else the ID part of its printed `slug:`: the text before the `/`, or before the first `-` of `<ProjectID>-HH.MM.SS`. A value from an old-style folder that is not a ProjectID (a resumed v1.1 or legacy name) is dropped: no line. It is never CEO text and never a value the Lead made up.
 
 The line is never part of the request, report, idea or topic:
 
