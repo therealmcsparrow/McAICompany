@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -20,7 +20,8 @@ test('AC1: the file exists and states the `project: <ProjectID>` line rule', () 
 
 test('AC1: join only when `run-state projects --json` lists the ID, else act as hand-typed', () => {
   const t = text();
-  has(t, 'run-state projects --json', '--layout v3', '--project', /hand-typed/i, /never guess/i);
+  has(t, 'run-state projects --json', '--project', /hand-typed/i, /never guess/i);
+  assert.ok(!t.includes('--layout'), 'v3 is the only layout: no --layout flag');
 });
 
 test('AC10: hand-typed Playbook with an active project gets one form before any folder or ID', () => {
@@ -48,22 +49,8 @@ test('AFK: start new, no form', () => {
   has(t, /AFK/, /start new/i);
 });
 
-test('dormant in run 1: no file under skills/ cites join-project', () => {
-  // Bounded walk: links are never followed (Dirent does not resolve them), only regular files are read.
-  const MAX_DEPTH = 8;
-  const MAX_ENTRIES = 5000;
-  let seen = 0;
-  const hits = [];
-  const walk = (d, depth) => {
-    assert.ok(depth <= MAX_DEPTH, `skills/ is nested deeper than ${MAX_DEPTH}`);
-    for (const e of readdirSync(d, { withFileTypes: true })) {
-      assert.ok(++seen <= MAX_ENTRIES, `skills/ has more than ${MAX_ENTRIES} entries`);
-      const p = join(d, e.name);
-      if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) walk(p, depth + 1);
-      else if (e.isFile() && /join-project/.test(readFileSync(p, 'utf8'))) hits.push(p);
-    }
-  };
-  walk(join(root, 'skills'), 0);
-  assert.deepEqual(hits, []);
+test('run 2: the file is live, not dormant', () => {
+  const t = text();
+  assert.doesNotMatch(t, /dormant/i);
+  assert.doesNotMatch(t, /No Playbook loads it yet/i);
 });
