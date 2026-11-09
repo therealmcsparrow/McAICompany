@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Usage: node scripts/sbom.mjs [<out file>] (contract: docs/contracts/release.md v1.3)
-// Builds the CycloneDX 1.6 SBOM of one plugin version (contract: docs/contracts/release.md v1.3). Node built-ins only.
+// Usage: node scripts/sbom.mjs [<out file>] (contract: docs/contracts/release.md v1.4)
+// Builds the CycloneDX 1.6 SBOM of one plugin version (contract: docs/contracts/release.md v1.4). Node built-ins only.
 // Inputs: .claude-plugin/plugin.json, deps/3rdpartyskills.json and tools/claude-cli/package-lock.json under the working directory.
 // Every input is untrusted data: sizes are capped, names and versions are matched against allow-lists, and anything
 // that does not match stops the build (a partial SBOM is never written).

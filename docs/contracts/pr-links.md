@@ -1,4 +1,6 @@
-# Contract: pr-links v1
+# Contract: pr-links v1.1
+
+v1.1 (task One Project One ID, T19; additive): `<slug>` also accepts a v3 run slug `<ID>/<NN>-<pb>` (`isRunSlug`, folder checked with `exactWorkPath` of `workParts(slug)`); the slug is kept as given and the branch is `aico/<ProjectID>`. v2, v1.1 and legacy names give byte-identical output to v1.
 
 Provider: `scripts/pr-links.mjs` (Node built-ins only). Consumers: `scripts/dashboard-server.mjs` (`dashboard` v1, path `api/run/<slug>/links`, loaded when the run drawer opens and cached in server memory for 60 s), through `lookup` only.
 Why it exists: the CEO wants a run's pull requests and the issues they close beside the run, but aico must not store PR state (it goes stale and is GitHub's data). So this Module asks `gh` live and keeps nothing. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md`.

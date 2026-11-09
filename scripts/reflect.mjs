@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { lint } from './handoff-lint.mjs';
 import { main as ledgerMain } from './ledger.mjs';
 import { checkText, ROLE_RE } from './lessons.mjs';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const MAX_BYTES = 64 * 1024;
 const MAX_STEPS = 200;
@@ -186,13 +186,13 @@ function plainDir(p) {
 }
 
 function workDir(slug) {
-  if (!isWorkFolder(slug)) throw new Refusal('run must be a work folder name');
+  if (!isRunSlug(slug)) throw new Refusal('run must be a work folder name');
   const company = path.join(process.cwd(), '.company');
   const work = path.join(company, 'work');
-  const dir = path.join(work, slug);
+  const dir = path.join(work, ...workParts(slug));
   // Exact letter case first; a missing folder keeps the `no run folder` refusal below.
   try {
-    exactWorkPath({ fs, path }, process.cwd(), [slug]);
+    exactWorkPath({ fs, path }, process.cwd(), workParts(slug));
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;

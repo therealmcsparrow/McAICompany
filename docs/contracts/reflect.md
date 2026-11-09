@@ -1,4 +1,6 @@
-# Contract: reflect v1.3
+# Contract: reflect v1.4
+
+v1.4 (task One Project One ID, T19; additive): `<slug>` also accepts a v3 run slug `<ID>/<NN>-<pb>` (`isRunSlug`); its folder is `exactWorkPath` of `workParts(slug)`, and the ledger report is read for that slug. v2, v1.1 and legacy names give byte-identical output to v1.3.
 
 v1.3 (task role-skills-file; additive): a Step file name takes 2 or 3 digits, so a run past Step 99 keeps its Steps. Every v1.2 name and output stays valid. `retro` reads at most 200 Step files; past that it keeps the newest 200 (the highest Step numbers, as `run-state` does), drops the oldest and adds the warning `only 200 Step files read`.
 
