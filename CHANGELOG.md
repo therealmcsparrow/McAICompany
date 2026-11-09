@@ -4,6 +4,12 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### New
+- **Project IDs.** Each project gets one ID, `P<yyyymmdd>.<nnnnnn>` (for example `P20261108.000001`), counted per day from the folders on disk. Tickets are `<ID>-T<n>`, a bare `T<n>` is refused. Each run (draft, build, fix) gets a folder `<ID>-HH.MM.SS`, and each project gets one branch `aico/<ID>`. A one-line description of the project goes in `00-summary.md` in the run folder.
+
+### Improved
+- Existing work folders and branches keep their old names and stay readable. Nothing is renamed.
+
 ## [0.31.0] - 2026-11-08
 
 Rollback: node scripts/stable.mjs 0.29.0

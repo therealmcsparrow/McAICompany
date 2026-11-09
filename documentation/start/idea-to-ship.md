@@ -94,7 +94,7 @@ The build run has no Brief Gate and no Plan Gate. The ticket you approved is the
 3. **Full suite.** Once the last review is clean, the Lead runs the whole test suite once.
 4. **Docs.** The Writer adds user docs and release notes.
 5. **→ Ship Gate.** You see one summary: what changed, test results, open nits, skipped lanes and a cost line. It also holds what the two removed Gates used to show: Core and Contract changes, the parallel plan, the plan check, spike results, and the applied approve lines of your tickets from `ticket-approval read`, each shown with a `> ` prefix, with `tickets changed since approval`. You Approve, Change or Stop.
-6. **PR, CI, merge.** After approval the Lead pushes the run branch `aico/<slug>`, opens a pull request, waits for CI to pass and merges only when it is green. With the Ship Gate set to `auto`, the Lead opens the PR and stops; you merge it.
+6. **PR, CI, merge.** After approval the Lead pushes the project branch `aico/<ProjectID>`, opens a pull request, waits for CI to pass and merges only when it is green. With the Ship Gate set to `auto`, the Lead opens the PR and stops; you merge it.
 
 When something needs your decision during the build, such as a `needs-ceo` Handoff, you get one form at that moment. It is not a Gate. A refusal from a script is never bypassed.
 
