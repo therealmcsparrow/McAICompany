@@ -163,6 +163,9 @@ test('only the exact name is accepted: near names and other numbered files stay 
   for (const bad of ['00-summary.MD', '00-Summary.md', '00-summary.md.bak', '00-summary', '0-summary.md', '000-summary.md', '01-summary.md', ' 00-summary.md', '00-summary.md ', '00-summary.md.']) {
     const p = project();
     fs.writeFileSync(path.join(p.dir, bad), 'x\n');
+    // Case-insensitive or dot/space-stripping filesystems (Windows) fold this variant onto the
+    // exact name, so no distinct name exists there; only test variants this filesystem can hold apart.
+    if (fs.existsSync(path.join(p.dir, SUMMARY)) || !fs.readdirSync(p.dir).includes(bad)) continue;
     refusedSnap(p, /unexpected file in the run folder/);
   }
 });
