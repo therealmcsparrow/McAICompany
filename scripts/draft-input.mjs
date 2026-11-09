@@ -533,6 +533,8 @@ function takeFile(rest, forWhat, root, now) {
   const rel = norm.path;
   const src = workSource(rel);
   if (src !== null) checkExact(realRootOf(root), src);
+  // A work-folder source keeps its own run, so it must already sit in the project the line names.
+  if (joined !== null && src !== null && !(forWhat === 'to-spec' && src.rest === 'prompt.md') && projectIdOf(src.name) !== joined) throw new Refused('bad project');
   if (forWhat === 'feature' && !(src && DRAFT_FILE.test(src.rest))) throw new Refused('not a draft file');
   if (forWhat === 'fix' && !(src && src.rest === 'plan.md' && isBuildName(realRootOf(root), src.name))) throw new Refused('not a build plan');
   const realRoot = realRootOf(root);

@@ -224,6 +224,21 @@ describe('take --project', () => {
     assert.deepEqual(tops(b.root), tops(a.root));
   });
 
+  test('a work-folder source in another project is refused, nothing written', () => {
+    const f = fixture();
+    const other = makeProjectV3(IO, f.root, NOW, 'Other page', 'to-spec');
+    put(f.root, `.company/work/${other.name}/grill.md`, '---\nformat: 1\n---\n## Log\n');
+    put(f.root, '.company/work-folder-topic-to-spec.txt', 'Topic');
+    const before = walk(path.join(f.root, '.company', 'work'));
+    const r = run(f.root, 'take', `.company/work/${other.name}/grill.md`, '--project', f.A, '--for', 'to-spec');
+    assert.deepEqual(r, { code: 3, lines: ['refused: bad project'] });
+    assert.deepEqual(walk(path.join(f.root, '.company', 'work')), before);
+    assert.ok(!exists(f.root, '.company/work-folder-topic-to-spec.txt'), 'Topic dropped');
+    const ok = run(f.root, 'take', `.company/work/${other.name}/grill.md`, '--project', other.id, '--for', 'to-spec');
+    assert.equal(ok.code, 0);
+    assert.equal(ok.lines.at(-1), `project: ${other.id}`);
+  });
+
   test('the flag shape: only <path> --project <id> before --for', () => {
     const { root, A } = fixture();
     put(root, 'notes.md', NOTE);
