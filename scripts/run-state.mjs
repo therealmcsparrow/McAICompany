@@ -343,10 +343,10 @@ export function active(root, { now = Date.now() } = {}) {
 // Every run of the product, newest start first (past the run cap the newest runs are kept); a run whose state file cannot be read is one `unreadable` entry.
 export function list(root, { now = Date.now() } = {}) {
   const out = { v: 1, runs: [], warnings: [] };
-  const { slugs, capped } = runSlugs(root);
-  const found = slugs.filter(slug => lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl')));
-  if (capped) out.warnings.push(`over ${MAX_FOLDERS} runs`);
-  for (const slug of found) {
+  // Walk uncapped, keep runs with a state file, then cap: folders without one never count.
+  const all = runSlugs(root, { max: Infinity }).slugs.filter(slug => lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl')));
+  if (all.length > MAX_FOLDERS) out.warnings.push(`over ${MAX_FOLDERS} runs`);
+  for (const slug of all.slice(0, MAX_FOLDERS)) {
     const { view } = load(root, slug, now);
     if (view.state === 'none' && view.warnings.includes('run-state unreadable')) {
       out.runs.push({ slug, state: 'unreadable', started: null, ended: null, outcome: null, tier: null, round: null });
@@ -388,16 +388,19 @@ function runActivity(root, parts, now) {
 // A project is active when one of its runs has an open, non-stale segment or, with no run-state, a direct file newer than 12 h.
 export function projects(root, { now = Date.now() } = {}) {
   const out = { v: 1, projects: [], warnings: [] };
-  const { slugs, capped } = runSlugs(root);
-  const found = new Map();
-  for (const slug of slugs) {
+  // Only v3 runs and parseProject names count toward the cap.
+  const counted = [];
+  for (const slug of runSlugs(root, { max: Infinity }).slugs) {
     const parts = slug.split('/');
     const id = parts.length === 2 ? parts[0] : parseProject(slug)?.id;
-    if (id === undefined) continue;
+    if (id !== undefined) counted.push({ parts, id });
+  }
+  const found = new Map();
+  for (const { parts, id } of counted.slice(0, MAX_FOLDERS)) {
     const at = runActivity(root, parts, now);
     if (at > 0 && at > (found.get(id) ?? 0)) found.set(id, at);
   }
-  if (capped) out.warnings.push(`over ${MAX_FOLDERS} runs`);
+  if (counted.length > MAX_FOLDERS) out.warnings.push(`over ${MAX_FOLDERS} runs`);
   out.projects = [...found].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? 1 : -1)).slice(0, 3).map(([id, at]) => ({ id, activity: iso(at) }));
   return out;
 }
