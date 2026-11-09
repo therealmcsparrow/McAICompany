@@ -173,10 +173,16 @@ function createNew(dir, name, text) {
     if (error.code === 'EEXIST') throw new Refusal('file exists');
     throw new Refusal('file cannot be created');
   }
+  let wrote = false;
   try {
     fs.writeSync(fd, text);
+    wrote = true;
   } finally {
     fs.closeSync(fd);
+    // A failed write leaves our own empty file: remove it so the fresh folder can be dropped.
+    if (!wrote) {
+      try { fs.rmSync(path.join(dir, name), { force: true }); } catch { /* the file stays */ }
+    }
   }
 }
 
