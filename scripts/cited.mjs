@@ -5,7 +5,7 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isWorkFolder, workParts } from '../mods/lib/work-folder.mjs';
+import { workParts } from '../mods/lib/work-folder.mjs';
 import { runSlugs } from './run-state.mjs';
 
 // Frozen here: nothing read from a Handoff can change it.
@@ -64,7 +64,7 @@ function knownRoles(agentsDir) {
 function runFolders(root, state) {
   const work = join(root, '.company', 'work');
   let names;
-  try { names = readdirSync(work).filter(isWorkFolder).sort().slice(0, MAX_RUN_DIRS); } catch { return []; }
+  try { names = readdirSync(work).filter(n => workParts(n) !== null).sort().slice(0, MAX_RUN_DIRS); } catch { return []; }
   const dirs = [];
   // v3 runs `<ID>/<NN>-<playbook>` come from the one walker; the project folder is not a run.
   const v3 = runSlugs(root, { max: MAX_RUN_DIRS }).slugs.filter(s => s.includes('/'));

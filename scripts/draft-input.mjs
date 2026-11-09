@@ -207,7 +207,7 @@ function checkPath(text) {
     if (cut === -1 || cut === p.length - 1) return { ok: false, reason: 'bad character' };
     name = p.slice(WORK_PREFIX.length, cut);
     if (parseRun(name) === null) return { ok: false, reason: 'bad character' };
-  } else if (!isWorkFolder(name)) return { ok: false, reason: 'bad character' };
+  } else if (workParts(name) === null) return { ok: false, reason: 'bad character' };
   const rest = normalizePath(p.slice(cut + 1));
   if (!rest.ok) return rest;
   return { ok: true, path: `${WORK_PREFIX}${name}/${rest.path}` };

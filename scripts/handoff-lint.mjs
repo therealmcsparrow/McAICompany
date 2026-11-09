@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
 import { show as showRun } from './run-state.mjs';
-import { WorkFolderRefusal, exactWorkPath, isRunSlug, isWorkFolder, parseRun, projectIdOf, workParts, summaryDescription, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, parseRun, projectIdOf, workParts, summaryDescription, ticketPattern } from '../mods/lib/work-folder.mjs';
 
 export const MAX_BYTES = 64 * 1024;
 const MAX_LINE = 1000;
@@ -356,7 +356,7 @@ function checkProductManager(isPm, order, side, errors) {
 // In a v2 folder `task:` is the folder name or a ticket of its project; elsewhere a work folder name or a task id.
 function taskOk(task, folder) {
   if (typeof folder === 'string' && projectIdOf(folder) !== null) return task === folder || ticketPattern(folder).id.test(task);
-  return isWorkFolder(task) || TASK_ID_RE.test(task);
+  return isRunSlug(task) || TASK_ID_RE.test(task);
 }
 
 // In a v2 folder 00-summary.md must open with a one-line description. Errors name the check, never the text.
