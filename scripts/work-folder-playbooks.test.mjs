@@ -29,14 +29,15 @@ test('Setup item 1 writes the Topic with Write and runs work-folder new', () => 
     "work-folder new --playbook '<id>' --topic file", '--topic none', 'mkdir -p .company/work');
   assert.ok(one.indexOf('mkdir -p .company/work') < one.indexOf('work-folder new'));
   has(one, "work-folder clear --playbook '<id>'", 'never `--topic none`', 'no second try');
-  has(one, "work-folder branch '<name>'", '`draft-input`', 'resumed run', 'The `name:` line is the slug');
+  has(one, "work-folder branch '<name>'", '`draft-input`', 'resumed run', 'The `id:` line is the project ID, the `name:` line the slug and the `branch:` line the branch, all as printed');
   has(one, "--exceptions-for '<slug>'");
   lacks(one, 'kebab-case');
 });
 
 test('Setup item 3 uses the printed branch value as is and never prefixes aico/ again', () => {
   const three = setupLine(3);
-  has(three, 'printed `branch:` value as is', 'never prefix', "git checkout -b '<branch>'");
+  has(three, 'printed `branch:` value as is', 'never prefix', "git switch -c '<branch>'",
+    "git checkout --end-of-options '<branch>'", 'refs/heads/<branch>');
   lacks(three, 'aico/<slug>');
   lacks(pipeline, 'aico/<slug>');
 });
