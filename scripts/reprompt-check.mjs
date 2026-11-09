@@ -22,11 +22,12 @@ const NN_RE = /^\d{2,3}$/;
 const HEX_RE = /^[0-9a-f]{64}$/;
 const ASKS_RE = /^[0-3]$/;
 const LEAD_FILE_RE = /^(request|answers-\d+|edit-\d+)\.md$/;
-const RUN_FILE_RE = /^(\.gitignore|\.tree\.json|\.gate-\d{2,3}|prompt\.md|run-state\.jsonl|request\.md|answers-\d+\.md|edit-\d+\.md|\d{2,3}-reprompter\.md)$/;
+const RUN_FILE_RE = /^(\.gitignore|\.tree\.json|\.gate-\d{2,3}|prompt\.md|run-state\.jsonl|00-summary\.md|request\.md|answers-\d+\.md|edit-\d+\.md|\d{2,3}-reprompter\.md)$/;
 const USAGE = 'bad arguments (snap <slug> [walk-less|raise|both] | arm <slug> <NN> | reply <slug> <NN> <hex> <asks>)';
 
 const KIB = 1024;
 const MAX_LEAD_FILE = 33 * KIB;
+const MAX_SUMMARY = 16 * KIB;
 const MAX_HANDOFF = 64 * KIB;
 const MAX_PROMPT = 16 * KIB;
 const MAX_OUT = 64 * KIB;
@@ -735,6 +736,10 @@ function checkRunFolder(dir) {
     const st = lstatOrNull(join(dir, name));
     if (!st || !st.isFile()) refuse('unexpected entry in the run folder');
     if (LEAD_FILE_RE.test(name) && st.size > MAX_LEAD_FILE) refuse('a request file is too large');
+    if (name === '00-summary.md') {
+      if (st.nlink > 1) refuse('unexpected entry in the run folder');
+      if (st.size > MAX_SUMMARY) refuse('the summary file is too large');
+    }
   }
   const ig = lstatOrNull(join(dir, '.gitignore'));
   if (!ig || !ig.isFile() || ig.size !== 2 || readFileSync(join(dir, '.gitignore'), 'latin1') !== '*\n') {
