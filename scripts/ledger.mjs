@@ -1529,12 +1529,13 @@ function cmdBrainstormReport(args) {
 
 const RELEASE_RUN = /^(?:\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - )?release(?:$| |-)/i;
 
-// A v2 run is a release run when line 3 of its 00-summary.md says so. The file is a new read: no link, one link count,
+// A v2 or v3 run is a release run when line 3 of its 00-summary.md says so. The file is a new read: no link, one link count,
 // size cap first. Anything unreadable or damaged counts as not a release.
 function isV2Release(name) {
-  if (parseProject(name) === null) return false;
+  const parts = workParts(name);
+  if (parts === null || (parts.length === 1 && parseProject(name) === null)) return false;
   try {
-    const got = readInside(fs.realpathSync.native(env.root), ['.company', 'work', name, '00-summary.md'], 64 * 1024);
+    const got = readInside(fs.realpathSync.native(env.root), ['.company', 'work', ...parts, '00-summary.md'], 64 * 1024);
     return got.status === 'ok' && runOf(got.text)?.playbook === 'release';
   } catch {
     return false;
