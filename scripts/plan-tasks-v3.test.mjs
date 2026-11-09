@@ -53,7 +53,11 @@ function env(folders) {
   const run = (...args) => main(args, { now: NOW, root: product, pluginRoot, home: path.join(base, 'home') });
   const check = (slug) => run('check', slug, 'plan.md', '--cap', '3', '--mode', 'parallel', '--handover', '120000');
   const begin = (slug) => run('begin', slug, 'plan.md', '--cap', '3', '--mode', 'parallel', '--handover', '120000');
-  return { run, check, begin, product, work, base };
+  const add = (rel, planText) => {
+    fs.mkdirSync(path.join(work, rel), { recursive: true });
+    fs.writeFileSync(path.join(work, rel, 'plan.md'), planText);
+  };
+  return { run, check, begin, add, product, work, base };
 }
 
 const text = (r) => r.lines.join('\n');
@@ -76,7 +80,7 @@ describe('AC18: a v3 slug passes check and begin', () => {
     assert.ok(fs.existsSync(path.join(e.work, ID, '01-feature', 'parallel.jsonl')));
     assert.ok(!fs.existsSync(path.join(e.work, ID, 'parallel.jsonl')));
     const rec = fs.readFileSync(path.join(e.work, ID, '01-feature', 'parallel.jsonl'), 'utf8');
-    assert.ok(rec.includes(`${ID}-T1`), rec);
+    assert.ok(rec.includes('"ev":"begin"') && rec.includes('"tasks":2'), rec);
   });
 
   test('next, start, lines, done and brief take the slug and the full ticket ID', () => {
@@ -151,16 +155,18 @@ describe('AC18: a v3 slug passes check and begin', () => {
 
 describe('AC18: ticket numbers stay unique across the project', () => {
   test('run 2 reusing a ticket of run 1 with a different block is refused, naming the run slug', () => {
-    const e = env({ [R1]: plan(task(`${ID}-T1`)), [R2]: plan(task(`${ID}-T1`, 'src/other.js')) });
+    const e = env({ [R1]: plan(task(`${ID}-T1`)) });
     assert.equal(e.check(R1).code, 0, 'run 1 alone is fine');
+    e.add(R2, plan(task(`${ID}-T1`, 'src/other.js')));
     const r = e.check(R2);
     assert.equal(r.code, 3, text(r));
     assert.ok(text(r).includes(`ticket-reused: ${ID}-T1 already heads a plan in ${R1}`), text(r));
   });
 
   test('begin refuses the same reuse and writes no record', () => {
-    const e = env({ [R1]: plan(task(`${ID}-T1`)), [R2]: plan(task(`${ID}-T1`, 'src/other.js')) });
+    const e = env({ [R1]: plan(task(`${ID}-T1`)) });
     assert.equal(e.begin(R1).code, 0);
+    e.add(R2, plan(task(`${ID}-T1`, 'src/other.js')));
     const r = e.begin(R2);
     assert.equal(r.code, 3, text(r));
     assert.ok(text(r).includes('ticket-reused'), text(r));
@@ -192,16 +198,18 @@ describe('AC18: ticket numbers stay unique across the project', () => {
   });
 
   test('a v2 folder of the same project counts for a v3 run', () => {
-    const e = env({ [V2]: plan(task(`${ID}-T1`)), [R1]: plan(task(`${ID}-T1`, 'src/other.js')) });
+    const e = env({ [V2]: plan(task(`${ID}-T1`)) });
     assert.equal(e.check(V2).code, 0, 'the v2 folder alone is fine');
+    e.add(R1, plan(task(`${ID}-T1`, 'src/other.js')));
     const r = e.check(R1);
     assert.equal(r.code, 3, text(r));
     assert.ok(text(r).includes(`ticket-reused: ${ID}-T1 already heads a plan in ${V2}`), text(r));
   });
 
   test('a v3 run of the same project counts for a v2 folder', () => {
-    const e = env({ [V2]: plan(task(`${ID}-T1`, 'src/other.js')), [R1]: plan(task(`${ID}-T1`)) });
+    const e = env({ [R1]: plan(task(`${ID}-T1`)) });
     assert.equal(e.check(R1).code, 0, 'the v3 run alone is fine');
+    e.add(V2, plan(task(`${ID}-T1`, 'src/other.js')));
     const r = e.check(V2);
     assert.equal(r.code, 3, text(r));
     assert.ok(text(r).includes(`ticket-reused: ${ID}-T1 already heads a plan in ${R1}`), text(r));
