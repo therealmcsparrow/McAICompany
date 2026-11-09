@@ -23,6 +23,7 @@ export const ALLOW = [
   'scripts/idea-flow.mjs#NAME',
   'scripts/idea-flow.mjs#FINAL_NAME',
   'scripts/lessons.mjs#STANDARD_TARGET_RE',
+  'scripts/wayfinder.mjs#FILE_RE',
 ];
 
 const PLACEHOLDERS = ['<slug>', '<name>', '<run>', '<task>', '<build>', '<parent>'];
@@ -441,9 +442,9 @@ test('scan: the roots hold the files the guard is meant to read', () => {
 
 // The repo.
 
-test('allow-list: exactly the nine keys, each still declared in its file', () => {
-  assert.equal(ALLOW.length, 9);
-  assert.equal(new Set(ALLOW).size, 9);
+test('allow-list: exactly the ten keys, each still declared in its file', () => {
+  assert.equal(ALLOW.length, 10);
+  assert.equal(new Set(ALLOW).size, 10);
   for (const key of ALLOW) {
     const [file, constant] = key.split('#');
     const text = readFileSync(join(ROOT, file), 'utf8');
