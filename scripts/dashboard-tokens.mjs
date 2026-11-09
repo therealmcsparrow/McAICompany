@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { runKey } from '../mods/lib/work-folder.mjs';
 
 const LEDGER_SCRIPT = path.join(import.meta.dirname, 'ledger.mjs');
 const CTX_CAP = 95000;
@@ -102,9 +102,10 @@ async function load(root, slug, spawn, timeoutMs) {
 
 export async function readLedger(root, slug, { spawn = nodeSpawn, timeoutMs = DEFAULT_TIMEOUT_MS, cache = defaultCache } = {}) {
   try {
-    if (typeof slug !== 'string' || !isWorkFolder(slug)) return unavailable();
+    const ledgerKey = typeof slug === 'string' ? runKey(slug) : null;
+    if (ledgerKey === null) return unavailable();
     let stat;
-    try { stat = fs.lstatSync(path.join(root, '.company', 'ledger', `${slug}.jsonl`)); } catch { return { state: 'none', totals: null, overCap: [] }; }
+    try { stat = fs.lstatSync(path.join(root, '.company', 'ledger', `${ledgerKey}.jsonl`)); } catch { return { state: 'none', totals: null, overCap: [] }; }
     if (!stat.isFile()) return { state: 'none', totals: null, overCap: [] };
     const key = `${stat.mtimeMs}:${stat.size}`;
     const hit = cache.get(slug);

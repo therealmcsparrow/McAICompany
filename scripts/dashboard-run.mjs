@@ -1,7 +1,7 @@
 // Run detail JSON for the dashboard drawer: Steps with a Did summary, round chips, reviewer routing and active-run data.
 import fs from 'node:fs';
 import path from 'node:path';
-import { isWorkFolder, exactWorkPath } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath } from '../mods/lib/work-folder.mjs';
 import { show as showRun, active as activeRun } from './run-state.mjs';
 import { readLedger } from './dashboard-tokens.mjs';
 
@@ -18,20 +18,26 @@ const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 const IO = { fs, path };
 
 // The slug when `raw` (a URL path part, still encoded) names a real run folder inside `.company/work`, else null.
-// Validator for untrusted URL input; mirrors the path resolver (fs.realpath/lstat). Covers: oversize, double
-// decoding, traversal, case-fold collisions, symlink/junction escapes of the folder or of `.company/work` (CWE-22, CWE-59).
+// Validator for untrusted URL input; mirrors the URL path decoder (`%2F` is the run slash) and the path resolver
+// (fs.realpath/lstat). Allow-list: decoded once; beside `%2F`/`%2f` no other escape is read; `\`, `..`, a second `/`,
+// oversize, case-fold collisions and symlink/junction escapes of a folder level or of `.company/work` are refused (CWE-22, CWE-59).
 export function resolveRunSlug(root, raw) {
   try {
     if (typeof raw !== 'string' || raw.length === 0 || raw.length > MAX_SLUG) return null;
-    const slug = decodeURIComponent(raw);
-    if (!isWorkFolder(slug)) return null;
-    if (exactWorkPath(IO, root, [slug]) !== 'exact') return null;
+    const slashed = raw.replace(/%2[Ff]/g, '/');
+    // A raw part with a run slash allows no other escape; a v2 or legacy name decodes once as before.
+    const slug = slashed === raw ? decodeURIComponent(raw) : slashed;
+    if (slug.includes('%') || slug.includes(String.fromCharCode(92)) || !isRunSlug(slug)) return null;
+    const parts = workParts(slug);
+    if (parts === null || exactWorkPath(IO, root, parts) !== 'exact') return null;
     const work = path.join(root, '.company', 'work');
-    const folder = path.join(work, slug);
-    if (!fs.lstatSync(folder).isDirectory()) return null;
     const realWork = path.join(fs.realpathSync.native(root), '.company', 'work');
     if (fs.realpathSync.native(work) !== realWork) return null;
-    if (fs.realpathSync.native(folder) !== path.join(realWork, slug)) return null;
+    for (let i = 1; i <= parts.length; i += 1) {
+      const folder = path.join(work, ...parts.slice(0, i));
+      if (!fs.lstatSync(folder).isDirectory()) return null;
+      if (fs.realpathSync.native(folder) !== path.join(realWork, ...parts.slice(0, i))) return null;
+    }
     return slug;
   } catch {
     return null;
@@ -123,7 +129,7 @@ export async function run(root, slug, { now = Date.now(), deps = {} } = {}) {
   let view;
   try { view = show(root, resolved, { now }) || {}; } catch { view = {}; }
   const list = Array.isArray(view.steps) ? view.steps : [];
-  const folder = path.join(root, '.company', 'work', resolved);
+  const folder = path.join(root, '.company', 'work', ...workParts(resolved));
   let realFolder = null;
   try { realFolder = fs.realpathSync.native(folder); } catch { /* summaries stay null */ }
   const steps = list.map((s, i) => ({
