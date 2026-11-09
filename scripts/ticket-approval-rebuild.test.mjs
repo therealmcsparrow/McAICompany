@@ -88,7 +88,7 @@ test('R-4 (b) archiving the earlier Build run lets build-plan build a new run', 
   assert.equal(again.lines[0], 'built 2 tickets');
   assert.equal(planLine(again), `plan: .company/work/${ID}-22.40.09/plan.md`);
   assert.deepEqual(fs.readdirSync(f.work).sort(), [PARENT, `${ID}-22.40.09`]);
-  assert.equal(f.events().filter((e) => e.event === 'build').length, 2);
+  assert.equal(f.events().filter((e) => e.ev === 'build').length, 2);
 });
 
 test('R-4 (c) a non-build run of the same project holding the same IDs is not a match', () => {
