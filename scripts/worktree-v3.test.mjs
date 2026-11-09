@@ -110,10 +110,12 @@ describe('worktree on a v3 run slug (AC19)', () => {
     assert.deepEqual(res.lines, ['new.txt']);
   });
 
-  test('cleanup removes the worktree and its ref', () => {
+  test('cleanup --archive removes the worktree and its ref; without it unmerged work is kept', () => {
     const r = makeRepo();
     assert.equal(r.run('add', RUN, 't1', '--base', r.head()).code, 0);
-    const res = r.run('cleanup', RUN);
+    assert.equal(r.run('cleanup', RUN).code, 2, 'unmerged work is kept');
+    assert.ok(fs.existsSync(path.join(r.wtRoot, ID, 't1')));
+    const res = r.run('cleanup', RUN, '--archive');
     assert.equal(res.code, 0, res.lines.join('\n'));
     assert.equal(git(r.repo, 'branch', '--list', 'aico-wt/*'), '');
     assert.ok(!fs.existsSync(path.join(r.wtRoot, ID, 't1')));
@@ -162,7 +164,8 @@ describe('step-split on a v3 run slug (AC19)', () => {
     assert.equal(stepSplit(['review', RUN, SHA, '1'], { root: d, exec }).code, 0);
     const r = stepSplit(['show', RUN, 'r1'], { root: d });
     assert.equal(r.code, 0, r.out);
-    assert.match(r.out, /x\.mjs/);
+    assert.match(r.out, /^groups: 1\ngroup 1: 1 entries\n/);
+    assert.ok(r.out.includes(`.company/work/${RUN}/split/r1/g1.txt`), r.out);
   });
 
   test('a v3 slug without a run folder, or a malformed one, is refused', () => {
