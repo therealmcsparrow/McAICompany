@@ -43,8 +43,8 @@ function handoff(root, slug, name, step, status) {
 function records(root, slug) {
   put(root, slug, 'parallel.jsonl', jsonl([
     { ev: 'begin', plan: '03-plan.md', hash: '0123456789ab', cap: 3, mode: 'waves', tasks: 2, ow: [] },
-    { ev: 'start', task: 'T1', round: 0, ow: [] },
-    { ev: 'out', task: 'T1', round: 0, extra: ['src/a.mjs'], sibling: ['src/b.mjs', 'src/c.mjs'] }
+    { ev: 'start', task: `${ID}-T1`, round: 0, ow: [] },
+    { ev: 'out', task: `${ID}-T1`, round: 0, extra: ['src/a.mjs'], sibling: ['src/b.mjs', 'src/c.mjs'] }
   ]));
   put(root, slug, 'worktrees.jsonl', jsonl([
     { ev: 'add', task: 't1', base: ID40 },
