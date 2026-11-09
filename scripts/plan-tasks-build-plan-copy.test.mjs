@@ -14,8 +14,8 @@ const PARENT = `${ID}-22.25.00`;
 const BASE = 'a'.repeat(40);
 const NL = '\n';
 const T1 = new Date(2026, 10, 8, 22, 31, 7).getTime();
-const ARROW = '→';
-const DASH = '—';
+const ARROW = '\u2192';
+const DASH = '\u2014';
 
 const roots = [];
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'bpc-home-'));
@@ -99,7 +99,7 @@ test('R-9: only trailing spaces, tabs and blank lines are ignored, other trailin
   const p = path.join(f.work, b.folder, b.file);
   const s = fs.readFileSync(p, 'utf8');
   assert.ok(s.includes('#run'), 'seams line present');
-  fs.writeFileSync(p, s.replace(/(- seams: [^\n]*#run)/, '$1 '));
+  fs.writeFileSync(p, s.replace(/(- seams: [^\n]*#run)/, '$1\u00A0'));
   const r = f.check(b.folder, b.file);
   assert.notEqual(r.code, 0);
   assert.ok(text(r).includes('ticket-reused'), text(r));
