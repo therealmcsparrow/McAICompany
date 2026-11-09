@@ -660,9 +660,10 @@ function makeBuildRun(env, slug) {
 }
 
 // A v2 Build folder whose plan.md write failed holds only its fresh summary: remove both, never more.
-function dropFreshRun(root, name) {
+export function dropFreshRun(root, name) {
   const dir = path.join(root, '.company', 'work', name);
   try {
+    if (!fs.lstatSync(dir).isDirectory()) return; // a link or file there is not ours to remove
     if (fs.readdirSync(dir).some((f) => f !== '00-summary.md')) return;
     fs.rmSync(path.join(dir, '00-summary.md'), { force: true });
     fs.rmdirSync(dir);

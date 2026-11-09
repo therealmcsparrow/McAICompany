@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { main as approve } from './ticket-approval.mjs';
+import { main as approve, dropFreshRun } from './ticket-approval.mjs';
 
 const ID = 'P20261108.000001';
 const PARENT = `${ID}-22.25.00`;
@@ -120,4 +120,19 @@ test('R-4 (e) a build-plan with a different approved set still makes a new Build
   assert.equal(r.code, 0, r.lines.join(NL));
   assert.equal(r.lines[0], 'built 3 tickets');
   assert.equal(fs.readdirSync(f.work).length, 3);
+});
+
+test('dropFreshRun leaves a symlink or junction at the run folder untouched', () => {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebuild-link-')));
+  roots.push(root);
+  const work = path.join(root, '.company', 'work');
+  const target = path.join(root, 'elsewhere');
+  fs.mkdirSync(work, { recursive: true });
+  fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, '00-summary.md'), 'keep\n');
+  const name = `${ID}-22.31.07`;
+  fs.symlinkSync(target, path.join(work, name), 'junction');
+  dropFreshRun(root, name);
+  assert.equal(fs.readFileSync(path.join(target, '00-summary.md'), 'utf8'), 'keep\n');
+  assert.ok(fs.lstatSync(path.join(work, name)).isSymbolicLink());
 });
