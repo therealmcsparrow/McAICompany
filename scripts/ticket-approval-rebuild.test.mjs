@@ -12,8 +12,9 @@ const NL = '\n';
 const T1 = new Date(2026, 10, 8, 22, 31, 7).getTime();
 const T2 = new Date(2026, 10, 8, 22, 40, 9).getTime();
 
-const block = (n) => [`### ${ID}-T${n} a task`, '- role: backend-engineer', `- files: src/t${n}.mjs`, '- depends-on: none', ''].join(NL);
-const plan = (...n) => ['# Plan: demo', '', `Base commit: ${BASE}`, '', '## Tasks', '', ...n.map(block)].join(NL) + NL;
+const block = (n, id = ID) => [`### ${id}-T${n} a task`, '- role: backend-engineer', `- files: src/t${n}.mjs`, '- depends-on: none', ''].join(NL);
+const plan = (...n) => planFor(ID, ...n);
+function planFor(id, ...n) { return ['# Plan: demo', '', `Base commit: ${BASE}`, '', '## Tasks', '', ...n.map((x) => block(x, id))].join(NL) + NL; }
 
 const roots = [];
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'rebuild-home-'));
@@ -41,24 +42,75 @@ function fixture(planText) {
   };
   const work = path.join(root, '.company', 'work');
   const events = () => fs.readFileSync(path.join(dir, 'tickets.jsonl'), 'utf8').split(NL).filter(Boolean).map((l) => JSON.parse(l));
-  return { run, approveAll, work, dir, events };
+  const addRun = (name, summaryLine3, planText) => {
+    const d = path.join(work, name);
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, '00-summary.md'), `Other run
+
+${summaryLine3}
+`);
+    fs.writeFileSync(path.join(d, 'plan.md'), planText);
+  };
+  return { run, approveAll, work, dir, events, addRun, root };
 }
 
-test('a resumed build-plan with the same approved IDs refuses file exists and makes no second Build run', () => {
+const planLine = (r) => r.lines.find((l) => l.startsWith('plan: '));
+
+test('R-4 (a) a resumed build-plan refuses file exists, prints the earlier Build run plan, makes no second run', () => {
   const f = fixture(plan(1, 2));
   f.approveAll(`${ID}-T1`, `${ID}-T2`);
   const first = f.run(T1, 'build-plan', PARENT);
   assert.equal(first.code, 0, first.lines.join(NL));
+  const firstPlan = planLine(first);
+  assert.match(firstPlan, /^plan: \.company\/work\/P20261108\.000001-22\.31\.07\/plan\.md$/);
   const folders = fs.readdirSync(f.work).sort();
   const events = f.events();
   const second = f.run(T2, 'build-plan', PARENT);
-  assert.equal(second.code, 3);
+  assert.equal(second.code, 3, second.lines.join(NL));
   assert.equal(second.lines[0], 'refused: file exists');
+  assert.equal(second.lines[1], firstPlan);
   assert.deepEqual(fs.readdirSync(f.work).sort(), folders);
   assert.deepEqual(f.events(), events);
 });
 
-test('a build-plan with a different approved set still makes a new Build run', () => {
+test('R-4 (b) archiving the earlier Build run lets build-plan build a new run', () => {
+  const f = fixture(plan(1, 2));
+  f.approveAll(`${ID}-T1`, `${ID}-T2`);
+  const first = f.run(T1, 'build-plan', PARENT);
+  assert.equal(first.code, 0, first.lines.join(NL));
+  const name = `${ID}-22.31.07`;
+  assert.equal(f.run(T2, 'build-plan', PARENT).code, 3);
+  const archive = path.join(f.root, '.company', 'archive');
+  fs.mkdirSync(archive, { recursive: true });
+  fs.renameSync(path.join(f.work, name), path.join(archive, name));
+  const again = f.run(T2, 'build-plan', PARENT);
+  assert.equal(again.code, 0, again.lines.join(NL));
+  assert.equal(again.lines[0], 'built 2 tickets');
+  assert.equal(planLine(again), `plan: .company/work/${ID}-22.40.09/plan.md`);
+  assert.deepEqual(fs.readdirSync(f.work).sort(), [PARENT, `${ID}-22.40.09`]);
+  assert.equal(f.events().filter((e) => e.event === 'build').length, 2);
+});
+
+test('R-4 (c) a non-build run of the same project holding the same IDs is not a match', () => {
+  const f = fixture(plan(1, 2));
+  f.approveAll(`${ID}-T1`, `${ID}-T2`);
+  f.addRun(`${ID}-22.20.00`, 'Run: later feature', plan(1, 2));
+  const r = f.run(T1, 'build-plan', PARENT);
+  assert.equal(r.code, 0, r.lines.join(NL));
+  assert.equal(r.lines[0], 'built 2 tickets');
+});
+
+test('R-4 (d) a Build run of another project with the same local IDs is not a match', () => {
+  const f = fixture(plan(1, 2));
+  f.approveAll(`${ID}-T1`, `${ID}-T2`);
+  const other = 'P20261108.000002';
+  f.addRun(`${other}-22.20.00`, 'Run: build feature', planFor(other, 1, 2));
+  const r = f.run(T1, 'build-plan', PARENT);
+  assert.equal(r.code, 0, r.lines.join(NL));
+  assert.equal(r.lines[0], 'built 2 tickets');
+});
+
+test('R-4 (e) a build-plan with a different approved set still makes a new Build run', () => {
   const f = fixture(plan(1, 2));
   f.approveAll(`${ID}-T1`, `${ID}-T2`);
   assert.equal(f.run(T1, 'build-plan', PARENT).code, 0);
