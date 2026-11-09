@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   isProjectId, nextProjectId, makeRun, parseProject, projectIdOf, checkDescription, summaryDescription, runOf,
-  isBranchId, isWorkFolder, branchId, WorkFolderRefusal,
+  isBranchId, isWorkFolder, branchId, WorkFolderRefusal, makeProject, readTopicFile, fallbackTopic,
 } from '../mods/lib/work-folder.mjs';
 import { main } from './work-folder.mjs';
 
@@ -42,6 +42,25 @@ function project() {
 const work = root => path.join(root, '.company', 'work');
 const folders = root => fs.readdirSync(work(root)).sort();
 const run = (root, argv, now = NOW) => main(argv, { root, now });
+// Builds v2 folders the way `work-folder new` did before the v3 flip (topic read, then makeProject; or makeRun for
+// --project), so tests that read v2 names back stay green when `new` makes only v3 (work-folder-name v3.0).
+const runV2 = (root, argv, now = NOW) => {
+  const flag = name => argv[argv.indexOf(name) + 1];
+  const playbook = flag('--playbook');
+  const lines = (id, name) => ({ code: 0, lines: [`id: ${id}`, `name: ${name}`, `branch: aico/${branchId(name)}`] });
+  try {
+    if (argv.includes('--project')) {
+      const id = flag('--project');
+      return lines(id, makeRun(io, root, id, now, 'later', playbook));
+    }
+    const { topic } = readTopicFile(io, root, playbook, flag('--topic'), checkDescription);
+    const made = makeProject(io, root, now, topic ?? fallbackTopic(playbook), playbook);
+    return lines(made.id, made.name);
+  } catch (e) {
+    if (e instanceof WorkFolderRefusal) return { code: 3, lines: [`refused: ${e.message}`] };
+    throw e;
+  }
+};
 const topicPath = (root, id = 'idea') => path.join(root, '.company', `work-folder-topic-${id}.txt`);
 const writeTopic = (root, text, id = 'idea') => fs.writeFileSync(topicPath(root, id), text);
 const summaryOf = (root, name) => fs.readFileSync(path.join(work(root), name, '00-summary.md'), 'utf8');
@@ -52,7 +71,7 @@ const plant = (root, name, text) => {
 };
 const newProject = (root, desc = 'Fix login', now = NOW, playbook = 'idea') => {
   writeTopic(root, `${desc}\n`, playbook);
-  return run(root, ['new', '--playbook', playbook, '--topic', 'file'], now);
+  return runV2(root, ['new', '--playbook', playbook, '--topic', 'file'], now);
 };
 const refusal = (fn, reason) => assert.throws(fn, e => e instanceof WorkFolderRefusal && (reason === undefined || e.message === reason));
 
@@ -348,7 +367,7 @@ describe('work-folder new', () => {
   });
   test('--topic none uses the fallback description', () => {
     const root = project();
-    const r = run(root, ['new', '--playbook', 'usability-test', '--topic', 'none']);
+    const r = runV2(root, ['new', '--playbook', 'usability-test', '--topic', 'none']);
     assert.equal(r.code, 0);
     assert.equal(lineOf(summaryOf(root, `${ID1}-22.25.00`), 1), 'Usability-Test');
   });
@@ -471,7 +490,7 @@ describe('summary written by new', () => {
     test(`hostile description falls back, never echoed: ${label}`, () => {
       const root = project();
       writeTopic(root, text);
-      const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+      const r = runV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
       assert.equal(r.code, 0);
       const summary = summaryOf(root, `${ID1}-22.25.00`);
       assert.equal(lineOf(summary, 1), 'Idea');
@@ -485,13 +504,13 @@ describe('summary written by new', () => {
   test('invalid UTF-8 falls back', () => {
     const root = project();
     fs.writeFileSync(topicPath(root), Buffer.from([0x46, 0xff, 0xfe]));
-    run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    runV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(lineOf(summaryOf(root, `${ID1}-22.25.00`), 1), 'Idea');
   });
 });
 
 describe('a later run through --project', () => {
-  const later = (root, now, extra = []) => run(root, ['new', '--playbook', 'fix', '--project', ID1, ...extra], now);
+  const later = (root, now, extra = []) => runV2(root, ['new', '--playbook', 'fix', '--project', ID1, ...extra], now);
   test('same minute, another second: a new folder with the same ID', () => {
     const root = project();
     newProject(root);
@@ -772,7 +791,7 @@ describe('siblings', () => {
   test('every folder of a listed project is linked', () => {
     const root = project();
     three(root);
-    run(root, ['new', '--playbook', 'fix', '--project', ID1], at(2026, 11, 8, 23, 0, 0));
+    runV2(root, ['new', '--playbook', 'fix', '--project', ID1], at(2026, 11, 8, 23, 0, 0));
     run(root, ['siblings', ID1, ID2]);
     for (const n of nameOf(root, ID1)) assert.equal(lineOf(summaryOf(root, n), 4), `Siblings: ${ID2}`, n);
   });
@@ -780,7 +799,7 @@ describe('siblings', () => {
     const root = project();
     three(root);
     run(root, ['siblings', ID1, ID2, ID3]);
-    const r = run(root, ['new', '--playbook', 'fix', '--project', ID2], at(2026, 11, 8, 23, 0, 0));
+    const r = runV2(root, ['new', '--playbook', 'fix', '--project', ID2], at(2026, 11, 8, 23, 0, 0));
     assert.equal(lineOf(summaryOf(root, r.lines[1].slice(6)), 4), `Siblings: ${ID1} ${ID3}`);
   });
   test('the sibling summaries pass the description check', () => {
@@ -837,7 +856,7 @@ describe('the branch command on a v2 folder', () => {
   test('prints aico/<ProjectID> and writes nothing', () => {
     const root = project();
     newProject(root);
-    run(root, ['new', '--playbook', 'fix', '--project', ID1], at(2026, 11, 8, 23, 0, 0));
+    runV2(root, ['new', '--playbook', 'fix', '--project', ID1], at(2026, 11, 8, 23, 0, 0));
     const before = folders(root);
     assert.deepEqual(run(root, ['branch', `${ID1}-22.25.00`]), { code: 0, lines: [`branch: aico/${ID1}`] });
     assert.deepEqual(run(root, ['branch', `${ID1}-23.00.00`]), { code: 0, lines: [`branch: aico/${ID1}`] });
@@ -858,7 +877,7 @@ describe('the branch command on a v2 folder', () => {
   test('every run of one project reports the same branch as new', () => {
     const root = project();
     const a = newProject(root);
-    const b = run(root, ['new', '--playbook', 'fix', '--project', ID1], at(2026, 11, 8, 23, 0, 0));
+    const b = runV2(root, ['new', '--playbook', 'fix', '--project', ID1], at(2026, 11, 8, 23, 0, 0));
     assert.equal(a.lines[2], b.lines[2]);
   });
 });
