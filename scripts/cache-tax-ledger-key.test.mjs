@@ -1,4 +1,4 @@
-// R-3: Cache Tax stamps the ledger file named by runKey(slug), so a v3 run's growing ledger refreshes the pane.
+// Cache Tax stamps the ledger file named by runKey(slug), so a v3 run's growing ledger refreshes the pane.
 // mods/test/cache-tax.test.tsx needs the plugin harness; this pins the path in plain node.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
