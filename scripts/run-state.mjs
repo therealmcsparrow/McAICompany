@@ -7,11 +7,11 @@
 // symlink, and read with the handoff-lint parser.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, realpathSync, openSync, readdirSync, readSync, renameSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, isProjectId, parseProject, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 
@@ -62,24 +62,31 @@ class Refusal extends Error {}
 const refuse = reason => { throw new Refusal(reason); };
 
 // Name shape first, then the exact letter case of the folder on disk; a missing folder passes (start makes it).
+function partsOf(slug) {
+  const parts = workParts(slug);
+  if (parts === null) refuse('bad slug');
+  return parts;
+}
+
 function checkSlug(root, slug) {
-  if (!isWorkFolder(slug)) refuse('bad slug');
-  try { exactWorkPath({ fs: nodeFs, path: nodePath }, root, [slug]); } catch (e) {
+  const parts = partsOf(slug);
+  try { exactWorkPath({ fs: nodeFs, path: nodePath }, root, parts); } catch (e) {
     if (e instanceof WorkFolderRefusal) refuse(e.message);
     throw e;
   }
 }
 
 function paths(root, slug) {
-  const dir = join(root, '.company', 'work', slug);
+  const dir = join(root, '.company', 'work', ...partsOf(slug));
   return { dir, file: join(dir, 'run-state.jsonl') };
 }
 
-// True when the run folder's real path is the folder of that name inside the real .company/work of the root.
-function insideWork(root, dir) {
+// True when the folder's real path is `parts` inside the real .company/work of the root.
+function insideWork(root, parts) {
   try {
-    const want = join(realpathSync.native(join(root, '.company', 'work')), basename(dir));
-    const real = realpathSync.native(dir);
+    const work = join(root, '.company', 'work');
+    const want = join(realpathSync.native(work), ...parts);
+    const real = realpathSync.native(join(work, ...parts));
     return real === want;
   } catch { return false; }
 }
@@ -131,13 +138,13 @@ function validRecord(o) {
 }
 
 // Reads the record file. Returns { records, warnings, unreadable, lines }.
-function readRecords(file) {
+function readRecords(file, verified = false) {
   const out = { records: [], warnings: [], unreadable: false, lines: 0 };
-  const st = lstatOrNull(file);
+  const st = verified ? lstatBigOrNull(file) : lstatOrNull(file);
   if (!st) return out;
   if (!st.isFile() || st.size > MAX_FILE) { out.unreadable = true; return out; }
   let buf;
-  try { buf = readCapped(file, MAX_FILE); } catch { out.unreadable = true; return out; }
+  try { buf = readCapped(file, MAX_FILE, verified ? st : undefined); } catch { out.unreadable = true; return out; }
   const lines = buf.toString('utf8').split('\n');
   if (lines[lines.length - 1] === '') lines.pop();
   out.lines = lines.length;
@@ -219,7 +226,7 @@ function load(root, slug, now) {
     round: 0, tier: 'unknown', steps: [], warnings: [],
   };
   const dst = lstatOrNull(dir);
-  if (dst && (!dst.isDirectory() || !insideWork(root, dir))) { view.warnings.push('run-state unreadable'); return { view, activity: 0 }; }
+  if (dst && (!dst.isDirectory() || !insideWork(root, partsOf(slug)))) { view.warnings.push('run-state unreadable'); return { view, activity: 0 }; }
   const rec = readRecords(file);
   view.warnings.push(...rec.warnings);
   if (rec.unreadable) view.warnings.push('run-state unreadable');
@@ -309,7 +316,7 @@ export function list(root, { now = Date.now() } = {}) {
   for (const slug of names) {
     try { checkSlug(root, slug); } catch { continue; }
     const dst = lstatOrNull(join(work, slug));
-    if (!dst || !dst.isDirectory() || !insideWork(root, join(work, slug))) continue;
+    if (!dst || !dst.isDirectory() || !insideWork(root, [slug])) continue;
     if (!lstatOrNull(join(work, slug, 'run-state.jsonl'))) continue;
     found.push(slug);
   }
@@ -328,12 +335,78 @@ export function list(root, { now = Date.now() } = {}) {
   return out;
 }
 
+const RUN_SUB_RE = /^(?:0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+// The activity time (ms) of a run when it counts as active, else 0.
+function runActivity(root, parts, now) {
+  const dir = join(root, '.company', 'work', ...parts);
+  const dst = lstatOrNull(dir);
+  if (!dst || !dst.isDirectory() || !insideWork(root, parts)) return 0;
+  let names;
+  try { names = readdirSync(dir).slice(0, 1000); } catch { return 0; }
+  let newest = 0;
+  let newestStep = 0;
+  for (const name of names) {
+    const st = lstatOrNull(join(dir, name));
+    if (!st || !st.isFile()) continue;
+    newest = Math.max(newest, st.mtimeMs);
+    if (STEP_FILE_RE.test(name) && !name.startsWith('00-')) newestStep = Math.max(newestStep, st.mtimeMs);
+  }
+  if (!names.includes('run-state.jsonl')) return now - newest <= STALE_MS ? newest : 0;
+  const rec = readRecords(join(dir, 'run-state.jsonl'), true);
+  if (rec.unreadable) return 0;
+  const seg = lastSegment(rec.records);
+  if (!segmentOpen(seg)) return 0;
+  const activity = Math.max(Date.parse(seg[seg.length - 1].at), newestStep);
+  return now - activity > STALE_MS ? 0 : activity;
+}
+
+// Active projects (v3 project folders and v2 `<ID>-HH.MM.SS` runs), newest activity first, at most 3: IDs and times only.
+// A project is active when one of its runs has an open, non-stale segment or, with no run-state, a direct file newer than 12 h.
+export function projects(root, { now = Date.now() } = {}) {
+  const out = { v: 1, projects: [], warnings: [] };
+  const work = join(root, '.company', 'work');
+  const wst = lstatOrNull(work);
+  if (!wst || !wst.isDirectory()) return out;
+  let names;
+  try { names = readdirSync(work).sort().reverse(); } catch { return out; }
+  const found = new Map();
+  let read = 0;
+  const visit = (id, parts) => {
+    read++;
+    const at = runActivity(root, parts, now);
+    if (at > 0 && at > (found.get(id) ?? 0)) found.set(id, at);
+  };
+  for (const name of names) {
+    if (read >= MAX_FOLDERS) { out.warnings.push(`over ${MAX_FOLDERS} runs`); break; }
+    const p = parseProject(name);
+    if (p !== null) { visit(p.id, [name]); continue; }
+    if (!isProjectId(name)) continue;
+    const pdir = join(work, name);
+    const pst = lstatOrNull(pdir);
+    if (!pst || !pst.isDirectory() || !insideWork(root, [name])) continue;
+    let subs;
+    try { subs = readdirSync(pdir).filter(n => RUN_SUB_RE.test(n)).sort().reverse(); } catch { continue; }
+    for (const sub of subs) {
+      if (read >= MAX_FOLDERS) { out.warnings.push(`over ${MAX_FOLDERS} runs`); break; }
+      if (workParts(`${name}/${sub}`) !== null) visit(name, [name, sub]);
+    }
+  }
+  out.projects = [...found].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? 1 : -1)).slice(0, 3).map(([id, at]) => ({ id, activity: iso(at) }));
+  return out;
+}
+
 // Validates, checks the open segment and limits, then appends one line. Returns the record written.
 export function append(root, slug, fields, { now = Date.now() } = {}) {
   checkSlug(root, slug);
   const { dir, file } = paths(root, slug);
   const dst = lstatOrNull(dir);
-  if (dst && (!dst.isDirectory() || !insideWork(root, dir))) refuse('run folder is not a directory');
+  const parts = partsOf(slug);
+  if (dst && (!dst.isDirectory() || !insideWork(root, parts))) refuse('run folder is not a directory');
+  if (!dst && parts.length === 2) {
+    const pst = lstatOrNull(dirname(dir));
+    if (!pst || !pst.isDirectory() || !insideWork(root, parts.slice(0, 1))) refuse('project folder is missing');
+  }
   const fst = lstatOrNull(file);
   if (fst && !fst.isFile()) refuse('run-state is not a regular file');
   if (fst && fst.size > MAX_FILE) refuse('run-state unreadable');
@@ -351,7 +424,7 @@ export function append(root, slug, fields, { now = Date.now() } = {}) {
   if (rec.lines >= MAX_LINES) refuse('run-state is full (1000 lines)');
   const size = fst ? fst.size : 0;
   if (size + Buffer.byteLength(line, 'utf8') > MAX_FILE) refuse('run-state is full (64 KiB)');
-  if (!dst) mkdirSync(dir, { recursive: true });
+  if (!dst) mkdirSync(dir, { recursive: parts.length === 1 });
   const fd = openSync(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o644);
   try {
     // A last line without a newline would glue to the new one.
@@ -554,7 +627,7 @@ function agentSlugs() {
 }
 
 function usage() {
-  return 'usage: start <slug> [<aico version>] | ceo <slug> <brief|plan|ship|none> <1-20> | sub <slug> <start|stop> <role> <id> [<session>] | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | list --json | triage issue | triage check <nonce> [--route fix]';
+  return 'usage: start <slug> [<aico version>] | ceo <slug> <brief|plan|ship|none> <1-20> | sub <slug> <start|stop> <role> <id> [<session>] | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | list --json | projects --json | triage issue | triage check <nonce> [--route fix]';
 }
 
 // Returns { out, code }.
@@ -619,6 +692,9 @@ export function run(argv, { root = process.cwd(), now = Date.now(), home } = {})
       case 'list':
         if (rest.length !== 1 || rest[0] !== '--json') refuse(usage());
         return { out: JSON.stringify(list(root, opts)), code: 0 };
+      case 'projects':
+        if (rest.length !== 1 || rest[0] !== '--json') refuse(usage());
+        return { out: JSON.stringify(projects(root, opts)), code: 0 };
       case 'triage':
         return { out: triage(root, rest, opts), code: 0 };
       default:

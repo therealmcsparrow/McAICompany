@@ -1,4 +1,4 @@
-# Contract: run-state v1.9
+# Contract: run-state v1.10
 
 Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v1 mods (Savvy, Reflect, Blast Radius, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`; from v1.8 the `dashboard` v1 Modules, through the exported `list`, `active` and `show` only.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
@@ -15,6 +15,8 @@ v1.7 is additive (task draft-input-folder-case-draft): every command that takes 
 v1.8 is additive (task 2026-11-04 01.19 - Skillset Dashboard Draft; rationale `docs/adr/0057-dashboard-reads-script-json-only.md`): it adds the command `list --json` and the exported `list` ("Run list"), exports `active` beside `show`, and adds the view keys `waves` and `open_ask` and the step keys `verdict` and `gate`. Records, storage, writes and every v1.7 command are unchanged; no new event is written. A v1.7 reader of the view ignores the new keys. Every v1.7 file gives the same view plus `"waves": [...]`, `"open_ask": ...` and, on each step, `"verdict": null, "gate": null` unless the Handoff frontmatter carries them.
 
 v1.9 is additive (task role-skills-file): a Step file name in the view's `steps` takes 2 or 3 digits, so a run past Step 99 keeps its Steps; past 200 Step files the newest 200 are kept, with the warning `only 200 Step files read`. Records, commands and every v1.8 name stay valid.
+
+v1.10 is additive (one project one folder, run 1): `<slug>` also accepts the v3 run slug `<ProjectID>/<NN>-<playbook>` (`isRunSlug` and `workParts` of `work-folder-name` v2.1; `NN` 01-999), and the command `projects --json` with the exported `projects` ("Project list") is added. A v3 run keeps its state in `.company/work/<ProjectID>/<NN>-<playbook>/run-state.jsonl`; `start` on a v3 slug never makes the project folder (`refused: project folder is missing`). A run folder is used only when its real path is `<ID>/<NN>-<playbook>` inside the real `.company/work`, not by its last name. `list` and `active` read top-level runs only, as before. Every v1.9 call, file and output is unchanged.
 
 ## Storage
 - `.company/work/<slug>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a work folder name (`isWorkFolder` of `mods/lib/work-folder.mjs`, `work-folder-name` v1): a new name or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$`. The name holds spaces and dots, so a shell line quotes it in single quotes.
@@ -86,6 +88,9 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 
 ## Active run
 `active` picks, among `.company/work/*/run-state.jsonl` (at most 200 folders), the one whose last segment has no `end` and whose newest activity (last record, or newest Step file mtime) is the most recent. A segment with no activity for 12 hours is `stale` and never active. No candidate → `{ "slug": null, "view": null }`. (v1.8) `active(root, { now })` exported by `scripts/run-state.mjs` returns the same object as `active --json`.
+
+## Project list (v1.10)
+`projects --json` / `projects(root, { now })` returns `{ "v": 1, "projects": [{ "id", "activity" }], "warnings": [] }`: IDs and UTC activity times only, newest first, at most 3, each project once. A project (a v3 folder `<ProjectID>` or a v2 `<ProjectID>-HH.MM.SS` run) is active when one of its runs has an open segment whose newest record or Step file is at most 12 h old, or has no `run-state.jsonl` and its newest direct file (links skipped) is at most 12 h old. An unreadable or oversize state file never lists a project. At most 200 runs are read (newest names first; then the warning `over 200 runs`). Read-only. Other arguments: `refused: usage`.
 
 ## Run list (v1.8)
 `list --json`, and `list(root, { now })` exported by `scripts/run-state.mjs`, give every run of the product as one object:
