@@ -51,7 +51,7 @@ describe('plan-check on a v3 slug (AC18, AC12)', () => {
   test('gate warn scans the plan in the run folder and records under the v3 folder', () => {
     const root = root3();
     const r = cli(root, ['gate', V3, PLAN, '--policy', 'warn']);
-    assert.deepEqual(r, { code: 0, lines: ['plan-check (warn): 1 open decision, 0 decided'] });
+    assert.deepEqual(r, { code: 0, lines: ['plan-check (warn): 1 open decision, 0 decided', '02-plan.md:4 | TBD | a placeholder: the plan does not say what to build here'] });
     const recs = records(root, V3);
     assert.equal(recs.length, 1);
     assert.equal(recs[0].ev, 'scan');
@@ -63,15 +63,18 @@ describe('plan-check on a v3 slug (AC18, AC12)', () => {
     const a = cli(root3(V3), ['gate', V3, PLAN, '--policy', 'block']);
     const b = cli(root3(V2), ['gate', V2, PLAN, '--policy', 'block']);
     assert.deepEqual(a, b);
-    assert.equal(a.lines.length, 1);
+    assert.equal(a.lines.length, 2, 'summary line plus one finding row');
     assert.equal(a.code, b.code);
   });
 
-  test('gate --json for a v3 slug carries the v3 slug as written', () => {
+  test('gate --json for a v3 slug has the v1 shape and the finding row', () => {
     const r = cli(root3(), ['gate', V3, PLAN, '--policy', 'warn', '--json']);
     assert.equal(r.code, 0);
     const obj = JSON.parse(r.lines.join('\n'));
-    assert.equal(obj.slug, V3);
+    assert.equal(obj.v, 1);
+    assert.equal(obj.count, 1);
+    assert.equal(obj.findings[0].file, PLAN);
+    assert.equal('slug' in obj, false, 'v1.6 --json has no slug key');
   });
 
   test('read, wave, off and verify work on a v3 slug', () => {
@@ -145,7 +148,7 @@ describe('plan-check on a v3 slug (AC18, AC12)', () => {
     const root = root3();
     const r = spawnSync(process.execPath, [path.join(HERE, 'plan-check.mjs'), 'gate', V3, PLAN, '--policy', 'warn'], { cwd: root, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /^plan-check \(warn\): 1 open decision, 0 decided\n$/);
+    assert.equal(r.stdout, 'plan-check (warn): 1 open decision, 0 decided\n02-plan.md:4 | TBD | a placeholder: the plan does not say what to build here\n');
   });
 
   test('a v2 slug and a legacy slug keep working (AC12)', () => {
