@@ -180,7 +180,7 @@ test('AC22 spec-check: a v3 spec path in the wrong letter case, a bad v3 shape, 
 test('AC22 guard: an Output line with a v3 run folder gives the run slug, a v2 line gives the folder name as before', () => {
   assert.deepEqual(parseOutputLine(`Output: .company/work/${V3}/05-qa.md`), { slug: V3, step: '05', role: 'qa' });
   assert.deepEqual(parseOutputLine(`Output: .company/work/${V2}/05-qa.md`), { slug: V2, step: '05', role: 'qa' });
-  assert.deepEqual(parseOutputLine(`Output: .company/work/${LEGACY}/105-qa-tester.md`), { slug: LEGACY, step: '105', role: 'qa-tester' });
+  assert.deepEqual(parseOutputLine(`Output: .company/work/${LEGACY}/105-qa.md`), { slug: LEGACY, step: '105', role: 'qa' });
   const text = `Task: x\r\nOutput: .company/work/${V3}/05-qa.md\r\nGoal: y\r\n`;
   assert.deepEqual(parseOutputText(text), { slug: V3, step: '05', role: 'qa' });
 });

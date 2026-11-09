@@ -21,7 +21,7 @@ const HANDOFF_V = /^# Contract: (handoff v\d+\.\d+)/.exec(fs.readFileSync(path.j
 
 const handoff = (task) => `---
 step: 03
-role: qa-tester
+role: qa
 task: ${task}
 status: done
 round: 0
@@ -29,7 +29,7 @@ base-commit: 079d7863b895c7359738a05977681fdbc33b4997
 risk-tier: high
 contracts: [${HANDOFF_V}]
 ---
-By: qa-tester
+By: qa
 ## Did
 - x
 ## Decisions
@@ -59,7 +59,7 @@ function v2Run(r) {
   fs.writeFileSync(path.join(dir, '00-summary.md'), 'A demo project\n');
   return dir;
 }
-function lintFile(dir, task, name = '03-qa-tester.md') {
+function lintFile(dir, task, name = '03-qa.md') {
   const file = path.join(dir, name);
   fs.writeFileSync(file, handoff(task));
   const r = spawnSync(process.execPath, [script, file], { encoding: 'utf8' });

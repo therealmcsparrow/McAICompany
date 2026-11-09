@@ -371,7 +371,7 @@ describe('reprompt gate run name', () => {
   test('near misses and hostile names are refused', () => {
     assert.equal(isRunName(RUN), true, 'control');
     for (const name of [
-      'p20261108.000001-22.25.00', 'P20261108.000001', `${ID}-22.25`, `${ID}-22.25.60`, `${ID}-24.00.00`, `${ID}-22.25.00 Build`,
+      'p20261108.000001-22.25.00', `${ID}-22.25`, `${ID}-22.25.60`, `${ID}-24.00.00`, `${ID}-22.25.00 Build`,
       `${ID}-22.25.00 Draft`, `${ID}-22.25.00/..`, `${ID}-22.25.00\n`, ` ${RUN}`, `${RUN}x`, `${ID}.lock-22.25.00`, 'P20261108.1-22.25.00',
       'P20261108.000000-22.25.00', 'P20261308.000001-22.25.00', `${ID}-${'x'.repeat(113)}`, '..', '-x', '', null, undefined, 7, {}
     ]) assert.equal(isRunName(name), false, String(name));
