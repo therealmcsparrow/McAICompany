@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/context-guard.md v1
+// contract: docs/contracts/context-guard.md v1.1
 // uses: docs/contracts/lead-handoff.md v2.0 docs/contracts/run-state.md v2.0
 // Hard hand-over at HANDOVER_AT, done outside the agent: a PreToolUse hook refuses tools to a Step that is at
 // the hand-over point, and a SubagentStop hook blocks that Step's stop once when no Handoff was announced.

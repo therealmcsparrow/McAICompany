@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v2.5): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.6): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
 import { show as showRun } from './run-state.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder, projectIdOf, summaryDescription, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, isWorkFolder, parseRun, projectIdOf, workParts, summaryDescription, ticketPattern } from '../mods/lib/work-folder.mjs';
 
 export const MAX_BYTES = 64 * 1024;
 const MAX_LINE = 1000;
@@ -385,7 +385,7 @@ export function lint(text, opts = {}) {
   if ('round' in fm && !/^\d{1,3}$/.test(fm.round)) errors.push('frontmatter: round must be a number');
   for (const k of LIST_KEYS) if (k in fm && list(fm[k]) === null) errors.push(`frontmatter: ${k} must be a [list]`);
   if ('task' in fm && !taskOk(fm.task, opts.folder)) errors.push(`line ${at.task}: task must be a work folder name or a task id`);
-  if (typeof opts.folder === 'string' && projectIdOf(opts.folder) !== null) checkSummary(opts.summary, errors);
+  if (typeof opts.folder === 'string' && projectIdOf(opts.folder) !== null && parseRun(opts.folder) === null) checkSummary(opts.summary, errors);
   if ('contracts' in fm) checkContracts(fm.contracts, opts.index, errors);
   const roleIdBy = BYLINE_ID_RE.test(lines[end + 1] ?? '');
   if (roleIdBy && !('contracts' in fm)) errors.push('frontmatter: missing contracts (required under a Role id byline, handoff v1.2)');
@@ -697,16 +697,28 @@ export function readInside(realRoot, segments, cap) {
   }
 }
 
+// The run slug of a folder `<work>/<name>` or `<work>/<ProjectID>/<NN>-<playbook>`: { work, slug, depth } or null.
+function slugAt(runAbs) {
+  const up = dirname(runAbs);
+  if (basename(up) === 'work') return { work: up, slug: basename(runAbs), depth: 1 };
+  const top = dirname(up);
+  if (basename(top) !== 'work') return null;
+  const slug = `${basename(up)}/${basename(runAbs)}`;
+  return parseRun(slug) === null ? null : { work: top, slug, depth: 2 };
+}
+
 // The product root of a run folder `<root>/.company/work/<slug>`, or null when the folder has another shape.
 function runContext(runAbs) {
-  const work = dirname(runAbs);
-  const company = dirname(work);
-  if (basename(work) !== 'work' || basename(company) !== '.company') return null;
+  const at = slugAt(runAbs);
+  if (at === null) return null;
+  const company = dirname(at.work);
+  if (basename(company) !== '.company') return null;
   const root = dirname(company);
   try {
     // The run folder name must be the on-disk name: a case alias would pick up lines filed under the alias (proj.M-SEC8).
-    const canon = basename(realpathSync.native(runAbs)) === basename(runAbs);
-    return { root, realRoot: realpathSync.native(root), reads: 0, cache: new Map(), canon };
+    const real = realpathSync.native(runAbs);
+    const canon = basename(real) === basename(runAbs) && (at.depth === 1 || basename(dirname(real)) === basename(dirname(runAbs)));
+    return { root, realRoot: realpathSync.native(root), reads: 0, cache: new Map(), canon, slug: at.slug };
   } catch { return null; }
 }
 
@@ -792,10 +804,10 @@ export function parseLocations(text) {
 
 // ---- contested findings (handoff v2.0) ----
 const RUN_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
-// `- <work folder name>/<NN>-<role>:R-<n> — … — approved: <date> (CEO)`; the slug is the run folder name. A line without a slug names no run.
+// `- <run slug>/<NN>-<role>:R-<n> — … — approved: <date> (CEO)`; the slug is the run folder name. A line without a slug names no run.
 const EXC_TAIL = ' — .{1,600} — approved: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$';
-// The run part is read up to the first slash and judged by isWorkFolder afterwards; it must equal the run folder name byte for byte.
-const EXCEPTION_RE = new RegExp(`^- ([^/]{1,120})/(${KEY_PART})${EXC_TAIL}`);
+// The run part is read up to the last slash and judged by isRunSlug afterwards; it must equal the run folder name byte for byte.
+const EXCEPTION_RE = new RegExp(`^- ([^/]{1,120}(?:/[^/]{1,120})?)/(${KEY_PART})${EXC_TAIL}`);
 const UNSLUGGED_RE = new RegExp(`^- (${KEY_PART})${EXC_TAIL}`);
 const RULING_RE = new RegExp(`^- (${KEY_PART}) — (upheld|overruled) — (.{1,600}) — ruled: (\\d{4})-(\\d{2})-(\\d{2}) \\(CEO\\)\\s*$`);
 
@@ -866,7 +878,7 @@ function exceptionLines(text) {
     if (section !== 'Exceptions') continue;
     const m = EXCEPTION_RE.exec(line);
     if (m) {
-      if (isWorkFolder(m[1]) && realDate(Number(m[3]), Number(m[4]), Number(m[5]))) out.push({ slug: m[1], key: m[2], date: `${m[3]}-${m[4]}-${m[5]}`, line });
+      if (isRunSlug(m[1]) && realDate(Number(m[3]), Number(m[4]), Number(m[5]))) out.push({ slug: m[1], key: m[2], date: `${m[3]}-${m[4]}-${m[5]}`, line });
       continue;
     }
     const u = UNSLUGGED_RE.exec(line);
@@ -880,7 +892,7 @@ function exceptionLines(text) {
 // `sink`, when given, collects the applied lines for `applied()` and notes a file that exists but cannot be read.
 function readExceptions(ctx, slug, warnings, sink = null) {
   const found = new Set();
-  if (!ctx || !isWorkFolder(slug)) return found;
+  if (!ctx || !isRunSlug(slug)) return found;
   if (!ctx.canon) { warnings.push('warning: run folder name is not its on-disk name; no exceptions applied'); return found; }
   const got = readInside(ctx.realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
   if (got.status === 'missing') return found;
@@ -923,8 +935,8 @@ function readExceptions(ctx, slug, warnings, sink = null) {
 // CEO rulings: `## Rulings` of .company/work/<slug>/rulings.md. The last line for a key counts. Returns Map key -> { verb, at }.
 function readRulings(ctx, slug, warnings, sink = null) {
   const rulings = new Map();
-  if (!ctx || !isWorkFolder(slug) || !ctx.canon) return rulings;
-  const got = readInside(ctx.realRoot, ['.company', 'work', slug, 'rulings.md'], MAX_RULINGS);
+  if (!ctx || !isRunSlug(slug) || !ctx.canon) return rulings;
+  const got = readInside(ctx.realRoot, ['.company', 'work', ...workParts(slug), 'rulings.md'], MAX_RULINGS);
   if (got.status === 'missing') return rulings;
   if (got.status !== 'ok') {
     if (sink) sink.failed = sink.failed ?? 'cannot read rulings.md';
@@ -949,8 +961,8 @@ function readRulings(ctx, slug, warnings, sink = null) {
 
 // The number of `## Exceptions` lines that name `<slug>/`, any date. Returns { code, line }.
 export function exceptionsFor(root, slug) {
-  if (!isWorkFolder(slug)) return { code: 2, line: 'ERROR slug must be a work folder name' };
-  if (wrongWorkCase(join(root, '.company', 'work', slug))) return { code: 2, line: WRONG_CASE };
+  if (!isRunSlug(slug)) return { code: 2, line: 'ERROR slug must be a work folder name' };
+  if (wrongWorkCase(join(root, '.company', 'work', ...workParts(slug)))) return { code: 2, line: WRONG_CASE };
   let realRoot;
   try { realRoot = realpathSync.native(root); } catch { return { code: 1, line: 'ERROR cannot read standards.md' }; }
   const got = readInside(realRoot, ['.company', 'standards.md'], MAX_STANDARDS);
@@ -1044,7 +1056,7 @@ export function contests(runFolder, sink = null) {
     }
   }
 
-  const slug = basename(runAbs);
+  const slug = ctx?.slug ?? basename(runAbs);
   const excepts = readExceptions(ctx, slug, out.warnings, sink);
   const rulings = readRulings(ctx, slug, out.warnings, sink);
   const keyed = [...lineages.values()].map(l => [keyOf(l), l]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
@@ -1098,8 +1110,8 @@ export function printLine(line) {
 export function applied(runFolder) {
   const runAbs = resolve(runFolder);
   const ctx = runContext(runAbs);
-  const slug = basename(runAbs);
-  if (!ctx || !ctx.canon || !isWorkFolder(slug)) return { code: 2, lines: [] };
+  const slug = ctx?.slug ?? basename(runAbs);
+  if (!ctx || !ctx.canon || !isRunSlug(slug)) return { code: 2, lines: [] };
   const sink = { rulings: [], exceptions: [], failed: null };
   const r = contests(runAbs, sink);
   if (sink.failed) return { code: 1, lines: ['ERROR ' + sink.failed] };
@@ -1118,8 +1130,10 @@ function folderContext(file) {
   const dir = dirname(resolve(file));
   const ctx = runContext(dir);
   if (!ctx) return {};
-  const folder = basename(realpathSync.native(dir));
+  const real = realpathSync.native(dir);
+  const folder = ctx.slug.includes('/') ? `${basename(dirname(real))}/${basename(real)}` : basename(real);
   if (projectIdOf(folder) === null) return { folder };
+  if (parseRun(folder) !== null) return { folder };
   return { folder, summary: readInside(ctx.realRoot, ['.company', 'work', folder, '00-summary.md'], MAX_BYTES) };
 }
 

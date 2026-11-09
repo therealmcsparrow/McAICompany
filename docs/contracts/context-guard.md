@@ -1,4 +1,6 @@
-# Contract: context-guard v1
+# Contract: context-guard v1.1
+
+v1.1 (task P20261109.000009-T11, minor, additive; uses `run-state` v2.0): the active run and its folder may be nested, `<ProjectID>/<NN>-<playbook>`. The folder is found with `workParts` and must be a real directory inside the real work folder; `context-guard.jsonl` and the Handoff and ledger writes are bound to that folder, never to the project folder, a sibling run or a deeper path. v1 behaviour for v2, v1.1 and legacy runs is byte-identical.
 
 New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/context-guard.mjs` (Node built-ins only), wired by `hooks/hooks.json`. Consumers: every Role and the Lead during an active run (they see only the refusals), `skills/handoff/SKILL.md` and `skills/pipeline/references/lead-handover.md` (they describe the result). Uses `lead-handoff` v1.8 (`HANDOVER_AT`, `findRun`, `transcriptTokens`, `contextHandover`, `newSessionCommand`, `claudeDirOf`, `workDir`, `lstatOrNull`, `openRegular`, `readSmall`, `iso`, `loadRecord`) and `run-state` v1.7 (`show`, read-only). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`. Spike facts: `tests/lead-handover/evidence.md` (T1 spike section).
 

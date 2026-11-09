@@ -1,4 +1,6 @@
-# Contract: step-times v1.1
+# Contract: step-times v1.2
+
+v1.2 (task P20261109.000009-T11; additive, uses `run-state` v2.0): the active run name is checked with `isRunSlug` (`work-folder-name`), so a nested slug `<ProjectID>/<NN>-<playbook>` is passed on as one argument to `run-state sub`. Any other value still writes nothing. v1.1, v2 and legacy names behave byte-identically.
 
 v1.1 (task idea-20261030-2242-build-draft; additive): the active run name is checked with `isWorkFolder` (`work-folder-name` v1) before it is passed on, so a new name (with spaces and dots) is accepted and any other value writes nothing. Each `run-state` call stays `execFile` with fixed arguments, so no shell sees the name. Every v1 payload behaves as before.
 
