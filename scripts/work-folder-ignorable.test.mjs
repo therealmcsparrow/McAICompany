@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { checkDescription, summaryDescription } from '../mods/lib/work-folder.mjs';
 
 const HOSTILE = [
-  ['U+3164 HANGUL FILLER', 'ㅤ'],
-  ['U+034F COMBINING GRAPHEME JOINER', '͏'],
-  ['U+115F HANGUL CHOSEONG FILLER', 'ᅟ'],
-  ['U+FE0F VARIATION SELECTOR-16', '️'],
-  ['U+FFA0 HALFWIDTH HANGUL FILLER', 'ﾠ'],
-  ['U+1160 HANGUL JUNGSEONG FILLER', 'ᅠ'],
-  ['U+17B4 KHMER VOWEL INHERENT AQ', '឴'],
+  ['U+3164 HANGUL FILLER', '\u{3164}'],
+  ['U+034F COMBINING GRAPHEME JOINER', '\u{34F}'],
+  ['U+115F HANGUL CHOSEONG FILLER', '\u{115F}'],
+  ['U+FE0F VARIATION SELECTOR-16', '\u{FE0F}'],
+  ['U+FFA0 HALFWIDTH HANGUL FILLER', '\u{FFA0}'],
+  ['U+1160 HANGUL JUNGSEONG FILLER', '\u{1160}'],
+  ['U+17B4 KHMER VOWEL INHERENT AQ', '\u{17B4}'],
   ['U+E0100 VARIATION SELECTOR-17', '\u{E0100}'],
 ];
 
