@@ -527,7 +527,9 @@ function cmdAdd(args, env) {
   const { positional, flags } = takeFlags(args, { '--base': 'value' });
   if (positional.length !== 2 || !flags['--base']) throw new Refusal(USAGE);
   const slug = checkSlug(positional[0], env.root);
-  const id = checkId(positional[1]);
+  const given = positional[1];
+  const local = ticketPattern(slug)?.id.test(given) ? ticketLocal(given) : null;
+  const id = checkId(local !== null && local !== given ? local.toLowerCase() : given);
   const base = flags['--base'];
   if (!FULL_ID.test(base)) throw new Refusal('--base must be a full commit id');
   const ctx = openGit(env);
