@@ -241,8 +241,9 @@ export function runKey(slug) {
 
 // Reverse of runKey: `<ProjectID>~<NN>-<playbook>` -> `<ProjectID>/<NN>-<playbook>`; a work folder name -> itself; else null.
 export function slugOfKey(key) {
-  if (typeof key !== 'string' || key.length > MAX_RUN_SLUG) return null;
+  if (typeof key !== 'string' || key.length > MAX_NAME) return null;
   if (isWorkFolder(key)) return key;
+  if (key.length > MAX_RUN_SLUG) return null;
   const cut = key.indexOf('~');
   if (cut < 0 || key.indexOf('~', cut + 1) >= 0) return null;
   const slug = `${key.slice(0, cut)}/${key.slice(cut + 1)}`;
