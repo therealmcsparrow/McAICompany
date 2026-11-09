@@ -71,7 +71,7 @@ const V2_PLAN = plan(block(`${ID1}-T1`), block(`${ID1}-T2`));
 
 // ------------------------------------------------------------------ ticket-approval
 
-describe('ticket-approval on a v2 project (AC3, AC5)', () => {
+describe('ticket-approval on a v2 project', () => {
   function fx(files = {}, planText = V2_PLAN) {
     const p = product({ [`.company/work/${PARENT}/plan.md`]: planText, [`.company/work/${PARENT}/00-summary.md`]: SUMMARY(), ...files });
     const run = (...args) => approve(args, { now: DATE.getTime(), root: p.root });
@@ -86,7 +86,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     for (const id of [`${ID1}-T1`, `${ID1}-T2`, 'S0']) assert.equal(f.run('ticket', PARENT, id, 'approve').code, 0, id);
   };
 
-  test('AC5: a bare T<n> and a ticket of another project are refused and write nothing', () => {
+  test('a bare T<n> and a ticket of another project are refused and write nothing', () => {
     const f = fx();
     f.run('tickets', PARENT, 'plan.md', '--phase', 'd');
     const before = bytes(f.root);
@@ -99,7 +99,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.deepEqual(f.events().map((e) => e.ev), ['plan']);
   });
 
-  test('AC5: heads with a bare ID or a foreign project ID are no tickets', () => {
+  test('heads with a bare ID or a foreign project ID are no tickets', () => {
     const f = fx({}, plan(block('T1'), block(`${ID2}-T1`), block(`${ID1}-T3`)));
     const r = f.run('tickets', PARENT, 'plan.md', '--phase', 'd');
     assert.equal(r.code, 0, r.lines.join(NL));
@@ -108,7 +108,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.equal(r.lines.some((l) => l === 'ask T1 new' || l.includes(ID2)), false);
   });
 
-  test('AC9: a project ID alone, a lowercase p and a name without seconds are no folder', () => {
+  test('a project ID alone, a lowercase p and a name without seconds are no folder', () => {
     const f = fx();
     for (const slug of [ID1, PARENT.toLowerCase(), `${ID1}-22.25`, `${ID1}-22.25.60`, `${ID1}.5-22.25.00`, `P20261308.000001-22.25.00`]) {
       const r = f.run('read', slug);
@@ -117,7 +117,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     }
   });
 
-  test('AC5: full ticket IDs are listed, approved and read back', () => {
+  test('full ticket IDs are listed, approved and read back', () => {
     const f = fx();
     const r = f.run('tickets', PARENT, 'plan.md', '--phase', 'd');
     assert.equal(r.code, 0, r.lines.join(NL));
@@ -129,7 +129,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.deepEqual(f.events().map((e) => e.id).filter(Boolean), [`${ID1}-T1`]);
   });
 
-  test('AC3: build-plan makes <ID>-HH.MM.SS with the plan and a Build summary', () => {
+  test('build-plan makes <ID>-HH.MM.SS with the plan and a Build summary', () => {
     const f = fx();
     approved(f);
     const r = f.run('build-plan', PARENT);
@@ -145,7 +145,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.deepEqual(f.events().at(-1).ids, [`${ID1}-T1`, `${ID1}-T2`]);
   });
 
-  test('AC3: the Build summary keeps the parent Playbook and its Siblings line', () => {
+  test('the Build summary keeps the parent Playbook and its Siblings line', () => {
     const f = fx({ [`.company/work/${PARENT}/00-summary.md`]: SUMMARY('later fix', SIBLINGS) });
     approved(f);
     assert.equal(f.run('build-plan', PARENT).code, 0);
@@ -165,7 +165,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     return () => { fs.openSync = real; };
   }
 
-  test('AC3: a failed plan.md write removes the fresh Build folder, nothing else changes', () => {
+  test('a failed plan.md write removes the fresh Build folder, nothing else changes', () => {
     const f = fx();
     approved(f);
     const evBefore = f.events().length;
@@ -178,7 +178,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.equal(f.events().length, evBefore);
   });
 
-  test('AC3: a failed plan.md write leaves a Build folder that holds other files', () => {
+  test('a failed plan.md write leaves a Build folder that holds other files', () => {
     const f = fx();
     approved(f);
     const restore = failPlanWrite('notes.md');
@@ -188,7 +188,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.deepEqual(fs.readdirSync(f.dir(HELPER)).sort(), ['00-summary.md', 'notes.md']);
   });
 
-  test('AC3: a run of the project at another second does not block the Build run', () => {
+  test('a run of the project at another second does not block the Build run', () => {
     const f = fx({ [`.company/work/${EARLIER}/00-summary.md`]: SUMMARY('draft grill') });
     approved(f);
     const r = f.run('build-plan', PARENT);
@@ -196,7 +196,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.ok(fs.existsSync(path.join(f.dir(HELPER), 'plan.md')));
   });
 
-  test('AC3: a clash at the same second is refused and creates nothing', () => {
+  test('a clash at the same second is refused and creates nothing', () => {
     const f = fx({ [`.company/work/${HELPER}/00-summary.md`]: 'taken\n' });
     approved(f);
     const before = bytes(f.root);
@@ -206,7 +206,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
     assert.deepEqual(bytes(f.root), before);
   });
 
-  test('AC3: a clash with an empty folder of that second is refused, no event is written', () => {
+  test('a clash with an empty folder of that second is refused, no event is written', () => {
     const f = fx();
     approved(f);
     fs.mkdirSync(f.dir(HELPER));
@@ -218,7 +218,7 @@ describe('ticket-approval on a v2 project (AC3, AC5)', () => {
   });
 });
 
-describe('ticket-approval on legacy folders is unchanged (AC7, green before and after by design)', () => {
+describe('ticket-approval on legacy folders is unchanged (green before and after by design)', () => {
   const legacy = (slug) => {
     const p = product({ [`.company/work/${slug}/plan.md`]: plan(block('T1'), block('T2')) });
     const run = (...args) => approve(args, { now: DATE.getTime(), root: p.root });
@@ -246,7 +246,7 @@ describe('ticket-approval on legacy folders is unchanged (AC7, green before and 
 
 // ------------------------------------------------------------------ draft-input
 
-describe('draft-input on a v2 project (AC3, AC5)', () => {
+describe('draft-input on a v2 project', () => {
   const BUILD_PLAN = plan(block(`${ID1}-T1`));
   const run = (root, ...args) => draft(args, { root, now: DATE });
   const refused = (r, reason) => {
@@ -260,7 +260,7 @@ describe('draft-input on a v2 project (AC3, AC5)', () => {
   });
   const PATH = `.company/work/${PARENT}/plan.md`;
 
-  test('AC9: a project ID alone, a lowercase p and a name without seconds are no folder', () => {
+  test('a project ID alone, a lowercase p and a name without seconds are no folder', () => {
     const p = parent();
     const before = bytes(p.root);
     for (const folder of [ID1, PARENT.toLowerCase(), `${ID1}-22.25`, `${ID1}-22.25.60`, `${ID1}.5-22.25.00`]) {
@@ -271,7 +271,7 @@ describe('draft-input on a v2 project (AC3, AC5)', () => {
     assert.deepEqual(bytes(p.root), before);
   });
 
-  test('AC3: take --for feature makes <ID>-HH.MM.SS with the copy and a Draft summary', () => {
+  test('take --for feature makes <ID>-HH.MM.SS with the copy and a Draft summary', () => {
     const p = parent();
     const r = run(p.root, 'take', PATH, '--for', 'feature');
     assert.equal(r.code, 0, r.lines.join(NL));
@@ -282,20 +282,20 @@ describe('draft-input on a v2 project (AC3, AC5)', () => {
     assert.equal(fs.readFileSync(path.join(p.dir(HELPER), '00-summary.md'), 'utf8'), SUMMARY('draft feature'));
   });
 
-  test('AC3: the Draft summary copies the Siblings line', () => {
+  test('the Draft summary copies the Siblings line', () => {
     const p = parent({ [`.company/work/${PARENT}/00-summary.md`]: SUMMARY('build feature', SIBLINGS) });
     assert.equal(run(p.root, 'take', PATH, '--for', 'feature').code, 0);
     assert.equal(fs.readFileSync(path.join(p.dir(HELPER), '00-summary.md'), 'utf8'), SUMMARY('draft feature', SIBLINGS));
   });
 
-  test('AC3: an earlier run of the project with the same branch id does not block a Draft run', () => {
+  test('an earlier run of the project with the same branch id does not block a Draft run', () => {
     const p = parent({ [`.company/work/${EARLIER}/00-summary.md`]: SUMMARY('draft grill') });
     const r = run(p.root, 'take', PATH, '--for', 'feature');
     assert.equal(r.code, 0, r.lines.join(NL));
     assert.equal(r.lines[0], `slug: ${HELPER}`);
   });
 
-  test('AC3: a clash at the same second is refused and creates nothing', () => {
+  test('a clash at the same second is refused and creates nothing', () => {
     const p = parent({ [`.company/work/${HELPER}/00-summary.md`]: 'taken\n' });
     const before = bytes(p.root);
     refused(run(p.root, 'take', PATH, '--for', 'feature'), 'too many runs this second');
@@ -425,7 +425,7 @@ describe('draft-input on a v2 project (AC3, AC5)', () => {
   });
 });
 
-describe('draft-input on legacy folders is unchanged (AC7, green before and after by design)', () => {
+describe('draft-input on legacy folders is unchanged (green before and after by design)', () => {
   test('a legacy -build plan and a v1.1 Build folder still give a Draft helper', () => {
     const PLAN = '# Build plan\n\n## Tasks\n\n### T1 First ticket\nfiles: a.mjs\n';
     const p = product({ '.company/work/flow-build/plan.md': PLAN, '.company/work/2026-11-08 20.27 - Flow Build/plan.md': PLAN });
@@ -438,7 +438,7 @@ describe('draft-input on legacy folders is unchanged (AC7, green before and afte
 
 // ------------------------------------------------------------------ wayfinder
 
-describe('wayfinder anchors on a v2 plan (AC5)', () => {
+describe('wayfinder anchors on a v2 plan', () => {
   function check(anchorPath, files = {}) {
     const p = product({
       'docs/a.md': '# a\n',

@@ -113,14 +113,14 @@ test('a v2 folder without 00-summary.md fails', t => {
   fromSummary(r.out);
 });
 
-// ---------- summary description (AC4, lint side) ----------
+// ---------- summary description (lint side) ----------
 
-test('a v2 folder with a good one-line description passes (AC4)', t => {
+test('a v2 folder with a good one-line description passes', t => {
   const r = run(sandbox(t), V2, V2, GOOD);
   assert.equal(r.code, 0, r.out);
 });
 
-test('a v2 folder with an empty or blank first line fails with missing description (AC4)', t => {
+test('a v2 folder with an empty or blank first line fails with missing description', t => {
   for (const summary of ['', '\n', '   \n\nRun: first feature\n']) {
     const r = run(sandbox(t), V2, V2, summary);
     assert.equal(r.code, 1, JSON.stringify(summary));
@@ -128,7 +128,7 @@ test('a v2 folder with an empty or blank first line fails with missing descripti
   }
 });
 
-test('a v2 folder whose line 2 is not empty fails with multi-line description (AC4)', t => {
+test('a v2 folder whose line 2 is not empty fails with multi-line description', t => {
   for (const summary of ['One line\nSecond line\nRun: first feature\n', 'One line\nRun: first feature\n']) {
     const r = run(sandbox(t), V2, V2, summary);
     assert.equal(r.code, 1, JSON.stringify(summary));
@@ -143,25 +143,25 @@ test('a description over 120 characters fails', t => {
   fromSummary(r.out);
 });
 
-test('v1.1 and legacy folders need no 00-summary.md (AC4)', t => {
+test('v1.1 and legacy folders need no 00-summary.md', t => {
   assert.equal(run(sandbox(t), V11, V11).code, 0);
   assert.equal(run(sandbox(t), LEGACY, LEGACY).code, 0);
 });
 
-// ---------- task: shapes (AC10) ----------
+// ---------- task: shapes ----------
 
-test('task: of the v2 folder name passes (AC10)', t => {
+test('task: of the v2 folder name passes', t => {
   assert.equal(run(sandbox(t), V2, V2, GOOD).code, 0);
 });
 
-test('task: of a ticket of the folder project passes (AC10)', t => {
+test('task: of a ticket of the folder project passes', t => {
   for (const id of [`${PROJECT}-T1`, `${PROJECT}-T12`, `${PROJECT}-T123`, `${PROJECT}-T4a`]) {
     const r = run(sandbox(t), V2, id, GOOD);
     assert.equal(r.code, 0, `${id}: ${r.out}`);
   }
 });
 
-test('task: of another project ticket, a bare ticket or a near-miss fails in a v2 folder (AC10)', t => {
+test('task: of another project ticket, a bare ticket or a near-miss fails in a v2 folder', t => {
   const bad = [`${OTHER}-T1`, 'T1', `${PROJECT}-T`, `${PROJECT}-T1234`, `${PROJECT}-T1A`, `${PROJECT}X-T1`, `${PROJECT.replace('.', 'X')}-T1`, `${PROJECT}-t1`, 'P20261108.1-T1'];
   for (const id of bad) {
     const r = run(sandbox(t), V2, id, GOOD);
@@ -170,7 +170,7 @@ test('task: of another project ticket, a bare ticket or a near-miss fails in a v
   }
 });
 
-test('task: of a v1.1 or legacy ticket shape still passes in its own folder (AC10)', t => {
+test('task: of a v1.1 or legacy ticket shape still passes in its own folder', t => {
   assert.equal(run(sandbox(t), V11, 'T3').code, 0);
   assert.equal(run(sandbox(t), LEGACY, 'T3').code, 0);
   assert.equal(run(sandbox(t), V11, V11).code, 0);

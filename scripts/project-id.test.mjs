@@ -56,7 +56,7 @@ const newProject = (root, desc = 'Fix login', now = NOW, playbook = 'idea') => {
 };
 const refusal = (fn, reason) => assert.throws(fn, e => e instanceof WorkFolderRefusal && (reason === undefined || e.message === reason));
 
-// AC9: hostile shapes first.
+// Hostile shapes first.
 
 const BAD_IDS = [
   ['lowercase p', 'p20261108.000001'],
@@ -85,7 +85,7 @@ const BAD_IDS = [
   ['empty', ''],
 ];
 
-describe('AC9 isProjectId refuses every bad shape', () => {
+describe('isProjectId refuses every bad shape', () => {
   for (const [label, text] of BAD_IDS) test(label, () => assert.equal(isProjectId(text), false));
   test('non-strings', () => {
     for (const v of [undefined, null, 42, {}, [ID1], true]) assert.equal(isProjectId(v), false);
@@ -98,7 +98,7 @@ describe('AC9 isProjectId refuses every bad shape', () => {
   });
 });
 
-describe('AC9 CLI: a bad project ID refuses, exit 3, nothing written', () => {
+describe('CLI: a bad project ID refuses, exit 3, nothing written', () => {
   for (const [label, text] of BAD_IDS) {
     test(`new --project: ${label}`, () => {
       const root = project();
@@ -150,7 +150,7 @@ const BAD_FOLDERS = [
   `${ID1}-22.25.00K`,
 ];
 
-describe('AC9 folder names: every bad shape is not a work folder and `branch` refuses it', () => {
+describe('folder names: every bad shape is not a work folder and `branch` refuses it', () => {
   for (const name of BAD_FOLDERS) {
     test(JSON.stringify(name), () => {
       assert.equal(isWorkFolder(name), false);
@@ -170,7 +170,7 @@ describe('isProjectId accepts the good shapes', () => {
   }
 });
 
-describe('AC2 nextProjectId', () => {
+describe('nextProjectId', () => {
   const day = at(2026, 11, 8, 22, 25);
   test('no names: the first of the day', () => assert.equal(nextProjectId(day, []), ID1));
   test('one project today: the second', () => assert.equal(nextProjectId(day, [`${ID1}-22.25.00`]), ID2));
@@ -201,7 +201,7 @@ describe('AC2 nextProjectId', () => {
   });
 });
 
-describe('parseProject, projectIdOf, branchId (AC6, AC7)', () => {
+describe('parseProject, projectIdOf, branchId', () => {
   test('a v2 name parses to id and time', () => {
     const p = parseProject(`${ID1}-22.25.07`);
     assert.equal(p.id, ID1);
@@ -253,7 +253,7 @@ describe('isBranchId', () => {
   });
 });
 
-describe('AC4 checkDescription', () => {
+describe('checkDescription', () => {
   test('120 characters pass, 121 fail', () => {
     assert.ok(checkDescription('a'.repeat(120)));
     assert.ok(!checkDescription('a'.repeat(121)));
@@ -293,7 +293,7 @@ describe('AC4 checkDescription', () => {
   });
 });
 
-describe('AC4 summaryDescription and runOf', () => {
+describe('summaryDescription and runOf', () => {
   test('line 1 is the description', () => {
     assert.deepEqual(summaryDescription('Fix login\n\nRun: first idea\n'), { description: 'Fix login' });
     assert.deepEqual(summaryDescription('Fix login'), { description: 'Fix login' });
@@ -322,7 +322,7 @@ describe('AC4 summaryDescription and runOf', () => {
   });
 });
 
-describe('AC1 work-folder new', () => {
+describe('work-folder new', () => {
   test('a new project at 22:25:00 makes the folder and the summary and prints three lines', () => {
     const root = project();
     const r = newProject(root);
@@ -364,7 +364,7 @@ describe('AC1 work-folder new', () => {
   });
 });
 
-describe('AC2 second project, next day, big numbers, archive', () => {
+describe('second project, next day, big numbers, archive', () => {
   test('a second project the same day gets 000002', () => {
     const root = project();
     newProject(root);
@@ -426,7 +426,7 @@ describe('AC2 second project, next day, big numbers, archive', () => {
   });
 });
 
-describe('AC4 summary written by new', () => {
+describe('summary written by new', () => {
   test('line 1 description, line 2 empty, line 3 Run: first <playbook>', () => {
     const root = project();
     newProject(root, 'Fix the login bug');
@@ -490,7 +490,7 @@ describe('AC4 summary written by new', () => {
   });
 });
 
-describe('AC3 a later run through --project', () => {
+describe('a later run through --project', () => {
   const later = (root, now, extra = []) => run(root, ['new', '--playbook', 'fix', '--project', ID1, ...extra], now);
   test('same minute, another second: a new folder with the same ID', () => {
     const root = project();
@@ -728,7 +728,7 @@ describe('makeRun (exported)', () => {
   });
 });
 
-describe('AC8 siblings', () => {
+describe('siblings', () => {
   function three(root) {
     newProject(root, 'First task');
     newProject(root, 'Second task', at(2026, 11, 8, 22, 26, 0));
@@ -833,7 +833,7 @@ describe('AC8 siblings', () => {
   });
 });
 
-describe('AC6 the branch command on a v2 folder', () => {
+describe('the branch command on a v2 folder', () => {
   test('prints aico/<ProjectID> and writes nothing', () => {
     const root = project();
     newProject(root);
