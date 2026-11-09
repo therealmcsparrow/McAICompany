@@ -92,3 +92,15 @@ test('R-1: a genuinely different sibling block under the same ID is still refuse
   assert.notEqual(r.code, 0);
   assert.ok(text(r).includes('ticket-reused'), text(r));
 });
+
+test('R-9: only trailing spaces, tabs and blank lines are ignored, other trailing whitespace makes a different block', () => {
+  const f = fixture(plan(block(1)));
+  const b = f.buildRun([`${ID}-T1`]);
+  const p = path.join(f.work, b.folder, b.file);
+  const s = fs.readFileSync(p, 'utf8');
+  assert.ok(s.includes('#run'), 'seams line present');
+  fs.writeFileSync(p, s.replace(/(- seams: [^\n]*#run)/, '$1 '));
+  const r = f.check(b.folder, b.file);
+  assert.notEqual(r.code, 0);
+  assert.ok(text(r).includes('ticket-reused'), text(r));
+});

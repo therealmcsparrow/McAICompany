@@ -387,7 +387,7 @@ export function parsePlan(text, { agents, slug } = {}) {
         alone: reasons.length > 0,
         reasons
       };
-      blockTexts.set(task, block.raw.map((l) => l.replace(/[ \t]+$/, '')).join('\n').trimEnd());
+      blockTexts.set(task, block.raw.map((l) => l.replace(/[ \t]+$/, '')).join('\n').replace(/\n+$/, ''));
       handoverFields.set(task, {
         context: block.fields.get('context'),
         slice: block.fields.get('slice'),
