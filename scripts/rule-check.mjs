@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.5). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.6). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MiB = 1024 * KiB;
@@ -29,7 +29,7 @@ const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 // The run ref of a run name (new name or legacy slug): refs/heads/aico/ plus its branch id, or null when the name is not a work folder.
 export function runRef(name) {
-  if (typeof name !== 'string' || !isWorkFolder(name)) return null;
+  if (typeof name !== 'string' || !isRunSlug(name)) return null;
   const id = branchId(name);
   return typeof id === 'string' && isBranchId(id) ? `refs/heads/aico/${id}` : null;
 }
@@ -1108,7 +1108,7 @@ export function main(args, options = {}) {
       isDir = false;
     }
     if (!isDir) throw new Refusal('bad root');
-    if (judging) exactOrRefuse(root, [slug]);
+    if (judging) exactOrRefuse(root, workParts(slug));
     const a = { root, packs: opts['--packs'], base, run: slug, positional, handoff: null, write: opts['--write'] === true };
     if (opts['--handoff'] !== undefined) {
       const abs = path.resolve(root, opts['--handoff']);

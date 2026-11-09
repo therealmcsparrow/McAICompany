@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1.7). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v1.8). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
 import { show } from './run-state.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_DATA_BYTES = 16 * KiB;
@@ -130,7 +130,7 @@ function decode(bytes) {
 // The run folder with no link in .company, .company/work or the slug folder. null when absent, 'unsafe' when a link or not a folder.
 function runDir(root, slug) {
   let dir = root;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...(workParts(slug) ?? [slug])]) {
     dir = path.join(dir, part);
     const st = lstatOrNull(dir);
     if (!st) return null;
@@ -467,7 +467,7 @@ const DIFF_FLAGS = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--n
 // Paths of the work since base, or null when any check or git call fails. The base is used only when it is a full commit id.
 // The committed diff ends at the run branch itself; the worktree diff and the untracked lists are read only when HEAD is that branch.
 function readDiffPaths(env, base, slug) {
-  if (typeof base !== 'string' || !FULL_SHA.test(base) || typeof slug !== 'string' || !isWorkFolder(slug)) return null;
+  if (typeof base !== 'string' || !FULL_SHA.test(base) || typeof slug !== 'string' || !isRunSlug(slug)) return null;
   const id = branchId(slug);
   if (typeof id !== 'string' || !isBranchId(id)) return null;
   const ref = `refs/heads/aico/${id}`;
@@ -632,7 +632,7 @@ function buildView(slug, records) {
 }
 
 export function readTierPath(root, slug) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TierPathRecordError('?', 0, 'bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new TierPathRecordError('?', 0, 'bad slug');
   const cur = loadRecord(root, slug);
   if (cur.records.length === 0) return { v: 1, slug, state: 'none' };
   return buildView(slug, cur.records);
@@ -682,7 +682,7 @@ const oneOf = (list, v, label) => {
 // The exact spelling of the run folder on disk; a letter-case variant is refused before any read or write.
 function exactSlug(root, slug) {
   try {
-    exactWorkPath({ fs, path }, root, [slug]);
+    exactWorkPath({ fs, path }, root, workParts(slug) ?? [slug]);
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;
@@ -691,7 +691,7 @@ function exactSlug(root, slug) {
 
 function slugArg(positional, count, root) {
   if (positional.length !== count) throw new Refusal(USAGE);
-  if (!isWorkFolder(positional[0])) throw new Refusal('bad slug');
+  if (!isRunSlug(positional[0])) throw new Refusal('bad slug');
   exactSlug(root, positional[0]);
   return positional[0];
 }
