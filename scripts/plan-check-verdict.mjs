@@ -139,7 +139,7 @@ const show1 = m => (m === null ? '?' : m.toFixed(1));
 function featureRuns(root) {
   const work = join(root, '.company', 'work');
   let names;
-  try { names = runSlugs(root, { max: MAX_RUNS }).slugs.sort(); } catch { return []; }
+  try { names = runSlugs(root, { max: Infinity }).slugs.sort(); } catch { return []; }
   const runs = [];
   for (const slug of names) {
     const dir = join(work, ...workParts(slug));
@@ -317,13 +317,13 @@ function parseHistoryArgs(args) {
   return out;
 }
 
-// Plans on disk now: [{ path, mtime }], at most MAX_RUNS folders, regular files only. null when there is no work folder.
+// Plans on disk now: [{ path, time }], the first MAX_RUNS of all run folders by name, regular files only. null when there is no work folder.
 function workingTreePlans(root) {
   const work = join(root, '.company', 'work');
   const st = lstatOrNull(work);
   if (!st || !st.isDirectory()) return null;
   let names;
-  try { names = runSlugs(root, { max: MAX_RUNS }).slugs.sort().slice(0, MAX_RUNS); } catch { return []; }
+  try { names = runSlugs(root, { max: Infinity }).slugs.sort().slice(0, MAX_RUNS); } catch { return []; }
   const plans = [];
   for (const slug of names) {
     const dir = join(work, ...workParts(slug));
