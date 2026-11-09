@@ -1,6 +1,6 @@
 // Pure logic for the plan Gate mod: which commands and files it judges, and what a `plan-check verify --json` answer means.
 // Nothing here runs a process or touches a file. Allow-lists only: anything not matched exactly is not judged.
-import { isRunSlug, isWorkFolder, isProjectId, workParts, isLegacySlug } from './work-folder.mjs';
+import { isRunSlug, isProjectId, workParts, isLegacySlug } from './work-folder.mjs';
 
 const MAX_COMMAND = 4096;
 const MAX_PATH = 4096;
@@ -51,7 +51,7 @@ function gateName(rest) {
 // The run name when the command is, character for character, one of the two recorded forms of the plan Gate; else null.
 //   node <path>/scripts/run-state.mjs gate '<name>' plan passed
 //   node <path>/scripts/run.mjs run-state gate '<name>' plan passed
-// The name is one single-quoted token with no quote inside and passes isWorkFolder; the old unquoted form with a legacy
+// The name is one single-quoted token with no quote inside and passes workParts; the old unquoted form with a legacy
 // slug is still judged. Single spaces only: a double quote, a chain, an env prefix, a redirect, a newline, a second
 // quoted token or any other character is not judged.
 export function parseGateCommand(command) {
@@ -73,7 +73,7 @@ export function recordPath(path) {
   // A second segment under a valid work folder (not a project folder) is a sub folder, not a record. Any other
   // one- or two-segment match that is not a run slug is judged with a null slug, since Windows may open the record.
   const first = found[1].slice(0, found[1].indexOf('/') < 0 ? undefined : found[1].indexOf('/'));
-  if (found[1].includes('/') && isWorkFolder(first) && !isProjectId(first.toUpperCase())) return null;
+  if (found[1].includes('/') && workParts(first) !== null && !isProjectId(first.toUpperCase())) return null;
   return { slug: isRunSlug(found[1]) ? found[1] : null };
 }
 
