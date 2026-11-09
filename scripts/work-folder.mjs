@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   WorkFolderRefusal, checkPlaybookId, checkWorkDirs, fallbackTopic, readTopicFile, clearTopicFile,
-  checkDescription, isProjectId, makeProject, makeRun, linkSiblings, branchId, isWorkFolder, exactWorkPath,
+  checkDescription, isProjectId, makeProject, makeRun, linkSiblings, branchId, isRunSlug, workParts, exactWorkPath,
   makeProjectV3, makeRunV3,
 } from '../mods/lib/work-folder.mjs';
 
@@ -88,10 +88,11 @@ function clear(args, { root }) {
 function branch(args, { root }) {
   if (args.length !== 1) refuse('usage');
   const name = args[0];
-  if (!isWorkFolder(name)) refuse('bad name');
+  if (!isRunSlug(name)) refuse('bad name');
+  const parts = workParts(name);
   const { work } = checkWorkDirs(io, root);
-  if (exactWorkPath(io, root, [name]) === 'missing') refuse('unknown name');
-  const st = lstatOrNull(path.join(work, name));
+  if (exactWorkPath(io, root, parts) === 'missing') refuse('unknown name');
+  const st = lstatOrNull(path.join(work, ...parts));
   if (!st || st.isSymbolicLink() || !st.isDirectory()) refuse('unknown name');
   return { code: 0, lines: [`branch: aico/${branchId(name)}`] };
 }

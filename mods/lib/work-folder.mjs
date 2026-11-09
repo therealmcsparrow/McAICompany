@@ -239,6 +239,16 @@ export function runKey(slug) {
   return parts.length === 2 ? `${parts[0]}~${parts[1]}` : slug;
 }
 
+// Reverse of runKey: `<ProjectID>~<NN>-<playbook>` -> `<ProjectID>/<NN>-<playbook>`; a work folder name -> itself; else null.
+export function slugOfKey(key) {
+  if (typeof key !== 'string' || key.length > MAX_RUN_SLUG) return null;
+  if (isWorkFolder(key)) return key;
+  const cut = key.indexOf('~');
+  if (cut < 0 || key.indexOf('~', cut + 1) >= 0) return null;
+  const slug = `${key.slice(0, cut)}/${key.slice(cut + 1)}`;
+  return parseRun(slug) === null ? null : slug;
+}
+
 // Ticket ID rules of a folder: { id, head, src }. `src` is the ID as regex source (the dot escaped), `id` matches a whole
 // ID, `head` matches an ID at the start of a heading. null when `name` is not a work folder.
 const LOCAL_TICKET = 'T\\d{1,3}[a-z]?';
@@ -570,9 +580,9 @@ function readSummary(io, realRoot, work, name, full, leaf = SUMMARY) {
   }
 }
 
-function writeSummary(io, realRoot, work, name, text) {
+function writeSummary(io, realRoot, work, name, text, leaf = SUMMARY) {
   const { fs } = io;
-  const open = openSummary(io, realRoot, work, name, fs.constants.O_WRONLY);
+  const open = openSummary(io, realRoot, work, name, fs.constants.O_WRONLY, leaf);
   if (open === null) return refuse('bad project');
   try {
     const buf = Buffer.from(text, 'utf8');
@@ -683,11 +693,11 @@ export function makeRun(io, root, id, date, kind, playbook) {
   return name;
 }
 
-function withSiblings(text, line) {
+function withSiblings(text, line, at = 3) {
   const lines = text.split('\n');
-  while (lines.length < 3) lines.push('');
-  if (lines[3]?.startsWith('Siblings:')) lines[3] = line;
-  else lines.splice(3, 0, line);
+  while (lines.length < at) lines.push('');
+  if (lines[at]?.startsWith('Siblings:')) lines[at] = line;
+  else lines.splice(at, 0, line);
   if (lines[lines.length - 1] !== '') lines.push('');
   return lines.join('\n');
 }
@@ -702,15 +712,21 @@ export function linkSiblings(io, root, ids) {
   const plan = [];
   for (const id of ids) {
     const folders = projectFolders(io, realRoot, work, names, id);
-    if (folders.length === 0) refuse('unknown project');
+    const v3 = names.includes(id);
+    if (folders.length === 0 && !v3) refuse('unknown project');
     const line = `Siblings: ${ids.filter(x => x !== id).sort().join(' ')}`;
+    if (v3) {
+      const text = readSummary(io, realRoot, work, id, true, PROJECT_FILE);
+      if (text === null || summaryDescription(text).description === undefined) refuse('bad project');
+      plan.push({ folder: id, text: withSiblings(text, line, 2), leaf: PROJECT_FILE });
+    }
     for (const folder of folders) {
       const text = readSummary(io, realRoot, work, folder, true);
       if (text === null || summaryDescription(text).description === undefined) refuse('bad project');
-      plan.push({ folder, text: withSiblings(text, line) });
+      plan.push({ folder, text: withSiblings(text, line), leaf: SUMMARY });
     }
   }
-  for (const { folder, text } of plan) writeSummary(io, realRoot, work, folder, text);
+  for (const { folder, text, leaf } of plan) writeSummary(io, realRoot, work, folder, text, leaf);
   return plan.map(p => p.folder);
 }
 
