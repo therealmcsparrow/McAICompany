@@ -1,5 +1,5 @@
-// qa-owned (P20261109.000009-T3): red tests for T4, run-state v1.10 (run slugs `<ID>/<NN>-<playbook>`, `projects --json`).
-// Assumed output shape (the plan names IDs and activity times only): { v: 1, projects: [{ id, activity }], warnings: [] }.
+// Tests for run-state v1.10 (run slugs `<ID>/<NN>-<playbook>`, `projects --json`).
+// Output shape: { v: 1, projects: [{ id, activity }], warnings: [] }.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -366,5 +366,114 @@ describe('list and active unchanged for top-level runs (AC7)', () => {
     go(root, ['start', SLUG]);
     rs.projects(root, { now: T0 });
     assert.deepEqual(fs.readFileSync(f), before);
+  });
+});
+
+describe('hostile folders: links, files and a missing project (proj.M4)', () => {
+  const outsideDir = () => fs.mkdtempSync(path.join(base, 'out-'));
+  const link = (t, target, at) => {
+    try {
+      fs.symlinkSync(target, at, 'junction');
+      return true;
+    } catch {
+      t.skip('no link right');
+      return false;
+    }
+  };
+  // A run-state file with an open run, made by the tool itself in a scratch repo.
+  const openState = () => {
+    const r = repo();
+    v3(r, ID);
+    go(r, ['start', SLUG], -1 * H);
+    return fs.readFileSync(stateFile(r, SLUG), 'utf8');
+  };
+  const tree = dir => JSON.stringify(fs.readdirSync(dir, { recursive: true }).sort());
+
+  test('start in a project folder that is missing is refused and creates nothing', () => {
+    const root = repo();
+    const r = go(root, ['start', SLUG]);
+    assert.deepEqual(r, { out: 'refused: project folder is missing', code: 2 });
+    assert.deepEqual(fs.readdirSync(work(root)), []);
+  });
+
+  test('a project folder that is a link out of work: start refuses, show and projects read nothing from the target', t => {
+    const root = repo();
+    const out = outsideDir();
+    fs.mkdirSync(path.join(out, '01-feature'));
+    fs.writeFileSync(path.join(out, '01-feature', 'run-state.jsonl'), openState());
+    const before = tree(out);
+    if (!link(t, out, path.join(work(root), ID))) return;
+    assert.equal(go(root, ['start', `${ID}/02-fix`]).code, 2);
+    assert.equal(go(root, ['start', SLUG]).code, 2);
+    assert.equal(tree(out), before);
+    assert.notEqual(rs.show(root, SLUG, { now: T0 }).state, 'running');
+    assert.deepEqual(ids(rs.projects(root, { now: T0 })), []);
+  });
+
+  test('a project ID that is a plain file: start refuses, projects lists nothing, the file is untouched', () => {
+    const root = repo();
+    fs.writeFileSync(path.join(work(root), ID), 'not a folder');
+    const r = go(root, ['start', SLUG]);
+    assert.equal(r.code, 2);
+    assert.match(r.out, /^refused: /);
+    assert.equal(fs.readFileSync(path.join(work(root), ID), 'utf8'), 'not a folder');
+    assert.deepEqual(ids(rs.projects(root, { now: T0 })), []);
+  });
+
+  for (const which of ['work', '.company']) {
+    test(`${which} as a link out of the repo: start refuses, show and projects read nothing from the target (R-1)`, t => {
+      const root = path.join(base, `linked${n++}`);
+      fs.mkdirSync(root);
+      const out = outsideDir();
+      const inner = which === 'work' ? out : path.join(out, 'work');
+      fs.mkdirSync(path.join(inner, ID, '01-feature'), { recursive: true });
+      fs.writeFileSync(path.join(inner, ID, '00-project.md'), 'Secret Project Description\n');
+      fs.writeFileSync(path.join(inner, ID, '01-feature', 'run-state.jsonl'), openState());
+      if (which === 'work') fs.mkdirSync(path.join(root, '.company'));
+      if (!link(t, out, which === 'work' ? path.join(root, '.company', 'work') : path.join(root, '.company'))) return;
+      const before = tree(out);
+      for (const slug of [SLUG, `${ID}/02-fix`]) {
+        const r = go(root, ['start', slug]);
+        assert.equal(r.code, 2, slug);
+        assert.match(r.out, /^refused: /);
+      }
+      assert.equal(tree(out), before);
+      assert.notEqual(rs.show(root, SLUG, { now: T0 }).state, 'running');
+      assert.deepEqual(ids(rs.projects(root, { now: T0 })), []);
+    });
+  }
+});
+
+describe('projects run cap (R-4, R-5)', () => {
+  const CAP = 'over 200 runs';
+  const old = i => `P20261001.${String(i + 1).padStart(6, '0')}`;
+
+  test('205 old projects: the recent one is listed and the cap warning shows exactly once', () => {
+    const root = repo();
+    for (let i = 0; i < 205; i++) v3(root, old(i), ['01-feature'], -24 * H);
+    v3(root, ID, ['01-feature'], -1 * H);
+    const r = rs.projects(root, { now: T0 });
+    assert.deepEqual(ids(r), [ID]);
+    assert.deepEqual(r.warnings, [CAP]);
+  });
+
+  test('inside one project: 205 projects with two runs each warn exactly once', () => {
+    const root = repo();
+    for (let i = 0; i < 205; i++) v3(root, old(i), ['01-feature', '02-fix'], -24 * H);
+    const r = rs.projects(root, { now: T0 });
+    assert.deepEqual(r.warnings, [CAP]);
+  });
+
+  test('exactly 200 runs, then a non-run name: no warning', () => {
+    const root = repo();
+    for (let i = 0; i < 200; i++) v3(root, old(i), ['01-feature'], -24 * H);
+    fs.mkdirSync(path.join(work(root), 'A-notes'));
+    assert.deepEqual(rs.projects(root, { now: T0 }).warnings, []);
+  });
+
+  test('201 runs: one run is skipped and the warning shows once', () => {
+    const root = repo();
+    for (let i = 0; i < 201; i++) v3(root, old(i), ['01-feature'], -24 * H);
+    assert.deepEqual(rs.projects(root, { now: T0 }).warnings, [CAP]);
   });
 });

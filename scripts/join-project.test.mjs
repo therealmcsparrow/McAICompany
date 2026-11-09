@@ -1,11 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// qa-owned (P20261109.000009-T5). Pins skills/pipeline/references/join-project.md.
-// Red until T6 writes the file. AC1, AC6, AC10, AC11.
+// Pins skills/pipeline/references/join-project.md: the join rules and the dormant state.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REF = 'skills/pipeline/references/join-project.md';
 const text = () => readFileSync(join(root, REF), 'utf8');
@@ -50,14 +49,21 @@ test('AFK: start new, no form', () => {
 });
 
 test('dormant in run 1: no file under skills/ cites join-project', () => {
+  // Bounded walk: links are never followed (Dirent does not resolve them), only regular files are read.
+  const MAX_DEPTH = 8;
+  const MAX_ENTRIES = 5000;
+  let seen = 0;
   const hits = [];
-  const walk = (d) => {
-    for (const e of readdirSync(d)) {
-      const p = join(d, e);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (/join-project/.test(readFileSync(p, 'utf8'))) hits.push(p);
+  const walk = (d, depth) => {
+    assert.ok(depth <= MAX_DEPTH, `skills/ is nested deeper than ${MAX_DEPTH}`);
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      assert.ok(++seen <= MAX_ENTRIES, `skills/ has more than ${MAX_ENTRIES} entries`);
+      const p = join(d, e.name);
+      if (e.isSymbolicLink()) continue;
+      if (e.isDirectory()) walk(p, depth + 1);
+      else if (e.isFile() && /join-project/.test(readFileSync(p, 'utf8'))) hits.push(p);
     }
   };
-  walk(join(root, 'skills'));
+  walk(join(root, 'skills'), 0);
   assert.deepEqual(hits, []);
 });

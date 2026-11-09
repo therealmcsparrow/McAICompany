@@ -1,4 +1,4 @@
-// qa-owned (P20261109.000009-T1): red tests for T2, work-folder v3 layout (work-folder-name v2.1, opt-in `--layout v3`).
+// Tests for the work-folder v3 layout (work-folder-name v2.1, opt-in `--layout v3`).
 // Path-shape checks stay drive-agnostic: temp dirs only, no Z:/UNC assumption.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -439,4 +439,115 @@ describe('default output unchanged without --layout (AC6, AC7)', () => {
     assert.equal(r.lines[0], `id: ${ID2}`);
     assert.equal(r.lines[1], `name: ${ID2}-23.50.00`);
   });
+});
+
+describe('hostile folders: links, files and case variants (proj.M4)', () => {
+  const outsideDir = () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'work-folder-v3-out-'));
+    dirs.push(d);
+    return d;
+  };
+  // Makes a link, or skips the test when the platform refuses it. Returns false when skipped.
+  const link = (t, target, at, type) => {
+    try {
+      fs.symlinkSync(target, at, type);
+      return true;
+    } catch {
+      t.skip('no link right');
+      return false;
+    }
+  };
+  const SECRET = 'TOP SECRET DESCRIPTION';
+
+  test('a project folder that is a link out of work is refused, nothing is written there', t => {
+    const root = project();
+    const out = outsideDir();
+    fs.writeFileSync(path.join(out, '00-project.md'), `${SECRET}\n`);
+    fs.mkdirSync(path.join(out, '01-idea'));
+    const before = snapshot(out);
+    if (!link(t, out, path.join(work(root), ID), 'junction')) return;
+    const r = joinV3(root, ID, 'fix');
+    assert.equal(r.code, 3);
+    assert.match(r.lines[0], /^refused: /);
+    assert.deepEqual(snapshot(out), before);
+    assert.deepEqual(top(root), [ID]);
+  });
+
+  test('a project ID that is a plain file is refused, the file is untouched', () => {
+    const root = project();
+    fs.writeFileSync(path.join(work(root), ID), 'not a folder');
+    const r = joinV3(root, ID, 'fix');
+    assert.equal(r.code, 3);
+    assert.match(r.lines[0], /^refused: /);
+    assert.equal(read(root, ID), 'not a folder');
+    assert.deepEqual(top(root), [ID]);
+  });
+
+  test('00-project.md as a symlink to a file outside: its text is never copied into the new run', t => {
+    const root = project();
+    newV3(root);
+    const out = outsideDir();
+    const secret = path.join(out, 'secret.txt');
+    fs.writeFileSync(secret, `${SECRET}\n\nbody\n`);
+    const file = path.join(work(root), ID, '00-project.md');
+    fs.rmSync(file);
+    if (!link(t, secret, file, 'file')) return;
+    const r = joinV3(root, ID, 'fix');
+    assert.ok(r.code === 0 || r.code === 3);
+    assert.equal(fs.readFileSync(secret, 'utf8'), `${SECRET}\n\nbody\n`);
+    for (const f of fs.readdirSync(path.join(work(root), ID), { recursive: true })) {
+      const p = path.join(work(root), ID, f);
+      if (fs.lstatSync(p).isFile() && !fs.lstatSync(p).isSymbolicLink()) assert.ok(!fs.readFileSync(p, 'utf8').includes(SECRET), f);
+    }
+    assert.deepEqual(fs.readdirSync(out), ['secret.txt']);
+  });
+
+  test('00-project.md as a hard link to a file outside: its text is never copied into the new run', () => {
+    const root = project();
+    newV3(root);
+    const out = outsideDir();
+    const secret = path.join(out, 'secret.txt');
+    fs.writeFileSync(secret, `${SECRET}\n\nbody\n`);
+    const file = path.join(work(root), ID, '00-project.md');
+    fs.rmSync(file);
+    fs.linkSync(secret, file);
+    const r = joinV3(root, ID, 'fix');
+    assert.ok(r.code === 0 || r.code === 3);
+    assert.equal(fs.readFileSync(secret, 'utf8'), `${SECRET}\n\nbody\n`);
+    for (const run of fs.readdirSync(path.join(work(root), ID)).filter(n => /^\d\d-/.test(n) && n !== '00-project.md')) {
+      assert.ok(!read(root, ID, run, '00-summary.md').includes(SECRET), run);
+    }
+  });
+
+  test('a project folder whose name differs only by case is not the project: refused, nothing created', () => {
+    const root = project();
+    const lower = ID.toLowerCase();
+    fs.mkdirSync(path.join(work(root), lower));
+    fs.writeFileSync(path.join(work(root), lower, '00-project.md'), 'Lower\n');
+    const before = snapshot(work(root));
+    const r = joinV3(root, ID, 'fix');
+    assert.equal(r.code, 3);
+    assert.match(r.lines[0], /^refused: /);
+    assert.deepEqual(snapshot(work(root)), before);
+  });
+
+  for (const which of ['work', '.company']) {
+    test(`${which} as a link out of the repo: new and join are refused, nothing is written outside (R-1)`, t => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'work-folder-v3-'));
+      dirs.push(root);
+      const out = outsideDir();
+      fs.mkdirSync(path.join(out, which === 'work' ? ID : path.join('work', ID)), { recursive: true });
+      fs.writeFileSync(path.join(out, which === 'work' ? ID : path.join('work', ID), '00-project.md'), `${SECRET}\n`);
+      const at = which === 'work' ? path.join(root, '.company', 'work') : path.join(root, '.company');
+      if (which === 'work') fs.mkdirSync(path.join(root, '.company'));
+      if (!link(t, out, at, 'junction')) return;
+      const before = snapshot(out);
+      const a = run(root, ['new', '--playbook', 'idea', '--topic', 'none', '--layout', 'v3']);
+      assert.notEqual(a.code, 0);
+      const b = joinV3(root, ID, 'fix');
+      assert.equal(b.code, 3);
+      assert.match(b.lines[0], /^refused: /);
+      assert.deepEqual(snapshot(out), before);
+    });
+  }
 });
