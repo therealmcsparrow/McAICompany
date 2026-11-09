@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-09
+
+Rollback: node scripts/stable.mjs 0.32.0
+
 ### New
 - **One Project One Folder, run 1 of 2. Nothing changes for you yet.** Every Playbook still makes the same folders, IDs and branches as in 0.32.0. This run adds the building blocks; run 2 wires them in. Until then you see no difference.
   - `work-folder new --layout v3` is opt-in. It builds a project folder with each run nested inside it, instead of a sibling `<ID>-HH.MM.SS` folder. No Playbook passes the flag.
