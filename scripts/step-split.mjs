@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Step split (contract: docs/contracts/step-split.md v1.1). Node built-ins only.
+// Step split (contract: docs/contracts/step-split.md v1.2). Node built-ins only.
 // uses: docs/contracts/review-depth.md v1.3 docs/contracts/work-folder-name.md v2.0
 // Usage: node scripts/step-split.mjs review '<run>' <base> <round> [--max-lines <n>] [--max-files <n>]
 //        node scripts/step-split.mjs fix '<run>' <round> <handoff>...
@@ -10,7 +10,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readInside } from './handoff-lint.mjs';
-import { WorkFolderRefusal, checkWorkDirs, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, checkWorkDirs, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const MAX_LINES = 1200;
 const MAX_FILES = 25;
@@ -43,16 +43,16 @@ const byName = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 // The run folder as a real directory under the exact-spelling work tree; returns its path.
 function runFolder(root, run) {
-  if (typeof run !== 'string' || !isWorkFolder(run)) refuse('bad run name');
+  if (typeof run !== 'string' || !isRunSlug(run)) refuse('bad run name');
   const io = { fs, path };
   try {
     checkWorkDirs(io, root);
-    if (exactWorkPath(io, root, [run]) !== 'exact') refuse('run folder not found');
+    if (exactWorkPath(io, root, workParts(run)) !== 'exact') refuse('run folder not found');
   } catch (error) {
     if (error instanceof WorkFolderRefusal) refuse(error.message);
     throw error;
   }
-  const dir = path.join(root, '.company', 'work', run);
+  const dir = path.join(root, '.company', 'work', ...workParts(run));
   let st;
   try {
     st = fs.lstatSync(dir);
@@ -278,12 +278,12 @@ function readHandoff(root, runDir, run, name) {
   if (given !== base && given !== `${prefix}${base}`) refuse('handoff must be a file in the run folder');
   if (!HANDOFF_NAME.test(base)) refuse('bad handoff name');
   try {
-    if (exactWorkPath({ fs, path }, root, [run, base]) !== 'exact') refuse('handoff not found');
+    if (exactWorkPath({ fs, path }, root, [...workParts(run), base]) !== 'exact') refuse('handoff not found');
   } catch (error) {
     if (error instanceof WorkFolderRefusal) refuse(error.message);
     throw error;
   }
-  const r = readPlain(root, ['.company', 'work', run, base], MAX_HANDOFF_BYTES);
+  const r = readPlain(root, ['.company', 'work', ...workParts(run), base], MAX_HANDOFF_BYTES);
   if (r === null) refuse('handoff not found');
   return { name: base, text: r };
 }
@@ -335,7 +335,7 @@ function fix(args, root) {
 // ---- show ----
 
 function countEntries(root, run, which, name) {
-  const text = readPlain(root, ['.company', 'work', run, 'split', which, name], MAX_GROUP_BYTES);
+  const text = readPlain(root, ['.company', 'work', ...workParts(run), 'split', which, name], MAX_GROUP_BYTES);
   return text === null ? null : text.split('\n').filter(Boolean).length;
 }
 
