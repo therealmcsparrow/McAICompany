@@ -1,6 +1,7 @@
-# Contract: run-guard v1.2
+# Contract: run-guard v1.3
 
 Provider: `scripts/run-guard.mjs` (Node built-ins only; cwd = product root; `main(args, { root })` exported). Read-only: it writes nothing. Consumers: the Lead of `aico:pipeline` (Ship Gate). Uses: `plan-tasks` v1.3 (`readParallel`), `worktree` v1.1 (`readWorktrees`), `run-state` v1.7 (`show`), `work-folder-name` v1.1 (`isWorkFolder`, `exactWorkPath`). v1.1 is additive: the run argument may be a new work folder name; a legacy slug is accepted as before. v1.2 is additive: a name that matches a folder on disk only in another ASCII letter case is `refused: wrong letter case` (exit 3), checked after the name shape and before any record is read.
+v1.3 is additive (T33; `work-folder-name` v3.0 `isRunSlug`, `workParts`): the run argument may be a v3 run slug `<ProjectID>/<NN>-<playbook>`. Its folder is `exactWorkPath(io, root, workParts(slug))`, checked before any record is read; a wrong letter case in either part is `refused: wrong letter case`, a bad shape (a bare project ID, a second `/`, `..`, `\`, `%`, `~`) is `refused: bad slug`, both exit 3. The readers take the slug as given. v2, v1.1 and legacy names give byte-identical output to v1.2.
 The two lines are information for the Ship Gate. They never block a ship and never change an exit code of another command.
 
 ## Command

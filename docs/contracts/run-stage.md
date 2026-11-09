@@ -1,7 +1,7 @@
-# Contract: run-stage v1
+# Contract: run-stage v1.1
 
 Provider: `scripts/run-stage.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`), one `set` each time a run enters a new stage. Consumers: `scripts/dashboard-data.mjs` (`dashboard` v1, `board` and `refreshActive`), through `readStage` only.
-Why it exists: run-state v1.8 records waves and Gates but not where a run stands between them (a build wave and a review round look the same), so the dashboard cannot place a card in a column from records alone. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md`. Report only; a stage never blocks a Step or a Gate.
+Why it exists: run-state v1.8 records waves and Gates but not where a run stands between them (a build wave and a review round look the same), so the dashboard cannot place a card in a column from records alone. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md`. Report only; a stage never blocks a Step or a Gate. v1.1 is additive (T33; `work-folder-name` v3.0 `isRunSlug`, `workParts`): `<slug>` may be a v3 run slug `<ProjectID>/<NN>-<playbook>`; the stage file is `.company/work/<ID>/<NN>-<pb>/stage.jsonl`, found with `exactWorkPath(io, root, workParts(slug))`, and both folders must be real directories (no link) inside the real `.company/work`. A slug with a second `/`, `..`, `\` or a bare project ID is `bad slug`. v2, v1.1 and legacy names give byte-identical output to v1.
 
 ## Storage
 - `.company/work/<slug>/stage.jsonl`, append-only, one JSON object per line, LF. Committed with the run's Handoffs (it sits in the run folder).
