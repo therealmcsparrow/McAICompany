@@ -47,7 +47,7 @@ Starting from a rough idea or a bug report? Use `/aico:idea <idea>` or `/aico:bu
 
 1. **You ask.** Through `/aico:lead` or a specific command.
 2. **The Lead routes.** It picks only the Roles the job needs and sequences them, running independent Roles in parallel.
-3. **Roles work in turn.** Each Role starts fresh, reads the Handoff files it needs, does its part, and writes its own Handoff for the next Role. Work is committed one step at a time on a branch named `aico/<task>`.
+3. **Roles work in turn.** Each Role starts fresh, reads the Handoff files it needs, does its part, and writes its own Handoff for the next Role. Work is committed one step at a time on a branch named `aico/<ProjectID>`. The ID, such as `P20261108.000001`, names the project everywhere: its work folder, its branch and its tickets (`P20261108.000001-T1`).
 4. **You approve at Gates.** The run pauses at each Gate (below) until you approve, ask for a change, or stop. **→ Ship Gate** is the one that always runs.
 5. **Ship.** After the Ship Gate, release happens as you approved, and the Lead writes a short summary, shows one cost line (tokens used, counts only), prints a one-line [run scorecard](../concepts/receipts-and-reports.md) and records any Lessons for next time.
 

@@ -2,7 +2,7 @@
 // No engine object, no Node import, no npm package.
 
 import { cleanText } from './guard.mjs';
-import { parseName } from './work-folder.mjs';
+import { parseName, parseProject } from './work-folder.mjs';
 
 export const SPAWN_SCAN = 65536;
 export const MAX_PATH = 4096;
@@ -26,6 +26,7 @@ const UPPER = /[A-Z]/g;
 export function isRunName(name) {
   if (typeof name !== 'string' || name.length === 0 || name.length > MAX_NAME) return false;
   if (LEGACY_RUN.test(name)) return true;
+  if (parseProject(name) !== null) return true;
   const parsed = parseName(name);
   return parsed !== null && parsed.suffix === null;
 }

@@ -67,7 +67,7 @@ const ALLOW = [
   ['scripts/worktree.mjs', "r.toLowerCase() : r", 'sameKey: compares repo and worktree paths (git output), not a typed work folder'],
   ['scripts/worktree.mjs', "key.toUpperCase().startsWith('GIT_')", 'environment variable names'],
   ['scripts/worktree.mjs', "base.slice(0, end).toLowerCase()", 'attrAlias: .gitattributes alias guard'],
-  ['scripts/worktree.mjs', 'ID_.toLowerCase()', 'git ref id'],
+  ['scripts/worktree.mjs', 'local.toLowerCase()', 'git ref id from a ticket-local task id (T1 to t1), not a typed work folder'],
   ['scripts/worktree.mjs', "seg.toLowerCase().startsWith('.env')", '.env guard on a repo path'],
   ['scripts/skillspector.mjs', 'k.toUpperCase() === want.toUpperCase()', 'environment variable names on win32'],
   ['scripts/skillspector.mjs', 'i.severity.toLowerCase()', 'scanner severity'],

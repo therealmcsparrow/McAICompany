@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// contract: docs/contracts/work-folder-name.md v1.1
-// Work folder creator: `new` makes the run folder and prints its name and branch, `clear` removes a stale Topic file,
-// `branch` prints the branch of an existing folder. Node built-ins only; the naming rules live in mods/lib/work-folder.mjs.
+// contract: docs/contracts/work-folder-name.md v2.0
+// Work folder creator: `new` makes a project's run folder and prints its ID, name and branch, `siblings` links split
+// projects, `clear` removes a stale Topic file, `branch` prints the branch of an existing folder. Node built-ins only; the naming rules live in mods/lib/work-folder.mjs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   WorkFolderRefusal, checkPlaybookId, checkWorkDirs, fallbackTopic, readTopicFile, clearTopicFile,
-  candidates, stampOf, branchId, isWorkFolder, exactWorkPath,
+  checkDescription, isProjectId, makeProject, makeRun, linkSiblings, branchId, isWorkFolder, exactWorkPath,
 } from '../mods/lib/work-folder.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,24 +45,28 @@ function checkPlaybook(id, pluginRoot) {
   if (fallbackTopic(id) === null) refuse('bad playbook');
 }
 
+function created(id, name) {
+  return { code: 0, lines: [`id: ${id}`, `name: ${name}`, `branch: aico/${branchId(name)}`] };
+}
+
 function create(args, { root, now, pluginRoot }) {
+  if (args.includes('--project')) {
+    const { '--playbook': id, '--project': project } = flags(args, ['--playbook', '--project']);
+    checkPlaybook(id, pluginRoot);
+    if (!isProjectId(project)) refuse('bad project');
+    return created(project, makeRun(io, root, project, now, 'later', id));
+  }
   const { '--playbook': id, '--topic': mode } = flags(args, ['--playbook', '--topic']);
   checkPlaybook(id, pluginRoot);
   if (mode !== 'file' && mode !== 'none') refuse('usage');
-  const { topic } = readTopicFile(io, root, id, mode);
-  const { work } = checkWorkDirs(io, root);
-  const taken = new Set(fs.readdirSync(work).map(branchId).filter(Boolean));
-  for (const name of candidates(stampOf(now), topic ?? fallbackTopic(id))) {
-    if (taken.has(branchId(name))) continue;
-    try {
-      fs.mkdirSync(path.join(work, name));
-    } catch (error) {
-      if (error.code === 'EEXIST') continue;
-      throw error;
-    }
-    return { code: 0, lines: [`name: ${name}`, `branch: aico/${branchId(name)}`] };
-  }
-  return refuse('too many runs this minute');
+  const { topic } = readTopicFile(io, root, id, mode, checkDescription);
+  const made = makeProject(io, root, now, topic ?? fallbackTopic(id), id);
+  return created(made.id, made.name);
+}
+
+function siblings(args, { root }) {
+  if (args.length < 2 || args.length > 20) refuse('usage');
+  return { code: 0, lines: [`linked: ${linkSiblings(io, root, args).join(' ')}`] };
 }
 
 function clear(args, { root }) {
@@ -85,6 +89,7 @@ export function main(args, { root = process.cwd(), now = new Date(), pluginRoot 
   try {
     const env = { root, now, pluginRoot };
     if (args[0] === 'new') return create(args.slice(1), env);
+    if (args[0] === 'siblings') return siblings(args.slice(1), env);
     if (args[0] === 'clear') return clear(args.slice(1), env);
     if (args[0] === 'branch') return branch(args.slice(1), env);
     return refuse('usage');

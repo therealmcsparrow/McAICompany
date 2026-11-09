@@ -1,4 +1,4 @@
-// Work folder names (contract: docs/contracts/work-folder-name.md v1.1). Pure logic, no imports:
+// Work folder names (contract: docs/contracts/work-folder-name.md v2.0). Pure logic, no imports:
 // every file call goes through the `io` object the caller passes ({ fs, path, platform }).
 // Every pattern is anchored and every input is length-capped before a pattern runs.
 
@@ -103,13 +103,145 @@ export function parseName(name) {
   return { stamp, stem, suffix, number };
 }
 
-export function isWorkFolder(name) {
-  return parseName(name) !== null || isLegacySlug(name);
+// Project ID: `P<yyyymmdd>.<n>`, a real date, n of 6 digits (not all zero) or 7 to 9 digits without a leading zero.
+const PROJECT_RE = /^P(\d{4})(\d{2})(\d{2})\.(\d{6}|[1-9]\d{6,8})$/;
+const PROJECT_TIME_RE = /^([01]\d|2[0-3])\.([0-5]\d)\.([0-5]\d)$/;
+const BRANCH_RE = /^[a-z0-9][a-z0-9-]{0,127}$/;
+const MAX_PROJECT_ID = 19;
+const MAX_PROJECT_NAME = 28;
+const MAX_DESCRIPTION = 120;
+const MAX_SIBLINGS = 20;
+const MAX_ENTRIES = 5000;
+const MAX_RUN_FOLDERS = 50;
+const SUMMARY = '00-summary.md';
+const SUMMARY_HEAD = 2048;
+const SUMMARY_FULL = 1024 * 1024;
+const KINDS = ['first', 'later', 'build', 'draft'];
+const RUN_RE = /^Run: (first|later|build|draft) ([a-z0-9]+(?:-[a-z0-9]+)*)$/;
+const DESCRIPTION_BAD_RE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}᠎⁥\u{E0000}-\u{E007F}]/u;
+
+function realDate(y, mo, d) {
+  if (mo < 1 || mo > 12 || d < 1) return false;
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
 }
 
-// Git ref part for a work folder name; legacy names map to themselves.
+export function isProjectId(text) {
+  if (typeof text !== 'string' || text.length > MAX_PROJECT_ID) return false;
+  const m = PROJECT_RE.exec(text);
+  if (!m || Number(m[4]) === 0) return false;
+  return realDate(Number(m[1]), Number(m[2]), Number(m[3]));
+}
+
+// `<ProjectID>-HH.MM.SS` -> { id, day, n, time } or null.
+export function parseProject(name) {
+  if (typeof name !== 'string' || name.length > MAX_PROJECT_NAME) return null;
+  const cut = name.indexOf('-');
+  if (cut < 0) return null;
+  const id = name.slice(0, cut);
+  const time = name.slice(cut + 1);
+  if (!isProjectId(id) || !PROJECT_TIME_RE.test(time)) return null;
+  return { id, day: id.slice(1, 9), n: Number(id.slice(10)), time };
+}
+
+export function projectIdOf(name) {
+  const p = parseProject(name);
+  return p === null ? null : p.id;
+}
+
+export function isBranchId(text) {
+  if (typeof text !== 'string' || text.length > 128) return false;
+  return isProjectId(text) || BRANCH_RE.test(text);
+}
+
+const dayOf = date => `${pad(date.getFullYear(), 4)}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+const clockOf = date => `${pad(date.getHours())}.${pad(date.getMinutes())}.${pad(date.getSeconds())}`;
+const validDate = date => date instanceof Date && !Number.isNaN(date.getTime());
+
+// 1 plus the highest number among the v2 names of that local day, else 000001.
+export function nextProjectId(date, names) {
+  if (!validDate(date)) return refuse('usage');
+  const day = dayOf(date);
+  let top = 0;
+  for (const name of names) {
+    const p = parseProject(name);
+    if (p !== null && p.day === day && p.n > top) top = p.n;
+  }
+  const n = top + 1;
+  const id = `P${day}.${n <= 999999 ? pad(n, 6) : String(n)}`;
+  return isProjectId(id) ? id : refuse('bad project');
+}
+
+// One line, 1 to 120 characters, not only spaces, none of the Cc, Cf, Zl, Zp or Default_Ignorable_Code_Point characters or the other listed ones.
+export function checkDescription(text) {
+  if (typeof text !== 'string' || text.length === 0 || text.length > MAX_DESCRIPTION * 2) return false;
+  if ([...text].length > MAX_DESCRIPTION || text.trim() === '') return false;
+  return !DESCRIPTION_BAD_RE.test(text);
+}
+
+// { description } or { error }. The text itself is never in the result.
+export function summaryDescription(text) {
+  if (typeof text !== 'string') return { error: 'missing description' };
+  const head = text.slice(0, SUMMARY_HEAD);
+  const nl = head.indexOf('\n');
+  const first = nl < 0 ? head : head.slice(0, nl);
+  if (!checkDescription(first)) return { error: 'missing description' };
+  if (nl >= 0 && nl + 1 < text.length && text[nl + 1] !== '\n') return { error: 'multi-line description' };
+  return { description: first };
+}
+
+// Line 3: `Run: <kind> <playbook>` -> { kind, playbook } or null.
+export function runOf(text) {
+  if (typeof text !== 'string') return null;
+  const line = text.slice(0, SUMMARY_HEAD).split('\n')[2];
+  if (line === undefined || line.length > 80) return null;
+  const m = RUN_RE.exec(line);
+  return m && m[2].length <= 64 ? { kind: m[1], playbook: m[2] } : null;
+}
+
+const siblingsOk = line => {
+  if (typeof line !== 'string' || !line.startsWith('Siblings: ') || line.length > 10 + MAX_SIBLINGS * 20) return false;
+  const ids = line.slice(10).split(' ');
+  return ids.length >= 1 && ids.length <= MAX_SIBLINGS && ids.every(isProjectId);
+};
+
+export function isWorkFolder(name) {
+  return parseProject(name) !== null || parseName(name) !== null || isLegacySlug(name);
+}
+
+// Ticket ID rules of a folder: { id, head, src }. `src` is the ID as regex source (the dot escaped), `id` matches a whole
+// ID, `head` matches an ID at the start of a heading. null when `name` is not a work folder.
+const LOCAL_TICKET = 'T\\d{1,3}[a-z]?';
+const TICKET_AFTER = '(?=$|[\\s:.)-])';
+export function ticketPattern(name) {
+  const pid = projectIdOf(name);
+  if (pid === null && !isWorkFolder(name)) return null;
+  const src = pid === null ? LOCAL_TICKET : `${pid.replace('.', '\\.')}-${LOCAL_TICKET}`;
+  return { id: new RegExp(`^${src}$`), head: new RegExp(`^(${src})${TICKET_AFTER}`), src };
+}
+
+// A heading that opens a task section in either form (no folder known).
+export function isTicketHeading(title) {
+  if (typeof title !== 'string') return false;
+  const text = title.slice(0, MAX_PROJECT_ID + 40);
+  const cut = text.indexOf('-T');
+  const rest = cut > 0 && cut <= MAX_PROJECT_ID && isProjectId(text.slice(0, cut)) ? text.slice(cut + 1) : text;
+  return new RegExp(`^${LOCAL_TICKET}${TICKET_AFTER}`).test(rest);
+}
+
+// The `T<n>` part of a ticket ID, for file names inside a run folder; null when not an ID.
+export function ticketLocal(id) {
+  if (typeof id !== 'string' || id.length > MAX_PROJECT_ID + 8) return null;
+  const cut = id.indexOf('-T');
+  const local = cut > 0 && isProjectId(id.slice(0, cut)) ? id.slice(cut + 1) : id;
+  return new RegExp(`^${LOCAL_TICKET}$`).test(local) ? local : null;
+}
+
+// Git ref part for a work folder name; legacy names map to themselves, a v2 name to its project ID.
 export function branchId(name) {
   if (isLegacySlug(name)) return name;
+  const pid = projectIdOf(name);
+  if (pid !== null) return pid;
   const p = parseName(name);
   if (!p) return null;
   const rest = name.slice(19).toLowerCase().replaceAll(' ', '-');
@@ -138,8 +270,14 @@ function legacyStem(slug) {
 // Helper folder name. `suffix` is Build or Draft; `stamp` is the new run's own local time (used by Draft);
 // `fallback` is a draft-input `--for` word used only when a legacy parent's stem fails the Topic check;
 // `isTaken(name)` says whether a name is in use. null: bad input, or every Draft number taken.
-export function helperName(parent, suffix, { stamp, fallback, isTaken = () => false } = {}) {
+export function helperName(parent, suffix, { stamp, fallback, date, isTaken = () => false } = {}) {
   if (!SUFFIXES.includes(suffix)) return null;
+  const pid = projectIdOf(parent);
+  if (pid !== null) {
+    if (!validDate(date)) return null;
+    const name = `${pid}-${clockOf(date)}`;
+    return isTaken(name) ? null : name;
+  }
   let at;
   let stem;
   if (isLegacySlug(parent)) {
@@ -289,7 +427,7 @@ function readSmall(io, file, st) {
 // Steps 2-7 for one Topic file. mode `file`: a missing entry refuses `no topic file`. mode `none`: nothing is read,
 // a stale entry is removed. Returns { topic } with the checked Topic, or { topic: null } for the fallback.
 // The entry is removed whenever it exists, and never before the id and both folders passed.
-export function readTopicFile(io, root, id, mode) {
+export function readTopicFile(io, root, id, mode, check = checkTopic) {
   if (mode !== 'file' && mode !== 'none') refuse('usage');
   const { file, st } = topicEntry(io, root, id);
   if (st === null) {
@@ -300,7 +438,7 @@ export function readTopicFile(io, root, id, mode) {
   remove(io, file);
   if (text === null) return { topic: null };
   const body = text.endsWith('\n') ? text.slice(0, -1) : text;
-  if (FORBIDDEN_RE.test(body) || !checkTopic(body)) return { topic: null };
+  if (FORBIDDEN_RE.test(body) || !check(body)) return { topic: null };
   return { topic: body };
 }
 
@@ -310,4 +448,234 @@ export function clearTopicFile(io, root, id) {
   if (st === null) return 'no topic file';
   remove(io, file);
   return 'cleared';
+}
+
+// Run folders of v2 projects.
+
+const NOFOLLOW = io => (io.platform === 'win32' ? 0 : (io.fs.constants.O_NOFOLLOW ?? 0));
+
+function isRealDirAt(io, full, want) {
+  try {
+    const st = io.fs.lstatSync(full);
+    return !st.isSymbolicLink() && st.isDirectory() && io.fs.realpathSync.native(full) === want;
+  } catch {
+    return false;
+  }
+}
+
+function listWork(io, work) {
+  try {
+    return io.fs.readdirSync(work);
+  } catch {
+    return refuse('bad topic path');
+  }
+}
+
+// The real folders of one project under .company/work, in name order. A link or a plain file is skipped.
+function projectFolders(io, realRoot, work, names, id) {
+  const base = io.path.join(realRoot, '.company', 'work');
+  return names
+    .filter(n => projectIdOf(n) === id && isRealDirAt(io, io.path.join(work, n), io.path.join(base, n)))
+    .sort();
+}
+
+// `00-summary.md` of one run folder opened by the full rule: real folder, real file inside the root (no link, one link
+// count), the descriptor is the entry that was checked. { fd, size } or null.
+function openSummary(io, realRoot, work, name, flag) {
+  const { fs, path } = io;
+  const base = path.join(realRoot, '.company', 'work', name);
+  const file = path.join(work, name, SUMMARY);
+  let fd = null;
+  try {
+    if (!isRealDirAt(io, path.join(work, name), base)) return null;
+    const st = fs.lstatSync(file, { bigint: true });
+    if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1n) return null;
+    if (fs.realpathSync.native(file) !== path.join(base, SUMMARY)) return null;
+    fd = fs.openSync(file, flag | NOFOLLOW(io));
+    const f = fs.fstatSync(fd, { bigint: true });
+    if (!f.isFile() || f.dev !== st.dev || f.ino !== st.ino || f.nlink !== 1n) {
+      fs.closeSync(fd);
+      return null;
+    }
+    return { fd, size: Number(f.size) };
+  } catch {
+    if (fd !== null) fs.closeSync(fd);
+    return null;
+  }
+}
+
+// The summary text: only its first SUMMARY_HEAD bytes, or all of it (at most SUMMARY_FULL) when `full`. null when unsafe.
+function readSummary(io, realRoot, work, name, full) {
+  const { fs } = io;
+  const open = openSummary(io, realRoot, work, name, fs.constants.O_RDONLY);
+  if (open === null) return null;
+  try {
+    const max = full ? SUMMARY_FULL : SUMMARY_HEAD;
+    if (full && open.size > max) return null;
+    const len = Math.min(open.size, max);
+    const buf = Buffer.alloc(len);
+    let off = 0;
+    while (off < len) {
+      const n = fs.readSync(open.fd, buf, off, len - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    const cuts = open.size > max ? 3 : 0;
+    for (let cut = 0; cut <= cuts; cut++) {
+      try {
+        return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buf.subarray(0, off - cut));
+      } catch {
+        // a cut inside a multi-byte character: try one byte less
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    fs.closeSync(open.fd);
+  }
+}
+
+function writeSummary(io, realRoot, work, name, text) {
+  const { fs } = io;
+  const open = openSummary(io, realRoot, work, name, fs.constants.O_WRONLY);
+  if (open === null) return refuse('bad project');
+  try {
+    const buf = Buffer.from(text, 'utf8');
+    fs.ftruncateSync(open.fd, 0);
+    fs.writeSync(open.fd, buf, 0, buf.length, 0);
+  } finally {
+    fs.closeSync(open.fd);
+  }
+}
+
+// Names under .company/archive and one folder level below it (never a link, never deeper).
+function archiveNames(io, root, realRoot) {
+  const { fs, path } = io;
+  const read = dir => {
+    try {
+      return fs.readdirSync(dir).slice(0, MAX_ENTRIES);
+    } catch {
+      return [];
+    }
+  };
+  const arch = path.join(root, '.company', 'archive');
+  const realArch = path.join(realRoot, '.company', 'archive');
+  if (!isRealDirAt(io, arch, realArch)) return [];
+  const out = [];
+  for (const n of read(arch)) {
+    out.push(n);
+    if (isRealDirAt(io, path.join(arch, n), path.join(realArch, n))) out.push(...read(path.join(arch, n)));
+  }
+  return out;
+}
+
+// Names that count for the next project ID: .company/work and .company/archive (two levels).
+export function listProjectNames(io, root) {
+  const { work, realRoot } = checkWorkDirs(io, root);
+  return [...listWork(io, work), ...archiveNames(io, root, realRoot)];
+}
+
+function summaryText(description, kind, playbook, siblings) {
+  return `${description}\n\nRun: ${kind} ${playbook}\n${siblings ? `${siblings}\n` : ''}`;
+}
+
+function makeFolder(io, work, name, text) {
+  const { fs, path } = io;
+  const dir = path.join(work, name);
+  try {
+    fs.mkdirSync(dir);
+  } catch (error) {
+    if (error.code === 'EEXIST') return false;
+    return refuse('bad topic path');
+  }
+  try {
+    fs.writeFileSync(path.join(dir, SUMMARY), text, { flag: 'wx' });
+  } catch (error) {
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      // the folder stays; the caller sees the original error
+    }
+    throw error;
+  }
+  return true;
+}
+
+// A new project: the next project ID and its first run folder, with the description in `00-summary.md`.
+// An exact clash takes the next number at the same time, at most 9 tries. Returns { id, name }.
+export function makeProject(io, root, date, description, playbook) {
+  if (!checkDescription(description)) refuse('usage');
+  if (!checkPlaybookId(playbook)) refuse('bad playbook');
+  if (!validDate(date)) refuse('usage');
+  const names = listProjectNames(io, root);
+  const { work } = checkWorkDirs(io, root);
+  const tried = [];
+  for (let i = 0; i < 9; i++) {
+    const id = nextProjectId(date, [...names, ...tried]);
+    const name = `${id}-${clockOf(date)}`;
+    if (makeFolder(io, work, name, summaryText(description, 'first', playbook, null))) return { id, name };
+    tried.push(name);
+  }
+  return refuse('too many runs this second');
+}
+
+// A later run folder of an existing project; the only maker of a continuation folder. Returns the name.
+export function makeRun(io, root, id, date, kind, playbook) {
+  if (!isProjectId(id)) refuse('bad project');
+  if (!KINDS.includes(kind)) refuse('usage');
+  if (!checkPlaybookId(playbook)) refuse('bad playbook');
+  if (!validDate(date)) refuse('usage');
+  const { work, realRoot } = checkWorkDirs(io, root);
+  const names = listWork(io, work);
+  const folders = projectFolders(io, realRoot, work, names, id);
+  if (folders.length === 0) refuse('unknown project');
+  const name = `${id}-${clockOf(date)}`;
+  if (names.includes(name)) refuse('too many runs this second');
+  let description = null;
+  let siblings = null;
+  for (const folder of folders.slice(0, MAX_RUN_FOLDERS)) {
+    const text = readSummary(io, realRoot, work, folder, false);
+    if (text === null) continue;
+    if (description === null) description = summaryDescription(text).description ?? null;
+    if (siblings === null) {
+      const line = text.slice(0, SUMMARY_HEAD).split('\n')[3];
+      if (siblingsOk(line)) siblings = line;
+    }
+    if (description !== null && siblings !== null) break;
+  }
+  const text = summaryText(description ?? fallbackTopic(playbook) ?? 'Run', kind, playbook, siblings);
+  if (!makeFolder(io, work, name, text)) refuse('too many runs this second');
+  return name;
+}
+
+function withSiblings(text, line) {
+  const lines = text.split('\n');
+  while (lines.length < 3) lines.push('');
+  if (lines[3]?.startsWith('Siblings:')) lines[3] = line;
+  else lines.splice(3, 0, line);
+  if (lines[lines.length - 1] !== '') lines.push('');
+  return lines.join('\n');
+}
+
+// Line 4 of every folder of each listed project becomes `Siblings: <the other IDs>`. All checks and reads come before
+// the first write. Returns the folder names.
+export function linkSiblings(io, root, ids) {
+  if (!Array.isArray(ids) || ids.length < 2 || ids.length > MAX_SIBLINGS) refuse('usage');
+  if (!ids.every(isProjectId) || new Set(ids).size !== ids.length) refuse('bad project');
+  const { work, realRoot } = checkWorkDirs(io, root);
+  const names = listWork(io, work);
+  const plan = [];
+  for (const id of ids) {
+    const folders = projectFolders(io, realRoot, work, names, id);
+    if (folders.length === 0) refuse('unknown project');
+    const line = `Siblings: ${ids.filter(x => x !== id).sort().join(' ')}`;
+    for (const folder of folders) {
+      const text = readSummary(io, realRoot, work, folder, true);
+      if (text === null || summaryDescription(text).description === undefined) refuse('bad project');
+      plan.push({ folder, text: withSiblings(text, line) });
+    }
+  }
+  for (const { folder, text } of plan) writeSummary(io, realRoot, work, folder, text);
+  return plan.map(p => p.folder);
 }

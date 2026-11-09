@@ -24,7 +24,7 @@ A map for an effort that spans several sessions. It records decisions made, ques
 Rules, in short:
 - Line 1 is `# Wayfinder: <topic>`. Then `## Decisions`, `## Open`, `## Pointers`, each at most once, in that order.
 - A decision is `- D-<n> <text> — src: <ref>`, an open question `- O-<n> <text> — src: <ref>`, a pointer `- <ref> — <why>`. Numbers are unique per prefix. A line holds up to 3 refs.
-- A ref is a repo-relative file path, with an optional `#T<n>` anchor for a task in a plan file. Wrap it in backticks when it runs through a run folder name, which has spaces.
+- A ref is a repo-relative file path, with an optional `#T<n>` anchor for a task in a plan file. In a v2 run folder the anchor is `#<ProjectID>-T<n>` (the task heading's ID). Wrap it in backticks when it runs through a run folder name, which has spaces.
 - Text up to 200 characters, a reason up to 120, a whole line up to 240.
 - No code fences, quotes or prose lines. Anything else is an error.
 

@@ -1,4 +1,4 @@
-# Contract: dispatch-prompt v5.0
+# Contract: dispatch-prompt v5.1
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`, and from v3.3 `aico:reprompt`). Consumer: every Role, through `aico:handoff`.
 v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
@@ -8,6 +8,7 @@ v3.3 is additive (task reprompter-role): it adds the `Asks left:` and `Request:`
 
 v3.4 is additive (task cheaper-role-models): the `Settings:` line ends with the word `floor` when the Lead raised a Role's model to its floor (pipeline §2). Then `model=<floor>` is always passed and written, also when it equals the agent frontmatter. A Role that gets a v3.3 prompt behaves as before; the Role does nothing with the word. Row text: `Settings: model=<m> effort=<e>[ floor]`.
 
+v5.1 (task Project Id Naming, wording only): in a v2 run folder the `Task:` line carries `<ProjectID>-T<n>` (the first line `plan-tasks.mjs lines` prints, as before). No line is added or removed; a v5.0 prompt behaves as before.
 v3.5 is additive (task parallel-cap): it adds the `Task:` and `Files:` lines for Steps started from a plan task (`plan-tasks` v1). A Role that gets a v3.4 prompt behaves as before.
 
 v3.6 is additive (task goldfish-roles): it adds the `Task brief:` line for Steps started from a plan task, and the goldfish rules below. A Role that gets a v3.5 prompt behaves as before.

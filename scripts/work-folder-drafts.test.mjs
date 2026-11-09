@@ -157,11 +157,12 @@ describe('take of a file outside the work folder', () => {
     topicFile(root, 'to-spec', 'Login Page\n');
     fs.mkdirSync(path.join(root, '.company', 'work'), { recursive: true });
     const a = run(root, NOW, 'take', 'docs/idea.md', '--for', 'to-spec');
-    assert.equal(a.lines[0], 'slug: 2026-10-31 09.15 - Login Page');
+    assert.equal(a.lines[0], 'slug: P20261031.000001-09.15.00');
+    assert.match(fs.readFileSync(path.join(root, '.company', 'work', 'P20261031.000001-09.15.00', '00-summary.md'), 'utf8'), /Login Page/);
     assert.ok(!exists(root, '.company/work-folder-topic-to-spec.txt'));
     topicFile(root, 'to-spec', 'Login Page');
     const b = run(root, NOW, 'take', 'docs/idea.md', '--for', 'to-spec');
-    assert.equal(b.lines[0], 'slug: 2026-10-31 09.15 - Login Page 2');
+    assert.equal(b.lines[0], 'slug: P20261031.000002-09.15.00');
   });
 
   test('no Topic file gives the fallback for --for', () => {
@@ -169,14 +170,17 @@ describe('take of a file outside the work folder', () => {
     const r = run(root, NOW, 'take', 'docs/idea.md', '--for', 'to-tickets');
     assert.equal(r.code, 4);
     const ok = fixture({ 'docs/idea.md': '- AC1: a\n' });
-    assert.equal(run(ok, NOW, 'take', 'docs/idea.md', '--for', 'to-tickets').lines[0], 'slug: 2026-10-31 09.15 - To-Tickets');
+    fs.mkdirSync(path.join(ok, '.company', 'work'), { recursive: true });
+    assert.equal(run(ok, NOW, 'take', 'docs/idea.md', '--for', 'to-tickets').lines[0], 'slug: P20261031.000001-09.15.00');
+    assert.match(fs.readFileSync(path.join(ok, '.company', 'work', 'P20261031.000001-09.15.00', '00-summary.md'), 'utf8'), /To-Tickets/);
   });
 
   test('a bad Topic falls back and the file is removed', () => {
     const root = fixture({ 'docs/idea.md': NOTE });
     topicFile(root, 'grill', 'login page\n');
+    fs.mkdirSync(path.join(root, '.company', 'work'), { recursive: true });
     const r = run(root, NOW, 'take', 'docs/idea.md', '--for', 'grill');
-    assert.equal(r.lines[0], 'slug: 2026-10-31 09.15 - Grill');
+    assert.equal(r.lines[0], 'slug: P20261031.000001-09.15.00');
     assert.ok(!exists(root, '.company/work-folder-topic-grill.txt'));
   });
 
@@ -184,15 +188,17 @@ describe('take of a file outside the work folder', () => {
     const root = fixture({ 'docs/idea.md': NOTE });
     const t = topicFile(root, 'grill', 'Login Page\n');
     fs.linkSync(t, path.join(root, 'other.txt'));
+    fs.mkdirSync(path.join(root, '.company', 'work'), { recursive: true });
     const r = run(root, NOW, 'take', 'docs/idea.md', '--for', 'grill');
-    assert.equal(r.lines[0], 'slug: 2026-10-31 09.15 - Grill');
+    assert.equal(r.lines[0], 'slug: P20261031.000001-09.15.00');
+    assert.doesNotMatch(fs.readFileSync(path.join(root, '.company', 'work', 'P20261031.000001-09.15.00', '00-summary.md'), 'utf8'), /Login Page/);
     assert.ok(exists(root, 'other.txt'));
   });
 
   test('an existing run name is never reused', () => {
-    const root = fixture({ 'docs/idea.md': NOTE, '.company/work/2026-10-31 09.15 - Grill/grill.md': GRILL });
+    const root = fixture({ 'docs/idea.md': NOTE, '.company/work/P20261031.000001-09.15.00/grill.md': GRILL });
     const r = run(root, NOW, 'take', 'docs/idea.md', '--for', 'grill');
-    assert.equal(r.lines[0], 'slug: 2026-10-31 09.15 - Grill 2');
+    assert.equal(r.lines[0], 'slug: P20261031.000002-09.15.00');
   });
 
   test('a path with spaces outside the work folder is refused', () => {
@@ -298,7 +304,7 @@ describe('Topic file consumption', () => {
     assert.deepEqual(run(root, NOW, 'arg', '--for', 'to-tickets'), { code: 0, lines: ['arg: file docs/idea.md'] });
     assert.ok(exists(root, '.company/work-folder-topic-to-tickets.txt'));
     const r = run(root, NOW, 'take', 'docs/idea.md', '--for', 'to-tickets');
-    assert.equal(r.lines[0], 'slug: 2026-10-31 09.15 - Login Page');
+    assert.equal(r.lines[0], 'slug: P20261031.000001-09.15.00');
     assert.ok(!exists(root, '.company/work-folder-topic-to-tickets.txt'));
   });
 
@@ -315,15 +321,16 @@ describe('Topic file consumption', () => {
     argFile(root, 'grill', 'make the login page better');
     topicFile(root, 'grill', 'Login Page\n');
     const r = run(root, NOW, 'arg', '--for', 'grill');
-    assert.deepEqual(r, { code: 0, lines: ['arg: idea', 'slug: 2026-10-31 09.15 - Login Page'] });
+    assert.deepEqual(r, { code: 0, lines: ['arg: idea', 'slug: P20261031.000001-09.15.00'] });
     assert.ok(!exists(root, '.company/work-folder-topic-grill.txt'));
   });
 
   test('arg idea for grill with no Topic file gives the fallback', () => {
     const root = fixture({});
     argFile(root, 'to-spec', 'make the login page better');
+    fs.mkdirSync(path.join(root, '.company', 'work'), { recursive: true });
     const r = run(root, NOW, 'arg', '--for', 'to-spec');
-    assert.deepEqual(r.lines, ['arg: idea', 'slug: 2026-10-31 09.15 - To-Spec']);
+    assert.deepEqual(r.lines, ['arg: idea', 'slug: P20261031.000001-09.15.00']);
   });
 
   test('arg idea for feature prints no slug and removes the Topic file', () => {

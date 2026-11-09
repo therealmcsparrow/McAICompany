@@ -221,12 +221,12 @@ describe('skill text', () => {
     assert.ok(fix.split('\n').length <= 125);
   });
 
-  test('the contract is v1.4 and names the helper rule', () => {
+  test('the contract is v1.5 and names the helper rule', () => {
     const c = read('docs/contracts/ticket-approval.md');
-    assert.match(c, /^# Contract: ticket-approval v1\.4/);
+    assert.match(c, /^# Contract: ticket-approval v1\.5/);
     assert.match(c, /helperName/);
     assert.match(c, /plan: <path>/);
-    assert.match(read('scripts/ticket-approval.mjs'), /ticket-approval\.md v1\.4/);
+    assert.match(read('scripts/ticket-approval.mjs'), /ticket-approval\.md v1\.5/);
   });
 
   test('no CR byte in the touched text files', () => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.10). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.11). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -12,7 +12,8 @@ import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { costText, readCost } from './cost-source.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isWorkFolder, parseProject, runOf } from '../mods/lib/work-folder.mjs';
+import { readInside } from './handoff-lint.mjs';
 import { readTierPath } from './tier-set.mjs';
 import * as settings from './settings.mjs';
 
@@ -1528,6 +1529,18 @@ function cmdBrainstormReport(args) {
 
 const RELEASE_RUN = /^(?:\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - )?release(?:$| |-)/i;
 
+// A v2 run is a release run when line 3 of its 00-summary.md says so. The file is a new read: no link, one link count,
+// size cap first. Anything unreadable or damaged counts as not a release.
+function isV2Release(name) {
+  if (parseProject(name) === null) return false;
+  try {
+    const got = readInside(fs.realpathSync.native(env.root), ['.company', 'work', name, '00-summary.md'], 64 * 1024);
+    return got.status === 'ok' && runOf(got.text)?.playbook === 'release';
+  } catch {
+    return false;
+  }
+}
+
 // Exact median printed with at most one decimal, a trailing .0 dropped.
 function medianText(list) {
   const sorted = [...list].sort((a, b) => a - b);
@@ -1561,7 +1574,7 @@ function cmdQaFirstReport(args) {
     }
     const ship = lastShipOf(ledger.records);
     if (ship === undefined && ledger.warnings.length === 0) continue;
-    if (EXCLUDED_RUN.test(name) || RELEASE_RUN.test(name) || ledger.warnings.length > 0 || ship === undefined || !Object.hasOwn(ship, 'fix_rounds')) {
+    if (EXCLUDED_RUN.test(name) || RELEASE_RUN.test(name) || isV2Release(name) || ledger.warnings.length > 0 || ship === undefined || !Object.hasOwn(ship, 'fix_rounds')) {
       excluded += 1;
       continue;
     }

@@ -139,7 +139,7 @@ test('the Handoff skill states the Worktree rule in the Task and Files step', ()
 
 test('the Contract and the skill texts name the v2.0 parts', () => {
   const contract = read('docs/contracts/handoff.md');
-  assert.match(contract, /^# Contract: handoff v2.4$/m);
+  assert.match(contract, /^# Contract: handoff v2.5$/m);
   for (const part of ['[comprehension]', '## Paraphrase', '## First pass', 'evidence:', 'rulings.md', 'escalated', 'upheld', 'overruled', 'parseLocations', '--exceptions-for', 'review-mode', 'real-path read rule']) {
     assert.ok(contract.includes(part), part);
   }

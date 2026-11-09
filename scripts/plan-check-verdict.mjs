@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.5). Node built-ins and git only.
+// Plan-check verdict and history scan (contract: docs/contracts/plan-check.md v1.6). Node built-ins and git only.
 // Read-only: nothing is written to the repository or to .company/. Output goes to stdout (one line for `verdict`).
 // git runs through execFile with a fixed argument list, no shell, in the product root. Every value taken from git output and
 // reused as an argument is matched against a strict pattern first.
@@ -9,7 +9,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, read
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateRecord } from './ledger.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isWorkFolder, projectIdOf } from '../mods/lib/work-folder.mjs';
 import { loadPatterns, readRecord, scanText } from './plan-check.mjs';
 import { show } from './run-state.mjs';
 
@@ -218,6 +218,7 @@ function collectRuns(root, warnings) {
   const counted = [];
   for (const r of ordered) {
     const ship = lastShip(root, r.slug);
+    if (ship === null && projectIdOf(r.slug) !== null) continue;
     if (ship !== null && ship.path === 'short') continue;
     const rec = readRecord(root, r.slug);
     if (rec.state === 'error') { warnings.push(`${r.slug}: plan-check record in error state`); continue; }

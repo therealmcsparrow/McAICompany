@@ -1859,7 +1859,7 @@ describe('AC31 contested findings', () => {
 describe('AC32 the handoff Contract holds contested findings and the contracts field', () => {
   const header = read('docs', 'contracts', 'handoff.md').split('\n')[0];
   test('the Contract is v2.0, breaking, and names the contest, the contracts key and the v2.0 evidence part', () => {
-    assert.equal(header, '# Contract: handoff v2.4');
+    assert.equal(header, '# Contract: handoff v2.5');
     const text = read('docs', 'contracts', 'handoff.md');
     assert.match(text, /v1\.2 is additive/);
     assert.match(text, /v2\.0 \(part 5\) is \*\*breaking\*\*/);
@@ -1891,7 +1891,7 @@ describe('AC32 the handoff Contract holds contested findings and the contracts f
     assert.match(unknown.all, /is not a Contract/);
     const stale = write('07-backend-engineer.md', base('contracts: [handoff v1.9]\n'));
     assert.equal(stale.code, 1, stale.all);
-    assert.match(stale.all, /handoff v1.9 is stale, current v2.4/);
+    assert.match(stale.all, /handoff v1.9 is stale, current v2.5/);
   });
   test('the shipped fixture set covers open, accepted and rejected contests', () => {
     const tests = read('scripts', 'handoff-contest.test.mjs');
