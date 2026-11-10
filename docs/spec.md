@@ -134,7 +134,7 @@ Decisions: `docs/adr/` 0003–0005. Contracts: `docs/contracts/` (dispatch-promp
 - **Skills catalog** (`skill-catalog` v1, ADR 0062): the baseline `deps/3rdpartyskills.json` (categories, groups, entries; it replaces `deps/skills.json`) and your own `~/.mcsparrow/3rdpartyskills.json`. `/aico:add-skill` adds entries to the user file. `scripts/install-skills.mjs` runs the pinned `skills@1.7.4` CLI, dry-run first, and installs only after an Install form.
 - **Role skills:** each Role has at most 5 selected skills (`roles.<role>.skills` in settings, Skills tab). A project selects by name only. An entry in `.company/project.md` under `## Skills` or `## Design skills` is no longer read; `/aico:setup` migrates those lines to the user file after a form. The install form asks Install or Skip per skill, and a Skip leaves out only that skill.
 - **Checks:** `scripts/check.mjs` also verifies the Role count in the plugin description and docs, roster and `roles.md` coverage, `### /aico:<name>` entries for every Playbook, `Language:` in dispatch blocks, and manifest name and source patterns. `scripts/handoff-lint.mjs` checks Handoff structure.
-- **Build:** `npm test` runs every `scripts/*.test.mjs`; `.nvmrc` 24 and `engines` >= 24; CI uses read-only token permissions and commit-pinned actions.
+- **Build:** `npm test` runs every `scripts/*.test.mjs` through `scripts/test-run.mjs` (stdout is node's reporter; per-file n/total, heartbeat and end line go to stderr); `.nvmrc` 24 and `engines` >= 24; CI uses read-only token permissions and commit-pinned actions.
 
 ## v0.10 additions
 Decisions: `docs/adr/` 0006. Contracts: `docs/contracts/` (`aico-settings`, `role-names`, `dispatch-prompt` v4).
