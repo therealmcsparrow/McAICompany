@@ -25,7 +25,7 @@ const V3B = `${PID}/02-fix`;
 
 const roots = [];
 after(() => { for (const r of roots) fs.rmSync(r, { recursive: true, force: true }); });
-const tmp = (p) => { const r = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), p))); roots.push(r); return r; };
+const tmp = (p) => { const r = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), p))); roots.push(r); return r; };
 const put = (root, rel, text) => {
   const abs = path.join(root, ...rel.split('/'));
   fs.mkdirSync(path.dirname(abs), { recursive: true });

@@ -12,7 +12,7 @@ import { isRunName, parseOutputLine, allowsTool } from '../mods/lib/reprompt-gat
 
 const tmps = [];
 after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
-const root = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'flows-v3-')); tmps.push(d); return d; };
+const root = () => { const d = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'flows-v3-'))); tmps.push(d); return d; };
 
 const PID = 'P20261109.000009';
 const V3 = `${PID}/01-idea`;
