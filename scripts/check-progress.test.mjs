@@ -66,8 +66,9 @@ function stdoutOf(root) {
 }
 
 const lines = s => (s === '' ? [] : s.replace(/\n$/, '').split('\n'));
-const ITEM_RE = /^aico check: (\d+)\/(\d+) (.+) (ok|fail) \d+\.\d s$/;
-const END_RE = /^aico check: end, (\d+) pass, (\d+) fail, \d+\.\d s$/;
+// One format for all commands, pinned by scripts/progress.test.mjs.
+const ITEM_RE = /^aico check: (\d+)\/(\d+) (.+) (ok|fail)$/;
+const END_RE = /^aico check: end, (\d+) ok, (\d+) fail, \d+(?:\.\d+)?s$/;
 
 function recorder(t) {
   const calls = [];
