@@ -13,8 +13,10 @@
 
 ## How it works
 1. Each question has two to four options and a recommended one.
-2. Each answer is saved to `.company/work/<slug>/grill.md` before the next question.
+2. Each answer is saved to `grill.md` in the run folder before the next question. In a project this is `.company/work/<ProjectID>/<NN>-grill/`; older runs keep `.company/work/<slug>/`.
 3. It ends with a form whose options depend on your company type.
+
+**Joining a project.** If a project is active when you start by hand, one form asks whether to join it or start a new one. When another Playbook hands an idea to grill, the hand-over carries a last line `project: <ProjectID>` and the run joins that project without asking. A line naming an unknown or inactive project is ignored and the run starts a new project.
 
 ## Technical details
 **You get.** `grill.md` with the idea, decisions, facts with sources, and proposed glossary and ADR lines. Proposals are never written for you.
