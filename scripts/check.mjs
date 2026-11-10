@@ -7,6 +7,7 @@ import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
 import { checkDrift } from './contract-drift.mjs';
 import { probe } from './drift-probe.mjs';
 import { expandGroups, parseBaseline } from './skill-catalog.mjs';
+import { createProgress } from './progress.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -837,11 +838,22 @@ export function checkDescriptionBudget(entries, errors, notes) {
   notes.push(`agent descriptions: ~${total} of ${DESCRIPTION_BUDGET.total} tokens, headroom ${DESCRIPTION_BUDGET.total - total}`);
 }
 
-export function check(root, { today } = {}) {
+export const CHECK_PHASES = Object.freeze(['units', 'references', 'versions', 'dispatch', 'docs', 'catalog', 'company', 'local']);
+
+export function check(root, { today, progress } = {}) {
   const errors = [], warnings = [], notes = [], names = new Set(), units = [], playbooks = [], skills = [];
   const skillNames = new Set(), agentDescs = [], agentNames = new Set(), agentFm = new Map();
   const skillsDir = join(root, 'skills'), agentsDir = join(root, 'agents');
+  const tracker = typeof progress === 'function' ? progress(CHECK_PHASES.length) : null;
+  const phase = (name, fn) => {
+    const before = errors.length;
+    tracker?.begin(name);
+    fn();
+    tracker?.done(name, errors.length === before);
+  };
+  tracker?.start();
 
+  phase('units', () => {
   if (existsSync(skillsDir)) for (const dir of readdirSync(skillsDir)) {
     const file = join(skillsDir, dir, 'SKILL.md');
     if (existsSync(file)) units.push({ kind: 'skill', file, expected: dir });
@@ -872,13 +884,17 @@ export function check(root, { today } = {}) {
   }
 
   for (const n of skillNames) if (agentNames.has(n)) errors.push(`ERROR agents/${n}.md: name clash ${n} (skill and agent)`);
+  });
 
+  phase('references', () => {
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir), ...mdFiles(join(root, 'company'))]) {
     const rel = relative(root, file).split(sep).join('/');
     for (const [, ref] of readFileSync(file, 'utf8').matchAll(/aico:([a-z0-9-]+)/g))
       if (!names.has(ref)) errors.push(`ERROR ${rel}: unknown reference aico:${ref}`);
   }
+  });
 
+  phase('versions', () => {
   // Version consistency: plugin.json is the source of truth; other files must agree.
   // Skipped entirely when plugin.json is absent (e.g. test fixtures), so it never false-fails.
   const pluginFile = join(root, '.claude-plugin', 'plugin.json');
@@ -897,6 +913,9 @@ export function check(root, { today } = {}) {
         errors.push(`ERROR ${rel}: version ${m[1]} != plugin.json ${version}`);
     }
   }
+  });
+
+  phase('dispatch', () => {
   // Language rule (dispatch-prompt v2) and Name rule (v3): every dispatch block passes the language and the Role's name,
   // and every Playbook resolves the language.
   for (const file of [...mdFiles(skillsDir), ...mdFiles(agentsDir)]) {
@@ -919,16 +938,20 @@ export function check(root, { today } = {}) {
   for (const p of playbooks)
     if (!LANGUAGE_EXEMPT.has(p.name) && !p.text.includes('aico:pipeline') && !p.text.includes('§1.6'))
       errors.push(`ERROR ${p.rel}: Playbook mentions neither aico:pipeline nor §1.6 (Language rule)`);
+  });
 
-  checkDocPages(root, playbooks.map(p => p.name), agentNames, errors);
-  checkCatalog(root, agentNames, errors);
-  checkCompanyTypes(root, agentNames, playbooks, skills, errors);
-  checkRoleCounts(root, agentNames, errors, agentFm);
-  checkNames(root, agentNames, errors);
-  checkModelFloor(root, agentFm, errors);
-  checkDescriptionBudget(agentDescs, errors, notes);
-  checkPersonalities(root, agentNames, errors);
-  checkLocalCompany(root, todayString(today), errors, notes);
+  phase('docs', () => checkDocPages(root, playbooks.map(p => p.name), agentNames, errors));
+  phase('catalog', () => checkCatalog(root, agentNames, errors));
+  phase('company', () => {
+    checkCompanyTypes(root, agentNames, playbooks, skills, errors);
+    checkRoleCounts(root, agentNames, errors, agentFm);
+    checkNames(root, agentNames, errors);
+    checkModelFloor(root, agentFm, errors);
+    checkDescriptionBudget(agentDescs, errors, notes);
+    checkPersonalities(root, agentNames, errors);
+  });
+  phase('local', () => checkLocalCompany(root, todayString(today), errors, notes));
+  tracker?.end();
   return { errors: [...new Set(errors)], warnings, notes };
 }
 
@@ -953,7 +976,7 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) 
     process.exit(errors.length ? 1 : 0);
   }
   const root = args[0] ?? join(fileURLToPath(import.meta.url), '..', '..');
-  const { errors, warnings, notes } = check(root);
+  const { errors, warnings, notes } = check(root, { progress: total => createProgress({ command: 'aico check', total, unit: 'phases' }) });
   [...errors, ...warnings, ...notes].forEach(l => console.log(l));
   console.log(`${errors.length} error(s), ${warnings.length} warning(s)`);
   process.exit(errors.length ? 1 : 0);
