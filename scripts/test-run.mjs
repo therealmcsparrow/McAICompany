@@ -51,7 +51,7 @@ function shown(file) {
 export default async function* reporter(source) {
   const raw = process.env.AICO_TEST_TOTAL;
   const total = typeof raw === 'string' && /^\d{1,7}$/.test(raw) && Number(raw) <= MAX_TOTAL ? Number(raw) : '?';
-  const progress = createProgress({ command: 'test-run', total, unit: 'files' });
+  const progress = createProgress({ command: 'aico test', total, unit: 'files' });
   progress.start();
   const open = new Set();
   const finished = new Set();
@@ -94,7 +94,7 @@ function main(args) {
     { cwd: process.cwd(), env, stdio: 'inherit' }
   );
   if (r.error) {
-    process.stderr.write(`test-run: cannot start node --test: ${r.error.code ?? 'error'}\n`);
+    process.stderr.write(`aico test: cannot start node --test: ${r.error.code ?? 'error'}\n`);
     return 1;
   }
   if (r.signal) return 1;
