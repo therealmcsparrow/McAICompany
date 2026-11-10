@@ -81,24 +81,20 @@ test('AC2 no heartbeat when every file is faster than the interval', () => {
 test('AC3 last stderr line has pass and fail counts and seconds, on pass', () => {
   const r = wrapped([PASS_A, PASS_B]);
   const last = lines(r.err).at(-1) ?? '';
-  assert.match(last, /\b2\b.*pass/i);
-  assert.match(last, /\b0\b.*fail/i);
-  assert.match(last, /\d+(\.\d+)?\s*s\b/);
+  assert.match(last, /^test-run: end, 2 ok, 0 fail, \d+(?:\.\d+)?s$/);
   assert.equal(r.code, 0);
 });
 
 test('AC3 last stderr line counts the failing file, on fail', () => {
   const r = wrapped([PASS_A, FAIL]);
   const last = lines(r.err).at(-1) ?? '';
-  assert.match(last, /\b1\b.*pass/i);
-  assert.match(last, /\b1\b.*fail/i);
-  assert.match(last, /\d+(\.\d+)?\s*s\b/);
+  assert.match(last, /^test-run: end, 1 ok, 1 fail, \d+(?:\.\d+)?s$/);
 });
 
 test('AC3 no heartbeat or other line follows the end line', () => {
   const r = wrapped([SLOW], { AICO_PROGRESS_HEARTBEAT_MS: '50' });
   const ls = lines(r.err);
-  const endIdx = ls.map((l) => /pass/i.test(l) && /fail/i.test(l) && !/\d\/\d/.test(l)).lastIndexOf(true);
+  const endIdx = ls.map((l) => /: end, \d+ ok, \d+ fail, /.test(l)).lastIndexOf(true);
   assert.equal(endIdx, ls.length - 1, `end line is not last in:\n${r.err}`);
 });
 
@@ -156,5 +152,5 @@ test('AC6 start, n/total, heartbeat and end all appear in one non-TTY run', () =
   assert.ok(ls.some((l) => /\b1\/2\b/.test(l)));
   assert.ok(ls.some((l) => /\b2\/2\b/.test(l)));
   assert.ok(ls.some((l) => l.includes('slow.fixture.mjs') && !/\b\d\/2\b/.test(l) && /\d+(\.\d+)?\s*s\b/.test(l)));
-  assert.match(ls.at(-1), /pass/i);
+  assert.match(ls.at(-1), /^test-run: end, \d+ ok, \d+ fail, \d+(?:\.\d+)?s$/);
 });
