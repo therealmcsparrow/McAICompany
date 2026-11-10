@@ -60,6 +60,26 @@ test('a stream suffix on the record name is still judged', () => {
   for (const tail of ['::$DATA', ':x']) assert.notEqual(recordPath(`Z:/p/.company/work/${RUN}/01-feature/run-state.jsonl${tail}`), null, tail);
 });
 
+test('a stream suffix holding a slash cannot make a record path read as another run', () => {
+  const found = recordPath(`.company/work/${RUN}/run-state.jsonl:/../../run-one/run-state.jsonl`);
+  assert.notEqual(found, null);
+  assert.notEqual(found.slug, RUN);
+  for (const tail of [':/../../run-one/run-state.jsonl', '::$DATA/../../run-one/run-state.jsonl']) {
+    const other = recordPath(`.company/work/run-two/run-state.jsonl${tail}`);
+    assert.notEqual(other, null, tail);
+    assert.notEqual(other.slug, 'run-two', tail);
+  }
+});
+
+test('ordinary product files under a short-name home with a work folder are not judged', () => {
+  for (const path of [
+    'C:/Users/CARLOH~1/work/proj/src/a~b.ts',
+    'C:/Users/CARLOH~1/work/proj/src/run-stats.csv',
+    'C:/Users/CARLOH~1/work/proj/run-state-notes.md',
+    'C:\\Users\\CARLOH~1\\work\\proj\\src\\a~b.ts'
+  ]) assert.equal(recordPath(path), null, path);
+});
+
 test('a drive letter and an ordinary home short name are not judged', () => {
   for (const path of [
     'Z:/p/src/a.ts',

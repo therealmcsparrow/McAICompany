@@ -10,7 +10,9 @@ const SCRIPT_PATH = /^[A-Za-z0-9_.:/\\+@-]+$/;
 const POLICIES = ['off', 'warn', 'block'];
 const STATES = ['pass', 'open', 'error'];
 // A run-state record file under a run folder. Trailing dots, spaces and a stream suffix reach the same file on Windows.
-const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]*(?:\/[^/]*)?)\/run-state\.jsonl[. ]*(?::.*)?$/i;
+const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]*(?:\/[^/]*)?)\/run-state\.jsonl[. ]*(?::[^/]*)?$/i;
+// The last segment of a record, or its short (8.3) alias such as RUN-ST~1.JSO.
+const RECORD_LIKE = /^(?:run-state\.jsonl|run-st[a-z]*~\d+(?:\.[a-z0-9]{0,3})?)$/i;
 
 // A path that has a segment after the `work` folder.
 const WORK_ROOT = /(?:(?:^|\/)\.company\/|^)work\/./i;
@@ -103,10 +105,13 @@ function canonicalPath(text) {
 function aliasAbove(path) {
   const parts = path.split('/');
   const last = parts[parts.length - 1];
-  if (!/^run-st/i.test(last) && !last.includes('~')) return false;
-  const first = parts.findIndex((part) => part.includes('~'));
-  if (first < 0) return false;
-  return parts.slice(first + 1, -1).some((part) => part.toLowerCase() === 'work' || part.includes('~'));
+  if (!RECORD_LIKE.test(last)) return false;
+  return parts.some((part, index) => {
+    if (!part.includes('~')) return false;
+    const next = parts[index + 1];
+    const below = parts.length - index - 2;
+    return next !== undefined && (next.toLowerCase() === 'work' || next.includes('~')) && below >= 1 && below <= 3;
+  });
 }
 
 function matchRecord(path) {
