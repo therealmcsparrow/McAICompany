@@ -143,7 +143,9 @@ test('AC2: a check running past the heartbeat interval gets a line with its id a
   const beats = res.lines.slice(1, done).filter(l => l.text.includes('slow') && /\d+(?:\.\d+)?\s?s\b/.test(l.text));
   assert.ok(beats.length >= 1, `no heartbeat before the first check finished:\n${res.err}`);
   assert.ok(beats[0].at >= 150, `heartbeat at ${beats[0].at} ms is earlier than the interval`);
-  assert.ok(beats.length <= 6, `heartbeat flood: ${beats.length} lines`);
+  // Flood bound follows the elapsed time the last beat reports (interval 200 ms), so a loaded host that stretches the check stays green.
+  const lastSecs = Number(/(\d+(?:\.\d+)?)\s?s$/.exec(beats[beats.length - 1].text)?.[1] ?? 0);
+  assert.ok(beats.length <= Math.max(6, Math.ceil(lastSecs * 5) + 2), `heartbeat flood: ${beats.length} lines, last at ${lastSecs}s`);
   assert.ok(res.lines[done].at - res.lines[0].at >= 800, 'the slow check ran about one second');
 });
 

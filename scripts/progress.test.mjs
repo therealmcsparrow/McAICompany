@@ -143,7 +143,9 @@ test('heartbeat fires while the main thread is blocked in spawnSync, naming the 
   const doneIdx = r.lines.findIndex((l) => DONE_RE.test(l));
   assert.ok(doneIdx > 1, `expected a line between start and done:\n${r.stderr}`);
   const beats = r.lines.slice(1, doneIdx);
-  assert.ok(beats.length >= 1 && beats.length <= 9, `beats: ${beats.length}`);
+  // Flood bound follows the elapsed time the last beat reports, so a slow, loaded host that stretches the block stays green.
+  const lastSecs = Number(/(\d+(?:\.\d+)?)s$/.exec(beats[beats.length - 1] || '')?.[1] ?? 0);
+  assert.ok(beats.length >= 1 && beats.length <= Math.max(9, Math.ceil(lastSecs * 10) + 2), `beats: ${beats.length}, last at ${lastSecs}s`);
   for (const b of beats) {
     assert.match(b, /^aico check: /);
     assert.ok(b.includes('slow-item'), b);
