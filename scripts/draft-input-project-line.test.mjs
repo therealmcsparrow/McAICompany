@@ -239,6 +239,30 @@ describe('take --project', () => {
     assert.equal(ok.lines.at(-1), `project: ${other.id}`);
   });
 
+  test('a to-spec prompt.md from another project is exempt: a new run in the flagged project (R-18a)', () => {
+    const f = fixture();
+    const other = makeProjectV3(IO, f.root, NOW, 'Other page', 'to-spec');
+    put(f.root, `.company/work/${other.name}/prompt.md`, 'Write a spec for the other page');
+    const beforeOther = walk(path.join(f.root, '.company', 'work', other.id));
+    const r = run(f.root, 'take', `.company/work/${other.name}/prompt.md`, '--project', f.A, '--for', 'to-spec');
+    assert.equal(r.code, 0);
+    assert.match(r.lines[0], new RegExp(`^slug: ${f.A}/\\d\\d-to-spec$`));
+    assert.equal(r.lines.at(-1), `project: ${f.A}`);
+    assert.ok(exists(f.root, `.company/work/${r.lines[0].slice(6)}/input-to-spec.md`));
+    assert.deepEqual(walk(path.join(f.root, '.company', 'work', other.id)), beforeOther, 'source project unchanged');
+  });
+
+  test('an old-style source in no project is refused with --project, nothing written (R-18b)', () => {
+    const f = fixture();
+    put(f.root, '.company/work/old-login/grill.md', '---\nformat: 1\n---\n## Log\n');
+    put(f.root, '.company/work-folder-topic-to-spec.txt', 'Topic');
+    const before = walk(path.join(f.root, '.company', 'work'));
+    const r = run(f.root, 'take', '.company/work/old-login/grill.md', '--project', f.A, '--for', 'to-spec');
+    assert.deepEqual(r, { code: 3, lines: ['refused: bad project'] });
+    assert.deepEqual(walk(path.join(f.root, '.company', 'work')), before);
+    assert.ok(!exists(f.root, '.company/work-folder-topic-to-spec.txt'), 'Topic dropped');
+  });
+
   test('the flag shape: only <path> --project <id> before --for', () => {
     const { root, A } = fixture();
     put(root, 'notes.md', NOTE);
