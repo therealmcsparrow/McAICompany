@@ -51,7 +51,8 @@ test('stream suffixes, device paths, trailing dots and short names above the run
     `//?/Z:/p/.company /work/${rec}`,
     `Z:/p/.company/work/${RUN}./01-feature /run-state.jsonl`,
     `Z:/p/COMPAN~1/work/${rec}`,
-    `Z:/p/COMPAN~1/WORK~1/${rec}`,
+    `Z:/p/COMPAN~1/work/${RUN}/RU3F2A~1.JSO`,
+    `COMPAN~1\\work\\${RUN}\\RU3F2A~1.JSO`,
     `Z:/p/COMPAN~1/work/run-one/run-state.jsonl`
   ]) assert.deepEqual(recordPath(path), { slug: null }, path);
 });
@@ -61,13 +62,12 @@ test('a stream suffix on the record name is still judged', () => {
 });
 
 test('a stream suffix holding a slash cannot make a record path read as another run', () => {
-  const found = recordPath(`.company/work/${RUN}/run-state.jsonl:/../../run-one/run-state.jsonl`);
-  assert.notEqual(found, null);
-  assert.notEqual(found.slug, RUN);
-  for (const tail of [':/../../run-one/run-state.jsonl', '::$DATA/../../run-one/run-state.jsonl']) {
-    const other = recordPath(`.company/work/run-two/run-state.jsonl${tail}`);
-    assert.notEqual(other, null, tail);
-    assert.notEqual(other.slug, 'run-two', tail);
+  for (const tail of [':/../../run-one/run-state.jsonl', ':x/../../run-one/run-state.jsonl', '::$DATA/../../run-one/run-state.jsonl', ':\\..\\..\\run-one\\run-state.jsonl']) {
+    for (const first of [RUN, 'run-two']) {
+      const found = recordPath(`.company/work/${first}/run-state.jsonl${tail}`);
+      assert.notEqual(found, null, tail);
+      assert.equal(found.slug, 'run-one', tail);
+    }
   }
 });
 
@@ -85,7 +85,10 @@ test('a drive letter and an ordinary home short name are not judged', () => {
     'Z:/p/src/a.ts',
     'C:/Users/CARLOH~1/p/src/a.ts',
     'C:/Users/CARLOH~1/p/run-state.jsonl',
-    'Z:/p/COMPAN~1/work/x/notes.md'
+    'Z:/p/COMPAN~1/work/x/notes.md',
+    'Z:/p/COMPAN~1/work/x/a~b.ts',
+    'Z:/p/COMPAN~1/work/x/run-stats.csv',
+    'Z:/p/COMPAN~1/WORK~1/x/run-state.jsonl'
   ]) assert.equal(recordPath(path), null, path);
 });
 
