@@ -92,7 +92,8 @@ test('idea input uses the slug arg printed', () => {
 test('shell words are fixed words or printed values only', () => {
   const sh = lines.filter((l) => l.includes('run.mjs'));
   assert.ok(sh.length >= 4);
-  for (const l of sh) assert.ok(!/\$\(|`[^`]*;[^`]*`/.test(l), `shell metachar: ${l}`);
+  // Judge the code spans only: a `;` in the prose between two spans is not a shell word.
+  for (const l of sh) for (const [, span] of l.matchAll(/`([^`]*)`/g)) assert.ok(!/\$\(|;/.test(span), `shell metachar: ${l}`);
   has('fixed words and values `arg`, `take` or `grill` printed');
 });
 

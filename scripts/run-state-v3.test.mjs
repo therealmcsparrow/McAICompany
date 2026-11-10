@@ -167,7 +167,7 @@ describe('projects --json (AC1, AC10)', () => {
   test('works through the real CLI', () => {
     const root = repo();
     v3(root, ID);
-    go(root, ['start', SLUG]);
+    go(root, ['start', SLUG], Date.now() - T0); // the spawned CLI reads the real clock, so start the segment now
     const cp = spawnSync(process.execPath, [SCRIPT, 'projects', '--json'], { cwd: root, encoding: 'utf8' });
     assert.equal(cp.status, 0);
     assert.deepEqual(ids(JSON.parse(cp.stdout)), [ID]);

@@ -341,7 +341,7 @@ describe('one copy of the name rule', () => {
     assert.match(read('mods/reflect.tsx'), /slug: workFolder/);
     assert.match(read('mods/cache-tax.tsx'), /run: workFolder/);
     assert.match(read('mods/lib/blast.mjs'), /parseOutputLine/);
-    assert.match(read('mods/lib/plan-gate.mjs'), /isWorkFolder/);
+    assert.match(read('mods/lib/plan-gate.mjs'), /workParts/); // plan-gate moved from isWorkFolder to workParts in 25da620
     assert.match(read('scripts/reflect.mjs'), /isRunSlug/);
   });
 
