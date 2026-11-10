@@ -86,6 +86,29 @@ function aliasName(path) {
   return last.includes('~') || (/^run-st/i.test(last) && /[. ]$/.test(last));
 }
 
+// The path as Windows resolves it: a `//./` or `//?/` device root dropped, every segment cut at its first `:` (a stream
+// suffix) and trimmed of trailing dots and spaces, a leading `X:` drive kept, then `.`, `..` and empty segments resolved.
+function canonicalPath(text) {
+  const body = /^\/\/[.?]\//.test(text) ? text.slice(4) : text;
+  const parts = body.split('/').map((part, index) => {
+    if (index === 0 && /^[A-Za-z]:$/.test(part)) return part;
+    const cut = part.indexOf(':') < 0 ? part : part.slice(0, part.indexOf(':'));
+    if (cut.trim() === '..') return '..';
+    return cut.replace(/[. ]+$/, '');
+  });
+  return resolveSegments(parts.join('/'));
+}
+
+// Judged when a short (8.3) alias segment sits above a `work` folder (or another alias) and the path ends in a record-like name.
+function aliasAbove(path) {
+  const parts = path.split('/');
+  const last = parts[parts.length - 1];
+  if (!/^run-st/i.test(last) && !last.includes('~')) return false;
+  const first = parts.findIndex((part) => part.includes('~'));
+  if (first < 0) return false;
+  return parts.slice(first + 1, -1).some((part) => part.toLowerCase() === 'work' || part.includes('~'));
+}
+
 function matchRecord(path) {
   const found = RECORD_PATH.exec(path);
   if (found === null) return null;
@@ -102,7 +125,9 @@ export function recordPath(path) {
   if (typeof path !== 'string' || path.length > MAX_PATH) return null;
   const raw = path.replaceAll('\\', '/');
   const resolved = resolveSegments(raw);
-  return matchRecord(raw) ?? matchRecord(resolved) ?? (aliasName(resolved) ? { slug: null } : null);
+  const canon = canonicalPath(raw);
+  return matchRecord(raw) ?? matchRecord(resolved) ?? (matchRecord(canon) === null ? null : { slug: null }) ??
+    (aliasName(resolved) || aliasName(canon) || aliasAbove(canon) ? { slug: null } : null);
 }
 
 export function writeTarget(input) {

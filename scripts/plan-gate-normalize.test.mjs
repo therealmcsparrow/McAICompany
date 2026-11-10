@@ -39,6 +39,36 @@ test('a last segment that starts run-st and ends in a dot or space is judged wit
   ]) assert.deepEqual(recordPath(path), { slug: null }, path);
 });
 
+test('stream suffixes, device paths, trailing dots and short names above the run folder are judged with a null slug', () => {
+  const rec = `${RUN}/01-feature/run-state.jsonl`;
+  for (const path of [
+    `Z:/p/.company::$INDEX_ALLOCATION/work/${rec}`,
+    `Z:/p/.company/work::$INDEX_ALLOCATION/${rec}`,
+    `Z:/p/.company/work:$I30:$INDEX_ALLOCATION/${rec}`,
+    `//./Z:/p/.company./work/${rec}`,
+    `//./Z:/p/.company/work./${rec}`,
+    `\\\\.\\Z:\\p\\.company.\\work\\${RUN}\\01-feature\\run-state.jsonl`,
+    `//?/Z:/p/.company /work/${rec}`,
+    `Z:/p/.company/work/${RUN}./01-feature /run-state.jsonl`,
+    `Z:/p/COMPAN~1/work/${rec}`,
+    `Z:/p/COMPAN~1/WORK~1/${rec}`,
+    `Z:/p/COMPAN~1/work/run-one/run-state.jsonl`
+  ]) assert.deepEqual(recordPath(path), { slug: null }, path);
+});
+
+test('a stream suffix on the record name is still judged', () => {
+  for (const tail of ['::$DATA', ':x']) assert.notEqual(recordPath(`Z:/p/.company/work/${RUN}/01-feature/run-state.jsonl${tail}`), null, tail);
+});
+
+test('a drive letter and an ordinary home short name are not judged', () => {
+  for (const path of [
+    'Z:/p/src/a.ts',
+    'C:/Users/CARLOH~1/p/src/a.ts',
+    'C:/Users/CARLOH~1/p/run-state.jsonl',
+    'Z:/p/COMPAN~1/work/x/notes.md'
+  ]) assert.equal(recordPath(path), null, path);
+});
+
 test('ordinary files and paths outside work are not judged', () => {
   for (const path of [
     `.company/work/${RUN}/01-feature/notes.md`,
