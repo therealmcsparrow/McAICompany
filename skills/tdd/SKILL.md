@@ -24,3 +24,5 @@ description: Use when an aico builder or QA writes or changes code. Test first, 
 **No tautological tests.** A test must fail when the behaviour breaks. Never assert on the test's own setup or fixture, never restate the code under test in the expectation, never mock the unit under test, and never assert only that a mock was called. Expected values come from an independent source: a known literal, a worked example, the spec; never recomputed the way the code computes them.
 
 **Mock only at system boundaries:** external APIs, time and randomness, and the database or file system when a real test instance is not practical. Never mock your own modules. Pass boundary clients in rather than building them inside the code, and give each external operation its own function (`getUser`, `createOrder`) rather than one generic fetcher, so each mock returns one shape with no logic of its own. `aico:review` blocks such a test as `[test]`.
+
+**Long runs.** Use a streaming reporter for any long run (full suite, build, scan) so output streams as it runs; never silence or fully buffer it, and name where the output went in `## Did`.

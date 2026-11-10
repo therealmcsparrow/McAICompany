@@ -26,3 +26,5 @@ A code comment about Handoffs, Steps, Roles, AI or company process is `## Blocki
 **Sort:** bug, spec miss, Contract violation, missing test, security risk → `## Blocking`; style → `## Nits`. A builder edit to a QA-owned file (plan-tasks v1.7), or an AC proven only by builder tests, is `## Blocking` `[test]`. A test that asserts its own setup or mocks the unit under test is `## Blocking` `[test]` (`aico:tdd`, `plan-tasks` v1.3 `seams:`).
 
 **Open decisions.** A finding caused by a choice the plan left open (no `Decided:` line) also gets a Nit `[open-decision] <plan file>:<line or section> — <the open choice>`. The tag never appears under `## Blocking`; a bug it caused stays Blocking, untagged.
+
+**Long runs.** Use a streaming reporter for any long run (full suite, build, scan) so output streams as it runs; never silence or fully buffer it, and name where the output went in `## Did`.

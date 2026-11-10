@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **Progress on long commands.** `npm test`, `check.mjs` and `rule-check run` now write progress lines to stderr: a start line, one line per finished item (file, phase or check) and a heartbeat after 10 s of silence. Stdout and exit codes are unchanged; library calls stay silent. `npm test` runs through `scripts/test-run.mjs`.
+- Role skills (`tdd`, `review`, `verify`) and the `qa` agent tell a Role to use a streaming reporter for long runs, never silence or fully buffer them, and name the output place in `## Did`.
+
 ## [0.34.0] - 2026-11-10
 
 Rollback: node scripts/stable.mjs 0.33.0
