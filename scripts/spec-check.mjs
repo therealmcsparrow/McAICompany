@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Destination spec check (contract: docs/contracts/destination-spec.md v1.4). Node built-ins only.
+// Destination spec check (contract: docs/contracts/destination-spec.md v1.5). Node built-ins only.
 // `check` reports a spec that holds a code block, a file path, a bad frontmatter or a wrong heading list;
 // `stamp` fills the two pending frontmatter values once. Spec text and arguments are untrusted: sizes are
 // capped before parsing, every pattern is anchored over a character class or replaced by a single scan, the
@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { WorkFolderRefusal, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, slugOfKey, workParts } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
 const MAX_BYTES = 64 * 1024;
@@ -34,7 +34,10 @@ class Refused extends Error {}
 // judged by the shared allow-list.
 function isSpecRel(rel) {
   if (typeof rel !== 'string' || rel.length > MAX_ARG) return false;
-  if (rel.startsWith(SPECS_DIR) && rel.endsWith('.md')) return workParts(rel.slice(SPECS_DIR.length, -'.md'.length))?.length === 1;
+  if (rel.startsWith(SPECS_DIR) && rel.endsWith('.md')) {
+    const name = rel.slice(SPECS_DIR.length, -'.md'.length);
+    return workParts(name)?.length === 1 || (!name.includes('/') && slugOfKey(name) !== null);
+  }
   if (rel.startsWith(WORK_DIR) && rel.endsWith('/spec.md')) return isRunSlug(rel.slice(WORK_DIR.length, -'/spec.md'.length));
   return false;
 }
