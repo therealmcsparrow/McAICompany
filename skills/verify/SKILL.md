@@ -10,3 +10,5 @@ description: Use before any aico Role writes status done or claims something wor
 **Fallback:** run the actual command (tests, build, lint, app), read its output, and quote the result line in your Handoff under `## Did`. "Should pass" isn't evidence. If you couldn't run it, say so and set `status: blocked`.
 
 **Scope of the run.** Builders and QA verify with the test files that cover their changed files plus `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check` (or the product's check); they start no full suite run, in the background or while another Role may be running one in the same tree. A "prove it is fixed" check repeats only the affected file, at most 3 times; QA starts no full run. The one full run is the Lead's: it runs the full suite once, in the foreground, after the last review and before the Ship Gate; CI runs it on the PR.
+
+**Long runs.** Use a streaming reporter for any long run (full suite, build, scan) so output streams as it runs; never silence or fully buffer it, and name where the output went in `## Did`.

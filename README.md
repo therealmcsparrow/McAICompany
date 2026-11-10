@@ -162,6 +162,8 @@ Code-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, PM, ac
 npm test        # checker and installer tests
 npm run check   # frontmatter, broken aico: refs; warns when agents > 50 or skills > 125 lines
 ```
+Both commands, and `rule-check run`, print progress on stderr only: lines start with `aico test:`, `aico check:` or `aico rule-check:`, and the last line reads `end, <N> ok, <M> fail, <X>s`. Stdout and exit codes are the same as before. After 10 s without output you get a `still running` line.
+
 Pressure-test evidence: `tests/pressure/RESULTS.md`.
 
 ## Credits

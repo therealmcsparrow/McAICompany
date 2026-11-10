@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draft input (contract: docs/contracts/draft-input.md v1.7). Node built-ins only.
+// Draft input (contract: docs/contracts/draft-input.md v1.8). Node built-ins only.
 // `arg` turns the argument file into a fixed result line, `free` picks a name that never reuses earlier work,
 // `take` copies a file input once, `stale` compares a draft plan's paths with HEAD.
 // Work folder names come only from ../mods/lib/work-folder.mjs.
@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { normalizePath, parsePlan } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isProjectId, isTicketHeading, isWorkFolder, makeProject, makeRun, makeRunV3, parseName, parseRun, projectIdOf, readTopicFile, runOf, stampOf, ticketLocal, ticketPattern, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, candidates, fallbackTopic, helperName, isLegacySlug, isProjectId, isTicketHeading, isWorkFolder, makeProject, makeRun, makeRunV3, parseName, parseRun, projectIdOf, readTopicFile, runOf, slugOfKey, stampOf, ticketLocal, ticketPattern, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 import { readPlanLines } from './plan-markdown.mjs';
 import { projects } from './run-state.mjs';
 import { checkText } from './spec-check.mjs';
@@ -196,6 +196,10 @@ function checkPath(text) {
   if (!p.startsWith(WORK_PREFIX)) {
     // ASCII-only fold: it only picks the refusal words and never grants access.
     if (p.slice(0, WORK_PREFIX.length).replace(/[A-Z]/g, (c) => c.toLowerCase()) === WORK_PREFIX) throw new Refused('wrong letter case');
+    if (p.startsWith('docs/specs/') && p.endsWith('.md')) {
+      const key = p.slice('docs/specs/'.length, -3);
+      if (key.includes('~') && !key.includes('/') && slugOfKey(key) !== null) return { ok: true, path: p };
+    }
     return normalizePath(p);
   }
   if (p.length > MAX_WORK_PATH) return { ok: false, reason: 'too long' };
