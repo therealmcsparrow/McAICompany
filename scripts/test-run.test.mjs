@@ -47,7 +47,7 @@ const lines = (s) => s.split('\n').filter((l) => l.length > 0);
 test('AC1 start line is the first stderr line and names the command and file count', () => {
   const r = wrapped([PASS_A, PASS_B]);
   const first = lines(r.err)[0] ?? '';
-  assert.match(first, /test-run|aico test/i);
+  assert.match(first, /^aico test: /);
   assert.match(first, /start/i);
   assert.match(first, /\b2\b/);
 });
@@ -81,14 +81,14 @@ test('AC2 no heartbeat when every file is faster than the interval', () => {
 test('AC3 last stderr line has pass and fail counts and seconds, on pass', () => {
   const r = wrapped([PASS_A, PASS_B]);
   const last = lines(r.err).at(-1) ?? '';
-  assert.match(last, /^test-run: end, 2 ok, 0 fail, \d+(?:\.\d+)?s$/);
+  assert.match(last, /^aico test: end, 2 ok, 0 fail, \d+(?:\.\d+)?s$/);
   assert.equal(r.code, 0);
 });
 
 test('AC3 last stderr line counts the failing file, on fail', () => {
   const r = wrapped([PASS_A, FAIL]);
   const last = lines(r.err).at(-1) ?? '';
-  assert.match(last, /^test-run: end, 1 ok, 1 fail, \d+(?:\.\d+)?s$/);
+  assert.match(last, /^aico test: end, 1 ok, 1 fail, \d+(?:\.\d+)?s$/);
 });
 
 test('AC3 no heartbeat or other line follows the end line', () => {
@@ -121,7 +121,7 @@ test('AC4 stdout carries no progress line', () => {
   assert.match(r.err, /\b2\/2\b/);
   assert.match(r.out, /pass/i);
   assert.doesNotMatch(r.out, /\b[12]\/2\b.*fixture/);
-  assert.doesNotMatch(r.out, /test-run: start/i);
+  assert.doesNotMatch(r.out, /aico test: start/i);
 });
 
 test('AC4 a failing run keeps the node not ok lines off the progress lines', () => {
@@ -152,5 +152,5 @@ test('AC6 start, n/total, heartbeat and end all appear in one non-TTY run', () =
   assert.ok(ls.some((l) => /\b1\/2\b/.test(l)));
   assert.ok(ls.some((l) => /\b2\/2\b/.test(l)));
   assert.ok(ls.some((l) => l.includes('slow.fixture.mjs') && !/\b\d\/2\b/.test(l) && /\d+(\.\d+)?\s*s\b/.test(l)));
-  assert.match(ls.at(-1), /^test-run: end, \d+ ok, \d+ fail, \d+(?:\.\d+)?s$/);
+  assert.match(ls.at(-1), /^aico test: end, \d+ ok, \d+ fail, \d+(?:\.\d+)?s$/);
 });
