@@ -159,7 +159,7 @@ test('AC3: the last stderr line gives pass and fail counts and elapsed seconds; 
   const res = await runCli(r, runArgs(r), HEARTBEAT);
   const last = res.lines.at(-1).text;
   assert.match(last, /^aico rule-check: /, last);
-  assert.match(last, /\b1 pass/, last);
+  assert.match(last, /\b1 ok/, last);
   assert.match(last, /\b1 fail/, last);
   assert.match(last, /\d+(?:\.\d+)? ?s\b/, last);
   assert.ok(res.err.endsWith('\n'));
@@ -178,7 +178,7 @@ test('AC3: a binding whose rule text changed counts as a fail', async () => {
   const res = await runCli(r, runArgs(r), HEARTBEAT);
   assert.match(res.lines[0].text, /start, 2 \w+/, res.err);
   const last = res.lines.at(-1).text;
-  assert.match(last, /\b1 pass/, last);
+  assert.match(last, /\b1 ok/, last);
   assert.match(last, /\b1 fail/, last);
 });
 
