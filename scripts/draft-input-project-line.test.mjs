@@ -1,4 +1,4 @@
-// draft-input v1.7: a last `project:` line in the argument file, and `take --project`.
+// draft-input v1.8: a last `project:` line in the argument file, and `take --project`.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,9 +13,9 @@ after(() => {
   for (const d of made) fs.rmSync(d, { recursive: true, force: true });
 });
 
-test('the fixture stamp matches the draft-input Contract header (v1.7)', () => {
-  assert.equal(loadGolden('draft-input').version, '1.7');
-  assert.match(fs.readFileSync(new URL('./draft-input.mjs', import.meta.url), 'utf8').split('\n')[1], /draft-input\.md v1\.7\)/);
+test('the fixture stamp matches the draft-input Contract header (v1.8)', () => {
+  assert.equal(loadGolden('draft-input').version, '1.8');
+  assert.match(fs.readFileSync(new URL('./draft-input.mjs', import.meta.url), 'utf8').split('\n')[1], /draft-input\.md v1\.8\)/);
 });
 
 const IO = { fs, path, platform: process.platform };
