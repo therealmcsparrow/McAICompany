@@ -276,7 +276,7 @@ describe('Playbook text', () => {
 
   test('the contract is v1.5 and names the work folder forms', () => {
     const text = read('docs/contracts/destination-spec.md');
-    assert.ok(text.startsWith('# Contract: destination-spec v1.4\n'));
+    assert.ok(text.startsWith('# Contract: destination-spec v1.5\n'));
     assert.ok(/v1\.3 \(/.test(text));
     assert.ok(text.includes('work-folder-name'));
     assert.ok(!text.includes('^[a-z0-9][a-z0-9-]{0,63}$') || /legacy/i.test(text));
