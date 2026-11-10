@@ -1,4 +1,4 @@
-// Tests for run-state v1.10 (run slugs `<ID>/<NN>-<playbook>`, `projects --json`).
+// Tests for run-state v1.10 write side, kept under v2.0 (run slugs `<ID>/<NN>-<playbook>`, `projects --json`).
 // Output shape: { v: 1, projects: [{ id, activity }], warnings: [] }.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -167,7 +167,7 @@ describe('projects --json (AC1, AC10)', () => {
   test('works through the real CLI', () => {
     const root = repo();
     v3(root, ID);
-    go(root, ['start', SLUG]);
+    go(root, ['start', SLUG], Date.now() - T0); // the spawned CLI reads the real clock, so start the segment now
     const cp = spawnSync(process.execPath, [SCRIPT, 'projects', '--json'], { cwd: root, encoding: 'utf8' });
     assert.equal(cp.status, 0);
     assert.deepEqual(ids(JSON.parse(cp.stdout)), [ID]);
@@ -316,7 +316,7 @@ describe('list and active unchanged for top-level runs (AC7)', () => {
   const A = '2026-11-01 10.00 - Alpha Build';
   const B = '2026-11-02 10.00 - Beta Build';
 
-  test('list output is identical with and without a v3 project beside the old runs', () => {
+  test('list keeps every old entry byte-identical when a v3 run is added (the v3 run is listed too, v2.0)', () => {
     const root = repo();
     go(root, ['start', A], -5 * H);
     go(root, ['start', B], -4 * H);
@@ -326,26 +326,21 @@ describe('list and active unchanged for top-level runs (AC7)', () => {
     v3(root, ID);
     go(root, ['start', SLUG], -1 * H);
     stepFile(root, SLUG, '03-qa.md', '03');
-    assert.deepEqual(rs.list(root, { now: T0 }), before);
-    assert.deepEqual(JSON.parse(go(root, ['list', '--json']).out), before);
+    const after = rs.list(root, { now: T0 });
+    assert.deepEqual(after.runs.filter(x => x.slug !== SLUG), before.runs);
+    assert.ok(after.runs.some(x => x.slug === SLUG));
+    assert.deepEqual(JSON.parse(go(root, ['list', '--json']).out).runs.filter(x => x.slug !== SLUG), before.runs);
   });
 
-  test('active output is identical with and without a running v3 run', () => {
+  test('active still reports an old run when the v3 run is ended', () => {
     const root = repo();
     go(root, ['start', A], -2 * H);
     const before = rs.active(root, { now: T0 });
     assert.equal(before.slug, A);
     v3(root, ID);
     go(root, ['start', SLUG], -1 * H);
+    go(root, ['end', SLUG, 'abort'], -30 * 60 * 1000);
     assert.deepEqual(rs.active(root, { now: T0 }), before);
-  });
-
-  test('active with only a v3 run is still the empty answer, list has no runs', () => {
-    const root = repo();
-    v3(root, ID);
-    go(root, ['start', SLUG], -1 * H);
-    assert.deepEqual(rs.active(root, { now: T0 }), { slug: null, view: null });
-    assert.deepEqual(rs.list(root, { now: T0 }), { v: 1, runs: [], warnings: [] });
   });
 
   test('a v2 project folder with state keeps its list entry and slug', () => {

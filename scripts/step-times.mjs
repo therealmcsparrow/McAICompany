@@ -1,11 +1,12 @@
 #!/usr/bin/env node
+// contract: docs/contracts/step-times.md v1.2
 // SubagentStart / SubagentStop adapter: appends one `sub` event to the active run through run-state.
 // Every path ends in exit 0 with nothing on stdout or stderr; the time is the receipt time run-state stamps.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isRunSlug } from '../mods/lib/work-folder.mjs';
 
 const HERE = import.meta.dirname;
 const MAX_INPUT = 64 * 1024;
@@ -67,7 +68,7 @@ export async function handle(text, phase, { runStatePath = join(HERE, 'run-state
     if (act === null) return;
     let slug;
     try { slug = JSON.parse(act).slug; } catch { return; }
-    if (!isWorkFolder(slug)) return;
+    if (!isRunSlug(slug)) return;
     const args = ['sub', slug, phase, rec.role, rec.id, ...(rec.session ? [rec.session] : [])];
     await call(runStatePath, args, cwd, left());
   } catch {

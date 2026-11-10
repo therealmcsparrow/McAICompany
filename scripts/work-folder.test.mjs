@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
   checkTopic, parseName, isWorkFolder, newName, helperName, branchId, stampOf,
-  checkPlaybookId, fallbackTopic, readTopicFile, WorkFolderRefusal,
+  checkPlaybookId, fallbackTopic, readTopicFile, WorkFolderRefusal, makeProject, checkDescription,
 } from '../mods/lib/work-folder.mjs';
 import { main } from './work-folder.mjs';
 
@@ -32,6 +32,15 @@ after(() => {
 const topicPath = (root, id = 'idea') => path.join(root, '.company', `work-folder-topic-${id}.txt`);
 const writeTopic = (root, text, id = 'idea') => fs.writeFileSync(topicPath(root, id), text);
 const run = (root, argv, now = NOW) => main(argv, { root, now });
+// Builds a v2 project the way `work-folder new --topic <mode>` did before the v3 flip: topic read, then the v2 maker.
+// Tests that read v2 names back use this, so they stay green when `new` makes only v3 (work-folder-name v3.0).
+const makeV2 = (root, argv, now = NOW) => {
+  const flag = name => argv[argv.indexOf(name) + 1];
+  const playbook = flag('--playbook');
+  const { topic } = readTopicFile(io, root, playbook, flag('--topic'), checkDescription);
+  const made = makeProject(io, root, now, topic ?? fallbackTopic(playbook), playbook);
+  return { code: 0, lines: [`id: ${made.id}`, `name: ${made.name}`, `branch: aico/${branchId(made.name)}`] };
+};
 const summaryLine = (root, name, n) => fs.readFileSync(path.join(root, '.company', 'work', name, '00-summary.md'), 'utf8').split('\n')[n - 1];
 const folders = root => fs.readdirSync(path.join(root, '.company', 'work')).sort();
 
@@ -137,7 +146,7 @@ describe('security: .company links and topic entry links', () => {
     dirs.push(target);
     fs.writeFileSync(path.join(target, 'keep.txt'), 'Fix Login');
     fs.symlinkSync(target, topicPath(root), 'junction');
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(r.code, 0);
     assert.equal(r.lines[1], `name: ${NAME}`);
     assert.equal(summaryLine(root, NAME, 1), 'Idea');
@@ -150,7 +159,7 @@ describe('security: .company links and topic entry links', () => {
     writeTopic(root, 'Fix Login');
     const other = path.join(root, 'second-link.txt');
     fs.linkSync(topicPath(root), other);
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(r.lines[1], `name: ${NAME}`);
     assert.equal(summaryLine(root, NAME, 1), 'Idea');
     assert.equal(fs.existsSync(topicPath(root)), false);
@@ -170,7 +179,7 @@ describe('security: .company links and topic entry links', () => {
   test('a topic file over 4096 bytes is not read, removed, fallback', () => {
     const root = project();
     writeTopic(root, `Fix${' a'.repeat(3000)}`);
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(r.lines[1], `name: ${NAME}`);
     assert.equal(summaryLine(root, NAME, 1), 'Idea');
     assert.equal(fs.existsSync(topicPath(root)), false);
@@ -181,7 +190,7 @@ describe('topic file: read steps and fallback', () => {
   test('a good topic is used and the file is removed', () => {
     const root = project();
     writeTopic(root, 'Fix Login\n');
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.deepEqual(r.lines, [`id: ${ID}`, `name: ${NAME}`, `branch: aico/${ID}`]);
     assert.deepEqual(folders(root), [NAME]);
     assert.equal(summaryLine(root, NAME, 1), 'Fix Login');
@@ -192,7 +201,7 @@ describe('topic file: read steps and fallback', () => {
   test('no final LF is fine too', () => {
     const root = project();
     writeTopic(root, 'Fix Login');
-    assert.equal(run(root, ['new', '--playbook', 'idea', '--topic', 'file']).lines[1], `name: ${NAME}`);
+    assert.equal(makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']).lines[1], `name: ${NAME}`);
     assert.equal(summaryLine(root, NAME, 1), 'Fix Login');
   });
 
@@ -207,19 +216,19 @@ describe('topic file: read steps and fallback', () => {
   test('--topic none uses the fallback and removes a stale file', () => {
     const root = project();
     writeTopic(root, 'Fix Login');
-    const r = run(root, ['new', '--playbook', 'usability-test', '--topic', 'none']);
+    const r = makeV2(root, ['new', '--playbook', 'usability-test', '--topic', 'none']);
     assert.equal(r.lines[1], `name: ${NAME}`);
     assert.equal(r.lines[2], `branch: aico/${ID}`);
     assert.equal(summaryLine(root, NAME, 1), 'Usability-Test');
     writeTopic(root, 'Fix Login', 'idea');
-    assert.equal(run(root, ['new', '--playbook', 'idea', '--topic', 'none']).lines[0], 'id: P20261030.000002');
+    assert.equal(makeV2(root, ['new', '--playbook', 'idea', '--topic', 'none']).lines[0], 'id: P20261030.000002');
     assert.equal(fs.existsSync(topicPath(root)), false);
   });
 
   test('a topic file ending CRLF falls back', () => {
     const root = project();
     writeTopic(root, 'Fix Login\r\n');
-    run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(summaryLine(root, NAME, 1), 'Idea');
     assert.equal(fs.existsSync(topicPath(root)), false);
   });
@@ -241,7 +250,7 @@ describe('topic file: read steps and fallback', () => {
     test(`hostile topic falls back: ${label}`, () => {
       const root = project();
       writeTopic(root, text);
-      const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+      const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
       assert.equal(r.code, 0);
       assert.equal(r.lines[1], `name: ${NAME}`);
     assert.equal(summaryLine(root, NAME, 1), 'Idea');
@@ -253,14 +262,14 @@ describe('topic file: read steps and fallback', () => {
   test('invalid UTF-8 falls back', () => {
     const root = project();
     fs.writeFileSync(topicPath(root), Buffer.from([0x46, 0xff, 0xfe]));
-    run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(summaryLine(root, NAME, 1), 'Idea');
   });
 
   test('a rejected topic text is never echoed', () => {
     const root = project();
     writeTopic(root, 'Evil $(rm -rf x)');
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(r.lines.join('\n').includes('Evil'), false);
   });
 
@@ -314,12 +323,12 @@ describe('creator: collisions and branch ids', () => {
     const ids = [];
     for (let i = 0; i < 3; i++) {
       writeTopic(root, 'Fix');
-      ids.push(run(root, ['new', '--playbook', 'idea', '--topic', 'file']).lines[0]);
+      ids.push(makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']).lines[0]);
     }
     assert.deepEqual(ids, ['id: P20261030.000001', 'id: P20261030.000002', 'id: P20261030.000003']);
     fs.writeFileSync(path.join(root, '.company', 'work', NAME, 'keep.md'), 'x');
     writeTopic(root, 'Fix');
-    run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(fs.readFileSync(path.join(root, '.company', 'work', NAME, 'keep.md'), 'utf8'), 'x');
   });
 
@@ -327,7 +336,7 @@ describe('creator: collisions and branch ids', () => {
     const root = project();
     for (let i = 0; i < 10; i++) {
       writeTopic(root, 'Fix');
-      assert.equal(run(root, ['new', '--playbook', 'idea', '--topic', 'file']).code, 0);
+      assert.equal(makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']).code, 0);
     }
     assert.equal(folders(root).length, 10);
   });
@@ -335,9 +344,9 @@ describe('creator: collisions and branch ids', () => {
   test('a different second does not collide', () => {
     const root = project();
     writeTopic(root, 'Fix');
-    run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     writeTopic(root, 'Fix');
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file'], new Date(2026, 9, 30, 23, 45, 1));
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file'], new Date(2026, 9, 30, 23, 45, 1));
     assert.deepEqual(r.lines, ['id: P20261030.000002', 'name: P20261030.000002-23.45.01', 'branch: aico/P20261030.000002']);
   });
 
@@ -346,14 +355,14 @@ describe('creator: collisions and branch ids', () => {
     fs.mkdirSync(path.join(root, '.company', 'work', '2026-10-30-2345-fix-login'));
     fs.mkdirSync(path.join(root, '.company', 'work', `${STAMP} - Fix Login`));
     writeTopic(root, 'Fix Login');
-    const r = run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    const r = makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.equal(r.lines[0], `id: ${ID}`);
   });
 
   test('the creator is not recursive: it never makes parents', () => {
     const root = project();
     writeTopic(root, 'Fix');
-    run(root, ['new', '--playbook', 'idea', '--topic', 'file']);
+    makeV2(root, ['new', '--playbook', 'idea', '--topic', 'file']);
     assert.deepEqual(fs.readdirSync(path.join(root, '.company')).sort(), ['work']);
   });
 });
@@ -618,7 +627,7 @@ describe('real shell calls', () => {
     const [i, n, b] = r.stdout.trimEnd().split('\n');
     assert.equal(r.stdout.trimEnd().split('\n').length, 3);
     assert.match(i, /^id: P\d{8}\.000001$/);
-    assert.match(n, /^name: P\d{8}\.000001-\d{2}\.\d{2}\.\d{2}$/);
+    assert.match(n, /^name: P\d{8}\.000001(-\d{2}\.\d{2}\.\d{2}|\/01-idea)$/);
     assert.equal(b, `branch: aico/${i.slice(4)}`);
     assert.equal(folders(root).length, 1);
     assert.equal(summaryLine(root, n.slice(6), 1), 'Fix Login');

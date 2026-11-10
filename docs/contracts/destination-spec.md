@@ -1,4 +1,4 @@
-# Contract: destination-spec v1.3
+# Contract: destination-spec v1.4
 
 Provider: `scripts/spec-check.mjs` (Node built-ins only). Writer of the shipped spec: the Product Manager, at step 5a of a feature run; writer of a spec draft (v1.1): the Product Manager in an `aico:to-spec` run. Consumers: the Lead of `aico:feature` (`check`, `stamp`), the Ship Gate (the check line), for a client project the `aico:client handoff` package, and from v1.1 `aico:to-spec` (`check`) and `draft-input` (`checkText`, imported in-process, no child process). Rationale: `docs/adr/0044-destination-spec-without-paths.md`.
 A feature run leaves one short spec of the destination. It holds no file path and no code, so it cannot go stale when files move. Plans keep their `files:` paths; only the spec is checked. Feature runs write the shipped spec; `aico:to-spec` writes only drafts; fix, maintain and other Playbooks write no spec.
@@ -6,6 +6,8 @@ v1.1 (task grill-spec-tickets, T1; additive): spec drafts from `aico:to-spec` at
 v1.2 (task T11, minor): `<slug>` in a spec path and in the frontmatter `slug` is a work folder name, as `work-folder-name` v1 defines it: a new name (`YYYY-MM-DD HH.MM - <Topic>`, with an optional ` <n>` or `Draft` helper form, spaces inside) or a legacy slug. The old pattern is the legacy case. The check is the shared `isWorkFolder`, so a spec of a new run is accepted, a name the contract refuses (a `Build` helper with a number, lower-case words, a trailing space or dot, a bad date, a control character) is `refused`. The shape, `check`, `stamp`, output lines and exit codes are unchanged; every v1.1 spec and caller stays valid. `docs/specs/<name>.md` holds spaces and is committed, so a git call names it as one argument after `--literal-pathspecs` and `--`.
 
 v1.3 (minor, additive): a spec path `.company/work/<name>/spec.md` typed with a folder or file in another letter case than on disk, or with `.company` or `work` in another letter case → `refused: wrong letter case`, exit 3, on every platform, nothing read or written (`exactWorkPath`, `work-folder-name` v1.1). The real-path compare of `check` and `stamp` is exact now, not case-insensitive on win32 and darwin. A missing spec keeps its old refusal. No new command, output line or exit code.
+
+v1.4 (task T37, minor, additive; work-folder-name v3.0): `check` and `stamp` take `.company/work/<ProjectID>/<NN>-<playbook>/spec.md` and a frontmatter `slug:` that is the v3 run slug; `docs/specs/<name>.md` has no v3 form. A `<slug>` argument is accepted with `isRunSlug`; its folder is `exactWorkPath(io, root, workParts(slug))`, so a v3 run `<ProjectID>/<NN>-<playbook>` is read like a v2 folder. The v2, v1.1 and legacy names give byte-identical output to v1.3. `isWorkFolder` keeps its v2 meaning.
 
 ## Where it lives
 - `docs/specs/<slug>.md` in the product repo (`<slug>` a work folder name: a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$` or a new name; spaces are allowed only in a new name).

@@ -1,6 +1,8 @@
-# Contract: skill-recommendation v2.0
+# Contract: skill-recommendation v2.1
 
 v2.0 (task role-skills-file, major, per `docs/adr/0007-contract-minor-versions.md`; rationale ADR 0062): `vet` prints `entry` in place of `record`, holding no `license` or `vetted`, plus `stated_license` for the form to show. `role-skills record` takes each new entry's license from the CEO's form and writes no `vetted`; there is no `no-license` reject code. `design-researcher` Handoffs go through `lint` and `vet` too. Approved picks go into the user catalog and Role selections (`skill-catalog` v1, `aico-settings` v1.12), not into `## Design skills` or `## Skills`. Role skill installs no longer use `check-install`; the post-install scan runs inside `install-skills --selected`, before it stores anything, and the stop form reads that command's output.
+
+v2.1 (task T37, minor, additive; work-folder-name v3.0): `lint` and `vet` take `.company/work/<run>/<NN>-skill-researcher.md` or `<NN>-design-researcher.md` where `<run>` is a v3 run `<ProjectID>/<NN>-<playbook>`; a wrong letter case or any other nested folder is `handoff path must be …`. A `<slug>` argument is accepted with `isRunSlug`; its folder is `exactWorkPath(io, root, workParts(slug))`, so a v3 run `<ProjectID>/<NN>-<playbook>` is read like a v2 folder. The v2, v1.1 and legacy names give byte-identical output to v2.0. `isWorkFolder` keeps its v2 meaning.
 
 v1.3 (task skill-audit-bugs, minor, per `docs/adr/0007-contract-minor-versions.md`): the cited contracts moved to `design-skills-section` v1.2, `skills-section` v1.1 and `skills-manifest` v3.0. The old unpinned `impeccable` line is accepted on a `skills` group line too, as the same known old form. Nothing in a recommendation line changes.
 

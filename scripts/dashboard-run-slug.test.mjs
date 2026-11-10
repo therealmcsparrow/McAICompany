@@ -129,3 +129,75 @@ test('a file that grows past the cap after fstat is refused', async (t) => {
   void lst;
   assert.equal(await summaryOf(root, '01-qa.md'), null);
 });
+
+// dashboard v2.0: a v3 run slug `<ID>/<NN>-<pb>` arrives as `<ID>%2F<NN>-<pb>`.
+const PROJ = 'P20261109.000009';
+const V3 = `${PROJ}/01-feature`;
+
+function makeV3Root(t) {
+  const root = makeRoot(t);
+  fs.mkdirSync(path.join(root, '.company', 'work', PROJ, '01-feature'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.company', 'work', PROJ, '02-fix'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.company', 'work', PROJ, '00-project.md'), 'A project\n');
+  fs.writeFileSync(path.join(root, '.company', 'work', PROJ, '03-file'), 'x');
+  return root;
+}
+
+test('%2F and %2f decode once to the v3 slug', (t) => {
+  const root = makeV3Root(t);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2f02-fix`), `${PROJ}/02-fix`);
+  assert.equal(resolveRunSlug(root, NAME.replaceAll(' ', '%20')), NAME, 'a v2 name still resolves');
+});
+
+test('every other escape, a second slash, dots, backslash or a bad shape is refused', (t) => {
+  const root = makeV3Root(t);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3, 'control: the valid slug resolves');
+  const bad = [
+    `${PROJ}%252F01-feature`, `${PROJ}%2F01-feature%2Fx`, `${PROJ}%2F..`, `${PROJ}%2F%2E%2E`, `..%2F01-feature`,
+    `${PROJ}%5C01-feature`, `${PROJ}%2F01-feature%20`, `${PROJ}%2F01%2Dfeature`, `%2F01-feature`, `${PROJ}%2F`,
+    `${PROJ}%2F01-Feature`, `${PROJ}%2F1-feature`, `${PROJ}%2F00-feature`, `${PROJ}%2F01-feature%00`,
+    `${PROJ}%2F%2F01-feature`, `${PROJ}%2F01-feature%2F`, `${PROJ}%2F01-feature%2F..%2F02-fix`,
+  ];
+  for (const raw of bad) assert.equal(resolveRunSlug(root, raw), null, raw);
+});
+
+test('a v3 slug with no run folder, a file or a missing project is refused', (t) => {
+  const root = makeV3Root(t);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3, 'control');
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F09-nothere`), null);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F03-file`), null);
+  assert.equal(resolveRunSlug(root, 'P20260101.000001%2F01-feature'), null);
+});
+
+test('a linked run folder or a linked project folder does not resolve', (t) => {
+  const root = makeV3Root(t);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F01-feature`), V3, 'control');
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-slug-v3out-'));
+  t.after(() => fs.rmSync(out, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(out, '05-fix'));
+  const other = 'P20261108.000003';
+  try {
+    fs.symlinkSync(out, path.join(root, '.company', 'work', other), 'junction');
+    fs.symlinkSync(path.join(out, '05-fix'), path.join(root, '.company', 'work', PROJ, '04-link'), 'junction');
+  } catch (error) {
+    t.skip(`links not permitted: ${error.code}`);
+    return;
+  }
+  assert.equal(resolveRunSlug(root, `${other}%2F05-fix`), null);
+  assert.equal(resolveRunSlug(root, `${PROJ}%2F04-link`), null);
+});
+
+test('run() of a v3 slug returns that run and reads its Did summary', async (t) => {
+  const root = makeV3Root(t);
+  fs.writeFileSync(path.join(root, '.company', 'work', PROJ, '01-feature', '01-qa.md'), '## Did\n- v3 ok\n');
+  const seen = [];
+  const show = (_r, slug) => { seen.push(slug); return { steps: [{ step: 1, role: 'qa', status: 'done', round: 1, file: '01-qa.md' }] }; };
+  const out = await run(root, `${PROJ}%2F01-feature`, { deps: { show, active: () => ({ slug: V3 }), readLedger: () => ({ state: 'none', overCap: [] }) } });
+  assert.ok(out, 'run data returns');
+  assert.equal(out.slug, V3);
+  assert.equal(out.steps[0].summary, 'v3 ok');
+  assert.deepEqual(seen, [V3]);
+  assert.ok(out.active, 'active data for the active v3 run');
+  assert.equal(await run(root, `${PROJ}%2F01-feature%2Fx`, { deps: { show, active: () => ({ slug: null }), readLedger: () => null } }), null);
+});

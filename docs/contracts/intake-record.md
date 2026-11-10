@@ -1,4 +1,4 @@
-# Contract: intake-record v1
+# Contract: intake-record v1.1
 
 Provider: `scripts/intake.mjs` (Node built-ins only). Writers: `aico:lead` and `aico:triage` (the front door): `add` at triage, `set` when a run folder is made for the request or it is held or declined. Consumers: `scripts/dashboard-data.mjs` (`dashboard` v1, the intake lane), through `listIntake` only.
 Why it exists: a request that is held for more information or declined never gets a run folder, so nothing on disk shows it. The dashboard's intake lane needs that outcome. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md`. Report only; a record never blocks a Step or a Gate.
@@ -15,7 +15,7 @@ Why it exists: a request that is held for more information or declined never get
 - `id`: exactly 12 lowercase hex (6 bytes of `crypto.randomBytes`), made by `add`.
 - `outcome`: `intake | needs-info | rejected` (`intake`: taken in, a run folder follows or exists; `needs-info`: held until the CEO adds information; `rejected`: declined).
 - `topic`: the Topic grammar of `work-folder-name` v1.1 (`checkTopic`), at most 60 characters.
-- `slug`: optional; a work folder name that passes `isWorkFolder` (`work-folder-name` v1.1).
+- `slug`: optional; a run slug that passes `isRunSlug` (`work-folder-name` v2.1): a work folder name, or a v3 run slug `<ProjectID>/<NN>-<playbook>` (v1.1).
 
 ## Data rule (GDPR Art. 5(1)(c))
 - The Topic names the subject of the request (a feature, a bug area, a product part), never a person, client or company. `checkTopic` accepts person names, so this rule is enforced by the `aico:lead` and `aico:triage` text, not by the script.
@@ -40,3 +40,6 @@ Before each `add` and `set` appends, every id whose latest record `at` is more t
 - Missing file → `items: []`.
 - A bad line (invalid JSON, unknown key, a value outside its rule, over 256 bytes, CR byte) → skipped, `warnings: ["line <n> skipped"]`.
 - File a link, more than one hard link, or over 64 KiB when read → `list` gives `items: []` and `warnings: ["intake unreadable"]`; `add` and `set` are refused `intake file unreadable`.
+
+## Compatibility
+v1.1 (minor, additive): `slug` may be a v3 run slug (`isRunSlug`); a slug with `00-`, an extra `/`, `..` or a backslash is `refused: bad slug`. A `<slug>` argument is accepted with `isRunSlug`; its folder is `exactWorkPath(io, root, workParts(slug))`; a file named after a run uses `runKey(slug)`; a walk over runs uses `runSlugs` of run-state v2.0. v1 records and legacy names give byte-identical output to today.

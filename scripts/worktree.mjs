@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Worktree (contract: docs/contracts/worktree.md v1.3).Node built-ins only; cwd = product root.
+// Worktree (contract: docs/contracts/worktree.md v1.4). Node built-ins only; cwd = product root.
 // uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/tier-sets.md v1.1
 // One git worktree per parallel task, merged back into the run branch in plan order. Every git call is a fixed argument
 // list run without a shell, in a scrubbed environment, with replace refs and grafts off; branches, worktree folders,
@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readParallel, sortByVisit, normalizePath, ParallelRecordError } from './plan-tasks.mjs';
-import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isWorkFolder, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isRunSlug, ticketLocal, ticketPattern, workParts } from '../mods/lib/work-folder.mjs';
 
 const ID =/^(?:t\d{1,3}[a-z]?|proto)$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -126,7 +126,7 @@ function readFileChecked(file, max) {
 // The run folder, with no link in .company, .company/work or the slug folder. Null when absent.
 function runDir(root, slug) {
   let dir = root;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...(workParts(slug) ?? [])]) {
     dir = path.join(dir, part);
     const st = lstatOrNull(dir);
     if (!st) return null;
@@ -261,7 +261,7 @@ function loadRecord(root, slug) {
 }
 
 export function readWorktrees(root, slug) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('worktree: bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new TypeError('worktree: bad slug');
   const cur = loadRecord(root, slug);
   if (!cur.events.length) return { v: 1, slug, state: 'none', events: [], archived: 0, conflicts: 0 };
   return {
@@ -408,7 +408,7 @@ function listBranches(ctx, slug) {
 
 // The branch id of a run name (a legacy slug is its own id), re-checked against its allow-list before it is part of a ref or a path.
 function idOf(slug) {
-  const id = isWorkFolder(slug) ? branchId(slug) : null;
+  const id = isRunSlug(slug) ? branchId(slug) : null;
   if (typeof id !== 'string' || !isBranchId(id)) throw new Refusal('bad run name');
   return id;
 }
@@ -443,7 +443,7 @@ function printable(p) {
 // The exact spelling of the run folder on disk; a letter-case variant is refused before any read or write.
 function exactSlug(root, slug) {
   try {
-    exactWorkPath({ fs, path }, root, [slug]);
+    exactWorkPath({ fs, path }, root, workParts(slug) ?? []);
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;
@@ -451,7 +451,7 @@ function exactSlug(root, slug) {
 }
 
 function checkSlug(value, root) {
-  if (typeof value !== 'string' || !isWorkFolder(value)) throw new Refusal('slug must be lowercase letters, digits and hyphens');
+  if (typeof value !== 'string' || !isRunSlug(value)) throw new Refusal('slug must be lowercase letters, digits and hyphens');
   exactSlug(root, value);
   return value;
 }

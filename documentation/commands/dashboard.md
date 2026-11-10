@@ -5,7 +5,7 @@
 ## In short
 **Only you start this command.** No other command or the Lead starts it.
 
-**What it does.** Starts a read-only local dashboard: a board with one card per run, in columns from Brief to Done, and a drawer per run with its Steps, Gates, review verdicts and token use.
+**What it does.** Starts a read-only local dashboard: a board with one card per project, in columns from Brief to Done, and a drawer per run with its Steps, Gates, review verdicts and token use.
 
 **When to use it.** You want to see where every run stands without reading Handoff files.
 
@@ -16,6 +16,8 @@ One local server, no Roles, no Gates, no branch or commit. It reads run data and
 1. The server starts in the background and prints a link such as `aico dashboard: http://127.0.0.1:<port>/t/<token>/`. Open that full link in your browser.
 2. The board refreshes by itself. A change to the active run shows within 5 seconds; any other change, including a new run, within 35 seconds. "Pause updates" stops the refreshing until you press it again.
 3. Stop the server by stopping the background task. It also ends itself after 60 idle minutes. Then the page says: `Dashboard server stopped. Run /aico:dashboard for a new link.`
+
+**Project cards.** A project folder with nested runs shows as one card: the project ID, its one-line description and its runs. Open a run from the card's drawer. Runs in old folders (v2, v1.1, legacy) keep a card each.
 
 **Options.**
 - **Start:** `/aico:dashboard`. The server listens on this computer only (127.0.0.1). The port is chosen by the system; `--port <1024-65535>` pins one.

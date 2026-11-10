@@ -1,4 +1,6 @@
-# Contract: cited-report v1.2
+# Contract: cited-report v1.3
+
+v1.3 (task v3 slugs, T35; additive, `docs/adr/0007-contract-minor-versions.md`): each v3 run counts as one run (its Step files are read from its own folder); a project folder alone is not a run. A run is a v3 slug `<ProjectID>/<NN>-<playbook>` (`isRunSlug`, folder through `workParts`; a walk over runs uses `runSlugs` of `run-state` v2.0). Output for v2, v1.1 and legacy names is byte-identical to the previous version; arguments, refusals and report format are unchanged.
 
 v1.2 (task Draft Input Folder Case Draft, T12; `docs/adr/0007-contract-minor-versions.md`): folder names are listed as the directory returns them, with no case fold or dedupe. Where two folders differ only in letter case (a case-sensitive file system) both count as runs; on win32 and darwin the directory never returns case twins, so the report is unchanged there. The report format and arguments are unchanged.
 

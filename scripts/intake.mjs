@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Provider CLI for intake-record v1: outcomes of requests that never got a run folder.
+// Provider CLI for intake-record v1.1: outcomes of requests that never got a run folder.
 // Node built-ins only. Records hold enums, times and a Topic; every line read is validated.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { checkTopic, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { checkTopic, isRunSlug } from '../mods/lib/work-folder.mjs';
 
 const MAX_LINE = 256;
 const MAX_FILE = 64 * 1024;
@@ -26,7 +26,7 @@ const refuse = reason => { throw new Refused(reason); };
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 function validSlug(slug) {
-  return typeof slug === 'string' && slug.length <= 120 && isWorkFolder(slug);
+  return typeof slug === 'string' && slug.length <= 120 && isRunSlug(slug);
 }
 
 // Returns the record as read when every rule holds, else null.

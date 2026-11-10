@@ -1,9 +1,13 @@
-# Contract: dashboard v1.1
+# Contract: dashboard v2.0
+
+v2.0 (task P20261109.000009-T15; major): a v3 project is one board card and a run slug may hold one `/`. Project card `{ "kind": "project", "id": "<ProjectID>", "slug": "<ProjectID>", "title", "description", "runs": ["<ID>/<NN>-<pb>", ...], plus the run-card fields of its newest run }`: `description` is the first line of `00-project.md` through `summaryDescription` (`""` when missing or not one clean line), `title` is `description` or the ID, `runs` newest first (run-state v2.0 `runSlugs` order), `state`, `column` and the other run fields come from the newest run. Its runs get no own card. v2, v1.1 and legacy runs keep their own cards with no `kind` field (byte-identical to v1.1); a card with no `kind` is a run card. `resolveRunSlug` decodes `%2F` or `%2f` once to `/`; with a run slash no other `%` escape is read; a second `/`, `..`, `\` or a result failing `isRunSlug` gives `null` (404, never read), for `api/run/<slug>` and `api/run/<slug>/links`. Folders are checked with `exactWorkPath(io, root, workParts(slug))` and each folder level by `lstat` and `realpath`. `readLedger` reads `.company/ledger/<runKey(slug)>.jsonl` (`<ID>~<NN>-<pb>`); the child still receives the slug. The drawer of a project card lists its runs; opening one loads `api/run/<ID>%2F<NN>-<pb>`.
+
+Reader rule (run-state v2.0, work-folder-name v2.1): v2, v1.1 and legacy names give byte-identical output to v1.1.
 
 v1.1 (task role-skills-file; additive): a Step file name takes 2 or 3 digits, so a run past Step 99 keeps its Did text. Cites move to `run-state` v1.9 and `token-ledger` v1.9. Every v1 name, field and route stays valid.
 
 Providers (Node built-ins only): `scripts/dashboard-data.mjs` (board JSON), `scripts/dashboard-run.mjs` (run JSON, the Did reader, the slug resolver), `scripts/dashboard-tokens.mjs` (token reader), `scripts/dashboard-server.mjs` (HTTP API, access token, `serve` CLI). Page assets: `scripts/dashboard-page/` (`index.html`, `board.js`, `drawer.js`, `live.js`), private files of the server, not Modules. Consumer: the CEO's browser, through the HTTP API only.
-Uses: run-state v1.9 (`list`, `active`, `show`), run-stage v1 (`readStage`), intake-record v1 (`listIntake`), roadmap-list v1 (`listRoadmap`), pr-links v1 (`lookup`), token-ledger v1.9 (`report --json`, in a child process), cost-source v1 (`readCost`), work-folder-name v1.1 (`isWorkFolder`, `exactWorkPath`).
+Uses: run-state v2.0 (`list`, `active`, `show`), run-stage v1 (`readStage`), intake-record v1 (`listIntake`), roadmap-list v1 (`listRoadmap`), pr-links v1 (`lookup`), token-ledger v1.9 (`report --json`, in a child process), cost-source v1 (`readCost`), work-folder-name v2.1 (`parseRun`, `isRunSlug`, `workParts`, `runKey`, `summaryDescription`, `exactWorkPath`).
 Why it exists: the CEO sees every run, its stage, the Gate it waits on and its token use on one live page without reading Handoffs. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md` (data only from aico script JSON, loopback by default) and `docs/adr/0058-dashboard-access-token.md` (per-start token). Read-only: nothing here writes a record, blocks a Step or a Gate.
 
 ## Sources and imports
@@ -20,7 +24,7 @@ Why it exists: the CEO sees every run, its stage, the Gate it waits on and its t
   "roadmap": [] }
 ```
 - `generated`: `now` as UTC `<at>`. `columns`: all eight, always, in the order above.
-- `active`: the `slug` of run-state v1.9 `active(root, { now })` (one running, non-stale run, the newest activity), else `null`.
+- `active`: the `slug` of run-state v2.0 `active(root, { now })` (one running, non-stale run, the newest activity), else `null`.
 - `inflight`: for the active run, the view `subs` entries with `stop: null` whose `start` is within the last 12 hours; `0` when `active` is `null`.
 - `roadmap`: the `items` of roadmap-list v1 `listRoadmap(root)`.
 - Intake lane (`columns` id `intake`): one card `{ "id", "topic", "outcome", "at" }` per intake-record v1 `listIntake` item with outcome `needs-info` or `rejected`, in that order.
@@ -31,7 +35,7 @@ Why it exists: the CEO sees every run, its stage, the Gate it waits on and its t
   "elapsedS": 0, "live": true, "tier": "high", "round": 0, "needsCeo": false, "column": "build",
   "stageNote": "stage not recorded"|null, "readable": true, "tokens": { "spend": 0, "cacheRead": 0 }|null, "usd": 0.42|null }
 ```
-- One card per run-state v1.9 `list` entry; fields from that entry and the run view (`show`) of the run.
+- One card per run-state v2.0 `list` entry; fields from that entry and the run view (`show`) of the run.
 - `title`: for a new work folder name, the text after ` - ` as on disk (Topic plus any suffix and number); for a legacy slug, the slug.
 - `state`: the list `state` (the page shows "stale" for `stale`). `live`: `state` is `running`.
 - `elapsedS`: whole seconds from `started` to `ended`, or to `now` when `ended` is `null`; `null` when `started` is `null`.
@@ -54,7 +58,7 @@ Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` ex
 
 ## Token reader: `readLedger(root, slug, { spawn, timeoutMs, cache })`
 `readLedger` is exported by `scripts/dashboard-tokens.mjs`. It resolves to `{ "state": "ok|none|unavailable", "totals": { "spend", "cacheRead" }|null, "overCap": [{ "step", "role", "ctxEnd" }] }`.
-- `.company/ledger/<slug>.jsonl` missing by `lstat` (a link counts as missing) → `none`, no spawn.
+- `.company/ledger/<runKey(slug)>.jsonl` missing by `lstat` (a link counts as missing) → `none`, no spawn.
 - Else spawns `process.execPath` with `[<ledger.mjs beside this script>, "report", <slug>, "--json"]`, `shell: false`, cwd `root`, timeout 5 s (`timeoutMs`), stdout at most 1 MiB; at most 4 children at once, others wait.
 - Non-zero exit, timeout, stdout over 1 MiB, unparsable JSON or `v` other than 1 → `unavailable`.
 - `totals` = report `totals.spend` and `totals.cache_read`. `overCap` = every report row with `ctx_end` above 95000 (the token-ledger v1.9 over-cap threshold), as `step` = row `id`, `role`, `ctxEnd` = `ctx_end`, in file order; `[]` unless `ok`.
@@ -71,7 +75,7 @@ Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` ex
 ```
 - `slug` not resolved by `resolveRunSlug` → `null` (the server answers 404).
 - `steps`: view `steps` (`step`, `role`, `status`, `round`) plus `summary` (Did reader).
-- `rounds`: one entry per distinct step `round`, ascending; `gate` and `review` = the step keys `gate` and `verdict` (run-state v1.9) of the highest-numbered Step of that round that carries one, else `null`. Until Handoffs carry `gate:` and `verdict:`, every chip says "verdict not recorded".
+- `rounds`: one entry per distinct step `round`, ascending; `gate` and `review` = the step keys `gate` and `verdict` (run-state v2.0) of the highest-numbered Step of that round that carries one, else `null`. Until Handoffs carry `gate:` and `verdict:`, every chip says "verdict not recorded".
 - `routing`: `routing(steps)`, the reviewer Roles in first-seen order.
 - `active` is non-null only when `slug` equals run-state `active`. `gates` = view `gates` (`gate`, `result`, `waitS` = `wait`). `waves` = view `waves`. `roleTimes` = view `subs` grouped by `role` in first-seen order: `ms` = sum of non-null `ms`, `steps` = number of entries (open ones included). `overCap` = `readLedger` `overCap`. `fixRounds` = view `round`.
 
@@ -84,10 +88,10 @@ Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` ex
 `resolveRunSlug` exported by `scripts/dashboard-run.mjs` returns the slug or `null`. `raw` is the path part exactly as received (after the token prefix and `api/run/`, up to the next `/` or the end). `null` when:
 1. `raw` is longer than 300 characters;
 2. `decodeURIComponent` throws (decoded exactly once, never again);
-3. the decoded text fails `isWorkFolder`;
-4. `exactWorkPath(io, root, [slug])` is `missing` or throws `wrong letter case`;
-5. `lstat` of the folder is not a directory (a link or junction included);
-6. its `realpath` differs from `join(realpath(<root>/.company/work), slug)`.
+3. the decoded text fails `isRunSlug`, holds `%` or `\`, or a raw part with `%2F`/`%2f` holds any other `%` escape;
+4. `exactWorkPath(io, root, workParts(slug))` is `missing` or throws `wrong letter case`;
+5. `lstat` of a folder level (project, then run) is not a directory (a link or junction included);
+6. its `realpath` differs from `join(realpath(<root>/.company/work), ...parts)` at any level.
 
 `run()` re-runs `resolveRunSlug`; pr-links v1 `lookup()` runs its own `isWorkFolder` and `exactWorkPath` check.
 

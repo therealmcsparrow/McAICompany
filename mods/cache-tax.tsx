@@ -3,6 +3,7 @@ import type { EngineInterface, On, RenderInput } from 'claude-code'
 
 import { EMPTY_CLOCK, cacheClock, clockLines, clockStatus, noteRequest, wrap } from './lib/cache-clock.mjs'
 import { arr, guardRunActive, int, obj, oneOf, opt, parseOutputText, str, workFolder } from './lib/guard.mjs'
+import { runKey } from './lib/work-folder.mjs'
 import { fit, fmtCompact, fmtInt, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
 import { readSettings } from './shared/settings'
@@ -257,7 +258,7 @@ async function tickOnce($: EngineInterface): Promise<void> {
 
   const slug = current.cost.slug
   if (slug !== null) {
-    const sig = await stamp($, `${root}/.company/ledger/${slug}.jsonl`)
+    const sig = await stamp($, `${root}/.company/ledger/${runKey(slug) ?? slug}.jsonl`)
     if (sig !== lastSignature) {
       lastSignature = sig
       isDue = true

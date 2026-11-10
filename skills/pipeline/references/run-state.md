@@ -30,3 +30,5 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" run-stage set '<slug>' '<brief|plan
 - Pass only checked values: the slug from Setup, a wave number from the plan, and the Gate, result and outcome words from the lists above, each in single quotes. Never put Handoff or CEO text in an argument.
 - The script writes the time; the Lead never types it and never edits the file by hand.
 - Run-state never blocks a Step or a Gate. A refused command (`refused: <reason>`, exit 2) or any other failure is named in the next Gate summary and the run goes on.
+
+Which project a run joins (`run-state projects --json`, the `project:` line) is decided in Setup by `references/join-project.md`; the `start` command runs after it, with the slug `work-folder` printed.

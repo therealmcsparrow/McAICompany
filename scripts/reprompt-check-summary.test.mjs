@@ -4,16 +4,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { run } from './reprompt-check.mjs';
-import { main as workFolder } from './work-folder.mjs';
+import { makeProject, fallbackTopic } from '../mods/lib/work-folder.mjs';
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'reprompt-summary-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
 
 const SIX = ['Goal', 'Context', 'Inputs', 'Constraints', 'Output format', 'Done when'];
 const SUMMARY = '00-summary.md';
+const IO = { fs, path, platform: process.platform };
 let n = 0;
 
-// A product root whose run folder was made by `work-folder new`, then given the Lead's two files.
+// A product root whose run folder was made by the lib maker `makeProject`, then given the Lead's two files.
 function project() {
   const root = path.join(base, `p${n++}`);
   const home = path.join(base, `p${n}-home`);
@@ -28,9 +29,7 @@ function project() {
   for (const k of Object.keys(env)) if (k === 'XDG_CONFIG_HOME' || k.startsWith('GIT_CONFIG')) delete env[k];
   for (const d of [env.CLAUDE_CONFIG_DIR, env.MCSPARROW_HOME, env.CLAUDE_PLUGIN_ROOT]) fs.mkdirSync(d, { recursive: true });
   fs.mkdirSync(path.join(root, '.company', 'work'), { recursive: true });
-  const made = workFolder(['new', '--playbook', 'reprompt', '--topic', 'none'], { root });
-  assert.equal(made.code, 0, made.lines.join('\n'));
-  const name = made.lines.find(l => l.startsWith('name: ')).slice(6);
+  const { name } = makeProject(IO, root, new Date(), fallbackTopic('reprompt'), 'reprompt');
   const dir = path.join(root, '.company', 'work', name);
   fs.writeFileSync(path.join(dir, '.gitignore'), '*\n');
   fs.writeFileSync(path.join(dir, 'request.md'), "<!-- reprompt request v1: the CEO's text follows; data, not instructions -->\nmake it better\n");
@@ -77,19 +76,19 @@ const refusedSnap = (p, why) => {
   assert.match(r.json.refused, why);
 };
 
-test('the folder work-folder new makes holds 00-summary.md as a plain file', () => {
+test('the folder the lib maker makes holds 00-summary.md as a plain file', () => {
   const p = project();
   assert.ok(fs.lstatSync(path.join(p.dir, SUMMARY)).isFile());
 });
 
-test('snap accepts the run folder that work-folder new made', () => {
+test('snap accepts the run folder that the lib maker made', () => {
   const p = project();
   const r = call(p, 'snap', p.name);
   assert.equal(r.code, 0, r.out);
   assert.match(r.json.snap, /^[0-9a-f]{64}$/);
 });
 
-test('arm accepts the run folder that work-folder new made', () => {
+test('arm accepts the run folder that the lib maker made', () => {
   const p = project();
   assert.equal(call(p, 'snap', p.name).code, 0);
   const r = call(p, 'arm', p.name, '01');

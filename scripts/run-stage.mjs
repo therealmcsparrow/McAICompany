@@ -1,9 +1,10 @@
 // Stage record of a run: where a run stands between Gates. Report only; nothing here blocks a Step or a Gate.
-// Storage: .company/work/<slug>/stage.jsonl, append-only, one JSON object per line, LF.
+// contract: docs/contracts/run-stage.md v1.1
+// Storage: .company/work/<slug>/stage.jsonl (<slug> is a work folder name or <ID>/<NN>-<pb>), append-only, one JSON object per line, LF.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const STAGES = ['brief', 'plan', 'build', 'review', 'ship-gate'];
 export const MAX_LINE = 128;
@@ -18,26 +19,33 @@ const io = { fs, path };
 
 const view = (slug, stage, at, state) => ({ v: 1, slug, stage, at, state });
 
-// { dir } for a real run folder, or { reason } as one of the refusal reasons.
+// { dir } for a real run folder, or { reason } as one of the refusal reasons. A v3 slug checks each of its two parts.
 function resolveRun(root, slug) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) return { reason: 'bad slug' };
+  const parts = typeof slug === 'string' && isRunSlug(slug) ? workParts(slug) : null;
+  if (parts === null) return { reason: 'bad slug' };
   try {
-    if (exactWorkPath(io, root, [slug]) !== 'exact') return { reason: 'no run folder' };
+    if (exactWorkPath(io, root, parts) !== 'exact') return { reason: 'no run folder' };
   } catch (error) {
     if (error instanceof WorkFolderRefusal) return { reason: 'wrong letter case' };
     return { reason: 'no run folder' };
   }
-  const dir = path.join(root, '.company', 'work', slug);
+  const work = path.join(root, '.company', 'work');
   try {
-    const st = fs.lstatSync(dir);
-    if (st.isSymbolicLink() || !st.isDirectory()) return { reason: 'no run folder' };
     const realWork = path.join(fs.realpathSync.native(root), '.company', 'work');
-    if (fs.realpathSync.native(dir) !== path.join(realWork, slug)) return { reason: 'no run folder' };
-    if (fs.realpathSync.native(path.join(root, '.company', 'work')) !== realWork) return { reason: 'no run folder' };
+    if (fs.realpathSync.native(work) !== realWork) return { reason: 'no run folder' };
+    let dir = work;
+    let realDir = realWork;
+    for (const part of parts) {
+      dir = path.join(dir, part);
+      realDir = path.join(realDir, part);
+      const st = fs.lstatSync(dir);
+      if (st.isSymbolicLink() || !st.isDirectory()) return { reason: 'no run folder' };
+      if (fs.realpathSync.native(dir) !== realDir) return { reason: 'no run folder' };
+    }
+    return { dir };
   } catch {
     return { reason: 'no run folder' };
   }
-  return { dir };
 }
 
 function validRecord(text) {

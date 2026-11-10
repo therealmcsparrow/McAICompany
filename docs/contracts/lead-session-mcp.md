@@ -1,4 +1,6 @@
-# Contract: lead-session-mcp v1.1
+# Contract: lead-session-mcp v1.2
+
+v1.2 (task P20261109.000009-T13, additive): `lead_new_session` accepts a v3 run slug `<ProjectID>/<NN>-<playbook>` (checked with `isRunSlug`, its folder through `workParts`) and returns the `lead-handoff` v2.1 command naming it. Result and refusal texts for v2, v1.1 and legacy names are byte-identical to v1.1. Uses `lead-handoff` v2.1.
 
 New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/lead-launch-mcp.mjs` (Node built-ins only, no MCP SDK), registered by `mcpServers` in `.claude-plugin/plugin.json` (v1.1; v1 used a plugin root `.mcp.json`). Consumer: the frozen Lead (`context-guard` v1 allows this one tool). Uses `lead-handoff` v1.8 (`findRun`, `newSessionCommand`, `readSmall`, and `main` for `read`) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`.
 

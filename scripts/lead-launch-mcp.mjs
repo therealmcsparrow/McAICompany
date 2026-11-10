@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// lead-session-mcp v1.1 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It only points: it returns the command
+// lead-session-mcp v1.2 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It only points: it returns the command
 // for a new Lead session and starts nothing. Node built-ins only; no process start, no network, no write.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findRun, newSessionCommand, main as handover, readSmall } from './lead-handover.mjs';
-import { isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAX_LINE = 64 * 1024;
@@ -22,7 +22,7 @@ const refusal = (text) => ({ content: [{ type: 'text', text: `refused: ${text}` 
 
 // The newest `handover` event of the record, read only after `read` accepted the record. Null when none or unreadable.
 function newestHandover(root, slug) {
-  const text = readSmall(path.join(root, '.company', 'work', slug, 'lead-handover.jsonl'), MAX_RECORD);
+  const text = readSmall(path.join(root, '.company', 'work', ...workParts(slug), 'lead-handover.jsonl'), MAX_RECORD);
   if (text === null) return null;
   let last = null;
   for (const line of text.split('\n')) {
@@ -36,7 +36,7 @@ export function newSession(root = process.cwd(), now = Date.now()) {
   try {
     const slug = findRun(root, now);
     if (!slug) return refusal('no run');
-    if (!isWorkFolder(slug)) return refusal('bad slug');
+    if (!isRunSlug(slug)) return refusal('bad slug');
     const r = handover(['read', slug], root, {});
     if (r.code !== 0) return refusal('broken record');
     if (/^running: step$/m.test(r.out)) return refusal('step running');

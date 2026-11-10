@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Drift report (contract: docs/contracts/drift-report.md v1.2). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v2.0
+// Drift report (contract: docs/contracts/drift-report.md v1.3). Node built-ins only.
+// uses: docs/contracts/contract-index.md v1 docs/contracts/work-folder-name.md v3.0
 // `pick` lists the Contracts with a script Provider that were checked longest ago; `lint` checks the shape
 // of one report. Neither writes anything. Report text, file names and arguments are untrusted: every
 // pattern is anchored over a character class, sizes are capped before parsing, every file is read by the
@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
+import { runSlugs } from './run-state.mjs';
 
 const KINDS = ['missing-feature', 'incomplete-model', 'logic-shortcut', 'architectural-divergence'];
 const MAX_ARG = 4096;
@@ -32,11 +33,11 @@ const MAX_REPORT_REL = 300;
 function splitReportRel(rel) {
   if (typeof rel !== 'string' || rel.length > MAX_REPORT_REL || !rel.startsWith(REPORT_PREFIX)) return null;
   const rest = rel.slice(REPORT_PREFIX.length);
-  const cut = rest.indexOf('/');
+  const cut = rest.lastIndexOf('/');
   if (cut < 1) return null;
   const folder = rest.slice(0, cut);
   const file = rest.slice(cut + 1);
-  return isWorkFolder(folder) && REPORT_NAME.test(file) ? [folder, file] : null;
+  return isRunSlug(folder) && REPORT_NAME.test(file) ? [folder, file] : null;
 }
 const CONTRACT_NAME = /^[a-z][a-z0-9-]{0,60}$/;
 const PROVIDER = /^Provider: `(scripts\/[A-Za-z0-9._-]{1,100}\.mjs)`/;
@@ -185,13 +186,14 @@ function realRootOf(root) {
 function lastChecked(realRoot, known) {
   const last = new Map();
   let seen = 0;
-  const slugs = listPlainDir(realRoot, ['.company', 'work'], MAX_SLUGS).filter((e) => e.dir && isWorkFolder(e.name));
-  for (const s of slugs) {
-    const reports = listPlainDir(realRoot, ['.company', 'work', s.name], MAX_REPORTS_PER_SLUG).filter((e) => e.file && REPORT_NAME.test(e.name));
+  const slugs = runSlugs(realRoot, { max: MAX_SLUGS }).slugs;
+  for (const slug of slugs) {
+    const base = ['.company', 'work', ...workParts(slug)];
+    const reports = listPlainDir(realRoot, base, MAX_REPORTS_PER_SLUG).filter((e) => e.file && REPORT_NAME.test(e.name));
     for (const r of reports) {
       if (seen >= MAX_REPORTS) return last;
       seen += 1;
-      const res = readPlain(realRoot, ['.company', 'work', s.name, r.name], MAX_REPORT_BYTES);
+      const res = readPlain(realRoot, [...base, r.name], MAX_REPORT_BYTES);
       if (res.text === undefined) continue;
       const fm = parseFrontmatter(splitLines(res.text));
       if (fm.error) continue;
@@ -311,8 +313,8 @@ function lint(args, root) {
     rel = r.split(path.sep).join('/');
   }
   const shaped = rel.split('/');
-  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel) && shaped.length === 4
-    && isWorkFolder(shaped[2]) && REPORT_NAME.test(shaped[3])) {
+  if (rel.length <= MAX_REPORT_REL && /^\.company\/work\//i.test(rel) && (shaped.length === 4 || shaped.length === 5)
+    && isRunSlug(shaped.slice(2, -1).join('/')) && REPORT_NAME.test(shaped[shaped.length - 1])) {
     if (!rel.startsWith(REPORT_PREFIX)) throw new Refused('wrong letter case');
     try { exactWorkPath({ fs, path }, realRoot, rel.split('/').slice(2)); } catch (error) {
       if (error instanceof WorkFolderRefusal) throw new Refused(error.message);

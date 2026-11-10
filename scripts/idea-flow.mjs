@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// idea-flow: the route record of one idea or bug flow (contract idea-flow v2.0).
+// idea-flow: the route record of one idea or bug flow (contract idea-flow v2.1).
 // Every argument and every line of the record is untrusted and parsed against an allow-list.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run as companyType } from './company-type.mjs';
-import { isWorkFolder, isLegacySlug, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, isLegacySlug, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const FINAL_NAME = /^[a-z0-9][a-z0-9-]{2,65}$/;
@@ -138,7 +138,7 @@ function replay(events) {
 function dirsOk(cwd, slug, create) {
   const may = create && isLegacySlug(slug);
   let p = cwd;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...workParts(slug)]) {
     p = path.join(p, part);
     let l;
     try { l = fs.lstatSync(p); } catch (e) {
@@ -153,7 +153,7 @@ function dirsOk(cwd, slug, create) {
   return p;
 }
 
-function recordPath(cwd, slug) { return path.join(cwd, '.company', 'work', slug, 'idea-flow.jsonl'); }
+function recordPath(cwd, slug) { return path.join(cwd, '.company', 'work', ...workParts(slug), 'idea-flow.jsonl'); }
 
 function openChecked(file, flags) {
   let l;
@@ -213,9 +213,9 @@ function append(cwd, slug, ev, create) {
 }
 
 function checkSlug(s, cwd) {
-  if (!isWorkFolder(s)) refuse('bad slug');
+  if (!isRunSlug(s)) refuse('bad slug');
   // Exact letter case of the folder, before any read or write; a missing folder keeps the old behaviour.
-  try { exactWorkPath({ fs, path }, cwd, [s]); } catch (e) { if (e instanceof WorkFolderRefusal) refuse(e.message); throw e; }
+  try { exactWorkPath({ fs, path }, cwd, workParts(s)); } catch (e) { if (e instanceof WorkFolderRefusal) refuse(e.message); throw e; }
 }
 
 // Collects regular files of the work folder; links are skipped, caps fail before anything is created.
@@ -235,7 +235,7 @@ function scan(dir, rel, depth, acc) {
 }
 
 function parkCopy(cwd, slug, name) {
-  const work = path.join(cwd, '.company', 'work', slug);
+  const work = path.join(cwd, '.company', 'work', ...workParts(slug));
   const acc = { dirs: [], files: [] };
   scan(work, [], 0, acc);
   const ideas = path.join(cwd, '.company', 'ideas');

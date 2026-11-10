@@ -66,7 +66,7 @@ test('Ship Gate shows over cap and the Lead peak', () => {
 });
 
 test('the group lines sit in the v4.4 section, the canonical order stays', () => {
-  has(contract, '# Contract: dispatch-prompt v5.1', 'v4.4 is additive');
+  has(contract, '# Contract: dispatch-prompt v5.2', 'v4.4 is additive');
   has(contract, '`Review group: <i>/<n> .company/work/<slug>/split/r<round>/g<i>.txt`', '`Fix group: <i>/<n> .company/work/<slug>/split/f<round>/g<i>.txt`');
   has(contract, 'directly after `Review depth:`', 'directly after `Round:`', 'architect.txt', 'one architect Step', 'A Role that gets a v4.3 prompt behaves as before');
   has(line(pipeline, '- **One Step per review or Fix group'), '`Review group:`', '`Fix group:`');

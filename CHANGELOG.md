@@ -4,6 +4,20 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-10
+
+Rollback: node scripts/stable.mjs 0.33.0
+
+### Changed
+- **One project, one folder.** `work-folder new` now makes only the nested layout: a project folder `.company/work/<ID>/` with `00-project.md`, and each run as a sub folder `<NN>-<playbook>`. `--project <ID>` adds the next run. `--layout` is refused with `usage`, and nothing is written.
+  - `work-folder siblings` writes the `Siblings:` line into `00-project.md` of a nested project. `work-folder branch` accepts a run slug and prints `aico/<ID>`.
+  - Old v2, v1.1 and legacy folders stay where they are and stay readable.
+  - Contract: `work-folder-name` v3.0 (major).
+- **Join an active project.** When you start a Playbook by hand while a project is active, one form asks first: join that project (up to 3 shown, join first) or start a new one. With no active project there is no form. A hand-over to the next Playbook ends with `project: <ProjectID>` and joins the same project with no form; an unknown or inactive ID is ignored and a new project starts. Contract: `draft-input` v1.7 (minor) reads that last line and adds `take --project`.
+- **Run state sees nested runs.** `run-state list` and `active` now include runs inside a project folder, so their slugs can hold one `/` (`<ID>/<NN>-<playbook>`). Contract: `run-state` v2.0 (major).
+- **Project cards on the dashboard.** A nested project shows as one card with its description and its runs; open a run from the card's drawer. Old runs keep their own cards. Contract: `dashboard` v2.0 (major).
+- Many other Contracts got a minor bump so they accept nested run slugs; v2, v1.1 and legacy names behave as before.
+
 ## [0.33.0] - 2026-11-09
 
 Rollback: node scripts/stable.mjs 0.32.0

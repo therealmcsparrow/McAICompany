@@ -1,11 +1,13 @@
-// Board JSON for the dashboard: one card per run, each in exactly one column, read-only.
+// Board JSON for the dashboard: one card per run (a v3 project is one card), each in exactly one column, read-only.
 import { list as listRuns, show as showRun, active as activeRun } from './run-state.mjs';
 import { readStage } from './run-stage.mjs';
 import { listIntake } from './intake.mjs';
 import { listRoadmap } from './roadmap.mjs';
 import { readCost } from './cost-source.mjs';
 import { readLedger } from './dashboard-tokens.mjs';
-import { parseName } from '../mods/lib/work-folder.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseName, parseRun, summaryDescription } from '../mods/lib/work-folder.mjs';
 
 const COLUMNS = ['intake', 'brief', 'plan', 'build', 'review', 'ship-gate', 'needs-ceo', 'done'];
 const STAGE_COLUMNS = new Set(['brief', 'plan', 'build', 'review', 'ship-gate']);
@@ -14,6 +16,7 @@ const INTAKE_OUTCOMES = ['needs-info', 'rejected'];
 const INFLIGHT_MS = 12 * 3600 * 1000;
 const MAX_TEXT = 300;
 const MAX_ENDED_CACHE = 1000;
+const MAX_PROJECT_FILE = 4096;
 
 const defaults = {
   list: listRuns, active: activeRun, show: showRun, readStage, readCost, readLedger, listIntake, listRoadmap,
@@ -133,6 +136,29 @@ async function buildCard(root, entry, view, now, deps) {
   };
 }
 
+// First line of `00-project.md` of a v3 project, '' when the file is missing, a link, unreadable or not one clean line.
+function projectDescription(root, id) {
+  let fd = null;
+  try {
+    const file = path.join(root, '.company', 'work', id, '00-project.md');
+    const st = fs.lstatSync(file, { bigint: true });
+    if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1n) return '';
+    const want = path.join(fs.realpathSync.native(root), '.company', 'work', id, '00-project.md');
+    if (fs.realpathSync.native(file) !== want) return '';
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const f = fs.fstatSync(fd, { bigint: true });
+    if (!f.isFile() || f.dev !== st.dev || f.ino !== st.ino || f.nlink !== 1n) return '';
+    const buf = Buffer.alloc(MAX_PROJECT_FILE);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    const out = summaryDescription(buf.subarray(0, n).toString('utf8').replace(/\r\n?/g, '\n'));
+    return typeof out.description === 'string' ? out.description : '';
+  } catch {
+    return '';
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
 function inflightOf(view, now) {
   if (!view || !Array.isArray(view.subs)) return 0;
   return view.subs.filter((s) => {
@@ -162,9 +188,25 @@ export async function board(root, { now = Date.now(), deps: given = {} } = {}) {
   const deps = { ...defaults, ...given };
   const entries = safe(() => deps.list(root, { now }).runs, []);
   const act = safe(() => deps.active(root, { now }), { slug: null, view: null });
-  const cards = await Promise.all((Array.isArray(entries) ? entries : []).map((entry) => {
+  // A v3 project is one card built from its newest run (first in list order); its other runs get no card.
+  const projects = new Map();
+  const shown = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const r = parseRun(entry?.slug);
+    if (r === null) shown.push({ entry });
+    else if (projects.has(r.id)) projects.get(r.id).runs.push(entry.slug);
+    else {
+      const project = { id: r.id, runs: [entry.slug] };
+      projects.set(r.id, project);
+      shown.push({ entry, project });
+    }
+  }
+  const cards = await Promise.all(shown.map(async ({ entry, project }) => {
     const view = entry.state === 'unreadable' ? null : safe(() => deps.show(root, entry.slug, { now }), null);
-    return buildCard(root, entry, view, now, deps);
+    const card = await buildCard(root, entry, view, now, deps);
+    if (project === undefined) return card;
+    const description = projectDescription(root, project.id);
+    return { ...card, kind: 'project', id: project.id, slug: project.id, title: description || project.id, description, runs: project.runs };
   }));
   const columns = COLUMNS.map((id) => ({ id, cards: id === 'intake' ? intakeCards(deps, root, now) : cards.filter((c) => c.column === id) }));
   const slug = typeof act?.slug === 'string' ? act.slug : null;
@@ -184,7 +226,7 @@ export async function refreshActive(root, prev, { now = Date.now(), deps: given 
   const deps = { ...defaults, ...given };
   const next = { ...prev, generated: at(now), columns: prev.columns.map((c) => ({ id: c.id, cards: [...c.cards] })) };
   const act = safe(() => deps.active(root, { now }), { slug: null, view: null });
-  const known = (s) => typeof s === 'string' && next.columns.some((c) => c.cards.some((x) => x.slug === s));
+  const known = (s) => typeof s === 'string' && next.columns.some((c) => c.cards.some((x) => x.slug === s || (x.kind === 'project' && x.runs.includes(s))));
   if (known(act?.slug)) {
     next.active = act.slug;
     next.inflight = inflightOf(act.view, now);
@@ -193,15 +235,19 @@ export async function refreshActive(root, prev, { now = Date.now(), deps: given 
     next.inflight = 0;
   }
   const slug = prev.active;
-  if (typeof slug !== 'string' || !known(slug)) return next;
+  if (typeof slug !== 'string') return next;
+  // A v3 run is shown by its project card, built from the newest run (runs[0]), as in `board`.
+  const hit = (x) => (x.kind === 'project' ? x.runs[0] === slug : x.slug === slug);
+  const old = next.columns.flatMap((c) => c.cards).find(hit);
+  if (old === undefined) return next;
   const view = safe(() => deps.show(root, slug, { now }), null);
-  const old = next.columns.flatMap((c) => c.cards).find((x) => x.slug === slug);
   const entry = view === null
     ? { slug, state: 'unreadable', started: old.started, ended: old.ended, tier: old.tier, round: old.round }
     : { slug, state: view.state, started: view.started, ended: view.ended, tier: view.tier, round: view.round };
-  const card = await buildCard(root, entry, view, now, deps);
+  let card = await buildCard(root, entry, view, now, deps);
+  if (old.kind === 'project') card = { ...card, kind: old.kind, id: old.id, slug: old.slug, title: old.title, description: old.description, runs: old.runs };
   for (const c of next.columns) {
-    if (c.id !== 'intake') c.cards = c.cards.filter((x) => x.slug !== slug);
+    if (c.id !== 'intake') c.cards = c.cards.filter((x) => x !== old);
   }
   const target = next.columns.find((c) => c.id === card.column);
   target.cards.push(card);

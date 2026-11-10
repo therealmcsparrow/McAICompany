@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Review depth (contract: docs/contracts/review-depth.md v1.3). Node built-ins only.
+// Review depth (contract: docs/contracts/review-depth.md v1.4). Node built-ins only.
 // Usage: node scripts/review-depth.mjs (<base> --run <name> | --staged | --worktree) [--risk low|medium|high] [--repo <dir>] [--json [--lines]]
 // Review depth follows the paths a diff touches, never the builder's label.
 import fs from 'node:fs';

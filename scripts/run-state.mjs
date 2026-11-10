@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (run-state v1.9). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v2.0). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -288,42 +288,65 @@ export function show(root, slug, { now = Date.now() } = {}) {
   return load(root, slug, now).view;
 }
 
-export function active(root, { now = Date.now() } = {}) {
+const RUN_SUB_RE = /^(?:0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+// A real folder (not a link) whose real path is `parts` inside the real `.company/work`.
+function realFolder(root, parts) {
+  const st = lstatOrNull(join(root, '.company', 'work', ...parts));
+  return Boolean(st && st.isDirectory() && insideWork(root, parts));
+}
+
+// The runs of the product, newest first: v2, v1.1 and legacy top-level folders, and each v3 run `<ID>/<NN>-<playbook>`.
+// A v3 project folder expands in place to its runs, `NN` descending. At most `max` runs; `capped` says more existed.
+export function runSlugs(root, { max = MAX_FOLDERS } = {}) {
+  const out = { slugs: [], capped: false };
   const work = join(root, '.company', 'work');
-  const wst = lstatOrNull(work);
-  let best = null;
-  if (wst && wst.isDirectory()) {
-    let names;
-    try { names = readdirSync(work).filter(isWorkFolder).sort().reverse(); } catch { names = []; }
-    for (const slug of names.slice(0, MAX_FOLDERS)) {
-      const f = lstatOrNull(join(work, slug, 'run-state.jsonl'));
-      if (!f || !f.isFile()) continue;
-      const { view, activity } = load(root, slug, now);
-      if (view.state !== 'running') continue;
-      if (!best || activity > best.activity) best = { slug, view, activity };
+  if (!realFolder(root, [])) return out;
+  let names;
+  try { names = readdirSync(work).sort().reverse(); } catch { return out; }
+  const push = slug => {
+    if (out.slugs.length >= max) { out.capped = true; return false; }
+    out.slugs.push(slug);
+    return true;
+  };
+  for (const name of names) {
+    if (isWorkFolder(name)) {
+      if (realFolder(root, [name]) && !push(name)) break;
+      continue;
     }
+    if (!isProjectId(name) || !realFolder(root, [name])) continue;
+    let subs;
+    try { subs = readdirSync(join(work, name)).filter(n => RUN_SUB_RE.test(n)); } catch { continue; }
+    subs.sort((x, y) => parseInt(y, 10) - parseInt(x, 10));
+    let stop = false;
+    for (const sub of subs) {
+      if (workParts(`${name}/${sub}`) === null || !realFolder(root, [name, sub])) continue;
+      if (!push(`${name}/${sub}`)) { stop = true; break; }
+    }
+    if (stop) break;
+  }
+  return out;
+}
+
+export function active(root, { now = Date.now() } = {}) {
+  let best = null;
+  for (const slug of runSlugs(root).slugs) {
+    const f = lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl'));
+    if (!f || !f.isFile()) continue;
+    const { view, activity } = load(root, slug, now);
+    if (view.state !== 'running') continue;
+    if (!best || activity > best.activity) best = { slug, view, activity };
   }
   return best ? { slug: best.slug, view: best.view } : { slug: null, view: null };
 }
 
-// Every run of the product, newest start first (past the folder cap the newest folders are kept); a run whose state file cannot be read is one `unreadable` entry.
+// Every run of the product, newest start first (past the run cap the newest runs are kept); a run whose state file cannot be read is one `unreadable` entry.
 export function list(root, { now = Date.now() } = {}) {
   const out = { v: 1, runs: [], warnings: [] };
-  const work = join(root, '.company', 'work');
-  const wst = lstatOrNull(work);
-  if (!wst || !wst.isDirectory()) return out;
-  let names;
-  try { names = readdirSync(work).filter(isWorkFolder).sort().reverse(); } catch { return out; }
-  const found = [];
-  for (const slug of names) {
-    try { checkSlug(root, slug); } catch { continue; }
-    const dst = lstatOrNull(join(work, slug));
-    if (!dst || !dst.isDirectory() || !insideWork(root, [slug])) continue;
-    if (!lstatOrNull(join(work, slug, 'run-state.jsonl'))) continue;
-    found.push(slug);
-  }
-  if (found.length > MAX_FOLDERS) out.warnings.push(`over ${MAX_FOLDERS} runs`);
-  for (const slug of found.slice(0, MAX_FOLDERS)) {
+  // Walk uncapped, keep runs with a state file, then cap: folders without one never count.
+  const all = runSlugs(root, { max: Infinity }).slugs.filter(slug => lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl')));
+  if (all.length > MAX_FOLDERS) out.warnings.push(`over ${MAX_FOLDERS} runs`);
+  for (const slug of all.slice(0, MAX_FOLDERS)) {
     const { view } = load(root, slug, now);
     if (view.state === 'none' && view.warnings.includes('run-state unreadable')) {
       out.runs.push({ slug, state: 'unreadable', started: null, ended: null, outcome: null, tier: null, round: null });
@@ -336,8 +359,6 @@ export function list(root, { now = Date.now() } = {}) {
     || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
   return out;
 }
-
-const RUN_SUB_RE = /^(?:0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // The activity time (ms) of a run when it counts as active, else 0.
 function runActivity(root, parts, now) {
@@ -367,39 +388,19 @@ function runActivity(root, parts, now) {
 // A project is active when one of its runs has an open, non-stale segment or, with no run-state, a direct file newer than 12 h.
 export function projects(root, { now = Date.now() } = {}) {
   const out = { v: 1, projects: [], warnings: [] };
-  const work = join(root, '.company', 'work');
-  const wst = lstatOrNull(work);
-  if (!wst || !wst.isDirectory()) return out;
-  let names;
-  try { names = readdirSync(work).sort().reverse(); } catch { return out; }
+  // Only v3 runs and parseProject names count toward the cap.
+  const counted = [];
+  for (const slug of runSlugs(root, { max: Infinity }).slugs) {
+    const parts = slug.split('/');
+    const id = parts.length === 2 ? parts[0] : parseProject(slug)?.id;
+    if (id !== undefined) counted.push({ parts, id });
+  }
   const found = new Map();
-  let read = 0;
-  let capped = false;
-  const visit = (id, parts) => {
-    read++;
+  for (const { parts, id } of counted.slice(0, MAX_FOLDERS)) {
     const at = runActivity(root, parts, now);
     if (at > 0 && at > (found.get(id) ?? 0)) found.set(id, at);
-  };
-  for (const name of names) {
-    if (capped) break;
-    const p = parseProject(name);
-    if (p !== null) {
-      if (read >= MAX_FOLDERS) { capped = true; break; }
-      visit(p.id, [name]);
-      continue;
-    }
-    if (!isProjectId(name)) continue;
-    const pdir = join(work, name);
-    const pst = lstatOrNull(pdir);
-    if (!pst || !pst.isDirectory() || !insideWork(root, [name])) continue;
-    let subs;
-    try { subs = readdirSync(pdir).filter(n => RUN_SUB_RE.test(n)).sort().reverse(); } catch { continue; }
-    for (const sub of subs) {
-      if (read >= MAX_FOLDERS) { capped = true; break; }
-      if (workParts(`${name}/${sub}`) !== null) visit(name, [name, sub]);
-    }
   }
-  if (capped) out.warnings.push(`over ${MAX_FOLDERS} runs`);
+  if (counted.length > MAX_FOLDERS) out.warnings.push(`over ${MAX_FOLDERS} runs`);
   out.projects = [...found].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? 1 : -1)).slice(0, 3).map(([id, at]) => ({ id, activity: iso(at) }));
   return out;
 }

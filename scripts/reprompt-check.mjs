@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checker for the reprompt Playbook (reprompt v2.3). Three subcommands, run from the product root:
+// Checker for the reprompt Playbook (reprompt v2.6). Three subcommands, run from the product root:
 //   snap <name> [walk-less|raise|both]          records the run and a baseline of the watched files before a dispatch
 //   arm <name> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
 //   reply <name> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list
@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lint } from './handoff-lint.mjs';
 import { isRunName } from '../mods/lib/reprompt-gate.mjs';
-import { exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { exactWorkPath, workParts, isProjectId, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const NN_RE = /^\d{2,3}$/;
 const HEX_RE = /^[0-9a-f]{64}$/;
@@ -100,19 +100,21 @@ function lstatOrNull(p) {
 }
 
 function runFolder(loc, slug) {
+  const parts = workParts(slug);
+  if (parts === null) refuse(USAGE);
   // Exact letter case of `.company`, `work` and the slug first; a missing path keeps the refusals below.
   try {
-    exactWorkPath({ fs: { readdirSync }, path: { join } }, loc.root, [slug]);
+    exactWorkPath({ fs: { readdirSync }, path: { join } }, loc.root, parts);
   } catch (e) {
     if (e instanceof WorkFolderRefusal) refuse(e.message);
     throw e;
   }
-  const dir = join(loc.root, '.company', 'work', slug);
+  const dir = join(loc.root, '.company', 'work', ...parts);
   const st = lstatOrNull(dir);
   if (!st || st.isSymbolicLink() || !st.isDirectory()) refuse('run folder missing or not a plain folder');
   let found;
   try { found = realpathSync.native(dir); } catch { refuse('run folder missing or not a plain folder'); }
-  if (found !== join(realpathSync.native(loc.root), '.company', 'work', slug)) refuse('run folder is reached through a link');
+  if (found !== join(realpathSync.native(loc.root), '.company', 'work', ...parts)) refuse('run folder is reached through a link');
   return dir;
 }
 
@@ -862,7 +864,7 @@ function baseLimits(limits) {
 export function run(argv, { cwd = process.cwd(), env = process.env, limits } = {}) {
   try {
     const [cmd, slug, ...rest] = argv;
-    if (typeof slug !== 'string' || !isRunName(slug)) refuse(USAGE);
+    if (typeof slug !== 'string' || !isRunName(slug) || isProjectId(slug)) refuse(USAGE);
     const base = baseLimits(limits);
     const loc = locations(cwd, env);
     let res;

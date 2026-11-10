@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { WorkFolderRefusal, branchId, exactWorkPath, isWorkFolder } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const MAX_OUT = 1024 * 1024;
 const MAX_PRS = 5;
@@ -16,9 +16,9 @@ const FIELDS = 'number,url,state,closingIssuesReferences';
 const result = (slug, branch, state, prs = [], issues = []) => ({ v: 1, slug, branch, state, prs, issues });
 
 function slugOk(root, slug) {
-  if (typeof slug !== 'string' || slug === '' || !isWorkFolder(slug)) return false;
+  if (typeof slug !== 'string' || slug === '' || !isRunSlug(slug)) return false;
   try {
-    return exactWorkPath({ fs, path }, root, [slug]) === 'exact';
+    return exactWorkPath({ fs, path }, root, workParts(slug)) === 'exact';
   } catch (error) {
     if (error instanceof WorkFolderRefusal) return false;
     return false;

@@ -1,6 +1,6 @@
 // Allow-list guards for the JSON the mods read from the plugin scripts.
 // Pure: no engine object, no Node import, no npm package.
-import { isWorkFolder } from './work-folder.mjs';
+import { isRunSlug } from './work-folder.mjs';
 
 export const MAX_STDOUT = 262144;
 export const MAX_CTX = 10000000;
@@ -8,8 +8,8 @@ export const MAX_CTX = 10000000;
 export const AGENT_ID = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 const MAX_OUTPUT_TEXT = 65536;
 const MAX_OUTPUT_LINE = 300;
-// The folder part is cut at a slash and checked by isWorkFolder; only the shape of the rest is read here.
-const OUTPUT_LINE = /^Output: \.company\/work\/([^/]{1,120})\/(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
+// The folder part is one segment or two (a v3 run) and checked by isRunSlug; only the shape of the rest is read here.
+const OUTPUT_LINE = /^Output: \.company\/work\/([^/]{1,120}(?:\/[^/]{1,80})?)\/(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
 const MAX_DEPTH = 32;
 const DANGEROUS = new Set(['__proto__', 'constructor', 'prototype']);
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g;
@@ -144,11 +144,11 @@ export function interpretRun(result, guard) {
 }
 
 const ROLE_KEY = /^[a-z][a-z0-9-]{0,40}$/;
-// A run name as the scripts print it: a new work folder name or a legacy slug.
-export const workFolder = (v) => (typeof v === 'string' && v.length <= 120 && isWorkFolder(v) ? v : undefined);
+// A run slug as the scripts print it: a work folder name, a legacy slug or a v3 `<ProjectID>/<NN>-<playbook>`.
+export const workFolder = (v) => (typeof v === 'string' && v.length <= 120 && isRunSlug(v) ? v : undefined);
 
 // The first `Output:` dispatch line of a text: { slug, step, role }, or null. One trailing CR is dropped from a line,
-// a line over 300 characters is skipped, and the folder must pass isWorkFolder.
+// a line over 300 characters is skipped, and the folder must pass isRunSlug.
 export function parseOutputText(text) {
   if (typeof text !== 'string') return null;
   const head = text.length > MAX_OUTPUT_TEXT ? text.slice(0, MAX_OUTPUT_TEXT) : text;
@@ -163,7 +163,7 @@ export function parseOutputText(text) {
 export function parseOutputLine(line) {
   if (typeof line !== 'string' || line.length > MAX_OUTPUT_LINE) return null;
   const m = OUTPUT_LINE.exec(line);
-  return m !== null && isWorkFolder(m[1]) ? { slug: m[1], step: m[2], role: m[3] } : null;
+  return m !== null && isRunSlug(m[1]) ? { slug: m[1], step: m[2], role: m[3] } : null;
 }
 const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const askWarn = oneOf(['ask', 'warn']);

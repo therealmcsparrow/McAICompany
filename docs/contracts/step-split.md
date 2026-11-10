@@ -1,6 +1,6 @@
-# Contract: step-split v1.1
+# Contract: step-split v1.2
 
-History: v1.1 (2026-11-02, CEO decision) `fix` merges rows only when tag, path, line and finding text are all equal; v1 merged on tag, path and line. Compatible for consumers: it can only yield more rows, never fewer than distinct findings. v1 first release (task context-cap-enforcement T3).
+History: v1.2 is additive (task Project Folders, T25; `work-folder-name` v3.0 `isRunSlug`, `workParts`): `<run>` may be a v3 run slug `<ProjectID>/<NN>-<playbook>`; its folder is `exactWorkPath(io, root, workParts(run))`, the whole slug goes to `review-depth --run`, `split/` sits in the run folder and printed paths read `.company/work/<slug>/split/...`. A malformed or missing v3 slug is `refused`, exit 2. v2, v1.1 and legacy names give byte-identical output to v1.1. v1.1 (2026-11-02, CEO decision) `fix` merges rows only when tag, path, line and finding text are all equal; v1 merged on tag, path and line. Compatible for consumers: it can only yield more rows, never fewer than distinct findings. v1 first release (task context-cap-enforcement T3).
 
 New Contract (task context-cap-enforcement T3). Provider: `scripts/step-split.mjs` (Node built-ins only; `main(argv, { root, exec })` exported). Consumer: `aico:pipeline` (review and Fix rounds that would not fit one Step's context), the Code Reviewer lanes and builders via the `Review group:` and `Fix group:` lines of `dispatch-prompt` v5.0. Uses `review-depth` v1.3 (`--lines`) and `work-folder-name` v1 (`exactWorkPath`).
 A group is a list of paths or Blocking rows small enough for one Step to judge inside the handover point. The script never runs git itself and never writes outside the `split/` folder of the run.

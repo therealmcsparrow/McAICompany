@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1.8). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.9). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { readPlanLines } from './plan-markdown.mjs';
-import { WorkFolderRefusal, exactWorkPath, isTicketHeading, isWorkFolder, projectIdOf, ticketLocal, ticketPattern } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isProjectId, isRunSlug, isTicketHeading, parseRun, projectIdOf, ticketLocal, ticketPattern, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
 const MAX_PLAN_BYTES = 256 * KiB;
@@ -609,8 +609,10 @@ function openedMatches(fd, expect) {
 
 // The run folder, with no link in .company, .company/work or the slug folder. Returns null when absent.
 function runDir(root, slug) {
+  const parts = workParts(slug);
+  if (parts === null) return 'unsafe';
   let dir = root;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...parts]) {
     dir = path.join(dir, part);
     const st = lstatOrNull(dir);
     if (!st) return null;
@@ -886,7 +888,7 @@ function viewOf(slug, st) {
 }
 
 export function readParallel(root, slug) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('plan-tasks: bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new TypeError('plan-tasks: bad slug');
   const { state } = loadRecord(root, slug);
   return state ? viewOf(slug, state) : { v: 1, slug, state: 'none' };
 }
@@ -894,7 +896,7 @@ export function readParallel(root, slug) {
 // The given task ids in the visit order of the plan the run began with. Null when the plan cannot be read, differs from the
 // one hashed at begin, or lacks one of the ids: a caller that merges in plan order stops then.
 export function sortByVisit(root, slug, ids) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new TypeError('plan-tasks: bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new TypeError('plan-tasks: bad slug');
   const { state } = loadRecord(root, slug);
   if (!state?.begun || !Array.isArray(ids)) return null;
   try {
@@ -1032,9 +1034,10 @@ function takeFlags(args, spec) {
 
 // The name shape first, then the exact spelling of the folder (and a plan file) on disk.
 function checkSlug(slug, root, file) {
-  if (typeof slug !== 'string' || !isWorkFolder(slug)) throw new Refusal('bad slug');
+  if (typeof slug !== 'string' || !isRunSlug(slug)) throw new Refusal('bad slug');
   try {
-    exactWorkPath({ fs, path }, root, file === undefined ? [slug] : [slug, file]);
+    const parts = workParts(slug);
+    exactWorkPath({ fs, path }, root, file === undefined ? parts : [...parts, file]);
   } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;
@@ -1079,7 +1082,33 @@ function planFor(env, slug, name) {
 const MAX_SIBLING_FOLDERS = 200;
 const MAX_SIBLING_PLANS = 20;
 
-// In a v2 folder, a ticket ID that heads a plan in another folder of the same project with a different block is refused.
+// The other runs of a project, as slugs: its v2 folders and the run folders inside its v3 project folder.
+function siblingRuns(root, slug, project) {
+  let top;
+  try {
+    top = fs.readdirSync(path.join(root, '.company', 'work'));
+  } catch {
+    return [];
+  }
+  const found = [];
+  for (const name of top) {
+    if (found.length >= MAX_SIBLING_FOLDERS) break;
+    if (name === project && isProjectId(name)) {
+      let subs;
+      try {
+        subs = fs.readdirSync(path.join(root, '.company', 'work', name));
+      } catch {
+        continue;
+      }
+      for (const sub of subs) if (parseRun(`${name}/${sub}`) !== null) found.push(`${name}/${sub}`);
+    } else if (projectIdOf(name) === project && !isProjectId(name)) {
+      found.push(name);
+    }
+  }
+  return found.filter((other) => other !== slug).slice(0, MAX_SIBLING_FOLDERS);
+}
+
+// A ticket ID that heads a plan in another folder of the same project with a different block is refused.
 function refuseReusedTickets(root, slug, parsed) {
   const project = projectIdOf(slug);
   if (project === null) return;
@@ -1089,13 +1118,7 @@ function refuseReusedTickets(root, slug, parsed) {
     if (!own.has(id)) own.set(id, new Set());
     own.get(id).add(blockTexts.get(t));
   }
-  let folders;
-  try {
-    folders = fs.readdirSync(path.join(root, '.company', 'work'));
-  } catch {
-    return;
-  }
-  folders = folders.filter((other) => other !== slug && projectIdOf(other) === project).slice(0, MAX_SIBLING_FOLDERS);
+  const folders = siblingRuns(root, slug, project);
   for (const other of folders) {
     const dir = runDir(root, other);
     if (dir === null || dir === 'unsafe') continue;

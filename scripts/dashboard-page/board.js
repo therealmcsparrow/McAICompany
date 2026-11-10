@@ -123,8 +123,30 @@
     p.btn.setAttribute('aria-haspopup', 'dialog');
     p.chip.id = 'chip-' + (++seq);
     p.btn.setAttribute('aria-describedby', p.chip.id);
-    p.btn.addEventListener('click', function () { if (api.onOpen) api.onOpen(slug, p.btn); });
+    p.btn.addEventListener('click', function () { if (api.onOpen) api.onOpen(slug, p.btn, p.runs); });
     p.li.append(p.btn, p.slug, p.chip, p.time, p.tokens, p.usd, p.stage, p.note);
+    return p;
+  }
+
+  var PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+  function okPart(s) { return typeof s === 'string' && PART.test(s) && s.indexOf('..') < 0; }
+  // keeps only `<id>/<sub>` entries whose two parts are plain names; anything else is never listed or fetched
+  function cleanRuns(id, runs) {
+    var out = [];
+    (Array.isArray(runs) ? runs : []).forEach(function (r) {
+      if (typeof r !== 'string') return;
+      var at = r.indexOf('/');
+      if (at < 1 || r.slice(0, at) !== id || !okPart(r.slice(at + 1))) return;
+      if (out.indexOf(r) < 0) out.push(r);
+    });
+    return out;
+  }
+
+  function makeProjectCard(id) {
+    var p = makeRunCard(id);
+    p.proj = el('p', 'note');
+    p.li.insertBefore(p.proj, p.chip);
+    p.runs = [];
     return p;
   }
 
@@ -183,6 +205,12 @@
     setShown(p.stage, !!sn);
     setText(p.note, unreadable ? "This run's files could not be read. Other runs are fine." : '');
     setShown(p.note, unreadable);
+  }
+
+  function fillProject(p, c, runs) {
+    p.runs = runs;
+    fillRun(p, c);
+    setText(p.proj, 'Project · ' + runs.length + (runs.length === 1 ? ' run' : ' runs'));
   }
 
   function fillIntake(p, c) {
@@ -276,18 +304,19 @@
       var list = desired[col.id] = desired[col.id] || [];
       col.cards.forEach(function (c) {
         if (!c || typeof c !== 'object') return;
-        var raw = intake ? str(c.id, 100) : str(c.slug, 300);
-        if (!raw) return;
-        var id = (intake ? 'i:' : 'r:') + raw;
+        var project = !intake && c.kind === 'project';
+        var raw = intake || project ? str(c.id, 100) : str(c.slug, 300);
+        if (!raw || (project && !okPart(raw))) return;
+        var id = (intake ? 'i:' : project ? 'p:' : 'r:') + raw;
         if (seen[id]) return;
         seen[id] = true;
         var p = cards[id];
         var isNew = !p;
-        if (isNew) p = cards[id] = intake ? makeIntakeCard() : makeRunCard(raw);
+        if (isNew) p = cards[id] = intake ? makeIntakeCard() : project ? makeProjectCard(raw) : makeRunCard(raw);
         if (intake) {
           fillIntake(p, c);
         } else {
-          fillRun(p, c);
+          if (project) { c = Object.assign({}, c, { slug: raw }); fillProject(p, c, cleanRuns(raw, c.runs)); } else fillRun(p, c);
           runCount++;
           if (c.live === true) live++;
           if (!first && (isNew || p.column !== col.id)) {
@@ -302,7 +331,7 @@
       if (seen[id]) return;
       var p = cards[id];
       var focused = doc.activeElement && within(p.li, doc.activeElement);
-      if (id.charAt(0) === 'r') changes.push({ kind: 'removed', title: p.btn.textContent });
+      if (id.charAt(0) !== 'i') changes.push({ kind: 'removed', title: p.btn.textContent });
       p.li.remove();
       delete cards[id];
       if (focused) cols[p.column].h.focus();

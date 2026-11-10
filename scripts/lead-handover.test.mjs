@@ -74,7 +74,7 @@ describe('calibration', () => {
 
   test('the Contract is v1.8 and holds the hand-over point, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v2\.0$/m);
+    assert.match(text, /^# Contract: lead-handoff v2\.1$/m);
     assert.ok(text.includes('85500'));
     assert.ok(text.includes('no setup'));
     assert.ok(!text.includes('\r'));
@@ -82,8 +82,8 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.0');
-    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v1.7 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.1');
+    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v2.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2');
   });
 });
 
@@ -808,7 +808,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v2.0'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v2.1'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {
@@ -824,5 +824,32 @@ describe('pipeline wiring', () => {
     for (const needle of ['base commit:', 'tier-path', 'tier-set', 'fail closed', 'high', 'triage', 'nonce', 'ticket-approval read', 'approve line']) {
       assert.ok(t.includes(needle), `lead-handover.md lacks ${needle}`);
     }
+  });
+});
+
+// run-state v2.0: the newest open run may be a v3 run `<ID>/<NN>-<playbook>`.
+describe('run-state v2.0 cites and v3 runs', () => {
+  test('context-guard and run-guard cite run-state v2.0 on their uses line; triage names v2.0', () => {
+    const uses = (f) => fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/)[2];
+    assert.match(uses('context-guard.mjs'), /docs\/contracts\/run-state\.md v2\.0(?![\d.])/);
+    assert.match(uses('run-guard.mjs'), /docs\/contracts\/run-state\.md v2\.0(?![\d.])/);
+    const triage = fs.readFileSync(path.join(repo, 'skills', 'triage', 'SKILL.md'), 'utf8').split(/\r?\n/)[23];
+    assert.match(triage, /run-state v2\.0/);
+    assert.ok(!/run-state v1/.test(triage));
+  });
+
+  test('findRun returns the slug of a running v3 run, with its one slash', () => {
+    const slug = 'P20261109.000001/01-feature';
+    const fx = fixture({ slug });
+    assert.equal(lead.findRun(fx.root, fx.now), slug);
+  });
+
+  test('findRun keeps returning a running v2 folder when a v3 run is older', () => {
+    const fx = fixture({ slug: 'P20261109.000002-10.00.00' });
+    const old = path.join(fx.root, '.company', 'work', 'P20261109.000001', '01-feature');
+    fs.mkdirSync(old, { recursive: true });
+    fs.writeFileSync(path.join(old, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(fx.now - 3600000), ev: 'start' })}
+`);
+    assert.equal(lead.findRun(fx.root, fx.now), 'P20261109.000002-10.00.00');
   });
 });

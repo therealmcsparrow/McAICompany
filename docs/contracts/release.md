@@ -1,4 +1,6 @@
-# Contract: release v1.3
+# Contract: release v1.4
+
+v1.4 (task One Project One ID, T19; additive): `gate-report.mjs` `runsOf` reads a ledger file named `<ID>~<NN>-<pb>.jsonl` back as the slug `<ID>/<NN>-<pb>` with `slugOfKey` (`work-folder-name` v3.0) and skips a name that gives null; the Gate Report shows the slug. v2, v1.1 and legacy names give byte-identical output to v1.3.
 
 Provider: `scripts/release.mjs` (the one command), `scripts/sbom.mjs` and `scripts/gate-report.mjs` (Node built-ins only). Consumers: the CEO and CI reading `releases/<x.y.z>/`, and `scripts/stable.mjs` through the rollback line. Sources read: `token-ledger` v1.6 files (`.company/ledger/<run>.jsonl`), `run-state` v1.5 `show`.
 Rationale: every release carries a bill of materials, a one-line way back and a record of how its Gates went, all made from recorded data. Rules: `.company/standards/cyclonedx@1.md` (cdx.M1 to M7, S1 to S5, M-SEC1, M-SEC2), `.company/standards/git@2.md` (git.M1, git.M4). The deviation from gha.S5 (an SBOM built in CI): it is built here, in `release.mjs`, so the file is in the release commit; CI can run `node scripts/sbom.mjs <file>` to build the same file.

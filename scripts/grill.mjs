@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Grill file check (contract: docs/contracts/grill-file.md v1.4). Node built-ins only.
+// Grill file check (contract: docs/contracts/grill-file.md v1.5). Node built-ins only.
 // `check` lists the shape errors of a grill file; `status` prints the answered count and the open branches.
 // File text and arguments are untrusted: the size is capped before decoding, every pattern is anchored and
 // runs per line, the file is read by the real-path rule, and output holds only fixed words, ids, numbers,
@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isWorkFolder, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const MAX_ARG = 4096;
 const WORK_PREFIX = '.company/work/';
@@ -82,7 +82,7 @@ export function parseGrill(text) {
     const started = /^started: (.+)$/.exec(lines[2]);
     const st = /^status: (.+)$/.exec(lines[3]);
     if (!slug || !started || !st || lines[4] !== 'format: 1') return false;
-    if (!isWorkFolder(slug[1]) || !validStarted(started[1])) return false;
+    if (!isRunSlug(slug[1]) || !validStarted(started[1])) return false;
     if (st[1] !== 'open' && st[1] !== 'done' && st[1] !== 'stopped') return false;
     status = st[1];
     return true;
@@ -228,7 +228,8 @@ export function parseGrill(text) {
 function isGrillRel(rel) {
   if (typeof rel !== 'string' || rel.length > MAX_ARG || !rel.startsWith(WORK_PREFIX)) return false;
   const parts = rel.slice(WORK_PREFIX.length).split('/');
-  return parts.length === 2 && /^grill\.md$/i.test(parts[1]) && isWorkFolder(parts[0]);
+  const file = parts.pop();
+  return parts.length >= 1 && parts.length <= 2 && /^grill\.md$/i.test(file) && isRunSlug(parts.join('/'));
 }
 
 function checkArgs(args) {
@@ -344,7 +345,7 @@ function check(args, root) {
 
 function status(args, root) {
   if (args.length !== 1) throw new Refused(USAGE);
-  if (!isWorkFolder(args[0])) throw new Refused('bad slug');
+  if (!isRunSlug(args[0])) throw new Refused('bad slug');
   const realRoot = realRootOf(root);
   const parsed = parseGrill(readGrill(realRoot, `${WORK_PREFIX}${args[0]}/grill.md`));
   if (parsed.errors.length > 0) return { code: 2, lines: errorLines(parsed.errors) };

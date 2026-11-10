@@ -1859,7 +1859,7 @@ describe('AC31 contested findings', () => {
 describe('AC32 the handoff Contract holds contested findings and the contracts field', () => {
   const header = read('docs', 'contracts', 'handoff.md').split('\n')[0];
   test('the Contract is v2.0, breaking, and names the contest, the contracts key and the v2.0 evidence part', () => {
-    assert.equal(header, '# Contract: handoff v2.5');
+    assert.equal(header, '# Contract: handoff v2.6');
     const text = read('docs', 'contracts', 'handoff.md');
     assert.match(text, /v1\.2 is additive/);
     assert.match(text, /v2\.0 \(part 5\) is \*\*breaking\*\*/);
@@ -1881,7 +1881,7 @@ describe('AC32 the handoff Contract holds contested findings and the contracts f
     assert.equal(none.code, 1, none.all);
     assert.match(none.all, /missing contracts/);
     assert.equal(write('02-backend-engineer.md', base('').replace('By: backend-engineer', 'By: Bo (backend-engineer)')).code, 0);
-    assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v2.0, run-state v1.5]\n')).code, 0);
+    assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v2.0, run-state v2.0]\n')).code, 0);
     assert.equal(write('08-backend-engineer.md', base('contracts: [handoff v2.0]\n')).code, 0);
     const malformed = write('05-backend-engineer.md', base('contracts: handoff v2.0\n'));
     assert.equal(malformed.code, 1, malformed.all);
@@ -1891,7 +1891,7 @@ describe('AC32 the handoff Contract holds contested findings and the contracts f
     assert.match(unknown.all, /is not a Contract/);
     const stale = write('07-backend-engineer.md', base('contracts: [handoff v1.9]\n'));
     assert.equal(stale.code, 1, stale.all);
-    assert.match(stale.all, /handoff v1.9 is stale, current v2.5/);
+    assert.match(stale.all, /handoff v1.9 is stale, current v2.6/);
   });
   test('the shipped fixture set covers open, accepted and rejected contests', () => {
     const tests = read('scripts', 'handoff-contest.test.mjs');

@@ -12,7 +12,8 @@ after(() => fs.rmSync(base, { recursive: true, force: true }));
 
 // git must never read the real user or system configuration.
 const gitConfig = path.join(base, 'gitconfig');
-fs.writeFileSync(gitConfig, '');
+// No detached auto maintenance or gc: it makes transient lock files under .git while treeHash walks.
+fs.writeFileSync(gitConfig, ['[maintenance]', '\tauto = false', '[gc]', '\tauto = 0', ''].join('\n'));
 process.env.GIT_CONFIG_GLOBAL = gitConfig;
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_CEILING_DIRECTORIES = base;

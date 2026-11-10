@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Review loop (contract: docs/contracts/review-loop.md v1.2). Node built-ins only.
-// uses: docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v2.0
+// Review loop (contract: docs/contracts/review-loop.md v1.3). Node built-ins only.
+// uses: docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v3.0
 // Keeps the retry and "not run" count of review dispatches and the run-branch commit each repair round starts from in one
 // append-only record, and decides churn from git hunks of the judging diff. Arguments, the record, review-file text and
 // git output are untrusted: values are allow-listed before use, sizes are capped before parsing, and any failed or
@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { contests, parseLocations } from './handoff-lint.mjs';
-import { isWorkFolder, branchId, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, branchId, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 export const REVIEW_ROLES = ['code-reviewer', 'fresh-reviewer', 'qa', 'security', 'pentester', 'vuln-scanner', 'senior-engineer',
   'accessibility-tester', 'hands-on-tester', 'persona-tester', 'legal'];
@@ -55,7 +55,7 @@ const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino;
 
 function runDir(root, slug) {
   let dir = root;
-  for (const part of ['.company', 'work', slug]) {
+  for (const part of ['.company', 'work', ...(workParts(slug) ?? [slug])]) {
     dir = path.join(dir, part);
     const st = lstatOrNull(dir);
     if (!st) return null;
@@ -138,7 +138,7 @@ function loadRecord(root, slug) {
 }
 
 export function readReviewLoop(root, slug) {
-  if (!isWorkFolder(slug)) throw new TypeError('review-loop: bad slug');
+  if (!isRunSlug(slug)) throw new TypeError('review-loop: bad slug');
   return loadRecord(root, slug).events;
 }
 
@@ -413,8 +413,8 @@ function churn(root, slug, round, base) {
 const runRef = (slug) => `refs/heads/aico/${branchId(slug)}`;
 
 const checkSlug = (s, root) => {
-  if (!isWorkFolder(s)) throw new Refusal('slug must be a work folder name');
-  try { exactWorkPath({ fs, path }, root, [s]); } catch (error) {
+  if (!isRunSlug(s)) throw new Refusal('slug must be a work folder name');
+  try { exactWorkPath({ fs, path }, root, workParts(s)); } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;
   }
@@ -495,7 +495,7 @@ function readHead(root, slug, runFolder, full) {
   let fd;
   try {
     const realDir = fs.realpathSync.native(runFolder);
-    if (realDir !== path.join(fs.realpathSync.native(root), '.company', 'work', slug)) throw new Error('outside');
+    if (realDir !== path.join(fs.realpathSync.native(root), '.company', 'work', ...workParts(slug))) throw new Error('outside');
     if (fs.realpathSync.native(full) !== path.join(realDir, path.basename(full))) throw new Error('moved');
     const st = fs.lstatSync(full);
     if (!isPlain(st) || st.size > MAX_RECORD_BYTES) throw new Error('unsafe');

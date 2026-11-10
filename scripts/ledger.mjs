@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.11). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.12). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -12,7 +12,7 @@ import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { costText, readCost } from './cost-source.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
-import { WorkFolderRefusal, exactWorkPath, isWorkFolder, parseProject, runOf } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, exactWorkPath, isRunSlug, parseProject, runKey, runOf, slugOfKey, workParts } from '../mods/lib/work-folder.mjs';
 import { readInside } from './handoff-lint.mjs';
 import { readTierPath } from './tier-set.mjs';
 import * as settings from './settings.mjs';
@@ -40,7 +40,7 @@ const TIME_MAX = Date.parse('2100-01-01T00:00:00Z');
 const EXCLUDED_RUN = /^(brainstorm|replay|baseline)-/;
 const TIERS = ['low', 'medium', 'high'];
 
-const isRun = (name) => typeof name === 'string' && isWorkFolder(name);
+const isRun = (name) => typeof name === 'string' && isRunSlug(name);
 const AGENT = /^[A-Za-z0-9_-]{1,64}$/;
 const ROLE = /^(lead|[a-z][a-z0-9-]{0,40})$/;
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
@@ -106,7 +106,7 @@ function timeMs(text) {
 
 function checkRun(run) {
   if (!isRun(run)) throw new Refusal('run must be a work folder name or a legacy slug');
-  try { exactWorkPath({ fs, path }, env.root, [run]); } catch (error) {
+  try { exactWorkPath({ fs, path }, env.root, workParts(run)); } catch (error) {
     if (error instanceof WorkFolderRefusal) throw new Refusal(error.message);
     throw error;
   }
@@ -237,7 +237,7 @@ export function validateRecord(input) {
 
 // ---------- storage ----------
 
-const fileFor = (run) => path.join(ledgerDir(), `${checkRun(run)}.jsonl`);
+const fileFor = (run) => path.join(ledgerDir(), `${runKey(checkRun(run))}.jsonl`);
 
 function appendRecord(rec) {
   const verdict = validateRecord(rec);
@@ -953,8 +953,8 @@ function comparisonFiles(run, counts) {
   }
   const files = [];
   for (const file of names) {
-    const name = file.endsWith('.jsonl') ? file.slice(0, -6) : '';
-    if (name === run || !isRun(name)) continue;
+    const name = file.endsWith('.jsonl') ? slugOfKey(file.slice(0, -6)) : null;
+    if (name === null || name === run) continue;
     try {
       const st = fs.lstatSync(path.join(ledgerDir(), file));
       if (st.isFile()) files.push({ name, mtime: st.mtimeMs });
@@ -1187,7 +1187,7 @@ function verdictRuns(floor, counts, build = verdictRun) {
     if (EXCLUDED_RUN.test(name)) continue;
     let size;
     try {
-      size = fs.lstatSync(path.join(ledgerDir(), `${name}.jsonl`)).size;
+      size = fs.lstatSync(path.join(ledgerDir(), `${runKey(name)}.jsonl`)).size;
     } catch {
       counts.warnings += 1;
       continue;
@@ -1529,12 +1529,13 @@ function cmdBrainstormReport(args) {
 
 const RELEASE_RUN = /^(?:\d{4}-\d{2}-\d{2} \d{2}\.\d{2} - )?release(?:$| |-)/i;
 
-// A v2 run is a release run when line 3 of its 00-summary.md says so. The file is a new read: no link, one link count,
+// A v2 or v3 run is a release run when line 3 of its 00-summary.md says so. The file is a new read: no link, one link count,
 // size cap first. Anything unreadable or damaged counts as not a release.
 function isV2Release(name) {
-  if (parseProject(name) === null) return false;
+  const parts = workParts(name);
+  if (parts === null || (parts.length === 1 && parseProject(name) === null)) return false;
   try {
-    const got = readInside(fs.realpathSync.native(env.root), ['.company', 'work', name, '00-summary.md'], 64 * 1024);
+    const got = readInside(fs.realpathSync.native(env.root), ['.company', 'work', ...parts, '00-summary.md'], 64 * 1024);
     return got.status === 'ok' && runOf(got.text)?.playbook === 'release';
   } catch {
     return false;
@@ -1561,7 +1562,7 @@ function cmdQaFirstReport(args) {
   for (const { name } of files) {
     let size;
     try {
-      size = fs.lstatSync(path.join(ledgerDir(), `${name}.jsonl`)).size;
+      size = fs.lstatSync(path.join(ledgerDir(), `${runKey(name)}.jsonl`)).size;
     } catch {
       continue;
     }

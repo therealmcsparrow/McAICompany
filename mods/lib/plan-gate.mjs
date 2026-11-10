@@ -1,6 +1,6 @@
 // Pure logic for the plan Gate mod: which commands and files it judges, and what a `plan-check verify --json` answer means.
 // Nothing here runs a process or touches a file. Allow-lists only: anything not matched exactly is not judged.
-import { isWorkFolder, isLegacySlug } from './work-folder.mjs';
+import { isRunSlug, isProjectId, workParts, isLegacySlug } from './work-folder.mjs';
 
 const MAX_COMMAND = 4096;
 const MAX_PATH = 4096;
@@ -10,7 +10,12 @@ const SCRIPT_PATH = /^[A-Za-z0-9_.:/\\+@-]+$/;
 const POLICIES = ['off', 'warn', 'block'];
 const STATES = ['pass', 'open', 'error'];
 // A run-state record file under a run folder. Trailing dots, spaces and a stream suffix reach the same file on Windows.
-const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]+)\/run-state\.jsonl[. ]*(?::.*)?$/i;
+const RECORD_PATH = /(?:(?:^|\/)\.company\/|^)work\/([^/]*(?:\/[^/]*)?)\/run-state\.jsonl[. ]*(?::[^/]*)?$/i;
+// The last segment of a record, or its short (8.3) alias such as RUN-ST~1.JSO.
+const RECORD_LIKE = /^(?:run-state\.jsonl|[^/~]{1,7}~\d+\.jso)$/i;
+
+// A path that has a segment after the `work` folder.
+const WORK_ROOT = /(?:(?:^|\/)\.company\/|^)work\/./i;
 
 export const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 
@@ -41,7 +46,7 @@ function gateName(rest) {
     const close = rest.indexOf("'", 1);
     if (close < 0 || rest.slice(close + 1) !== GATE_TAIL) return null;
     const name = rest.slice(1, close);
-    return isWorkFolder(name) ? name : null;
+    return workParts(name) !== null ? name : null;
   }
   if (!rest.endsWith(GATE_TAIL)) return null;
   const name = rest.slice(0, -GATE_TAIL.length);
@@ -51,7 +56,7 @@ function gateName(rest) {
 // The run name when the command is, character for character, one of the two recorded forms of the plan Gate; else null.
 //   node <path>/scripts/run-state.mjs gate '<name>' plan passed
 //   node <path>/scripts/run.mjs run-state gate '<name>' plan passed
-// The name is one single-quoted token with no quote inside and passes isWorkFolder; the old unquoted form with a legacy
+// The name is one single-quoted token with no quote inside and passes workParts; the old unquoted form with a legacy
 // slug is still judged. Single spaces only: a double quote, a chain, an env prefix, a redirect, a newline, a second
 // quoted token or any other character is not judged.
 export function parseGateCommand(command) {
@@ -65,12 +70,69 @@ export function parseGateCommand(command) {
   return null;
 }
 
+// The path with every `.` and empty segment dropped and every `..` applied to the segment before it.
+function resolveSegments(text) {
+  const out = [];
+  for (const part of text.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') out.pop();
+    else out.push(part);
+  }
+  return out.join('/');
+}
+
+// Judged when the last segment of a path under `work/` is a short (8.3) alias, or a record name with trailing dots or spaces.
+function aliasName(path) {
+  if (!WORK_ROOT.test(path)) return false;
+  const last = path.slice(path.lastIndexOf('/') + 1);
+  return last.includes('~') || (/^run-st/i.test(last) && /[. ]$/.test(last));
+}
+
+// The path as Windows resolves it: a `//./` or `//?/` device root dropped, every segment cut at its first `:` (a stream
+// suffix) and trimmed of trailing dots and spaces, a leading `X:` drive kept, then `.`, `..` and empty segments resolved.
+function canonicalPath(text) {
+  const body = /^\/\/[.?]\//.test(text) ? text.slice(4) : text;
+  const parts = body.split('/').map((part, index) => {
+    if (index === 0 && /^[A-Za-z]:$/.test(part)) return part;
+    const cut = part.indexOf(':') < 0 ? part : part.slice(0, part.indexOf(':'));
+    if (cut.trim() === '..') return '..';
+    return cut.replace(/[. ]+$/, '');
+  });
+  return resolveSegments(parts.join('/'));
+}
+
+// Judged when a short (8.3) alias segment sits directly above a `work` folder and the path ends in a record-like name.
+function aliasAbove(path) {
+  const parts = path.split('/');
+  const last = parts[parts.length - 1];
+  if (!RECORD_LIKE.test(last)) return false;
+  return parts.some((part, index) => {
+    if (!part.includes('~')) return false;
+    const next = parts[index + 1];
+    const below = parts.length - index - 2;
+    return next !== undefined && next.toLowerCase() === 'work' && below >= 1 && below <= 3;
+  });
+}
+
+function matchRecord(path) {
+  const found = RECORD_PATH.exec(path);
+  if (found === null) return null;
+  // A second segment under a valid work folder (not a project folder) is a sub folder, not a record. Any other
+  // one- or two-segment match that is not a run slug is judged with a null slug, since Windows may open the record.
+  const first = found[1].slice(0, found[1].indexOf('/') < 0 ? undefined : found[1].indexOf('/'));
+  if (found[1].includes('/') && workParts(first) !== null && !isProjectId(first.toUpperCase())) return null;
+  return { slug: isRunSlug(found[1]) ? found[1] : null };
+}
+
 // For a path to a run-state record under `work/`: { slug } (slug is null when it is not a valid slug); else null.
+// The raw text and the path with its `.`, `..` and empty segments resolved are both tested, so neither form hides a record.
 export function recordPath(path) {
   if (typeof path !== 'string' || path.length > MAX_PATH) return null;
-  const found = RECORD_PATH.exec(path.replaceAll('\\', '/'));
-  if (found === null) return null;
-  return { slug: isWorkFolder(found[1]) ? found[1] : null };
+  const raw = path.replaceAll('\\', '/');
+  const resolved = resolveSegments(raw);
+  const canon = canonicalPath(raw);
+  return matchRecord(raw) ?? matchRecord(resolved) ?? (matchRecord(canon) === null ? null : { slug: null }) ??
+    (aliasName(resolved) || aliasName(canon) || aliasAbove(canon) ? { slug: null } : null);
 }
 
 export function writeTarget(input) {

@@ -267,8 +267,8 @@ const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
 test('the Contract is v4.4 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v5.1$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '5.1');
+  assert.match(contract, /^# Contract: dispatch-prompt v5.2$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '5.2');
   has(contract, 'v4.1 is additive', 'v4.2 is additive', 'v4.3 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 
