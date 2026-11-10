@@ -8,6 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { createProgress } from './progress.mjs';
 import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
@@ -636,12 +637,18 @@ function cmdRun(a, opts) {
   const timeout = opts.timeoutMs ?? TOOL_TIMEOUT_MS;
   const ctx = { root: a.root, cwd: a.root, git, ref, base: a.base, handoff: a.handoff, timeout, nodeTestTimeout: opts.timeoutMs ?? NODE_TEST_TIMEOUT_MS };
   const lines = [];
+  const progress = opts.progress ? opts.progress(checks.size) : null;
+  progress?.start();
+  try {
   for (const [id, b] of checks) {
     const rule = rules.get(b.rule);
+    progress?.begin(id);
     if (!rule || sha256(rule.text) !== b.text) {
       lines.push(row(0, '.company/checks.json', `tool config invalid: binding ${id} is out of date (run drift)`, null, 'rebind the check'));
+      progress?.done(id, false);
       continue;
     }
+    const before = lines.length;
     let result;
     if (b.argv) result = checkArgv(id, b.argv, ctx);
     else if (id === 'aico-check') result = checkAico(ctx);
@@ -650,6 +657,10 @@ function cmdRun(a, opts) {
     else result = checkHandoffLint(ctx);
     if (result.failed) lines.push(row(++n, '-', `tool failed: ${id} (${result.failed})`, rule));
     else for (const f of result.findings) lines.push(row(++n, f.file, f.problem, rule, f.fix));
+    progress?.done(id, lines.length === before);
+  }
+  } finally {
+    progress?.end();
   }
   return done(0, lines);
 }
@@ -1132,7 +1143,7 @@ export function main(args, options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const { code, lines } = main(process.argv.slice(2));
+  const { code, lines } = main(process.argv.slice(2), { progress: total => createProgress({ command: 'aico rule-check', total, unit: 'checks' }) });
   if (lines.length) process.stdout.write(`${lines.join('\n')}\n`);
   process.exitCode = code;
 }
