@@ -128,7 +128,7 @@ test('skill-picks: a v3 path in the wrong letter case, or a nested non-run folde
   assert.throws(() => picks('demo/x', cwd), /handoff path must be/);
 });
 
-// ---------- spec-check (destination-spec v1.4) ----------
+// ---------- spec-check (destination-spec v1.5) ----------
 const HEADINGS = ['## Problem', '## Solution', '## User stories', '## Decisions', '## Testing decisions', '## Out of scope'];
 const spec = (slug) => `---\nslug: ${slug}\nversion: pending\nshipped: pending\n---\n${HEADINGS.map((h) => `${h}\nPlain words about the result.\n`).join('\n')}`;
 
@@ -266,7 +266,7 @@ test('plan-gate: a run record path with a bad v3 shape is still a record path, w
 
 // ---------- Contracts ----------
 const doc = (name) => fs.readFileSync(path.join(REPO, 'docs', 'contracts', `${name}.md`), 'utf8');
-for (const [name, version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.4'], ['aico-mods', '1.8']]) {
+for (const [name, version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8']]) {
   test(`${name} is v${version} and says v2, v1.1 and legacy names are byte-identical`, () => {
     const text = doc(name);
     assert.ok(text.startsWith(`# Contract: ${name} v${version}\n`), text.split('\n')[0]);
@@ -281,5 +281,5 @@ for (const [name, version] of [['wayfinder', '1.2'], ['skill-recommendation', '2
 test('the provider scripts declare the new Contract versions', () => {
   const head = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8').split('\n').slice(0, 3).join('\n');
   assert.match(head('scripts/wayfinder.mjs'), /docs\/contracts\/wayfinder\.md v1\.2\b/);
-  assert.match(head('scripts/spec-check.mjs'), /docs\/contracts\/destination-spec\.md v1\.4\b/);
+  assert.match(head('scripts/spec-check.mjs'), /docs\/contracts\/destination-spec\.md v1\.5\b/);
 });
