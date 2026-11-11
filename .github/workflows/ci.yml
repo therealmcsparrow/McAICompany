@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
     defaults:
       run:
         shell: bash
@@ -36,6 +36,78 @@ jobs:
       # aico: references, size budgets and version consistency across files.
       - run: npm test
       - run: npm run check
+
+  # Windows runs the suite in four shards; each shard uploads the list of files it ran.
+  windows-test:
+    name: windows-test (shard ${{ matrix.shard }}/4)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    defaults:
+      run:
+        shell: bash
+        working-directory: repo with space
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo with space
+          persist-credentials: false
+      - run: cp .nvmrc ../.nvmrc
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Test shard
+        env:
+          AICO_TEST_SHARD: ${{ matrix.shard }}/4
+          AICO_TEST_FILES_OUT: ${{ runner.temp }}/shard-files/shard-${{ matrix.shard }}.txt
+        run: npm test -- "--test-shard=$AICO_TEST_SHARD"
+      - name: Structural checks
+        if: matrix.shard == 1
+        run: npm run check
+      - name: Upload shard file list
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shard-files-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard-files/shard-${{ matrix.shard }}.txt
+          retention-days: 1
+
+  # Red on any shard that did not succeed and on any test file no shard ran.
+  windows-check:
+    name: check (windows-latest)
+    needs: windows-test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Download shard file lists
+        if: always()
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: shard-files-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/shard-files
+      - name: Cover check
+        if: always()
+        env:
+          SHARD_DIR: ${{ runner.temp }}/shard-files
+        run: npm test -- "--aico-cover=$SHARD_DIR"
+      - name: Shard result
+        if: always()
+        env:
+          SHARDS_RESULT: ${{ needs.windows-test.result }}
+        run: |
+          echo "windows-test: $SHARDS_RESULT"
+          test "$SHARDS_RESULT" = success
 
   # Report-only: names stored Handoff fixtures that lack a required section. Never fails the build.
   golden-warn:
