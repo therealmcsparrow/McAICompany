@@ -21,7 +21,6 @@ const MAX_TIMEOUT_MS = 86400000;
 const WATCHDOG_GRACE_MS = 30000;
 const WATCHDOG = path.join(path.dirname(SELF), 'test-watchdog.mjs');
 const REFUSE_TIMEOUT = 'aico test: bad --test-timeout';
-const REFUSE_COVER = 'aico test: bad --aico-cover';
 const REFUSE_ISOLATION = 'aico test: --test-isolation=none is not supported';
 
 // Lists the files an argument list selects, as given (literal paths) or `<dir>/<name>` (patterns).
@@ -101,7 +100,7 @@ function writeFileList(finished) {
   if (typeof target !== 'string' || target === '') return;
   try {
     const out = path.resolve(target);
-    const names = [...finished].map((f) => path.relative(ROOT, path.resolve(process.cwd(), f)).split(path.sep).join('/'));
+    const names = [...finished];
     const sorted = names.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, sorted.map((n) => `${n}
@@ -189,7 +188,6 @@ export function planRun(args) {
     if (!a.startsWith('-')) continue;
     if (a.startsWith('--aico-cover=')) {
       coverDir = a.slice('--aico-cover='.length);
-      if (coverDir === '') return { refuse: REFUSE_COVER };
     } else flags.push(a);
   }
   const patterns = args.filter((a) => !a.startsWith('-'));
