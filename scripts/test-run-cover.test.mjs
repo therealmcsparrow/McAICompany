@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -33,8 +33,14 @@ function cover(dir, patterns = [GLOB]) {
   return { code: r.status, out: r.stdout.replace(/\r\n/g, '\n'), err: r.stderr, all };
 }
 
+const made = [];
+after(() => {
+  for (const d of made) fs.rmSync(d, { recursive: true, force: true });
+});
 function mkdir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'aico-cover-'));
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-cover-'));
+  made.push(d);
+  return d;
 }
 const list = (dir, name, files) => fs.writeFileSync(path.join(dir, name), files.join('\n') + '\n');
 const lines = (s) => s.split('\n').filter((l) => l.length > 0);
@@ -108,6 +114,15 @@ test('cover: no list in the dir -> cover: error, exit 1', () => {
   assert.equal(r.code, 1, r.all);
   assert.ok(lines(r.all).some((l) => /^cover: error \S/.test(l)), r.all);
   assert.ok(!/ok$/m.test(r.all));
+});
+
+test('cover: empty --aico-cover= prints one cover: error line on stdout, exit 1, runs no tests', () => {
+  const r = cover('');
+  assert.equal(r.code, 1, r.all);
+  const errs = lines(r.out).filter((l) => /^cover: error \S/.test(l));
+  assert.equal(errs.length, 1, r.all);
+  assert.doesNotMatch(r.err, /bad --aico-cover/);
+  assert.ok(!/^# (tests|pass|fail)/m.test(r.all) && !/TAP version/.test(r.all), r.all);
 });
 
 test('cover: missing dir -> cover: error, exit 1', () => {

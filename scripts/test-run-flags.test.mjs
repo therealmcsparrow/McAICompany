@@ -1,4 +1,4 @@
-// QA-first tests for test-run v1.1 `## Command` (flags, default timeout, shard, refusals).
+// Tests for test-run v1.1 `## Command` (flags, default timeout, shard, refusals).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

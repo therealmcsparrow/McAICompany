@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -13,8 +13,14 @@ const PASS_A = `${FIX}/pass-a.fixture.mjs`;
 const PASS_B = `${FIX}/pass-b.fixture.mjs`;
 const FAIL = `${FIX}/fail.fixture.mjs`;
 
+const made = [];
+after(() => {
+  for (const d of made) fs.rmSync(d, { recursive: true, force: true });
+});
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'aico-files-out-'));
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-files-out-'));
+  made.push(d);
+  return d;
 }
 
 function run(args, extraEnv = {}) {
@@ -56,19 +62,17 @@ test('File list: parent folder is created when missing', () => {
 });
 
 test('File list: unset writes nothing', () => {
-  const dir = tmp();
+  const before = fs.readdirSync(ROOT).sort();
   const r = run([PASS_A]);
   assert.equal(r.code, 0);
-  assert.deepEqual(fs.readdirSync(dir), []);
+  assert.deepEqual(fs.readdirSync(ROOT).sort(), before, 'no stray list file in the cwd');
   assert.ok(!fs.existsSync(path.join(ROOT, 'undefined')));
 });
 
 test('File list: empty value writes nothing and does not break the run', () => {
-  const dir = tmp();
   const before = fs.readdirSync(ROOT).sort();
   const r = run([PASS_A], { AICO_TEST_FILES_OUT: '' });
   assert.equal(r.code, 0, r.err);
-  assert.deepEqual(fs.readdirSync(dir), []);
   assert.deepEqual(fs.readdirSync(ROOT).sort(), before, 'no stray file in the cwd');
 });
 

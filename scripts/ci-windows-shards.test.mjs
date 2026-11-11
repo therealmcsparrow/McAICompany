@@ -1,5 +1,5 @@
-// T9: static reads of .github/workflows/ci.yml for the sharded Windows jobs
-// (test-run v1.1 `## CI jobs`; AC1, AC3, AC5, AC7).
+// Static reads of .github/workflows/ci.yml for the sharded Windows jobs
+// (test-run v1.1 `## CI jobs`).
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

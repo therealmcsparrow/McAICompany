@@ -1,6 +1,6 @@
-// QA-first tests for the per-file watchdog (test-run contract, "Per-file watchdog", AC4).
-// Imports of the not-yet-built modules are dynamic so each test fails by name until T8 lands.
-import { test } from 'node:test';
+// Tests for the per-file watchdog (test-run contract, "Per-file watchdog").
+// Modules are imported dynamically so each test fails by name if one is missing.
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -40,9 +40,13 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // One shared run: two hangers and a passer, D = 4000 ms.
 let shared;
+let sharedDir;
+after(() => {
+  if (sharedDir) fs.rmSync(sharedDir, { recursive: true, force: true });
+});
 function sharedRun() {
   if (!shared) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-wd-'));
+    const dir = (sharedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-wd-')));
     const list = path.join(dir, 'files.txt');
     const r = runner(['--test-timeout=2000', OPEN, TLA_HANDLE, PASS], { AICO_TEST_FILES_OUT: list });
     shared = { r, list: fs.existsSync(list) ? fs.readFileSync(list, 'utf8').split('\n').filter(Boolean) : [] };
