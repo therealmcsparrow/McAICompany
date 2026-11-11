@@ -80,6 +80,24 @@ export default async function* reporter(source) {
     }
   } finally {
     progress.end();
+    writeFileList(finished);
+  }
+}
+
+// Writes the completed-file list once, at run end, when AICO_TEST_FILES_OUT names a path.
+function writeFileList(finished) {
+  const target = process.env.AICO_TEST_FILES_OUT;
+  if (typeof target !== 'string' || target === '') return;
+  try {
+    const out = path.resolve(target);
+    const names = [...finished].map((f) => path.relative(ROOT, path.resolve(process.cwd(), f)).split(path.sep).join('/'));
+    const sorted = names.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, sorted.map((n) => `${n}
+`).join(''));
+  } catch (e) {
+    process.stderr.write(`aico test: cannot write file list: ${e.code ?? 'error'}
+`);
   }
 }
 
