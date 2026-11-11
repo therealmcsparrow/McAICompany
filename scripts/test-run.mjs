@@ -18,6 +18,8 @@ const ROOT = path.resolve(path.dirname(SELF), '..');
 const MAX_TOTAL = 1000000;
 const DEFAULT_TIMEOUT_MS = 1200000;
 const MAX_TIMEOUT_MS = 86400000;
+const WATCHDOG_GRACE_MS = 30000;
+const WATCHDOG = path.join(path.dirname(SELF), 'test-watchdog.mjs');
 const REFUSE_TIMEOUT = 'aico test: bad --test-timeout';
 const REFUSE_COVER = 'aico test: bad --aico-cover';
 const REFUSE_ISOLATION = 'aico test: --test-isolation=none is not supported';
@@ -192,12 +194,14 @@ export function planRun(args) {
   }
   const patterns = args.filter((a) => !a.startsWith('-'));
   let hasTimeout = false;
+  let timeoutMs = DEFAULT_TIMEOUT_MS;
   for (let i = 0; i < flags.length; i++) {
     const f = flags[i];
     if (f.startsWith('--test-timeout=')) {
       const v = f.slice('--test-timeout='.length);
       if (!/^[1-9]\d{0,7}$/.test(v) || Number(v) > MAX_TIMEOUT_MS) return { refuse: REFUSE_TIMEOUT };
       hasTimeout = true;
+      timeoutMs = Number(v);
     } else if (f === '--test-isolation=none' || f === '--experimental-test-isolation=none') {
       return { refuse: REFUSE_ISOLATION };
     }
@@ -207,7 +211,9 @@ export function planRun(args) {
       return { refuse: REFUSE_ISOLATION };
     }
   }
+  const deadlineMs = timeoutMs + Math.min(timeoutMs, WATCHDOG_GRACE_MS);
   const argv = [
+    `--import=${pathToFileURL(WATCHDOG).href}`,
     '--test',
     '--test-reporter=spec',
     '--test-reporter-destination=stdout',
@@ -218,7 +224,7 @@ export function planRun(args) {
     ...patterns
   ];
   const sharded = flags.some((f) => f.startsWith('--test-shard='));
-  return { argv, patterns, totalKnown: !sharded, coverDir };
+  return { argv, patterns, totalKnown: !sharded, coverDir, deadlineMs, env: { AICO_TEST_WATCHDOG_MS: String(deadlineMs) } };
 }
 
 function main(args) {
@@ -230,7 +236,7 @@ function main(args) {
   }
   if (plan.coverDir !== null) return runCover(plan.coverDir, plan.patterns);
   const known = plan.totalKnown ? countFiles(plan.patterns) : null;
-  const env = { ...process.env };
+  const env = { ...process.env, ...plan.env };
   delete env.AICO_TEST_TOTAL;
   if (known !== null) env.AICO_TEST_TOTAL = String(known);
   const r = spawnSync(process.execPath, plan.argv, { cwd: process.cwd(), env, stdio: 'inherit' });
