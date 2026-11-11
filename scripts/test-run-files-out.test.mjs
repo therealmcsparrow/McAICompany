@@ -23,14 +23,14 @@ function tmp() {
   return d;
 }
 
-function run(args, extraEnv = {}) {
+function run(args, extraEnv = {}, cwd = ROOT) {
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
   delete env.AICO_TEST_TOTAL;
   delete env.AICO_TEST_FILES_OUT;
   Object.assign(env, extraEnv);
   const r = spawnSync(process.execPath, [RUNNER, ...args], {
-    cwd: ROOT,
+    cwd,
     env,
     encoding: 'utf8',
     timeout: 60000,
@@ -39,7 +39,7 @@ function run(args, extraEnv = {}) {
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 
-test('File list: passed and failed files are both listed, sorted, repo-relative with / and LF', () => {
+test('File list: passed and failed files are both listed, sorted, cwd-relative with / and LF', () => {
   const dir = tmp();
   const out = path.join(dir, 'files.txt');
   const r = run([PASS_B, FAIL, PASS_A], { AICO_TEST_FILES_OUT: out });
@@ -61,19 +61,24 @@ test('File list: parent folder is created when missing', () => {
   assert.equal(fs.readFileSync(out, 'utf8'), `${PASS_A}\n`);
 });
 
+function isolated() {
+  const d = tmp();
+  fs.copyFileSync(path.join(ROOT, PASS_A), path.join(d, 'pass-a.fixture.mjs'));
+  return d;
+}
+
 test('File list: unset writes nothing', () => {
-  const before = fs.readdirSync(ROOT).sort();
-  const r = run([PASS_A]);
-  assert.equal(r.code, 0);
-  assert.deepEqual(fs.readdirSync(ROOT).sort(), before, 'no stray list file in the cwd');
-  assert.ok(!fs.existsSync(path.join(ROOT, 'undefined')));
+  const d = isolated();
+  const r = run(['pass-a.fixture.mjs'], {}, d);
+  assert.equal(r.code, 0, r.err);
+  assert.deepEqual(fs.readdirSync(d), ['pass-a.fixture.mjs'], 'no stray list file in the cwd');
 });
 
 test('File list: empty value writes nothing and does not break the run', () => {
-  const before = fs.readdirSync(ROOT).sort();
-  const r = run([PASS_A], { AICO_TEST_FILES_OUT: '' });
+  const d = isolated();
+  const r = run(['pass-a.fixture.mjs'], { AICO_TEST_FILES_OUT: '' }, d);
   assert.equal(r.code, 0, r.err);
-  assert.deepEqual(fs.readdirSync(ROOT).sort(), before, 'no stray file in the cwd');
+  assert.deepEqual(fs.readdirSync(d), ['pass-a.fixture.mjs'], 'no stray file in the cwd');
 });
 
 test('File list: with --test-shard=1/2 and 2/2 each list holds only that shard, together all files', () => {
@@ -90,4 +95,16 @@ test('File list: with --test-shard=1/2 and 2/2 each list holds only that shard, 
   }
   assert.deepEqual(lists[0].filter((f) => lists[1].includes(f)), [], 'shards are disjoint');
   assert.deepEqual([...lists[0], ...lists[1]].sort(), all);
+});
+
+test('File list: run from a subfolder lists names relative to that cwd, not the repo root (test-run v1.1)', () => {
+  const sub = path.join(ROOT, FIX);
+  const out = path.join(tmp(), 'f.txt');
+  const r = run(['pass-b.fixture.mjs', 'fail.fixture.mjs', 'pass-a.fixture.mjs'], { AICO_TEST_FILES_OUT: out }, sub);
+  assert.notEqual(r.code, 0, 'the failing fixture must fail the run');
+  assert.ok(fs.existsSync(out), `list not written; stderr: ${r.err}`);
+  assert.equal(
+    fs.readFileSync(out, 'utf8'),
+    'fail.fixture.mjs\npass-a.fixture.mjs\npass-b.fixture.mjs\n',
+  );
 });
