@@ -4,6 +4,18 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **Windows CI runs in 4 parallel shards.** `npm test` on Windows is split into four jobs (`windows-test`, shards 1 to 4), each running `npm test -- --test-shard=<i>/4`. A failed shard does not stop the others. `npm run check` runs once, in shard 1. Ubuntu and macOS still run one job each. The goal is a Windows wall time of 8 minutes or less per PR; the figure is measured over the first 5 PRs after merge and reported then.
+- **One Windows check name.** A new job `check (windows-latest)` waits for all shards and is red when a shard fails, is cancelled or is skipped, or when the cover check below finds a gap. The three names `check (ubuntu-latest)`, `check (windows-latest)` and `check (macos-latest)` stay as before. Main has no required checks set yet; turning them on is a repo setting.
+- **`npm test` takes flags.** Anything starting with `-` goes to `node --test` unchanged, for example `npm test -- --test-shard=2/4`. Run without flags, `npm test` runs the full suite as before.
+- **Per-file time limit on every OS.** Without a `--test-timeout=<ms>` flag, `npm test` adds `--test-timeout=1200000` (20 minutes). A test that never finishes now fails by name. A file whose tests are done but whose open handle keeps the process alive is ended after the limit plus up to 30 s, with the stderr line `aico test: watchdog: <file> did not end within <ms> ms`, and the run exits non-zero. A file that blocks its event loop with a synchronous endless loop is not caught; the CI job timeout stops it.
+- `npm test` refuses a `--test-timeout` that is not a whole number from 1 to 86400000, and `--test-isolation=none`, with one stderr line and exit 1 before any test runs.
+
+### New
+- **Test file list.** Set `AICO_TEST_FILES_OUT=<path>` and a run writes the test files that completed, one relative path per line, sorted.
+- **Cover mode.** `npm test -- --aico-cover=<dir>` runs no tests. It reads every `*.txt` file list in `<dir>` and prints `missing <file>`, `twice <file> <k>` or `unknown <file>` for each gap, or `cover: <n> files, <m> lists, ok` and exit 0. CI uses it to prove that the four Windows shards together ran every test file exactly once.
+- Contract: `test-run` v1.1 (`docs/contracts/test-run.md`).
+
 ## [0.35.0] - 2026-11-10
 
 Rollback: node scripts/stable.mjs 0.34.0
