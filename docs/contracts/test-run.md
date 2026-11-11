@@ -1,16 +1,24 @@
-# Contract: test-run v1
+# Contract: test-run v1.1
 
-Provider: `scripts/test-run.mjs` (Node built-ins only). Consumers: the `test` script in `package.json` (the one place the test patterns live), `.github/workflows/ci.yml`, QA.
+Provider: `scripts/test-run.mjs` and its per-file watchdog `scripts/test-watchdog.mjs` (Node built-ins only). Consumers: the `test` script in `package.json` (the one place the test patterns live), `.github/workflows/ci.yml`, QA.
 Rationale: Windows CI splits `npm test` over parallel jobs. A hanging test file must fail by name instead of running into the job timeout, and a split run must prove that every test file ran exactly once. The split is node's own `--test-shard` (by file count, not duration): one file, `scripts/worktree.test.mjs`, takes about 95% of the slowest shard, so no file-level split can beat it by much.
 
 ## Command
 `node scripts/test-run.mjs <arg>...`, normally through `npm test [-- <flag>...]`.
 - An argument that starts with `-` is a flag; any other is a pattern (a literal path or `<dir>/*<suffix>`, as before v1). Flags and patterns may come in any order.
-- node is started as `node --test <reporters> [--test-timeout=1200000] <flags> <patterns>`: flags in their given order, always before the patterns. Every flag except `--aico-cover=<dir>` reaches `node --test` unchanged. Node rejects a bad flag; the run then exits non-zero.
+- node is started as `node --import=<file URL of scripts/test-watchdog.mjs> --test <reporters> [--test-timeout=1200000] <flags> <patterns>`: flags in their given order, always before the patterns. Every flag except `--aico-cover=<dir>` reaches `node --test` unchanged. Node rejects a bad flag; the run then exits non-zero.
 - `--test-shard=<i>/<n>` runs node's shard `i` of `n`. Without it the full suite runs, as before v1.
-- **Per-file timeout.** With no `--test-timeout=` flag, test-run adds `--test-timeout=1200000` (20 minutes). A test file that has not finished by then fails, its repo-relative path is in the output, and the run exits non-zero. A given `--test-timeout=<ms>` replaces the default (tests use a short one). The timeout must also fail a file whose top-level code or open handle never lets it end, not only a slow test.
+- **Per-file timeout `T`.** With no `--test-timeout=<ms>` flag, test-run adds `--test-timeout=1200000` (20 minutes); a given one replaces the default (tests use a short one). Only the `=` form counts. `T` is that value. node applies it to each test, which fails a test that awaits forever by its test name.
+- **Per-file watchdog.** `--test-timeout` does not end a file whose tests are done but whose open handle keeps the process alive (spike S1 case b). test-run sets env `AICO_TEST_WATCHDOG_MS` to the deadline `D = T + min(T, 30000)` ms (replacing any inherited value) and preloads `scripts/test-watchdog.mjs` with `--import`; node passes that flag on to every test file's child process.
+  - The watchdog arms only in a test file's child: `AICO_TEST_WATCHDOG_MS` holds a whole number and `process.execArgv` has no `--test` (the runner process loads it too and must not arm). Importing it has no other effect.
+  - Armed: one `unref`'d timer of `D` ms from the child's start, so it never keeps a finished file alive. When it fires it writes one stderr line `aico test: watchdog: <file> did not end within <D> ms` (`<file>` relative to the working directory, `/` separators) and ends the child with exit code 1.
+  - node then fails that file: a nesting-0 `test:complete` with `passed: false`, so the progress line shows it failed, the file is in the `AICO_TEST_FILES_OUT` list (it ran), other files keep running, and node exits non-zero.
+  - Unsettled top-level await (case c) is failed by node itself when the event loop drains; with a handle that keeps the loop alive the watchdog fails it at `D`.
+  - Not covered: a file that blocks its event loop (a synchronous endless loop). No timer runs there; the CI job timeout stops it.
+- **`--test-force-exit`** is not added by test-run. Given by hand it passes through, but it turns an unsettled top-level await into a pass (spike S1); do not use it in CI.
 - **Progress total.** `AICO_TEST_TOTAL` is computed from the patterns as before v1. With a `--test-shard=` flag, the total is unknown (`?`).
 - **Exit code.** node's exit status; 1 when node cannot start or is killed by a signal.
+- **Refused before node starts** (exit 1, one stderr line, no tests run): `--test-timeout=<ms>` whose value is not a whole number from 1 to 86400000 → `aico test: bad --test-timeout`; `--test-isolation=none` or `--experimental-test-isolation=none` (all files in one process, so no per-file watchdog) → `aico test: --test-isolation=none is not supported`.
 
 ## File list (`AICO_TEST_FILES_OUT`)
 - When the environment variable `AICO_TEST_FILES_OUT` holds a path, the reporter writes that file when the run ends: one line per test file that completed (passed or failed), as a path relative to the working directory with `/` separators, sorted, UTF-8, LF line ends, a final LF. The parent folder is created if missing.
@@ -31,4 +39,5 @@ Rationale: Windows CI splits `npm test` over parallel jobs. A hanging test file 
 - New actions are pinned to a full commit with a `# vX.Y.Z` comment, like every other `uses:` line.
 
 ## Compatibility
-v1. A new flag or a new CI job is a minor bump. These are major bumps: a changed default timeout, a changed file-list or cover output format, a changed cover exit code, or a renamed required check.
+v1.1 (minor, per spike S1): the per-file watchdog (`scripts/test-watchdog.mjs`, env `AICO_TEST_WATCHDOG_MS`, the `--import` preload) and two refusals before node starts (`bad --test-timeout`, `--test-isolation=none`). `--test-force-exit` is not used. No flag, file-list or cover format, exit code or CI job changes. v1 had no implementation, so no consumer breaks.
+v1. A new flag or a new CI job is a minor bump. These are major bumps: a changed default timeout or watchdog deadline rule, a changed file-list or cover output format, a changed cover exit code, or a renamed required check.
