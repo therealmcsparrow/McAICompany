@@ -5,7 +5,7 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ## [Unreleased]
 
 ### Added
-- **ADHD mode.** `/aico:i-have-adhd` makes replies start with the next action, number the steps, say `step n of m` and end with one next action. It lasts for the session, ends on "stop adhd mode" or "normal mode", and is never saved.
+- **ADHD mode.** `/aico:i-have-adhd [help]` makes replies start with the next action, number the steps, say `step n of m` and end with one next action. CEO-only. It lasts for the session, ends on "stop adhd mode" or "normal mode", and is never saved. Gate summaries, forms and Handoffs stay unchanged. Adapted from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd) (MIT, notice in `skills/i-have-adhd/LICENSE`). Contract: `company-type` v2.2.
 
 ### Changed
 - **Settings page matches the control console look.** `scripts/settings-page.html` now uses the same visual style as the control console.
