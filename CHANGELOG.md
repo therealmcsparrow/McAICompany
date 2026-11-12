@@ -12,6 +12,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 - **Per-file time limit on every OS.** Without a `--test-timeout=<ms>` flag, `npm test` adds `--test-timeout=1200000` (20 minutes). A test that never finishes now fails by name. A file whose tests are done but whose open handle keeps the process alive is ended after the limit plus up to 30 s, with the stderr line `aico test: watchdog: <file> did not end within <ms> ms`, and the run exits non-zero. A file that blocks its event loop with a synchronous endless loop is not caught; the CI job timeout stops it.
 - `npm test` refuses a `--test-timeout` that is not a whole number from 1 to 86400000, and `--test-isolation=none`, with one stderr line and exit 1 before any test runs.
 
+### Fixed
+- **Plan Gate no longer blocks absolute `/work/...` product files.** An absolute path whose first folder is `work` lost its leading slash and was read as a run record; only paths under `.company/work` or a relative `work/` count now.
+
 ### New
 - **Token breakdown.** `node scripts/token-breakdown.mjs [--runs <n>] [--json]` shows where the tokens of the newest shipped runs went: spend per run and Role, the Lead's spend when a session is recorded, and the share of context from file reads, test output, command output, other tool results and the prompt. It ends with the top sink and a yes or no on a test-output tail hook. Read-only, counts only. Contract: `token-breakdown` v1.
 - **Token breakdown report.** The first report covers the last 10 shipped runs. Top sink: the prompt, 38.0% of carried tokens, then command output at 29.3%. Test output is 2.6%, so the test-output tail hook is not worth building. The Lead's spend could be read for 1 of the 10 runs.

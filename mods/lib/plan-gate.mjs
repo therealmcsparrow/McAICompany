@@ -78,7 +78,8 @@ function resolveSegments(text) {
     if (part === '..') out.pop();
     else out.push(part);
   }
-  return out.join('/');
+  // A leading `/` stays, so an absolute `/work/...` is not read as the relative `work/...`.
+  return (text.startsWith('/') ? '/' : '') + out.join('/');
 }
 
 // Judged when the last segment of a path under `work/` is a short (8.3) alias, or a record name with trailing dots or spaces.
