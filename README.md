@@ -171,4 +171,4 @@ Pressure-test evidence: `tests/pressure/RESULTS.md`.
 
 `aico:tdd`, `aico:debugging` and `aico:wizard` adapt ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT, © 2026 Matt Pocock).
 
-`aico:i-have-adhd` is a rewrite of ideas from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd) (https://github.com/ayghri/i-have-adhd, MIT, © Ayoub Ghriss), read 2026-11-12.
+`aico:i-have-adhd` is adapted from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd) (MIT, © 2026 Ayoub Ghriss), read 2026-11-12.
