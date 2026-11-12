@@ -48,12 +48,12 @@ function transcript(fx) {
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
 
-describe('the Contract and the header (lead-handoff v2.1)', () => {
-  test('the Contract header is v2.1 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-handoff v2.2)', () => {
+  test('the Contract header is v2.2 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v2\.1$/m);
+    assert.match(doc, /^# Contract: lead-handoff v2\.2$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.1');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.2');
   });
 
   test('line 3 cites run-state v2.0', () => {
@@ -130,7 +130,7 @@ describe('CLI on a v3 slug', () => {
     assert.equal(main(['base', SLUG, 'a'.repeat(40)], fx.root, {}).out, 'recorded\n');
     const c = main(['ctx', SLUG, '--json'], fx.root, {});
     assert.equal(c.code, 0, c.out);
-    assert.deepEqual(JSON.parse(c.out), { v: 1, ctx: null, peak: null, at: null });
+    assert.deepEqual(JSON.parse(c.out), { v: 1, ctx: null, peak: null, at: null, ttl: null });
     assert.ok(fs.existsSync(path.join(fx.dir, 'lead-handover.jsonl')));
   });
 
