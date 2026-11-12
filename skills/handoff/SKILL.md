@@ -56,7 +56,7 @@ By: <role id>
 - What the next Step needs; name the Role.
 ```
 
-`By:` is your Role id, the agent file name (e.g. `By: qa`). **Fields are the contract:** the Lead and Steps read the frontmatter, not prose; fill each that applies. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit if none); `contracts:` is required.
+`By:` is the agent file name (e.g. `By: qa`). **Fields are the contract:** Lead and Steps read frontmatter, not prose; fill all that apply. `round`, `base-commit` (the full object id; reviewers diff against it, never `HEAD~1`), `acceptance-ids` and `risk-tier` come from the dispatch; `files-touched` is what you changed (omit if none); `contracts:` is required.
 
 **Blocking tags** `contract`, `spec`, `security`, `test` route the Fix round. **Risk tier** `low | medium | high` is forced **high** for anything touching auth, payments, personal data, migrations or a Contract; a Role may raise it, never lower it.
 
