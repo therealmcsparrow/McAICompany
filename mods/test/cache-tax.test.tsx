@@ -66,6 +66,9 @@ function makeWorld() {
     active: ACTIVE as unknown,
     ledger: ok(JSON.stringify(REPORT)) as unknown,
     ledgerMtime: 1,
+    // What `lead-handover.mjs ctx demo --json` answers; a measured 1 h keeps the v1.8 assertions meaningful (v1.9).
+    ctx: ok(JSON.stringify({ v: 1, ctx: 42000, peak: 50000, at: '2026-10-26T10:05:00Z', ttl: '1h' })) as unknown,
+    ctxMtime: 1,
     agents: [] as Info[],
     isPlaced: true,
     statuses: [] as (string | undefined)[],
@@ -83,7 +86,10 @@ async function boot($: Env[0], on: Env[1], world: World, surface: 'terminal' | '
   on('session.root', () => ({ value: '/work' }))
   on('command.register', (_: unknown, e: { name: string }) => ({ value: { command: e.name } }) as never)
   on('fs.exists', () => ({ value: true }))
-  on('fs.stat', () => ({ value: { kind: 'file', size: 10, mtimeMs: world.ledgerMtime, isLink: false } }) as never)
+  on('fs.stat', ((_: unknown, e: { path: string }) => {
+    const isCtx = String(e.path).replace(/\\/g, '/').endsWith('/lead-context.json')
+    return { value: { kind: 'file', size: 10, mtimeMs: isCtx ? world.ctxMtime : world.ledgerMtime, isLink: false } }
+  }) as never)
   on('agent.list', () => ({ value: world.agents }) as never)
   on('ui.status', (_: unknown, e: { text: string | undefined }) => {
     world.statuses.push(e.text)
@@ -116,6 +122,7 @@ async function boot($: Env[0], on: Env[1], world: World, surface: 'terminal' | '
     world.scripts.push(script)
     if (script === 'settings.mjs') return ok(world.settings)
     if (script === 'run-state.mjs') return typeof world.active === 'function' ? world.active() : ok(world.active as string)
+    if (script === 'lead-handover.mjs') return typeof world.ctx === 'function' ? world.ctx() : world.ctx
     if (script === 'ledger.mjs') {
       world.ledgerCalls.push(e.argv.slice(2))
       return typeof world.ledger === 'function' ? world.ledger() : world.ledger
@@ -221,6 +228,26 @@ test('Lead cache: unknown until a main-loop request, then expires with the time 
   expect(rows.join('\n')).toMatch(/\(in 4[0-3] min\)/)
   expect(rows).toContain('Lifetime: 1 h (measured)')
   expect(rows).toContain('Subagent caches last 5 minutes; nothing keeps them warm.')
+  await ui.unmount()
+})
+
+test('session.start resets the lifetime and source to unknown (R-5)', async ($, on) => {
+  const w = makeWorld()
+  const clock = await boot($, on, w)
+  await request($)
+  await clock.advance(2100)
+  expect(last(w)).toContain('tax 60m')
+  let ui = await $.ui.mount(pane('terminal', 120))
+  expect(await lines(ui)).toContain('Lifetime: 1 h (measured)')
+  await ui.unmount()
+
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.advance(2500)
+  expect(last(w)).toContain('tax ?')
+  ui = await $.ui.mount(pane('terminal', 120))
+  const rows = await lines(ui)
+  expect(rows).toContain('Lead cache: unknown')
+  expect(rows.some(r => r.startsWith('Lifetime:') && r.includes('(measured)'))).toBe(false)
   await ui.unmount()
 })
 
@@ -454,7 +481,7 @@ test('Cache Tax makes no model call, writes no file and writes nothing to the le
   expect(w.writes).toBe(0)
   expect(w.ledgerCalls.length).toBeGreaterThan(0)
   for (const argv of w.ledgerCalls) expect(argv[0]).toBe('report')
-  expect(w.scripts.every(s => ['settings.mjs', 'run-state.mjs', 'ledger.mjs'].includes(s))).toBe(true)
+  expect(w.scripts.every(s => ['settings.mjs', 'run-state.mjs', 'ledger.mjs', 'lead-handover.mjs'].includes(s))).toBe(true)
 })
 
 test('vscode and mobile pass the render through', async ($, on) => {
