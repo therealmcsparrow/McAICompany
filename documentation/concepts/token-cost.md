@@ -31,6 +31,16 @@ The scorecard only reports. It never blocks a Step or a Gate. It stores times, c
 
 The savings come from reading less: shorter prompts, fewer file reads, fewer dispatches, a digest in place of a full transcript. Brainstorm Roles also keep one constant prompt for the whole run, with changing content in a per-round input file. aico claims no saving percentage for this yet. Prompts keep one fixed order so they stay readable and testable.
 
+### Token breakdown
+To see where tokens go across runs, run `node scripts/token-breakdown.mjs [--runs <n>] [--json]`. It reads the newest shipped runs (`n` from 1 to 50, default 10) and prints Markdown, or one JSON object with `--json`. It writes nothing and makes no network call. A bad flag prints `refused: usage` and exits 2.
+
+It shows:
+- **Spend**: per run and per Role, taken from `report`, plus the Lead's spend when a Lead session is recorded for the run. Otherwise it says `not measurable from records` and gives the reason.
+- **Shares**: how much of the context came from file reads, test output, command output, other tool results, mixed requests, the prompt and replies. Two views: tokens added, and tokens carried (the cache reads they cause).
+- **A last line**: `Top sink: <category> <p>% of carried tokens`, then `Test-output tail hook: yes` or `no`.
+
+Categories are never estimated. What cannot be read, such as a missing or oversized transcript, is listed with its reason and left out of the shares. The script prints counts, run IDs and Role names only, never commands, file paths or tool results.
+
 ### Cost from telemetry
 The scorecard shows a cost segment only when a cost is recorded, and never estimates one. The number is Claude Code's approximate cost from telemetry, not a bill. aico reads an OpenTelemetry export file you set up, matched by session id inside the run window.
 

@@ -1,8 +1,8 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderInput } from 'claude-code'
 
-import { EMPTY_CLOCK, cacheClock, clockLines, clockStatus, noteRequest, wrap } from './lib/cache-clock.mjs'
-import { arr, guardRunActive, int, obj, oneOf, opt, parseOutputText, str, workFolder } from './lib/guard.mjs'
+import { EMPTY_CLOCK, cacheClock, clockLines, clockStatus, lifetimeLabel, noteRequest, noteTtl, wrap } from './lib/cache-clock.mjs'
+import { arr, guardLeadTtl, guardRunActive, int, obj, oneOf, opt, parseOutputText, str, workFolder } from './lib/guard.mjs'
 import { runKey } from './lib/work-folder.mjs'
 import { fit, fmtCompact, fmtInt, UNKNOWN } from './lib/format.mjs'
 import { TIMEOUT_MS, runScript } from './shared/run-script'
@@ -41,6 +41,8 @@ let isForced = false
 let lastPollMs = 0
 let lastSignature = ''
 let lastAgents = ''
+let lastTtlKey = ''
+let isClockStale = false // set by session.start; the next tick resets the clock to unknown
 let lastPart = ''
 
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
@@ -172,11 +174,12 @@ async function drawPane($: EngineInterface, e: RenderInput) {
   const settings = await readSettings($)
   if (!settings.mods.cache_tax.enabled) return undefined
   const cost = costOf(await read($, costAtom))
-  const clock = cacheClock(await read($, clockAtom), await $.clock.now())
+  const clockState = await read($, clockAtom)
+  const clock = cacheClock(clockState, await $.clock.now())
   const skip = new Set<string | null>((cost.cost.data?.rows ?? []).map(r => r.agent))
   const entries = cost.cost.slug === null ? [] : await runningEntries($, skip)
   const { Box, Text } = $.ui.resolve(e)
-  const rows = buildLines(cost, entries, settings.roles, clockLines(clock), paneWidth(e))
+  const rows = buildLines(cost, entries, settings.roles, clockLines(clock, lifetimeLabel(clockState)), paneWidth(e))
   return (
     <Box flexDirection="column">
       {rows.map(row => (row.isTax ? <Text weight="bold">{row.text}</Text> : <Text>{row.text}</Text>))}
@@ -208,6 +211,18 @@ async function stamp($: EngineInterface, path: string): Promise<string> {
   }
 }
 
+// The Lead cache lifetime, read again only when `lead-context.json` changes; a failed call keeps the earlier reading.
+async function refreshTtl($: EngineInterface, root: string, slug: string): Promise<boolean> {
+  const key = `${slug}|${await stamp($, `${root}/.company/work/${slug}/lead-context.json`)}`
+  if (key === lastTtlKey) return false
+  lastTtlKey = key // set before the call so a failed or hung call is not retried every tick
+  const out = await runScript($, 'lead-handover', ['ctx', slug, '--json'], TIMEOUT_MS.leadCtx, guardLeadTtl)
+  if (!out.ok) return false
+  const ttl = (out.value as { ttl: string | null }).ttl
+  await update($, clockAtom, prev => noteTtl(prev, ttl) as CacheClockState)
+  return true
+}
+
 async function openPane($: EngineInterface): Promise<void> {
   try {
     await $.ui.open({ id: PANE, title: 'Cache Tax' })
@@ -232,6 +247,10 @@ async function tickOnce($: EngineInterface): Promise<void> {
   }
   const nowMs = await $.clock.now()
   const root = await $.session.root()
+  if (isClockStale) {
+    isClockStale = false
+    await update($, clockAtom, () => EMPTY_CLOCK as CacheClockState)
+  }
   const stored = await read($, costAtom)
   let current = costOf(stored)
   let isDue = isForced
@@ -249,6 +268,7 @@ async function tickOnce($: EngineInterface): Promise<void> {
       await update($, costAtom, () => ({ known: true, report: { slug: found.slug, data: null } }))
       current = { known: true, cost: { slug: found.slug, data: null } }
       lastSignature = ''
+      lastTtlKey = ''
       isRedraw = true
       if (found.slug !== null && !wasRunning && settings.mods.cache_tax.pane === 'auto') await openPane($)
     } else if (current.cost.slug !== null && current.cost.data === null) {
@@ -273,6 +293,8 @@ async function tickOnce($: EngineInterface): Promise<void> {
       isRedraw = true
     }
   }
+
+  if (slug !== null && (await refreshTtl($, root, slug))) isRedraw = true
 
   const ids = (await runningEntries($, new Set())).map(e => e.row.step ?? '').join(',')
   if (ids !== lastAgents) {
@@ -323,7 +345,10 @@ async function noteMainRequest($: EngineInterface): Promise<void> {
     const settings = await readSettings($)
     if (!settings.mods.cache_tax.enabled) return
     const nowMs = await $.clock.now()
-    await update($, clockAtom, prev => noteRequest(prev, nowMs) as CacheClockState)
+    // A request after session.start replaces the stale clock; the tick must not wipe it later.
+    const isStale = isClockStale
+    isClockStale = false
+    await update($, clockAtom, prev => noteRequest(isStale ? EMPTY_CLOCK : prev, nowMs, 'assumed') as CacheClockState)
     void ensureTimer($).catch(() => undefined)
   } catch {
     // A request is never held up by Cache Tax.
@@ -375,6 +400,8 @@ export function registerCacheTax(on: On): void {
     lastSignature = ''
     lastAgents = ''
     lastPart = ''
+    lastTtlKey = ''
+    isClockStale = true
     void begin($)
     return next(e)
   })

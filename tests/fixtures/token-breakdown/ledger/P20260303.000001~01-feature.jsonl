@@ -1,0 +1,2 @@
+{"v":1,"run":"P20260303.000001/01-feature","kind":"step","id":"01","role":"architect","agent":"agentun3","src":"notification","ctx_end":900,"tool_uses":1,"ms":1000,"t0":"2026-03-03T09:00:00Z","t1":"2026-03-03T09:01:00Z"}
+{"v":1,"run":"P20260303.000001/01-feature","kind":"step","id":"01","role":"architect","agent":"agentun3","src":"transcript","ctx_end":900,"tokens":{"in":1,"cache_write":2,"cache_read":3,"out":4},"reqs":1}

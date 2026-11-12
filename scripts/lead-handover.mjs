@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v2.1
+// contract: docs/contracts/lead-handoff.md v2.2
 // uses: docs/contracts/run-state.md v2.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a SessionStart hook that
 // injects it after compaction, a Stop hook that keeps the Lead's context reading, a SessionStart hook that resets the current reading for a new session, plus a small CLI. Every hook payload, transcript line, record line and Step
@@ -401,8 +401,8 @@ function usageTotal(u) {
   return total > 0 ? total : null;
 }
 
-// sidechain false: the Lead (main chain rows); true: a Step file (sidechain rows only).
-export function transcriptTokens(p, claudeDir, sidechain = false) {
+// The last MAX_TAIL bytes of a transcript as lines (a cut first line is dropped), or null when it cannot be read.
+function tailLines(p, claudeDir) {
   if (typeof p !== 'string' || p.length === 0 || p.length > MAX_ARG || p.includes('\0') || !path.isAbsolute(p)) return null;
   try {
     const real = fs.realpathSync.native(p);
@@ -416,14 +416,42 @@ export function transcriptTokens(p, claudeDir, sidechain = false) {
     try { buf = readFd(h.fd, from, h.size - from); } finally { fs.closeSync(h.fd); }
     const lines = buf.toString('utf8').split('\n');
     if (from > 0) lines.shift();
-    for (let i = lines.length - 1; i >= 0; i--) {
-      let o;
-      try { o = JSON.parse(lines[i]); } catch { continue; }
-      if (o === null || typeof o !== 'object' || o.type !== 'assistant' || (o.isSidechain === true) !== sidechain) continue;
-      const t = usageTotal(o.message?.usage);
-      if (t !== null) return t;
-    }
-  } catch { /* unreadable transcript */ }
+    return lines;
+  } catch { return null; }
+}
+
+// sidechain false: the Lead (main chain rows); true: a Step file (sidechain rows only).
+export function transcriptTokens(p, claudeDir, sidechain = false) {
+  const lines = tailLines(p, claudeDir);
+  if (!lines) return null;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let o;
+    try { o = JSON.parse(lines[i]); } catch { continue; }
+    if (o === null || typeof o !== 'object' || o.type !== 'assistant' || (o.isSidechain === true) !== sidechain) continue;
+    const t = usageTotal(o.message?.usage);
+    if (t !== null) return t;
+  }
+  return null;
+}
+
+// Cache lifetime of the newest main-chain assistant line with a cache write split: '5m' when the 5m count is above 0
+// (the earliest-expiring part bounds reuse), else '1h'. Null when no line has a usable split.
+export function transcriptTtl(p, claudeDir) {
+  const lines = tailLines(p, claudeDir);
+  if (!lines) return null;
+  const count = (v) => (v === undefined ? 0 : Number.isSafeInteger(v) && v >= 0 ? v : null);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let o;
+    try { o = JSON.parse(lines[i]); } catch { continue; }
+    if (o === null || typeof o !== 'object' || o.type !== 'assistant' || o.isSidechain === true) continue;
+    const cc = o.message?.usage?.cache_creation;
+    if (cc === null || typeof cc !== 'object') continue;
+    const m5 = count(cc.ephemeral_5m_input_tokens);
+    const h1 = count(cc.ephemeral_1h_input_tokens);
+    if (m5 === null || h1 === null) continue;
+    if (m5 > 0) return '5m';
+    if (h1 > 0) return '1h';
+  }
   return null;
 }
 
@@ -546,12 +574,14 @@ function readReading(dir) {
   try { o = JSON.parse(text); } catch { return null; }
   if (o === null || typeof o !== 'object' || Array.isArray(o)) return null;
   const keys = Object.keys(o).join(',');
-  const tagged = keys === 'v,session,ctx,peak,at';
+  const withTtl = keys === 'v,session,ctx,peak,at,ttl';
+  const tagged = withTtl || keys === 'v,session,ctx,peak,at';
   if (!tagged && keys !== 'v,ctx,peak,at') return null;
   const num = (x) => Number.isInteger(x) && x >= 0 && x <= MAX_TOKENS;
   if (o.v !== 1 || !(num(o.ctx) || (tagged && o.ctx === null)) || !num(o.peak) || typeof o.at !== 'string' || !AT_RE.test(o.at)) return null;
   if (tagged && o.session !== null && !(typeof o.session === 'string' && SESSION_RE.test(o.session))) return null;
-  return { session: tagged ? o.session : null, ctx: o.ctx, peak: o.peak, at: o.at };
+  const ttl = withTtl && (o.ttl === '5m' || o.ttl === '1h') ? o.ttl : null;
+  return { session: tagged ? o.session : null, ctx: o.ctx, peak: o.peak, at: o.at, ttl };
 }
 
 // Takes the reading lock, waiting up to READING_LOCK_WAIT_MS; a lock left by a crash is replaced after LOCK_STALE_MS.
@@ -618,7 +648,11 @@ export function measure(text, options) {
     if (!dir) return quiet;
     const ctx = transcriptTokens(p.transcript, claudeDir);
     if (ctx === null) return quiet;
-    writeReading(dir, (old) => ({ session: p.session, ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now) }), true);
+    const seen = transcriptTtl(p.transcript, claudeDir);
+    writeReading(dir, (old) => ({
+      session: p.session, ctx, peak: Math.max(old ? old.peak : 0, ctx), at: iso(now),
+      ttl: seen ?? (old && p.session !== null && old.session === p.session ? old.ttl : null),
+    }), true);
     return quiet;
   } catch {
     return quiet;
@@ -638,7 +672,7 @@ export function start(text, options) {
     exactWorkPath({ fs, path }, root, workParts(slug));
     const dir = runExists(root, slug);
     if (!dir) return quiet;
-    writeReading(dir, (old) => ({ session: p.session, ctx: null, peak: old ? old.peak : 0, at: iso(now) }));
+    writeReading(dir, (old) => ({ session: p.session, ctx: null, peak: old ? old.peak : 0, at: iso(now), ttl: null }));
     return quiet;
   } catch {
     return quiet;
@@ -736,8 +770,8 @@ function exec(argv, root, env) {
       checkSlug(slug, root);
       const dir = workDir(root, slug);
       if (!dir) refuse('no run');
-      const r = readReading(dir) ?? { ctx: null, peak: null, at: null };
-      return `${JSON.stringify({ v: 1, ctx: r.ctx, peak: r.peak, at: r.at })}\n`;
+      const r = readReading(dir) ?? { ctx: null, peak: null, at: null, ttl: null };
+      return `${JSON.stringify({ v: 1, ctx: r.ctx, peak: r.peak, at: r.at, ttl: r.ttl })}\n`;
     }
     case 'begin': {
       if (rest.length !== 1) refuse('usage');

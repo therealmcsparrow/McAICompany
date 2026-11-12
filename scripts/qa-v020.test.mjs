@@ -1356,24 +1356,38 @@ describe('AC21 the release notes carry a rollback line that reverts with one com
 
 describe('AC22 CI runs the checks on three OSes with the Node LTS, in a path with spaces', () => {
   const ci = read('.github', 'workflows', 'ci.yml');
-  const job = ci.slice(ci.indexOf('\n  check:'), ci.indexOf('\n  golden-warn:'));
+  const jobOf = (name) => {
+    const start = ci.indexOf(`\n  ${name}:`);
+    if (start < 0) return '';
+    const next = ci.slice(start + 1).search(/\n  [a-z-]+:\n/);
+    return next < 0 ? ci.slice(start) : ci.slice(start, start + 1 + next);
+  };
+  const job = jobOf('check');
+  const winJob = jobOf('windows-test');
 
-  test('the check job is a matrix of ubuntu, windows and macos that does not stop at the first failure', () => {
+  test('the three OSes run across check and windows-test and do not stop at the first failure', () => {
     assert.match(job, /runs-on: \$\{\{ matrix\.os \}\}/);
-    assert.match(job, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);
+    assert.match(job, /os: \[ubuntu-latest, macos-latest\]/);
     assert.match(job, /fail-fast: false/);
+    assert.match(winJob, /runs-on: windows-latest/);
+    assert.match(winJob, /fail-fast: false/);
     assert.match(job, /run: npm test/);
     assert.match(job, /run: npm run check/);
+    assert.match(winJob, /npm test/);
   });
   test('Node comes from .nvmrc and is an LTS line', () => {
     assert.match(job, /node-version-file: \.nvmrc/);
+    assert.match(winJob, /node-version-file: \.nvmrc/);
     const major = Number(read('.nvmrc').trim());
     assert.ok(Number.isInteger(major) && major % 2 === 0, `.nvmrc ${major} is not an even (LTS) major`);
     assert.match(read('package.json'), /"node": ">=\d+"/);
   });
-  test('the repository is checked out into a path with a space', () => {
-    const checkout = job.slice(job.indexOf('actions/checkout'), job.indexOf('actions/setup-node'));
-    assert.match(checkout, /path: [^\n]* [^\n]*/, 'the check job checks out into the default path, so a path with a space is never tested');
+  test('the repository is checked out into a path with a space on every OS', () => {
+    for (const j of [job, winJob]) {
+      assert.ok(j.includes('actions/checkout'), 'job has a checkout');
+      const checkout = j.slice(j.indexOf('actions/checkout'), j.indexOf('actions/setup-node'));
+      assert.match(checkout, /path: [^\n]* [^\n]*/, 'a job checks out into the default path, so a path with a space is never tested');
+    }
   });
   test('hostile: actions are pinned to a full commit, the token is read only and credentials are not persisted', () => {
     for (const m of ci.matchAll(/uses: ([^\s]+)/g)) assert.match(m[1], /@[0-9a-f]{40}$/, m[1]);

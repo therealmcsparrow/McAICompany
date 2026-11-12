@@ -29,7 +29,15 @@ It reads one of three ways:
 - `Lead cache: expired 14:32; the next turn rewrites it`
 - `Lead cache: unknown`, when the mod has not seen a Lead request in this session yet (for example when it loaded mid-session)
 
-The expiry is the time of the Lead's last request plus the cache lifetime. Every new Lead request restarts it. In our measurements on Claude Code 2.1.310, the Lead's cache lasted one hour, so the clock uses 60 minutes, labelled `1 h (measured)`. That figure is measured, not taken from the API documentation. Below it, the pane always says: `Subagent caches last 5 minutes; nothing keeps them warm.`
+The expiry is the time of the Lead's last request plus the cache lifetime. Every new Lead request restarts it.
+
+The lifetime is read from the Lead's own transcript, so the clock follows the cache you actually have:
+
+- `Lifetime: 1 h (measured)`: the Lead's cache lasts one hour (what we measured on Claude Code 2.1.310). The clock adds 60 minutes. Output is the same as before this change.
+- `Lifetime: 5 min (measured)`: your Lead's cache lasts five minutes. The clock adds 5 minutes.
+- `Lifetime: 1 h (assumed)`: the lifetime could not be read, so the clock falls back to 60 minutes. Treat the expiry as a guess.
+
+The reading is taken while a run is active. Outside a run nothing is read, so the pane shows `1 h (assumed)` even if your cache lasts one hour. Below the lifetime line, the pane always says: `Subagent caches last 5 minutes; nothing keeps them warm.`
 
 ### Why there is no keep-warm
 

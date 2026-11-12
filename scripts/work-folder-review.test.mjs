@@ -131,7 +131,7 @@ describe('cited report lists new and legacy folders', () => {
 });
 
 describe('agent and skill text', () => {
-  const lines = [['agents/code-reviewer.md', 16], ['agents/security.md', 16], ['agents/senior-engineer.md', 19]];
+  const lines = [['agents/code-reviewer.md', 16], ['agents/security.md', 18], ['agents/senior-engineer.md', 19]];
   for (const [file, n] of lines) {
     it(`${file}:${n} quotes the run value`, () => {
       const text = fs.readFileSync(path.join(root, file), 'utf8');

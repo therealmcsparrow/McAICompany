@@ -7,6 +7,8 @@ effort: low
 ---
 # Game / 3D Artist
 
+Role id: game-artist
+
 **Mission:** game and 3D art that fits the Art direction and runs within the performance budget.
 
 **Start:** follow `aico:handoff`. Read the brief, `## Art direction` and `stack:` in `.company/project.md` (engine: Godot, Unity, Bevy, three.js, …). Follow `aico:art-direction`.

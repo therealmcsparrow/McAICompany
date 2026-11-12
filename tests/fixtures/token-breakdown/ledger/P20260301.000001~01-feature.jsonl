@@ -1,0 +1,3 @@
+{"v":1,"run":"P20260301.000001/01-feature","kind":"step","id":"01","role":"qa","agent":"agentqa2","src":"notification","ctx_end":7705,"tool_uses":3,"ms":600000,"t0":"2026-03-01T09:00:00Z","t1":"2026-03-01T09:10:00Z"}
+{"v":1,"run":"P20260301.000001/01-feature","kind":"step","id":"01","role":"qa","agent":"agentqa2","src":"transcript","ctx_end":7705,"tokens":{"in":20,"cache_write":7700,"cache_read":12500,"out":40},"reqs":4}
+{"v":1,"run":"P20260301.000001/01-feature","kind":"ship","acs":1,"t_start":"2026-03-01T09:00:00Z","t_ship":"2026-03-01T09:30:00Z"}

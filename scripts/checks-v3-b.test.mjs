@@ -266,10 +266,10 @@ test('plan-gate: a run record path with a bad v3 shape is still a record path, w
 
 // ---------- Contracts ----------
 const doc = (name) => fs.readFileSync(path.join(REPO, 'docs', 'contracts', `${name}.md`), 'utf8');
-for (const [name, version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8']]) {
-  test(`${name} is v${version} and says v2, v1.1 and legacy names are byte-identical`, () => {
+for (const [name, version, header = version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '1.9']]) {
+  test(`${name} is v${header} and says v2, v1.1 and legacy names are byte-identical`, () => {
     const text = doc(name);
-    assert.ok(text.startsWith(`# Contract: ${name} v${version}\n`), text.split('\n')[0]);
+    assert.ok(text.startsWith(`# Contract: ${name} v${header}\n`), text.split('\n')[0]);
     const para = text.split('\n').find((l) => new RegExp(`^v${version.replace('.', '\\.')}\\b`).test(l));
     assert.ok(para, `a v${version} paragraph exists`);
     assert.match(para, /byte-identical/);

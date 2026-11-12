@@ -94,10 +94,10 @@ test('no seam copies the run slug rule (no own `parseRun`, `isRunSlug` or `workP
 });
 
 test('the four reader Contracts carry the reader paragraph', () => {
-  const want = [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8']];
-  const lacking = want.filter(([name, v]) => {
+  const want = [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '1.9']];
+  const lacking = want.filter(([name, v, header = v]) => {
     const text = read(`docs/contracts/${name}.md`);
-    return !text.startsWith(`# Contract: ${name} v${v}\n`) || !text.split('\n').some((l) => l.startsWith(`v${v} `) && /isRunSlug/.test(l) && /byte-identical/.test(l));
+    return !text.startsWith(`# Contract: ${name} v${header}\n`) || !text.split('\n').some((l) => l.startsWith(`v${v} `) && /isRunSlug/.test(l) && /byte-identical/.test(l));
   });
   assert.deepEqual(lacking.map(([n]) => n), []);
 });

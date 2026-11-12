@@ -1,4 +1,4 @@
-# Contract: aico-mods v1.8
+# Contract: aico-mods v1.9
 
 Provider: the aico plugin's hooks module (`hooks/hooks.json` → `./register.tsx`, which imports each mod and the reprompt write gate from `mods/`). Consumers: the CEO (views, the commit question), `/aico:settings` (switches). API: the Claude Code function-hooks API of the installed build (`plugin-authoring`); `claude plugin validate` is the authority on what it accepts.
 Rationale: `docs/adr/0015-mods-thin-hooks-over-scripts.md`, `0016-run-state-record.md`, `0017-blast-radius-fail-closed.md`.
@@ -22,6 +22,8 @@ v1.7 (task role-skills-file, additive): a Step number takes 2 or 3 digits, so a 
 
 v1.8 (task T37, minor, additive; work-folder-name v3.0): the guard, blast and plan Gate mods take a v3 run slug through the one library: the dispatch `Output:` line (`.company/work/<ProjectID>/<NN>-<playbook>/<Step>-<role>.md`), `workFolder`, the `review-depth` `--run` argument, the single-quoted Gate command name and the run record path `.company/work/<ProjectID>/<NN>-<playbook>/run-state.jsonl`; a bad v3 shape is not read, not judged, and its record path is never writable. A `<slug>` argument is accepted with `isRunSlug`; its folder is `exactWorkPath(io, root, workParts(slug))`, so a v3 run `<ProjectID>/<NN>-<playbook>` is read like a v2 folder. The v2, v1.1 and legacy names give byte-identical output to v1.7. `isWorkFolder` keeps its v2 meaning.
 
+v1.9 (task P20261112.000001/02-feature, minor, additive; uses `lead-handoff` v2.2): the M2 cache clock follows the Lead's real cache lifetime, 5 min or 1 h, read from the `ttl` key of `lead-handover.mjs ctx '<slug>' --json` ("M2 Cache Tax", "Sources"). Lifetime unknown → 60 min labelled `1 h (assumed)`. State `cacheClock.source` gains the value `assumed`; no new state key, status part or setting. A read `1h` gives byte-identical pane and status output to v1.8.
+
 ## Shape
 - One hooks module for the plugin; one file per mod: `mods/savvy.tsx`, `mods/cache-tax.tsx`, `mods/reflect.tsx`, `mods/blast-radius.ts`, `mods/plan-gate.ts` (v1.3), `mods/fresh-step.ts` (v1.6); shared code in `mods/shared/*.ts` (incl. `status.ts`, the status composer); pure logic (parsers, formatters, the status line builder, the git-commit detector, the cache clock, JSON guards, the Lesson text rule `lesson-text.mjs`, the progress bars `bars.mjs` (v1.1), the context rows `ctx-row.mjs` (v1.6)) in `mods/lib/*.mjs` with no `$`, no Node import and no npm package, so `npm test` covers it. The write gate is `mods/reprompt-gate.ts` with `mods/lib/reprompt-gate.mjs`; M6's logic is `mods/lib/fresh-step.mjs`.
 - `types/index.d.ts` declares `interface PluginState { aico: … }`; `plugin.json` names it under `"types"`. State keys (all `Shaped<…>`, shape tag `v1`): `settings`, `run`, `agents` (a family keyed by `agentId`), `cost`, `cacheClock`, `reflect`, `blast`, `ctx` (v1.6, the Savvy context counts: `lead` and `agents[{id, ctx}]`, int or null). The status parts are not a state key (see "Status line").
@@ -37,7 +39,7 @@ v1.8 (task T37, minor, additive; work-folder-name v3.0): the guard, blast and pl
 | Run view (`run-state` v1) | `run-state.mjs active --json` | Savvy, Reflect, Blast Radius (tier), Cache Tax (active run), Fresh Step (own call, `slug` only) |
 | Ledger (`token-ledger` v1.1) | `ledger.mjs report <run> --json --live` | Cache Tax, Reflect retrospective |
 | Subagent context (`token-ledger` v1.8, since aico-mods v1.6) | `ledger.mjs agent-ctx <ids> --json` | Savvy |
-| Lead context (`lead-handoff` v1.6, since aico-mods v1.6) | `lead-handover.mjs ctx '<slug>' --json` | Savvy |
+| Lead context (`lead-handoff` v1.6, since aico-mods v1.6; `ttl` key since v1.9, `lead-handoff` v2.2) | `lead-handover.mjs ctx '<slug>' --json` | Savvy (`ctx`, `peak`), Cache Tax (`ttl` only, v1.9) |
 | The plugin's own `.claude-plugin/plugin.json` (`version` only, via `$.fs`, regular file ≤ 64 KiB) | `mods/shared/shell.ts` → `parseVersion` (`mods/lib/version.mjs`) | status `version` part, ready toast |
 | Handoffs of the active run | `reflect.mjs` (below), `run-state.mjs` | Reflect, Savvy |
 | Touched paths, tier, depth (`review-depth` v1) | `review-depth.mjs … --json` | Blast Radius |
@@ -115,8 +117,9 @@ One status line for the plugin, in compact form, on **one terminal row of 80 col
 - **Cache clock (AC43 as re-scoped by the CEO; replaces keep-warm).** Shows when the main session's (the Lead's) cached prefix expires.
   - Lifetimes (SP-M3, 2.1.310): the main loop writes the 1-hour lifetime (1216 of 1217 main-loop requests), subagents write 5 minutes (2705 of 2705). Main-loop reuse held up to 60 min and broke after (62–70 min: floor only).
   - Expiry = time of the last main-loop request (newest `turn.step` without `agentId`, else `turn.start`) + its lifetime. Every main-loop request restarts it. Lifetime per request: from the event's usage split (`cache_creation.ephemeral_1h_input_tokens` / `ephemeral_5m_input_tokens`) when the installed API types carry it; otherwise the constant 60 min in `mods/lib/cache-clock.mjs`, labelled `1 h (measured)`. The M9 builder checks the types and implements exactly one of the two, named in its Handoff.
-  - Pane line: `Lead cache: expires <HH:MM> (in <m> min)`, `Lead cache: expired <HH:MM>; the next turn rewrites it`, or `Lead cache: unknown` (no main-loop request seen in this session yet, e.g. a mod loaded mid-session). Under it, always: `Subagent caches last 5 minutes; nothing keeps them warm.`
-  - Status part, while a run is active: ` <m>m`, ` exp` or ` ?`.
+  - **Lifetime source (v1.9).** The turn events carry no split (build 2.1.322 types). While a run is active, Cache Tax reads `ttl` from `lead-handover.mjs ctx '<slug>' --json` (`lead-handoff` v2.2: the Lead transcript's split, written by the Stop adapter) when `lead-context.json` changes, through one guard: `"5m"` → 5 min, `"1h"` → 60 min, both labelled measured; `null`, a missing key, any other value, no active run or a failed call → 60 min, labelled assumed. The known lifetime stays in the `cacheClock` state (`lifetimeMs`, `source`) until a new reading or `session.start`; it applies from the last main-loop request on, so the status part and the pane line use it at once. Labels: `1 h (measured)`, `5 min (measured)`, `1 h (assumed)`. Never a script call per request, never a block.
+  - Pane line (the `Lifetime: <label>` line under it as before): `Lead cache: expires <HH:MM> (in <m> min)`, `Lead cache: expired <HH:MM>; the next turn rewrites it`, or `Lead cache: unknown` (no main-loop request seen in this session yet, e.g. a mod loaded mid-session). Under it, always: `Subagent caches last 5 minutes; nothing keeps them warm.`
+  - Status part, while a run is active: ` <m>m`, ` exp` or ` ?` (v1.9: minutes counted against the lifetime above; no label in the status part).
   - It never forks, pings or calls a model: SP-M3 found no evidence that a fork keeps the entry alive (a fork 55 min in did not read the main tail; the main loop's next request at 66 min read only the floor).
 
 ## M3 Reflect

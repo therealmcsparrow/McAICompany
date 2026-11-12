@@ -4,6 +4,28 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-12
+
+Rollback: node scripts/stable.mjs 0.35.0
+
+### Changed
+- **Cache Tax clock follows your Lead's cache lifetime.** The lifetime is read from the Lead transcript: `5 min (measured)` or `1 h (measured)`. When it cannot be read, the clock uses 60 minutes and labels it `1 h (assumed)`. One-hour output is unchanged. Outside an active run nothing is read, so the label is `1 h (assumed)`. Contracts: `aico-mods` v1.9, `lead-handoff` v2.2 (`ttl` in `ctx --json`).
+- **Windows CI runs in 4 parallel shards.** `npm test` on Windows is split into four jobs (`windows-test`, shards 1 to 4), each running `npm test -- --test-shard=<i>/4`. A failed shard does not stop the others. `npm run check` runs once, in shard 1. Ubuntu and macOS still run one job each. The goal is a Windows wall time of 8 minutes or less per PR; the figure is measured over the first 5 PRs after merge and reported then.
+- **One Windows check name.** A new job `check (windows-latest)` waits for all shards and is red when a shard fails, is cancelled or is skipped, or when the cover check below finds a gap. The three names `check (ubuntu-latest)`, `check (windows-latest)` and `check (macos-latest)` stay as before. Main has no required checks set yet; turning them on is a repo setting.
+- **`npm test` takes flags.** Anything starting with `-` goes to `node --test` unchanged, for example `npm test -- --test-shard=2/4`. Run without flags, `npm test` runs the full suite as before.
+- **Per-file time limit on every OS.** Without a `--test-timeout=<ms>` flag, `npm test` adds `--test-timeout=1200000` (20 minutes). A test that never finishes now fails by name. A file whose tests are done but whose open handle keeps the process alive is ended after the limit plus up to 30 s, with the stderr line `aico test: watchdog: <file> did not end within <ms> ms`, and the run exits non-zero. A file that blocks its event loop with a synchronous endless loop is not caught; the CI job timeout stops it.
+- `npm test` refuses a `--test-timeout` that is not a whole number from 1 to 86400000, and `--test-isolation=none`, with one stderr line and exit 1 before any test runs.
+
+### Fixed
+- **Plan Gate no longer blocks absolute `/work/...` product files.** An absolute path whose first folder is `work` lost its leading slash and was read as a run record; only paths under `.company/work` or a relative `work/` count now.
+
+### New
+- **Token breakdown.** `node scripts/token-breakdown.mjs [--runs <n>] [--json]` shows where the tokens of the newest shipped runs went: spend per run and Role, the Lead's spend when a session is recorded, and the share of context from file reads, test output, command output, other tool results and the prompt. It ends with the top sink and a yes or no on a test-output tail hook. Read-only, counts only. Contract: `token-breakdown` v1.
+- **Token breakdown report.** The first report covers the last 10 shipped runs. Top sink: the prompt, 38.0% of carried tokens, then command output at 29.3%. Test output is 2.6%, so the test-output tail hook is not worth building. The Lead's spend could be read for 1 of the 10 runs.
+- **Test file list.** Set `AICO_TEST_FILES_OUT=<path>` and a run writes the test files that completed, one relative path per line, sorted.
+- **Cover mode.** `npm test -- --aico-cover=<dir>` runs no tests. It reads every `*.txt` file list in `<dir>` and prints `missing <file>`, `twice <file> <k>` or `unknown <file>` for each gap, or `cover: <n> files, <m> lists, ok` and exit 0. CI uses it to prove that the four Windows shards together ran every test file exactly once.
+- Contract: `test-run` v1.1 (`docs/contracts/test-run.md`).
+
 ## [0.35.0] - 2026-11-10
 
 Rollback: node scripts/stable.mjs 0.34.0

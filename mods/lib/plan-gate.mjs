@@ -71,14 +71,15 @@ export function parseGateCommand(command) {
 }
 
 // The path with every `.` and empty segment dropped and every `..` applied to the segment before it.
-function resolveSegments(text) {
+function resolveSegments(text, absolute = text.startsWith('/')) {
   const out = [];
   for (const part of text.split('/')) {
     if (part === '' || part === '.') continue;
     if (part === '..') out.pop();
     else out.push(part);
   }
-  return out.join('/');
+  // A leading `/` stays, so an absolute `/work/...` is not read as the relative `work/...`.
+  return (absolute ? '/' : '') + out.join('/');
 }
 
 // Judged when the last segment of a path under `work/` is a short (8.3) alias, or a record name with trailing dots or spaces.
@@ -98,7 +99,8 @@ function canonicalPath(text) {
     if (cut.trim() === '..') return '..';
     return cut.replace(/[. ]+$/, '');
   });
-  return resolveSegments(parts.join('/'));
+  // Absoluteness comes from the raw text, since a trimmed leading `.` segment would otherwise look like a root `/`.
+  return resolveSegments(parts.join('/'), body.startsWith('/'));
 }
 
 // Judged when a short (8.3) alias segment sits directly above a `work` folder and the path ends in a record-like name.
