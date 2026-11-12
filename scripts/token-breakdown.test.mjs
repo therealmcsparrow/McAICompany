@@ -347,3 +347,113 @@ test('--runs accepts the bounds 1 and 50', (t) => {
   const sb = sandbox(t);
   for (const n of ['1', '50']) assert.equal(run(sb, ['--runs', n]).status, 0, n);
 });
+
+// ---- fix round 1: R-6, hostile run files, duplicate transcripts (commit 0805a30) ----
+
+const R1_LEDGER = 'P20260302.000001~01-feature.jsonl';
+const LEAD_FILE = `${LEAD_UUID}.jsonl`;
+const NO_SESSION = /Lead[^\n]*not measurable from records: no Lead session recorded/i;
+
+function skipIfNoLink(t, error) {
+  if (['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) {
+    t.skip(`cannot create this link here (${error.code})`);
+    return true;
+  }
+  throw error;
+}
+
+test('AC3 R-6: the hook is not yes when only file reads is non-zero, even if test output ties at zero', (t) => {
+  const sb = sandbox(t, { ledgers: [R1_LEDGER] });
+  const row = (n, ctx, tool) => JSON.stringify({
+    type: 'assistant', uuid: `f${n}`, requestId: `freq${n}`,
+    message: { id: `fmsg${n}`, usage: { input_tokens: 0, cache_creation_input_tokens: ctx, cache_read_input_tokens: 0, output_tokens: 0 },
+      content: tool ? [{ type: 'tool_use', id: 'x', name: 'Read', input: { file_path: '/x' } }] : [] }
+  });
+  // carried: file reads 100 (added 100 after a Read request, one later request), every other category 0.
+  fs.writeFileSync(sb.agentFile('agentpm1', 'sess-r1'), [row(1, 0, true), row(2, 100, true), row(3, 100, false)].join('\n') + '\n');
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  const last = lines(r.out).slice(-2);
+  const sink = last.find((l) => l.startsWith('Top sink:'));
+  const hook = last.find((l) => l.startsWith('Test-output tail hook:'));
+  assert.ok(sink && hook, `last two lines: ${JSON.stringify(last)}`);
+  assert.match(sink, /^Top sink: file reads 100(\.0)?% /);
+  assert.doesNotMatch(hook, /^Test-output tail hook: yes\b/);
+  assert.match(hook, /^Test-output tail hook: no\b/);
+});
+
+test('proj.M4: a hard-linked lead-context.json is read as no session', (t) => {
+  const sb = sandbox(t);
+  const dir = path.join(sb.proj, R1_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  const outside = path.join(sb.dir, 'outside-context.json');
+  fs.writeFileSync(outside, `${JSON.stringify({ v: 1, session: hash12(LEAD_UUID), ctx: 1, peak: 2, at: '2026-03-02T10:50:00Z' })}\n`);
+  try {
+    fs.linkSync(outside, path.join(dir, 'lead-context.json'));
+  } catch (error) {
+    if (skipIfNoLink(t, error)) return;
+  }
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, NO_SESSION);
+  assert.doesNotMatch(r.out, /\b777\b/);
+});
+
+test('proj.M4: a symlinked lead-context.json is read as no session', (t) => {
+  const sb = sandbox(t);
+  const dir = path.join(sb.proj, R1_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  const outside = path.join(sb.dir, 'outside-context.json');
+  fs.writeFileSync(outside, `${JSON.stringify({ v: 1, session: hash12(LEAD_UUID), ctx: 1, peak: 2, at: '2026-03-02T10:50:00Z' })}\n`);
+  try {
+    fs.symlinkSync(outside, path.join(dir, 'lead-context.json'));
+  } catch (error) {
+    if (skipIfNoLink(t, error)) return;
+  }
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, NO_SESSION);
+  assert.doesNotMatch(r.out, /\b777\b/);
+});
+
+test('proj.M4: a junctioned run folder is read as no session', (t) => {
+  const sb = sandbox(t);
+  const target = path.join(sb.dir, 'elsewhere', '01-feature');
+  fs.mkdirSync(target, { recursive: true });
+  fs.writeFileSync(path.join(target, 'lead-context.json'), `${JSON.stringify({ v: 1, session: hash12(LEAD_UUID), ctx: 1, peak: 2, at: '2026-03-02T10:50:00Z' })}\n`);
+  const link = path.join(sb.proj, R1_DIR);
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  try {
+    fs.symlinkSync(target, link, 'junction');
+  } catch (error) {
+    if (skipIfNoLink(t, error)) return;
+  }
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, NO_SESSION);
+  assert.doesNotMatch(r.out, /\b777\b/);
+});
+
+test('cct.M2: the same Lead session file under two projects makes the Lead not measurable and sums nothing', (t) => {
+  const sb = sandbox(t);
+  withLead(sb);
+  const other = path.join(sb.claude, 'projects', 'proj-b');
+  fs.mkdirSync(other, { recursive: true });
+  fs.copyFileSync(path.join(sb.claude, 'projects', 'proj-a', LEAD_FILE), path.join(other, LEAD_FILE));
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, /Lead[^\n]*not measurable from records: [^\n]*more than one Lead transcript/i);
+  assert.doesNotMatch(r.out, /\b777\b/);
+  assert.doesNotMatch(r.out, /\b1554\b/, 'the two copies are not summed');
+});
+
+test('cct.M2: the same agent transcript under two projects and sessions gives the gap more than one transcript found', (t) => {
+  const sb = sandbox(t);
+  const dir = path.join(sb.claude, 'projects', 'proj-b', 'sess-copy', 'subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(sb.agentFile('agentpm1', 'sess-r1'), path.join(dir, 'agent-agentpm1.jsonl'));
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, /more than one transcript found/);
+  assert.doesNotMatch(r.out, /Top sink: file reads (49\.3|49)%/, 'the ambiguous transcript is not measured');
+});
