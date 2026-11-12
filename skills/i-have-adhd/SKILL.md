@@ -53,7 +53,7 @@ Your own tone and length instructions still apply inside this shape. If one clas
 
 ## Machine-read output stays unchanged
 
-The mode covers prose the CEO reads in the main session only. These stay as they are: Handoff frontmatter and headings, Gate and ask form fields and options, Step dispatch prompts, AC IDs, English machine keys and values, and the `Language:` rule. Roles never receive the mode.
+The mode covers prose the CEO reads in the main session only. These stay as they are: Handoff frontmatter and headings, Gate and ask form fields and options, Gate summaries in full (every line a Gate requires, verbatim `> ` lines, pasted blocks and Nits, never capped, grouped, reordered or cut as recap), Step dispatch prompts, AC IDs, English machine keys and values, and the `Language:` rule. Roles never receive the mode.
 
 ## Pre-send check
 
