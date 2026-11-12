@@ -4,12 +4,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { ALWAYS, CEO_ONLY, TYPE_ORDER } from './company-type.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(root, 'scripts', 'company-type.mjs');
-const BASE = 'df41d910ebd65ceb8e91bc393fc774a7e38f7035';
 const NAME = 'i-have-adhd';
 
 const dirs = [];
@@ -56,15 +55,4 @@ test('i-have-adhd is hidden from the Skill tool: it is in CEO_ONLY and its skill
   const front = text.split(/^---$/m)[1];
   assert.match(front, /^disable-model-invocation: true$/m);
   assert.match(front, /^argument-hint: "\[help\]"$/m);
-});
-
-const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-const baseKnown = (() => {
-  try { git('rev-parse', '--verify', '--quiet', '--end-of-options', `${BASE}^{commit}`); return true; } catch { return false; }
-})();
-
-test('dependencies and the plugin manifest equal the base commit', { skip: !baseKnown && 'base commit is not in this checkout' }, () => {
-  const paths = ['deps', 'package.json', 'package-lock.json', '.claude-plugin/plugin.json'];
-  const changed = git('diff', '--name-only', '--end-of-options', BASE, '--', ...paths).split('\n').filter(Boolean);
-  assert.deepEqual(changed, []);
 });

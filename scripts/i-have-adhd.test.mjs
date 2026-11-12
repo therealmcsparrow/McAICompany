@@ -131,7 +131,7 @@ describe('i-have-adhd skill', () => {
     test('rule 4 suppress tangents', () => assert.match(skill(), /tangent/i));
     test('rule 5 restate state', () => assert.match(skill(), /restate/i));
     test('rule 6 concrete time estimates', () => assert.match(skill(), /time estimate/i));
-    test('rule 7 visible wins', () => assert.match(skill(), /win|completed work|what now works/i));
+    test('rule 7 visible wins', () => assert.match(skill(), /show wins[^\n]*what now works/i));
     test('rule 8 matter-of-fact errors', () => assert.match(skill(), /matter-of-fact/i));
     test('rule 9 at most 5 visible items per group, none dropped', () => {
       const t = skill();
@@ -180,6 +180,18 @@ describe('i-have-adhd skill', () => {
     assert.match(t, /AC ID/i);
     assert.match(t, /English[^\n]*key|key[^\n]*English/i);
     assert.match(t, /`Language:`/);
+  });
+
+  test('AC6: Gate summaries stay in full (section pin; red until F2)', () => {
+    const m = skill().match(/^## Machine-read output stays unchanged[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m);
+    assert.ok(m, 'section "## Machine-read output stays unchanged" exists');
+    const s = m[1];
+    assert.match(s, /Gate summar/i);
+    assert.match(s, /verbatim/i);
+    assert.match(s, /`> `/);
+    assert.match(s, /pasted block/i);
+    assert.match(s, /Nits/);
+    for (const w of [/capped/i, /grouped/i, /reordered/i, /cut/i]) assert.match(s, w);
   });
 
   test('no-storage line: never written to file, Handoff, dispatch, settings, run state or memory', () => {
