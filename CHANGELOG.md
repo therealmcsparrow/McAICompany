@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-12
+
+Rollback: node scripts/stable.mjs 0.35.0
+
 ### Changed
 - **Cache Tax clock follows your Lead's cache lifetime.** The lifetime is read from the Lead transcript: `5 min (measured)` or `1 h (measured)`. When it cannot be read, the clock uses 60 minutes and labels it `1 h (assumed)`. One-hour output is unchanged. Outside an active run nothing is read, so the label is `1 h (assumed)`. Contracts: `aico-mods` v1.9, `lead-handoff` v2.2 (`ttl` in `ctx --json`).
 - **Windows CI runs in 4 parallel shards.** `npm test` on Windows is split into four jobs (`windows-test`, shards 1 to 4), each running `npm test -- --test-shard=<i>/4`. A failed shard does not stop the others. `npm run check` runs once, in shard 1. Ubuntu and macOS still run one job each. The goal is a Windows wall time of 8 minutes or less per PR; the figure is measured over the first 5 PRs after merge and reported then.
