@@ -322,15 +322,16 @@ function readRunFile(root, run, name) {
     const io = { fs, path };
     if (exactWorkPath(io, root, parts) !== 'exact') return null;
     const file = path.join(root, '.company', 'work', ...parts, name);
-    const st = fs.lstatSync(file);
-    if (!st.isFile() || st.nlink !== 1 || st.size > MAX_RUN_FILE_BYTES) return null;
     const realWork = fs.realpathSync.native(path.join(root, '.company', 'work'));
+    if (realWork !== path.join(fs.realpathSync.native(root), '.company', 'work')) return null;
+    const st = fs.lstatSync(file, { bigint: true });
+    if (!st.isFile() || st.nlink !== 1n || st.size > BigInt(MAX_RUN_FILE_BYTES)) return null;
     const real = fs.realpathSync.native(file);
     if (real !== path.join(realWork, ...parts, name) || !insideReal(realWork, real)) return null;
     const fd = fs.openSync(file, 'r');
     try {
-      const open = fs.fstatSync(fd);
-      if (!open.isFile() || open.nlink !== 1 || open.dev !== st.dev || open.ino !== st.ino || open.size > MAX_RUN_FILE_BYTES) return null;
+      const open = fs.fstatSync(fd, { bigint: true });
+      if (!open.isFile() || open.nlink !== 1n || open.dev !== st.dev || open.ino !== st.ino || open.size > BigInt(MAX_RUN_FILE_BYTES)) return null;
       return fs.readFileSync(fd, 'utf8');
     } finally {
       fs.closeSync(fd);
