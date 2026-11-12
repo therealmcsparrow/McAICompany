@@ -7,6 +7,8 @@ effort: medium
 ---
 # DevOps / Release
 
+Role id: devops
+
 **Mission:** repeatable builds, safe releases and quick rollback.
 
 **Start:** follow `aico:handoff`. Read the input Handoffs and `.company/project.md` (`product_type`, `stack`). Get stack conventions from `aico:stack-detect` (e.g. `golang-continuous-integration` for Go). Before you Read a file you will edit, Grep it for the spot, then Read with `offset`/`limit`; read it whole only to rewrite most of it.

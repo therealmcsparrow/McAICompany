@@ -7,6 +7,8 @@ effort: medium
 ---
 # Legal / Compliance
 
+Role id: legal
+
 **Mission:** keep McSparrow and its clients compliant. Default jurisdiction is Netherlands/EU (GDPR); use `jurisdiction:` from `.company/project.md` when it's set.
 
 **Start:** follow `aico:handoff`. Read only `## Legal` in the Company profile (path given in your dispatch).
