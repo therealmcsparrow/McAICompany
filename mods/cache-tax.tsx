@@ -42,6 +42,7 @@ let lastPollMs = 0
 let lastSignature = ''
 let lastAgents = ''
 let lastTtlKey = ''
+let isClockStale = false // set by session.start; the next tick resets the clock to unknown
 let lastPart = ''
 
 const ROLE = /^[a-z][a-z0-9-]{0,40}$/
@@ -214,9 +215,9 @@ async function stamp($: EngineInterface, path: string): Promise<string> {
 async function refreshTtl($: EngineInterface, root: string, slug: string): Promise<boolean> {
   const key = `${slug}|${await stamp($, `${root}/.company/work/${slug}/lead-context.json`)}`
   if (key === lastTtlKey) return false
+  lastTtlKey = key // set before the call so a failed or hung call is not retried every tick
   const out = await runScript($, 'lead-handover', ['ctx', slug, '--json'], TIMEOUT_MS.leadCtx, guardLeadTtl)
   if (!out.ok) return false
-  lastTtlKey = key
   const ttl = (out.value as { ttl: string | null }).ttl
   await update($, clockAtom, prev => noteTtl(prev, ttl) as CacheClockState)
   return true
@@ -246,6 +247,10 @@ async function tickOnce($: EngineInterface): Promise<void> {
   }
   const nowMs = await $.clock.now()
   const root = await $.session.root()
+  if (isClockStale) {
+    isClockStale = false
+    await update($, clockAtom, () => EMPTY_CLOCK as CacheClockState)
+  }
   const stored = await read($, costAtom)
   let current = costOf(stored)
   let isDue = isForced
@@ -393,6 +398,7 @@ export function registerCacheTax(on: On): void {
     lastAgents = ''
     lastPart = ''
     lastTtlKey = ''
+    isClockStale = true
     void begin($)
     return next(e)
   })
