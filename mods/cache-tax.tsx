@@ -345,7 +345,10 @@ async function noteMainRequest($: EngineInterface): Promise<void> {
     const settings = await readSettings($)
     if (!settings.mods.cache_tax.enabled) return
     const nowMs = await $.clock.now()
-    await update($, clockAtom, prev => noteRequest(prev, nowMs, 'assumed') as CacheClockState)
+    // A request after session.start replaces the stale clock; the tick must not wipe it later.
+    const isStale = isClockStale
+    isClockStale = false
+    await update($, clockAtom, prev => noteRequest(isStale ? EMPTY_CLOCK : prev, nowMs, 'assumed') as CacheClockState)
     void ensureTimer($).catch(() => undefined)
   } catch {
     // A request is never held up by Cache Tax.
