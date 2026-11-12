@@ -40,6 +40,9 @@ type Call = { argv: string[] }
 function makeWorld() {
   return {
     now: NOW,
+    settings: SETTINGS,
+    // While true, the settings script fails: the mod starts on its defaults.
+    settingsDown: false,
     active: ACTIVE,
     // What `lead-handover.mjs ctx demo --json` answers: a stdout text, or a function for a failure.
     ctx: ok(ctxAnswer('1h')) as unknown,
@@ -53,7 +56,7 @@ function makeWorld() {
 }
 type World = ReturnType<typeof makeWorld>
 
-async function boot($: Env[0], on: Env[1], world: World) {
+async function boot($: Env[0], on: Env[1], world: World, advanceMs = 2500) {
   const clock = mock.clock(on, { now: world.now })
   on('session.root', () => ({ value: '/work' }))
   on('command.register', (_: unknown, e: { name: string }) => ({ value: { command: e.name } }) as never)
@@ -73,6 +76,7 @@ async function boot($: Env[0], on: Env[1], world: World) {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
+  on('turn.start', (_, e) => e as never)
   on('command.run', () => ({ text: 'engine' }))
   on('agent.spawn', (() => ({ model: 'm', agentId: 'a1' })) as never)
   on('turn.step', async function* () {
@@ -89,7 +93,7 @@ async function boot($: Env[0], on: Env[1], world: World) {
   on('process.run', ((_: unknown, e: Call) => {
     const script = e.argv[1].replace(/\\/g, '/').split('/').pop() ?? ''
     world.scripts.push(script)
-    if (script === 'settings.mjs') return ok(SETTINGS)
+    if (script === 'settings.mjs') return world.settingsDown ? { value: { exitCode: 1, stdout: '', stderr: '' } } : ok(world.settings)
     if (script === 'run-state.mjs') return ok(world.active as string)
     if (script === 'ledger.mjs') return ok(JSON.stringify(REPORT))
     if (script === 'lead-handover.mjs') {
@@ -99,7 +103,7 @@ async function boot($: Env[0], on: Env[1], world: World) {
     return { value: { exitCode: 2, stdout: '', stderr: '' } }
   }) as never)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  await clock.advance(2500)
+  await clock.advance(advanceMs)
   return clock
 }
 
@@ -257,7 +261,7 @@ for (const [name, setup] of FAILURES) {
     expect(rows).toContain('Lifetime: 1 h (assumed)')
     expect(last(w)).toMatch(/tax 4[0-3]m$/)
     expect(w.modelCalls).toBe(0)
-    // R-4: a failed call is not repeated on every tick; one call per lead-context.json modification time.
+    // A failed call is not repeated on every tick: one call per lead-context.json modification time.
     expect(w.ctxCalls.length).toBe(1)
   })
 }
@@ -295,7 +299,7 @@ test('AC6 a slow ctx call does not hold the request', async ($, on) => {
   await clock.advance(18 * MIN)
   expect(last(w)).toMatch(/tax 4[0-3]m$/)
   expect(await paneLines($)).toContain('Lifetime: 1 h (assumed)')
-  // R-4: the call that never answers is given up at its time limit and not started again on every tick.
+  // The call that never answers is given up at its time limit and not started again on every tick.
   expect(w.ctxCalls.length).toBe(1)
 })
 
@@ -327,4 +331,34 @@ test('a request never calls a script by itself', async ($, on) => {
   await request($)
   expect(w.scripts.length).toBe(before)
   await clock.advance(1)
+})
+
+// ---- the clock reset at session start keeps a request that comes before the first tick
+
+test('a request recorded after the mod is switched on, then the first tick, keeps a running clock', async ($, on) => {
+  const w = makeWorld()
+  w.settings = SETTINGS.replace('"cache_tax":{"enabled":true', '"cache_tax":{"enabled":false')
+  const clock = await boot($, on, w)
+  expect(last(w)).not.toContain('tax')
+  w.settings = SETTINGS
+  await $.turn.start({ turnId: 't2', model: 'm', messageCount: 1 } as never)
+  await clock.advance(100)
+  await request($)
+  await clock.advance(2100)
+  expect(last(w)).not.toContain('tax ?')
+  expect(last(w)).toMatch(/tax 60m$/)
+  const rows = await paneLines($)
+  expect(rows.some(r => r.startsWith('Lead cache: expires '))).toBe(true)
+})
+
+test('a request in the first seconds of a session, before the first tick, keeps a running clock', async ($, on) => {
+  const w = makeWorld()
+  w.settingsDown = true
+  const clock = await boot($, on, w, 0)
+  await request($)
+  w.settingsDown = false
+  await clock.advance(2500)
+  expect(last(w)).not.toContain('tax ?')
+  expect(last(w)).toMatch(/tax (60|59)m$/)
+  expect((await paneLines($)).some(r => r.startsWith('Lead cache: expires '))).toBe(true)
 })
