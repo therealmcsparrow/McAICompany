@@ -1,0 +1,7 @@
+{"v":1,"run":"P20260302.000001/01-feature","kind":"step","id":"01","role":"product-manager","agent":"agentpm1","src":"notification","ctx_end":4675,"tool_uses":5,"ms":600000,"t0":"2026-03-02T10:00:00Z","t1":"2026-03-02T10:10:00Z"}
+{"v":1,"run":"P20260302.000001/01-feature","kind":"step","id":"01","role":"product-manager","agent":"agentpm1","src":"transcript","ctx_end":4675,"tokens":{"in":35,"cache_write":4670,"cache_read":16160,"out":155},"reqs":6}
+{"v":1,"run":"P20260302.000001/01-feature","kind":"step","id":"02","role":"architect","agent":"agentar1","src":"notification","ctx_end":5000,"tool_uses":3,"ms":600000,"t0":"2026-03-02T10:20:00Z","t1":"2026-03-02T10:30:00Z"}
+{"v":1,"run":"P20260302.000001/01-feature","kind":"step","id":"02","role":"architect","agent":"agentar1","src":"transcript","ctx_end":11020,"tokens":{"in":20,"cache_write":3000,"cache_read":8000,"out":100},"reqs":3}
+{"v":1,"run":"P20260302.000001/01-feature","kind":"step","id":"03","role":"product-manager","agent":"agentpm3","src":"notification","ctx_end":100,"tool_uses":0,"ms":300000,"t0":"2026-03-02T10:40:00Z","t1":"2026-03-02T10:45:00Z"}
+{"v":1,"run":"P20260302.000001/01-feature","kind":"step","id":"03","role":"product-manager","agent":"agentpm3","src":"transcript","ctx_end":101,"tokens":{"in":1,"cache_write":100,"cache_read":0,"out":9},"reqs":1}
+{"v":1,"run":"P20260302.000001/01-feature","kind":"ship","acs":3,"t_start":"2026-03-02T10:00:00Z","t_ship":"2026-03-02T11:00:00Z"}

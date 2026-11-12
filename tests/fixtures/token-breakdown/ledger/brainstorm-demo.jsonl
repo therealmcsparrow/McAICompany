@@ -1,0 +1,2 @@
+{"v":1,"run":"brainstorm-demo","kind":"round","id":"R1","role":"product-manager","agent":"agentbr4","src":"transcript","ctx_end":900,"tokens":{"in":1,"cache_write":2,"cache_read":3,"out":4},"reqs":1}
+{"v":1,"run":"brainstorm-demo","kind":"ship","acs":0}
