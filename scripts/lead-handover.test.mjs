@@ -72,7 +72,7 @@ describe('calibration', () => {
     assert.equal(lead.COMPACT_RESERVE, undefined);
   });
 
-  test('the Contract is v1.8 and holds the hand-over point, not the window setup', () => {
+  test('the Contract is v2.2 and holds the hand-over point, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
     assert.match(text, /^# Contract: lead-handoff v2\.2$/m);
     assert.ok(text.includes('85500'));

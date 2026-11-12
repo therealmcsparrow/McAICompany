@@ -66,7 +66,7 @@ function makeWorld() {
     active: ACTIVE as unknown,
     ledger: ok(JSON.stringify(REPORT)) as unknown,
     ledgerMtime: 1,
-    // What `lead-handover.mjs ctx demo --json` answers; a measured 1 h keeps the v1.8 assertions meaningful (v1.9).
+    // What `lead-handover.mjs ctx demo --json` answers; a measured 1 h keeps the lifetime assertions meaningful.
     ctx: ok(JSON.stringify({ v: 1, ctx: 42000, peak: 50000, at: '2026-10-26T10:05:00Z', ttl: '1h' })) as unknown,
     ctxMtime: 1,
     agents: [] as Info[],
@@ -231,7 +231,7 @@ test('Lead cache: unknown until a main-loop request, then expires with the time 
   await ui.unmount()
 })
 
-test('session.start resets the lifetime and source to unknown (R-5)', async ($, on) => {
+test('session.start resets the lifetime and source to unknown', async ($, on) => {
   const w = makeWorld()
   const clock = await boot($, on, w)
   await request($)
