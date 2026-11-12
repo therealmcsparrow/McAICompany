@@ -174,18 +174,21 @@ function subdirs(dir) {
   }
 }
 
+// Every matching transcript; the caller refuses more than one (cct.M2).
 function findAgentFile(projects, agent) {
+  const found = [];
   for (const proj of subdirs(projects.dir)) {
     for (const sess of subdirs(path.join(projects.dir, proj))) {
       const file = path.join(projects.dir, proj, sess, 'subagents', `agent-${agent}.jsonl`);
-      if (safeFile(projects.real, file)) return file;
+      if (safeFile(projects.real, file)) found.push(file);
     }
   }
-  return null;
+  return found;
 }
 
 function findLeadFiles(projects, sessions) {
   const files = [];
+  const perSession = new Map();
   for (const proj of subdirs(projects.dir)) {
     let entries;
     try { entries = fs.readdirSync(path.join(projects.dir, proj)); } catch { continue; }
@@ -195,10 +198,13 @@ function findLeadFiles(projects, sessions) {
       if (!UUID.test(uuid)) continue;
       if (!sessions.has(crypto.createHash('sha256').update(uuid).digest('hex').slice(0, 12))) continue;
       const file = path.join(projects.dir, proj, name);
-      if (safeFile(projects.real, file)) files.push(file);
+      if (safeFile(projects.real, file)) {
+        files.push(file);
+        perSession.set(uuid, (perSession.get(uuid) ?? 0) + 1);
+      }
     }
   }
-  return files;
+  return { files, ambiguous: [...perSession.values()].some((n) => n > 1) };
 }
 
 function forEachLine(file, onLine) {
@@ -317,9 +323,18 @@ function readRunFile(root, run, name) {
     if (exactWorkPath(io, root, parts) !== 'exact') return null;
     const file = path.join(root, '.company', 'work', ...parts, name);
     const st = fs.lstatSync(file);
-    if (!st.isFile() || st.size > MAX_RUN_FILE_BYTES) return null;
-    if (!insideReal(fs.realpathSync(path.join(root, '.company', 'work')), fs.realpathSync(file))) return null;
-    return fs.readFileSync(file, 'utf8');
+    if (!st.isFile() || st.nlink !== 1 || st.size > MAX_RUN_FILE_BYTES) return null;
+    const realWork = fs.realpathSync.native(path.join(root, '.company', 'work'));
+    const real = fs.realpathSync.native(file);
+    if (real !== path.join(realWork, ...parts, name) || !insideReal(realWork, real)) return null;
+    const fd = fs.openSync(file, 'r');
+    try {
+      const open = fs.fstatSync(fd);
+      if (!open.isFile() || open.nlink !== 1 || open.dev !== st.dev || open.ino !== st.ino || open.size > MAX_RUN_FILE_BYTES) return null;
+      return fs.readFileSync(fd, 'utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch (error) {
     if (error instanceof WorkFolderRefusal) return null;
     return null;
@@ -363,7 +378,8 @@ function leadFor(root, run, window, projects) {
   if (found.size === 0) return { reason: 'the recorded Lead session is not valid' };
   if (window === null) return { reason: 'no ledger times to bound the Lead window' };
   if (projects === null) return { reason: 'no Lead transcript found' };
-  const files = findLeadFiles(projects, found);
+  const { files, ambiguous } = findLeadFiles(projects, found);
+  if (ambiguous) return { reason: 'more than one Lead transcript for a session' };
   if (files.length === 0) return { reason: 'no Lead transcript found' };
   let spend = 0;
   let requests = 0;
@@ -412,7 +428,9 @@ function measureRun(root, entry, projects) {
     if (row.agent === null) { out.gaps.push({ ...label, reason: 'no agent ID in the record' }); continue; }
     if (seen.has(row.agent)) continue;
     seen.add(row.agent);
-    const file = projects === null ? null : findAgentFile(projects, row.agent);
+    const matches = projects === null ? [] : findAgentFile(projects, row.agent);
+    if (matches.length > 1) { out.gaps.push({ ...label, reason: 'more than one transcript found' }); continue; }
+    const file = matches[0] ?? null;
     if (file === null) { out.gaps.push({ ...label, reason: 'transcript not found' }); continue; }
     const t = readTranscript(file, false);
     if (t.reason) { out.gaps.push({ ...label, reason: t.reason === 'size' ? 'transcript over the size limit (size)' : `transcript ${t.reason}` }); continue; }
@@ -456,7 +474,7 @@ function summarize(runs) {
     const at = ranking.list.findIndex((x) => x.cat === 'test output');
     const other = at === 0 ? ranking.list[1] : ranking.list[0];
     hook = {
-      yes: at <= 1,
+      yes: at <= 1 && ranking.list[at].n > 0,
       rank: at + 1,
       testShare: share(ranking.list[at].n, ranking.total),
       otherCategory: other.cat,
