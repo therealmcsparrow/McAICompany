@@ -43,7 +43,7 @@ acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
 contracts: [handoff v2.0]
 ---
-By: <role id: agent file name, e.g. qa>
+By: <role id>
 ## Did
 - What changed, as facts, with file paths.
 ## Decisions
