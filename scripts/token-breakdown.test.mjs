@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 //     transcript of agentpm1 (6 requests): added file reads 1995, test output 20, command output 1500,
 //     other tool results 100, reply 50, prompt 1010 (sum 4675); carried 7980, 60, 3000, 100, 0, 5050 (sum 16190).
 //     the transcripts of agentar1 and agentpm3 are gone.
-//   run R2 (older): subagent spend 7760 = qa-tester 7760. transcript of agentqa2 (4 requests): carried
+//   run R2 (older): subagent spend 7760 = qa 7760. transcript of agentqa2 (4 requests): carried
 //     test output 11000, prompt 1515, file reads 0.
 //   both runs: carried test output 11060, file reads 7980, prompt 6565, command output 3000 (sum 28705).
 //   Lead window of R1 (10:00:00Z to 11:00:00Z): two requests, spend 333 + 444 = 777.
