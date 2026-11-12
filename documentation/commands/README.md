@@ -134,5 +134,6 @@ These four commands belong to the research, marketing and design companies. In a
 | [`/aico:dashboard`](dashboard.md) | Starts a read-only local board of all runs |
 | [`/aico:help`](help.md) | Lists or explains commands |
 | [`/aico:version`](version.md) | Shows the installed version |
+| [`/aico:i-have-adhd`](i-have-adhd.md) | Turns on ADHD mode for this session: action first, numbered steps, one next action |
 
 You can also summon any Role directly, without a command — for example *"use the aico security agent on `src/auth`"* or *"use the aico pentester on the staging build"*. See [Roles](../roles/README.md).

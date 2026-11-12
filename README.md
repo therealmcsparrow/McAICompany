@@ -65,6 +65,7 @@ Details: [`documentation/start/getting-started.md`](documentation/start/getting-
 | `/aico:vulnscan` | On demand: the Vulnerability Scanner checks your dependencies and code against CVE/NVD, OSV, GitHub Advisories and CISA KEV; Critical/High come to you, safe fixes come as a ready upgrade set |
 | `/aico:skillspector [--project\|--global\|--all\|<skill-name>] [--no-llm\|--claude-cli] [install]` | On demand: scans the agent skills installed in this project or your user folder with NVIDIA SkillSpector (pinned v2.13.1) and reports pass, findings or error per skill. Read-only; it suggests removals and runs none. The install changes your user-scope Claude config, so it always asks first |
 | `/aico:add-skill` | Adds a third-party skill to your own list, `~/.mcsparrow/3rdpartyskills.json`, in a few form questions. Nothing is installed or run; you give it to a Role on the Skills tab of `/aico:settings` |
+| `/aico:i-have-adhd` | Turns on ADHD mode for this session: replies start with the next action, number the steps and end with one next action. Say "stop adhd mode" or "normal mode" to end it. Nothing is saved |
 | `/aico:settings` | Opens a local page to set each Role's name, model, effort, skills and personality, the language and profile, the pipeline (Fix rounds, parallel or sequential, optional lanes) and the Gates, as your default or per project. Nothing changes until you save |
 | `/aico:dashboard [--lan] [--port <n>]` | Starts a read-only local board of all runs, with a drawer per run. Every start makes a new link; anyone with the link can read the runs until the server stops. `--lan` opens it to your network over plain HTTP |
 | `/aico:setup [core] [research] [go] [react] [tanstack] [auth] [type]` | Installs the standalone and stack skills. With `type` (or no arguments) it also sets the project's company type and offers a search for up to 5 skills that fit it. Nothing installs without your answer |
@@ -169,3 +170,5 @@ Pressure-test evidence: `tests/pressure/RESULTS.md`.
 ## Credits
 
 `aico:tdd`, `aico:debugging` and `aico:wizard` adapt ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT, © 2026 Matt Pocock).
+
+`aico:i-have-adhd` is a rewrite of ideas from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd) (https://github.com/ayghri/i-have-adhd, MIT, © Ayoub Ghriss), read 2026-11-12.
