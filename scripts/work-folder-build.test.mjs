@@ -6,6 +6,26 @@ import os from 'node:os';
 import path from 'node:path';
 import { main } from './ticket-approval.mjs';
 
+// Resolve a usable bash. On Windows a bare `bash` can be the WSL stub, so prefer Git Bash.
+function findBash() {
+  const cands = [];
+  if (process.platform === 'win32') {
+    for (const base of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs')]) {
+      if (base) cands.push(path.join(base, 'Git', 'bin', 'bash.exe'), path.join(base, 'Git', 'usr', 'bin', 'bash.exe'));
+    }
+    const g = spawnSync('git', ['--exec-path'], { encoding: 'utf8' });
+    if (g.status === 0) cands.push(path.resolve(g.stdout.trim(), '..', '..', '..', 'bin', 'bash.exe'));
+  }
+  cands.push('bash');
+  for (const c of cands) {
+    if (c !== 'bash' && !fs.existsSync(c)) continue;
+    const r = spawnSync(c, ['-c', 'printf ok'], { encoding: 'utf8' });
+    if (r.status === 0 && r.stdout === 'ok') return c;
+  }
+  return 'bash';
+}
+const BASH = findBash();
+
 const NOW = new Date(2026, 9, 30, 22, 42, 0).getTime();
 const BASE = 'a'.repeat(40);
 const ZERO = '000000000000';
@@ -186,7 +206,7 @@ describe('shell use of the printed path', () => {
     const fx = flow(NEW);
     const r = fx.run('build-plan', NEW);
     const printed = r.lines[1].slice('plan: '.length);
-    const sh = spawnSync('bash', ['-c', `test -f '${printed}' && printf '%s' '${printed}'`], { cwd: fx.root, encoding: 'utf8' });
+    const sh = spawnSync(BASH, ['-c', `test -f '${printed}' && printf '%s' '${printed}'`], { cwd: fx.root, encoding: 'utf8' });
     assert.equal(sh.error, undefined, 'bash is required');
     assert.equal(sh.status, 0, sh.stderr);
     assert.equal(sh.stdout, printed);

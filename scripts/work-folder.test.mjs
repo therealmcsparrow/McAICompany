@@ -11,6 +11,26 @@ import {
 } from '../mods/lib/work-folder.mjs';
 import { main } from './work-folder.mjs';
 
+// Resolve a usable bash. On Windows a bare `bash` can be the WSL stub, so prefer Git Bash.
+function findBash() {
+  const cands = [];
+  if (process.platform === 'win32') {
+    for (const base of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs')]) {
+      if (base) cands.push(path.join(base, 'Git', 'bin', 'bash.exe'), path.join(base, 'Git', 'usr', 'bin', 'bash.exe'));
+    }
+    const g = spawnSync('git', ['--exec-path'], { encoding: 'utf8' });
+    if (g.status === 0) cands.push(path.resolve(g.stdout.trim(), '..', '..', '..', 'bin', 'bash.exe'));
+  }
+  cands.push('bash');
+  for (const c of cands) {
+    if (c !== 'bash' && !fs.existsSync(c)) continue;
+    const r = spawnSync(c, ['-c', 'printf ok'], { encoding: 'utf8' });
+    if (r.status === 0 && r.stdout === 'ok') return c;
+  }
+  return 'bash';
+}
+const BASH = findBash();
+
 const SCRIPT = fileURLToPath(new URL('./work-folder.mjs', import.meta.url));
 const NOW = new Date(2026, 9, 30, 23, 45);
 const STAMP = '2026-10-30 23.45';
@@ -606,7 +626,7 @@ describe('branch command', () => {
 describe('real shell calls', () => {
   let bashOk;
   before(() => {
-    bashOk = spawnSync('bash', ['-c', 'exit 0']).status === 0;
+    bashOk = spawnSync(BASH, ['-c', 'exit 0']).status === 0;
   });
   test('bash exists (no bash is a failure, not a skip)', () => assert.equal(bashOk, true));
 
@@ -614,7 +634,7 @@ describe('real shell calls', () => {
     const root = project();
     const name = '2026-10-30 23.45 - Fix Login';
     fs.mkdirSync(path.join(root, '.company', 'work', name));
-    const r = spawnSync('bash', ['-c', `"$1" "$2" branch '${name}'`, 'bash', process.execPath, SCRIPT], { cwd: root, encoding: 'utf8' });
+    const r = spawnSync(BASH, ['-c', `"$1" "$2" branch '${name}'`, 'bash', process.execPath, SCRIPT], { cwd: root, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, 'branch: aico/2026-10-30-2345-fix-login\n');
   });
@@ -622,7 +642,7 @@ describe('real shell calls', () => {
   test('work-folder new through bash prints id, name and branch, exit 0', () => {
     const root = project();
     writeTopic(root, 'Fix Login\n');
-    const r = spawnSync('bash', ['-c', `"$1" "$2" new --playbook 'idea' --topic file`, 'bash', process.execPath, SCRIPT], { cwd: root, encoding: 'utf8' });
+    const r = spawnSync(BASH, ['-c', `"$1" "$2" new --playbook 'idea' --topic file`, 'bash', process.execPath, SCRIPT], { cwd: root, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     const [i, n, b] = r.stdout.trimEnd().split('\n');
     assert.equal(r.stdout.trimEnd().split('\n').length, 3);
@@ -644,7 +664,7 @@ describe('real shell calls', () => {
     const root = project();
     const marker = path.join(root, 'pwned');
     writeTopic(root, `Fix '$(touch ${marker.replaceAll('\\', '/')})'`);
-    const r = spawnSync('bash', ['-c', `"$1" "$2" new --playbook 'idea' --topic file`, 'bash', process.execPath, SCRIPT], { cwd: root, encoding: 'utf8' });
+    const r = spawnSync(BASH, ['-c', `"$1" "$2" new --playbook 'idea' --topic file`, 'bash', process.execPath, SCRIPT], { cwd: root, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     assert.equal(fs.existsSync(marker), false);
     assert.match(r.stdout, /^id: P\d{8}\.000001\nname: /);
