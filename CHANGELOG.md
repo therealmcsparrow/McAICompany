@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **Settings page matches the control console look.** `scripts/settings-page.html` now uses the same visual style as the control console.
+
 ## [0.36.0] - 2026-11-12
 
 Rollback: node scripts/stable.mjs 0.35.0
