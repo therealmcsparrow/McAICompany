@@ -55,7 +55,7 @@ export type AgentRow = {
 export type CostState = { known: boolean; report: unknown }
 
 /** Time of the newest main-loop request and the lifetime of its cache entry, in milliseconds. */
-export type CacheClockState = { lastRequestMs: number | null; lifetimeMs: number | null; source: 'usage' | 'measured' | null }
+export type CacheClockState = { lastRequestMs: number | null; lifetimeMs: number | null; source: 'usage' | 'measured' | 'assumed' | null }
 
 export type ReflectState = { pending: { role: string; text: string }[] }
 

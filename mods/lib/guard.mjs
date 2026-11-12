@@ -239,3 +239,12 @@ export const guardLeadCtx = obj({
   peak: ctxCount,
   at: (v) => (v === null ? null : stamp(v))
 });
+
+const TTL_VALUES = ['5m', '1h'];
+
+// `lead-handover.mjs ctx <slug> --json`, the `ttl` key only: '5m', '1h' or null. A missing or other value is null.
+export const guardLeadTtl = (v) => {
+  if (!isPlain(v)) return undefined;
+  const ttl = Object.hasOwn(v, 'ttl') && typeof v.ttl === 'string' && TTL_VALUES.includes(v.ttl) ? v.ttl : null;
+  return { v: 1, ttl };
+};
