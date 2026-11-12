@@ -348,7 +348,7 @@ test('--runs accepts the bounds 1 and 50', (t) => {
   for (const n of ['1', '50']) assert.equal(run(sb, ['--runs', n]).status, 0, n);
 });
 
-// ---- fix round 1: R-6, hostile run files, duplicate transcripts (commit 0805a30) ----
+// ---- hook rule, hostile run files, duplicate transcripts ----
 
 const R1_LEDGER = 'P20260302.000001~01-feature.jsonl';
 const LEAD_FILE = `${LEAD_UUID}.jsonl`;
@@ -362,7 +362,7 @@ function skipIfNoLink(t, error) {
   throw error;
 }
 
-test('AC3 R-6: the hook is not yes when only file reads is non-zero, even if test output ties at zero', (t) => {
+test('AC3: the hook is not yes when only file reads is non-zero, even if test output ties at zero', (t) => {
   const sb = sandbox(t, { ledgers: [R1_LEDGER] });
   const row = (n, ctx, tool) => JSON.stringify({
     type: 'assistant', uuid: `f${n}`, requestId: `freq${n}`,
@@ -425,6 +425,43 @@ test('proj.M4: a junctioned run folder is read as no session', (t) => {
   fs.mkdirSync(path.dirname(link), { recursive: true });
   try {
     fs.symlinkSync(target, link, 'junction');
+  } catch (error) {
+    if (skipIfNoLink(t, error)) return;
+  }
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, NO_SESSION);
+  assert.doesNotMatch(r.out, /\b777\b/);
+});
+
+const CONTEXT_JSON = () => `${JSON.stringify({ v: 1, session: hash12(LEAD_UUID), ctx: 1, peak: 2, at: '2026-03-02T10:50:00Z' })}\n`;
+
+test('proj.M4: a junctioned .company/work folder pointing outside the repo reads as no session', (t) => {
+  const sb = sandbox(t);
+  const target = path.join(sb.dir, 'elsewhere-work');
+  fs.mkdirSync(path.join(target, 'P20260302.000001', '01-feature'), { recursive: true });
+  fs.writeFileSync(path.join(target, 'P20260302.000001', '01-feature', 'lead-context.json'), CONTEXT_JSON());
+  try {
+    fs.symlinkSync(target, path.join(sb.proj, '.company', 'work'), 'junction');
+  } catch (error) {
+    if (skipIfNoLink(t, error)) return;
+  }
+  const r = run(sb, ['--runs', '1']);
+  assert.equal(r.status, 0, r.err);
+  assert.match(r.out, NO_SESSION);
+  assert.doesNotMatch(r.out, /\b777\b/);
+});
+
+test('proj.M4: a junctioned .company folder pointing outside the repo reads as no session', (t) => {
+  const sb = sandbox(t);
+  const real = path.join(sb.proj, '.company');
+  const target = path.join(sb.dir, 'elsewhere-company');
+  fs.cpSync(real, target, { recursive: true });
+  fs.mkdirSync(path.join(target, 'work', 'P20260302.000001', '01-feature'), { recursive: true });
+  fs.writeFileSync(path.join(target, 'work', 'P20260302.000001', '01-feature', 'lead-context.json'), CONTEXT_JSON());
+  fs.rmSync(real, { recursive: true, force: true });
+  try {
+    fs.symlinkSync(target, real, 'junction');
   } catch (error) {
     if (skipIfNoLink(t, error)) return;
   }
