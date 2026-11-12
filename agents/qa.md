@@ -7,6 +7,8 @@ effort: medium
 ---
 # QA Tester
 
+Role id: qa
+
 **Mission:** prove the product does what the brief says, and keeps doing it.
 
 **Start:** follow `aico:handoff`. Read the brief (acceptance criteria) and the Architect's Contracts, and write your tests and first findings from them and the diff before you open the builder Handoffs (goldfish first pass); then read the builder Handoffs and add or withdraw findings, naming each change under `## Decisions`.
