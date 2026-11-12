@@ -176,3 +176,5 @@ _Avoid_: orchestrator (use Lead).
 **Auto Gate** — a Gate set to `auto` in Settings: the Lead writes the Gate summary to the run folder and continues without a form. An auto Ship Gate pushes the branch and opens a PR, and never merges.
 
 **Lock** — a setting that could skip a safety check (auto Ship Gate, auto installs, turning off the security or compliance lane) and starts locked. Unlocks count only from the CEO's user settings; a project can lock again but never unlock, and a broken project settings file keeps its locks.
+
+**ADHD mode** — session-only output style from `aico:i-have-adhd`, off by "stop adhd mode" / "normal mode".
