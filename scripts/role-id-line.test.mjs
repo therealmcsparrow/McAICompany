@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Source of the `By: qa-tester` drift: a Role file whose display title does not equal its file name gives the Role no
+// Source of the old qa id `By:` drift: a Role file whose display title does not equal its file name gives the Role no
 // id to copy into `By:` and `role:`, so it slugifies the title. Each such file must state `Role id: <file stem>`.
 
 const ROOT = join(import.meta.dirname, '..');
@@ -21,7 +21,7 @@ const parse = f => {
   };
 };
 
-test('the qa Role file states Role id: qa, so By: and role: never become qa-tester', () => {
+test('the qa Role file states Role id: qa, so By: and role: never become the old id', () => {
   const qa = parse('qa.md');
   assert.deepEqual(qa.ids, ['qa']);
 });

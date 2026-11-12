@@ -19,7 +19,7 @@ const rel = (file) => path.relative(root, file).split(path.sep).join('/');
 
 function walk(dir, keep, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+    if (entry.name.startsWith('.') || entry.name === 'node_modules' || (dir === root && entry.name === 'tmp')) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(full, keep, out);
     else if (keep(full)) out.push(full);
