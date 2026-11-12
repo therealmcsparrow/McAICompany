@@ -257,6 +257,8 @@ for (const [name, setup] of FAILURES) {
     expect(rows).toContain('Lifetime: 1 h (assumed)')
     expect(last(w)).toMatch(/tax 4[0-3]m$/)
     expect(w.modelCalls).toBe(0)
+    // R-4: a failed call is not repeated on every tick; one call per lead-context.json modification time.
+    expect(w.ctxCalls.length).toBe(1)
   })
 }
 
@@ -293,6 +295,8 @@ test('AC6 a slow ctx call does not hold the request', async ($, on) => {
   await clock.advance(18 * MIN)
   expect(last(w)).toMatch(/tax 4[0-3]m$/)
   expect(await paneLines($)).toContain('Lifetime: 1 h (assumed)')
+  // R-4: the call that never answers is given up at its time limit and not started again on every tick.
+  expect(w.ctxCalls.length).toBe(1)
 })
 
 // ---- call budget
