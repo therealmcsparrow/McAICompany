@@ -52,7 +52,7 @@ describe('measure', () => {
     const r = measure(stop(transcript(fx, 40000)), opts(fx));
     assert.deepEqual(r, { code: 0, err: '' });
     const o = stored(fx);
-    assert.deepEqual(Object.keys(o), ['v', 'session', 'ctx', 'peak', 'at']);
+    assert.deepEqual(Object.keys(o), ['v', 'session', 'ctx', 'peak', 'at', 'ttl']);
     assert.equal(o.session, null);
     assert.equal(o.v, 1);
     assert.equal(o.ctx, 40000);
@@ -204,9 +204,9 @@ describe('read and ctx', () => {
 
   test('ctx --json prints the stored reading or null fields', () => {
     const fx = fixture();
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null, ttl: null });
     fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 5, peak: 9, at: AT })}\n`);
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: 5, peak: 9, at: AT });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: 5, peak: 9, at: AT, ttl: null });
   });
 
   test('ctx refuses a missing flag, a bad slug and a missing run', () => {
@@ -252,7 +252,7 @@ describe('read refuses what is not exactly the named file (proj.M-SEC7)', () => 
     const other = path.join(fx.base, 'other.json');
     fs.writeFileSync(other, body);
     fs.linkSync(other, fx.file);
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null, ttl: null });
   });
 
   test('a symlinked reading file pointing outside the run is unknown', (t) => {
@@ -265,14 +265,14 @@ describe('read refuses what is not exactly the named file (proj.M-SEC7)', () => 
       t.skip('symlinks not available');
       return;
     }
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null, ttl: null });
   });
 
   test('a file whose real name differs in letter case is unknown', (t) => {
     const fx = fixture();
     fs.writeFileSync(path.join(fx.dir, 'LEAD-CONTEXT.JSON'), body);
     if (fs.existsSync(path.join(fx.dir, 'lead-context.json')) === false) { t.skip('case-sensitive folder'); return; }
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: null, at: null, ttl: null });
   });
 });
 
@@ -304,14 +304,14 @@ describe('per-session reading', () => {
     measure(stop(transcript(fx, 147000), { session_id: 'sess-a' }), opts(fx));
     assert.deepEqual(start(begin(), opts(fx)), { code: 0, err: '' });
     const o = stored(fx);
-    assert.deepEqual(Object.keys(o), ['v', 'session', 'ctx', 'peak', 'at']);
+    assert.deepEqual(Object.keys(o), ['v', 'session', 'ctx', 'peak', 'at', 'ttl']);
     assert.equal(o.session, tag('sess-b'));
     assert.equal(o.ctx, null);
     assert.equal(o.peak, 147000);
     const read = main(['read', fx.slug], fx.root, {}).out.split('\n');
     assert.ok(read.includes('lead ctx unknown'), read.join('|'));
     assert.ok(read.includes('lead peak 147000 over cap'));
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: 147000, at: o.at });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: 147000, at: o.at, ttl: null });
   });
 
   test('start works for resume and clear, writes a peak of 0 on a first run, and ignores compact and subagents', () => {
@@ -341,7 +341,7 @@ describe('per-session reading', () => {
     const fx = fixture();
     fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 90000, peak: 120000, at: '2026-11-03T07:43:00Z' })}
 `);
-    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: 90000, peak: 120000, at: '2026-11-03T07:43:00Z' });
+    assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: 90000, peak: 120000, at: '2026-11-03T07:43:00Z', ttl: null });
     measure(stop(transcript(fx, 30000), { session_id: 'sess-a' }), opts(fx));
     assert.equal(stored(fx).peak, 120000);
     assert.equal(stored(fx).session, tag('sess-a'));
