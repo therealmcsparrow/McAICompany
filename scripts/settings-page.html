@@ -2238,12 +2238,13 @@ function renderSkills(panel) {
     const box = el('div', { class: 'info' });
     fsEl.append(box);
     skRoles[role].fs = fsEl;
+    const reg = skRoles[role];
     if (level === 'project' && !projectOn()) {
-      box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'));
+      box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'), reg.pills.row, reg.eff);
       return fsEl;
     }
     if (level === 'user' && state.resolved?.settings_folder_moved === true) {
-      box.append(el('p', { class: 'lockwhy locked' }, SKILL_MOVED));
+      box.append(el('p', { class: 'lockwhy locked' }, SKILL_MOVED), reg.pills.row, reg.eff);
       return fsEl;
     }
     const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
@@ -2251,7 +2252,6 @@ function renderSkills(panel) {
       err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}_err`, hidden: true }) };
     skRecs.push(rec);
     skRoles[role].recs.push(rec);
-    const reg = skRoles[role];
     const stale = staleSkills(level, role);
     const protectedHere = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
     if (protectedHere) {
