@@ -330,7 +330,7 @@ test('settings page: the served page has the Reprompt table and the Question rou
   const res = await api('/');
   assert.equal(res.status, 200);
   const html = await res.text();
-  for (const needle of ["'Reprompt'", "'Question rounds'", "['reprompt', 'question_rounds']", 'selectFor([0, 1, 2, 3], l)', "describedBy: 'reprompt-hint'", "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
+  for (const needle of ["sectionHead('Reprompt')", "label: 'Question rounds'", "['reprompt', 'question_rounds']", 'options: [0, 1, 2, 3]', "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
     assert.ok(html.includes(needle), needle);
   }
   // The hint is the exact text of the aico-settings Contract, read from it, with nothing added.
@@ -339,9 +339,9 @@ test('settings page: the served page has the Reprompt table and the Question rou
   assert.ok(html.includes(`'${hint}'`), `the page shows the Contract hint exactly: ${hint}`);
   assert.ok(!/Question rounds is a whole number from 0 to 3/.test(html), 'the old hint wording is gone');
   // Directly under the pipeline table: after the context cap hint, before the Brainstorm heading.
-  const capHint = html.indexOf('The context cap is fixed.');
-  const reprompt = html.indexOf("el('h2', {}, 'Reprompt')");
-  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  const capHint = html.indexOf("const CONTEXT_CAP_HINT = 'The context cap is fixed.");
+  const reprompt = html.indexOf("sectionHead('Reprompt')");
+  const brainstorm = html.indexOf("sectionHead('Brainstorm')");
   assert.ok(capHint > 0 && reprompt > capHint && brainstorm > reprompt, 'order: context cap hint, Reprompt heading, Brainstorm heading');
   assert.ok(html.indexOf(`'${hint}'`) > reprompt && html.indexOf(`'${hint}'`) < brainstorm, 'the hint sits between the Reprompt and Brainstorm headings');
   assert.ok(!/<script[^>]*\ssrc=/i.test(html), 'the page loads no outside script');
