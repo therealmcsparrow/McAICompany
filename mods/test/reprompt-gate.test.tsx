@@ -4,7 +4,6 @@ const MODS = {
   savvy: { enabled: true, pane: 'command' },
   cache_tax: { enabled: true, pane: 'command' },
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 }
 const SETTINGS = JSON.stringify({ revision: 1, roles: {}, mods: MODS })
 const OFF = JSON.stringify({ revision: 1, roles: {}, mods: Object.fromEntries(Object.entries(MODS).map(([k, v]) => [k, { ...v, enabled: false }])) })

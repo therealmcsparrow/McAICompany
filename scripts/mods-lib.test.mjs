@@ -148,7 +148,8 @@ test('guardSettings keeps the mods block and role names, drops the rest', () => 
   });
   const r = interpretRun({ exitCode: 0, stdout: text + '\r\n' }, guardSettings);
   assert.equal(r.ok, true);
-  assert.deepEqual({ ...r.value.mods.blast_radius }, MODS_DEFAULTS.blast_radius);
+  assert.deepEqual(Object.keys(r.value.mods).sort(), ['cache_tax', 'reflect', 'savvy']);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), ['cache_tax', 'reflect', 'savvy']);
   assert.equal(r.value.roles['frontend-engineer'].name, 'Freya');
   assert.equal(r.value.secrets, undefined);
   assert.equal(r.value.roles.architect.model, undefined);
@@ -229,7 +230,7 @@ test('guardReviewDepth ignores unknown categories and refuses a bad depth or tie
 // ---- status.mjs
 
 test('composeStatus ignores prototype keys, unknown keys and non-string values', () => {
-  const hostile = JSON.parse('{"__proto__":"x","constructor":"y","prototype":"z","extra":"e","savvy":7,"blast":["b"],"cost":{"a":1},"reflect":null}');
+  const hostile = JSON.parse('{"__proto__":"x","constructor":"y","prototype":"z","extra":"e","savvy":7,"gone":["b"],"cost":{"a":1},"reflect":null}');
   assert.equal(composeStatus(hostile), undefined);
   const mixed = JSON.parse('{"__proto__":"x","constructor":"y","unknown":"u","cost":"spend 1"}');
   assert.equal(composeStatus(mixed), 'spend 1');
@@ -250,19 +251,19 @@ test('composeStatus makes CR, LF, tab and ESC one clean line', () => {
 });
 
 test('composeStatus cuts a CJK part to its cell cap', () => {
-  const line = composeStatus({ blast: '漢'.repeat(30) });
-  assert.ok(cellWidth(line) <= STATUS_CAPS.blast);
+  const line = composeStatus({ cost: '漢'.repeat(30) });
+  assert.ok(cellWidth(line) <= STATUS_CAPS.cost);
   assert.ok(line.endsWith('…'));
 });
 
-test('composeStatus joins parts in order savvy, blast, cost, reflect', () => {
-  assert.equal(composeStatus({ reflect: '2 lessons', cost: '5 tax', blast: '⚠ core', savvy: 'W1 S01' }),
-    'W1 S01 · ⚠ core · 5 tax · 2 lessons');
+test('composeStatus joins parts in order savvy, cost, reflect', () => {
+  assert.equal(composeStatus({ reflect: '2 lessons', cost: '5 tax', savvy: 'W1 S01' }),
+    'W1 S01 · 5 tax · 2 lessons');
 });
 
 test('composeStatus returns undefined when there is nothing to say', () => {
   assert.equal(composeStatus({}), undefined);
-  assert.equal(composeStatus({ savvy: '', cost: '   ', blast: null, reflect: undefined }), undefined);
+  assert.equal(composeStatus({ savvy: '', cost: '   ', reflect: undefined }), undefined);
   assert.equal(composeStatus(undefined), undefined);
   assert.equal(composeStatus(null), undefined);
   assert.equal(composeStatus('x'), undefined);
@@ -271,23 +272,24 @@ test('composeStatus returns undefined when there is nothing to say', () => {
 test('STATUS_CAPS add up so the whole line stays on 70 cells, so the host prefix of 8 leaves 2 spare', () => {
   const sum = Object.values(STATUS_CAPS).reduce((a, b) => a + b, 0);
   assert.equal(STATUS_MAX, 70);
-  assert.deepEqual(STATUS_CAPS, { version: 8, savvy: 17, blast: 10, cost: 13, reflect: 10 });
-  assert.ok(sum + 4 * 3 <= STATUS_MAX);
+  assert.deepEqual(STATUS_CAPS, { version: 8, savvy: 17, cost: 13, reflect: 10 });
+  assert.equal(Object.keys(STATUS_CAPS).length, 4);
+  assert.ok(sum + 3 * 3 <= STATUS_MAX);
 });
 
-test('composeStatus with all five parts at their cap is at most 70 cells and keeps every part', () => {
-  const line = composeStatus({ version: 'v' + '9'.repeat(200), savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
+test('composeStatus with all four parts at their cap is at most 70 cells and keeps every part', () => {
+  const line = composeStatus({ version: 'v' + '9'.repeat(200), savvy: 's'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
   assert.ok(cellWidth(line) <= 70);
-  assert.equal(line.split(' · ').length, 5);
-  const wide = composeStatus({ version: 'v10.2.30', savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
+  assert.equal(line.split(' · ').length, 4);
+  const wide = composeStatus({ version: 'v10.2.30', savvy: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
   assert.ok(cellWidth(wide) <= 70);
   assert.ok(8 + cellWidth(wide) <= 78);
-  assert.equal(wide.split(' · ').length, 5);
-  const real = composeStatus({ version: 'v0.20.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '9 lessons' });
-  assert.equal(real, 'v0.20.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 9 lessons');
+  assert.equal(wide.split(' · ').length, 4);
+  const real = composeStatus({ version: 'v0.20.0', savvy: 'W3 S12 be-eng 14m', cost: '12.4k tax 60m', reflect: '9 lessons' });
+  assert.equal(real, 'v0.20.0 · W3 S12 be-eng 14m · 12.4k tax 60m · 9 lessons');
   assert.ok(cellWidth(real) <= 70);
-  const twenty = composeStatus({ version: 'v0.21.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '20 lessons' });
-  assert.equal(twenty, 'v0.21.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 20 lessons');
+  const twenty = composeStatus({ version: 'v0.21.0', savvy: 'W3 S12 be-eng 14m', cost: '12.4k tax 60m', reflect: '20 lessons' });
+  assert.equal(twenty, 'v0.21.0 · W3 S12 be-eng 14m · 12.4k tax 60m · 20 lessons');
   assert.ok(cellWidth(twenty) <= 70);
 });
 
@@ -295,7 +297,7 @@ test('composeStatus puts the version first, shows it next to the idle part and n
   assert.equal(composeStatus({ version: 'v0.20.0' }), 'v0.20.0');
   assert.equal(composeStatus({ version: 'v0.20.0' }, { idle: true }), 'v0.20.0 · aico idle');
   assert.equal(composeStatus({ cost: '5 tax', version: 'v0.20.0' }), 'v0.20.0 · 5 tax');
-  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), blast: 'b'.repeat(10), cost: 'c'.repeat(13), reflect: 'r'.repeat(10) };
+  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), cost: 'c'.repeat(13), reflect: 'r'.repeat(10) };
   for (const max of [60, 50, 40, 30, 20]) {
     const l = composeStatus(parts, { max });
     assert.ok(cellWidth(l) <= max, String(max));
@@ -315,16 +317,16 @@ test('parseVersion accepts x.y.z from plugin.json text and nothing else', () => 
   assert.equal(parseVersion('{"version":"' + '1'.repeat(1e6) + '.1.1"}'), undefined);
 });
 
-test('composeStatus with a small max drops reflect, cost, blast, then cuts savvy', () => {
-  const parts = { savvy: 's'.repeat(17), blast: 'b'.repeat(8), cost: 'c'.repeat(13), reflect: 'r'.repeat(8) };
-  const l1 = composeStatus(parts, { max: 50 });
-  assert.ok(cellWidth(l1) <= 50 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(13)));
-  const l2 = composeStatus(parts, { max: 40 });
-  assert.ok(cellWidth(l2) <= 40);
-  assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(13)) && l2.includes('b'.repeat(8)));
+test('composeStatus with a small max drops reflect, then cost, then cuts savvy', () => {
+  const parts = { savvy: 's'.repeat(17), cost: 'c'.repeat(13), reflect: 'r'.repeat(8) };
+  const l1 = composeStatus(parts, { max: 40 });
+  assert.ok(cellWidth(l1) <= 40 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(13)));
+  const l2 = composeStatus(parts, { max: 30 });
+  assert.ok(cellWidth(l2) <= 30);
+  assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(13)) && l2.includes('s'.repeat(17)));
   const l3 = composeStatus(parts, { max: 15 });
   assert.ok(cellWidth(l3) <= 15);
-  assert.ok(l3.endsWith('…') && !l3.includes('b'));
+  assert.ok(l3.endsWith('…') && !l3.includes('c'));
 });
 
 test('composeStatus with idle shows `aico idle` in the first slot when no run part is there', () => {
@@ -332,7 +334,7 @@ test('composeStatus with idle shows `aico idle` in the first slot when no run pa
   assert.equal(composeStatus({}, { idle: true }), 'aico idle');
   assert.equal(composeStatus({ savvy: '', cost: '   ' }, { idle: true }), 'aico idle');
   assert.equal(composeStatus(undefined, { idle: true }), 'aico idle');
-  assert.equal(composeStatus({ cost: '5 tax', blast: '⚠ core' }, { idle: true }), 'aico idle · ⚠ core · 5 tax');
+  assert.equal(composeStatus({ cost: '5 tax', reflect: '2 lessons' }, { idle: true }), 'aico idle · 5 tax · 2 lessons');
   assert.equal(composeStatus({}), undefined);
   assert.equal(composeStatus({}, { idle: false }), undefined);
 });
@@ -340,40 +342,42 @@ test('composeStatus with idle shows `aico idle` in the first slot when no run pa
 test('composeStatus with idle gives way to the Savvy part and keeps the 70 cell budget', () => {
   assert.equal(composeStatus({ savvy: 'W3 S12 be-eng 14m', cost: '5 tax' }, { idle: true }), 'W3 S12 be-eng 14m · 5 tax');
   assert.equal(composeStatus({ savvy: 'ended ok 14m' }, { idle: true }), 'ended ok 14m');
-  const all = composeStatus({ blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) }, { idle: true });
+  const all = composeStatus({ cost: 'c'.repeat(200), reflect: 'r'.repeat(200) }, { idle: true });
   assert.ok(cellWidth(all) <= STATUS_MAX);
-  assert.equal(all.split(' · ').length, 4);
+  assert.equal(all.split(' · ').length, 3);
   assert.ok(all.startsWith('aico idle · '));
   assert.ok(cellWidth(composeStatus({}, { idle: true })) <= STATUS_CAPS.savvy);
-  const small = composeStatus({ blast: 'b'.repeat(8), cost: 'c'.repeat(15), reflect: 'r'.repeat(8) }, { idle: true, max: 15 });
+  const small = composeStatus({ cost: 'c'.repeat(15), reflect: 'r'.repeat(8) }, { idle: true, max: 15 });
   assert.ok(cellWidth(small) <= 15);
 });
 
 test('composeStatus with idle ignores hostile parts and a hostile option', () => {
-  const hostile = JSON.parse('{"__proto__":"x","savvy":7,"blast":["b"],"cost":{"a":1}}');
+  const hostile = JSON.parse('{"__proto__":"x","savvy":7,"gone":["b"],"cost":{"a":1}}');
   assert.equal(composeStatus(hostile, { idle: true }), 'aico idle');
   assert.equal(composeStatus({}, { idle: 'yes' }), undefined);
 });
 
 test('readyText lists the mods that are on, in a fixed order', () => {
   const on = (enabled) => ({ enabled });
-  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true), blast_radius: on(true) }, true),
-    'aico mods ready: Savvy, Cache Tax, Reflect, Blast Radius');
+  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true) }, true),
+    'aico mods ready: Savvy, Cache Tax, Reflect');
+  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true) }, true, '0.37.0'),
+    'aico 0.37.0 mods ready: Savvy, Cache Tax, Reflect');
   assert.equal(readyText({ savvy: on(true) }, true, '0.20.0'), 'aico 0.20.0 mods ready: Savvy');
   assert.equal(readyText({ savvy: on(true) }, false, '0.20.0'), 'aico 0.20.0 mods ready (settings unknown): Savvy');
   assert.equal(readyText(null, true, '0.20.0'), 'aico 0.20.0 mods ready');
   for (const bad of ['v0.20.0', '0.20', '0.20.0\n', 'x'.repeat(100), 7, null, {}]) {
     assert.equal(readyText({ savvy: on(true) }, true, bad), 'aico mods ready: Savvy', String(bad));
   }
-  assert.equal(readyText({ savvy: on(false), cache_tax: on(true), reflect: on(false), blast_radius: on(true) }, true),
-    'aico mods ready: Cache Tax, Blast Radius');
+  assert.equal(readyText({ savvy: on(false), cache_tax: on(true), reflect: on(false) }, true),
+    'aico mods ready: Cache Tax');
   assert.equal(readyText({ savvy: on(false) }, true), 'aico mods ready: none on');
 });
 
 test('readyText says when the settings are unknown and survives hostile input', () => {
   assert.equal(readyText({ savvy: { enabled: true } }, false), 'aico mods ready (settings unknown): Savvy');
   for (const bad of [null, undefined, 'x', 7]) assert.equal(readyText(bad, true), 'aico mods ready');
-  const hostile = JSON.parse('{"__proto__":{"enabled":true},"savvy":"yes","reflect":{"enabled":"true"},"blast_radius":null}');
+  const hostile = JSON.parse('{"__proto__":{"enabled":true},"savvy":"yes","reflect":{"enabled":"true"},"gone":{"enabled":true}}');
   assert.equal(readyText(hostile, true), 'aico mods ready: none on');
   assert.ok(readyText({ savvy: { enabled: true } }, true).length <= 80);
 });
