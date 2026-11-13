@@ -1754,36 +1754,6 @@ function textRow(parent, o) {
   parent.append(fs);
   return fs;
 }
-function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, format, opts = {}) {
-  const effect = el('p', { class: 'readout', 'aria-live': 'polite' });
-  const lockId = `lock-${path.join('-')}`;
-  const level = lvl();
-  const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock) : null;
-  const control = bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard);
-  control.id = `f-${path.join('-')}-${level}`;
-  if (opts.problem) withProblem(control, label, opts.problem);
-  const desc = [opts.lock ? lockId : '', opts.describedBy ?? control.getAttribute('aria-describedby') ?? ''].filter(Boolean).join(' ');
-  if (desc) { control.baseDesc = desc; control.setAttribute('aria-describedby', desc); }
-  const head = el('label', { class: 'ctl-label', for: control.id }, label);
-  if (opts.lock) {
-    const why = el('span', { class: 'lockcap', id: lockId });
-    head.append(why);
-    syncers.push(() => {
-      const open = userUnlocked(opts.lock);
-      why.classList.toggle('locked', !open);
-      const text = open ? 'Unlocked by you.' : `Locked. ${opts.lockedValue} needs your ${opts.lock === 'security' ? 'security' : UNLOCK_NAMES[opts.lock]} unlock.`;
-      if (why.textContent !== text) why.textContent = text;
-    });
-  }
-  head.append(el('span', { class: 'edited', 'aria-hidden': 'true' }, el('i', { class: 'led' }), 'edited'));
-  const fieldset = el('fieldset', { class: 'ctl' }, head, control, control.errEl ?? '', effect);
-  tbody.append(fieldset);
-  syncers.push(() => {
-    const was = JSON.stringify(getIn(skillBase[level] ?? state[level], path));
-    fieldset.classList.toggle('dirty', JSON.stringify(getIn(outgoing(level), path)) !== was);
-  });
-  syncers.push(() => showEffect(effect, path, pluginValue, format, getIn(state.resolved, path)));
-}
 // Plan check rows: each control has a visible label, the shared hint and, when refused, its own error text.
 const PLAN_POLICIES = ['off', 'warn', 'block'];
 const PLAN_RUNS_RANGE = 'a whole number from 3 to 50';
@@ -1986,27 +1956,28 @@ function renderGates(panel) {
 }
 
 // ---------- Mods tab ----------
-const onOffChoice = (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' });
+const ONOFF_LABELS = { true: 'on', false: 'off' };
 function renderMods(panel) {
   const defaults = state.plugin.mods;
   panel.append(panelHead('Mods', 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.'));
   const units = el('div', { class: 'units' });
   panel.append(units);
+  const onOffRow = (rack, label, path, pluginValue) => switchRow(rack, { label, path, pluginValue, options: ['true', 'false'], labels: ONOFF_LABELS, decode: (s) => s === 'true', format: onOff });
   for (const mod of MODS) {
-    const label = MOD_LABELS[mod];
-    const tbody = el('div', { class: 'rack' });
-    const unit = el('section', { class: 'unit' }, [
-      el('div', { class: 'unit-h' }, [el('span', { class: 'screw', 'aria-hidden': 'true' }), el('h3', {}, label)]),
-      tbody,
-    ]);
-    units.append(unit);
-    pipelineRow(tbody, `${label} on/off`, ['mods', mod, 'enabled'], defaults[mod].enabled, onOffChoice, (s) => s === 'true', onOff);
+    const title = MOD_LABELS[mod];
+    const rack = el('div', { class: 'rack' });
+    units.append(el('section', { class: 'unit', 'aria-label': title }, [
+      el('div', { class: 'unit-h' }, [el('span', { class: 'screw', 'aria-hidden': 'true' }), el('h3', {}, title)]),
+      rack,
+    ]));
+    onOffRow(rack, 'Power', ['mods', mod, 'enabled'], defaults[mod].enabled);
     if (mod !== 'reflect') {
-      pipelineRow(tbody, `${label} pane`, ['mods', mod, 'pane'], defaults[mod].pane, (l) => selectFor(['auto', 'command'], l), String, String);
+      switchRow(rack, { label: 'Pane', path: ['mods', mod, 'pane'], pluginValue: defaults[mod].pane, options: ['auto', 'command'] });
     } else {
-      pipelineRow(tbody, 'Reflect step check', ['mods', 'reflect', 'step_check'], defaults.reflect.step_check, onOffChoice, (s) => s === 'true', onOff);
-      pipelineRow(tbody, 'Reflect retrospective', ['mods', 'reflect', 'retrospective'], defaults.reflect.retrospective, onOffChoice, (s) => s === 'true', onOff);
-      pipelineRow(tbody, 'Reflect mode', ['mods', 'reflect', 'mode'], defaults.reflect.mode, (l) => selectFor(['deterministic', 'model'], l), String, String);
+      onOffRow(rack, 'Step check', ['mods', 'reflect', 'step_check'], defaults.reflect.step_check);
+      onOffRow(rack, 'Retrospective', ['mods', 'reflect', 'retrospective'], defaults.reflect.retrospective);
+      switchRow(rack, { label: 'Mode', path: ['mods', 'reflect', 'mode'], pluginValue: defaults.reflect.mode, options: ['deterministic', 'model'],
+        onSync: (control) => control.classList.toggle('ignored', lvl() === 'project' && control.value === 'model') });
     }
   }
   panel.append(el('p', { class: 'hint' }, 'Pane auto: the pane opens by itself when a run starts, where the surface docks it. Reflect model mode spends tokens and is written to the token ledger.'));
