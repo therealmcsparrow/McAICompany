@@ -1403,7 +1403,8 @@ function planRecAt(level, key) {
 }
 function ghostPlanText(rec, text) {
   rec.message = text;
-  if (!['policy', 'runs'].includes(rec.key)) rec.text = `${rec.label}, ${rec.level} level: ${text.replace(/^Error: /, '').replace(`${rec.label} `, '')}`;
+  const reason = text.replace(/^Error: /, '').replace(`${rec.label} `, '');
+  rec.text = ['policy', 'runs'].includes(rec.key) ? `Plan check, ${rec.label}, ${rec.level} level: ${reason}` : `${rec.label}, ${rec.level} level: ${reason}`;
 }
 function mapRefusals(lines) {
   const rest = [];
