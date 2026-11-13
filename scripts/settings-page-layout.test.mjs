@@ -86,6 +86,31 @@ test('layout: Language and profile is a rack of controls with a profile block', 
   for (const c of ['rack', 'profile']) assert.ok(hasClass(src, c), `Language builds .${c}`);
 });
 
+test('layout: Language field is labelled "Writing language", with a linked hint, ladder and polite readout', () => {
+  const src = fnBody('renderLanguage');
+  assert.ok(/id:\s*`lang-\$\{scope\}`/.test(src), 'input id lang-{scope}');
+  assert.ok(/'label',\s*\{[^}]*for:\s*input\.id[^}]*\},\s*'Writing language'/.test(src), 'label for the input reads "Writing language"');
+  assert.ok(!/aria-label['"]?\s*[:,]\s*['"`]?(Writing )?[Ll]anguage/.test(src.replace(/'Values per level'/g, '')), 'no aria-label on the Language input');
+  const field = src.slice(0, src.indexOf('panel.append(rack)'));
+  assert.ok(!/input\.setAttribute\('aria-label'/.test(field) && !/el\('input',[^)]*aria-label/.test(field), 'input has no aria-label');
+  assert.ok(/const hintId = `lang-\$\{scope\}-hint`/.test(src), 'hint id lang-{scope}-hint');
+  assert.ok(/class:\s*'hint',\s*id:\s*hintId\s*\}/.test(src), 'hint element carries that id');
+  assert.ok(src.includes('Stored at the ${scope} level. Project wins over User; the plugin default is en.'), 'hint text');
+  assert.ok(/input\.setAttribute\('aria-describedby',\s*hintId\)/.test(src), 'input aria-describedby points at the hint');
+  assert.ok(hasClass(src, 'ladder'), 'builds .ladder');
+  assert.ok(/part\('plugin', 'en', 'plugin'\)[\s\S]*part\('user'[\s\S]*part\('project'/.test(src), 'ladder order: plugin en, user, project');
+  assert.ok(/class:\s*'readout',\s*'aria-live':\s*'polite'/.test(src), 'readout is aria-live polite');
+  assert.ok(src.indexOf("class: 'ladder'") < src.indexOf("class: 'readout'"), 'ladder is built before the readout');
+  assert.ok(/input, errEl, ladder, langEffect\)/.test(src), 'ladder sits above the readout in the box');
+});
+
+test('layout: Language value is saved through its own body.language key, not the settings layers', () => {
+  const save = fnBody('save');
+  assert.ok(/const language = changedLanguage\(\);\s*if \(Object\.keys\(language\)\.length\) body\.language = language;/.test(save), 'body.language from changedLanguage()');
+  assert.ok(!/outgoing\(/.test(fnBody('renderLanguage')), 'renderLanguage does not feed the settings body');
+  assert.ok(/draft\.language\[scope\] = input\.value/.test(fnBody('renderLanguage')), 'input writes draft.language, not draft[level]');
+});
+
 test('layout: Pipeline is racks of labelled controls with level readouts', () => {
   assert.ok(hasClass(fnBody('renderPipeline'), 'rack'), 'Pipeline builds .rack');
   for (const c of ['ctl', 'ctl-label', 'readout', 'lockcap']) assert.ok(hasClass(SCRIPT, c), `page builds .${c}`);
