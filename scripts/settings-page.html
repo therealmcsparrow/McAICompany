@@ -2190,7 +2190,8 @@ function applySkillFilter() {
 
 function renderSkills(panel) {
   skFilterUI = null;
-  panel.append(panelHead('Skills'));
+  const skHead = panelHead('Skills');
+  panel.append(skHead);
   if (!isObj(state.catalog) || !Array.isArray(state.catalog.entries)) {
     panel.append(el('p', { class: 'hint' }, 'The settings server sent no skill data.'));
     return;
@@ -2283,7 +2284,7 @@ function renderSkills(panel) {
   }
   const entries = skillEntries();
   const hasOwn = entries.some((e) => e.layer === 'user');
-  panel.append(el('p', { class: 'notice info', id: 'skills-info' }, SKILL_INFO, hasOwn ? '' : ` ${SKILL_ADD_HINT}`));
+  skHead.append(el('p', { class: 'hint', id: 'skills-info' }, SKILL_INFO, hasOwn ? '' : ` ${SKILL_ADD_HINT}`));
   const input = el('input', { type: 'text', id: 'skfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'skfilter-hint' });
   input.value = skFilter;
   input.addEventListener('input', () => { skFilter = input.value; applySkillFilter(); });
