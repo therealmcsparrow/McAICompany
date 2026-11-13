@@ -629,10 +629,10 @@ function bindLayer(control, level, path, decode = (s) => s, guard = null) {
   return control;
 }
 // For locked settings at user level: opens the dialog before a value that needs the unlock.
-function lockGuard(lockKey, needsUnlock, dialogKey = lockKey) {
+function lockGuard(lockKey, needsUnlock) {
   return async (value) => {
     if (!needsUnlock(value) || userUnlocked(lockKey)) return true;
-    if (!(await confirmUnlock(dialogKey))) return false;
+    if (!(await confirmUnlock(lockKey))) return false;
     setUnlock(lockKey, true);
     return true;
   };
@@ -1319,7 +1319,7 @@ function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, forma
   const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
   const lockId = `lock-${path.join('-')}`;
   const cells = ['user', 'project'].map((level) => {
-    const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock, opts.dialog) : null;
+    const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock) : null;
     const control = bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard);
     if (opts.problem) withProblem(control, label, opts.problem);
     const desc = [opts.lock ? lockId : '', opts.describedBy ?? control.getAttribute('aria-describedby') ?? ''].filter(Boolean).join(' ');
