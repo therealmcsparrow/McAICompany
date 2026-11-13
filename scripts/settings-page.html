@@ -816,17 +816,6 @@ function confirmUnlock(key) {
   });
 }
 
-// Cells get their column header as data-label, which the stacked layout shows above each value.
-function labelCells(node) {
-  for (const c of node.children ?? []) {
-    if (c.tagName !== 'TABLE') { labelCells(c); continue; }
-    const heads = [...(c.children[0]?.children[0]?.children ?? [])].map((th) => th.textContent);
-    for (const tr of c.children[1]?.children ?? []) {
-      if (tr.className === 'dept') continue;
-      [...tr.children].forEach((cell, i) => cell.setAttribute('data-label', heads[i] ?? ''));
-    }
-  }
-}
 function table() {
   const wrap = el('div', { class: 'rack' });
   return { wrap, tbody: wrap };
@@ -1836,10 +1825,16 @@ const onOffChoice = (l) => selectFor(['true', 'false'], l, { true: 'on', false: 
 function renderMods(panel) {
   const defaults = state.plugin.mods;
   panel.append(el('p', { class: 'hint' }, 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.'));
+  const units = el('div', { class: 'units' });
+  panel.append(units);
   for (const mod of MODS) {
-    panel.append(el('h2', {}, MOD_LABELS[mod]));
-    const { wrap, tbody } = table();
     const label = MOD_LABELS[mod];
+    const tbody = el('div', { class: 'rack' });
+    const unit = el('section', { class: 'unit' }, [
+      el('div', { class: 'unit-h' }, [el('span', { class: 'screw', 'aria-hidden': 'true' }), el('h3', {}, label)]),
+      tbody,
+    ]);
+    units.append(unit);
     pipelineRow(tbody, `${label} on/off`, ['mods', mod, 'enabled'], defaults[mod].enabled, onOffChoice, (s) => s === 'true', onOff);
     if (mod !== 'reflect') {
       pipelineRow(tbody, `${label} pane`, ['mods', mod, 'pane'], defaults[mod].pane, (l) => selectFor(['auto', 'command'], l), String, String);
@@ -1848,7 +1843,6 @@ function renderMods(panel) {
       pipelineRow(tbody, 'Reflect retrospective', ['mods', 'reflect', 'retrospective'], defaults.reflect.retrospective, onOffChoice, (s) => s === 'true', onOff);
       pipelineRow(tbody, 'Reflect mode', ['mods', 'reflect', 'mode'], defaults.reflect.mode, (l) => selectFor(['deterministic', 'model'], l), String, String);
     }
-    panel.append(wrap);
   }
   panel.append(el('p', { class: 'hint' }, 'Pane auto: the pane opens by itself when a run starts, where the surface docks it. Reflect model mode spends tokens and is written to the token ledger.'));
 }
@@ -1868,9 +1862,9 @@ function scanModeSelect(label) {
 }
 function renderScan(panel) {
   panel.append(el('h2', {}, 'SkillSpector'));
-  const ss = table();
-  pipelineRow(ss.tbody, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm', scanModeSelect, String, String);
-  panel.append(ss.wrap);
+  const rack = el('div', { class: 'rack' });
+  pipelineRow(rack, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm', scanModeSelect, String, String);
+  panel.append(rack);
   panel.append(el('p', { class: 'hint', id: 'scan-note' }, SCAN_NOTE));
 }
 
@@ -2214,7 +2208,6 @@ function render() {
     const panel = document.getElementById(`panel-${name}`);
     panel.replaceChildren();
     fn(panel);
-    labelCells(panel);
   }
   const project = document.getElementById('lvl-project');
   project.disabled = !projectOn();
