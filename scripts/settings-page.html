@@ -1347,8 +1347,58 @@ function personalityProblems() {
   }
   return bad;
 }
+// The level the header switch is not showing has no controls; it is checked from the draft instead.
+const hiddenLevel = () => (lvl() === 'user' ? 'project' : 'user');
+const hiddenLevelOn = () => hiddenLevel() === 'user' || projectOn();
+function ghostPersonality(level, role, key) {
+  if (!pRoles[role] || !P_KEYS.includes(key) || level === lvl() || !(level === 'user' || projectOn())) return null;
+  return { ghost: true, role, level, key, id: `pf-${role}-${level}-${key}`, isText: P_TEXT.includes(key), error: '', refused: true, sticky: false };
+}
+function hiddenPersonalityProblems() {
+  const bad = [];
+  if (!hiddenLevelOn()) return bad;
+  const level = hiddenLevel();
+  for (const [role, entry] of Object.entries(draft[level].roles ?? {})) {
+    for (const key of P_KEYS) {
+      const rec = ghostPersonality(level, role, key);
+      const message = rec && fieldProblem(key, getIn(entry, ['personality', key]) ?? '');
+      if (!message) continue;
+      rec.error = message;
+      bad.push(rec);
+    }
+  }
+  return bad;
+}
+function hiddenPlanProblems() {
+  if (!hiddenLevelOn()) return [];
+  const level = hiddenLevel();
+  const raw = draft[level].plan_check?.runs;
+  const message = raw === undefined ? '' : runsProblem('Verdict runs', String(raw));
+  return message ? [{ ghost: true, key: 'runs', level, label: 'Verdict runs', message, sticky: '', control: { id: `pc-runs-${level}` } }] : [];
+}
+// Shows the level a summary link points at, then returns the live control record for the ghost one.
+function showLevel(level) {
+  if (lvl() === level) return;
+  for (const radio of document.querySelectorAll('input[name="lvl"]')) radio.checked = radio.value === level;
+  render();
+}
 const REFUSED_PERSONALITY = /^(user|project) roles\.([a-z0-9-]+)\.personality\.([a-z_]+): /;
 // Maps server refusal lines to fields by their leading path. The text comes from the page, never from the line.
+const PLAN_LABELS = { policy: 'Policy', runs: 'Verdict runs', parallel_cap: 'Parallel cap', short_path: 'Short path' };
+const PLAN_IDS = { policy: (l) => `pc-policy-${l}`, runs: (l) => `pc-runs-${l}`, parallel_cap: (l) => `parallel-cap-${l}`, short_path: (l) => `short-path-${l}` };
+// The live record, else one for the hidden level so its refusal is still counted and linked.
+function planRecAt(level, key) {
+  const live = planRecs.find((r) => r.level === level && r.key === key);
+  if (live) return live;
+  const spec = USER_ONLY_ROWS[key];
+  const id = spec ? `${spec.slug}-user` : PLAN_IDS[key]?.(level);
+  if (!id || level === lvl() || !(level === 'user' || projectOn()) || (spec && level !== 'user')) return null;
+  return { ghost: true, key, level, label: spec?.label ?? PLAN_LABELS[key], control: { id, value: '' }, sticky: '', message: '', text: '' };
+}
+function ghostPlanText(rec, text) {
+  rec.message = text;
+  if (!['policy', 'runs'].includes(rec.key)) rec.text = `${rec.label}, ${rec.level} level: ${text.replace(/^Error: /, '').replace(`${rec.label} `, '')}`;
+}
 function mapRefusals(lines) {
   const rest = [];
   const marked = [];
@@ -1360,44 +1410,53 @@ function mapRefusals(lines) {
       rest.push(markSkillRefused(krec, line));
       continue;
     }
+    if (km && km[1] !== lvl() && hiddenLevelOn()) {
+      rest.push(`${roleLabel(km[2])}, ${km[1]} level, Skills: the server refused the list: ${skillRefusalReason(line)}`);
+      continue;
+    }
     const pm = REFUSED_PLAN_CHECK.exec(line);
-    const prec = pm && planRecs.find((r) => r.level === pm[1] && r.key === pm[2]);
+    const prec = pm && planRecAt(pm[1], pm[2]);
     if (prec) {
       prec.sticky = `Error: ${prec.label} ${PLAN_REFUSAL[prec.key]}`;
       prec.stickyValue = prec.control.value;
       prec.message = prec.sticky;
+      if (prec.ghost) ghostPlanText(prec, prec.sticky);
       if (!plan.includes(prec)) plan.push(prec);
       continue;
     }
     const cm = REFUSED_PARALLEL_CAP.exec(line);
-    const crec = cm && planRecs.find((r) => r.level === cm[1] && r.key === 'parallel_cap');
+    const crec = cm && planRecAt(cm[1], 'parallel_cap');
     if (crec) {
       crec.sticky = `Error: ${crec.label} ${PARALLEL_CAP_REFUSAL}`;
       crec.stickyValue = crec.control.value;
+      if (crec.ghost) ghostPlanText(crec, crec.sticky);
       if (!plan.includes(crec)) plan.push(crec);
       continue;
     }
     const sm = REFUSED_SHORT_PATH.exec(line);
-    const srec = sm && planRecs.find((r) => r.level === sm[1] && r.key === 'short_path');
+    const srec = sm && planRecAt(sm[1], 'short_path');
     if (srec) {
       srec.sticky = `Error: ${srec.label} ${SHORT_PATH_REFUSAL}`;
       srec.stickyValue = srec.control.value;
+      if (srec.ghost) ghostPlanText(srec, srec.sticky);
       if (!plan.includes(srec)) plan.push(srec);
       continue;
     }
     const um = REFUSED_USER_ONLY.exec(line);
-    const urec = um && planRecs.find((r) => r.level === um[1] && r.key === um[2]);
+    const urec = um && planRecAt(um[1], um[2]);
     if (urec) {
       urec.sticky = `Error: ${urec.label} ${USER_ONLY_REFUSAL[urec.key]}`;
       urec.stickyValue = urec.control.value;
+      if (urec.ghost) ghostPlanText(urec, urec.sticky);
       if (!plan.includes(urec)) plan.push(urec);
       continue;
     }
     const m = REFUSED_PERSONALITY.exec(line);
-    const rec = m && pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]);
+    const rec = m && (pRecs.find((r) => r.level === m[1] && r.role === m[2] && r.key === m[3]) ?? ghostPersonality(m[1], m[2], m[3]));
     if (!rec) { rest.push(line); continue; }
     const own = fieldProblem(rec.key, draftAt(rec) ?? '');
-    setError(rec, own || `Error: ${P_LABELS[rec.key]} was refused. ${rec.isText ? CHARSET_COPY : 'Choose one of the levels, or Not set.'}`);
+    const text = own || `Error: ${P_LABELS[rec.key]} was refused. ${rec.isText ? CHARSET_COPY : 'Choose one of the levels, or Not set.'}`;
+    if (rec.ghost) rec.error = text; else setError(rec, text);
     rec.sticky = own === '';
     rec.refused = true;
     marked.push(rec);
@@ -1425,12 +1484,26 @@ function jumpTo(rec) {
 }
 function fieldLink(rec) {
   const link = el('a', { href: `#${rec.id}` }, refusalText(rec));
-  link.addEventListener('click', (e) => { e.preventDefault(); jumpTo(rec); });
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    // The record may belong to a level that is hidden now, or to a render that was replaced: find the live control by id.
+    showLevel(rec.level);
+    const live = pRecs.find((r) => r.id === rec.id);
+    if (!live) return;
+    if (live !== rec) {
+      setError(live, rec.error);
+      live.sticky = rec.sticky;
+      live.refused = true;
+      refresh();
+    }
+    jumpTo(live);
+  });
   return link;
 }
 // The error summary: a heading that takes focus, then one item per refused line.
 function refusedStatus(marked, rest, plan = []) {
-  const fields = [...marked].sort((a, b) => pRecs.indexOf(a) - pRecs.indexOf(b));
+  // User level first; inside a level, page order (a record of the hidden level has no page position).
+  const fields = [...marked].sort((a, b) => (a.level === b.level ? pRecs.indexOf(a) - pRecs.indexOf(b) : a.level === 'user' ? -1 : 1));
   const n = fields.length + plan.length + rest.length;
   const heading = el('h2', { class: 'sum-title', id: 'status-heading', tabIndex: -1 }, `Nothing was saved. Fix ${n} ${n === 1 ? 'field' : 'fields'}:`);
   const list = el('ul', {}, fields.map((rec) => el('li', {}, fieldLink(rec))), plan.map((rec) => el('li', {}, planLink(rec))), rest.map((line) => el('li', {}, line)));
@@ -1731,9 +1804,17 @@ function planLink(rec) {
   const link = el('a', { href: `#${rec.control.id}` }, planRefusalText(rec));
   link.addEventListener('click', (e) => {
     e.preventDefault();
+    showLevel(rec.level);
     selectTab('pipeline');
-    rec.control.focus();
-    if (typeof rec.control.scrollIntoView === 'function') rec.control.scrollIntoView({ block: 'center' });
+    const live = planRecs.find((r) => r.level === rec.level && r.key === rec.key);
+    if (!live) return;
+    if (live !== rec && rec.sticky) {
+      live.sticky = rec.sticky;
+      live.stickyValue = live.control.value;
+      refresh();
+    }
+    live.control.focus();
+    if (typeof live.control.scrollIntoView === 'function') live.control.scrollIntoView({ block: 'center' });
   });
   return link;
 }
@@ -2005,10 +2086,11 @@ function refuseSkill(rec, row, text) {
   refresh();
   rec.err.scrollIntoView({ block: 'nearest' });
 }
+const skillRefusalReason = (line) => (line.includes('at most') ? 'a Role can have 5 skills.'
+  : line.includes('protected Role') ? 'skills are chosen at User level only.'
+  : 'a skill in the list is not available for this Role.');
 function markSkillRefused(rec, line) {
-  const reason = line.includes('at most') ? 'a Role can have 5 skills.'
-    : line.includes('protected Role') ? 'skills are chosen at User level only.'
-    : 'a skill in the list is not available for this Role.';
+  const reason = skillRefusalReason(line);
   rec.refused = true;
   rec.message = `Error: Skills for ${rec.role}, ${rec.level} level, were refused: ${reason}`;
   rec.refusedRow = null;
@@ -2344,9 +2426,9 @@ const unreachable = () => status('err', 'Can\'t reach the settings server. It st
 async function save() {
   if (document.getElementById('save').getAttribute('aria-disabled') === 'true') return;
   const previousId = document.activeElement?.id ?? '';
-  const bad = personalityProblems();
+  const bad = [...personalityProblems(), ...hiddenPersonalityProblems()];
   refresh();
-  const badPlan = planProblems();
+  const badPlan = [...planProblems(), ...hiddenPlanProblems()];
   if (bad.length || badPlan.length) {
     refusedStatus(bad, [], badPlan);
     return;
