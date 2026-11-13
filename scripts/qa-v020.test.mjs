@@ -1731,7 +1731,7 @@ describe('AC30 a gate-locked setting shows its lock reason on the page', () => {
   });
   test('every locked gate and lane row uses the lock option', () => {
     assert.match(page, /const lock = LOCKED_LANES\.includes\(lane\) \? \{ key: 'security'/);
-    assert.match(page, /const lock = LOCKED_GATES\.includes\(gate\) \? \{ lock: gate/);
+    assert.match(page, /const lock = LOCKED_GATES\.includes\(gate\) \? \{ key: gate, lockedValue: 'auto'/);
     const gates = /const LOCKED_GATES = (\[[^\]]*\])/.exec(page);
     const lanes = /const LOCKED_LANES = (\[[^\]]*\])/.exec(page);
     assert.ok(gates && lanes);

@@ -154,8 +154,13 @@ async function open(overrides, fetchImpl) {
   await settle();
   return page;
 }
-function rowSelect(page, label, level) {
-  return page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === `${label}, ${level}`);
+// Gate rows are switchRow fieldsets (.ctl.gate): the legend names the row and the level, the fieldset carries the lock reason, the .seg.bigsw radio group is the control.
+function gateRow(page, label, level) {
+  return page.find((n) => n.tagName === 'FIELDSET' && n.className.split(' ').includes('gate')
+    && n.children.some((c) => c.tagName === 'LEGEND' && c.textContent.startsWith(label) && c.textContent.includes(`, ${level} level`)));
+}
+function gateSeg(row) {
+  return row.children.find((c) => c.tagName === 'DIV' && c.className.split(' ').includes('seg'));
 }
 
 test('the Roles tab shows the pseudonym notice as text, and the old claim is gone', async () => {
@@ -231,13 +236,15 @@ test('every locked Gate row shows its reason as text, tied to the control at eac
   assert.ok(reasons);
   for (const [label, , text] of LOCKED_ROWS) {
     await page.setLevel('user');
-    const user = rowSelect(page, label, 'user');
+    const user = gateRow(page, label, 'user');
     assert.ok(user, label);
+    assert.ok(gateSeg(user).className.split(' ').includes('bigsw'), label);
+    assert.ok(gateSeg(user).radios.length > 0, label);
     const id = describedBy(user)[0];
     assert.match(id, /^lock-/);
     assert.equal(textOf(page, id), text);
     await page.setLevel('project');
-    const project = rowSelect(page, label, 'project');
+    const project = gateRow(page, label, 'project');
     assert.ok(project, label);
     assert.equal(describedBy(project)[0], id);
     assert.equal(textOf(page, id), text);
@@ -262,16 +269,17 @@ test('lane rows carry the security reason', async () => {
 
 test('rows without a lock keep no lock reason', async () => {
   const page = await open();
-  const control = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === 'Legal, user') ?? rowSelect(page, 'Plan', 'user');
+  const control = gateRow(page, 'Plan', 'user');
   assert.ok(control);
   assert.ok(!describedBy(control).some((id) => id.startsWith('lock-')));
+  assert.equal(walkAll(control, (n) => typeof n.id === 'string' && n.id.startsWith('lock-')).length, 0);
 });
 
 test('the unlocked state replaces the reason text', async () => {
   const page = await open({ user: { version: 1, unlocked: ['ship'] } });
-  const id = describedBy(rowSelect(page, 'Ship', 'user'))[0];
+  const id = describedBy(gateRow(page, 'Ship', 'user'))[0];
   assert.equal(textOf(page, id), 'Unlocked by you.');
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Installs', 'user'))[0]), 'Locked. auto needs your Installs unlock.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Installs', 'user'))[0]), 'Locked. auto needs your Installs unlock.');
 });
 
 test('the lock reason changes with the unlock and the change is announced, not the load', async () => {
@@ -285,19 +293,20 @@ test('the lock reason changes with the unlock and the change is announced, not t
   await page.ids['unlock-ok'].fire('click');
   await pending;
   await settle();
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Unlocked by you.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Unlocked by you.');
   assert.equal(page.ids['lock-live'].textContent, 'Ship unlocked. auto now applies.');
   const again = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-label') === 'Ship unlock, user');
   assert.equal(again.getAttribute('aria-pressed'), 'true');
   await again.fire('click');
   await settle();
   assert.equal(page.ids['lock-live'].textContent, 'Ship locked again. auto is held until you unlock it.');
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
 });
 
 test('cancelling the dialog keeps the lock and says so', async () => {
   const page = await open();
-  const ship = rowSelect(page, 'Ship', 'user');
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  assert.ok(ship.radios.some((r) => r.value === 'auto'));
   ship.value = 'auto';
   const pending = ship.fire('change');
   await settle();
@@ -306,7 +315,8 @@ test('cancelling the dialog keeps the lock and says so', async () => {
   await pending;
   await settle();
   assert.equal(page.ids['lock-live'].textContent, 'Kept locked. Your choice was not applied.');
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
+  assert.ok(gateSeg(gateRow(page, 'Ship', 'user')).value !== 'auto');
 });
 
 test('the page keeps the dialog and a separate polite live region for locks, and sets text without innerHTML', () => {
