@@ -137,6 +137,7 @@ button, input, select { font: inherit; color: inherit; }
 .brand h1 span { color: var(--color-ink-2); font-weight: 500; }
 .brand p { margin-top: var(--space-2); color: var(--color-ink-2); font-size: var(--text-sm); max-width: 62ch; }
 .legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); }
+.legend { list-style: none; padding: 0; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 
 .rocker { border: 0; margin: 0; padding: 0; min-width: 0; }
@@ -411,7 +412,6 @@ dialog::backdrop { background: var(--color-scrim); }
 .ctl select, .field select, .ctl input[type="text"], .ctl textarea, .strip .cf input[type="text"], .scribble, .pers summary, .annun summary { min-height: 44px; }
 .seg label, .rocker label, .mbank label, .annun summary { justify-content: center; }
 .mbank label { padding: 2px 8px; }
-.annun summary { display: flex; align-items: center; }
 
 /* a project value that is held (ignored) reads muted with a dashed border, so colour is not the only cue */
 select.ignored { color: var(--color-ink-2); border-style: dashed; }
@@ -435,6 +435,7 @@ select.ignored { color: var(--color-ink-2); border-style: dashed; }
 .src[data-src="user"] { color: var(--color-text-user); } .src[data-src="project"] { color: var(--color-text-project); }
 .src[data-src="locked"], .src[data-src="floor"] { color: var(--color-text-lock); }
 .held { display: block; color: var(--color-text-lock); font-size: var(--text-xs); }
+.pill[hidden] { display: none; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--color-panel-2); font-size: var(--text-xs); }
 .small { font-size: var(--text-xs); color: var(--color-ink-2); }
 .ro, .lockwhy { color: var(--color-ink-2); font-size: var(--text-sm); }
@@ -918,6 +919,7 @@ const NAME_HINTS = {
 };
 const NAMES_NOTICE = "Use a pseudonym, never a real person's name. Names are shown only to you; Roles get their Role id, not your name, in prompts.";
 const EFFORT_TICKS = ['—', 'low', 'med', 'high', 'xhi', 'max'];
+const panelHead = (title, ...hints) => el('div', { class: 'panel-head' }, el('h2', {}, title), hints.map((h) => (h instanceof Node ? h : el('p', { class: 'hint' }, h))));
 const sectionHead = (text) => el('div', { class: 'section-h' }, el('h3', {}, text));
 // One channel strip: name, model key-caps, vertical effort fader and what is in effect, for the editing level.
 function roleStrip(role) {
@@ -1275,7 +1277,8 @@ function renderPersonality(panel) {
   pRoles = {};
   filterUI = null;
   const data = state.personalities;
-  panel.append(el('h2', {}, 'Personality'));
+  const personalityHead = panelHead('Personality');
+  panel.append(personalityHead);
   if (data === null || typeof data !== 'object') {
     panel.append(el('p', { class: 'hint' }, 'The settings server sent no personality data.'));
     return;
@@ -1283,7 +1286,7 @@ function renderPersonality(panel) {
   const rule = personalityRule();
   const entries = Array.isArray(data.ignored) ? data.ignored.filter(isIgnoredEntry) : [];
   const ignoredPaths = new Set(entries.map((e) => `${e.level}|${e.path}`));
-  panel.append(el('p', { class: 'hint' }, PERSONALITY_HINT));
+  personalityHead.append(el('p', { class: 'hint' }, PERSONALITY_HINT));
   // One Role card: summary line (who, gist, pills) and a body with the editing level's fields.
   function roleCard(role, rule, ignoredPaths) {
     const details = el('details', { class: 'pcard' });
@@ -1298,7 +1301,7 @@ function renderPersonality(panel) {
     details.append(el('div', { class: 'pbody body' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
     return details;
   }
-  const input = el('input', { type: 'text', id: 'pfilter', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
+  const input = el('input', { type: 'text', id: 'pfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
   input.value = filterText;
   input.addEventListener('input', () => { filterText = input.value; applyFilter(); });
   filterUI = { input, count: el('p', { id: 'pcount', role: 'status' }), labels: [] };
@@ -1521,6 +1524,7 @@ function refusedStatus(marked, rest, plan = []) {
 
 // ---------- Language & profile tab ----------
 function renderLanguage(panel) {
+  panel.append(panelHead('Language & profile'));
   if (!profileOn()) panel.append(el('p', { class: 'notice info' }, 'No .company/project.md here, so the profile and the project language are off. Open the page from a product repo to edit them.'));
   const scope = lvl();
   const rack = el('div', { class: 'rack' });
@@ -1622,7 +1626,13 @@ function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, forma
       if (why.textContent !== text) why.textContent = text;
     });
   }
-  tbody.append(el('fieldset', { class: 'ctl' }, head, control, control.errEl ?? '', effect));
+  head.append(el('span', { class: 'edited', 'aria-hidden': 'true' }, el('i', { class: 'led' }), 'edited'));
+  const fieldset = el('fieldset', { class: 'ctl' }, head, control, control.errEl ?? '', effect);
+  tbody.append(fieldset);
+  syncers.push(() => {
+    const was = JSON.stringify(getIn(skillBase[level] ?? state[level], path));
+    fieldset.classList.toggle('dirty', JSON.stringify(getIn(outgoing(level), path)) !== was);
+  });
   syncers.push(() => showEffect(effect, path, pluginValue, format, getIn(state.resolved, path)));
 }
 // Plan check rows: each control has a visible label, the shared hint and, when refused, its own error text.
@@ -1828,6 +1838,7 @@ function planLink(rec) {
 const onOff = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
 function renderPipeline(panel) {
   const defaults = state.plugin.pipeline;
+  panel.append(panelHead('Pipeline'));
   const wrap = el('div', { class: 'rack' });
   const tbody = wrap;
   pipelineRow(tbody, 'Fix rounds', ['pipeline', 'fix_rounds'], defaults.fix_rounds,
@@ -1850,21 +1861,21 @@ function renderPipeline(panel) {
   panel.append(el('p', { class: 'hint', id: 'second-reviewer-hint' }, SECOND_REVIEWER_HINT));
   panel.append(el('p', { class: 'hint', id: 'second-reviewer-model-hint' }, SECOND_REVIEWER_MODEL_HINT));
   panel.append(el('p', { class: 'hint', id: 'worktrees-hint' }, WORKTREES_HINT));
-  panel.append(el('h2', {}, 'Reprompt'));
+  panel.append(sectionHead('Reprompt'));
   const rp = table();
   const rpDefaults = state.plugin.reprompt;
   pipelineRow(rp.tbody, 'Question rounds', ['reprompt', 'question_rounds'], rpDefaults.question_rounds,
     (l) => selectFor([0, 1, 2, 3], l), Number, String, { describedBy: 'reprompt-hint' });
   panel.append(rp.wrap);
   panel.append(el('p', { class: 'hint', id: 'reprompt-hint' }, 'How often /aico:reprompt may come back with questions before it writes the prompt on stated assumptions. 0: it never asks.'));
-  panel.append(el('h2', {}, 'Plan check'));
+  panel.append(sectionHead('Plan check'));
   const pc = table();
   const pcDefaults = state.plugin.plan_check;
   planCheckRow(pc.tbody, 'policy', 'Policy', pcDefaults.policy, () => selectFor(PLAN_POLICIES, null), String, null);
   planCheckRow(pc.tbody, 'runs', 'Verdict runs', pcDefaults.runs, () => el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), (s) => (/^\d{1,6}$/.test(s.trim()) ? Number(s) : s), runsProblem);
   panel.append(pc.wrap);
   panel.append(el('p', { class: 'hint', id: 'plan-check-hint' }, 'Plan check lists open choices in the plan at the Plan Gate. Warn: you see the rows and can still approve. Block: the check reports an error on any finding; in this version the Plan Gate still treats it as a warning. Off: no check runs. Verdict runs: how many check-on runs /aico:feedback compares with as many earlier runs.'));
-  panel.append(el('h2', {}, 'Brainstorm'));
+  panel.append(sectionHead('Brainstorm'));
   const bs = table();
   const bsDefaults = state.plugin.brainstorm;
   pipelineRow(bs.tbody, 'Film script', ['brainstorm', 'film_script'], bsDefaults.film_script,
@@ -1873,7 +1884,7 @@ function renderPipeline(panel) {
     (l) => selectFor(['crossfire', 'full_pass'], l), String, String);
   panel.append(bs.wrap);
   panel.append(el('p', { class: 'hint' }, 'Debate rounds: crossfire is one pair answering each other; full_pass adds a pass where every Role answers the others, then the crossfire.'));
-  panel.append(el('h2', {}, 'Optional lanes'));
+  panel.append(sectionHead('Optional lanes'));
   panel.append(el('p', { class: 'hint' }, 'Turning off Security or Compliance needs your security unlock. A project can always turn a lane back on.'));
   const lanes = table();
   for (const lane of LANES) {
@@ -1892,7 +1903,7 @@ function renderPipeline(panel) {
 // ---------- Gates tab ----------
 function renderGates(panel) {
   const defaults = state.plugin.gates;
-  panel.append(el('p', { class: 'hint' }, 'ask shows you a form; auto writes the Gate summary and carries on. Ship and Installs need your unlock before auto applies.'));
+  panel.append(panelHead('Gates', 'ask shows you a form; auto writes the Gate summary and carries on. Ship and Installs need your unlock before auto applies.'));
   const gates = el('div', { class: 'gates' });
   for (const gate of GATES) {
     const lock = LOCKED_GATES.includes(gate) ? { lock: gate, lockedValue: 'auto', needsUnlock: (v) => v === 'auto' } : {};
@@ -1900,7 +1911,7 @@ function renderGates(panel) {
   }
   panel.append(gates);
 
-  panel.append(el('h2', {}, 'Unlocks · user level only'));
+  panel.append(sectionHead('Unlocks · user level only'));
   const keys = el('div', { class: 'keys' });
   for (const key of ['ship', 'installs', 'security']) {
     const label = key === 'security' ? 'Security (security and compliance lanes)' : GATE_LABELS[key];
@@ -1928,7 +1939,7 @@ function renderGates(panel) {
   }
   panel.append(keys);
 
-  panel.append(el('h2', {}, 'Ignored settings'));
+  panel.append(sectionHead('Ignored settings'));
   const ignored = state.resolved.ignored;
   panel.append(ignored.length
     ? el('ul', {}, ignored.map((i) => el('li', {}, i)))
@@ -1939,7 +1950,7 @@ function renderGates(panel) {
 const onOffChoice = (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' });
 function renderMods(panel) {
   const defaults = state.plugin.mods;
-  panel.append(el('p', { class: 'hint' }, 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.'));
+  panel.append(panelHead('Mods', 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.'));
   const units = el('div', { class: 'units' });
   panel.append(units);
   for (const mod of MODS) {
@@ -1976,11 +1987,10 @@ function scanModeSelect(label) {
   return sel;
 }
 function renderScan(panel) {
-  panel.append(el('h2', {}, 'SkillSpector'));
+  panel.append(panelHead('Skill scan', el('p', { class: 'hint', id: 'scan-note' }, SCAN_NOTE)));
   const rack = el('div', { class: 'rack' });
   pipelineRow(rack, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm', scanModeSelect, String, String);
   panel.append(rack);
-  panel.append(el('p', { class: 'hint', id: 'scan-note' }, SCAN_NOTE));
 }
 
 // ---------- Skills tab ----------
@@ -2180,7 +2190,7 @@ function applySkillFilter() {
 
 function renderSkills(panel) {
   skFilterUI = null;
-  panel.append(el('h2', {}, 'Skills'));
+  panel.append(panelHead('Skills'));
   if (!isObj(state.catalog) || !Array.isArray(state.catalog.entries)) {
     panel.append(el('p', { class: 'hint' }, 'The settings server sent no skill data.'));
     return;
@@ -2274,7 +2284,7 @@ function renderSkills(panel) {
   const entries = skillEntries();
   const hasOwn = entries.some((e) => e.layer === 'user');
   panel.append(el('p', { class: 'notice info', id: 'skills-info' }, SKILL_INFO, hasOwn ? '' : ` ${SKILL_ADD_HINT}`));
-  const input = el('input', { type: 'text', id: 'skfilter', autocomplete: 'off', 'aria-describedby': 'skfilter-hint' });
+  const input = el('input', { type: 'text', id: 'skfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'skfilter-hint' });
   input.value = skFilter;
   input.addEventListener('input', () => { skFilter = input.value; applySkillFilter(); });
   skFilterUI = { input, count: el('p', { id: 'skcount', role: 'status' }), labels: [] };
