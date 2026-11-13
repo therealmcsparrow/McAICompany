@@ -1,5 +1,5 @@
-// Tests: wayfinder, skill-picks, spec-check and the guard, blast and
-// plan-gate mods take a v3 run slug `<ProjectID>/<NN>-<playbook>` and answer as they do for a v2 name.
+// Tests: wayfinder, skill-picks, spec-check and the guard
+// and plan-gate mods take a v3 run slug `<ProjectID>/<NN>-<playbook>` and answer as they do for a v2 name.
 // Each test pairs a v3 assertion with the v2 / legacy answer (unchanged, byte for byte).
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,6 @@ import { validate, main as wayfinder } from './wayfinder.mjs';
 import { lint } from './skill-picks.mjs';
 import { main as specCheck } from './spec-check.mjs';
 import { parseOutputLine, parseOutputText, workFolder } from '../mods/lib/guard.mjs';
-import { parseSpawnLines, reviewArgs } from '../mods/lib/blast.mjs';
 import { parseGateCommand, recordPath } from '../mods/lib/plan-gate.mjs';
 
 const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -200,25 +199,6 @@ test('guard: workFolder takes a v3 run slug and the v2 and legacy names, nothing
   for (const bad of [...BAD_V3, 42, null, undefined, '', `${V3}/${'a'.repeat(120)}`]) assert.equal(workFolder(bad), undefined, String(bad));
 });
 
-// ---------- blast mod (aico-mods v1.8) ----------
-test('blast: the spawn prompt Output line and the review-depth arguments take a v3 run slug', () => {
-  const prompt = `Task: x\nOutput: .company/work/${V3}/05-qa.md\nBase commit: ${SHA}\nRisk tier: high\n`;
-  assert.deepEqual(parseSpawnLines(prompt), { slug: V3, step: '05', role: 'qa', base: SHA, tier: 'high' });
-  assert.deepEqual(parseSpawnLines(prompt.replace(V3, V2)), { slug: V2, step: '05', role: 'qa', base: SHA, tier: 'high' });
-  assert.deepEqual(reviewArgs({ source: 'base', base: SHA, slug: V3 }), [SHA, '--run', V3, '--json']);
-  assert.deepEqual(reviewArgs({ source: 'base', base: SHA, slug: V2, risk: 'high' }), [SHA, '--run', V2, '--json', '--risk', 'high']);
-  assert.deepEqual(reviewArgs({ source: 'base', base: SHA, slug: LEGACY }), [SHA, '--run', LEGACY, '--json']);
-});
-
-test('blast: a bad v3 shape gives no review arguments and no slug', () => {
-  for (const bad of BAD_V3.filter((s) => s !== V3)) {
-    assert.equal(reviewArgs({ source: 'base', base: SHA, slug: bad }), null, bad);
-    assert.equal(parseSpawnLines(`Output: .company/work/${bad}/05-qa.md\n`).slug, null, bad);
-  }
-  assert.deepEqual(reviewArgs({ source: 'worktree' }), ['--worktree', '--json']);
-  assert.equal(reviewArgs({ source: 'base', base: SHA, slug: undefined }), null);
-});
-
 // ---------- plan-gate mod (aico-mods v1.8) ----------
 const GATE = 'node scripts/run-state.mjs gate';
 
@@ -266,7 +246,7 @@ test('plan-gate: a run record path with a bad v3 shape is still a record path, w
 
 // ---------- Contracts ----------
 const doc = (name) => fs.readFileSync(path.join(REPO, 'docs', 'contracts', `${name}.md`), 'utf8');
-for (const [name, version, header = version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '1.9']]) {
+for (const [name, version, header = version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '2.0']]) {
   test(`${name} is v${header} and says v2, v1.1 and legacy names are byte-identical`, () => {
     const text = doc(name);
     assert.ok(text.startsWith(`# Contract: ${name} v${header}\n`), text.split('\n')[0]);
