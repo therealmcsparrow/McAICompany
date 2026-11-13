@@ -1628,7 +1628,7 @@ describe('AC27 the settings name field carries a pseudonym notice', () => {
     const around = page.slice(idx - 200, idx + 200);
     assert.doesNotMatch(around, /title:/);
     assert.doesNotMatch(page, /title: NAMES_NOTICE|setAttribute\('title', NAMES_NOTICE/);
-    assert.match(page, /\.notice\.info \{[^}]*color: var\(--info\)/);
+    assert.match(page, /\.notice\.info \{[^}]*border-left-color: var\(--color-led-project\)/);
   });
   test('the older short notices keep the pseudonym wording and no text claims more than the data does', () => {
     for (const short of ["user: 'Use a pseudonym, not a real name.'", "project: 'Saved in .company/. Use a pseudonym, not a real name.'"]) assert.ok(page.includes(short), short);
@@ -1717,11 +1717,11 @@ describe('AC29 a display name in .company or a dispatch prompt fails the drift t
 describe('AC30 a gate-locked setting shows its lock reason on the page', () => {
   const page = read('scripts', 'settings-page.html');
   test('the reason is a visible element in the row header, not only the dialog text', () => {
-    assert.match(page, /const why = el\('span', \{ class: 'lockwhy', id: lockId \}\);\s*\n\s*head\.append\(why\);/);
+    assert.match(page, /const why = el\('span', \{ class: 'lockcap', id: lockId \}\);\s*\n\s*head\.append\(why\);/);
     assert.match(page, /`Locked\. \$\{opts\.lockedValue\} needs your \$\{opts\.lock === 'security' \? 'security' : UNLOCK_NAMES\[opts\.lock\]\} unlock\.`/);
     assert.match(page, /'Unlocked by you\.'/);
-    assert.match(page, /\.lockwhy \{ display: block;/);
-    assert.doesNotMatch(page, /\.lockwhy[^{]*\{[^}]*display:\s*none/);
+    assert.match(page, /\.ctl \.lockcap \{ display: inline-flex;/);
+    assert.doesNotMatch(page, /\.(lockcap|lockwhy)[^{]*\{[^}]*display:\s*none/);
   });
   test('the reason is announced: both controls of the row are described by it, and a change goes to a polite live region', () => {
     assert.match(page, /const desc = \[opts\.lock \? lockId : '', opts\.describedBy/);

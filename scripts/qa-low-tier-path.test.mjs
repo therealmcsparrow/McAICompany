@@ -1247,7 +1247,7 @@ describe('AC13 pipeline.short_path off gives the full route, and only off can be
   test('AC13 the settings page row is labelled, tied to its hint, offers only off to a project and uses native selects', () => {
     const html = read('scripts/settings-page.html');
     assert.match(html, /const label = 'Short path';/);
-    assert.match(html, /el\('label', \{ for: id \}, label, el\('span', \{ class: 'vh' \}, `, \$\{level\} level`\)\)/);
+    assert.match(html, /el\('label', \{ class: 'ctl-label', for: id \}, label, el\('span', \{ class: 'vh' \}, `, \$\{level\} level`\)\)/);
     assert.match(html, /control\.setAttribute\('aria-describedby', 'short-path-hint'\)/);
     assert.match(html, /selectFor\(level === 'user' \? \['on', 'off'\] : \['off'\], null\)/);
     assert.match(html, /el\('p', \{ class: 'hint', id: 'short-path-hint' \}, SHORT_PATH_HINT\)/);

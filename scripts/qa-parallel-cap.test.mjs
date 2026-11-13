@@ -132,7 +132,7 @@ test('AC1 a refused layer names the setting and the range', () => {
 test('AC1 the settings page row is labelled, described and reachable by keyboard', () => {
   const html = read('scripts/settings-page.html');
   const body = html.slice(html.indexOf('function parallelCapRow'), html.indexOf('function planLink'));
-  assert.match(body, /el\('label', \{ for: id \}/);
+  assert.match(body, /el\('label', \{ class: 'ctl-label', for: id \}/);
   assert.match(body, /'aria-describedby', 'parallel-cap-hint'/);
   assert.match(body, /selectFor\(\[3, 4, 5\], null\)/);
   assert.ok(!/tabindex/i.test(body), 'native controls only');
