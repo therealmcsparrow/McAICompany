@@ -153,15 +153,13 @@ _Avoid_: orchestrator (use Lead).
 
 **Editor** — the Role (Edith) that checks every claim in a report or public text is cited `[S#]` or marked `(unverified)`. It blocks with a `[spec]` finding and never rewrites. Its passing Handoff satisfies the `claims-cited` check.
 
-**Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are four: Savvy, Cache Tax, Reflect and Blast Radius. They add no tokens to a prompt, apart from Reflect `model` mode and Blast Radius's refusal reason. Switched in `/aico:settings`.
+**Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are three: Savvy, Cache Tax and Reflect. They add no tokens to a prompt, apart from Reflect `model` mode. Switched in `/aico:settings`.
 
 **Savvy** — the mod that shows the progress of the current run: wave, Step, Gates passed, Fix round and elapsed time.
 
 **Cache Tax** — the mod that shows spend per Step, with cache writes marked `[tax]`, and the cache clock.
 
 **Reflect** — the mod that checks each finished Step and the finished run, and suggests Lessons. Each is `suggested` until the CEO presses Accept; Decline writes nothing.
-
-**Blast Radius** — the mod that checks what a `git commit` touches (Core, Contract or security paths) before it runs, through both the `Bash` and `PowerShell` tools. Each category is `ask` or `warn`. With nobody to ask it refuses; turning it off needs the `security` unlock.
 
 **Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
 

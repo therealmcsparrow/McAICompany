@@ -7,7 +7,7 @@ v1.2 (`docs/adr/0007-contract-minor-versions.md`): `--run` takes a run name. A r
 
 v1.1 (task v020-gate-roadmap, T2; `docs/adr/0007-contract-minor-versions.md`): base mode takes the full base id and `--run <slug>` and reads the diff as the judging diff of rule git.M-SEC4 (the call form is in `rule-check` v1.1, "Judging diff and run ref"); `## Core` and `## Modules` come from `.company/project.md` at the base commit; a grafts file, a HEAD that is not the run ref or an unreadable base profile gives `full`; `--staged` and `--worktree` carry every judging flag. A v1 caller (`<sha>` without `--run`) gets `full` with `reason: no run ref`.
 
-Provider: `scripts/review-depth.mjs`. Consumer: `aico:pipeline` §2 (the `Review depth:` line, `dispatch-prompt` v3.1), the Code Reviewer and, from part M, the Blast Radius mod (`aico-mods` v1).
+Provider: `scripts/review-depth.mjs`. Consumer: `aico:pipeline` §2 (the `Review depth:` line, `dispatch-prompt` v3.1) and the Code Reviewer.
 Depth follows the touched paths, never the builder's label (AC24).
 
 ## CLI
@@ -34,7 +34,7 @@ Depth follows the touched paths, never the builder's label (AC24).
 3. A Contract path: `docs/contracts/**`, any `contracts/` folder, `*.proto`, `openapi.*`, `asyncapi.*`. Category `contract`.
 4. A security path: a name or folder containing `auth`, `login`, `session`, `token`, `secret`, `crypt`, `password`, `payment`, `billing`, `permission`; `migrations/**`; `.github/workflows/**`; `agents/*.md`; `.company/standards.md`, `.company/standards/**`, `.company/checks.json`, `.company/settings.json`; `package.json`, lockfiles, `deps/**`. Part M adds `hooks/**` and `mods/**` (code that runs on every tool call). Category `security`.
 5. The diff can't be read → `full` with `reason: diff unavailable`; in `--json`, `paths: []` and one reason `{ "path": "*", "rule": "diff unavailable" }`.
-6. Anything else that leaves the diff unjudged, with the same shape and the reason as the rule text: `no run ref` (base mode without `--run`), `grafts file present` (every mode; a graft-path query that fails or prints nothing counts, and `GIT_GRAFT_FILE` is dropped from the inherited environment), `head not on run branch` (base mode: `git symbolic-ref -q HEAD` is not `refs/heads/aico/<slug>`), `core unknown at base` (base mode: `.company/project.md` is missing at the base commit, over 64 KiB or has no `## Core`). The Blast Radius mod counts every such `*` reason except the risk tier as an unknown Security hit.
+6. Anything else that leaves the diff unjudged, with the same shape and the reason as the rule text: `no run ref` (base mode without `--run`), `grafts file present` (every mode; a graft-path query that fails or prints nothing counts, and `GIT_GRAFT_FILE` is dropped from the inherited environment), `head not on run branch` (base mode: `git symbolic-ref -q HEAD` is not `refs/heads/aico/<slug>`), `core unknown at base` (base mode: `.company/project.md` is missing at the base commit, over 64 KiB or has no `## Core`).
 
 A path may carry several categories. Otherwise `standard`. The reviewer may raise `standard` to `full`, never lower it.
 

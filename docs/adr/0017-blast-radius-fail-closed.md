@@ -1,4 +1,5 @@
 # Blast Radius asks through the permission check and refuses when nobody can answer
+Status: superseded by docs/adr/0068-remove-blast-radius.md (2026-11-12).
 
 Blast Radius answers the engine's `tool.check` for a `git commit` in either shell tool (`Bash` or `PowerShell`) with `ask` (the engine's own question, with every hit in its reason) when a person or host can answer, and with `deny` when none can (`claude -p`, a background loop); it never answers `allow`, so it can only tighten what the session's rules decide, and its error handler refuses the commit too. Doubt also fails toward asking: a command the parser cannot place but that names `git` and `commit` counts as a commit, and a failed `review-depth` call (or a surface without `$.process`) counts as a security hit. SP-M2 confirmed the engine honours a plugin `ask` in every permission mode and over allow rules, and turns it into a deny when no approver exists. This is hard to reverse because headless runs that commit Core or security paths now stop unless the CEO sets that category to `warn` at the user level (Contracts default to `warn`, CEO), and docs and Playbooks will describe that behaviour.
 
