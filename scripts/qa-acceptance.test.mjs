@@ -448,7 +448,7 @@ test('AC6 the page builds labelled, described, focusable personality fields that
   assert.match(html, /heading\.focus\(\)/);
   assert.match(html, /function jumpTo\(rec\) \{[\s\S]*?selectTab\('personality'\);[\s\S]*?openRole\(rec\.role\);[\s\S]*?rec\.control\.focus\(\)/);
   // The personality section sits on its own tab, apart from the Roles table.
-  assert.match(html, /<button role="tab" id="tab-personality" aria-controls="panel-personality"[^>]*>Personality<\/button>/);
+  assert.match(html, /<button role="tab" id="tab-personality" aria-controls="panel-personality"[^>]*>(?:<span class="row1">[\s\S]*?<\/span><\/span>)?Personality<\/button>/);
   assert.match(html, /<section role="tabpanel" id="panel-personality" aria-labelledby="tab-personality" hidden><\/section>/);
   assert.ok(!html.includes('innerHTML'), 'hostile text is never parsed as markup');
   assert.ok(!/<script[^>]+src=|<link[^>]+href="http/.test(html), 'no remote files');
