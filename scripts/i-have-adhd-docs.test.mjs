@@ -68,9 +68,9 @@ describe('i-have-adhd credit', () => {
 });
 
 describe('i-have-adhd changelog and glossary', () => {
-  it('AC10: Unreleased names ADHD mode and keeps the settings console line', () => {
+  it('AC10: release 0.37.0 names ADHD mode and keeps the settings console line', () => {
     const log = read('CHANGELOG.md');
-    const start = log.indexOf('## [Unreleased]');
+    const start = log.indexOf('## [0.37.0]');
     assert.ok(start >= 0);
     const next = log.indexOf('\n## [', start + 1);
     const section = log.slice(start, next < 0 ? undefined : next);
