@@ -2014,21 +2014,16 @@ function renderMods(panel) {
 
 // ---------- Skill scan tab ----------
 const SCAN_NOTE = "No-LLM: SkillSpector's static rules run on this machine and no skill text leaves it; package names, versions and ecosystems from a skill's dependency files go to OSV.dev for a vulnerability lookup, plus the ids of any vulnerabilities found. Claude CLI: the text of each scanned skill also goes to Claude (Anthropic) under your login and counts toward your usage. Set it for yourself only; a project setting cannot turn it on.";
-function scanModeSelect(label) {
-  const sel = selectFor(['no-llm', 'claude_cli'], label);
-  if (label.endsWith(', project')) {
-    // A project can only tighten: claude_cli is not offered, but a stored one stays visible (and locked in In effect).
-    const stored = state.project.skillspector?.mode === 'claude_cli';
-    sel.replaceChildren(...[...sel.options].filter((o) => o.value !== 'claude_cli'));
-    if (stored) sel.append(el('option', { value: 'claude_cli', disabled: true }, 'claude_cli'));
-  }
-  sel.setAttribute('aria-describedby', 'scan-note');
-  return sel;
-}
+// One switch row: key caps per level. The project group offers only no-llm; a stored project claude_cli stays visible, disabled.
 function renderScan(panel) {
-  panel.append(panelHead('Skill scan', el('p', { class: 'hint', id: 'scan-note' }, SCAN_NOTE)));
+  panel.append(panelHead('Skill scan', el('p', { class: 'hint' }, 'SkillSpector checks a skill before aico adds it.')));
   const rack = el('div', { class: 'rack' });
-  pipelineRow(rack, 'Scan mode', ['skillspector', 'mode'], state.plugin.skillspector?.mode ?? 'no-llm', scanModeSelect, String, String);
+  const level = lvl();
+  const ignored = level === 'project' && state.project.skillspector?.mode === 'claude_cli';
+  switchRow(rack, { label: 'Scan mode', path: ['skillspector', 'mode'], pluginValue: state.plugin.skillspector?.mode ?? 'no-llm',
+    options: level === 'user' ? ['no-llm', 'claude_cli'] : ignored ? ['no-llm', 'claude_cli'] : ['no-llm'], fixed: ignored ? ['claude_cli'] : [],
+    hint: { id: 'scan-note', text: SCAN_NOTE },
+    onSync: (control) => control.classList.toggle('ignored', ignored && control.value === 'claude_cli') });
   panel.append(rack);
 }
 
