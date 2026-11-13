@@ -1947,7 +1947,7 @@ function renderGates(panel) {
       barrel.setAttribute('aria-pressed', on ? 'true' : 'false');
       barrel.classList.toggle('set', on);
       state1.className = on ? 'open' : 'locked';
-      state1.replaceChildren(el('i', { class: 'led', 'data-on': on ? 'user' : 'lock' }), on ? 'Unlocked (user)' : 'Locked (plugin)');
+      state1.replaceChildren(el('i', { class: 'led', 'data-on': on ? 'ok' : 'lock' }), on ? 'Unlocked (user)' : 'Locked (plugin)');
     });
     keys.append(el('div', { class: 'keysw' }, barrel, el('div', { class: 'kt' }, el('b', { id: `${id}-l` }, label), state1,
       el('small', { id: `${id}-d` }, key === 'security' ? 'Security and compliance lanes.' : `Lets ${GATE_LABELS[key]} run on auto.`),
