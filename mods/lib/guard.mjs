@@ -204,22 +204,6 @@ const runView = obj({
 // `run-state.mjs active --json`.
 export const guardRunActive = obj({ slug: opt(workFolder), view: opt(runView) });
 
-// `review-depth.mjs … --json`.
-export const guardReviewDepth = obj({
-  v: int(1, 1),
-  source: oneOf(['base', 'staged', 'worktree']),
-  base: opt(str(40)),
-  tier,
-  depth: oneOf(['full', 'standard']),
-  paths: arr(obj({
-    path: str(300),
-    categories: arr(oneOf(['core', 'contract', 'security']), 3, true),
-    module: opt(str(60))
-  }), 500),
-  reasons: opt(arr(obj({ path: str(300), rule: str(120) }), 500, true)),
-  truncated: bool
-});
-
 // A count, or null: a missing key is not allowed.
 const ctxCount = (v) => (v === null ? null : int(0, MAX_CTX)(v));
 
