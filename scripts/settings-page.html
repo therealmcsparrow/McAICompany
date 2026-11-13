@@ -801,7 +801,7 @@ function bindLayer(control, level, path, decode = (s) => s, guard = null) {
     // Text is stored as typed (the server validates it), so syncing never fights the caret.
     const raw = control.value;
     const value = raw.trim() === '' ? undefined : decode(raw);
-    if (guard && !(await guard(value))) { refresh(); return; }
+    if (guard && !(await guard(value))) { refresh(); if (control.radios) control.focus(); return; }
     setIn(draft[level], path, value);
     refresh();
   };
