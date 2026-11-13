@@ -285,8 +285,11 @@ test('the unlocked state replaces the reason text', async () => {
 test('the lock reason changes with the unlock and the change is announced, not the load', async () => {
   const page = await open();
   assert.equal(page.ids['lock-live'].textContent, '');
-  const unlocks = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-label') === 'Ship unlock, user');
+  const unlocks = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
   assert.equal(unlocks.getAttribute('aria-pressed'), 'false');
+  // WCAG 2.5.3: the accessible name (labelledby text) contains the visible label, GATE_LABELS casing.
+  assert.ok(textOf(page, 'key-ship-l').includes('Ship key'));
+  assert.ok(textOf(page, unlocks.getAttribute('aria-labelledby')).includes('Ship key'));
   const pending = unlocks.fire('click');
   await settle();
   assert.equal(page.ids.unlock.open, true);
@@ -295,7 +298,7 @@ test('the lock reason changes with the unlock and the change is announced, not t
   await settle();
   assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Unlocked by you.');
   assert.equal(page.ids['lock-live'].textContent, 'Ship unlocked. auto now applies.');
-  const again = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-label') === 'Ship unlock, user');
+  const again = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
   assert.equal(again.getAttribute('aria-pressed'), 'true');
   await again.fire('click');
   await settle();
