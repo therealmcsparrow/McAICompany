@@ -9,15 +9,13 @@ export const TIMEOUT_MS = {
   ledger: 5000,
   step: 5000,
   lessons: 5000,
-  depthPre: 5000,
-  depthGate: 10000,
   retro: 10000,
   arm: 5000,
   agentCtx: 5000,
   leadCtx: 1000,
 } as const
 
-export type ScriptName = 'settings' | 'run-state' | 'ledger' | 'lead-handover' | 'reflect' | 'lessons' | 'review-depth' | 'reprompt-check'
+export type ScriptName = 'settings' | 'run-state' | 'ledger' | 'lead-handover' | 'reflect' | 'lessons' | 'reprompt-check'
 export type ScriptResult<T> = { ok: true; value: T } | { ok: false; reason: string }
 type Guard<T> = (value: unknown) => T | undefined
 
