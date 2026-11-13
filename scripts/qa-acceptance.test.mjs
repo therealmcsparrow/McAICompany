@@ -440,7 +440,7 @@ test('AC6 the page builds labelled, described, focusable personality fields that
   assert.match(html, /input\[aria-invalid="true"\]/);
   // Visible labels tied to the field, native details for each Role, errors tied with aria-describedby.
   assert.match(html, /el\('label', \{ for: id \}, P_LABELS\[key\]\)/);
-  assert.match(html, /el\('details', \{ class: 'pcard' \}\)/);
+  assert.match(html, /el\('details', \{ id: `pers-\$\{role\}` \}\)/);
   assert.match(html, /setAttribute\('aria-invalid', 'true'\)/);
   assert.match(html, /setAttribute\('aria-describedby'/);
   // A refused Save focuses the error summary heading; each summary link opens the card and focuses its field.

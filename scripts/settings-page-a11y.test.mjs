@@ -489,6 +489,27 @@ test('an eligible name in a protected Role project list is not part of the draft
   assert.equal(posted.project.roles?.architect?.skills, undefined);
 });
 
+// The effective skills each Role readout names, as "names (source)" or "none"; one string per Role row.
+function effectiveReadouts(page) {
+  return walkAll(page.panel('skills'), (x) => x.tagName === 'P' && x.className.split(' ').includes('readout')).map((r) => {
+    const kids = r.children;
+    const at = kids.findIndex((c) => c.textContent === 'In effect');
+    const v = kids[at + 1];
+    const src = kids[at + 2];
+    const srcText = src && src.className.split(' ').includes('s') ? ` (${src.textContent})` : '';
+    return `${v.textContent}${srcText}`;
+  });
+}
+// A skill checkbox sits in an always-open Role row: no DETAILS above it, and the row is the labelled fieldset.
+function assertAlwaysOpenRow(box) {
+  let row = box;
+  while (row && row.tagName !== 'FIELDSET') row = row.parentNode;
+  assert.ok(row !== null && row !== undefined, 'the checkbox sits in a fieldset');
+  assert.ok(row.className.split(' ').includes('bay-row'), 'the fieldset is the Role row');
+  for (let up = box.parentNode; up; up = up.parentNode) assert.ok(up.tagName !== 'DETAILS', 'no collapsed card hides the checkbox');
+  assert.ok(!row.hidden, 'the row is shown');
+}
+
 test('while the user layer is unread its stored names are kept, not listed as ignored', async () => {
   const state = skillsState([skill('qa-helper')]);
   state.user = { version: 1, roles: { qa: { skills: [{ name: 'my-own' }, { name: 'qa-helper' }] } } };
@@ -497,7 +518,8 @@ test('while the user layer is unread its stored names are kept, not listed as ig
   await settle();
   const text = page.panel('skills').textContent;
   assert.ok(!text.includes('Ignored: this stored skill'));
-  assert.ok(text.includes('2 selected (user)'));
+  assert.ok(effectiveReadouts(page).includes('qa-helper (user)'), 'the readout names the stored catalog skill, from the user layer');
+  assert.ok(text.includes('2 of 5 selected'));
   assert.equal(unsaved(page), '0 unsaved changes');
 });
 
@@ -533,10 +555,7 @@ test('save keeps focus on the same checkbox and shows the saved notice', async (
   };
   const page = loadPage(initial, fetchImpl);
   await settle();
-  let card = box(page, 'sk-qa-user-qa-helper');
-  while (card.tagName !== 'DETAILS') card = card.parentNode;
-  card.open = true;
-  await card.fire('toggle');
+  assertAlwaysOpenRow(box(page, 'sk-qa-user-qa-helper'));
   await ticked(box(page, 'sk-qa-user-qa-helper'));
   box(page, 'sk-qa-user-qa-helper').focus();
   await page.ids.save.fire('click');
@@ -564,10 +583,7 @@ test('keyboard-only save: focus on Save stays on Save, status starts Saved., and
   await save.fire('click');
   await settle();
   assert.equal(posts, 0);
-  let card = box(page, 'sk-qa-user-qa-helper');
-  while (card.tagName !== 'DETAILS') card = card.parentNode;
-  card.open = true;
-  await card.fire('toggle');
+  assertAlwaysOpenRow(box(page, 'sk-qa-user-qa-helper'));
   await ticked(box(page, 'sk-qa-user-qa-helper'));
   assert.equal(save.getAttribute('aria-disabled'), 'false');
   save.focus();
@@ -694,7 +710,7 @@ test('In effect names only what the resolver would use while the user layer is u
     await page.setLevel('project');
     const eff = textOf(page, 'sk-qa-project_count');
     assert.match(eff, /1 of 5 selected, 1 not in effect/, unread);
-    const dd = walkAll(page.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+    const dd = effectiveReadouts(page);
     assert.ok(!dd.some((t) => t.includes('ghost')), unread);
     if (unread === 'catalog') assert.ok(dd.includes('qa-helper (user)'), unread);
     else assert.ok(!dd.includes('qa-helper (user)'), unread);
@@ -707,13 +723,13 @@ test('In effect: an empty project list masks the user list, a repeated stored na
   empty.project = { version: 1, roles: { qa: { skills: [] } } };
   const p1 = loadPage(empty);
   await settle();
-  const dd1 = walkAll(p1.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  const dd1 = effectiveReadouts(p1);
   assert.ok(!dd1.some((t) => t.includes('qa-helper (')), 'an empty project list is a choice of none and wins');
   const dup = skillsState([skill('qa-helper'), skill('b')]);
   dup.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }, { name: 'b' }, { name: 'qa-helper' }] } } };
   const p2 = loadPage(dup);
   await settle();
-  const dd2 = walkAll(p2.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  const dd2 = effectiveReadouts(p2);
   assert.ok(dd2.includes('qa-helper, b (user)'), dd2.join('|'));
 });
 
