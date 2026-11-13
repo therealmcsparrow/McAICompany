@@ -1512,9 +1512,10 @@ function refusedStatus(marked, rest, plan = []) {
 
 // ---------- Language & profile tab ----------
 function renderLanguage(panel) {
-  panel.append(panelHead('Language & profile'));
+  panel.append(panelHead('Language & profile', 'Language takes a BCP 47 tag such as en, nl or pt-BR. Profile fields live in .company/project.md.'));
   if (!profileOn()) panel.append(el('p', { class: 'notice info' }, 'No .company/project.md here, so the profile and the project language are off. Open the page from a product repo to edit them.'));
   const scope = lvl();
+  panel.append(sectionHead('Language'));
   const rack = el('div', { class: 'rack' });
   // Language: user and project scopes go through language.mjs on save; only the active level is shown.
   const lang = state.resolved.language;
@@ -1522,7 +1523,7 @@ function renderLanguage(panel) {
   input.disabled = scope === 'project' && !profileOn();
   input.addEventListener('input', () => { draft.language[scope] = input.value; refresh(); });
   const langEffect = el('p', { class: 'readout' });
-  const box = el('fieldset', { class: 'ctl' }, el('label', { class: 'ctl-label', for: input.id }, 'Language'), input, langEffect);
+  const box = el('fieldset', { class: 'ctl' }, el('label', { class: 'ctl-label', for: input.id }, 'Writing language'), input, langEffect);
   rack.append(box);
   syncers.push(() => {
     if (input.value !== draft.language[scope]) input.value = draft.language[scope];
@@ -1542,10 +1543,8 @@ function renderLanguage(panel) {
   });
   panel.append(rack);
 
-  if (scope !== 'project') {
-    panel.append(el('p', { class: 'hint' }, 'Language takes a BCP 47 tag such as en, nl or pt-BR. Profile fields live in .company/project.md; switch to the project level to edit them.'));
-    return;
-  }
+  panel.append(sectionHead('Profile · project only'));
+  const atProject = scope === 'project';
   const options = state.resolved.profile.options ?? {};
   const stored = state.resolved.profile.fields;
   const datalist = el('datalist', { id: 'voice-options' }, (options.voice ?? []).map((v) => el('option', { value: v })));
@@ -1563,7 +1562,7 @@ function renderLanguage(panel) {
       if (field === 'voice') control.setAttribute('list', 'voice-options');
     }
     control.id = cid;
-    control.disabled = !profileOn();
+    control.disabled = !profileOn() || !atProject;
     control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => { draft.profile[field] = control.value; refresh(); });
     const effect = el('span', { class: 'v' });
     syncers.push(() => {
@@ -1575,11 +1574,11 @@ function renderLanguage(panel) {
     const label = el('label', { class: 'ctl-label', for: cid }, field);
     const kids = [label, control];
     if (field === 'stack') kids.push(el('span', { class: 'held' }, 'aico:stack-detect may overwrite this'));
+    if (!atProject) kids.push(el('p', { class: 'note' }, 'Switch to Project to edit.'));
     kids.push(el('p', { class: 'readout' }, el('span', { class: 'k' }, 'In effect'), effect));
     profile.append(el('fieldset', { class: 'ctl' }, ...kids));
   }
   panel.append(profile);
-  panel.append(el('p', { class: 'hint' }, 'Language takes a BCP 47 tag such as en, nl or pt-BR. Profile fields live in .company/project.md.'));
 }
 
 // ---------- Pipeline tab ----------
