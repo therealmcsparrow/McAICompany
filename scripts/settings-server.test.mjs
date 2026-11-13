@@ -467,7 +467,7 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
 test('page has a Mods section built from the existing controls, shows lock reasons, and never uses innerHTML', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   for (const needle of ['id="tab-mods"', 'id="panel-mods"', 'function renderMods', "['mods', mod, 'enabled']", "['mods', 'reflect', 'mode']",
-    "'step_check'", "'retrospective'", 'pipelineRow(', 'selectFor(']) {
+    "'step_check'", "'retrospective'", 'switchRow(', 'selectFor(']) {
     assert.ok(html.includes(needle), needle);
   }
   assert.ok(!html.includes('keep_warm') && !html.includes('keep-warm'));
