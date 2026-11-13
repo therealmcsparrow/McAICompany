@@ -321,12 +321,12 @@ input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: var(-
 .bay-row legend { float: left; padding: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--text-lg); text-transform: uppercase; letter-spacing: .03em; line-height: 1.1; }
 .bay-row legend small { display: block; font-family: var(--font-mono); font-weight: 400; font-size: var(--text-xs); text-transform: none; letter-spacing: 0; color: var(--color-ink-2); }
 .bay-row .info { display: grid; gap: 4px; }
-.jacks { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.jack { position: relative; }
+.jacks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: var(--space-2); }
+.jack { position: relative; min-width: 0; }
 .jack input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-.jack label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-2); align-items: center; padding: 6px var(--space-3); border-radius: var(--radius-sm);
+.jack label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-2); align-items: center; align-content: center; height: 100%; min-height: 3.5rem; box-sizing: border-box; overflow: hidden; padding: 6px var(--space-3); border-radius: var(--radius-sm);
   background: var(--color-key); box-shadow: 0 2px 0 var(--color-key-edge); cursor: pointer; font-family: var(--font-mono); font-size: var(--text-sm); }
-.jack label .meta { grid-column: 2; font-size: 0.65rem; color: var(--color-ink-2); overflow-wrap: anywhere; min-width: 0; }
+.jack label .meta { grid-column: 2; font-size: 0.65rem; color: var(--color-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .jack label .meta.bad { color: var(--color-text-lock); }
 .jack input:checked + label { transform: translateY(2px); box-shadow: inset 0 1px 2px var(--color-shadow); font-weight: 600; }
 .jack input:checked + label .led { background: var(--lvl-led); box-shadow: 0 0 6px 1px var(--lvl-glow); }
@@ -2227,7 +2227,8 @@ function renderSkills(panel) {
     if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}_d4` }, SKILL_NOT_SELECTABLE));
     cb.addEventListener('change', () => toggleSkill(rec, row));
     const meta = el('span', { class: warnish ? 'meta bad' : 'meta' }, `${e.category} · ${status}`);
-    row.li = el('div', { class: 'jack' }, cb, el('label', { for: id }, el('i', { class: 'led', 'aria-hidden': 'true' }), e.name, meta), el('div', { class: 'jack-info' }, info));
+    row.li = el('div', { class: 'jack' }, cb, el('label', { for: id }, el('i', { class: 'led', 'aria-hidden': 'true' }), e.name, meta));
+    row.li.append(el('div', { class: 'vh' }, info)); // read by aria-describedby, not shown under the card
     return row;
   }
 
