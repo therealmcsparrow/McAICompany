@@ -412,6 +412,15 @@ dialog::backdrop { background: var(--color-scrim); }
 .src[data-src="user"] { color: var(--color-text-user); } .src[data-src="project"] { color: var(--color-text-project); }
 .src[data-src="locked"], .src[data-src="floor"] { color: var(--color-text-lock); }
 .held { display: block; color: var(--color-text-lock); font-size: var(--text-xs); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--color-panel-2); font-size: var(--text-xs); }
+.small { font-size: var(--text-xs); color: var(--color-ink-2); }
+.ro, .lockwhy { color: var(--color-ink-2); font-size: var(--text-sm); }
+.lockwhy { color: var(--color-text-lock); }
+.pfield { display: grid; gap: 4px; min-width: 0; }
+.pgrid, .pbody { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+.pcard, .plevel { border: 1px solid var(--color-rule); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); margin: 0; min-width: 0; }
+.peff, .jack-info, .dept-label { font-size: var(--text-xs); color: var(--color-ink-2); }
+.dept-label { letter-spacing: .08em; text-transform: uppercase; }
 .bulk { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: end; margin-bottom: var(--space-4); padding: var(--space-2) var(--space-3); background: var(--color-well); border-radius: var(--radius-md); box-shadow: inset 0 2px 3px var(--color-shadow); }
 .bulk label { display: grid; gap: 2px; font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--color-silk); }
 .bulk select { padding: 4px var(--space-2); border-radius: var(--radius-sm); border: 1px solid var(--color-rule); background: var(--color-scribble); color: var(--color-scribble-ink); font-family: var(--font-mono); font-size: var(--text-sm); }
@@ -1420,23 +1429,19 @@ function refusedStatus(marked, rest, plan = []) {
 // ---------- Language & profile tab ----------
 function renderLanguage(panel) {
   if (!profileOn()) panel.append(el('p', { class: 'notice info' }, 'No .company/project.md here, so the profile and the project language are off. Open the page from a product repo to edit them.'));
-  const { wrap, tbody } = table(COLUMNS);
-  // Language row: user and project scopes go through language.mjs on save.
+  const scope = lvl();
+  const rack = el('div', { class: 'rack' });
+  // Language: user and project scopes go through language.mjs on save; only the active level is shown.
   const lang = state.resolved.language;
-  const langInput = (scope) => {
-    const input = el('input', { type: 'text', placeholder: '—', 'aria-label': `Language, ${scope}` });
-    input.disabled = scope === 'project' && !profileOn();
-    input.addEventListener('input', () => { draft.language[scope] = input.value; refresh(); });
-    syncers.push(() => {
-      if (input.value !== draft.language[scope]) input.value = draft.language[scope];
-      input.classList.toggle('set', draft.language[scope].trim() !== '');
-    });
-    return input;
-  };
-  const langEffect = el('td', { class: 'effect' });
-  tbody.append(el('tr', {}, el('th', { scope: 'row' }, 'Language'), el('td', { class: 'plugin' }, 'en'),
-    el('td', {}, langInput('user')), el('td', {}, langInput('project')), langEffect));
+  const input = el('input', { type: 'text', id: `lang-${scope}`, placeholder: '—', 'aria-label': `Language, ${scope}` });
+  input.disabled = scope === 'project' && !profileOn();
+  input.addEventListener('input', () => { draft.language[scope] = input.value; refresh(); });
+  const langEffect = el('p', { class: 'readout' });
+  const box = el('fieldset', { class: 'ctl' }, el('label', { class: 'ctl-label', for: input.id }, 'Language'), input, langEffect);
+  rack.append(box);
   syncers.push(() => {
+    if (input.value !== draft.language[scope]) input.value = draft.language[scope];
+    input.classList.toggle('set', draft.language[scope].trim() !== '');
     const changed = changedLanguage();
     // Unchanged: what the server resolved. Changed: project > user > en (plugin default).
     let tag = lang.tag, source = lang.source;
@@ -1446,15 +1451,24 @@ function renderLanguage(panel) {
       else if (u) [tag, source] = [u, 'user'];
       else [tag, source] = ['en', 'plugin'];
     }
-    langEffect.replaceChildren(tag, sourceTag(source === 'default' ? 'plugin' : source, `(${source === 'default' ? 'plugin' : source})`));
+    const shown = source === 'default' ? 'plugin' : source;
+    const s = sourceTag(shown, shown);
+    langEffect.replaceChildren(el('span', { class: 'k' }, 'In effect'), el('span', { class: 'v' }, tag), s);
   });
+  panel.append(rack);
 
+  if (scope !== 'project') {
+    panel.append(el('p', { class: 'hint' }, 'Language takes a BCP 47 tag such as en, nl or pt-BR. Profile fields live in .company/project.md; switch to the project level to edit them.'));
+    return;
+  }
   const options = state.resolved.profile.options ?? {};
   const stored = state.resolved.profile.fields;
   const datalist = el('datalist', { id: 'voice-options' }, (options.voice ?? []).map((v) => el('option', { value: v })));
   panel.append(datalist);
+  const profile = el('div', { class: 'profile' });
   for (const field of PROFILE_FIELDS) {
     let control;
+    const cid = `profile-${field}`;
     if (field === 'product_type' || field === 'engagement') {
       const opts = [...(options[field] ?? [])];
       if (stored[field] && !opts.includes(stored[field])) opts.unshift(stored[field]);
@@ -1463,20 +1477,23 @@ function renderLanguage(panel) {
       control = el('input', { type: 'text', class: 'wide', maxLength: 200, placeholder: '—', 'aria-label': `${field}, project` });
       if (field === 'voice') control.setAttribute('list', 'voice-options');
     }
+    control.id = cid;
     control.disabled = !profileOn();
     control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => { draft.profile[field] = control.value; refresh(); });
-    const effect = el('td', { class: 'effect text' });
+    const effect = el('span', { class: 'v' });
     syncers.push(() => {
       const v = draft.profile[field] ?? '';
       if (control.value !== v) control.value = v;
       control.classList.toggle('set', v !== '');
-      effect.replaceChildren(v || '—');
+      effect.textContent = v || '—';
     });
-    const label = el('th', { scope: 'row' }, field);
-    if (field === 'stack') label.append(el('span', { class: 'held' }, 'aico:stack-detect may overwrite this'));
-    tbody.append(el('tr', {}, label, el('td', { class: 'plugin' }, '—'), el('td', { class: 'ro' }, 'project only'), el('td', {}, control), effect));
+    const label = el('label', { class: 'ctl-label', for: cid }, field);
+    const kids = [label, control];
+    if (field === 'stack') kids.push(el('span', { class: 'held' }, 'aico:stack-detect may overwrite this'));
+    kids.push(el('p', { class: 'readout' }, el('span', { class: 'k' }, 'In effect'), effect));
+    profile.append(el('fieldset', { class: 'ctl' }, ...kids));
   }
-  panel.append(wrap);
+  panel.append(profile);
   panel.append(el('p', { class: 'hint' }, 'Language takes a BCP 47 tag such as en, nl or pt-BR. Profile fields live in .company/project.md.'));
 }
 
