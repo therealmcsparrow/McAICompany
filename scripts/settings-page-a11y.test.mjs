@@ -712,3 +712,18 @@ test('the Skills tab sits after Roles, wraps long text and adds no colour or fix
   assert.ok(/\.jacks \{[^}]*flex-wrap: wrap/.test(css));
   assert.ok(/\.pgrid, \.pbody \{[^}]*minmax\(min\(100%, 17rem\), 1fr\)/.test(html));
 });
+
+test('touch targets: every console control is at least 44px high, the effort fader 44px wide, the key switch 44px square', () => {
+  const html = fs.readFileSync(PAGE_FILE, 'utf8').replace(/\r\n/g, '\n');
+  const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const rule = /([^{}]*)\{[^}]*\bmin-height: 44px[^}]*\}/.exec(css);
+  assert.ok(rule, 'a min-height: 44px rule');
+  const selectors = rule[1].replace(/\/\*[\s\S]*?\*\//g, '').split(',').map((s) => s.trim());
+  for (const control of ['.btn', '.bulk button', '.bulk select', '.select-bank [role="tab"]', '.rocker label', '.seg label', '.mbank label', '.jack label', 'button.small',
+    '.ctl select', '.ctl input[type="text"]', '.ctl textarea', '.strip .cf input[type="text"]', '.scribble', '.pers summary']) {
+    assert.ok(selectors.includes(control), `${control} is in the 44px rule`);
+  }
+  assert.ok(/\.fader input\[type="range"\] \{[^}]*width: 44px[^}]*height: 132px/.test(css), 'the effort fader is 44px wide');
+  assert.ok(/\.keysw \.barrel \{[^}]*width: 52px; height: 52px/.test(css), 'the key switch barrel');
+  assert.ok(!/min-height: (?:[0-3]?\d|4[0-3])px/.test(css), 'no smaller min-height is set on a control');
+});

@@ -105,7 +105,7 @@ body[data-level="project"] { --lvl-led: var(--color-led-project); --lvl-text: va
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow-x: clip; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-bottom: calc(var(--footer-h, 104px) + 8px); }
 body {
   margin: 0; background: var(--color-room); color: var(--color-ink);
   font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5;
@@ -293,7 +293,7 @@ main { padding-top: var(--space-4); }
 .mbank label.below { color: var(--color-text-lock); }
 .fader { display: grid; grid-template-columns: auto auto; gap: 4px; justify-items: center; align-content: start; }
 .fader > label { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: .08em; text-transform: uppercase; color: var(--color-silk); }
-.fader input[type="range"] { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 132px; margin: 0; background: transparent; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.fader input[type="range"] { writing-mode: vertical-lr; direction: rtl; width: 44px; height: 132px; margin: 0; background: transparent; cursor: pointer; -webkit-appearance: none; appearance: none; }
 .fader input[type="range"]::-webkit-slider-runnable-track { width: 4px; background: var(--color-well); border-radius: 2px; box-shadow: inset 0 1px 2px var(--color-shadow); }
 .fader input[type="range"]::-moz-range-track { width: 4px; background: var(--color-well); border-radius: 2px; }
 .fader input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 14px; border-radius: 2px; margin-left: -11px;
@@ -404,6 +404,25 @@ dialog::backdrop { background: var(--color-scrim); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; }
   .seg input:checked + label, .select-bank [role="tab"][aria-selected="true"], .btn:active, .jack input:checked + label { transform: none; }
+}
+
+/* touch targets: every control is at least 44px high; the effort fader is 44px wide */
+.btn, .bulk button, .bulk select, .select-bank [role="tab"], .rocker label, .seg label, .mbank label, .jack label, button.small,
+.ctl select, .field select, .ctl input[type="text"], .ctl textarea, .strip .cf input[type="text"], .scribble, .pers summary, .annun summary { min-height: 44px; }
+.seg label, .rocker label, .mbank label, .annun summary { justify-content: center; }
+.mbank label { padding: 2px 8px; }
+.annun summary { display: flex; align-items: center; }
+
+/* a project value that is held (ignored) reads muted with a dashed border, so colour is not the only cue */
+select.ignored { color: var(--color-ink-2); border-style: dashed; }
+@media (max-width: 600px), (max-height: 500px) {
+  body { padding-bottom: 0; }
+  .transport { position: static; }
+}
+@media (forced-colors: active) {
+  select.ignored { color: CanvasText; border-style: dashed; }
+  .ctl select, .ctl input[type="text"], .ctl textarea, .scribble { border-color: CanvasText; }
+  .seg input:checked + label, .jack input:checked + label, .select-bank [role="tab"][aria-selected="true"] { outline: 2px solid Highlight; }
 }
 
 /* compat: classes the page script still uses */
@@ -558,7 +577,7 @@ function el(tag, props = {}, ...children) {
   for (const [k, v] of Object.entries(props)) {
     if (v === undefined || v === null || v === false) continue;
     if (k === 'class') node.className = v;
-    else if (k.startsWith('aria-') || k === 'role' || k === 'for' || k === 'list' || k === 'colspan' || k === 'scope' || k === 'href') node.setAttribute(k, String(v));
+    else if (k.startsWith('aria-') || k.startsWith('data-') || k === 'role' || k === 'for' || k === 'list' || k === 'colspan' || k === 'scope' || k === 'href') node.setAttribute(k, String(v));
     else node[k] = v;
   }
   for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)));
@@ -910,6 +929,11 @@ function roleStrip(role) {
   const mPath = ['roles', role, 'model'];
   const mBase = `rf-${role}-${level}-model`;
   const bank = el('fieldset', { class: 'mbank' }, el('legend', {}, 'Model', el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)));
+  if (floor) {
+    const hint = el('p', { class: 'hint vh', id: `${mBase}-hint` }, `Protected: runs at ${floor} or higher at every risk tier.`);
+    bank.setAttribute('aria-describedby', hint.id);
+    bank.append(hint);
+  }
   const radios = ['', ...MODELS].map((m, i) => {
     const id = i === 0 ? mBase : `${mBase}-${i}`;
     const input = el('input', { type: 'radio', name: mBase, id, value: m });

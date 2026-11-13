@@ -373,7 +373,7 @@ test('page has the fixed cap text, film-script and debate rows built from the ex
   }
   assert.ok(!html.includes("['roles', role, 'context_cap']"), 'no editable Role cap');
   assert.ok(!html.includes('innerHTML'), 'fixed text is set with textContent');
-  assert.ok(!html.includes('type="range"') && !/<script[^>]*\ssrc=/i.test(html));
+  assert.ok(!/<input[^>]*type="range"/i.test(html) && !/<script[^>]*\ssrc=/i.test(html));
 });
 
 test('state carries reprompt defaults; save round-trips question_rounds, refuses bad values and writes nothing', async (t) => {
@@ -467,6 +467,24 @@ test('page has a Mods section built from the existing controls, shows lock reaso
 });
 
 const pageHtml = () => fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
+// OKLCH colour tokens (light, and dark laid over light) to relative luminance.
+const oklchLum = (L, C, h) => {
+  const a = C * Math.cos((h * Math.PI) / 180);
+  const b = C * Math.sin((h * Math.PI) / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const lin = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map((v) => Math.min(1, Math.max(0, v)));
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+};
+const colourTokens = (html) => {
+  const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const block = (from, to) => { const s = css.indexOf(from); return css.slice(s, css.indexOf(to, s + 1)); };
+  const read = (b) => Object.fromEntries([...b.matchAll(/--color-([a-z0-9-]+):\s*oklch\(([\d.]+)%\s+([\d.]+)\s+([\d.]+)\)/g)].map((m) => [m[1], oklchLum(Number(m[2]) / 100, Number(m[3]), Number(m[4]))]));
+  const light = read(block(':root {', '@media (prefers-color-scheme: dark)'));
+  return { light, dark: { ...light, ...read(block('@media (prefers-color-scheme: dark)', ':root[data-theme="dark"]')) } };
+};
+const contrast = (lumA, lumB) => (Math.max(lumA, lumB) + 0.05) / (Math.min(lumA, lumB) + 0.05);
 const contractText = () => fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
 
 test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row', () => {
@@ -501,23 +519,15 @@ test('a focused control never sits under the footer, and the footer lets go on s
   const html = pageHtml();
   assert.ok(/scroll-padding-bottom:\s*calc\(var\(--footer-h[^)]*\)\s*\+\s*8px\)/.test(html));
   assert.ok(html.includes('new ResizeObserver') && html.includes("'--footer-h'"));
-  assert.ok(/@media \(max-width: 600px\), \(max-height: 500px\) \{[^@]*footer \{[^}]*position: static/.test(html));
+  assert.ok(/@media \(max-width: 600px\), \(max-height: 500px\) \{[^@]*\.transport \{[^}]*position: static/.test(html));
 });
 
 test('select and text-input borders have 3:1 contrast in light and dark', () => {
-  const html = pageHtml();
-  const lum = (hex) => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
-  const light = html.slice(html.indexOf(':root {'), html.indexOf('@media (prefers-color-scheme: dark)'));
-  const dark = html.slice(html.indexOf('@media (prefers-color-scheme: dark)'), html.indexOf('* { box-sizing'));
-  for (const [scheme, css] of [['light', light], ['dark', dark]]) {
-    const token = (name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)?.[1];
-    for (const ground of ['surface', 'bg']) assert.ok(ratio(token('control-border'), token(ground)) >= 3, `${scheme} on ${ground}`);
+  const tokens = colourTokens(pageHtml());
+  for (const scheme of ['light', 'dark']) {
+    for (const ground of ['scribble', 'panel', 'panel-2']) assert.ok(contrast(tokens[scheme].edge, tokens[scheme][ground]) >= 3, `${scheme} edge on ${ground}`);
   }
-  assert.ok(/select, input\[type="text"\] \{[^}]*border: 1px solid var\(--control-border\)/.test(html));
+  assert.ok(/\.ctl select, [^{]*\.ctl input\[type="text"\][^{]*\{[^}]*border: 1px solid var\(--color-edge\)/.test(pageHtml()));
 });
 
 test('the In effect text is a polite live region', () => {
@@ -890,7 +900,8 @@ test('the context cap shows as fixed read-only text with a row header and no cap
   await page.ids['tab-pipeline'].fire('click');
   const cell = walk(page.ids['panel-pipeline'], (n) => n.id === 'context-cap-fixed');
   assert.ok(cell, 'fixed cap cell exists');
-  assert.equal(cell.tagName, 'TD');
+  assert.equal(cell.tagName, 'P');
+  assert.equal(closest(cell, 'FIELDSET').children.find((n) => n.tagName === 'LEGEND').textContent, 'Context cap', 'the fieldset legend is the row header');
   assert.equal(cell.textContent, '95000 (fixed, cannot be changed)');
   assert.equal(page.allRoles((n) => n.tagName === 'INPUT' && n.getAttribute('aria-label') === 'Context cap, user').length, 0);
 });
@@ -957,11 +968,12 @@ test('a cleared or replaced ignored value is one unsaved change, and an untouche
   assert.equal(select.value, '__ignored__');
   assert.ok(select.options.some((o) => o.textContent === 'Ignored stored value'));
   assert.match(byId(page, 'pf-qa-user-creativity-hint').textContent, /^Ignored: this stored value is not Low, Medium or High/);
-  assert.match(byId(page, 'pf-qa-project-topic-hint').textContent, /^Ignored: this stored value breaks the rule/);
   select.value = '';
   await select.fire('change');
   assert.equal(page.ids.count.textContent, '1 unsaved change');
   assert.equal(select.options.some((o) => o.textContent === 'Ignored stored value'), false);
+  // Switching the level rebuilds the controls, so the user select is not read after this line.
+  assert.match(byId(page, 'pf-qa-project-topic-hint').textContent, /^Ignored: this stored value breaks the rule/);
   await type(field(page, 'qa', 'project', 'topic'), 'cats');
   assert.equal(page.ids.count.textContent, '2 unsaved changes');
   await page.ids.save.fire('click');
@@ -979,8 +991,10 @@ test('the reset button clears a level for one Role, counts it and keeps focus in
   await settle();
   const reset = page.find((n) => n.tagName === 'BUTTON' && n.textContent === 'Use plugin default for qa, user');
   assert.equal(reset.disabled, false);
+  page.useLevel('project');
   assert.equal(page.find((n) => n.textContent === 'Use plugin default for qa, project').disabled, true);
-  await reset.fire('click');
+  page.useLevel('user');
+  await page.find((n) => n.tagName === 'BUTTON' && n.textContent === 'Use plugin default for qa, user').fire('click');
   assert.equal(field(page, 'qa', 'user', 'talk').value, '');
   assert.equal(field(page, 'qa', 'user', 'intelligence').value, '');
   assert.equal(page.ids.count.textContent, '2 unsaved changes');
@@ -990,9 +1004,10 @@ test('the reset button clears a level for one Role, counts it and keeps focus in
 test('without a .company folder the Project personality controls are off and say why', async () => {
   const page = loadPage(pageState({ hasProject: false }));
   await settle();
-  assert.equal(field(page, 'qa', 'project', 'talk').disabled, true);
+  assert.equal(page.ids['lvl-project'].disabled, true, 'the Project level cannot be chosen');
+  assert.equal(page.ids['lvl-user'].disabled, false);
   assert.equal(field(page, 'qa', 'user', 'talk').disabled, false);
-  assert.ok(page.find((n) => n.textContent === 'Needs a .company/ folder'));
+  assert.match(page.ids.notices.textContent, /No \.company\/ folder here, so the Project column is off/);
 });
 
 test('a payload without personalities draws no section, and a rule that does not parse checks nothing on the page', async () => {
@@ -1021,35 +1036,25 @@ test('stored plugin text with markup is shown as text and never becomes an eleme
   assert.equal(page.all((n) => n.tagName === 'IMG').length, 0);
 });
 
-test('the page keeps the layout fixes: the Roles table fits, and the footer sits above sticky row headers', () => {
+test('the page keeps the layout fixes: the console grids fit, and the footer sits above the content', () => {
   const html = pageHtml();
-  assert.ok(/\.cell \{[^}]*display: grid/.test(html));
-  assert.ok(/\.cell > :first-child \{[^}]*grid-column: 1 \/ -1/.test(html));
-  assert.ok(/footer \{[^}]*z-index: 10/.test(html));
+  assert.ok(/\.bay-row \{[^}]*display: grid/.test(html));
+  assert.ok(/\.transport \{[^}]*position: fixed[^}]*z-index: 5/.test(html));
   assert.ok(!html.includes('1F512'), 'the lock emoji is gone');
   assert.ok(!html.includes('content: "needs unlock"'), 'the lock reason is real text, not generated content');
-  assert.ok(/@media \(prefers-reduced-motion: no-preference\)/.test(html));
+  assert.ok(/@media \(prefers-reduced-motion: reduce\)/.test(html));
   assert.ok(/@media \(forced-colors: active\)/.test(html));
   assert.ok(!/\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write/.test(html));
 });
 
 test('every colour pair the visual spec names passes its contrast floor in both schemes', () => {
-  const html = pageHtml();
-  const lum = (hex) => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
-  const light = html.slice(html.indexOf(':root {'), html.indexOf('@media (prefers-color-scheme: dark)'));
-  const dark = html.slice(html.indexOf('@media (prefers-color-scheme: dark)'), html.indexOf('* { box-sizing'));
-  for (const [scheme, css] of [['light', light], ['dark', dark]]) {
-    const t = (name) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)?.[1];
-    for (const [fg, bg] of [['text', 'surface'], ['muted', 'surface'], ['muted', 'head'], ['accent', 'surface'], ['warn', 'warn-bg'], ['err', 'err-bg'], ['info', 'info-bg'], ['ok', 'ok-bg'], ['err', 'surface'], ['warn', 'surface']]) {
-      assert.ok(ratio(t(fg), t(bg)) >= 4.5, `${scheme} ${fg} on ${bg}: ${ratio(t(fg), t(bg)).toFixed(2)}`);
+  const tokens = colourTokens(pageHtml());
+  for (const scheme of ['light', 'dark']) {
+    const c = tokens[scheme];
+    for (const [fg, bg] of [['ink', 'panel'], ['ink', 'panel-2'], ['ink-2', 'panel'], ['ink-2', 'panel-2'], ['silk', 'well'], ['scribble-ink', 'scribble'], ['text-user', 'panel'], ['text-project', 'panel'], ['text-ok', 'panel'], ['text-lock', 'panel'], ['text-lock', 'panel-2']]) {
+      assert.ok(contrast(c[fg], c[bg]) >= 4.5, `${scheme} ${fg} on ${bg}: ${contrast(c[fg], c[bg]).toFixed(2)}`);
     }
-    assert.ok(ratio(t('accent-text'), t('accent')) >= 4.5, `${scheme} accent-text on accent`);
-    assert.ok(ratio(t('control-border'), t('set')) >= 3, `${scheme} border on set`);
-    assert.ok(ratio(t('focus'), t('bg')) >= 3, `${scheme} focus`);
+    for (const bg of ['panel', 'room']) assert.ok(contrast(c.focus, c[bg]) >= 3, `${scheme} focus on ${bg}`);
   }
 });
 
@@ -1085,10 +1090,10 @@ test('layout: the page never scrolls sideways: no overflow scrollers, no table m
   assert.ok(!/overflow-x:\s*(auto|scroll)/.test(css));
   assert.ok(!/overflow:\s*(auto|scroll)/.test(css));
   assert.ok(!/(^|\n)\s*table[^{]*\{[^}]*min-width/.test(css));
-  assert.ok(!/\bt[hd][^{]*\{[^}]*position:\s*sticky/.test(css));
-  assert.ok(/\[role="tablist"\] \{[^}]*flex-wrap: wrap/.test(css));
-  assert.ok(/@container \(max-width: \d+px\)/.test(css), 'a table that does not fit becomes stacked cards');
-  assert.ok(/td::before \{[^}]*content: attr\(data-label\)/.test(css));
+  assert.ok(!/position:\s*sticky/.test(css));
+  assert.ok(/html, body \{[^}]*overflow-x: clip/.test(css), 'a stray wide child is clipped, never scrolled');
+  assert.ok(/\.select-bank \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, [\d.]+rem\), 1fr\)\)/.test(css), 'the tab bank wraps');
+  assert.ok(/\.bay-row \{[^}]*min-width: 0/.test(css));
   assert.ok(/overflow-wrap: anywhere/.test(css));
 });
 
@@ -1097,11 +1102,13 @@ test('layout: the personality section is on the Personality tab, not on the Role
   await settle();
   assert.equal(page.all((n) => n.tagName === 'DETAILS').length, 2);
   assert.equal(page.allRoles((n) => n.tagName === 'DETAILS').length, 0);
-  assert.ok(page.allRoles((n) => n.tagName === 'TABLE').length >= 1);
+  assert.equal(page.allRoles((n) => n.tagName === 'ARTICLE' && n.className === 'strip').length, 2, 'one channel strip per Role on the Roles tab');
   assert.ok(page.all((n) => n.tagName === 'H3' && n.className === 'dept-label').length >= 1);
   const legend = page.all((n) => n.tagName === 'LEGEND').map((n) => n.textContent);
   assert.ok(legend.includes('Ava (architect), User level'));
-  assert.ok(legend.includes('qa, Project level'));
+  assert.ok(!legend.includes('qa, Project level'), 'the editing level shows one level at a time');
+  await page.setLevel('project');
+  assert.ok(page.all((n) => n.tagName === 'LEGEND').map((n) => n.textContent).includes('qa, Project level'));
 });
 
 test('layout: the Role filter has its label and hint, hides cards, counts them, and never changes the Save body', async () => {
@@ -1132,20 +1139,30 @@ test('layout: the Role filter has its label and hint, hides cards, counts them, 
   assert.ok(!JSON.stringify(body).includes('zzz'), 'the filter text is never sent');
 });
 
-test('layout: every Roles-table control has a visible label that starts with its field word, and no aria-label', async () => {
+test('layout: every Roles control has a visible label that starts with its field word, and no aria-label', async () => {
   const page = loadPage(namedState());
   await settle();
-  const controls = page.allRoles((n) => /^rf-/.test(idOf(n)) && (n.tagName === 'INPUT' || n.tagName === 'SELECT'));
-  assert.equal(controls.length, 2 * 2 * 3, 'two Roles, two levels, three fields');
+  const controls = page.allRoles((n) => /^rf-/.test(idOf(n)) && n.tagName === 'INPUT');
+  const named = controls.filter((n) => /-(name|effort)$/.test(n.id));
+  assert.equal(named.length, 2 * 2, 'two Roles, the shown level only, a Name and an Effort control each');
+  assert.ok(controls.every((n) => /^rf-[a-z-]+?-user-/.test(n.id)), 'only the shown level is built');
   for (const control of controls) {
     assert.equal(control.getAttribute('aria-label'), null, control.id);
+    assert.ok(page.allRoles((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id)[0], control.id);
+  }
+  for (const control of named) {
     const label = page.allRoles((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id)[0];
-    assert.ok(label, control.id);
-    const [, role, level, key] = /^rf-([a-z-]+?)-(user|project)-(name|model|effort)$/.exec(control.id);
-    const word = { name: 'Name', model: 'Model', effort: 'Effort' }[key];
-    assert.equal(label.children[0].textContent, word, 'the visible text is the field word');
+    const [, role, level, key] = /^rf-([a-z-]+?)-(user|project)-(name|effort)$/.exec(control.id);
+    const word = { name: 'Name', effort: 'Effort' }[key];
     assert.equal(label.textContent, `${word}, ${role === 'architect' ? 'Ava (architect)' : role}, ${level} level`);
-    assert.ok(label.children[1].className.split(' ').includes('vh'), 'the context is visually hidden');
+    assert.ok(label.textContent.startsWith(word), 'the visible text is the field word');
+    assert.ok(label.children.at(-1).className.split(' ').includes('vh'), 'the context is visually hidden');
+  }
+  for (const role of ['architect', 'qa']) {
+    const bank = closest(page.find((n) => n.id === `rf-${role}-user-model`), 'FIELDSET');
+    const legend = bank.children.find((n) => n.tagName === 'LEGEND');
+    assert.equal(legend.textContent, `Model, ${role === 'architect' ? 'Ava (architect)' : role}, user level`);
+    assert.ok(legend.children.at(-1).className.split(' ').includes('vh'));
   }
 });
 
@@ -1162,18 +1179,20 @@ test('layout: the Bulk bar controls are named by their wrapping labels only', as
   assert.deepEqual(walkAll(bulk, (n) => n.tagName === 'LABEL').map((l) => l.children[0].textContent), ['Apply to', 'model', 'effort']);
 });
 
-test('layout: table cells carry their column header for the stacked layout', async () => {
+test('layout: the Roles tab holds no table; each strip is named by its Role heading', async () => {
   const page = loadPage(namedState());
   await settle();
-  const cells = page.allRoles((n) => n.tagName === 'TD');
-  assert.deepEqual([...new Set(cells.map((c) => c.getAttribute('data-label')))], ['Plugin', 'User', 'Project', 'In effect']);
+  assert.equal(page.allRoles((n) => n.tagName === 'TD' || n.tagName === 'TABLE').length, 0);
+  const strips = page.allRoles((n) => n.tagName === 'ARTICLE' && n.className === 'strip');
+  assert.equal(strips.length, 2);
+  for (const strip of strips) assert.ok(page.allRoles((n) => n.id === strip.getAttribute('aria-labelledby')).length === 1, 'the strip names itself by its heading');
 });
 
 test('layout: a refused Save puts an error summary in the status and focuses its heading', async () => {
   const page = loadPage(namedState());
   await settle();
   await type(field(page, 'architect', 'user', 'talk'), 'bad: value');
-  await type(field(page, 'qa', 'project', 'topic'), 'x<y');
+  await type(field(page, 'qa', 'user', 'topic'), 'x<y');
   page.document.activeElement = page.ids.save;
   await page.ids.save.fire('click');
   assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
@@ -1189,7 +1208,7 @@ test('layout: a refused Save puts an error summary in the status and focuses its
     assert.ok(byId(page, target), `href ${link.getAttribute('href')} names an existing field`);
   }
   assert.ok(links[0].textContent.startsWith('Ava (architect), user level, Way of talking: can'));
-  assert.ok(links[1].textContent.startsWith('qa, project level, Pet topic: can'));
+  assert.ok(links[1].textContent.startsWith('qa, user level, Pet topic: can'));
 });
 
 test('layout: a summary link selects the Personality tab, clears a filter that hides the Role, opens the card and focuses the field', async () => {
@@ -1450,40 +1469,43 @@ function floorState() {
 }
 const modelControl = (page, role, level) => page.find((n) => n.id === `rf-${role}-${level}-model`);
 
-test('a protected Role gets the floor hint on both Model controls, tied with aria-describedby, and the label stays', async () => {
+test('a protected Role gets the floor hint on the Model group at both levels, tied with aria-describedby, and the label stays', async () => {
   const page = loadPage(floorState());
   await settle();
   for (const level of ['user', 'project']) {
+    await page.setLevel(level);
     const control = modelControl(page, 'architect', level);
+    const bank = closest(control, 'FIELDSET');
     const hint = byId(page, `rf-architect-${level}-model-hint`);
     assert.equal(hint.textContent, 'Protected: runs at opus or higher at every risk tier.');
-    assert.ok(control.getAttribute('aria-describedby').split(' ').includes(hint.id));
+    assert.ok(bank.getAttribute('aria-describedby').split(' ').includes(hint.id));
     assert.equal(hint.hidden, false);
     assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id));
     const qa = modelControl(page, 'qa', level);
     assert.equal(byId(page, `rf-qa-${level}-model-hint`), null);
-    assert.equal(qa.getAttribute('aria-describedby'), null);
+    assert.equal(closest(qa, 'FIELDSET').getAttribute('aria-describedby'), null);
   }
 });
+
+const modelReadout = (page, role) => {
+  const strip = closest(modelControl(page, role, 'user'), 'ARTICLE');
+  const readout = strip.children.find((n) => n.className === 'readout');
+  return { value: readout.children[3].textContent, source: readout.children[4].getAttribute('data-src') };
+};
 
 test('a model that came from the floor reads floor in the In effect cell', async () => {
   const page = loadPage(floorState());
   await settle();
-  const row = closest(modelControl(page, 'architect', 'user'), 'TR');
-  const effect = row.children[row.children.length - 1];
-  assert.match(effect.textContent, /^architect · opus · .*\((?:[^()]*, )?floor\)$/);
+  assert.deepEqual(modelReadout(page, 'architect'), { value: 'opus', source: 'floor' });
 });
 
 test('a protected pick below the floor shows the floor in effect before saving', async () => {
   const page = loadPage(floorState());
   await settle();
-  const control = modelControl(page, 'architect', 'user');
-  control.value = 'haiku';
-  await control.fire('change');
-  const row = closest(modelControl(page, 'architect', 'user'), 'TR');
-  const text = row.children[row.children.length - 1].textContent;
-  assert.match(text, /^architect · opus/);
-  assert.ok(text.includes('floor'));
+  const haiku = page.find((n) => n.tagName === 'INPUT' && n.name === 'rf-architect-user-model' && n.value === 'haiku');
+  haiku.checked = true;
+  await haiku.fire('change');
+  assert.deepEqual(modelReadout(page, 'architect'), { value: 'opus', source: 'floor' });
 });
 
 test('a field error on the Roles tab is announced through a live region', async () => {
@@ -1613,7 +1635,7 @@ test('user-only rows come after Short path in the pipeline panel, in order, and 
   assert.ok(!html.includes('innerHTML'));
   const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
   assert.ok(!/tabindex/i.test(fn));
-  for (const needle of ["el('label', { for: id }", "'aria-describedby'", "'aria-live'", "getElementById('field-live')", 'Locked']) {
+  for (const needle of ["el('label', { class: 'ctl-label', for: id }", "'aria-describedby'", "'aria-live'", "getElementById('field-live')", 'Locked']) {
     assert.ok(fn.includes(needle), needle);
   }
 });
@@ -1703,7 +1725,7 @@ test('the muted ignored select keeps full-strength text and border, with a non-c
   const rule = html.match(/^select\.ignored \{([^}]*)\}/m);
   assert.ok(rule, 'select.ignored rule');
   assert.ok(!/opacity/.test(rule[1]), 'no opacity on the text or border');
-  assert.ok(rule[1].includes('color: var(--muted)'));
+  assert.ok(rule[1].includes('color: var(--color-ink-2)'));
   assert.ok(rule[1].includes('border-style: dashed'));
   const forced = html.match(/@media \(forced-colors: active\) \{[^@]*select\.ignored \{([^}]*)\}/);
   assert.ok(forced, 'forced-colors override');
