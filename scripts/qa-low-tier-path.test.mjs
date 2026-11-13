@@ -1244,25 +1244,29 @@ describe('AC13 pipeline.short_path off gives the full route, and only off can be
     assert.equal(w.records().length, 0);
   });
 
-  test('AC13 the settings page row is labelled, tied to its hint, offers only off to a project and uses native selects', () => {
+  test('AC13 the settings page row is labelled, tied to its hint, offers only off to a project and uses a key-cap switch row', () => {
     const html = read('scripts/settings-page.html');
-    assert.match(html, /const label = 'Short path';/);
-    assert.match(html, /el\('label', \{ for: id \}, label, el\('span', \{ class: 'vh' \}, `, \$\{level\} level`\)\)/);
-    assert.match(html, /control\.setAttribute\('aria-describedby', 'short-path-hint'\)/);
-    assert.match(html, /selectFor\(level === 'user' \? \['on', 'off'\] : \['off'\], null\)/);
-    assert.match(html, /el\('p', \{ class: 'hint', id: 'short-path-hint' \}, SHORT_PATH_HINT\)/);
+    const body = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const SECOND_REVIEWER_HINT'));
+    assert.match(body, /switchRow\(tbody, \{ label: 'Short path'/);
+    assert.match(body, /options: level === 'user' \? \['on', 'off'\] : ignored \? \['off', 'on'\] : \['off'\]/);
+    assert.match(body, /hint: \{ id: 'short-path-hint', text: SHORT_PATH_HINT \}/);
+    // the switch row names its fieldset by legend (label + level) and links the hint by aria-describedby
+    const sw = html.slice(html.indexOf('function switchRow'), html.indexOf('function textRow'));
+    assert.match(sw, /el\('legend', \{\}, label, el\('span', \{ class: 'vh' \}, `, \$\{level\} level`\)\)/);
+    assert.match(sw, /el\('p', \{ class: 'hint', id: hint\.id \}, hint\.text\)/);
+    assert.match(sw, /fs\.setAttribute\('aria-describedby', baseDesc\)/);
     const contract = read('docs/contracts/aico-settings.md');
-    const quoted = contract.match(/"(Short path: a feature you approve[^"]*)"/);
-    assert.ok(quoted, 'the Contract quotes the hint');
-    assert.ok(html.includes(quoted[1]));
+    const quoted = contract.match(/exactly: "(A feature you approve[^"]*)"/);
+    assert.ok(quoted, 'the Contract (v2.1) quotes the hint');
+    assert.ok(html.includes(quoted[1]), 'the page hint is the exact Contract v2.1 text');
     assert.ok(!html.includes('innerHTML'));
   });
 
   test('AC13 the Short path row sits after Parallel cap and before the Reprompt heading', () => {
     const html = read('scripts/settings-page.html');
-    const a = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap);');
-    const b = html.indexOf('shortPathRow(tbody, defaults.short_path);');
-    const c = html.indexOf("el('h2', {}, 'Reprompt')");
+    const a = html.indexOf('parallelCapRow(rack, defaults.parallel_cap);');
+    const b = html.indexOf('shortPathRow(rack, defaults.short_path);');
+    const c = html.indexOf("sectionHead('Reprompt')");
     assert.ok(a > 0 && a < b && b < c);
   });
 });

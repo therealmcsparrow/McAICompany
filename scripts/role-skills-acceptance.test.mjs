@@ -1004,14 +1004,13 @@ test('AC1, AC2: each Role gets only entries of its categories; a bad user entry 
 });
 
 test('AC15: every skill row has a label bound to its checkbox, state and status as text, wrapping text and no sideways scroll', () => {
-  assert.match(PAGE, /el\('label', \{ for: id \}, e\.name\)/);
+  assert.match(PAGE, /el\('label', \{ for: id \}, el\('i', \{ class: 'led', 'aria-hidden': 'true' \}\), e\.name, meta\)/);
   assert.match(PAGE, /type: 'checkbox', id, disabled: e\.selectable !== true/);
   assert.match(PAGE, /'Status: '/);
   assert.match(PAGE, /aria-describedby/);
   assert.match(PAGE, /id: 'skcount', role: 'status'/);
-  assert.match(PAGE, /\.sk-row \.sk-text \{[^}]*overflow-wrap: anywhere/);
-  assert.match(PAGE, /\.sk-row \{[^}]*min-width: 0/);
-  const rule = PAGE.match(/\.sk-(?:list|row|text)[^{]*\{[^}]*\}/g).join('\n');
+  assert.match(PAGE, /\.jack label, \.jack-info[^{]*\{[^}]*overflow-wrap: anywhere; min-width: 0/);
+  const rule = PAGE.match(/\.jack[^{]*\{[^}]*\}/g).join('\n');
   assert.doesNotMatch(rule, /white-space:\s*nowrap|overflow-x:\s*(scroll|auto)/);
   assert.doesNotMatch(PAGE, /body\s*\{[^}]*overflow-x:\s*scroll/);
 });

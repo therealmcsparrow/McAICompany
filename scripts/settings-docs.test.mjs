@@ -164,7 +164,7 @@ test('aico-settings v1.7 names pipeline.parallel_cap, its range, default, refusa
   assert.match(doc, /\| `pipeline\.parallel_cap` \| integer 3-5; default 4 \(v1\.7\) \|/);
   assert.match(doc, /refused: pipeline\.parallel_cap must be a whole number from 3 to 5, nothing written \(v1\.7\)/);
   assert.match(doc, /pipeline: \{fix_rounds, dispatch, parallel_cap, short_path, second_reviewer, second_reviewer_model, second_reviewer_model_effective, worktrees, context_cap, review_format, lanes\}/);
-  assert.match(doc, /"Parallel cap: at most this many Steps run at once \(builders, reviewers, QA and security\)\. Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn\. Ignored when Dispatch is sequential\."/);
+  assert.match(doc, /"At most this many Steps run at once \(builders, reviewers, QA and security\)\. Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn\. Ignored when Dispatch is sequential\."/);
   assert.match(doc, /`pipeline\.dispatch: sequential` overrides it with 1\. Absent or invalid → 4\./);
 });
 
@@ -175,7 +175,7 @@ test('aico-settings v1.8 names pipeline.short_path, off wins, the refusal, the p
   assert.match(doc, /\| `pipeline\.short_path` \| on \\\| off; default on; off wins \(v1\.8\) \|/);
   assert.match(doc, /refused: pipeline\.short_path must be on or off/);
   assert.match(doc, /pipeline\.short_path: a project can only turn the short path off/);
-  assert.match(doc, /"Short path: a feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes, the ruleset research and the plan review; a fix triaged as low risk skips the security lane\. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file\. Off: low-risk runs take the full route\. A project setting can only turn it off\."/);
+  assert.match(doc, /"A feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes, the ruleset research and the plan review; a fix triaged as low risk skips the security lane\. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file\. Off: low-risk runs take the full route\. A project setting can only turn it off\."/);
   assert.match(doc, /Absent, invalid or no `get` JSON → `off`\./);
   assert.match(doc, /"short path off"/);
   assert.ok(!doc.includes('\r'), 'LF only');

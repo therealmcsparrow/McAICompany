@@ -440,7 +440,7 @@ test('AC6 the page builds labelled, described, focusable personality fields that
   assert.match(html, /input\[aria-invalid="true"\]/);
   // Visible labels tied to the field, native details for each Role, errors tied with aria-describedby.
   assert.match(html, /el\('label', \{ for: id \}, P_LABELS\[key\]\)/);
-  assert.match(html, /el\('details', \{ class: 'pcard' \}\)/);
+  assert.match(html, /el\('details', \{ id: `pers-\$\{role\}` \}\)/);
   assert.match(html, /setAttribute\('aria-invalid', 'true'\)/);
   assert.match(html, /setAttribute\('aria-describedby'/);
   // A refused Save focuses the error summary heading; each summary link opens the card and focuses its field.
@@ -448,7 +448,7 @@ test('AC6 the page builds labelled, described, focusable personality fields that
   assert.match(html, /heading\.focus\(\)/);
   assert.match(html, /function jumpTo\(rec\) \{[\s\S]*?selectTab\('personality'\);[\s\S]*?openRole\(rec\.role\);[\s\S]*?rec\.control\.focus\(\)/);
   // The personality section sits on its own tab, apart from the Roles table.
-  assert.match(html, /<button role="tab" id="tab-personality" aria-controls="panel-personality"[^>]*>Personality<\/button>/);
+  assert.match(html, /<button role="tab" id="tab-personality" aria-controls="panel-personality"[^>]*>(?:<span class="row1">[\s\S]*?<\/span><\/span>)?Personality<\/button>/);
   assert.match(html, /<section role="tabpanel" id="panel-personality" aria-labelledby="tab-personality" hidden><\/section>/);
   assert.ok(!html.includes('innerHTML'), 'hostile text is never parsed as markup');
   assert.ok(!/<script[^>]+src=|<link[^>]+href="http/.test(html), 'no remote files');

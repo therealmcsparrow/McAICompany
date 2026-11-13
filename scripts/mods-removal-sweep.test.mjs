@@ -129,13 +129,15 @@ describe('leftover sweep over tracked files', () => {
 });
 
 describe('both Contracts', () => {
+  const VERSION = { 'aico-mods': 'v2.0', 'aico-settings': 'v2.1' };
   for (const [rel, name] of [['docs/contracts/aico-mods.md', 'aico-mods'], ['docs/contracts/aico-settings.md', 'aico-settings']]) {
-    test(`${name} is at v2.0 with a v2.0 line in its history`, () => {
+    test(`${name} is at ${VERSION[name]} with a v2.0 line in its history`, () => {
       const text = read(rel);
-      assert.match(text, new RegExp(`^# Contract: ${name} v2\\.0$`, 'm'));
+      assert.match(text, new RegExp(`^# Contract: ${name} v${VERSION[name].slice(1).replace('.', '\\.')}$`, 'm'));
       const lines = text.split('\n');
       const header = lines.slice(0, headerEnd(lines)).join('\n');
       assert.match(header, /^v2\.0\b/m);
+      if (name === 'aico-settings') assert.match(header, /^v2\.1\b/m);
     });
 
     test(`AC8: the ${name} body from the first section heading on holds no removed-mod text`, () => {

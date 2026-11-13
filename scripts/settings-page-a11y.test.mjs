@@ -36,6 +36,8 @@ class FakeNode {
         if (on === undefined ? !set.has(name) : on) set.add(name); else set.delete(name);
         self.className = [...set].join(' ');
       },
+      add: (name) => self.classList.toggle(name, true),
+      remove: (name) => self.classList.toggle(name, false),
       contains: (name) => self.className.split(/\s+/).includes(name)
     };
     if (tag === 'option') {
@@ -98,14 +100,20 @@ function loadPage(initialState, fetchImpl) {
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
     return ids[`tab-${name}`];
   });
+  // The header level switch, the lamps and the per-tab dirty lamps the console shell adds.
+  const radios = ['user', 'project'].map((v) => { const r = make('input', { id: `lvl-${v}`, name: 'lvl' }); r.value = v; r.checked = v === 'user'; ids[`lvl-${v}`] = r; return r; });
+  for (const name of names) ids[`dirty-${name}`] = make('span');
+  ids.lamps = make('div', { id: 'lamps' });
+  ids['annun-list'] = make('div', { id: 'annun-list' });
+  doc.body = { dataset: {} };
   const footer = make('footer');
   const main = make('main');
   Object.assign(doc, {
     createElement: (tag) => make(tag),
     createTextNode: (text) => new FakeText(text),
     getElementById: (id) => ids[id] ?? names.map((n) => walk(ids[`panel-${n}`], (x) => x.id === id)).find(Boolean) ?? walk(ids.status, (x) => x.id === id),
-    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : null),
-    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : [])
+    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : sel === 'input[name="lvl"]:checked' ? radios.find((r) => r.checked) : null),
+    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : sel === 'input[name="lvl"]' ? radios : [])
   });
   const fakeFetch = fetchImpl ?? (async () => ({ status: 200, json: async () => structuredClone(initialState) }));
   const script = /<script>([\s\S]*)<\/script>/.exec(fs.readFileSync(PAGE_FILE, 'utf8'))[1];
@@ -114,6 +122,7 @@ function loadPage(initialState, fetchImpl) {
   vm.runInContext(script, context);
   const panels = names.map((n) => ids[`panel-${n}`]);
   return {
+    setLevel: async (level) => { for (const r of radios) r.checked = r.value === level; await ids[`lvl-${level}`].fire('change'); await new Promise((resolve) => setImmediate(resolve)); },
     ids,
     doc,
     find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
@@ -145,8 +154,13 @@ async function open(overrides, fetchImpl) {
   await settle();
   return page;
 }
-function rowSelect(page, label, level) {
-  return page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === `${label}, ${level}`);
+// Gate rows are switchRow fieldsets (.ctl.gate): the legend names the row and the level, the fieldset carries the lock reason, the .seg.bigsw radio group is the control.
+function gateRow(page, label, level) {
+  return page.find((n) => n.tagName === 'FIELDSET' && n.className.split(' ').includes('gate')
+    && n.children.some((c) => c.tagName === 'LEGEND' && c.textContent.startsWith(label) && c.textContent.includes(`, ${level} level`)));
+}
+function gateSeg(row) {
+  return row.children.find((c) => c.tagName === 'DIV' && c.className.split(' ').includes('seg'));
 }
 
 test('the Roles tab shows the pseudonym notice as text, and the old claim is gone', async () => {
@@ -162,13 +176,15 @@ test('the Roles tab shows the pseudonym notice as text, and the old claim is gon
 test('each Name field is described by its hint and the notice, and the ids resolve', async () => {
   const page = await open();
   for (const level of ['user', 'project']) {
+    await page.setLevel(level);
     const input = byId(page, `rf-architect-${level}-name`);
     const ids = describedBy(input);
     assert.deepEqual(ids, [`rf-architect-${level}-name-hint`, 'roles-names-notice']);
     for (const id of ids) assert.ok(byId(page, id), id);
   }
-  assert.equal(textOf(page, 'rf-architect-user-name-hint'), 'Use a pseudonym, not a real name.');
   assert.equal(textOf(page, 'rf-architect-project-name-hint'), 'Saved in .company/. Use a pseudonym, not a real name.');
+  await page.setLevel('user');
+  assert.equal(textOf(page, 'rf-architect-user-name-hint'), 'Use a pseudonym, not a real name.');
 });
 
 test('a name error is listed first and the hint and notice stay tied to the field', async () => {
@@ -187,17 +203,18 @@ test('a name error is listed first and the hint and notice stay tied to the fiel
   assert.deepEqual(describedBy(input), ['rf-architect-user-name-hint', 'roles-names-notice']);
 });
 
-test('without a .company/ folder the project Name hint says what is needed', async () => {
+test('without a .company/ folder the Project level cannot be chosen and the User level stays', async () => {
   const page = await open({ hasProject: false });
-  assert.equal(textOf(page, 'rf-architect-project-name-hint'), 'Needs a .company/ folder.');
-  assert.equal(byId(page, 'rf-architect-project-name').disabled, true);
+  assert.equal(page.ids['lvl-project'].disabled, true);
+  assert.equal(byId(page, 'rf-architect-project-name'), null);
+  assert.equal(textOf(page, 'rf-architect-user-name-hint'), 'Use a pseudonym, not a real name.');
 });
 
-test('the notice comes before the Roles table and no hint or reason takes a tab stop', async () => {
+test('the notice comes before the Role strips and no hint or reason takes a tab stop', async () => {
   const page = await open();
   const kids = page.panel('roles').children;
   const at = (pred) => kids.findIndex(pred);
-  assert.ok(at((n) => n.id === 'roles-names-notice') < at((n) => n.children?.some?.((c) => c.tagName === 'TABLE') || n.tagName === 'TABLE'));
+  assert.ok(at((n) => n.id === 'roles-names-notice') < at((n) => n.className === 'dept'));
   const stops = [];
   const scan = (node) => { for (const c of node.children ?? []) { if (c.tagName && c.getAttribute('tabindex') !== null) stops.push(c); scan(c); } };
   scan(page.panel('roles'));
@@ -213,16 +230,29 @@ const LOCKED_ROWS = [
   ['Installs', 'installs', 'Locked. auto needs your Installs unlock.']
 ];
 
-test('every locked Gate row shows its reason as text, tied to both controls', async () => {
+test('every locked Gate row shows its reason as text, tied to the control at each level', async () => {
   const page = await open();
   const reasons = page.panel('gates').children;
   assert.ok(reasons);
   for (const [label, , text] of LOCKED_ROWS) {
-    const user = rowSelect(page, label, 'user');
-    const project = rowSelect(page, label, 'project');
-    assert.ok(user && project, label);
+    await page.setLevel('user');
+    const user = gateRow(page, label, 'user');
+    assert.ok(user, label);
+    assert.ok(gateSeg(user).className.split(' ').includes('bigsw'), label);
+    assert.ok(gateSeg(user).radios.length > 0, label);
     const id = describedBy(user)[0];
     assert.match(id, /^lock-/);
+    // read once: the reason id appears once in aria-describedby; the legend label is aria-hidden
+    assert.equal(describedBy(user).filter((d) => d === id).length, 1);
+    const caps = walkAll(user.children.find((c) => c.tagName === 'LEGEND'), (n) => typeof n.className === 'string' && n.className.split(' ').includes('lockcap'));
+    assert.equal(caps.length, 1, label);
+    const cap = caps[0];
+    assert.equal(cap.getAttribute('aria-hidden'), 'true');
+    assert.equal(cap.textContent, `${label.toLowerCase()} lock`);
+    assert.equal(textOf(page, id), text);
+    await page.setLevel('project');
+    const project = gateRow(page, label, 'project');
+    assert.ok(project, label);
     assert.equal(describedBy(project)[0], id);
     assert.equal(textOf(page, id), text);
   }
@@ -235,50 +265,60 @@ test('lane rows carry the security reason', async () => {
     ['pipeline', 'Compliance', 'Locked. Off needs your security unlock.']
   ];
   for (const [, label, text] of rows) {
-    const control = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label')?.startsWith(label) && n.getAttribute('aria-label').endsWith(', user'));
-    assert.ok(control, label);
+    // lane rows are switchRow fieldsets: the legend names the row, the fieldset carries the reason
+    const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.startsWith(label) && n.textContent.includes(', user level'));
+    assert.ok(legend, label);
+    const control = legend.parentNode;
+    assert.equal(control.tagName, 'FIELDSET', label);
     assert.equal(textOf(page, describedBy(control)[0]), text);
   }
 });
 
 test('rows without a lock keep no lock reason', async () => {
   const page = await open();
-  const control = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === 'Legal, user') ?? rowSelect(page, 'Plan', 'user');
+  const control = gateRow(page, 'Plan', 'user');
   assert.ok(control);
   assert.ok(!describedBy(control).some((id) => id.startsWith('lock-')));
+  assert.equal(walkAll(control, (n) => typeof n.id === 'string' && n.id.startsWith('lock-')).length, 0);
 });
 
 test('the unlocked state replaces the reason text', async () => {
   const page = await open({ user: { version: 1, unlocked: ['ship'] } });
-  const id = describedBy(rowSelect(page, 'Ship', 'user'))[0];
-  assert.equal(textOf(page, id), 'Unlocked by you.');
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Installs', 'user'))[0]), 'Locked. auto needs your Installs unlock.');
+  const id = describedBy(gateRow(page, 'Ship', 'user'))[0];
+  // unlocked: no lock reason shown (empty and hidden)
+  assert.equal(textOf(page, id), '');
+  assert.equal(byId(page, id).hidden, true);
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Installs', 'user'))[0]), 'Locked. auto needs your Installs unlock.');
 });
 
 test('the lock reason changes with the unlock and the change is announced, not the load', async () => {
   const page = await open();
   assert.equal(page.ids['lock-live'].textContent, '');
-  const unlocks = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === 'Ship unlock, user');
-  unlocks.value = 'on';
-  const pending = unlocks.fire('change');
+  const unlocks = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
+  assert.equal(unlocks.getAttribute('aria-pressed'), 'false');
+  // WCAG 2.5.3: the accessible name (labelledby text) contains the visible label, GATE_LABELS casing.
+  assert.ok(textOf(page, 'key-ship-l').includes('Ship key'));
+  assert.ok(textOf(page, unlocks.getAttribute('aria-labelledby')).includes('Ship key'));
+  const pending = unlocks.fire('click');
   await settle();
   assert.equal(page.ids.unlock.open, true);
   await page.ids['unlock-ok'].fire('click');
   await pending;
   await settle();
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Unlocked by you.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), '');
   assert.equal(page.ids['lock-live'].textContent, 'Ship unlocked. auto now applies.');
-  const again = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === 'Ship unlock, user');
-  again.value = '';
-  await again.fire('change');
+  const again = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
+  assert.equal(again.getAttribute('aria-pressed'), 'true');
+  await again.fire('click');
   await settle();
   assert.equal(page.ids['lock-live'].textContent, 'Ship locked again. auto is held until you unlock it.');
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
 });
 
 test('cancelling the dialog keeps the lock and says so', async () => {
   const page = await open();
-  const ship = rowSelect(page, 'Ship', 'user');
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  assert.ok(ship.radios.some((r) => r.value === 'auto'));
   ship.value = 'auto';
   const pending = ship.fire('change');
   await settle();
@@ -287,7 +327,138 @@ test('cancelling the dialog keeps the lock and says so', async () => {
   await pending;
   await settle();
   assert.equal(page.ids['lock-live'].textContent, 'Kept locked. Your choice was not applied.');
-  assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
+  assert.ok(gateSeg(gateRow(page, 'Ship', 'user')).value !== 'auto');
+});
+
+// 96 A1-A9 (94-ui-ux-designer.md): arrowing onto a locked key-cap opens the one dialog; Cancel and Esc put focus back on the checked radio.
+const radioOf = (seg, value) => seg.radios.find((r) => r.value === value);
+// An arrow key lands on a radio: the browser focuses it, checks it and fires change on the group.
+async function arrowTo(seg, value) {
+  const radio = radioOf(seg, value);
+  radio.focus();
+  seg.value = value;
+  const pending = seg.fire('change');
+  await settle();
+  return pending;
+}
+const laneSeg = (page, label) => gateSeg(page.find((n) => n.tagName === 'LEGEND' && n.textContent.startsWith(label) && n.textContent.includes(', user level')).parentNode);
+
+test('96 A1: an arrow onto a locked Gate or Lane option opens the dialog once and writes nothing yet', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const before = unsaved(page);
+  const prev = ship.value;
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  assert.ok(page.ids.unlock.open === true, 'Ship auto opens #unlock');
+  assert.ok(page.ids['unlock-title'].textContent === 'Unlock the Ship Gate', 'the Ship text is shown');
+  assert.ok(unsaved(page) === before, 'no unsaved change before the answer');
+  await page.ids['unlock-cancel'].fire('click');
+  await pending;
+  assert.ok(ship.value === prev, 'Ship is back on the previous value');
+  const security = laneSeg(page, 'Security');
+  assert.ok(security.radios.some((r) => r.value === 'false'), 'the Security lane has an off option (value false)');
+  const laneBefore = unsaved(page);
+  const lanePending = arrowTo(security, 'false');
+  await settle();
+  assert.ok(page.ids.unlock.open === true, 'Security off (false) opens #unlock');
+  assert.ok(page.ids['unlock-title'].textContent === 'Unlock the security lanes', 'the security text is shown');
+  assert.ok(unsaved(page) === laneBefore, 'no unsaved change before the answer');
+  await page.ids['unlock-cancel'].fire('click');
+  await lanePending;
+});
+
+test('96 A2: Cancel restores the checked radio, puts focus on it, says Kept locked and leaves no edit', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const prev = ship.value;
+  const before = unsaved(page);
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  assert.ok(page.doc.activeElement === page.ids['unlock-cancel'], 'the dialog starts on Keep it locked');
+  await page.ids['unlock-cancel'].fire('click');
+  await pending;
+  await settle();
+  const checked = ship.radios.find((r) => r.checked);
+  assert.ok(checked !== undefined && checked.value === prev, 'the previous option is the checked radio');
+  assert.ok(page.doc.activeElement === checked, 'focus is on the restored checked radio, not on the locked option or the dialog button');
+  assert.ok(page.ids['lock-live'].textContent === 'Kept locked. Your choice was not applied.', 'the Kept locked line is announced');
+  assert.ok(unsaved(page) === before, 'no edited tag');
+});
+
+test('96 A3: closing the dialog with Esc behaves exactly as Cancel', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const prev = ship.value;
+  const before = unsaved(page);
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  await page.ids.unlock.fire('close');
+  await pending;
+  await settle();
+  const checked = ship.radios.find((r) => r.checked);
+  assert.ok(checked !== undefined && checked.value === prev, 'the previous option is the checked radio');
+  assert.ok(page.doc.activeElement === checked, 'focus is on the restored checked radio');
+  assert.ok(page.ids['lock-live'].textContent === 'Kept locked. Your choice was not applied.', 'the Kept locked line is announced');
+  assert.ok(unsaved(page) === before, 'no edited tag');
+});
+
+test('96 A4: OK unlocks, applies the value and keeps focus on the new radio', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  await page.ids['unlock-ok'].fire('click');
+  await pending;
+  await settle();
+  assert.ok(ship.value === 'auto', 'auto is applied');
+  // Focus on the new radio after OK is the browser's own dialog close; the fake dialog does not restore focus, so it is not pinned here.
+  assert.ok(page.ids['lock-live'].textContent === 'Ship unlocked. auto now applies.', 'the unlock is announced');
+  const key = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
+  assert.ok(key.getAttribute('aria-pressed') === 'true', 'the Ship key now reads unlocked');
+  assert.ok(unsaved(page) !== '0 unsaved changes', 'the unlock and the value count as unsaved');
+});
+
+test('96 A5: focus alone and an arrow onto an unlocked option never open the dialog', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  for (const r of ship.radios) r.focus();
+  assert.ok(page.ids.unlock.open === false, 'Tab or focus alone does not open it');
+  const free = ship.radios.find((r) => r.value !== '' && r.value !== 'auto');
+  assert.ok(free !== undefined, 'Ship has an option that needs no unlock');
+  await arrowTo(ship, free.value);
+  assert.ok(page.ids.unlock.open === false, 'an unlocked option does not open it');
+  assert.ok(ship.value === free.value, 'the unlocked option applies at once');
+});
+
+test('96 A6: an unlocked key and the Project level open no dialog', async () => {
+  const unlocked = await open({ user: { version: 1, unlocked: ['ship'] } });
+  await arrowTo(gateSeg(gateRow(unlocked, 'Ship', 'user')), 'auto');
+  assert.ok(unlocked.ids.unlock.open === false, 'already unlocked: no dialog');
+  assert.ok(gateSeg(gateRow(unlocked, 'Ship', 'user')).value === 'auto', 'and the value applies');
+  const page = await open();
+  await page.setLevel('project');
+  await arrowTo(gateSeg(gateRow(page, 'Ship', 'project')), 'auto');
+  assert.ok(page.ids.unlock.open === false, 'project level: no dialog');
+});
+
+test('96 A7/A8: the dialog opens only through the group change event, with no key handler on the radios', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  assert.ok(ship.radios.every((r) => Object.values(r.listeners).every((l) => l.length === 0)), 'no listener on any radio, so click, Space and arrows share the group change path');
+  assert.ok((ship.listeners.change ?? []).length === 1, 'one change listener on the group');
+  assert.ok(Object.keys(ship.listeners).every((t) => t === 'change'), 'the group listens to change only, no keydown');
+  const html = fs.readFileSync(PAGE_FILE, 'utf8');
+  const body = (name) => { const i = html.indexOf(`function ${name}(`); return html.slice(i, html.indexOf('\nfunction ', i + 1)); };
+  assert.ok(!body('segFor').includes('keydown') && !body('switchRow').includes('keydown'), 'segFor and switchRow add no keydown code');
+});
+
+test('96 A9: the dialog has an accessible name and Cancel is the first focus', () => {
+  const html = fs.readFileSync(PAGE_FILE, 'utf8');
+  assert.ok(/<dialog id="unlock" aria-labelledby="unlock-title">/.test(html), 'the dialog is named by its title');
+  assert.ok(/id="unlock-title"/.test(html), 'the title id exists');
+  assert.ok(/dialog\.showModal\(\);\s*cancel\.focus\(\);/.test(html), 'Cancel takes focus when the dialog opens');
 });
 
 test('the page keeps the dialog and a separate polite live region for locks, and sets text without innerHTML', () => {
@@ -314,6 +485,8 @@ function skillsState(entries, over = {}) {
 const box = (page, id) => page.find((n) => n.tagName === 'INPUT' && n.type === 'checkbox' && n.id === id);
 const ticked = async (cb, on = true) => { cb.checked = on; await cb.fire('change'); };
 const unsaved = (page) => page.ids.count.textContent;
+// A jack label holds the skill name as text, then a meta line (category and status).
+const labelName = (label) => label.children.filter((c) => !c.tagName).map((c) => c.textContent).join('');
 
 test('each skill row is a checkbox with a label, a fieldset legend and status as words', async () => {
   const entries = [skill('qa-helper', { status: 'folder not recognized', place: 'project', vetted: '2026-01-02', skillrepo: 'owner/name' }), skill('cmd', { kind: 'command', commit: undefined })];
@@ -321,7 +494,7 @@ test('each skill row is a checkbox with a label, a fieldset legend and status as
   await settle();
   const cb = box(page, 'sk-qa-user-qa-helper');
   assert.equal(cb.type, 'checkbox');
-  assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === cb.id && n.textContent === 'qa-helper'));
+  assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === cb.id && labelName(n) === 'qa-helper'));
   const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.includes('qa') && n.textContent.includes('User level'));
   assert.equal(legend.parentNode.tagName, 'FIELDSET');
   const text = describedBy(cb).map((id) => byId(page, id).textContent);
@@ -345,7 +518,7 @@ test('hostile entry text reaches the page as text only', async () => {
   await settle();
   const panel = page.panel('skills');
   assert.ok(panel.textContent.includes(evil));
-  assert.equal(walk(panel, (n) => ['IMG', 'B', 'SCRIPT', 'I'].includes(n.tagName)), null);
+  assert.equal(walk(panel, (n) => ['IMG', 'B', 'SCRIPT'].includes(n.tagName) || (n.tagName === 'I' && n.getAttribute('aria-hidden') !== 'true')), null);
 });
 
 test('the sixth pick stays unchecked, says why in the live region and the list, and the field is described by it', async () => {
@@ -429,6 +602,8 @@ test('a protected Role has no project controls and says so', async () => {
   await settle();
   assert.ok(box(page, 'sk-architect-user-shared'));
   assert.equal(box(page, 'sk-architect-project-shared'), null);
+  await page.setLevel('project');
+  assert.equal(box(page, 'sk-architect-project-shared'), null);
   assert.ok(page.panel('skills').textContent.includes('Protected Role: skills are chosen at User level only. A project value is ignored.'));
   assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
 });
@@ -444,6 +619,7 @@ test('an eligible name in a protected Role project list is not part of the draft
   const page = loadPage(initial, fetchImpl);
   await settle();
   assert.equal(unsaved(page), '0 unsaved changes');
+  await page.setLevel('project');
   assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
   await ticked(box(page, 'sk-qa-project-shared'));
   await page.ids.save.fire('click');
@@ -451,6 +627,27 @@ test('an eligible name in a protected Role project list is not part of the draft
   assert.ok(posted.project, 'the project layer is posted');
   assert.equal(posted.project.roles?.architect?.skills, undefined);
 });
+
+// The effective skills each Role readout names, as "names (source)" or "none"; one string per Role row.
+function effectiveReadouts(page) {
+  return walkAll(page.panel('skills'), (x) => x.tagName === 'P' && x.className.split(' ').includes('readout')).map((r) => {
+    const kids = r.children;
+    const at = kids.findIndex((c) => c.textContent === 'In effect');
+    const v = kids[at + 1];
+    const src = kids[at + 2];
+    const srcText = src && src.className.split(' ').includes('s') ? ` (${src.textContent})` : '';
+    return `${v.textContent}${srcText}`;
+  });
+}
+// A skill checkbox sits in an always-open Role row: no DETAILS above it, and the row is the labelled fieldset.
+function assertAlwaysOpenRow(box) {
+  let row = box;
+  while (row && row.tagName !== 'FIELDSET') row = row.parentNode;
+  assert.ok(row !== null && row !== undefined, 'the checkbox sits in a fieldset');
+  assert.ok(row.className.split(' ').includes('bay-row'), 'the fieldset is the Role row');
+  for (let up = box.parentNode; up; up = up.parentNode) assert.ok(up.tagName !== 'DETAILS', 'no collapsed card hides the checkbox');
+  assert.ok(!row.hidden, 'the row is shown');
+}
 
 test('while the user layer is unread its stored names are kept, not listed as ignored', async () => {
   const state = skillsState([skill('qa-helper')]);
@@ -460,7 +657,8 @@ test('while the user layer is unread its stored names are kept, not listed as ig
   await settle();
   const text = page.panel('skills').textContent;
   assert.ok(!text.includes('Ignored: this stored skill'));
-  assert.ok(text.includes('2 selected (user)'));
+  assert.ok(effectiveReadouts(page).includes('qa-helper (user)'), 'the readout names the stored catalog skill, from the user layer');
+  assert.ok(text.includes('2 of 5 selected'));
   assert.equal(unsaved(page), '0 unsaved changes');
 });
 
@@ -496,10 +694,7 @@ test('save keeps focus on the same checkbox and shows the saved notice', async (
   };
   const page = loadPage(initial, fetchImpl);
   await settle();
-  let card = box(page, 'sk-qa-user-qa-helper');
-  while (card.tagName !== 'DETAILS') card = card.parentNode;
-  card.open = true;
-  await card.fire('toggle');
+  assertAlwaysOpenRow(box(page, 'sk-qa-user-qa-helper'));
   await ticked(box(page, 'sk-qa-user-qa-helper'));
   box(page, 'sk-qa-user-qa-helper').focus();
   await page.ids.save.fire('click');
@@ -527,10 +722,7 @@ test('keyboard-only save: focus on Save stays on Save, status starts Saved., and
   await save.fire('click');
   await settle();
   assert.equal(posts, 0);
-  let card = box(page, 'sk-qa-user-qa-helper');
-  while (card.tagName !== 'DETAILS') card = card.parentNode;
-  card.open = true;
-  await card.fire('toggle');
+  assertAlwaysOpenRow(box(page, 'sk-qa-user-qa-helper'));
   await ticked(box(page, 'sk-qa-user-qa-helper'));
   assert.equal(save.getAttribute('aria-disabled'), 'false');
   save.focus();
@@ -595,6 +787,7 @@ test('a missing catalog, an empty user list, a moved folder and a bad list each 
   const text = page.panel('skills').textContent;
   assert.ok(text.includes('role skills: the settings folder is not the user home, the user level is not counted'));
   assert.equal(box(page, 'sk-qa-user-b'), null);
+  await page.setLevel('project');
   assert.ok(box(page, 'sk-qa-project-b'));
   const bad = skillsState([]);
   bad.catalog.errors = ['ERROR user catalog: entry 3: category'];
@@ -627,7 +820,7 @@ test('a skill named like a fixed part keeps its own id: the label and the descri
     assert.equal(cb.type, 'checkbox', n);
     assert.equal(byId(page, cb.id), cb, `${n}: the first node with the id is the checkbox`);
     const label = page.find((x) => x.tagName === 'LABEL' && x.getAttribute('for') === cb.id);
-    assert.equal(label.textContent, n);
+    assert.equal(labelName(label), n);
     for (const id of describedBy(cb)) assert.notEqual(byId(page, id), cb, `${n}: ${id}`);
   }
   assert.equal(byId(page, 'sk-qa-user_count').tagName, 'P');
@@ -653,9 +846,10 @@ test('In effect names only what the resolver would use while the user layer is u
     if (unread === 'moved') state.resolved.settings_folder_moved = true; else state.catalog.errors = ['ERROR user catalog: entry 3: category'];
     const page = loadPage(state);
     await settle();
+    await page.setLevel('project');
     const eff = textOf(page, 'sk-qa-project_count');
     assert.match(eff, /1 of 5 selected, 1 not in effect/, unread);
-    const dd = walkAll(page.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+    const dd = effectiveReadouts(page);
     assert.ok(!dd.some((t) => t.includes('ghost')), unread);
     if (unread === 'catalog') assert.ok(dd.includes('qa-helper (user)'), unread);
     else assert.ok(!dd.includes('qa-helper (user)'), unread);
@@ -668,13 +862,13 @@ test('In effect: an empty project list masks the user list, a repeated stored na
   empty.project = { version: 1, roles: { qa: { skills: [] } } };
   const p1 = loadPage(empty);
   await settle();
-  const dd1 = walkAll(p1.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  const dd1 = effectiveReadouts(p1);
   assert.ok(!dd1.some((t) => t.includes('qa-helper (')), 'an empty project list is a choice of none and wins');
   const dup = skillsState([skill('qa-helper'), skill('b')]);
   dup.user = { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }, { name: 'b' }, { name: 'qa-helper' }] } } };
   const p2 = loadPage(dup);
   await settle();
-  const dd2 = walkAll(p2.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
+  const dd2 = effectiveReadouts(p2);
   assert.ok(dd2.includes('qa-helper, b (user)'), dd2.join('|'));
 });
 
@@ -682,10 +876,84 @@ test('the Skills tab sits after Roles, wraps long text and adds no colour or fix
   const html = fs.readFileSync(PAGE_FILE, 'utf8');
   assert.ok(html.indexOf('id="tab-roles"') < html.indexOf('id="tab-skills"') && html.indexOf('id="tab-skills"') < html.indexOf('id="tab-personality"'));
   assert.ok(html.includes("const TAB_NAMES = ['roles', 'skills', 'personality'"));
-  const css = html.split('\n').filter((l) => l.startsWith('.sk-')).join('\n');
+  const css = html.split(/\r?\n/).filter((l) => /^\.(bay|jack|jacks)\b/.test(l)).join('\n');
   assert.ok(css.includes('overflow-wrap: anywhere'));
   assert.ok(!/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i.test(css));
-  assert.ok(!/(^|[^-])width: \d+(px|rem)/.test(css.replace('width: 24px; height: 24px', '')));
-  assert.ok(/min-height: 44px/.test(css));
-  assert.ok(/@media \(max-width: 600px\)[^}]*\n\s*\.pgrid \{ grid-template-columns: 1fr; \}/.test(html));
+  assert.ok(!/(^|[^-])width: \d+(px|rem)/.test(css.replace('width: 1px; height: 1px', '')));
+  assert.ok(/\.jacks \{[^}]*flex-wrap: wrap/.test(css));
+  assert.ok(/\.pgrid, \.pbody \{[^}]*minmax\(min\(100%, 17rem\), 1fr\)/.test(html));
+});
+
+test('touch targets: every console control is at least 44px high, the effort fader 44px wide, the key switch 44px square', () => {
+  const html = fs.readFileSync(PAGE_FILE, 'utf8').replace(/\r\n/g, '\n');
+  const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const rule = /([^{}]*)\{[^}]*\bmin-height: 44px[^}]*\}/.exec(css);
+  assert.ok(rule, 'a min-height: 44px rule');
+  const selectors = rule[1].replace(/\/\*[\s\S]*?\*\//g, '').split(',').map((s) => s.trim());
+  for (const control of ['.btn', '.bulk button', '.bulk select', '.select-bank [role="tab"]', '.rocker label', '.seg label', '.mbank label', '.jack label', 'button.small',
+    '.ctl select', '.ctl input[type="text"]', '.ctl textarea', '.strip .cf input[type="text"]', '.scribble', '.pers summary']) {
+    assert.ok(selectors.includes(control), `${control} is in the 44px rule`);
+  }
+  assert.ok(/\.fader input\[type="range"\] \{[^}]*width: 44px[^}]*height: 132px/.test(css), 'the effort fader is 44px wide');
+  assert.ok(/\.keysw \.barrel \{[^}]*width: 52px; height: 52px/.test(css), 'the key switch barrel');
+  assert.ok(!/min-height: (?:[0-3]?\d|4[0-3])px/.test(css), 'no smaller min-height is set on a control');
+});
+
+// ---------- Fix round 2 pins (Step 82): 80 R-1/R-2, 79 R-1 ----------
+// Every Role row on the Skills tab ends in the In effect readout (p.readout) and the changed/refused/ignored pills,
+// also when the row has no list (no .company/ folder, settings folder moved).
+function assertRowsHaveReadout(page, why) {
+  const rows = walkAll(page.panel('skills'), (x) => x.tagName === 'FIELDSET' && x.className.split(' ').includes('bay-row'));
+  assert.ok(rows.length >= 2, `${why}: both Role rows are built`);
+  for (const row of rows) {
+    const readout = walk(row, (x) => x.tagName === 'P' && x.className.split(' ').includes('readout'));
+    assert.ok(readout !== null, `${why}: ${row.textContent.slice(0, 12)} has an In effect readout`);
+    assert.ok(readout !== null && readout.textContent.includes('In effect'), `${why}: the readout says In effect`);
+    const pills = walkAll(row, (x) => x.tagName === 'SPAN' && x.className.split(' ').includes('pill') && ['changed', 'refused', 'ignored value'].includes(x.textContent));
+    assert.ok(pills.length === 3, `${why}: the changed, refused and ignored value pills are in the row`);
+  }
+}
+
+test('80 R-2: at Project level without a .company/ folder each Role row still has the In effect readout and pills', async () => {
+  const page = loadPage(skillsState([skill('qa-helper')], { hasProject: false }));
+  await settle();
+  await page.setLevel('project');
+  assert.ok(page.panel('skills').textContent.includes('Needs a .company/ folder.'), 'the project level shows the no-folder hint');
+  assertRowsHaveReadout(page, 'no .company/');
+});
+
+test('80 R-2: at User level with the settings folder moved each Role row still has the In effect readout and pills', async () => {
+  const moved = skillsState([skill('qa-helper')]);
+  moved.resolved.settings_folder_moved = true;
+  const page = loadPage(moved);
+  await settle();
+  assert.ok(page.panel('skills').textContent.includes('the user level is not counted'), 'the moved notice shows');
+  assert.ok(box(page, 'sk-qa-user-qa-helper') === null, 'no checkbox at the moved user level');
+  assertRowsHaveReadout(page, 'folder moved');
+});
+
+test('79 R-1: the Mods Pane auto note is the second hint in the panel head, not a loose paragraph', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const mods = page.panel('mods');
+  const head = walk(mods, (x) => x.tagName === 'DIV' && x.className.split(' ').includes('panel-head'));
+  assert.ok(head !== null, 'the Mods panel has a head');
+  const hints = head.children.filter((c) => c.tagName === 'P' && c.className.split(' ').includes('hint'));
+  assert.ok(hints.length === 2, 'the head carries two hints');
+  assert.ok(hints.length === 2 && hints[1].textContent.startsWith('Pane auto:'), 'the second hint is the Pane auto note');
+  const loose = mods.children.filter((c) => c.tagName === 'P' && c.textContent.includes('Pane auto:'));
+  assert.ok(loose.length === 0, 'no loose Pane auto paragraph after the units');
+});
+
+test('79 R-2: the unlocked key light is the preview ok led (green), the locked one the lock led', async () => {
+  // Preview 06-hallmark-console.html: led(on ? 'ok' : 'lock') styled by .led[data-on="ok"] (green) and .led[data-on="lock"].
+  const page = await open({ user: { version: 1, unlocked: ['ship'] } });
+  const ledOf = (key) => walk(byId(page, `key-${key}-s`), (x) => x.tagName === 'I' && x.className.split(' ').includes('led'));
+  const unlocked = ledOf('ship');
+  const locked = ledOf('installs');
+  assert.ok(unlocked !== null && locked !== null, 'both key states carry a led');
+  assert.ok(unlocked !== null && unlocked.getAttribute('data-on') === 'ok', 'the unlocked Ship key light is data-on ok');
+  assert.ok(locked !== null && locked.getAttribute('data-on') === 'lock', 'the locked Installs key light is data-on lock');
+  const css = fs.readFileSync(PAGE_FILE, 'utf8');
+  assert.ok(/\.led\[data-on="ok"\] \{[^}]*--color-led-ok/.test(css), 'the page styles .led[data-on="ok"] with the ok colour');
 });
