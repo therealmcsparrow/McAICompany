@@ -410,9 +410,9 @@ test('Reprompt hint equals the Contract text byte for byte and sits between the 
   const hintCall = `el('p', { class: 'hint', id: 'reprompt-hint' }, '${m[1]}')`;
   assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
   const cap = html.indexOf('The context cap is fixed.');
-  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  const h2 = html.indexOf("sectionHead('Reprompt')");
   const hint = html.indexOf(hintCall);
-  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  const brainstorm = html.indexOf("sectionHead('Brainstorm')");
   assert.ok(cap > 0 && cap < h2 && h2 < hint && hint < brainstorm, `order ${cap} ${h2} ${hint} ${brainstorm}`);
 });
 
@@ -496,7 +496,7 @@ test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row
   const mods = html.slice(at('function renderMods'), at('const SCAN_NOTE'));
   assert.ok(!mods.includes('skillspector') && !mods.includes('SkillSpector'));
   const scan = html.slice(at('const SCAN_NOTE'), at('// ---------- page'));
-  for (const needle of ["'SkillSpector'", "'Scan mode'", "['skillspector', 'mode']", 'aria-describedby']) assert.ok(scan.includes(needle), needle);
+  for (const needle of ["panelHead('Skill scan'", "'Scan mode'", "['skillspector', 'mode']", 'aria-describedby']) assert.ok(scan.includes(needle), needle);
 });
 
 test('the Skill scan sentence is the Contract sentence byte for byte', () => {
@@ -1433,8 +1433,8 @@ test('Plan check hint equals the Contract text and the table sits after the Repr
   const hintCall = `el('p', { class: 'hint', id: 'plan-check-hint' }, '${planHintText()}')`;
   assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
   const reprompt = html.indexOf("id: 'reprompt-hint'");
-  const h2 = html.indexOf("el('h2', {}, 'Plan check')");
-  const brainstorm = html.indexOf("el('h2', {}, 'Brainstorm')");
+  const h2 = html.indexOf("sectionHead('Plan check')");
+  const brainstorm = html.indexOf("sectionHead('Brainstorm')");
   assert.ok(reprompt > 0 && reprompt < h2 && h2 < html.indexOf(hintCall) && html.indexOf(hintCall) < brainstorm);
   assert.ok(!/tabIndex: [1-9]|tabindex="[1-9]/.test(html), 'no positive tabindex');
   assert.ok(!/innerHTML/.test(html));
@@ -1637,7 +1637,7 @@ test('Parallel cap hint equals the Contract text once and sits after the context
   assert.equal(html.split(`const PARALLEL_CAP_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
   const cap = html.indexOf('The context cap is fixed.');
   const hint = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
-  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  const h2 = html.indexOf("sectionHead('Reprompt')");
   assert.ok(cap > 0 && cap < hint && hint < h2, `order ${cap} ${hint} ${h2}`);
 });
 
@@ -1682,7 +1682,7 @@ test('Short path hint equals the Contract text once and sits as the fourth hint,
   assert.equal(html.split(`const SHORT_PATH_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
   const par = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
   const hint = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
-  const h2 = html.indexOf("el('h2', {}, 'Reprompt')");
+  const h2 = html.indexOf("sectionHead('Reprompt')");
   assert.ok(par > 0 && par < hint && hint < h2, `order ${par} ${hint} ${h2}`);
 });
 
@@ -1725,7 +1725,7 @@ test('Second reviewer, Second reviewer model and Worktrees hints equal the Contr
     assert.ok(at > last, `${id} hint order`);
     last = at;
   }
-  assert.ok(last < html.indexOf("el('h2', {}, 'Reprompt')"));
+  assert.ok(last < html.indexOf("sectionHead('Reprompt')"));
 });
 
 test('Second reviewer model offers only the values the code-reviewer floor allows', () => {
