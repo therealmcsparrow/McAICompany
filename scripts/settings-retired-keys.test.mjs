@@ -83,7 +83,7 @@ const LEFTOVERS = [
 ];
 const LEVEL_SETS = [['user'], ['project'], ['user', 'project']];
 
-// ---------- AC3: a stored leftover resolves as before with one warning ----------
+// ---------- a stored leftover resolves as before with one warning ----------
 for (const [label, value] of LEFTOVERS) {
   for (const levels of LEVEL_SETS) {
     test(`leftover ${label} in ${levels.join(' and ')}: no throw, get equals the file without it, one warning line`, (t) => {
@@ -180,7 +180,7 @@ test('a project layer broken by something else still holds the unlock, with or w
   assert.ok(r.warnings.some((w) => /held/.test(w)), r.warnings.join(' | '));
 });
 
-// ---------- AC4: a save of another setting works and cleans the file ----------
+// ---------- a save of another setting works and cleans the file ----------
 test('writeLayer of another setting succeeds on a file with the leftover, and the file no longer holds the key', (t) => {
   const s = sandbox(t);
   s.put('user', layerWith(BASE_USER, { enabled: false }), { other_app: { keep: 1 } });
@@ -206,7 +206,7 @@ test('writeLayer at the project level also cleans the leftover', (t) => {
   assert.ok(!fs.readFileSync(s.projectFile, 'utf8').includes(KEY));
 });
 
-// ---------- AC5: setting the key is refused, nothing written ----------
+// ---------- setting the key is refused, nothing written ----------
 const WRITES = [{}, { enabled: false }, { core: 'warn' }, { security: 'warn', contract: 'warn' }, true, null, 'x', [1]];
 
 test('writeLayer refuses mods.<retired key> in any shape and leaves the file byte-identical', (t) => {
@@ -236,7 +236,7 @@ test('writeLayer refuses the retired key beside a valid change and writes neithe
   assert.deepEqual(read(s.config), before);
 });
 
-// ---------- server POST (AC4 and AC5) ----------
+// ---------- server POST: save of another setting, and refusal of the key ----------
 async function start(t, s) {
   const server = await startServer({ ...s.ctx, open: false, log: () => {} });
   t.after(() => server.close());
@@ -282,7 +282,7 @@ test('POST /api/save with the retired key is refused with 400 and both files sta
   }
 });
 
-// ---------- AC6: the page ----------
+// ---------- the settings page ----------
 test('the settings page carries no commit-gate section, control, lock note or dialog text', () => {
   const html = fs.readFileSync(PAGE_FILE, 'utf8');
   assert.ok(!/blast/i.test(html), 'no Blast Radius text');

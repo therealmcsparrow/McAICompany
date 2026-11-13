@@ -5,7 +5,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   MAX_STDOUT, MODS_DEFAULTS, trimEol, cleanText, parseJson, str, int, bool, oneOf, arr, obj, opt, rec, pattern,
-  interpretRun, guardSettings, guardRunActive, guardReviewDepth, parseOutputText
+  interpretRun, guardSettings, guardRunActive, parseOutputText
 } from '../mods/lib/guard.mjs';
 import { composeStatus, IDLE, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
 import { readyText } from '../mods/lib/ready.mjs';
@@ -200,30 +200,6 @@ test('guardRunActive accepts a Step past 99 and refuses a four-digit one', () =>
 
 test('guardRunActive accepts a run without a wave yet', () => {
   assert.equal(guardRunActive({ slug: 'x', view: { ...VIEW, wave: null, steps: [], gates: [] } }).view.wave, null);
-});
-
-const DEPTH = {
-  v: 1, source: 'staged', base: null, tier: 'unknown', depth: 'full',
-  paths: [{ path: 'docs/contracts/x.md', categories: ['contract'], module: null }, { path: 'hooks/a.tsx', categories: ['security', 'core'], module: 'mods' }],
-  reasons: [{ path: 'hooks/a.tsx', rule: 'security path' }], truncated: false
-};
-
-test('guardReviewDepth keeps tier, depth and paths exactly', () => {
-  const v = guardReviewDepth(DEPTH);
-  assert.equal(v.tier, 'unknown');
-  assert.equal(v.depth, 'full');
-  assert.deepEqual([...v.paths[1].categories], ['security', 'core']);
-  assert.equal(v.paths[1].module, 'mods');
-  assert.equal(v.truncated, false);
-});
-
-test('guardReviewDepth ignores unknown categories and refuses a bad depth or tier', () => {
-  const odd = { ...DEPTH, paths: [{ path: 'a', categories: ['other', 'core'], module: null }] };
-  assert.deepEqual([...guardReviewDepth(odd).paths[0].categories], ['core']);
-  assert.equal(guardReviewDepth({ ...DEPTH, depth: 'deep' }), undefined);
-  assert.equal(guardReviewDepth({ ...DEPTH, tier: 'extreme' }), undefined);
-  assert.equal(guardReviewDepth({ ...DEPTH, paths: 'x' }), undefined);
-  assert.equal(guardReviewDepth({ ...DEPTH, paths: new Array(501).fill(DEPTH.paths[0]) }), undefined);
 });
 
 // ---- status.mjs
