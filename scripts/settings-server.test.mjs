@@ -977,7 +977,8 @@ test('a cleared or replaced ignored value is one unsaved change, and an untouche
   await settle();
   assert.equal(page.ids.count.textContent, '0 unsaved changes');
   assert.equal(page.ids.save.getAttribute('aria-disabled'), 'true');
-  assert.match(page.ids.notices.textContent, /user roles\.qa\.personality\.creativity: must be low, medium or high/);
+  assert.match(page.ids['annun-list'].textContent, /user roles\.qa\.personality\.creativity: must be low, medium or high/);
+  assert.match(page.ids.notices.textContent, /0 warnings, 2 ignored/);
   const select = field(page, 'qa', 'user', 'creativity');
   assert.equal(select.value, '__ignored__');
   assert.ok(select.options.some((o) => o.textContent === 'Ignored stored value'));
