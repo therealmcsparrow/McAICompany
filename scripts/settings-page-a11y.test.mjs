@@ -331,6 +331,136 @@ test('cancelling the dialog keeps the lock and says so', async () => {
   assert.ok(gateSeg(gateRow(page, 'Ship', 'user')).value !== 'auto');
 });
 
+// 96 A1-A9 (94-ui-ux-designer.md): arrowing onto a locked key-cap opens the one dialog; Cancel and Esc put focus back on the checked radio.
+const radioOf = (seg, value) => seg.radios.find((r) => r.value === value);
+// An arrow key lands on a radio: the browser focuses it, checks it and fires change on the group.
+async function arrowTo(seg, value) {
+  const radio = radioOf(seg, value);
+  radio.focus();
+  seg.value = value;
+  const pending = seg.fire('change');
+  await settle();
+  return pending;
+}
+const laneSeg = (page, label) => gateSeg(page.find((n) => n.tagName === 'LEGEND' && n.textContent.startsWith(label) && n.textContent.includes(', user level')).parentNode);
+
+test('96 A1: an arrow onto a locked Gate or Lane option opens the dialog once and writes nothing yet', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const before = unsaved(page);
+  const prev = ship.value;
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  assert.ok(page.ids.unlock.open === true, 'Ship auto opens #unlock');
+  assert.ok(page.ids['unlock-title'].textContent === 'Unlock the Ship Gate', 'the Ship text is shown');
+  assert.ok(unsaved(page) === before, 'no unsaved change before the answer');
+  await page.ids['unlock-cancel'].fire('click');
+  await pending;
+  assert.ok(ship.value === prev, 'Ship is back on the previous value');
+  const security = laneSeg(page, 'Security');
+  assert.ok(security.radios.some((r) => r.value === 'false'), 'the Security lane has an off option (value false)');
+  const laneBefore = unsaved(page);
+  const lanePending = arrowTo(security, 'false');
+  await settle();
+  assert.ok(page.ids.unlock.open === true, 'Security off (false) opens #unlock');
+  assert.ok(page.ids['unlock-title'].textContent === 'Unlock the security lanes', 'the security text is shown');
+  assert.ok(unsaved(page) === laneBefore, 'no unsaved change before the answer');
+  await page.ids['unlock-cancel'].fire('click');
+  await lanePending;
+});
+
+test('96 A2: Cancel restores the checked radio, puts focus on it, says Kept locked and leaves no edit', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const prev = ship.value;
+  const before = unsaved(page);
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  assert.ok(page.doc.activeElement === page.ids['unlock-cancel'], 'the dialog starts on Keep it locked');
+  await page.ids['unlock-cancel'].fire('click');
+  await pending;
+  await settle();
+  const checked = ship.radios.find((r) => r.checked);
+  assert.ok(checked !== undefined && checked.value === prev, 'the previous option is the checked radio');
+  assert.ok(page.doc.activeElement === checked, 'focus is on the restored checked radio, not on the locked option or the dialog button');
+  assert.ok(page.ids['lock-live'].textContent === 'Kept locked. Your choice was not applied.', 'the Kept locked line is announced');
+  assert.ok(unsaved(page) === before, 'no edited tag');
+});
+
+test('96 A3: closing the dialog with Esc behaves exactly as Cancel', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const prev = ship.value;
+  const before = unsaved(page);
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  await page.ids.unlock.fire('close');
+  await pending;
+  await settle();
+  const checked = ship.radios.find((r) => r.checked);
+  assert.ok(checked !== undefined && checked.value === prev, 'the previous option is the checked radio');
+  assert.ok(page.doc.activeElement === checked, 'focus is on the restored checked radio');
+  assert.ok(page.ids['lock-live'].textContent === 'Kept locked. Your choice was not applied.', 'the Kept locked line is announced');
+  assert.ok(unsaved(page) === before, 'no edited tag');
+});
+
+test('96 A4: OK unlocks, applies the value and keeps focus on the new radio', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  const pending = arrowTo(ship, 'auto');
+  await settle();
+  await page.ids['unlock-ok'].fire('click');
+  await pending;
+  await settle();
+  assert.ok(ship.value === 'auto', 'auto is applied');
+  // Focus on the new radio after OK is the browser's own dialog close; the fake dialog does not restore focus, so it is not pinned here.
+  assert.ok(page.ids['lock-live'].textContent === 'Ship unlocked. auto now applies.', 'the unlock is announced');
+  const key = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
+  assert.ok(key.getAttribute('aria-pressed') === 'true', 'the Ship key now reads unlocked');
+  assert.ok(unsaved(page) !== '0 unsaved changes', 'the unlock and the value count as unsaved');
+});
+
+test('96 A5: focus alone and an arrow onto an unlocked option never open the dialog', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  for (const r of ship.radios) r.focus();
+  assert.ok(page.ids.unlock.open === false, 'Tab or focus alone does not open it');
+  const free = ship.radios.find((r) => r.value !== '' && r.value !== 'auto');
+  assert.ok(free !== undefined, 'Ship has an option that needs no unlock');
+  await arrowTo(ship, free.value);
+  assert.ok(page.ids.unlock.open === false, 'an unlocked option does not open it');
+  assert.ok(ship.value === free.value, 'the unlocked option applies at once');
+});
+
+test('96 A6: an unlocked key and the Project level open no dialog', async () => {
+  const unlocked = await open({ user: { version: 1, unlocked: ['ship'] } });
+  await arrowTo(gateSeg(gateRow(unlocked, 'Ship', 'user')), 'auto');
+  assert.ok(unlocked.ids.unlock.open === false, 'already unlocked: no dialog');
+  assert.ok(gateSeg(gateRow(unlocked, 'Ship', 'user')).value === 'auto', 'and the value applies');
+  const page = await open();
+  await page.setLevel('project');
+  await arrowTo(gateSeg(gateRow(page, 'Ship', 'project')), 'auto');
+  assert.ok(page.ids.unlock.open === false, 'project level: no dialog');
+});
+
+test('96 A7/A8: the dialog opens only through the group change event, with no key handler on the radios', async () => {
+  const page = await open();
+  const ship = gateSeg(gateRow(page, 'Ship', 'user'));
+  assert.ok(ship.radios.every((r) => Object.values(r.listeners).every((l) => l.length === 0)), 'no listener on any radio, so click, Space and arrows share the group change path');
+  assert.ok((ship.listeners.change ?? []).length === 1, 'one change listener on the group');
+  assert.ok(Object.keys(ship.listeners).every((t) => t === 'change'), 'the group listens to change only, no keydown');
+  const html = fs.readFileSync(PAGE_FILE, 'utf8');
+  const body = (name) => { const i = html.indexOf(`function ${name}(`); return html.slice(i, html.indexOf('\nfunction ', i + 1)); };
+  assert.ok(!body('segFor').includes('keydown') && !body('switchRow').includes('keydown'), 'segFor and switchRow add no keydown code');
+});
+
+test('96 A9: the dialog has an accessible name and Cancel is the first focus', () => {
+  const html = fs.readFileSync(PAGE_FILE, 'utf8');
+  assert.ok(/<dialog id="unlock" aria-labelledby="unlock-title">/.test(html), 'the dialog is named by its title');
+  assert.ok(/id="unlock-title"/.test(html), 'the title id exists');
+  assert.ok(/dialog\.showModal\(\);\s*cancel\.focus\(\);/.test(html), 'Cancel takes focus when the dialog opens');
+});
+
 test('the page keeps the dialog and a separate polite live region for locks, and sets text without innerHTML', () => {
   const html = fs.readFileSync(PAGE_FILE, 'utf8');
   assert.match(html, /<div id="lock-live"[^>]*role="status"[^>]*aria-live="polite"/);
