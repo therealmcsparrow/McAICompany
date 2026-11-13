@@ -203,3 +203,25 @@ describe('release note and docs', () => {
     });
   }
 });
+
+describe('git-commit detector removal', () => {
+  test('mods/lib/git-commit.mjs does not exist', () => {
+    assert.equal(exists('mods/lib/git-commit.mjs'), false);
+  });
+
+  test('no tracked file outside CHANGELOG and Contract headers imports git-commit', () => {
+    const name = ['git', 'commit'].join('-');
+    const importer = new RegExp(`(?:\bimport\b|\brequire\b|\bfrom\b)[^\n]*${name}(?:\.mjs)?['"\`]`);
+    const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, maxBuffer: 64 * 1024 * 1024 })
+      .toString('utf8').split('\0').filter(Boolean)
+      .filter((rel) => rel !== 'CHANGELOG.md' && !rel.startsWith('docs/contracts/'));
+    const hits = [];
+    for (const rel of files) {
+      if (!exists(rel)) continue;
+      const abs = path.join(root, rel);
+      if (fs.statSync(abs).size > MAX_FILE_BYTES) continue;
+      if (importer.test(fs.readFileSync(abs, 'utf8'))) hits.push(rel);
+    }
+    assert.deepEqual(hits, []);
+  });
+});

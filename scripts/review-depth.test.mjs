@@ -398,7 +398,7 @@ test('json: one reason per path, the same rule the text output names', () => {
 });
 
 test('security paths: hooks/** and mods/** force full, lookalikes do not', () => {
-  for (const p of ['hooks/hooks.json', 'hooks/register.tsx', 'mods/savvy.tsx', 'mods/lib/git-commit.mjs', 'Mods/X.tsx']) {
+  for (const p of ['hooks/hooks.json', 'hooks/register.tsx', 'mods/savvy.tsx', 'Mods/X.tsx']) {
     assert.equal(classify([p], { core: [] }).depth, 'full', p);
   }
   for (const p of ['hooksy/a.js', 'mods.md', 'src/hooks/a.js', 'modsx/a.js']) {
