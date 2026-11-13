@@ -1192,7 +1192,9 @@ test('layout: a refused Save puts an error summary in the status and focuses its
   const page = loadPage(namedState());
   await settle();
   await type(field(page, 'architect', 'user', 'talk'), 'bad: value');
-  await type(field(page, 'qa', 'user', 'topic'), 'x<y');
+  await page.setLevel('project');
+  await type(field(page, 'qa', 'project', 'topic'), 'x<y');
+  await page.setLevel('user');
   page.document.activeElement = page.ids.save;
   await page.ids.save.fire('click');
   assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
@@ -1203,12 +1205,14 @@ test('layout: a refused Save puts an error summary in the status and focuses its
   assert.equal(page.document.activeElement, heading);
   const links = walkAll(page.ids.status, (n) => n.tagName === 'A');
   assert.equal(links.length, 2);
-  for (const link of links) {
-    const target = link.getAttribute('href').slice(1);
-    assert.ok(byId(page, target), `href ${link.getAttribute('href')} names an existing field`);
-  }
   assert.ok(links[0].textContent.startsWith('Ava (architect), user level, Way of talking: can'));
-  assert.ok(links[1].textContent.startsWith('qa, user level, Pet topic: can'));
+  assert.ok(links[1].textContent.startsWith('qa, project level, Pet topic: can'));
+  // The project field is hidden while User is shown; following its link must reveal it.
+  for (const link of links) {
+    for (const fn of link.listeners.click) fn({ preventDefault() {} });
+    const target = link.getAttribute('href').slice(1);
+    assert.ok(byId(page, target), `href ${link.getAttribute('href')} names an existing field after following it`);
+  }
 });
 
 test('layout: a summary link selects the Personality tab, clears a filter that hides the Role, opens the card and focuses the field', async () => {
