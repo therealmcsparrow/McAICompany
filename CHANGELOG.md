@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-13
+
+Rollback: node scripts/stable.mjs 0.37.0
+
 ### Changed
 - **Settings page rebuilt to match the Hallmark console preview.** `scripts/settings-page.html` and `scripts/settings-server.mjs` are rebuilt to the approved Hallmark console preview, with arrow-key lock handling and focus restored to the radio after an unlock is cancelled. Contract: `aico-settings` v2.1 (additive). Accepted gaps: there is no lock label while a setting is unlocked, and the Skills readout lists only catalog skills.
 
