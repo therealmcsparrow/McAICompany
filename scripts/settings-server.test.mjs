@@ -1103,7 +1103,7 @@ test('layout: the personality section is on the Personality tab, not on the Role
   assert.equal(page.all((n) => n.tagName === 'DETAILS').length, 2);
   assert.equal(page.allRoles((n) => n.tagName === 'DETAILS').length, 0);
   assert.equal(page.allRoles((n) => n.tagName === 'ARTICLE' && n.className === 'strip').length, 2, 'one channel strip per Role on the Roles tab');
-  assert.ok(page.all((n) => n.tagName === 'H3' && n.className === 'dept-label').length >= 1);
+  assert.equal(page.all((n) => n.tagName === 'H3' && n.className === 'dept-label').length, 0, 'flat list, no department labels');
   const legend = page.all((n) => n.tagName === 'LEGEND').map((n) => n.textContent);
   assert.ok(legend.includes('Ava (architect), User level'));
   assert.ok(!legend.includes('qa, Project level'), 'the editing level shows one level at a time');

@@ -1262,7 +1262,7 @@ describe('AC13 pipeline.short_path off gives the full route, and only off can be
     const html = read('scripts/settings-page.html');
     const a = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap);');
     const b = html.indexOf('shortPathRow(tbody, defaults.short_path);');
-    const c = html.indexOf("el('h2', {}, 'Reprompt')");
+    const c = html.indexOf("sectionHead('Reprompt')");
     assert.ok(a > 0 && a < b && b < c);
   });
 });
