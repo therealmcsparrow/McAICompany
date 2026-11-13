@@ -73,7 +73,7 @@ for (const [name, answer] of FAILURES) {
       const last = writes[writes.length - 1].value
       expect(last.known).toBe(false)
       expect(last.mods.savvy.enabled).toBe(true)
-      expect(Object.hasOwn(last.mods, 'blast_radius')).toBe(false)
+      expect(Object.keys(last.mods).sort()).toEqual(['cache_tax', 'reflect', 'savvy'])
     })
   }
 }

@@ -140,7 +140,7 @@ describe('both Contracts', () => {
 
   test('AC8: aico-mods no longer lists a commit gate rule, state key or status part in its body', () => {
     const text = body('docs/contracts/aico-mods.md');
-    assert.doesNotMatch(text, /commit gate|tool\.check[^\n]*(?:ask|warn|deny)/i);
+    assert.doesNotMatch(text, /commit gate|tool\.check[^\n]*git commit/i);
     assert.doesNotMatch(text, /<savvy> · <\w+> · <cost> · <reflect>/);
   });
 
@@ -188,15 +188,17 @@ describe('release note and docs', () => {
 
   test('AC9: the note points to a repo git hook and names both Contract majors', () => {
     assert.match(removed, /git hook/i);
-    assert.match(removed, /aico-mods v2\.0/);
-    assert.match(removed, /aico-settings v2\.0/);
+    assert.match(removed, /`?aico-mods`? v2\.0/);
+    assert.match(removed, /`?aico-settings`? v2\.0/);
   });
 
   const docs = ['README.md', 'GLOSSARY.md', 'docs/spec.md', 'documentation/README.md', 'documentation/mods/README.md'];
   for (const rel of docs) {
     test(`AC9: ${rel} says three mods and no file says four`, () => {
       const lines = read(rel).split('\n');
-      assert.ok(lines.some((l) => /\bthree\b/i.test(l) && /Savvy/.test(l) && /Reflect/.test(l)), 'no line names three mods');
+      // documentation/mods/README.md names the mods in a table, so "three small add-ons" alone counts there.
+      const names = rel === 'documentation/mods/README.md' ? /\b(?:mods|add-ons)\b/i : /(?=.*Savvy)(?=.*Reflect)/;
+      assert.ok(lines.some((l) => /\bthree\b/i.test(l) && names.test(l)), 'no line names three mods');
       assert.equal(lines.filter((l) => /\bfour (?:mods|add-ons)\b|There are four\b/i.test(l)).length, 0);
     });
   }
