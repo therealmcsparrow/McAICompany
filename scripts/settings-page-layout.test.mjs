@@ -135,7 +135,7 @@ test('fonts: the server serves each font from the same origin as woff2 without a
   const origin = `http://127.0.0.1:${server.port}`;
   const page = await fetch(`${origin}/`, { headers: { 'X-Aico-Token': server.token } });
   assert.equal(page.headers.get('content-security-policy'),
-    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
   const urls = new Set(faceUrls());
   assert.ok(urls.size >= 3, 'at least one file per family');
   for (const u of urls) {
