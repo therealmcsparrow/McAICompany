@@ -242,6 +242,13 @@ test('every locked Gate row shows its reason as text, tied to the control at eac
     assert.ok(gateSeg(user).radios.length > 0, label);
     const id = describedBy(user)[0];
     assert.match(id, /^lock-/);
+    // read once: the reason id appears once in aria-describedby; the legend label is aria-hidden
+    assert.equal(describedBy(user).filter((d) => d === id).length, 1);
+    const caps = walkAll(user.children.find((c) => c.tagName === 'LEGEND'), (n) => typeof n.className === 'string' && n.className.split(' ').includes('lockcap'));
+    assert.equal(caps.length, 1, label);
+    const cap = caps[0];
+    assert.equal(cap.getAttribute('aria-hidden'), 'true');
+    assert.equal(cap.textContent, `${label.toLowerCase()} lock`);
     assert.equal(textOf(page, id), text);
     await page.setLevel('project');
     const project = gateRow(page, label, 'project');
@@ -278,7 +285,9 @@ test('rows without a lock keep no lock reason', async () => {
 test('the unlocked state replaces the reason text', async () => {
   const page = await open({ user: { version: 1, unlocked: ['ship'] } });
   const id = describedBy(gateRow(page, 'Ship', 'user'))[0];
-  assert.equal(textOf(page, id), 'Unlocked by you.');
+  // unlocked: no lock reason shown (empty and hidden)
+  assert.equal(textOf(page, id), '');
+  assert.equal(byId(page, id).hidden, true);
   assert.equal(textOf(page, describedBy(gateRow(page, 'Installs', 'user'))[0]), 'Locked. auto needs your Installs unlock.');
 });
 
@@ -296,7 +305,7 @@ test('the lock reason changes with the unlock and the change is announced, not t
   await page.ids['unlock-ok'].fire('click');
   await pending;
   await settle();
-  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), 'Unlocked by you.');
+  assert.equal(textOf(page, describedBy(gateRow(page, 'Ship', 'user'))[0]), '');
   assert.equal(page.ids['lock-live'].textContent, 'Ship unlocked. auto now applies.');
   const again = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-labelledby') === 'key-ship-l');
   assert.equal(again.getAttribute('aria-pressed'), 'true');

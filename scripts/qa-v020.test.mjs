@@ -1717,14 +1717,21 @@ describe('AC29 a display name in .company or a dispatch prompt fails the drift t
 describe('AC30 a gate-locked setting shows its lock reason on the page', () => {
   const page = read('scripts', 'settings-page.html');
   test('the reason is a visible element in the row header, not only the dialog text', () => {
-    assert.match(page, /const why = el\('span', \{ class: 'lockcap', id: lockId \}, [^\n]*whyText\);\s*\n\s*legend\.append\(why\);/);
+    // legend carries only a short aria-hidden label; the reason sentence is its own hint line with the lock id
+    assert.match(page, /const whyEl = lock \? el\('p', \{ class: 'hint', id: lockId \}\) : null;/);
+    assert.match(page, /const why = el\('span', \{ class: 'lockcap', 'aria-hidden': 'true' \}, [^\n]*`\$\{lock\.key\} lock`\);\s*\n\s*legend\.append\(why\);/);
     assert.match(page, /`Locked\. \$\{lock\.lockedValue\} needs your \$\{lock\.key === 'security' \? 'security' : UNLOCK_NAMES\[lock\.key\]\} unlock\.`/);
-    assert.match(page, /'Unlocked by you\.'/);
+    // unlocked: no lock reason shown (empty and hidden), no "Unlocked by you."
+    assert.match(page, /whyEl\.hidden = open;/);
+    assert.match(page, /const text = open \? '' : `Locked\./);
+    assert.doesNotMatch(page, /Unlocked by you\./);
     assert.match(page, /\.ctl \.lockcap \{ display: inline-flex;/);
     assert.doesNotMatch(page, /\.(lockcap|lockwhy)[^{]*\{[^}]*display:\s*none/);
   });
   test('the reason is announced: both controls of the row are described by it, and a change goes to a polite live region', () => {
     assert.match(page, /const baseDesc = \[lock \? lockId : '', hint\?\.id \?\? '', o\.describedBy/);
+    // read once: the reason id is in aria-describedby once, the legend label is aria-hidden
+    assert.equal((page.match(/lock \? lockId : ''/g) ?? []).length, 1);
     assert.match(page, /<div id="lock-live" class="vh" role="status" aria-live="polite"><\/div>/);
     assert.match(page, /function announceLock\(message\) \{[^}]*getElementById\('lock-live'\)/);
     assert.match(page, /locked again\. \$\{UNLOCK_VALUES\[key\]\} is held until you unlock it\./);
