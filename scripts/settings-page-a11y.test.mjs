@@ -228,7 +228,7 @@ test('every locked Gate row shows its reason as text, tied to both controls', as
   }
 });
 
-test('lane and Blast Radius rows carry the security reason', async () => {
+test('lane rows carry the security reason', async () => {
   const page = await open();
   const rows = [
     ['pipeline', 'Security', 'Locked. Off needs your security unlock.'],
@@ -239,10 +239,6 @@ test('lane and Blast Radius rows carry the security reason', async () => {
     assert.ok(control, label);
     assert.equal(textOf(page, describedBy(control)[0]), text);
   }
-  const blastOn = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label')?.includes('on/off, user') && /blast/i.test(n.getAttribute('aria-label')));
-  assert.equal(textOf(page, describedBy(blastOn)[0]), 'Locked. Off needs your security unlock.');
-  const blastSec = page.find((n) => n.tagName === 'SELECT' && /blast.* security, user/i.test(n.getAttribute('aria-label') ?? ''));
-  assert.equal(textOf(page, describedBy(blastSec)[0]), 'Locked. warn needs your security unlock.');
 });
 
 test('rows without a lock keep no lock reason', async () => {

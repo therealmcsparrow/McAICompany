@@ -661,14 +661,14 @@ test('no keep-warm key exists in the schema', () => {
 const MODS_ALL = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' }
+  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
 };
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const modsOf = (s) => plain(resolveSettings(s.ctx).mods);
 
-test('MODS_DEFAULTS: all four mods on, Blast Radius core ask, contract warn, security ask, no keep-warm key', () => {
+test('MODS_DEFAULTS: three mods on (savvy, cache_tax, reflect), no keep-warm key', () => {
   assert.deepEqual(plain(MODS_DEFAULTS), MODS_ALL);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS), ['savvy', 'cache_tax', 'reflect']);
   assert.ok(!JSON.stringify(MODS_DEFAULTS).includes('keep_warm'));
 });
 
@@ -677,8 +677,7 @@ test('a fresh install resolves every mod on, through get and get <key>', (t) => 
   assert.deepEqual(modsOf(s), MODS_ALL);
   assert.deepEqual(plain(pluginDefaults(s.pluginRoot).mods), MODS_ALL);
   assert.deepEqual(JSON.parse(s.cli('get').out).mods, MODS_ALL);
-  assert.equal(s.cli('get', 'mods.blast_radius.security').out, 'ask\n');
-  assert.equal(s.cli('get', 'mods.blast_radius.contract').out, 'warn\n');
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).mods), ['savvy', 'cache_tax', 'reflect']);
   assert.equal(s.cli('get', 'mods.reflect.mode').out, 'deterministic\n');
 });
 
@@ -688,22 +687,18 @@ test('mods.* refuses hostile values first, each with the Contract text', () => {
     [['savvy', 'enabled'], 'mods.savvy.enabled must be true or false'],
     [['cache_tax', 'enabled'], 'mods.cache_tax.enabled must be true or false'],
     [['reflect', 'enabled'], 'mods.reflect.enabled must be true or false'],
-    [['blast_radius', 'enabled'], 'mods.blast_radius.enabled must be true or false'],
     [['reflect', 'step_check'], 'mods.reflect.step_check must be true or false'],
     [['reflect', 'retrospective'], 'mods.reflect.retrospective must be true or false'],
     [['savvy', 'pane'], 'mods.savvy.pane must be auto or command'],
     [['cache_tax', 'pane'], 'mods.cache_tax.pane must be auto or command'],
-    [['reflect', 'mode'], 'mods.reflect.mode must be deterministic or model'],
-    [['blast_radius', 'core'], 'mods.blast_radius.core must be ask or warn'],
-    [['blast_radius', 'contract'], 'mods.blast_radius.contract must be ask or warn'],
-    [['blast_radius', 'security'], 'mods.blast_radius.security must be ask or warn']
+    [['reflect', 'mode'], 'mods.reflect.mode must be deterministic or model']
   ];
   for (const [[mod, key], msg] of cases) {
     for (const bad of hostile) {
       assert.deepEqual(validateLayer({ version: 1, mods: { [mod]: { [key]: bad } } }, roleSet), [msg], `${mod}.${key} ${String(bad).slice(0, 12)}`);
     }
   }
-  for (const [mod, key, ok] of [['savvy', 'enabled', false], ['savvy', 'pane', 'command'], ['reflect', 'mode', 'model'], ['blast_radius', 'core', 'warn']]) {
+  for (const [mod, key, ok] of [['savvy', 'enabled', false], ['savvy', 'pane', 'command'], ['reflect', 'mode', 'model']]) {
     assert.deepEqual(validateLayer({ version: 1, mods: { [mod]: { [key]: ok } } }, roleSet), []);
   }
 });
@@ -759,58 +754,46 @@ test('lock 1: Reflect model counts only from the user level', (t) => {
   assert.equal(r.ignored.filter((i) => i.startsWith('mods.reflect.mode')).length, 0);
 });
 
-test('lock 2: a project only tightens Blast Radius', (t) => {
+test('Reflect model is the only mods lock: every other mods key is free and no lock entry is listed for it', (t) => {
   const s = sandbox(t);
-  s.project({ mods: { blast_radius: { core: 'warn', contract: 'ask', enabled: false } } });
-  let r = resolveSettings(s.ctx);
-  assert.equal(r.mods.blast_radius.core, 'ask');
-  assert.equal(r.mods.blast_radius.contract, 'ask', 'a project ask over the warn default is kept');
-  assert.equal(r.mods.blast_radius.enabled, true);
-  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.core: warn from project')), r.ignored.join(' | '));
-  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.enabled: off from project')), r.ignored.join(' | '));
-  assert.ok(!r.ignored.some((i) => i.startsWith('mods.blast_radius.contract')));
-  s.user({ unlocked: ['security'], mods: { blast_radius: { core: 'warn', enabled: false } } });
-  s.project({ mods: { blast_radius: { core: 'warn' } } });
-  r = resolveSettings(s.ctx);
-  assert.equal(r.mods.blast_radius.core, 'warn', 'the user value stays');
-  assert.equal(r.mods.blast_radius.enabled, false);
-  s.project({ mods: { blast_radius: { enabled: true } } });
-  assert.equal(resolveSettings(s.ctx).mods.blast_radius.enabled, true);
+  s.user({ mods: { savvy: { enabled: false }, cache_tax: { pane: 'auto' }, reflect: { enabled: false } } });
+  s.project({ mods: { savvy: { enabled: true, pane: 'command' }, cache_tax: { enabled: false } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(Object.keys(r.mods), ['savvy', 'cache_tax', 'reflect']);
+  assert.deepEqual(r.mods.savvy, { enabled: true, pane: 'command' });
+  assert.deepEqual(r.mods.cache_tax, { enabled: false, pane: 'auto' });
+  assert.equal(r.mods.reflect.enabled, false);
+  assert.deepEqual(r.ignored.filter((i) => i.startsWith('mods.')), []);
+  assert.deepEqual(r.warnings, []);
 });
 
-test('lock 3: security warn and Blast Radius off need the user security unlock', (t) => {
+test('the security unlock still guards the security and compliance lanes', (t) => {
   const s = sandbox(t);
-  s.user({ mods: { blast_radius: { security: 'warn', enabled: false, core: 'warn', contract: 'warn' } } });
+  s.user({ pipeline: { lanes: { security: false, compliance: false } } });
   let r = resolveSettings(s.ctx);
-  assert.equal(r.mods.blast_radius.security, 'ask');
-  assert.equal(r.mods.blast_radius.enabled, true);
-  assert.equal(r.mods.blast_radius.core, 'warn', 'core and contract warn need no unlock');
-  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.security: warn from user needs the user unlock security')), r.ignored.join(' | '));
-  assert.ok(r.ignored.some((i) => i.startsWith('mods.blast_radius.enabled: off from user needs the user unlock security')), r.ignored.join(' | '));
-  s.user({ unlocked: ['security'], mods: { blast_radius: { security: 'warn', enabled: false } } });
+  assert.equal(r.pipeline.lanes.security, true);
+  assert.equal(r.pipeline.lanes.compliance, true);
+  assert.ok(r.ignored.some((i) => i.startsWith('pipeline.lanes.security: off from user needs the user unlock security')), r.ignored.join(' | '));
+  s.user({ unlocked: ['security'], pipeline: { lanes: { security: false, compliance: false } } });
   r = resolveSettings(s.ctx);
-  assert.equal(r.mods.blast_radius.security, 'warn');
-  assert.equal(r.mods.blast_radius.enabled, false);
-  assert.ok(!r.ignored.some((i) => i.startsWith('mods.blast_radius')));
-  s.user({ mods: { blast_radius: { security: 'warn' } } });
-  s.project({ unlocked: ['security'] });
-  assert.equal(resolveSettings(s.ctx).mods.blast_radius.security, 'ask', 'a project unlock never counts');
+  assert.equal(r.pipeline.lanes.security, false);
+  assert.equal(r.pipeline.lanes.compliance, false);
 });
 
-test('a broken project layer holds Blast Radius at defaults and Reflect deterministic', (t) => {
+test('a broken project layer holds Reflect deterministic and names only that hold', (t) => {
   const s = sandbox(t);
-  s.user({ unlocked: ['security'], mods: { blast_radius: { enabled: false, security: 'warn', core: 'warn' }, reflect: { mode: 'model' } } });
+  s.user({ unlocked: ['security'], mods: { reflect: { mode: 'model' } } });
   s.project({ mods: { savvy: { pane: 'sideways' } } });
   const r = resolveSettings(s.ctx);
-  assert.deepEqual(plain(r.mods.blast_radius), MODS_ALL.blast_radius);
   assert.equal(r.mods.reflect.mode, 'deterministic');
-  assert.ok(r.warnings.some((w) => /held/.test(w) && w.includes('mods.blast_radius')), r.warnings.join(' | '));
+  const held = r.warnings.filter((w) => /held/.test(w) && w.includes('mods.reflect.mode'));
+  assert.equal(held.length, 1, r.warnings.join(' | '));
+  assert.ok(!/plugin defaults/.test(held[0]), held[0]);
+  assert.ok(!/mods\.(?!reflect)\w+ held/.test(held[0]), held[0]);
   assert.ok(r.warnings.some((w) => w.includes('mods.savvy.pane must be auto or command')));
   assert.equal(r.mods.savvy.pane, 'auto', 'the bad field falls back to the level below');
   s.project({ roles: { qa: { effort: 'low' } } });
-  const ok = resolveSettings(s.ctx);
-  assert.equal(ok.mods.blast_radius.enabled, false);
-  assert.equal(ok.mods.reflect.mode, 'model');
+  assert.equal(resolveSettings(s.ctx).mods.reflect.mode, 'model');
 });
 
 test('a bad mods layer value falls back to the level below with a warning', (t) => {
