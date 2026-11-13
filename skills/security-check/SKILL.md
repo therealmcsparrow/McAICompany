@@ -17,4 +17,6 @@ description: Use when the aico security Role audits code, or a builder handles a
 
 **Ruleset:** these rules are the project ruleset's `proj.M1`–`proj.M4` (`aico:ruleset`); security rules there are always Must.
 
+**Unplanned Core, Contract or security change.** A diff that changes a Core item (`.company/project.md` `## Core`), a Contract file or a security-relevant file is `## Blocking` (`contract`, or `security` for a security-relevant file) unless the plan names that change (its Core and Contracts list or a task's `files:`). Security-relevant: code or config that handles auth, permissions, secrets, payments, personal data or crypto; hook, sandbox and permission settings; CI and release workflows; dependency manifests and lockfiles.
+
 Report findings with confidence (high/medium) and file:line. High-confidence exploitable → `## Blocking`.

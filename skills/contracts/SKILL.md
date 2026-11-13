@@ -26,6 +26,7 @@ This applies to every product type: backend, frontend, desktop and game. Pattern
 - A Module imports or calls another Module's internals, or reads its storage.
 - Code added to Core that isn't on the approved Core list.
 - A Contract changed without a version bump, or a breaking change without CEO approval.
+- **Unplanned Core, Contract or security change.** A diff that changes a Core item (`.company/project.md` `## Core`), a Contract file or a security-relevant file is `## Blocking` (`contract`, or `security` for a security-relevant file) unless the plan names that change (its Core and Contracts list or a task's `files:`). Security-relevant: code or config that handles auth, permissions, secrets, payments, personal data or crypto; hook, sandbox and permission settings; CI and release workflows; dependency manifests and lockfiles.
 - A Module has no contract tests for the Contracts it provides.
 
 ## Contract tests
