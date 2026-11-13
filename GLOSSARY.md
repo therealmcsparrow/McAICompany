@@ -153,15 +153,13 @@ _Avoid_: orchestrator (use Lead).
 
 **Editor** — the Role (Edith) that checks every claim in a report or public text is cited `[S#]` or marked `(unverified)`. It blocks with a `[spec]` finding and never rewrites. Its passing Handoff satisfies the `claims-cited` check.
 
-**Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are four: Savvy, Cache Tax, Reflect and Blast Radius. They add no tokens to a prompt, apart from Reflect `model` mode and Blast Radius's refusal reason. Switched in `/aico:settings`.
+**Mod** — a small add-on that runs inside Claude Code and shows the CEO something or checks something. There are three: Savvy, Cache Tax and Reflect. They add no tokens to a prompt, apart from Reflect `model` mode. Switched in `/aico:settings`.
 
 **Savvy** — the mod that shows the progress of the current run: wave, Step, Gates passed, Fix round and elapsed time.
 
 **Cache Tax** — the mod that shows spend per Step, with cache writes marked `[tax]`, and the cache clock.
 
 **Reflect** — the mod that checks each finished Step and the finished run, and suggests Lessons. Each is `suggested` until the CEO presses Accept; Decline writes nothing.
-
-**Blast Radius** — the mod that checks what a `git commit` touches (Core, Contract or security paths) before it runs, through both the `Bash` and `PowerShell` tools. Each category is `ask` or `warn`. With nobody to ask it refuses; turning it off needs the `security` unlock.
 
 **Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
 
@@ -176,3 +174,5 @@ _Avoid_: orchestrator (use Lead).
 **Auto Gate** — a Gate set to `auto` in Settings: the Lead writes the Gate summary to the run folder and continues without a form. An auto Ship Gate pushes the branch and opens a PR, and never merges.
 
 **Lock** — a setting that could skip a safety check (auto Ship Gate, auto installs, turning off the security or compliance lane) and starts locked. Unlocks count only from the CEO's user settings; a project can lock again but never unlock, and a broken project settings file keeps its locks.
+
+**ADHD mode** — session-only output style from `aico:i-have-adhd`, off by "stop adhd mode" / "normal mode".

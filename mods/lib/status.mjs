@@ -1,14 +1,14 @@
-// The one status line of the plugin: `v<x.y.z> · <savvy> · <blast> · <cost> · <reflect>` (the host adds its own 8 cell prefix).
+// The one status line of the plugin: `v<x.y.z> · <savvy> · <cost> · <reflect>` (the host adds its own 8 cell prefix).
 import { cellWidth, fit } from './format.mjs';
 
 export const STATUS_MAX = 70;
 // Stands in the first slot while no run part (`savvy`) is set, when the caller asks for it.
 export const IDLE = 'aico idle';
-// Per-part caps in terminal cells: 8 + 17 + 10 + 13 + 10 + 4 * 3 = 70; the host prefix is 8 cells, so the row stays within 80 with 2 spare.
-export const STATUS_CAPS = Object.freeze({ version: 8, savvy: 17, blast: 10, cost: 13, reflect: 10 });
+// Per-part caps in terminal cells: 8 + 17 + 13 + 10 + 3 * 3 = 57; the caps sum to 57 <= STATUS_MAX 70, and STATUS_MAX 70 + HOST_RESERVE 10 (8 cell host prefix + 2 spare) = 80 columns.
+export const STATUS_CAPS = Object.freeze({ version: 8, savvy: 17, cost: 13, reflect: 10 });
 const SEP = ' · ';
-const ORDER = ['version', 'savvy', 'blast', 'cost', 'reflect'];
-const DROP = ['reflect', 'cost', 'blast'];
+const ORDER = ['version', 'savvy', 'cost', 'reflect'];
+const DROP = ['reflect', 'cost'];
 
 function onePart(value, cap) {
   if (typeof value !== 'string') return '';

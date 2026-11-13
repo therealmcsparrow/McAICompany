@@ -419,7 +419,7 @@ test('registry lookup never touches the file system with the project value', () 
 
 // Behaviour.
 
-test('software is every agent but the editor: 35 Roles, 24 Playbooks, 34 commands with ALWAYS', () => {
+test('software is every agent but the editor: 35 Roles, 24 Playbooks, 35 commands with ALWAYS', () => {
   const r = json(['resolve'], project(null));
   assert.equal(r.code, 0);
   const out = JSON.parse(r.out);
@@ -431,8 +431,8 @@ test('software is every agent but the editor: 35 Roles, 24 Playbooks, 34 command
   assert.ok(!out.roles.includes('editor'));
   const agents = fs.readdirSync(path.join(REAL_ROOT, 'agents')).map(f => f.slice(0, -3));
   assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor').sort());
-  assert.equal(ALWAYS.length, 10);
-  assert.equal(out.playbooks.length, 34);
+  assert.equal(ALWAYS.length, 11);
+  assert.equal(out.playbooks.length, 35);
   assert.deepEqual(out.playbooks.slice(24), ALWAYS);
   assert.deepEqual(out.playbooks.slice(0, 24), ['audit', 'brainstorm', 'bug', 'client', 'cooler', 'dashboard', 'feature', 'feedback', 'fix', 'grill', 'grill-me', 'grill-with-docs', 'idea', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan']);
   assert.deepEqual(out.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
@@ -472,7 +472,7 @@ test('check-playbook and check-role pass inside the type and refuse outside', ()
   assert.equal(exec(['check-role', 'qa'], cwd).code, 0);
   const root = pluginRoot();
   const no = exec(['check-playbook', 'report'], cwd, root);
-  assert.deepEqual(no, { code: 2, out: 'refused: report is not part of the software company; allowed: fix, audit, help, version, language, settings, setup, lead, triage, skillspector, add-skill, reprompt' });
+  assert.deepEqual(no, { code: 2, out: 'refused: report is not part of the software company; allowed: fix, audit, help, version, language, settings, setup, lead, triage, skillspector, add-skill, i-have-adhd, reprompt' });
   assert.deepEqual(exec(['check-role', 'editor'], cwd, root), { code: 2, out: 'refused: editor is not part of the software company; allowed: skill-researcher, qa, reprompter' });
 });
 
@@ -486,7 +486,7 @@ test('the default output is the type lines, and the check commands put an ok lin
   const root = pluginRoot({ software: manifest({ ship, skill_search: { hints: ['alpha beta', 'gamma'] } }), research: manifest({ id: 'research', label: 'Research firm' }) });
   const rest = [
     'roles: skill-researcher, qa, reprompter',
-    'playbooks: fix, audit, help, version, language, settings, setup, lead, triage, skillspector, add-skill, reprompt',
+    'playbooks: fix, audit, help, version, language, settings, setup, lead, triage, skillspector, add-skill, i-have-adhd, reprompt',
     'work: fix',
     'ship: release. Push, merge, release or deploy.',
     'ship lanes: legal, security',
@@ -620,11 +620,11 @@ test('the manifest files and script use LF only', () => {
 
 test('CEO_ONLY is frozen and equals the contract list', () => {
   assert.ok(Object.isFrozen(CEO_ONLY));
-  assert.deepEqual([...CEO_ONLY], ['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs', 'add-skill']);
-  assert.equal(CEO_ONLY.length, 15);
+  assert.deepEqual([...CEO_ONLY], ['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs', 'add-skill', 'i-have-adhd']);
+  assert.equal(CEO_ONLY.length, 16);
   const contract = fs.readFileSync(path.join(REAL_ROOT, 'docs', 'contracts', 'company-type.md'), 'utf8');
   const line = contract.split('\n').find(l => l.startsWith('- **`CEO_ONLY`**'));
-  assert.deepEqual([...line.matchAll(/`([a-z-]+)`/g)].map(m => m[1]).slice(0, 15), [...CEO_ONLY]);
+  assert.deepEqual([...line.matchAll(/`([a-z-]+)`/g)].map(m => m[1]).slice(0, 16), [...CEO_ONLY]);
 });
 
 test('a skill is a Playbook by an argument-hint line inside its frontmatter, not by the flag', () => {

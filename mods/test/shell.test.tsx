@@ -8,7 +8,6 @@ const MODS = {
   savvy: { enabled: false, pane: 'command' },
   cache_tax: { enabled: true, pane: 'command' },
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 }
 const GOOD = JSON.stringify({ revision: 1, roles: { architect: { name: 'Ava' } }, mods: MODS })
 const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } })
@@ -74,7 +73,7 @@ for (const [name, answer] of FAILURES) {
       const last = writes[writes.length - 1].value
       expect(last.known).toBe(false)
       expect(last.mods.savvy.enabled).toBe(true)
-      expect(last.mods.blast_radius.contract).toBe('warn')
+      expect(Object.keys(last.mods).sort()).toEqual(['cache_tax', 'reflect', 'savvy'])
     })
   }
 }
@@ -147,7 +146,7 @@ async function bootWithOutputs($: Env[0], on: Env[1], answer: (e: Run) => unknow
 
 test('session start shows one toast that lists the mods that are on, and the idle status part', async ($, on) => {
   const out = await bootWithOutputs($, on, () => ok(GOOD))
-  expect(out.toasts).toEqual(['aico mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(out.toasts).toEqual(['aico mods ready: Cache Tax, Reflect'])
   expect(out.statuses[0]).toBe('aico idle')
 })
 
@@ -166,19 +165,19 @@ async function bootWithManifest($: Env[0], on: Env[1], manifest: string | null) 
 test('the plugin version is the first status part and in the ready toast', async ($, on) => {
   const out = await bootWithManifest($, on, '{"name":"aico","version":"0.20.0"}')
   expect(out.paths[0].replaceAll('\\', '/').endsWith('/.claude-plugin/plugin.json')).toBe(true)
-  expect(out.toasts).toEqual(['aico 0.20.0 mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(out.toasts).toEqual(['aico 0.20.0 mods ready: Cache Tax, Reflect'])
   expect(out.statuses[out.statuses.length - 1]).toBe('v0.20.0 · aico idle')
 })
 
 test('an unreadable or invalid plugin.json leaves the version out and never prints file text', async ($, on) => {
   const missing = await bootWithManifest($, on, null)
-  expect(missing.toasts).toEqual(['aico mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(missing.toasts).toEqual(['aico mods ready: Cache Tax, Reflect'])
   expect(missing.statuses[missing.statuses.length - 1]).toBe('aico idle')
 })
 
 test('a plugin.json whose version is not x.y.z leaves the version out', async ($, on) => {
   const bad = await bootWithManifest($, on, '{"version":"evil\u001b[31m 1.2"}')
-  expect(bad.toasts).toEqual(['aico mods ready: Cache Tax, Reflect, Blast Radius'])
+  expect(bad.toasts).toEqual(['aico mods ready: Cache Tax, Reflect'])
   expect(bad.statuses[bad.statuses.length - 1]).toBe('aico idle')
 })
 

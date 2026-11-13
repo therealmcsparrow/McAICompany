@@ -10,7 +10,6 @@ const MODS = (reflect: Record<string, unknown>) => ({
   savvy: { enabled: false, pane: 'command' },
   cache_tax: { enabled: false, pane: 'command' },
   reflect,
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 })
 const ON = { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
 const SETTINGS = (reflect: Record<string, unknown> = ON) =>

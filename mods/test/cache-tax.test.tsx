@@ -11,7 +11,6 @@ const MODS = (tax: { enabled: boolean; pane: string }) => ({
   savvy: { enabled: false, pane: 'command' },
   cache_tax: tax,
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 })
 const SETTINGS = (tax = { enabled: true, pane: 'command' }, roles: Record<string, { name: string }> = {}) =>
   JSON.stringify({

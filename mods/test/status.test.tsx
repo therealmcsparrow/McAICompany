@@ -15,7 +15,6 @@ const SETTINGS = ({ savvy, tax, pane = 'command' }: Mods) =>
       savvy: { enabled: savvy, pane },
       cache_tax: { enabled: tax, pane },
       reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-      blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
     },
   })
 
@@ -31,8 +30,6 @@ const REPORT = (spend: number) => ({
   not_reconciled: 0,
   warnings: [],
 })
-const DEPTH = (category: string) =>
-  JSON.stringify({ v: 1, source: 'staged', base: null, tier: 'unknown', depth: 'full', truncated: false, paths: [{ path: 'x', categories: [category], module: null }] })
 const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } })
 
 type Env = Parameters<Parameters<typeof test>[1]>
@@ -90,7 +87,6 @@ async function boot($: Env[0], on: Env[1], w: World, surface: 'terminal' | 'desk
     if (script === 'settings.mjs') return ok(w.settings)
     if (script === 'run-state.mjs') return ok(JSON.stringify({ slug: w.slug, view: view(w.slug) }))
     if (script === 'ledger.mjs') return ok(JSON.stringify(REPORT(w.spend)))
-    if (script === 'review-depth.mjs') return ok(DEPTH('contract'))
     return { value: { exitCode: 2, stdout: '', stderr: '' } }
   }) as never)
   await $.session.start({ cwd: '/work', surface, isInteractive: true })
@@ -115,15 +111,18 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
-test('a Contract commit puts the blast part second, and it leaves after 60 seconds with the others intact', async ($, on) => {
+test('a git commit adds no status part and leaves the line as it was', async ($, on) => {
   const w = makeWorld()
   const clock = await boot($, on, w)
+  const before = last(w)
   const r = await commit($)
   expect(r.decision).toBe('allow')
   await clock.advance(0)
-  expect(last(w)).toMatch(new RegExp(`^${SAVVY} · ⚠ contract · ${COST}$`))
+  expect(last(w)).toBe(before)
+  expect(last(w)).toMatch(new RegExp(`^${SAVVY} · ${COST}$`))
   await clock.advance(60_000)
   expect(last(w)).toMatch(new RegExp(`^${SAVVY} · ${COST}$`))
+  expect(w.statuses.some(s => s !== undefined && s.includes('⚠'))).toBe(false)
   expect(w.statuses.includes(undefined)).toBe(false)
 })
 
@@ -151,16 +150,15 @@ test('with Savvy off and no placed pane the Cache Tax summary stands alone on th
   expect(last(w)).toMatch(new RegExp(`^aico idle · ${COST}$`))
 })
 
-test('the longest slug, the largest spend and a warning all fit in 70 cells', async ($, on) => {
+test('the longest slug and the largest spend fit in 70 cells', async ($, on) => {
   const w = makeWorld()
   w.slug = 'a'.repeat(64)
   w.spend = 9007199254740991
   const clock = await boot($, on, w)
-  await commit($)
   await clock.advance(0)
   const line = last(w) ?? ''
   expect(cellWidth(line)).toBeLessThanOrEqual(70)
-  for (const part of ['W2 ', 'm · ', ' tax ', '⚠ contract']) expect(line).toContain(part)
+  for (const part of ['W2 ', 'm · ', ' tax ']) expect(line).toContain(part)
 })
 
 test('a quiet run within one minute writes nothing new', async ($, on) => {

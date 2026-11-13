@@ -59,7 +59,7 @@ test('AC33 every mod source and type file is LF only', () => {
 });
 
 test('AC35 each mod has a test for terminal and for desktop', () => {
-  for (const f of ['savvy', 'cache-tax', 'reflect', 'blast-radius']) {
+  for (const f of ['savvy', 'cache-tax', 'reflect']) {
     const text = read(`mods/test/${f}.test.tsx`);
     assert.match(text, /terminal/, `${f}: no terminal case`);
     assert.match(text, /desktop/, `${f}: no desktop case`);
@@ -72,45 +72,22 @@ test('AC39 NO_COLOR is read by the mods and the cache write carries a [tax] text
   assert.match(read('mods/cache-tax.tsx'), /\[tax\]/);
 });
 
-test('AC36/AC48 fresh defaults: all four mods on; Blast Radius core ask, security ask, contract warn', async () => {
+test('AC36 fresh defaults: the three mods are on and no other mod key exists', async () => {
   const { MODS_DEFAULTS } = await import('./settings.mjs');
-  const b = MODS_DEFAULTS.blast_radius;
-  assert.deepEqual([b.enabled, b.core, b.contract, b.security], [true, 'ask', 'warn', 'ask']);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), ['cache_tax', 'reflect', 'savvy']);
   for (const k of ['savvy', 'cache_tax', 'reflect']) assert.equal(MODS_DEFAULTS[k].enabled, true);
-  assert.match(docFolder(root, 'mods'), /`core: ask`, `security: ask`, `contract: warn`/);
 });
 
-test('AC47/AC48 the commit gate registers for Bash and PowerShell only', () => {
-  const t = read('mods/blast-radius.ts');
-  assert.match(t, /PowerShell/);
-  assert.match(t, /\bBash\b/);
-  assert.match(t, /tool\.check/);
-});
-
-test('AC49 the docs name the four mods, the shell tools, the cache clock, no keep-warm and desktop unverified', () => {
+test('AC49 the docs name the three mods, the cache clock, no keep-warm and desktop unverified', () => {
   const docs = docFolder(root, 'mods');
-  for (const need of ['Savvy', 'Cache Tax', 'Reflect', 'Blast Radius', 'PowerShell', 'Bash', 'cache clock', 'no keep-warm', 'Unverified', 'nobody can be asked; commit refused', '<savvy> · <blast> · <cost> · <reflect>', 'mods.cache_tax.keep_warm']) {
+  for (const need of ['Savvy', 'Cache Tax', 'Reflect', 'cache clock', 'no keep-warm', 'Unverified', 'mods.cache_tax.keep_warm']) {
     assert.ok(docs.includes(need) || docs.toLowerCase().includes(need.toLowerCase()), `documentation/mods.md lacks: ${need}`);
   }
-  for (const key of ['mods.savvy.enabled', 'mods.savvy.pane', 'mods.cache_tax.enabled', 'mods.cache_tax.pane', 'mods.reflect.enabled', 'mods.reflect.step_check', 'mods.reflect.retrospective', 'mods.reflect.mode', 'mods.blast_radius.enabled', 'mods.blast_radius.core', 'mods.blast_radius.contract', 'mods.blast_radius.security']) {
+  for (const key of ['mods.savvy.enabled', 'mods.savvy.pane', 'mods.cache_tax.enabled', 'mods.cache_tax.pane', 'mods.reflect.enabled', 'mods.reflect.step_check', 'mods.reflect.retrospective', 'mods.reflect.mode']) {
     assert.ok(docs.includes(`\`${key}\``), `documentation/mods.md lacks setting ${key}`);
   }
   assert.match(docs, /Locks/);
-  for (const f of ['README.md', 'CHANGELOG.md', 'docs/contracts/aico-mods.md']) assert.match(read(f), /Blast Radius/, f);
   assert.match(read('docs/contracts/aico-mods.md'), /## Status line/);
-});
-
-// The constants are pinned as literals here, so editing them in blast.mjs cannot also edit the check.
-test('AC48 the refusal text and the 600 character cap are the ones the brief names', async () => {
-  const { NOBODY, MAX_REASON, buildReason, hitsFromDepth } = await import('../mods/lib/blast.mjs');
-  assert.equal(NOBODY, 'nobody can be asked; commit refused');
-  assert.equal(MAX_REASON, 600);
-  const paths = Array.from({ length: 80 }, (_, i) => ({ path: `src/auth/${'x'.repeat(100)}${i}.ts`, categories: ['security'], modules: ['m'] }));
-  const hits = hitsFromDepth({ tier: 'high', depth: 'full', paths, truncated: false });
-  const deny = buildReason(hits, 'deny', null);
-  assert.ok(deny.length <= 600, String(deny.length));
-  assert.ok(deny.includes('nobody can be asked; commit refused'));
-  assert.ok(buildReason(hits, 'ask', 'x'.repeat(5000)).length <= 600);
 });
 
 test('AC43 the cache lifetimes are 60 minutes for the Lead and 5 for subagents', async () => {

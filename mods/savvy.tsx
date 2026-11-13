@@ -449,7 +449,7 @@ async function runCommand($: EngineInterface): Promise<{ text: string }> {
 }
 
 export function registerSavvy(on: On): void {
-  // The shell and Blast Radius own the unmatched `session.start` and `agent.spawn` hooks; a match-all pattern keeps Savvy's own apart from them.
+  // The shell owns the unmatched `session.start` and `agent.spawn` hooks; a match-all pattern keeps Savvy's own apart from them.
   on('session.start', { cwd: /^/ }, async ($, e, next) => {
     try {
       await $.command.register({ name: COMMAND, description: 'Show the progress of the active aico run' })

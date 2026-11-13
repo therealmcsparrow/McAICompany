@@ -16,7 +16,6 @@ const SETTINGS = JSON.stringify({
     savvy: { enabled: false, pane: 'command' },
     cache_tax: { enabled: true, pane: 'command' },
     reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-    blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
   },
 })
 const view = { v: 1, slug: 'demo', state: 'running', started: STAMP(START), ended: null, outcome: null, wave: 2, gates: [], round: 0, tier: 'high', steps: [], warnings: [] }

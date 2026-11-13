@@ -382,10 +382,8 @@ const LOCKS = {
   installs: { title: 'Unlock installs', text: 'aico will run design-skill and dependency installs without asking you for approval first.' },
   security: { title: 'Unlock the security lanes', text: 'aico will skip the security and compliance lanes wherever you turn them off. Nobody checks that code for vulnerabilities or legal problems before it ships.' }
 };
-// Dialog text for the Blast Radius loosening, which the same security unlock covers.
-LOCKS.blast = { title: 'Loosen the commit gate', text: 'aico will let commits that touch security paths go ahead with only a warning, or stop checking commits at all. Nobody is asked before such a commit.' };
-const MODS = ['savvy', 'cache_tax', 'reflect', 'blast_radius'];
-const MOD_LABELS = { savvy: 'Savvy', cache_tax: 'Cache Tax', reflect: 'Reflect', blast_radius: 'Blast Radius' };
+const MODS = ['savvy', 'cache_tax', 'reflect'];
+const MOD_LABELS = { savvy: 'Savvy', cache_tax: 'Cache Tax', reflect: 'Reflect' };
 const LOCKED_GATES = ['ship', 'installs'];
 const LOCKED_LANES = ['security', 'compliance'];
 const LANE_LABELS = { security: 'Security', compliance: 'Compliance', legal: 'Legal', persona: 'Persona testing', hands_on: 'Hands-on testing', accessibility: 'Accessibility' };
@@ -470,7 +468,7 @@ function announceLock(message) {
 function setUnlock(key, on) {
   if (on !== userUnlocked(key)) {
     announceLock(on
-      ? `${UNLOCK_NAMES[key]} unlocked. ${key === 'security' ? 'Off now applies to Security, Compliance and Blast Radius.' : 'auto now applies.'}`
+      ? `${UNLOCK_NAMES[key]} unlocked. ${key === 'security' ? 'Off now applies to Security and Compliance.' : 'auto now applies.'}`
       : `${UNLOCK_NAMES[key]} locked again. ${UNLOCK_VALUES[key]} is held until you unlock it.`);
   }
   const list = (draft.user.unlocked ?? []).filter((k) => k !== key);
@@ -567,13 +565,6 @@ function modsEffective(path, pluginValue) {
   if (mod === 'reflect' && key === 'mode' && fromProject === 'model') {
     [value, source] = lowerLevel();
     held = 'model from project counts only from your user settings';
-  } else if (mod === 'blast_radius' && fromProject === (key === 'enabled' ? false : 'warn')) {
-    [value, source] = lowerLevel();
-    held = `${key === 'enabled' ? 'off' : 'warn'} from project: a project can only tighten`;
-  }
-  const loosens = mod === 'blast_radius' && ((key === 'security' && value === 'warn') || (key === 'enabled' && value === false));
-  if (loosens && !userUnlocked('security')) {
-    return { value: pluginValue, source: 'locked', held: `${key === 'enabled' ? 'off' : 'warn'} from ${source} needs your security unlock` };
   }
   return held ? { value, source: 'locked', held } : { value, source };
 }
@@ -638,10 +629,10 @@ function bindLayer(control, level, path, decode = (s) => s, guard = null) {
   return control;
 }
 // For locked settings at user level: opens the dialog before a value that needs the unlock.
-function lockGuard(lockKey, needsUnlock, dialogKey = lockKey) {
+function lockGuard(lockKey, needsUnlock) {
   return async (value) => {
     if (!needsUnlock(value) || userUnlocked(lockKey)) return true;
-    if (!(await confirmUnlock(dialogKey))) return false;
+    if (!(await confirmUnlock(lockKey))) return false;
     setUnlock(lockKey, true);
     return true;
   };
@@ -1328,7 +1319,7 @@ function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, forma
   const effect = el('td', { class: 'effect', 'aria-live': 'polite' });
   const lockId = `lock-${path.join('-')}`;
   const cells = ['user', 'project'].map((level) => {
-    const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock, opts.dialog) : null;
+    const guard = level === 'user' && opts.lock ? lockGuard(opts.lock, opts.needsUnlock) : null;
     const control = bindLayer(makeControl(`${label}, ${level}`), level, path, decode, guard);
     if (opts.problem) withProblem(control, label, opts.problem);
     const desc = [opts.lock ? lockId : '', opts.describedBy ?? control.getAttribute('aria-describedby') ?? ''].filter(Boolean).join(' ');
@@ -1646,28 +1637,18 @@ function renderGates(panel) {
 const onOffChoice = (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' });
 function renderMods(panel) {
   const defaults = state.plugin.mods;
-  panel.append(el('p', { class: 'hint' }, 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings. A project can only tighten Blast Radius. Blast Radius security on warn, or Blast Radius off, needs your security unlock.'));
+  panel.append(el('p', { class: 'hint' }, 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.'));
   for (const mod of MODS) {
     panel.append(el('h2', {}, MOD_LABELS[mod]));
     const { wrap, tbody } = table(COLUMNS);
     const label = MOD_LABELS[mod];
-    if (mod === 'blast_radius') {
-      const lock = { lock: 'security', lockedValue: 'Off', needsUnlock: (v) => v === false, dialog: 'blast' };
-      pipelineRow(tbody, `${label} on/off`, ['mods', 'blast_radius', 'enabled'], defaults.blast_radius.enabled, onOffChoice, (s) => s === 'true', onOff, lock);
-      const askOrWarn = (l) => selectFor(['ask', 'warn'], l);
-      pipelineRow(tbody, `${label} core`, ['mods', 'blast_radius', 'core'], defaults.blast_radius.core, askOrWarn, String, String);
-      pipelineRow(tbody, `${label} contract`, ['mods', 'blast_radius', 'contract'], defaults.blast_radius.contract, askOrWarn, String, String);
-      pipelineRow(tbody, `${label} security`, ['mods', 'blast_radius', 'security'], defaults.blast_radius.security, askOrWarn, String, String,
-        { lock: 'security', lockedValue: 'warn', needsUnlock: (v) => v === 'warn', dialog: 'blast' });
+    pipelineRow(tbody, `${label} on/off`, ['mods', mod, 'enabled'], defaults[mod].enabled, onOffChoice, (s) => s === 'true', onOff);
+    if (mod !== 'reflect') {
+      pipelineRow(tbody, `${label} pane`, ['mods', mod, 'pane'], defaults[mod].pane, (l) => selectFor(['auto', 'command'], l), String, String);
     } else {
-      pipelineRow(tbody, `${label} on/off`, ['mods', mod, 'enabled'], defaults[mod].enabled, onOffChoice, (s) => s === 'true', onOff);
-      if (mod !== 'reflect') {
-        pipelineRow(tbody, `${label} pane`, ['mods', mod, 'pane'], defaults[mod].pane, (l) => selectFor(['auto', 'command'], l), String, String);
-      } else {
-        pipelineRow(tbody, 'Reflect step check', ['mods', 'reflect', 'step_check'], defaults.reflect.step_check, onOffChoice, (s) => s === 'true', onOff);
-        pipelineRow(tbody, 'Reflect retrospective', ['mods', 'reflect', 'retrospective'], defaults.reflect.retrospective, onOffChoice, (s) => s === 'true', onOff);
-        pipelineRow(tbody, 'Reflect mode', ['mods', 'reflect', 'mode'], defaults.reflect.mode, (l) => selectFor(['deterministic', 'model'], l), String, String);
-      }
+      pipelineRow(tbody, 'Reflect step check', ['mods', 'reflect', 'step_check'], defaults.reflect.step_check, onOffChoice, (s) => s === 'true', onOff);
+      pipelineRow(tbody, 'Reflect retrospective', ['mods', 'reflect', 'retrospective'], defaults.reflect.retrospective, onOffChoice, (s) => s === 'true', onOff);
+      pipelineRow(tbody, 'Reflect mode', ['mods', 'reflect', 'mode'], defaults.reflect.mode, (l) => selectFor(['deterministic', 'model'], l), String, String);
     }
     panel.append(wrap);
   }

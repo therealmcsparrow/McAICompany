@@ -7,7 +7,6 @@ const MODS = (savvy: { enabled: boolean; pane: string }) => ({
   savvy,
   cache_tax: { enabled: false, pane: 'command' },
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 })
 const SETTINGS = (savvy = { enabled: true, pane: 'auto' }) =>
   JSON.stringify({ revision: 1, roles: { 'frontend-engineer': { name: 'Freya' }, 'backend-engineer': { name: 'Ben' } }, mods: MODS(savvy) })

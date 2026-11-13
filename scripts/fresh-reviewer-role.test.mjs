@@ -134,5 +134,5 @@ test('company-type check-role is ok under software and design', () => {
 test('Contracts record the 36th Role and the manifests', () => {
   assert.match(read('docs/contracts/role-names.md'), /^# Contract: role-names v1\.4$/m);
   assert.match(read('docs/contracts/role-names.md'), /36th Role, `fresh-reviewer`/);
-  assert.match(read('docs/contracts/company-type.md'), /^# Contract: company-type v2\.1$/m);
+  assert.match(read('docs/contracts/company-type.md'), /^# Contract: company-type v2\.2$/m);
 });

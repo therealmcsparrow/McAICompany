@@ -6,7 +6,6 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { guardRunActive, parseOutputLine, parseOutputText, workFolder } from '../mods/lib/guard.mjs';
 import { parseGateCommand, recordPath } from '../mods/lib/plan-gate.mjs';
-import { parseSpawnLines, reviewArgs } from '../mods/lib/blast.mjs';
 
 const NAME = '2026-10-30 23.45 - Fix Login';
 const HELPER = '2026-10-30 23.45 - Fix Login Build';
@@ -102,34 +101,6 @@ describe('workFolder guard and the run view', () => {
     });
     assert.equal(guardRunActive({ slug: NAME, view: view(NAME) }).view.slug, NAME);
     for (const [, bad] of BAD_LIST) assert.equal(guardRunActive({ slug: NAME, view: view(bad) }), undefined, bad);
-  });
-});
-
-describe('Blast Radius reads the same line', () => {
-  const prompt = (folder) => `Output: .company/work/${folder}/12-code-reviewer.md\nBase commit: ${SHA}\nRisk tier: high\n`;
-
-  test('a new name and a legacy slug give the run, step and Role', () => {
-    assert.deepEqual(parseSpawnLines(prompt(NAME)), { slug: NAME, step: '12', role: 'code-reviewer', base: SHA, tier: 'high' });
-    assert.equal(parseSpawnLines(prompt(LEGACY)).slug, LEGACY);
-    assert.equal(parseSpawnLines(prompt(NAME).replaceAll('\n', '\r\n')).slug, NAME);
-  });
-
-  for (const [what, bad] of BAD_LIST) {
-    test(`a folder with ${what} gives no run`, () => {
-      const got = parseSpawnLines(prompt(bad));
-      assert.equal(got.slug, null);
-      assert.equal(got.step, null);
-      assert.equal(got.role, null);
-      assert.equal(got.base, SHA);
-    });
-  }
-
-  test('the review-depth arguments carry a valid name and refuse a bad one', () => {
-    assert.deepEqual(reviewArgs({ source: 'base', base: SHA, slug: NAME }), [SHA, '--run', NAME, '--json']);
-    assert.deepEqual(reviewArgs({ source: 'base', base: SHA, slug: LEGACY }), [SHA, '--run', LEGACY, '--json']);
-    for (const [, bad] of BAD_LIST) assert.equal(reviewArgs({ source: 'base', base: SHA, slug: bad }), null, bad);
-    assert.equal(reviewArgs({ source: 'base', base: SHA, slug: 5 }), null);
-    assert.equal(reviewArgs({ source: 'base', base: SHA }), null);
   });
 });
 
@@ -329,7 +300,7 @@ describe('one copy of the name rule', () => {
   const OLD = '[a-z0-9][a-z0-9-]{0,63}';
 
   test('no file of the task repeats the old run name pattern', () => {
-    for (const file of ['mods/lib/guard.mjs', 'mods/lib/blast.mjs', 'mods/savvy.tsx', 'mods/reflect.tsx', 'mods/cache-tax.tsx', 'scripts/reflect.mjs']) {
+    for (const file of ['mods/lib/guard.mjs', 'mods/savvy.tsx', 'mods/reflect.tsx', 'mods/cache-tax.tsx', 'scripts/reflect.mjs']) {
       assert.ok(!read(file).includes(OLD), file);
     }
     // plan-gate judges the unquoted legacy form through isLegacySlug, so it holds no copy either.
@@ -340,26 +311,25 @@ describe('one copy of the name rule', () => {
     for (const file of ['mods/savvy.tsx', 'mods/reflect.tsx', 'mods/cache-tax.tsx']) assert.match(read(file), /parseOutputText/, file);
     assert.match(read('mods/reflect.tsx'), /slug: workFolder/);
     assert.match(read('mods/cache-tax.tsx'), /run: workFolder/);
-    assert.match(read('mods/lib/blast.mjs'), /parseOutputLine/);
     assert.match(read('mods/lib/plan-gate.mjs'), /workParts/); // plan-gate moved from isWorkFolder to workParts in 25da620
     assert.match(read('scripts/reflect.mjs'), /isRunSlug/);
   });
 
   test('mod code imports no Node module and no npm package', () => {
-    for (const file of ['mods/lib/guard.mjs', 'mods/lib/plan-gate.mjs', 'mods/lib/blast.mjs', 'mods/lib/work-folder.mjs']) {
+    for (const file of ['mods/lib/guard.mjs', 'mods/lib/plan-gate.mjs', 'mods/lib/work-folder.mjs']) {
       const imports = read(file).split('\n').filter((l) => /^import /.test(l));
       for (const line of imports) assert.match(line, /from '\.\//, `${file}: ${line}`);
     }
   });
 
   test('the files have no CR byte', () => {
-    for (const file of ['mods/lib/guard.mjs', 'mods/lib/plan-gate.mjs', 'mods/lib/blast.mjs', 'mods/savvy.tsx', 'mods/reflect.tsx', 'mods/cache-tax.tsx', 'scripts/reflect.mjs', 'docs/contracts/aico-mods.md', 'docs/contracts/reflect.md', 'docs/contracts/plugin-root.md', 'scripts/work-folder-mods.test.mjs']) {
+    for (const file of ['mods/lib/guard.mjs', 'mods/lib/plan-gate.mjs', 'mods/savvy.tsx', 'mods/reflect.tsx', 'mods/cache-tax.tsx', 'scripts/reflect.mjs', 'docs/contracts/aico-mods.md', 'docs/contracts/reflect.md', 'docs/contracts/plugin-root.md', 'scripts/work-folder-mods.test.mjs']) {
       assert.ok(!read(file).includes('\r'), file);
     }
   });
 
   test('the contracts state the new versions and the quoted gate form', () => {
-    assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v1\.9$/m);
+    assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v2\.0$/m);
     assert.match(read('docs/contracts/reflect.md'), /^# Contract: reflect v1\.4$/m);
     assert.match(read('docs/contracts/plugin-root.md'), /^# Contract: plugin-root v1\.1$/m);
     assert.match(read('docs/contracts/aico-mods.md'), /gate '<name>' plan passed/);

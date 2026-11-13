@@ -5,7 +5,6 @@ const MODS = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: false, pane: 'command' },
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' },
 }
 const SETTINGS = JSON.stringify({ revision: 1, roles: { 'frontend-engineer': { name: 'Freya' } }, mods: MODS })
 const STAMP = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, 'Z')

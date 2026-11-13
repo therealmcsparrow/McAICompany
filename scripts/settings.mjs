@@ -39,12 +39,13 @@ export const PIPELINE_DEFAULTS = {
 };
 export const GATE_DEFAULTS = { brief: 'ask', plan: 'ask', ship: 'ask', installs: 'ask' };
 export const BRAINSTORM_DEFAULTS = { film_script: false, debate: 'crossfire' };
-export const MODS = ['savvy', 'cache_tax', 'reflect', 'blast_radius'];
+export const MODS = ['savvy', 'cache_tax', 'reflect'];
+// A mod key removed from the schema: dropped on read with one warning, refused on write as an unknown key.
+const RETIRED_MOD = 'blast_radius';
 export const MODS_DEFAULTS = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' }
+  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
 };
 export const SKILLSPECTOR_MODES = ['no-llm', 'claude_cli'];
 export const SKILLSPECTOR_DEFAULTS = { mode: 'no-llm' };
@@ -287,12 +288,6 @@ const MOD_RULES = {
     step_check: modBool('reflect', 'step_check'),
     retrospective: modBool('reflect', 'retrospective'),
     mode: modOneOf('reflect', 'mode', ['deterministic', 'model'])
-  },
-  blast_radius: {
-    enabled: modBool('blast_radius', 'enabled'),
-    core: modOneOf('blast_radius', 'core', ['ask', 'warn']),
-    contract: modOneOf('blast_radius', 'contract', ['ask', 'warn']),
-    security: modOneOf('blast_radius', 'security', ['ask', 'warn'])
   }
 };
 const SKILLSPECTOR_RULES = {
@@ -668,8 +663,16 @@ function loadLayer(level, ctx, roleNames, floor = 'opus') {
     return { raw: bytes, layer: empty, warnings: [error.message], reasons: [] };
   }
   if (!Object.hasOwn(data, KEY)) return { raw: bytes, layer: empty, warnings: [], reasons: [] };
-  const { clean, reasons } = sanitize(data[KEY], roleNames, floor);
-  return { raw: bytes, layer: clean, warnings: reasons.map(storedWarning(file)), reasons };
+  let stored = data[KEY];
+  let retired = false;
+  const mods = stored?.mods;
+  if (mods !== null && typeof mods === 'object' && !Array.isArray(mods) && Object.hasOwn(mods, RETIRED_MOD)) {
+    const { [RETIRED_MOD]: _dropped, ...rest } = mods;
+    stored = { ...stored, mods: rest };
+    retired = true;
+  }
+  const { clean, reasons } = sanitize(stored, roleNames, floor);
+  return { raw: bytes, layer: clean, warnings: reasons.map(storedWarning(file)), reasons, retired };
 }
 
 // The code-reviewer floor from the model floor file; an unreadable file gives opus.
@@ -821,10 +824,8 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
   writeAtomic(file, parts.join(''));
 }
 
-const BLAST_CATEGORIES = ['core', 'contract', 'security'];
-
-// Resolves `mods.*`: free keys per field, then the three lock rules (aico-settings v1.1).
-function resolveMods(user, project, { isUnlocked, broken, ignored, warnings }) {
+// Resolves `mods.*`: free keys per field, then the Reflect lock.
+function resolveMods(user, project, { broken, ignored, warnings }) {
   const out = structuredClone(MODS_DEFAULTS);
   const u = (mod, key) => user.mods?.[mod]?.[key];
   const p = (mod, key) => project.mods?.[mod]?.[key];
@@ -836,33 +837,13 @@ function resolveMods(user, project, { isUnlocked, broken, ignored, warnings }) {
   }
   if (broken) {
     // A broken project layer may have lost a tightening, so the user's loosening does not count.
-    const userLoosens = BLAST_CATEGORIES.some((c) => u('blast_radius', c) !== undefined && u('blast_radius', c) !== MODS_DEFAULTS.blast_radius[c])
-      || u('blast_radius', 'enabled') === false || u('reflect', 'mode') === 'model';
-    if (userLoosens) warnings.push('project settings have problems: mods.blast_radius held at its plugin defaults, mods.reflect.mode held deterministic');
+    if (u('reflect', 'mode') === 'model') warnings.push('project settings have problems: mods.reflect.mode held deterministic');
     return out;
   }
   // Lock 1: Reflect model counts only from the user level; a project may only say deterministic.
   out.reflect.mode = u('reflect', 'mode') ?? MODS_DEFAULTS.reflect.mode;
   if (p('reflect', 'mode') === 'model') ignored.push('mods.reflect.mode: model from project counts only from your user settings');
   else if (p('reflect', 'mode') !== undefined) out.reflect.mode = p('reflect', 'mode');
-  // Lock 2: a project only tightens Blast Radius. Lock 3: security warn and off need the user unlock.
-  const blast = out.blast_radius;
-  for (const c of BLAST_CATEGORIES) {
-    blast[c] = u('blast_radius', c) ?? MODS_DEFAULTS.blast_radius[c];
-    if (p('blast_radius', c) === 'ask') blast[c] = 'ask';
-    else if (p('blast_radius', c) === 'warn') ignored.push(`mods.blast_radius.${c}: warn from project can only tighten`);
-  }
-  if (blast.security === 'warn' && !isUnlocked('security')) {
-    blast.security = 'ask';
-    ignored.push('mods.blast_radius.security: warn from user needs the user unlock security');
-  }
-  blast.enabled = u('blast_radius', 'enabled') ?? true;
-  if (p('blast_radius', 'enabled') === true) blast.enabled = true;
-  else if (p('blast_radius', 'enabled') === false) ignored.push('mods.blast_radius.enabled: off from project can only tighten');
-  if (blast.enabled === false && !isUnlocked('security')) {
-    blast.enabled = true;
-    ignored.push('mods.blast_radius.enabled: off from user needs the user unlock security');
-  }
   return out;
 }
 
@@ -915,6 +896,9 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const held = p.warnings.length > 0 && unlocked.length > 0;
   if (held) warnings.push('project settings have problems: ship and installs Gates held at ask, security and compliance lanes held on');
   const isUnlocked = (k) => !held && unlocked.includes(k);
+
+  const retiredLevels = [['user', u], ['project', p]].filter(([, l]) => l.retired).map(([name]) => name);
+  if (retiredLevels.length > 0) warnings.push(`mods.${RETIRED_MOD}: ignored, removed in aico 0.37.0 (${retiredLevels.join(', ')})`);
 
   const roles = resolveRoles(defaults, user, project);
   const table = loadModelFloor(pluginRoot);
@@ -979,7 +963,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     runs: pick(project.plan_check?.runs, user.plan_check?.runs, PLAN_CHECK_DEFAULTS.runs)[0]
   };
 
-  const mods = resolveMods(user, project, { isUnlocked, broken: p.warnings.length > 0, ignored, warnings });
+  const mods = resolveMods(user, project, { broken: p.warnings.length > 0, ignored, warnings });
 
   // The revision also covers project.md (profile and project language), so a stale page can't overwrite it.
   let md;

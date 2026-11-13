@@ -5,12 +5,11 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   MAX_STDOUT, MODS_DEFAULTS, trimEol, cleanText, parseJson, str, int, bool, oneOf, arr, obj, opt, rec, pattern,
-  interpretRun, guardSettings, guardRunActive, guardReviewDepth, parseOutputText
+  interpretRun, guardSettings, guardRunActive, parseOutputText
 } from '../mods/lib/guard.mjs';
 import { composeStatus, IDLE, STATUS_CAPS, STATUS_MAX } from '../mods/lib/status.mjs';
 import { readyText } from '../mods/lib/ready.mjs';
 import { parseVersion } from '../mods/lib/version.mjs';
-import { commitIntent } from '../mods/lib/git-commit.mjs';
 import { cut, cellWidth, fit, fmtInt, fmtCompact, fmtPct, fmtDuration, fmtMinutes, fmtClock, colorEnabled } from '../mods/lib/format.mjs';
 import {
   MAIN_LIFETIME_MS, SUBAGENT_LIFETIME_MS, LIFETIME_LABEL, SUBAGENT_LINE, EMPTY_CLOCK, noteRequest, cacheClock, clockLines, clockStatus, wrap
@@ -148,7 +147,8 @@ test('guardSettings keeps the mods block and role names, drops the rest', () => 
   });
   const r = interpretRun({ exitCode: 0, stdout: text + '\r\n' }, guardSettings);
   assert.equal(r.ok, true);
-  assert.deepEqual({ ...r.value.mods.blast_radius }, MODS_DEFAULTS.blast_radius);
+  assert.deepEqual(Object.keys(r.value.mods).sort(), ['cache_tax', 'reflect', 'savvy']);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), ['cache_tax', 'reflect', 'savvy']);
   assert.equal(r.value.roles['frontend-engineer'].name, 'Freya');
   assert.equal(r.value.secrets, undefined);
   assert.equal(r.value.roles.architect.model, undefined);
@@ -202,34 +202,10 @@ test('guardRunActive accepts a run without a wave yet', () => {
   assert.equal(guardRunActive({ slug: 'x', view: { ...VIEW, wave: null, steps: [], gates: [] } }).view.wave, null);
 });
 
-const DEPTH = {
-  v: 1, source: 'staged', base: null, tier: 'unknown', depth: 'full',
-  paths: [{ path: 'docs/contracts/x.md', categories: ['contract'], module: null }, { path: 'hooks/a.tsx', categories: ['security', 'core'], module: 'mods' }],
-  reasons: [{ path: 'hooks/a.tsx', rule: 'security path' }], truncated: false
-};
-
-test('guardReviewDepth keeps tier, depth and paths exactly', () => {
-  const v = guardReviewDepth(DEPTH);
-  assert.equal(v.tier, 'unknown');
-  assert.equal(v.depth, 'full');
-  assert.deepEqual([...v.paths[1].categories], ['security', 'core']);
-  assert.equal(v.paths[1].module, 'mods');
-  assert.equal(v.truncated, false);
-});
-
-test('guardReviewDepth ignores unknown categories and refuses a bad depth or tier', () => {
-  const odd = { ...DEPTH, paths: [{ path: 'a', categories: ['other', 'core'], module: null }] };
-  assert.deepEqual([...guardReviewDepth(odd).paths[0].categories], ['core']);
-  assert.equal(guardReviewDepth({ ...DEPTH, depth: 'deep' }), undefined);
-  assert.equal(guardReviewDepth({ ...DEPTH, tier: 'extreme' }), undefined);
-  assert.equal(guardReviewDepth({ ...DEPTH, paths: 'x' }), undefined);
-  assert.equal(guardReviewDepth({ ...DEPTH, paths: new Array(501).fill(DEPTH.paths[0]) }), undefined);
-});
-
 // ---- status.mjs
 
 test('composeStatus ignores prototype keys, unknown keys and non-string values', () => {
-  const hostile = JSON.parse('{"__proto__":"x","constructor":"y","prototype":"z","extra":"e","savvy":7,"blast":["b"],"cost":{"a":1},"reflect":null}');
+  const hostile = JSON.parse('{"__proto__":"x","constructor":"y","prototype":"z","extra":"e","savvy":7,"gone":["b"],"cost":{"a":1},"reflect":null}');
   assert.equal(composeStatus(hostile), undefined);
   const mixed = JSON.parse('{"__proto__":"x","constructor":"y","unknown":"u","cost":"spend 1"}');
   assert.equal(composeStatus(mixed), 'spend 1');
@@ -250,19 +226,19 @@ test('composeStatus makes CR, LF, tab and ESC one clean line', () => {
 });
 
 test('composeStatus cuts a CJK part to its cell cap', () => {
-  const line = composeStatus({ blast: '漢'.repeat(30) });
-  assert.ok(cellWidth(line) <= STATUS_CAPS.blast);
+  const line = composeStatus({ cost: '漢'.repeat(30) });
+  assert.ok(cellWidth(line) <= STATUS_CAPS.cost);
   assert.ok(line.endsWith('…'));
 });
 
-test('composeStatus joins parts in order savvy, blast, cost, reflect', () => {
-  assert.equal(composeStatus({ reflect: '2 lessons', cost: '5 tax', blast: '⚠ core', savvy: 'W1 S01' }),
-    'W1 S01 · ⚠ core · 5 tax · 2 lessons');
+test('composeStatus joins parts in order savvy, cost, reflect', () => {
+  assert.equal(composeStatus({ reflect: '2 lessons', cost: '5 tax', savvy: 'W1 S01' }),
+    'W1 S01 · 5 tax · 2 lessons');
 });
 
 test('composeStatus returns undefined when there is nothing to say', () => {
   assert.equal(composeStatus({}), undefined);
-  assert.equal(composeStatus({ savvy: '', cost: '   ', blast: null, reflect: undefined }), undefined);
+  assert.equal(composeStatus({ savvy: '', cost: '   ', reflect: undefined }), undefined);
   assert.equal(composeStatus(undefined), undefined);
   assert.equal(composeStatus(null), undefined);
   assert.equal(composeStatus('x'), undefined);
@@ -271,23 +247,24 @@ test('composeStatus returns undefined when there is nothing to say', () => {
 test('STATUS_CAPS add up so the whole line stays on 70 cells, so the host prefix of 8 leaves 2 spare', () => {
   const sum = Object.values(STATUS_CAPS).reduce((a, b) => a + b, 0);
   assert.equal(STATUS_MAX, 70);
-  assert.deepEqual(STATUS_CAPS, { version: 8, savvy: 17, blast: 10, cost: 13, reflect: 10 });
-  assert.ok(sum + 4 * 3 <= STATUS_MAX);
+  assert.deepEqual(STATUS_CAPS, { version: 8, savvy: 17, cost: 13, reflect: 10 });
+  assert.equal(Object.keys(STATUS_CAPS).length, 4);
+  assert.ok(sum + 3 * 3 <= STATUS_MAX);
 });
 
-test('composeStatus with all five parts at their cap is at most 70 cells and keeps every part', () => {
-  const line = composeStatus({ version: 'v' + '9'.repeat(200), savvy: 's'.repeat(200), blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
+test('composeStatus with all four parts at their cap is at most 70 cells and keeps every part', () => {
+  const line = composeStatus({ version: 'v' + '9'.repeat(200), savvy: 's'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) });
   assert.ok(cellWidth(line) <= 70);
-  assert.equal(line.split(' · ').length, 5);
-  const wide = composeStatus({ version: 'v10.2.30', savvy: '漢'.repeat(200), blast: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
+  assert.equal(line.split(' · ').length, 4);
+  const wide = composeStatus({ version: 'v10.2.30', savvy: '漢'.repeat(200), cost: '漢'.repeat(200), reflect: '漢'.repeat(200) });
   assert.ok(cellWidth(wide) <= 70);
   assert.ok(8 + cellWidth(wide) <= 78);
-  assert.equal(wide.split(' · ').length, 5);
-  const real = composeStatus({ version: 'v0.20.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '9 lessons' });
-  assert.equal(real, 'v0.20.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 9 lessons');
+  assert.equal(wide.split(' · ').length, 4);
+  const real = composeStatus({ version: 'v0.20.0', savvy: 'W3 S12 be-eng 14m', cost: '12.4k tax 60m', reflect: '9 lessons' });
+  assert.equal(real, 'v0.20.0 · W3 S12 be-eng 14m · 12.4k tax 60m · 9 lessons');
   assert.ok(cellWidth(real) <= 70);
-  const twenty = composeStatus({ version: 'v0.21.0', savvy: 'W3 S12 be-eng 14m', blast: '⚠ security', cost: '12.4k tax 60m', reflect: '20 lessons' });
-  assert.equal(twenty, 'v0.21.0 · W3 S12 be-eng 14m · ⚠ security · 12.4k tax 60m · 20 lessons');
+  const twenty = composeStatus({ version: 'v0.21.0', savvy: 'W3 S12 be-eng 14m', cost: '12.4k tax 60m', reflect: '20 lessons' });
+  assert.equal(twenty, 'v0.21.0 · W3 S12 be-eng 14m · 12.4k tax 60m · 20 lessons');
   assert.ok(cellWidth(twenty) <= 70);
 });
 
@@ -295,7 +272,7 @@ test('composeStatus puts the version first, shows it next to the idle part and n
   assert.equal(composeStatus({ version: 'v0.20.0' }), 'v0.20.0');
   assert.equal(composeStatus({ version: 'v0.20.0' }, { idle: true }), 'v0.20.0 · aico idle');
   assert.equal(composeStatus({ cost: '5 tax', version: 'v0.20.0' }), 'v0.20.0 · 5 tax');
-  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), blast: 'b'.repeat(10), cost: 'c'.repeat(13), reflect: 'r'.repeat(10) };
+  const parts = { version: 'v0.20.0', savvy: 's'.repeat(17), cost: 'c'.repeat(13), reflect: 'r'.repeat(10) };
   for (const max of [60, 50, 40, 30, 20]) {
     const l = composeStatus(parts, { max });
     assert.ok(cellWidth(l) <= max, String(max));
@@ -315,16 +292,16 @@ test('parseVersion accepts x.y.z from plugin.json text and nothing else', () => 
   assert.equal(parseVersion('{"version":"' + '1'.repeat(1e6) + '.1.1"}'), undefined);
 });
 
-test('composeStatus with a small max drops reflect, cost, blast, then cuts savvy', () => {
-  const parts = { savvy: 's'.repeat(17), blast: 'b'.repeat(8), cost: 'c'.repeat(13), reflect: 'r'.repeat(8) };
-  const l1 = composeStatus(parts, { max: 50 });
-  assert.ok(cellWidth(l1) <= 50 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(13)));
-  const l2 = composeStatus(parts, { max: 40 });
-  assert.ok(cellWidth(l2) <= 40);
-  assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(13)) && l2.includes('b'.repeat(8)));
+test('composeStatus with a small max drops reflect, then cost, then cuts savvy', () => {
+  const parts = { savvy: 's'.repeat(17), cost: 'c'.repeat(13), reflect: 'r'.repeat(8) };
+  const l1 = composeStatus(parts, { max: 40 });
+  assert.ok(cellWidth(l1) <= 40 && !l1.includes('r'.repeat(8)) && l1.includes('c'.repeat(13)));
+  const l2 = composeStatus(parts, { max: 30 });
+  assert.ok(cellWidth(l2) <= 30);
+  assert.ok(!l2.includes('r'.repeat(8)) && !l2.includes('c'.repeat(13)) && l2.includes('s'.repeat(17)));
   const l3 = composeStatus(parts, { max: 15 });
   assert.ok(cellWidth(l3) <= 15);
-  assert.ok(l3.endsWith('…') && !l3.includes('b'));
+  assert.ok(l3.endsWith('…') && !l3.includes('c'));
 });
 
 test('composeStatus with idle shows `aico idle` in the first slot when no run part is there', () => {
@@ -332,7 +309,7 @@ test('composeStatus with idle shows `aico idle` in the first slot when no run pa
   assert.equal(composeStatus({}, { idle: true }), 'aico idle');
   assert.equal(composeStatus({ savvy: '', cost: '   ' }, { idle: true }), 'aico idle');
   assert.equal(composeStatus(undefined, { idle: true }), 'aico idle');
-  assert.equal(composeStatus({ cost: '5 tax', blast: '⚠ core' }, { idle: true }), 'aico idle · ⚠ core · 5 tax');
+  assert.equal(composeStatus({ cost: '5 tax', reflect: '2 lessons' }, { idle: true }), 'aico idle · 5 tax · 2 lessons');
   assert.equal(composeStatus({}), undefined);
   assert.equal(composeStatus({}, { idle: false }), undefined);
 });
@@ -340,40 +317,42 @@ test('composeStatus with idle shows `aico idle` in the first slot when no run pa
 test('composeStatus with idle gives way to the Savvy part and keeps the 70 cell budget', () => {
   assert.equal(composeStatus({ savvy: 'W3 S12 be-eng 14m', cost: '5 tax' }, { idle: true }), 'W3 S12 be-eng 14m · 5 tax');
   assert.equal(composeStatus({ savvy: 'ended ok 14m' }, { idle: true }), 'ended ok 14m');
-  const all = composeStatus({ blast: 'b'.repeat(200), cost: 'c'.repeat(200), reflect: 'r'.repeat(200) }, { idle: true });
+  const all = composeStatus({ cost: 'c'.repeat(200), reflect: 'r'.repeat(200) }, { idle: true });
   assert.ok(cellWidth(all) <= STATUS_MAX);
-  assert.equal(all.split(' · ').length, 4);
+  assert.equal(all.split(' · ').length, 3);
   assert.ok(all.startsWith('aico idle · '));
   assert.ok(cellWidth(composeStatus({}, { idle: true })) <= STATUS_CAPS.savvy);
-  const small = composeStatus({ blast: 'b'.repeat(8), cost: 'c'.repeat(15), reflect: 'r'.repeat(8) }, { idle: true, max: 15 });
+  const small = composeStatus({ cost: 'c'.repeat(15), reflect: 'r'.repeat(8) }, { idle: true, max: 15 });
   assert.ok(cellWidth(small) <= 15);
 });
 
 test('composeStatus with idle ignores hostile parts and a hostile option', () => {
-  const hostile = JSON.parse('{"__proto__":"x","savvy":7,"blast":["b"],"cost":{"a":1}}');
+  const hostile = JSON.parse('{"__proto__":"x","savvy":7,"gone":["b"],"cost":{"a":1}}');
   assert.equal(composeStatus(hostile, { idle: true }), 'aico idle');
   assert.equal(composeStatus({}, { idle: 'yes' }), undefined);
 });
 
 test('readyText lists the mods that are on, in a fixed order', () => {
   const on = (enabled) => ({ enabled });
-  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true), blast_radius: on(true) }, true),
-    'aico mods ready: Savvy, Cache Tax, Reflect, Blast Radius');
+  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true) }, true),
+    'aico mods ready: Savvy, Cache Tax, Reflect');
+  assert.equal(readyText({ savvy: on(true), cache_tax: on(true), reflect: on(true) }, true, '0.37.0'),
+    'aico 0.37.0 mods ready: Savvy, Cache Tax, Reflect');
   assert.equal(readyText({ savvy: on(true) }, true, '0.20.0'), 'aico 0.20.0 mods ready: Savvy');
   assert.equal(readyText({ savvy: on(true) }, false, '0.20.0'), 'aico 0.20.0 mods ready (settings unknown): Savvy');
   assert.equal(readyText(null, true, '0.20.0'), 'aico 0.20.0 mods ready');
   for (const bad of ['v0.20.0', '0.20', '0.20.0\n', 'x'.repeat(100), 7, null, {}]) {
     assert.equal(readyText({ savvy: on(true) }, true, bad), 'aico mods ready: Savvy', String(bad));
   }
-  assert.equal(readyText({ savvy: on(false), cache_tax: on(true), reflect: on(false), blast_radius: on(true) }, true),
-    'aico mods ready: Cache Tax, Blast Radius');
+  assert.equal(readyText({ savvy: on(false), cache_tax: on(true), reflect: on(false) }, true),
+    'aico mods ready: Cache Tax');
   assert.equal(readyText({ savvy: on(false) }, true), 'aico mods ready: none on');
 });
 
 test('readyText says when the settings are unknown and survives hostile input', () => {
   assert.equal(readyText({ savvy: { enabled: true } }, false), 'aico mods ready (settings unknown): Savvy');
   for (const bad of [null, undefined, 'x', 7]) assert.equal(readyText(bad, true), 'aico mods ready');
-  const hostile = JSON.parse('{"__proto__":{"enabled":true},"savvy":"yes","reflect":{"enabled":"true"},"blast_radius":null}');
+  const hostile = JSON.parse('{"__proto__":{"enabled":true},"savvy":"yes","reflect":{"enabled":"true"},"gone":{"enabled":true}}');
   assert.equal(readyText(hostile, true), 'aico mods ready: none on');
   assert.ok(readyText({ savvy: { enabled: true } }, true).length <= 80);
 });
@@ -409,430 +388,6 @@ test('only mods/shared/status.ts calls $.ui.status', () => {
   for (const top of ['hooks', 'mods']) if (existsSync(join(root, top))) walk(join(root, top));
   assert.deepEqual(found, []);
   assert.match(readFileSync(join(root, 'mods/shared/status.ts'), 'utf8'), /\bui\.status\s*\(/);
-});
-
-// ---- git-commit.mjs
-
-const BASH = (c) => commitIntent(c, 'bash');
-const PS = (c) => commitIntent(c, 'powershell');
-
-test('commitIntent is total for hostile input', () => {
-  for (const bad of [undefined, null, 42, {}, [], '', ' ', ';;;', '&&', '|||', '"', "'", '`', '\\', '$(', '(((', '))))']) {
-    const r = BASH(bad);
-    assert.equal(typeof r.isCommit, 'boolean');
-    const q = PS(bad);
-    assert.equal(typeof q.isCommit, 'boolean');
-  }
-  assert.equal(BASH(42).isCommit, false);
-  assert.equal(commitIntent('git commit', 'nonsense').isCommit, true);
-  assert.equal(commitIntent('git commit').isCommit, true);
-});
-
-test('commitIntent bounds a 10 MiB command', () => {
-  const t0 = Date.now();
-  const big = 'a '.repeat(5 * 1024 * 1024);
-  assert.equal(BASH(big).isCommit, false);
-  assert.equal(BASH(big + ' git commit').isCommit, true);
-  assert.equal(PS('git '.repeat(500000)).isCommit, false);
-  assert.ok(Date.now() - t0 < 3000);
-});
-
-test('a result carries no staged-only scope: the gate always reads worktree, staged and untracked', () => {
-  assert.deepEqual(BASH('git commit -m y'), { isCommit: true, repo: null, unknown: false });
-  assert.deepEqual(BASH('ls'), { isCommit: false, repo: null, unknown: false });
-  for (const c of ['git commit -m y', 'git add -A && git commit -m x', 'git commit --pathspec-from-file=p -m x', 'git commit --amend --no-edit', 'git commit -F m.txt']) {
-    assert.equal('scope' in BASH(c), false, c);
-  }
-});
-
-test('bash: plain and prefixed commits', () => {
-  const c = BASH('git -C x commit -m y');
-  assert.equal(c.isCommit, true);
-  assert.equal(c.repo, 'x');
-  assert.equal(BASH('A=1 git commit').isCommit, true);
-  assert.equal(BASH('A=1 B="x y" git commit -m z').isCommit, true);
-  assert.equal(BASH('echo commit && git commit').isCommit, true);
-  assert.equal(BASH('bash -c "git commit"').isCommit, true);
-  assert.equal(BASH('git -c user.name=x --no-pager commit').isCommit, true);
-  assert.equal(BASH('/usr/bin/git commit').isCommit, true);
-  assert.equal(BASH('if true; then git commit -m x; fi').isCommit, true);
-  assert.equal(BASH('(git commit -m x)').isCommit, true);
-  assert.equal(BASH('true || git commit').isCommit, true);
-  assert.equal(BASH('sudo git commit').isCommit, true);
-  assert.equal(BASH('echo x | xargs git commit').isCommit, true);
-  assert.equal(BASH('git add . \\\n && git commit -m x').isCommit, true);
-  assert.equal(BASH('command git commit -m x').isCommit, true);
-});
-
-test('bash: a commit after git add, in any form, is a commit', () => {
-  for (const c of ['git add -A && git commit -m x', 'git add mods/a.ts; git commit -m x', 'git stage . && git commit -m x', 'git add . ; git commit -m x',
-    'git commit --pathspec-from-file=p.txt', 'git commit --pathspec-from-file p.txt -m x']) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-});
-
-test('bash: not a commit', () => {
-  assert.equal(BASH('git log --grep commit').isCommit, false);
-  assert.equal(BASH('gitcommit').isCommit, false);
-  assert.equal(BASH('git status').isCommit, false);
-  assert.equal(BASH('echo "git commit"').isCommit, false);
-  assert.equal(BASH('git -C commit status').isCommit, false);
-  assert.equal(BASH('git commit-graph write').isCommit, false);
-  assert.equal(BASH('grep commit file.txt').isCommit, false);
-  assert.deepEqual(BASH('ls'), { isCommit: false, repo: null, unknown: false });
-  assert.equal(BASH('# git commit').isCommit, false);
-  assert.equal(BASH('git diff --cached && git log -3 --oneline').isCommit, false);
-  assert.equal(BASH('git add . && git push origin main').isCommit, false);
-  assert.equal(BASH('npm test').isCommit, false);
-  assert.equal(BASH('git --version').isCommit, false);
-  assert.equal(BASH('git').isCommit, false);
-});
-
-test('bash: options, settings and variables that make an allowed git run a commit are a commit', () => {
-  for (const c of [
-    "git -c diff.external='git commit -am x' diff",
-    "git -c core.fsmonitor='git commit -am x' status",
-    "git -c core.sshCommand='git commit -am x' fetch",
-    'git -c user.name=x status',
-    'git -cfoo.bar=x status',
-    'git --config-env=core.fsmonitor=VAR status',
-    'git --config-env core.fsmonitor=VAR status',
-    "GIT_EXTERNAL_DIFF='git commit -am x' git diff",
-    "GIT_EXTERNAL_DIFF='git commit -am x'; export GIT_EXTERNAL_DIFF; git diff",
-    "export GIT_EXTERNAL_DIFF='git commit -am x'; git diff",
-    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='git commit -am x' git status",
-    "git config core.fsmonitor 'git commit -am x'; git status",
-    "git config diff.external 'git commit -am x' && git diff",
-    "git grep -O'git commit -am x' foo",
-    "git grep -O 'git commit -am x' foo",
-    "git grep --open-files-in-pager='git commit -am x' foo",
-    "git fetch --upload-pack='git commit -am x' .",
-    "git fetch --upload-pack 'git commit -am x' .",
-    "git ls-remote --upload-pack='git commit -am x' .",
-    "git push --receive-pack='git commit -am x' origin",
-    "git push --exec='git commit -am x' origin",
-    "git fetch --upload-p='git commit -am x' .",
-    "git clone -u 'git commit -am x' . out",
-    "git clone -u'git commit -am x' . out",
-    "git diff --ext-diff --ext-diff='git commit -am x'",
-    "git -c diff.external='git commit' diff",
-    "git status && git -c x.y=z log --grep commit"
-  ]) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-});
-
-test('bash: a network or search subcommand next to the word commit is a commit, whatever its options', () => {
-  for (const c of [
-    "git push --e='git commit -qam x;:' .",
-    "git ls-remote --u='git commit -qam x;:' .",
-    "git clone --no-local --u='git commit -qam x;:' . ../y",
-    "git grep -iO'git commit -qam x;:' kk",
-    "git clone -c core.sshCommand='git -C r commit -qam x;:' ssh://h/x y",
-    "git fetch --up='git commit -qam x;:' .",
-    "git archive --ex='git commit -qam x;:' HEAD",
-    "git archive --remote=. HEAD; echo commit",
-    'git push origin main; echo commit'
-  ]) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-  for (const c of ['git push -u origin main', 'git clone https://example.com/r.git out', 'git grep -n foo', 'git fetch --all', 'git archive HEAD', 'git ls-remote origin']) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-});
-
-test('bash: a payload that lands work on the branch without the word commit is a commit', () => {
-  for (const c of [
-    "git ls-remote --upload-pack='git stash -q; git merge -q --no-edit refs/stash;:' .",
-    "GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:' git diff",
-    "git config diff.external 'git stash -q; git merge -q --no-edit refs/stash;:'; git diff",
-    "git fetch --upload-pack='git cherry-pick -n x' .",
-    "git fetch --upload-pack='git pull' .",
-    "git fetch --upload-pack='git revert x' .",
-    "git fetch --upload-pack='git am p' .",
-    "git fetch --upload-pack='git rebase x' .",
-    "git fetch --upload-pack='git reset --soft x' .",
-    "git fetch --upload-pack='git update-ref refs/heads/x y' .",
-    "git fetch --upload-pack='git commit-tree t' .",
-    "git config diff.external 'x'; git log -p --ext-diff; echo merge",
-    "GIT_EXTERNAL_DIFF=./x git diff; git status -s -- git"
-  ]) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-  // a nested git outside the program position is enough, whatever the other words are
-  assert.equal(BASH("git ls-remote --upload-pack='git x' .").isCommit, true);
-  assert.equal(BASH("GIT_EXTERNAL_DIFF='git x' git diff").isCommit, true);
-  assert.equal(BASH("git config diff.external 'git x'; git diff").isCommit, true);
-  for (const c of ['git fetch origin && git status', 'git push origin main', 'export PATH=x; git status', 'git stash', 'git merge-base a b', 'git ls-remote origin',
-    'git fetch --upload-pack', 'git diff --exit-code', 'git config user.name x', 'git reset --hard; git status']) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-});
-
-test('bash: an abbreviated runner option of three or more characters counts when the command names commit', () => {
-  for (const c of ["git diff --ext 'commit'", "git log --ext-d -p commit", "git diff --ext=x commit", "git log --ext commit", "git show --ext commit",
-    "git diff-files --ext commit", "git format-patch --ext commit", "git range-diff --ext commit", "git diff --ext-diff commit", "git diff --open commit",
-    "git diff --rec commit", "git diff --upl commit", 'git diff --e commit', 'git log --e commit', 'git diff --o commit']) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-  for (const c of ['git diff --exit-code commit', 'git diff --stat commit', 'git log --oneline --graph commit',
-    'git diff --name-only commit', 'git diff --ext']) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-});
-
-test('bash: Contract-pinned commit and not-a-commit cases', () => {
-  for (const c of ['export GIT_EXTERNAL_DIFF; git diff --stat commit', "git archive --e='x' commit", 'git add --fo a && git commit -m x', 'git add --fo a; git commit -m x']) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-  assert.equal(BASH('git add --fo a && git commit -m x').unknown, true);
-  for (const c of ["printf 'git commit\\n'", 'git fetch origin && git status', 'git clone https://h/x.git y', 'export PATH=x; git status', 'rg TODO', 'rg commit']) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-});
-
-test('bash: printf -v, a bare export and set -a set the environment for git', () => {
-  for (const c of [
-    "printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; export GIT_EXTERNAL_DIFF; git diff",
-    "set -a; printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; git diff",
-    "printf -v GIT_EXTERNAL_DIFF '%s' 'git commit -qam x;:'; git diff",
-    'export GIT_EXTERNAL_DIFF; git diff; echo commit',
-    'set -a; git diff; echo commit'
-  ]) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-  for (const c of ['export GIT_EXTERNAL_DIFF; git diff', 'set -a; git diff', "printf '%s' x; git diff", 'printf -v X y; git status']) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-});
-
-test('bash: rg is not harmless: --pre runs a program', () => {
-  assert.equal(BASH('touch commit; GIT_EDITOR="echo m >" rg --pre git x commit').isCommit, true);
-  assert.equal(BASH('git status; rg --pre git x commit').isCommit, true);
-  assert.equal(BASH('rg foo src').isCommit, false);
-});
-
-test('bash: git add -f in a commit command is an unknown-scope commit', () => {
-  for (const c of ['git add -f core.mjs && git commit -m x', 'git add --force core.mjs && git commit -m x', 'git add -fA && git commit -m x', 'git stage -f a; git commit -m x',
-    'git add --forc a && git commit -m x']) {
-    const r = BASH(c);
-    assert.equal(r.isCommit, true, c);
-    assert.equal(r.unknown, true, c);
-  }
-  assert.equal(BASH('git add a && git commit -m x').unknown, false);
-  assert.equal(BASH('git add -f a').isCommit, false);
-});
-
-test('powershell: an environment variable that makes git run a program is a commit', () => {
-  for (const c of [
-    "$env:GIT_EXTERNAL_DIFF='git commit -am x'; git diff",
-    "$env:GIT_EXTERNAL_DIFF = 'git commit -am x'; git diff",
-    "git -c diff.external='git commit -am x' diff",
-    "git fetch --upload-pack='git commit -am x' ."
-  ]) {
-    assert.equal(PS(c).isCommit, true, c);
-  }
-});
-
-test('bash: harmless uses of config, -u, -c-free options and variables stay not a commit', () => {
-  for (const c of [
-    'git config user.name x',
-    'git config --get user.email',
-    'git config user.name x; git status',
-    'git push -u origin main',
-    'git clone https://example.com/r.git out',
-    'git fetch --upload-pack',
-    'git diff --stat',
-    'git grep -n foo',
-    'git status --porcelain',
-    'FOO=1 git status',
-    'export FOO=1; git log --oneline',
-    'git log --grep=commit',
-    'git log -O'
-  ]) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-  assert.equal(PS('$env:FOO = 1; git status').isCommit, false);
-});
-
-test('bash: quoted separators and heredoc messages do not hide or invent a commit', () => {
-  assert.equal(BASH('git commit -m "a; b && c | d"').isCommit, true);
-  assert.equal(BASH('echo "x; git commit"').isCommit, false);
-  assert.equal(BASH("git commit -m 'it''s'").isCommit, true);
-  const heredoc = 'git commit -m "$(cat <<\'EOF\'\nfix: thing\n\nbody; more\nEOF\n)"';
-  assert.deepEqual(BASH(heredoc), { isCommit: true, repo: null, unknown: false });
-});
-
-test('bash: doubt counts as a commit', () => {
-  assert.deepEqual(BASH('git commit -m "unterminated'), { isCommit: true, repo: null, unknown: false });
-  assert.equal(BASH('echo "x && git commit').isCommit, true);
-  assert.equal(BASH('echo $(git commit -m x)').isCommit, true);
-  assert.equal(BASH('x=`git commit`').isCommit, true);
-  assert.equal(BASH('eval "git commit"').isCommit, true);
-  assert.equal(BASH('bash -c "echo hi"').isCommit, false);
-});
-
-test('bash: evasions of the program name or the subcommand are commits (allow-list, not block-list)', () => {
-  for (const c of [
-    'G=git; $G commit -m x',
-    'g=git; $g commit',
-    '"$G" commit -m x',
-    "$'git' commit -m x",
-    "git $'commit' -m x",
-    "git $'\\x63ommit' -m x",
-    'git "$sub" -m x',
-    'g=git\n$g commit',
-    'git -c alias.ci=commit ci -m x',
-    'git -c Alias.x=commit x',
-    'git --config-env=alias.x=VAR x',
-    'git ci -m x',
-    'git cm -m x',
-    'a=(commit -m x); git "${a[@]}"',
-    'a=(commit -m x); git ${a[@]}',
-    '/usr/bin/gi? commit',
-    '/usr/bin/g[i]t commit',
-    '/usr/bin/gi* commit',
-    '{git,commit} -m x',
-    'git commit-tree abc -m x',
-    'git.cmd commit -m x',
-    'git.bat commit',
-    'node -e "require(\'child_process\').execSync(\'git commit -m x\')"',
-    'find . -exec git commit -m x \\;',
-    'find . -name x -exec git commit -m x {} +',
-    'stdbuf -o0 git commit',
-    'echo commit | xargs git',
-    'echo x | xargs -I{} git commit -m {}',
-    'xargs -a list.txt git commit',
-    'python3 -c "import os; os.system(\'git commit\')"',
-    'env git commit',
-    'env -i git commit',
-    'nice git commit',
-    'time git commit',
-    'timeout 5 git commit',
-    'git merge feature',
-    'git cherry-pick abc',
-    'git revert HEAD',
-    'git rebase main',
-    'git am p.patch',
-    'git pull',
-    'git write-tree',
-    'git update-ref refs/heads/x abc',
-    '. ./go.sh; git commit',
-    'bash c.sh && git log --grep commit'
-  ]) {
-    assert.equal(BASH(c).isCommit, true, c);
-  }
-});
-
-test('bash: git-dir, work-tree and index overrides are doubt that asks as unknown', () => {
-  for (const c of [
-    'git --git-dir=/x/.git commit -m y',
-    'git --git-dir /x/.git commit -m y',
-    'git --work-tree=/x commit -m y',
-    'git --work-tree /x --git-dir /y commit -m y',
-    'GIT_DIR=/x/.git git commit -m y',
-    'GIT_WORK_TREE=/x git commit -m y',
-    'GIT_INDEX_FILE=/tmp/idx git commit -m y',
-    'export GIT_INDEX_FILE=/tmp/idx; git commit -m y',
-    'GIT_DIR=/x/.git; export GIT_DIR; git commit',
-    'git -c core.worktree=/x commit -m y',
-    'sudo git --git-dir=/x commit',
-    'bash -c "GIT_DIR=/x git commit"'
-  ]) {
-    const r = BASH(c);
-    assert.equal(r.isCommit, true, c);
-    assert.equal(r.unknown, true, c);
-  }
-  assert.equal(BASH('git commit -m y').unknown, false);
-  assert.equal(BASH('git -C sub commit -m y').unknown, false);
-  assert.equal(BASH('git --git-dir=/x/.git status').isCommit, false);
-});
-
-test('bash: the words git and commit in a printer or a search are not a commit', () => {
-  for (const c of ['echo commit | cat', 'printf "git commit\\n"', 'grep -rn "git commit" docs', 'cat docs/git-commit.md', 'ls commit', 'git log --oneline | grep commit']) {
-    assert.equal(BASH(c).isCommit, false, c);
-  }
-});
-
-test('bash: the repo comes from -C and a leading cd', () => {
-  assert.equal(BASH('cd sub && git commit -m x').repo, 'sub');
-  assert.equal(BASH('cd sub; git -C inner commit').repo, 'sub/inner');
-  assert.equal(BASH('git -C /abs commit').repo, '/abs');
-  assert.equal(BASH('cd sub; git -C /abs commit').repo, '/abs');
-  assert.equal(BASH('git commit').repo, null);
-  assert.equal(BASH('git -C ' + 'a'.repeat(9000) + ' commit').repo.length, 4096);
-});
-
-test('powershell: commits', () => {
-  assert.equal(PS('cd x; git commit -m y').isCommit, true);
-  assert.equal(PS('cd x; git commit -m y').repo, 'x');
-  assert.equal(PS('git add .; git commit -am y').isCommit, true);
-  assert.equal(PS('& git commit -m y').isCommit, true);
-  assert.equal(PS('& "git.exe" commit').isCommit, true);
-  assert.equal(PS("& 'C:\\Program Files\\Git\\cmd\\git.exe' commit -m y").isCommit, true);
-  assert.equal(PS('git commit `\n-m y').isCommit, true);
-  assert.equal(PS('git commit `\r\n-m y').isCommit, true);
-  assert.equal(PS('$env:GIT_X=1; git commit').isCommit, true);
-  assert.equal(PS('git status && git commit').isCommit, true);
-  assert.equal(PS('git status || git commit').isCommit, true);
-  assert.equal(PS('GIT.EXE commit -m x').isCommit, true);
-  assert.equal(PS('Set-Location -Path sub; git commit').repo, 'sub');
-  assert.equal(PS('git commit -m (Get-Date)').isCommit, true);
-  assert.equal(PS('if ($true) { git commit -m x }').isCommit, true);
-  assert.equal(PS('pwsh -Command "git commit"').isCommit, true);
-  assert.equal(PS('Invoke-Expression "git commit"').isCommit, true);
-  assert.equal(PS('git commit -m "a`"b"').isCommit, true);
-});
-
-test('powershell: evasions are commits', () => {
-  for (const c of [
-    "$g='git'; & $g commit",
-    '$g = "git"; & $g commit -m x',
-    '& $g commit',
-    '. git commit -m x',
-    '. $g commit',
-    '& (Get-Command git) commit -m x',
-    '& (Get-Command git).Source commit',
-    '$a = @("commit","-m","x"); git @a',
-    'git @a',
-    'git $sub -m x',
-    'git.cmd commit -m x',
-    'git.ps1 commit',
-    '& git.cmd commit',
-    'git -c alias.x=commit x',
-    'git commit-tree abc',
-    'Start-Process git -ArgumentList commit',
-    'Invoke-Command { git commit }',
-    'cmd /c git commit -m x',
-    '$env:GIT_DIR="x"; git commit -m y',
-    '$env:GIT_INDEX_FILE="x"; git commit -m y',
-    '& "$env:ProgramFiles\\Git\\cmd\\git.exe" commit'
-  ]) {
-    assert.equal(PS(c).isCommit, true, c);
-  }
-  for (const c of ['$env:GIT_DIR="x"; git commit -m y', 'git --git-dir=x commit', '$env:GIT_WORK_TREE="x"; git commit', '$env:GIT_INDEX_FILE="x"; git commit']) {
-    assert.equal(PS(c).unknown, true, c);
-  }
-});
-
-test('powershell: not a commit', () => {
-  assert.equal(PS('Write-Output commit').isCommit, false);
-  assert.equal(PS('git log --grep commit').isCommit, false);
-  assert.equal(PS('git status; Get-ChildItem').isCommit, false);
-  assert.equal(PS('Write-Host "git commit"').isCommit, false);
-  assert.equal(PS('git add .').isCommit, false);
-  assert.equal(PS('$x = 5').isCommit, false);
-});
-
-test('powershell: a backslash path is not an escape', () => {
-  assert.equal(PS('git -C C:\\repo\\sub commit -m x').repo, 'C:\\repo\\sub');
-  assert.equal(PS('cd C:\\repo; git commit').repo, 'C:\\repo');
-});
-
-test('the same command can be a commit in one shell and not another', () => {
-  assert.equal(BASH('a && git commit').isCommit, true);
-  assert.equal(PS('a & git commit').isCommit, true);
-  assert.equal(BASH('a & git commit').isCommit, true);
 });
 
 // ---- format.mjs
@@ -1001,103 +556,6 @@ test('wrap keeps every row within the width, in cells, and loses no word', () =>
   assert.deepEqual(wrap(7, 39), ['']);
   assert.ok(wrap('x'.repeat(10 * 1024 * 1024), 39).length <= 8);
   assert.deepEqual(wrap('a b', 0), ['']);
-});
-
-// ---- git-commit.mjs: cases pinned by aico-mods M4, one test per exact string
-
-const PINNED_COMMIT = [
-  // stash then merge, run through a runner option, an env variable and diff.external
-  String.raw`git ls-remote --upload-pack='git stash -q; git merge -q --no-edit refs/stash;:' .`,
-  String.raw`GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:' git diff`,
-  String.raw`git config diff.external 'git stash -q; git merge -q --no-edit refs/stash;:'; git diff`,
-  // nested git with no commit word
-  String.raw`git ls-remote --upload-pack='git branch -f main x;:' .`,
-  String.raw`GIT_EXTERNAL_DIFF='/usr/bin/git branch -f main x;:' git diff`,
-  String.raw`git config diff.external 'git branch -f main x;:'; git diff`,
-  String.raw`git fetch --u='git.exe branch -f main x;:' .`,
-  // each history word alone
-  ...['merge', 'pull', 'cherry-pick', 'revert', 'am', 'rebase', 'stash', 'reset', 'update-ref', 'commit-tree'].map((w) => `git push --e=./x.sh . ${w}`),
-  // history word with the environment rule
-  String.raw`export GIT_EXTERNAL_DIFF; git diff --stat merge`,
-  String.raw`GIT_EXTERNAL_DIFF=./x.sh git diff --stat rebase`,
-  // 3-character runner prefix
-  String.raw`git diff --e commit`,
-  String.raw`git log --e commit`,
-  String.raw`git log --o stash`,
-  String.raw`git show --u=./x.sh reset`,
-  String.raw`git diff --r=./x.sh revert`,
-  // other programs, not-literal programs, doubt with a history word
-  String.raw`bash -c "git merge x"`,
-  String.raw`find . -exec git cherry-pick x \;`,
-  String.raw`echo am | xargs git`,
-  String.raw`node -e "require('child_process').execSync('git stash; git merge refs/stash')"`,
-  String.raw`g=gi""t; $g merge x`,
-  String.raw`echo "git pull`,
-  String.raw`echo "$(git merge x)"`
-];
-
-const PINNED_PS_COMMIT = [
-  String.raw`$env:GIT_EXTERNAL_DIFF='git stash -q; git merge -q --no-edit refs/stash;:'; git diff`,
-  String.raw`git ls-remote --upload-pack='git branch -f main x;:' .`
-];
-
-const PINNED_NOT_COMMIT = [
-  'git push origin main',
-  'git fetch origin main && git status',
-  'GIT_PAGER=cat git log -1',
-  'git ls-remote --upload-pack=git-upload-pack .',
-  'git ls-remote --upload-pack=./x.sh .',
-  'git push --e=./x.sh . merges',
-  'git diff -- commit',
-  'git log --no-merges',
-  'git merge-base HEAD main',
-  'git stash',
-  'git stash list',
-  'git reset HEAD mods/a.ts',
-  'git log --grep git',
-  'cd git && git status',
-  'echo I am here; git status',
-  'bash -c "git status"',
-  'npm run git-hooks',
-  'git clone https://h/x.git y && cd y && git status'
-];
-
-for (const c of PINNED_COMMIT) {
-  test(`M4 pinned commit (bash): ${c}`, () => {
-    assert.equal(BASH(c).isCommit, true, c);
-  });
-}
-for (const c of PINNED_PS_COMMIT) {
-  test(`M4 pinned commit (powershell): ${c}`, () => {
-    assert.equal(PS(c).isCommit, true, c);
-  });
-}
-for (const c of PINNED_NOT_COMMIT) {
-  test(`M4 pinned not a commit: ${c}`, () => {
-    assert.equal(BASH(c).isCommit, false, c);
-  });
-}
-
-test('M4 pinned case counts: 31 commit + 2 PowerShell commit + 18 not a commit', () => {
-  assert.equal(PINNED_COMMIT.length, 31);
-  assert.equal(PINNED_PS_COMMIT.length, 2);
-  assert.equal(PINNED_NOT_COMMIT.length, 18);
-});
-
-test('M4: program-name nesting, hyphen word ends and oversize payloads are commits', () => {
-  for (const c of [
-    String.raw`bash -c "git stash -q; git merge -q --no-edit refs/stash"`,
-    String.raw`echo -q --no-edit refs/stash | (git stash -q; xargs git merge)`,
-    String.raw`echo "$(git stash -q; git merge -q --no-edit refs/stash)"`,
-    String.raw`GIT_EXTERNAL_DIFF='/mingw64/bin/git add -A; c=comm; /mingw64/bin/git ${'$'}{c}it -qm x;:' git diff`,
-    String.raw`git ls-remote --upload-pack='git.exe add -A; c=comm; git.exe ${'$'}{c}it -qm x;:' .`,
-    String.raw`git ls-remote --upload-pack='s=-stash; m=-merge; gi""t ${'$'}{s#-} -q; gi""t ${'$'}{m#-} -q --no-edit refs/sta""sh;:' .`,
-    String.raw`git ls-remote --upload-pack='C:\Git\bin\git.exe x' .`,
-    'x '.repeat(40000) + 'git stash; git merge refs/stash'
-  ]) {
-    assert.equal(BASH(c).isCommit, true, c.slice(0, 80));
-  }
-  assert.equal(BASH('x '.repeat(40000)).isCommit, false);
 });
 
 // ---- bars.mjs: Gates and Steps progress rows

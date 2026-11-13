@@ -428,7 +428,7 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   const before = await state();
-  assert.equal(before.plugin.mods.blast_radius.security, 'ask');
+  assert.deepEqual(Object.keys(before.plugin.mods), ['savvy', 'cache_tax', 'reflect']);
   assert.equal(before.resolved.mods.cache_tax.pane, 'command');
   const bad = await post('/api/save', {
     revision: before.resolved.revision,
@@ -442,16 +442,15 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
   assert.equal(read(s.config), null);
   const ok = await post('/api/save', {
     revision: before.resolved.revision,
-    user: { version: 1, mods: { savvy: { enabled: false, pane: 'command' }, blast_radius: { security: 'warn' } } },
-    project: { version: 1, mods: { reflect: { mode: 'model' }, blast_radius: { core: 'warn' } } }
+    user: { version: 1, mods: { savvy: { enabled: false, pane: 'command' } } },
+    project: { version: 1, mods: { reflect: { mode: 'model' } } }
   });
   assert.equal(ok.status, 200);
   const { state: after } = await ok.json();
   assert.deepEqual(after.resolved.mods.savvy, { enabled: false, pane: 'command' });
-  assert.equal(after.resolved.mods.blast_radius.security, 'ask');
-  assert.equal(after.resolved.mods.blast_radius.core, 'ask');
+  assert.deepEqual(Object.keys(after.resolved.mods), ['savvy', 'cache_tax', 'reflect']);
   assert.equal(after.resolved.mods.reflect.mode, 'deterministic');
-  for (const key of ['mods.blast_radius.security', 'mods.blast_radius.core', 'mods.reflect.mode']) {
+  for (const key of ['mods.reflect.mode']) {
     assert.ok(after.resolved.ignored.some((i) => i.startsWith(key)), key);
   }
 });
@@ -459,7 +458,7 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
 test('page has a Mods section built from the existing controls, shows lock reasons, and never uses innerHTML', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   for (const needle of ['id="tab-mods"', 'id="panel-mods"', 'function renderMods', "['mods', mod, 'enabled']", "['mods', 'reflect', 'mode']",
-    "['mods', 'blast_radius', 'security']", "['mods', 'blast_radius', 'enabled']", "'step_check'", "'retrospective'", 'pipelineRow(', 'selectFor(']) {
+    "'step_check'", "'retrospective'", 'pipelineRow(', 'selectFor(']) {
     assert.ok(html.includes(needle), needle);
   }
   assert.ok(!html.includes('keep_warm') && !html.includes('keep-warm'));

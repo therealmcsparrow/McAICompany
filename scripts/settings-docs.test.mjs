@@ -79,12 +79,12 @@ test('roles/README.md lists every default name', () => {
 
 test('aico-settings v1.3 or later keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.match(doc, /^# Contract: aico-settings v1\.(?:[3-9]|\d{2,})$/m);
+  assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:[3-9]|\d{2,})|[2-9]\.\d+)$/m);
   assert.equal(PIPELINE_DEFAULTS.context_cap, 95000);
   assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 95000/);
   assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
   assert.match(doc, /refused: context_cap must be a whole number from 60000 to 1000000/);
-  assert.match(doc, /^# Contract: aico-settings v1\.(?:1[1-9]|[2-9]\d|\d{3,})$/m);
+  assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:1[1-9]|[2-9]\d|\d{3,})|[2-9]\.\d+)$/m);
   assert.match(doc, /deprecated/);
   assert.match(doc, /always as `95000`/);
   assert.deepEqual(BRAINSTORM_DEFAULTS, { film_script: false, debate: 'crossfire' });
@@ -97,28 +97,23 @@ test('aico-settings v1.3 or later keeps the v1.1 cap range, the brainstorm keys 
   assert.match(doc, /refused: pipeline\.review_format must be plain or pilot/);
 });
 
-test('aico-settings v1.1 names the mods keys, defaults, three locks and refusal text', () => {
+test('aico-settings names the mods keys, defaults, the spend lock and refusal text', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.deepEqual(MODS, ['savvy', 'cache_tax', 'reflect', 'blast_radius']);
-  assert.deepEqual(MODS_DEFAULTS.blast_radius, { enabled: true, core: 'ask', contract: 'warn', security: 'ask' });
+  assert.deepEqual(MODS, ['savvy', 'cache_tax', 'reflect']);
   assert.equal(MODS_DEFAULTS.reflect.mode, 'deterministic');
-  assert.ok(Object.values(MODS_DEFAULTS).every((m) => m.enabled === true), 'all four mods on');
+  assert.ok(Object.values(MODS_DEFAULTS).every((m) => m.enabled === true), 'all three mods on');
   assert.ok(!JSON.stringify(MODS_DEFAULTS).includes('keep_warm'));
-  assert.match(doc, /Plugin defaults for Blast Radius \(CEO, part M\): `core: ask`, `contract: warn`, `security: ask`/);
-  assert.match(doc, /`mods\.<savvy\\|cache_tax\\|reflect\\|blast_radius>\.enabled` \| boolean; default `true`/);
+  assert.match(doc, /`mods\.<savvy\\|cache_tax\\|reflect\>\.enabled` \| boolean; default `true`/);
   assert.match(doc, /`mods\.reflect\.mode` \| `deterministic \\| model`; default `deterministic`; `model` user level only/);
-  assert.match(doc, /`mods\.blast_radius\.<core\\|contract\\|security>` \| `ask \\| warn`; default `ask` for `core` and `security`, `warn` for `contract`/);
   assert.match(doc, /refused: mods\.<path> must be <allowed values>/);
   assert.match(doc, /\*The spend switch is user-level only\.\*/);
-  assert.match(doc, /\*The commit gate only tightens from a project\.\*/);
-  assert.match(doc, /\*Security stays asked unless unlocked\.\*/);
   assert.ok(!/^\| `mods\..*keep/m.test(doc), 'no keep-warm row in the Contract schema');
 });
 
 test('aico-settings v1.3 or later names skillspector.mode, its default, the user-level lock and refusal text', () => {
   const doc = read('docs/contracts/aico-settings.md');
   assert.deepEqual(SKILLSPECTOR_DEFAULTS, { mode: 'no-llm' });
-  assert.match(doc, /^# Contract: aico-settings v1\.(?:[3-9]|\d{2,})$/m);
+  assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:[3-9]|\d{2,})|[2-9]\.\d+)$/m);
   assert.match(doc, /`skillspector\.mode` \| `no-llm \\| claude_cli`; default `no-llm`; `claude_cli` user level only/);
   assert.match(doc, /\*the scan's data switch is user-level only\.\*/);
   assert.match(doc, /skillspector\.mode: claude_cli from project needs the user level/);
@@ -164,7 +159,7 @@ test('aico-settings v1.3 names the personality payload, the phrases, the ignored
 
 test('aico-settings v1.7 names pipeline.parallel_cap, its range, default, refusal, page hint and pipeline use', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.match(doc, /^# Contract: aico-settings v1\.(?:[7-9]|\d{2,})$/m);
+  assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:[7-9]|\d{2,})|[2-9]\.\d+)$/m);
   assert.equal(PIPELINE_DEFAULTS.parallel_cap, 4);
   assert.match(doc, /\| `pipeline\.parallel_cap` \| integer 3-5; default 4 \(v1\.7\) \|/);
   assert.match(doc, /refused: pipeline\.parallel_cap must be a whole number from 3 to 5, nothing written \(v1\.7\)/);
@@ -175,7 +170,7 @@ test('aico-settings v1.7 names pipeline.parallel_cap, its range, default, refusa
 
 test('aico-settings v1.8 names pipeline.short_path, off wins, the refusal, the page hint and the pipeline use', () => {
   const doc = read('docs/contracts/aico-settings.md');
-  assert.match(doc, /^# Contract: aico-settings v1\.(?:[8-9]|\d{2,})$/m);
+  assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:[8-9]|\d{2,})|[2-9]\.\d+)$/m);
   assert.equal(PIPELINE_DEFAULTS.short_path, 'on');
   assert.match(doc, /\| `pipeline\.short_path` \| on \\\| off; default on; off wins \(v1\.8\) \|/);
   assert.match(doc, /refused: pipeline\.short_path must be on or off/);

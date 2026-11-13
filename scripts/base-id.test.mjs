@@ -437,10 +437,3 @@ test('source: no Role or pipeline text puts a <path> placeholder into a command'
     }
   }
 });
-
-test('source: Blast Radius passes the run slug and accepts only a full id', () => {
-  const lib = read('mods/lib/blast.mjs');
-  assert.match(lib, /Base commit: \(\[0-9a-f\]\{40\}\|\[0-9a-f\]\{64\}\)|\(\?:\[0-9a-f\]\{40\}\|\[0-9a-f\]\{64\}\)/);
-  assert.doesNotMatch(lib, /\{7,40\}/);
-  assert.match(lib, /'--run'/);
-});

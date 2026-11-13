@@ -71,8 +71,8 @@ test('the allow-list entries name a file and a reason', () => {
   }
 });
 
-// The six reader seams must take a run slug through the shared helpers.
-const SEAMS = ['scripts/wayfinder.mjs', 'scripts/skill-picks.mjs', 'scripts/spec-check.mjs', 'mods/lib/guard.mjs', 'mods/lib/blast.mjs', 'mods/lib/plan-gate.mjs'];
+// The five reader seams must take a run slug through the shared helpers.
+const SEAMS = ['scripts/wayfinder.mjs', 'scripts/skill-picks.mjs', 'scripts/spec-check.mjs', 'mods/lib/guard.mjs', 'mods/lib/plan-gate.mjs'];
 
 test('every reader seam uses isRunSlug or workParts on its run argument, and imports it from the one library', () => {
   const lacking = [];
@@ -94,7 +94,7 @@ test('no seam copies the run slug rule (no own `parseRun`, `isRunSlug` or `workP
 });
 
 test('the four reader Contracts carry the reader paragraph', () => {
-  const want = [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '1.9']];
+  const want = [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '2.0']];
   const lacking = want.filter(([name, v, header = v]) => {
     const text = read(`docs/contracts/${name}.md`);
     return !text.startsWith(`# Contract: ${name} v${header}\n`) || !text.split('\n').some((l) => l.startsWith(`v${v} `) && /isRunSlug/.test(l) && /byte-identical/.test(l));
