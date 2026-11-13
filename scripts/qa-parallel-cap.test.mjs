@@ -132,16 +132,20 @@ test('AC1 a refused layer names the setting and the range', () => {
 test('AC1 the settings page row is labelled, described and reachable by keyboard', () => {
   const html = read('scripts/settings-page.html');
   const body = html.slice(html.indexOf('function parallelCapRow'), html.indexOf('function planLink'));
-  assert.match(body, /el\('label', \{ class: 'ctl-label', for: id \}/);
-  assert.match(body, /'aria-describedby', 'parallel-cap-hint'/);
-  assert.match(body, /selectFor\(\[3, 4, 5\], null\)/);
+  assert.match(body, /switchRow\(tbody, \{ label: 'Parallel cap'/);
+  assert.match(body, /options: \[3, 4, 5\]/);
+  assert.match(body, /hint: \{ id: 'parallel-cap-hint', text: PARALLEL_CAP_HINT \}/);
+  // switchRow gives the fieldset a legend name and the aria-describedby hint link
+  const sw = html.slice(html.indexOf('function switchRow'), html.indexOf('function textRow'));
+  assert.match(sw, /el\('legend', \{\}, label/);
+  assert.match(sw, /fs\.setAttribute\('aria-describedby', baseDesc\)/);
   assert.ok(!/tabindex/i.test(body), 'native controls only');
   const contract = read('docs/contracts/aico-settings.md');
   const hint = html.match(/const PARALLEL_CAP_HINT = '([^']+)'/)[1];
-  assert.ok(contract.includes(hint), 'the hint is the Contract text');
+  assert.ok(contract.includes(`exactly: "${hint}"`), 'the hint is the exact Contract v2.1 text');
   assert.match(html, /id: 'parallel-cap-hint'/);
-  const dispatch = html.indexOf("selectFor(['parallel', 'sequential']");
-  assert.ok(dispatch > 0 && html.indexOf('parallelCapRow(tbody, defaults.parallel_cap)') > dispatch, 'the row follows Dispatch');
+  const dispatch = html.indexOf("label: 'Dispatch'");
+  assert.ok(dispatch > 0 && html.indexOf('parallelCapRow(rack, defaults.parallel_cap)') > dispatch, 'the row follows Dispatch');
 });
 
 // ---------- sequential ----------

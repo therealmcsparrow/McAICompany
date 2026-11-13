@@ -395,11 +395,19 @@ test('state carries reprompt defaults; save round-trips question_rounds, refuses
   assert.deepEqual(after.resolved.reprompt, { question_rounds: 3 });
 });
 
-test('page has a Reprompt table with a Question rounds row, 0 to 3, hint tied to the field', () => {
+test('page has a Reprompt table with a Question rounds row, 0 to 3, hint tied to the field', async () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const needle of ["'Reprompt'", "'Question rounds'", "['reprompt', 'question_rounds']", 'selectFor([0, 1, 2, 3], l)', "describedBy: 'reprompt-hint'", "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
+  for (const needle of ["sectionHead('Reprompt')", "label: 'Question rounds'", "['reprompt', 'question_rounds']", 'options: [0, 1, 2, 3]', "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
     assert.ok(html.includes(needle), needle);
   }
+  const page = loadPage(pageState());
+  await settle();
+  const group = page.find((n) => n.id === 'f-reprompt-question_rounds-user');
+  assert.ok(group, 'Question rounds group');
+  const box = closest(group, 'FIELDSET');
+  assert.ok(box.children.some((n) => n.tagName === 'LEGEND' && n.textContent.startsWith('Question rounds')), 'legend is the row header');
+  assert.ok(box.getAttribute('aria-describedby').split(' ').includes('reprompt-hint'), 'hint tied to the field');
+  assert.equal(JSON.stringify(Array.from(group.radios, (r) => r.value)), '["","0","1","2","3"]');
 });
 
 test('Reprompt hint equals the Contract text byte for byte and sits between the context-cap hint and Brainstorm', () => {
@@ -407,12 +415,13 @@ test('Reprompt hint equals the Contract text byte for byte and sits between the 
   const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
   const m = /the hint "(How often \/aico:reprompt[^"]*)"/.exec(contract);
   assert.ok(m, 'Contract hint not found');
-  const hintCall = `el('p', { class: 'hint', id: 'reprompt-hint' }, '${m[1]}')`;
+  const hintCall = `{ id: 'reprompt-hint', text: '${m[1]}' }`;
   assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
-  const cap = html.indexOf('The context cap is fixed.');
-  const h2 = html.indexOf("sectionHead('Reprompt')");
-  const hint = html.indexOf(hintCall);
-  const brainstorm = html.indexOf("sectionHead('Brainstorm')");
+  const body = html.slice(html.indexOf('function renderPipeline'));
+  const cap = body.indexOf('contextCapRow(rack');
+  const h2 = body.indexOf("sectionHead('Reprompt')");
+  const hint = body.indexOf(hintCall);
+  const brainstorm = body.indexOf("sectionHead('Brainstorm')");
   assert.ok(cap > 0 && cap < h2 && h2 < hint && hint < brainstorm, `order ${cap} ${h2} ${hint} ${brainstorm}`);
 });
 
@@ -901,8 +910,13 @@ test('the context cap shows as fixed read-only text with a row header and no cap
   const cell = walk(page.ids['panel-pipeline'], (n) => n.id === 'context-cap-fixed');
   assert.ok(cell, 'fixed cap cell exists');
   assert.equal(cell.tagName, 'P');
-  assert.equal(closest(cell, 'FIELDSET').children.find((n) => n.tagName === 'LEGEND').textContent, 'Context cap', 'the fieldset legend is the row header');
-  assert.equal(cell.textContent, '95000 (fixed, cannot be changed)');
+  const box = cell.parentNode;
+  const head = box.children.find((n) => n.className === 'ctl-label');
+  assert.ok(head && head.textContent.startsWith('Context cap'), 'the row label names the setting');
+  assert.ok(head.textContent.includes('fixed'), 'the label carries the fixed tag');
+  assert.ok(cell.textContent.includes('95000'), cell.textContent);
+  assert.ok(cell.textContent.startsWith('In effect'), cell.textContent);
+  assert.equal(walkAll(box, (n) => ['INPUT', 'SELECT', 'TEXTAREA'].includes(n.tagName)).length, 0, 'no control in the cap row');
   assert.equal(page.allRoles((n) => n.tagName === 'INPUT' && n.getAttribute('aria-label') === 'Context cap, user').length, 0);
 });
 
@@ -1289,7 +1303,10 @@ for (const c of HIDDEN_CASES) {
     const live = page.find((n) => n.id === c.id);
     assert.ok(live, 'the field exists at the shown level');
     assert.equal(page.ids['lvl-project'].checked, true, 'find() did not need to switch the level');
-    assert.equal(page.document.activeElement, live, 'the field has focus');
+    // Key-cap radio groups (console layout) carry the id on the group; focus() lands on a radio inside it.
+    // ok() on a boolean: assert.equal on two DOM nodes builds a huge diff and hangs the run for minutes.
+    const active = page.document.activeElement;
+    assert.ok(active === live || walk(live, (n) => n === active) !== null,'the field (or a radio inside its group) has focus');
   });
 }
 
@@ -1430,7 +1447,7 @@ test('state carries plan_check defaults; save round-trips policy and runs, refus
 
 test('Plan check hint equals the Contract text and the table sits after the Reprompt hint and before Brainstorm', () => {
   const html = pageHtml();
-  const hintCall = `el('p', { class: 'hint', id: 'plan-check-hint' }, '${planHintText()}')`;
+  const hintCall = `el('p', { class: 'hint', id: 'plan-check-hint', style: 'margin-bottom: 12px' }, '${planHintText()}')`;
   assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
   const reprompt = html.indexOf("id: 'reprompt-hint'");
   const h2 = html.indexOf("sectionHead('Plan check')");
@@ -1446,18 +1463,28 @@ test('Plan check controls have a visible label tied by for, no aria-label, and t
   const page = loadPage(pageState());
   await settle();
   assert.equal(byId(page, 'plan-check-hint').textContent, planHintText());
-  for (const [key, word] of [['policy', 'Policy'], ['runs', 'Verdict runs']]) {
-    for (const level of ['user', 'project']) {
-      const control = planField(page, key, level);
-      assert.ok(control, `${key} ${level}`);
-      assert.equal(control.getAttribute('aria-label'), null);
-      const label = page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id);
-      assert.ok(label.textContent.startsWith(word), label.textContent);
-      assert.ok(label.textContent.includes(`${level} level`));
-      assert.ok(control.getAttribute('aria-describedby').split(' ').includes('plan-check-hint'));
-    }
+  for (const level of ['user', 'project']) {
+    // Policy: a key-cap group inside a fieldset; the legend is the visible label.
+    const group = planField(page, 'policy', level);
+    assert.ok(group, `policy ${level}`);
+    assert.ok(group.getAttribute('aria-label') === null, 'no aria-label');
+    const box = closest(group, 'FIELDSET');
+    const legend = box.children.find((n) => n.tagName === 'LEGEND');
+    assert.ok(legend.textContent.startsWith('Policy'), legend.textContent);
+    assert.ok(legend.textContent.includes(`${level} level`));
+    assert.ok(box.getAttribute('aria-describedby').split(' ').includes('plan-check-hint'));
+    assert.ok(group.radios.every((r) => page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === r.id)), 'every key has a label');
+    // Verdict runs: a text input with a label tied by for.
+    const control = planField(page, 'runs', level);
+    assert.ok(control, `runs ${level}`);
+    assert.ok(control.getAttribute('aria-label') === null, 'no aria-label');
+    const label = page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id);
+    assert.ok(label.textContent.startsWith('Verdict runs'), label.textContent);
+    assert.ok(label.textContent.includes(`${level} level`));
+    assert.ok(control.getAttribute('aria-describedby').split(' ').includes('plan-check-hint'));
   }
-  assert.deepEqual(planField(page, 'policy', 'user').options.map((o) => o.textContent), ['—', 'off', 'warn', 'block']);
+  const keys = planField(page, 'policy', 'user').radios.map((r) => r.value);
+  assert.equal(JSON.stringify(Array.from(keys)), '["","off","warn","block"]');
 });
 
 test('choosing a policy and a run count sends them in the Save body', async () => {
@@ -1483,19 +1510,20 @@ test('a bad run count gets an error tied to the field with the hint kept, and Sa
   assert.equal(runs.getAttribute('aria-invalid'), 'true');
   const ids = runs.getAttribute('aria-describedby').split(' ');
   assert.ok(ids.includes('plan-check-hint'));
-  const err = byId(page, ids.find((i) => i !== 'plan-check-hint'));
+  const err = byId(page, ids.find((i) => i === 'pc-runs-user-err'));
+  assert.ok(err, 'the error text is tied to the field');
   assert.equal(err.textContent, 'Error: Verdict runs is out of range. Use a whole number from 3 to 50.');
   await type(runs, 'x');
   assert.equal(err.textContent, 'Error: Verdict runs must be a whole number from 3 to 50.');
   await page.ids.save.fire('click');
   assert.equal(page.calls.filter((c) => c.url === '/api/save').length, 0);
-  assert.equal(page.document.activeElement, walk(page.ids.status, (n) => n.id === 'status-heading'));
+  assert.ok(page.document.activeElement === walk(page.ids.status, (n) => n.id === 'status-heading'), 'focus goes to the summary heading');
   const link = walk(page.ids.status, (n) => n.tagName === 'A');
   assert.equal(link.getAttribute('href'), '#pc-runs-user');
   assert.match(link.textContent, /^Plan check, Verdict runs, user level: /);
   await page.ids['tab-roles'].fire('click');
   await link.fire('click');
-  assert.equal(page.document.activeElement, runs);
+  assert.ok(page.document.activeElement === runs, 'the link focuses the field');
   assert.equal(page.ids['panel-pipeline'].hidden, false);
 });
 
@@ -1509,15 +1537,16 @@ test('a server refusal of a Plan check value marks and links that field; the tex
   await page.ids.save.fire('click');
   await settle();
   const heading = walk(page.ids.status, (n) => n.id === 'status-heading');
-  assert.equal(page.document.activeElement, heading);
+  assert.ok(page.document.activeElement === heading, 'focus goes to the summary heading');
   assert.equal(heading.textContent, 'Nothing was saved. Fix 2 fields:');
   const links = walkAll(page.ids.status, (n) => n.tagName === 'A');
   assert.equal(links.length, 1);
   assert.equal(links[0].getAttribute('href'), '#pc-policy-project');
-  assert.equal(policy.getAttribute('aria-invalid'), 'true');
+  assert.equal(closest(policy, 'FIELDSET').getAttribute('aria-invalid'), 'true', 'the field box is marked');
   assert.ok(page.ids.status.textContent.includes('stale thing'));
   await links[0].fire('click');
-  assert.equal(page.document.activeElement, policy);
+  const active = page.document.activeElement;
+  assert.ok(active === policy || walk(policy, (n) => n === active) !== null, 'the link focuses the group (a radio inside it)');
 });
 
 test('Clear on the Pipeline tab also clears Plan check', async () => {
@@ -1616,29 +1645,53 @@ test('state carries the parallel_cap default; save round-trips 3 to 5 and refuse
   assert.equal(after.resolved.pipeline.parallel_cap, 5);
 });
 
-test('page has a Parallel cap row after Dispatch with label-for selects tied to the hint, and a refusal path', () => {
+// Hint paragraph ids of the Pipeline panel in document order, at the level the page shows.
+const pipelineHintIds = (page) => walkAll(page.ids['panel-pipeline'], (n) => n.tagName === 'P' && /-hint$/.test(n.id ?? '')).map((n) => n.id);
+
+test('page has a Parallel cap row after Dispatch with label-for selects tied to the hint, and a refusal path', async () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const needle of ['parallelCapRow(tbody, defaults.parallel_cap)', "['pipeline', 'parallel_cap']", 'selectFor([3, 4, 5], null)',
-    "el('label', { for: id }", "'aria-describedby', 'parallel-cap-hint'", "id: 'parallel-cap-hint'", 'REFUSED_PARALLEL_CAP', "getElementById('field-live')"]) {
+  for (const needle of ['parallelCapRow(rack, defaults.parallel_cap)', "['pipeline', 'parallel_cap']", 'options: [3, 4, 5]',
+    "id: 'parallel-cap-hint'", "refusal: 'parallel_cap'", 'REFUSED_PARALLEL_CAP', "getElementById('field-live')"]) {
     assert.ok(html.includes(needle), needle);
   }
-  const dispatch = html.indexOf("pipelineRow(tbody, 'Dispatch'");
-  const row = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap)');
-  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  const body = html.slice(html.indexOf('function renderPipeline'));
+  const dispatch = body.indexOf("label: 'Dispatch'");
+  const row = body.indexOf('parallelCapRow(rack, defaults.parallel_cap)');
+  const review = body.indexOf("label: 'Review format'");
   assert.ok(dispatch > 0 && dispatch < row && row < review, `order ${dispatch} ${row} ${review}`);
-  assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function parallelCapRow'), html.indexOf('function planCheckRow'))));
+  assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function parallelCapRow'), html.indexOf('const REFUSED_SHORT_PATH'))));
+  // Rendered: the key-cap group sits in a fieldset whose legend is the label and whose description is the hint.
+  const page = loadPage(pageState());
+  await settle();
+  for (const level of ['user', 'project']) {
+    const group = byId(page, `parallel-cap-${level}`);
+    assert.ok(group, level);
+    assert.equal(JSON.stringify(Array.from(group.radios, (r) => r.value)), '["","3","4","5"]');
+    const box = closest(group, 'FIELDSET');
+    assert.ok(box.children.some((n) => n.tagName === 'LEGEND' && n.textContent.startsWith('Parallel cap')), 'legend is the label');
+    assert.ok(box.getAttribute('aria-describedby').split(' ').includes('parallel-cap-hint'), 'hint tied to the field');
+    assert.ok(group.radios.every((r) => page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === r.id)), 'every key has a label');
+  }
 });
 
-test('Parallel cap hint equals the Contract text once and sits after the context-cap hint, before Reprompt', () => {
+test('Parallel cap hint equals the Contract text once and, in the v2.1 order, comes first: parallel cap, short path, user-only rows, review format, context cap, reprompt, plan check', async () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = /exactly: "(Parallel cap: [^"]*)"/.exec(contract);
+  const m = /exactly: "(At most this many Steps run at once[^"]*)"/.exec(contract);
   assert.ok(m, 'Contract hint not found');
+  assert.equal(html.split("id: 'parallel-cap-hint', text: PARALLEL_CAP_HINT").length - 1, 1, 'the row uses that text, once');
+  const page = loadPage(pageState());
+  await settle();
+  // Contract v2.1 render order: parallel cap, short path, second reviewer, model, worktrees, review format, context cap (closes the rack), reprompt, plan check.
+  const ids = pipelineHintIds(page);
+  const at = (id) => ids.indexOf(id);
+  const order = ['parallel-cap-hint', 'short-path-hint', 'second-reviewer-hint', 'second-reviewer-model-hint', 'worktrees-hint', 'context-cap-hint', 'reprompt-hint'];
+  assert.ok(order.every((id) => at(id) >= 0), ids.join(' '));
+  assert.ok(order.every((id, i) => i === 0 || at(order[i - 1]) < at(id)), ids.join(' '));
+  assert.ok(at('parallel-cap-hint') === Math.min(...ids.map((_, i) => i).filter((i) => ids[i] !== undefined)), 'the Parallel cap hint is the first hint in the pipeline panel');
+  // The Contract text, byte for byte: the page text and the constant must both equal it.
   assert.equal(html.split(`const PARALLEL_CAP_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
-  const cap = html.indexOf('The context cap is fixed.');
-  const hint = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
-  const h2 = html.indexOf("sectionHead('Reprompt')");
-  assert.ok(cap > 0 && cap < hint && hint < h2, `order ${cap} ${hint} ${h2}`);
+  assert.ok(byId(page, 'parallel-cap-hint').textContent === m[1], 'rendered hint equals the Contract text');
 });
 
 test('state carries the short_path default; save round-trips on/off and refuses other values with nothing written', async (t) => {
@@ -1660,72 +1713,101 @@ test('state carries the short_path default; save round-trips on/off and refuses 
   assert.equal(after.resolved.pipeline.short_path, 'off');
 });
 
-test('page has a Short path row after Parallel cap with label-for selects tied to the hint, project offers only off, and a refusal path', () => {
+test('page has a Short path row after Parallel cap with label-for selects tied to the hint, project offers only off, and a refusal path', async () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const needle of ['shortPathRow(tbody, defaults.short_path)', "['pipeline', 'short_path']", "['on', 'off'] : ['off']",
-    "el('label', { for: id }", "'aria-describedby', 'short-path-hint'", "id: 'short-path-hint'", 'REFUSED_SHORT_PATH', "getElementById('field-live')"]) {
+  for (const needle of ['shortPathRow(rack, defaults.short_path)', "['pipeline', 'short_path']", "level === 'user' ? ['on', 'off']", "['off']",
+    "id: 'short-path-hint'", "refusal: 'short_path'", 'REFUSED_SHORT_PATH', "getElementById('field-live')"]) {
     assert.ok(html.includes(needle), needle);
   }
-  const cap = html.indexOf('parallelCapRow(tbody, defaults.parallel_cap)');
-  const row = html.indexOf('shortPathRow(tbody, defaults.short_path)');
-  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  const body = html.slice(html.indexOf('function renderPipeline'));
+  const cap = body.indexOf('parallelCapRow(rack, defaults.parallel_cap)');
+  const row = body.indexOf('shortPathRow(rack, defaults.short_path)');
+  const review = body.indexOf("label: 'Review format'");
   assert.ok(cap > 0 && cap < row && row < review, `order ${cap} ${row} ${review}`);
   assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'))));
   assert.ok(!html.includes('innerHTML'));
+  const page = loadPage(pageState());
+  await settle();
+  const user = byId(page, 'short-path-user');
+  const project = byId(page, 'short-path-project');
+  assert.ok(user && project);
+  assert.equal(JSON.stringify(Array.from(user.radios, (r) => r.value)), '["","on","off"]');
+  assert.equal(JSON.stringify(Array.from(project.radios, (r) => r.value)), '["","off"]', 'project offers only off');
+  for (const group of [user, project]) {
+    const box = closest(group, 'FIELDSET');
+    assert.ok(box.children.some((n) => n.tagName === 'LEGEND' && n.textContent.startsWith('Short path')), 'legend is the label');
+    assert.ok(box.getAttribute('aria-describedby').split(' ').includes('short-path-hint'), 'hint tied to the field');
+  }
 });
 
-test('Short path hint equals the Contract text once and sits as the fourth hint, before Reprompt', () => {
+test('Short path hint equals the Contract text once and, in the v2.1 order, is the second hint (right after Parallel cap, before the user-only rows), before Reprompt', async () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = /exactly: "(Short path: [^"]*)"/.exec(contract);
+  const m = /exactly: "(A feature you approve as low risk[^"]*)"/.exec(contract);
   assert.ok(m, 'Contract hint not found');
+  assert.equal(html.split("id: 'short-path-hint', text: SHORT_PATH_HINT").length - 1, 1, 'the row uses that text, once');
+  const page = loadPage(pageState());
+  await settle();
+  const ids = pipelineHintIds(page);
+  assert.ok(ids.indexOf('parallel-cap-hint') === 0 && ids.indexOf('short-path-hint') === 1 && ids.indexOf('short-path-hint') < ids.indexOf('second-reviewer-hint') && ids.indexOf('short-path-hint') < ids.indexOf('reprompt-hint'), ids.join(' '));
   assert.equal(html.split(`const SHORT_PATH_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
-  const par = html.indexOf("id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT");
-  const hint = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
-  const h2 = html.indexOf("sectionHead('Reprompt')");
-  assert.ok(par > 0 && par < hint && hint < h2, `order ${par} ${hint} ${h2}`);
+  assert.ok(byId(page, 'short-path-hint').textContent === m[1], 'rendered hint equals the Contract text');
 });
 
 const pageSource = () => fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
 const contractHint = (start) => {
   const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = new RegExp(`exactly: "(${start}: [^"]*)"`).exec(contract);
+  const m = new RegExp(`exactly: "(${start}[^"]*)"`).exec(contract);
   assert.ok(m, `Contract hint ${start} not found`);
   return m[1];
 };
 
 test('user-only rows come after Short path in the pipeline panel, in order, and are built through el() and textContent', () => {
   const html = pageSource();
-  const short = html.indexOf('shortPathRow(tbody, defaults.short_path)');
-  const rev = html.indexOf('userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer');
-  const model = html.indexOf('userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer_model');
-  const wt = html.indexOf('userOnlyRow(tbody, USER_ONLY_ROWS.worktrees');
-  const review = html.indexOf("pipelineRow(tbody, 'Review format'");
+  const body = html.slice(html.indexOf('function renderPipeline'));
+  const short = body.indexOf('shortPathRow(rack, defaults.short_path)');
+  const rev = body.indexOf('userOnlyRow(rack, USER_ONLY_ROWS.second_reviewer,');
+  const model = body.indexOf('userOnlyRow(rack, USER_ONLY_ROWS.second_reviewer_model,');
+  const wt = body.indexOf('userOnlyRow(rack, USER_ONLY_ROWS.worktrees,');
+  const review = body.indexOf("label: 'Review format'");
   assert.ok(short > 0 && short < rev && rev < model && model < wt && wt < review, `order ${short} ${rev} ${model} ${wt} ${review}`);
   assert.ok(!html.includes('innerHTML'));
   const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
   assert.ok(!/tabindex/i.test(fn));
-  for (const needle of ["el('label', { class: 'ctl-label', for: id }", "'aria-describedby'", "'aria-live'", "getElementById('field-live')", 'Locked']) {
+  for (const needle of ["el('legend'", "'aria-describedby'", 'User level only', 'refusal: key', 'segFor(']) {
     assert.ok(fn.includes(needle), needle);
   }
+  assert.ok(html.slice(html.indexOf('function finishCtl'), html.indexOf('function showFieldError')).includes("'aria-live'"), 'readout is a live region');
+  assert.ok(html.slice(html.indexOf('function refusalRec'), html.indexOf('function planRec(')).includes("getElementById('field-live')"), 'refusal is announced');
 });
 
-test('Second reviewer, Second reviewer model and Worktrees hints equal the Contract text once, each tied by id', () => {
+test('Second reviewer, Second reviewer model and Worktrees hints equal the Contract text once, each tied by id', async () => {
   const html = pageSource();
   const cases = [
-    ['SECOND_REVIEWER_HINT', 'second-reviewer-hint', 'Second reviewer'],
-    ['SECOND_REVIEWER_MODEL_HINT', 'second-reviewer-model-hint', 'Second reviewer model'],
-    ['WORKTREES_HINT', 'worktrees-hint', 'Worktrees'],
+    ['SECOND_REVIEWER_HINT', 'second-reviewer-hint', 'At high risk, a fresh reviewer'],
+    ['SECOND_REVIEWER_MODEL_HINT', 'second-reviewer-model-hint', 'The Claude model the second reviewer runs on'],
+    ['WORKTREES_HINT', 'worktrees-hint', 'Parallel builder tasks each get'],
   ];
-  let last = html.indexOf("id: 'short-path-hint' }, SHORT_PATH_HINT");
+  const page = loadPage(pageState());
+  await settle();
+  const ids = pipelineHintIds(page);
+  let last = ids.indexOf('short-path-hint');
+  assert.ok(last >= 0, ids.join(' '));
+  const differs = [];
   for (const [name, id, start] of cases) {
     const text = contractHint(start);
-    assert.equal(html.split(`const ${name} = ${JSON.stringify(text)};`).length - 1, 1, `${name} must equal the Contract text, once`);
-    const at = html.indexOf(`id: '${id}' }, ${name}`);
+    if (html.split(`const ${name} = ${JSON.stringify(text)};`).length - 1 !== 1) differs.push(name);
+    const hint = byId(page, id);
+    assert.ok(hint, id);
+    if (hint.textContent !== text) differs.push(`${id} (rendered)`);
+    const box = closest(hint, 'FIELDSET');
+    assert.ok(box.getAttribute('aria-describedby').split(' ').includes(id), `${id} tied to the field`);
+    const at = ids.indexOf(id);
     assert.ok(at > last, `${id} hint order`);
     last = at;
   }
-  assert.ok(last < html.indexOf("sectionHead('Reprompt')"));
+  assert.ok(last < ids.indexOf('reprompt-hint'));
+  assert.deepEqual(differs, [], 'hint text must equal the Contract text, once');
 });
 
 test('Second reviewer model offers only the values the code-reviewer floor allows', () => {
@@ -1740,14 +1822,26 @@ test('Second reviewer model offers only the values the code-reviewer floor allow
   assert.deepEqual(run(''), ['default', 'opus']);
 });
 
-test('user-only rows lock the Project column with a visible reason and have no project control', () => {
+test('user-only rows lock the Project column with a visible reason and have no project control', async () => {
   const html = pageSource();
   const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
-  assert.ok(fn.includes("'not set'"));
-  assert.ok(fn.includes('Locked. Set at the user level only.'));
+  assert.ok(fn.includes('User level only. A project value is ignored.'));
   assert.ok(!fn.includes("['user', 'project']"), 'no project select');
   for (const key of ['second_reviewer', 'second_reviewer_model', 'worktrees']) assert.ok(html.includes(`${key}:`), key);
   assert.ok(html.includes('REFUSED_USER_ONLY'));
+  const page = loadPage(pageState());
+  await settle();
+  await page.setLevel('project');
+  for (const slug of ['second-reviewer', 'second-reviewer-model', 'worktrees']) {
+    const note = byId(page, `${slug}-lock`);
+    assert.ok(note, `${slug} shows its reason at the project level`);
+    assert.equal(note.textContent, 'User level only. A project value is ignored.');
+    const box = closest(note, 'FIELDSET');
+    assert.ok(box.getAttribute('aria-describedby').split(' ').includes(note.id), 'reason tied to the field');
+    const inputs = walkAll(box, (n) => n.tagName === 'INPUT');
+    assert.ok(inputs.length > 0 && inputs.every((n) => n.disabled === true), `${slug}: every project key is disabled`);
+    assert.ok(byId(page, `${slug}-project`) === null, 'no editable project control');
+  }
 });
 
 test('a stored project short_path on shows disabled and is described as ignored', () => {
@@ -1782,24 +1876,45 @@ test('effective() on pipeline.short_path: a project on is held and the user valu
   assert.deepEqual({ ...none }, { value: 'on', source: 'plugin' });
 });
 
-test('a stored project short_path on is styled disabled and its select points at the effect cell', () => {
+test('a stored project short_path on is styled disabled and its select points at the effect cell', async () => {
   const html = pageHtml();
   const row = html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
-  assert.ok(row.includes("control.classList.add('ignored')"));
+  assert.ok(row.includes("fixed: ignored ? ['on'] : []"), 'the stored on key is fixed (disabled)');
   assert.ok(row.includes('effectId'));
-  assert.ok(html.includes('select.ignored'));
+  assert.ok(html.split('\n').some((ln) => ln.startsWith('.seg.ignored {')), 'a .seg.ignored rule');
+  const st = pageState();
+  st.project = { version: 1, pipeline: { short_path: 'on' } };
+  const page = loadPage(st);
+  await settle();
+  await page.setLevel('project');
+  const group = byId(page, 'short-path-project');
+  assert.ok(group, 'project group');
+  const on = group.radios.find((r) => r.value === 'on');
+  assert.ok(on && on.disabled === true, 'the stored on key is disabled');
+  assert.ok(group.className.split(' ').includes('ignored'), 'the group carries the ignored class');
+  const box = closest(group, 'FIELDSET');
+  assert.ok(box.getAttribute('aria-describedby').split(' ').includes('short-path-effect'), 'the group is described by the effect cell');
+  assert.ok(byId(page, 'short-path-effect'), 'the effect cell exists');
 });
 
-test('the muted ignored select keeps full-strength text and border, with a non-colour cue, in forced colors too', () => {
+test('a stored project short_path on gets a style rule for the key-cap group, with a descendant label rule too', () => {
   const html = pageHtml();
-  const rule = html.match(/^select\.ignored \{([^}]*)\}/m);
-  assert.ok(rule, 'select.ignored rule');
-  assert.ok(!/opacity/.test(rule[1]), 'no opacity on the text or border');
-  assert.ok(rule[1].includes('color: var(--color-ink-2)'));
-  assert.ok(rule[1].includes('border-style: dashed'));
-  const forced = html.match(/@media \(forced-colors: active\) \{[^@]*select\.ignored \{([^}]*)\}/);
+  assert.ok(/^\.seg\.ignored\s*\{/m.test(html) && /^\.seg\.ignored label\s*\{/m.test(html), 'CSS rules for .seg.ignored and .seg.ignored label');
+});
+
+test('the muted ignored key-cap group keeps full-strength text, with a non-colour cue, in forced colors too', () => {
+  const html = pageHtml();
+  const rule = html.match(/^\.seg\.ignored \{([^}]*)\}/m);
+  const lab = html.match(/^\.seg\.ignored label \{([^}]*)\}/m);
+  assert.ok(rule && lab, '.seg.ignored and .seg.ignored label rules');
+  assert.ok(!/opacity/.test(rule[1] + lab[1]), 'no opacity on the text or border');
+  assert.ok(rule[1].includes('color: var(--color-ink-2)') && lab[1].includes('color: var(--color-ink-2)'));
+  assert.ok(rule[1].includes('outline: 2px dashed'), 'a dashed outline is the non-colour cue');
+  const forced = html.match(/@media \(forced-colors: active\) \{[^@]*?\.seg\.ignored \{([^}]*)\}/);
   assert.ok(forced, 'forced-colors override');
-  assert.ok(forced[1].includes('CanvasText') && !/GrayText|opacity/.test(forced[1]));
+  assert.ok(forced[1].includes('outline: 2px dashed CanvasText') && !/GrayText|opacity/.test(forced[1]));
+  const forcedText = html.match(/@media \(forced-colors: active\) \{[^@]*?\.seg\.ignored, \.seg\.ignored label \{([^}]*)\}/);
+  assert.ok(forcedText && forcedText[1].includes('CanvasText') && !/GrayText|opacity/.test(forcedText[1]), 'forced-colors text stays CanvasText');
 });
 
 test('the ignored class follows the project select value, so picking off or blank removes it', () => {

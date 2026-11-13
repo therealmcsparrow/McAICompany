@@ -251,8 +251,11 @@ test('lane rows carry the security reason', async () => {
     ['pipeline', 'Compliance', 'Locked. Off needs your security unlock.']
   ];
   for (const [, label, text] of rows) {
-    const control = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label')?.startsWith(label) && n.getAttribute('aria-label').endsWith(', user'));
-    assert.ok(control, label);
+    // lane rows are switchRow fieldsets: the legend names the row, the fieldset carries the reason
+    const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.startsWith(label) && n.textContent.includes(', user level'));
+    assert.ok(legend, label);
+    const control = legend.parentNode;
+    assert.equal(control.tagName, 'FIELDSET', label);
     assert.equal(textOf(page, describedBy(control)[0]), text);
   }
 });
