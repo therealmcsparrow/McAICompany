@@ -268,6 +268,7 @@ function readBody(req) {
   });
 }
 
+const FONT_DIR = path.join(import.meta.dirname, 'fonts');
 function send(res, status, body, type = 'application/json; charset=utf-8') {
   const text = typeof body === 'string' ? body : JSON.stringify(body);
   res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': type, 'Content-Length': Buffer.byteLength(text) });
@@ -319,6 +320,14 @@ export async function startServer({
     if (!hosts.has(host)) throw new HttpError(403, ['forbidden']);
     if (origin !== undefined && !origins.has(String(origin).toLowerCase())) throw new HttpError(403, ['forbidden']);
     const url = new URL(req.url, 'http://127.0.0.1');
+    // Fonts are public files: a stylesheet font request cannot send the token header. Host and Origin are already checked.
+    const font = req.method === 'GET' ? /^\/fonts\/([a-z0-9-]+\.woff2)$/.exec(url.pathname) : null;
+    if (font) {
+      let bytes;
+      try { bytes = fs.readFileSync(path.join(FONT_DIR, font[1])); } catch { throw new HttpError(404, ['not found']); }
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'font/woff2', 'Content-Length': bytes.length });
+      return res.end(bytes);
+    }
     if (!tokenMatches(req.headers['x-aico-token'] ?? url.searchParams.get('token'), token)) throw new HttpError(403, ['forbidden']);
 
     const route = `${req.method} ${url.pathname}`;
