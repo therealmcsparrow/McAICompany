@@ -2305,8 +2305,11 @@ function renderNotices() {
   const { warnings } = state.resolved;
   const personal = (Array.isArray(state.personalities?.ignored) ? state.personalities.ignored : []).filter(isIgnoredEntry).map((e) => `${e.level} ${e.path}: ${e.reason}`);
   const ignored = [...state.resolved.ignored, ...personal.filter((l) => !state.resolved.ignored.includes(l))];
-  if (warnings.length) box.append(el('div', { class: 'notice warn' }, el('strong', {}, 'Warnings'), el('ul', {}, warnings.map((w) => el('li', {}, w)))));
-  if (ignored.length) box.append(el('div', { class: 'notice warn' }, el('strong', {}, 'Ignored (stored, but not applied)'), el('ul', {}, ignored.map((w) => el('li', {}, w)))));
+  // The lists live in the closed details in the status section (renderLamps). Only a short
+  // screen-reader line is announced here, so a closed details never hides new warnings.
+  if (warnings.length || ignored.length) {
+    box.append(el('p', { class: 'vh' }, `${warnings.length} ${warnings.length === 1 ? 'warning' : 'warnings'}, ${ignored.length} ignored. Open "Show warnings and ignored settings" in the status section to read them.`));
+  }
 }
 function render() {
   syncers = [];
