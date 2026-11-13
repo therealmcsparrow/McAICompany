@@ -779,18 +779,27 @@ const field = (page, role, level, key) => page.find((n) => n.id === `pf-${role}-
 const byId = (page, id) => page.find((n) => n.id === id);
 const type = async (node, text) => { node.value = text; await node.fire('input'); };
 
-test('the page builds one labelled personality card per Role, with the counter and level choices from the payload', async () => {
+test('the page builds one labelled personality card per Role, with plain rows and key-cap level choices from the payload', async () => {
   const page = loadPage(pageState());
   await settle();
   assert.equal(page.all((n) => n.tagName === 'DETAILS').length, 2);
   for (const [key, label] of [['temperament', 'Temperament'], ['talk', 'Way of talking'], ['topic', 'Pet topic'], ['intelligence', 'Intelligence'], ['creativity', 'Creativity']]) {
     const control = field(page, 'qa', 'user', key);
     assert.ok(control, key);
-    assert.equal(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id).textContent, label);
+    if (['intelligence', 'creativity'].includes(key)) {
+      const name = control.parentNode.getAttribute('aria-labelledby');
+      assert.equal(control.parentNode.getAttribute('role'), 'group', key);
+      assert.equal(page.find((n) => n.id === name).textContent, label);
+    } else {
+      assert.equal(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === control.id).textContent, label);
+    }
   }
-  assert.deepEqual(field(page, 'qa', 'user', 'intelligence').options.map((o) => o.textContent), ['Not set', 'Low', 'Medium', 'High']);
-  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '0 of 80 characters');
-  assert.ok(field(page, 'qa', 'user', 'talk').getAttribute('aria-describedby').includes('pf-qa-user-talk-count'));
+  const seg = field(page, 'qa', 'user', 'intelligence');
+  assert.ok(seg.classList.contains('seg') && seg.classList.contains('small'));
+  assert.deepEqual([...seg.radios.map((r) => r.value)], ['', 'low', 'medium', 'high']);
+  assert.equal(seg.value, '', 'no stored user value: the group sits on not set');
+  assert.equal(byId(page, 'pf-qa-user-talk-count'), null, 'the preview has no character counter');
+  assert.equal(page.all((n) => n.tagName === 'FIELDSET' || n.tagName === 'LEGEND' || n.tagName === 'SELECT').length, 0, 'no fieldset, legend or select');
 });
 
 test('under each level select the page shows the payload phrase, and no phrase is copied into the page', async () => {
@@ -821,20 +830,21 @@ test('without phrases in the payload the page shows no phrase line and nothing e
   assert.equal(page.ids.count.textContent, '1 unsaved change');
 });
 
-test('a too long value gets an error text tied to the field, counted in code points, on blur', async () => {
+test('a too long value gets an error text tied to the field, measured in code points, on blur', async () => {
   const page = loadPage(pageState());
   await settle();
   const talk = field(page, 'qa', 'user', 'talk');
   await type(talk, '\u{10400}'.repeat(80));
   await talk.fire('change');
   assert.equal(talk.getAttribute('aria-invalid'), null);
-  assert.equal(byId(page, 'pf-qa-user-talk-count').textContent, '80 of 80 characters');
+  assert.equal(byId(page, 'pf-qa-user-talk-err').hidden, true, '80 code points is within the limit');
   await type(talk, 'a'.repeat(96));
   await talk.fire('change');
   assert.equal(talk.getAttribute('aria-invalid'), 'true');
   const err = byId(page, 'pf-qa-user-talk-err');
   assert.equal(err.textContent, 'Error: Way of talking is 96 characters. The limit is 80. Remove 16.');
   assert.ok(talk.getAttribute('aria-describedby').split(' ').includes(err.id));
+  assert.equal(byId(page, 'pf-qa-user-talk-count'), null, 'no counter, the error text carries the number');
   await type(talk, 'fine');
   assert.equal(talk.getAttribute('aria-invalid'), null);
 });
@@ -980,13 +990,13 @@ test('a cleared or replaced ignored value is one unsaved change, and an untouche
   assert.match(page.ids['annun-list'].textContent, /user roles\.qa\.personality\.creativity: must be low, medium or high/);
   assert.match(page.ids.notices.textContent, /0 warnings, 2 ignored/);
   const select = field(page, 'qa', 'user', 'creativity');
-  assert.equal(select.value, '__ignored__');
-  assert.ok(select.options.some((o) => o.textContent === 'Ignored stored value'));
+  assert.ok(select.classList.contains('ignored'), 'an untouched ignored value marks the key-cap group');
+  assert.equal(select.radios.some((r) => r.checked), false, 'no key is lit for an ignored value');
   assert.match(byId(page, 'pf-qa-user-creativity-hint').textContent, /^Ignored: this stored value is not Low, Medium or High/);
   select.value = '';
   await select.fire('change');
   assert.equal(page.ids.count.textContent, '1 unsaved change');
-  assert.equal(select.options.some((o) => o.textContent === 'Ignored stored value'), false);
+  assert.equal(select.classList.contains('ignored'), false, 'clearing drops the ignored mark');
   // Switching the level rebuilds the controls, so the user select is not read after this line.
   assert.match(byId(page, 'pf-qa-project-topic-hint').textContent, /^Ignored: this stored value breaks the rule/);
   await type(field(page, 'qa', 'project', 'topic'), 'cats');
@@ -1047,7 +1057,7 @@ test('stored plugin text with markup is shown as text and never becomes an eleme
   st.personalities.roles.qa.plugin.talk = '<img src=x onerror=alert(1)>';
   const page = loadPage(st);
   await settle();
-  assert.ok(page.all((n) => n.tagName === 'DL')[1].textContent.includes('<img src=x onerror=alert(1)>'));
+  assert.ok(page.all((n) => n.className === 'gist')[1].textContent.includes('<img src=x onerror=alert(1)>'));
   assert.equal(page.all((n) => n.tagName === 'IMG').length, 0);
 });
 
@@ -1119,11 +1129,13 @@ test('layout: the personality section is on the Personality tab, not on the Role
   assert.equal(page.allRoles((n) => n.tagName === 'DETAILS').length, 0);
   assert.equal(page.allRoles((n) => n.tagName === 'ARTICLE' && n.className === 'strip').length, 2, 'one channel strip per Role on the Roles tab');
   assert.equal(page.all((n) => n.tagName === 'H3' && n.className === 'dept-label').length, 0, 'flat list, no department labels');
-  const legend = page.all((n) => n.tagName === 'LEGEND').map((n) => n.textContent);
-  assert.ok(legend.includes('Ava (architect), User level'));
-  assert.ok(!legend.includes('qa, Project level'), 'the editing level shows one level at a time');
+  const buttons = () => page.all((n) => n.tagName === 'BUTTON').map((n) => n.textContent);
+  assert.ok(page.all((n) => n.className === 'who').map((n) => n.textContent).includes('Ava (architect)'), 'the card names the Role');
+  assert.equal(page.all((n) => n.tagName === 'LEGEND').length, 0, 'no legend');
+  assert.ok(buttons().includes('Use plugin default for architect, user'));
+  assert.ok(!buttons().includes('Use plugin default for qa, project'), 'the editing level shows one level at a time');
   await page.setLevel('project');
-  assert.ok(page.all((n) => n.tagName === 'LEGEND').map((n) => n.textContent).includes('qa, Project level'));
+  assert.ok(buttons().includes('Use plugin default for qa, project'));
 });
 
 test('layout: the Role filter has its label and hint, hides cards, counts them, and never changes the Save body', async () => {

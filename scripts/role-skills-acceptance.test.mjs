@@ -1003,15 +1003,20 @@ test('AC1, AC2: each Role gets only entries of its categories; a bad user entry 
   assert.ok(!errs.includes('secret'));
 });
 
-test('AC15: every skill row has a label bound to its checkbox, state and status as text, wrapping text and no sideways scroll', () => {
+test('AC15: every skill row has a label bound to its checkbox, state and status as text, a clipped one-line status in a four-column grid and no sideways scroll', () => {
   assert.match(PAGE, /el\('label', \{ for: id \}, el\('i', \{ class: 'led', 'aria-hidden': 'true' \}\), e\.name, meta\)/);
   assert.match(PAGE, /type: 'checkbox', id, disabled: e\.selectable !== true/);
   assert.match(PAGE, /'Status: '/);
   assert.match(PAGE, /aria-describedby/);
   assert.match(PAGE, /id: 'skcount', role: 'status'/);
   assert.match(PAGE, /\.jack label, \.jack-info[^{]*\{[^}]*overflow-wrap: anywhere; min-width: 0/);
-  const rule = PAGE.match(/\.jack[^{]*\{[^}]*\}/g).join('\n');
-  assert.doesNotMatch(rule, /white-space:\s*nowrap|overflow-x:\s*(scroll|auto)/);
+  // Cards sit in a fixed four-column grid of equal rows; the one-line status is clipped with an ellipsis, never scrolled.
+  assert.match(PAGE, /\.jacks \{[^}]*display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); grid-auto-rows: 1fr/);
+  const rules = PAGE.match(/\.jack[^{]*\{[^}]*\}/g);
+  assert.doesNotMatch(rules.join('\n'), /overflow-x:\s*(scroll|auto)|overflow:\s*(scroll|auto)/);
+  const nowrap = rules.filter((r) => /white-space:\s*nowrap/.test(r));
+  assert.equal(nowrap.length, 1, 'only the one-line status clips');
+  assert.match(nowrap[0], /^\.jack label \.meta[^{]*\{[^}]*overflow: hidden; text-overflow: ellipsis; white-space: nowrap/);
   assert.doesNotMatch(PAGE, /body\s*\{[^}]*overflow-x:\s*scroll/);
 });
 

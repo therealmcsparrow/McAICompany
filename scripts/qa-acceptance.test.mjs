@@ -439,7 +439,9 @@ test('AC6 the page builds labelled, described, focusable personality fields that
   assert.match(html, /:focus-visible \{ outline: 2px solid/);
   assert.match(html, /input\[aria-invalid="true"\]/);
   // Visible labels tied to the field, native details for each Role, errors tied with aria-describedby.
-  assert.match(html, /el\('label', \{ for: id \}, P_LABELS\[key\]\)/);
+  // Text keys: a label for the input. Level keys: a labelled key-cap group. Both use the plain .ctl row.
+  assert.match(html, /el\('label', \{ class: 'ctl-label', for: id \}, label\)/);
+  assert.match(html, /role: 'group', 'aria-labelledby': `\$\{id\}-lbl` \}, el\('span', \{ class: 'ctl-label', id: `\$\{id\}-lbl` \}, label\)/);
   assert.match(html, /el\('details', \{ id: `pers-\$\{role\}` \}\)/);
   assert.match(html, /setAttribute\('aria-invalid', 'true'\)/);
   assert.match(html, /setAttribute\('aria-describedby'/);
