@@ -1249,6 +1249,72 @@ test('layout: a server line that maps to no field is plain text in the summary',
   assert.equal(walk(page.ids.status, (n) => n.id === 'status-heading').textContent, 'Nothing was saved. Fix 2 fields:');
 });
 
+// R-3 / R-7: the server refuses a field of the level that is NOT shown. Each summary link needs text, and following it must
+// switch the level (lvl-project checked) and focus the live field. page.find() switches level silently, so the level is
+// read from the radio before any find() and the focus check compares with the node that find() returns afterwards.
+const TOPIC_REFUSAL = "project roles.qa.personality.topic: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit";
+const HIDDEN_CASES = [
+  { name: 'personality text', line: TOPIC_REFUSAL, id: 'pf-qa-project-topic', text: /^qa, project level, Pet topic: \S/ },
+  { name: 'personality select', line: 'project roles.qa.personality.intelligence: must be low, medium or high', id: 'pf-qa-project-intelligence', text: /^qa, project level, Intelligence: \S/ },
+  { name: 'plan_check.policy', line: 'project plan_check.policy must be off, warn or block', id: 'pc-policy-project', text: /^Plan check, Policy, project level: \S/ },
+  { name: 'plan_check.runs', line: 'project plan_check.runs must be a whole number from 3 to 50', id: 'pc-runs-project', text: /^Plan check, Verdict runs, project level: \S/ },
+  { name: 'pipeline.parallel_cap', line: 'project pipeline.parallel_cap must be 3, 4 or 5', id: 'parallel-cap-project', text: /^Parallel cap, project level: \S/ }
+];
+async function refusedAtHiddenLevel(lines) {
+  const page = loadPage(namedState(), { saveReply: { status: 400, body: { refused: lines } } });
+  await settle();
+  assert.equal(page.ids['lvl-user'].checked, true, 'User is the shown level');
+  await type(field(page, 'qa', 'user', 'talk'), 'fine value');
+  assert.equal(page.ids['lvl-user'].checked, true, 'typing at User keeps User shown');
+  await page.ids.save.fire('click');
+  await settle();
+  assert.equal(page.ids['lvl-user'].checked, true, 'the refusal does not switch the level by itself');
+  return page;
+}
+
+for (const c of HIDDEN_CASES) {
+  test(`layout: a server refusal of ${c.name} at the hidden level is one summary link with text that switches the level and focuses the field`, async () => {
+    const page = await refusedAtHiddenLevel([c.line]);
+    const heading = walk(page.ids.status, (n) => n.id === 'status-heading');
+    assert.equal(heading.textContent, 'Nothing was saved. Fix 1 field:');
+    const links = walkAll(page.ids.status, (n) => n.tagName === 'A');
+    assert.equal(links.length, 1, 'one link for the one refused field');
+    assert.equal(links[0].getAttribute('href'), `#${c.id}`);
+    assert.ok(links[0].textContent.trim() !== '', 'the link has text');
+    assert.match(links[0].textContent, c.text);
+    await links[0].fire('click');
+    await settle();
+    assert.equal(page.ids['lvl-project'].checked, true, 'following the link switches to Project');
+    assert.equal(page.ids['lvl-user'].checked, false);
+    const live = page.find((n) => n.id === c.id);
+    assert.ok(live, 'the field exists at the shown level');
+    assert.equal(page.ids['lvl-project'].checked, true, 'find() did not need to switch the level');
+    assert.equal(page.document.activeElement, live, 'the field has focus');
+  });
+}
+
+test('layout: refusals at the hidden level for personality, plan check, parallel cap and skills are all counted, none has an empty link', async () => {
+  const lines = [...HIDDEN_CASES.map((c) => c.line), 'project roles.qa.skills: at most 5 skills'];
+  const page = await refusedAtHiddenLevel(lines);
+  assert.equal(walk(page.ids.status, (n) => n.id === 'status-heading').textContent, 'Nothing was saved. Fix 6 fields:');
+  const links = walkAll(page.ids.status, (n) => n.tagName === 'A');
+  assert.equal(links.length, 5);
+  for (const link of links) assert.ok(link.textContent.trim() !== '', `link ${link.getAttribute('href')} has text`);
+  assert.deepEqual(links.map((l) => l.getAttribute('href')).sort(), HIDDEN_CASES.map((c) => `#${c.id}`).sort());
+  const items = walkAll(page.ids.status, (n) => n.tagName === 'LI');
+  assert.equal(items.length, 6);
+  assert.ok(items.some((li) => li.textContent === 'qa, project level, Skills: the server refused the list: a Role can have 5 skills.' && walkAll(li, (n) => n.tagName === 'A').length === 0), 'the skills line is plain text');
+});
+
+test('layout: a link that does nothing fails the check: a refused user-level field is already shown, so only a hidden one proves the switch', async () => {
+  const page = await refusedAtHiddenLevel([TOPIC_REFUSAL]);
+  const link = walk(page.ids.status, (n) => n.tagName === 'A');
+  assert.equal(page.ids['lvl-project'].checked, false, 'before the click Project is hidden');
+  await link.fire('click');
+  await settle();
+  assert.equal(page.ids['lvl-project'].checked, true);
+});
+
 test('layout: after a successful Save focus is not on body: the same control when it still works, else the status message', async () => {
   const page = loadPage(namedState(), { saveReply: { status: 200, body: { state: namedState() } } });
   await settle();
