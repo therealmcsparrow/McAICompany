@@ -1966,7 +1966,8 @@ function renderGates(panel) {
 const ONOFF_LABELS = { true: 'on', false: 'off' };
 function renderMods(panel) {
   const defaults = state.plugin.mods;
-  panel.append(panelHead('Mods', 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.'));
+  panel.append(panelHead('Mods', 'A change applies from the next turn. Switching a mod off keeps its options. The Reflect model mode counts only from your user settings.',
+  'Pane auto: the pane opens by itself when a run starts, where the surface docks it. Reflect model mode spends tokens and is written to the token ledger.'));
   const units = el('div', { class: 'units' });
   panel.append(units);
   const onOffRow = (rack, label, path, pluginValue) => switchRow(rack, { label, path, pluginValue, options: ['true', 'false'], labels: ONOFF_LABELS, decode: (s) => s === 'true', format: onOff });
@@ -1987,7 +1988,6 @@ function renderMods(panel) {
         onSync: (control) => control.classList.toggle('ignored', lvl() === 'project' && control.value === 'model') });
     }
   }
-  panel.append(el('p', { class: 'hint' }, 'Pane auto: the pane opens by itself when a run starts, where the surface docks it. Reflect model mode spends tokens and is written to the token ledger.'));
 }
 
 // ---------- Skill scan tab ----------
