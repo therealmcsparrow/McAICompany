@@ -1711,6 +1711,7 @@ function switchRow(parent, o) {
   const guard = level === 'user' && lock ? lockGuard(lock.key, lock.needsUnlock) : null;
   const control = bindLayer(segFor(options, labels, fixed), level, path, decode, guard);
   control.id = id;
+  if (o.big) control.className += ' bigsw';
   const legend = el('legend', {}, label, el('span', { class: 'vh' }, `, ${level} level`));
   const lockId = `lock-${path.join('-')}`;
   if (lock) {
@@ -1728,7 +1729,7 @@ function switchRow(parent, o) {
   const hintEl = hint ? el('p', { class: 'hint', id: hint.id }, hint.text) : null;
   const baseDesc = [lock ? lockId : '', hint?.id ?? '', o.describedBy ?? ''].filter(Boolean).join(' ');
   const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-  const fs = el('fieldset', { class: 'ctl' }, legend, hintEl, o.note ?? null, control, err);
+  const fs = el('fieldset', { class: o.big ? 'ctl gate' : 'ctl' }, legend, hintEl, o.note ?? null, control, err);
   if (baseDesc) fs.setAttribute('aria-describedby', baseDesc);
   if (o.refusal) refusalRec(fs, control, err, o.refusal, level, label, baseDesc);
   if (o.planKey) planRec(fs, control, err, o.planKey, level, label, baseDesc, null);
@@ -1943,43 +1944,44 @@ function renderGates(panel) {
   panel.append(panelHead('Gates', 'ask shows you a form; auto writes the Gate summary and carries on. Ship and Installs need your unlock before auto applies.'));
   const gates = el('div', { class: 'gates' });
   for (const gate of GATES) {
-    const lock = LOCKED_GATES.includes(gate) ? { lock: gate, lockedValue: 'auto', needsUnlock: (v) => v === 'auto' } : {};
-    pipelineRow(gates, GATE_LABELS[gate], ['gates', gate], defaults[gate], (l) => selectFor(['ask', 'auto'], l), String, String, lock);
+    const lock = LOCKED_GATES.includes(gate) ? { key: gate, lockedValue: 'auto', needsUnlock: (v) => v === 'auto' } : undefined;
+    switchRow(gates, { label: GATE_LABELS[gate], path: ['gates', gate], pluginValue: defaults[gate], options: ['ask', 'auto'], lock, big: true });
   }
   panel.append(gates);
 
   panel.append(sectionHead('Unlocks · user level only'));
+  panel.append(el('p', { class: 'hint', style: 'margin-bottom: 12px' }, 'Turn the key to unlock. Unlocks only count from your user settings; a project cannot unlock anything.'));
   const keys = el('div', { class: 'keys' });
   for (const key of ['ship', 'installs', 'security']) {
-    const label = key === 'security' ? 'Security (security and compliance lanes)' : GATE_LABELS[key];
-    const barrel = el('button', { type: 'button', class: 'barrel', 'aria-pressed': 'false', 'aria-label': `${label} unlock, user` });
+    const label = key === 'security' ? 'Security key' : `${GATE_LABELS[key]} key`;
+    const id = `key-${key}`;
+    const barrel = el('button', { type: 'button', class: 'barrel', id, 'aria-pressed': 'false', 'aria-label': `${key === 'security' ? 'Security (security and compliance lanes)' : GATE_LABELS[key]} unlock, user`, 'aria-describedby': `${id}-s ${id}-d` });
+    barrel.disabled = lvl() === 'project';
     barrel.addEventListener('click', async () => {
       const turnOn = !userUnlocked(key);
       if (turnOn && !(await confirmUnlock(key))) { refresh(); return; }
       setUnlock(key, turnOn);
       refresh();
     });
-    const state1 = el('span', {}, 'locked');
+    const state1 = el('span', { id: `${id}-s` });
     const projectList = state.project.unlocked ?? [];
-    const note = el('small', {}, projectList.includes(key) ? `${key} (ignored): ` : '', 'unlocks only count from your user settings');
-    const effect = el('p', { class: 'readout', 'aria-live': 'polite' });
     syncers.push(() => {
       const on = userUnlocked(key);
       barrel.setAttribute('aria-pressed', on ? 'true' : 'false');
       barrel.classList.toggle('set', on);
       state1.className = on ? 'open' : 'locked';
-      state1.textContent = on ? 'unlocked' : 'locked';
-      const text = on ? 'unlocked' : 'locked';
-      if (effect.dataset.t !== text) { effect.dataset.t = text; effect.replaceChildren(text, sourceTag(on ? 'user' : 'plugin', on ? '(user)' : '(plugin)')); }
+      state1.replaceChildren(el('i', { class: 'led', 'data-on': on ? 'user' : 'lock' }), on ? 'Unlocked (user)' : 'Locked (plugin)');
     });
-    keys.append(el('div', { class: 'keysw' }, barrel, el('div', { class: 'kt' }, el('b', {}, label), state1, note, effect)));
+    keys.append(el('div', { class: 'keysw' }, barrel, el('div', { class: 'kt' }, el('b', { id: `${id}-l` }, label), state1,
+      el('small', { id: `${id}-d` }, key === 'security' ? 'Security and compliance lanes.' : `Lets ${GATE_LABELS[key]} run on auto.`),
+      projectList.includes(key) ? el('small', {}, `Project ${key} unlock is ignored.`) : null)));
   }
   panel.append(keys);
 
   panel.append(sectionHead('Ignored settings'));
   const ignored = state.resolved.ignored;
   panel.append(ignored.length
-    ? el('ul', {}, ignored.map((i) => el('li', {}, i)))
+    ? el('ul', { class: 'plainlist' }, ignored.map((i) => el('li', {}, i)))
     : el('p', { class: 'hint' }, 'None. Every stored setting applies.'));
 }
 
