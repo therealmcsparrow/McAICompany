@@ -324,7 +324,7 @@ input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: var(-
 .jack input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
 .jack label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-2); align-items: center; padding: 6px var(--space-3); border-radius: var(--radius-sm);
   background: var(--color-key); box-shadow: 0 2px 0 var(--color-key-edge); cursor: pointer; font-family: var(--font-mono); font-size: var(--text-sm); }
-.jack label .meta { grid-column: 2; font-size: 0.65rem; color: var(--color-ink-2); white-space: nowrap; }
+.jack label .meta { grid-column: 2; font-size: 0.65rem; color: var(--color-ink-2); overflow-wrap: anywhere; min-width: 0; }
 .jack label .meta.bad { color: var(--color-text-lock); }
 .jack input:checked + label { transform: translateY(2px); box-shadow: inset 0 1px 2px var(--color-shadow); font-weight: 600; }
 .jack input:checked + label .led { background: var(--lvl-led); box-shadow: 0 0 6px 1px var(--lvl-glow); }
