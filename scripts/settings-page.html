@@ -1955,7 +1955,7 @@ function renderGates(panel) {
   for (const key of ['ship', 'installs', 'security']) {
     const label = key === 'security' ? 'Security key' : `${GATE_LABELS[key]} key`;
     const id = `key-${key}`;
-    const barrel = el('button', { type: 'button', class: 'barrel', id, 'aria-pressed': 'false', 'aria-label': `${key === 'security' ? 'Security (security and compliance lanes)' : GATE_LABELS[key]} unlock, user`, 'aria-describedby': `${id}-s ${id}-d` });
+    const barrel = el('button', { type: 'button', class: 'barrel', id, 'aria-pressed': 'false', 'aria-labelledby': `${id}-l`, 'aria-describedby': `${id}-s ${id}-d` });
     barrel.disabled = lvl() === 'project';
     barrel.addEventListener('click', async () => {
       const turnOn = !userUnlocked(key);
