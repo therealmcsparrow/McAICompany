@@ -778,15 +778,6 @@ function effectOf(path, pluginValue, resolvedValue) {
   if (!dirty(path) && !anyUnlockDirty() && resolvedValue !== undefined && resolvedValue !== eff.value) return { value: resolvedValue, source: 'resolved' };
   return eff;
 }
-function showEffect(cell, path, pluginValue, format, resolvedValue) {
-  const eff = effectOf(path, pluginValue, resolvedValue);
-  // Rewrite only on a change, so the live region announces what changed and nothing else.
-  const signature = JSON.stringify([format(eff.value), eff.source, eff.held ?? '']);
-  if (cell.dataset.signature === signature) return;
-  cell.dataset.signature = signature;
-  cell.replaceChildren(format(eff.value), sourceTag(eff.source, `(${eff.source})`));
-  if (eff.held) cell.append(el('span', { class: 'held' }, eff.held));
-}
 
 // ---------- controls ----------
 function selectFor(options, label, labels = {}) {
