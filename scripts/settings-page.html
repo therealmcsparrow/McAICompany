@@ -1717,22 +1717,25 @@ function switchRow(parent, o) {
   if (o.big) control.className += ' bigsw';
   const legend = el('legend', {}, label, el('span', { class: 'vh' }, `, ${level} level`));
   const lockId = `lock-${path.join('-')}`;
+  // The reason sentence lives in its own hint line (read once, via aria-describedby); the legend only carries the short label.
+  const whyEl = lock ? el('p', { class: 'hint', id: lockId }) : null;
   if (lock) {
-    const whyText = el('span', {});
-    const why = el('span', { class: 'lockcap', id: lockId }, el('i', { class: 'led', 'data-on': 'lock' }), whyText);
+    const why = el('span', { class: 'lockcap', 'aria-hidden': 'true' }, el('i', { class: 'led', 'data-on': 'lock' }), `${lock.key} lock`);
     legend.append(why);
     syncers.push(() => {
       const open = userUnlocked(lock.key);
       why.classList.toggle('locked', !open);
-      const text = open ? 'Unlocked by you.' : `Locked. ${lock.lockedValue} needs your ${lock.key === 'security' ? 'security' : UNLOCK_NAMES[lock.key]} unlock.`;
-      if (whyText.textContent !== text) whyText.textContent = text;
+      why.style.display = open ? 'none' : '';
+      whyEl.hidden = open;
+      const text = open ? '' : `Locked. ${lock.lockedValue} needs your ${lock.key === 'security' ? 'security' : UNLOCK_NAMES[lock.key]} unlock.`;
+      if (whyEl.textContent !== text) whyEl.textContent = text;
     });
   }
   legend.append(editedTag());
   const hintEl = hint ? el('p', { class: 'hint', id: hint.id }, hint.text) : null;
   const baseDesc = [lock ? lockId : '', hint?.id ?? '', o.describedBy ?? ''].filter(Boolean).join(' ');
   const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-  const fs = el('fieldset', { class: o.big ? 'ctl gate' : 'ctl' }, legend, hintEl, o.note ?? null, control, err);
+  const fs = el('fieldset', { class: o.big ? 'ctl gate' : 'ctl' }, legend, hintEl, whyEl, o.note ?? null, control, err);
   if (baseDesc) fs.setAttribute('aria-describedby', baseDesc);
   if (o.refusal) refusalRec(fs, control, err, o.refusal, level, label, baseDesc);
   if (o.planKey) planRec(fs, control, err, o.planKey, level, label, baseDesc, null);
