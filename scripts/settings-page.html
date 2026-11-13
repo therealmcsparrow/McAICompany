@@ -1193,7 +1193,6 @@ function levelFieldset(role, level, rule, ignoredPaths) {
   const off = level === 'project' && !projectOn();
   const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
   box.dataset.level = level;
-  if (level === 'project') box.append(el('p', { class: 'hint' }, PROJECT_HINT));
   for (const key of P_KEYS) box.append(personalityField(role, level, key, rule, ignoredPaths, off));
   const reset = el('button', { type: 'button', class: 'small' }, `Use plugin default for ${role}, ${level}`);
   reset.addEventListener('click', () => resetLevel(role, level));
@@ -1260,9 +1259,7 @@ function syncPersonality() {
     }
     const changed = reg.recs.some((rec) => typedValue(draftAt(rec)) !== getIn(state[rec.level], ['roles', rec.role, 'personality', rec.key])
       || (touched.has(touchKey(rec)) && draftAt(rec) === undefined));
-    reg.pills.changed.hidden = !changed;
-    reg.pills.refused.hidden = !reg.recs.some((rec) => rec.refused);
-    reg.pills.ign.hidden = !(reg.recs.some((rec) => ignoredUntouched(rec)) || reg.objectIgnored);
+    reg.details.classList.toggle('dirty', changed);
     for (const level of ['user', 'project']) {
       if (!reg.reset[level]) continue;
       const here = reg.recs.filter((rec) => rec.level === level);
@@ -1286,41 +1283,33 @@ function renderPersonality(panel) {
   const rule = personalityRule();
   const entries = Array.isArray(data.ignored) ? data.ignored.filter(isIgnoredEntry) : [];
   const ignoredPaths = new Set(entries.map((e) => `${e.level}|${e.path}`));
-  personalityHead.append(el('p', { class: 'hint' }, PERSONALITY_HINT));
+  personalityHead.append(el('p', { class: 'hint' }, PERSONALITY_HINT), el('p', { class: 'hint' }, lvl() === 'project' ? PROJECT_HINT : CHARSET_COPY));
   // One Role card: summary line (who, gist, pills) and a body with the editing level's fields.
   function roleCard(role, rule, ignoredPaths) {
-    const details = el('details', { class: 'pcard' });
+    const details = el('details', { id: `pers-${role}` });
     details.open = openRoles.has(role);
     details.addEventListener('toggle', () => { if (details.open) openRoles.add(role); else openRoles.delete(role); });
-    const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
-    const reg = { role, details, sum: el('span', { class: 'gist' }), eff: el('dl'), recs: [], reset: {},
-      pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
+    const reg = { role, details, sum: el('span', { class: 'gist' }), eff: el('dl'), recs: [], reset: {} };
     pRoles[role] = reg;
-    details.append(el('summary', {}, el('span', { class: 'who' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
-    const grid = el('div', { class: 'pgrid' }, [levelFieldset(role, lvl(), rule, ignoredPaths)]);
-    details.append(el('div', { class: 'pbody body' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
+    details.append(el('summary', {}, el('span', { class: 'who' }, roleLabel(role)), reg.sum));
+    details.append(el('div', { class: 'body' }, levelFieldset(role, lvl(), rule, ignoredPaths), el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
     return details;
   }
   const input = el('input', { type: 'text', id: 'pfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
   input.value = filterText;
   input.addEventListener('input', () => { filterText = input.value; applyFilter(); });
-  filterUI = { input, count: el('p', { id: 'pcount', role: 'status' }), labels: [] };
+  filterUI = { input, count: el('p', { id: 'pcount', role: 'status' }) };
   filterUI.count.classList.add('count');
   panel.append(el('div', { class: 'toolbar' }, el('div', { class: 'field' }, el('label', { for: 'pfilter' }, 'Filter Roles'), input,
     el('p', { class: 'hint', id: 'pfilter-hint' }, 'Name, Role or department')), filterUI.count));
   const list = el('div', { class: 'pers' });
   panel.append(list);
   for (const [dept, roles] of roleGroups()) {
-    const label = el('h3', { class: 'dept-label' }, dept);
-    list.append(label);
-    const regs = [];
     for (const role of roles) {
       list.append(roleCard(role, rule, ignoredPaths));
       pRoles[role].objectIgnored = entries.some((e) => e.path === `roles.${role}.personality`);
       pRoles[role].dept = dept;
-      regs.push(pRoles[role]);
     }
-    filterUI.labels.push({ label, regs });
   }
   syncers.push(syncPersonality);
   applyFilter();
@@ -1337,7 +1326,6 @@ function applyFilter() {
     reg.details.hidden = !match;
     if (match) shown++;
   }
-  for (const { label, regs } of filterUI.labels) label.hidden = regs.every((r) => r.details.hidden);
   filterUI.count.textContent = shown === 0 ? 'No Role matches the filter.' : `Showing ${shown} of ${total} Roles`;
 }
 const isIgnoredEntry = (e) => e !== null && typeof e === 'object' && (e.level === 'user' || e.level === 'project')
