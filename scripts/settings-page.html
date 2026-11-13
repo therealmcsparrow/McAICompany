@@ -1155,26 +1155,20 @@ function openRole(role) {
 function personalityField(role, level, key, rule, ignoredPaths, off) {
   const id = `pf-${role}-${level}-${key}`;
   const isText = P_TEXT.includes(key);
+  const levels = rule?.levels ?? [];
   const control = isText
-    ? el('input', { type: 'text', id, autocomplete: 'off', placeholder: '-' })
-    : el('select', { id });
+    ? el('input', { type: 'text', class: 'scribble', id, autocomplete: 'off', placeholder: '—' })
+    : segFor(levels, Object.fromEntries(levels.map((l) => [l, capital(l)])));
+  if (!isText) { control.id = id; control.classList.add('small'); }
   const rec = {
     role, level, key, id, isText, control, error: '', refused: false,
     path: `roles.${role}.personality.${key}`,
     errEl: el('p', { class: 'perr', id: `${id}-err`, hidden: true }),
     hintEl: el('p', { class: 'hint', id: `${id}-hint`, hidden: true }),
-    countEl: isText && rule ? el('span', { class: 'pcount', id: `${id}-count` }) : null
+    countEl: null
   };
   rec.ignored = ignoredPaths.has(`${level}|${rec.path}`);
   control.disabled = off;
-  if (!isText) {
-    control.append(el('option', { value: '' }, 'Not set'));
-    for (const l of rule?.levels ?? []) control.append(el('option', { value: l }, capital(l)));
-    if (rec.ignored) {
-      rec.ignoredOption = el('option', { value: IGNORED_OPTION, disabled: true }, 'Ignored stored value');
-      control.append(rec.ignoredOption);
-    }
-  }
   if (isText) {
     control.addEventListener('input', () => editRecord(rec));
     control.addEventListener('change', () => checkRecord(rec));
@@ -1183,22 +1177,22 @@ function personalityField(role, level, key, rule, ignoredPaths, off) {
   }
   pRecs.push(rec);
   pRoles[role].recs.push(rec);
-  return el('div', { class: 'pfield' },
-    el('div', { class: 'plabel' }, el('label', { for: id }, P_LABELS[key]), rec.countEl),
-    control, rec.errEl, rec.hintEl);
+  const label = `${P_LABELS[key]}`;
+  if (isText) return el('div', { class: 'ctl' }, el('label', { class: 'ctl-label', for: id }, label), control, rec.errEl, rec.hintEl);
+  const group = el('div', { class: 'ctl', role: 'group', 'aria-labelledby': `${id}-lbl` }, el('span', { class: 'ctl-label', id: `${id}-lbl` }, label), control, rec.errEl, rec.hintEl);
+  return group;
 }
 
+// The rows of one Role body: plain .ctl rows plus a small control that clears this level's overrides.
 function levelFieldset(role, level, rule, ignoredPaths) {
   const off = level === 'project' && !projectOn();
-  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
-  box.dataset.level = level;
-  for (const key of P_KEYS) box.append(personalityField(role, level, key, rule, ignoredPaths, off));
+  const rows = P_KEYS.map((key) => personalityField(role, level, key, rule, ignoredPaths, off));
   const reset = el('button', { type: 'button', class: 'small' }, `Use plugin default for ${role}, ${level}`);
   reset.addEventListener('click', () => resetLevel(role, level));
   pRoles[role].reset[level] = reset;
-  box.append(reset);
-  if (off) box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder'));
-  return box;
+  rows.push(reset);
+  if (off) rows.push(el('p', { class: 'hint' }, 'Needs a .company/ folder'));
+  return rows;
 }
 
 const typedValue = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
@@ -1224,13 +1218,7 @@ function syncPersonality() {
     // A text control keeps what is typed while the draft only differs by spaces, so the caret is never moved.
     if (c.value !== want && (!rec.isText || c.value.trim() !== want.trim())) c.value = want;
     c.classList.toggle('set', want !== '' && want !== IGNORED_OPTION);
-    if (!ignoredNow && rec.ignoredOption && rec.ignoredOption.parentNode) rec.ignoredOption.remove();
-    if (rec.countEl) {
-      const n = [...c.value.trim()].length;
-      const text = `${n} of ${rule.max} characters`;
-      if (rec.countEl.textContent !== text) rec.countEl.textContent = text;
-      rec.countEl.classList.toggle('over', n > rule.max);
-    }
+    if (!rec.isText) c.classList.toggle('ignored', ignoredNow);
     if (rec.error && !rec.sticky && !fieldProblem(rec.key, c.value)) setError(rec, '');
     let hint = '';
     if (ignoredNow) hint = rec.isText ? IGNORED_TEXT_HINT : IGNORED_LEVEL_HINT;
@@ -1244,18 +1232,11 @@ function syncPersonality() {
     describe(rec);
   }
   for (const reg of Object.values(pRoles)) {
-    const eff = P_KEYS.map((key) => [key, ...personalityEffective(reg.role, key)]);
-    const parts = eff.filter(([, v]) => v !== undefined).map(([key, v]) => (P_TEXT.includes(key) ? v : `${P_LABELS[key]} ${v}`));
-    const sumText = parts.join(', ') || 'nothing set';
+    const eff = Object.fromEntries(P_KEYS.map((key) => [key, personalityEffective(reg.role, key)[0] ?? '—']));
+    const sumText = P_KEYS.every((key) => eff[key] === '—')
+      ? 'nothing set'
+      : `${[eff.temperament, eff.talk, eff.topic].join(' · ')} · intelligence ${eff.intelligence}, creativity ${eff.creativity}`;
     if (reg.sum.textContent !== sumText) reg.sum.textContent = sumText;
-    const signature = JSON.stringify(eff);
-    if (reg.eff.dataset.signature !== signature) {
-      reg.eff.dataset.signature = signature;
-      reg.eff.replaceChildren(...eff.flatMap(([key, v, source]) => [
-        el('dt', {}, P_LABELS[key]),
-        el('dd', {}, v === undefined ? '—' : showValue(key, v), v === undefined ? null : sourceTag(source, `(${source})`))
-      ]));
-    }
     const changed = reg.recs.some((rec) => typedValue(draftAt(rec)) !== getIn(state[rec.level], ['roles', rec.role, 'personality', rec.key])
       || (touched.has(touchKey(rec)) && draftAt(rec) === undefined));
     reg.details.classList.toggle('dirty', changed);
@@ -1288,10 +1269,10 @@ function renderPersonality(panel) {
     const details = el('details', { id: `pers-${role}` });
     details.open = openRoles.has(role);
     details.addEventListener('toggle', () => { if (details.open) openRoles.add(role); else openRoles.delete(role); });
-    const reg = { role, details, sum: el('span', { class: 'gist' }), eff: el('dl'), recs: [], reset: {} };
+    const reg = { role, details, sum: el('span', { class: 'gist' }), recs: [], reset: {} };
     pRoles[role] = reg;
     details.append(el('summary', {}, el('span', { class: 'who' }, roleLabel(role)), reg.sum));
-    details.append(el('div', { class: 'body' }, levelFieldset(role, lvl(), rule, ignoredPaths), el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
+    details.append(el('div', { class: 'body' }, ...levelFieldset(role, lvl(), rule, ignoredPaths)));
     return details;
   }
   const input = el('input', { type: 'text', id: 'pfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
