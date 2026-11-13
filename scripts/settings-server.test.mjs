@@ -1128,12 +1128,12 @@ test('layout: the Bulk bar controls are named by their wrapping labels only', as
   await settle();
   const bulk = page.allRoles((n) => n.tagName === 'DIV' && n.className === 'bulk')[0];
   const selects = walkAll(bulk, (n) => n.tagName === 'SELECT');
-  assert.equal(selects.length, 4);
+  assert.equal(selects.length, 3);
   for (const s of selects) {
     assert.equal(s.getAttribute('aria-label'), null);
     assert.equal(closest(s, 'LABEL').parentNode, bulk);
   }
-  assert.deepEqual(walkAll(bulk, (n) => n.tagName === 'LABEL').map((l) => l.children[0].textContent), ['Apply to', 'at', 'model', 'effort']);
+  assert.deepEqual(walkAll(bulk, (n) => n.tagName === 'LABEL').map((l) => l.children[0].textContent), ['Apply to', 'model', 'effort']);
 });
 
 test('layout: table cells carry their column header for the stacked layout', async () => {
