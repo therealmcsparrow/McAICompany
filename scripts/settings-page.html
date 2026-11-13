@@ -316,6 +316,7 @@ input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: var(-
 .bay { display: grid; gap: var(--space-2); }
 .bay-row { border: 1px solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-panel-2); padding: var(--space-3); margin: 0; min-width: 0;
   display: grid; gap: var(--space-2); grid-template-columns: minmax(0, 1fr); }
+.bay-row[hidden] { display: none; }
 @media (min-width: 760px) { .bay-row { grid-template-columns: 13rem minmax(0, 1fr); align-items: start; } }
 .bay-row legend { float: left; padding: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--text-lg); text-transform: uppercase; letter-spacing: .03em; line-height: 1.1; }
 .bay-row legend small { display: block; font-family: var(--font-mono); font-weight: 400; font-size: var(--text-xs); text-transform: none; letter-spacing: 0; color: var(--color-ink-2); }
