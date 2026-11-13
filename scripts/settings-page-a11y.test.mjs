@@ -814,3 +814,16 @@ test('79 R-1: the Mods Pane auto note is the second hint in the panel head, not 
   const loose = mods.children.filter((c) => c.tagName === 'P' && c.textContent.includes('Pane auto:'));
   assert.ok(loose.length === 0, 'no loose Pane auto paragraph after the units');
 });
+
+test('79 R-2: the unlocked key light is the preview ok led (green), the locked one the lock led', async () => {
+  // Preview 06-hallmark-console.html: led(on ? 'ok' : 'lock') styled by .led[data-on="ok"] (green) and .led[data-on="lock"].
+  const page = await open({ user: { version: 1, unlocked: ['ship'] } });
+  const ledOf = (key) => walk(byId(page, `key-${key}-s`), (x) => x.tagName === 'I' && x.className.split(' ').includes('led'));
+  const unlocked = ledOf('ship');
+  const locked = ledOf('installs');
+  assert.ok(unlocked !== null && locked !== null, 'both key states carry a led');
+  assert.ok(unlocked !== null && unlocked.getAttribute('data-on') === 'ok', 'the unlocked Ship key light is data-on ok');
+  assert.ok(locked !== null && locked.getAttribute('data-on') === 'lock', 'the locked Installs key light is data-on lock');
+  const css = fs.readFileSync(PAGE_FILE, 'utf8');
+  assert.ok(/\.led\[data-on="ok"\] \{[^}]*--color-led-ok/.test(css), 'the page styles .led[data-on="ok"] with the ok colour');
+});
