@@ -2010,7 +2010,6 @@ let skFilterUI = null;
 let skillBase = { user: null, project: null }; // the stored layers without stale skill names: what "changed" compares to
 let skIndex = new Map(); // catalog name -> entry
 const skillCat = {};     // "role|level" -> chosen category filter; survives a re-render
-const openSkillRoles = new Set();
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 function skillEntries() {
@@ -2107,8 +2106,7 @@ function markSkillRefused(rec, line) {
   rec.refused = true;
   rec.message = `Error: Skills for ${rec.role}, ${rec.level} level, were refused: ${reason}`;
   rec.refusedRow = null;
-  skRoles[rec.role].details.open = true;
-  openSkillRoles.add(rec.role);
+  skRoles[rec.role].fs.hidden = false;
   refresh();
   return `${roleLabel(rec.role)}, ${rec.level} level, Skills: the server refused the list: ${reason}`;
 }
@@ -2159,10 +2157,9 @@ function syncSkills() {
     const undated = eff.list.some((i) => dated(eff.source, i.name) === null);
     const reviewed = eff.list.length === 0 ? 'none' : `${dates.length ? dates.join(', ') : 'not reviewed yet'}${undated && dates.length ? ', new picks are dated on save' : ''}`;
     reg.eff.replaceChildren(
-      el('dt', {}, 'Skills'), el('dd', {}, eff.list.length ? `${eff.list.map((i) => i.name).join(', ')} (${eff.source})` : 'none'),
-      el('dt', {}, 'Reviewed'), el('dd', {}, reviewed));
-    const count = (level) => (skillList(level, reg.role) ?? []).length;
-    reg.sum.textContent = reg.entries.length === 0 ? 'none available' : `${count('user')} selected (user), ${count('project')} (project)`;
+      el('span', { class: 'k' }, 'In effect'), el('span', { class: 'v' }, eff.list.length ? eff.list.map((i) => i.name).join(', ') : 'none'),
+      ...(eff.list.length ? [el('span', { class: 's', 'data-src': eff.source }, eff.source)] : []),
+      el('span', { class: 'k' }, 'Reviewed'), el('span', { class: 'v' }, reviewed));
     const changed = ['user', 'project'].some((level) => JSON.stringify(skillList(level, reg.role)) !== JSON.stringify(getIn(skillBase[level], ['roles', reg.role, 'skills'])));
     reg.pills.changed.hidden = !changed;
     reg.pills.refused.hidden = !reg.recs.some((r) => r.refused);
@@ -2176,12 +2173,11 @@ function applySkillFilter() {
   const total = Object.keys(skRoles).length;
   let shown = 0;
   for (const reg of Object.values(skRoles)) {
-    const match = q === '' || [reg.role, reg.dept].some((s) => String(s).toLowerCase().includes(q));
-    reg.details.hidden = !match;
+    const match = q === '' || [reg.role, reg.dept, roleLabel(reg.role)].some((v) => String(v).toLowerCase().includes(q));
+    reg.fs.hidden = !match;
     if (match) shown++;
   }
-  for (const { label, regs } of skFilterUI.labels) label.hidden = regs.every((r) => r.details.hidden);
-  skFilterUI.count.textContent = shown === 0 ? 'No Role matches the filter.' : `Showing ${shown} of ${total} Roles`;
+  skFilterUI.count.textContent = `${shown} of ${total} Roles shown`;
 }
 
 function renderSkills(panel) {
@@ -2219,23 +2215,27 @@ function renderSkills(panel) {
     return row;
   }
 
-  function skillLevel(role, level, entries, cats) {
+  function skillLevel(role, level, entries, cats, dept) {
     const key = `${role}|${level}`;
-    const box = el('fieldset', { class: 'bay-row' }, el('legend', {}, roleLabel(role), el('small', {}, `${role} · ${levelWord(level)} level`)));
-    box.dataset.level = level;
+    const fsEl = el('fieldset', { class: 'bay-row' }, el('legend', {}, roleLabel(role), el('small', {}, `${role} · ${dept}`)));
+    fsEl.dataset.level = level;
+    const box = el('div', { class: 'info' });
+    fsEl.append(box);
+    skRoles[role].fs = fsEl;
     if (level === 'project' && !projectOn()) {
       box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'));
-      return box;
+      return fsEl;
     }
     if (level === 'user' && state.resolved?.settings_folder_moved === true) {
       box.append(el('p', { class: 'lockwhy locked' }, SKILL_MOVED));
-      return box;
+      return fsEl;
     }
     const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
       count: el('p', { class: 'hint', id: `sk-${key.replace('|', '-')}_count`, 'aria-live': 'polite' }),
       err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}_err`, hidden: true }) };
     skRecs.push(rec);
     skRoles[role].recs.push(rec);
+    const reg = skRoles[role];
     const stale = staleSkills(level, role);
     const protectedHere = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
     if (protectedHere) {
@@ -2262,21 +2262,17 @@ function renderSkills(panel) {
         el('ul', { class: 'hint' }, stale.map((s) => el('li', {}, s))));
     }
     rec.stale = stale.length;
-    return box;
+    box.append(reg.pills.row, reg.eff);
+    return fsEl;
   }
 
-  function skillCard(role, entries, cats) {
-    const details = el('details', { class: 'pcard' });
-    details.open = openSkillRoles.has(role);
-    details.addEventListener('toggle', () => { if (details.open) openSkillRoles.add(role); else openSkillRoles.delete(role); });
+  function skillCard(role, entries, cats, dept) {
     const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
-    const reg = { role, details, entries, sum: el('span', { class: 'psum' }), eff: el('dl'), recs: [],
+    const reg = { role, dept, entries, eff: el('p', { class: 'readout' }), recs: [],
       pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
+    reg.pills.row = el('p', { class: 'hint' }, reg.pills.changed, reg.pills.refused, reg.pills.ign);
     skRoles[role] = reg;
-    details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
-    const grid = el('div', { class: 'pgrid' }, [skillLevel(role, lvl(), entries, cats)]);
-    details.append(el('div', { class: 'pbody info' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
-    return details;
+    return skillLevel(role, lvl(), entries, cats, dept);
   }
   const entries = skillEntries();
   const hasOwn = entries.some((e) => e.layer === 'user');
@@ -2284,24 +2280,18 @@ function renderSkills(panel) {
   const input = el('input', { type: 'text', id: 'skfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'skfilter-hint' });
   input.value = skFilter;
   input.addEventListener('input', () => { skFilter = input.value; applySkillFilter(); });
-  skFilterUI = { input, count: el('p', { id: 'skcount', role: 'status' }), labels: [] };
+  skFilterUI = { input, count: el('p', { id: 'skcount', role: 'status' }) };
   skFilterUI.count.classList.add('count');
   panel.append(el('div', { class: 'toolbar' }, el('div', { class: 'field' }, el('label', { for: 'skfilter' }, 'Filter Roles'), input,
     el('p', { class: 'hint', id: 'skfilter-hint' }, 'Name or department')), skFilterUI.count));
   const bay = el('div', { class: 'bay' });
   panel.append(bay);
   for (const [dept, roles] of roleGroups()) {
-    const label = el('h3', { class: 'dept-label' }, dept);
-    bay.append(label);
-    const regs = [];
     for (const role of roles) {
       const mine = entries.filter((e) => e.roles.includes(role));
       const cats = [...new Set(mine.map((e) => String(e.category)))];
-      bay.append(skillCard(role, mine, cats));
-      skRoles[role].dept = dept;
-      regs.push(skRoles[role]);
+      bay.append(skillCard(role, mine, cats, dept));
     }
-    skFilterUI.labels.push({ label, regs });
   }
   syncers.push(syncSkills);
   applySkillFilter();
