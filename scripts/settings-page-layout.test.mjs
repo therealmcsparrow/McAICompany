@@ -172,3 +172,9 @@ test('fonts: the server serves each font from the same origin as woff2 without a
   }
   assert.equal((await fetch(`${origin}/api/state`)).status, 403, 'API still needs the token');
 });
+
+test('80 R-1: a hidden .bay-row is display:none, so the Skills filter really hides Role rows', () => {
+  const rules = [...STYLE.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').some((s) => /^\s*\.bay-row\[hidden\]\s*$/.test(s)));
+  assert.ok(rules.length > 0, 'the stylesheet has a .bay-row[hidden] rule');
+  assert.ok(rules.some((m) => /display:\s*none\b/.test(m[2])), '.bay-row[hidden] sets display: none');
+});

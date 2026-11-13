@@ -768,3 +768,49 @@ test('touch targets: every console control is at least 44px high, the effort fad
   assert.ok(/\.keysw \.barrel \{[^}]*width: 52px; height: 52px/.test(css), 'the key switch barrel');
   assert.ok(!/min-height: (?:[0-3]?\d|4[0-3])px/.test(css), 'no smaller min-height is set on a control');
 });
+
+// ---------- Fix round 2 pins (Step 82): 80 R-1/R-2, 79 R-1 ----------
+// Every Role row on the Skills tab ends in the In effect readout (p.readout) and the changed/refused/ignored pills,
+// also when the row has no list (no .company/ folder, settings folder moved).
+function assertRowsHaveReadout(page, why) {
+  const rows = walkAll(page.panel('skills'), (x) => x.tagName === 'FIELDSET' && x.className.split(' ').includes('bay-row'));
+  assert.ok(rows.length >= 2, `${why}: both Role rows are built`);
+  for (const row of rows) {
+    const readout = walk(row, (x) => x.tagName === 'P' && x.className.split(' ').includes('readout'));
+    assert.ok(readout !== null, `${why}: ${row.textContent.slice(0, 12)} has an In effect readout`);
+    assert.ok(readout !== null && readout.textContent.includes('In effect'), `${why}: the readout says In effect`);
+    const pills = walkAll(row, (x) => x.tagName === 'SPAN' && x.className.split(' ').includes('pill') && ['changed', 'refused', 'ignored value'].includes(x.textContent));
+    assert.ok(pills.length === 3, `${why}: the changed, refused and ignored value pills are in the row`);
+  }
+}
+
+test('80 R-2: at Project level without a .company/ folder each Role row still has the In effect readout and pills', async () => {
+  const page = loadPage(skillsState([skill('qa-helper')], { hasProject: false }));
+  await settle();
+  await page.setLevel('project');
+  assert.ok(page.panel('skills').textContent.includes('Needs a .company/ folder.'), 'the project level shows the no-folder hint');
+  assertRowsHaveReadout(page, 'no .company/');
+});
+
+test('80 R-2: at User level with the settings folder moved each Role row still has the In effect readout and pills', async () => {
+  const moved = skillsState([skill('qa-helper')]);
+  moved.resolved.settings_folder_moved = true;
+  const page = loadPage(moved);
+  await settle();
+  assert.ok(page.panel('skills').textContent.includes('the user level is not counted'), 'the moved notice shows');
+  assert.ok(box(page, 'sk-qa-user-qa-helper') === null, 'no checkbox at the moved user level');
+  assertRowsHaveReadout(page, 'folder moved');
+});
+
+test('79 R-1: the Mods Pane auto note is the second hint in the panel head, not a loose paragraph', async () => {
+  const page = loadPage(pageState());
+  await settle();
+  const mods = page.panel('mods');
+  const head = walk(mods, (x) => x.tagName === 'DIV' && x.className.split(' ').includes('panel-head'));
+  assert.ok(head !== null, 'the Mods panel has a head');
+  const hints = head.children.filter((c) => c.tagName === 'P' && c.className.split(' ').includes('hint'));
+  assert.ok(hints.length === 2, 'the head carries two hints');
+  assert.ok(hints.length === 2 && hints[1].textContent.startsWith('Pane auto:'), 'the second hint is the Pane auto note');
+  const loose = mods.children.filter((c) => c.tagName === 'P' && c.textContent.includes('Pane auto:'));
+  assert.ok(loose.length === 0, 'no loose Pane auto paragraph after the units');
+});
