@@ -615,6 +615,8 @@ class FakeNode {
         if (on === undefined ? !set.has(name) : on) set.add(name); else set.delete(name);
         self.className = [...set].join(' ');
       },
+      add: (name) => self.classList.toggle(name, true),
+      remove: (name) => self.classList.toggle(name, false),
       contains: (name) => self.className.split(/\s+/).includes(name)
     };
     if (tag === 'option') {
@@ -665,6 +667,12 @@ function loadPage(initialState, { saveReply } = {}) {
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
     return ids[`tab-${name}`];
   });
+  // The header level switch, the lamps and the per-tab dirty lamps the console shell adds.
+  const radios = ['user', 'project'].map((v) => { const r = make('input', { id: `lvl-${v}`, name: 'lvl' }); r.value = v; r.checked = v === 'user'; ids[`lvl-${v}`] = r; return r; });
+  for (const name of names) ids[`dirty-${name}`] = make('span');
+  ids.lamps = make('div', { id: 'lamps' });
+  ids['annun-list'] = make('div', { id: 'annun-list' });
+  doc.body = { dataset: {} };
   const footer = make('footer');
   const main = make('main');
   const calls = [];
@@ -672,8 +680,8 @@ function loadPage(initialState, { saveReply } = {}) {
     createElement: (tag) => make(tag),
     createTextNode: (text) => new FakeText(text),
     getElementById: (id) => ids[id] ?? names.map((n) => walk(ids[`panel-${n}`], (x) => x.id === id)).find(Boolean) ?? walk(ids.status, (x) => x.id === id),
-    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : null),
-    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : [])
+    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : sel === 'input[name="lvl"]:checked' ? radios.find((r) => r.checked) : null),
+    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : sel === 'input[name="lvl"]' ? radios : [])
   });
   const fakeFetch = async (url, init = {}) => {
     calls.push({ url, body: init.body ? JSON.parse(init.body) : undefined });
@@ -689,9 +697,27 @@ function loadPage(initialState, { saveReply } = {}) {
   const context = vm.createContext({ document: doc, window: { addEventListener() {}, confirm: () => true }, fetch: fakeFetch, Node: NodeLike });
   vm.runInContext(script, context);
   const panels = names.map((n) => ids[`panel-${n}`]);
+  const levelNow = () => radios.find((r) => r.checked).value;
+  const findHere = (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null;
+  const useLevel = (level) => {
+    if (levelNow() === level) return;
+    for (const r of radios) r.checked = r.value === level;
+    ids[`lvl-${level}`].fire('change');
+  };
   return {
+    setLevel: async (level) => { for (const r of radios) r.checked = r.value === level; await ids[`lvl-${level}`].fire('change'); await new Promise((resolve) => setImmediate(resolve)); },
     document: doc, ids, calls,
-    find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
+    // The page builds controls for one level at a time; find() looks at the shown level first, then at the other one.
+    useLevel,
+    find: (pred) => {
+      const first = levelNow();
+      let hit = findHere(pred);
+      if (hit) return hit;
+      useLevel(first === 'user' ? 'project' : 'user');
+      hit = findHere(pred);
+      if (!hit) useLevel(first);
+      return hit;
+    },
     all: (pred) => walkAll(ids['panel-personality'], pred),
     allRoles: (pred) => walkAll(ids['panel-roles'], pred)
   };

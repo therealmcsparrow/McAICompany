@@ -36,6 +36,8 @@ class FakeNode {
         if (on === undefined ? !set.has(name) : on) set.add(name); else set.delete(name);
         self.className = [...set].join(' ');
       },
+      add: (name) => self.classList.toggle(name, true),
+      remove: (name) => self.classList.toggle(name, false),
       contains: (name) => self.className.split(/\s+/).includes(name)
     };
     if (tag === 'option') {
@@ -98,14 +100,20 @@ function loadPage(initialState, fetchImpl) {
     ids[`tab-${name}`] = make('button', { role: 'tab', id: `tab-${name}`, 'aria-controls': `panel-${name}` });
     return ids[`tab-${name}`];
   });
+  // The header level switch, the lamps and the per-tab dirty lamps the console shell adds.
+  const radios = ['user', 'project'].map((v) => { const r = make('input', { id: `lvl-${v}`, name: 'lvl' }); r.value = v; r.checked = v === 'user'; ids[`lvl-${v}`] = r; return r; });
+  for (const name of names) ids[`dirty-${name}`] = make('span');
+  ids.lamps = make('div', { id: 'lamps' });
+  ids['annun-list'] = make('div', { id: 'annun-list' });
+  doc.body = { dataset: {} };
   const footer = make('footer');
   const main = make('main');
   Object.assign(doc, {
     createElement: (tag) => make(tag),
     createTextNode: (text) => new FakeText(text),
     getElementById: (id) => ids[id] ?? names.map((n) => walk(ids[`panel-${n}`], (x) => x.id === id)).find(Boolean) ?? walk(ids.status, (x) => x.id === id),
-    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : null),
-    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : [])
+    querySelector: (sel) => (sel === 'meta[name="aico-token"]' ? { content: 'tok' } : sel === 'main' ? main : sel === 'footer' ? footer : sel === 'input[name="lvl"]:checked' ? radios.find((r) => r.checked) : null),
+    querySelectorAll: (sel) => (sel === '[role="tab"]' ? tabs : sel === 'input[name="lvl"]' ? radios : [])
   });
   const fakeFetch = fetchImpl ?? (async () => ({ status: 200, json: async () => structuredClone(initialState) }));
   const script = /<script>([\s\S]*)<\/script>/.exec(fs.readFileSync(PAGE_FILE, 'utf8'))[1];
@@ -114,6 +122,7 @@ function loadPage(initialState, fetchImpl) {
   vm.runInContext(script, context);
   const panels = names.map((n) => ids[`panel-${n}`]);
   return {
+    setLevel: async (level) => { for (const r of radios) r.checked = r.value === level; await ids[`lvl-${level}`].fire('change'); await new Promise((resolve) => setImmediate(resolve)); },
     ids,
     doc,
     find: (pred) => panels.map((p) => walk(p, pred)).find(Boolean) ?? null,
@@ -162,13 +171,15 @@ test('the Roles tab shows the pseudonym notice as text, and the old claim is gon
 test('each Name field is described by its hint and the notice, and the ids resolve', async () => {
   const page = await open();
   for (const level of ['user', 'project']) {
+    await page.setLevel(level);
     const input = byId(page, `rf-architect-${level}-name`);
     const ids = describedBy(input);
     assert.deepEqual(ids, [`rf-architect-${level}-name-hint`, 'roles-names-notice']);
     for (const id of ids) assert.ok(byId(page, id), id);
   }
-  assert.equal(textOf(page, 'rf-architect-user-name-hint'), 'Use a pseudonym, not a real name.');
   assert.equal(textOf(page, 'rf-architect-project-name-hint'), 'Saved in .company/. Use a pseudonym, not a real name.');
+  await page.setLevel('user');
+  assert.equal(textOf(page, 'rf-architect-user-name-hint'), 'Use a pseudonym, not a real name.');
 });
 
 test('a name error is listed first and the hint and notice stay tied to the field', async () => {
@@ -187,17 +198,18 @@ test('a name error is listed first and the hint and notice stay tied to the fiel
   assert.deepEqual(describedBy(input), ['rf-architect-user-name-hint', 'roles-names-notice']);
 });
 
-test('without a .company/ folder the project Name hint says what is needed', async () => {
+test('without a .company/ folder the Project level cannot be chosen and the User level stays', async () => {
   const page = await open({ hasProject: false });
-  assert.equal(textOf(page, 'rf-architect-project-name-hint'), 'Needs a .company/ folder.');
-  assert.equal(byId(page, 'rf-architect-project-name').disabled, true);
+  assert.equal(page.ids['lvl-project'].disabled, true);
+  assert.equal(byId(page, 'rf-architect-project-name'), null);
+  assert.equal(textOf(page, 'rf-architect-user-name-hint'), 'Use a pseudonym, not a real name.');
 });
 
-test('the notice comes before the Roles table and no hint or reason takes a tab stop', async () => {
+test('the notice comes before the Role strips and no hint or reason takes a tab stop', async () => {
   const page = await open();
   const kids = page.panel('roles').children;
   const at = (pred) => kids.findIndex(pred);
-  assert.ok(at((n) => n.id === 'roles-names-notice') < at((n) => n.children?.some?.((c) => c.tagName === 'TABLE') || n.tagName === 'TABLE'));
+  assert.ok(at((n) => n.id === 'roles-names-notice') < at((n) => n.className === 'dept'));
   const stops = [];
   const scan = (node) => { for (const c of node.children ?? []) { if (c.tagName && c.getAttribute('tabindex') !== null) stops.push(c); scan(c); } };
   scan(page.panel('roles'));
@@ -213,16 +225,20 @@ const LOCKED_ROWS = [
   ['Installs', 'installs', 'Locked. auto needs your Installs unlock.']
 ];
 
-test('every locked Gate row shows its reason as text, tied to both controls', async () => {
+test('every locked Gate row shows its reason as text, tied to the control at each level', async () => {
   const page = await open();
   const reasons = page.panel('gates').children;
   assert.ok(reasons);
   for (const [label, , text] of LOCKED_ROWS) {
+    await page.setLevel('user');
     const user = rowSelect(page, label, 'user');
-    const project = rowSelect(page, label, 'project');
-    assert.ok(user && project, label);
+    assert.ok(user, label);
     const id = describedBy(user)[0];
     assert.match(id, /^lock-/);
+    assert.equal(textOf(page, id), text);
+    await page.setLevel('project');
+    const project = rowSelect(page, label, 'project');
+    assert.ok(project, label);
     assert.equal(describedBy(project)[0], id);
     assert.equal(textOf(page, id), text);
   }
@@ -258,9 +274,9 @@ test('the unlocked state replaces the reason text', async () => {
 test('the lock reason changes with the unlock and the change is announced, not the load', async () => {
   const page = await open();
   assert.equal(page.ids['lock-live'].textContent, '');
-  const unlocks = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === 'Ship unlock, user');
-  unlocks.value = 'on';
-  const pending = unlocks.fire('change');
+  const unlocks = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-label') === 'Ship unlock, user');
+  assert.equal(unlocks.getAttribute('aria-pressed'), 'false');
+  const pending = unlocks.fire('click');
   await settle();
   assert.equal(page.ids.unlock.open, true);
   await page.ids['unlock-ok'].fire('click');
@@ -268,9 +284,9 @@ test('the lock reason changes with the unlock and the change is announced, not t
   await settle();
   assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Unlocked by you.');
   assert.equal(page.ids['lock-live'].textContent, 'Ship unlocked. auto now applies.');
-  const again = page.find((n) => n.tagName === 'SELECT' && n.getAttribute('aria-label') === 'Ship unlock, user');
-  again.value = '';
-  await again.fire('change');
+  const again = page.find((n) => n.tagName === 'BUTTON' && n.getAttribute('aria-label') === 'Ship unlock, user');
+  assert.equal(again.getAttribute('aria-pressed'), 'true');
+  await again.fire('click');
   await settle();
   assert.equal(page.ids['lock-live'].textContent, 'Ship locked again. auto is held until you unlock it.');
   assert.equal(textOf(page, describedBy(rowSelect(page, 'Ship', 'user'))[0]), 'Locked. auto needs your Ship unlock.');
@@ -314,6 +330,8 @@ function skillsState(entries, over = {}) {
 const box = (page, id) => page.find((n) => n.tagName === 'INPUT' && n.type === 'checkbox' && n.id === id);
 const ticked = async (cb, on = true) => { cb.checked = on; await cb.fire('change'); };
 const unsaved = (page) => page.ids.count.textContent;
+// A jack label holds the skill name as text, then a meta line (category and status).
+const labelName = (label) => label.children.filter((c) => !c.tagName).map((c) => c.textContent).join('');
 
 test('each skill row is a checkbox with a label, a fieldset legend and status as words', async () => {
   const entries = [skill('qa-helper', { status: 'folder not recognized', place: 'project', vetted: '2026-01-02', skillrepo: 'owner/name' }), skill('cmd', { kind: 'command', commit: undefined })];
@@ -321,7 +339,7 @@ test('each skill row is a checkbox with a label, a fieldset legend and status as
   await settle();
   const cb = box(page, 'sk-qa-user-qa-helper');
   assert.equal(cb.type, 'checkbox');
-  assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === cb.id && n.textContent === 'qa-helper'));
+  assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === cb.id && labelName(n) === 'qa-helper'));
   const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.includes('qa') && n.textContent.includes('User level'));
   assert.equal(legend.parentNode.tagName, 'FIELDSET');
   const text = describedBy(cb).map((id) => byId(page, id).textContent);
@@ -345,7 +363,7 @@ test('hostile entry text reaches the page as text only', async () => {
   await settle();
   const panel = page.panel('skills');
   assert.ok(panel.textContent.includes(evil));
-  assert.equal(walk(panel, (n) => ['IMG', 'B', 'SCRIPT', 'I'].includes(n.tagName)), null);
+  assert.equal(walk(panel, (n) => ['IMG', 'B', 'SCRIPT'].includes(n.tagName) || (n.tagName === 'I' && n.getAttribute('aria-hidden') !== 'true')), null);
 });
 
 test('the sixth pick stays unchecked, says why in the live region and the list, and the field is described by it', async () => {
@@ -429,6 +447,8 @@ test('a protected Role has no project controls and says so', async () => {
   await settle();
   assert.ok(box(page, 'sk-architect-user-shared'));
   assert.equal(box(page, 'sk-architect-project-shared'), null);
+  await page.setLevel('project');
+  assert.equal(box(page, 'sk-architect-project-shared'), null);
   assert.ok(page.panel('skills').textContent.includes('Protected Role: skills are chosen at User level only. A project value is ignored.'));
   assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
 });
@@ -444,6 +464,7 @@ test('an eligible name in a protected Role project list is not part of the draft
   const page = loadPage(initial, fetchImpl);
   await settle();
   assert.equal(unsaved(page), '0 unsaved changes');
+  await page.setLevel('project');
   assert.ok(page.panel('skills').textContent.includes('Ignored: this stored skill'));
   await ticked(box(page, 'sk-qa-project-shared'));
   await page.ids.save.fire('click');
@@ -595,6 +616,7 @@ test('a missing catalog, an empty user list, a moved folder and a bad list each 
   const text = page.panel('skills').textContent;
   assert.ok(text.includes('role skills: the settings folder is not the user home, the user level is not counted'));
   assert.equal(box(page, 'sk-qa-user-b'), null);
+  await page.setLevel('project');
   assert.ok(box(page, 'sk-qa-project-b'));
   const bad = skillsState([]);
   bad.catalog.errors = ['ERROR user catalog: entry 3: category'];
@@ -627,7 +649,7 @@ test('a skill named like a fixed part keeps its own id: the label and the descri
     assert.equal(cb.type, 'checkbox', n);
     assert.equal(byId(page, cb.id), cb, `${n}: the first node with the id is the checkbox`);
     const label = page.find((x) => x.tagName === 'LABEL' && x.getAttribute('for') === cb.id);
-    assert.equal(label.textContent, n);
+    assert.equal(labelName(label), n);
     for (const id of describedBy(cb)) assert.notEqual(byId(page, id), cb, `${n}: ${id}`);
   }
   assert.equal(byId(page, 'sk-qa-user_count').tagName, 'P');
@@ -653,6 +675,7 @@ test('In effect names only what the resolver would use while the user layer is u
     if (unread === 'moved') state.resolved.settings_folder_moved = true; else state.catalog.errors = ['ERROR user catalog: entry 3: category'];
     const page = loadPage(state);
     await settle();
+    await page.setLevel('project');
     const eff = textOf(page, 'sk-qa-project_count');
     assert.match(eff, /1 of 5 selected, 1 not in effect/, unread);
     const dd = walkAll(page.panel('skills'), (x) => x.tagName === 'DD').map((x) => x.textContent);
@@ -682,10 +705,10 @@ test('the Skills tab sits after Roles, wraps long text and adds no colour or fix
   const html = fs.readFileSync(PAGE_FILE, 'utf8');
   assert.ok(html.indexOf('id="tab-roles"') < html.indexOf('id="tab-skills"') && html.indexOf('id="tab-skills"') < html.indexOf('id="tab-personality"'));
   assert.ok(html.includes("const TAB_NAMES = ['roles', 'skills', 'personality'"));
-  const css = html.split('\n').filter((l) => l.startsWith('.sk-')).join('\n');
+  const css = html.split(/\r?\n/).filter((l) => /^\.(bay|jack|jacks)\b/.test(l)).join('\n');
   assert.ok(css.includes('overflow-wrap: anywhere'));
   assert.ok(!/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i.test(css));
-  assert.ok(!/(^|[^-])width: \d+(px|rem)/.test(css.replace('width: 24px; height: 24px', '')));
-  assert.ok(/min-height: 44px/.test(css));
-  assert.ok(/@media \(max-width: 600px\)[^}]*\n\s*\.pgrid \{ grid-template-columns: 1fr; \}/.test(html));
+  assert.ok(!/(^|[^-])width: \d+(px|rem)/.test(css.replace('width: 1px; height: 1px', '')));
+  assert.ok(/\.jacks \{[^}]*flex-wrap: wrap/.test(css));
+  assert.ok(/\.pgrid, \.pbody \{[^}]*minmax\(min\(100%, 17rem\), 1fr\)/.test(html));
 });
