@@ -18,6 +18,7 @@ const ANY_HIT = new Set([
   'docs/adr/0016-run-state-record.md',
   'docs/adr/0017-blast-radius-fail-closed.md',
   'docs/adr/0068-remove-blast-radius.md',
+  'docs/specs/P20261112.000001~04-feature.md',
   'mods/test/no-commit-gate.test.tsx',
   'scripts/mods-removal-sweep.test.mjs',
   'scripts/settings-retired-keys.test.mjs'
