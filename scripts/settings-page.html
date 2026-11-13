@@ -414,13 +414,16 @@ dialog::backdrop { background: var(--color-scrim); }
 .mbank label { padding: 2px 8px; }
 
 /* a project value that is held (ignored) reads muted with a dashed border, so colour is not the only cue */
-select.ignored { color: var(--color-ink-2); border-style: dashed; }
+/* the Pipeline key-cap group (.seg) carries the class too */
+.seg.ignored { color: var(--color-ink-2); outline: 2px dashed var(--color-ink-2); outline-offset: -2px; }
+.seg.ignored label { color: var(--color-ink-2); }
 @media (max-width: 600px), (max-height: 500px) {
   body { padding-bottom: 0; }
   .transport { position: static; }
 }
 @media (forced-colors: active) {
-  select.ignored { color: CanvasText; border-style: dashed; }
+  .seg.ignored, .seg.ignored label { color: CanvasText; }
+  .seg.ignored { outline: 2px dashed CanvasText; outline-offset: -2px; }
   .ctl select, .ctl input[type="text"], .ctl textarea, .scribble { border-color: CanvasText; }
   .seg input:checked + label, .jack input:checked + label, .select-bank [role="tab"][aria-selected="true"] { outline: 2px solid Highlight; }
   input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: Mark; border-width: 3px; border-style: double; }
@@ -769,10 +772,14 @@ function effective(path, pluginValue) {
   }
   return { value, source };
 }
-function showEffect(cell, path, pluginValue, format, resolvedValue) {
-  let eff = effective(path, pluginValue);
+function effectOf(path, pluginValue, resolvedValue) {
+  const eff = effective(path, pluginValue);
   // Unchanged rows show what the server resolved, so the page matches what dispatch will use.
-  if (!dirty(path) && !anyUnlockDirty() && resolvedValue !== undefined && resolvedValue !== eff.value) eff = { value: resolvedValue, source: 'resolved' };
+  if (!dirty(path) && !anyUnlockDirty() && resolvedValue !== undefined && resolvedValue !== eff.value) return { value: resolvedValue, source: 'resolved' };
+  return eff;
+}
+function showEffect(cell, path, pluginValue, format, resolvedValue) {
+  const eff = effectOf(path, pluginValue, resolvedValue);
   // Rewrite only on a change, so the live region announces what changed and nothing else.
   const signature = JSON.stringify([format(eff.value), eff.source, eff.held ?? '']);
   if (cell.dataset.signature === signature) return;
@@ -806,7 +813,7 @@ function bindLayer(control, level, path, decode = (s) => s, guard = null) {
     setIn(draft[level], path, value);
     refresh();
   };
-  control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', apply);
+  control.addEventListener(control.tagName === 'SELECT' || control.radios ? 'change' : 'input', apply);
   syncers.push(sync);
   return control;
 }
@@ -1583,14 +1590,168 @@ function renderLanguage(panel) {
 
 // ---------- Pipeline tab ----------
 const CONTEXT_CAP_HINT = 'The context cap is fixed. Every Role and every risk tier uses it. A context_cap value in an old settings file is kept but has no effect.';
-// Fixed, read-only row: the row header names it for screen readers; the value is plain text, never an input.
+// Fixed, read-only row: the label names it for screen readers; the value is plain text, never an input.
 function contextCapRow(tbody, value) {
   const cell = el('p', { class: 'readout', id: 'context-cap-fixed' });
-  tbody.append(el('fieldset', { class: 'ctl' }, el('legend', {}, 'Context cap'), cell));
+  tbody.append(el('div', { class: 'ctl' },
+    el('p', { class: 'ctl-label' }, 'Context cap', el('span', { class: 'lockcap' }, el('i', { class: 'led', 'data-on': 'lock' }), 'fixed')),
+    el('p', { class: 'hint', id: 'context-cap-hint' }, CONTEXT_CAP_HINT), cell));
   syncers.push(() => {
-    const text = `${getIn(state.resolved, ['pipeline', 'context_cap']) ?? value} (fixed, cannot be changed)`;
-    if (cell.textContent !== text) cell.textContent = text;
+    const v = String(getIn(state.resolved, ['pipeline', 'context_cap']) ?? value);
+    if (cell.dataset.v === v) return;
+    cell.dataset.v = v;
+    cell.replaceChildren(el('span', { class: 'k' }, 'In effect'), el('i', { class: 'led', 'data-on': 'plugin' }), el('span', { class: 'v' }, v), el('span', { class: 's', 'data-src': 'plugin' }, 'plugin'));
   });
+}
+// ---- Pipeline tab controls, same markup as the preview: legend, hint, key-cap group, ladder, "In effect" readout ----
+let segSeq = 0;
+// A key-cap radio group that acts as one control: value, disabled and focus(); the radios' change events bubble to it.
+// The first key is "not set". `fixed` values stay disabled whatever the group state.
+function segFor(options, labels = {}, fixed = []) {
+  const seg = el('div', { class: 'seg' });
+  const radios = [];
+  const gid = ++segSeq;
+  ['', ...options].forEach((o, i) => {
+    const input = el('input', { type: 'radio', name: `seg-${gid}`, id: `seg-${gid}-${i}`, value: o === '' ? '' : String(o) });
+    if (fixed.includes(String(o))) input.dataset.fixed = 'true';
+    const text = o === '' ? el('span', { class: 'unset' }, '—', el('span', { class: 'vh' }, ' not set')) : (labels[o] ?? String(o));
+    seg.append(input, el('label', { for: input.id }, el('i', { class: 'led' }), text));
+    radios.push(input);
+  });
+  Object.defineProperty(seg, 'value', {
+    get: () => radios.find((r) => r.checked)?.value ?? '',
+    set: (v) => { for (const r of radios) r.checked = r.value === String(v); },
+  });
+  Object.defineProperty(seg, 'disabled', {
+    get: () => radios.every((r) => r.disabled),
+    set: (v) => { for (const r of radios) r.disabled = Boolean(v) || r.dataset.fixed === 'true'; },
+  });
+  seg.focus = () => (radios.find((r) => r.checked) ?? radios[0]).focus();
+  seg.radios = radios;
+  return seg;
+}
+// Ladder: the value at each level (plugin, user, project) for one setting.
+function ladderFill(node, path, pluginValue, format) {
+  const u = getIn(draft.user, path);
+  const p = getIn(draft.project, path);
+  const show = (v) => (v === undefined || v === '' ? '—' : format(v));
+  const part = (name, v, on) => el('span', {}, el('i', { class: 'led', 'data-on': on }), name, el('b', {}, show(v)));
+  node.replaceChildren(part('plugin', pluginValue, 'plugin'), part('user', u, u !== undefined ? 'user' : ''), part('project', p, p !== undefined ? 'project' : ''));
+}
+function showReadout(node, path, pluginValue, format, resolvedValue) {
+  const eff = effectOf(path, pluginValue, resolvedValue);
+  const signature = JSON.stringify([format(eff.value), eff.source, eff.held ?? '']);
+  if (node.dataset.signature === signature) return;
+  node.dataset.signature = signature;
+  const led = eff.source === 'locked' ? 'lock' : eff.source === 'resolved' ? 'plugin' : eff.source;
+  node.replaceChildren(el('span', { class: 'k' }, 'In effect'), el('i', { class: 'led', 'data-on': led }),
+    el('span', { class: 'v' }, eff.value === undefined || eff.value === '' ? '—' : format(eff.value)),
+    el('span', { class: 's', 'data-src': eff.source }, eff.source === 'locked' ? 'held' : eff.source));
+  if (eff.held) node.append(el('span', { class: 'held' }, eff.held));
+}
+const editedTag = () => el('span', { class: 'edited', 'aria-hidden': 'true' }, el('i', { class: 'led' }), 'edited');
+// Ladder, readout, dirty and held state for one control box.
+function finishCtl(fs, path, pluginValue, format, level, opts = {}) {
+  const ladder = el('div', { class: 'ladder', 'aria-label': 'Values per level' });
+  const readout = el('p', { class: 'readout', id: opts.readoutId, 'aria-live': 'polite' });
+  fs.append(ladder, readout);
+  syncers.push(() => {
+    const was = JSON.stringify(getIn(skillBase[level] ?? state[level], path));
+    fs.classList.toggle('dirty', JSON.stringify(getIn(outgoing(level), path)) !== was);
+    fs.dataset.locked = String(Boolean(opts.locked) || effective(path, pluginValue).source === 'locked');
+    ladderFill(ladder, path, pluginValue, format);
+    showReadout(readout, path, pluginValue, format, getIn(state.resolved, path));
+  });
+}
+// Error text under a control: sets aria-invalid and aria-describedby on `host`.
+function showFieldError(host, err, message, baseDesc) {
+  err.textContent = message;
+  err.hidden = message === '';
+  if (message) host.setAttribute('aria-invalid', 'true'); else host.removeAttribute('aria-invalid');
+  const ids = [baseDesc, message ? err.id : ''].filter(Boolean).join(' ');
+  if (ids) host.setAttribute('aria-describedby', ids); else host.removeAttribute('aria-describedby');
+}
+// Refusal record for a field the server may refuse: a sticky message under the control, a live announcement, and a link in the Save refusal list.
+function refusalRec(host, control, err, key, level, label, baseDesc) {
+  const prefix = `${label}, ${level} level: `;
+  const rec = { key, level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
+  syncers.push(() => {
+    if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
+    const message = rec.sticky;
+    const text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
+    if (message !== rec.message) {
+      const live = document.getElementById('field-live');
+      if (message) live.textContent = text;
+      else if (live.textContent.startsWith(prefix)) live.textContent = '';
+    }
+    rec.message = message;
+    rec.text = text;
+    showFieldError(host, err, message, baseDesc);
+  });
+  if (!control.disabled) planRecs.push(rec);
+  return rec;
+}
+// Plan check record: a client check (`problem`) or the sticky server refusal; the Save list words it via planRefusalText.
+function planRec(host, control, err, key, level, label, baseDesc, problem) {
+  const rec = { key, level, label, control, sticky: '', stickyValue: '', message: '' };
+  syncers.push(() => {
+    if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
+    rec.message = (problem ? problem(label, control.value) : '') || rec.sticky;
+    showFieldError(host, err, rec.message, baseDesc);
+  });
+  if (!control.disabled) planRecs.push(rec);
+  return rec;
+}
+// One switch row (key-cap group) of the Pipeline tab. o: label, path, pluginValue, options, labels, decode, format, hint {id, text}, lock {key, lockedValue, needsUnlock}, fixed, id, readoutId, refusal, planKey, note, describedBy, onSync.
+function switchRow(parent, o) {
+  const { label, path, pluginValue, options, labels = {}, decode = String, hint, lock, fixed, readoutId } = o;
+  const format = o.format ?? ((v) => labels[String(v)] ?? String(v));
+  const level = lvl();
+  const id = o.id ?? `f-${path.join('-')}-${level}`;
+  const guard = level === 'user' && lock ? lockGuard(lock.key, lock.needsUnlock) : null;
+  const control = bindLayer(segFor(options, labels, fixed), level, path, decode, guard);
+  control.id = id;
+  const legend = el('legend', {}, label, el('span', { class: 'vh' }, `, ${level} level`));
+  const lockId = `lock-${path.join('-')}`;
+  if (lock) {
+    const whyText = el('span', {});
+    const why = el('span', { class: 'lockcap', id: lockId }, el('i', { class: 'led', 'data-on': 'lock' }), whyText);
+    legend.append(why);
+    syncers.push(() => {
+      const open = userUnlocked(lock.key);
+      why.classList.toggle('locked', !open);
+      const text = open ? 'Unlocked by you.' : `Locked. ${lock.lockedValue} needs your ${lock.key === 'security' ? 'security' : UNLOCK_NAMES[lock.key]} unlock.`;
+      if (whyText.textContent !== text) whyText.textContent = text;
+    });
+  }
+  legend.append(editedTag());
+  const hintEl = hint ? el('p', { class: 'hint', id: hint.id }, hint.text) : null;
+  const baseDesc = [lock ? lockId : '', hint?.id ?? '', o.describedBy ?? ''].filter(Boolean).join(' ');
+  const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
+  const fs = el('fieldset', { class: 'ctl' }, legend, hintEl, o.note ?? null, control, err);
+  if (baseDesc) fs.setAttribute('aria-describedby', baseDesc);
+  if (o.refusal) refusalRec(fs, control, err, o.refusal, level, label, baseDesc);
+  if (o.planKey) planRec(fs, control, err, o.planKey, level, label, baseDesc, null);
+  if (o.onSync) syncers.push(() => o.onSync(control, fs));
+  finishCtl(fs, path, pluginValue, format, level, { readoutId });
+  parent.append(fs);
+  return fs;
+}
+// One text row: a text input with the same label, hint, ladder and readout. o: key, label, path, pluginValue, decode, problem, id, hint {id, text}, describedBy.
+function textRow(parent, o) {
+  const { label, path, pluginValue, decode = (s) => s, hint } = o;
+  const level = lvl();
+  const control = bindLayer(el('input', { type: 'text', class: 'scribble', inputMode: 'numeric', placeholder: '—', autocomplete: 'off' }), level, path, decode);
+  control.id = o.id;
+  const head = el('label', { class: 'ctl-label', for: o.id }, label, el('span', { class: 'vh' }, `, ${level} level`), editedTag());
+  const hintEl = hint ? el('p', { class: 'hint', id: hint.id }, hint.text) : null;
+  const baseDesc = [o.describedBy ?? '', hint?.id ?? ''].filter(Boolean).join(' ');
+  const err = el('p', { class: 'perr', id: `${o.id}-err`, hidden: true });
+  const fs = el('div', { class: 'ctl' }, head, hintEl, control, err);
+  planRec(control, control, err, o.key, level, label, baseDesc, o.problem);
+  finishCtl(fs, path, pluginValue, String, level);
+  parent.append(fs);
+  return fs;
 }
 function pipelineRow(tbody, label, path, pluginValue, makeControl, decode, format, opts = {}) {
   const effect = el('p', { class: 'readout', 'aria-live': 'polite' });
@@ -1633,30 +1794,14 @@ const runsProblem = (label, raw) => {
   const n = Number(t);
   return n < 3 || n > 50 ? `Error: ${label} is out of range. Use ${PLAN_RUNS_RANGE}.` : '';
 };
-function planCheckRow(tbody, key, label, pluginValue, makeControl, decode, problem) {
+function planCheckRow(tbody, key, label, pluginValue, makeControl, decode, problem, hint = null) {
+  const id = `pc-${key}-${lvl()}`;
   const path = ['plan_check', key];
-  const effect = el('p', { class: 'readout', 'aria-live': 'polite' });
-  const cells = [lvl()].map((level) => {
-    const id = `pc-${key}-${level}`;
-    const control = bindLayer(makeControl(), level, path, decode);
-    control.id = id;
-    control.setAttribute('aria-describedby', 'plan-check-hint');
-    const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-    const rec = { key, level, label, control, sticky: '', stickyValue: '', message: '' };
-    syncers.push(() => {
-      if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
-      rec.message = (problem ? problem(label, control.value) : '') || rec.sticky;
-      err.textContent = rec.message;
-      err.hidden = rec.message === '';
-      if (rec.message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `plan-check-hint ${err.id}`); }
-      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', 'plan-check-hint'); }
-    });
-    if (!control.disabled) planRecs.push(rec);
-    const tag = el('label', { class: 'ctl-label', for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
-    return [tag, control, err];
-  });
-  tbody.append(el('fieldset', { class: 'ctl' }, ...cells.flat(), effect));
-  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+  if (makeControl === 'text') {
+    textRow(tbody, { key, label, path, pluginValue, decode, problem, id, describedBy: 'plan-check-hint', hint: hint ? { id: `${id}-hint`, text: hint } : null });
+    return;
+  }
+  switchRow(tbody, { label, path, pluginValue, options: makeControl, decode, id, describedBy: 'plan-check-hint', planKey: key });
 }
 const planRefusalText = (rec) => rec.text ?? `Plan check, ${rec.label}, ${rec.level} level: ${rec.message.replace(/^Error: /, '').replace(`${rec.label} `, '')}`;
 function planProblems() {
@@ -1665,89 +1810,30 @@ function planProblems() {
 
 const REFUSED_PARALLEL_CAP = /^(user|project) pipeline[.]parallel_cap(?![a-z_])/;
 const PARALLEL_CAP_REFUSAL = 'must be a whole number from 3 to 5.';
-const PARALLEL_CAP_HINT = 'Parallel cap: at most this many Steps run at once (builders, reviewers, QA and security). Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn. Ignored when Dispatch is sequential.';
-// Parallel cap row: a labelled select per level, tied to the shared hint; a refused value gets its own error text and a live announcement.
+const PARALLEL_CAP_HINT = 'At most this many Steps run at once (builders, reviewers, QA and security). Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn. Ignored when Dispatch is sequential.';
+// Parallel cap row: key caps 3 to 5 tied to the hint; a refused value gets its own error text and a live announcement.
 function parallelCapRow(tbody, pluginValue) {
-  const path = ['pipeline', 'parallel_cap'];
-  const label = 'Parallel cap';
-  const effect = el('p', { class: 'readout', 'aria-live': 'polite' });
-  const cells = [lvl()].map((level) => {
-    const id = `parallel-cap-${level}`;
-    const control = bindLayer(selectFor([3, 4, 5], null), level, path, Number);
-    control.id = id;
-    control.setAttribute('aria-describedby', 'parallel-cap-hint');
-    const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-    const rec = { key: 'parallel_cap', level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
-    const prefix = `${label}, ${level} level: `;
-    syncers.push(() => {
-      if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
-      const message = rec.sticky;
-      if (message !== rec.message) {
-        const live = document.getElementById('field-live');
-        if (message) live.textContent = prefix + message.replace(/^Error: /, '').replace(`${label} `, '');
-        else if (live.textContent.startsWith(prefix)) live.textContent = '';
-      }
-      rec.message = message;
-      rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
-      err.textContent = message;
-      err.hidden = message === '';
-      if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `parallel-cap-hint ${err.id}`); }
-      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', 'parallel-cap-hint'); }
-    });
-    if (!control.disabled) planRecs.push(rec);
-    const tag = el('label', { class: 'ctl-label', for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
-    return [tag, control, err];
-  });
-  tbody.append(el('fieldset', { class: 'ctl' }, ...cells.flat(), effect));
-  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+  switchRow(tbody, { label: 'Parallel cap', path: ['pipeline', 'parallel_cap'], pluginValue, options: [3, 4, 5], decode: Number,
+    hint: { id: 'parallel-cap-hint', text: PARALLEL_CAP_HINT }, id: `parallel-cap-${lvl()}`, refusal: 'parallel_cap' });
 }
 const REFUSED_SHORT_PATH = /^(user|project) pipeline[.]short_path(?![a-z_])/;
 const SHORT_PATH_REFUSAL = 'must be on or off.';
-const SHORT_PATH_HINT = 'Short path: a feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes, the ruleset research and the plan review; a fix triaged as low risk skips the security lane. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file. Off: low-risk runs take the full route. A project setting can only turn it off.';
-// Short path row: a labelled select per level tied to the hint. The project select offers only off; a stored project "on" stays visible, disabled.
+const SHORT_PATH_HINT = 'A feature you approve as low risk at the Brief Gate skips the persona, security, compliance and hands-on lanes, the ruleset research and the plan review; a fix triaged as low risk skips the security lane. Every Gate and every test stays, and the run goes back to the full route when it touches a risky file. Off: low-risk runs take the full route. A project setting can only turn it off.';
+// Short path row: key caps per level. The project group offers only off; a stored project "on" stays visible, disabled.
 function shortPathRow(tbody, pluginValue) {
-  const path = ['pipeline', 'short_path'];
-  const label = 'Short path';
+  const level = lvl();
+  const ignored = level === 'project' && state.project.pipeline?.short_path === 'on';
   const effectId = 'short-path-effect';
-  const effect = el('p', { class: 'readout', id: effectId, 'aria-live': 'polite' });
-  const cells = [lvl()].map((level) => {
-    const id = `short-path-${level}`;
-    const control = bindLayer(selectFor(level === 'user' ? ['on', 'off'] : ['off'], null), level, path, String);
-    const ignored = level === 'project' && state.project.pipeline?.short_path === 'on';
-    if (ignored) { control.append(el('option', { value: 'on', disabled: true }, 'on')); control.classList.add('ignored'); }
-    control.id = id;
-    control.setAttribute('aria-describedby', 'short-path-hint');
-    const baseDesc = ignored ? `short-path-hint ${effectId}` : 'short-path-hint';
-    if (ignored) control.setAttribute('aria-describedby', baseDesc);
-    const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-    const rec = { key: 'short_path', level, label, control, sticky: '', stickyValue: '', message: '', text: '' };
-    const prefix = `${label}, ${level} level: `;
-    syncers.push(() => {
-      control.classList.toggle('ignored', ignored && control.value === 'on');
-      if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
-      const message = rec.sticky;
-      if (message !== rec.message) {
-        const live = document.getElementById('field-live');
-        if (message) live.textContent = prefix + message.replace(/^Error: /, '').replace(`${label} `, '');
-        else if (live.textContent.startsWith(prefix)) live.textContent = '';
-      }
-      rec.message = message;
-      rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
-      err.textContent = message;
-      err.hidden = message === '';
-      if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `${baseDesc} ${err.id}`); }
-      else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', baseDesc); }
-    });
-    if (!control.disabled) planRecs.push(rec);
-    const tag = el('label', { class: 'ctl-label', for: id }, label, el('span', { class: 'vh' }, `, ${level} level`));
-    return [tag, control, err];
-  });
-  tbody.append(el('fieldset', { class: 'ctl' }, ...cells.flat(), effect));
-  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+  switchRow(tbody, { label: 'Short path', path: ['pipeline', 'short_path'], pluginValue,
+    options: level === 'user' ? ['on', 'off'] : ignored ? ['off', 'on'] : ['off'], fixed: ignored ? ['on'] : [],
+    hint: { id: 'short-path-hint', text: SHORT_PATH_HINT }, describedBy: ignored ? effectId : '', readoutId: effectId,
+    id: `short-path-${level}`, refusal: 'short_path',
+    onSync: (control) => control.classList.toggle('ignored', ignored && control.value === 'on') });
 }
-const SECOND_REVIEWER_HINT = "Second reviewer: at high risk, a fresh reviewer that never reads the brief or the builders' notes reviews the code beside the Code Reviewer. It adds one more review per round. Set it for yourself only.";
-const SECOND_REVIEWER_MODEL_HINT = "Second reviewer model: the Claude model the second reviewer runs on. It never runs below the Code Reviewer's floor and never on another provider. Set it for yourself only.";
-const WORKTREES_HINT = "Worktrees: parallel builder tasks each get their own git worktree in a folder beside the repo, merged in plan order. Allow that folder in Claude Code's permissions first. Set it for yourself only.";
+const SECOND_REVIEWER_HINT = "At high risk, a fresh reviewer that never reads the brief or the builders' notes reviews the code beside the Code Reviewer. It adds one more review per round. Set it for yourself only.";
+const SECOND_REVIEWER_MODEL_HINT = "The Claude model the second reviewer runs on. It never runs below the Code Reviewer's floor and never on another provider. Set it for yourself only.";
+const REVIEW_FORMAT_HINT = 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).';
+const WORKTREES_HINT = "Parallel builder tasks each get their own git worktree in a folder beside the repo, merged in plan order. Allow that folder in Claude Code's permissions first. Set it for yourself only.";
 const REFUSED_USER_ONLY = /^(user|project) pipeline[.](second_reviewer_model|second_reviewer|worktrees)(?![a-z_])/;
 const USER_ONLY_REFUSAL = {
   second_reviewer: 'must be off or on.',
@@ -1764,44 +1850,22 @@ const USER_ONLY_ROWS = {
   second_reviewer_model: { label: 'Second reviewer model', slug: 'second-reviewer-model', hint: 'second-reviewer-model-hint', options: reviewerModelOptions },
   worktrees: { label: 'Worktrees', slug: 'worktrees', hint: 'worktrees-hint', options: () => ['off', 'on'] },
 };
-// User-only row: one labelled select at the user level; the Project column is text (not set, locked, why), never a control.
+// User-only row: key caps at the user level; at project level the same keys are shown disabled with a note, never editable.
 function userOnlyRow(tbody, spec, key, pluginValue) {
   const path = ['pipeline', key];
-  const { label } = spec;
-  const id = `${spec.slug}-user`;
-  const effect = el('p', { class: 'readout', id: `${spec.slug}-effect`, 'aria-live': 'polite' });
-  const lockId = `${spec.slug}-lock`;
+  const hint = { id: spec.hint, text: { second_reviewer: SECOND_REVIEWER_HINT, second_reviewer_model: SECOND_REVIEWER_MODEL_HINT, worktrees: WORKTREES_HINT }[key] };
   if (lvl() !== 'user') {
-    tbody.append(el('fieldset', { class: 'ctl', 'data-locked': 'true' }, el('legend', {}, label), el('span', { class: 'held', id: lockId }, 'Locked. Set at the user level only.'), effect));
-    syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+    const seg = segFor(spec.options());
+    seg.radios.forEach((r) => { r.disabled = true; });
+    const fs = el('fieldset', { class: 'ctl', 'aria-describedby': `${spec.hint} ${spec.slug}-lock` },
+      el('legend', {}, spec.label, el('span', { class: 'vh' }, ', project level'), editedTag()),
+      el('p', { class: 'hint', id: spec.hint }, hint.text),
+      el('p', { class: 'note', id: `${spec.slug}-lock` }, 'User level only. A project value is ignored.'), seg);
+    finishCtl(fs, path, pluginValue, String, 'project', { readoutId: `${spec.slug}-effect`, locked: true });
+    tbody.append(fs);
     return;
   }
-  const control = bindLayer(selectFor(spec.options(), null), 'user', path, String);
-  control.id = id;
-  control.options[0].textContent = 'not set';
-  const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-  control.setAttribute('aria-describedby', spec.hint);
-  const rec = { key, level: 'user', label, control, sticky: '', stickyValue: '', message: '', text: '' };
-  const prefix = `${label}, user level: `;
-  syncers.push(() => {
-    if (rec.sticky && control.value !== rec.stickyValue) rec.sticky = '';
-    const message = rec.sticky;
-    if (message !== rec.message) {
-      const live = document.getElementById('field-live');
-      if (message) live.textContent = prefix + message.replace(/^Error: /, '').replace(`${label} `, '');
-      else if (live.textContent.startsWith(prefix)) live.textContent = '';
-    }
-    rec.message = message;
-    rec.text = message ? prefix + message.replace(/^Error: /, '').replace(`${label} `, '') : '';
-    err.textContent = message;
-    err.hidden = message === '';
-    if (message) { control.setAttribute('aria-invalid', 'true'); control.setAttribute('aria-describedby', `${spec.hint} ${err.id}`); }
-    else { control.removeAttribute('aria-invalid'); control.setAttribute('aria-describedby', spec.hint); }
-  });
-  planRecs.push(rec);
-  const tag = el('label', { class: 'ctl-label', for: id }, label, el('span', { class: 'vh' }, ', user level'));
-  tbody.append(el('fieldset', { class: 'ctl' }, tag, control, err, effect));
-  syncers.push(() => showEffect(effect, path, pluginValue, String, getIn(state.resolved, path)));
+  switchRow(tbody, { label: spec.label, path, pluginValue, options: spec.options(), hint, id: `${spec.slug}-user`, readoutId: `${spec.slug}-effect`, refusal: key });
 }
 const REFUSED_PLAN_CHECK = /^(user|project) plan_check\.(policy|runs)\b/;
 function planLink(rec) {
@@ -1825,66 +1889,52 @@ function planLink(rec) {
 const onOff = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
 function renderPipeline(panel) {
   const defaults = state.plugin.pipeline;
-  panel.append(panelHead('Pipeline'));
-  const wrap = el('div', { class: 'rack' });
-  const tbody = wrap;
-  pipelineRow(tbody, 'Fix rounds', ['pipeline', 'fix_rounds'], defaults.fix_rounds,
-    (l) => selectFor([0, 1, 2, 3, 4, 5], l), Number, String);
-  pipelineRow(tbody, 'Dispatch', ['pipeline', 'dispatch'], defaults.dispatch,
-    (l) => selectFor(['parallel', 'sequential'], l), String, String);
-  parallelCapRow(tbody, defaults.parallel_cap);
-  shortPathRow(tbody, defaults.short_path);
-  userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer, 'second_reviewer', defaults.second_reviewer ?? 'off');
-  userOnlyRow(tbody, USER_ONLY_ROWS.second_reviewer_model, 'second_reviewer_model', defaults.second_reviewer_model ?? 'default');
-  userOnlyRow(tbody, USER_ONLY_ROWS.worktrees, 'worktrees', defaults.worktrees ?? 'off');
-  pipelineRow(tbody, 'Review format', ['pipeline', 'review_format'], defaults.review_format,
-    (l) => selectFor(['plain', 'pilot'], l), String, String);
-  contextCapRow(tbody, defaults.context_cap);
-  panel.append(wrap);
-  panel.append(el('p', { class: 'hint' }, 'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).'));
-  panel.append(el('p', { class: 'hint' }, CONTEXT_CAP_HINT));
-  panel.append(el('p', { class: 'hint', id: 'parallel-cap-hint' }, PARALLEL_CAP_HINT));
-  panel.append(el('p', { class: 'hint', id: 'short-path-hint' }, SHORT_PATH_HINT));
-  panel.append(el('p', { class: 'hint', id: 'second-reviewer-hint' }, SECOND_REVIEWER_HINT));
-  panel.append(el('p', { class: 'hint', id: 'second-reviewer-model-hint' }, SECOND_REVIEWER_MODEL_HINT));
-  panel.append(el('p', { class: 'hint', id: 'worktrees-hint' }, WORKTREES_HINT));
+  panel.append(panelHead('Pipeline', 'How a run moves: Fix rounds, dispatch, review and the optional lanes.'));
+  panel.append(sectionHead('Pipeline'));
+  const rack = el('div', { class: 'rack' });
+  switchRow(rack, { label: 'Fix rounds', path: ['pipeline', 'fix_rounds'], pluginValue: defaults.fix_rounds, options: [0, 1, 2, 3, 4, 5], decode: Number });
+  switchRow(rack, { label: 'Dispatch', path: ['pipeline', 'dispatch'], pluginValue: defaults.dispatch, options: ['parallel', 'sequential'] });
+  parallelCapRow(rack, defaults.parallel_cap);
+  shortPathRow(rack, defaults.short_path);
+  userOnlyRow(rack, USER_ONLY_ROWS.second_reviewer, 'second_reviewer', defaults.second_reviewer ?? 'off');
+  userOnlyRow(rack, USER_ONLY_ROWS.second_reviewer_model, 'second_reviewer_model', defaults.second_reviewer_model ?? 'default');
+  userOnlyRow(rack, USER_ONLY_ROWS.worktrees, 'worktrees', defaults.worktrees ?? 'off');
+  switchRow(rack, { label: 'Review format', path: ['pipeline', 'review_format'], pluginValue: defaults.review_format, options: ['plain', 'pilot'],
+    hint: { id: 'review-format-hint', text: REVIEW_FORMAT_HINT } });
+  contextCapRow(rack, defaults.context_cap);
+  panel.append(rack);
   panel.append(sectionHead('Reprompt'));
-  const rp = table();
-  const rpDefaults = state.plugin.reprompt;
-  pipelineRow(rp.tbody, 'Question rounds', ['reprompt', 'question_rounds'], rpDefaults.question_rounds,
-    (l) => selectFor([0, 1, 2, 3], l), Number, String, { describedBy: 'reprompt-hint' });
-  panel.append(rp.wrap);
-  panel.append(el('p', { class: 'hint', id: 'reprompt-hint' }, 'How often /aico:reprompt may come back with questions before it writes the prompt on stated assumptions. 0: it never asks.'));
+  const rp = el('div', { class: 'rack' });
+  switchRow(rp, { label: 'Question rounds', path: ['reprompt', 'question_rounds'], pluginValue: state.plugin.reprompt.question_rounds, options: [0, 1, 2, 3], decode: Number,
+    hint: { id: 'reprompt-hint', text: 'How often /aico:reprompt may come back with questions before it writes the prompt on stated assumptions. 0: it never asks.' } });
+  panel.append(rp);
   panel.append(sectionHead('Plan check'));
-  const pc = table();
+  panel.append(el('p', { class: 'hint', id: 'plan-check-hint', style: 'margin-bottom: 12px' }, 'Plan check lists open choices in the plan at the Plan Gate. Warn: you see the rows and can still approve. Block: the check reports an error on any finding; in this version the Plan Gate still treats it as a warning. Off: no check runs. Verdict runs: how many check-on runs /aico:feedback compares with as many earlier runs.'));
+  const pc = el('div', { class: 'rack' });
   const pcDefaults = state.plugin.plan_check;
-  planCheckRow(pc.tbody, 'policy', 'Policy', pcDefaults.policy, () => selectFor(PLAN_POLICIES, null), String, null);
-  planCheckRow(pc.tbody, 'runs', 'Verdict runs', pcDefaults.runs, () => el('input', { type: 'text', inputMode: 'numeric', placeholder: '—' }), (s) => (/^\d{1,6}$/.test(s.trim()) ? Number(s) : s), runsProblem);
-  panel.append(pc.wrap);
-  panel.append(el('p', { class: 'hint', id: 'plan-check-hint' }, 'Plan check lists open choices in the plan at the Plan Gate. Warn: you see the rows and can still approve. Block: the check reports an error on any finding; in this version the Plan Gate still treats it as a warning. Off: no check runs. Verdict runs: how many check-on runs /aico:feedback compares with as many earlier runs.'));
+  planCheckRow(pc, 'policy', 'Policy', pcDefaults.policy, PLAN_POLICIES, String, null);
+  planCheckRow(pc, 'runs', 'Verdict runs', pcDefaults.runs, 'text', (s) => (/^\d{1,6}$/.test(s.trim()) ? Number(s) : s), runsProblem, 'A whole number from 3 to 50.');
+  panel.append(pc);
   panel.append(sectionHead('Brainstorm'));
-  const bs = table();
+  const bs = el('div', { class: 'rack' });
   const bsDefaults = state.plugin.brainstorm;
-  pipelineRow(bs.tbody, 'Film script', ['brainstorm', 'film_script'], bsDefaults.film_script,
-    (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' }), (s) => s === 'true', onOff);
-  pipelineRow(bs.tbody, 'Debate style', ['brainstorm', 'debate'], bsDefaults.debate,
-    (l) => selectFor(['crossfire', 'full_pass'], l), String, String);
-  panel.append(bs.wrap);
-  panel.append(el('p', { class: 'hint' }, 'Debate rounds: crossfire is one pair answering each other; full_pass adds a pass where every Role answers the others, then the crossfire.'));
+  switchRow(bs, { label: 'Film script', path: ['brainstorm', 'film_script'], pluginValue: bsDefaults.film_script, options: ['true', 'false'], labels: { true: 'on', false: 'off' }, decode: (s) => s === 'true', format: onOff });
+  switchRow(bs, { label: 'Debate style', path: ['brainstorm', 'debate'], pluginValue: bsDefaults.debate, options: ['crossfire', 'full_pass'],
+    hint: { id: 'debate-hint', text: 'Debate rounds: crossfire is one pair answering each other; full_pass adds a pass where every Role answers the others, then the crossfire.' } });
+  panel.append(bs);
   panel.append(sectionHead('Optional lanes'));
-  panel.append(el('p', { class: 'hint' }, 'Turning off Security or Compliance needs your security unlock. A project can always turn a lane back on.'));
-  const lanes = table();
+  panel.append(el('p', { class: 'hint', style: 'margin-bottom: 12px' }, 'Turning off Security or Compliance needs your security unlock. A project can always turn a lane back on.'));
+  const lanes = el('div', { class: 'rack' });
   for (const lane of LANES) {
     const path = ['pipeline', 'lanes', lane];
     if (lane === 'legal') {
-      pipelineRow(lanes.tbody, LANE_LABELS[lane], path, defaults.lanes[lane], (l) => selectFor(['auto', 'on', 'off'], l), String, String);
+      switchRow(lanes, { label: LANE_LABELS[lane], path, pluginValue: defaults.lanes[lane], options: ['auto', 'on', 'off'] });
     } else {
-      const lock = LOCKED_LANES.includes(lane) ? { lock: 'security', lockedValue: 'Off', needsUnlock: (v) => v === false } : {};
-      pipelineRow(lanes.tbody, LANE_LABELS[lane], path, defaults.lanes[lane],
-        (l) => selectFor(['true', 'false'], l, { true: 'on', false: 'off' }), (s) => s === 'true', onOff, lock);
+      const lock = LOCKED_LANES.includes(lane) ? { key: 'security', lockedValue: 'Off', needsUnlock: (v) => v === false } : undefined;
+      switchRow(lanes, { label: LANE_LABELS[lane], path, pluginValue: defaults.lanes[lane], options: ['true', 'false'], labels: { true: 'on', false: 'off' }, decode: (s) => s === 'true', format: onOff, lock });
     }
   }
-  panel.append(lanes.wrap);
+  panel.append(lanes);
 }
 
 // ---------- Gates tab ----------
