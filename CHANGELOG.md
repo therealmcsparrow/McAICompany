@@ -9,6 +9,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 ### Added
 - **ADHD mode.** `/aico:i-have-adhd [help]` makes replies start with the next action, number the steps, say `step n of m` and end with one next action. CEO-only. It lasts for the session, ends on "stop adhd mode" or "normal mode", and is never saved. Gate summaries, forms and Handoffs stay unchanged. Adapted from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd) (MIT, notice in `skills/i-have-adhd/LICENSE`). Contract: `company-type` v2.2.
 
+### Removed
+- **Blast Radius is removed.** Aico no longer asks, warns or refuses on a `git commit` that touches Core, Contract or security paths. This removes a security guard. The guard now runs in review: aico:review, aico:contracts and aico:security-check make an unplanned Core, Contract or security-relevant change Blocking. If you want a commit guard, add a git hook in your repository. A stored `mods.blast_radius` key is ignored on read with one warning (`mods.blast_radius: ignored, removed in aico 0.37.0`) and refused on save; the first save from the settings page removes it. Aico now has three mods: Savvy, Cache Tax and Reflect. Contracts: `aico-mods` v2.0, `aico-settings` v2.0 (both breaking). ADR 0068.
+
 ### Changed
 - **Settings page matches the control console look.** `scripts/settings-page.html` now uses the same visual style as the control console.
 
