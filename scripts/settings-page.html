@@ -597,6 +597,8 @@ function diffCount(a, b) {
   return n;
 }
 const projectOn = () => state.hasProject;
+// The editing level chosen in the header switch; every tab builds controls for this level only.
+const lvl = () => document.querySelector('input[name="lvl"]:checked').value;
 const profileOn = () => state.resolved.profile.hasProject;
 const userUnlocked = (key) => (draft.user.unlocked ?? []).includes(key);
 const UNLOCK_NAMES = { ship: 'Ship', installs: 'Installs', security: 'Security' };
@@ -892,19 +894,76 @@ const NAME_HINTS = {
   'project-off': 'Needs a .company/ folder.'
 };
 const NAMES_NOTICE = "Use a pseudonym, never a real person's name. Names are shown only to you; Roles get their Role id, not your name, in prompts.";
-function roleCell(level, role) {
-  const name = withProblem(bindLayer(el('input', { type: 'text', placeholder: '—' }), level, ['roles', role, 'name']), 'Name', nameProblem);
-  const model = bindLayer(selectFor(MODELS, null), level, ['roles', role, 'model']);
-  const effort = bindLayer(selectFor(EFFORTS, null), level, ['roles', role, 'effort']);
-  return el('td', {}, el('div', { class: 'cell' },
-    roleField(level, role, 'name', 'Name', name, el('p', { class: 'hint' }, NAME_HINTS[projectOn() ? level : `${level}-off`])),
-    roleField(level, role, 'model', 'Model', model, protectedFloor(role) ? el('p', { class: 'hint' }, `Protected: runs at ${protectedFloor(role)} or higher at every risk tier.`) : null),
-    roleField(level, role, 'effort', 'Effort', effort)));
+const EFFORT_TICKS = ['—', 'low', 'med', 'high', 'xhi', 'max'];
+const sectionHead = (text) => el('div', { class: 'section-h' }, el('h3', {}, text));
+// One channel strip: name, model key-caps, vertical effort fader and what is in effect, for the editing level.
+function roleStrip(role) {
+  const level = lvl();
+  const base = state.plugin.roles[role];
+  const floor = protectedFloor(role);
+  const hid = `strip-${role}`;
+  const strip = el('article', { class: 'strip', 'aria-labelledby': hid });
+  const top = el('div', { class: 'strip-top' }, el('h4', { id: hid }, role), el('span', { class: 'rid' }, base.name));
+  if (floor) top.append(el('span', { class: 'floor' }, el('i', { class: 'led', 'data-on': 'lock', 'aria-hidden': 'true' }), `Protected · floor ${floor}`));
+  strip.append(top);
+  const name = withProblem(bindLayer(el('input', { type: 'text', placeholder: '—', autocomplete: 'off' }), level, ['roles', role, 'name']), 'Name', nameProblem);
+  strip.append(roleField(level, role, 'name', 'Name', name, el('p', { class: 'hint vh' }, NAME_HINTS[projectOn() ? level : `${level}-off`])));
+  // model key-caps: a radio group, "—" is not set
+  const mPath = ['roles', role, 'model'];
+  const mBase = `rf-${role}-${level}-model`;
+  const bank = el('fieldset', { class: 'mbank' }, el('legend', {}, 'Model', el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)));
+  const radios = ['', ...MODELS].map((m, i) => {
+    const id = i === 0 ? mBase : `${mBase}-${i}`;
+    const input = el('input', { type: 'radio', name: mBase, id, value: m });
+    const below = floor && (MODEL_RANK[m] ?? 0) > 0 && (MODEL_RANK[m] ?? 0) < (MODEL_RANK[floor] ?? 0);
+    input.addEventListener('change', () => { setIn(draft[level], mPath, m === '' ? undefined : m); refresh(); });
+    bank.append(input, el('label', { for: id, class: below ? 'below' : '' }, el('i', { class: 'led', 'aria-hidden': 'true' }), m === '' ? '—' : m,
+      m === '' ? el('span', { class: 'vh' }, ' not set') : null, below ? el('span', { class: 'vh' }, ', below floor, not applied') : null));
+    return input;
+  });
+  // effort fader: 0 is not set
+  const ePath = ['roles', role, 'effort'];
+  const eId = `rf-${role}-${level}-effort`;
+  const range = el('input', { type: 'range', id: eId, min: '0', max: '5', step: '1', 'aria-orientation': 'vertical' });
+  const ticks = el('div', { class: 'ticks', 'aria-hidden': 'true' }, EFFORT_TICKS.map((t) => el('span', {}, t)));
+  range.addEventListener('input', () => { const v = Number(range.value); setIn(draft[level], ePath, v === 0 ? undefined : EFFORTS[v - 1]); refresh(); });
+  const disabled = level === 'project' && !projectOn();
+  for (const r of [...radios, range]) r.disabled = disabled;
+  strip.append(el('div', { class: 'strip-mid' }, bank,
+    el('div', { class: 'fader' }, el('label', { for: eId }, 'Effort', el('span', { class: 'vh' }, `, ${roleLabel(role)}, ${level} level`)), range, ticks)));
+  const readout = el('p', { class: 'readout' });
+  strip.append(readout);
+  syncers.push(() => {
+    const m = getIn(draft[level], mPath) ?? '';
+    for (const r of radios) r.checked = r.value === m;
+    const ef = getIn(draft[level], ePath);
+    const idx = ef ? EFFORTS.indexOf(ef) + 1 : 0;
+    if (range.value !== String(idx)) range.value = String(idx);
+    range.classList.toggle('unset', idx === 0);
+    range.setAttribute('aria-valuetext', idx === 0 ? 'not set' : ef);
+    [...ticks.children].forEach((t, i) => { t.dataset.on = String(i === idx && idx !== 0); });
+    readout.replaceChildren();
+    const resolved = state.resolved.roles[role] ?? {};
+    const parts = ['name', 'model', 'effort'].map((f) => {
+      const path = ['roles', role, f];
+      if (!dirty(path) && resolved[f] !== undefined) return [resolved[f], resolved.source?.[f] ?? 'plugin'];
+      return pickSource(path, base[f]);
+    });
+    // A protected Role never runs below its floor; the server applies the same rule on save.
+    const picked = parts[1][0];
+    if (floor && typeof picked === 'string' && picked !== 'inherit' && (MODEL_RANK[picked] ?? 0) < (MODEL_RANK[floor] ?? 0)) parts[1] = [floor, 'floor'];
+    readout.append(el('span', { class: 'k' }, 'In effect'));
+    for (const [v, src] of parts) readout.append(el('span', { class: 'v' }, v ?? '—'), el('span', { class: 's', 'data-src': src }, src));
+    // The context cap is fixed; every Role runs at the same value.
+    readout.append(el('span', { class: 'v' }, `cap ${resolved.context_cap ?? state.plugin.pipeline.context_cap}`));
+    strip.classList.toggle('dirty', ['name', 'model', 'effort'].some((f) => getIn(draft[level], ['roles', role, f]) !== getIn(state[level], ['roles', role, f])));
+  });
+  return strip;
 }
 function renderRoles(panel) {
+  const level = lvl();
   const groups = roleGroups();
   const dept = el('select', {}, el('option', { value: '*' }, 'All Roles'), groups.map(([d]) => el('option', { value: d }, d)));
-  const level = el('select', {}, el('option', { value: 'user' }, 'User'), el('option', { value: 'project', disabled: !projectOn() }, 'Project'));
   const keep = (opts) => el('select', {}, el('option', { value: 'keep' }, 'keep'), el('option', { value: 'clear' }, '— clear'), opts.map((o) => el('option', { value: o }, o)));
   const model = keep(MODELS);
   const effort = keep(EFFORTS);
@@ -914,48 +973,19 @@ function renderRoles(panel) {
     for (const role of roles) {
       for (const [field, sel] of [['model', model], ['effort', effort]]) {
         if (sel.value === 'keep') continue;
-        setIn(draft[level.value], ['roles', role, field], sel.value === 'clear' ? undefined : sel.value);
+        setIn(draft[level], ['roles', role, field], sel.value === 'clear' ? undefined : sel.value);
       }
     }
     refresh();
   });
-  panel.append(el('div', { class: 'bulk' },
-    el('label', {}, 'Apply to', dept), el('label', {}, 'at', level), el('label', {}, 'model', model), el('label', {}, 'effort', effort), apply));
+  panel.append(el('div', { class: 'panel-head' }, el('h2', {}, 'Roles'),
+    el('p', { class: 'hint' }, `Each strip holds name, model and effort for the ${level} level. Project wins over User.`)));
+  panel.append(el('div', { class: 'bulk' }, el('label', {}, 'Apply to', dept), el('label', {}, 'model', model), el('label', {}, 'effort', effort), apply));
   panel.append(el('div', { class: 'notice info', id: 'roles-names-notice' }, NAMES_NOTICE));
-  panel.append(el('p', { class: 'hint' }, 'Each cell holds name, model and effort.'));
-
-  const { wrap, tbody } = table(['Role', 'Plugin', 'User', 'Project', 'In effect'], 'roles');
   for (const [d, roles] of groups) {
-    tbody.append(el('tr', { class: 'dept' }, el('th', { colspan: 5, scope: 'colgroup' }, d)));
-    for (const role of roles) {
-      const base = state.plugin.roles[role];
-      const effect = el('td', { class: 'effect' });
-      tbody.append(el('tr', {},
-        el('th', { scope: 'row' }, role),
-        el('td', { class: 'plugin' }, `${base.name} · ${base.model ?? '—'} · ${base.effort ?? '—'}`),
-        roleCell('user', role), roleCell('project', role), effect));
-      syncers.push(() => {
-        effect.replaceChildren();
-        const resolved = state.resolved.roles[role] ?? {};
-        const parts = ['name', 'model', 'effort'].map((f) => {
-          const path = ['roles', role, f];
-          if (!dirty(path) && resolved[f] !== undefined) return [resolved[f], resolved.source?.[f] ?? 'plugin'];
-          return pickSource(path, base[f]);
-        });
-        // A protected Role never runs below its floor; the server applies the same rule on save.
-        const floor = protectedFloor(role);
-        const [picked] = parts[1];
-        if (floor && typeof picked === 'string' && picked !== 'inherit' && (MODEL_RANK[picked] ?? 0) < (MODEL_RANK[floor] ?? 0)) parts[1] = [floor, 'floor'];
-        // The context cap is fixed; every Role runs at the same value.
-        parts.push([`cap ${resolved.context_cap ?? state.plugin.pipeline.context_cap}`, 'plugin']);
-        effect.append(parts.map(([v]) => v ?? '—').join(' · '));
-        const sources = [...new Set(parts.map(([, s]) => s))];
-        const lit = ['floor', 'locked', 'project', 'user'].find((s) => sources.includes(s)) ?? 'plugin';
-        effect.append(sourceTag(lit, `(${sources.join(', ')})`));
-      });
-    }
+    const strips = el('div', { class: 'strips' }, roles.map(roleStrip));
+    panel.append(el('section', { class: 'dept', 'aria-label': d }, sectionHead(d), strips));
   }
-  panel.append(wrap);
 }
 
 // ---------- Personality ----------
@@ -1143,20 +1173,6 @@ function levelFieldset(role, level, rule, ignoredPaths) {
   return box;
 }
 
-function roleCard(role, rule, ignoredPaths) {
-  const details = el('details', { class: 'pcard' });
-  details.open = openRoles.has(role);
-  details.addEventListener('toggle', () => { if (details.open) openRoles.add(role); else openRoles.delete(role); });
-  const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
-  const reg = { role, details, sum: el('span', { class: 'psum' }), eff: el('dl'), recs: [], reset: {},
-    pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
-  pRoles[role] = reg;
-  details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
-  const grid = el('div', { class: 'pgrid' }, ['user', 'project'].map((level) => levelFieldset(role, level, rule, ignoredPaths)));
-  details.append(el('div', { class: 'pbody' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
-  return details;
-}
-
 const typedValue = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
 // project, else user, else the plugin default; a typed value that fails its rule does not count yet.
 function personalityEffective(role, key) {
@@ -1218,6 +1234,7 @@ function syncPersonality() {
     reg.pills.refused.hidden = !reg.recs.some((rec) => rec.refused);
     reg.pills.ign.hidden = !(reg.recs.some((rec) => ignoredUntouched(rec)) || reg.objectIgnored);
     for (const level of ['user', 'project']) {
+      if (!reg.reset[level]) continue;
       const here = reg.recs.filter((rec) => rec.level === level);
       reg.reset[level].disabled = (level === 'project' && !projectOn())
         || !here.some((rec) => draftAt(rec) !== undefined || ignoredUntouched(rec));
@@ -1239,18 +1256,35 @@ function renderPersonality(panel) {
   const entries = Array.isArray(data.ignored) ? data.ignored.filter(isIgnoredEntry) : [];
   const ignoredPaths = new Set(entries.map((e) => `${e.level}|${e.path}`));
   panel.append(el('p', { class: 'hint' }, PERSONALITY_HINT));
+  // One Role card: summary line (who, gist, pills) and a body with the editing level's fields.
+  function roleCard(role, rule, ignoredPaths) {
+    const details = el('details', { class: 'pcard' });
+    details.open = openRoles.has(role);
+    details.addEventListener('toggle', () => { if (details.open) openRoles.add(role); else openRoles.delete(role); });
+    const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
+    const reg = { role, details, sum: el('span', { class: 'gist' }), eff: el('dl'), recs: [], reset: {},
+      pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
+    pRoles[role] = reg;
+    details.append(el('summary', {}, el('span', { class: 'who' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
+    const grid = el('div', { class: 'pgrid' }, [levelFieldset(role, lvl(), rule, ignoredPaths)]);
+    details.append(el('div', { class: 'pbody body' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
+    return details;
+  }
   const input = el('input', { type: 'text', id: 'pfilter', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
   input.value = filterText;
   input.addEventListener('input', () => { filterText = input.value; applyFilter(); });
   filterUI = { input, count: el('p', { id: 'pcount', role: 'status' }), labels: [] };
-  panel.append(el('div', { class: 'pfilter' }, el('label', { for: 'pfilter' }, 'Filter Roles'), input,
-    el('p', { class: 'hint', id: 'pfilter-hint' }, 'Name, Role or department')), filterUI.count);
+  filterUI.count.classList.add('count');
+  panel.append(el('div', { class: 'toolbar' }, el('div', { class: 'field' }, el('label', { for: 'pfilter' }, 'Filter Roles'), input,
+    el('p', { class: 'hint', id: 'pfilter-hint' }, 'Name, Role or department')), filterUI.count));
+  const list = el('div', { class: 'pers' });
+  panel.append(list);
   for (const [dept, roles] of roleGroups()) {
     const label = el('h3', { class: 'dept-label' }, dept);
-    panel.append(label);
+    list.append(label);
     const regs = [];
     for (const role of roles) {
-      panel.append(roleCard(role, rule, ignoredPaths));
+      list.append(roleCard(role, rule, ignoredPaths));
       pRoles[role].objectIgnored = entries.some((e) => e.path === `roles.${role}.personality`);
       pRoles[role].dept = dept;
       regs.push(pRoles[role]);
@@ -1958,85 +1992,6 @@ function toggleSkill(rec, row) {
   refresh();
 }
 
-function skillRow(rec, e) {
-  const id = `sk-${rec.role}-${rec.level}-${e.name}`;
-  const cb = el('input', { type: 'checkbox', id, disabled: e.selectable !== true });
-  const vetted = typeof e.vetted_text === 'string' && e.vetted_text !== '' ? e.vetted_text
-    : typeof e.vetted === 'string' && e.vetted !== '' ? `vetted ${e.vetted}` : 'not vetted';
-  const status = `${typeof e.status === 'string' ? e.status : 'not found'}${typeof e.place === 'string' && e.place !== '' ? `, ${e.place}` : ''}`;
-  const warnish = e.status === 'folder not recognized' || e.status === 'not found';
-  const row = { e, id, cb };
-  const info = [
-    el('span', { class: 'ro', id: `${id}_d1` }, `${e.category}, ${sourceText(e)}`),
-    el('span', { class: 'ro', id: `${id}_d2` }, 'Status: ', el('span', { class: warnish ? 'pill ign' : 'pill' }, status)),
-    el('span', { class: 'ro', id: `${id}_d3` }, `${typeof e.license === 'string' ? e.license : 'no license on record'}, ${vetted}`)
-  ];
-  if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}_d4` }, SKILL_NOT_SELECTABLE));
-  cb.addEventListener('change', () => toggleSkill(rec, row));
-  row.li = el('li', { class: 'sk-row' }, cb, el('div', { class: 'sk-text' }, el('label', { for: id }, e.name), info));
-  return row;
-}
-
-function skillLevel(role, level, entries, cats) {
-  const key = `${role}|${level}`;
-  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
-  box.dataset.level = level;
-  if (level === 'project' && !projectOn()) {
-    box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'));
-    return box;
-  }
-  if (level === 'user' && state.resolved?.settings_folder_moved === true) {
-    box.append(el('p', { class: 'lockwhy locked' }, SKILL_MOVED));
-    return box;
-  }
-  const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
-    count: el('p', { class: 'hint', id: `sk-${key.replace('|', '-')}_count`, 'aria-live': 'polite' }),
-    err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}_err`, hidden: true }) };
-  skRecs.push(rec);
-  skRoles[role].recs.push(rec);
-  const stale = staleSkills(level, role);
-  const protectedHere = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
-  if (protectedHere) {
-    box.append(el('p', { class: 'lockwhy locked' }, SKILL_PROTECTED));
-  } else if (entries.length === 0) {
-    box.append(el('p', { class: 'hint' }, SKILL_NONE_HINT));
-  } else {
-    if (cats.length > 1) {
-      const sel = el('select', { id: `sk-${role}-${level}_cat` }, el('option', { value: '' }, 'All categories'), cats.map((c) => el('option', { value: c }, c)));
-      sel.value = skillCat[key] ?? '';
-      sel.addEventListener('change', () => { skillCat[key] = sel.value; refresh(); });
-      box.append(el('div', { class: 'pfield' }, el('label', { for: sel.id }, 'Category'), sel));
-    } else {
-      box.append(el('p', { class: 'hint' }, `Category: ${cats[0]}`));
-    }
-    box.append(rec.count);
-    rec.rows = entries.map((e) => skillRow(rec, e));
-    box.append(el('ul', { class: 'sk-list' }, rec.rows.map((r) => r.li)));
-    if (entries.some((e) => e.status === 'not found')) box.append(el('p', { class: 'hint' }, SKILL_NOT_FOUND));
-    box.append(rec.err);
-  }
-  if (stale.length) {
-    box.append(el('p', { class: 'lockwhy locked' }, el('span', { class: 'pill ign' }, 'ignored'), ' ', SKILL_IGNORED),
-      el('ul', { class: 'hint' }, stale.map((s) => el('li', {}, s))));
-  }
-  rec.stale = stale.length;
-  return box;
-}
-
-function skillCard(role, entries, cats) {
-  const details = el('details', { class: 'pcard' });
-  details.open = openSkillRoles.has(role);
-  details.addEventListener('toggle', () => { if (details.open) openSkillRoles.add(role); else openSkillRoles.delete(role); });
-  const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
-  const reg = { role, details, entries, sum: el('span', { class: 'psum' }), eff: el('dl'), recs: [],
-    pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
-  skRoles[role] = reg;
-  details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
-  const grid = el('div', { class: 'pgrid' }, ['user', 'project'].map((level) => skillLevel(role, level, entries, cats)));
-  details.append(el('div', { class: 'pbody' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
-  return details;
-}
-
 function syncSkills() {
   for (const reg of Object.values(skRoles)) {
     const dated = (level, name) => {
@@ -2104,6 +2059,86 @@ function renderSkills(panel) {
   }
   if (errors.length) panel.append(el('div', { class: 'notice err' }, el('strong', {}, 'Skill list problems'), el('ul', {}, errors.map((s) => el('li', {}, s)))));
   if (state.resolved?.settings_folder_moved === true) panel.append(el('p', { class: 'notice warn' }, SKILL_MOVED));
+  // A Role's row on the patch bay: one jack per skill, for the editing level.
+  function skillRow(rec, e) {
+    const id = `sk-${rec.role}-${rec.level}-${e.name}`;
+    const cb = el('input', { type: 'checkbox', id, disabled: e.selectable !== true });
+    const vetted = typeof e.vetted_text === 'string' && e.vetted_text !== '' ? e.vetted_text
+      : typeof e.vetted === 'string' && e.vetted !== '' ? `vetted ${e.vetted}` : 'not vetted';
+    const status = `${typeof e.status === 'string' ? e.status : 'not found'}${typeof e.place === 'string' && e.place !== '' ? `, ${e.place}` : ''}`;
+    const warnish = e.status === 'folder not recognized' || e.status === 'not found';
+    const row = { e, id, cb };
+    const info = [
+      el('span', { class: 'ro', id: `${id}_d1` }, `${e.category}, ${sourceText(e)}`),
+      el('span', { class: 'ro', id: `${id}_d2` }, 'Status: ', el('span', { class: warnish ? 'pill ign' : 'pill' }, status)),
+      el('span', { class: 'ro', id: `${id}_d3` }, `${typeof e.license === 'string' ? e.license : 'no license on record'}, ${vetted}`)
+    ];
+    if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}_d4` }, SKILL_NOT_SELECTABLE));
+    cb.addEventListener('change', () => toggleSkill(rec, row));
+    const meta = el('span', { class: warnish ? 'meta bad' : 'meta' }, `${e.category} · ${status}`);
+    row.li = el('div', { class: 'jack' }, cb, el('label', { for: id }, el('i', { class: 'led', 'aria-hidden': 'true' }), e.name, meta), el('div', { class: 'jack-info' }, info));
+    return row;
+  }
+
+  function skillLevel(role, level, entries, cats) {
+    const key = `${role}|${level}`;
+    const box = el('fieldset', { class: 'bay-row' }, el('legend', {}, roleLabel(role), el('small', {}, `${role} · ${levelWord(level)} level`)));
+    box.dataset.level = level;
+    if (level === 'project' && !projectOn()) {
+      box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder.'));
+      return box;
+    }
+    if (level === 'user' && state.resolved?.settings_folder_moved === true) {
+      box.append(el('p', { class: 'lockwhy locked' }, SKILL_MOVED));
+      return box;
+    }
+    const rec = { role, level, key, rows: [], message: '', refused: false, refusedRow: null,
+      count: el('p', { class: 'hint', id: `sk-${key.replace('|', '-')}_count`, 'aria-live': 'polite' }),
+      err: el('p', { class: 'perr', id: `sk-${key.replace('|', '-')}_err`, hidden: true }) };
+    skRecs.push(rec);
+    skRoles[role].recs.push(rec);
+    const stale = staleSkills(level, role);
+    const protectedHere = level === 'project' && state.resolved?.roles?.[role]?.protected === true;
+    if (protectedHere) {
+      box.append(el('p', { class: 'lockwhy locked' }, SKILL_PROTECTED));
+    } else if (entries.length === 0) {
+      box.append(el('p', { class: 'hint' }, SKILL_NONE_HINT));
+    } else {
+      if (cats.length > 1) {
+        const sel = el('select', { id: `sk-${role}-${level}_cat` }, el('option', { value: '' }, 'All categories'), cats.map((c) => el('option', { value: c }, c)));
+        sel.value = skillCat[key] ?? '';
+        sel.addEventListener('change', () => { skillCat[key] = sel.value; refresh(); });
+        box.append(el('div', { class: 'pfield' }, el('label', { for: sel.id }, 'Category'), sel));
+      } else {
+        box.append(el('p', { class: 'hint' }, `Category: ${cats[0]}`));
+      }
+      box.append(rec.count);
+      rec.rows = entries.map((e) => skillRow(rec, e));
+      box.append(el('div', { class: 'jacks' }, rec.rows.map((r) => r.li)));
+      if (entries.some((e) => e.status === 'not found')) box.append(el('p', { class: 'hint' }, SKILL_NOT_FOUND));
+      box.append(rec.err);
+    }
+    if (stale.length) {
+      box.append(el('p', { class: 'lockwhy locked' }, el('span', { class: 'pill ign' }, 'ignored'), ' ', SKILL_IGNORED),
+        el('ul', { class: 'hint' }, stale.map((s) => el('li', {}, s))));
+    }
+    rec.stale = stale.length;
+    return box;
+  }
+
+  function skillCard(role, entries, cats) {
+    const details = el('details', { class: 'pcard' });
+    details.open = openSkillRoles.has(role);
+    details.addEventListener('toggle', () => { if (details.open) openSkillRoles.add(role); else openSkillRoles.delete(role); });
+    const pill = (text, cls) => el('span', { class: `pill ${cls}`, hidden: true }, text);
+    const reg = { role, details, entries, sum: el('span', { class: 'psum' }), eff: el('dl'), recs: [],
+      pills: { changed: pill('changed', 'changed'), refused: pill('refused', 'refused'), ign: pill('ignored value', 'ign') } };
+    skRoles[role] = reg;
+    details.append(el('summary', {}, el('span', { class: 'pname' }, role), reg.sum, reg.pills.changed, reg.pills.refused, reg.pills.ign));
+    const grid = el('div', { class: 'pgrid' }, [skillLevel(role, lvl(), entries, cats)]);
+    details.append(el('div', { class: 'pbody info' }, grid, el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
+    return details;
+  }
   const entries = skillEntries();
   const hasOwn = entries.some((e) => e.layer === 'user');
   panel.append(el('p', { class: 'notice info', id: 'skills-info' }, SKILL_INFO, hasOwn ? '' : ` ${SKILL_ADD_HINT}`));
@@ -2111,16 +2146,19 @@ function renderSkills(panel) {
   input.value = skFilter;
   input.addEventListener('input', () => { skFilter = input.value; applySkillFilter(); });
   skFilterUI = { input, count: el('p', { id: 'skcount', role: 'status' }), labels: [] };
-  panel.append(el('div', { class: 'pfilter' }, el('label', { for: 'skfilter' }, 'Filter Roles'), input,
-    el('p', { class: 'hint', id: 'skfilter-hint' }, 'Name or department')), skFilterUI.count);
+  skFilterUI.count.classList.add('count');
+  panel.append(el('div', { class: 'toolbar' }, el('div', { class: 'field' }, el('label', { for: 'skfilter' }, 'Filter Roles'), input,
+    el('p', { class: 'hint', id: 'skfilter-hint' }, 'Name or department')), skFilterUI.count));
+  const bay = el('div', { class: 'bay' });
+  panel.append(bay);
   for (const [dept, roles] of roleGroups()) {
     const label = el('h3', { class: 'dept-label' }, dept);
-    panel.append(label);
+    bay.append(label);
     const regs = [];
     for (const role of roles) {
       const mine = entries.filter((e) => e.roles.includes(role));
       const cats = [...new Set(mine.map((e) => String(e.category)))];
-      panel.append(skillCard(role, mine, cats));
+      bay.append(skillCard(role, mine, cats));
       skRoles[role].dept = dept;
       regs.push(skRoles[role]);
     }
@@ -2156,16 +2194,67 @@ function render() {
     fn(panel);
     labelCells(panel);
   }
+  const project = document.getElementById('lvl-project');
+  project.disabled = !projectOn();
+  if (!projectOn() && project.checked) document.getElementById('lvl-user').checked = true;
+  document.body.dataset.level = lvl();
   document.getElementById('clear-project').disabled = !projectOn();
   refresh();
+}
+const TAB_LABELS = ['roles', 'skills', 'personality', 'language', 'pipeline', 'gates', 'scan', 'mods'];
+// Does this tab hold an unsaved change? Compares each tab's slice of the draft with what was loaded.
+function tabChanges(name) {
+  const slice = (layer) => {
+    if (name === 'roles') return Object.fromEntries(Object.entries(layer.roles ?? {}).map(([r, e]) => [r, { name: e.name, model: e.model, effort: e.effort }]));
+    if (name === 'skills') return Object.fromEntries(Object.entries(layer.roles ?? {}).map(([r, e]) => [r, e.skills]));
+    if (name === 'personality') return Object.fromEntries(Object.entries(layer.roles ?? {}).map(([r, e]) => [r, e.personality]));
+    if (name === 'pipeline') return [layer.pipeline, layer.reprompt, layer.plan_check];
+    if (name === 'gates') return [layer.gates, layer.unlocked];
+    if (name === 'scan') return layer.skillspector;
+    if (name === 'mods') return layer.mods;
+    return undefined;
+  };
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  if (name === 'language') return Object.keys(changedProfile()).length + Object.keys(changedLanguage()).length;
+  return ['user', 'project'].filter((l) => !same(slice(outgoing(l)), slice(skillBase[l] ?? state[l]))).length;
+}
+// Counters in the status bar: what the server warned about, ignored, held by a lock, and unlocked at user level.
+function renderLamps() {
+  const warnings = state.resolved.warnings ?? [];
+  const personal = (Array.isArray(state.personalities?.ignored) ? state.personalities.ignored : []).filter(isIgnoredEntry).map((e) => `${e.level} ${e.path}: ${e.reason}`);
+  const ignored = [...state.resolved.ignored, ...personal.filter((l) => !state.resolved.ignored.includes(l))];
+  const held = [];
+  for (const g of LOCKED_GATES) {
+    const e = effective(['gates', g], state.plugin.gates?.[g]);
+    if (e.held) held.push(`${GATE_LABELS[g]}: ${e.held}`);
+  }
+  for (const l of LOCKED_LANES) {
+    const e = effective(['pipeline', 'lanes', l], state.plugin.pipeline?.lanes?.[l]);
+    if (e.held) held.push(`${LANE_LABELS[l]}: ${e.held}`);
+  }
+  const unlocks = (draft.user.unlocked ?? []).map((k) => UNLOCK_NAMES[k] ?? k);
+  const items = [['Warnings', warnings, 'user'], ['Ignored', ignored, 'user'], ['Held by lock', held, 'lock'], ['Unlocks', unlocks, 'lock']];
+  const box = document.getElementById('lamps');
+  box.replaceChildren(...items.map(([label, list, kind]) => el('span', { class: 'lamp', 'data-lit': list.length ? (kind === 'lock' ? 'lock' : 'warn') : 'off' },
+    el('i', { class: 'led', 'data-on': list.length ? kind : 'off', 'aria-hidden': 'true' }), label, el('b', {}, String(list.length)))));
+  const detail = document.getElementById('annun-list');
+  detail.replaceChildren(...items.filter(([, list]) => list.length).map(([label, list]) => el('div', { class: 'notice warn' }, el('strong', {}, label), el('ul', {}, list.map((w) => el('li', {}, w))))));
 }
 function refresh() {
   for (const s of syncers) s();
   const n = unsavedCount();
   const count = document.getElementById('count');
   count.textContent = `${n} unsaved ${n === 1 ? 'change' : 'changes'}`;
+  count.dataset.n = String(n);
   count.classList.toggle('dirty', n > 0);
   document.getElementById('save').setAttribute('aria-disabled', n === 0 ? 'true' : 'false');
+  for (const name of TAB_LABELS) {
+    const c = tabChanges(name);
+    const lamp = document.getElementById(`dirty-${name}`);
+    lamp.textContent = c ? `${c} edited` : '';
+    lamp.dataset.on = c ? 'true' : 'false';
+  }
+  renderLamps();
 }
 function status(kind, title, lines = []) {
   const box = document.getElementById('status');
@@ -2329,6 +2418,7 @@ const footerEl = document.querySelector('footer');
 const syncFooterHeight = () => document.documentElement.style.setProperty('--footer-h', `${footerEl.hidden ? 0 : Math.ceil(footerEl.getBoundingClientRect().height)}px`);
 syncFooterHeight();
 if (typeof ResizeObserver === 'function') new ResizeObserver(syncFooterHeight).observe(footerEl);
+for (const radio of document.querySelectorAll('input[name="lvl"]')) radio.addEventListener('change', () => { if (draft) render(); });
 document.getElementById('save').addEventListener('click', save);
 document.getElementById('done').addEventListener('click', done);
 document.getElementById('clear-user').addEventListener('click', () => clearLevel('user'));
