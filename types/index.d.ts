@@ -1,13 +1,11 @@
 // The `$.state` contract of the aico mods (`aico-mods` v1). Every value is kept
 // under shape tag `v1`; change the tag when a value's fields change.
-export type AskWarn = 'ask' | 'warn'
 export type Tier = 'low' | 'medium' | 'high' | 'unknown'
 
 export type ModsSettings = {
   savvy: { enabled: boolean; pane: 'auto' | 'command' }
   cache_tax: { enabled: boolean; pane: 'auto' | 'command' }
   reflect: { enabled: boolean; step_check: boolean; retrospective: boolean; mode: 'deterministic' | 'model' }
-  blast_radius: { enabled: boolean; core: AskWarn; contract: AskWarn; security: AskWarn }
 }
 
 /** `settings.mjs get`, mods block and Role names. `known: false` means the script failed and the defaults stand. */
@@ -59,8 +57,6 @@ export type CacheClockState = { lastRequestMs: number | null; lifetimeMs: number
 
 export type ReflectState = { pending: { role: string; text: string }[] }
 
-export type BlastState = { warn: { category: 'core' | 'contract' | 'security'; count: number; untilMs: number } | null }
-
 export type CtxState = { lead: number | null; agents: { id: string; ctx: number | null }[] }
 
 declare module 'claude-code' {
@@ -72,7 +68,6 @@ declare module 'claude-code' {
       cost: Shaped<CostState>
       cacheClock: Shaped<CacheClockState>
       reflect: Shaped<ReflectState>
-      blast: Shaped<BlastState>
       ctx: Shaped<CtxState>
     }
   }

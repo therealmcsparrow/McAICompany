@@ -18,8 +18,7 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2
 export const MODS_DEFAULTS = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  blast_radius: { enabled: true, core: 'ask', contract: 'warn', security: 'ask' }
+  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
 };
 
 export function trimEol(text) {
@@ -166,7 +165,6 @@ export function parseOutputLine(line) {
   return m !== null && isRunSlug(m[1]) ? { slug: m[1], step: m[2], role: m[3] } : null;
 }
 const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-const askWarn = oneOf(['ask', 'warn']);
 const paneMode = oneOf(['auto', 'command']);
 const stamp = pattern(STAMP);
 const tier = oneOf(['low', 'medium', 'high', 'unknown']);
@@ -177,8 +175,7 @@ export const guardSettings = obj({
   mods: obj({
     savvy: obj({ enabled: bool, pane: paneMode }),
     cache_tax: obj({ enabled: bool, pane: paneMode }),
-    reflect: obj({ enabled: bool, step_check: bool, retrospective: bool, mode: oneOf(['deterministic', 'model']) }),
-    blast_radius: obj({ enabled: bool, core: askWarn, contract: askWarn, security: askWarn })
+    reflect: obj({ enabled: bool, step_check: bool, retrospective: bool, mode: oneOf(['deterministic', 'model']) })
   })
 });
 

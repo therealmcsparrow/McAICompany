@@ -3,7 +3,6 @@ const NAMES = [
   ['savvy', 'Savvy'],
   ['cache_tax', 'Cache Tax'],
   ['reflect', 'Reflect'],
-  ['blast_radius', 'Blast Radius'],
 ];
 const SEMVER = /^\d+\.\d+\.\d+$/;
 
