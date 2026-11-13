@@ -1517,13 +1517,25 @@ function renderLanguage(panel) {
   const rack = el('div', { class: 'rack' });
   // Language: user and project scopes go through language.mjs on save; only the active level is shown.
   const lang = state.resolved.language;
-  const input = el('input', { type: 'text', id: `lang-${scope}`, placeholder: '—', 'aria-label': `Language, ${scope}` });
+  // Same markup as textRow (label, hint, input, error, ladder, readout); the value lives in draft.language, not in a settings layer.
+  const input = el('input', { type: 'text', class: 'scribble', id: `lang-${scope}`, placeholder: '—', autocomplete: 'off' });
   input.disabled = scope === 'project' && !profileOn();
   input.addEventListener('input', () => { draft.language[scope] = input.value; refresh(); });
-  const langEffect = el('p', { class: 'readout' });
-  const box = el('fieldset', { class: 'ctl' }, el('label', { class: 'ctl-label', for: input.id }, 'Writing language'), input, langEffect);
+  const hintId = `lang-${scope}-hint`;
+  const errEl = el('p', { class: 'perr', id: `lang-${scope}-err`, hidden: true });
+  input.setAttribute('aria-describedby', hintId);
+  const ladder = el('div', { class: 'ladder', 'aria-label': 'Values per level' });
+  const langEffect = el('p', { class: 'readout', 'aria-live': 'polite' });
+  const box = el('div', { class: 'ctl' },
+    el('label', { class: 'ctl-label', for: input.id }, 'Writing language', el('span', { class: 'vh' }, `, ${scope} level`), editedTag()),
+    el('p', { class: 'hint', id: hintId }, `Stored at the ${scope} level. Project wins over User; the plugin default is en.`),
+    input, errEl, ladder, langEffect);
   rack.append(box);
   syncers.push(() => {
+    const dirty = Object.prototype.hasOwnProperty.call(changedLanguage(), scope);
+    box.classList.toggle('dirty', dirty);
+    const part = (name, v, on) => el('span', {}, el('i', { class: 'led', 'data-on': v ? on : '' }), name, el('b', {}, v || '—'));
+    ladder.replaceChildren(part('plugin', 'en', 'plugin'), part('user', draft.language.user.trim(), 'user'), part('project', draft.language.project.trim(), 'project'));
     if (input.value !== draft.language[scope]) input.value = draft.language[scope];
     input.classList.toggle('set', draft.language[scope].trim() !== '');
     const changed = changedLanguage();
