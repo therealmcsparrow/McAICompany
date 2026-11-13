@@ -453,6 +453,11 @@ select.ignored { color: var(--color-ink-2); border-style: dashed; }
 .cf { display: grid; gap: 4px; min-width: 0; }
 .cf label { font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--color-silk); }
 .strip .cf input[type="text"] { width: 100%; padding: 5px var(--space-2); border-radius: var(--radius-sm); border: 1px solid var(--color-edge); background: var(--color-scribble); color: var(--color-scribble-ink); font-family: var(--font-mono); font-size: var(--text-xs); }
+/* invalid state: last in the cascade, specificity above every field rule and .set (which is !important) */
+.ctl input[aria-invalid="true"], .ctl select[aria-invalid="true"], .strip .cf input[aria-invalid="true"], .strip .cf select[aria-invalid="true"], .field select[aria-invalid="true"], .pfield input[aria-invalid="true"], .pfield select[aria-invalid="true"], input[aria-invalid="true"], select[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: var(--color-led-lock) !important; border-width: 2px; }
+@media (forced-colors: active) {
+  .ctl input[aria-invalid="true"], .ctl select[aria-invalid="true"], .strip .cf input[aria-invalid="true"], .strip .cf select[aria-invalid="true"], .field select[aria-invalid="true"], .pfield input[aria-invalid="true"], .pfield select[aria-invalid="true"], input[aria-invalid="true"], select[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: Mark !important; border-width: 3px; border-style: double; }
+}
 
 </style>
 </head>
