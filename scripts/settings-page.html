@@ -262,7 +262,7 @@ main { padding-top: var(--space-4); }
 .scribble::placeholder { color: var(--color-ink-2); }
 .scribble.set { border-color: var(--lvl-led); }
 .scribble:disabled { opacity: .55; cursor: not-allowed; }
-.scribble[aria-invalid="true"] { border-color: var(--color-led-lock); border-width: 2px; }
+input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: var(--color-led-lock); border-width: 2px; }
 .err { color: var(--color-text-lock); font-size: var(--text-sm); font-weight: 500; }
 .err:empty { display: none; }
 
@@ -423,6 +423,7 @@ select.ignored { color: var(--color-ink-2); border-style: dashed; }
   select.ignored { color: CanvasText; border-style: dashed; }
   .ctl select, .ctl input[type="text"], .ctl textarea, .scribble { border-color: CanvasText; }
   .seg input:checked + label, .jack input:checked + label, .select-bank [role="tab"][aria-selected="true"] { outline: 2px solid Highlight; }
+  input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: Mark; border-width: 3px; border-style: double; }
 }
 
 /* compat: classes the page script still uses */
