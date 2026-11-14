@@ -9,6 +9,16 @@ import { run, show, active, append, MAX_FILE } from './run-state.mjs';
 const script = path.join(import.meta.dirname, 'run-state.mjs');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
+// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
+const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
+const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
+process.env.HOME = isoHome;
+process.env.USERPROFILE = isoHome;
+after(() => {
+  for (const [k, v] of Object.entries(savedHome)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  fs.rmSync(isoHome, { recursive: true, force: true });
+});
 
 let n = 0;
 function repo() {
