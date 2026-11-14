@@ -266,10 +266,11 @@ test('B6 the Plan check wording says what the scripts do under block, not "in v0
   assert.ok(!/Gate can be approved/.test(section(ref, '3. **Show it.**', '4. **Wave-off.**')), 'step 3 contradicts step 7');
 });
 
-test('B7 pilot ledger threshold is 64125, the fixed 75% of the 85500 hand-over point (pilot.md:11)', () => {
+test('B7 pilot ledger threshold is three quarters of the run handover `<n>` (pilot.md:11)', () => {
   const l = lineStarting(read('skills/handoff/references/pilot.md'), '**Findings ledger**');
   assert.ok(l, 'ledger line exists');
-  assert.ok(l.includes('64125'), `names 64125: ${l.slice(0, 200)}`);
+  assert.ok(l.includes('three quarters of `<n>`'), `names three quarters of <n>: ${l.slice(0, 200)}`);
+  assert.ok(!l.includes('64125') && !l.includes('85500'), 'stale fixed figure');
   assert.ok(!l.includes('60% of `<cap>`'), 'stale 60% of cap (75% of 85500 is 67.5% of 95000)');
   assert.ok(!l.includes('90000'), 'stale 90000 fallback');
 });

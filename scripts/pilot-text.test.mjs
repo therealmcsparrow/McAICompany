@@ -148,8 +148,9 @@ test('builder agents: search before you read a file you will edit', () => {
 
 test('ledger timing: written only near a handover (60% of the cap or a decision to hand over), IDs without a ledger', () => {
   const p = read(PILOT);
-  has(p, 'only with `status: handover`', '64125 tokens (75% of the fixed hand-over point 85500, `<n>`)', 'status: handover', 'writes none', 'always has it',
+  has(p, 'only with `status: handover`', 'three quarters of `<n>`', 'status: handover', 'writes none', 'always has it',
     'fixed R-2', '1 + the highest');
+  assert.doesNotMatch(p, /64125|85500|fixed hand-over point/);
   assert.doesNotMatch(read('agents/code-reviewer.md') + read('skills/review/SKILL.md'), /before the first file|from the first file/);
 });
 
@@ -179,7 +180,8 @@ test('kept rules: reviewer never edits, Must never softened, old rules still pre
 
 test('handoff skill: context budget follows the Context cap line, lint runs from the plugin root', () => {
   const t = read('skills/handoff/SKILL.md');
-  has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '95000', '85500', 'never compute');
+  has(t, 'Context cap: <cap> handover <n>', 'invalid Context cap', '180000', '162000', 'never compute');
+  assert.doesNotMatch(t, /95000|85500/);
   assert.doesNotMatch(t, /around 130k/);
   has(read('skills/pipeline/SKILL.md'), '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" handoff-lint');
   assert.doesNotMatch(read(PILOT), /node scripts\/handoff-lint\.mjs/);
