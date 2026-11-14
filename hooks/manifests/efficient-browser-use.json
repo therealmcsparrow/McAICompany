@@ -1,0 +1,1 @@
+{ "v": 1, "id": "efficient-browser-use", "kind": "saver", "title": "Browser screenshot note", "owner": "backend-engineer", "sessions": "lead", "events": ["PreToolUse"], "rules": ["browser.Y1"], "fail": "open", "switch": "mods.efficient_browser_use.enabled", "lock": false, "upstream": null }
