@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Fixed
+- **Settings page polish.** The Skills tab lists cards in a fixed 4-column grid, personality tab rows match the console preview, and the segmented-field hint and error attach to the group wrapper for assistive tech. Contract: `aico-settings` v2.1 (unchanged).
+
 ## [0.38.0] - 2026-11-13
 
 Rollback: node scripts/stable.mjs 0.37.0
