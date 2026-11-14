@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// contract: docs/contracts/context-guard.md v1.1
-// uses: docs/contracts/lead-handoff.md v2.0 docs/contracts/run-state.md v2.0
-// Hard hand-over at HANDOVER_AT, done outside the agent: a PreToolUse hook refuses tools to a Step that is at
+// contract: docs/contracts/context-guard.md v1.2
+// uses: docs/contracts/lead-handoff.md v2.3 docs/contracts/run-state.md v2.1
+// Hard hand-over at the run's handover point (runCap), done outside the agent: a PreToolUse hook refuses tools to a Step that is at
 // the hand-over point, and a SubagentStop hook blocks that Step's stop once when no Handoff was announced.
 // Hook input is untrusted: only allow-listed fields are read, the content of a Write never. The guard record
 // holds enums, UTC times, file names and truncated hashes. Any failure allows the tool (fail open).
@@ -10,8 +10,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { show } from './run-state.mjs';
+import { runCap } from './run-cap.mjs';
 import {
-  HANDOVER_AT, findRun, transcriptTokens, claudeDirOf, workDir, lstatOrNull, openRegular, readSmall, iso,
+  findRun, transcriptTokens, claudeDirOf, workDir, lstatOrNull, openRegular, readSmall, iso,
   loadRecord, contextHandover, newSessionCommand,
 } from './lead-handover.mjs';
 
@@ -23,6 +24,8 @@ export const WAIT_REASON = 'aico context cap: no new Step from this session. Wai
 export const FROZEN_LINE = 'aico context cap: this session is frozen. Start a new session in the product folder with:';
 export const NEW_SESSION_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
 
+// floor(60000 * 9 / 10): the lowest handover any cap gives, so below it the run is never looked up.
+const MIN_HANDOVER = 54000;
 const MAX_STDIN = 4 * 1024 * 1024;
 const MAX_ARG = 4096;
 const MAX_LINES = 1000;
@@ -90,6 +93,14 @@ function runOf(root, now) {
   if (!slug) return null;
   const dir = workDir(base, slug);
   return dir ? { slug, dir } : null;
+}
+
+// The run's hand-over point; an unreadable cap gives the 162000 default, never a skipped check.
+function handoverFor(base, slug) {
+  try {
+    const h = runCap(base, slug).handover;
+    return Number.isSafeInteger(h) && h > 0 ? h : 162000;
+  } catch { return 162000; }
 }
 
 function stepFile(transcript, agent) {
@@ -165,9 +176,10 @@ export function pre(text, opts) {
     const file = stepFile(p.transcript, p.agent);
     if (!file) return silent;
     const tokens = transcriptTokens(file, claudeDir, true);
-    if (tokens === null || tokens < HANDOVER_AT) return silent;
+    if (tokens === null || tokens < MIN_HANDOVER) return silent;
     const run = runOf(root, now);
     if (!run) return silent;
+    if (tokens < handoverFor(mainRoot(root), run.slug)) return silent;
     const id = hash12(p.agent);
     const rec = loadGuard(run.dir);
     if (p.tool === 'Write') {
@@ -195,10 +207,11 @@ function lead(p, root, claudeDir, now) {
   if (typeof p.session !== 'string' || p.session.length === 0 || p.session.length > 512) return silent;
   if (typeof p.transcript !== 'string' || p.transcript.length > MAX_ARG) return silent;
   const tokens = transcriptTokens(p.transcript, claudeDir, false);
-  if (tokens === null || tokens < HANDOVER_AT) return silent;
+  if (tokens === null || tokens < MIN_HANDOVER) return silent;
   const run = runOf(root, now);
   if (!run) return silent;
   const base = mainRoot(root);
+  if (tokens < handoverFor(base, run.slug)) return silent;
   const session = hash12(p.session);
   const command = newSessionCommand(run.slug);
   const tail = command ? ` ${command}` : '';
