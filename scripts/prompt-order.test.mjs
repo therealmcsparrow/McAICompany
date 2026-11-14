@@ -84,7 +84,7 @@ test('the order is described as fixed for reading, with no cache claim', () => {
 });
 
 test('Setup fixes the context cap once; it lives only here', () => {
-  has(pipeline, '**Context cap (§1.7)**', '`run-state show <slug> --json`', '`pipeline.context_cap`', '`plan-tasks check|begin --handover`', 'the Role never computes');
+  has(pipeline, '**Context cap (§1.7)**', "`run-state show '<slug>' --json`", '`pipeline.context_cap`', '`plan-tasks check|begin --handover`', 'the Role never computes');
   assert.doesNotMatch(pipeline, /no settings read|fixed for every Role/);
 });
 

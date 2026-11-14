@@ -103,7 +103,7 @@ describe('skill and contract text name the run cap', () => {
   test('Setup item 8 reads cap and handover from run-state and hands the handover to plan-tasks', () => {
     const item = pipeline.split('\n').find((l) => l.startsWith('8. **Context cap (§1.7)**'));
     assert.ok(item, 'Setup item 8 missing');
-    for (const needle of ['`run-state show <slug> --json`', '`cap`', '`handover`', '`pipeline.context_cap`', '`plan-tasks check|begin --handover`']) {
+    for (const needle of ["`run-state show '<slug>' --json`", '`cap`', '`handover`', '`pipeline.context_cap`', '`plan-tasks check|begin --handover`']) {
       assert.ok(item.includes(needle), `item 8 lacks ${needle}`);
     }
     assert.doesNotMatch(item, /95000|85500|no settings read|fixed for every Role/);
