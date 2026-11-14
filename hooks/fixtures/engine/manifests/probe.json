@@ -1,0 +1,1 @@
+{ "v": 1, "id": "probe", "kind": "guard", "title": "Probe", "owner": "backend-engineer", "sessions": "all", "events": ["PreToolUse", "SubagentStart", "SubagentStop"], "rules": ["probe.M1", "probe.M2", "probe.M3"], "fail": "closed", "switch": null, "lock": true, "upstream": null }

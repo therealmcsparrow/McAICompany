@@ -1,0 +1,1 @@
+{ "v": 1, "id": "stub-guard", "kind": "guard", "title": "Stub guard", "owner": "backend-engineer", "sessions": "all", "events": ["PreToolUse"], "rules": ["stub-guard.M1"], "fail": "closed", "switch": null, "lock": true, "upstream": null }
