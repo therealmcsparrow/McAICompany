@@ -140,7 +140,7 @@ test('Setup item 8 no longer calls the cap one value for the whole run: a settin
 
 test('the handoff skill names the cap guard of context-guard v2.0, not v1', () => {
   hasNot(handoff, '`context-guard` v1,');
-  has(handoff, /`context-guard` v2/, 'cap.M1');
+  has(handoff, /`context-guard` v2/);
 });
 
 test('shipped text no longer names AICO_CONTEXT_GUARD as the escape: AICO_GUARDS=off, Lead session only, replaces it', () => {
