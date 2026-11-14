@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { run as runState } from './run-state.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = path.join(ROOT, 'scripts', 'hook-host.mjs');
@@ -37,13 +38,50 @@ function host(payload) {
 const denyReason = (r) => (r.json?.hookSpecificOutput?.permissionDecision === 'deny' ? r.json.hookSpecificOutput.permissionDecisionReason : null);
 const base = (over) => ({ hook_event_name: 'PreToolUse', session_id: 'fixture', transcript_path: 'fixture.jsonl', cwd: fwd(project), permission_mode: 'default', ...over });
 
-// Fixture paths under /proj are moved into the temp project so they resolve against the same root.
+// Fixture paths under /proj (any drive letter, either slash) are moved into the temp project so they resolve against the same root.
+const PROJ_PATH = /(?<![\w.:\\/-])(?:[A-Za-z]:)?[\\/]proj(?=[\\/]|$|[\s"'])/g;
 const localize = (v) => {
-  if (typeof v === 'string') return v === '/proj' || v.startsWith('/proj/') ? fwd(project) + v.slice('/proj'.length) : v;
+  if (typeof v === 'string') return v.replace(PROJ_PATH, () => fwd(project));
   if (Array.isArray(v)) return v.map(localize);
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, localize(x)]));
   return v;
 };
+
+const usageLine = (total, sidechain) => `${JSON.stringify({ type: 'assistant', isSidechain: sidechain, message: { model: 'fixture-model', usage: { input_tokens: total, output_tokens: 0 } } })}
+`;
+
+// Builds the state a real run has on disk for a fixture's synthetic block: a started run in the project, and the
+// transcript the host reads the token count from. Returns the payload to send and a cleanup.
+function realState(payload, syn, name) {
+  const made = [];
+  const dir = path.join(tmp, `state-${name.replace(/[^a-z0-9]/gi, '_')}`);
+  fs.mkdirSync(dir, { recursive: true });
+  made.push(dir);
+  const slug = syn.run?.slug;
+  if (slug) {
+    fs.mkdirSync(path.join(project, '.company', 'work', slug.split('/')[0]), { recursive: true });
+    const r = runState(['start', slug], { root: project });
+    assert.equal(r.code, 0, r.out);
+    made.push(path.join(project, '.company'));
+  }
+  const out = { ...payload };
+  const step = syn.session === 'step';
+  const tokens = syn.tokens ?? { state: 'none', total: 0 };
+  const main = path.join(dir, 'session.jsonl');
+  out.transcript_path = fwd(main);
+  if (tokens.state === 'error') {
+    fs.mkdirSync(main);
+  } else if (tokens.state === 'read') {
+    if (step) {
+      const sub = path.join(dir, 'session', 'subagents');
+      fs.mkdirSync(sub, { recursive: true });
+      fs.writeFileSync(path.join(sub, `agent-${payload.agent_id}.jsonl`), usageLine(tokens.total, true));
+    } else {
+      fs.writeFileSync(main, usageLine(tokens.total, false));
+    }
+  }
+  return { payload: out, cleanup: () => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); } };
+}
 
 before(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-shipped-'));
@@ -86,8 +124,11 @@ describe('shipped rule table through the real engine', () => {
     for (const n of names) {
       const wantDeny = n.startsWith('block-');
       test(`${dir}/${n} ${wantDeny ? 'denies' : 'passes'}`, () => {
-        const payload = localize(JSON.parse(fs.readFileSync(path.join(FIXTURES, dir, n), 'utf8')));
-        const r = host(payload);
+        const { _synthetic: syn, ...raw } = JSON.parse(fs.readFileSync(path.join(FIXTURES, dir, n), 'utf8'));
+        const state = wantDeny && syn ? realState(localize(raw), syn, `${dir}-${n}`) : null;
+        const payload = state ? state.payload : localize(raw);
+        let r;
+        try { r = host(payload); } finally { if (state) state.cleanup(); }
         assert.equal(r.code, 0, r.err);
         const reason = denyReason(r);
         if (wantDeny) { assert.ok(reason, `expected a deny, got ${r.out}`); assert.ok(reason.startsWith(`aico guard ${dir}:`), `denied by another rule: ${reason}`); }
