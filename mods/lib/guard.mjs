@@ -14,13 +14,8 @@ const MAX_DEPTH = 32;
 const DANGEROUS = new Set(['__proto__', 'constructor', 'prototype']);
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g;
 
-// Mirrors MODS_DEFAULTS in scripts/settings.mjs (a test keeps them equal).
-export const MODS_DEFAULTS = {
-  savvy: { enabled: true, pane: 'auto' },
-  cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
-};
-
+// One source for the mod switch defaults; scripts/settings.mjs re-exports the same table.
+export { MODS_DEFAULTS } from '../../hooks/lib/mods-defaults.mjs';
 export function trimEol(text) {
   if (typeof text !== 'string') return '';
   let end = text.length;

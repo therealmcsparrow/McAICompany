@@ -72,10 +72,11 @@ test('AC39 NO_COLOR is read by the mods and the cache write carries a [tax] text
   assert.match(read('mods/cache-tax.tsx'), /\[tax\]/);
 });
 
-test('AC36 fresh defaults: the three mods are on and no other mod key exists', async () => {
+test('AC36 fresh defaults: the three mods and the savers are on, browser use is off, and no other mod key exists', async () => {
   const { MODS_DEFAULTS } = await import('./settings.mjs');
-  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), ['cache_tax', 'reflect', 'savvy']);
-  for (const k of ['savvy', 'cache_tax', 'reflect']) assert.equal(MODS_DEFAULTS[k].enabled, true);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard']);
+  for (const k of ['savvy', 'cache_tax', 'reflect', 'savings', 'switchboard']) assert.equal(MODS_DEFAULTS[k].enabled, true);
+  assert.equal(MODS_DEFAULTS.efficient_browser_use.enabled, false);
 });
 
 test('AC49 the docs name the three mods, the cache clock, no keep-warm and desktop unverified', () => {

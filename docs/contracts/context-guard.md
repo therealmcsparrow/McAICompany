@@ -1,96 +1,21 @@
-# Contract: context-guard v1.2
+# Contract: context-guard v2.0
 
-v1.2 (task P20261112.000001/07-feature, minor; ADR 0069; uses `run-state` v2.1): the hand-over point is the active run's `runCap(...).handover` (`scripts/run-cap.mjs`), not the fixed `HANDOVER_AT`; unreadable → 162000. The cap is read only at a reading of at least 54000 (floor(60000 x 0.9), the lowest possible point), so the fast path stays scan-free. Texts, hook entries, the guard record and every refusal are unchanged.
+v2.0 (task P20261114.000001/01-feature, major, breaking, CEO approved at the Plan Gate 2026-11-14; ADR `docs/adr/0070-cap-in-handoff-mod.md`; shipped: the old guard script is deleted). The handoff mod: the cap becomes the `cap` guard (rule `cap.M1`) of the hook engine (`mod-hook` v1, `hook-event` v1, manifest `cap`, `mod-manifest` v1); the old guard script and its two `hooks/hooks.json` entries are removed. Changes against v1.2:
+- Threshold `T` = the snapshot's `threshold` (`aico-settings` v3.0 `pipeline.context_cap`: default 180000, valid 60000-250000, invalid → 180000 with one warning per session naming the bad value). Freeze point `F` = floor(T x 0.9). Constants and both formulas live only in the cap rule module (hooks/rules/cap.mjs); `mods/lib/context-cap.mjs` and `scripts/run-cap.mjs` re-export or read from it; no other production file holds `180000` or `162000` (AC13).
+- Bands, per session (the dispatch line `Context cap: <cap> handover <n>` carries `<cap>` = `T` and `<n>` = `F`):
 
-v1.1 (task P20261109.000009-T11, minor, additive; uses `run-state` v2.0): the active run and its folder may be nested, `<ProjectID>/<NN>-<playbook>`. The folder is found with `workParts` and must be a real directory inside the real work folder; `context-guard.jsonl` and the Handoff and ledger writes are bound to that folder, never to the project folder, a sibling run or a deeper path. v1 behaviour for v2, v1.1 and legacy runs is byte-identical.
+  | Band | Step session | Lead session | Record |
+  |---|---|---|---|
+  | tokens < `F` | silent, every tool | silent, every tool | nothing |
+  | `F` ≤ tokens < `T` (**freeze**) | v1.2 Step branch: only a `Write` of a new Handoff or of one new findings ledger in the run folder; every other tool denied with the v1.2 Step reason; SubagentStop blocks once without a Handoff | v1.2 Lead branch in order: Frozen (session already handed over) → deny all but the MCP tool, `continue:false`; Step running → deny `Agent`/`Task` with the wait reason, other tools pass; else clean point → `contextHandover`, first-freeze deny without `continue:false` | `deny`, `handoff`, `ledger` as v1.2; Lead `handover` event |
+  | tokens ≥ `T` (**hand over**) | same as freeze (no further tool is allowed or refused) | as freeze, plus `continue:false` on every deny, so the turn ends; a Step running still writes no Lead Handoff | as freeze |
 
-New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/context-guard.mjs` (Node built-ins only), wired by `hooks/hooks.json`. Consumers: every Role and the Lead during an active run (they see only the refusals), `skills/handoff/SKILL.md` and `skills/pipeline/references/lead-handover.md` (they describe the result). Uses `lead-handoff` v1.8 (`HANDOVER_AT`, `findRun`, `transcriptTokens`, `contextHandover`, `newSessionCommand`, `claudeDirOf`, `workDir`, `lstatOrNull`, `openRegular`, `readSmall`, `iso`, `loadRecord`) and `run-state` v1.7 (`show`, read-only). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`. Spike facts: `tests/lead-handover/evidence.md` (T1 spike section).
+  At the first freeze deny of each agent (Step) or session (Lead) the engine adds one `systemMessage` for the CEO (`aico cap: …`, design file); it is a CEO note, never model text: the model learns only from the deny reason. Tests at T-1-F boundaries: 161999 silent, 162000 freeze, 179999 freeze, 180000 hand over, 180001 hand over (AC11), each for Step and Lead.
+- Order: no active run → pass, whatever `tokens.state` (the guard is a run budget; a transcript read error outside a run never denies). In an active run: tokens `state: 'none'` (no usage row yet) count as 0; then the bands.
+- Fail mode **closed** (was open), in an active run only: tokens `state: 'error'`, an invalid snapshot, a crash or a timeout → deny `cap.M1: <error word>` (Lead: no freeze, plain deny). The host supplies `run` when `state` is `error` (`hook-event` v1.1). A run error (`run` is `{ error: true, slug, folder }`: the run is found but its run record or run state cannot be read) at or over `F` → deny `cap.M1: unreadable`, naming the fix (repair or remove the malformed `lead-handover.jsonl` in the run folder, or check `run-state show`), in Step and Lead sessions, no effect and no guard record row; below `F` it passes like any call. A lookup that fails before a run is named reads as no active run.
+- The off switch `AICO_CONTEXT_GUARD=off` is retired; `AICO_GUARDS=off` (engine, CEO only) replaces it for all guards, in the Lead session only; Step sessions are always guarded (`mod-hook` v1 engine step 1).
+- The guard record is `.company/work/<slug>/guard.jsonl` (was `context-guard.jsonl`), same rules, plus the event `guards-off` (`{ v, at, ev: "guards-off", session: <sessionKey> }`, once per session). Every guard's denies, `cap.M1` included, also go to the engine's deny log (`mod-hook` v1 engine step 7), which the guard record does not replace.
+- `subagent-stop` moves into the engine's `SubagentStop` entry, same behaviour.
+- The 54000 fast path becomes floor(60000 x 0.9) from the cap module; the run is found as in v1.1.
 
-The hard hand-over at the run's hand-over point (v1.2: floor(cap x 0.9) of the run's Context cap, `run-state` v2.1), done outside the agent: a hook refuses tools, so no model has to choose to stop.
-
-v1 note (Lead hand-over loop fix, task 2026-11-03 07.12): the Lead point is unchanged, `HANDOVER_AT` 85500 of the total context. A fresh Lead session holds about 55k tokens before it reads anything, so what it reads before its first Step must stay near 15k: the new-session line points to `skills/pipeline/references/lead-resume.md` (`lead-handoff` v1.8), which says to read the `read` output, a Step Handoff slice and the `aico:pipeline` skill only. Measured: the old boot (Playbook skill, `aico:pipeline`, `lead-handover.md`, tool outputs) took a fresh Lead from 55.5k to 87k in 37 seconds and froze it before any Step. `tests/context-guard/lead-fresh-boot.test.mjs` pins a byte budget on what the resume path loads (an estimate: baseline plus bytes/3) and that the command, header and resume line name the resume file.
-
-## Hook entries
-Two new command hooks in `hooks/hooks.json`, each with `"timeout": 5`, `${CLAUDE_PLUGIN_ROOT}` the only path in the command, and nothing written under it:
-- `PreToolUse`, no matcher (every tool; on win32 the Lead uses PowerShell, so never match on `Bash`): `node "${CLAUDE_PLUGIN_ROOT}/scripts/context-guard.mjs" pre`.
-- `SubagentStop`, beside the unchanged `step-times` entry: `node "${CLAUDE_PLUGIN_ROOT}/scripts/context-guard.mjs" subagent-stop`.
-
-## Input
-Stdin JSON, read until end of input, at most 4 MiB (a `Write` payload can be large), parsed once; longer input fails open. Keys are read with `Object.hasOwn`. Allow-listed fields only: `hook_event_name`, `transcript_path`, `session_id`, `agent_id`, `tool_name`, `tool_input.file_path`, `stop_hook_active`. Every other field, and the `content` of a `Write`, is never read or stored. The run is resolved from the hook process cwd, which is the session cwd also for a worktree Step (`skills/pipeline/references/worktrees.md`).
-
-## Reading the context
-- Lead (no `agent_id`): `transcript_path`, last assistant `usage` with `isSidechain` false.
-- Step (`agent_id` present): `transcript_path` is the parent session there. The file is `<session-dir>/subagents/agent-<agent_id>.jsonl`, `<session-dir>` being `transcript_path` minus `.jsonl`; last assistant `usage` with `isSidechain` true (first lines can be metadata rows). `agent_id` must match `^[A-Za-z0-9_-]{1,128}$` before it is joined into a path; else unknown.
-- Both: the `lead-handoff` token rule (input + cache creation + cache read + output, last 1 MiB, a regular file whose real path lies under the real `projects` folder of the Claude config dir). Transcript text is never read as instruction, stored or echoed. A missing file or no usage row is unknown.
-
-## `pre`, in this order
-1. `AICO_CONTEXT_GUARD=off` in the process env (this exact value): exit 0, silent.
-2. Not `PreToolUse`, or tokens unknown, or tokens below 54000 (v1.2; floor(60000 x 0.9), below which no cap can trigger): exit 0, silent, no run scan (the fast path). Target under 200 ms per call, estimated, not measured; T3 measures it on win32.
-3. No active run (`findRun`): exit 0, silent.
-4. (v1.2) Hand-over point `H` = `runCap(root, slug).handover` of the active run (`run-state` v2.1 "Run cap"); unreadable or not a whole number → 162000. Tokens below `H`: exit 0, silent.
-5. Step or Lead branch below.
-
-### Step branch (`agent_id` present)
-Both allowed cases need a `Write` whose `tool_input.file_path` resolves to a file that does not exist yet, directly in the real folder of the active run (`.company/work/<slug>/`, checks of `work-folder-name` v1.1).
-- Allowed, Handoff: a name matching `^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.md$`. Appends `handoff` to the guard record. Exit 0 with no decision.
-- Allowed, findings ledger (`handoff` v2.2, part 3): a name matching `^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.findings\.md$`, when the guard record holds no `ledger` for this agent. Appends `ledger`, never `handoff`, to the guard record. Exit 0 with no decision. A second ledger name from the same agent is denied.
-- Everything else: deny with the reason below; appends `deny` once per agent.
-- Reason, exact text in `scripts/context-guard.mjs`: `aico context cap: this Step reached the hand-over point. Write your Handoff with status: handover to your Output path now, then end. Every other tool is refused.`
-
-### Lead branch (no `agent_id`)
-`<session>` = first 12 hex of the SHA-256 of `session_id`; no `session_id` (not a non-empty string of at most 512 characters): exit 0, silent. `<command>` = `newSessionCommand(slug)`. `L` = the frozen line below plus a space and `<command>`. `F` = the freeze reason below plus a space and `<command>`.
-1. **Frozen**: the run record holds a `handover` with trigger `context` and this `<session>`. The tool `mcp__plugin_aico_lead-session__lead_new_session` is allowed. Any other tool is denied and the turn ends: stdout `{"continue":false,"stopReason":L,"systemMessage":L,"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":L}}`, stderr `L`, exit 0.
-2. **Step running** (a `subs` entry of the run with `stop` null): deny `Agent` and `Task` with the wait reason below; every other tool is allowed.
-3. **Clean point**: `contextHandover` writes the Lead Handoff and the `handover` event (`lead-handoff` v1.8). Then the first-freeze deny, without `continue:false`, so the Lead keeps the turn to call the MCP tool or show the command: stdout `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":F},"systemMessage":L}`, nothing on stderr, exit 0. The MCP tool itself is allowed instead, with no output. A concurrent call that loses the lock, or a failed write: allow, the next call re-reads the record.
-- Freeze reason, exact text in `scripts/context-guard.mjs`: `aico context cap: the Lead Handoff is written and this session is frozen. Call lead_new_session, or show the CEO this command for a new session:`
-- Wait reason, exact text in `scripts/context-guard.mjs`: `aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.`
-- Frozen line, exact text in `scripts/context-guard.mjs`: `aico context cap: this session is frozen. Start a new session in the product folder with:`
-
-Routes for the command: the freeze reason (model-visible), `systemMessage` on the first-freeze deny and on every frozen deny, and stderr on a frozen deny (the CEO-visible routes: `stopReason` did not reach `result` in the spike; T4 records in `tests/lead-handover/evidence.md` which of these the CEO sees), the Lead Handoff `## Next`, and the MCP tool.
-
-A plain deny is stdout `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":<reason>}}`, exit 0.
-
-## `subagent-stop`
-Exit 0, silent, when: `AICO_CONTEXT_GUARD=off`, `stop_hook_active` true, no valid `agent_id`, no active run, or the record holds no `deny` for this agent. A `deny` and a `handoff` whose file exists as a regular file: also silent. A `deny` and no such `handoff`: stdout `{"decision":"block","reason":R}`, exit 0, once; the next stop arrives with `stop_hook_active` true and passes. A `ledger` never counts as a `handoff`.
-- R, exact text in `scripts/context-guard.mjs`: `aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.`
-
-## Guard record
-`.company/work/<slug>/context-guard.jsonl`. Append-only, one JSON object per line, at most 1000 lines of at most 512 bytes, created and opened under the `lead-handover.jsonl` file checks. Written by this script only, and only at or over the run's hand-over point `H` (v1.2). No line number, because parallel Steps append at once. Keys in this order: `v` (1), `at` (UTC to the second), `ev`, `id`, then:
-- `deny`: nothing more. At most one per `id`.
-- `handoff`: `file` (the Handoff file name).
-- `ledger`: `file` (the ledger file name). At most one per `id`.
-`id` = first 12 hex of the SHA-256 of `agent_id`; the agent id is never stored in clear. A bad line is ignored. A full or unwritable record never lifts a deny; with no `deny` on record the stop passes. With a full, unreadable or unwritable record a new ledger is still allowed, unrecorded.
-
-## Fail open
-Unknown context, an own exception, or a hook timeout: the tool is allowed. A read failure must not brick every Step; `ledger add` exit 4 (`token-ledger`) still catches an over-cap Step after. The script exits 0 by itself 4 s after it starts. A `Write` that fails the path check is a deny, not an error. Nothing is printed on a silent path.
-
-## Limits (not enforceable)
-- The guard is a budget control, not a boundary against a prompt-injected or hostile Role: under the limit such a Role can switch it off (settings files, a hard link on its own transcript, closing the run in its state files).
-- The reading lags one tool result, so one big read can pass the run's cap; `ledger add` exit 4 is the backstop.
-- A hook stops a Step at any point, so a half-edit is possible. The fresh Role runs the tests first.
-- After the one blocked stop a Step can still end without a Handoff; `handoff-lint` catches it. A Step that keeps calling refused tools burns turns until it ends; no hook result ends a subagent (not tested).
-- A Step whose Output already exists cannot change it once refused; later edits by that Step are not in its Handoff. The fresh Role checks the tree.
-- An existing findings ledger cannot be appended to once refused. Rows not yet in it go under the Handoff's `## Next` as plain lines with no `R-<n>` row shape, and the fresh reviewer adds them to the ledger. `handoff-lint --require-top` reads finding IDs from `## Blocking` and `## Nits` only: an ID there that the ledger lacks is the error `finding <id> missing from ledger`, while `## Next` lines are not checked. Until then the ledger misses those rows.
-- `step-times` records a stop for a stop this hook then blocks, so the run can look clean to the Lead during that re-prompt.
-- A stale `subs` entry keeps the Lead at Step running: unfrozen, and auto compaction stays blocked. Only manual `/compact` helps.
-- Manual `/compact` in a frozen session lowers the reading and so unfreezes it: a CEO act. The CEO must not continue both that session and the new one.
-- Dispatching the fresh Role and ending the old session stay outside the hook. The frozen session stays open until the CEO closes it.
-
-## Personal data and destinations
-Stores enums, UTC times, file names and truncated hashes of agent ids. No transcript text, no tool input, no CEO words. Deny reasons and the command go to the Claude model of the same session and to the CEO's screen; the guard record stays local under `.company/`. McSparrow adds no recipient (GDPR Art. 5(1)(c)).
-
-## Error cases
-| Case | Result |
-|---|---|
-| Below the run's hand-over point `H` (v1.2), any tool | silent, exit 0 |
-| Run cap unreadable (v1.2) | `H` = 162000 |
-| Bad or oversize stdin, unknown tokens, own exception | allow, exit 0 |
-| `agent_id` with a path character | tokens unknown, allow |
-| `Write` to an existing file (a ledger included), another folder, a link or a bad name | deny |
-| Second ledger name from one agent | deny |
-| Frozen Lead, any tool but the MCP tool | deny, turn ends |
-| Lead Handoff write refused or lost race | allow, retried on the next call |
-| Run ended | no active run: silent |
-
-## Compatibility
-New Contract, v1. A new allowed tool, a new field read from stdin or a change in the fixed texts needs a new version. The threshold (v1.2) is the run's handover from `run-state` `runCap`; a change to how it is found is a `run-state` change.
+Provider: `hooks/rules/cap.mjs` (rule `cap.M1`), run by `scripts/hook-host.mjs` through the `PreToolUse` and `SubagentStop` entries of `hooks/hooks.json`. Consumers: every Role and the Lead during an active run (they see only the refusals), `skills/handoff/SKILL.md` and `skills/pipeline/references/lead-handover.md`. Uses `lead-handoff` v2.4, `run-state` v3.0 (`runCap`, read-only). History: v1.0 to v1.2 held the guard in a script of its own with the hand-over point frozen per run (ADR 0056, ADR 0069); both are superseded by ADR 0070.

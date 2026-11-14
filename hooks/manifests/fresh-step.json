@@ -1,0 +1,1 @@
+{ "v": 1, "id": "fresh-step", "kind": "gate", "title": "Fresh Step", "owner": "frontend-engineer", "sessions": "lead", "events": ["SubagentStart"], "rules": [], "fail": "closed", "switch": null, "lock": true, "upstream": null }

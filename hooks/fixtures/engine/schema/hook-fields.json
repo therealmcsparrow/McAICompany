@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "release": "engine-fixture",
+  "events": {
+    "SessionStart": { "hook_event_name": "string", "session_id": "string", "transcript_path": "string", "cwd": "string", "source": "string" },
+    "PreToolUse": { "hook_event_name": "string", "session_id": "string", "transcript_path": "string", "cwd": "string", "tool_name": "string", "tool_input": "object", "permission_mode": "string" },
+    "SubagentStart": { "hook_event_name": "string", "session_id": "string", "transcript_path": "string", "cwd": "string", "agent_id": "string", "agent_type": "string" },
+    "SubagentStop": { "hook_event_name": "string", "session_id": "string", "transcript_path": "string", "cwd": "string", "agent_id": "string", "agent_type": "string", "agent_transcript_path": "string", "stop_hook_active": "boolean" }
+  }
+}

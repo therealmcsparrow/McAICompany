@@ -1,0 +1,1 @@
+{ "hook_event_name": "PreToolUse", "session_id": "fixture", "transcript_path": "fixture.jsonl", "cwd": ".", "tool_name": "mcp__Claude_Browser__screenshot", "tool_input": {}, "permission_mode": "default", "agent_id": "agent-1", "agent_type": "aico:hands-on-tester", "_synthetic": { "session": "step", "saver": true } }

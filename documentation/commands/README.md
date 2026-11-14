@@ -19,9 +19,10 @@ This page lists every command once. Start here, find the command for your job in
 - **Gate**: a point where the company stops and asks you to Approve, Change or Stop.
 - **Handoff**: the one short file a Role writes at the end of its step, so the next Role knows what happened.
 - **Slug**: the short task name a run picks, used as a folder name.
-- **Context cap**: how much text a Role may keep in its head at once. The default is 180000 tokens for every Role; you can change it in `/aico:settings` (60000 to 1000000), and it is frozen when a run starts. A Role hands over to a fresh one at 90% of it, 162000 at the default.
+- **Context cap**: how much text a Role may keep in its head at once. The default is 180000 tokens for every Role; you can change it in `/aico:settings` (60000 to 250000, user level only), and it applies from the next Step. A Role hands over to a fresh one at 90% of it, 162000 at the default.
 - **Core and Contract**: the Core is the small base of a product; a Contract is the written rule for how two parts of it talk to each other.
 - **Ticket**: one small task cut from a spec, with a Role, the files it touches and what it depends on.
+- **Mods panes**: `/aico-mods` lists every mod and guard and switches the savers; `/aico-savings` shows tokens per Step against the runs before the guards. Both are mod commands typed in Claude Code, not `/aico:` Playbooks. See [Switchboard](../mods/switchboard.md) and [Savings](../mods/savings.md).
 
 ### Route table
 **Route table.** The same list as the groups under Technical details, in words.

@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Bash","tool_input":{"command":"node scripts/hook-pins.mjs write"},"permission_mode":"default"}

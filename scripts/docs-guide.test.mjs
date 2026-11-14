@@ -1,4 +1,4 @@
-// Pins the plain-language guide, concepts, getting-started, README and GLOSSARY for the idea flow (T16).
+// Pins the plain-language guide, concepts, getting-started, README and GLOSSARY for the idea flow.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -43,7 +43,8 @@ test('setup page says no setup is needed and names the hard hand-over', () => {
   const t = read('documentation/start/setup.md');
   assert.match(t, /^# No setup needed: the hand-over point$/m);
   assert.ok(t.includes('lead_new_session'));
-  assert.ok(t.includes('AICO_CONTEXT_GUARD=off'));
+  assert.ok(t.includes('AICO_GUARDS=off'));
+  assert.ok(!t.includes('AICO_CONTEXT_GUARD'));
   assert.ok(t.includes('162000'));
   assert.ok(!t.includes('85500'));
   assert.doesNotMatch(t, /"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"/);

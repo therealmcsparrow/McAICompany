@@ -11,7 +11,7 @@ Cache Tax shows what a run spends, Step by Step. It also shows a clock for the L
 5. Read the cache clock at the bottom to see when the Lead's cache expires. Cache Tax only tells you the time; what you do with it is up to you.
 
 ## Technical details
-Switch it on or off with `mods.cache_tax.enabled`, and choose how the pane opens with `mods.cache_tax.pane` (`auto` or `command`, default `command`). See [Mods](README.md#settings).
+Its title on the [Switchboard](switchboard.md) is "Cache clock", and it is a saver: it only shows you information. Switch it on or off with `mods.cache_tax.enabled`, and choose how the pane opens with `mods.cache_tax.pane` (`auto` or `command`, default `command`). See [Mods](README.md#settings).
 
 Shows what the run spends per Step: tokens in, cache write, out, cache read and spend, taken from the [token ledger](../concepts/token-cost.md). Cache writes are marked `[tax]`, and the total shows what share of spend they are. A subagent that has started but has no ledger row yet shows `running`.
 

@@ -304,8 +304,7 @@ const RUN_CAP = { cap: 120000, handover: 108000 }
 test('AC11: cap 120000 and handover 108000: 108000 is plain, no cap word anywhere', async ($, on) => {
   const r = await withView($, on, RUN_CAP, 108000)
   expect(r.all.some(x => x.endsWith('ctx 108.0k'))).toBe(true)
-  expect(r.all.join('
-')).not.toContain('cap')
+  expect(r.all.join('\n')).not.toContain('cap')
   expect(r.w.statuses.filter(t => t !== undefined && t.includes('cap'))).toEqual([])
 })
 
@@ -350,18 +349,41 @@ test('a view with null cap and handover reads 162000 and 180000', async ($, on) 
 
 test('a hostile view cap (string) never lowers the line below 180000 and keeps the pane', async ($, on) => {
   const r = await withView($, on, { cap: '120000', handover: '108000' }, 110000)
-  expect(r.all.join('
-')).not.toContain('110.0k near cap')
-  expect(r.all.join('
-')).not.toContain('110.0k over cap')
+  expect(r.all.join('\n')).not.toContain('110.0k near cap')
+  expect(r.all.join('\n')).not.toContain('110.0k over cap')
 })
 
 test('a hostile view cap (out of range) never lowers the line below 180000', async ($, on) => {
   const r = await withView($, on, { cap: 59999, handover: 1 }, 110000)
-  expect(r.all.join('
-')).not.toContain('110.0k near cap')
-  expect(r.all.join('
-')).not.toContain('110.0k over cap')
+  expect(r.all.join('\n')).not.toContain('110.0k near cap')
+  expect(r.all.join('\n')).not.toContain('110.0k over cap')
+})
+
+// aico-settings v3.0 / token-ledger v1.14: the run cap range is 60000-250000.
+const TOP = { cap: 250000, handover: 225000 }
+
+test('AC11: the range top 250000 with handover 225000: 225000 is plain, no cap word', async ($, on) => {
+  const r = await withView($, on, TOP, 225000)
+  expect(r.all.some(x => x.endsWith('ctx 225.0k'))).toBe(true)
+  expect(r.w.statuses.filter(t => t !== undefined && t.includes('cap'))).toEqual([])
+})
+
+test('AC11: cap 250000: 240000 is near cap, in the row and the status part', async ($, on) => {
+  const r = await withView($, on, TOP, 240000)
+  expect(r.all.some(x => x.endsWith('ctx 240.0k near cap'))).toBe(true)
+  expect(r.w.statuses.some(t => t !== undefined && t.includes('near cap'))).toBe(true)
+})
+
+test('AC11: cap 250000: 251000 is over cap, in the row and the status part', async ($, on) => {
+  const r = await withView($, on, TOP, 251000)
+  expect(r.all.some(x => x.endsWith('ctx 251.0k over cap'))).toBe(true)
+  expect(r.w.statuses.some(t => t !== undefined && t.includes('over cap'))).toBe(true)
+})
+
+test('a hostile view cap above 250000 reads 180000 and 162000: 200000 is over cap, never plain', async ($, on) => {
+  const r = await withView($, on, { cap: 250001, handover: 225000 }, 200000)
+  expect(r.all.some(x => x.endsWith('ctx 200.0k over cap'))).toBe(true)
+  expect(r.w.statuses.some(t => t !== undefined && t.includes('over cap'))).toBe(true)
 })
 
 test('wcag.M10: the over mark is a word at the end of the row text', async ($, on) => {

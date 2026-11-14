@@ -1,0 +1,4 @@
+[
+  { "event": "PreToolUse", "matcher": ["*"], "rule": "stub-guard.M1", "module": "stub-guard.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "aico guard stub-guard.M1: stub" },
+  { "event": "PreToolUse", "matcher": ["*"], "rule": "cache-tax.Y1", "module": "stub-saver.mjs", "export": "judge", "fail": "open", "timeoutMs": 300, "message": "stub saver" }
+]

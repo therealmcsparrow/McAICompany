@@ -1,56 +1,25 @@
 // A fresh Lead session holds about 55k tokens before it reads anything (system prompt, tools, skill and agent listings),
-// and the context-guard `lead` branch freezes at the handover of the run's cap (162000 by default). The boot path (new-session command, resume line,
+// and the cap guard (cap.M1, `context-guard` v2.0) freezes the Lead at 90% of the snapshot threshold. The boot path (new-session command, resume line,
 // header) must therefore point to the short skills/pipeline/references/lead-resume.md, and what that path loads must stay
 // small enough to leave real headroom below the point.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { pre } from '../../scripts/context-guard.mjs';
+import { capEnv, cleanup } from './cap-engine.mjs';
 import { newSessionCommand, HEADER, resume } from '../../scripts/lead-handover.mjs';
-import { append } from '../../scripts/run-state.mjs';
 
-const SLUG = '2026-11-03 07.12 - Lead Fresh Session Test';
-const SESSION = 'sess-fresh-lead-1';
-const NOW = Math.floor(Date.now() / 1000) * 1000;
-const usage = (n) => ({ input_tokens: 2, output_tokens: 200, cache_creation_input_tokens: 3000, cache_read_input_tokens: n - 3202 });
-const row = (n) => `${JSON.stringify({ type: 'assistant', isSidechain: false, message: { usage: usage(n) } })}\n`;
+// The freeze checks run through the engine (scripts/hook-host.mjs, real cap.M1 rule);
+// the threshold is the user setting `pipeline.context_cap` read into the snapshot at SessionStart, never a value
+// recorded on the run's start line (run-state v3.0). The boot-budget tests below are unchanged.
+const SLUG = 'P20261114.000099/01-feature';
+after(cleanup);
 
-const tmps = [];
-after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
-// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
-const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
-tmps.push(isoHome);
-const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
-process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
-process.env.HOME = isoHome;
-process.env.USERPROFILE = isoHome;
-after(() => { for (const [k, v] of Object.entries(savedHome)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
-
-
-// A run with a Lead transcript holding the given main-chain readings in order (first = session start).
-// `cap` is the cap recorded on the run's start line; absent records none.
-function fixture(readings, cap) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'context-guard-fresh-'));
-  tmps.push(base);
-  const root = path.join(base, 'product');
-  const claudeDir = path.join(base, 'claude');
-  const dir = path.join(root, '.company', 'work', SLUG);
-  fs.mkdirSync(dir, { recursive: true });
-  if (cap === undefined) append(root, SLUG, { ev: 'start' }, { now: NOW - 60000 });
-  else fs.writeFileSync(path.join(dir, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: new Date(NOW - 60000).toISOString().replace(/\.\d{3}Z$/, 'Z'), ev: 'start', cap })}
-`);
-  const proj = path.join(claudeDir, 'projects', 'p');
-  fs.mkdirSync(proj, { recursive: true });
-  const transcript = path.join(proj, 'lead.jsonl');
-  fs.writeFileSync(transcript, readings.map(row).join(''));
-  const input = JSON.stringify({ hook_event_name: 'PreToolUse', transcript_path: transcript, session_id: SESSION, tool_name: 'Bash', tool_input: {} });
-  const record = () => {
-    const f = path.join(dir, 'lead-handover.jsonl');
-    return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
-  };
-  return { input, opts: { root, claudeDir, env: {}, now: NOW }, record };
+// A run, a snapshot taken with `cap` (undefined = the default) and the Lead's call at the last reading.
+async function fixture(readings, cap) {
+  const fx = await capEnv({ cap });
+  fx.bootLead();
+  return { fx, call: () => fx.lead(readings[readings.length - 1], { rows: readings }), root: fx.env.project };
 }
 
 const repo = path.join(import.meta.dirname, '..', '..');
@@ -85,10 +54,10 @@ describe('Lead hand-over loop: lean boot path', () => {
     assert.ok(!HEADER.includes('lead-handover.md'));
   });
 
-  test('resume() output after a compact names the resume file', () => {
-    const f = fixture([55558]);
-    const payload = JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact', session_id: SESSION });
-    const r = resume(payload, { root: f.opts.root, now: NOW });
+  test('resume() output after a compact names the resume file', async () => {
+    const f = await fixture([55558]);
+    const payload = JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact', session_id: 'sess-fresh-lead-1' });
+    const r = resume(payload, { root: f.root, now: Date.now() });
     const ctx = JSON.parse(r.out).hookSpecificOutput.additionalContext;
     assert.match(ctx, /references\/lead-resume\.md/);
     assert.ok(!ctx.includes('lead-handover.md'));
@@ -96,30 +65,38 @@ describe('Lead hand-over loop: lean boot path', () => {
 });
 
 describe('Lead hand-over loop: the guard still freezes a session over the point', () => {
-  test('control: a session far over the run handover (55558 -> 150000, cap 120000) is still frozen', () => {
-    const f = fixture([55558, 100000, 150000], 120000);
-    const r = pre(f.input, f.opts);
-    assert.equal(JSON.parse(r.out).hookSpecificOutput.permissionDecision, 'deny');
-    assert.equal(f.record().filter((e) => e.ev === 'handover').length, 1);
+  test('control: a session far over the handover (55558 -> 150000, threshold 120000) is frozen, one handover recorded', async () => {
+    const f = await fixture([55558, 100000, 150000], 120000);
+    const r = f.call();
+    assert.ok(f.fx.isDeny(r), r.out);
+    assert.equal(f.fx.handovers().length, 1);
   });
 
-  test('a fresh session below the run handover is not frozen: 108000 at cap 130000 is allowed, 117000 is frozen', () => {
-    const low = fixture([55558, 100000, 108000], 130000);
-    assert.deepEqual(pre(low.input, low.opts), { code: 0, out: '', err: '' });
-    assert.deepEqual(low.record(), []);
-    const hi = fixture([55558, 100000, 117000], 130000);
-    assert.equal(JSON.parse(pre(hi.input, hi.opts).out).hookSpecificOutput.permissionDecision, 'deny');
+  test('a fresh session below the point is not frozen: 108000 at threshold 130000 is allowed, 117000 is frozen', async () => {
+    const low = await fixture([55558, 100000, 108000], 130000);
+    low.fx.quiet(low.call());
+    assert.deepEqual(low.fx.handovers(), []);
+    const hi = await fixture([55558, 100000, 117000], 130000);
+    assert.ok(hi.fx.isDeny(hi.call()));
   });
 
-  test('without a recorded cap the same session freezes at 162000, not at 150000', () => {
-    const low = fixture([55558, 100000, 150000]);
-    assert.deepEqual(pre(low.input, low.opts), { code: 0, out: '', err: '' });
-    const hi = fixture([55558, 100000, 162000]);
-    assert.equal(JSON.parse(pre(hi.input, hi.opts).out).hookSpecificOutput.permissionDecision, 'deny');
+  test('without a stored threshold the same session freezes at 162000, not at 150000', async () => {
+    const low = await fixture([55558, 100000, 150000]);
+    low.fx.quiet(low.call());
+    const hi = await fixture([55558, 100000, 162000]);
+    assert.ok(hi.fx.isDeny(hi.call()));
   });
 
-  test('the smallest cap hands over below a fresh session reading: a boot at 55558 with cap 60000 is frozen', () => {
-    const f = fixture([55558], 60000);
-    assert.equal(JSON.parse(pre(f.input, f.opts).out).hookSpecificOutput.permissionDecision, 'deny');
+  test('the smallest threshold hands over below a fresh session reading: a boot at 55558 with 60000 is frozen', async () => {
+    const f = await fixture([55558], 60000);
+    assert.ok(f.fx.isDeny(f.call()));
+  });
+
+  test('a cap recorded on the run start line is ignored: the snapshot threshold decides (run-state v3.0)', async () => {
+    const f = await fixture([55558, 100000, 110000], 130000);
+    const file = path.join(f.fx.runDir, 'run-state.jsonl');
+    fs.writeFileSync(file, `${JSON.stringify({ v: 1, at: new Date(Date.now() - 60000).toISOString().replace(/\.\d{3}Z$/, 'Z'), ev: 'start', cap: 60000 })}
+`);
+    f.fx.quiet(f.call());
   });
 });

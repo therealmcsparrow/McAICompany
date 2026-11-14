@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 const SCRIPT = path.join(import.meta.dirname, 'ledger.mjs');
@@ -40,8 +41,20 @@ function transcriptDir(sb, session = 'sess1', proj = '-proj') {
 
 const ctx = (sb, ...ids) => JSON.parse(run(sb, ['agent-ctx', ...ids, '--json']).out);
 
-// A run-state file: one start per cap given (undefined = a start without a cap), an end between segments.
-// A raw value is written as given, for the hostile cases.
+// run-state v3.0: the run cap is the `threshold` of the project's Lead snapshot under MCSPARROW_HOME (`mod-hook` v1 "Snapshot"),
+// `runCap(...).cap`, range 60000-250000 (token-ledger v1.14). `snapshot(sb, threshold)` writes it for the sandbox root;
+// a raw threshold is written as given, for the hostile cases. No snapshot means 180000.
+const snapshotFile = (sb, dir = sb.dir) => {
+  const r12 = crypto.createHash('sha256').update(fs.realpathSync(dir)).digest('hex').slice(0, 12);
+  return path.join(sb.home, '.mcsparrow', 'hook-snapshots', r12, 'lead.json');
+};
+function snapshot(sb, threshold, dir = sb.dir) {
+  const file = snapshotFile(sb, dir);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ v: 1, at: '2026-11-14T10:00:00Z', threshold, savers: {}, floor: {}, drift: false, settingsWarnings: [] }));
+}
+
+// A run-state file whose start records carry the old v2 `cap` (one start per cap given, an end between segments). v3.0 ignores it.
 function runState(sb, ...caps) {
   const dir = path.join(sb.dir, '.company', 'work', RUN);
   fs.mkdirSync(dir, { recursive: true });
@@ -65,17 +78,20 @@ const overLine = (n, cap, step = '07', role = 'backend-engineer') => `over cap: 
 
 test('add above the hard limit is still refused with exit 2 and writes nothing', (t) => {
   const sb = sandbox(t);
-  runState(sb, 120000);
+  snapshot(sb, 120000);
   const r = run(sb, ['add', RUN, 'step', '01', 'architect', 'a1', '10000001']);
   assert.equal(r.code, 2);
   assert.match(r.out, /^refused:/);
   assert.equal(fs.existsSync(path.join(sb.dir, '.company', 'ledger')), false);
 });
 
-test('hostile recorded caps (string, null, negative, below 60000, above 1000000, fraction, object) fall back to 180000 and echo nothing of the value', (t) => {
-  for (const bad of ['120000', null, -1, 0, 59999, 1000001, 120000.5, '; rm -rf', { a: 1 }, [120000]]) {
+test('hostile snapshot thresholds (string, null, negative, below 60000, above 250000, fraction, object) fall back to 180000 and echo nothing of the value', (t) => {
+  const good = sandbox(t);
+  snapshot(good, 250000); // the range top is a real cap: the pair that makes this test red before the build
+  assert.equal(add(good, 240000).code, 0);
+  for (const bad of ['120000', null, -1, 0, 59999, 250001, 1000000, 120000.5, '; rm -rf', { a: 1 }, [120000]]) {
     const sb = sandbox(t);
-    runState(sb, bad);
+    snapshot(sb, bad);
     const ok = add(sb, 130000);
     assert.equal(ok.code, 0, JSON.stringify(bad));
     assert.equal(ok.out, '', JSON.stringify(bad));
@@ -85,9 +101,21 @@ test('hostile recorded caps (string, null, negative, below 60000, above 1000000,
   }
 });
 
-test('AC11: run cap 120000: 130000 writes the row, prints the over cap line with that cap and exits 4', (t) => {
+test('an unreadable or empty snapshot file falls back to 180000 and the ledger still writes', (t) => {
   const sb = sandbox(t);
-  runState(sb, 120000);
+  snapshot(sb, 200000);
+  assert.equal(add(sb, 190000).code, 0);
+  for (const raw of ['{"v":1,"threshold":12', '', '[]', 'null']) {
+    fs.writeFileSync(snapshotFile(sb), raw);
+    const r = add(sb, 190000, '08');
+    assert.equal(r.code, 4, JSON.stringify(raw));
+    assert.equal(r.out, overLine(190000, 180000, '08'), JSON.stringify(raw));
+  }
+});
+
+test('AC11: snapshot 120000: 130000 writes the row, prints the over cap line with that cap and exits 4', (t) => {
+  const sb = sandbox(t);
+  snapshot(sb, 120000);
   const r = add(sb, 130000);
   assert.equal(r.code, 4);
   assert.equal(r.out, overLine(130000, 120000));
@@ -96,9 +124,9 @@ test('AC11: run cap 120000: 130000 writes the row, prints the over cap line with
   assert.equal(rows[0].ctx_end, 130000);
 });
 
-test('AC11: run cap 120000: 120000 and below exit 0 with no output, 120001 exits 4', (t) => {
+test('AC11: snapshot 120000: 120000 and below exit 0 with no output, 120001 exits 4', (t) => {
   const sb = sandbox(t);
-  runState(sb, 120000);
+  snapshot(sb, 120000);
   for (const n of [0, 85500, 95000, 108000, 120000]) {
     const r = add(sb, n);
     assert.equal(r.code, 0, String(n));
@@ -110,58 +138,104 @@ test('AC11: run cap 120000: 120000 and below exit 0 with no output, 120001 exits
   assert.equal(ledgerLines(sb).length, 6);
 });
 
-test('AC11: a larger run cap lifts the line: 200000 recorded, 190000 passes, 200001 exits 4', (t) => {
+test('the range ends are real caps: 60000 and 250000', (t) => {
+  const lo = sandbox(t);
+  snapshot(lo, 60000);
+  assert.equal(add(lo, 60000).code, 0);
+  assert.equal(add(lo, 60001, '08').out, overLine(60001, 60000, '08'));
+  const hi = sandbox(t);
+  snapshot(hi, 250000);
+  assert.equal(add(hi, 250000).code, 0);
+  const r = add(hi, 250001, '08', 'qa');
+  assert.equal(r.code, 4);
+  assert.equal(r.out, overLine(250001, 250000, '08', 'qa'));
+});
+
+test('AC11: a larger cap lifts the line: 200000 in the snapshot, 190000 passes, 200001 exits 4', (t) => {
   const sb = sandbox(t);
-  runState(sb, 200000);
+  snapshot(sb, 200000);
   assert.equal(add(sb, 190000).code, 0);
   const r = add(sb, 200001, '08', 'qa');
   assert.equal(r.code, 4);
   assert.equal(r.out, overLine(200001, 200000, '08', 'qa'));
 });
 
-test('AC8: the first recorded cap holds when a resumed segment records another', (t) => {
+test('the cap is no longer frozen: a snapshot edit applies to the next add', (t) => {
   const sb = sandbox(t);
-  runState(sb, 120000, 150000);
+  snapshot(sb, 120000);
   assert.equal(add(sb, 130000).code, 4);
-  assert.equal(add(sb, 130000, '08').out, overLine(130000, 120000, '08'));
+  snapshot(sb, 200000);
+  assert.equal(add(sb, 190000, '08').code, 0);
+  assert.equal(add(sb, 200001, '09').out, overLine(200001, 200000, '09'));
 });
 
-test('AC9: no run state and no stored setting: the cap is 180000, never 95000', (t) => {
+test('run-state v3.0: a cap recorded on a start line is ignored, with or without a snapshot', (t) => {
   const sb = sandbox(t);
+  runState(sb, 120000, 150000);
+  snapshot(sb, 200000);
+  assert.equal(add(sb, 190000).code, 0);
+  assert.equal(add(sb, 200001, '08').out, overLine(200001, 200000, '08'));
+  const bare = sandbox(t);
+  runState(bare, 120000);
+  assert.equal(add(bare, 130000).code, 0);
+  assert.equal(add(bare, 180001, '08').out, overLine(180001, 180000, '08'));
+});
+
+test('AC9: no snapshot and no stored setting: the cap is 180000, never 95000', (t) => {
+  const sb = sandbox(t);
+  snapshot(sb, 200000); // the pair: a snapshot is read at all
+  assert.equal(add(sb, 190000, '06').code, 0);
+  const none = sandbox(t);
   for (const n of [95001, 150000, 180000]) {
-    const r = add(sb, n);
+    const r = add(none, n);
     assert.equal(r.code, 0, String(n));
     assert.equal(r.out, '', String(n));
   }
-  const r = add(sb, 180001);
+  const r = add(none, 180001);
   assert.equal(r.code, 4);
   assert.equal(r.out, overLine(180001, 180000));
 });
 
-test('a run-state start without a cap falls back to 180000', (t) => {
+test('a run-state start without a cap and no snapshot falls back to 180000', (t) => {
   const sb = sandbox(t);
+  snapshot(sb, 200000);
   runState(sb, undefined);
-  assert.equal(add(sb, 150000).code, 0);
-  assert.equal(add(sb, 180001).out, overLine(180001, 180000));
+  assert.equal(add(sb, 190000).code, 0);
+  const bare = sandbox(t);
+  runState(bare, undefined);
+  assert.equal(add(bare, 150000).code, 0);
+  assert.equal(add(bare, 180001).out, overLine(180001, 180000));
 });
 
-test('no run state: the current pipeline.context_cap setting applies', (t) => {
+test('the pipeline.context_cap file setting is no longer read by the ledger: only the snapshot carries it', (t) => {
   const sb = sandbox(t);
-  settingsFile(sb, 150000);
-  assert.equal(add(sb, 150000).code, 0);
-  assert.equal(add(sb, 150001).out, overLine(150001, 150000));
+  settingsFile(sb, 200000);
+  assert.equal(add(sb, 190000).code, 4);
+  assert.equal(add(sb, 190000, '08').out, overLine(190000, 180000, '08'));
+  snapshot(sb, 200000);
+  assert.equal(add(sb, 190000, '09').code, 0);
 });
 
-test('a recorded cap beats the current setting', (t) => {
+test('the snapshot beats a recorded cap and a file setting', (t) => {
   const sb = sandbox(t);
   settingsFile(sb, 150000);
   runState(sb, 120000);
-  assert.equal(add(sb, 130000).out, overLine(130000, 120000));
+  snapshot(sb, 200000);
+  assert.equal(add(sb, 190000).code, 0);
+  assert.equal(add(sb, 200001, '08').out, overLine(200001, 200000, '08'));
+});
+
+test("another project's snapshot is not read", (t) => {
+  const sb = sandbox(t);
+  snapshot(sb, 200000);
+  const other = sandbox(t);
+  snapshot(sb, 120000, other.dir); // a snapshot keyed by a different root12 in the same MCSPARROW_HOME
+  assert.equal(add(sb, 190000).code, 0);
 });
 
 test('add above the cap with a bad other field is a refusal, not exit 4', (t) => {
   const sb = sandbox(t);
-  runState(sb, 120000);
+  snapshot(sb, 120000);
   const r = run(sb, ['add', RUN, 'bogus', '07', 'qa', 'a7', '130000']);
   assert.equal(r.code, 2);
   assert.equal(fs.existsSync(path.join(sb.dir, '.company', 'ledger')), false);
@@ -169,9 +243,9 @@ test('add above the cap with a bad other field is a refusal, not exit 4', (t) =>
 
 // ---------- report ----------
 
-test('report text ends with an over cap line for the run cap and report --json adds cap', (t) => {
+test('report text ends with an over cap line for the snapshot cap and report --json carries it (token-ledger v1.14)', (t) => {
   const sb = sandbox(t);
-  runState(sb, 120000);
+  snapshot(sb, 120000);
   assert.equal(add(sb, 1000, '01', 'architect').code, 0);
   const none = run(sb, ['report', RUN]);
   assert.equal(none.code, 0);
@@ -186,7 +260,18 @@ test('report text ends with an over cap line for the run cap and report --json a
   assert.equal(json.cap, 120000);
 });
 
-test('report --json cap is 180000 with no recorded cap, and 95001 is not over cap in the text', (t) => {
+test('report --json cap is within 60000-250000: 250000 is kept, 250001 reads 180000', (t) => {
+  const hi = sandbox(t);
+  snapshot(hi, 250000);
+  assert.equal(add(hi, 1000, '01', 'qa').code, 0);
+  assert.equal(JSON.parse(run(hi, ['report', RUN, '--json']).out).cap, 250000);
+  const bad = sandbox(t);
+  snapshot(bad, 250001);
+  assert.equal(add(bad, 1000, '01', 'qa').code, 0);
+  assert.equal(JSON.parse(run(bad, ['report', RUN, '--json']).out).cap, 180000);
+});
+
+test('report --json cap is 180000 with no snapshot, and 95001 is not over cap in the text', (t) => {
   const sb = sandbox(t);
   assert.equal(add(sb, 95001, '01', 'qa').code, 0);
   assert.equal(JSON.parse(run(sb, ['report', RUN, '--json']).out).cap, 180000);

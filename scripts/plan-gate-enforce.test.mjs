@@ -307,7 +307,7 @@ describe('hostile cases under block with one open decision', () => {
     }
     const sandbox = { cwd: e.product, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: e.home, HOME: e.home, USERPROFILE: e.home } };
     const node = (script, ...a) => spawnSync(process.execPath, [path.join(scripts, script), ...a], sandbox);
-    for (const d of ['agents', 'company']) fs.cpSync(path.join(import.meta.dirname, '..', d), path.join(plugin, d), { recursive: true });
+    for (const d of ['agents', 'company', 'hooks']) fs.cpSync(path.join(import.meta.dirname, '..', d), path.join(plugin, d), { recursive: true });
     fs.mkdirSync(path.join(plugin, 'mods', 'lib'), { recursive: true });
     fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'work-folder.mjs'), path.join(plugin, 'mods', 'lib', 'work-folder.mjs'));
     // run-state imports the one cap formula (ADR 0069)

@@ -20,7 +20,7 @@ test('fmtCtx refuses anything that is not a count', () => {
 });
 
 // ctxCell(n, cap, handover), leadRow(n, cap, handover), worstNote(counts, cap, handover): the run's values;
-// absent or not a whole number 60000-1000000 (handover: not a whole number up to the cap) means 180000 and 162000.
+// absent or not a whole number 60000-250000 (token-ledger v1.14, aico-settings v3.0; handover: not a whole number up to the cap) means 180000 and 162000.
 test('AC11: ctxCell with run cap 120000 and handover 108000: near cap past 108000, over cap past 120000', () => {
   assert.equal(ctxCell(40000, 120000, 108000), 'ctx 40.0k');
   assert.equal(ctxCell(108000, 120000, 108000), 'ctx 108.0k');
@@ -47,8 +47,21 @@ test('AC9: absent cap and handover read 162000 and 180000', () => {
   assert.equal(ctxCell(null, 120000, 108000), 'ctx ?');
 });
 
+test('cap range 60000-250000: both ends are caps, one above is hostile and reads 180000 and 162000', () => {
+  assert.equal(ctxCell(230000, 250000, 225000), 'ctx 230.0k near cap');
+  assert.equal(ctxCell(250000, 250000, 225000), 'ctx 250.0k near cap');
+  assert.equal(ctxCell(250001, 250000, 225000), 'ctx 250.0k over cap');
+  assert.equal(ctxCell(215000, 250000, 225000), 'ctx 215.0k');
+  assert.equal(ctxCell(60000, 60000, 54000), 'ctx 60.0k near cap');
+  assert.equal(ctxCell(240000, 250001, 225000), 'ctx 240.0k over cap');
+  assert.equal(ctxCell(215000, 250001, 225000), 'ctx 215.0k over cap');
+  assert.equal(leadRow(240000, 250001, 225000), 'Lead ctx 240.0k over cap');
+  assert.equal(worstNote([240000, 1], 250000, 225000), 'near cap');
+  assert.equal(worstNote([240000, 1], 250001, 225000), 'over cap');
+});
+
 test('hostile cap and handover (string, null, negative, fraction, out of range, object) fall back to 180000 and 162000', () => {
-  const bad = ['120000', null, undefined, -1, 0, 59999, 1000001, 120000.5, NaN, Infinity, {}, [120000], true];
+  const bad = ['120000', null, undefined, -1, 0, 59999, 250001, 1000000, 1000001, 120000.5, NaN, Infinity, {}, [120000], true];
   for (const v of bad) {
     assert.equal(ctxCell(170000, v, v), 'ctx 170.0k near cap', String(v));
     assert.equal(ctxCell(181000, v, v), 'ctx 181.0k over cap', String(v));

@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
 import { show as showRun } from './run-state.mjs';
+import { isDeviceName, trimAlias } from '../hooks/lib/paths.mjs';
 import { WorkFolderRefusal, exactWorkPath, isRunSlug, parseRun, projectIdOf, workParts, summaryDescription, ticketPattern } from '../mods/lib/work-folder.mjs';
 
 export const MAX_BYTES = 64 * 1024;
@@ -567,21 +568,8 @@ export function checkLedger(file, findingIds) {
 // ---- evidence refs and real-path reads (handoff v2.0) ----
 // The path rule of `plan-tasks` v1 (a repo-relative path of safe characters), kept here so the lint has no dependency on the
 // scheduler; a test holds both in step.
-const DEVICE_RE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 const PATH_SHAPE_RE = /^[A-Za-z0-9._@+-]+(\/[A-Za-z0-9._@+-]+)*\/?$/;
 const MAX_PATH_CHARS = 200;
-
-function trimAlias(segment) {
-  let end = segment.length;
-  while (end > 0 && (segment[end - 1] === '.' || segment[end - 1] === ' ')) end--;
-  return end === 0 ? segment : segment.slice(0, end);
-}
-
-function isDeviceName(segment) {
-  const name = trimAlias(segment);
-  const dot = name.indexOf('.');
-  return DEVICE_RE.test((dot === -1 ? name : name.slice(0, dot)).replace(/ +$/, '').toLowerCase());
-}
 
 export function evidencePath(item) {
   if (typeof item !== 'string') return { ok: false };

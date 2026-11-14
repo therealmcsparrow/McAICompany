@@ -10,7 +10,7 @@ import * as check from './check.mjs';
 import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
 import { eligibleRoles, readBaseline, readCatalog, selectable, skillStatus, vettedText } from './skill-catalog.mjs';
 import {
-  Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
+  CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
 
 const MAX_BODY = 65536;
@@ -141,6 +141,7 @@ function state(ctx) {
   const user = readLayer('user', ctx).layer;
   const project = readLayer('project', ctx).layer;
   const resolved = resolveSettings(ctx);
+  resolved.limits = { context_cap: { min: CONTEXT_CAP_MIN, max: CONTEXT_CAP_MAX, default: CONTEXT_CAP_DEFAULT } };
   return {
     plugin,
     user,

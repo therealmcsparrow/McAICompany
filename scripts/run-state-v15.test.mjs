@@ -8,7 +8,7 @@ import { run, show } from './run-state.mjs';
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-v15-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
-// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
+// The run cap is read from the Lead snapshot under MCSPARROW_HOME: point it at an empty temp home so a real snapshot never leaks in.
 const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
 const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
 process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
@@ -61,6 +61,10 @@ function oldReader() {
   const modLib = path.join(lib, '..', 'mods', 'lib');
   fs.mkdirSync(modLib, { recursive: true });
   fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'work-folder.mjs'), path.join(modLib, 'work-folder.mjs'));
+  // handoff-lint also imports ../hooks/lib/paths.mjs (hook engine path checks).
+  const hookLib = path.join(lib, '..', 'hooks', 'lib');
+  fs.mkdirSync(hookLib, { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, '..', 'hooks', 'lib', 'paths.mjs'), path.join(hookLib, 'paths.mjs'));
   return path.join(lib, 'run-state.mjs');
 }
 const oldView = (reader, root) => JSON.parse(spawnSync(process.execPath, [reader, 'show', 'x', '--json'], { cwd: root, encoding: 'utf8' }).stdout);
@@ -128,10 +132,10 @@ test('start: aico is an anchored version, nothing written otherwise', () => {
   }
   const root = repo();
   assert.equal(go(root, ['start', 'x', '0.19.1']).code, 0);
-  assert.deepEqual(JSON.parse(raw(root, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start', aico: '0.19.1', cap: 180000 });
+  assert.deepEqual(JSON.parse(raw(root, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start', aico: '0.19.1' });
   const plain = repo();
   assert.equal(go(plain, ['start', 'x']).code, 0);
-  assert.deepEqual(JSON.parse(raw(plain, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start', cap: 180000 });
+  assert.deepEqual(JSON.parse(raw(plain, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start' });
   assert.equal(show(root, 'x', { now: T0 + 1000 }).state, 'running');
   assert.deepEqual(show(root, 'x', { now: T0 + 1000 }).warnings, []);
 });
@@ -228,7 +232,7 @@ test('v1.4 file: same view plus the new empty keys', () => {
   }
 });
 
-test('a v1.4 reader skips the new lines with its warning', t => {
+test('a v1.4 reader skips the new lines with its warning (start carries no cap in v3.0, so line 1 reads)', t => {
   const reader = oldReader();
   if (!reader) { t.skip('v1.4 reader not in this clone'); return; }
   const root = started();
@@ -236,8 +240,8 @@ test('a v1.4 reader skips the new lines with its warning', t => {
   go(root, ['sub', 'x', 'start', 'qa', ID, SID], 2000);
   go(root, ['wave', 'x', '2'], 3000);
   const v = oldView(reader, root);
-  assert.deepEqual(v.warnings, ['line 1 skipped', 'line 2 skipped', 'line 3 skipped']);
-  assert.equal(v.wave, null); // the old reader skipped the start line, so it sees no run segment
+  assert.deepEqual(v.warnings, ['line 2 skipped', 'line 3 skipped']);
+  assert.equal(v.wave, 2); // the old reader reads the start line (no cap), so it sees the run segment and the wave line it still knows
 });
 
 test('a v1.4 reader skips a start line that carries aico', t => {

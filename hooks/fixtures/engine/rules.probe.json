@@ -1,0 +1,5 @@
+[
+  { "event": "PreToolUse", "matcher": ["*"], "rule": "probe.M1", "module": "probe.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "probe" },
+  { "event": "SubagentStart", "matcher": ["*"], "rule": "probe.M2", "module": "probe.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "probe" },
+  { "event": "SubagentStop", "matcher": ["*"], "rule": "probe.M3", "module": "probe.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "probe" }
+]

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v2.1). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.0). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
 import { isWorkFolder, isProjectId, parseProject, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
-import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, handoverOf } from '../mods/lib/context-cap.mjs';
+import { runCap } from './run-cap.mjs';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 
@@ -54,9 +54,6 @@ const EXTRA = { start: [], ceo: ['gate', 'n'], sub: ['role', 'id', 'phase'], wav
 
 // Optional keys per event.
 const OPTIONAL = { start: ['aico', 'cap'], sub: ['session'] };
-
-// A cap is a whole number inside the settings range; anything else is not a cap. A start record with a bad cap is kept and its cap ignored.
-export const validCap = n => Number.isSafeInteger(n) && n >= CONTEXT_CAP_MIN && n <= CONTEXT_CAP_MAX;
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
@@ -254,8 +251,9 @@ function load(root, slug, now) {
   view.steps = steps.map(({ tier, ...s }) => s);
   view.round = round;
   view.tier = ['unknown', 'low', 'medium', 'high'][tierRank];
-  const first = rec.unreadable ? undefined : rec.records.find(r => r.ev === 'start' && validCap(r.cap));
-  if (first) { view.cap = first.cap; view.handover = handoverOf(first.cap); }
+  const capNow = runCap(root, slug);
+  view.cap = capNow.cap;
+  view.handover = capNow.handover;
   const seg = rec.unreadable ? [] : lastSegment(rec.records);
   let activity = 0;
   if (seg.length > 0) {
@@ -298,27 +296,6 @@ function load(root, slug, now) {
 export function show(root, slug, { now = Date.now() } = {}) {
   checkSlug(root, slug);
   return load(root, slug, now).view;
-}
-
-// The first cap a `start` record of the run carries, or null (none, unreadable, or a folder that is not the run's own).
-export function recordedCap(root, slug) {
-  checkSlug(root, slug);
-  const { dir, file } = paths(root, slug);
-  const dst = lstatOrNull(dir);
-  if (!dst || !dst.isDirectory() || !insideWork(root, partsOf(slug))) return null;
-  const rec = readRecords(file);
-  if (rec.unreadable) return null;
-  return rec.records.find(r => r.ev === 'start' && validCap(r.cap))?.cap ?? null;
-}
-
-// The cap a new run freezes: the resolved pipeline.context_cap, the default when settings cannot be read.
-// Settings load only here.
-function settingsCap(root, home) {
-  try {
-    const { resolveSettings } = createRequire(import.meta.url)('./settings.mjs');
-    const cap = resolveSettings({ home, cwd: root }).pipeline.context_cap;
-    return validCap(cap) ? cap : CONTEXT_CAP_DEFAULT;
-  } catch { return CONTEXT_CAP_DEFAULT; }
 }
 
 const RUN_SUB_RE = /^(?:0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -683,8 +660,7 @@ export function run(argv, { root = process.cwd(), now = Date.now(), home } = {})
         if (rest.length === 2 && !AICO_RE.test(rest[1])) refuse('aico must be a version like 0.19.1');
         {
           checkSlug(root, rest[0]);
-          const cap = recordedCap(root, rest[0]) === null ? { cap: settingsCap(root, home) } : {};
-          append(root, rest[0], { ev: 'start', ...(rest.length === 2 ? { aico: rest[1] } : {}), ...cap }, opts);
+          append(root, rest[0], { ev: 'start', ...(rest.length === 2 ? { aico: rest[1] } : {}) }, opts);
         }
         return { out: `ok: start ${rest[0]}`, code: 0 };
       case 'wave':

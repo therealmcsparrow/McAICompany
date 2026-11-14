@@ -1,24 +1,26 @@
 # Mods
 
 ## In short
-Mods are three small add-ons that run inside Claude Code while aico works. They show you what the run is doing, what it costs and what to remember. All three are on after a fresh install.
+Mods are five small add-ons that run inside Claude Code while aico works. They show you what the run is doing, what it costs and what to remember. All five are on after a fresh install.
 
 | Mod | What it does |
 |---|---|
 | [Savvy](savvy.md) | Shows the progress of the current run. |
 | [Cache Tax](cache-tax.md) | Shows what the run spends per Step, and the cache clock. |
 | [Reflect](reflect.md) | Looks at each finished Step and suggests what to remember. |
+| [Switchboard](switchboard.md) | One pane (`/aico-mods`) that lists every mod and guard, switches savers and shows recent refusals. |
+| [Savings](savings.md) | Shows median tokens per Step of this run next to the runs before the guards (`/aico-savings`). |
 
-The three share one [status line](status-line.md). To try the plugin from a checkout, see [Test a local copy](local-copy.md).
+Savvy, Cache Tax and Reflect share one [status line](status-line.md). To try the plugin from a checkout, see [Test a local copy](local-copy.md).
 
 ## How it works
 1. You switch each mod on or off, and set its options, on the [`/aico:settings`](../commands/settings.md) page (Mods section).
 2. A change takes effect by your next turn: no reinstall, no restart.
-3. While a run is going, Savvy and Cache Tax draw panes where they can, and every mod adds its part to the status line.
+3. While a run is going, Savvy and Cache Tax draw panes where they can, and Savvy, Cache Tax and Reflect add their part to the status line. Switchboard and Savings open their panes with `/aico-mods` and `/aico-savings`.
 4. To check that the mods loaded, follow the steps under Technical details.
 
 ## Technical details
-Mods are three small add-ons that run inside Claude Code while aico works. They show you what the run is doing, what it costs and what to remember. All three are on after a fresh install. You switch each one on or off, and set its options, on the [`/aico:settings`](../commands/settings.md) page (Mods section). A change takes effect by your next turn: no reinstall, no restart.
+Mods are five small add-ons that run inside Claude Code while aico works. They show you what the run is doing, what it costs and what to remember. All five are on after a fresh install. You switch each one on or off, and set its options, on the [`/aico:settings`](../commands/settings.md) page (Mods section). A change takes effect by your next turn: no reinstall, no restart.
 
 A mod switched off draws nothing, sets no status part, runs no timer, calls no script and acts on no event. Its options are kept.
 
@@ -46,6 +48,11 @@ Set these on the `/aico:settings` page, or read one with `node scripts/settings.
 | `mods.reflect.step_check` | `true`, `false` | `true` |
 | `mods.reflect.retrospective` | `true`, `false` | `true` |
 | `mods.reflect.mode` | `deterministic`, `model` | `deterministic` |
+| `mods.switchboard.enabled` | `true`, `false` | `true` |
+| `mods.switchboard.seen` | `true`, `false` | `false` |
+| `mods.savings.enabled` | `true`, `false` | `true` |
+
+`mods.switchboard.seen` is user-level only and is set when you first open the Switchboard pane. See [Switchboard](switchboard.md) and [Savings](savings.md).
 
 There is no keep-warm key. `mods.cache_tax.keep_warm` is refused as unknown.
 

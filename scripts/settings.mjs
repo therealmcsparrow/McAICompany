@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { MODS_DEFAULTS } from '../hooks/lib/mods-defaults.mjs';
 import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, handoverOf } from '../mods/lib/context-cap.mjs';
 import { NAME_RE, PERSONALITY_KEYS, personalityProblem } from './check.mjs';
 import { headerEnd, resolve as resolveLanguage, validate as validateLanguage } from './language.mjs';
@@ -40,11 +41,10 @@ export const BRAINSTORM_DEFAULTS = { film_script: false, debate: 'crossfire' };
 export const MODS = ['savvy', 'cache_tax', 'reflect'];
 // A mod key removed from the schema: dropped on read with one warning, refused on write as an unknown key.
 const RETIRED_MOD = 'blast_radius';
-export const MODS_DEFAULTS = {
-  savvy: { enabled: true, pane: 'auto' },
-  cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
-};
+export { MODS_DEFAULTS };
+// Saver ids `set-mod` may switch; the stored key is mods.<id with underscores>.enabled.
+const SWITCHABLE = ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard'];
+const switchKey = (id) => id.replaceAll('-', '_');
 export const SKILLSPECTOR_MODES = ['no-llm', 'claude_cli'];
 export const SKILLSPECTOR_DEFAULTS = { mode: 'no-llm' };
 export const REPROMPT_DEFAULTS = { question_rounds: 1 };
@@ -70,7 +70,7 @@ const MAX_SKILL_NAME = 130;
 const SKILL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_SELECTABLE = 'not selectable for this Role';
 const PROJECT_PROTECTED = 'a project cannot set this for a protected Role';
-const USAGE = 'usage: settings.mjs get [key] | serve [--no-open] | model-env';
+const USAGE = 'usage: settings.mjs get [key] | serve [--no-open] | model-env | set-mod <id> on|off';
 const FLOOR_FILE_MAX = 16 * 1024;
 const FLOOR_FAILED = 'model floor: company/model-floor.json unreadable, every Role held at opus';
 const LOCK_ECHO = ['haiku', 'sonnet', 'fable'];
@@ -286,7 +286,10 @@ const MOD_RULES = {
     step_check: modBool('reflect', 'step_check'),
     retrospective: modBool('reflect', 'retrospective'),
     mode: modOneOf('reflect', 'mode', ['deterministic', 'model'])
-  }
+  },
+  efficient_browser_use: { enabled: modBool('efficient_browser_use', 'enabled') },
+  switchboard: { enabled: modBool('switchboard', 'enabled'), seen: modBool('switchboard', 'seen') },
+  savings: { enabled: modBool('savings', 'enabled') }
 };
 const SKILLSPECTOR_RULES = {
   mode: { ok: (v) => SKILLSPECTOR_MODES.includes(v), msg: `skillspector.mode must be ${SKILLSPECTOR_MODES.join(' or ')}` }
@@ -552,7 +555,7 @@ function sanitizePersonality(value, at, reasons) {
 // Walks a layer against the schema. Returns { clean, reasons }: clean keeps only valid parts.
 function sanitize(layer, roleNames, floor = 'opus') {
   const reasons = [];
-  const capReasons = new Set(); // indexes in `reasons` that refuse pipeline.context_cap
+  const capReasons = new Map(); // index in `reasons` -> shown value, for a refused pipeline.context_cap
   const clean = { version: 1 };
   if (!isObject(layer)) return { clean, reasons: [`${KEY}: must be an object`] };
   if (layer.version !== 1) return { clean, reasons: ['version: must be 1'] };
@@ -565,7 +568,12 @@ function sanitize(layer, roleNames, floor = 'opus') {
       for (const role of Object.keys(value)) {
         if (!roleNames.has(role)) { reasons.push(`roles.${label(role)}: unknown Role`); continue; }
         if (!isObject(value[role])) { reasons.push(`roles.${role}: must be an object`); continue; }
+        const roleBefore = reasons.length;
         const fields = checkFields(value[role], ROLE_RULES, `roles.${role}`, reasons, ['personality', 'skills']);
+        if (Object.hasOwn(value[role], 'context_cap') && !Object.hasOwn(fields, 'context_cap')) {
+          const at = reasons.indexOf(CONTEXT_CAP.msg, roleBefore);
+          if (at !== -1) capReasons.set(at, `roles.${role}.context_cap`);
+        }
         if (Object.hasOwn(value[role], 'skills')) {
           const skills = sanitizeSkills(value[role].skills, `roles.${role}.skills`, reasons);
           if (skills !== undefined) fields.skills = skills;
@@ -583,7 +591,7 @@ function sanitize(layer, roleNames, floor = 'opus') {
       const pipeline = checkFields(value, { ...PIPELINE_RULES, second_reviewer_model: secondReviewerModelRule(floor) }, 'pipeline', reasons, ['lanes']);
       if (Object.hasOwn(value, 'context_cap') && !Object.hasOwn(pipeline, 'context_cap')) {
         const at = reasons.indexOf(CONTEXT_CAP.msg, before);
-        if (at !== -1) capReasons.add(at);
+        if (at !== -1) capReasons.set(at, 'pipeline.context_cap');
       }
       if (Object.hasOwn(value, 'lanes')) {
         if (!isObject(value.lanes)) reasons.push('pipeline.lanes: must be an object');
@@ -675,11 +683,11 @@ function loadLayer(level, ctx, roleNames, floor = 'opus') {
     stored = { ...stored, mods: rest };
     retired = true;
   }
-  const { clean, reasons, capReasons = new Set() } = sanitize(stored, roleNames, floor);
+  const { clean, reasons, capReasons = new Map() } = sanitize(stored, roleNames, floor);
   const warn = storedWarning(file);
-  // The refusal text stays as the Contract words it; the warning names the field, never the value.
-  const warnings = reasons.map((r, i) => (capReasons.has(i) ? `${file}: ignoring pipeline.context_cap: ${r.replace(/^context_cap /, '')}` : warn(r)));
-  return { raw: bytes, layer: clean, warnings, reasons, retired };
+  // The refusal text stays as the Contract words it; a bad pipeline cap warning also names the value, cut to 35 characters.
+  const warnings = reasons.map((r, i) => (capReasons.has(i) ? `${file}: ignoring ${capReasons.get(i)}: ${r.replace(/^context_cap /, '')}` : warn(r)));
+  return { raw: bytes, layer: clean, warnings, reasons, retired, capRefused: capReasons.size > 0 };
 }
 
 // The code-reviewer floor from the model floor file; an unreadable file gives opus.
@@ -704,14 +712,15 @@ function resolveRoles(defaults, user, project) {
       [entry[f], source[f]] = pick(project.roles?.[role]?.[f], user.roles?.[role]?.[f], base[f]);
     }
     // A stored roles.<role>.context_cap is validated elsewhere and has no effect: the Role shows the pipeline value.
-    [entry.context_cap, source.context_cap] = pickCap(project, user);
+    [entry.context_cap, source.context_cap] = pickCap(user);
     roles[role] = { ...entry, source };
   }
   return roles;
 }
 
 const capOf = (layer) => (layer.pipeline !== undefined && Object.hasOwn(layer.pipeline, 'context_cap') ? layer.pipeline.context_cap : undefined);
-const pickCap = (project, user) => pick(capOf(project), capOf(user), CONTEXT_CAP_DEFAULT);
+// The cap counts only from the user level; a project value is ignored.
+const pickCap = (user) => (capOf(user) !== undefined ? [capOf(user), 'user'] : [CONTEXT_CAP_DEFAULT, 'plugin']);
 
 const pick = (p, u, d) => (p !== undefined ? [p, 'project'] : u !== undefined ? [u, 'user'] : [d, 'plugin']);
 
@@ -839,9 +848,14 @@ function resolveMods(user, project, { broken, ignored, warnings }) {
   const out = structuredClone(MODS_DEFAULTS);
   const u = (mod, key) => user.mods?.[mod]?.[key];
   const p = (mod, key) => project.mods?.[mod]?.[key];
-  for (const mod of ['savvy', 'cache_tax', 'reflect']) {
+  for (const mod of Object.keys(MODS_DEFAULTS)) {
     for (const key of Object.keys(MODS_DEFAULTS[mod])) {
       if (mod === 'reflect' && key === 'mode') continue;
+      if (mod === 'switchboard' && key === 'seen') {
+        out[mod][key] = u(mod, key) ?? MODS_DEFAULTS[mod][key];
+        if (p(mod, key) !== undefined) ignored.push('mods.switchboard.seen: set it at the user level');
+        continue;
+      }
       out[mod][key] = pick(p(mod, key), u(mod, key), MODS_DEFAULTS[mod][key])[0];
     }
   }
@@ -918,7 +932,8 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   applySkills(roles, user, project, { home, moved, ignored, warnings });
   warnings.push(...nameClashes(roles));
 
-  const [capValue, capSource] = pickCap(project, user);
+  const [capValue, capSource] = pickCap(user);
+  if (capOf(project) !== undefined || p.capRefused) ignored.push('pipeline.context_cap: set it at the user level');
   const pipeline = {
     fix_rounds: pick(project.pipeline?.fix_rounds, user.pipeline?.fix_rounds, PIPELINE_DEFAULTS.fix_rounds)[0],
     dispatch: pick(project.pipeline?.dispatch, user.pipeline?.dispatch, PIPELINE_DEFAULTS.dispatch)[0],
@@ -1234,6 +1249,25 @@ export function modelEnvLine({ env = process.env, readVersion, readSources = () 
   return `model env: CLAUDE_CODE_SUBAGENT_MODEL=${shown(raw)} CLAUDE_CODE_SUBAGENT_MODEL_FORCE=${shown(rawForce)}, Claude Code ${ver}: ${effect}; floor ${kept ? 'kept' : 'bypassed'}`;
 }
 
+// Switches one saver at the user level: one key, written atomically. A key the project layer sets is refused, since it would win.
+function setMod(id, word, { home, cwd, pluginRoot }) {
+  if (!SWITCHABLE.includes(id)) throw new Refusal(`${label(id)} cannot be switched`);
+  const key = switchKey(id);
+  const seen = id === 'switchboard' && word === 'seen';
+  if (!seen && word !== 'on' && word !== 'off') throw new Refusal(`${id} takes on or off`);
+  const field = seen ? 'seen' : 'enabled';
+  const value = seen ? true : word === 'on';
+  // A user file that does not parse is refused here, never replaced.
+  readConfig(layerPath('user', { home, cwd }));
+  if (!seen && readLayer('project', { home, cwd, pluginRoot }).layer.mods?.[key]?.enabled !== undefined) {
+    throw new Refusal(`${id} is set in .company/settings.json`);
+  }
+  const layer = structuredClone(readLayer('user', { home, cwd, pluginRoot }).layer);
+  layer.mods = { ...layer.mods, [key]: { ...layer.mods?.[key], [field]: value } };
+  writeLayer('user', layer, { home, cwd, pluginRoot });
+  return `set mods.${key}.${field} ${value}`;
+}
+
 // Returns { code, out }, or { code: 0, serve: { open } } for the CLI to start the server.
 export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, env, readVersion } = {}) {
   try {
@@ -1253,6 +1287,7 @@ export function run(args, { home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, env, re
     if (command === 'serve' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--no-open'))) {
       return { code: 0, serve: { open: rest.length === 0 } };
     }
+    if (command === 'set-mod' && rest.length === 2) return { code: 0, out: setMod(rest[0], rest[1], { home, cwd, pluginRoot }) };
     throw new Refusal(USAGE);
   } catch (error) {
     if (error instanceof Refusal) return { code: 2, out: `refused: ${error.message}` };

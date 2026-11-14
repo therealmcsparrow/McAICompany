@@ -104,20 +104,20 @@ const cleanChildEnv = (home, extra = {}) => {
 
 // ---------- defaults ----------
 
-test('plugin defaults: tech-researcher is sonnet and every other Role keeps its earlier model', () => {
+test('plugin defaults: every Role runs on its floor model and every other Role keeps its earlier model', () => {
   const ctx = mkCtx(repoRoot);
   const got = resolveSettings(ctx);
-  const opus = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'product-manager', 'security', 'senior-engineer'];
+  const opus = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'product-manager', 'security', 'senior-engineer', 'tech-researcher'];
   const haiku = ['localizer', 'prompt-artist'];
   const roles = fs.readdirSync(path.join(repoRoot, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3));
   assert.deepEqual(Object.keys(got.roles).sort(), roles.sort());
   for (const r of roles) {
-    const expected = r === 'tech-researcher' ? 'sonnet' : opus.includes(r) ? 'opus' : haiku.includes(r) ? 'haiku' : 'sonnet';
+    const expected = opus.includes(r) ? 'opus' : haiku.includes(r) ? 'haiku' : 'sonnet';
     assert.equal(got.roles[r].model, expected, r);
     assert.equal(got.roles[r].source.model, 'plugin', r);
   }
   const researcher = read('agents', 'tech-researcher.md');
-  assert.match(researcher, /^model: sonnet$/m);
+  assert.match(researcher, /^model: opus$/m);
   assert.match(researcher, /^effort: medium$/m);
 });
 
@@ -155,7 +155,7 @@ test('loadModelFloor and MODEL_RANK: ranked families, unranked fable, downgraded
   assert.equal(Object.hasOwn(MODEL_RANK, 'inherit'), false);
   const real = loadModelFloor(repoRoot);
   assert.deepEqual(Object.keys(real).sort(), ['downgraded', 'floor', 'protected', 'release', 'warnings']);
-  assert.deepEqual(real.downgraded, ['tech-researcher']);
+  assert.deepEqual(real.downgraded, []);
   assert.deepEqual(real.warnings, []);
   const fixture = loadModelFloor(mkPlugin());
   assert.deepEqual([...fixture.downgraded].sort(), ['tech-researcher', 'writer']);
@@ -332,7 +332,7 @@ test('model-env: hostile values print (hidden), on one line, and nothing else is
 test('model-env: extra arguments are refused with the usage line', () => {
   const r = settingsRun(['model-env', 'extra'], mkCtx(repoRoot));
   assert.equal(r.code, 2);
-  assert.equal(r.out, 'refused: usage: settings.mjs get [key] | serve [--no-open] | model-env');
+  assert.equal(r.out, 'refused: usage: settings.mjs get [key] | serve [--no-open] | model-env | set-mod <id> on|off');
 });
 
 test('model-env from the command line: no variable prints nothing; a variable with an unreachable claude reads unknown', () => {
@@ -389,9 +389,9 @@ test('concepts page: the source order, versions, citations and the two unverifie
   for (const r of PROTECTED) assert.ok(s.includes(r), r);
 });
 
-test('roles page: tech-researcher on sonnet, the protected list and both rollback lines', () => {
+test('roles page: tech-researcher on opus, the protected list and both rollback lines', () => {
   const doc = read('documentation', 'roles', 'README.md');
-  assert.match(doc, /tech-researcher[^\n]*sonnet/i);
+  assert.match(doc, /tech-researcher[^\n]*opus/i);
   for (const r of PROTECTED) assert.ok(doc.includes(r), r);
   assert.match(doc, /roles\.<role>\.model/);
   assert.match(doc, /\/aico:settings/);

@@ -1,0 +1,1 @@
+{ "v": 1, "id": "plan-gate", "kind": "gate", "title": "Plan Gate", "owner": "frontend-engineer", "sessions": "lead", "events": ["PreToolUse"], "rules": [], "fail": "closed", "switch": null, "lock": true, "upstream": null }

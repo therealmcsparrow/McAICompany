@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.13). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.14). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -83,7 +83,8 @@ const USAGE = [
   '  model-verdict [--runs <3-50>]',
   '  parallel-verdict [--runs <3-50>]',
   '  low-path-verdict [--runs <3-50>]',
-  '  qa-first-report'
+  '  qa-first-report',
+  '  baseline --before <x.y.z> --json'
 ].join('\n');
 
 class Refusal extends Error {}
@@ -1591,6 +1592,71 @@ function cmdQaFirstReport(args) {
   ];
 }
 
+// ---------- baseline (Savings pane) ----------
+
+const BASELINE_RUNS = 10;
+
+function isBelow(version, limit) {
+  const [a, b] = [versionParts(version), versionParts(limit)];
+  return (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) < 0;
+}
+
+// The real tokens of one counted Step record: the four counts summed, or undefined when any is not a whole number.
+function countedTokens(rec) {
+  if (!isObject(rec.tokens)) return undefined;
+  let sum = 0;
+  for (const key of TOKEN_KEYS) {
+    const n = Object.hasOwn(rec.tokens, key) ? rec.tokens[key] : undefined;
+    if (!isInt(n, MAX_COUNT)) return undefined;
+    sum += n;
+  }
+  return sum;
+}
+
+// Read only: the median real tokens per Step over the newest shipped runs whose last meta version is below `before`.
+function cmdBaseline(args) {
+  const usage = 'usage: baseline --before <x.y.z> --json';
+  const at = args.indexOf('--before');
+  const before = at === -1 ? undefined : args[at + 1];
+  if (typeof before !== 'string' || !AICO_VERSION.test(before)) throw new Refusal('--before must be x.y.z');
+  if (args.length !== 3 || args[0] !== '--before' || args[2] !== '--json') throw new Refusal(usage);
+
+  const counts = { warnings: 0, excluded: 0 };
+  const below = [];
+  let unknown = 0;
+  let shippedWithMeta = 0;
+  for (const { name, mtime } of comparisonFiles(null, counts)) {
+    if (EXCLUDED_RUN.test(name)) continue;
+    const { records } = readSafe(name);
+    const ship = lastShipOf(records);
+    if (ship === undefined) continue;
+    const meta = records.findLast((r) => r.kind === 'meta' && typeof r.aico === 'string' && AICO_VERSION.test(r.aico));
+    if (meta === undefined) {
+      unknown += 1;
+      continue;
+    }
+    shippedWithMeta += 1;
+    if (!isBelow(meta.aico, before)) continue;
+    const byId = new Map();
+    for (const rec of records) {
+      if (rec.kind !== 'step') continue;
+      const sum = countedTokens(rec);
+      if (sum !== undefined) byId.set(`${rec.role}/${rec.id}`, sum);
+    }
+    below.push({ name, mtime, shipMs: timeMs(ship.t_ship) ?? 0, steps: [...byId.values()] });
+  }
+
+  const out = (state, median, runs, steps) => [JSON.stringify({ state, median, runs, steps, unknown })];
+  if (below.length === 0) return shippedWithMeta === 0 && unknown > 0 ? out('unknown', null, 0, 0) : out('no-data', null, 0, 0);
+  below.sort((a, b) => b.shipMs - a.shipMs || b.mtime - a.mtime || (a.name < b.name ? -1 : 1));
+  const chosen = below.slice(0, BASELINE_RUNS);
+  const all = chosen.flatMap((r) => r.steps).sort((a, b) => a - b);
+  if (all.length === 0) return out('unmeasured', null, chosen.length, 0);
+  const mid = all.length >> 1;
+  const median = all.length % 2 === 1 ? all[mid] : Math.round((all[mid - 1] + all[mid]) / 2);
+  return out('ok', median, chosen.length, all.length);
+}
+
 // ---------- CLI ----------
 
 // `now` (epoch ms), `root` (the product root), `pluginRoot` and `loadFloor` (the model floor reader) are for callers that
@@ -1608,7 +1674,7 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
     const handlers = {
       add: cmdAdd, 'add-mod': cmdAddMod, reconcile: cmdReconcile, import: cmdImport, ship: cmdShip, scorecard: cmdScorecard, receipt: cmdReceipt,
       report: cmdReport, 'brainstorm-report': cmdBrainstormReport, 'model-verdict': cmdModelVerdict, 'parallel-verdict': cmdParallelVerdict,
-      'low-path-verdict': cmdLowPathVerdict, 'agent-ctx': cmdAgentCtx, 'qa-first-report': cmdQaFirstReport
+      'low-path-verdict': cmdLowPathVerdict, 'agent-ctx': cmdAgentCtx, 'qa-first-report': cmdQaFirstReport, baseline: cmdBaseline
     };
     if (!Object.hasOwn(handlers, command ?? '')) throw new Refusal(USAGE);
     if (['report', 'brainstorm-report', 'scorecard', 'receipt'].includes(command) && rest.length === 0) throw new Refusal(USAGE);

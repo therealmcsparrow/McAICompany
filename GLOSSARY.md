@@ -79,13 +79,13 @@ _Avoid_: orchestrator (use Lead).
 
 **Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only, and only with `pipeline.review_format: pilot` (default `plain`). Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
 
-**Context cap** — the max context of every Role and the Lead in a run, the setting `pipeline.context_cap` (project, else user, else 180000; a whole number from 60000 to 1000000), with the hand-over at 90% of it (floor). Frozen per run when the run starts, so a change takes effect at the next run, and passed in each dispatch as `Context cap: <cap> handover <n>` (default `180000 handover 162000`). A per-Role `context_cap` is accepted but has no effect. A soft limit. Contracts `aico-settings` v2.2, `run-state` v2.1; ADR 0069.
+**Context cap** — the max context of every Role and the Lead in a run, the setting `pipeline.context_cap` (project, else user, else 180000; a whole number from 60000 to 250000; user level only), with the hand-over at 90% of it (floor). Read from a snapshot when each Step starts, so a change takes effect at the next Step, and passed in each dispatch as `Context cap: <cap> handover <n>` (default `180000 handover 162000`). A per-Role `context_cap` is accepted but has no effect. A soft limit. Contracts `aico-settings` v3.0, `run-state` v3.0; ADR 0070.
 
 **Idea flow** — the route of `/aico:idea` and `/aico:bug`: capture, a grill, a reprompt, then the routes A to E, ticket approval and the tickets form F, G, E. Both kinds share one route; the kind decides the build Playbook (`aico:feature` for an idea, `aico:fix` for a bug). The allowed picks come from the `idea-flow` script. Record: `.company/work/<slug>/idea-flow.jsonl`. Contract `idea-flow` v1.1.
 
 **Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. The plan sections before the tasks are approved the same way as one item, `S0`. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.4.
 
-**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at the run's hand-over point (see Context cap), after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v2.3, `context-guard` v1.2; ADR 0049, ADR 0056, ADR 0069.
+**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at the run's hand-over point (see Context cap), after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v2.4, `context-guard` v2.0; ADR 0049, ADR 0056, ADR 0070.
 
 **Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 
@@ -160,6 +160,10 @@ _Avoid_: orchestrator (use Lead).
 **Cache Tax** — the mod that shows spend per Step, with cache writes marked `[tax]`, and the cache clock.
 
 **Reflect** — the mod that checks each finished Step and the finished run, and suggests Lessons. Each is `suggested` until the CEO presses Accept; Decline writes nothing.
+
+**Guard** — a fail-closed deny hook, locked on, that runs in every session (the Lead and every Step). On a crash, timeout or unreadable input it denies. Only the CEO's one-session off switch stands it down. Proposed in ADR 0071.
+
+**Saver** — a fail-open advisory mod, switchable in settings, that runs in the Lead session only. It may allow or add a note, never deny or change a tool call; on any failure it passes the call through unchanged. Proposed in ADR 0071.
 
 **Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
 

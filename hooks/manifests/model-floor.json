@@ -1,0 +1,1 @@
+{ "v": 1, "id": "model-floor", "kind": "guard", "title": "Role model floor", "owner": "backend-engineer", "sessions": "all", "events": ["PreToolUse"], "rules": ["model-floor.M1"], "fail": "closed", "switch": null, "lock": true, "upstream": null }

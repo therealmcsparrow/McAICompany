@@ -1,4 +1,6 @@
-# Contract: lead-handoff v2.3
+# Contract: lead-handoff v2.4
+
+v2.4 (task P20261114.000001/01-feature, minor; shipped; uses `run-state` v3.0, `context-guard` v2.0): the `watch` PreCompact rule runs when `AICO_GUARDS=off` (was `AICO_CONTEXT_GUARD=off`, retired with `context-guard` v2.0, CEO approved at the Plan Gate 2026-11-14); `AICO_CONTEXT_GUARD` is no longer read. Every Lead check takes the run's values from `runCap` of `run-state` v3.0 (the Lead snapshot's threshold, else 180000). No line, key, event, command or refusal changes.
 
 v2.3 (task P20261112.000001/07-feature, minor; ADR 0069; uses `run-state` v2.1): `CAP` and `HANDOVER_AT` stay exported, now as the defaults `180000` and `162000`. Every Lead check (the `watch` PreCompact rule under `AICO_CONTEXT_GUARD=off`, the `read` ` over cap` marks, and the Lead point of `context-guard` v1.2) uses the active run's `runCap(root, slug)` (`scripts/run-cap.mjs`) instead. No line, key, event, command or refusal changes.
 

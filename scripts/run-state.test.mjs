@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { run, show, active, append, MAX_FILE } from './run-state.mjs';
+import { runCap } from './run-cap.mjs';
 
 const script = path.join(import.meta.dirname, 'run-state.mjs');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
-// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
+// The run cap is read from the Lead snapshot under MCSPARROW_HOME: point it at an empty temp home so a real snapshot never leaks in.
 const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
 const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
 process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
@@ -274,7 +276,7 @@ test('append: records are exact, ordered, and `at` comes from the script clock',
   run(['gate', 'x', 'plan', 'changed'], { root, now: now + 2000 });
   run(['end', 'x', 'ship'], { root, now: now + 3000 });
   assert.deepEqual(lines(root, 'x'), [
-    { v: 1, at: at(now), ev: 'start', cap: 180000 },
+    { v: 1, at: at(now), ev: 'start' },
     { v: 1, at: at(now + 1000), ev: 'wave', wave: 2 },
     { v: 1, at: at(now + 2000), ev: 'gate', gate: 'plan', result: 'changed' },
     { v: 1, at: at(now + 3000), ev: 'end', outcome: 'ship' },
@@ -740,4 +742,86 @@ test('cli: ask through the spawned script', () => {
   assert.equal(r.status, 0);
   assert.equal(r.stdout, 'ok: ask plan\n');
   assert.equal(go('ask', 'x', 'nope').status, 2);
+});
+
+// run-state v3.0: the cap is no longer frozen per run. `runCap(root, slug)` returns
+// { cap, handover, from: 'snapshot'|'default' }: the `threshold` of the project's Lead snapshot (mod-hook v1 "Snapshot"),
+// range 60000-250000, else 180000. The view keys `cap` and `handover` carry that value. `start` writes no `cap`.
+const snapFile = (root) => {
+  const r12 = crypto.createHash('sha256').update(fs.realpathSync(root)).digest('hex').slice(0, 12);
+  return path.join(process.env.MCSPARROW_HOME, 'hook-snapshots', r12, 'lead.json');
+};
+function snap(root, threshold) {
+  fs.mkdirSync(path.dirname(snapFile(root)), { recursive: true });
+  fs.writeFileSync(snapFile(root), JSON.stringify({ v: 1, at: at(T0), threshold, savers: {}, floor: {}, drift: false, settingsWarnings: [] }));
+}
+const viewOf = (root, slug = 'x') => JSON.parse(run(['show', slug, '--json'], { root, now: T0 + 3000 }).out);
+
+test('v3.0 start: never writes a cap, with a snapshot present or not', () => {
+  const root = repo();
+  snap(root, 120000);
+  assert.equal(run(['start', 'x'], { root, now: T0 }).code, 0);
+  assert.deepEqual(lines(root, 'x'), [{ v: 1, at: at(T0), ev: 'start' }]);
+  const plain = repo();
+  run(['start', 'x', '0.39.0'], { root: plain, now: T0 });
+  assert.deepEqual(lines(plain, 'x'), [{ v: 1, at: at(T0), ev: 'start', aico: '0.39.0' }]);
+});
+
+test('v3.0 runCap: the snapshot threshold with its 90% hand-over, from "snapshot"', () => {
+  const root = repo();
+  run(['start', 'x'], { root, now: T0 });
+  snap(root, 120000);
+  assert.deepEqual(runCap(root, 'x'), { cap: 120000, handover: 108000, from: 'snapshot' });
+  snap(root, 250000);
+  assert.deepEqual(runCap(root, 'x'), { cap: 250000, handover: 225000, from: 'snapshot' });
+  snap(root, 60000);
+  assert.deepEqual(runCap(root, 'x'), { cap: 60000, handover: 54000, from: 'snapshot' });
+});
+
+test('v3.0 runCap: no snapshot gives the default 180000 / 162000 from "default"; the file setting and an old start cap are not read', () => {
+  const root = repo();
+  fs.writeFileSync(path.join(root, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, pipeline: { context_cap: 150000 } } }));
+  seed(root, 'x', [rec(T0, { ev: 'start', cap: 120000 })]);
+  assert.deepEqual(runCap(root, 'x'), { cap: 180000, handover: 162000, from: 'default' });
+  snap(root, 200000);
+  assert.deepEqual(runCap(root, 'x'), { cap: 200000, handover: 180000, from: 'snapshot' });
+});
+
+test('v3.0 runCap: a hostile threshold, a broken snapshot and a missing run fall to the default and never throw', () => {
+  const ok = repo();
+  snap(ok, 250000);
+  assert.equal(runCap(ok, 'x').cap, 250000);
+  for (const bad of ['120000', null, -1, 0, 59999, 250001, 1000000, 120000.5, NaN, { a: 1 }, [120000], true]) {
+    const root = repo();
+    snap(root, bad);
+    assert.deepEqual(runCap(root, 'x'), { cap: 180000, handover: 162000, from: 'default' }, JSON.stringify(bad));
+  }
+  for (const raw of ['', '{"v":1,"threshold":12', '[]', 'null', '"x"']) {
+    const root = repo();
+    snap(root, 200000);
+    fs.writeFileSync(snapFile(root), raw);
+    assert.deepEqual(runCap(root, 'x'), { cap: 180000, handover: 162000, from: 'default' }, JSON.stringify(raw));
+  }
+  assert.deepEqual(runCap(path.join(base, 'no-such-root'), 'nope'), { cap: 180000, handover: 162000, from: 'default' });
+});
+
+test('v3.0 show: the view cap and handover follow the snapshot, an edit applies on the next show, an old start cap is ignored', () => {
+  const root = repo();
+  seed(root, 'x', [rec(T0, { ev: 'start', cap: 120000 })]);
+  assert.equal(viewOf(root).cap, 180000);
+  assert.equal(viewOf(root).handover, 162000);
+  snap(root, 200000);
+  const v = viewOf(root);
+  assert.equal(v.cap, 200000);
+  assert.equal(v.handover, 180000);
+  snap(root, 250000);
+  assert.deepEqual([viewOf(root).cap, viewOf(root).handover], [250000, 225000]);
+  snap(root, 250001);
+  assert.deepEqual([viewOf(root).cap, viewOf(root).handover], [180000, 162000]);
+});
+
+test('v3.0 header: the Contract is run-state v3.0 and the script declares it', () => {
+  const doc = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'run-state.md'), 'utf8');
+  assert.match(doc, /^# Contract: run-state v3\.0\r?$/m);
+  assert.match(fs.readFileSync(script, 'utf8').split('\n').slice(0, 3).join('\n'), /docs\/contracts\/run-state\.md v3\.0(?![\d.])/);
 });

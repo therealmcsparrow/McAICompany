@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { runKey } from '../mods/lib/work-folder.mjs';
+import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN } from '../mods/lib/context-cap.mjs';
 
 const LEDGER_SCRIPT = path.join(import.meta.dirname, 'ledger.mjs');
-const DEFAULT_CAP = 180000;
+const DEFAULT_CAP = CONTEXT_CAP_DEFAULT;
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_CHILDREN = 4;
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -16,7 +17,7 @@ const waiting = [];
 let running = 0;
 
 const unavailable = () => ({ state: 'unavailable', totals: null, overCap: [] });
-const isCap = (n) => Number.isSafeInteger(n) && n >= 60000 && n <= 1000000;
+const isCap = (n) => Number.isSafeInteger(n) && n >= CONTEXT_CAP_MIN && n <= CONTEXT_CAP_MAX;
 const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
 
 async function slot() {

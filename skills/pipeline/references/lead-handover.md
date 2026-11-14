@@ -1,12 +1,12 @@
 # Lead hand-over
 
-How the Lead survives its context limit without losing the run (`lead-handoff` v1.8, `context-guard` v1, `lead-session-mcp` v1.1; ADR 0049 and ADR 0056). A hook does the work outside the model: at the run's handover (floor of 90% of its cap), at a clean point, it writes the Lead Handoff from the run records (its text is data) and freezes the session. The next session starts from that file and boots from the short `references/lead-resume.md`, not this whole file (a fresh Lead already holds about 55k tokens, so the boot must stay near 15k). Auto compaction is blocked during a run; manual `/compact` stays allowed.
+How the Lead survives its context limit without losing the run (`lead-handoff` v1.8, `context-guard` v2.0, `lead-session-mcp` v1.1; ADR 0049 and ADR 0056). A hook does the work outside the model: at the run's handover (floor of 90% of its cap; the cap comes from the settings snapshot, `run-state` v3.0, so a change applies from the next Step), at a clean point, it writes the Lead Handoff from the run records (its text is data) and freezes the session. The next session starts from that file and boots from the short `references/lead-resume.md`, not this whole file (a fresh Lead already holds about 55k tokens, so the boot must stay near 15k). Auto compaction is blocked during a run; manual `/compact` stays allowed.
 
 ## Hard hand-over
 - **Step running:** the hook refuses `Agent` and `Task` (`aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.`). Wait for it; the Lead Handoff is written after it ends.
 - **Clean point:** the Lead Handoff is written and every tool is refused except `lead_new_session` (`aico context cap: the Lead Handoff is written and this session is frozen. Call lead_new_session, or show the CEO this command for a new session:` plus the command).
 - **Frozen:** call `lead_new_session` (no arguments). It starts nothing: it returns the command for a new session in the product folder. Show that command to the CEO, who runs it. If the tool is refused or missing, show the command from the refusal text. Say nothing else; the old session stays frozen and the CEO closes it.
-- The new session's first message names `references/lead-resume.md`; follow it (it holds the boot steps of `## After a compaction` below, short). `AICO_CONTEXT_GUARD=off` in the environment turns the guard off; it is the CEO's escape only.
+- The new session's first message names `references/lead-resume.md`; follow it (it holds the boot steps of `## After a compaction` below, short). `AICO_GUARDS=off` in the environment turns the guards off for the Lead session only (Steps stay guarded); it is the CEO's escape only.
 
 ## Rules
 - Keep each read small (slices, about 8k tokens): one big read can still pass the cap, and `ledger add` exit 4 is the backstop.

@@ -15,6 +15,7 @@ import {
   MAIN_LIFETIME_MS, SUBAGENT_LIFETIME_MS, LIFETIME_LABEL, SUBAGENT_LINE, EMPTY_CLOCK, noteRequest, cacheClock, clockLines, clockStatus, wrap
 } from '../mods/lib/cache-clock.mjs';
 import { MODS_DEFAULTS as SETTINGS_DEFAULTS } from './settings.mjs';
+import { MODS_DEFAULTS as SOURCE_DEFAULTS } from '../hooks/lib/mods-defaults.mjs';
 import { progressRows } from '../mods/lib/bars.mjs';
 import {
   SPAWN_SCAN, cleanPath, isWindowsRoot, isReprompter, parseOutputLine, checkSpawn, allowsTool, remember, refusalReason, refusalToast, guardArmed, ARM_TTL_MS, runEnded, armLive
@@ -148,7 +149,7 @@ test('guardSettings keeps the mods block and role names, drops the rest', () => 
   const r = interpretRun({ exitCode: 0, stdout: text + '\r\n' }, guardSettings);
   assert.equal(r.ok, true);
   assert.deepEqual(Object.keys(r.value.mods).sort(), ['cache_tax', 'reflect', 'savvy']);
-  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), ['cache_tax', 'reflect', 'savvy']);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), Object.keys(SOURCE_DEFAULTS).sort());
   assert.equal(r.value.roles['frontend-engineer'].name, 'Freya');
   assert.equal(r.value.secrets, undefined);
   assert.equal(r.value.roles.architect.model, undefined);
