@@ -62,18 +62,21 @@ describe('AC12 a bad threshold gives 180000 and one warning naming the value', (
     });
   }
 
-  test('the snapshot holds exactly one warning naming the bad value, cut to 35 characters', async () => {
-    for (const bad of ['200k', 250001, 59999]) {
+  test('the snapshot holds exactly one warning naming the field and never the bad value', async () => {
+    for (const bad of ['200k', 250001, 59999, 'a‮b-canary']) {
       const fx = await booted(bad);
       const snap = JSON.parse(fs.readFileSync(fx.env.leadFile, 'utf8'));
       assert.equal(snap.threshold, 180000);
       assert.equal(snap.settingsWarnings.length, 1, JSON.stringify(snap.settingsWarnings));
-      assert.ok(snap.settingsWarnings[0].includes(String(bad)), snap.settingsWarnings[0]);
+      const w = snap.settingsWarnings[0];
+      assert.ok(w.includes('pipeline.context_cap'), w);
+      assert.ok(!w.includes(String(bad)), `omits the value: ${w}`);
+      assert.ok(!/[‪-‮⁦-⁩​-‏]/.test(w), 'no bidi or zero-width characters');
     }
     const long = await booted('x'.repeat(300));
     const w = JSON.parse(fs.readFileSync(long.env.leadFile, 'utf8')).settingsWarnings;
     assert.equal(w.length, 1);
-    assert.ok(!w[0].includes('x'.repeat(36)), 'the value is cut to 35 characters');
+    assert.ok(!w[0].includes('xxxxx'), 'the value is absent');
   });
 
   test('the bounds 60000 and 250000 are valid and give no warning', async () => {

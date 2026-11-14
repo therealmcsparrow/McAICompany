@@ -659,7 +659,7 @@ test('AC3: a refused save writes nothing, names no stored value and leaves the f
   }
 });
 
-test('AC12: a bad user cap falls back to 180000 with one warning that names the field and the value (cut to 35 characters)', (t) => {
+test('AC12: a bad user cap falls back to 180000 with one warning that names the field and never the value', (t) => {
   for (const bad of [0, -1, 'abc', null, 1.5, '200k', 250001, 1e9, 59999, true, [], {}]) {
     const s = sandbox(t);
     s.user({ pipeline: { context_cap: bad } });
@@ -669,14 +669,21 @@ test('AC12: a bad user cap falls back to 180000 with one warning that names the 
     assert.equal(r.pipeline.source.context_cap, 'plugin');
     const mine = r.warnings.filter((w) => w.includes('pipeline.context_cap'));
     assert.equal(mine.length, 1, JSON.stringify([bad, r.warnings]));
-    if (typeof bad === 'number' && Number.isFinite(bad)) assert.ok(mine[0].includes(String(bad)), `names the value: ${mine[0]}`);
-    if (typeof bad === 'string' && bad !== '') assert.ok(mine[0].includes(bad), `names the value: ${mine[0]}`);
+    assert.ok(mine[0].includes('ignoring pipeline.context_cap'), `names the field: ${mine[0]}`);
+    for (const raw of ['abc', '200k', '250001', '59999', '1000000000', '1.5']) {
+      if (String(bad) === raw) assert.ok(!mine[0].includes(raw), `omits the value: ${mine[0]}`);
+    }
   }
-  const s = sandbox(t);
-  const long = 'x'.repeat(80);
-  s.user({ pipeline: { context_cap: long } });
-  const [line] = resolveSettings(s.ctx).warnings.filter((w) => w.includes('pipeline.context_cap'));
-  assert.ok(line.includes('x'.repeat(35)) && !line.includes('x'.repeat(36)), line);
+  for (const hostile of ['x'.repeat(80), 'a‮b​c-canary', 987654321, 'Zq9-canary']) {
+    const s = sandbox(t);
+    s.user({ pipeline: { context_cap: hostile } });
+    const r = resolveSettings(s.ctx);
+    const [line, ...rest] = r.warnings.filter((w) => w.includes('pipeline.context_cap'));
+    assert.equal(rest.length, 0, JSON.stringify(r.warnings));
+    assert.ok(line.includes('ignoring pipeline.context_cap'), line);
+    assert.ok(!line.includes('x'.repeat(5)) && !line.includes('canary') && !line.includes('987654321'), `omits the value: ${line}`);
+    assert.ok(!/[‪-‮⁦-⁩​-‏]/.test(line), 'no bidi or zero-width characters');
+  }
 });
 
 test('AC12: a missing cap is the default with no warning; 200000 and 250000 resolve with the handover at 90%', (t) => {
