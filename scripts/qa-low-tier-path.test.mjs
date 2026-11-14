@@ -920,9 +920,9 @@ describe('AC9 the ledger holds the tier, the path and the data file version, as 
       // the scorecard gained a last segment in v1.5; with it cut off the line is the v0.18.0 line
       const noCost = (r) => ({ ...r, lines: r.lines.map((x) => x.replace(/ \| cost: not recorded$/, '')) });
       // v1.8 adds a last report line `over cap: <n> steps (max <n>)` when a Step is above the cap (absent run record: 180000).
-      // Derived from fixture data; only triage-hardening has such Steps (2 above 180000, max 190796).
+      // Derived from fixture data; only triage-hardening has such Steps (1 notification Step above 180000, max 190796; the 189899 record is a transcript row of the same Step).
       const oldReport = oldMain(['report', run], opts);
-      if (run === 'triage-hardening') oldReport.lines = [...oldReport.lines, 'over cap: 2 steps (max 190796)'];
+      if (run === 'triage-hardening') oldReport.lines = [...oldReport.lines, 'over cap: 1 steps (max 190796)'];
       assert.deepEqual(ledger(['report', run], opts), oldReport, `report ${run}`);
       assert.deepEqual(noCost(ledger(['scorecard', run], opts)), oldMain(['scorecard', run], opts), `scorecard ${run}`);
     }
