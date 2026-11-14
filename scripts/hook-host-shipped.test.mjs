@@ -136,4 +136,16 @@ describe('shipped rule table through the real engine', () => {
       });
     }
   }
+
+  // The session start replay reads fixtures up to 64 KiB, and a command past the guard's 65536-char bound cannot fit
+  // in one, so this case is built here and sent through the real host.
+  test('dotenv.M-SEC1: a Bash command over the length bound denies', () => {
+    const command = `echo ${'a'.repeat(65540)}; cat .env`;
+    assert.ok(command.length > 65536);
+    const r = host(base({ tool_name: 'Bash', tool_input: { command } }));
+    assert.equal(r.code, 0, r.err);
+    const reason = denyReason(r);
+    assert.ok(reason, `expected a deny, got ${r.out.slice(0, 200)}`);
+    assert.ok(reason.startsWith('aico guard dotenv.M-SEC1:'), `denied by another rule: ${reason}`);
+  });
 });
