@@ -8,9 +8,11 @@ const MAX_LINES = 1000;
 const MAX_LINE = 512;
 const HANDOFF_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.md$/;
 const LEDGER_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.findings\.md$/;
+const MCP_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
 const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 
 const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { return null; } };
+const isFile = (p) => { const l = lstatOrNull(p); return l !== null && l.isFile() && !l.isSymbolicLink(); };
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 async function modules() {
@@ -88,7 +90,12 @@ export async function resolveRun(event, root, now = Date.now()) {
   const mine = event.agentKey ? readGuard(dir).rows.filter((r) => r.id === event.agentKey) : [];
   return {
     slug, folder: dir, stepRunning, frozen,
-    agent: { deny: mine.some((r) => r.ev === 'deny'), handoff: mine.some((r) => r.ev === 'handoff'), ledger: mine.some((r) => r.ev === 'ledger') }
+    agent: {
+      deny: mine.some((r) => r.ev === 'deny'),
+      // A Handoff counts once its file is on disk; a recorded stop block counts as the one allowed pass.
+      handoff: mine.some((r) => r.ev === 'stop' || (r.ev === 'handoff' && typeof r.file === 'string' && HANDOFF_NAME.test(r.file) && isFile(path.join(dir, r.file)))),
+      ledger: mine.some((r) => r.ev === 'ledger')
+    }
   };
 }
 
@@ -130,13 +137,18 @@ export async function applyEffect(verdict, event, root, now = Date.now()) {
         if (!run) break;
         const { lh } = await modules();
         try { lh.contextHandover(mainRoot(root), run.slug, { tokens: event.tokens.total, session: event.sessionKey, now }); } catch { /* refused: the deny stands */ }
+        const cmd = lh.newSessionCommand(run.slug);
+        if (cmd) extra.reasonSuffix = cmd;
         break;
       }
-      case 'cap-lead-frozen':
+      case 'cap-lead-frozen': {
+        const { lh } = await modules();
+        const cmd = run ? lh.newSessionCommand(run.slug) : null;
+        if (cmd) extra.reasonSuffix = cmd;
         extra.continue = false;
-        extra.stopReason = verdict.message;
-        extra.systemMessage = verdict.message;
+        extra.systemMessage = cmd ? `${verdict.message} ${cmd}` : verdict.message;
         break;
+      }
       case 'cap-warn':
         if (verdict.message) extra.systemMessage = verdict.message;
         break;
@@ -145,4 +157,29 @@ export async function applyEffect(verdict, event, root, now = Date.now()) {
     }
   } catch { /* the verdict stands unrecorded */ }
   return { extra };
+}
+
+// The MCP tool call at the clean point is allowed by the rule; the engine freezes the session on it.
+export async function freezeOnMcp(event, snapshot, root, now = Date.now()) {
+  try {
+    const run = event.run;
+    if (!run || event.session !== 'lead' || run.frozen === true || run.stepRunning === true) return false;
+    if (!event.tool || event.tool.name !== MCP_TOOL || event.tokens.state !== 'read') return false;
+    if (!snapshot || !Number.isInteger(snapshot.threshold) || snapshot.threshold <= 0) return false;
+    const { freezeAt } = await import('../rules/cap.mjs');
+    if (event.tokens.total < freezeAt(snapshot.threshold)) return false;
+    await applyEffect({ v: 'allow', rule: 'cap.M1', effect: 'cap-lead-freeze' }, event, root, now);
+    return true;
+  } catch { return false; }
+}
+
+// One `stop` row per agent: the stop block is given once.
+export function recordStopBlock(event, now = Date.now()) {
+  try {
+    const run = event.run;
+    if (!run || !event.agentKey) return false;
+    const { rows, count } = readGuard(run.folder);
+    if (rows.some((r) => r.id === event.agentKey && r.ev === 'stop')) return false;
+    return appendGuard(run.folder, count, { ev: 'stop', id: event.agentKey }, now);
+  } catch { return false; }
 }

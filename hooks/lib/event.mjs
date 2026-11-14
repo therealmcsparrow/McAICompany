@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isDeviceName, normalizePath } from './paths.mjs';
-import { CONTEXT_CAP_MIN, handoverOf } from '../../mods/lib/context-cap.mjs';
 
 export const MAX_INPUT = 4 * 1024 * 1024;
 export const EVENTS = Object.freeze(['SessionStart', 'PreToolUse', 'SubagentStart', 'SubagentStop']);
@@ -18,7 +17,8 @@ const MAX_PATHS = 80;
 const MAX_SHELL_PATHS = 64;
 const MAX_MODEL = 64;
 const PROMPT_BYTES = 64 * 1024;
-const FAST_FLOOR = handoverOf(CONTEXT_CAP_MIN);
+// Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
+const FAST_FLOOR = await import('../rules/cap.mjs').then((m) => m.freezeAt(m.MIN_THRESHOLD), () => Infinity);
 const SHELL = new Set(['Bash', 'PowerShell']);
 const FILE_FIELDS = ['file_path', 'notebook_path', 'path'];
 
@@ -184,6 +184,12 @@ export function readUsage(file, sidechain) {
   } catch { return bad; } finally { if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ } }
 }
 
+// False when the main transcript exists but is not a regular file (a Step reads its own file beside it).
+function mainReadable(file) {
+  if (file.length > MAX_PATH) return false;
+  try { return fs.statSync(file).isFile(); } catch (e) { return e.code === 'ENOENT' || e.code === 'ENOTDIR'; }
+}
+
 export function projectRoot(cwd) {
   const start = realOf(cwd || '.', process.cwd());
   if (!start) return null;
@@ -234,6 +240,7 @@ export async function normalize(raw, ctx) {
     const tp = str(raw, 'transcript_path');
     if (session === 'lead') usage = readUsage(tp, false);
     else if (name === 'SubagentStop') usage = readUsage(str(raw, 'agent_transcript_path'), true);
+    else if (tp && tp.endsWith('.jsonl') && !mainReadable(tp)) usage = { state: 'error', total: null, model: null };
     else if (tp && tp.endsWith('.jsonl')) usage = readUsage(path.join(tp.slice(0, -'.jsonl'.length), 'subagents', `agent-${raw.agent_id}.jsonl`), true);
   }
   const mainModel = session === 'lead' && tool && (tool.name === 'Agent' || tool.name === 'Task') ? usage.model : null;

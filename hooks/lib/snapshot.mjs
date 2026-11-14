@@ -1,12 +1,15 @@
 // Settings snapshots: written at Lead SessionStart and at every SubagentStart, read by every guarded call.
 import fs from 'node:fs';
 import path from 'node:path';
-import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MIN } from '../../mods/lib/context-cap.mjs';
 import { hash12 } from './event.mjs';
 
 export const MAX_BYTES = 4096;
 export const MAX_STEP_FILES = 200;
-const THRESHOLD_MAX = 250000;
+// The cap numbers live in hooks/rules/cap.mjs. A plugin root without that rule has no cap guard: any integer is accepted.
+const CAP = await import('../rules/cap.mjs').then(
+  (m) => ({ min: m.MIN_THRESHOLD, max: m.MAX_THRESHOLD, def: m.DEFAULT_THRESHOLD }),
+  () => ({ min: 1, max: Number.MAX_SAFE_INTEGER, def: Number.MAX_SAFE_INTEGER })
+);
 const MAX_WARNINGS = 5;
 const MAX_WARNING_CHARS = 160;
 
@@ -36,11 +39,11 @@ export function resolveSnapshotSettings({ mcsHome, root, manifests }) {
   const warnings = [];
   const user = layer(path.join(mcsHome, 'config.json'), warnings, 'config.json');
   const project = root ? layer(path.join(root, '.company', 'settings.json'), warnings, '.company/settings.json') : {};
-  let threshold = CONTEXT_CAP_DEFAULT;
+  let threshold = CAP.def;
   const cap = walk(user, ['pipeline', 'context_cap']);
   if (cap !== undefined) {
-    if (Number.isInteger(cap) && cap >= CONTEXT_CAP_MIN && cap <= THRESHOLD_MAX) threshold = cap;
-    else warnings.push(`pipeline.context_cap: ignoring ${JSON.stringify(cap)?.slice(0, 30)}, valid is ${CONTEXT_CAP_MIN}-${THRESHOLD_MAX}`);
+    if (Number.isInteger(cap) && cap >= CAP.min && cap <= CAP.max) threshold = cap;
+    else warnings.push(`pipeline.context_cap: ignoring ${JSON.stringify(cap)?.slice(0, 30)}, valid is ${CAP.min}-${CAP.max}`);
   }
   const savers = {};
   for (const m of manifests) {

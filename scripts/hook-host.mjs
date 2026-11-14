@@ -115,6 +115,7 @@ async function main() {
   if (over) return finish(preDeny('malformed', 'input over the size limit'));
   const raw = ev.parseInput(text);
   if (!raw) return finish(preDeny('malformed', 'input is not a hook event'));
+  if (raw.hook_event_name === 'PostToolUse') return finish(null);
 
   const mcsHome = process.env.MCSPARROW_HOME || path.join(process.env.USERPROFILE || process.env.HOME || (await import('node:os')).homedir(), '.mcsparrow');
   let schema = null;
@@ -215,6 +216,7 @@ async function main() {
       if (v.v === 'note') notes.push(v.message);
     }
   }
+  if (!denied && s.ok && !off && guardRows.length > 0) await eff.freezeOnMcp(event, s.snapshot, root);
   if (!denied && s.ok && event.session === 'lead' && !s.snapshot.drift && event.drift.length === 0) {
     for (const r of rows.filter((x) => x.kind === 'saver' && applies(x, event) && s.snapshot.savers[x.id] === true)) {
       const out = await run(r, event, s.snapshot);
@@ -225,12 +227,25 @@ async function main() {
   let toast = null;
   if (denied) {
     const entry = log.appendDeny(snap.denyDir(mcsHome, root), { rule: denied.rule, kind: denied.kind, session: event.sessionKey, agent: event.agentKey });
-    if (entry.first) toast = `aico guard ${denied.rule} denied a call; later denies of this rule are only counted (see the deny log)`;
+    if (entry.first) {
+      toast = denied.rule === 'cap.M1'
+        ? 'aico cap: this session reached the context cap; later denies are only counted (see the deny log)'
+        : `aico guard ${denied.rule} denied a call; later denies of this rule are only counted (see the deny log)`;
+    }
+    if (evName === 'SubagentStop' && !stopActive && denied.rule === 'cap.M1' && denied.kind === 'deny') eff.recordStopBlock(event);
   }
   const msg = sysOf([...notes, extra.systemMessage, toast]);
   const rest = { ...extra };
   delete rest.systemMessage;
-  if (denied) return done(denyOut(evName, stopActive, denied.rule, denied.message, { ...rest, ...(msg ? { systemMessage: msg } : {}) }));
+  delete rest.reasonSuffix;
+  if (denied) {
+    const full = extra.reasonSuffix ? `${denied.message} ${extra.reasonSuffix}` : denied.message;
+    // The Lead ends its turn at the hand-over point on every cap deny.
+    if (denied.rule === 'cap.M1' && denied.kind === 'deny' && evName === 'PreToolUse' && event.session === 'lead' && s.ok
+      && event.tokens.state === 'read' && event.tokens.total >= s.snapshot.threshold) rest.continue = false;
+    if (rest.continue === false) rest.stopReason = full;
+    return done(denyOut(evName, stopActive, denied.rule, full, { ...rest, ...(msg ? { systemMessage: msg } : {}) }));
+  }
   const out = { ...rest, ...(msg ? { systemMessage: msg } : {}) };
   return done(Object.keys(out).length > 0 ? out : null);
 }
