@@ -797,7 +797,7 @@ describe('hooks.json and source', () => {
     assert.ok(!('matcher' in pre[0]));
     assert.deepEqual(pre[0].hooks, [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" watch', timeout: 5 }]);
     const ss = cfg.hooks.SessionStart;
-    assert.equal(ss.length, 2);
+    assert.equal(ss.length, 3);
     assert.equal(ss[0].matcher, 'compact');
     assert.deepEqual(ss[0].hooks, [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" resume', timeout: 5 }]);
     assert.equal(ss[1].matcher, 'startup|resume|clear');

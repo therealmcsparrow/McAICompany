@@ -102,7 +102,8 @@ test('aico-settings names the mods keys, defaults, the spend lock and refusal te
   const doc = read('docs/contracts/aico-settings.md');
   assert.deepEqual(MODS, ['savvy', 'cache_tax', 'reflect']);
   assert.equal(MODS_DEFAULTS.reflect.mode, 'deterministic');
-  assert.ok(Object.values(MODS_DEFAULTS).every((m) => m.enabled === true), 'all three mods on');
+  assert.ok(MODS.every((id) => MODS_DEFAULTS[id].enabled === true), 'all three mods on');
+  assert.equal(MODS_DEFAULTS.efficient_browser_use.enabled, false, 'efficient_browser_use defaults off');
   assert.ok(!JSON.stringify(MODS_DEFAULTS).includes('keep_warm'));
   assert.match(doc, /`mods\.<savvy\\|cache_tax\\|reflect\>\.enabled` \| boolean; default `true`/);
   assert.match(doc, /`mods\.reflect\.mode` \| `deterministic \\| model`; default `deterministic`; `model` user level only/);

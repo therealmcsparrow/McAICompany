@@ -429,7 +429,9 @@ describe('AC18: drift and the session-start check', () => {
       const env = makeEnv();
       startLead(env);
       denied(env, env.run(make(env)), 'hook-payload-changed');
-      const s = env.run({ ...make(env), tool_input: { command: 's:note' } });
+      // keep the drift: only restore tool_input when it is not the drifted field
+      const drifted = make(env);
+      const s = env.run(typeof drifted.tool_input === 'object' ? { ...drifted, tool_input: { command: 's:note' } } : drifted);
       assert.doesNotMatch(sys(s), /stub saver note/);
     });
   }
