@@ -321,12 +321,12 @@ input[aria-invalid="true"], .scribble[aria-invalid="true"] { border-color: var(-
 .bay-row legend { float: left; padding: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--text-lg); text-transform: uppercase; letter-spacing: .03em; line-height: 1.1; }
 .bay-row legend small { display: block; font-family: var(--font-mono); font-weight: 400; font-size: var(--text-xs); text-transform: none; letter-spacing: 0; color: var(--color-ink-2); }
 .bay-row .info { display: grid; gap: 4px; }
-.jacks { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.jack { position: relative; }
+.jacks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: var(--space-2); }
+.jack { position: relative; min-width: 0; }
 .jack input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-.jack label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-2); align-items: center; padding: 6px var(--space-3); border-radius: var(--radius-sm);
+.jack label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-2); align-items: center; align-content: center; height: 100%; min-height: 3.5rem; box-sizing: border-box; overflow: hidden; padding: 6px var(--space-3); border-radius: var(--radius-sm);
   background: var(--color-key); box-shadow: 0 2px 0 var(--color-key-edge); cursor: pointer; font-family: var(--font-mono); font-size: var(--text-sm); }
-.jack label .meta { grid-column: 2; font-size: 0.65rem; color: var(--color-ink-2); overflow-wrap: anywhere; min-width: 0; }
+.jack label .meta { grid-column: 2; font-size: 0.65rem; color: var(--color-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .jack label .meta.bad { color: var(--color-text-lock); }
 .jack input:checked + label { transform: translateY(2px); box-shadow: inset 0 1px 2px var(--color-shadow); font-weight: 600; }
 .jack input:checked + label .led { background: var(--lvl-led); box-shadow: 0 0 6px 1px var(--lvl-glow); }
@@ -1106,7 +1106,8 @@ const ignoredUntouched = (rec) => rec.ignored && !touched.has(touchKey(rec));
 
 function setError(rec, message) {
   rec.error = message;
-  if (message) rec.control.setAttribute('aria-invalid', 'true'); else rec.control.removeAttribute('aria-invalid');
+  const host = rec.host ?? rec.control;
+  if (message) host.setAttribute('aria-invalid', 'true'); else host.removeAttribute('aria-invalid');
   rec.errEl.textContent = message;
   rec.errEl.hidden = message === '';
   describe(rec);
@@ -1117,7 +1118,8 @@ function describe(rec) {
   if (rec.countEl) ids.push(rec.countEl.id);
   if (rec.error) ids.push(rec.errEl.id);
   if (!rec.hintEl.hidden) ids.push(rec.hintEl.id);
-  if (ids.length) rec.control.setAttribute('aria-describedby', ids.join(' ')); else rec.control.removeAttribute('aria-describedby');
+  const host = rec.host ?? rec.control;
+  if (ids.length) host.setAttribute('aria-describedby', ids.join(' ')); else host.removeAttribute('aria-describedby');
 }
 function editRecord(rec) {
   if (rec.ignored) touched.add(touchKey(rec));
@@ -1155,26 +1157,20 @@ function openRole(role) {
 function personalityField(role, level, key, rule, ignoredPaths, off) {
   const id = `pf-${role}-${level}-${key}`;
   const isText = P_TEXT.includes(key);
+  const levels = rule?.levels ?? [];
   const control = isText
-    ? el('input', { type: 'text', id, autocomplete: 'off', placeholder: '-' })
-    : el('select', { id });
+    ? el('input', { type: 'text', class: 'scribble', id, autocomplete: 'off', placeholder: '—' })
+    : segFor(levels, Object.fromEntries(levels.map((l) => [l, capital(l)])));
+  if (!isText) { control.id = id; control.classList.add('small'); }
   const rec = {
     role, level, key, id, isText, control, error: '', refused: false,
     path: `roles.${role}.personality.${key}`,
     errEl: el('p', { class: 'perr', id: `${id}-err`, hidden: true }),
     hintEl: el('p', { class: 'hint', id: `${id}-hint`, hidden: true }),
-    countEl: isText && rule ? el('span', { class: 'pcount', id: `${id}-count` }) : null
+    countEl: null
   };
   rec.ignored = ignoredPaths.has(`${level}|${rec.path}`);
   control.disabled = off;
-  if (!isText) {
-    control.append(el('option', { value: '' }, 'Not set'));
-    for (const l of rule?.levels ?? []) control.append(el('option', { value: l }, capital(l)));
-    if (rec.ignored) {
-      rec.ignoredOption = el('option', { value: IGNORED_OPTION, disabled: true }, 'Ignored stored value');
-      control.append(rec.ignoredOption);
-    }
-  }
   if (isText) {
     control.addEventListener('input', () => editRecord(rec));
     control.addEventListener('change', () => checkRecord(rec));
@@ -1183,22 +1179,24 @@ function personalityField(role, level, key, rule, ignoredPaths, off) {
   }
   pRecs.push(rec);
   pRoles[role].recs.push(rec);
-  return el('div', { class: 'pfield' },
-    el('div', { class: 'plabel' }, el('label', { for: id }, P_LABELS[key]), rec.countEl),
-    control, rec.errEl, rec.hintEl);
+  const label = `${P_LABELS[key]}`;
+  if (isText) return el('div', { class: 'ctl' }, el('label', { class: 'ctl-label', for: id }, label), control, rec.errEl, rec.hintEl);
+  // The segmented control has no role of its own, so the group wrapper carries the description and the invalid state.
+  const group = el('div', { class: 'ctl', role: 'group', 'aria-labelledby': `${id}-lbl` }, el('span', { class: 'ctl-label', id: `${id}-lbl` }, label), control, rec.errEl, rec.hintEl);
+  rec.host = group;
+  return group;
 }
 
+// The rows of one Role body: plain .ctl rows plus a small control that clears this level's overrides.
 function levelFieldset(role, level, rule, ignoredPaths) {
   const off = level === 'project' && !projectOn();
-  const box = el('fieldset', { class: 'plevel' }, el('legend', {}, `${roleLabel(role)}, ${levelWord(level)} level`));
-  box.dataset.level = level;
-  for (const key of P_KEYS) box.append(personalityField(role, level, key, rule, ignoredPaths, off));
+  const rows = P_KEYS.map((key) => personalityField(role, level, key, rule, ignoredPaths, off));
   const reset = el('button', { type: 'button', class: 'small' }, `Use plugin default for ${role}, ${level}`);
   reset.addEventListener('click', () => resetLevel(role, level));
   pRoles[role].reset[level] = reset;
-  box.append(reset);
-  if (off) box.append(el('p', { class: 'hint' }, 'Needs a .company/ folder'));
-  return box;
+  rows.push(reset);
+  if (off) rows.push(el('p', { class: 'hint' }, 'Needs a .company/ folder'));
+  return rows;
 }
 
 const typedValue = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
@@ -1224,13 +1222,7 @@ function syncPersonality() {
     // A text control keeps what is typed while the draft only differs by spaces, so the caret is never moved.
     if (c.value !== want && (!rec.isText || c.value.trim() !== want.trim())) c.value = want;
     c.classList.toggle('set', want !== '' && want !== IGNORED_OPTION);
-    if (!ignoredNow && rec.ignoredOption && rec.ignoredOption.parentNode) rec.ignoredOption.remove();
-    if (rec.countEl) {
-      const n = [...c.value.trim()].length;
-      const text = `${n} of ${rule.max} characters`;
-      if (rec.countEl.textContent !== text) rec.countEl.textContent = text;
-      rec.countEl.classList.toggle('over', n > rule.max);
-    }
+    if (!rec.isText) c.classList.toggle('ignored', ignoredNow);
     if (rec.error && !rec.sticky && !fieldProblem(rec.key, c.value)) setError(rec, '');
     let hint = '';
     if (ignoredNow) hint = rec.isText ? IGNORED_TEXT_HINT : IGNORED_LEVEL_HINT;
@@ -1244,18 +1236,11 @@ function syncPersonality() {
     describe(rec);
   }
   for (const reg of Object.values(pRoles)) {
-    const eff = P_KEYS.map((key) => [key, ...personalityEffective(reg.role, key)]);
-    const parts = eff.filter(([, v]) => v !== undefined).map(([key, v]) => (P_TEXT.includes(key) ? v : `${P_LABELS[key]} ${v}`));
-    const sumText = parts.join(', ') || 'nothing set';
+    const eff = Object.fromEntries(P_KEYS.map((key) => [key, personalityEffective(reg.role, key)[0] ?? '—']));
+    const sumText = P_KEYS.every((key) => eff[key] === '—')
+      ? 'nothing set'
+      : `${[eff.temperament, eff.talk, eff.topic].join(' · ')} · intelligence ${eff.intelligence}, creativity ${eff.creativity}`;
     if (reg.sum.textContent !== sumText) reg.sum.textContent = sumText;
-    const signature = JSON.stringify(eff);
-    if (reg.eff.dataset.signature !== signature) {
-      reg.eff.dataset.signature = signature;
-      reg.eff.replaceChildren(...eff.flatMap(([key, v, source]) => [
-        el('dt', {}, P_LABELS[key]),
-        el('dd', {}, v === undefined ? '—' : showValue(key, v), v === undefined ? null : sourceTag(source, `(${source})`))
-      ]));
-    }
     const changed = reg.recs.some((rec) => typedValue(draftAt(rec)) !== getIn(state[rec.level], ['roles', rec.role, 'personality', rec.key])
       || (touched.has(touchKey(rec)) && draftAt(rec) === undefined));
     reg.details.classList.toggle('dirty', changed);
@@ -1288,10 +1273,10 @@ function renderPersonality(panel) {
     const details = el('details', { id: `pers-${role}` });
     details.open = openRoles.has(role);
     details.addEventListener('toggle', () => { if (details.open) openRoles.add(role); else openRoles.delete(role); });
-    const reg = { role, details, sum: el('span', { class: 'gist' }), eff: el('dl'), recs: [], reset: {} };
+    const reg = { role, details, sum: el('span', { class: 'gist' }), recs: [], reset: {} };
     pRoles[role] = reg;
     details.append(el('summary', {}, el('span', { class: 'who' }, roleLabel(role)), reg.sum));
-    details.append(el('div', { class: 'body' }, levelFieldset(role, lvl(), rule, ignoredPaths), el('div', { class: 'peff' }, el('h4', {}, `In effect for ${role}`), reg.eff)));
+    details.append(el('div', { class: 'body' }, ...levelFieldset(role, lvl(), rule, ignoredPaths)));
     return details;
   }
   const input = el('input', { type: 'text', id: 'pfilter', class: 'scribble', autocomplete: 'off', 'aria-describedby': 'pfilter-hint' });
@@ -2227,7 +2212,8 @@ function renderSkills(panel) {
     if (e.selectable !== true) info.push(el('span', { class: 'lockwhy', id: `${id}_d4` }, SKILL_NOT_SELECTABLE));
     cb.addEventListener('change', () => toggleSkill(rec, row));
     const meta = el('span', { class: warnish ? 'meta bad' : 'meta' }, `${e.category} · ${status}`);
-    row.li = el('div', { class: 'jack' }, cb, el('label', { for: id }, el('i', { class: 'led', 'aria-hidden': 'true' }), e.name, meta), el('div', { class: 'jack-info' }, info));
+    row.li = el('div', { class: 'jack' }, cb, el('label', { for: id }, el('i', { class: 'led', 'aria-hidden': 'true' }), e.name, meta));
+    row.li.append(el('div', { class: 'vh' }, info)); // read by aria-describedby, not shown under the card
     return row;
   }
 

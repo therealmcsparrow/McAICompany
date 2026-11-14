@@ -495,8 +495,11 @@ test('each skill row is a checkbox with a label, a fieldset legend and status as
   const cb = box(page, 'sk-qa-user-qa-helper');
   assert.equal(cb.type, 'checkbox');
   assert.ok(page.find((n) => n.tagName === 'LABEL' && n.getAttribute('for') === cb.id && labelName(n) === 'qa-helper'));
-  const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.includes('qa') && n.textContent.includes('User level'));
+  // The bay row names the Role in its legend; the editing level is the level switch, kept on the fieldset as data-level.
+  const legend = page.find((n) => n.tagName === 'LEGEND' && n.textContent.includes('qa') && n.parentNode.dataset.level === 'user');
+  assert.ok(legend, 'a skills bay row for qa at the user level');
   assert.equal(legend.parentNode.tagName, 'FIELDSET');
+  assert.equal(legend.parentNode.dataset.level, 'user');
   const text = describedBy(cb).map((id) => byId(page, id).textContent);
   assert.deepEqual(text, ['quality, repo owner/name at aaaaaaa', 'Status: folder not recognized, project', 'MIT, as stated, not checked, vetted 2026-01-02']);
   const cmd = describedBy(box(page, 'sk-qa-user-cmd')).map((id) => byId(page, id).textContent);
@@ -872,7 +875,7 @@ test('In effect: an empty project list masks the user list, a repeated stored na
   assert.ok(dd2.includes('qa-helper, b (user)'), dd2.join('|'));
 });
 
-test('the Skills tab sits after Roles, wraps long text and adds no colour or fixed width', () => {
+test('the Skills tab sits after Roles, lays cards in a four-column grid with clipped status and adds no colour or fixed width', () => {
   const html = fs.readFileSync(PAGE_FILE, 'utf8');
   assert.ok(html.indexOf('id="tab-roles"') < html.indexOf('id="tab-skills"') && html.indexOf('id="tab-skills"') < html.indexOf('id="tab-personality"'));
   assert.ok(html.includes("const TAB_NAMES = ['roles', 'skills', 'personality'"));
@@ -880,7 +883,9 @@ test('the Skills tab sits after Roles, wraps long text and adds no colour or fix
   assert.ok(css.includes('overflow-wrap: anywhere'));
   assert.ok(!/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i.test(css));
   assert.ok(!/(^|[^-])width: \d+(px|rem)/.test(css.replace('width: 1px; height: 1px', '')));
-  assert.ok(/\.jacks \{[^}]*flex-wrap: wrap/.test(css));
+  assert.ok(/\.jacks \{[^}]*display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/.test(css), 'a fixed four-column grid');
+  assert.ok(!/\.jacks \{[^}]*flex-wrap/.test(css), 'no wrapping flex row');
+  assert.ok(/\.jack label \.meta \{[^}]*overflow: hidden; text-overflow: ellipsis; white-space: nowrap/.test(css), 'the one-line status is clipped, not wrapped');
   assert.ok(/\.pgrid, \.pbody \{[^}]*minmax\(min\(100%, 17rem\), 1fr\)/.test(html));
 });
 
