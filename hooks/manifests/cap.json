@@ -1,0 +1,1 @@
+{ "v": 1, "id": "cap", "kind": "guard", "title": "Context cap", "owner": "backend-engineer", "sessions": "all", "events": ["PreToolUse", "SubagentStop"], "rules": ["cap.M1"], "fail": "closed", "switch": null, "lock": true, "upstream": null }
