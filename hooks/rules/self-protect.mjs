@@ -362,8 +362,29 @@ function programDenied(body) {
   return namesSettingsWord(body) || (HOMEISH.test(body) && WRITEISH.test(body));
 }
 
-const PS_HERE = /@(["'])[ \t]*\r?\n([\s\S]*?)\r?\n\1@([^\n]*)/g;
-const PIPED_TEXT = /(["'])((?:\\.|(?!\1)[\s\S])*)\1[ \t]*\|[ \t]*([^\n|;&]*)/g;
+const PS_HERE_OPEN = /@(["'])[ \t]*\r?\n/g;
+const PIPED_TEXT = /(["'])((?:\\[\s\S]|(?!\1)[^\\])*\\?)\1[ \t]*\|[ \t]*([^\n|;&]*)/g;
+
+// PowerShell here-strings found in one forward pass: [body, rest of the closing line].
+function* psHereStrings(text) {
+  const exhausted = new Set();
+  let pos = 0;
+  while (pos < text.length) {
+    PS_HERE_OPEN.lastIndex = pos;
+    const open = PS_HERE_OPEN.exec(text);
+    if (!open) return;
+    const q = open[1];
+    const bodyStart = open.index + open[0].length;
+    if (exhausted.has(q)) { pos = open.index + 1; continue; }
+    const close = text.indexOf(`\n${q}@`, bodyStart);
+    if (close === -1) { exhausted.add(q); pos = open.index + 1; continue; }
+    const lineEnd = text.indexOf('\n', close + 3);
+    const end = lineEnd === -1 ? text.length : lineEnd;
+    const bodyEnd = close > bodyStart && text[close - 1] === '\r' ? close - 1 : close;
+    yield [text.slice(bodyStart, bodyEnd), text.slice(close + 3, end)];
+    pos = end;
+  }
+}
 
 function stdinProgramDenied(text) {
   if (!/<<|@["']|\|/.test(text)) return false;
@@ -376,8 +397,8 @@ function stdinProgramDenied(text) {
   for (const m of text.matchAll(HERESTRING)) {
     if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2])) return true;
   }
-  for (const m of text.matchAll(PS_HERE)) {
-    if (headWords(m[3]).some(isStdinRunner) && programDenied(m[2])) return true;
+  for (const [body, rest] of psHereStrings(text)) {
+    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
   }
   for (const m of text.matchAll(PIPED_TEXT)) {
     if (headWords(m[3]).some(isStdinRunner) && programDenied(m[2])) return true;

@@ -47,3 +47,36 @@ test('plain data in a here-string or pipe still allows', () => {
   allowed('Bash', `echo "print(1 + 1)" | python3`);
   allowed('Bash', `echo "settings.json" | grep settings`);
 });
+
+const timed = (tool, command) => {
+  const t = process.hrtime.bigint();
+  const v = judge(ev(tool, command));
+  return { v, ms: Number(process.hrtime.bigint() - t) / 1e6 };
+};
+
+test('a quoted Windows path with a pipe does not backtrack and still allows', () => {
+  const cmd = `echo "C:${'\a'.repeat(40)}" | grep x`;
+  const { v, ms } = timed('Bash', cmd);
+  assert.deepEqual(v, { v: 'allow' });
+  assert.ok(ms < 50, `took ${ms} ms`);
+  allowed('Bash', `echo 'C:\Users\me\' | grep x`);
+});
+
+test('worst-case backslash text piped to an interpreter stays fast and still denies', () => {
+  const cmd = `echo "${'\a'.repeat(60)} .claude/settings.json" | python3`;
+  const { v, ms } = timed('Bash', cmd);
+  assert.equal(v.v, 'deny');
+  assert.ok(ms < 50, `took ${ms} ms`);
+});
+
+test('many here-string openers without a closer stay linear', () => {
+  const cmd = "@'\n".repeat(60000);
+  const { v, ms } = timed('PowerShell', cmd);
+  assert.deepEqual(v, { v: 'allow' });
+  assert.ok(ms < 50, `took ${ms} ms`);
+});
+
+test('a here-string after many unclosed openers of the other quote still denies', () => {
+  const cmd = `${'@"\n'.repeat(500)}@'\nopen(".claude/settings.json","w")\n'@ | python -`;
+  denied('PowerShell', cmd);
+});
