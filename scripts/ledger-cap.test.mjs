@@ -55,7 +55,7 @@ function runState(sb, ...caps) {
 
 const settingsFile = (sb, cap) => {
   fs.mkdirSync(path.join(sb.dir, '.company'), { recursive: true });
-  fs.writeFileSync(path.join(sb.dir, '.company', 'settings.json'), JSON.stringify({ revision: 1, pipeline: { context_cap: cap } }));
+  fs.writeFileSync(path.join(sb.dir, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, pipeline: { context_cap: cap } } }));
 };
 
 const add = (sb, n, step = '07', role = 'backend-engineer') => run(sb, ['add', RUN, 'step', step, role, `a${step}`, String(n)]);
