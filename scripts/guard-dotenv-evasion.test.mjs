@@ -82,6 +82,24 @@ test('sequence braces and empty expansions that spell .env deny', () => {
   denies(bash('cat .e${x:-}nv'), 'default expansion');
 });
 
+test('an unclosed sequence brace over long dotted words stays linear', () => {
+  const time = (parts) => {
+    const command = `echo {${parts}`;
+    const start = process.hrtime.bigint();
+    judge(bash(command));
+    return Number(process.hrtime.bigint() - start) / 1e6;
+  };
+  const unit = `${'.'.repeat(4000)}=`;
+  time(unit);
+  const small = Math.max(time(unit.repeat(2)), 1);
+  const large = time(unit.repeat(16));
+  assert.ok(large < small * 40 + 100, `small ${small}ms, large ${large}ms`);
+  assert.ok(large < 500, `took ${large}ms`);
+  denies(bash(`echo {${unit.repeat(16)} cat .e{m..n}v`), 'sequence brace after a long word');
+  denies(bash('cat .{m..n}{m..n}nv'), 'two sequence braces in one word');
+  allows(bash('echo {a,b..c}'), 'comma inside the braces is not a sequence');
+});
+
 test('powershell wildcards that match a leading dot deny', () => {
   denies(bash('Get-Content *env'), 'star env');
   denies(bash('Get-Content *nv'), 'star nv');

@@ -9,7 +9,28 @@ const TEMPLATES = new Set(['.env.example', '.env.sample', '.env.template']);
 const MAX_PATH_CHARS = 4096;
 const MAX_COMMAND_CHARS = 65536;
 const SEPARATORS = /[\s;|&<>()"'`,=]+/;
-const SEQUENCE_BRACE = /\{[^{},]*\.\.[^{},]*\}/g;
+
+// Replaces each `{a..b}` group (no `{`, `}` or `,` inside) by a star in one pass.
+function starSequenceBraces(word) {
+  let out = '';
+  let i = 0;
+  const n = word.length;
+  while (i < n) {
+    const open = word.indexOf('{', i);
+    if (open === -1) break;
+    let j = open + 1;
+    while (j < n && word[j] !== '{' && word[j] !== '}' && word[j] !== ',') j += 1;
+    out += word.slice(i, open);
+    if (j < n && word[j] === '}' && word.slice(open + 1, j).includes('..')) {
+      out += '*';
+      i = j + 1;
+    } else {
+      out += word.slice(open, j);
+      i = j;
+    }
+  }
+  return out + word.slice(i);
+}
 
 function baseName(normalized) {
   const slash = normalized.lastIndexOf('/');
@@ -290,7 +311,7 @@ function expansionWords(command) {
   const words = [];
   let cur = '';
   let quote = '';
-  const flush = () => { if (cur !== '') words.push(cur.replace(SEQUENCE_BRACE, '*')); cur = ''; };
+  const flush = () => { if (cur !== '') words.push(starSequenceBraces(cur)); cur = ''; };
   for (let i = 0; i < command.length; i += 1) {
     const c = command[i];
     if (quote === "'") { if (c === "'") quote = ''; else cur += c; continue; }
