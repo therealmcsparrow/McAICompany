@@ -324,7 +324,9 @@ test('AC3 on the page: a valid value after an error clears the mark, the error t
 test('AC3 on the page: the readout keeps the value in effect while the draft is refused', async () => {
   const page = await openCap(capState({ user: 150000 }));
   const { input, readout } = capRow(page);
-  for (const text of ['abc', '50000', '1000001']) {
+  // typed values must not be substrings of the cap (150000) or handover (135000), or the negative check can never hold
+  for (const text of ['abc', '59999', '1000001']) {
+    assert.ok(!'150000 handover 135000'.includes(text), `${text} must not be a substring of the expected readout`);
     await typeCap(input, text);
     assert.ok(readout.textContent.includes('150000') && readout.textContent.includes('handover 135000'), `${text}: ${readout.textContent}`);
     assert.ok(!readout.textContent.includes(text), 'a refused number is never displayed as in effect');
