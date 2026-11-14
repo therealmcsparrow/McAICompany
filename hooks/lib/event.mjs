@@ -17,6 +17,7 @@ const MAX_PATHS = 80;
 const MAX_SHELL_PATHS = 64;
 const MAX_MODEL = 64;
 const MAX_RUNS = 500;
+const GUARD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+guard\.jsonl$/;
 const PROMPT_BYTES = 64 * 1024;
 // Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
 const FAST_FLOOR = await import('../rules/cap.mjs').then((m) => m.freezeAt(m.MIN_THRESHOLD), () => Infinity);
@@ -288,9 +289,14 @@ export function protectedPaths(ctx, root, main = null) {
     if (!r) continue;
     list.push(path.join(r, '.claude', 'settings.json'), path.join(r, '.claude', 'settings.local.json'), path.join(r, '.company', 'settings.json'));
     const work = path.join(r, '.company', 'work');
-    try {
-      for (const d of fs.readdirSync(work, { withFileTypes: true }).slice(0, MAX_RUNS)) if (d.isDirectory()) list.push(path.join(work, d.name, 'guard.jsonl'));
-    } catch { /* no work folder */ }
+    const queue = [work];
+    for (let seen = 0; queue.length > 0 && seen < MAX_RUNS; seen++) {
+      const dir = queue.shift();
+      list.push(path.join(dir, 'guard.jsonl'));
+      let kids = [];
+      try { kids = fs.readdirSync(dir, { withFileTypes: true }); } catch { /* unreadable or absent */ }
+      for (const d of kids) if (d.isDirectory()) queue.push(path.join(dir, d.name));
+    }
   }
   const out = new Set();
   for (const p of list) { const r = realOf(p, root || process.cwd()); if (r) out.add(fold(r)); }
@@ -350,6 +356,9 @@ export async function normalize(raw, ctx) {
   };
   if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error') {
     try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = null; }
+  }
+  for (const e of tool ? tool.paths : []) {
+    if (typeof e.real === 'string' && GUARD_SHAPE.test(fold(e.real)) && !event.protected.includes(fold(e.real))) event.protected.push(fold(e.real));
   }
   if (event.run && typeof event.run.folder === 'string') {
     const g = realOf(path.join(event.run.folder, 'guard.jsonl'), root || process.cwd());
