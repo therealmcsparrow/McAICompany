@@ -9,6 +9,7 @@ import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createProgress } from './progress.mjs';
+import { RULE_ID, RULE_ID_ANY } from '../hooks/lib/rule-id.mjs';
 import { WorkFolderRefusal, branchId, exactWorkPath, isBranchId, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
@@ -22,9 +23,7 @@ export const NODE_TEST_TIMEOUT_MS = 480000;
 export const NODE_TEST_OUTPUT = 16 * MiB;
 const CUT = 120;
 
-const RULE_ID = /^[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+$/;
 const RULE_LINE = /^- ([a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+) — (.*)$/;
-const RULE_ID_ANY = /[a-z][a-z0-9-]{0,23}\.(?:M-SEC|M|S|Y)\d+/g;
 const CHECK_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const FULL_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
