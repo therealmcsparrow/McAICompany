@@ -60,7 +60,8 @@ test('set-mod on flips it back; other stored keys and other config.json keys are
 });
 
 test('every saver manifest id with a switch is accepted and writes its own key; the key is mods.<id_with_underscores>.enabled', (t) => {
-  const savers = manifests().filter((m) => m.kind === 'saver' && m.switch);
+  const SWITCHABLE = ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard'];
+  const savers = manifests().filter((m) => m.kind === 'saver' && m.switch && SWITCHABLE.includes(m.id));
   const ids = savers.map((m) => m.id).sort();
   for (const must of ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard']) assert.ok(ids.includes(must), `saver manifest ${must}`);
   for (const m of savers) {
@@ -72,6 +73,11 @@ test('every saver manifest id with a switch is accepted and writes its own key; 
     const [, k] = m.switch.split('.');
     assert.deepEqual(s.stored().aico_settings.mods[k], { enabled: true }, m.id);
   }
+  const s = sandbox(t);
+  const r = s.cli('set-mod', 'reflect', 'on');
+  assert.equal(r.code, 2, 'reflect is switched on the settings page, not by set-mod');
+  assert.equal(r.out, 'refused: reflect cannot be switched\n');
+  assert.equal(fs.existsSync(s.config), false);
 });
 
 test('AC15: a guard or gate id is refused as not switchable, exit 2, nothing written', (t) => {
