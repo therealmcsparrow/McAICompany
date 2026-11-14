@@ -812,7 +812,10 @@ test('under each level select the page shows the payload phrase, and no phrase i
     select.value = level;
     await select.fire('change');
     assert.equal(hint.textContent, `The Role is told: ${PHRASES.creativity[level]}`);
-    assert.ok(select.getAttribute('aria-describedby').includes(hint.id));
+    let host = select.parentNode;
+    while (host && host.getAttribute('role') !== 'group') host = host.parentNode;
+    assert.ok(host && host !== select, 'the role=group wrapper holds the ARIA');
+    assert.ok(host.getAttribute('aria-describedby').split(' ').includes(hint.id));
   }
   const html = pageHtml();
   for (const group of Object.values(PHRASES)) for (const phrase of Object.values(group)) assert.ok(!html.includes(phrase), phrase);
