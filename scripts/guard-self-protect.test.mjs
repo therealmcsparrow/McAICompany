@@ -22,6 +22,7 @@ const protectedFor = (msh = MSH) => [
   `${msh}/config.json`, `${msh}/hook-snapshots`, PLUGIN, `${HOME}/.claude/settings.json`,
   `${HOME}/.claude/settings.local.json`, `${PROJ}/.claude/settings.json`, `${PROJ}/.claude/settings.local.json`,
   `${PROJ}/.company/settings.json`, `${PROJ}/.company/work/p1/guard.jsonl`,
+  `${PROJ}/.company/work/p1/01-feature/guard.jsonl`,
 ].map((p) => p.toLowerCase());
 
 async function load() {
