@@ -529,7 +529,7 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
   assert.equal(ok.status, 200);
   const { state: after } = await ok.json();
   assert.deepEqual(after.resolved.mods.savvy, { enabled: false, pane: 'command' });
-  assert.deepEqual(Object.keys(after.resolved.mods).sort(), ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard']);
+  assert.deepEqual(Object.keys(after.resolved.mods).sort(), Object.keys(before.plugin.mods).sort());
   assert.equal(after.resolved.mods.reflect.mode, 'deterministic');
   for (const key of ['mods.reflect.mode']) {
     assert.ok(after.resolved.ignored.some((i) => i.startsWith(key)), key);
