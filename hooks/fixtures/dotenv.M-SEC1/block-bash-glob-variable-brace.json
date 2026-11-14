@@ -1,0 +1,1 @@
+{ "hook_event_name": "PreToolUse", "session_id": "fixture", "transcript_path": "fixture.jsonl", "cwd": "/proj", "tool_name": "Bash", "tool_input": { "command": "cat .e${x}nv" }, "permission_mode": "default" }
