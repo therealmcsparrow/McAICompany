@@ -4,6 +4,7 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { main, contextHandover, newSessionCommand, watch, resume, findRun } from './lead-handover.mjs';
@@ -17,7 +18,7 @@ const SESSION = 'abcdef012345';
 
 const tmps = [];
 after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
-// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
+// The run cap is read from the Lead snapshot under MCSPARROW_HOME: point it at an empty temp home so a real snapshot never leaks in.
 const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
 tmps.push(isoHome);
 const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
@@ -29,7 +30,7 @@ after(() => { for (const [k, v] of Object.entries(savedHome)) { if (v === undefi
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 // A product root with a v3 project folder and one run folder; `running` leaves a Step open.
-function fixture({ slug = SLUG, running = false, cap } = {}) {
+function fixture({ slug = SLUG, running = false, cap, recorded } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-v3-'));
   tmps.push(base);
   const root = path.join(base, 'product');
@@ -40,10 +41,16 @@ function fixture({ slug = SLUG, running = false, cap } = {}) {
   fs.mkdirSync(path.join(claudeDir, 'projects', 'p1'), { recursive: true });
   if (slug.includes('/')) fs.writeFileSync(path.join(work, slug.split('/')[0], '00-project.md'), 'Demo project\n');
   const now = Date.now();
-  const rows = [{ v: 1, at: iso(now - 60000), ev: 'start', ...(cap === undefined ? {} : { cap }) }];
+  const rows = [{ v: 1, at: iso(now - 60000), ev: 'start', ...(recorded === undefined ? {} : { cap: recorded }) }];
   rows.push({ v: 1, at: iso(now - 50000), ev: 'sub', role: 'backend-engineer', id: '000000000001', phase: 'start' });
   if (!running) rows.push({ v: 1, at: iso(now - 40000), ev: 'sub', role: 'backend-engineer', id: '000000000001', phase: 'stop' });
   fs.writeFileSync(path.join(dir, 'run-state.jsonl'), `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+  if (cap !== undefined) { // run-state v3.0: the run cap is the Lead snapshot threshold under MCSPARROW_HOME, keyed by the root
+    const r12 = crypto.createHash('sha256').update(fs.realpathSync(root)).digest('hex').slice(0, 12);
+    fs.mkdirSync(path.join(process.env.MCSPARROW_HOME, 'hook-snapshots', r12), { recursive: true });
+    fs.writeFileSync(path.join(process.env.MCSPARROW_HOME, 'hook-snapshots', r12, 'lead.json'),
+      JSON.stringify({ v: 1, at: iso(now), threshold: cap, savers: {}, floor: {}, drift: false, settingsWarnings: [] }));
+  }
   return { base, root, claudeDir, work, dir, slug, now };
 }
 const records = (fx) => fs.readFileSync(path.join(fx.dir, 'lead-handover.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -55,19 +62,19 @@ function transcript(fx) {
   fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }], usage: USAGE_MID } })}\n`);
   return file;
 }
-const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
+const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_GUARDS: 'off' } });
 
-describe('the Contract and the header (lead-handoff v2.3)', () => {
-  test('the Contract header is v2.3 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-handoff v2.4)', () => {
+  test('the Contract header is v2.4 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v2\.3$/m);
+    assert.match(doc, /^# Contract: lead-handoff v2\.4$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.3');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.4');
   });
 
-  test('line 3 cites run-state v2.1', () => {
+  test('line 3 cites run-state v3.0', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v2\.1( |$)/);
+    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v3\.0( |$)/);
   });
 
   test('the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
@@ -239,7 +246,7 @@ describe('hooks and context hand-over on a v3 run', () => {
     assert.ok(text.split('\n').includes(`slug: ${SLUG}`));
   });
 
-  test('a v3 run keeps its own cap: the running-Step rule of watch follows the recorded cap', () => {
+  test('a v3 run follows the snapshot cap, not a start record: the running-Step rule of watch (AICO_GUARDS=off)', () => {
     const fx = fixture({ running: true, cap: 120000 });
     const at = (n) => {
       const file = path.join(fx.claudeDir, 'projects', 'p1', 'session.jsonl');
@@ -249,6 +256,14 @@ describe('hooks and context hand-over on a v3 run', () => {
     };
     assert.equal(watch(at(119999), opts(fx)).code, 2);
     assert.equal(watch(at(120000), opts(fx)).code, 0);
+    const fy = fixture({ running: true, recorded: 120000 }); // an old recorded cap is ignored: the default 180000 applies
+    const atY = (n) => {
+      const file = path.join(fy.claudeDir, 'projects', 'p1', 'session.jsonl');
+      fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: n - 15 } } })}\n`);
+      return JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'auto', transcript_path: file });
+    };
+    assert.equal(watch(atY(150000), opts(fy)).code, 2);
+    assert.equal(watch(atY(180000), opts(fy)).code, 0);
   });
 
   test('resume prints the fixed line with the quoted slug', () => {

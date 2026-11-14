@@ -82,9 +82,17 @@ test('AC9: a report without cap uses 180000, so 95001 is not over cap', async (t
   assert.deepEqual(await overOf(t, rows), [{ step: '07', role: 'qa', ctxEnd: 180001 }]);
 });
 
-test('a hostile report cap (string, null, negative, fraction, below 60000, above 1000000, object) falls back to 180000', async (t) => {
+test('token-ledger v1.14: the report cap range is 60000-250000: both ends are caps, 250001 is not', async (t) => {
+  const rows = [{ id: '05', role: 'qa', ctx_end: 60000 }, { id: '06', role: 'qa', ctx_end: 60001 }, { id: '07', role: 'qa', ctx_end: 250000 }, { id: '08', role: 'qa', ctx_end: 250001 }];
+  assert.deepEqual(await overOf(t, rows, { cap: 60000 }), [{ step: '06', role: 'qa', ctxEnd: 60001 }, { step: '07', role: 'qa', ctxEnd: 250000 }, { step: '08', role: 'qa', ctxEnd: 250001 }]);
+  assert.deepEqual(await overOf(t, rows, { cap: 250000 }), [{ step: '08', role: 'qa', ctxEnd: 250001 }]);
+  assert.deepEqual(await overOf(t, rows, { cap: 250001 }), [{ step: '07', role: 'qa', ctxEnd: 250000 }, { step: '08', role: 'qa', ctxEnd: 250001 }]); // hostile: reads 180000, so 250000 is over too
+});
+
+test('a hostile report cap (string, null, negative, fraction, below 60000, above 250000, object) falls back to 180000', async (t) => {
   const rows = [{ id: '05', role: 'qa', ctx_end: 130000 }, { id: '06', role: 'qa', ctx_end: 180001 }];
-  for (const cap of ['120000', null, -1, 0, 120000.5, 59999, 1000001, NaN, Infinity, { a: 1 }, [120000], true]) {
+  assert.deepEqual(await overOf(t, rows, { cap: 250000 }), [], 'the range top is a cap: the pair that makes this test red before the build');
+  for (const cap of ['120000', null, -1, 0, 120000.5, 59999, 250001, 1000000, 1000001, NaN, Infinity, { a: 1 }, [120000], true]) {
     assert.deepEqual(await overOf(t, rows, { cap }), [{ step: '06', role: 'qa', ctxEnd: 180001 }], JSON.stringify(cap));
   }
 });

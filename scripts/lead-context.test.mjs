@@ -14,6 +14,19 @@ const SCRIPT = path.join(here, 'lead-handover.mjs');
 const tmps = [];
 after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
 
+// The run cap is the Lead snapshot under MCSPARROW_HOME (run-state v3.0): an empty temp home, so a real snapshot never leaks in.
+const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
+tmps.push(isoHome);
+const savedHome = process.env.MCSPARROW_HOME;
+process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
+after(() => { if (savedHome === undefined) delete process.env.MCSPARROW_HOME; else process.env.MCSPARROW_HOME = savedHome; });
+function snapshot(root, threshold) {
+  const r12 = crypto.createHash('sha256').update(fs.realpathSync(root)).digest('hex').slice(0, 12);
+  fs.mkdirSync(path.join(process.env.MCSPARROW_HOME, 'hook-snapshots', r12), { recursive: true });
+  fs.writeFileSync(path.join(process.env.MCSPARROW_HOME, 'hook-snapshots', r12, 'lead.json'),
+    JSON.stringify({ v: 1, at: iso(Date.now()), threshold, savers: {}, floor: {}, drift: false, settingsWarnings: [] }));
+}
+
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 // One product root and one Claude config dir per test; nothing reads the real home.
@@ -169,6 +182,28 @@ describe('read and ctx', () => {
     assert.ok(l.includes(`lead peak ${CAP + 1} over cap`));
     fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: CAP, peak: CAP, at: AT })}\n`);
     assert.ok(lines(main(['read', fx.slug], fx.root, {}).out).includes(`lead peak ${CAP}`));
+  });
+
+  test('read marks over cap against the snapshot cap: 250000 lifts the line, 120000 lowers it, a hostile one is 180000', () => {
+    const peakLine = (fx, peak) => lines(main(['read', fx.slug], fx.root, {}).out).find((l) => l.startsWith('lead peak '));
+    const store = (fx, peak) => fs.writeFileSync(fx.file, `${JSON.stringify({ v: 1, ctx: 1000, peak, at: AT })}\n`);
+    const hi = fixture(); snapshot(hi.root, 250000);
+    store(hi, 240000);
+    assert.equal(peakLine(hi, 240000), 'lead peak 240000');
+    store(hi, 250001);
+    assert.equal(peakLine(hi, 250001), 'lead peak 250001 over cap');
+    const lo = fixture(); snapshot(lo.root, 120000);
+    store(lo, 120000);
+    assert.equal(peakLine(lo, 120000), 'lead peak 120000');
+    store(lo, 120001);
+    assert.equal(peakLine(lo, 120001), 'lead peak 120001 over cap');
+    for (const bad of ['120000', 0, 59999, 250001, 1000000, null]) {
+      const fx = fixture(); snapshot(fx.root, bad);
+      store(fx, 170000);
+      assert.equal(peakLine(fx, 170000), 'lead peak 170000', JSON.stringify(bad));
+      store(fx, 180001);
+      assert.equal(peakLine(fx, 180001), 'lead peak 180001 over cap', JSON.stringify(bad));
+    }
   });
 
   test('read prints the session tag of the stored reading, none for an untagged one', () => {

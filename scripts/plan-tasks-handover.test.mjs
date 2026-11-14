@@ -100,10 +100,10 @@ describe('skill and contract text name the run cap', () => {
   const pipeline = read('skills', 'pipeline', 'SKILL.md');
   const handoff = read('skills', 'handoff', 'SKILL.md');
 
-  test('Setup item 8 reads cap and handover from run-state and hands the handover to plan-tasks', () => {
+  test('Setup item 8 reads cap and handover from run-state (run-state v3.0: the value is the snapshot cap, so no `pipeline.context_cap` fallback is required) and hands the handover to plan-tasks', () => {
     const item = pipeline.split('\n').find((l) => l.startsWith('8. **Context cap (§1.7)**'));
     assert.ok(item, 'Setup item 8 missing');
-    for (const needle of ["`run-state show '<slug>' --json`", '`cap`', '`handover`', '`pipeline.context_cap`', '`plan-tasks check|begin --handover`']) {
+    for (const needle of ["`run-state show '<slug>' --json`", '`cap`', '`handover`', '`plan-tasks check|begin --handover`']) {
       assert.ok(item.includes(needle), `item 8 lacks ${needle}`);
     }
     assert.doesNotMatch(item, /95000|85500|no settings read|fixed for every Role/);
