@@ -1,3 +1,4 @@
 # Every dispatch carries one fixed context cap of 95000 with handover at 85500
+Status: superseded by docs/adr/0069-configurable-context-cap.md (2026-11-14).
 
 The CEO chose one cap below 100k for every Role and every Risk tier, so pipeline Setup item 8 no longer reads `roles.<role>.context_cap` or raises the cap for high-risk work: every dispatch carries `Context cap: 95000 handover 85500`, and a Role that sees the line absent or malformed uses the same values. Per-Role settings would let a Role pass 100k, so the `context_cap` settings keys stay accepted but have no effect. A Role that reaches the handover point still writes `status: handover` and the Lead starts a fresh Step of the same Role, with no CEO form and without resuming the old Step. This is hard to reverse because the plan-task `context:` budget, the parallel plan handover and every Role's Handoff rules now assume these two numbers.
