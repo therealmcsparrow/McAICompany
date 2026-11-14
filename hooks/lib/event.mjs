@@ -84,7 +84,7 @@ export function expandLeading(raw, ctx) {
   return null;
 }
 
-function pathEntry(raw, ctx, cwd) {
+function pathEntry(raw, ctx, cwd, alts = []) {
   const expanded = expandLeading(raw, ctx);
   const real = realOf(expanded ?? raw, cwd);
   let exists = false;
@@ -94,6 +94,7 @@ function pathEntry(raw, ctx, cwd) {
     exists = true;
     dir = st.isDirectory();
   } catch { /* absent */ }
+  if (!dir) for (const c of alts) if (isDirIn(expanded ?? raw, c)) { exists = true; dir = true; break; }
   return { raw, expanded, real, exists, dir };
 }
 
@@ -103,22 +104,48 @@ const isDirIn = (t, cwd) => {
   try { return fs.statSync(path.resolve(cwd || process.cwd(), t)).isDirectory(); } catch { return false; }
 };
 
-// Path-like tokens, plus bare tokens (and the rest of a `:/x` pathspec) that name a directory under cwd.
+const CD_WORDS = new Set(['cd', 'pushd', 'chdir', 'set-location', 'sl']);
+const MAX_CWDS = 8;
+
+// Path-like tokens, plus bare tokens (and the rest of a `:/x` pathspec) that name a directory under cwd
+// or under a `git -C` / `cd` target. `limited` is true when probes ran out or a target could not be read.
 function shellTokens(command, cwd) {
   const out = [];
-  let probes = 0;
+  const cwds = [cwd];
+  const state = { probes: 0, limited: false };
+  const probe = (t) => {
+    if (state.probes >= MAX_SHELL_PATHS) { state.limited = true; return false; }
+    state.probes++;
+    return cwds.some((c) => isDirIn(t, c));
+  };
+  const follow = (t) => {
+    const next = [];
+    for (const c of cwds) if (isDirIn(t, c)) next.push(path.resolve(c || process.cwd(), t));
+    if (next.length === 0) { state.limited = true; return; }
+    for (const n of next) if (cwds.length < MAX_CWDS && !cwds.includes(n)) cwds.push(n);
+  };
+  let want = null;
   for (const t of command.split(/[\s;|&<>()"'`,=]+/)) {
     if (t.length === 0 || t.length > MAX_PATH) continue;
+    const pending = want;
+    want = null;
+    if (pending) {
+      if (pending === 'cd' && t.startsWith('-') && t !== '-') { want = 'cd'; continue; }
+      follow(t);
+      if (pathLike(t)) out.push(t);
+      continue;
+    }
+    if (t === '-C') { want = 'C'; continue; }
+    if (CD_WORDS.has(t.toLowerCase())) { want = 'cd'; continue; }
     if (pathLike(t)) {
       out.push(t);
-      if (t.startsWith(':/') && t.length > 2 && probes < MAX_SHELL_PATHS) { probes++; if (isDirIn(t.slice(2), cwd)) out.push(t.slice(2)); }
-    } else if (!t.startsWith('-') && probes < MAX_SHELL_PATHS) {
-      probes++;
-      if (isDirIn(t, cwd)) out.push(t);
+      if (t.startsWith(':/') && t.length > 2 && probe(t.slice(2))) out.push(t.slice(2));
+    } else if (!t.startsWith('-') && probe(t)) {
+      out.push(t);
     }
-    if (out.length >= MAX_SHELL_PATHS) break;
+    if (out.length >= MAX_SHELL_PATHS) { state.limited = true; break; }
   }
-  return out;
+  return { tokens: out, cwds, limited: state.limited };
 }
 
 function toolOf(name, input, ctx, cwd) {
@@ -126,9 +153,12 @@ function toolOf(name, input, ctx, cwd) {
   for (const f of FILE_FIELDS) { const v = str(input, f); if (v) raws.push(v); }
   if (name === 'Glob') { const v = str(input, 'pattern'); if (v) raws.push(v); }
   const command = SHELL.has(name) ? str(input, 'command') : null;
-  if (command) raws.push(...shellTokens(command, cwd));
+  let alts = [];
+  let probeLimited = false;
+  if (command) { const st = shellTokens(command, cwd); raws.push(...st.tokens); alts = st.cwds; probeLimited = st.limited; }
   if (name === 'Grep') { const v = str(input, 'glob'); if (v) raws.push(v); }
-  const paths = [...new Set(raws)].filter((r) => r.length <= MAX_PATH).slice(0, MAX_PATHS).map((r) => pathEntry(r, ctx, cwd));
+  const paths = [...new Set(raws)].filter((r) => r.length <= MAX_PATH).slice(0, MAX_PATHS - 1).map((r) => pathEntry(r, ctx, cwd, alts));
+  if (probeLimited) paths.push({ raw: '', expanded: null, real: null, exists: false, dir: true });
   let model = null;
   let subagentType = null;
   let outputRole = null;

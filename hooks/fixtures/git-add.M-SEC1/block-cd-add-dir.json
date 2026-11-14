@@ -1,0 +1,1 @@
+{ "hook_event_name": "PreToolUse", "session_id": "fixture", "transcript_path": "fixture.jsonl", "cwd": ".", "tool_name": "Bash", "tool_input": { "command": "cd hooks && git add lib" }, "permission_mode": "default" }

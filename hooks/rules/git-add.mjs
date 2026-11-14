@@ -144,6 +144,7 @@ function badPathspec(value, dirs) {
   const s = v.replaceAll('\\', '/');
   if (s.endsWith('/')) return true;
   if (/^[. ]*$/.test(s.slice(s.lastIndexOf('/') + 1))) return true;
+  if (dirs.failClosed && !/[\\/]/.test(v) && !/^[~$%.]/.test(v) && !/\.[A-Za-z0-9]{1,8}$/.test(v)) return true;
   const norm = normalizePath(v);
   return norm !== '' && dirs.has(norm);
 }
@@ -248,7 +249,8 @@ export function judge(event) {
     for (const p of tool.paths) {
       if (p && p.dir === true && typeof p.raw === 'string') {
         const norm = normalizePath(p.raw);
-        if (norm !== '') dirs.add(norm);
+        if (p.raw === '') dirs.failClosed = true;
+        else if (norm !== '') dirs.add(norm);
       }
     }
   }
