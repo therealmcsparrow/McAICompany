@@ -61,11 +61,20 @@ test('Push-Location and pushd variants are followed like cd', () => withRepo(asy
   assert.equal(await verdict('pushd repo/hooks && git add lib', tmp), 'deny');
 }));
 
-test('a huge command of cd targets stays fast and fails closed', () => withRepo(async (tmp) => {
-  const cds = Array.from({ length: 8000 }, () => 'cd repo; cd ..;').join(' ');
+test('a huge command of repeated cd targets caps the directory probes', () => withRepo(async (tmp) => {
+  const names = Array.from({ length: 7 }, (_, i) => `d${i}`);
+  for (const n of names) fs.mkdirSync(path.join(tmp, n));
+  const setup = names.map((n) => `cd ${n};`).join(' ');
+  const command = `${setup} ${'cd . '.repeat(13000)}; git add scripts`;
+  const real = fs.statSync;
+  let stats = 0;
+  fs.statSync = (...args) => { stats++; return real(...args); };
+  let v;
   const start = Date.now();
-  assert.equal(await verdict(`${cds} git add scripts`, tmp), 'deny');
-  assert.ok(Date.now() - start < 1500);
+  try { v = await verdict(command, tmp); } finally { fs.statSync = real; }
+  assert.equal(v, 'deny');
+  assert.ok(stats < 500, `directory probes: ${stats}`);
+  assert.ok(Date.now() - start < 1000);
 }));
 
 test('an unreadable -C or cd target fails closed', () => withRepo(async (tmp) => {
