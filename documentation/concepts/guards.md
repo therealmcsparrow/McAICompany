@@ -3,6 +3,8 @@
 ## In short
 A guard is a check that runs before a tool call and can refuse it. aico has five. They work in the background while a run is active, and a Role that is refused sees only a short reason. You cannot switch an individual guard off. You can stand all of them down in the Lead session with `AICO_GUARDS=off`.
 
+Guards stop accidents, not a determined attacker. They block common mistakes, such as staging everything with `git add -A` or touching a `.env` file. They do not stop someone who crafts a command to get around them. Known gaps are tracked as Debt.
+
 ## How it works
 1. A Role or the Lead calls a tool, such as writing a file or running a command.
 2. The guards check the call before it runs.
