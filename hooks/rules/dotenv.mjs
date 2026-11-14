@@ -9,6 +9,7 @@ const TEMPLATES = new Set(['.env.example', '.env.sample', '.env.template']);
 const MAX_PATH_CHARS = 4096;
 const MAX_COMMAND_CHARS = 65536;
 const SEPARATORS = /[\s;|&<>()"'`,=]+/;
+const SEQUENCE_BRACE = /\{[^{},]*\.\.[^{},]*\}/g;
 
 function baseName(normalized) {
   const slash = normalized.lastIndexOf('/');
@@ -112,8 +113,10 @@ function globMatches(tokens, text) {
 
 function globNamesDotenv(base) {
   if (!GLOB_CHARS.test(base)) return false;
-  if (!base.startsWith('.') && !base.includes('~')) return false;
   if (base.length > MAX_GLOB_CHARS) return true;
+  if (!base.startsWith('.') && !base.includes('~')) {
+    return /[env]/i.test(base) && globMatches(globTokens(base), '.env');
+  }
   const samples = base.includes('~') ? [...GLOB_SAMPLES, 'env~1'] : GLOB_SAMPLES;
   const tokens = globTokens(base);
   return samples.some((sample) => globMatches(tokens, sample));
@@ -247,9 +250,65 @@ function deniesPath(raw, budget) {
   return deniesSpelling(raw, budget);
 }
 
+// An over-long token with no separator inside it is one path: it denies. One with separators
+// is checked through its parts.
 function deniesToken(token, budget) {
-  if (token === '' || token.length > MAX_PATH_CHARS) return false;
+  if (token === '') return false;
+  if (token.length > MAX_PATH_CHARS) return !SEPARATORS.test(token);
   return deniesSpelling(token, budget);
+}
+
+const PARAM_NAME = /[A-Za-z0-9_]/;
+
+// Index of the delimiter closing the group opened at text[open]; text.length when unclosed.
+function groupEnd(text, open, openCh, closeCh) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    if (text[i] === openCh) depth += 1;
+    else if (text[i] === closeCh) { depth -= 1; if (depth === 0) return i; }
+  }
+  return text.length;
+}
+
+// Index of the last character of the expansion starting at text[i]; i when the dollar is literal.
+function expansionEnd(text, i) {
+  const next = text[i + 1];
+  if (next === '(') return groupEnd(text, i + 1, '(', ')');
+  if (next === '{') return groupEnd(text, i + 1, '{', '}');
+  if (next !== undefined && PARAM_NAME.test(next)) {
+    let j = i + 1;
+    while (j + 1 < text.length && PARAM_NAME.test(text[j + 1])) j += 1;
+    return j;
+  }
+  if (next !== undefined && '@*#?!$-'.includes(next)) return i + 1;
+  return i;
+}
+
+// Words as the shell splits them, each expansion and sequence brace replaced by a star:
+// whatever it yields, it may spell a dotenv name.
+function expansionWords(command) {
+  const words = [];
+  let cur = '';
+  let quote = '';
+  const flush = () => { if (cur !== '') words.push(cur.replace(SEQUENCE_BRACE, '*')); cur = ''; };
+  for (let i = 0; i < command.length; i += 1) {
+    const c = command[i];
+    if (quote === "'") { if (c === "'") quote = ''; else cur += c; continue; }
+    if (c === '$') {
+      const end = expansionEnd(command, i);
+      if (end > i) { cur += '*'; i = end; continue; }
+    }
+    if (c === '`') {
+      const end = command.indexOf('`', i + 1);
+      cur += '*';
+      i = end === -1 ? command.length : end;
+    } else if (quote) { if (c === quote) quote = ''; else cur += c; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (/[\s;|&<>()]/.test(c)) flush();
+    else cur += c;
+  }
+  flush();
+  return words;
 }
 
 function decide(event) {
@@ -266,6 +325,10 @@ function decide(event) {
     if (tool.command.length > MAX_COMMAND_CHARS) return true;
     for (const token of commandTokens(tool.command)) {
       if (deniesToken(token, budget)) return true;
+    }
+    for (const word of expansionWords(tool.command)) {
+      if (word.length > MAX_PATH_CHARS && !SEPARATORS.test(word)) return true;
+      if (word.length <= MAX_PATH_CHARS && deniesSpelling(word, budget)) return true;
     }
   }
   return false;

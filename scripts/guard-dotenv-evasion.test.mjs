@@ -68,6 +68,47 @@ test('bash spellings of .env deny', () => {
   denies(bash('cat .e{n,z}v'), 'brace pair');
 });
 
+test('sequence braces and empty expansions that spell .env deny', () => {
+  denies(bash('cat .e{m..n}v'), 'sequence brace');
+  denies(bash('cat .{e..e}nv'), 'sequence brace head');
+  denies(bash('cat .e${x}nv'), 'empty parameter');
+  denies(bash('cat .e$x'), 'bare parameter at the tail');
+  denies(bash('cat .e$(:)nv'), 'empty command substitution');
+  denies(bash('cat .e`:`nv'), 'empty backtick');
+  denies(bash('cat ".e${x}nv"'), 'expansion inside double quotes');
+  denies(bash('cat src/.e$(:)nv'), 'expansion after a directory');
+  denies(bash('(cat .e${x}nv)'), 'subshell');
+  denies(bash('cat .e$(echo $(:))nv'), 'nested substitution');
+  denies(bash('cat .e${x:-}nv'), 'default expansion');
+});
+
+test('powershell wildcards that match a leading dot deny', () => {
+  denies(bash('Get-Content *env'), 'star env');
+  denies(bash('Get-Content *nv'), 'star nv');
+  denies(bash('Get-Content ?env'), 'question env');
+  denies(bash('Get-Content src\\*env'), 'after a directory');
+  denies(bash('cat *.env'), 'star dot env');
+});
+
+test('an over-long token denies', () => {
+  denies(bash('cat ' + './'.repeat(2100) + '.env'), 'padded dot path');
+  denies(bash('cat ' + 'a/'.repeat(2100) + '.e{n,x}v'), 'padded brace');
+  denies(bash('cat ' + 'a'.repeat(5000)), 'long plain word');
+  allows(bash('git commit -m "' + 'word '.repeat(1200) + '"'), 'long message made of short words');
+});
+
+test('expansions that cannot reach a dotenv name pass', () => {
+  allows(bash('echo $HOME'), 'plain parameter');
+  allows(bash('cat $dir/$name'), 'parameters only');
+  allows(bash('cat ${HOME}/notes.txt'), 'braced parameter');
+  allows(bash('echo $(date) `date`'), 'substitutions');
+  allows(bash('echo file{1..3}.txt'), 'sequence in a plain name');
+  allows(bash('ls *'), 'bare star');
+  allows(bash('ls *.mjs *.md'), 'extension globs');
+  allows(bash('node --test scripts/*.test.mjs'), 'test glob');
+  allows(bash('echo $?'), 'status parameter');
+});
+
 test('similar but harmless commands pass', () => {
   allows(bash("cat $'.e\\x6ev.example'"), 'ansi template');
   allows(bash('echo {a,b}'), 'echo braces');
