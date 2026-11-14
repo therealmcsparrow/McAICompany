@@ -983,8 +983,9 @@ function roleStrip(role) {
     if (floor && typeof picked === 'string' && picked !== 'inherit' && (MODEL_RANK[picked] ?? 0) < (MODEL_RANK[floor] ?? 0)) parts[1] = [floor, 'floor'];
     readout.append(el('span', { class: 'k' }, 'In effect'));
     for (const [v, src] of parts) readout.append(el('span', { class: 'v' }, v ?? '—'), el('span', { class: 's', 'data-src': src }, src));
-    // The context cap is fixed; every Role runs at the same value.
-    readout.append(el('span', { class: 'v' }, `cap ${resolved.context_cap ?? state.plugin.pipeline.context_cap}`));
+    // One cap for every Role: the saved pipeline value, never a per-Role value.
+    const runCap = state.resolved.pipeline?.context_cap ?? state.plugin.pipeline.context_cap;
+    readout.append(el('span', { class: 'v' }, `cap ${runCap} handover ${state.resolved.pipeline?.context_handover ?? handoverOf(runCap)}`));
     strip.classList.toggle('dirty', ['name', 'model', 'effort'].some((f) => getIn(draft[level], ['roles', role, f]) !== getIn(state[level], ['roles', role, f])));
   });
   return strip;
@@ -1355,7 +1356,11 @@ function hiddenPlanProblems() {
   const level = hiddenLevel();
   const raw = draft[level].plan_check?.runs;
   const message = raw === undefined ? '' : runsProblem('Verdict runs', String(raw));
-  return message ? [{ ghost: true, key: 'runs', level, label: 'Verdict runs', message, sticky: '', control: { id: `pc-runs-${level}` } }] : [];
+  const out = message ? [{ ghost: true, key: 'runs', level, label: 'Verdict runs', message, sticky: '', control: { id: `pc-runs-${level}` } }] : [];
+  const capRaw = draft[level].pipeline?.context_cap;
+  const capMessage = capRaw === undefined ? '' : contextCapProblem('Context cap', String(capRaw));
+  if (capMessage) out.push({ ghost: true, key: 'context_cap', level, label: 'Context cap', message: capMessage, text: contextCapText(level, capMessage), sticky: '', control: { id: `context-cap-${level}` } });
+  return out;
 }
 // Shows the level a summary link points at, then returns the live control record for the ghost one.
 function showLevel(level) {
@@ -1365,8 +1370,9 @@ function showLevel(level) {
 }
 const REFUSED_PERSONALITY = /^(user|project) roles\.([a-z0-9-]+)\.personality\.([a-z_]+): /;
 // Maps server refusal lines to fields by their leading path. The text comes from the page, never from the line.
-const PLAN_LABELS = { policy: 'Policy', runs: 'Verdict runs', parallel_cap: 'Parallel cap', short_path: 'Short path' };
-const PLAN_IDS = { policy: (l) => `pc-policy-${l}`, runs: (l) => `pc-runs-${l}`, parallel_cap: (l) => `parallel-cap-${l}`, short_path: (l) => `short-path-${l}` };
+const PLAN_LABELS = { policy: 'Policy', runs: 'Verdict runs', parallel_cap: 'Parallel cap', short_path: 'Short path', context_cap: 'Context cap' };
+const PLAN_IDS = { policy: (l) => `pc-policy-${l}`, runs: (l) => `pc-runs-${l}`, parallel_cap: (l) => `parallel-cap-${l}`, short_path: (l) => `short-path-${l}`, context_cap: (l) => `context-cap-${l}` };
+const REFUSED_CONTEXT_CAP = /^(user|project) context_cap(?![a-z_])/;
 // The live record, else one for the hidden level so its refusal is still counted and linked.
 function planRecAt(level, key) {
   const live = planRecs.find((r) => r.level === level && r.key === key);
@@ -1413,6 +1419,15 @@ function mapRefusals(lines) {
       crec.stickyValue = crec.control.value;
       if (crec.ghost) ghostPlanText(crec, crec.sticky);
       if (!plan.includes(crec)) plan.push(crec);
+      continue;
+    }
+    const xm = REFUSED_CONTEXT_CAP.exec(line);
+    const xrec = xm && planRecAt(xm[1], 'context_cap');
+    if (xrec) {
+      xrec.sticky = `Error: ${xrec.label} ${CONTEXT_CAP_REFUSAL}`;
+      xrec.stickyValue = xrec.control.value;
+      if (xrec.ghost) xrec.text = contextCapText(xrec.level, xrec.sticky);
+      if (!plan.includes(xrec)) plan.push(xrec);
       continue;
     }
     const sm = REFUSED_SHORT_PATH.exec(line);
@@ -1578,19 +1593,78 @@ function renderLanguage(panel) {
 }
 
 // ---------- Pipeline tab ----------
-const CONTEXT_CAP_HINT = 'The context cap is fixed. Every Role and every risk tier uses it. A context_cap value in an old settings file is kept but has no effect.';
-// Fixed, read-only row: the label names it for screen readers; the value is plain text, never an input.
-function contextCapRow(tbody, value) {
-  const cell = el('p', { class: 'readout', id: 'context-cap-fixed' });
-  tbody.append(el('div', { class: 'ctl' },
-    el('p', { class: 'ctl-label' }, 'Context cap', el('span', { class: 'lockcap' }, el('i', { class: 'led', 'data-on': 'lock' }), 'fixed')),
-    el('p', { class: 'hint', id: 'context-cap-hint' }, CONTEXT_CAP_HINT), cell));
+const CONTEXT_CAP_PATH = ['pipeline', 'context_cap'];
+const CONTEXT_CAP_MIN = 60000;
+const CONTEXT_CAP_MAX = 1000000;
+const CONTEXT_CAP_RANGE = `a whole number from ${CONTEXT_CAP_MIN} to ${CONTEXT_CAP_MAX}`;
+const CONTEXT_CAP_REFUSAL = `must be ${CONTEXT_CAP_RANGE}.`;
+const CONTEXT_CAP_HINT = 'How many tokens one Step may use before it stops and passes the work on. A whole number from 60000 to 1000000; hand-over starts at 90% of it (162000 at the default 180000).';
+const handoverOf = (cap) => Math.floor(cap * 9 / 10);
+// Same digits-then-range check as the server; the message never echoes the typed value.
+function contextCapProblem(label, raw) {
+  const t = raw.trim();
+  if (t === '') return '';
+  if (!/^[0-9]+$/.test(t)) return `Error: ${label} must be ${CONTEXT_CAP_RANGE}.`;
+  const n = Number(t);
+  return n < CONTEXT_CAP_MIN || n > CONTEXT_CAP_MAX ? `Error: ${label} is out of range. Use ${CONTEXT_CAP_RANGE}.` : '';
+}
+const contextCapDecode = (s) => (/^[0-9]{1,7}$/.test(s.trim()) ? Number(s) : s);
+const capValid = (v) => (Number.isInteger(v) && v >= CONTEXT_CAP_MIN && v <= CONTEXT_CAP_MAX ? v : undefined);
+// "Context cap, user level: must be ..." for the live region and the Save list.
+const contextCapText = (level, message) => `Context cap, ${level} level: ${message.replace(/^Error: Context cap /, '').replace(/^is out of range/, 'out of range')}`;
+// The cap in effect: the server's resolved value while nothing is edited, else the drafts. A refused draft counts as its saved value.
+function contextCapInEffect() {
+  const resolved = state.resolved.pipeline;
+  const edited = ['user', 'project'].some((l) => JSON.stringify(getIn(draft[l], CONTEXT_CAP_PATH)) !== JSON.stringify(getIn(state[l], CONTEXT_CAP_PATH)));
+  if (!edited && Number.isInteger(resolved?.context_cap)) return { cap: resolved.context_cap, source: resolved.source?.context_cap ?? 'plugin', handover: resolved.context_handover ?? handoverOf(resolved.context_cap) };
+  const layer = (l) => {
+    const d = getIn(draft[l], CONTEXT_CAP_PATH);
+    return d === undefined ? undefined : capValid(d) ?? capValid(getIn(state[l], CONTEXT_CAP_PATH));
+  };
+  const project = layer('project');
+  const user = layer('user');
+  const cap = project ?? user ?? state.plugin.pipeline.context_cap;
+  return { cap, source: project !== undefined ? 'project' : user !== undefined ? 'user' : 'plugin', handover: handoverOf(cap) };
+}
+function contextCapReadout(node) {
+  const eff = contextCapInEffect();
+  const signature = JSON.stringify(eff);
+  if (node.dataset.signature === signature) return;
+  node.dataset.signature = signature;
+  node.replaceChildren(el('span', { class: 'k' }, 'In effect'), el('i', { class: 'led', 'data-on': eff.source }),
+    el('span', { class: 'v' }, String(eff.cap)), el('span', { class: 's', 'data-src': eff.source }, eff.source),
+    el('span', { class: 'v' }, `handover ${eff.handover}`));
+}
+// Editable row: numeric text input; empty inherits. A client problem shows under the field at once and is announced on change; a server refusal sticks until the value changes.
+function contextCapRow(tbody, pluginValue) {
+  const level = lvl();
+  const id = `context-cap-${level}`;
+  const label = 'Context cap';
+  const field = el('input', { class: 'scribble', placeholder: '—' });
+  for (const [k, v] of [['type', 'text'], ['inputmode', 'numeric'], ['autocomplete', 'off']]) field.setAttribute(k, v);
+  const control = bindLayer(field, level, CONTEXT_CAP_PATH, contextCapDecode);
+  control.id = id;
+  const head = el('label', { class: 'ctl-label', for: id }, label, el('span', { class: 'vh' }, `, ${level} level`), editedTag());
+  const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
+  const fs = el('div', { class: 'ctl' }, head, el('p', { class: 'hint', id: 'context-cap-hint' }, CONTEXT_CAP_HINT), control, err);
+  const rec = planRec(control, control, err, 'context_cap', level, label, 'context-cap-hint', contextCapProblem);
+  const live = () => document.getElementById('field-live');
+  const prefix = `${label}, ${level} level: `;
+  let shown = '';
   syncers.push(() => {
-    const v = String(getIn(state.resolved, ['pipeline', 'context_cap']) ?? value);
-    if (cell.dataset.v === v) return;
-    cell.dataset.v = v;
-    cell.replaceChildren(el('span', { class: 'k' }, 'In effect'), el('i', { class: 'led', 'data-on': 'plugin' }), el('span', { class: 'v' }, v), el('span', { class: 's', 'data-src': 'plugin' }, 'plugin'));
+    rec.text = rec.message ? contextCapText(level, rec.message) : '';
+    if (rec.message !== shown) {
+      if (rec.message && rec.message === rec.sticky) live().textContent = rec.text;
+      else if (!rec.message && live().textContent.startsWith(prefix)) live().textContent = '';
+      shown = rec.message;
+    }
   });
+  control.addEventListener('change', () => {
+    if (rec.message) live().textContent = rec.text;
+  });
+  const shortText = (v) => (String(v).length > 12 ? `${String(v).slice(0, 12)}…` : String(v));
+  finishCtl(fs, CONTEXT_CAP_PATH, pluginValue, shortText, level, { fillReadout: contextCapReadout });
+  tbody.append(fs);
 }
 // ---- Pipeline tab controls, same markup as the preview: legend, hint, key-cap group, ladder, "In effect" readout ----
 let segSeq = 0;
@@ -1649,7 +1723,7 @@ function finishCtl(fs, path, pluginValue, format, level, opts = {}) {
     fs.classList.toggle('dirty', JSON.stringify(getIn(outgoing(level), path)) !== was);
     fs.dataset.locked = String(Boolean(opts.locked) || effective(path, pluginValue).source === 'locked');
     ladderFill(ladder, path, pluginValue, format);
-    showReadout(readout, path, pluginValue, format, getIn(state.resolved, path));
+    if (opts.fillReadout) opts.fillReadout(readout); else showReadout(readout, path, pluginValue, format, getIn(state.resolved, path));
   });
 }
 // Error text under a control: sets aria-invalid and aria-describedby on `host`.
