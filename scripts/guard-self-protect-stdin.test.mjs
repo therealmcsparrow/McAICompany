@@ -100,3 +100,29 @@ test('a here-string after many unclosed openers of the other quote still denies'
   const cmd = `${'@"\n'.repeat(500)}@'\nopen(".claude/settings.json","w")\n'@ | python -`;
   denied('PowerShell', cmd);
 });
+
+test('a closing quote with no pipe after it can still open the next piped text', () => {
+  denied('Bash', String.raw`printf '%s\n' '#\' 'open(".claude/settings.json","w").write("{}")' | python`);
+  denied('Bash', String.raw`printf '%s\n' '#\' 'open(".cl"+"aude/settings.json","w").write("{}")' | python`);
+  denied('Bash', String.raw`echo 'x\' 'open(".claude/settings.json","w")' | node`);
+});
+
+// The first quoted-text pattern, kept as a test oracle for short strings.
+const OLD_PIPED_TEXT = /(["'])((?:\\[\s\S]|(?!\1)[^\\])*\\?)\1[ \t]*\|[ \t]*([^\n|;&]*)/g;
+
+test('every quoted text the first pattern matched is still found', () => {
+  const parts = ["'", '"', BS, BS, ' ', '|', ' | python', '.claude/settings.json', '.claude/settings.json'];
+  let seed = 12345;
+  const rnd = (n) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
+  let checked = 0;
+  for (let k = 0; k < 100000; k++) {
+    let s = '';
+    for (let n = 2 + rnd(12); n > 0; n--) s += parts[rnd(parts.length)];
+    const cmd = `echo ${s}`;
+    const oldDenies = [...cmd.matchAll(OLD_PIPED_TEXT)].some((m) => m[3].trim().split(/[\s;|&()]+/)[0] === 'python' && m[2].includes('.claude/settings.json'));
+    if (!oldDenies) continue;
+    checked++;
+    assert.equal(judge(ev('Bash', cmd)).v, 'deny', `deny: ${cmd}`);
+  }
+  assert.ok(checked > 100, `only ${checked} oracle matches`);
+});

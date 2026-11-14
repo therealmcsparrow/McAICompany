@@ -544,46 +544,55 @@ function programDenied(body) {
 const PS_HERE_OPEN = /@(["'])[ \t]*\r?\n/g;
 const PIPE_AFTER = /[ \t]*\|[ \t]*([^\n|;&]*)/y;
 
-// Quoted text followed by a pipe, found in one forward scan: [text, first words of the receiving command].
+// Quoted text followed by a pipe: [text, first words of the receiving command]. Every quote is tried as an opener.
 // A backslash skips the next character; a quote after a backslash also counts as a closer, so a text that ends in a
-// lone backslash is still read. Each quote kind that never closes is dropped after one scan.
+// lone backslash is still read. Where each scan ends is tabulated once per quote kind, backwards, so the cost is linear.
 function* pipedTexts(text) {
-  const unclosed = new Set();
+  const n = text.length;
   const pipeAt = (at) => { PIPE_AFTER.lastIndex = at; return PIPE_AFTER.exec(text); };
+  const tables = new Map();
+  const tableFor = (q) => {
+    let t = tables.get(q);
+    if (t) return t;
+    const close = new Int32Array(n + 3).fill(-1);
+    const esc = new Int32Array(n + 3).fill(-1);
+    for (let s = n - 1; s >= 0; s--) {
+      const c = text[s];
+      if (c === '\\') {
+        close[s] = close[s + 2];
+        esc[s] = esc[s + 2];
+        if (esc[s] < 0 && text[s + 1] === q && pipeAt(s + 2)) esc[s] = s;
+      } else if (c === q) {
+        close[s] = s;
+      } else {
+        close[s] = close[s + 1];
+        esc[s] = esc[s + 1];
+      }
+    }
+    t = { close, esc };
+    tables.set(q, t);
+    return t;
+  };
   let i = 0;
-  while (i < text.length) {
+  while (i < n) {
     const q = text[i];
     if (q !== '"' && q !== "'") { i++; continue; }
-    if (unclosed.has(q)) { i++; continue; }
-    let j = i + 1;
-    let escaped = null;
-    let closer = -1;
-    while (j < text.length) {
-      const c = text[j];
-      if (c === '\\') {
-        if (text[j + 1] === q) {
-          const hit = pipeAt(j + 2);
-          if (hit) escaped = { at: j, end: PIPE_AFTER.lastIndex, rest: hit[1] };
-        }
-        j += 2;
-        continue;
-      }
-      if (c === q) { closer = j; break; }
-      j++;
-    }
+    const { close, esc } = tableFor(q);
+    const closer = close[i + 1];
     const plain = closer >= 0 ? pipeAt(closer + 1) : null;
     if (plain) {
       yield [text.slice(i + 1, closer), plain[1]];
       i = PIPE_AFTER.lastIndex;
-    } else if (escaped) {
-      yield [text.slice(i + 1, escaped.at + 1), escaped.rest];
-      i = escaped.end;
-    } else if (closer >= 0) {
-      i = closer + 1;
-    } else {
-      unclosed.add(q);
-      i++;
+      continue;
     }
+    const at = esc[i + 1];
+    if (at >= 0) {
+      const hit = pipeAt(at + 2);
+      yield [text.slice(i + 1, at + 1), hit[1]];
+      i = PIPE_AFTER.lastIndex;
+      continue;
+    }
+    i++;
   }
 }
 
