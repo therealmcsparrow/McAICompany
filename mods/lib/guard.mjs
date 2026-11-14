@@ -190,6 +190,8 @@ const runView = obj({
   gates: arr(obj({ gate: oneOf(['brief', 'plan', 'ship']), result: oneOf(['passed', 'changed', 'stopped']), at: stamp }), 16),
   round: or(int(0, 99), oneOf(['unknown'])),
   tier,
+  cap: opt(int(60000, 1000000)),
+  handover: opt(int(1, 1000000)),
   steps: arr(obj({
     step: pattern(/^\d{2,3}$/),
     role: pattern(ROLE_KEY),

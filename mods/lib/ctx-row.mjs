@@ -1,9 +1,10 @@
 // Context rows of the run pane: pure text and id handling, no engine object.
 import { UNKNOWN } from './format.mjs';
 import { AGENT_ID, MAX_CTX } from './guard.mjs';
+import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MIN, CONTEXT_CAP_MAX, handoverOf } from './context-cap.mjs';
 
-export const NEAR_CAP = 85500;
-export const OVER_CAP = 95000;
+export const NEAR_CAP = handoverOf(CONTEXT_CAP_DEFAULT);
+export const OVER_CAP = CONTEXT_CAP_DEFAULT;
 export const CHUNK_SIZE = 8;
 export const MAX_CALLS = 5;
 
@@ -13,32 +14,43 @@ export function fmtCtx(n) {
   return n < 1000 ? String(n) : `${(n / 1000).toFixed(1)}k`;
 }
 
-function capNote(n) {
-  if (n > OVER_CAP) return ' over cap';
-  if (n > NEAR_CAP) return ' near cap';
+// The run's marks: a whole cap 60000-1000000, and with it a whole handover up to that cap; anything else reads the defaults.
+function marks(cap, handover) {
+  const okCap = Number.isInteger(cap) && cap >= CONTEXT_CAP_MIN && cap <= CONTEXT_CAP_MAX;
+  const over = okCap ? cap : CONTEXT_CAP_DEFAULT;
+  if (!okCap) return { near: NEAR_CAP, over };
+  const okNear = Number.isInteger(handover) && handover >= 1 && handover <= over;
+  return { near: okNear ? handover : handoverOf(over), over };
+}
+
+function capNote(n, cap, handover) {
+  const m = marks(cap, handover);
+  if (n > m.over) return ' over cap';
+  if (n > m.near) return ' near cap';
   return '';
 }
 
 // The one note for the status part: `over cap` beats `near cap`; anything that is not a count is ignored.
-export function worstNote(counts) {
+export function worstNote(counts, cap, handover) {
   if (!Array.isArray(counts)) return '';
+  const m = marks(cap, handover);
   let note = '';
   for (const n of counts) {
     if (!Number.isInteger(n)) continue;
-    if (n > OVER_CAP) return 'over cap';
-    if (n > NEAR_CAP) note = 'near cap';
+    if (n > m.over) return 'over cap';
+    if (n > m.near) note = 'near cap';
   }
   return note;
 }
 
 // `ctx 90.0k near cap`, or `ctx ?` for anything that is not a count.
-export function ctxCell(n) {
+export function ctxCell(n, cap, handover) {
   const text = fmtCtx(n);
-  return text === UNKNOWN ? `ctx ${UNKNOWN}` : `ctx ${text}${capNote(n)}`;
+  return text === UNKNOWN ? `ctx ${UNKNOWN}` : `ctx ${text}${capNote(n, cap, handover)}`;
 }
 
-export function leadRow(n) {
-  return `Lead ${ctxCell(n)}`;
+export function leadRow(n, cap, handover) {
+  return `Lead ${ctxCell(n, cap, handover)}`;
 }
 
 // Valid, distinct ids only, in order, in chunks for one call each; at most MAX_CALLS chunks.

@@ -89,7 +89,10 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
     return { slug: UNKNOWN, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], lead: undefined, status: undefined }
   }
   const slug = state.slug
-  const lead = leadRow(counts.lead)
+  const runMarks = state.view as { cap?: number | null; handover?: number | null } | null
+  const cap = runMarks?.cap
+  const handover = runMarks?.handover
+  const lead = leadRow(counts.lead, cap, handover)
   if (view === null) {
     return { slug, state: UNKNOWN, wave: UNKNOWN, step: UNKNOWN, round: UNKNOWN, gates: UNKNOWN, view: null, elapsed: UNKNOWN, agents: [], lead, status: `W${UNKNOWN} S${UNKNOWN} ${UNKNOWN}` }
   }
@@ -113,7 +116,7 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
     const found = counts.agents.find(one => one.id === id)
     const ctxValue = found === undefined ? null : found.ctx
     counted.push(ctxValue)
-    lines.push({ head: whoLabel(row.step, role, name), units: [startedAt, ...splitCell(ctxCell(ctxValue))] })
+    lines.push({ head: whoLabel(row.step, role, name), units: [startedAt, ...splitCell(ctxCell(ctxValue, cap, handover))] })
     if (row.step !== null && (current === undefined || Number(row.step) > Number(current.step))) current = { step: row.step, role, name }
   }
   if (current === undefined) {
@@ -127,7 +130,7 @@ function buildModel(state: RunState, entries: Entry[], roles: Record<string, str
   const status = isEnded
     ? `ended ${view.outcome ?? UNKNOWN} ${minutes}`
     : view.state === 'running'
-      ? capped(worstNote(counted), `W${wave} S${stepNumber}`, `${shortRole(current?.role ?? null)}${minutes}`)
+      ? capped(worstNote(counted, cap, handover), `W${wave} S${stepNumber}`, `${shortRole(current?.role ?? null)}${minutes}`)
       : view.state
   return { slug, state: label, wave, step, round, gates, view, elapsed, agents: lines, lead, status }
 }
