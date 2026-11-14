@@ -115,3 +115,82 @@ describe('long command lists and long targets through the real host', () => {
     assert.equal(r.reason, null, `unexpected deny: ${r.reason}`);
   });
 });
+
+const BS = String.fromCharCode(92);
+const ps = (command, cwd = project) => host({ tool_name: 'PowerShell', tool_input: { command } }, cwd);
+const grep = (glob) => host({ tool_name: 'Grep', tool_input: { pattern: 'x', glob } }, project);
+const globTool = (pattern) => host({ tool_name: 'Glob', tool_input: { pattern } }, project);
+const denyBy = (r, rule) => {
+  assert.equal(r.code, 0, r.err);
+  assert.ok(r.reason, `expected a deny, got ${r.out.slice(0, 200)}`);
+  assert.ok(r.reason.startsWith(`aico guard ${rule}:`), `denied by another rule: ${r.reason}`);
+};
+
+describe('dotenv wildcard forms through the real host', () => {
+  for (const g of ['*env', '?env', '**/*env', '*nv.local']) {
+    test(`Grep glob ${g} denies`, () => denyBy(grep(g), 'dotenv.M-SEC1'));
+    test(`Glob pattern ${g} denies`, () => denyBy(globTool(g), 'dotenv.M-SEC1'));
+  }
+
+  test('powershell named from Bash with a leading star denies', () => {
+    denyBy(bash('powershell -c "Get-Content *env"'), 'dotenv.M-SEC1');
+  });
+
+  test('a shell variable joined to nv.local denies in Bash', () => {
+    denyBy(bash('cat ${x}nv.local'), 'dotenv.M-SEC1');
+  });
+
+  test('a shell variable joined to nv.local denies in PowerShell', () => {
+    denyBy(ps('Get-Content ${x}nv.local'), 'dotenv.M-SEC1');
+  });
+
+  test('Bash cat * still allows', () => {
+    const r = bash('cat *');
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.reason, null, `unexpected deny: ${r.reason}`);
+  });
+});
+
+describe('quoted text piped to an interpreter keeps denying through the real host', () => {
+  const payloads = [
+    [`printf '%s${BS}n' '#${BS}' 'open(".claude/settings.json","w").write("{}")' | python`, 'hash-backslash'],
+    [`printf '%s${BS}n' '#${BS}' 'open(".cl"+"aude/settings.json","w").write("{}")' | python`, 'split-literal'],
+    [`echo 'x${BS}' 'open(".claude/settings.json","w")' | node`, 'echo-node'],
+  ];
+  for (const [command, name] of payloads) {
+    test(`${name} denies`, () => {
+      assert.ok(command.includes(BS), 'payload keeps its backslash');
+      denyBy(bash(command), 'self-protect.M-SEC1');
+    });
+  }
+});
+
+describe('hostile long input stays fast through the real host', () => {
+  const timed = (command) => {
+    const t = process.hrtime.bigint();
+    const r = bash(command);
+    return { r, ms: Number(process.hrtime.bigint() - t) / 1e6 };
+  };
+
+  test('an unclosed sequence brace over long dotted words scales linearly', () => {
+    const unit = `${'.'.repeat(4000)}=`;
+    const run = (n) => timed(`echo {${unit.repeat(n)}`);
+    run(2);
+    const small = run(8);
+    const large = run(64);
+    assert.notEqual(large.r.code, null, 'host timed out');
+    assert.ok(large.ms < 8000, `took ${large.ms} ms`);
+    assert.ok(large.ms < Math.max(small.ms, 300) * 25, `${small.ms} ms -> ${large.ms} ms for 8x the input`);
+  });
+
+  test('words of 4096 characters scale linearly and finish well inside the hook timeout', () => {
+    const word = 'a'.repeat(4096);
+    const run = (bytes) => timed(`echo ${Array.from({ length: Math.floor(bytes / 4097) }, () => word).join(' ')}`);
+    run(65536);
+    const small = run(1 << 20);
+    const large = run(3 << 20);
+    assert.notEqual(large.r.code, null, 'host timed out');
+    assert.ok(large.ms < 8000, `took ${large.ms} ms`);
+    assert.ok(large.ms < Math.max(small.ms, 300) * 12, `${small.ms} ms -> ${large.ms} ms for 3x the input`);
+  });
+});
