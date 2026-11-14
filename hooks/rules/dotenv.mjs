@@ -1,6 +1,6 @@
 // dotenv.M-SEC1: deny any tool call whose path names a `.env` file.
 // `.env` and `.env.<x>` deny; `.env.example`, `.env.sample`, `.env.template` pass.
-// Pure: reads only the event it is given, returns a verdict.
+// Pure: reads only the event it is given, returns a verdict. Anything it cannot decide denies.
 import { normalizePath } from '../lib/paths.mjs';
 
 const RULE = 'dotenv.M-SEC1';
@@ -18,35 +18,153 @@ function baseName(normalized) {
 
 const SHORT_NAME = /^env~\d+(\.[a-z0-9]{0,3})?$/i;
 const GLOB_CHARS = /[*?[]/;
-const GLOB_SAMPLES = ['.env', '.env.x'];
+const GLOB_SAMPLES = ['.env', '.env.x', '.env.local', '.env.production', '.env.development', '.env.test'];
+const MAX_GLOB_CHARS = 256;
+const MAX_BRACE_ALTERNATIVES = 1024;
+const BRACE_WORK_CHARS = 4 * 1024 * 1024;
 
-function globRegex(pattern) {
-  let out = '';
+const POSIX_CLASSES = {
+  alpha: /[a-z]/i, digit: /[0-9]/, alnum: /[a-z0-9]/i, upper: /[A-Z]/, lower: /[a-z]/,
+  xdigit: /[0-9a-f]/i, punct: /[!-/:-@[-`{-~]/, space: /\s/, blank: /[ \t]/,
+  cntrl: /[\x00-\x1f\x7f]/, print: /[\x20-\x7e]/, graph: /[\x21-\x7e]/, word: /\w/,
+};
+
+// Parses a bracket expression at pattern[start]; null when it never closes (a literal bracket).
+// A class or range it cannot read exactly makes the set match every character.
+function parseSet(pattern, start) {
+  let j = start + 1;
+  let negate = false;
+  let unsure = false;
+  if (pattern[j] === '!' || pattern[j] === '^') { negate = true; j += 1; }
+  const first = j;
+  const items = [];
+  while (j < pattern.length) {
+    let c = pattern[j];
+    if (c === ']' && j > first) {
+      const test = (ch) => {
+        const variants = [ch.toLowerCase(), ch.toUpperCase()];
+        const hit = items.some((item) => variants.some((x) => (item.cls ? item.cls.test(x) : x >= item.lo && x <= item.hi)));
+        return unsure ? true : (negate ? !hit : hit);
+      };
+      return { test, next: j };
+    }
+    if (c === '[' && pattern[j + 1] === ':') {
+      const end = pattern.indexOf(':]', j + 2);
+      if (end !== -1) {
+        const name = pattern.slice(j + 2, end);
+        if (Object.hasOwn(POSIX_CLASSES, name)) items.push({ cls: POSIX_CLASSES[name] }); else unsure = true;
+        j = end + 2;
+        continue;
+      }
+    }
+    if (c === '\\' && j + 1 < pattern.length) { j += 1; c = pattern[j]; }
+    if (pattern[j + 1] === '-' && j + 2 < pattern.length && pattern[j + 2] !== ']') {
+      let lo = c;
+      let hi = pattern[j + 2];
+      if (lo > hi) { unsure = true; [lo, hi] = [hi, lo]; }
+      items.push({ lo, hi });
+      j += 3;
+      continue;
+    }
+    items.push({ lo: c, hi: c });
+    j += 1;
+  }
+  return null;
+}
+
+function globTokens(pattern) {
+  const tokens = [];
   for (let i = 0; i < pattern.length; i += 1) {
     const c = pattern[i];
-    if (c === '*') out += '[^/]*';
-    else if (c === '?') out += '[^/]';
+    if (c === '*') {
+      if (!tokens.length || tokens[tokens.length - 1].t !== 'star') tokens.push({ t: 'star' });
+    } else if (c === '?') tokens.push({ t: 'any' });
     else if (c === '[') {
-      const close = pattern.indexOf(']', i + 2);
-      if (close === -1) out += '\\[';
-      else {
-        let body = pattern.slice(i + 1, close).replace(/\\/g, '\\\\');
-        if (body[0] === '!') body = '^' + body.slice(1);
-        out += '[' + body + ']';
-        i = close;
-      }
-    } else out += c.replace(/[.+^${}()|\\\]]/g, '\\$&');
+      const set = parseSet(pattern, i);
+      if (set) { tokens.push({ t: 'set', test: set.test }); i = set.next; } else tokens.push({ t: 'lit', c: '[' });
+    } else if (c === '\\' && i + 1 < pattern.length) { i += 1; tokens.push({ t: 'lit', c: pattern[i].toLowerCase() }); }
+    else tokens.push({ t: 'lit', c: c.toLowerCase() });
   }
-  return out;
+  return tokens;
+}
+
+function tokenFits(token, ch) {
+  if (token.t === 'any') return true;
+  if (token.t === 'set') return token.test(ch);
+  return token.c === ch.toLowerCase();
+}
+
+// Wildcard match with single-star backtracking: O(pattern * text), no regex.
+function globMatches(tokens, text) {
+  let ti = 0;
+  let si = 0;
+  let starT = -1;
+  let starS = 0;
+  while (si < text.length) {
+    if (ti < tokens.length && tokens[ti].t === 'star') { starT = ti; starS = si; ti += 1; }
+    else if (ti < tokens.length && tokenFits(tokens[ti], text[si])) { ti += 1; si += 1; }
+    else if (starT !== -1) { starS += 1; si = starS; ti = starT + 1; }
+    else return false;
+  }
+  while (ti < tokens.length && tokens[ti].t === 'star') ti += 1;
+  return ti === tokens.length;
 }
 
 function globNamesDotenv(base) {
-  if (!GLOB_CHARS.test(base) || base.length > 256) return false;
-  const samples = base.includes('~') ? [...GLOB_SAMPLES, 'env~1'] : GLOB_SAMPLES;
+  if (!GLOB_CHARS.test(base)) return false;
   if (!base.startsWith('.') && !base.includes('~')) return false;
-  let re;
-  try { re = new RegExp('^' + globRegex(base) + '$', 'i'); } catch { return false; }
-  return samples.some((sample) => re.test(sample) && !TEMPLATES.has(sample));
+  if (base.length > MAX_GLOB_CHARS) return true;
+  const samples = base.includes('~') ? [...GLOB_SAMPLES, 'env~1'] : GLOB_SAMPLES;
+  const tokens = globTokens(base);
+  return samples.some((sample) => globMatches(tokens, sample));
+}
+
+// Finds the first top-level brace group holding a comma: { start, end, parts }.
+function findBraceGroup(s) {
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === '\\') { i += 1; continue; }
+    if (s[i] !== '{') continue;
+    let depth = 0;
+    let last = i + 1;
+    const parts = [];
+    for (let j = i; j < s.length; j += 1) {
+      const c = s[j];
+      if (c === '\\') j += 1;
+      else if (c === '{') depth += 1;
+      else if (c === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          if (!parts.length) break;
+          parts.push(s.slice(last, j));
+          return { start: i, end: j, parts };
+        }
+      } else if (c === ',' && depth === 1) { parts.push(s.slice(last, j)); last = j + 1; }
+    }
+  }
+  return null;
+}
+
+// Brace expansion as the shell does it; null when the work bound is exceeded.
+function expandBraces(text, budget) {
+  if (!text.includes('{') || !text.includes(',')) return [text];
+  const queue = [text];
+  const done = [];
+  while (queue.length) {
+    const item = queue.pop();
+    const group = findBraceGroup(item);
+    if (!group) done.push(item);
+    else {
+      const head = item.slice(0, group.start);
+      const tail = item.slice(group.end + 1);
+      for (const part of group.parts) {
+        const next = head + part + tail;
+        budget.left -= next.length;
+        queue.push(next);
+      }
+    }
+    if (done.length + queue.length > MAX_BRACE_ALTERNATIVES || budget.left < 0) return null;
+  }
+  return done;
 }
 
 function namesDotenv(base) {
@@ -58,19 +176,45 @@ function namesDotenv(base) {
   return globNamesDotenv(base);
 }
 
-// Shell quote removal: quotes vanish, so .e''nv reads as .env; split only outside quotes.
+const ANSI_SIMPLE = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' };
+const ANSI_NUMERIC = { x: [2, 16], u: [4, 16], U: [8, 16] };
+
+// Decodes the ANSI-C escape whose letter sits at text[i]; returns [chars, next index].
+function ansiEscape(text, i) {
+  const c = text[i];
+  const octal = c >= '0' && c <= '7';
+  if (octal || Object.hasOwn(ANSI_NUMERIC, c)) {
+    const [width, base] = octal ? [3, 8] : ANSI_NUMERIC[c];
+    const digit = base === 8 ? /[0-7]/ : /[0-9a-f]/i;
+    let j = octal ? i : i + 1;
+    let n = '';
+    while (j < text.length && n.length < width && digit.test(text[j])) { n += text[j]; j += 1; }
+    if (n === '') return ['\\' + c, i + 1];
+    const code = parseInt(n, base);
+    return [code > 0x10ffff ? '' : String.fromCodePoint(code), j];
+  }
+  return [Object.hasOwn(ANSI_SIMPLE, c) ? ANSI_SIMPLE[c] : c, i + 1];
+}
+
+// Shell quote removal: quotes vanish and $'..' escapes decode, so .e''nv and $'.e\x6ev' read as .env.
 function shellWords(command) {
   const words = [];
   let cur = '';
   let quote = '';
+  let ansi = false;
   const flush = () => { if (cur !== '') words.push(cur); cur = ''; };
   for (let i = 0; i < command.length; i += 1) {
     const c = command[i];
     if (quote) {
-      if (c === quote) quote = '';
+      if (ansi && c === '\\' && i + 1 < command.length) {
+        const [chars, next] = ansiEscape(command, i + 1);
+        cur += chars;
+        i = next - 1;
+      } else if (c === quote) { quote = ''; ansi = false; }
       else cur += c;
     } else if (c === '"' || c === "'") {
       quote = c;
+      ansi = c === "'" && cur.endsWith('$');
       if (cur.endsWith('$')) cur = cur.slice(0, -1);
     } else if (/[\s;|&<>()`]/.test(c)) flush();
     else cur += c;
@@ -89,31 +233,46 @@ function commandTokens(command) {
   return out;
 }
 
-function deniesPath(raw) {
+// True when any brace alternative of the spelling names a denied file; unbounded expansion denies.
+function deniesSpelling(text, budget) {
+  const alternatives = expandBraces(text, budget);
+  if (alternatives === null) return true;
+  return alternatives.some((alt) => namesDotenv(baseName(normalizePath(alt)))
+    || (alt.includes('[') && namesDotenv(baseName(alt.replace(/\\/g, '/')))));
+}
+
+function deniesPath(raw, budget) {
   if (typeof raw !== 'string' || raw === '') return false;
   if (raw.length > MAX_PATH_CHARS) return true;
-  return namesDotenv(baseName(normalizePath(raw)));
+  return deniesSpelling(raw, budget);
 }
 
-function deniesToken(token) {
+function deniesToken(token, budget) {
   if (token === '' || token.length > MAX_PATH_CHARS) return false;
-  return namesDotenv(baseName(normalizePath(token)));
+  return deniesSpelling(token, budget);
 }
 
-export function judge(event) {
+function decide(event) {
   const tool = event?.tool;
-  if (!tool || typeof tool !== 'object') return { v: 'allow' };
-  const verdict = { v: 'deny', rule: RULE, message: MESSAGE };
+  if (!tool || typeof tool !== 'object') return false;
+  const budget = { left: BRACE_WORK_CHARS };
   if (Array.isArray(tool.paths)) {
     for (const entry of tool.paths) {
       if (!entry || typeof entry !== 'object') continue;
-      if (deniesPath(entry.raw) || deniesPath(entry.expanded) || deniesPath(entry.real)) return verdict;
+      if (deniesPath(entry.raw, budget) || deniesPath(entry.expanded, budget) || deniesPath(entry.real, budget)) return true;
     }
   }
   if (typeof tool.command === 'string') {
-    for (const token of commandTokens(tool.command.slice(0, MAX_COMMAND_CHARS))) {
-      if (deniesToken(token)) return verdict;
+    if (tool.command.length > MAX_COMMAND_CHARS) return true;
+    for (const token of commandTokens(tool.command)) {
+      if (deniesToken(token, budget)) return true;
     }
   }
-  return { v: 'allow' };
+  return false;
+}
+
+export function judge(event) {
+  let denied;
+  try { denied = decide(event); } catch { denied = true; }
+  return denied ? { v: 'deny', rule: RULE, message: MESSAGE } : { v: 'allow' };
 }
