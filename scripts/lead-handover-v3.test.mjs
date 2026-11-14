@@ -20,7 +20,7 @@ after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 // A product root with a v3 project folder and one run folder; `running` leaves a Step open.
-function fixture({ slug = SLUG, running = false } = {}) {
+function fixture({ slug = SLUG, running = false, cap } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-v3-'));
   tmps.push(base);
   const root = path.join(base, 'product');
@@ -31,7 +31,7 @@ function fixture({ slug = SLUG, running = false } = {}) {
   fs.mkdirSync(path.join(claudeDir, 'projects', 'p1'), { recursive: true });
   if (slug.includes('/')) fs.writeFileSync(path.join(work, slug.split('/')[0], '00-project.md'), 'Demo project\n');
   const now = Date.now();
-  const rows = [{ v: 1, at: iso(now - 60000), ev: 'start' }];
+  const rows = [{ v: 1, at: iso(now - 60000), ev: 'start', ...(cap === undefined ? {} : { cap }) }];
   rows.push({ v: 1, at: iso(now - 50000), ev: 'sub', role: 'backend-engineer', id: '000000000001', phase: 'start' });
   if (!running) rows.push({ v: 1, at: iso(now - 40000), ev: 'sub', role: 'backend-engineer', id: '000000000001', phase: 'stop' });
   fs.writeFileSync(path.join(dir, 'run-state.jsonl'), `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
@@ -40,25 +40,25 @@ function fixture({ slug = SLUG, running = false } = {}) {
 const records = (fx) => fs.readFileSync(path.join(fx.dir, 'lead-handover.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 const tree = (d, rel = '') => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory()
   ? tree(path.join(d, e.name), `${rel}${e.name}/`) : [`${rel}${e.name}`])).sort();
-const USAGE_85500 = { input_tokens: 1000, cache_creation_input_tokens: 4000, cache_read_input_tokens: 80000, output_tokens: 500 };
+const USAGE_MID = { input_tokens: 1000, cache_creation_input_tokens: 4000, cache_read_input_tokens: 80000, output_tokens: 500 };
 function transcript(fx) {
   const file = path.join(fx.claudeDir, 'projects', 'p1', 'session.jsonl');
-  fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }], usage: USAGE_85500 } })}\n`);
+  fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }], usage: USAGE_MID } })}\n`);
   return file;
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
 
-describe('the Contract and the header (lead-handoff v2.2)', () => {
-  test('the Contract header is v2.2 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-handoff v2.3)', () => {
+  test('the Contract header is v2.3 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v2\.2$/m);
+    assert.match(doc, /^# Contract: lead-handoff v2\.3$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.2');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.3');
   });
 
-  test('line 3 cites run-state v2.0', () => {
+  test('line 3 cites run-state v2.1', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v2\.0( |$)/);
+    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v2\.1( |$)/);
   });
 
   test('the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
@@ -222,12 +222,24 @@ describe('hooks and context hand-over on a v3 run', () => {
     assert.equal(findRun(fx.root, fx.now), SLUG);
   });
 
-  test('watch on a v3 run at the cap writes the Handoff into the run folder', () => {
+  test('watch on a v3 run writes the Handoff into the run folder', () => {
     const fx = fixture();
     const r = watch(JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'manual', transcript_path: transcript(fx) }), opts(fx));
     assert.equal(r.code, 0);
     const text = fs.readFileSync(path.join(fx.dir, 'lead-handoff-1.md'), 'utf8');
     assert.ok(text.split('\n').includes(`slug: ${SLUG}`));
+  });
+
+  test('a v3 run keeps its own cap: the running-Step rule of watch follows the recorded cap', () => {
+    const fx = fixture({ running: true, cap: 120000 });
+    const at = (n) => {
+      const file = path.join(fx.claudeDir, 'projects', 'p1', 'session.jsonl');
+      fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: n - 15 } } })}
+`);
+      return JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'auto', transcript_path: file });
+    };
+    assert.equal(watch(at(119999), opts(fx)).code, 2);
+    assert.equal(watch(at(120000), opts(fx)).code, 0);
   });
 
   test('resume prints the fixed line with the quoted slug', () => {

