@@ -67,14 +67,32 @@ test('ADR 0047 is marked superseded by 0069 and ADR 0069 exists with the new def
   }
 });
 
-test('the CHANGELOG records the new default and that a stored context_cap now takes effect', () => {
-  const sections = read('CHANGELOG.md').split(/^## \[/m).slice(1);
-  const top = sections.find((s, i) => i > 0 || s.replace(/^[^\n]*\n/, '').trim().length > 0) ?? '';
-  assert.match(top, /^(Unreleased|\d+\.\d+\.\d+)\]/, 'the newest entry holds the note');
-  assert.match(top, /Unreleased\]/, 'the note sits under [Unreleased] until the release moves it');
+// release.mjs moves [Unreleased] into a version section, so the newest non-empty entry (Unreleased or a
+// released version) holds the note. AICO_CHANGELOG_FILE lets a run point at a changelog copy.
+const newestEntry = (log) => {
+  const sections = log.split(/^## \[/m).slice(1);
+  return sections.find((s, i) => i > 0 || s.replace(/^[^\n]*\n/, '').trim().length > 0) ?? '';
+};
+const checkNote = (top) => {
+  assert.match(top, /^(Unreleased|\d+\.\d+\.\d+)\]/, 'the newest entry (Unreleased or a released version) holds the note');
   for (const s of ['180000', '162000', 'aico-settings', 'ADR 0069']) assert.ok(top.includes(s), `the note names ${s}`);
   assert.match(top, /context_cap/);
   assert.match(top, /take(s)? effect/);
+};
+
+test('the CHANGELOG records the new default and that a stored context_cap now takes effect', () => {
+  const log = process.env.AICO_CHANGELOG_FILE ? fs.readFileSync(process.env.AICO_CHANGELOG_FILE, 'utf8') : read('CHANGELOG.md');
+  checkNote(newestEntry(log));
+});
+
+test('changelog note check accepts the note under Unreleased or the released version, rejects it missing', () => {
+  const note = '- 180000 and 162000 via aico-settings, ADR 0069: a stored context_cap takes effect.\n';
+  const old = '## [0.38.1] - 2026-11-14\n\n- old\n';
+  const before = '# Changelog\n\n## [Unreleased]\n\n' + note + '\n' + old;
+  const after = '# Changelog\n\n## [Unreleased]\n\n## [0.39.0] - 2026-11-14\n\n' + note + '\n' + old;
+  checkNote(newestEntry(before));
+  checkNote(newestEntry(after));
+  assert.throws(() => checkNote(newestEntry(after.replace(note, '- other\n'))));
 });
 
 test('shipped docs and skills touched by the cap are LF only', () => {
