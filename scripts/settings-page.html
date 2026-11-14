@@ -1357,7 +1357,7 @@ function hiddenPlanProblems() {
   const raw = draft[level].plan_check?.runs;
   const message = raw === undefined ? '' : runsProblem('Verdict runs', String(raw));
   const out = message ? [{ ghost: true, key: 'runs', level, label: 'Verdict runs', message, sticky: '', control: { id: `pc-runs-${level}` } }] : [];
-  const capRaw = draft[level].pipeline?.context_cap;
+  const capRaw = level === 'user' ? draft.user.pipeline?.context_cap : undefined;
   const capMessage = capRaw === undefined ? '' : contextCapProblem('Context cap', String(capRaw));
   if (capMessage) out.push({ ghost: true, key: 'context_cap', level, label: 'Context cap', message: capMessage, text: contextCapText(level, capMessage), sticky: '', control: { id: `context-cap-${level}` } });
   return out;
@@ -1424,7 +1424,7 @@ function mapRefusals(lines) {
     const xm = REFUSED_CONTEXT_CAP.exec(line);
     const xrec = xm && planRecAt(xm[1], 'context_cap');
     if (xrec) {
-      xrec.sticky = `Error: ${xrec.label} ${CONTEXT_CAP_REFUSAL}`;
+      xrec.sticky = `Error: ${xrec.label} must be ${capRangeText()}.`;
       xrec.stickyValue = xrec.control.value;
       if (xrec.ghost) xrec.text = contextCapText(xrec.level, xrec.sticky);
       if (!plan.includes(xrec)) plan.push(xrec);
@@ -1594,37 +1594,33 @@ function renderLanguage(panel) {
 
 // ---------- Pipeline tab ----------
 const CONTEXT_CAP_PATH = ['pipeline', 'context_cap'];
-const CONTEXT_CAP_MIN = 60000;
-const CONTEXT_CAP_MAX = 1000000;
-const CONTEXT_CAP_RANGE = `a whole number from ${CONTEXT_CAP_MIN} to ${CONTEXT_CAP_MAX}`;
-const CONTEXT_CAP_REFUSAL = `must be ${CONTEXT_CAP_RANGE}.`;
-const CONTEXT_CAP_HINT = 'How many tokens one Step may use before it stops and passes the work on. A whole number from 60000 to 1000000; hand-over starts at 90% of it (162000 at the default 180000).';
+// The range comes from the server (state.resolved.limits); the fallback only covers a state without it.
+const capLimits = () => state.resolved.limits?.context_cap ?? { min: 60000, max: 250000 };
+const capRangeText = () => `a whole number from ${capLimits().min} to ${capLimits().max}`;
+const capDefault = () => state.plugin.pipeline.context_cap;
+const capHint = () => `How many tokens one Step may use before it stops and passes the work on. A whole number from ${capLimits().min} to ${capLimits().max}; hand-over starts at 90% of it (${handoverOf(capDefault())} at the default ${capDefault()}).`;
 const handoverOf = (cap) => Math.floor(cap * 9 / 10);
 // Same digits-then-range check as the server; the message never echoes the typed value.
 function contextCapProblem(label, raw) {
   const t = raw.trim();
   if (t === '') return '';
-  if (!/^[0-9]+$/.test(t)) return `Error: ${label} must be ${CONTEXT_CAP_RANGE}.`;
+  if (!/^[0-9]+$/.test(t)) return `Error: ${label} must be ${capRangeText()}.`;
   const n = Number(t);
-  return n < CONTEXT_CAP_MIN || n > CONTEXT_CAP_MAX ? `Error: ${label} is out of range. Use ${CONTEXT_CAP_RANGE}.` : '';
+  return n < capLimits().min || n > capLimits().max ? `Error: ${label} is out of range. Use ${capRangeText()}.` : '';
 }
 const contextCapDecode = (s) => (/^[0-9]{1,7}$/.test(s.trim()) ? Number(s) : s);
-const capValid = (v) => (Number.isInteger(v) && v >= CONTEXT_CAP_MIN && v <= CONTEXT_CAP_MAX ? v : undefined);
+const capValid = (v) => (Number.isInteger(v) && v >= capLimits().min && v <= capLimits().max ? v : undefined);
 // "Context cap, user level: must be ..." for the live region and the Save list.
 const contextCapText = (level, message) => `Context cap, ${level} level: ${message.replace(/^Error: Context cap /, '').replace(/^is out of range/, 'out of range')}`;
 // The cap in effect: the server's resolved value while nothing is edited, else the drafts. A refused draft counts as its saved value.
 function contextCapInEffect() {
   const resolved = state.resolved.pipeline;
-  const edited = ['user', 'project'].some((l) => JSON.stringify(getIn(draft[l], CONTEXT_CAP_PATH)) !== JSON.stringify(getIn(state[l], CONTEXT_CAP_PATH)));
+  const edited = JSON.stringify(getIn(draft.user, CONTEXT_CAP_PATH)) !== JSON.stringify(getIn(state.user, CONTEXT_CAP_PATH));
   if (!edited && Number.isInteger(resolved?.context_cap)) return { cap: resolved.context_cap, source: resolved.source?.context_cap ?? 'plugin', handover: resolved.context_handover ?? handoverOf(resolved.context_cap) };
-  const layer = (l) => {
-    const d = getIn(draft[l], CONTEXT_CAP_PATH);
-    return d === undefined ? undefined : capValid(d) ?? capValid(getIn(state[l], CONTEXT_CAP_PATH));
-  };
-  const project = layer('project');
-  const user = layer('user');
-  const cap = project ?? user ?? state.plugin.pipeline.context_cap;
-  return { cap, source: project !== undefined ? 'project' : user !== undefined ? 'user' : 'plugin', handover: handoverOf(cap) };
+  const d = getIn(draft.user, CONTEXT_CAP_PATH);
+  const user = d === undefined ? undefined : capValid(d) ?? capValid(getIn(state.user, CONTEXT_CAP_PATH));
+  const cap = user ?? capDefault();
+  return { cap, source: user !== undefined ? 'user' : 'plugin', handover: handoverOf(cap) };
 }
 function contextCapReadout(node) {
   const eff = contextCapInEffect();
@@ -1638,6 +1634,17 @@ function contextCapReadout(node) {
 // Editable row: numeric text input; empty inherits. A client problem shows under the field at once and is announced on change; a server refusal sticks until the value changes.
 function contextCapRow(tbody, pluginValue) {
   const level = lvl();
+  if (level !== 'user') {
+    // Project level: no input. The label names the read-only output that shows the cap in effect.
+    const effect = el('output', { class: 'readout', id: 'context-cap-project', 'aria-live': 'polite' });
+    const fs = el('div', { class: 'ctl', 'aria-describedby': 'context-cap-hint context-cap-lock' },
+      el('label', { class: 'ctl-label', for: 'context-cap-project' }, 'Context cap', el('span', { class: 'vh' }, ', project level')),
+      el('p', { class: 'hint', id: 'context-cap-hint' }, capHint()),
+      el('p', { class: 'note', id: 'context-cap-lock' }, 'User level only. A project value is ignored.'), effect);
+    syncers.push(() => contextCapReadout(effect));
+    tbody.append(fs);
+    return;
+  }
   const id = `context-cap-${level}`;
   const label = 'Context cap';
   const field = el('input', { class: 'scribble', placeholder: '—' });
@@ -1646,7 +1653,7 @@ function contextCapRow(tbody, pluginValue) {
   control.id = id;
   const head = el('label', { class: 'ctl-label', for: id }, label, el('span', { class: 'vh' }, `, ${level} level`), editedTag());
   const err = el('p', { class: 'perr', id: `${id}-err`, hidden: true });
-  const fs = el('div', { class: 'ctl' }, head, el('p', { class: 'hint', id: 'context-cap-hint' }, CONTEXT_CAP_HINT), control, err);
+  const fs = el('div', { class: 'ctl' }, head, el('p', { class: 'hint', id: 'context-cap-hint' }, capHint()), control, err);
   const rec = planRec(control, control, err, 'context_cap', level, label, 'context-cap-hint', contextCapProblem);
   const live = () => document.getElementById('field-live');
   const prefix = `${label}, ${level} level: `;
