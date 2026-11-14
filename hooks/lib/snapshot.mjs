@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { hash12 } from './event.mjs';
+import { MODS_DEFAULTS } from '../../scripts/settings.mjs';
 
 export const MAX_BYTES = 4096;
 export const MAX_STEP_FILES = 200;
@@ -34,6 +35,12 @@ function layer(file, warnings, label) {
 
 const walk = (o, keys) => keys.reduce((cur, k) => (isObj(cur) && Object.hasOwn(cur, k) ? cur[k] : undefined), o);
 
+// A saver's default is the plugin default of its switch (MODS_DEFAULTS); a switch the table does not know counts as on.
+const savedDefault = (keys) => {
+  const d = walk({ mods: MODS_DEFAULTS }, keys);
+  return typeof d === 'boolean' ? d : true;
+};
+
 // Effective settings for the snapshot: the cap threshold (user level only) and one switch per saver manifest.
 export function resolveSnapshotSettings({ mcsHome, root, manifests }) {
   const warnings = [];
@@ -51,7 +58,7 @@ export function resolveSnapshotSettings({ mcsHome, root, manifests }) {
     const keys = m.switch.split('.');
     const p = walk(project, keys);
     const u = walk(user, keys);
-    savers[m.id] = typeof p === 'boolean' ? p : typeof u === 'boolean' ? u : true;
+    savers[m.id] = typeof p === 'boolean' ? p : typeof u === 'boolean' ? u : savedDefault(keys);
   }
   return { threshold, savers, warnings };
 }

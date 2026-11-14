@@ -48,7 +48,7 @@ async function readFlags($: EngineInterface): Promise<Flags | undefined> {
   return r === undefined || r.exitCode !== 0 ? undefined : (modsFlags(r.stdout) as Flags | undefined)
 }
 
-// A missing switch counts as on: the saver is on by default.
+// A missing switch counts as on: savings is on by default (MODS_DEFAULTS.savings.enabled).
 function isOff(flags: Flags | undefined): boolean {
   return flags !== undefined && Object.hasOwn(flags, SELF) && flags[SELF]?.enabled === false
 }
