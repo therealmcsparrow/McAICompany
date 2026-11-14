@@ -1,7 +1,7 @@
 {
   "v": 1,
   "files": {
-    "scripts/hook-host.mjs": "73ee84fe202e7c9f5a368dbfdd4e627725a1781cecb8a9cbe9c5dc5574aca041",
+    "scripts/hook-host.mjs": "91287fd18871b243e5c26a2fe7aafc8eef77c4884b26978a7f6ea32c7f6197dc",
     "hooks/lib/cap-effects.mjs": "ea724b9a549539e3a3574318a1b8ccf69741103831a03a998fe3d23356e4be25",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
     "hooks/lib/dep-hashes.mjs": "948d2ae635d6d962a55b476d8d6975c51bbdd516bef74925171614f3c564d461",
@@ -11,7 +11,7 @@
     "hooks/lib/paths.mjs": "ec20f185c22c4402650b9d051691affcf9f6da8b1897037e5c92be29bbacc821",
     "hooks/lib/rule-id.mjs": "942c6663b64f7e4de11a24ca5856c422542797bf3437c518a9444b8254acd42e",
     "hooks/lib/rule-runner.mjs": "7ba077f3cbd66ae4bb3dbf04919ae54159387a82d851644942ae7938e508aa69",
-    "hooks/lib/snapshot.mjs": "36eeeeacfacdcea7d5b4fe168e5af3d751cdfad734af6806a026ca15045d90ed",
+    "hooks/lib/snapshot.mjs": "ff5dcb5632ed8e52ca32d80ea6c42647fdd7fe9acda7736bbe30d55bee684980",
     "hooks/rules/browser.mjs": "895ee95287943d9c6627f8475d2f73223610d08256d208a668f76144618d032d",
     "hooks/rules/cap.mjs": "b96816382d0695c5194c738fe2b5bbb195f8f4fc6af4582a14b2032f639bf788",
     "hooks/rules/dotenv.mjs": "53e10047a416281c49aecc114dd64ecebdf86b579835b97ec400c7e47c950a84",
