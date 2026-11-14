@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-hook.md v1
+// contract: docs/contracts/mod-hook.md v1.1
 // Writes or checks hooks/pins.json: one SHA-256 per file of the pinned set. Usage: hook-pins.mjs write|check [--root <plugin root>]
 import fs from 'node:fs';
 import path from 'node:path';
