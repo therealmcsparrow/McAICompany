@@ -13,7 +13,7 @@ const FAKE_HOME = path.join(import.meta.dirname, '..', 'tests', 'fixtures', 'led
 
 // Every test works in its own temp dir; the plugin root is a temp dir too.
 function sandbox(t, version = '0.17.0') {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-meta-'));
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ledger-meta-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const pluginRoot = path.join(dir, 'plugin');
   fs.mkdirSync(path.join(pluginRoot, '.claude-plugin'), { recursive: true });
@@ -191,7 +191,7 @@ test('ship still prints exactly one line and writes no meta line when the plugin
 
 test('FLOOR_RELEASE_V017 equals the release of company/model-floor.json at tag v0.17.0', (t) => {
   const root = path.join(import.meta.dirname, '..');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-floor-tag-'));
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ledger-floor-tag-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const gitConfig = path.join(dir, 'empty-gitconfig');
   fs.writeFileSync(gitConfig, '');

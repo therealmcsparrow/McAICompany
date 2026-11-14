@@ -6,10 +6,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { run, show } from './run-state.mjs';
 
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-v15-'));
+const base = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'run-state-v15-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
 // The run cap is read from the Lead snapshot under MCSPARROW_HOME: point it at an empty temp home so a real snapshot never leaks in.
-const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
+const isoHome = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'cap-home-'));
 const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
 process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
 process.env.HOME = isoHome;
