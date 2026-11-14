@@ -134,15 +134,13 @@ function globMatches(tokens, text) {
 
 // A star that stands for a shell expansion is a guess, not a typed wildcard: a non-dot base
 // from an expansion must hold a letter of the name and match `.env` itself.
-// Bash `*` and `?` never match a leading dot, so a base that opens with one cannot name .env there;
-// PowerShell wildcards do match it.
-function globNamesDotenv(base, fromExpansion, powershell) {
+// Bash `*` and `?` never match a leading dot, so a base typed in a Bash command that opens with one
+// cannot name .env there. Tool path globs and PowerShell wildcards do match it (leadingWild).
+function globNamesDotenv(base, fromExpansion, leadingWild) {
   if (!GLOB_CHARS.test(base)) return false;
   if (base.length > MAX_GLOB_CHARS) return true;
-  if (!powershell && !fromExpansion && (base[0] === '*' || base[0] === '?')) return false;
-  if (fromExpansion && !base.startsWith('.') && !base.includes('~')) {
-    return /[env]/i.test(base) && globMatches(globTokens(base), '.env');
-  }
+  if (!leadingWild && !fromExpansion && (base[0] === '*' || base[0] === '?')) return false;
+  if (fromExpansion && !base.startsWith('.') && !base.includes('~') && !/[env]/i.test(base)) return false;
   const samples = base.includes('~') ? [...GLOB_SAMPLES, 'env~1'] : GLOB_SAMPLES;
   const tokens = globTokens(base);
   return samples.some((sample) => globMatches(tokens, sample));
@@ -196,13 +194,13 @@ function expandBraces(text, budget) {
   return done;
 }
 
-function namesDotenv(base, fromExpansion = false, powershell = false) {
+function namesDotenv(base, fromExpansion = false, leadingWild = true) {
   if (TEMPLATES.has(base)) return false;
   if (base === '.env') return true;
   if (base.startsWith('.env.')) return true;
   if (SHORT_NAME.test(base)) return true;
   if (/^\.env[*?[{]/.test(base)) return true;
-  return globNamesDotenv(base, fromExpansion, powershell);
+  return globNamesDotenv(base, fromExpansion, leadingWild);
 }
 
 const ANSI_SIMPLE = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' };
@@ -263,11 +261,11 @@ function commandTokens(command) {
 }
 
 // True when any brace alternative of the spelling names a denied file; unbounded expansion denies.
-function deniesSpelling(text, budget, fromExpansion = false, powershell = false) {
+function deniesSpelling(text, budget, fromExpansion = false, leadingWild = true) {
   const alternatives = expandBraces(text, budget);
   if (alternatives === null) return true;
-  return alternatives.some((alt) => namesDotenv(baseName(normalizePath(alt)), fromExpansion, powershell)
-    || (alt.includes('[') && namesDotenv(baseName(alt.replace(/\\/g, '/')), fromExpansion, powershell)));
+  return alternatives.some((alt) => namesDotenv(baseName(normalizePath(alt)), fromExpansion, leadingWild)
+    || (alt.includes('[') && namesDotenv(baseName(alt.replace(/\\/g, '/')), fromExpansion, leadingWild)));
 }
 
 function deniesPath(raw, budget) {
@@ -278,11 +276,14 @@ function deniesPath(raw, budget) {
 
 // An over-long token with no separator inside it is one path: it denies. One with separators
 // is checked through its parts.
-function deniesToken(token, budget, powershell) {
+function deniesToken(token, budget, leadingWild) {
   if (token === '') return false;
   if (token.length > MAX_PATH_CHARS) return !SEPARATORS.test(token);
-  return deniesSpelling(token, budget, false, powershell);
+  return deniesSpelling(token, budget, false, leadingWild);
 }
+
+// A Bash command that starts PowerShell hands its words to PowerShell, whose wildcards match a leading dot.
+const POWERSHELL_HOST = /powershell|pwsh/i;
 
 const PARAM_NAME = /[A-Za-z0-9_]/;
 
@@ -312,13 +313,15 @@ function expansionEnd(text, i) {
 
 // Words as the shell splits them, each expansion and sequence brace replaced by a star:
 // whatever it yields, it may spell a dotenv name.
-function expansionWords(command) {
+// With hosted set, the command is text for PowerShell: quote characters group nothing and expand everywhere.
+function expansionWords(command, hosted = false) {
   const words = [];
   let cur = '';
   let quote = '';
   const flush = () => { if (cur !== '') words.push(starSequenceBraces(cur)); cur = ''; };
   for (let i = 0; i < command.length; i += 1) {
     const c = command[i];
+    if (hosted && (c === '"' || c === "'")) continue;
     if (quote === "'") { if (c === "'") quote = ''; else cur += c; continue; }
     if (c === '$') {
       const end = expansionEnd(command, i);
@@ -341,7 +344,7 @@ function decide(event) {
   const tool = event?.tool;
   if (!tool || typeof tool !== 'object') return false;
   const budget = { left: BRACE_WORK_CHARS };
-  const powershell = tool.name === 'PowerShell';
+  const leadingWild = !(tool.name === 'Bash' && typeof tool.command === 'string' && !POWERSHELL_HOST.test(tool.command));
   if (Array.isArray(tool.paths)) {
     for (const entry of tool.paths) {
       if (!entry || typeof entry !== 'object') continue;
@@ -351,11 +354,11 @@ function decide(event) {
   if (typeof tool.command === 'string') {
     if (tool.command.length > MAX_COMMAND_CHARS) return true;
     for (const token of commandTokens(tool.command)) {
-      if (deniesToken(token, budget, powershell)) return true;
+      if (deniesToken(token, budget, leadingWild)) return true;
     }
-    for (const word of expansionWords(tool.command)) {
+    for (const word of expansionWords(tool.command, tool.name === 'Bash' && POWERSHELL_HOST.test(tool.command))) {
       if (word.length > MAX_PATH_CHARS && !SEPARATORS.test(word)) return true;
-      if (word.length <= MAX_PATH_CHARS && deniesSpelling(word, budget, true, powershell)) return true;
+      if (word.length <= MAX_PATH_CHARS && deniesSpelling(word, budget, true, leadingWild)) return true;
     }
   }
   return false;

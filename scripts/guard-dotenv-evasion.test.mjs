@@ -172,3 +172,54 @@ test('a Grep glob with braces is judged through the normalized event', async () 
   assert.deepEqual(await verdict('*.{mjs,json}'), { v: 'allow' }, 'ordinary brace glob');
   denies(ev('Grep', { paths: [P('{.env,x}')] }), 'brace path entry');
 });
+
+test('path globs that open with a wildcard deny', () => {
+  for (const glob of ['*env', '?env', '**/*env', '*nv.local', '*nv.production']) {
+    denies(ev('Grep', { paths: [P(glob)] }), `Grep glob ${glob}`);
+    denies(ev('Glob', { paths: [P(glob)] }), `Glob pattern ${glob}`);
+  }
+  allows(ev('Glob', { paths: [P('**/*.mjs')] }), 'ordinary glob pattern');
+});
+
+test('PowerShell started from Bash keeps leading wildcards denied', () => {
+  denies(bash('powershell -c "Get-Content *env"'), 'powershell -c');
+  denies(bash('pwsh -Command "gc ?env"'), 'pwsh');
+  denies(bash('powershell.exe -c "gc *nv.local"'), 'sample other than .env');
+  denies(ps('Get-Content *env'), 'PowerShell tool');
+});
+
+test('expansion words are tested against every sample', () => {
+  denies(bash('x=.e; cat ${x}nv.local'), 'bash expansion');
+  denies(bash('powershell -c \'$x=".e"; Get-Content "${x}nv.local"\''), 'powershell expansion');
+  denies(ps('$x=\'.e\'; Get-Content "${x}nv.local"'), 'PowerShell tool expansion');
+});
+
+test('a bare Bash star stays allowed', () => {
+  allows(bash('cat *'), 'cat star');
+  allows(bash('ls ?'), 'ls question mark');
+});
+
+test('nothing the earlier dotenv rule denied is allowed now', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const source = execFileSync('git', ['show', '2471098:hooks/rules/dotenv.mjs'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 24 });
+  const pathsUrl = pathToFileURL(path.join(root, 'hooks', 'lib', 'paths.mjs')).href;
+  const patched = source.replace("'../lib/paths.mjs'", JSON.stringify(pathsUrl));
+  const old = await import(`data:text/javascript;base64,${Buffer.from(patched).toString('base64')}`);
+  const bases = ['.env', '.env.local', 'env', '*env', '?env', '*nv.local', '*', '*.mjs', 'e*v', '.e*', '.?nv', '[.]env', '{.env,x}',
+    '**/*env', '$x', '${x}nv.local', '$x.env', 'a$x', '.e$x', 'env~1', '*~1', '.env.example', 'x/.env', 'x/*env', '$(echo .env)'];
+  const names = ['Bash', 'PowerShell', 'Grep', 'Glob', 'Read'];
+  const wrappers = [(b) => b, (b) => `cat ${b}`, (b) => `powershell -c "gc ${b}"`, (b) => `x='.e'; cat "${b}"`, (b) => `echo ${b} | cat`];
+  let checked = 0;
+  for (const base of bases) {
+    for (const name of names) {
+      const events = name === 'Bash' || name === 'PowerShell'
+        ? wrappers.map((w) => ev(name, { command: w(base) }))
+        : [ev(name, { paths: [P(base)] })];
+      for (const e of events) {
+        checked += 1;
+        if (old.judge(e).v === 'deny') assert.equal(judge(e).v, 'deny', `${name}: ${JSON.stringify(e.tool)}`);
+      }
+    }
+  }
+  assert.ok(checked > 100);
+});
