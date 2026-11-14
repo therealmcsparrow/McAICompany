@@ -312,6 +312,15 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
   return [...failed];
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+// Compare realpaths: a symlinked or 8.3 short path must not turn the guard into a silent no-op.
+function isMain() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && isMain()) {
   main().catch(() => finish(preDeny('host', 'crash')));
 }

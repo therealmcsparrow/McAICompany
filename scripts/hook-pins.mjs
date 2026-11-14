@@ -37,7 +37,16 @@ export function main(argv) {
   return { code: 2, out: 'usage: hook-pins.mjs write|check [--root <plugin root>]\n' };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Compare realpaths: a symlinked or 8.3 short path must not turn the script into a silent no-op.
+function isMain() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && isMain()) {
   const r = main(process.argv.slice(2));
   process.stdout.write(r.out);
   process.exitCode = r.code;
