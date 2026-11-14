@@ -99,6 +99,18 @@ function pathEntry(raw, ctx, cwd, alts = []) {
   return { raw, expanded, real, exists, dir };
 }
 
+// True when s holds a run of more than MAX_PATH consecutive non-whitespace characters (whitespace as in the regex \s class).
+export function hasLongWord(s) {
+  let run = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    const space = c === 32 || (c >= 9 && c <= 13) || (c > 127 && (c === 160 || c === 5760 || (c >= 8192 && c <= 8202) || c === 8232 || c === 8233 || c === 8239 || c === 8287 || c === 12288 || c === 65279));
+    if (space) run = 0;
+    else if (++run > MAX_PATH) return true;
+  }
+  return false;
+}
+
 const pathLike = (t) => /[\\/]/.test(t) || /^[~$%.]/.test(t) || /\.[A-Za-z0-9]{1,8}$/.test(t);
 
 const isDirIn = (t, cwd) => {
@@ -129,7 +141,7 @@ function shellTokens(command, cwd) {
     if (next.length === 0) { state.limited = true; return; }
     for (const n of next) if (cwds.length < MAX_CWDS && !cwds.includes(n)) cwds.push(n);
   };
-  if (command.length > MAX_PATH && /\S{4097,}/.test(command)) state.limited = true;
+  if (command.length > MAX_PATH && hasLongWord(command)) state.limited = true;
   let want = null;
   for (const t of command.split(/[\s;|&<>()"'`,=]+/)) {
     if (t.length === 0) continue;
