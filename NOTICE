@@ -1,0 +1,17 @@
+aico (McSparrow plugin)
+
+Third-party credit
+
+The token-saving mods of this plugin (cache clock, context cap, browser note, switchboard, savings pane) are
+built with ideas from the "token-saving-mods" pack by Ben AI (https://www.benai.co), upstream
+version: marketplace "token-saving-mods" with cache-clock 0.3.0, handoff 0.1.0, efficient-browser-use 0.2.0,
+mods 0.2.0, savings-proof 0.2.0 (also seen: input-router 0.3.1, effort-optimizer 0.1.0, research-router 0.3.0,
+model-router 0.6.0).
+
+The pack carries no licence for these mods. No code, text or structure of the pack is copied: aico's versions
+are written from a behaviour description only (docs/pack-clash-table.md). This credit is not a licence grant
+in either direction.
+
+model-router 0.6.0 of the pack is a copy of jev-model-router from davila7/claude-code-templates
+(https://github.com/davila7/claude-code-templates), MIT licence, Copyright (c) 2025 Daniel (San) Avila.
+No code of it is used in this release. If a later release reuses it, the full MIT notice is added here first.
