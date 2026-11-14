@@ -1,4 +1,4 @@
-// Tests for run-state v2.1: `runSlugs`, and `list` / `active` over a tree with v3 projects and v2 folders.
+// Tests for run-state v2.1 (doc header now v3.0): `runSlugs`, and `list` / `active` over a tree with v3 projects and v2 folders.
 // Slugs may now hold one `/`: `<ID>/<NN>-<playbook>`.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -267,9 +267,9 @@ describe('active over a mixed tree', () => {
 });
 
 describe('the Contract', () => {
-  test('the doc is v2.1 and says v2, v1.1 and legacy names behave as before', () => {
+  test('the doc is v3.0 and says v2, v1.1 and legacy names behave as before', () => {
     const text = fs.readFileSync(path.join(REPO, 'docs', 'contracts', 'run-state.md'), 'utf8');
-    assert.match(text, /^# Contract: run-state v2\.1\r?$/m);
+    assert.match(text, /^# Contract: run-state v3\.0\r?$/m);
     assert.ok(text.includes('runSlugs'));
     assert.match(text, /byte-identical/);
   });

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseOutputText, parseOutputLine } from '../mods/lib/guard.mjs';
+import { leadFile } from '../hooks/lib/snapshot.mjs';
 
 // Every reader of an output the context-cap change touched keeps working: one pinned case each.
 // Goldens marked "unchanged" were produced by the code before the change and compared byte for byte.
@@ -129,10 +130,16 @@ describe('run.mjs and ledger exit codes', () => {
 describe('the ledger and the Lead read the run cap', () => {
   const user = (sb, pipeline) => fs.writeFileSync(path.join(sb.home, 'config.json'), JSON.stringify({ aico_settings: { version: 1, pipeline } }));
   const runState = (sb, ...args) => node(sb, script('run-state'), args);
+  // run-state v3.0: the run cap is the `threshold` of the Lead snapshot of this root under MCSPARROW_HOME, else 180000.
+  const snap = (sb, threshold) => {
+    const file = leadFile(sb.home, fs.realpathSync(sb.dir));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ v: 1, at: '2026-11-14T10:00:00Z', threshold, savers: {}, floor: {}, drift: false, settingsWarnings: [] }));
+  };
 
-  test('AC11: exit 4 and its line use the run cap, frozen at start', () => {
+  test('AC11: exit 4 and its line use the run cap, the Lead snapshot threshold, not the setting', () => {
     const sb = sandbox();
-    user(sb, { context_cap: 100000 });
+    snap(sb, 100000);
     assert.equal(runState(sb, 'start', RUN).code, 0);
     user(sb, { context_cap: 200000 });
     assert.equal(ledger(sb, 'add', RUN, 'step', '01', 'qa', 'a1', '100000').code, 0);
@@ -142,9 +149,9 @@ describe('the ledger and the Lead read the run cap', () => {
     assert.equal(JSON.parse(ledger(sb, 'report', RUN, '--json').out).cap, 100000);
   });
 
-  test('AC11: a run with no run-state start uses the current setting', () => {
+  test('AC11: a run with no run-state start still uses the snapshot threshold', () => {
     const sb = sandbox();
-    user(sb, { context_cap: 120000 });
+    snap(sb, 120000);
     assert.equal(ledger(sb, 'add', RUN, 'step', '01', 'qa', 'a1', '120000').code, 0);
     const r = ledger(sb, 'add', RUN, 'step', '02', 'qa', 'a2', '120001');
     assert.equal(r.code, 4);
@@ -161,7 +168,7 @@ describe('the ledger and the Lead read the run cap', () => {
   test('AC10: the Lead reading is marked over cap against the run cap, not a fixed 95000', () => {
     const lead = script('lead-handover');
     const sb = sandbox();
-    user(sb, { context_cap: 60000 });
+    snap(sb, 60000);
     const dir = path.join(sb.home, '.claude', 'projects', 'p1');
     fs.mkdirSync(dir, { recursive: true });
     const at = new Date(Date.now() - 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -410,9 +417,9 @@ const TRACE = {
   AC2: [['scripts/context-cap-text.test.mjs', 'a Step is never resumed']],
   AC3: [['scripts/step-split.test.mjs', 'a 3000-line diff splits into 3 groups'], ['scripts/context-cap-text.test.mjs', 'one Step per review or Fix group']],
   AC4: [['scripts/step-split-fix.test.mjs', '11 blockers in 2 areas become groups of at most 8'], ['scripts/context-cap-text.test.mjs', 'one Step per review or Fix group']],
-  AC5: [['scripts/ledger-cap.test.mjs', 'AC11: run cap 120000: 130000 writes the row, prints the over cap line with that cap and exits 4'], ['scripts/qa-context-cap.test.mjs', 'run.mjs passes exit 4']],
+  AC5: [['scripts/ledger-cap.test.mjs', 'AC11: snapshot 120000: 130000 writes the row, prints the over cap line with that cap and exits 4'], ['scripts/qa-context-cap.test.mjs', 'run.mjs passes exit 4']],
   AC6: [['scripts/context-cap-text.test.mjs', 'ledger exit 4 routes to one fresh check Step'], ['scripts/qa-context-cap.test.mjs', 'the check Step after an exit-4 handover Step']],
-  AC7: [['scripts/ledger-cap.test.mjs', 'report text ends with an over cap line for the run cap'], ['scripts/qa-context-cap.test.mjs', 'AC11: the report text counts over-cap Steps']],
+  AC7: [['scripts/ledger-cap.test.mjs', 'report text ends with an over cap line for the snapshot cap and report --json carries it (token-ledger v1.14)'], ['scripts/qa-context-cap.test.mjs', 'AC11: the report text counts over-cap Steps']],
   AC8: [['scripts/lead-context.test.mjs', 'writes ctx, peak and time'], ['scripts/qa-context-cap.test.mjs', 'Stop, PreCompact and SessionStart in a row']],
   AC9: [['mods/test/savvy-ctx.test.tsx', 'a running agent at 110000 tokens shows ctx 110.0k near cap']],
   AC10: [['scripts/ctx-row-lib.test.mjs', 'AC11: ctxCell with run cap 120000 and handover 108000: near cap past 108000, over cap past 120000'], ['mods/test/savvy-ctx.test.tsx', 'a count past the run cap 120000 shows over cap']],

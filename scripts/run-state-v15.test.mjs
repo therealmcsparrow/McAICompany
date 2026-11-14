@@ -232,7 +232,7 @@ test('v1.4 file: same view plus the new empty keys', () => {
   }
 });
 
-test('a v1.4 reader skips the new lines with its warning', t => {
+test('a v1.4 reader skips the new lines with its warning (start carries no cap in v3.0, so line 1 reads)', t => {
   const reader = oldReader();
   if (!reader) { t.skip('v1.4 reader not in this clone'); return; }
   const root = started();
@@ -240,8 +240,8 @@ test('a v1.4 reader skips the new lines with its warning', t => {
   go(root, ['sub', 'x', 'start', 'qa', ID, SID], 2000);
   go(root, ['wave', 'x', '2'], 3000);
   const v = oldView(reader, root);
-  assert.deepEqual(v.warnings, ['line 1 skipped', 'line 2 skipped', 'line 3 skipped']);
-  assert.equal(v.wave, null); // the old reader skipped the start line, so it sees no run segment
+  assert.deepEqual(v.warnings, ['line 2 skipped', 'line 3 skipped']);
+  assert.equal(v.wave, 2); // the old reader reads the start line (no cap), so it sees the run segment and the wave line it still knows
 });
 
 test('a v1.4 reader skips a start line that carries aico', t => {

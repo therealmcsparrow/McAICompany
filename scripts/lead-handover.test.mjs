@@ -886,12 +886,12 @@ describe('pipeline wiring', () => {
 
 // run-state v2.0: the newest open run may be a v3 run `<ID>/<NN>-<playbook>`.
 describe('run-state v2.0 cites and v3 runs', () => {
-  test('the old guard script is gone; run-guard cites run-state v2.0 on its uses line; triage names v2.0', () => {
+  test('the old guard script is gone; run-guard cites run-state v3.0 on its uses line; triage names v3.0', () => {
     const uses = (f) => fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/)[2];
     assert.equal(fs.existsSync(path.join(here, 'context-guard.mjs')), false, 'context-guard v2.0 retires scripts/context-guard.mjs');
-    assert.match(uses('run-guard.mjs'), /docs\/contracts\/run-state\.md v2\.0(?![\d.])/);
+    assert.match(uses('run-guard.mjs'), /docs\/contracts\/run-state\.md v3\.0(?![\d.])/);
     const triage = fs.readFileSync(path.join(repo, 'skills', 'triage', 'SKILL.md'), 'utf8').split(/\r?\n/)[23];
-    assert.match(triage, /run-state v2\.0/);
+    assert.match(triage, /run-state v3\.0/);
     assert.ok(!/run-state v1/.test(triage));
   });
 
