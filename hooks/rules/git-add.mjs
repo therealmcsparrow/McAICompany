@@ -167,10 +167,10 @@ function judgeAdd(args, dirs) {
   return false;
 }
 
-function judgeCommit(args) {
+function judgeCommit(args, dirs) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === '--') return false;
+    if (a === '--') return args.slice(i + 1).some((p) => badPathspec(p, dirs));
     if (a.startsWith('--')) {
       const full = resolveLong(a.slice(2).split('=')[0], COMMIT_LONG);
       if (full !== null && COMMIT_DENY.has(full)) return true;
@@ -185,6 +185,8 @@ function judgeCommit(args) {
         }
         if (ch === 'u' || ch === 'S') break;
       }
+    } else if (badPathspec(a, dirs)) {
+      return true;
     }
   }
   return false;
@@ -197,7 +199,7 @@ function judgeGit(args, dirs) {
   const sub = args[i].replaceAll('\\', '').toLowerCase();
   const rest = args.slice(i + 1);
   if (sub === 'add' || sub === 'stage') return judgeAdd(rest, dirs);
-  if (sub === 'commit') return judgeCommit(rest);
+  if (sub === 'commit') return judgeCommit(rest, dirs);
   return false;
 }
 

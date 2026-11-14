@@ -16,6 +16,7 @@ const MAX_PATH = 4096;
 const MAX_PATHS = 80;
 const MAX_SHELL_PATHS = 64;
 const MAX_MODEL = 64;
+const MAX_RUNS = 500;
 const PROMPT_BYTES = 64 * 1024;
 // Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
 const FAST_FLOOR = await import('../rules/cap.mjs').then((m) => m.freezeAt(m.MIN_THRESHOLD), () => Infinity);
@@ -98,11 +99,23 @@ function pathEntry(raw, ctx, cwd) {
 
 const pathLike = (t) => /[\\/]/.test(t) || /^[~$%.]/.test(t) || /\.[A-Za-z0-9]{1,8}$/.test(t);
 
-function shellTokens(command) {
+const isDirIn = (t, cwd) => {
+  try { return fs.statSync(path.resolve(cwd || process.cwd(), t)).isDirectory(); } catch { return false; }
+};
+
+// Path-like tokens, plus bare tokens (and the rest of a `:/x` pathspec) that name a directory under cwd.
+function shellTokens(command, cwd) {
   const out = [];
+  let probes = 0;
   for (const t of command.split(/[\s;|&<>()"'`,=]+/)) {
-    if (t.length === 0 || t.length > MAX_PATH || !pathLike(t)) continue;
-    out.push(t);
+    if (t.length === 0 || t.length > MAX_PATH) continue;
+    if (pathLike(t)) {
+      out.push(t);
+      if (t.startsWith(':/') && t.length > 2 && probes < MAX_SHELL_PATHS) { probes++; if (isDirIn(t.slice(2), cwd)) out.push(t.slice(2)); }
+    } else if (!t.startsWith('-') && probes < MAX_SHELL_PATHS) {
+      probes++;
+      if (isDirIn(t, cwd)) out.push(t);
+    }
     if (out.length >= MAX_SHELL_PATHS) break;
   }
   return out;
@@ -113,7 +126,8 @@ function toolOf(name, input, ctx, cwd) {
   for (const f of FILE_FIELDS) { const v = str(input, f); if (v) raws.push(v); }
   if (name === 'Glob') { const v = str(input, 'pattern'); if (v) raws.push(v); }
   const command = SHELL.has(name) ? str(input, 'command') : null;
-  if (command) raws.push(...shellTokens(command));
+  if (command) raws.push(...shellTokens(command, cwd));
+  if (name === 'Grep') { const v = str(input, 'glob'); if (v) raws.push(v); }
   const paths = [...new Set(raws)].filter((r) => r.length <= MAX_PATH).slice(0, MAX_PATHS).map((r) => pathEntry(r, ctx, cwd));
   let model = null;
   let subagentType = null;
@@ -204,6 +218,12 @@ export function protectedPaths(ctx, root) {
   const list = [ctx.pluginRoot, path.join(ctx.mcsHome, 'config.json'), path.join(ctx.mcsHome, 'hook-snapshots'),
     path.join(home, '.claude', 'settings.json'), path.join(home, '.claude', 'settings.local.json')];
   if (root) list.push(path.join(root, '.claude', 'settings.json'), path.join(root, '.claude', 'settings.local.json'), path.join(root, '.company', 'settings.json'));
+  if (root) {
+    const work = path.join(root, '.company', 'work');
+    try {
+      for (const d of fs.readdirSync(work, { withFileTypes: true }).slice(0, MAX_RUNS)) if (d.isDirectory()) list.push(path.join(work, d.name, 'guard.jsonl'));
+    } catch { /* no work folder */ }
+  }
   const out = new Set();
   for (const p of list) { const r = realOf(p, root || process.cwd()); if (r) out.add(fold(r)); }
   return [...out];
@@ -262,6 +282,10 @@ export async function normalize(raw, ctx) {
   };
   if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error') {
     try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = null; }
+  }
+  if (event.run && typeof event.run.folder === 'string') {
+    const g = realOf(path.join(event.run.folder, 'guard.jsonl'), root || process.cwd());
+    if (g && !event.protected.includes(fold(g))) event.protected.push(fold(g));
   }
   return { ok: true, event: deepFreeze(event), cwd, root };
 }
