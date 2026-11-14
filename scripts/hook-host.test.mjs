@@ -354,15 +354,19 @@ describe('AC17: snapshot at dispatch, Step files, half-written files', () => {
     fs.mkdirSync(path.join(other, '.company'), { recursive: true });
     quiet(env.run(env.stepPre('ls', { cwd: other }), { cwd: other }));
     denied(env, env.run(env.stepPre('g:deny', { cwd: other }), { cwd: other }), 'stub-guard.M1');
-    // an unknown Step in that root has no file and no lead.json there: snapshot-invalid
-    denied(env, env.run(env.stepPre('ls', { cwd: other, agent_id: 'agent-unknown' }), { cwd: other }), 'snapshot-invalid');
+    // an unknown Step in that root has no file and no lead.json there: rebuilt, call judged
+    const unknown = (cmd) => env.stepPre(cmd, { cwd: other, agent_id: 'agent-unknown' });
+    quiet(env.run(unknown('ls'), { cwd: other }));
+    denied(env, env.run(unknown('g:deny'), { cwd: other }), 'stub-guard.M1');
   });
 
-  test('a Lead event without lead.json denies snapshot-invalid until a SubagentStart writes it (plugin enabled mid-session)', () => {
+  test('a Lead event without lead.json rebuilds it and judges the call (plugin enabled mid-session)', () => {
     const env = makeEnv();
-    denied(env, env.run(env.pre('ls')), 'snapshot-invalid');
-    env.run(env.event('SubagentStart', { agent_id: 'agent-late' }));
+    assert.ok(!fs.existsSync(env.leadFile));
     quiet(env.run(env.pre('ls')));
+    assert.ok(fs.existsSync(env.leadFile), 'lead.json rebuilt');
+    assert.equal(JSON.parse(fs.readFileSync(env.leadFile, 'utf8')).v, 1);
+    denied(env, env.run(env.pre('g:deny')), 'stub-guard.M1');
   });
 
   for (const [label, bytes] of [
@@ -372,22 +376,26 @@ describe('AC17: snapshot at dispatch, Step files, half-written files', () => {
     ['a wrong version', JSON.stringify({ v: 2, at: 'x', threshold: 1000, savers: {}, floor: {}, drift: false, settingsWarnings: [] })],
     ['over 4 KiB', JSON.stringify({ v: 1, at: 'x', threshold: 1000, savers: {}, floor: {}, drift: false, settingsWarnings: ['w'.repeat(5000)] })]
   ]) {
-    test(`a half-written snapshot (${label}): guards deny snapshot-invalid, savers pass`, () => {
+    test(`a half-written snapshot (${label}): a guard call rebuilds the file and is judged`, () => {
       const env = makeEnv();
       startLead(env);
       fs.writeFileSync(env.leadFile, bytes);
-      denied(env, env.run(env.pre('ls')), 'snapshot-invalid');
-      const r = env.run(env.pre('s:note'));
-      assert.doesNotMatch(sys(r), /stub saver note/);
+      quiet(env.run(env.pre('ls')));
+      const s = JSON.parse(fs.readFileSync(env.leadFile, 'utf8'));
+      assert.equal(s.v, 1);
+      assert.ok(Number.isInteger(s.threshold));
+      denied(env, env.run(env.pre('g:deny')), 'stub-guard.M1');
     });
   }
 
-  test('a half-written Step file: that Step denies snapshot-invalid', () => {
+  test('a half-written Step file: the Step file is rebuilt and the call judged', () => {
     const env = makeEnv();
     boot(env);
     env.run(env.event('SubagentStart'));
     fs.writeFileSync(env.stepFile('agent-a1'), '{"v":1,');
-    denied(env, env.run(env.stepPre('ls')), 'snapshot-invalid');
+    quiet(env.run(env.stepPre('ls')));
+    assert.equal(JSON.parse(fs.readFileSync(env.stepFile('agent-a1'), 'utf8')).v, 1, 'Step file rewritten');
+    denied(env, env.run(env.stepPre('g:deny')), 'stub-guard.M1');
   });
 
   test('at most 200 Step files: the oldest are deleted, the new one stays', () => {
