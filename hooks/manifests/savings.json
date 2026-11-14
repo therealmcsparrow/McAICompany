@@ -1,0 +1,1 @@
+{ "v": 1, "id": "savings", "kind": "saver", "title": "Savings", "owner": "frontend-engineer", "sessions": "lead", "events": [], "rules": [], "fail": "open", "switch": "mods.savings.enabled", "lock": false, "upstream": null }
