@@ -79,13 +79,13 @@ _Avoid_: orchestrator (use Lead).
 
 **Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only, and only with `pipeline.review_format: pilot` (default `plain`). Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
 
-**Context cap** — the fixed max context of every Role and tier: 95000, with a hand-over at 85500, passed in each dispatch as `Context cap: 95000 handover 85500`. The old `context_cap` settings are accepted but have no effect. A soft limit.
+**Context cap** — the max context of every Role and the Lead in a run, the setting `pipeline.context_cap` (project, else user, else 180000; a whole number from 60000 to 1000000), with the hand-over at 90% of it (floor). Frozen per run when the run starts, so a change takes effect at the next run, and passed in each dispatch as `Context cap: <cap> handover <n>` (default `180000 handover 162000`). A per-Role `context_cap` is accepted but has no effect. A soft limit. Contracts `aico-settings` v2.2, `run-state` v2.1; ADR 0069.
 
 **Idea flow** — the route of `/aico:idea` and `/aico:bug`: capture, a grill, a reprompt, then the routes A to E, ticket approval and the tickets form F, G, E. Both kinds share one route; the kind decides the build Playbook (`aico:feature` for an idea, `aico:fix` for a bug). The allowed picks come from the `idea-flow` script. Record: `.company/work/<slug>/idea-flow.jsonl`. Contract `idea-flow` v1.1.
 
 **Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. The plan sections before the tasks are approved the same way as one item, `S0`. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.4.
 
-**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at 85500 tokens, after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v1.7, `context-guard` v1; ADR 0049, ADR 0056.
+**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at the run's hand-over point (see Context cap), after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v2.3, `context-guard` v1.2; ADR 0049, ADR 0056, ADR 0069.
 
 **Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 
@@ -111,7 +111,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Film script** — an optional separate file (`brainstorm.film_script`, off by default) where every line quotes a stored brainstorm reply. No model call.
 
-**Context budget** — no agent (Role or Lead) goes over 95000 tokens of context. A Role at 85500 stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
+**Context budget** — no agent (Role or Lead) goes over the run's Context cap. A Role at the hand-over point stops at a clean point and writes a Handoff with `status: handover`; the Lead dispatches a fresh Step of the same Role to continue from its `## Next`. Never consumes a Fix round.
 
 **Risk tier** — `low | medium | high`, set in the Brief and carried in every dispatch; forced high for auth, payments, personal data, migrations or a Contract change. Drives test depth, rule scope and routing. A Role may raise it, never lower it.
 

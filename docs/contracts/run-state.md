@@ -1,4 +1,4 @@
-# Contract: run-state v2.0
+# Contract: run-state v2.1
 
 Provider: `scripts/run-state.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`, through `skills/pipeline/references/run-state.md`; from v1.1 also `aico:reprompt`, `reprompt` v1; from v1.2 also `aico:triage` and `aico:lead` for the triage record). Consumers: the `aico-mods` v2.0 mods (Savvy, Reflect, Cache Tax), through `show` and `active` only; `aico:lead` through `triage check` (v1.2) and, from v1.4, `aico:fix` through `triage check <nonce> --route fix`; from v1.3 `scripts/ledger.mjs` `ship` (`token-ledger` v1.1), through the exported `show(root, slug, { now })`, which returns the same run view as `show <slug> --json`; from v1.8 the `dashboard` v1 Modules, through the exported `list`, `active` and `show` only.
 Why it exists: Handoff frontmatter gives Steps, Roles, status and Fix round, but nothing on disk says which wave a run is in, which Gates passed, when it started or how it ended (`docs/adr/0016-run-state-record.md`).
@@ -19,6 +19,8 @@ v1.9 is additive (task role-skills-file): a Step file name in the view's `steps`
 v1.10 is additive (one project one folder, run 1): `<slug>` also accepts the v3 run slug `<ProjectID>/<NN>-<playbook>` (`isRunSlug` and `workParts` of `work-folder-name` v2.1; `NN` 01-999), and the command `projects --json` with the exported `projects` ("Project list") is added. A v3 run keeps its state in `.company/work/<ProjectID>/<NN>-<playbook>/run-state.jsonl`; `start` on a v3 slug never makes the project folder (`refused: project folder is missing`). A run folder is used only when its real path is `<ID>/<NN>-<playbook>` inside the real `.company/work`, not by its last name. `list` and `active` read top-level runs only, as before. Every v1.9 call, file and output is unchanged.
 
 v2.0 is a major (one project one folder, run 2): `list`, `active` and `projects` walk runs with the exported `runSlugs(root, { max = 200 })` ("Run walk"), so a v3 run is listed and can be active, and `list.runs[].slug` and `active.slug` may hold one `/` (`<ProjectID>/<NN>-<playbook>`). A consumer that uses the slug as one path part or file name breaks: it takes the folder from `workParts(slug)` and a file name from `runKey(slug)` (`work-folder-name`). `show`, `append` and `projects` output are unchanged. v2, v1.1 and legacy names give byte-identical output to v1.10.
+
+v2.1 is additive (task P20261112.000001/07-feature; ADR 0069): the `start` record gets the optional `cap` key (the run's frozen Context cap, written by the script, never typed), the view gets `cap` and `handover`, and `scripts/run-cap.mjs` exports `runCap(root, slug, opts)` ("Run cap"). Every v2.0 file is a valid v2.1 file and gives the same view plus `"cap": null, "handover": null`. A v2.0 reader skips a `start` line that carries `cap` with its usual `line <n> skipped` warning. Every v2.0 command keeps its arguments and refusals.
 
 ## Storage
 - `.company/work/<parts>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a run slug (`isRunSlug` of `mods/lib/work-folder.mjs`, `work-folder-name` v3.0): a v3 run slug `<ProjectID>/<NN>-<playbook>`, or a top-level v2, v1.1 or legacy name (`isWorkFolder`). `<parts>` is `workParts(slug)` (`<ProjectID>/<NN>-<playbook>` for a v3 slug, the name itself otherwise). The name holds spaces and dots, so a shell line quotes it in single quotes.
@@ -44,11 +46,12 @@ v2.0 is a major (one project one folder, run 2): `list`, `active` and `projects`
 | `phase` | `sub` only (v1.5): `start \| stop` |
 | `session` | `sub` only, optional (v1.5): `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$` (lowercase), the hook payload's `session_id` |
 | `aico` | `start` only, optional (v1.5): `^\d{1,3}\.\d{1,3}\.\d{1,3}$`, the plugin version from `plugin.json`; not shown in the view |
+| `cap` | `start` only, optional (v2.1): integer 60000-1000000, the run's Context cap, resolved and written by the script ("Run cap"); never an argument |
 
 ## CLI (cwd = product repo; refusals `refused: <reason>` on stdout, exit 2)
 | Command | Effect |
 |---|---|
-| `start <slug> [<aico>]` | appends `start` (v1.5: with `aico` when given; a value outside the pattern is `refused: aico must be a version like 0.19.1`). Refused when the file already has a `start` and no `end` (`refused: run <slug> already started`). A new `start` after an `end` begins a new segment (a resumed or reopened run). |
+| `start <slug> [<aico>]` | appends `start` (v1.5: with `aico` when given; a value outside the pattern is `refused: aico must be a version like 0.19.1`). Refused when the file already has a `start` and no `end` (`refused: run <slug> already started`). A new `start` after an `end` begins a new segment (a resumed or reopened run). (v2.1) When no earlier `start` in the file carries `cap`, the script resolves `pipeline.context_cap` (`aico-settings` v2.2, `resolveSettings` loaded lazily on this path only) and writes it as `cap`; settings unreadable → the resolver's fallback, still a whole number 60000-1000000. A later `start` writes no `cap`. |
 | `wave <slug> <n>` | appends `wave`. Refused without an open segment. |
 | `ask <slug> <brief\|plan\|ship>` | (v1.3) appends `ask`: the Gate form is about to be shown. Refused without an open segment, or for an unknown Gate. |
 | `gate <slug> <brief\|plan\|ship> <passed\|changed\|stopped>` | appends `gate`. Refused without an open segment. (v1.5) `gate <slug> plan passed` first resolves `plan_check.policy` (`aico-settings` v1.9); under `block` it calls `verifyPlans` (`plan-check` v1.2) in the readdir form, trusts no record, and refuses with nothing written: `refused: plan gate: <n> open decisions in <plan>` or `refused: plan gate: <reason>` (`no plan`, `unreadable`, `too large`, `patterns`). An exception in the check is a refusal (`refused: plan gate: check failed`). `plan changed\|stopped`, other Gates, `warn` and `off` are unchanged. The settings and plan-check scripts load only on this path. |
@@ -75,6 +78,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
   "waves": [{ "wave": 1, "at": "<at>" }],
   "open_ask": { "gate": "plan", "at": "<at>" },
   "round": 1, "tier": "low|medium|high|unknown",
+  "cap": 180000, "handover": 162000,
   "steps": [{ "step": "05", "role": "backend-engineer", "status": "done", "round": 0, "file": "05-backend-engineer.md", "mtime": "<at>", "verdict": null, "gate": null }],
   "warnings": ["line 7 skipped"] }
 ```
@@ -86,7 +90,11 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - `steps`: every `^\d{2,3}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200 and past that the newest 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`; a step's `round` is allowed as a whole number 0–99 (v1.1; a reprompt run's edits have no cap, so its rounds can pass 99).
 - Step keys `verdict` and `gate` (v1.8): `verdict` is the frontmatter `verdict:` when it is `approve`, `changes` or `blocked`; `gate` is the frontmatter `gate:` when it is `pass` or `fail`. Absent, or any other value → `null`. Both are read inside the same 8 KiB frontmatter limit; nothing else of the Handoff is read.
 - `round` = highest numeric `round:` among `steps` (so 0–99), else `0`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
-- Times and order come from the file; the view uses only the last segment (from the last `start`).
+- `cap`, `handover` (v2.1): `cap` is the first `cap` recorded on any `start` in the file (not only the last segment), so a run resumed after `end` keeps its cap; `handover` = `handoverOf(cap)` (`mods/lib/context-cap.mjs`, floor(cap x 0.9)). No recorded cap → both `null`. A v2.0 reader ignores the keys.
+- Times and order come from the file; the view uses only the last segment (from the last `start`), except `cap` and `handover`.
+
+## Run cap (v2.1)
+`runCap(root, slug, opts)`, exported by `scripts/run-cap.mjs`, returns `{ cap, handover, from: 'run'|'settings'|'default' }`: the view's recorded `cap` (`from: 'run'`); else the current resolved `pipeline.context_cap` (`'settings'`); else `180000` (`'default'`). `handover` is always `handoverOf(cap)`. A run without a run-state `start` (idea flows: grill, to-spec, research) gets the current setting, the value Setup §1.7 item 8 reads, so dispatch and guard agree. An unreadable view or settings falls through to the next source; it writes nothing. Consumers: `context-guard` v1.2, `lead-handoff` v2.3, `token-ledger` v1.13.
 
 ## Active run
 `active` picks, among the `run-state.jsonl` of the runs of `runSlugs` (at most 200 runs, v2.0), the one whose last segment has no `end` and whose newest activity (last record, or newest Step file mtime) is the most recent. A segment with no activity for 12 hours is `stale` and never active. No candidate → `{ "slug": null, "view": null }`. (v1.8) `active(root, { now })` exported by `scripts/run-state.mjs` returns the same object as `active --json`.
@@ -110,7 +118,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - `warnings`: `over 200 runs` when runs were left out by the cap; nothing else. No CEO text, Handoff text or step list is in the list.
 
 ## How the pipeline uses it (`aico:pipeline`, Core)
-- Setup, once the slug is known: `start <slug> <aico>` (v1.5, `<aico>` read from `plugin.json`; omitted when unreadable).
+- Setup, once the slug is known: `start <slug> <aico>` (v1.5, `<aico>` read from `plugin.json`; omitted when unreadable). (v2.1) Then Setup §1.7 item 8 reads `cap` and `handover` from `show <slug> --json` for the `Context cap:` line and `plan-tasks --handover`; `null` → `pipeline.context_cap` from the §1.7 `get` JSON and floor(x 0.9). A resumed Lead reads the same view.
 - Each wave start in the plan: `wave <slug> <n>`.
 - (v1.3) Directly before showing each Brief, Plan and Ship Gate form: `ask <slug> <gate>`. An `auto` Gate shows no form and gets no `ask`.
 - Each Brief, Plan and Ship Gate answer (an `auto` Gate counts as `passed`): `gate <slug> <gate> <result>`.
