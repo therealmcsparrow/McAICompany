@@ -1929,7 +1929,7 @@ test('short_path defaults to on in get and in get pipeline.short_path', (t) => {
   assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'on');
   assert.equal(s.cli('get', 'pipeline.short_path').out, 'on\n');
   assert.equal(JSON.parse(s.cli('get').out).pipeline.short_path, 'on');
-  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'second_reviewer', 'second_reviewer_model', 'second_reviewer_model_effective', 'worktrees', 'context_cap', 'review_format', 'lanes']);
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'second_reviewer', 'second_reviewer_model', 'second_reviewer_model_effective', 'worktrees', 'context_cap', 'review_format', 'lanes', 'context_handover', 'source']);
 });
 
 test('short_path off from the user level resolves off', (t) => {
