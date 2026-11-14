@@ -553,16 +553,6 @@ function sanitizePersonality(value, at, reasons) {
 }
 
 // Walks a layer against the schema. Returns { clean, reasons }: clean keeps only valid parts.
-const shownValue = (v) => {
-  let text;
-  try {
-    text = typeof v === 'string' ? v : JSON.stringify(v) ?? String(v);
-  } catch {
-    text = '?';
-  }
-  return text.slice(0, 35).replace(/[^ -~]/g, '?');
-};
-
 function sanitize(layer, roleNames, floor = 'opus') {
   const reasons = [];
   const capReasons = new Map(); // index in `reasons` -> shown value, for a refused pipeline.context_cap
@@ -601,7 +591,7 @@ function sanitize(layer, roleNames, floor = 'opus') {
       const pipeline = checkFields(value, { ...PIPELINE_RULES, second_reviewer_model: secondReviewerModelRule(floor) }, 'pipeline', reasons, ['lanes']);
       if (Object.hasOwn(value, 'context_cap') && !Object.hasOwn(pipeline, 'context_cap')) {
         const at = reasons.indexOf(CONTEXT_CAP.msg, before);
-        if (at !== -1) capReasons.set(at, `pipeline.context_cap (${shownValue(value.context_cap)})`);
+        if (at !== -1) capReasons.set(at, 'pipeline.context_cap');
       }
       if (Object.hasOwn(value, 'lanes')) {
         if (!isObject(value.lanes)) reasons.push('pipeline.lanes: must be an object');

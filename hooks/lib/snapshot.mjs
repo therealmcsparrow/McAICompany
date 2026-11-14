@@ -50,7 +50,7 @@ export function resolveSnapshotSettings({ mcsHome, root, manifests }) {
   const cap = walk(user, ['pipeline', 'context_cap']);
   if (cap !== undefined) {
     if (Number.isInteger(cap) && cap >= CAP.min && cap <= CAP.max) threshold = cap;
-    else warnings.push(`pipeline.context_cap: ignoring ${JSON.stringify(cap)?.slice(0, 30)}, valid is ${CAP.min}-${CAP.max}`);
+    else warnings.push(`pipeline.context_cap: ignoring the stored value, valid is ${CAP.min}-${CAP.max}`);
   }
   const savers = {};
   for (const m of manifests) {
