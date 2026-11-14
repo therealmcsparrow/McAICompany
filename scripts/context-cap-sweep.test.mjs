@@ -48,7 +48,7 @@ test('95000, 85500 and "fixed cap" appear only on the allowed list (CHANGELOG hi
   assert.deepEqual(bad, [], `old cap text outside the allowed list:\n${bad.join('\n')}`);
 });
 
-// T20 (P20261114.000001), AC13: the numbers 180000 and 162000 now live only in hooks/rules/cap.mjs
+// The numbers 180000 and 162000 now live only in hooks/rules/cap.mjs
 // (scripts/cap-literals.test.mjs scans for them). This sweep pins that the old readers keep their export names.
 test('the cap readers hold no default of their own: lead-handover re-exports CAP and HANDOVER_AT, the formula lives in the cap rule module', async () => {
   const lead = read('scripts/lead-handover.mjs');
@@ -79,7 +79,7 @@ test('ADR 0047 is marked superseded by 0069 and ADR 0069 exists with the new def
 
 // release.mjs moves [Unreleased] into a version section, so the newest non-empty entry (Unreleased or a
 // released version) holds the note. AICO_CHANGELOG_FILE lets a run point at a changelog copy.
-// T20: the note belongs to 0.39.0, the release that shipped the configurable cap; release 1 adds a newer entry
+// The note belongs to 0.39.0, the release that shipped the configurable cap; release 1 adds a newer entry
 // above it, so the newest entry is no longer the one to read.
 const entryOf = (log, version) => log.split(/^## \[/m).slice(1).find((s) => s.startsWith(`${version}]`)) ?? '';
 const checkNote = (top) => {

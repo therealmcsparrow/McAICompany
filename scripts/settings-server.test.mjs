@@ -1347,7 +1347,7 @@ test('layout: a server line that maps to no field is plain text in the summary',
   assert.equal(walk(page.ids.status, (n) => n.id === 'status-heading').textContent, 'Nothing was saved. Fix 2 fields:');
 });
 
-// R-3 / R-7: the server refuses a field of the level that is NOT shown. Each summary link needs text, and following it must
+// The server refuses a field of the level that is NOT shown. Each summary link needs text, and following it must
 // switch the level (lvl-project checked) and focus the live field. page.find() switches level silently, so the level is
 // read from the radio before any find() and the focus check compares with the node that find() returns afterwards.
 const TOPIC_REFUSAL = "project roles.qa.personality.topic: must be one line of letters, digits, single spaces and , . ' - ! ?; each word starts with a letter or digit";

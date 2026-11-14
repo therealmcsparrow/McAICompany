@@ -1,4 +1,4 @@
-// Threshold tests of the cap guard, rewritten red-first for the engine (T20, P20261114.000001; AC11, AC12, AC17).
+// Threshold tests of the cap guard, run through the engine.
 // Was: context-guard v1.2, the hand-over point is the run's recorded cap. Now: the threshold T is the snapshot's
 // `threshold` (`aico-settings` v3.0 `pipeline.context_cap`, user level, 60000-250000, default 180000), the
 // freeze point is F = floor(T * 0.9) (`context-guard` v2.0). Runs scripts/hook-host.mjs with the real cap.M1 rule.

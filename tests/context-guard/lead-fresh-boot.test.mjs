@@ -9,7 +9,7 @@ import path from 'node:path';
 import { capEnv, cleanup } from './cap-engine.mjs';
 import { newSessionCommand, HEADER, resume } from '../../scripts/lead-handover.mjs';
 
-// T20 (P20261114.000001): the freeze checks run through the engine (scripts/hook-host.mjs, real cap.M1 rule);
+// The freeze checks run through the engine (scripts/hook-host.mjs, real cap.M1 rule);
 // the threshold is the user setting `pipeline.context_cap` read into the snapshot at SessionStart, never a value
 // recorded on the run's start line (run-state v3.0). The boot-budget tests below are unchanged.
 const SLUG = 'P20261114.000099/01-feature';

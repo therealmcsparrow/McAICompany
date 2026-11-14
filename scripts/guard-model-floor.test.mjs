@@ -4,12 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// T14 (P20261114.000001): red tests for the model-floor guard (rule model-floor.M1), AC7.
+// Tests for the model-floor guard (rule model-floor.M1).
 // Seam: hooks/rules/model-floor.mjs#judge(event, snapshot) -> verdict (mod-hook v1, hook-event v1).
-// The R-10 Decided line of the plan gives the order: (1) FORCE set and not '0' -> the forced
+// Order of checks: (1) FORCE set and not '0' -> the forced
 // model (env model unless unset or 'inherit', else event.mainModel; null -> deny "forced model
 // unknown"); (2) else the dispatch model ('inherit' -> mainModel); (3) else absent -> pass.
-// Red until T15 ships the rule. Events are built by hand; the engine is not involved.
+// Events are built by hand; the engine is not involved.
 
 const root = path.resolve(import.meta.dirname, '..');
 const RULE = 'model-floor.M1';
@@ -61,7 +61,7 @@ async function allows(opts) {
   assert.deepEqual(await verdict(opts), { v: 'allow' }, `allow: ${JSON.stringify(opts)}`);
 }
 
-// ---------- AC7: dispatch model against the floor ----------
+// ---------- dispatch model against the floor ----------
 test('AC7 deny: qa (sonnet floor) dispatched on haiku', async () => { await denies({ model: 'haiku' }); });
 test('AC7 deny: architect (opus floor) dispatched on sonnet', async () => { await denies({ role: 'architect', model: 'sonnet' }); });
 test('AC7 deny: architect dispatched on haiku', async () => { await denies({ role: 'architect', model: 'haiku' }); });
@@ -81,7 +81,7 @@ test('AC7 every Role in the floor file is judged against its own floor', async (
   }
 });
 
-// ---------- AC7: any casing, full ids ----------
+// ---------- any casing, full ids ----------
 test('AC7 casing: any casing of the family counts', async () => {
   await denies({ model: 'HAIKU' });
   await denies({ model: 'Haiku' });
@@ -107,7 +107,7 @@ test('AC7 unknown family: a model with no haiku|sonnet|opus word denies', async 
   await denies({ model: '   ' });
 });
 
-// ---------- AC7: no Role / not a dispatch ----------
+// ---------- no Role / not a dispatch ----------
 test('AC7 no Role: a dispatch with neither subagentType nor outputRole passes on any model', async () => {
   await allows({ role: null, model: 'haiku' });
   await allows({ role: null, model: 'gpt-4o' });
@@ -124,7 +124,7 @@ test('both dispatch tool names (Agent, Task) are judged; other tools pass', asyn
   await allows({ name: 'Read', model: 'haiku' });
 });
 
-// ---------- R-10 precedence ----------
+// ---------- precedence ----------
 test('R-10 (1) FORCE on, env haiku, dispatch opus -> deny: the forced model runs', async () => {
   await denies({ force: '1', env: 'haiku', model: 'opus' });
 });
@@ -218,7 +218,7 @@ test('AC7 every agents/*.md model is at or above its floor (the file model appli
   }
 });
 
-// ---------- fixtures (AC4): per-rule folder, one pass and one block at least ----------
+// ---------- fixtures: per-rule folder, one pass and one block at least ----------
 function fixtures() {
   assert.ok(fs.existsSync(FIX), 'hooks/fixtures/model-floor.M1/ exists');
   return fs.readdirSync(FIX).filter((f) => f.endsWith('.json'));

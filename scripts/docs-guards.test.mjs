@@ -1,4 +1,4 @@
-// Pins the user docs for the five guards, AICO_GUARDS=off, the cap range and the mods commands (T36).
+// Pins the user docs for the five guards, AICO_GUARDS=off, the cap range and the mods commands.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

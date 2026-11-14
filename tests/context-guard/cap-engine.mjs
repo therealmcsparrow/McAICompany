@@ -1,9 +1,9 @@
-// Shared harness for the cap guard tests (T20, P20261114.000001). Not a test file.
+// Shared harness for the cap guard tests. Not a test file.
 // The old tests called scripts/context-guard.mjs in process. The cap is now the `cap` guard (rule cap.M1)
 // of the hook engine (`context-guard` v2.0, `mod-hook` v1), so every case here runs scripts/hook-host.mjs
 // as a process with the REAL hooks/rules/cap.mjs, hooks/manifests/cap.json and the cap.M1 row(s) of the
 // real hooks/rules.json, inside the throw-away plugin root of hooks/fixtures/engine/harness.mjs.
-// QA assumptions (change here in one place): the cap rows are found by `rule === 'cap.M1'` in hooks/rules.json;
+// Assumptions (change here in one place): the cap rows are found by `rule === 'cap.M1'` in hooks/rules.json;
 // the threshold comes from <MCSPARROW_HOME>/config.json `aico_settings.pipeline.context_cap`, read at
 // SessionStart / SubagentStart into the snapshot; the guard record is <run folder>/guard.jsonl.
 import fs from 'node:fs';

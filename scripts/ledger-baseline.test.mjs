@@ -1,5 +1,4 @@
-// T28 (QA-first, red until the ledger task of T29): `ledger.mjs baseline --before <x.y.z> --json`,
-// token-ledger v1.14 (planned), AC24 as amended in 14-product-manager.md.
+// Tests for `ledger.mjs baseline --before <x.y.z> --json` (token-ledger v1.14, planned).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

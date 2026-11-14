@@ -1,7 +1,7 @@
-// Tests (QA, red first): the hook engine scripts/hook-host.mjs, synthetic event on stdin -> verdict on stdout,
+// Tests: the hook engine scripts/hook-host.mjs, synthetic event on stdin -> verdict on stdout,
 // per `mod-hook` v1 (engine steps 1-7, Output, Snapshot) and `hook-event` v1. Stub rules live in
 // hooks/fixtures/engine; the harness builds a throw-away plugin root with matching pins.
-// Covers AC3, AC9, AC10, AC16, AC17, AC18, AC19, AC28 and the deny log.
+// Also covers the deny log.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

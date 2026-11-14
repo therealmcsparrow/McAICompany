@@ -744,7 +744,7 @@ test('cli: ask through the spawned script', () => {
   assert.equal(go('ask', 'x', 'nope').status, 2);
 });
 
-// run-state v3.0 (task P20261114.000001/01-feature, T21): the cap is no longer frozen per run. `runCap(root, slug)` returns
+// run-state v3.0: the cap is no longer frozen per run. `runCap(root, slug)` returns
 // { cap, handover, from: 'snapshot'|'default' }: the `threshold` of the project's Lead snapshot (mod-hook v1 "Snapshot"),
 // range 60000-250000, else 180000. The view keys `cap` and `handover` carry that value. `start` writes no `cap`.
 const snapFile = (root) => {

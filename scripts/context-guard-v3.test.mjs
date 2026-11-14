@@ -1,5 +1,5 @@
 // The cap guard finds the active v3 run `<ID>/<NN>-<pb>`, keeps its record in that run folder and allows a new
-// Handoff written directly in it. Rewritten red-first for the engine (T20, P20261114.000001; AC13, `context-guard`
+// Handoff written directly in it. Run through the engine (`context-guard`
 // v2.0: record file is guard.jsonl, was context-guard.jsonl). v2 (flat) cases stay in tests/context-guard/guard.test.mjs.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';

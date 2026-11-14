@@ -1,4 +1,4 @@
-// QA tests for P20261114.000001-T6 (AC20): handoff-lint and rule-check give byte-identical output and exit codes
+// Tests: handoff-lint and rule-check give byte-identical output and exit codes
 // to the base commit. Base = git archive of the base commit; "now" = the same tree with the working scripts/, mods/
 // and hooks/ laid over it, docs/ kept at base so only the script change is measured.
 import { test, before, after } from 'node:test';

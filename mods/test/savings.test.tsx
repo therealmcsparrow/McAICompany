@@ -2,8 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { GUARDS_SINCE } from '../lib/savings.mjs'
 
-// T28 (QA-first, red until T29): the Savings pane, mods/savings.tsx. Pane `aico-savings`, command `aico-savings`.
-// AC24 as amended (14-product-manager.md); wireframes in design/terminal-panes.md section 5. aico-mods v2.2.
+// The Savings pane, mods/savings.tsx. Pane `aico-savings`, command `aico-savings`.
+// Wireframes in design/terminal-panes.md section 5. aico-mods v2.2.
 const NOW = Date.parse('2026-11-14T10:00:00Z')
 const PANE = 'aico-savings'
 

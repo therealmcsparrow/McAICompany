@@ -1,7 +1,7 @@
-// Lead side of the cap guard, rewritten red-first for the engine (T20, P20261114.000001; AC11, AC16, AC28).
+// Lead side of the cap guard, run through the engine.
 // Was: scripts/context-guard.mjs `pre` in process. Now: scripts/hook-host.mjs with the real cap.M1 rule and its
 // effects (`context-guard` v2.0 "Bands": the Lead freezes at F, ends its turn at T). Harness: ./cap-engine.mjs.
-// QA assumption: the freeze / frozen / wait texts keep their v1.2 wording inside the deny reason; the tests pin
+// Assumption: the freeze / frozen / wait texts keep their v1.2 wording inside the deny reason; the tests pin
 // the key phrase of each, not the whole sentence, because the engine prefixes `aico guard cap.M1: `.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';

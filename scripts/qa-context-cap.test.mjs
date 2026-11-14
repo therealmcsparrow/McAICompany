@@ -426,7 +426,7 @@ const TRACE = {
   AC11: [['scripts/ledger-cap.test.mjs', 'agent-ctx refuses hostile ids'], ['mods/test/savvy-ctx.test.tsx', 'failures draw ctx ? and never block the pane']],
   AC12: [['scripts/qa-context-cap.test.mjs', 'check.mjs --drift reports 0 errors']],
   AC13: [['scripts/context-cap-text.test.mjs', 'Ship Gate shows over cap and the Lead peak'], ['scripts/lead-context.test.mjs', 'read prints ctx and peak, with over cap past CAP']],
-  // lead-handoff v1.7 removed the window warning (ADR 0056); AC14 now holds that begin prints none
+  // lead-handoff v1.7 removed the window warning (ADR 0056); this now holds that begin prints none
   AC14: [['scripts/lead-context.test.mjs', 'begin prints only begun, with or without the window setting']]
 };
 

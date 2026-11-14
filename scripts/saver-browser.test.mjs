@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// T24 (P20261114.000001): red tests for the browser saver note (rule browser.Y1), AC25, AC3, AC28.
+// Tests for the browser saver note (rule browser.Y1).
 // Seam: hooks/rules/browser.mjs#judge(event, snapshot) -> verdict (mod-hook v1, hook-event v1).
 // Source of the behaviour: docs/pack-clash-table.md row efficient-browser-use + clash.6: note-only, default
 // off, Lead session only, hands-on-tester and any Step session produce no note and no change.
-// QA assumptions (named in the T24 Handoff): the rule judges by tool name only (hook-event v1 reads no
+// Assumptions: the rule judges by tool name only (hook-event v1 reads no
 // screenshot fields); a "browser call" is a screenshot tool of a browser MCP server (name ends in
 // `screenshot`, any case); the switch is snapshot.savers['efficient-browser-use'] === true exactly.
-// Events are built by hand; the engine is not involved. Red until T25 ships the rule.
+// Events are built by hand; the engine is not involved.
 
 const root = path.resolve(import.meta.dirname, '..');
 const RULE = 'browser.Y1';
@@ -53,7 +53,7 @@ async function run(opts, s = ON) {
 }
 const allow = async (opts, s) => assert.deepEqual(await run(opts, s), { v: 'allow' }, `allow: ${JSON.stringify(opts)}`);
 
-// ---------- AC25: a Lead browser call notes when the saver is on ----------
+// ---------- a Lead browser call notes when the saver is on ----------
 test('AC25 note: Lead screenshot call with the saver on', async () => {
   for (const tool of SHOTS) {
     const v = await run({ tool });
@@ -73,7 +73,7 @@ test('AC25 note: the text names the cost, not the pack or a way to shrink eviden
   assert.match(v.message, /screenshot|token|image/i);
 });
 
-// ---------- AC25: off by default ----------
+// ---------- off by default ----------
 test('AC25 off: switch false, absent, empty or not exactly true allows', async () => {
   await allow({}, snap({ [ID]: false }));
   await allow({}, snap({}));
@@ -84,7 +84,7 @@ test('AC25 off: switch false, absent, empty or not exactly true allows', async (
   await allow({}, deepFreeze({ v: 1, at: 'x', threshold: 100000, floor: {}, drift: false, settingsWarnings: [] }));
 });
 
-// ---------- AC25 + AC28: never in a Step, never on hands-on-tester evidence ----------
+// ---------- never in a Step, never on hands-on-tester evidence ----------
 test('AC28 Step session: no note even with the saver on', async () => {
   await allow({ session: 'step', agentType: 'aico:qa' });
   await allow({ session: 'step', agentType: null });
@@ -108,7 +108,7 @@ test('AC25 scope: a null tool allows without throwing', async () => {
   assert.deepEqual(await judge(e, ON), { v: 'allow' });
 });
 
-// ---------- AC3: never alters input ----------
+// ---------- never alters input ----------
 test('AC3 frozen event and snapshot are never touched, verdict never carries updatedInput', async () => {
   for (const opts of [{}, { session: 'step' }, { tool: 'Read' }]) {
     const v = await run(opts);

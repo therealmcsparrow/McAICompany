@@ -1,5 +1,5 @@
-// T28 (QA-first, red until T29): the pure lib behind the Savings pane, mods/lib/savings.mjs.
-// AC24 as amended in 14-product-manager.md; aico-mods v2.2 (Savings saver), token-ledger v1.14 (baseline).
+// The pure lib behind the Savings pane, mods/lib/savings.mjs.
+// aico-mods v2.2 (Savings saver), token-ledger v1.14 (baseline).
 // The export names below are the seam this task pins: GUARDS_SINCE, currentFigures, baselineFigures, safeText.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

@@ -129,8 +129,8 @@ test('shipped files are LF only', () => {
   assert.ok(pipeline.split('\n').length <= 125 && handoff.split('\n').length <= 125);
 });
 
-// ---------- T20 (P20261114.000001): release 1 moves the cap into the handoff mod (context-guard v2.0, run-state v3.0) ----------
-// Red until T33 (pipeline and handoff skill text, Core edits approved in the plan) and T36 (setup doc) ship.
+// ---------- release 1 moves the cap into the handoff mod (context-guard v2.0, run-state v3.0) ----------
+//
 test('Setup item 8 no longer calls the cap one value for the whole run: a settings edit applies at the next Step dispatch (snapshot)', () => {
   const item8 = pipeline.split('\n').find((l) => l.startsWith('8. **Context cap'));
   assert.ok(item8, 'Setup item 8 exists');

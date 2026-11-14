@@ -1,4 +1,4 @@
-// Pins the plain-language guide, concepts, getting-started, README and GLOSSARY for the idea flow (T16).
+// Pins the plain-language guide, concepts, getting-started, README and GLOSSARY for the idea flow.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

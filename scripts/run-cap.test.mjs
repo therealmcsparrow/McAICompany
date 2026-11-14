@@ -6,12 +6,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-// T20 (P20261114.000001), rewritten red-first for `run-state` v3.0: the cap is no longer frozen per run.
+// `run-state` v3.0: the cap is no longer frozen per run.
 // `runCap(root, slug, { home })` returns { cap, handover, from: 'snapshot'|'default' }: the `threshold` of the
 // project's Lead snapshot (`mod-hook` v1 "Snapshot": <home>/hook-snapshots/<root12>/lead.json, root12 = first 12 hex
 // of SHA-256 of the real project root), else the plugin default. `start` stops writing `cap`; an old `cap` in a
 // record is ignored on read; the view keys `cap` and `handover` carry the runCap value.
-// QA assumption: `home` is the MCSPARROW_HOME folder (the snapshot folder lives under it); the child processes get
+// Assumption: `home` is the MCSPARROW_HOME folder (the snapshot folder lives under it); the child processes get
 // MCSPARROW_HOME too.
 const here = import.meta.dirname;
 const runState = path.join(here, 'run-state.mjs');

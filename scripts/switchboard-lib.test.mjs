@@ -1,6 +1,6 @@
-// Red tests (QA-first, task T26) for mods/lib/switchboard.mjs, built in T27.
+// Tests for mods/lib/switchboard.mjs.
 // Contracts: aico-mods v2.2 (Switchboard), mod-manifest v1, aico-settings v3.0 (`set-mod`), mod-hook v1 step 7 (deny log).
-// The lib is pure: no `$`, no Node import, no npm package. Names and shapes below are the seam T27 builds to:
+// The lib is pure: no `$`, no Node import, no npm package. Names and shapes below are the seam the lib builds to:
 //   parseManifest(text)            -> manifest object, or undefined (allow-list of mod-manifest v1)
 //   rows(manifests, settings)      -> { guards: Row[], savers: Row[] }  settings = { known, mods }
 //                                     Row = { id, title, kind, state, canChange, key }
@@ -67,7 +67,7 @@ test('parseManifest drops a __proto__ key instead of merging it', () => {
   assert.equal({}.polluted, undefined);
 });
 
-// ---- rows: AC15 read-only guards, AC23 settings only ----
+// ---- rows: read-only guards, settings only ----
 
 test('rows: guards and gates are one read-only group, savers another, manifest order kept, no row for the switchboard itself', () => {
   const r = rows(
@@ -197,7 +197,7 @@ test('message lines are the design file wording', () => {
   assert.equal(toggledMessage('cache-tax', true), 'cache-tax set ON. Applies when the next task step starts.');
 });
 
-// ---- AC23: no second switch file, static scan of the seams ----
+// ---- no second switch file, static scan of the seams ----
 
 test('AC23: neither the pane nor its lib names a switches.json or writes a file', () => {
   for (const rel of ['mods/lib/switchboard.mjs', 'mods/switchboard.tsx']) {

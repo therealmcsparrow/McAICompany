@@ -1,5 +1,4 @@
-// QA tests for P20261114.000001-T6 (red before T7): the shared path and rule-ID modules.
-// AC6 hostile paths, AC20 shared module. Pinned shape of normalizePath (the T7 builder aligns to it):
+// Tests for the shared path and rule-ID modules: hostile paths and the shared module. Pinned shape of normalizePath:
 //   normalizePath(raw) -> string: '/' separators, lower case, '.' and '..' resolved ('..' kept only at the start of a
 //   relative path, dropped at the root), trailing dots and spaces trimmed per segment, stream suffix (':name', '::$DATA')
 //   cut from the last segment, '\\?\' and '\\.\' prefixes dropped, UNC root '//server/share' and a drive 'c:' kept. Non-string -> ''.

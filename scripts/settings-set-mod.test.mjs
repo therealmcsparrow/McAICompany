@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 // aico-settings v3.0 (planned): `settings.mjs set-mod <id> on|off` and `set-mod switchboard seen`.
-// Task P20261114.000001-T22 (QA-first, red until T23). Covers AC15 (guards have no switch), AC23 (writes only through settings).
+// Covers: guards have no switch, switches are written only through settings.
 const here = import.meta.dirname;
 const script = path.join(here, 'settings.mjs');
 const manifestDir = path.join(here, '..', 'hooks', 'manifests');

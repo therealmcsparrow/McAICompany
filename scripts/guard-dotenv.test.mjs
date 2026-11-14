@@ -1,7 +1,7 @@
-// QA tests for P20261114.000001-T12 (red before T13): the dotenv.M-SEC1 guard, hooks/rules/dotenv.mjs#judge.
-// AC6: Read, Edit, Write, Grep, Glob, cat, type, gc, Get-Content, cp, symlink on `.env` / `.env.<x>` deny;
+// Tests for the dotenv.M-SEC1 guard, hooks/rules/dotenv.mjs#judge.
+// Read, Edit, Write, Grep, Glob, cat, type, gc, Get-Content, cp, symlink on `.env` / `.env.<x>` deny;
 // `.env.example`, `.env.sample`, `.env.template` pass; case, backslash, relative, drive letter, UNC, 8.3.
-// Pinned (T13 aligns to it): judge(event) reads only the frozen hook-event v1 object (tool.paths[].raw|expanded|real,
+// Pinned: judge(event) reads only the frozen hook-event v1 object (tool.paths[].raw|expanded|real,
 // tool.command as fallback), never a verb: any path naming a denied .env file denies, for every tool.
 // Deny = { v:'deny', rule:'dotenv.M-SEC1', message } (1-300 printable chars, never echoing a path or the command);
 // pass = { v:'allow' }. Names decided: `.env`, `.env.<x>` deny except .example/.sample/.template (any case).
@@ -44,7 +44,7 @@ async function expectAllow(e, label) {
   assert.deepEqual(v, { v: 'allow' }, `${label}: expected allow, got ${JSON.stringify(v)}`);
 }
 
-// AC6 file tools: each tool, one path that names .env
+// file tools: each tool, one path that names .env
 for (const tool of ['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Grep']) {
   test(`AC6: ${tool} on .env denies`, async () => { await expectDeny(ev(tool, { paths: [P('/proj/.env')] }), tool); });
   test(`AC6: ${tool} on .env.example passes`, async () => { await expectAllow(ev(tool, { paths: [P('/proj/.env.example')] }), tool); });
@@ -56,7 +56,7 @@ test('AC6: Glob of ordinary sources passes', async () => {
   await expectAllow(ev('Glob', { paths: [P('**/*.ts'), P('src')] }), 'glob ts');
 });
 
-// AC6 hostile spellings of the path (file tool and shell share the path list)
+// hostile spellings of the path (file tool and shell share the path list)
 const deny = [
   ['plain', '.env'], ['absolute', `/proj/${SECRET}/.env`], ['upper', '.ENV'], ['mixed', 'Sub/.Env'],
   ['backslash', `sub\\${SECRET}\\.env`], ['double backslash', 'sub\\\\.env'], ['double slash', 'sub//.env'],
@@ -91,7 +91,7 @@ test('AC6: a link whose real name is a template passes', async () => {
   await expectAllow(ev('Read', { paths: [P('notes/link.txt', { real: '/proj/.env.example', exists: true })] }), 'link to example');
 });
 
-// AC6 pass: the template names, any case, any spelling, and names that merely look alike
+// pass: the template names, any case, any spelling, and names that merely look alike
 const pass = [
   ['example', '.env.example'], ['sample', '.env.sample'], ['template', '.env.template'],
   ['example upper', '.ENV.EXAMPLE'], ['example backslash', 'cfg\\.env.example'], ['example drive', 'C:\\proj\\.env.template'],
@@ -107,7 +107,7 @@ for (const [label, raw] of pass) {
   });
 }
 
-// AC6 shell verbs
+// shell verbs
 const verbs = ['cat .env', 'type .env', 'type .\\.env', 'gc .env', 'Get-Content .env', 'Get-Content -Path C:\\proj\\.env',
   'get-content .ENV -Raw', 'cp .env /tmp/x', 'cp .env.production /tmp/x', 'copy .env x.txt', 'Copy-Item .env x', 'cat .env.example .env',
   'cat < .env', 'head -n1 .env', 'ln -s .env link', 'ln -s ../.env.local link', 'mklink link .env',
@@ -167,7 +167,7 @@ test('AC6/AC21: the rule is pure and does not mutate the event', async () => {
   assert.equal(JSON.stringify(e), before);
 });
 
-// AC4/AC6 fixtures: hooks/fixtures/dotenv.M-SEC1/{pass,block}-*.json are raw hook payloads (hook-event v1 Raw input)
+// Fixtures: hooks/fixtures/dotenv.M-SEC1/{pass,block}-*.json are raw hook payloads (hook-event v1 Raw input)
 const toEvent = (raw) => {
   const ti = raw.tool_input || {};
   const paths = [ti.file_path, ti.notebook_path, ti.path, ti.pattern].filter(x => typeof x === 'string').map(x => P(x));

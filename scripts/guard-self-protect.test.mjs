@@ -4,10 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// T16 (P20261114.000001): red tests for the self-protect guard (rule self-protect.M-SEC1),
-// AC8 and AC15 plus evasion. Seam: hooks/rules/self-protect.mjs#judge(event, snapshot) ->
-// verdict (mod-hook v1, hook-event v1). The R-1 / R-2 Decided lines of the plan list every
-// pass and deny form. Red until T17 ships the rule. The tests build normalized events by
+// Tests for the self-protect guard (rule self-protect.M-SEC1): file tools, shell, guard keys and evasion.
+// Seam: hooks/rules/self-protect.mjs#judge(event, snapshot) -> verdict (mod-hook v1, hook-event v1). Every
+// pass and deny form. The tests build normalized events by
 // hand, with tool.paths filled the way the host does (expanded, real, junction), and never
 // touch the engine, so they hold the rule alone.
 
@@ -103,7 +102,7 @@ async function allows(spec, opts, snap) {
 }
 const SH = ['Bash', 'PowerShell'];
 
-// ---------- AC8: file tools ----------
+// ---------- file tools ----------
 const FILE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 const PROTECTED_TARGETS = [
   `${MSH}/config.json`, '~/.mcsparrow/config.json', '$HOME/.mcsparrow/config.json', '${HOME}/.mcsparrow/config.json',
@@ -172,7 +171,7 @@ test('AC8 pass: an empty path list and an absent tool', async () => {
   assert.deepEqual(await judge(deepFreeze(b), SNAP), { v: 'allow' });
 });
 
-// ---------- AC8 / R-1: shell passes (running a plugin script is not a write) ----------
+// ---------- shell passes (running a plugin script is not a write) ----------
 const NODE = `node "${PLUGIN}/scripts`;
 const SH_PASS = [
   `node "${PLUGIN}/scripts/run.mjs" run-state triage issue`,
@@ -202,7 +201,7 @@ const PS_PASS = [
 ];
 for (const c of PS_PASS) test(`AC8 pass PowerShell: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
-// ---------- AC8 / R-2: shell denies ----------
+// ---------- shell denies ----------
 const SET_MOD = [
   `node "${PLUGIN}/scripts/settings.mjs" set-mod switchboard enabled false`,
   'node scripts/settings.mjs set-mod cache_tax enabled false', 'node settings.mjs set-mod switchboard seen',
@@ -271,7 +270,7 @@ test('AC8 deny: a new file in the snapshot folder from a shell (nearest existing
   await denies('Set-Content $env:USERPROFILE\\.mcsparrow\\hook-snapshots\\n\\x.json x', { exists: false, tool: 'PowerShell' });
 });
 
-// ---------- evasion: inline interpreters (R-2 c) ----------
+// ---------- evasion: inline interpreters ----------
 const INLINE = [
   `node -e "require('fs').writeFileSync(process.env.HOME+'/.mcsparrow/config.json','{}')"`,
   `node --eval "fs.writeFileSync('config.json','{}')"`, `node -p "fs.writeFileSync('config.json','{}')"`, `node --print "'config.json'"`,
@@ -301,7 +300,7 @@ test('evasion deny: inline text naming a settings word hides in a longer command
   await denies('npm test && node -e "x(\'config.json\')"');
 });
 
-// ---------- evasion: directory change plus a relative write (R-2 d) ----------
+// ---------- evasion: directory change plus a relative write ----------
 const CD = [
   'cd ~/.mcsparrow; echo x > config.json', 'cd ~/.mcsparrow && echo x > config.json', 'cd $HOME/.mcsparrow; echo x >> config.json',
   'cd %USERPROFILE%\\.mcsparrow && echo x > config.json', 'cd "$HOME/.mcsparrow" && sed -i s/a/b/ config.json',
@@ -329,7 +328,7 @@ test('evasion deny: protected target behind dot segments, redundant slashes and 
     for (const tool of SH) await denies(c, { tool });
 });
 
-// ---------- AC15: a hand-written guard key changes nothing ----------
+// ---------- a hand-written guard key changes nothing ----------
 test('AC15: the verdict ignores any snapshot key that tries to switch the guard off', async () => {
   const hand = deepFreeze({ ...SNAP, guards: { 'self-protect': false }, guardsOff: true, selfProtect: 'off', savers: { 'self-protect': { enabled: false } },
     settingsWarnings: ['self-protect off'], 'self-protect': { enabled: false } });
@@ -391,7 +390,7 @@ test('the deny message names no path or value from the input', async () => {
   assert.ok(!/config\.json|\.mcsparrow|C:/i.test(v.message), `message leaks a path: ${v.message}`);
 });
 
-// ---------- fixtures (AC4): per-rule folder, one pass and one block at least ----------
+// ---------- fixtures: per-rule folder, one pass and one block at least ----------
 function fixtures() {
   assert.ok(fs.existsSync(FIX), 'hooks/fixtures/self-protect.M-SEC1/ exists');
   return fs.readdirSync(FIX).filter((f) => f.endsWith('.json'));

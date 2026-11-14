@@ -1,4 +1,4 @@
-// Tests (backend, R-2): the SessionStart fixture check on the shipped plugin tree. Fixtures that carry a
+// Tests: the SessionStart fixture check on the shipped plugin tree. Fixtures that carry a
 // `_synthetic` run/token state are fed through the host's supported path; plugin paths use ${CLAUDE_PLUGIN_ROOT}.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,7 +1,6 @@
-// Step side of the cap guard, rewritten red-first for the engine (T20, P20261114.000001; AC11, AC13, AC28).
+// Step side of the cap guard, run through the engine.
 // Was: scripts/context-guard.mjs `pre` / `subagent-stop` in process. Now: scripts/hook-host.mjs with the real
-// cap.M1 rule (`context-guard` v2.0 "Bands", `mod-hook` v1, `hook-event` v1). Red until T19 (the rule) and
-// T5 (the host) ship, and T21 deletes scripts/context-guard.mjs. Harness: ./cap-engine.mjs.
+// cap.M1 rule (`context-guard` v2.0 "Bands", `mod-hook` v1, `hook-event` v1). Harness: ./cap-engine.mjs.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

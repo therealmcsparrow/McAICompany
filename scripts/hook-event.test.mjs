@@ -1,4 +1,4 @@
-// Tests (QA, red first): normalization of `hook-event` v1 (hooks/lib/event.mjs, fed by scripts/hook-host.mjs).
+// Tests: normalization of `hook-event` v1 (hooks/lib/event.mjs, fed by scripts/hook-host.mjs).
 // A probe guard (hooks/fixtures/engine/rules/probe.mjs) returns the normalized event as a compact JSON note,
 // so each test sees what a rule sees. Covers session mapping, keys, tokens, mainModel, env, malformed input.
 import { test, describe, after } from 'node:test';

@@ -4,10 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// T10 (P20261114.000001): red tests for the git-add guard (rule git-add.M-SEC1), AC5 plus
-// evasion. Seam: hooks/rules/git-add.mjs#judge(event, snapshot) -> verdict (mod-hook v1,
-// hook-event v1). The R-11 Decided line of the plan lists every deny form. Red until T11
-// ships the rule. The tests build normalized events by hand (tool.command and tool.paths)
+// Tests for the git-add guard (rule git-add.M-SEC1) plus evasion. Seam: hooks/rules/git-add.mjs#judge(event, snapshot) -> verdict (mod-hook v1,
+// hook-event v1). Every deny form is listed below.
+// The tests build normalized events by hand (tool.command and tool.paths)
 // and never touch the engine, so they hold the rule alone.
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -64,7 +63,7 @@ async function allows(command, opts) {
   assert.deepEqual(v, { v: 'allow' }, `allow: ${command}`);
 }
 
-// ---------- AC5: every deny form of the R-11 line ----------
+// ---------- every deny form ----------
 const DENY = [
   'git add .', 'git add ..', 'git add :/', 'git add -A', 'git add --all', 'git add --no-ignore-removal',
   'git add -u', 'git add --update', 'git stage .', 'git stage -A', 'git stage --all', 'git stage -u',
@@ -86,7 +85,7 @@ test('AC5 pass: the same name as a file (dir false) is a named file', async () =
   await allows('git add src');
 });
 
-// ---------- AC5: pass forms ----------
+// ---------- pass forms ----------
 const PASS = [
   'git add a.txt', 'git add -- a.txt', 'git add -p a.txt', 'git add a.txt b.txt', 'git add src/a.js',
   'git add -- src/a.js', "git add 'a b.txt'", 'git stage a.txt', 'git add -f a.txt', 'git add --patch a.txt',
@@ -158,7 +157,7 @@ test('judge is deterministic: the same event twice gives the same verdict', asyn
   assert.deepEqual(await judge(ev('git add .'), SNAP), await judge(ev('git add .'), SNAP));
 });
 
-// ---------- fixtures (AC4): per-rule folder, one pass and one block at least ----------
+// ---------- fixtures: per-rule folder, one pass and one block at least ----------
 function fixtures() {
   assert.ok(fs.existsSync(FIX), 'hooks/fixtures/git-add.M-SEC1/ exists');
   return fs.readdirSync(FIX).filter((f) => f.endsWith('.json'));

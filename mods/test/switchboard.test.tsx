@@ -1,4 +1,4 @@
-// Red tests (QA-first, task T26) for mods/switchboard.tsx, built in T27.
+// Tests for mods/switchboard.tsx.
 // Contracts: aico-mods v2.2 "Switchboard", mod-manifest v1, aico-settings v3.0 (`set-mod`), mod-hook v1 step 7.
 // Design: design/terminal-panes.md section 2. Seams the builder meets:
 //   - manifests come from `$.fs.list(<plugin root>/hooks/manifests)` and `$.fs.read` of each `.json`;

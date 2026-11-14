@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// T2 (P20261114.000001): the schema file hooks/schema/hook-fields.json holds field
-// names and types only, never a payload value (AC1), and names the fields of the
-// Lead and the Step session (AC28). Source of the field list: hook-event v1
-// "Raw input" and the spike answer. Red until T1 commits the schema file.
+// The schema file hooks/schema/hook-fields.json holds field
+// names and types only, never a payload value, and names the fields of the
+// Lead and the Step session. Source of the field list: hook-event v1
+// "Raw input" and the spike answer.
 //
 // Assumed shape (the contract fixes names, not layout): a JSON object whose event
 // rows are keyed by hook_event_name, top level or under `events`; a row maps field

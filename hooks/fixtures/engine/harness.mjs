@@ -2,7 +2,7 @@
 // from the real host and lib plus the stub rules of this folder, writes matching pins, and runs
 // the host as a process: synthetic event on stdin -> verdict on stdout.
 //
-// Shapes this harness assumes (QA assumptions, named in the T4 Handoff, change them here in one place):
+// Shapes this harness assumes (change them here in one place):
 //   hooks/rules.json  = JSON array of rule rows (`mod-hook` v1 "Rule table")
 //   hooks/pins.json   = { "v": 1, "files": { "<relative path, forward slashes>": "<sha256 hex>" } }
 //   host invocation   = `node <root>/scripts/hook-host.mjs`, event JSON on stdin, no arguments

@@ -1,4 +1,4 @@
-// T30 (QA-first, red until T31): AC22, no outbound call in savers or the engine; the cache clock never pings.
+// No outbound call in savers or the engine; the cache clock never pings.
 // Static scan of production code: mods/, hooks/ (rules, lib, register), scripts/hook-host.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

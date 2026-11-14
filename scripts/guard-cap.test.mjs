@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// T18 (P20261114.000001): red tests for the cap guard (rule cap.M1), AC11, AC12, AC28, R-13, R-14.
+// Tests for the cap guard (rule cap.M1).
 // Seams: hooks/rules/cap.mjs#judge(event, snapshot) and hooks/rules/cap.mjs#resolveThreshold(raw).
 // Bands: context-guard v2.0 "Bands" table. T = snapshot.threshold, F = floor(T * 0.9).
-// resolveThreshold(raw) -> { threshold: int, warning: string|null } (assumed shape, see Handoff Decisions).
-// Red until T19 ships the rule. Events are built by hand; the engine is not involved.
+// resolveThreshold(raw) -> { threshold: int, warning: string|null } (assumed shape).
+// Events are built by hand; the engine is not involved.
 
 const root = path.resolve(import.meta.dirname, '..');
 const RULE = 'cap.M1';
@@ -67,7 +67,7 @@ async function allows(opts, threshold) {
   const v = await verdict(opts, threshold);
   assert.deepEqual(v, { v: 'allow' }, `allow: ${JSON.stringify(opts)} T=${threshold} (got ${JSON.stringify(v)})`);
 }
-// An allow that carries the record effect (Step writes its Handoff or ledger).
+// An allow that carries the record effect (Step writes its handoff file or ledger).
 async function allowsRecorded(opts, threshold) {
   const v = await verdict(opts, threshold);
   assert.equal(v.v, 'allow', `allow: ${JSON.stringify(opts)} (got ${JSON.stringify(v)})`);
@@ -88,7 +88,7 @@ function fixtureEvent(name) {
   };
 }
 
-// ---------- AC11: the five boundaries at the default T = 180000, Step and Lead ----------
+// ---------- the five boundaries at the default T = 180000, Step and Lead ----------
 const DEFAULT = 180000;
 for (const session of ['step', 'lead']) {
   test(`AC11 ${session}: 161999 silent for every tool`, async () => {
@@ -115,7 +115,7 @@ for (const session of ['step', 'lead']) {
   });
 }
 
-// ---------- AC12: other thresholds, F = floor(T x 0.9) ----------
+// ---------- other thresholds, F = floor(T x 0.9) ----------
 const TABLE = [[200000, 180000], [250000, 225000], [60000, 54000], [100000, 90000], [123457, 111111]];
 for (const [T, F] of TABLE) {
   for (const session of ['step', 'lead']) {
@@ -131,7 +131,7 @@ for (const [T, F] of TABLE) {
   }
 }
 
-// ---------- AC12: resolveThreshold, valid and bad values, one warning naming the bad value ----------
+// ---------- resolveThreshold, valid and bad values, one warning naming the bad value ----------
 test('AC12 resolveThreshold: valid values pass unchanged, no warning', async () => {
   const { resolveThreshold } = await load();
   for (const n of [60000, 100000, 180000, 200000, 250000]) {
@@ -161,7 +161,7 @@ test('AC12 a bad value never moves the boundary: judge on the resolved 180000', 
   assert.equal((await verdict({ session: 'lead', total: 162000 }, T)).v, 'deny');
 });
 
-// ---------- R-14: active run only ----------
+// ---------- active run only ----------
 test('R-14 no active run: pass whatever tokens say, Step and Lead', async () => {
   for (const session of ['step', 'lead']) {
     await allows({ session, run: null, total: 0 }, DEFAULT);
@@ -194,7 +194,7 @@ test('state error with no active run passes (R-14); with a run it denies (AC9 cl
   await denies({ session: 'lead', state: 'error' }, DEFAULT, /unreadable/);
 });
 
-// ---------- Step bands, both freeze and hand over (AC28, R-13) ----------
+// ---------- Step bands, both freeze and hand over ----------
 for (const total of [162000, 179999, 180000, 180001]) {
   test(`Step at ${total}: only a new Handoff or one new ledger in the run folder`, async () => {
     const o = { session: 'step', total };
@@ -238,7 +238,7 @@ test('Step acts the same in both bands: same verdict at F and at T for a refused
   assert.deepEqual(a, b);
 });
 
-// ---------- Lead bands (R-13) ----------
+// ---------- Lead bands ----------
 for (const total of [162000, 179999, 180000, 180001]) {
   const hand = total >= 180000;
   test(`Lead at ${total} (${hand ? 'hand over' : 'freeze'}): clean point hands over and denies`, async () => {
@@ -276,7 +276,7 @@ test('Lead and Step do not share a branch: Lead freeze effect never appears on a
   assert.notEqual(v.effect, 'cap-lead-frozen');
 });
 
-// ---------- AC28: the same guard in a Step session (fixtures) ----------
+// ---------- the same guard in a Step session (fixtures) ----------
 test('AC28 fixtures: pass-* pass, block-* deny, through the rule', async () => {
   const names = fs.readdirSync(FIX).filter((n) => n.endsWith('.json'));
   assert.ok(names.some((n) => n.startsWith('pass-')) && names.some((n) => n.startsWith('block-')), 'one pass and one block fixture');

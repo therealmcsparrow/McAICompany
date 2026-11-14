@@ -1,11 +1,11 @@
-// AC13 (P20261114.000001, T20): release 1 has one cap enforcer, the handoff mod. The cap numbers live in
+// release 1 has one cap enforcer, the handoff mod. The cap numbers live in
 // hooks/rules/cap.mjs only; no other production file holds `180000` or `162000`; scripts/context-guard.mjs is gone.
-// Scanned set and exemptions are the R-9 Decided line of the plan: tracked and new `*.mjs`, `*.js`, `*.ts`, `*.tsx`,
+// Scanned set and exemptions are: tracked and new `*.mjs`, `*.js`, `*.ts`, `*.tsx`,
 // `*.html` under scripts/, hooks/, mods/, without `*.test.*`, `mods/test/`, `tests/`, `scripts/fixtures/`,
 // `hooks/fixtures/`. Exempt: hooks/rules/cap.mjs and the one skillspector line (a 3-minute timeout in ms).
-// Skill text, docs and README may name the defaults (T36 updates them), so they are not scanned.
-// Red now: scripts/context-guard.mjs exists and lead-handover, dashboard-tokens, settings-page and
-// mods/lib/context-cap.mjs hold literals; green when T19, T21 and T23 ship.
+// Skill text, docs and README may name the defaults, so they are not scanned.
+// Fails while scripts/context-guard.mjs exists or lead-handover, dashboard-tokens, settings-page and
+// mods/lib/context-cap.mjs hold literals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

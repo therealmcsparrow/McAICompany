@@ -1,8 +1,8 @@
-// Red tests for scripts/hook-check.mjs (task P20261114.000001-T8, build in T9).
-// Interface these tests assume (T9 builds to it; a mismatch goes back to QA, not into the check):
+// Tests for scripts/hook-check.mjs.
+// Interface these tests assume (the check builds to it):
 //   node hook-check.mjs ci|setup --root <plugin root>   exit 0 ok; exit 1 and one line per problem naming the file, mod or rule ID
 //   node hook-check.mjs denies --session <key> --json    run from the project dir, MCSPARROW_HOME set; prints a JSON array
-//   hooks/pins.json: flat map { "<posix path relative to the plugin root>": "<sha256 hex>" } over the R-4 pinned set.
+//   hooks/pins.json: flat map { "<posix path relative to the plugin root>": "<sha256 hex>" } over the pinned set.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -104,7 +104,7 @@ test('baseline root passes ci and setup (control)', () => {
   }
 });
 
-// AC2: every mod has a manifest; mapping mods/<id>.ts(x) -> hooks/manifests/<id>.json.
+// every mod has a manifest; mapping mods/<id>.ts(x) -> hooks/manifests/<id>.json.
 test('AC2: mods/<id>.tsx imported by register without a manifest fails, naming the mod', () => {
   const root = makeRoot((r) => {
     put(r, 'mods/extra.tsx', 'export function registerExtra() {}\n');
@@ -179,7 +179,7 @@ test('AC2: a manifest event that nothing wires fails', () => {
   expectFail('ci', root, 'git-add');
 });
 
-// AC4 / AC14: a guard missing, off (not a locked guard) or hash-mismatched stops ci and setup.
+// a guard missing, off (not a locked guard) or hash-mismatched stops ci and setup.
 test('AC4: a guard rule with no block fixture fails, naming the rule ID', () => {
   const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/fixtures/git-add.M-SEC1/block-1.json')));
   expectFail('ci', root, 'git-add.M-SEC1');
@@ -225,7 +225,7 @@ test('AC14: a hash-mismatched guard rule module stops setup, naming the file', (
   expectFail('setup', root, 'hooks/rules/git-add.mjs');
 });
 
-// AC19: one pins mismatch per file of the pinned set; the output names that file.
+// one pins mismatch per file of the pinned set; the output names that file.
 const PINNED_SAMPLE = [
   'scripts/hook-host.mjs', ...LIBS.map((l) => `hooks/lib/${l}.mjs`), 'hooks/rules/git-add.mjs',
   'hooks/manifests/git-add.json', 'hooks/manifests/cache-tax.json', 'hooks/rules.json', 'hooks/hooks.json',
@@ -280,7 +280,7 @@ test('AC19: two changed files give one line each', () => {
   assert.equal(lines.filter((l) => l.includes('hooks/lib/paths.mjs')).length, 1, r.out);
 });
 
-// AC21: a rule must be pure.
+// a rule must be pure.
 const IMPURE = [
   ['fs', "import fs from 'node:fs';\nexport function judge() { return { v: 'allow' }; }\n"],
   ['fs (bare)', "import { readFileSync } from 'fs';\nexport function judge() { return { v: 'allow' }; }\n"],

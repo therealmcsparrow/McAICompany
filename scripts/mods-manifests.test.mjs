@@ -1,4 +1,4 @@
-// T30 (QA-first, red until T31): AC2, every mod file has one valid manifest (mod-manifest v1).
+// Every mod file has one valid manifest (mod-manifest v1).
 // Mapping: mods/<id>.ts|tsx -> hooks/manifests/<id>.json; mods/shared/ and mods/lib/ are exempt.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

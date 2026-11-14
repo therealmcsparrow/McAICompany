@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-// T32 (P20261114.000001), AC26: one executable test group per row of docs/pack-clash-table.md, each proving
+// One executable test group per row of docs/pack-clash-table.md, each proving
 // that no saver overrides a Role pin, the model floor or the context cap. Row ids: clash.1 to clash.8 plus
 // `clash.cache-clock` (the extra row). Clean-room: only aico code and the Contracts are read, never the pack.
 // Rows 2 to 5 are Haiku mods of release 2; their release-1 test is the invariant that nothing in release 1 can
@@ -198,7 +198,7 @@ test('clash.5 AC26: nothing in release 1 routes research; the sourcing tiers, ca
   assert.match(text, /untrusted/i);
 });
 
-// ---------- clash.6: efficient-browser-use vs hands-on-tester evidence (AC25) ----------
+// ---------- clash.6: efficient-browser-use vs hands-on-tester evidence ----------
 test('clash.6 AC25 AC26: off by default in the settings and in the snapshot the engine builds', async () => {
   const { judge } = await imp('hooks', 'rules', 'browser.mjs');
   const s = await snapshotFor({});
@@ -238,7 +238,7 @@ test('clash.6 AC25 AC26: the Lead note never shrinks or replaces the screenshot:
   assert.equal(m.fail, 'open');
 });
 
-// ---------- clash.7: mods (switches.json) vs aico settings with locks (AC15, AC23) ----------
+// ---------- clash.7: mods (switches.json) vs aico settings with locks ----------
 test('clash.7 AC15 AC23 AC26: every guard and gate row is LOCKED ON and cannot change, even when settings say off', async () => {
   const { rows } = await imp('mods', 'lib', 'switchboard.mjs');
   const mods = Object.fromEntries(manifests().flatMap((m) => [[m.id.replaceAll('-', '_'), { enabled: false }]]));
@@ -292,7 +292,7 @@ test('clash.7 AC15 AC23 AC26: switches.json is never read or written by producti
   assert.deepEqual(hits, []);
 });
 
-// ---------- clash.8: savings-proof vs real tokens from the ledger (AC24) ----------
+// ---------- clash.8: savings-proof vs real tokens from the ledger ----------
 const stepRow = (tokens, extra = {}) => ({ kind: 'step', tokens, ...extra });
 const T = (n) => ({ in: n, cache_write: 0, cache_read: 0, out: 0 });
 test('clash.8 AC24 AC26: an estimate never enters the real figure, whatever name or place it has', async () => {
