@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Regression tests for the Skills tab card grid and the Personality tab look (P20261112.000001/06-fix).
+// Regression tests for the Skills tab card grid and the Personality tab look.
 const PAGE = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-const PREVIEW = fs.readFileSync(path.join(import.meta.dirname, '..', 'tmp', 'preview', '06-hallmark-console.html'), 'utf8');
 const STYLE = PAGE.slice(0, PAGE.indexOf('</style>'));
 const SCRIPT = PAGE.slice(PAGE.lastIndexOf('<script>'));
 
@@ -49,16 +48,28 @@ test('skills: cards are one fixed size (label fills the cell, long text is clipp
   assert.ok(!/overflow-wrap:\s*anywhere/.test(meta), 'meta no longer wraps onto extra lines');
 });
 
-// ---------- Item 2: Personality tab matches tmp/preview/06-hallmark-console.html ----------
+// ---------- Item 2: Personality tab look ----------
 
 const persSrc = () => ['renderPersonality', 'levelFieldset', 'personalityField'].map((n) => fnBody(SCRIPT, n)).join('\n');
 
-test('personality: the .pers CSS equals the preview', () => {
+// Expected .pers rules of the Personality tab (whitespace-normalised).
+const PERS_RULES = [
+  ".pers { display: grid; gap: var(--space-2); }",
+  ".pers details { border: 1px solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-panel-2); }",
+  ".pers details.dirty { border-color: var(--lvl-led); }",
+  ".pers summary { cursor: pointer; padding: var(--space-3) var(--space-4); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-3); align-items: baseline; list-style: none; }",
+  ".pers summary::-webkit-details-marker { display: none; }",
+  ".pers summary::before { content: \"+\"; font-family: var(--font-mono); color: var(--color-ink-2); grid-row: span 2; }",
+  ".pers details[open] summary::before { content: \"−\"; }",
+  ".pers summary .who { font-family: var(--font-display); font-weight: 600; font-size: var(--text-lg); text-transform: uppercase; letter-spacing: .03em; }",
+  ".pers summary .gist { font-size: var(--text-sm); color: var(--color-ink-2); overflow-wrap: anywhere; }",
+  ".pers .body { padding: 0 var(--space-4) var(--space-4); display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }",
+];
+
+test('personality: the .pers CSS has the expected rules', () => {
   const pick = (css) => [...css.matchAll(/(^|\n)(\.pers[^{\n]*\{[^}]*\})/g)].map((m) => m[2].replace(/\s+/g, ' ').trim());
-  const want = pick(PREVIEW.slice(0, PREVIEW.indexOf('</style>')));
-  assert.ok(want.length >= 8, 'preview has the .pers rules');
   const have = pick(STYLE);
-  for (const r of want) assert.ok(have.includes(r), `page has preview rule: ${r.slice(0, 60)}`);
+  for (const r of PERS_RULES) assert.ok(have.includes(r), `page has rule: ${r.slice(0, 60)}`);
 });
 
 test('personality: a Role body is plain .ctl rows, no per-level fieldset', () => {
