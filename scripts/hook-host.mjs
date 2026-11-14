@@ -97,7 +97,15 @@ async function main() {
   const peekLead = isObj(peek) && (name !== 'PreToolUse' || !Object.hasOwn(peek, 'agent_id')) && name !== 'SubagentStop';
   const guardsOff = process.env.AICO_GUARDS === 'off';
 
-  const pins = checkPins(ROOT);
+  let pins = checkPins(ROOT);
+  if (pins.ok) {
+    // The pinned folders match, so the dependency pins module is safe to load; it covers the scripts the engine imports.
+    try {
+      const deps = await import(pathToFileURL(path.join(ROOT, 'hooks', 'lib', 'dep-pins.mjs')).href);
+      const badDeps = deps.verifyDeps(ROOT);
+      if (badDeps.length > 0) pins = { ok: false, files: badDeps };
+    } catch { pins = { ok: false, files: ['hooks/lib/dep-pins.mjs'] }; }
+  }
   if (!pins.ok) {
     const msg = `pins-mismatch: ${pins.files.slice(0, 5).join(', ')}`;
     if (name === 'SessionStart') return finish({ systemMessage: `aico guards: ${msg}; guards deny until the plugin is reinstalled` });
