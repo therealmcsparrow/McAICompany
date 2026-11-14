@@ -388,7 +388,8 @@ function setMatches(body, ch) {
 }
 
 // One path segment as glob tokens: literal, `?`, `*` or a bracket set.
-function compileSeg(seg) {
+function compileSeg(raw) {
+  const seg = raw.replaceAll('\u0001', ':');
   const out = [];
   for (let i = 0; i < seg.length; i++) {
     const c = seg[i];

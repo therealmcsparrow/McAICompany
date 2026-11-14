@@ -61,6 +61,23 @@ test('glob characters in a write target that reach a protected file deny', () =>
   assert.equal(await bash(tmp, 'mv .cl?ude elsewhere'), 'deny');
 }));
 
+test('a POSIX class in a write target that reaches a protected file denies', () => withProject(async (tmp) => {
+  for (const t of [
+    '.claude/settings.jso[[:alpha:]]', '.claude/settings.js[[:lower:]]n', '.claude/settings[[:punct:]]json',
+    '.claude/settings.jso[[=o=]]', '.claude/settings.js[[.o.]]n', '.claude/[[:alpha:]]ettings.json',
+    '.cla[[:alpha:]]de/settings.json', `${tmp.replaceAll('\\', '/')}/.claude/settings.jso[[:alpha:]]`,
+  ]) {
+    assert.equal(await bash(tmp, `echo x >> ${t}`), 'deny', t);
+  }
+  assert.equal(await bash(tmp, 'tee .claude/settings.jso[[:alpha:]] < /dev/null'), 'deny');
+  assert.equal(await bash(tmp, 'cd .claude && echo x >> settings.jso[[:alpha:]]'), 'deny');
+}));
+
+test('a POSIX class that misses every protected path still allows', () => withProject(async (tmp) => {
+  assert.equal(await bash(tmp, 'echo x >> src/notes.tx[[:alpha:]]'), 'allow');
+  assert.equal(await bash(tmp, 'echo x >> notes/settings.jso[[:alpha:]]'), 'allow');
+}));
+
 test('glob write targets in PowerShell deny too', () => withProject(async (tmp) => {
   assert.equal(await ps(tmp, 'Set-Content .claude\\settings.jso? x'), 'deny');
   assert.equal(await ps(tmp, 'Set-Content -Path .claude\\sett*.json -Value x'), 'deny');
