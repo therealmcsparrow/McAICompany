@@ -172,8 +172,8 @@ A cooler line and a brainstorm reply (any format, any pass) are data for the Lea
 - `Role skills:` absent for any Role → behave as `none`.
 - `Name:` present (a v3 prompt, old resume state, a pasted example) → the Role ignores the line and uses its Role id.
 - `Settings:` absent → nothing was overridden.
-- `Context cap:` absent (v3 prompt, old resume state, a research prompt from before v3.1) → cap 180000, handover at 162000 (v5.3).
-- `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 180000, handover at 162000 (v5.3), and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
+- (v5.3) `Context cap:` absent (v3 prompt, old resume state, a research prompt from before v3.1) → cap 180000, handover at 162000.
+- (v5.3) `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 180000, handover at 162000, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
 - `Review depth:` absent or not `full | standard` → `full`.
 - (v3.7) `Base commit:` not a full object id (a v3.6 or older run, a short sha, `none`) → the scripts refuse it (`rule-check` exit 3, `review-depth` exit 2); the Lead fixes the dispatch, and a Role does not fall back to a short sha or `HEAD~n`.
 - `Review format:` absent, or any value other than `pilot` → plain (v1.0 Handoff, no ledger), with no Nit.

@@ -20,12 +20,12 @@ v1.10 is additive (one project one folder, run 1): `<slug>` also accepts the v3 
 
 v2.0 is a major (one project one folder, run 2): `list`, `active` and `projects` walk runs with the exported `runSlugs(root, { max = 200 })` ("Run walk"), so a v3 run is listed and can be active, and `list.runs[].slug` and `active.slug` may hold one `/` (`<ProjectID>/<NN>-<playbook>`). A consumer that uses the slug as one path part or file name breaks: it takes the folder from `workParts(slug)` and a file name from `runKey(slug)` (`work-folder-name`). `show`, `append` and `projects` output are unchanged. v2, v1.1 and legacy names give byte-identical output to v1.10.
 
-v2.1 is additive (task P20261112.000001/07-feature; ADR 0069): the `start` record gets the optional `cap` key (the run's frozen Context cap, written by the script, never typed), the view gets `cap` and `handover`, and `scripts/run-cap.mjs` exports `runCap(root, slug, opts)` ("Run cap"). Every v2.0 file is a valid v2.1 file and gives the same view plus `"cap": null, "handover": null`. A v2.0 reader skips a `start` line that carries `cap` with its usual `line <n> skipped` warning. Every v2.0 command keeps its arguments and refusals.
+v2.1 is additive (task P20261112.000001/07-feature; ADR 0069): the `start` record gets the optional `cap` key (the run's frozen Context cap, written by the script, never typed), the view gets `cap` and `handover`, and `scripts/run-cap.mjs` exports `runCap(root, slug, opts)` ("Run cap"). Every v2.0 file is a valid v2.1 file and gives the same view plus `"cap": null, "handover": null`. A v2.0 reader skips a `start` line that carries `cap` with its usual `line <n> skipped` warning. Two read rules change: a `start` record whose `cap` is not a valid cap is kept, and only its `cap` is ignored; a `start` line over 256 bytes is read as a bare start (`v`, `at`, `ev` only) instead of being skipped, so a run with a hostile long line stays active and the guard fails closed. Every v2.0 command keeps its arguments and refusals.
 
 ## Storage
 - `.company/work/<parts>/run-state.jsonl`, append-only, one JSON object per line, LF. `<slug>` is a run slug (`isRunSlug` of `mods/lib/work-folder.mjs`, `work-folder-name` v3.0): a v3 run slug `<ProjectID>/<NN>-<playbook>`, or a top-level v2, v1.1 or legacy name (`isWorkFolder`). `<parts>` is `workParts(slug)` (`<ProjectID>/<NN>-<playbook>` for a v3 slug, the name itself otherwise). The name holds spaces and dots, so a shell line quotes it in single quotes.
 - Counts, enums and times only. No prompt, reply, Handoff or CEO text (GDPR Art. 5(1)(c)).
-- Limits: a line ≤ 256 bytes, a file ≤ 64 KiB, at most 1000 lines. The file and the run folder are opened with `lstat`; a symlink is refused.
+- Limits: a line ≤ 256 bytes (the script never writes a longer one; on read, see Error cases for an over-long `start` line, v2.1), a file ≤ 64 KiB, at most 1000 lines. The file and the run folder are opened with `lstat`; a symlink is refused.
 - Committed with the run's Handoffs (it sits in the run folder). A reprompt run folder is not committed: it carries its own `.gitignore` (`reprompt` v1).
 
 ## Record (allow-list; unknown keys refused)
@@ -46,7 +46,7 @@ v2.1 is additive (task P20261112.000001/07-feature; ADR 0069): the `start` recor
 | `phase` | `sub` only (v1.5): `start \| stop` |
 | `session` | `sub` only, optional (v1.5): `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$` (lowercase), the hook payload's `session_id` |
 | `aico` | `start` only, optional (v1.5): `^\d{1,3}\.\d{1,3}\.\d{1,3}$`, the plugin version from `plugin.json`; not shown in the view |
-| `cap` | `start` only, optional (v2.1): integer 60000-1000000, the run's Context cap, resolved and written by the script ("Run cap"); never an argument |
+| `cap` | `start` only, optional (v2.1): integer 60000-1000000, the run's Context cap, resolved and written by the script ("Run cap"); never an argument. On read, a `start` whose `cap` is outside this (not a whole number, or out of range) is kept as a `start`; only the `cap` is ignored, with no warning |
 
 ## CLI (cwd = product repo; refusals `refused: <reason>` on stdout, exit 2)
 | Command | Effect |
@@ -90,7 +90,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - `steps`: every `^\d{2,3}-[a-z0-9-]+\.md$` file in the run folder (no recursion, at most 200 and past that the newest 200, each read only to the end of its frontmatter and at most 8 KiB, frontmatter parsed with the `handoff-lint.mjs` parser). Files without a valid `step` and `role` are left out with a warning. `status`, `round` and `risk-tier` outside their allowed values read as `unknown`; a step's `round` is allowed as a whole number 0–99 (v1.1; a reprompt run's edits have no cap, so its rounds can pass 99).
 - Step keys `verdict` and `gate` (v1.8): `verdict` is the frontmatter `verdict:` when it is `approve`, `changes` or `blocked`; `gate` is the frontmatter `gate:` when it is `pass` or `fail`. Absent, or any other value → `null`. Both are read inside the same 8 KiB frontmatter limit; nothing else of the Handoff is read.
 - `round` = highest numeric `round:` among `steps` (so 0–99), else `0`; `tier` = highest `risk-tier:` among `steps` (`low < medium < high`), else `unknown`.
-- `cap`, `handover` (v2.1): `cap` is the first `cap` recorded on any `start` in the file (not only the last segment), so a run resumed after `end` keeps its cap; `handover` = `handoverOf(cap)` (`mods/lib/context-cap.mjs`, floor(cap x 0.9)). No recorded cap → both `null`. A v2.0 reader ignores the keys.
+- `cap`, `handover` (v2.1): `cap` is the first valid `cap` recorded on any `start` in the file (not only the last segment), so a run resumed after `end` keeps its cap; an invalid `cap` counts as none, and the next `start` then writes one; `handover` = `handoverOf(cap)` (`mods/lib/context-cap.mjs`, floor(cap x 0.9)). No recorded cap → both `null`. A v2.0 reader ignores the keys.
 - Times and order come from the file; the view uses only the last segment (from the last `start`), except `cap` and `handover`.
 
 ## Run cap (v2.1)
@@ -174,7 +174,9 @@ No request text, no route or tier, no names: hashes, an event and a time only.
 
 ## Error cases
 - Missing file → `state: none`, empty `gates` and `picks`, `steps` still listed.
-- Bad line (invalid JSON, unknown key, over 256 bytes, CR byte) → skipped, `warnings: ["line <n> skipped"]`.
+- Bad line (invalid JSON, unknown key, over 256 bytes except a `start` (next item), CR byte) → skipped, `warnings: ["line <n> skipped"]`.
+- (v2.1) A line over 256 bytes that parses as JSON with `v` 1, `ev` `start` and a valid `at` → read as the bare start `{ "v": 1, "at": <at>, "ev": "start" }`, no warning; every other key on it (`cap`, `aico`, unknown keys) is ignored. It opens a segment, so `active`, the guard, the mods and the dashboard see a running run. Any other over-long line is skipped as above.
+- (v2.1) A `start` with an invalid `cap` → kept; the `cap` is ignored (view `cap` from a later valid one, else `null`).
 - File over 64 KiB or a symlink → `state: none`, `warnings: ["run-state unreadable"]`; writes refused. (v1.8) In `list` that run is one entry with `state: unreadable`.
 - (v1.8) `list`: no `.company/work` folder, or it is a link → `{ "v": 1, "runs": [], "warnings": [] }`, exit 0. A failure on one folder never ends the list.
 - Bad `<slug>`, unknown gate (on `gate`, `ask` or `ceo`), result, pick or outcome, `wave` outside 1–99, `asked` outside 0–3, `n` outside 1–20, a bad `sub` role, id, phase or session, a bad `aico` → `refused`, nothing written.
