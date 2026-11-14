@@ -12,7 +12,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
 const SELF_EXIT_MS = 3800;
-const FIXTURE_BUDGET_MS = 2000;
+const MAX_TOTAL_FIXTURES = 400;
 const MAX_FIXTURES = 24;
 const MAX_FIXTURE_BYTES = 64 * 1024;
 const FIXED = ['hooks/rules.json', 'hooks/hooks.json', 'hooks/schema/hook-fields.json', 'company/model-floor.json'];
@@ -259,15 +259,16 @@ async function main() {
 }
 
 // Runs hooks/fixtures/<rule>/pass-*.json and block-*.json against the rule; returns the rule IDs that failed.
+// The budget counts fixtures, not time, so machine load never reads as drift; a runaway set still fails closed.
 async function checkFixtures({ rows, prov, ctx, run, ev }) {
   const failed = new Set();
-  const t0 = Date.now();
+  let seen = 0;
   for (const r of rows.filter((x) => x.kind === 'guard')) {
     const dir = path.join(ROOT, 'hooks', 'fixtures', r.rule);
     let names = [];
     try { names = fs.readdirSync(dir).filter((n) => /^(pass|block)-[A-Za-z0-9._-]+\.json$/.test(n)).sort().slice(0, MAX_FIXTURES); } catch { continue; }
     for (const n of names) {
-      if (Date.now() - t0 > FIXTURE_BUDGET_MS) { failed.add('fixture-budget'); return [...failed]; }
+      if (++seen > MAX_TOTAL_FIXTURES) { failed.add('fixture-budget'); return [...failed]; }
       const wantDeny = n.startsWith('block-');
       let verdictDeny = false;
       try {
