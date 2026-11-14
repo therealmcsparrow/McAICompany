@@ -114,3 +114,20 @@ test('pathological glob text stays fast', () => withProject(async (tmp) => {
   await bash(tmp, Array.from({ length: 300 }, (_, i) => `echo x >> s${i}/*.t?t`).join('\n'));
   assert.ok(Number(process.hrtime.bigint() - t) / 1e6 < 3000);
 }));
+
+test('a long token list with cwd inside a protected folder denies a relative write', () => withProject(async () => {
+  assert.equal(await bash(ROOT, `cat ${junk(70)}; echo x >> hooks/rules/x.mjs`, ROOT), 'deny');
+  assert.equal(await bash(ROOT, `cat ${junk(70)}; cp /etc/hosts hooks/rules/dotenv.mjs`, ROOT), 'deny');
+  assert.equal(await bash(ROOT, `cat ${junk(70)}; cd hooks && echo x >> rules/x.mjs`, ROOT), 'deny');
+}));
+
+test('a long token list with a project cwd still allows an ordinary relative write', () => withProject(async (tmp) => {
+  assert.equal(await bash(tmp, `cat ${junk(70)}; echo x >> out.txt`, tmp), 'allow');
+}));
+
+test('a protected write target over 4096 chars denies', () => withProject(async (tmp) => {
+  const pad = 'p'.repeat(2100);
+  assert.equal(await bash(tmp, `echo y >> ${pad}a=b/../${pad}a=b/../.claude/settings.json`), 'deny');
+  assert.equal(await bash(tmp, `echo y >> ${pad}a=b/../${pad}a=b/../.company/work/P1/01-feature/guard.jsonl`), 'deny');
+  assert.equal(await bash(tmp, `echo y >> ${pad}a=b/../${pad}a=b/../out.txt`), 'allow');
+}));

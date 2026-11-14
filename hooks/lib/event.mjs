@@ -129,9 +129,11 @@ function shellTokens(command, cwd) {
     if (next.length === 0) { state.limited = true; return; }
     for (const n of next) if (cwds.length < MAX_CWDS && !cwds.includes(n)) cwds.push(n);
   };
+  if (command.length > MAX_PATH && /\S{4097,}/.test(command)) state.limited = true;
   let want = null;
   for (const t of command.split(/[\s;|&<>()"'`,=]+/)) {
-    if (t.length === 0 || t.length > MAX_PATH) continue;
+    if (t.length === 0) continue;
+    if (t.length > MAX_PATH) { state.limited = true; continue; }
     const pending = want;
     want = null;
     if (pending) {
@@ -163,7 +165,7 @@ function toolOf(name, input, ctx, cwd) {
   if (command) { const st = shellTokens(command, cwd); raws.push(...st.tokens); alts = st.cwds; probeLimited = st.limited; }
   if (name === 'Grep') { const v = str(input, 'glob'); if (v) raws.push(v); }
   const paths = [...new Set(raws)].filter((r) => r.length <= MAX_PATH).slice(0, MAX_PATHS - 1).map((r) => pathEntry(r, ctx, cwd, alts));
-  if (probeLimited) paths.push({ raw: '', expanded: null, real: null, exists: false, dir: true });
+  if (probeLimited) paths.push({ raw: '', expanded: null, real: null, exists: false, dir: true, cwds: alts });
   let model = null;
   let subagentType = null;
   let outputRole = null;
@@ -367,6 +369,15 @@ export async function normalize(raw, ctx) {
   if (event.run && typeof event.run.folder === 'string') {
     const g = realOf(path.join(event.run.folder, 'guard.jsonl'), root || process.cwd());
     if (g && !event.protected.includes(fold(g))) event.protected.push(fold(g));
+  }
+  for (const e of tool ? tool.paths : []) {
+    if (e.raw !== '' || !Array.isArray(e.cwds)) continue;
+    e.cwdHot = e.cwds.some((c) => {
+      const r = typeof c === 'string' ? realOf(c, root || process.cwd()) : null;
+      const f = r ? fold(r) : null;
+      return f !== null && event.protected.some((p) => f === p || f.startsWith(`${p}/`));
+    });
+    delete e.cwds;
   }
   return { ok: true, event: deepFreeze(event), cwd, root };
 }

@@ -215,8 +215,10 @@ function makeContext(event) {
   const bases = new Set(FIXED_BASES);
   for (const p of prot) bases.add(tailOf(p));
   const protSegs = prot.map((p) => p.split('/'));
-  const limited = entries.has('');
-  return { prot, protSegs, entries, homes, mshs, plugins, bases, limited };
+  const marker = entries.get('');
+  const limited = marker !== undefined;
+  const cwdHot = limited && marker.cwdHot !== false;
+  return { prot, protSegs, entries, homes, mshs, plugins, bases, limited, cwdHot };
 }
 
 function insideProtected(ctx, norm) {
@@ -656,6 +658,7 @@ function dotnetWriteDenied(text) {
 // With the token list cut short, a target the host never resolved is judged by its text alone.
 function unresolvedRisky(ctx, word) {
   if (ctx.entries.has(word)) return false;
+  if (ctx.cwdHot && isRelative(word)) return true;
   return RISKY_UNRESOLVED.test(word) || namesSettingsWord(word) || ctx.bases.has(tailOf(normalizePath(word)));
 }
 
