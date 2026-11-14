@@ -85,7 +85,7 @@ Then run `/plugin install aico@aico` as above. The tag form was checked with the
 
 ### The context cap
 
-Every Role in a run works under one cap: 180000 tokens by default, with a hand-over at 90% of it, 162000 at the default. You can change it with the `context_cap` setting; it is frozen when a run starts. The Lead's own hand-over needs [no setup](setup.md).
+Every Role in a run works under one cap: 180000 tokens by default, with a hand-over at 90% of it, 162000 at the default. You can change it with the `context_cap` setting (60000 to 250000, user level only); it applies from the next Step. Five guards check every tool call; `AICO_GUARDS=off` stands them down in the Lead session only (see [setup](setup.md)). `/aico-mods` and `/aico-savings` show the mods and your token savings. The Lead's own hand-over needs [no setup](setup.md).
 
 ### Tune the company
 
