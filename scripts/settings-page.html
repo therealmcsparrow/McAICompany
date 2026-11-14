@@ -566,8 +566,9 @@ const LOCKS = {
   installs: { title: 'Unlock installs', text: 'aico will run design-skill and dependency installs without asking you for approval first.' },
   security: { title: 'Unlock the security lanes', text: 'aico will skip the security and compliance lanes wherever you turn them off. Nobody checks that code for vulnerabilities or legal problems before it ships.' }
 };
-const MODS = ['savvy', 'cache_tax', 'reflect'];
-const MOD_LABELS = { savvy: 'Savvy', cache_tax: 'Cache Tax', reflect: 'Reflect' };
+const MODS = ['savvy', 'cache_tax', 'reflect', 'switchboard', 'savings', 'efficient_browser_use'];
+const PANE_MODS = ['savvy', 'cache_tax'];
+const MOD_LABELS = { savvy: 'Savvy', cache_tax: 'Cache Tax', reflect: 'Reflect', switchboard: 'Switchboard', savings: 'Savings', efficient_browser_use: 'Efficient Browser Use' };
 const LOCKED_GATES = ['ship', 'installs'];
 const LOCKED_LANES = ['security', 'compliance'];
 const LANE_LABELS = { security: 'Security', compliance: 'Compliance', legal: 'Legal', persona: 'Persona testing', hands_on: 'Hands-on testing', accessibility: 'Accessibility' };
@@ -2045,13 +2046,13 @@ function renderMods(panel) {
       rack,
     ]));
     onOffRow(rack, 'Power', ['mods', mod, 'enabled'], defaults[mod].enabled);
-    if (mod !== 'reflect') {
-      switchRow(rack, { label: 'Pane', path: ['mods', mod, 'pane'], pluginValue: defaults[mod].pane, options: ['auto', 'command'] });
-    } else {
+    if (mod === 'reflect') {
       onOffRow(rack, 'Step check', ['mods', 'reflect', 'step_check'], defaults.reflect.step_check);
       onOffRow(rack, 'Retrospective', ['mods', 'reflect', 'retrospective'], defaults.reflect.retrospective);
       switchRow(rack, { label: 'Mode', path: ['mods', 'reflect', 'mode'], pluginValue: defaults.reflect.mode, options: ['deterministic', 'model'],
         onSync: (control) => control.classList.toggle('ignored', lvl() === 'project' && control.value === 'model') });
+    } else if (PANE_MODS.includes(mod)) {
+      switchRow(rack, { label: 'Pane', path: ['mods', mod, 'pane'], pluginValue: defaults[mod].pane, options: ['auto', 'command'] });
     }
   }
 }
