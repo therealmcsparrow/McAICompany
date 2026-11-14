@@ -509,7 +509,7 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   const before = await state();
-  assert.deepEqual(Object.keys(before.plugin.mods), ['savvy', 'cache_tax', 'reflect']);
+  assert.deepEqual(Object.keys(before.plugin.mods).sort(), ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard']);
   assert.equal(before.resolved.mods.cache_tax.pane, 'command');
   const bad = await post('/api/save', {
     revision: before.resolved.revision,
@@ -529,7 +529,7 @@ test('save round-trips mods, refuses keep_warm and bad values with nothing writt
   assert.equal(ok.status, 200);
   const { state: after } = await ok.json();
   assert.deepEqual(after.resolved.mods.savvy, { enabled: false, pane: 'command' });
-  assert.deepEqual(Object.keys(after.resolved.mods), ['savvy', 'cache_tax', 'reflect']);
+  assert.deepEqual(Object.keys(after.resolved.mods).sort(), ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard']);
   assert.equal(after.resolved.mods.reflect.mode, 'deterministic');
   for (const key of ['mods.reflect.mode']) {
     assert.ok(after.resolved.ignored.some((i) => i.startsWith(key)), key);

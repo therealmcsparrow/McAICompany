@@ -10,7 +10,7 @@ import * as check from './check.mjs';
 import { clearLanguage, setLanguage, stored as storedLanguage, validate as validateLanguage } from './language.mjs';
 import { eligibleRoles, readBaseline, readCatalog, selectable, skillStatus, vettedText } from './skill-catalog.mjs';
 import {
-  CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, MODS, Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
+  CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, Refusal, checkLayers, layerFileProblem, pluginDefaults, readLayer, resolvePersonalities, resolveSettings, writeLayer, writeProfile
 } from './settings.mjs';
 
 const MAX_BODY = 65536;
@@ -141,8 +141,6 @@ function state(ctx) {
   const user = readLayer('user', ctx).layer;
   const project = readLayer('project', ctx).layer;
   const resolved = resolveSettings(ctx);
-  // The page edits the three mods; the savers are switched through `settings.mjs set-mod` and the Switchboard.
-  for (const view of [plugin, resolved]) view.mods = Object.fromEntries(MODS.map((m) => [m, view.mods[m]]));
   resolved.limits = { context_cap: { min: CONTEXT_CAP_MIN, max: CONTEXT_CAP_MAX, default: CONTEXT_CAP_DEFAULT } };
   return {
     plugin,
