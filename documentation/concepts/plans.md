@@ -32,7 +32,7 @@ Before the builders start, the Lead runs a text-only check on the plan file. Fea
 
 ### Plan tasks: sizes, slices and seams
 The Architect gives each plan task three more lines, which `plan-tasks check --handover` checks (`plan-tasks` v1.3).
-- `context: <n>k` is the estimate of the task Step's peak context. One task is one fresh window, handed over at 85500, 90% of the fixed 95000 cap, so an estimate above that handover is an ERROR.
+- `context: <n>k` is the estimate of the task Step's peak context. One task is one fresh window, handed over at the run's hand-over point (90% of the run's cap, 162000 at the default 180000), so an estimate above that handover is an ERROR.
 - `slice: <trigger> → <observable result> — demo: <path>` names one behaviour a user can see end to end through every layer the task touches. A task that names only a layer (all data, then all API) is an ERROR. A wide refactor may use `slice: wide-refactor — <reason>` and shows as a warning.
 - `seams: <path>[#symbol], …` lists where tests attach, or `none — <reason>` for a task with no testable code. Builders test at those seams, one slice at a time, red before green, without writing all tests first.
 

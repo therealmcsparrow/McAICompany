@@ -11,7 +11,7 @@ Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
 Language: <tag from Setup §1.6>
 Settings: model=<m> effort=<e> floor   # only the values passed on the Agent call, as in §2
-Context cap: 95000 handover 85500
+Context cap: <cap> handover <handover>
 Role skills: <names | none>   # fresh-reviewer's lines of `install-skills --status`, built per `aico:pipeline` §1.19 d
 Risk tier: <tier from the latest `set:` output>
 Base commit: <full object id from Step 01>

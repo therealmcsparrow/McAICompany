@@ -9,6 +9,16 @@ import { run, show, active, append, MAX_FILE } from './run-state.mjs';
 const script = path.join(import.meta.dirname, 'run-state.mjs');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
+// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
+const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
+const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
+process.env.HOME = isoHome;
+process.env.USERPROFILE = isoHome;
+after(() => {
+  for (const [k, v] of Object.entries(savedHome)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  fs.rmSync(isoHome, { recursive: true, force: true });
+});
 
 let n = 0;
 function repo() {
@@ -264,7 +274,7 @@ test('append: records are exact, ordered, and `at` comes from the script clock',
   run(['gate', 'x', 'plan', 'changed'], { root, now: now + 2000 });
   run(['end', 'x', 'ship'], { root, now: now + 3000 });
   assert.deepEqual(lines(root, 'x'), [
-    { v: 1, at: at(now), ev: 'start' },
+    { v: 1, at: at(now), ev: 'start', cap: 180000 },
     { v: 1, at: at(now + 1000), ev: 'wave', wave: 2 },
     { v: 1, at: at(now + 2000), ev: 'gate', gate: 'plan', result: 'changed' },
     { v: 1, at: at(now + 3000), ev: 'end', outcome: 'ship' },
@@ -338,7 +348,7 @@ test('show: view shape for a running run', () => {
   const v = JSON.parse(run(['show', 'x', '--json'], { root, now: T0 + 3000 }).out);
   assert.deepEqual(v, {
     v: 1, slug: 'x', state: 'running', started: at(T0), ended: null, outcome: null, wave: 2,
-    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], ceo: [], subs: [], sessions: [], waves: [{ wave: 2, at: at(T0 + 1000) }], open_ask: null, round: 0, tier: 'unknown', steps: [], warnings: [],
+    gates: [{ gate: 'brief', result: 'passed', at: at(T0 + 2000), wait: null }], picks: [], ceo: [], subs: [], sessions: [], waves: [{ wave: 2, at: at(T0 + 1000) }], open_ask: null, round: 0, tier: 'unknown', steps: [], warnings: [], cap: 180000, handover: 162000,
   });
   assert.deepEqual(Object.keys(v).slice(6, 9), ['wave', 'gates', 'picks']);
 });

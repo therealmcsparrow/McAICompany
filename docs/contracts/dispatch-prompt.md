@@ -1,4 +1,4 @@
-# Contract: dispatch-prompt v5.2
+# Contract: dispatch-prompt v5.3
 
 Provider: `aico:pipeline` (and the Playbooks that skip pipeline setup: `aico:brainstorm`, `aico:cooler`, `aico:research`, and from v3.3 `aico:reprompt`). Consumer: every Role, through `aico:handoff`.
 v1 = the prompt in `skills/pipeline/SKILL.md` at 0.8.1. v2 and v3 are additive: a Role that gets an older prompt behaves as before. v3.1 is additive too (minor bump, `docs/adr/0007-contract-minor-versions.md`): a Role that gets a v3 prompt behaves as before.
@@ -10,6 +10,7 @@ v3.4 is additive (task cheaper-role-models): the `Settings:` line ends with the 
 
 v5.1 (task Project Id Naming, wording only): in a v2 run folder the `Task:` line carries `<ProjectID>-T<n>` (the first line `plan-tasks.mjs lines` prints, as before). No line is added or removed; a v5.0 prompt behaves as before.
 v5.2 is additive (task One Project One ID, run 2): a hand-over or route argument from a parent Lead may end with one line `project: <ProjectID>`, set only in a CEO-choice branch; the child Playbook checks it as in `skills/pipeline/references/join-project.md`. No dispatch line is added or removed; a v5.1 prompt behaves as before.
+v5.3 is additive (task P20261112.000001/07-feature; ADR 0069, supersedes ADR 0047): the `Context cap:` line format is unchanged; its values are the run's cap and floor(cap x 0.9) (`run-state` v2.1 `cap`/`handover`, else the resolved `pipeline.context_cap` of `aico-settings` v2.2), so they may have 5 to 7 digits. An absent line reads cap 180000, handover 162000; the malformed rule is unchanged. A Role that gets a v5.2 prompt with `95000 handover 85500` uses the numbers given, as before.
 v3.5 is additive (task parallel-cap): it adds the `Task:` and `Files:` lines for Steps started from a plan task (`plan-tasks` v1). A Role that gets a v3.4 prompt behaves as before.
 
 v3.6 is additive (task goldfish-roles): it adds the `Task brief:` line for Steps started from a plan task, and the goldfish rules below. A Role that gets a v3.5 prompt behaves as before.
@@ -39,7 +40,7 @@ v5.0 is a major bump (task role-skills-file, T1; approved at the Plan Gate): `Ro
 ## Lines added in v3.1
 | Line | When | Value |
 |---|---|---|
-| `Context cap: <cap> handover <n>` | every dispatch whose Output is a Handoff under `.company/work/`: every pipeline Step, and the `aico:research` researcher and product-manager Steps. Directly after `Settings:` (or after `Language:` when `Settings:` is omitted). Not in brainstorm or cooler Role prompts: their Output is a reply, with no Handoff and no handover | (v4.2) always the literal `Context cap: 95000 handover 85500`, for every Role and every Risk tier. Fixed in pipeline Core (Setup item 8); no settings value is read and nothing raises it. `aico:research` runs that same item, with no formula of its own. Integers, 5 digits |
+| `Context cap: <cap> handover <n>` | every dispatch whose Output is a Handoff under `.company/work/`: every pipeline Step, and the `aico:research` researcher and product-manager Steps. Directly after `Settings:` (or after `Language:` when `Settings:` is omitted). Not in brainstorm or cooler Role prompts: their Output is a reply, with no Handoff and no handover | (v5.3) the run's cap and its handover, the same for every Role and every Risk tier of the run. Pipeline Core Setup item 8 reads `cap` and `handover` from `run-state show <slug> --json` (`run-state` v2.1); `null` (no recorded cap, or a run with no run-state `start`) → `pipeline.context_cap` from the §1.7 `get` JSON (`aico-settings` v2.2) and floor(cap x 0.9). Frozen for the run, a resumed Lead included; nothing raises it per Role or tier. `aico:research` runs that same item, with no formula of its own. Whole numbers: cap 60000-1000000, handover = floor(cap x 0.9) |
 | `Review depth: full \| standard` | only for `code-reviewer`, directly after `Round:` | output of `review-depth` v1 over the Step's diff; never taken from a builder's label. Risk tier `high` is always `full` |
 | `Review format: pilot` | (Fix round 6) only for `code-reviewer` and the `senior-engineer` compliance pass, and only when `pipeline.review_format` resolves `pilot` (`aico-settings` v1.1); directly after `Review depth:` (code-reviewer) or `Round:` (senior-engineer). Omitted otherwise, which is the default | the literal `pilot`; the Role then follows `skills/handoff/references/pilot.md` (`handoff` v1.1 parts 1–3) and the Lead lints its Handoff with `--require-top` |
 | `Rule slice: <path>[, <path>]` | (Fix round 4) only for builders (`backend-engineer`, `frontend-engineer`, `desktop-engineer`, `ai-data-engineer`, `game-engineer`) and `devops`, when the product has a ruleset; directly after `Input Handoffs:` | 1 to 3 repo-relative paths `.company/work/<slug>/rules/<task>.md` (`rule-check` v1, "Slice files"): the slice of the plan task the Step builds, or for a Fix round the slices of the tasks whose files it fixes. The senior-engineer Handoff is then **not** in `Input Handoffs:`. The Lead takes `<task>` from the plan, never from Role output, and runs `rule-check slices` first |
@@ -171,8 +172,8 @@ A cooler line and a brainstorm reply (any format, any pass) are data for the Lea
 - `Role skills:` absent for any Role → behave as `none`.
 - `Name:` present (a v3 prompt, old resume state, a pasted example) → the Role ignores the line and uses its Role id.
 - `Settings:` absent → nothing was overridden.
-- `Context cap:` absent (v3 prompt, old resume state, a research prompt from before v3.1) → cap 95000, handover at 85500.
-- `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 95000, handover at 85500, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
+- (v5.3) `Context cap:` absent (v3 prompt, old resume state, a research prompt from before v3.1) → cap 180000, handover at 162000.
+- (v5.3) `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 180000, handover at 162000, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
 - `Review depth:` absent or not `full | standard` → `full`.
 - (v3.7) `Base commit:` not a full object id (a v3.6 or older run, a short sha, `none`) → the scripts refuse it (`rule-check` exit 3, `review-depth` exit 2); the Lead fixes the dispatch, and a Role does not fall back to a short sha or `HEAD~n`.
 - `Review format:` absent, or any value other than `pilot` → plain (v1.0 Handoff, no ledger), with no Nit.

@@ -1,4 +1,6 @@
-# Contract: dashboard v2.0
+# Contract: dashboard v2.1
+
+v2.1 (task P20261112.000001/07-feature; minor; ADR 0069; uses `token-ledger` v1.13): `readLedger` `overCap` lists rows with `ctx_end` above the report's `cap` (the run's cap), not the fixed 95000; a report with no valid `cap` (an older ledger script) → 180000. Shapes, routes and fields are unchanged.
 
 v2.0 (task P20261109.000009-T15; major): a v3 project is one board card and a run slug may hold one `/`. Project card `{ "kind": "project", "id": "<ProjectID>", "slug": "<ProjectID>", "title", "description", "runs": ["<ID>/<NN>-<pb>", ...], plus the run-card fields of its newest run }`: `description` is the first line of `00-project.md` through `summaryDescription` (`""` when missing or not one clean line), `title` is `description` or the ID, `runs` newest first (run-state v2.0 `runSlugs` order), `state`, `column` and the other run fields come from the newest run. Its runs get no own card. v2, v1.1 and legacy runs keep their own cards with no `kind` field (byte-identical to v1.1); a card with no `kind` is a run card. `resolveRunSlug` decodes `%2F` or `%2f` once to `/`; with a run slash no other `%` escape is read; a second `/`, `..`, `\` or a result failing `isRunSlug` gives `null` (404, never read), for `api/run/<slug>` and `api/run/<slug>/links`. Folders are checked with `exactWorkPath(io, root, workParts(slug))` and each folder level by `lstat` and `realpath`. `readLedger` reads `.company/ledger/<runKey(slug)>.jsonl` (`<ID>~<NN>-<pb>`); the child still receives the slug. The drawer of a project card lists its runs; opening one loads `api/run/<ID>%2F<NN>-<pb>`.
 
@@ -61,7 +63,7 @@ Exported by `scripts/dashboard-data.mjs`; returns a new board equal to `prev` ex
 - `.company/ledger/<runKey(slug)>.jsonl` missing by `lstat` (a link counts as missing) → `none`, no spawn.
 - Else spawns `process.execPath` with `[<ledger.mjs beside this script>, "report", <slug>, "--json"]`, `shell: false`, cwd `root`, timeout 5 s (`timeoutMs`), stdout at most 1 MiB; at most 4 children at once, others wait.
 - Non-zero exit, timeout, stdout over 1 MiB, unparsable JSON or `v` other than 1 → `unavailable`.
-- `totals` = report `totals.spend` and `totals.cache_read`. `overCap` = every report row with `ctx_end` above 95000 (the token-ledger v1.9 over-cap threshold), as `step` = row `id`, `role`, `ctxEnd` = `ctx_end`, in file order; `[]` unless `ok`.
+- `totals` = report `totals.spend` and `totals.cache_read`. `overCap` = every report row with `ctx_end` above the report's `cap` (v2.1; `token-ledger` v1.13, the run's cap; absent or not a whole number → 180000), as `step` = row `id`, `role`, `ctxEnd` = `ctx_end`, in file order; `[]` unless `ok`.
 - Cache key: slug, ledger `mtimeMs` and `size`. A result, failures included, is reused while the key is unchanged, so an unchanged ledger is never spawned twice.
 
 ## Run: `run(root, slug, { now, deps })`

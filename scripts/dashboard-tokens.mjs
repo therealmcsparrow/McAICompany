@@ -5,7 +5,7 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { runKey } from '../mods/lib/work-folder.mjs';
 
 const LEDGER_SCRIPT = path.join(import.meta.dirname, 'ledger.mjs');
-const CTX_CAP = 95000;
+const DEFAULT_CAP = 180000;
 const MAX_OUTPUT = 1024 * 1024;
 const MAX_CHILDREN = 4;
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -16,6 +16,7 @@ const waiting = [];
 let running = 0;
 
 const unavailable = () => ({ state: 'unavailable', totals: null, overCap: [] });
+const isCap = (n) => Number.isSafeInteger(n) && n >= 60000 && n <= 1000000;
 const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
 
 async function slot() {
@@ -80,10 +81,11 @@ function parseReport(text) {
   if (totals === null || typeof totals !== 'object') return unavailable();
   if (!isCount(totals.spend) || !isCount(totals.cache_read)) return unavailable();
   if (!Array.isArray(rows) || rows.length > MAX_ROWS) return unavailable();
+  const cap = isCap(report.cap) ? report.cap : DEFAULT_CAP;
   const overCap = [];
   for (const row of rows) {
     if (row === null || typeof row !== 'object') return unavailable();
-    if (!isCount(row.ctx_end) || row.ctx_end <= CTX_CAP) continue;
+    if (!isCount(row.ctx_end) || row.ctx_end <= cap) continue;
     if (typeof row.id !== 'string' || typeof row.role !== 'string') return unavailable();
     overCap.push({ step: row.id, role: row.role, ctxEnd: row.ctx_end });
   }

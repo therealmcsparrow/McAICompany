@@ -1,10 +1,12 @@
-# Contract: context-guard v1.1
+# Contract: context-guard v1.2
+
+v1.2 (task P20261112.000001/07-feature, minor; ADR 0069; uses `run-state` v2.1): the hand-over point is the active run's `runCap(...).handover` (`scripts/run-cap.mjs`), not the fixed `HANDOVER_AT`; unreadable → 162000. The cap is read only at a reading of at least 54000 (floor(60000 x 0.9), the lowest possible point), so the fast path stays scan-free. Texts, hook entries, the guard record and every refusal are unchanged.
 
 v1.1 (task P20261109.000009-T11, minor, additive; uses `run-state` v2.0): the active run and its folder may be nested, `<ProjectID>/<NN>-<playbook>`. The folder is found with `workParts` and must be a real directory inside the real work folder; `context-guard.jsonl` and the Handoff and ledger writes are bound to that folder, never to the project folder, a sibling run or a deeper path. v1 behaviour for v2, v1.1 and legacy runs is byte-identical.
 
 New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/context-guard.mjs` (Node built-ins only), wired by `hooks/hooks.json`. Consumers: every Role and the Lead during an active run (they see only the refusals), `skills/handoff/SKILL.md` and `skills/pipeline/references/lead-handover.md` (they describe the result). Uses `lead-handoff` v1.8 (`HANDOVER_AT`, `findRun`, `transcriptTokens`, `contextHandover`, `newSessionCommand`, `claudeDirOf`, `workDir`, `lstatOrNull`, `openRegular`, `readSmall`, `iso`, `loadRecord`) and `run-state` v1.7 (`show`, read-only). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`. Spike facts: `tests/lead-handover/evidence.md` (T1 spike section).
 
-The hard hand-over at `HANDOVER_AT` (85500) of the fixed Context cap, done outside the agent: a hook refuses tools, so no model has to choose to stop.
+The hard hand-over at the run's hand-over point (v1.2: floor(cap x 0.9) of the run's Context cap, `run-state` v2.1), done outside the agent: a hook refuses tools, so no model has to choose to stop.
 
 v1 note (Lead hand-over loop fix, task 2026-11-03 07.12): the Lead point is unchanged, `HANDOVER_AT` 85500 of the total context. A fresh Lead session holds about 55k tokens before it reads anything, so what it reads before its first Step must stay near 15k: the new-session line points to `skills/pipeline/references/lead-resume.md` (`lead-handoff` v1.8), which says to read the `read` output, a Step Handoff slice and the `aico:pipeline` skill only. Measured: the old boot (Playbook skill, `aico:pipeline`, `lead-handover.md`, tool outputs) took a fresh Lead from 55.5k to 87k in 37 seconds and froze it before any Step. `tests/context-guard/lead-fresh-boot.test.mjs` pins a byte budget on what the resume path loads (an estimate: baseline plus bytes/3) and that the command, header and resume line name the resume file.
 
@@ -23,9 +25,10 @@ Stdin JSON, read until end of input, at most 4 MiB (a `Write` payload can be lar
 
 ## `pre`, in this order
 1. `AICO_CONTEXT_GUARD=off` in the process env (this exact value): exit 0, silent.
-2. Not `PreToolUse`, or tokens unknown, or tokens below `HANDOVER_AT`: exit 0, silent, no run scan (the fast path). Target under 200 ms per call, estimated, not measured; T3 measures it on win32.
+2. Not `PreToolUse`, or tokens unknown, or tokens below 54000 (v1.2; floor(60000 x 0.9), below which no cap can trigger): exit 0, silent, no run scan (the fast path). Target under 200 ms per call, estimated, not measured; T3 measures it on win32.
 3. No active run (`findRun`): exit 0, silent.
-4. Step or Lead branch below.
+4. (v1.2) Hand-over point `H` = `runCap(root, slug).handover` of the active run (`run-state` v2.1 "Run cap"); unreadable or not a whole number → 162000. Tokens below `H`: exit 0, silent.
+5. Step or Lead branch below.
 
 ### Step branch (`agent_id` present)
 Both allowed cases need a `Write` whose `tool_input.file_path` resolves to a file that does not exist yet, directly in the real folder of the active run (`.company/work/<slug>/`, checks of `work-folder-name` v1.1).
@@ -52,7 +55,7 @@ Exit 0, silent, when: `AICO_CONTEXT_GUARD=off`, `stop_hook_active` true, no vali
 - R, exact text in `scripts/context-guard.mjs`: `aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.`
 
 ## Guard record
-`.company/work/<slug>/context-guard.jsonl`. Append-only, one JSON object per line, at most 1000 lines of at most 512 bytes, created and opened under the `lead-handover.jsonl` file checks. Written by this script only, and only at or over `HANDOVER_AT`. No line number, because parallel Steps append at once. Keys in this order: `v` (1), `at` (UTC to the second), `ev`, `id`, then:
+`.company/work/<slug>/context-guard.jsonl`. Append-only, one JSON object per line, at most 1000 lines of at most 512 bytes, created and opened under the `lead-handover.jsonl` file checks. Written by this script only, and only at or over the run's hand-over point `H` (v1.2). No line number, because parallel Steps append at once. Keys in this order: `v` (1), `at` (UTC to the second), `ev`, `id`, then:
 - `deny`: nothing more. At most one per `id`.
 - `handoff`: `file` (the Handoff file name).
 - `ledger`: `file` (the ledger file name). At most one per `id`.
@@ -63,7 +66,7 @@ Unknown context, an own exception, or a hook timeout: the tool is allowed. A rea
 
 ## Limits (not enforceable)
 - The guard is a budget control, not a boundary against a prompt-injected or hostile Role: under the limit such a Role can switch it off (settings files, a hard link on its own transcript, closing the run in its state files).
-- The reading lags one tool result, so one big read can pass 95000; `ledger add` exit 4 is the backstop.
+- The reading lags one tool result, so one big read can pass the run's cap; `ledger add` exit 4 is the backstop.
 - A hook stops a Step at any point, so a half-edit is possible. The fresh Role runs the tests first.
 - After the one blocked stop a Step can still end without a Handoff; `handoff-lint` catches it. A Step that keeps calling refused tools burns turns until it ends; no hook result ends a subagent (not tested).
 - A Step whose Output already exists cannot change it once refused; later edits by that Step are not in its Handoff. The fresh Role checks the tree.
@@ -79,7 +82,8 @@ Stores enums, UTC times, file names and truncated hashes of agent ids. No transc
 ## Error cases
 | Case | Result |
 |---|---|
-| Below `HANDOVER_AT`, any tool | silent, exit 0 |
+| Below the run's hand-over point `H` (v1.2), any tool | silent, exit 0 |
+| Run cap unreadable (v1.2) | `H` = 162000 |
 | Bad or oversize stdin, unknown tokens, own exception | allow, exit 0 |
 | `agent_id` with a path character | tokens unknown, allow |
 | `Write` to an existing file (a ledger included), another folder, a link or a bad name | deny |
@@ -89,4 +93,4 @@ Stores enums, UTC times, file names and truncated hashes of agent ids. No transc
 | Run ended | no active run: silent |
 
 ## Compatibility
-New Contract, v1. A new allowed tool, a new field read from stdin or a change in the fixed texts needs a new version. A changed threshold is a `lead-handoff` change.
+New Contract, v1. A new allowed tool, a new field read from stdin or a change in the fixed texts needs a new version. The threshold (v1.2) is the run's handover from `run-state` `runCap`; a change to how it is found is a `run-state` change.

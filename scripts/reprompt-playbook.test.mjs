@@ -193,9 +193,9 @@ test('handover is capped at 2 per Round', () => {
   assert.match(s3, /`handover` → continue per `dispatch-prompt` v5[^\n]*at most 2 handovers per `Round:`; a third → show the Handoff path, `end '<slug>' abort`, stop/);
 });
 
-test('Edit has no fixed cap and re-dispatches with Asks left 0', () => {
+test('Edit has no set limit and re-dispatches with Asks left 0', () => {
   const s = section('5. Show and pick');
-  assert.ok(s.includes('Edits have no fixed cap'));
+  assert.ok(s.includes('Edits have no set limit'));
   assert.ok(s.includes('`Asks left: 0`'));
   assert.doesNotMatch(s, /After 3 edits|at most 3 edits/);
 });

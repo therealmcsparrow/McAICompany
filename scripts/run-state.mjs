@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v2.0). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v2.1). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
 import { isWorkFolder, isProjectId, parseProject, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, handoverOf } from '../mods/lib/context-cap.mjs';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 
@@ -52,7 +53,10 @@ const TIER_RANK = { low: 1, medium: 2, high: 3 };
 const EXTRA = { start: [], ceo: ['gate', 'n'], sub: ['role', 'id', 'phase'], wave: ['wave'], gate: ['gate', 'result'], ask: ['gate'], pick: ['pick', 'asked'], end: ['outcome'] };
 
 // Optional keys per event.
-const OPTIONAL = { start: ['aico'], sub: ['session'] };
+const OPTIONAL = { start: ['aico', 'cap'], sub: ['session'] };
+
+// A cap is a whole number inside the settings range; anything else is not a cap. A start record with a bad cap is kept and its cap ignored.
+export const validCap = n => Number.isSafeInteger(n) && n >= CONTEXT_CAP_MIN && n <= CONTEXT_CAP_MAX;
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const lstatOrNull = p => { try { return lstatSync(p); } catch { return null; } };
@@ -125,7 +129,7 @@ function validRecord(o) {
   const required = ['v', 'at', 'ev', ...EXTRA[o.ev]];
   const optional = OPTIONAL[o.ev] ?? [];
   if (!required.every(k => Object.hasOwn(o, k)) || !keys.every(k => required.includes(k) || optional.includes(k))) return false;
-  if (o.ev === 'start') return !('aico' in o) || (typeof o.aico === 'string' && AICO_RE.test(o.aico));
+  if (o.ev === 'start') return (!('aico' in o) || (typeof o.aico === 'string' && AICO_RE.test(o.aico)));
   if (o.ev === 'ceo') return typeof o.gate === 'string' && CEO_GATES.has(o.gate) && Number.isInteger(o.n) && o.n >= 1 && o.n <= 20;
   if (o.ev === 'sub') {
     return typeof o.role === 'string' && ROLE_RE.test(o.role) && typeof o.id === 'string' && SUB_ID_RE.test(o.id)
@@ -154,9 +158,15 @@ function readRecords(file, verified = false) {
     const n = i + 1;
     const line = lines[i];
     if (n > MAX_LINES) { out.warnings.push(`line ${n} skipped`); continue; }
-    if (line.includes('\r') || Buffer.byteLength(line, 'utf8') > MAX_LINE) { out.warnings.push(`line ${n} skipped`); continue; }
+    if (line.includes('\r')) { out.warnings.push(`line ${n} skipped`); continue; }
     let o;
     try { o = JSON.parse(line); } catch { out.warnings.push(`line ${n} skipped`); continue; }
+    // An over-long line counts only as a bare start: the run stays active, nothing else on it is read.
+    if (Buffer.byteLength(line, 'utf8') > MAX_LINE) {
+      const bare = o !== null && typeof o === 'object' && o.ev === 'start' && o.v === 1 && typeof o.at === 'string' ? { v: 1, at: o.at, ev: 'start' } : null;
+      if (bare && validRecord(bare)) out.records.push(bare); else out.warnings.push(`line ${n} skipped`);
+      continue;
+    }
     if (!validRecord(o)) { out.warnings.push(`line ${n} skipped`); continue; }
     out.records.push(o);
   }
@@ -225,7 +235,7 @@ function load(root, slug, now) {
   const { dir, file } = paths(root, slug);
   const view = {
     v: 1, slug, state: 'none', started: null, ended: null, outcome: null, wave: null, gates: [], picks: [], ceo: [], subs: [], sessions: [], waves: [], open_ask: null,
-    round: 0, tier: 'unknown', steps: [], warnings: [],
+    round: 0, tier: 'unknown', steps: [], warnings: [], cap: null, handover: null,
   };
   const dst = lstatOrNull(dir);
   if (dst && (!dst.isDirectory() || !insideWork(root, partsOf(slug)))) { view.warnings.push('run-state unreadable'); return { view, activity: 0 }; }
@@ -244,6 +254,8 @@ function load(root, slug, now) {
   view.steps = steps.map(({ tier, ...s }) => s);
   view.round = round;
   view.tier = ['unknown', 'low', 'medium', 'high'][tierRank];
+  const first = rec.unreadable ? undefined : rec.records.find(r => r.ev === 'start' && validCap(r.cap));
+  if (first) { view.cap = first.cap; view.handover = handoverOf(first.cap); }
   const seg = rec.unreadable ? [] : lastSegment(rec.records);
   let activity = 0;
   if (seg.length > 0) {
@@ -286,6 +298,27 @@ function load(root, slug, now) {
 export function show(root, slug, { now = Date.now() } = {}) {
   checkSlug(root, slug);
   return load(root, slug, now).view;
+}
+
+// The first cap a `start` record of the run carries, or null (none, unreadable, or a folder that is not the run's own).
+export function recordedCap(root, slug) {
+  checkSlug(root, slug);
+  const { dir, file } = paths(root, slug);
+  const dst = lstatOrNull(dir);
+  if (!dst || !dst.isDirectory() || !insideWork(root, partsOf(slug))) return null;
+  const rec = readRecords(file);
+  if (rec.unreadable) return null;
+  return rec.records.find(r => r.ev === 'start' && validCap(r.cap))?.cap ?? null;
+}
+
+// The cap a new run freezes: the resolved pipeline.context_cap, the default when settings cannot be read.
+// Settings load only here.
+function settingsCap(root, home) {
+  try {
+    const { resolveSettings } = createRequire(import.meta.url)('./settings.mjs');
+    const cap = resolveSettings({ home, cwd: root }).pipeline.context_cap;
+    return validCap(cap) ? cap : CONTEXT_CAP_DEFAULT;
+  } catch { return CONTEXT_CAP_DEFAULT; }
 }
 
 const RUN_SUB_RE = /^(?:0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -648,7 +681,11 @@ export function run(argv, { root = process.cwd(), now = Date.now(), home } = {})
       case 'start':
         if (rest.length < 1 || rest.length > 2) refuse(usage());
         if (rest.length === 2 && !AICO_RE.test(rest[1])) refuse('aico must be a version like 0.19.1');
-        append(root, rest[0], rest.length === 2 ? { ev: 'start', aico: rest[1] } : { ev: 'start' }, opts);
+        {
+          checkSlug(root, rest[0]);
+          const cap = recordedCap(root, rest[0]) === null ? { cap: settingsCap(root, home) } : {};
+          append(root, rest[0], { ev: 'start', ...(rest.length === 2 ? { aico: rest[1] } : {}), ...cap }, opts);
+        }
         return { out: `ok: start ${rest[0]}`, code: 0 };
       case 'wave':
         if (rest.length !== 2) refuse(usage());

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token ledger (contract: docs/contracts/token-ledger.md v1.12). Node built-ins only.
+// Token ledger (contract: docs/contracts/token-ledger.md v1.13). Node built-ins only.
 // Stores counts only, never prompt or reply content (GDPR Art. 5(1)(c)): every record is checked
 // against an allow-list schema when it is written and again when it is read.
 // Ledger files live in <root>/.company/ledger/<run>.jsonl; <root> is the working directory unless main() is given one.
@@ -12,6 +12,7 @@ import { readRecord as readPlanCheck } from './plan-check.mjs';
 import { costText, readCost } from './cost-source.mjs';
 import { readParallel } from './plan-tasks.mjs';
 import { show as showRun } from './run-state.mjs';
+import { runCap } from './run-cap.mjs';
 import { WorkFolderRefusal, exactWorkPath, isRunSlug, parseProject, runKey, runOf, slugOfKey, workParts } from '../mods/lib/work-folder.mjs';
 import { readInside } from './handoff-lint.mjs';
 import { readTierPath } from './tier-set.mjs';
@@ -26,7 +27,6 @@ const MAX_BASELINE_BYTES = MiB;
 const MAX_REQUESTS = 100000;
 const MAX_LIVE_AGENTS = 500;
 const MAX_COUNT = 1000000000;
-const CTX_CAP = 95000;
 const MAX_AGENT_IDS = 8;
 const MAX_COMPARE_FILES = 500;
 const MAX_PLUGIN_JSON_BYTES = 64 * 1024;
@@ -479,7 +479,8 @@ function cmdAdd(args) {
   rec.t1 = isoSec(t1);
   if (rec.ms !== undefined) rec.t0 = isoSec(t1 - Math.floor(rec.ms / 1000) * 1000);
   appendRecord(JSON.parse(JSON.stringify(rec)));
-  if (rec.ctx_end > CTX_CAP) return { code: 4, lines: [`over cap: ${kind} ${id} ${role} ctx_end ${rec.ctx_end} > ${CTX_CAP}`] };
+  const { cap } = runCap(env.root, run);
+  if (rec.ctx_end > cap) return { code: 4, lines: [`over cap: ${kind} ${id} ${role} ctx_end ${rec.ctx_end} > ${cap}`] };
   return [];
 }
 
@@ -824,7 +825,7 @@ function parseReportFlags(flags) {
   return opts;
 }
 
-function reportJson(run, records, warnings, live, acs) {
+function reportJson(run, records, warnings, live, acs, cap) {
   const sum = summarize(records, acs);
   const rows = dispatchRows(records, live).map((r) => r.json);
   const cacheWrite = sum.transcripts.reduce((n, r) => n + r.tokens.cache_write, 0);
@@ -840,7 +841,8 @@ function reportJson(run, records, warnings, live, acs) {
     },
     per_ac: { spend: ac ? perAc(sum.spend, sum.acs) : null, cache_read: ac ? perAc(sum.cacheRead, sum.acs) : null },
     not_reconciled: sum.unreconciled.length,
-    warnings
+    warnings,
+    cap
   });
 }
 
@@ -854,12 +856,12 @@ function cmdReport(args) {
     return [JSON.stringify({
       v: 1, run, rows: [],
       totals: { spend: 0, cache_read: 0, cache_write: 0, cache_write_share: 0, by_kind: {} },
-      per_ac: { spend: null, cache_read: null }, not_reconciled: 0, warnings: ['no ledger']
+      per_ac: { spend: null, cache_read: null }, not_reconciled: 0, warnings: ['no ledger'], cap: runCap(env.root, run).cap
     })];
   }
   const liveRecs = live ? liveRecords(stored, warnings) : [];
   const records = [...stored, ...liveRecs];
-  if (json) return [reportJson(run, records, warnings, new Set(liveRecs), acs)];
+  if (json) return [reportJson(run, records, warnings, new Set(liveRecs), acs, runCap(env.root, run).cap)];
   const out = [...warnings, `run ${run}`];
   const sum = summarize(records, acs);
   for (const row of dispatchRows(records, new Set(liveRecs))) out.push(describe(row.rec, row.t));
@@ -871,7 +873,8 @@ function cmdReport(args) {
     out.push('spend: n/a (nothing reconciled)', 'cache read: n/a (nothing reconciled)');
   }
   out.push(`not reconciled: ${sum.unreconciled.length}`);
-  const over = stored.filter((r) => r.src === 'notification' && r.kind !== 'total' && r.ctx_end > CTX_CAP);
+  const { cap } = runCap(env.root, run);
+  const over = stored.filter((r) => r.src === 'notification' && r.kind !== 'total' && r.ctx_end > cap);
   if (over.length > 0) out.push(`over cap: ${over.length} steps (max ${Math.max(...over.map((r) => r.ctx_end))})`);
   if (baselineRuns.length) {
     const spends = [];

@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, handoverOf } from '../mods/lib/context-cap.mjs';
 import { NAME_RE, PERSONALITY_KEYS, personalityProblem } from './check.mjs';
 import { headerEnd, resolve as resolveLanguage, validate as validateLanguage } from './language.mjs';
 import { eligibleRoles, readBaseline, readCatalog, selectable } from './skill-catalog.mjs';
@@ -18,10 +19,7 @@ export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 export const LANES = ['security', 'compliance', 'legal', 'persona', 'hands_on', 'accessibility'];
 export const GATES = ['brief', 'plan', 'ship', 'installs'];
 export const LOCKABLE = ['ship', 'security', 'installs'];
-export const CONTEXT_CAP_MIN = 60000;
-export const CONTEXT_CAP_MAX = 1000000;
-// The fixed cap every dispatch carries. Stored `context_cap` values are still validated but never read.
-export const CONTEXT_CAP_DEFAULT = 95000;
+export { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MIN, CONTEXT_CAP_MAX };
 export const DEBATES = ['crossfire', 'full_pass'];
 export const REVIEW_FORMATS = ['plain', 'pilot'];
 export const SECOND_REVIEWER_MODELS = ['default', 'opus', 'sonnet', 'haiku', 'fable'];
@@ -554,6 +552,7 @@ function sanitizePersonality(value, at, reasons) {
 // Walks a layer against the schema. Returns { clean, reasons }: clean keeps only valid parts.
 function sanitize(layer, roleNames, floor = 'opus') {
   const reasons = [];
+  const capReasons = new Set(); // indexes in `reasons` that refuse pipeline.context_cap
   const clean = { version: 1 };
   if (!isObject(layer)) return { clean, reasons: [`${KEY}: must be an object`] };
   if (layer.version !== 1) return { clean, reasons: ['version: must be 1'] };
@@ -580,7 +579,12 @@ function sanitize(layer, roleNames, floor = 'opus') {
       if (notEmpty(roles)) clean.roles = roles;
     } else if (key === 'pipeline') {
       if (!isObject(value)) { reasons.push('pipeline: must be an object'); continue; }
+      const before = reasons.length;
       const pipeline = checkFields(value, { ...PIPELINE_RULES, second_reviewer_model: secondReviewerModelRule(floor) }, 'pipeline', reasons, ['lanes']);
+      if (Object.hasOwn(value, 'context_cap') && !Object.hasOwn(pipeline, 'context_cap')) {
+        const at = reasons.indexOf(CONTEXT_CAP.msg, before);
+        if (at !== -1) capReasons.add(at);
+      }
       if (Object.hasOwn(value, 'lanes')) {
         if (!isObject(value.lanes)) reasons.push('pipeline.lanes: must be an object');
         else {
@@ -636,7 +640,7 @@ function sanitize(layer, roleNames, floor = 'opus') {
       reasons.push(`${label(key)}: unknown key`);
     }
   }
-  return { clean, reasons };
+  return { clean, reasons, capReasons };
 }
 
 export function validateLayer(layer, roleNames, floor = 'opus') {
@@ -671,8 +675,11 @@ function loadLayer(level, ctx, roleNames, floor = 'opus') {
     stored = { ...stored, mods: rest };
     retired = true;
   }
-  const { clean, reasons } = sanitize(stored, roleNames, floor);
-  return { raw: bytes, layer: clean, warnings: reasons.map(storedWarning(file)), reasons, retired };
+  const { clean, reasons, capReasons = new Set() } = sanitize(stored, roleNames, floor);
+  const warn = storedWarning(file);
+  // The refusal text stays as the Contract words it; the warning names the field, never the value.
+  const warnings = reasons.map((r, i) => (capReasons.has(i) ? `${file}: ignoring pipeline.context_cap: ${r.replace(/^context_cap /, '')}` : warn(r)));
+  return { raw: bytes, layer: clean, warnings, reasons, retired };
 }
 
 // The code-reviewer floor from the model floor file; an unreadable file gives opus.
@@ -696,12 +703,15 @@ function resolveRoles(defaults, user, project) {
     for (const f of ROLE_FIELDS) {
       [entry[f], source[f]] = pick(project.roles?.[role]?.[f], user.roles?.[role]?.[f], base[f]);
     }
-    // Deprecated key: stored values are validated elsewhere and have no effect.
-    [entry.context_cap, source.context_cap] = [CONTEXT_CAP_DEFAULT, 'plugin'];
+    // A stored roles.<role>.context_cap is validated elsewhere and has no effect: the Role shows the pipeline value.
+    [entry.context_cap, source.context_cap] = pickCap(project, user);
     roles[role] = { ...entry, source };
   }
   return roles;
 }
+
+const capOf = (layer) => (layer.pipeline !== undefined && Object.hasOwn(layer.pipeline, 'context_cap') ? layer.pipeline.context_cap : undefined);
+const pickCap = (project, user) => pick(capOf(project), capOf(user), CONTEXT_CAP_DEFAULT);
 
 const pick = (p, u, d) => (p !== undefined ? [p, 'project'] : u !== undefined ? [u, 'user'] : [d, 'plugin']);
 
@@ -908,6 +918,7 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   applySkills(roles, user, project, { home, moved, ignored, warnings });
   warnings.push(...nameClashes(roles));
 
+  const [capValue, capSource] = pickCap(project, user);
   const pipeline = {
     fix_rounds: pick(project.pipeline?.fix_rounds, user.pipeline?.fix_rounds, PIPELINE_DEFAULTS.fix_rounds)[0],
     dispatch: pick(project.pipeline?.dispatch, user.pipeline?.dispatch, PIPELINE_DEFAULTS.dispatch)[0],
@@ -917,9 +928,11 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     second_reviewer_model: userOnly(user, project, 'second_reviewer_model', ignored),
     second_reviewer_model_effective: null,
     worktrees: userOnly(user, project, 'worktrees', ignored),
-    context_cap: CONTEXT_CAP_DEFAULT,
+    context_cap: capValue,
     review_format: pick(project.pipeline?.review_format, user.pipeline?.review_format, PIPELINE_DEFAULTS.review_format)[0],
-    lanes: {}
+    lanes: {},
+    context_handover: handoverOf(capValue),
+    source: { context_cap: capSource }
   };
   pipeline.second_reviewer_model_effective = effectiveReviewerModel(pipeline.second_reviewer_model, roles['fresh-reviewer']?.model, table);
   // Not locks: no unlock is involved, and a fail-closed project layer does not change them.

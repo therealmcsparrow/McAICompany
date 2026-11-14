@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-14
+
+Rollback: node scripts/stable.mjs 0.38.1
+
+### Changed
+- **The context cap is a setting again, default 180000.** Every Role's context cap is now 180000 tokens by default (was 95000), and Roles and the Lead hand over at 90% of it, 162000 at the default (was 85500). A stored `pipeline.context_cap` now takes effect: the value is resolved project over user over the plugin default, range 60000 to 1000000, and frozen when a run starts, so a change applies from the next run. A stored `roles.<role>.context_cap` is still validated and has no effect. `get` adds `pipeline.context_handover` (derived, never stored) and `pipeline.source.context_cap`. The context guard stays: it stops a Role at the run's hand-over point. Check any `context_cap` left in an old settings file, because it now applies. Contracts: `aico-settings` v2.2, `run-state` v2.1, `dispatch-prompt` v5.3, `context-guard` v1.2, `lead-handoff` v2.3, `token-ledger` v1.13, `dashboard` v2.1, `aico-mods` v2.1, `plan-tasks` v1.10, `handoff` v2.7 (all minor). ADR 0069 replaces ADR 0047.
+
 ## [0.38.1] - 2026-11-14
 
 Rollback: node scripts/stable.mjs 0.38.0

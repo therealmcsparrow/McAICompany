@@ -29,7 +29,7 @@ test('a Step is never resumed: lint exit 1, needs-ceo answer and follow-up are f
 });
 
 test('ledger exit 4 routes to one fresh check Step, never a Fix round', () => {
-  has(line(pipeline, '- **Ledger exit 4'), 'over cap:', 'token-ledger', 'v1.8', 'fresh check Step', 'no Fix round', 'references/lead-handover.md');
+  has(line(pipeline, '- **Ledger exit 4'), 'over cap:', 'token-ledger', 'v1.13', 'fresh check Step', 'no Fix round', 'references/lead-handover.md');
   const s = ref.slice(ref.indexOf('## Ledger exit 4'));
   has(s, 'commit', 'same Role', 'next `NN`', 'same Round', 'second exit 4', 'never closes a review');
   has(s, 'plan-tasks', 'no `done`', 'check Step', 'scope');
@@ -66,7 +66,7 @@ test('Ship Gate shows over cap and the Lead peak', () => {
 });
 
 test('the group lines sit in the v4.4 section, the canonical order stays', () => {
-  has(contract, '# Contract: dispatch-prompt v5.2', 'v4.4 is additive');
+  has(contract, '# Contract: dispatch-prompt v5.3', 'v4.4 is additive');
   has(contract, '`Review group: <i>/<n> .company/work/<slug>/split/r<round>/g<i>.txt`', '`Fix group: <i>/<n> .company/work/<slug>/split/f<round>/g<i>.txt`');
   has(contract, 'directly after `Review depth:`', 'directly after `Round:`', 'architect.txt', 'one architect Step', 'A Role that gets a v4.3 prompt behaves as before');
   has(line(pipeline, '- **One Step per review or Fix group'), '`Review group:`', '`Fix group:`');

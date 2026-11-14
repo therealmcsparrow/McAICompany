@@ -310,6 +310,8 @@ describe('hostile cases under block with one open decision', () => {
     for (const d of ['agents', 'company']) fs.cpSync(path.join(import.meta.dirname, '..', d), path.join(plugin, d), { recursive: true });
     fs.mkdirSync(path.join(plugin, 'mods', 'lib'), { recursive: true });
     fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'work-folder.mjs'), path.join(plugin, 'mods', 'lib', 'work-folder.mjs'));
+    // run-state imports the one cap formula (ADR 0069)
+    fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'context-cap.mjs'), path.join(plugin, 'mods', 'lib', 'context-cap.mjs'));
     // The patterns file is absent from the copy.
     assert.equal(node('run-state.mjs', 'start', SLUG).status, 0);
     const gate = node('run-state.mjs', 'gate', SLUG, 'plan', 'passed');

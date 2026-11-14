@@ -21,6 +21,6 @@ step 19 devops  context at end 23824 (not reconciled)
 spend: 1646492 total, 548831 per AC (3 ACs)
 cache read: 17675258 total, 5891753 per AC (3 ACs)
 not reconciled: 1
-over cap: 4 steps (max 190796)
+over cap: 1 steps (max 190796)
 spend median 123450 per AC, delta +345% (baseline of 3 runs)
 cache read median 1123398 per AC, delta +424% (baseline of 3 runs)

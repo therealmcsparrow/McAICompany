@@ -149,12 +149,14 @@ describe('AC16: every task carries a context estimate checked against the handov
     }
   });
 
-  test('the handover is 85500, 90 percent of the fixed 95000 cap, and the basis is the skill text, not a talk figure', () => {
+  test('the handover is 90 percent of the run cap, and the basis is the skill text, not a talk figure', () => {
     const planning = read('skills', 'planning', 'SKILL.md');
-    assert.match(planning, /One task = one fresh window, handed over at 85500, 90% of the fixed 95000 cap/);
+    assert.match(planning, /One task = one fresh window, handed over at 90% of the run's cap/);
+    assert.doesNotMatch(planning, /95000|85500/);
     assert.doesNotMatch(planning, /\b100k\b/);
     const parallel = read('skills', 'pipeline', 'references', 'parallel.md');
-    assert.match(parallel, /`<h>` = `85500`, the fixed handover of every Role/);
+    assert.match(parallel, /`<h>` = the run's handover/);
+    assert.doesNotMatch(parallel, /95000|85500/);
     assert.match(parallel, /--handover '<h>'/);
   });
 });

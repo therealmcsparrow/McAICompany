@@ -72,13 +72,15 @@ test('the handover check takes cap, mode and handover from the settings get JSON
   has('plan-tasks check', '--cap', '--mode', '--handover');
   has('`pipeline.parallel_cap`', 'when it is 3, 4 or 5, else 4');
   has('`pipeline.dispatch`', 'exactly `sequential`', 'else `parallel`', 'never `waves`');
-  has('`<h>` = `85500`', 'fixed handover', 'every Role');
+  has("`<h>` = the run's handover");
+  lacks('85500', 'fixed handover');
   lacks('context_cap', '× 0.8', '120000');
   has('settings get');
 });
 
-test('handover is 85500', () => {
-  has('--handover \'<h>\'', '85500');
+test('handover is the run value, never a typed figure', () => {
+  has('--handover \'<h>\'');
+  lacks('85500');
 });
 
 test('ready comes from the check exit code and ERROR lines, one fix round, then not ready', () => {

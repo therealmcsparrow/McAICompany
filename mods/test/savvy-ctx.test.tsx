@@ -33,7 +33,8 @@ function makeWorld() {
   return {
     agents: [] as Info[],
     mtime: 1,
-    agentAnswer: ((ids: string[]) => ok(JSON.stringify({ v: 1, agents: ids.map(agent => ({ agent, ctx: 90000 })) }))) as (ids: string[]) => unknown,
+    view: { ...VIEW, cap: 120000, handover: 108000 } as Record<string, unknown>,
+    agentAnswer: ((ids: string[]) => ok(JSON.stringify({ v: 1, agents: ids.map(agent => ({ agent, ctx: 110000 })) }))) as (ids: string[]) => unknown,
     leadAnswer: ok(JSON.stringify({ v: 1, ctx: 42000, peak: 50000, at: '2026-10-26T10:05:00Z' })) as unknown,
     agentCalls: [] as Call[],
     leadCalls: [] as Call[],
@@ -66,7 +67,7 @@ async function boot($: Env[0], on: Env[1], world: World) {
   on('process.run', ((_: unknown, e: Call) => {
     const script = e.argv[1].replace(/\\/g, '/').split('/').pop()
     if (script === 'settings.mjs') return ok(SETTINGS)
-    if (script === 'run-state.mjs') return ok(JSON.stringify({ slug: 'demo', view: VIEW }))
+    if (script === 'run-state.mjs') return ok(JSON.stringify({ slug: 'demo', view: world.view }))
     if (script === 'ledger.mjs') {
       world.agentCalls.push(e)
       return world.agentAnswer(e.argv.slice(3, -1))
@@ -100,25 +101,25 @@ async function rows($: Env[0], width = 63): Promise<string[]> {
   return out
 }
 
-test('a running agent at 90000 tokens shows ctx 90.0k near cap', async ($, on) => {
+test('a running agent at 110000 tokens shows ctx 110.0k near cap', async ($, on) => {
   const w = makeWorld()
   w.agents = running(1)
   const clock = await boot($, on, w)
   await clock.advance(10_000)
   const text = (await rows($)).join('\n')
-  expect(text).toContain('ctx 90.0k near cap')
+  expect(text).toContain('ctx 110.0k near cap')
   expect(w.agentCalls[0].argv.slice(2)).toEqual(['agent-ctx', 'agent0', '--json'])
   expect(w.agentCalls[0].init.timeoutMs).toBe(5000)
 })
 
-test('a count past 95000 shows over cap and a low count shows no note', async ($, on) => {
+test('a count past the run cap 120000 shows over cap and a low count shows no note', async ($, on) => {
   const w = makeWorld()
   w.agents = running(2)
-  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 96000 }, { agent: ids[1], ctx: 12000 }] }))
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 125000 }, { agent: ids[1], ctx: 12000 }] }))
   const clock = await boot($, on, w)
   await clock.advance(10_000)
   const all = await rows($)
-  expect(all.some(r => r.endsWith('ctx 96.0k over cap'))).toBe(true)
+  expect(all.some(r => r.endsWith('ctx 125.0k over cap'))).toBe(true)
   expect(all.some(r => r.endsWith('ctx 12.0k'))).toBe(true)
 })
 
@@ -139,10 +140,10 @@ test('the Lead row is read again only when lead-context.json changes', async ($,
   const before = w.leadCalls.length
   expect(before).toBe(1)
   w.mtime = 7
-  w.leadAnswer = ok(JSON.stringify({ v: 1, ctx: 90000, peak: 90000, at: '2026-10-26T10:06:00Z' }))
+  w.leadAnswer = ok(JSON.stringify({ v: 1, ctx: 110000, peak: 110000, at: '2026-10-26T10:06:00Z' }))
   await clock.advance(4000)
   expect(w.leadCalls.length).toBeGreaterThan(before)
-  expect((await rows($))[0]).toBe('Lead ctx 90.0k near cap')
+  expect((await rows($))[0]).toBe('Lead ctx 110.0k near cap')
 })
 
 test('failures draw ctx ? and never block the pane', async ($, on) => {
@@ -223,7 +224,7 @@ test('the counts come from state: a fresh mount draws them with no new call', as
   const second = await rows($)
   expect(second).toEqual(first)
   expect(first[0]).toBe('Lead ctx 42.0k')
-  expect(first.some(r => r.endsWith('ctx 90.0k near cap'))).toBe(true)
+  expect(first.some(r => r.endsWith('ctx 110.0k near cap'))).toBe(true)
   expect(w.agentCalls.length).toBe(agentCalls)
   expect(w.leadCalls.length).toBe(leadCalls)
 })
@@ -251,13 +252,13 @@ test('the status line is unchanged by the ctx rows', async ($, on) => {
 test('at 20 columns the cap note stays whole and no row is cut', async ($, on) => {
   const w = makeWorld()
   w.agents = running(1)
-  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 96000 }] }))
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 125000 }] }))
   const clock = await boot($, on, w)
   await clock.advance(10_000)
   for (const width of [20, 24, 12]) {
     const all = await rows($, width)
     expect(all.some(r => r.includes('over cap'))).toBe(true)
-    expect(all.some(r => r.includes('ctx 96.0k'))).toBe(true)
+    expect(all.some(r => r.includes('ctx 125.0k'))).toBe(true)
     expect(all.filter(r => r.includes('…') && /ctx|cap|over/.test(r))).toEqual([])
   }
 })
@@ -265,7 +266,7 @@ test('at 20 columns the cap note stays whole and no row is cut', async ($, on) =
 test('the savvy status part carries over cap, near cap or nothing', async ($, on) => {
   const w = makeWorld()
   w.agents = running(2)
-  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 90000 }, { agent: ids[1], ctx: 96000 }] }))
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx: 110000 }, { agent: ids[1], ctx: 125000 }] }))
   const clock = await boot($, on, w)
   await clock.advance(10_000)
   expect(w.statuses.some(t => t !== undefined && t.includes('over cap'))).toBe(true)
@@ -283,8 +284,87 @@ test('a low count leaves the status line as it was', async ($, on) => {
 
 test('a Lead near cap with no agent in state shows near cap in the status part', async ($, on) => {
   const w = makeWorld()
-  w.leadAnswer = ok(JSON.stringify({ v: 1, ctx: 90000, peak: 90000, at: '2026-10-26T10:05:00Z' }))
+  w.leadAnswer = ok(JSON.stringify({ v: 1, ctx: 110000, peak: 110000, at: '2026-10-26T10:05:00Z' }))
   const clock = await boot($, on, w)
   await clock.advance(10_000)
   expect(w.statuses.some(t => t !== undefined && t.includes('near cap'))).toBe(true)
+})
+
+async function withView($: Env[0], on: Env[1], over: Record<string, unknown>, ctx: number) {
+  const w = makeWorld()
+  w.view = { ...VIEW, ...over }
+  w.agents = running(1)
+  w.agentAnswer = ids => ok(JSON.stringify({ v: 1, agents: [{ agent: ids[0], ctx }] }))
+  const clock = await boot($, on, w)
+  await clock.advance(10_000)
+  return { w, all: await rows($) }
+}
+const RUN_CAP = { cap: 120000, handover: 108000 }
+
+test('AC11: cap 120000 and handover 108000: 108000 is plain, no cap word anywhere', async ($, on) => {
+  const r = await withView($, on, RUN_CAP, 108000)
+  expect(r.all.some(x => x.endsWith('ctx 108.0k'))).toBe(true)
+  expect(r.all.join('
+')).not.toContain('cap')
+  expect(r.w.statuses.filter(t => t !== undefined && t.includes('cap'))).toEqual([])
+})
+
+test('AC11: 108001 under cap 120000 is near cap, in the row and the status part', async ($, on) => {
+  const r = await withView($, on, RUN_CAP, 108001)
+  expect(r.all.some(x => x.endsWith('ctx 108.0k near cap'))).toBe(true)
+  expect(r.w.statuses.some(t => t !== undefined && t.includes('near cap'))).toBe(true)
+})
+
+test('AC11: 120000 is still near cap, not over', async ($, on) => {
+  const r = await withView($, on, RUN_CAP, 120000)
+  expect(r.all.some(x => x.endsWith('ctx 120.0k near cap'))).toBe(true)
+  expect(r.w.statuses.some(t => t !== undefined && t.includes('over cap'))).toBe(false)
+})
+
+test('AC11: 121000 under cap 120000 is over cap, in the row and the status part', async ($, on) => {
+  const r = await withView($, on, RUN_CAP, 121000)
+  expect(r.all.some(x => x.endsWith('ctx 121.0k over cap'))).toBe(true)
+  expect(r.w.statuses.some(t => t !== undefined && t.includes('over cap'))).toBe(true)
+})
+
+test('AC9: a view without cap and handover is quiet at 110000 and 162000', async ($, on) => {
+  const r = await withView($, on, { cap: undefined, handover: undefined }, 162000)
+  expect(r.all.some(x => x.endsWith('ctx 162.0k'))).toBe(true)
+  expect(r.w.statuses.filter(t => t !== undefined && t.includes('cap'))).toEqual([])
+})
+
+test('AC9: a view without cap and handover marks near cap at 170000', async ($, on) => {
+  const r = await withView($, on, { cap: undefined, handover: undefined }, 170000)
+  expect(r.all.some(x => x.endsWith('ctx 170.0k near cap'))).toBe(true)
+})
+
+test('AC9: a view without cap and handover marks over cap at 181000', async ($, on) => {
+  const r = await withView($, on, { cap: undefined, handover: undefined }, 181000)
+  expect(r.all.some(x => x.endsWith('ctx 181.0k over cap'))).toBe(true)
+})
+
+test('a view with null cap and handover reads 162000 and 180000', async ($, on) => {
+  const r = await withView($, on, { cap: null, handover: null }, 170000)
+  expect(r.all.some(x => x.endsWith('ctx 170.0k near cap'))).toBe(true)
+})
+
+test('a hostile view cap (string) never lowers the line below 180000 and keeps the pane', async ($, on) => {
+  const r = await withView($, on, { cap: '120000', handover: '108000' }, 110000)
+  expect(r.all.join('
+')).not.toContain('110.0k near cap')
+  expect(r.all.join('
+')).not.toContain('110.0k over cap')
+})
+
+test('a hostile view cap (out of range) never lowers the line below 180000', async ($, on) => {
+  const r = await withView($, on, { cap: 59999, handover: 1 }, 110000)
+  expect(r.all.join('
+')).not.toContain('110.0k near cap')
+  expect(r.all.join('
+')).not.toContain('110.0k over cap')
+})
+
+test('wcag.M10: the over mark is a word at the end of the row text', async ($, on) => {
+  const r = await withView($, on, RUN_CAP, 125000)
+  expect(r.all.filter(t => t.includes('ctx 125.0k'))).toEqual([expect.stringMatching(/ over cap$/)])
 })

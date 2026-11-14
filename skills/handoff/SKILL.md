@@ -19,8 +19,8 @@ Your dispatch names the **Input Handoffs** (under `.company/work/<task>/`), the 
 
 ## Context budget: the `Context cap:` line
 
-Your dispatch carries `Context cap: <cap> handover <n>`, always `95000 handover 85500`: `<cap>` is your context limit, `<n>` the handover point. You never compute them. Past the cap quality drops; hand over to a clean Step.
-- Absent → cap 95000, handover at 85500. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v5).
+Your dispatch carries `Context cap: <cap> handover <n>`, the run's values: `<cap>` is your context limit, `<n>` the handover point. You never compute them. Past the cap quality drops; hand over to a clean Step.
+- Absent → cap 180000, handover at 162000. Malformed → the same, plus a Nit `invalid Context cap` (`dispatch-prompt` v5).
 - Big reads, long diffs and test logs add up: read slices, grep first. Near `<n>` (or you can't tell and have done a lot of reading), **stop at the next clean point**: tests green or the last change reverted, nothing half-edited.
 - Write `status: handover`: `## Did` what's finished, `## Next` what's left, in order, with file paths, so a fresh Role of the same type continues without re-reading. Commit-ready work only. A handover is not a failure or a blocker; never cut scope or skip checks to squeeze under the budget.
 - At the hand-over point a hook refuses every tool except `Write` of a new Handoff and one new findings ledger in the run folder; a pilot reviewer writes the ledger first. An existing ledger can no longer be changed: put rows it lacks under `## Next` as plain lines.

@@ -734,7 +734,8 @@ test('report --json prints one JSON object with the contract shape', () => {
   mixed(sb);
   const { text, data } = json(sb, ['--json']);
   assert.equal(text.trim().split('\n').length, 1);
-  assert.deepEqual(Object.keys(data), ['v', 'run', 'rows', 'totals', 'per_ac', 'not_reconciled', 'warnings']);
+  assert.deepEqual(Object.keys(data), ['v', 'run', 'rows', 'totals', 'per_ac', 'not_reconciled', 'warnings', 'cap']);
+  assert.equal(data.cap, 180000);
   assert.equal(data.v, 1);
   assert.equal(data.run, 'demo');
   assert.deepEqual(data.rows.map((x) => [x.kind, x.id, x.state]), [

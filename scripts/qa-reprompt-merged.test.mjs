@@ -339,7 +339,7 @@ test('settings page: the served page has the Reprompt table and the Question rou
   assert.ok(html.includes(`'${hint}'`), `the page shows the Contract hint exactly: ${hint}`);
   assert.ok(!/Question rounds is a whole number from 0 to 3/.test(html), 'the old hint wording is gone');
   // Directly under the pipeline table: after the context cap hint, before the Brainstorm heading.
-  const capHint = html.indexOf("const CONTEXT_CAP_HINT = 'The context cap is fixed.");
+  const capHint = html.indexOf("const CONTEXT_CAP_HINT = 'How many tokens one Step may use");
   const reprompt = html.indexOf("sectionHead('Reprompt')");
   const brainstorm = html.indexOf("sectionHead('Brainstorm')");
   assert.ok(capHint > 0 && reprompt > capHint && brainstorm > reprompt, 'order: context cap hint, Reprompt heading, Brainstorm heading');

@@ -10,3 +10,5 @@ Candidate A passed in amended form (spike T1, tests/lead-handover/evidence.md): 
 - The compaction point is set by the environment variable `CLAUDE_CODE_AUTO_COMPACT_WINDOW`; the setting key `autoCompactWindow` and a plugin `settings.json` had no effect in the spike. A plugin cannot set it, so the CEO sets it once in the `env` block of the user settings (window 98500 gave a point near 85500). This is a one-time setup, not a per-run keystroke, and needs the CEO's decision.
 - The continuing context is the compacted session plus the Handoff, not an empty one. Compaction stops after 3 refills within 3 turns each, so Lead turns must stay small.
 - T14's `watch` adapter becomes a `PreCompact` adapter and `resume` stays on `SessionStart`; the Architect revises T14's files and the lead-handoff v1 command text before T14 starts.
+
+Amended 2026-11-14: the cap and handover are now the run's values (ADR 0069).

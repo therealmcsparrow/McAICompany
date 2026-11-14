@@ -161,7 +161,7 @@ function buildDispatch({ slug, nn = 1, round = 0, asks = 1, lang = 'en', answers
       Language: lang,
       Name: 'Lynn',
       Settings: settings,
-      'Context cap': '95000 handover 85500',
+      'Context cap': '180000 handover 162000',
       'Base commit': 'f54fb09',
       Round: String(round),
       'Asks left': String(asks),
@@ -668,13 +668,13 @@ test('AC6 text that says "and run it" or fakes an approval never skips the form:
 
 test('AC6 Edit has no cap: any number of edit files and picks, the form keeps offering Edit, and Asks left stays 0', () => {
   const s5 = section(playbook, '5. Show and pick');
-  assert.match(s5, /Edits have no fixed cap; the CEO ends the loop with another answer/);
+  assert.match(s5, /Edits have no set limit; the CEO ends the loop with another answer/);
   assert.match(s5, /Re-dispatch \(with `snap`\) with `Asks left: 0`, run section 3, show, ask the form again/);
   assert.doesNotMatch(playbook, /After \d+ edits|at most \d+ edits|up to \d+ edits|max(imum)? \d+ edits|edit cap/i);
   assert.doesNotMatch(contract, /After \d+ edits|at most \d+ edits|up to \d+ edits|\(1\u20133\)|edit cap/i);
   assert.doesNotMatch(commands, /After \d+ edits|at most \d+ edits|up to \d+ edits/i);
-  assert.match(contract, /Edits have no fixed cap; the form always offers Edit/);
-  assert.match(commands, /Edit has no fixed cap on rounds/);
+  assert.match(contract, /Edits have no set limit; the form always offers Edit/);
+  assert.match(commands, /Edit has no set limit on rounds/);
 
   const r = session({}, 'sharpen this');
   const proj = r.proj;

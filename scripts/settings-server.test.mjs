@@ -344,7 +344,10 @@ test('save round-trips context_cap and brainstorm keys, refuses bad ones and wri
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   const before = await state();
-  assert.equal(before.plugin.pipeline.context_cap, 95000);
+  assert.equal(before.plugin.pipeline.context_cap, 180000);
+  assert.equal(before.resolved.pipeline.context_cap, 180000);
+  assert.equal(before.resolved.pipeline.context_handover, 162000);
+  assert.equal(before.resolved.pipeline.source.context_cap, 'plugin');
   assert.deepEqual(before.plugin.brainstorm, { film_script: false, debate: 'crossfire' });
   assert.deepEqual(before.resolved.brainstorm, { film_script: false, debate: 'crossfire' });
   const bad = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, brainstorm: { debate: 'duel' }, pipeline: { context_cap: 10 } } });
@@ -361,9 +364,77 @@ test('save round-trips context_cap and brainstorm keys, refuses bad ones and wri
   assert.equal(ok.status, 200);
   const { state: after } = await ok.json();
   assert.deepEqual(after.resolved.brainstorm, { film_script: true, debate: 'full_pass' });
-  assert.equal(after.resolved.roles.qa.context_cap, 95000);
-  assert.equal(after.resolved.roles.architect.context_cap, 95000);
-  assert.equal(after.resolved.pipeline.context_cap, 95000);
+  assert.equal(after.resolved.roles.qa.context_cap, 120000, 'a stored Role cap changes nothing');
+  assert.equal(after.resolved.roles.architect.context_cap, 120000);
+  assert.equal(after.resolved.roles.qa.source.context_cap, 'user');
+  assert.equal(after.resolved.pipeline.context_cap, 120000);
+  assert.equal(after.resolved.pipeline.context_handover, 108000);
+  assert.equal(after.resolved.pipeline.source.context_cap, 'user');
+  assert.equal(JSON.parse(read(s.projectFile)).aico_settings.roles.qa.context_cap, 80000, 'the stored Role cap is kept as written');
+  assert.ok(!Object.hasOwn(JSON.parse(read(s.config)).aico_settings.pipeline, 'context_handover'), 'the handover is derived, never stored');
+});
+
+const CAP_REFUSAL = 'context_cap must be a whole number from 60000 to 1000000';
+
+test('Save refuses every bad context_cap with the contract text, echoes no value and writes nothing', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const revision = (await state()).resolved.revision;
+  const hostile = [50000, 59999, 1000001, 0, -120000, 120000.5, 1e7, '120000', '12e4', ' 120000', '120000abc', '١٢٠٠٠٠', '9'.repeat(10000), null, true, [], {}, [120000]];
+  for (const level of ['user', 'project']) {
+    for (const value of hostile) {
+      const res = await post('/api/save', { revision, [level]: { version: 1, pipeline: { context_cap: value } } });
+      const shown = JSON.stringify(value).slice(0, 40);
+      assert.equal(res.status, 400, `${level} ${shown}`);
+      const { refused } = await res.json();
+      assert.ok(refused.some((r) => r === `${level} ${CAP_REFUSAL}`), `${level} ${shown}: ${refused.join(' | ').slice(0, 200)}`);
+      assert.ok(refused.every((r) => r.length < 300), 'the refusal never echoes a long value');
+      if (typeof value === 'string' && value.length > 6) assert.ok(!refused.join(' ').includes(value), 'no value echo');
+      assert.equal(read(s.config), null, `${level} ${shown}: nothing written (user)`);
+      assert.equal(read(s.projectFile), null, `${level} ${shown}: nothing written (project)`);
+    }
+  }
+});
+
+test('a stored Role context_cap is still validated: a bad one is refused with the same text, a good one is kept and has no effect', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  const revision = (await state()).resolved.revision;
+  const bad = await post('/api/save', { revision, user: { version: 1, roles: { qa: { context_cap: 50000 } } } });
+  assert.equal(bad.status, 400);
+  assert.deepEqual((await bad.json()).refused, [`user ${CAP_REFUSAL}`]);
+  assert.equal(read(s.config), null);
+  const good = await post('/api/save', { revision, user: { version: 1, roles: { qa: { context_cap: 70000 } } } });
+  assert.equal(good.status, 200);
+  const next = (await good.json()).state;
+  assert.equal(next.resolved.pipeline.context_cap, 180000);
+  assert.equal(next.resolved.roles.qa.context_cap, 180000);
+  assert.equal(JSON.parse(read(s.config)).aico_settings.roles.qa.context_cap, 70000);
+});
+
+test('Save accepts the range ends, resolves project over user and never stores the derived handover', async (t) => {
+  const s = sandbox(t);
+  const { post, state } = await start(t, s);
+  let revision = (await state()).resolved.revision;
+  for (const [value, handover] of [[60000, 54000], [1000000, 900000], [123457, 111111]]) {
+    const res = await post('/api/save', { revision, user: { version: 1, pipeline: { context_cap: value } } });
+    assert.equal(res.status, 200, String(value));
+    const next = (await res.json()).state;
+    assert.equal(next.resolved.pipeline.context_cap, value);
+    assert.equal(next.resolved.pipeline.context_handover, handover);
+    revision = next.resolved.revision;
+  }
+  const both = await post('/api/save', { revision, user: { version: 1, pipeline: { context_cap: 150000 } }, project: { version: 1, pipeline: { context_cap: 120000 } } });
+  assert.equal(both.status, 200);
+  const won = (await both.json()).state;
+  assert.equal(won.resolved.pipeline.context_cap, 120000);
+  assert.equal(won.resolved.pipeline.source.context_cap, 'project');
+  assert.equal(won.resolved.roles.qa.context_cap, 120000);
+  assert.equal(won.resolved.roles.qa.source.context_cap, 'project');
+  const bad = await post('/api/save', { revision: won.resolved.revision, user: { version: 1, pipeline: { context_cap: 150000, context_handover: 135000 } } });
+  assert.equal(bad.status, 400);
+  assert.ok((await bad.json()).refused.some((r) => r.includes('context_handover') && r.includes('unknown key')));
+  assert.ok(!read(s.config).includes('context_handover'));
 });
 
 test('page has the fixed cap text, film-script and debate rows built from the existing controls', () => {
@@ -764,7 +835,7 @@ function pageState(overrides = {}) {
     plugin, user: { version: 1 }, project: { version: 1 }, hasProject: true,
     language: { user: null, project: null },
     resolved: {
-      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: r, model: 'sonnet', effort: 'medium', context_cap: 95000, source: {} }])),
+      revision: 'r1', roles: Object.fromEntries(roles.map((r) => [r, { name: r, model: 'sonnet', effort: 'medium', context_cap: 180000, source: {} }])),
       ignored: [], warnings: [], language: { tag: 'en', source: 'default' }, profile: { hasProject: true, fields: {}, options: {} }
     },
     personalities: {
@@ -915,22 +986,18 @@ test('the name input never cuts input off; an over-long entry gets a field-linke
   assert.equal(name.getAttribute('aria-invalid'), null);
 });
 
-test('the context cap shows as fixed read-only text with a row header and no cap input', async () => {
+test('the context cap row is an editable numeric field with a label, no fixed badge and no Role cap input', async () => {
   const page = loadPage(pageState());
   await settle();
   assert.equal(page.allRoles((n) => n.tagName === 'INPUT' && /-cap$/.test(n.id ?? '')).length, 0, 'no Role cap input');
   await page.ids['tab-pipeline'].fire('click');
-  const cell = walk(page.ids['panel-pipeline'], (n) => n.id === 'context-cap-fixed');
-  assert.ok(cell, 'fixed cap cell exists');
-  assert.equal(cell.tagName, 'P');
-  const box = cell.parentNode;
-  const head = box.children.find((n) => n.className === 'ctl-label');
-  assert.ok(head && head.textContent.startsWith('Context cap'), 'the row label names the setting');
-  assert.ok(head.textContent.includes('fixed'), 'the label carries the fixed tag');
-  assert.ok(cell.textContent.includes('95000'), cell.textContent);
-  assert.ok(cell.textContent.startsWith('In effect'), cell.textContent);
-  assert.equal(walkAll(box, (n) => ['INPUT', 'SELECT', 'TEXTAREA'].includes(n.tagName)).length, 0, 'no control in the cap row');
-  assert.equal(page.allRoles((n) => n.tagName === 'INPUT' && n.getAttribute('aria-label') === 'Context cap, user').length, 0);
+  const label = walk(page.ids['panel-pipeline'], (n) => n.tagName === 'LABEL' && n.textContent.startsWith('Context cap'));
+  assert.ok(label, 'the row label names the setting');
+  const input = walk(page.ids['panel-pipeline'], (n) => n.tagName === 'INPUT' && n.id === label.getAttribute('for'));
+  assert.ok(input, 'the label is tied to an input');
+  assert.equal(walk(page.ids['panel-pipeline'], (n) => n.id === 'context-cap-fixed'), null);
+  assert.ok(!label.textContent.includes('fixed'), label.textContent);
+  assert.ok(!page.ids['panel-pipeline'].textContent.includes('The context cap is fixed'));
 });
 
 test('a Save with a bad value sends nothing, marks the field and puts the error summary in the status', async () => {
@@ -1578,7 +1645,7 @@ test('Clear on the Pipeline tab also clears Plan check', async () => {
 
 function floorState() {
   const st = pageState();
-  st.resolved.roles.architect = { name: 'architect', model: 'opus', effort: 'medium', context_cap: 95000, floor: 'opus', protected: true, source: { model: 'floor' } };
+  st.resolved.roles.architect = { name: 'architect', model: 'opus', effort: 'medium', context_cap: 180000, floor: 'opus', protected: true, source: { model: 'floor' } };
   st.resolved.roles.qa = { ...st.resolved.roles.qa, floor: 'sonnet', protected: false };
   return st;
 }

@@ -97,11 +97,11 @@ test('the pasted plan-check block sits inside a code fence', () => {
   has(reference, 'inside a code fence');
 });
 
-test('plan-review keeps its Plan Gate text and adds the feature and fix rule with the fixed cap', () => {
+test('plan-review keeps its Plan Gate text and adds the feature and fix rule with the run cap', () => {
   const review = read('skills/pipeline/references/plan-review.md');
   const rule = review.split('\n').find((l) => l.startsWith('**Feature and fix.**'));
   assert.ok(rule, 'no Feature and fix rule');
   has(rule, 'no Plan Gate', 'Ship Gate summary', 'plan review: not run');
-  has(review, 'Context cap: 95000 handover 85500', '**Plan Gate block.** Under the summary show');
-  assert.ok(!review.includes('Context cap: <cap> handover <n>'));
+  has(review, '**Plan Gate block.** Under the summary show');
+  assert.doesNotMatch(review, /95000|85500/);
 });

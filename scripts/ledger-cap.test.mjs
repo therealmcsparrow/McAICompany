@@ -22,7 +22,7 @@ function run(sb, args) {
   const r = spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: sb.dir,
     encoding: 'utf8',
-    env: { PATH: process.env.PATH, CLAUDE_CONFIG_DIR: sb.claude, HOME: sb.home, USERPROFILE: sb.home }
+    env: { PATH: process.env.PATH, CLAUDE_CONFIG_DIR: sb.claude, MCSPARROW_HOME: path.join(sb.home, '.mcsparrow'), HOME: sb.home, USERPROFILE: sb.home }
   });
   return { code: r.status, out: r.stdout.trim(), err: r.stderr };
 }
@@ -40,60 +40,157 @@ function transcriptDir(sb, session = 'sess1', proj = '-proj') {
 
 const ctx = (sb, ...ids) => JSON.parse(run(sb, ['agent-ctx', ...ids, '--json']).out);
 
+// A run-state file: one start per cap given (undefined = a start without a cap), an end between segments.
+// A raw value is written as given, for the hostile cases.
+function runState(sb, ...caps) {
+  const dir = path.join(sb.dir, '.company', 'work', RUN);
+  fs.mkdirSync(dir, { recursive: true });
+  const lines = [];
+  caps.forEach((cap, i) => {
+    if (i > 0) lines.push(JSON.stringify({ v: 1, at: `2026-11-14T10:0${i}:00Z`, ev: 'end', outcome: 'abort' }));
+    lines.push(JSON.stringify({ v: 1, at: `2026-11-14T10:0${i}:30Z`, ev: 'start', ...(cap === undefined ? {} : { cap }) }));
+  });
+  fs.writeFileSync(path.join(dir, 'run-state.jsonl'), `${lines.join('\n')}\n`);
+}
+
+const settingsFile = (sb, cap) => {
+  fs.mkdirSync(path.join(sb.dir, '.company'), { recursive: true });
+  fs.writeFileSync(path.join(sb.dir, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, pipeline: { context_cap: cap } } }));
+};
+
+const add = (sb, n, step = '07', role = 'backend-engineer') => run(sb, ['add', RUN, 'step', step, role, `a${step}`, String(n)]);
+const overLine = (n, cap, step = '07', role = 'backend-engineer') => `over cap: step ${step} ${role} ctx_end ${n} > ${cap}`;
+
 // ---------- add: hostile and boundary cases first ----------
 
 test('add above the hard limit is still refused with exit 2 and writes nothing', (t) => {
   const sb = sandbox(t);
+  runState(sb, 120000);
   const r = run(sb, ['add', RUN, 'step', '01', 'architect', 'a1', '10000001']);
   assert.equal(r.code, 2);
   assert.match(r.out, /^refused:/);
   assert.equal(fs.existsSync(path.join(sb.dir, '.company', 'ledger')), false);
 });
 
-test('add at 95000 and below is unchanged: exit 0, no over cap line', (t) => {
-  const sb = sandbox(t);
-  for (const n of ['0', '85500', '95000']) {
-    const r = run(sb, ['add', RUN, 'step', '01', 'architect', 'a1', n]);
-    assert.equal(r.code, 0, n);
-    assert.equal(r.out, '', n);
+test('hostile recorded caps (string, null, negative, below 60000, above 1000000, fraction, object) fall back to 180000 and echo nothing of the value', (t) => {
+  for (const bad of ['120000', null, -1, 0, 59999, 1000001, 120000.5, '; rm -rf', { a: 1 }, [120000]]) {
+    const sb = sandbox(t);
+    runState(sb, bad);
+    const ok = add(sb, 130000);
+    assert.equal(ok.code, 0, JSON.stringify(bad));
+    assert.equal(ok.out, '', JSON.stringify(bad));
+    const r = add(sb, 180001, '08');
+    assert.equal(r.code, 4, JSON.stringify(bad));
+    assert.equal(r.out, overLine(180001, 180000, '08'), JSON.stringify(bad));
   }
-  assert.equal(ledgerLines(sb).length, 3);
 });
 
-test('add above 95000 writes the row, prints the over cap line and exits 4', (t) => {
+test('AC11: run cap 120000: 130000 writes the row, prints the over cap line with that cap and exits 4', (t) => {
   const sb = sandbox(t);
-  const r = run(sb, ['add', RUN, 'step', '07', 'backend-engineer', 'a7', '96000']);
+  runState(sb, 120000);
+  const r = add(sb, 130000);
   assert.equal(r.code, 4);
-  assert.equal(r.out, 'over cap: step 07 backend-engineer ctx_end 96000 > 95000');
+  assert.equal(r.out, overLine(130000, 120000));
   const rows = ledgerLines(sb);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].ctx_end, 96000);
-  assert.equal(run(sb, ['add', RUN, 'step', '08', 'qa', 'a8', '10000000']).code, 4);
+  assert.equal(rows[0].ctx_end, 130000);
+});
+
+test('AC11: run cap 120000: 120000 and below exit 0 with no output, 120001 exits 4', (t) => {
+  const sb = sandbox(t);
+  runState(sb, 120000);
+  for (const n of [0, 85500, 95000, 108000, 120000]) {
+    const r = add(sb, n);
+    assert.equal(r.code, 0, String(n));
+    assert.equal(r.out, '', String(n));
+  }
+  const over = add(sb, 120001);
+  assert.equal(over.code, 4);
+  assert.equal(over.out, overLine(120001, 120000));
+  assert.equal(ledgerLines(sb).length, 6);
+});
+
+test('AC11: a larger run cap lifts the line: 200000 recorded, 190000 passes, 200001 exits 4', (t) => {
+  const sb = sandbox(t);
+  runState(sb, 200000);
+  assert.equal(add(sb, 190000).code, 0);
+  const r = add(sb, 200001, '08', 'qa');
+  assert.equal(r.code, 4);
+  assert.equal(r.out, overLine(200001, 200000, '08', 'qa'));
+});
+
+test('AC8: the first recorded cap holds when a resumed segment records another', (t) => {
+  const sb = sandbox(t);
+  runState(sb, 120000, 150000);
+  assert.equal(add(sb, 130000).code, 4);
+  assert.equal(add(sb, 130000, '08').out, overLine(130000, 120000, '08'));
+});
+
+test('AC9: no run state and no stored setting: the cap is 180000, never 95000', (t) => {
+  const sb = sandbox(t);
+  for (const n of [95001, 150000, 180000]) {
+    const r = add(sb, n);
+    assert.equal(r.code, 0, String(n));
+    assert.equal(r.out, '', String(n));
+  }
+  const r = add(sb, 180001);
+  assert.equal(r.code, 4);
+  assert.equal(r.out, overLine(180001, 180000));
+});
+
+test('a run-state start without a cap falls back to 180000', (t) => {
+  const sb = sandbox(t);
+  runState(sb, undefined);
+  assert.equal(add(sb, 150000).code, 0);
+  assert.equal(add(sb, 180001).out, overLine(180001, 180000));
+});
+
+test('no run state: the current pipeline.context_cap setting applies', (t) => {
+  const sb = sandbox(t);
+  settingsFile(sb, 150000);
+  assert.equal(add(sb, 150000).code, 0);
+  assert.equal(add(sb, 150001).out, overLine(150001, 150000));
+});
+
+test('a recorded cap beats the current setting', (t) => {
+  const sb = sandbox(t);
+  settingsFile(sb, 150000);
+  runState(sb, 120000);
+  assert.equal(add(sb, 130000).out, overLine(130000, 120000));
 });
 
 test('add above the cap with a bad other field is a refusal, not exit 4', (t) => {
   const sb = sandbox(t);
-  const r = run(sb, ['add', RUN, 'bogus', '07', 'qa', 'a7', '96000']);
+  runState(sb, 120000);
+  const r = run(sb, ['add', RUN, 'bogus', '07', 'qa', 'a7', '130000']);
   assert.equal(r.code, 2);
   assert.equal(fs.existsSync(path.join(sb.dir, '.company', 'ledger')), false);
 });
 
 // ---------- report ----------
 
-test('report text ends with an over cap line and report --json keeps its keys', (t) => {
+test('report text ends with an over cap line for the run cap and report --json adds cap', (t) => {
   const sb = sandbox(t);
-  assert.equal(run(sb, ['add', RUN, 'step', '01', 'architect', 'a1', '1000']).code, 0);
+  runState(sb, 120000);
+  assert.equal(add(sb, 1000, '01', 'architect').code, 0);
   const none = run(sb, ['report', RUN]);
   assert.equal(none.code, 0);
   assert.ok(!/over cap/.test(none.out), none.out);
-  const before = run(sb, ['report', RUN, '--json']).out;
-  assert.equal(run(sb, ['add', RUN, 'step', '02', 'qa', 'a2', '96000']).code, 4);
-  assert.equal(run(sb, ['add', RUN, 'step', '03', 'qa', 'a3', '99000']).code, 4);
+  assert.equal(add(sb, 119000, '02', 'qa').code, 0);
+  assert.equal(add(sb, 121000, '03', 'qa').code, 4);
+  assert.equal(add(sb, 130000, '04', 'qa').code, 4);
   const text = run(sb, ['report', RUN]).out.split('\n');
-  assert.ok(text.includes('over cap: 2 steps (max 99000)'), text.join('|'));
+  assert.ok(text.includes('over cap: 2 steps (max 130000)'), text.join('|'));
   const json = JSON.parse(run(sb, ['report', RUN, '--json']).out);
-  assert.deepEqual(Object.keys(json), ['v', 'run', 'rows', 'totals', 'per_ac', 'not_reconciled', 'warnings']);
-  assert.equal(JSON.parse(before).rows.length, 1);
+  assert.deepEqual(Object.keys(json).sort(), ['cap', 'not_reconciled', 'per_ac', 'rows', 'run', 'totals', 'v', 'warnings']);
+  assert.equal(json.cap, 120000);
+});
+
+test('report --json cap is 180000 with no recorded cap, and 95001 is not over cap in the text', (t) => {
+  const sb = sandbox(t);
+  assert.equal(add(sb, 95001, '01', 'qa').code, 0);
+  assert.equal(JSON.parse(run(sb, ['report', RUN, '--json']).out).cap, 180000);
+  assert.ok(!/over cap/.test(run(sb, ['report', RUN]).out));
 });
 
 // ---------- agent-ctx ----------

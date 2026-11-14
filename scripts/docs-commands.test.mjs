@@ -53,9 +53,10 @@ describe('reference', () => {
     assert.doesNotMatch(text, /nothing leaves/i);
   });
 
-  it('context cap is fixed at 95000 and 85500', async () => {
-    assert.match(text, /fixed at 95000/);
-    assert.ok(text.includes('85500'));
+  it('context cap is a setting: default 180000, handover 162000, no old numbers', async () => {
+    assert.match(text, /180000/);
+    assert.ok(text.includes('162000'));
+    assert.doesNotMatch(text, /fixed at 95000|95000|85500/);
     assert.doesNotMatch(text, /Default 150000/);
   });
 

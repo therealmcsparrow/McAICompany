@@ -52,7 +52,8 @@ test('the pipeline dispatch block follows the canonical order', () => {
 
 test('the pipeline dispatch block carries Context cap: and Review depth: as in v4', () => {
   const b = stepBlock().join('\n');
-  assert.match(b, /^Context cap: 95000 handover 85500/m);
+  assert.match(b, /^Context cap: <[a-z-]+> handover <[a-z-]+>/m);
+  assert.doesNotMatch(b, /95000|85500/);
   assert.match(b, /^Review depth: <full \| standard> +# code-reviewer only/m);
   assert.match(b, /^Review format: pilot +# code-reviewer and senior-engineer compliance, only when pipeline\.review_format is pilot/m);
   assert.match(b, /^Role skills: <names \| none> +# every Role/m);
@@ -83,14 +84,16 @@ test('the order is described as fixed for reading, with no cache claim', () => {
 });
 
 test('Setup fixes the context cap once; it lives only here', () => {
-  has(pipeline, '**Context cap (§1.7)**', 'Context cap: 95000 handover 85500', 'the Role never computes');
+  has(pipeline, '**Context cap (§1.7)**', "`run-state show '<slug>' --json`", '`pipeline.context_cap`', '`plan-tasks check|begin --handover`', 'the Role never computes');
+  assert.doesNotMatch(pipeline, /no settings read|fixed for every Role/);
 });
 
-test('handover follows the Context cap line for Roles; the Lead uses the same fixed cap with automatic hand-over', () => {
+test('handover follows the Context cap line for Roles; the Lead uses the run cap with automatic hand-over', () => {
   has(pipeline, '`status: handover` → the Role reached the handover point of its `Context cap:`');
   assert.doesNotMatch(pipeline, /hit the 150k context budget/);
   assert.doesNotMatch(pipeline, /Your own budget is 150k/);
-  has(pipeline, '95000', '85500', 'references/lead-handover.md');
+  has(pipeline, 'references/lead-handover.md', '`ctx_end <n> > <cap>`');
+  assert.doesNotMatch(pipeline, /95000|85500/);
 });
 
 test('review depth is computed per dispatch from the diff, for the code-reviewer only', () => {
@@ -267,8 +270,8 @@ const reviewLoop = read('skills/pipeline/references/review-loop.md');
 const idx = (text, needle) => { const i = text.indexOf(needle); assert.ok(i >= 0, `missing: ${needle}`); return i; };
 
 test('the Contract is v4.4 and the fixture is stamped with it', () => {
-  assert.match(contract, /^# Contract: dispatch-prompt v5.2$/m);
-  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '5.2');
+  assert.match(contract, /^# Contract: dispatch-prompt v5.3$/m);
+  assert.equal(read('tests/contracts/dispatch-prompt/version.txt').trim(), '5.3');
   has(contract, 'v4.1 is additive', 'v4.2 is additive', 'v4.3 is additive', 'A Role that gets a v4.0 prompt behaves as before');
 });
 

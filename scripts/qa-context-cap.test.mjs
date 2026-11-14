@@ -69,7 +69,7 @@ describe('hostile: the new parsers and lines meet bad input', () => {
 
   test('add keeps every refusal ahead of the over-cap check, through run.mjs too', () => {
     const sb = sandbox();
-    const r = viaRun(sb, 'ledger', 'add', RUN, 'step', '07', 'not a role!', 'a7', '96000');
+    const r = viaRun(sb, 'ledger', 'add', RUN, 'step', '07', 'not a role!', 'a7', '180001');
     assert.equal(r.code, 2);
     assert.match(r.out, /^refused:/);
     assert.equal(fs.existsSync(path.join(sb.dir, '.company', 'ledger')), false);
@@ -78,48 +78,100 @@ describe('hostile: the new parsers and lines meet bad input', () => {
 
 // ---------- readers of ledger output ----------
 
-const OVER_CAP_JSON = '{"v":1,"run":"cap-run","rows":[{"kind":"step","id":"04","role":"backend-engineer","agent":"a4","state":"unreconciled","tokens":null,"spend":null,"ctx_end":96000,"ms":null,"model":null},{"kind":"step","id":"05","role":"backend-engineer","agent":"a5","state":"unreconciled","tokens":null,"spend":null,"ctx_end":40000,"ms":null,"model":null}],"totals":{"spend":0,"cache_read":0,"cache_write":0,"cache_write_share":0,"by_kind":{}},"per_ac":{"spend":null,"cache_read":null},"not_reconciled":2,"warnings":[]}\n';
+const OVER = 180001;
+const OVER_CAP_JSON = { v: 1, run: 'cap-run', cap: 180000, rows: [{ kind: 'step', id: '04', role: 'backend-engineer', agent: 'a4', state: 'unreconciled', tokens: null, spend: null, ctx_end: OVER, ms: null, model: null }, { kind: 'step', id: '05', role: 'backend-engineer', agent: 'a5', state: 'unreconciled', tokens: null, spend: null, ctx_end: 40000, ms: null, model: null }], totals: { spend: 0, cache_read: 0, cache_write: 0, cache_write_share: 0, by_kind: {} }, per_ac: { spend: null, cache_read: null }, not_reconciled: 2, warnings: [] };
 
 function overCapRun(sb) {
-  assert.equal(ledger(sb, 'add', RUN, 'step', '04', 'backend-engineer', 'a4', '96000').code, 4);
+  assert.equal(ledger(sb, 'add', RUN, 'step', '04', 'backend-engineer', 'a4', String(OVER)).code, 4);
   assert.equal(ledger(sb, 'add', RUN, 'step', '05', 'backend-engineer', 'a5', '40000').code, 0);
 }
 
 describe('run.mjs and ledger exit codes', () => {
   test('run.mjs passes exit 4 and its line through unchanged', () => {
     const sb = sandbox();
-    const r = viaRun(sb, 'ledger', 'add', RUN, 'step', '04', 'backend-engineer', 'a4', '96000');
+    const r = viaRun(sb, 'ledger', 'add', RUN, 'step', '04', 'backend-engineer', 'a4', String(OVER));
     assert.equal(r.code, 4);
-    assert.equal(r.out, 'over cap: step 04 backend-engineer ctx_end 96000 > 95000\n');
+    assert.equal(r.out, `over cap: step 04 backend-engineer ctx_end ${OVER} > 180000\n`);
     assert.equal(r.err, '');
-    assert.equal(viaRun(sb, 'ledger', 'add', RUN, 'step', '05', 'qa', 'a5', '95000').code, 0);
+    assert.equal(viaRun(sb, 'ledger', 'add', RUN, 'step', '05', 'qa', 'a5', '180000').code, 0);
     assert.equal(viaRun(sb, 'ledger', 'add', RUN, 'step', '06', 'qa', 'a6', '0').code, 0);
   });
 
-  test('AC7: the report text counts over-cap Steps, report --json is byte-unchanged', () => {
+  test('AC11: the report text counts over-cap Steps, report --json adds only the run cap', () => {
     const sb = sandbox();
     overCapRun(sb);
-    assert.equal(ledger(sb, 'report', RUN, '--json').out, OVER_CAP_JSON);
+    assert.deepEqual(JSON.parse(ledger(sb, 'report', RUN, '--json').out), OVER_CAP_JSON);
     const text = ledger(sb, 'report', RUN).out.split('\n');
-    assert.ok(text.includes('over cap: 1 steps (max 96000)'), text.join('|'));
+    assert.ok(text.includes(`over cap: 1 steps (max ${OVER})`), text.join('|'));
   });
 
-  test('Cache Tax and Reflect read report --json: no key outside the allow-list appears, with or without --live', () => {
+  test('Cache Tax and Reflect read report --json: no key outside the allow-list appears (cap is the one new key), with or without --live', () => {
     const sb = sandbox();
     overCapRun(sb);
     for (const flags of [['--json'], ['--json', '--live']]) {
       const json = JSON.parse(ledger(sb, 'report', RUN, ...flags).out);
-      assert.deepEqual(Object.keys(json), ['v', 'run', 'rows', 'totals', 'per_ac', 'not_reconciled', 'warnings'], flags.join(' '));
+      assert.deepEqual(Object.keys(json).sort(), ['cap', 'not_reconciled', 'per_ac', 'rows', 'run', 'totals', 'v', 'warnings'], flags.join(' '));
+      assert.equal(json.cap, 180000);
       assert.deepEqual(Object.keys(json.totals), ['spend', 'cache_read', 'cache_write', 'cache_write_share', 'by_kind']);
       assert.deepEqual(Object.keys(json.rows[0]), ['kind', 'id', 'role', 'agent', 'state', 'tokens', 'spend', 'ctx_end', 'ms', 'model']);
-      assert.ok(!/over|cap_|peak/i.test(JSON.stringify(Object.keys(json))));
+      assert.ok(!/over|cap_|peak/i.test(JSON.stringify(Object.keys(json).filter((k) => k !== 'cap'))));
     }
   });
 
-  test('AC7: a run without over-cap Steps prints no over cap line (committed token-ledger v1.8 text)', () => {
+  test('a run without over-cap Steps prints no over cap line, even at the old 95000 cap', () => {
     const sb = sandbox();
     assert.equal(ledger(sb, 'add', RUN, 'step', '01', 'architect', 'a1', '95000').code, 0);
+    assert.equal(ledger(sb, 'add', RUN, 'step', '02', 'architect', 'a2', '180000').code, 0);
     assert.ok(!/over cap/.test(ledger(sb, 'report', RUN).out));
+  });
+});
+
+describe('the ledger and the Lead read the run cap', () => {
+  const user = (sb, pipeline) => fs.writeFileSync(path.join(sb.home, 'config.json'), JSON.stringify({ aico_settings: { version: 1, pipeline } }));
+  const runState = (sb, ...args) => node(sb, script('run-state'), args);
+
+  test('AC11: exit 4 and its line use the run cap, frozen at start', () => {
+    const sb = sandbox();
+    user(sb, { context_cap: 100000 });
+    assert.equal(runState(sb, 'start', RUN).code, 0);
+    user(sb, { context_cap: 200000 });
+    assert.equal(ledger(sb, 'add', RUN, 'step', '01', 'qa', 'a1', '100000').code, 0);
+    const r = ledger(sb, 'add', RUN, 'step', '02', 'qa', 'a2', '100001');
+    assert.equal(r.code, 4);
+    assert.equal(r.out, 'over cap: step 02 qa ctx_end 100001 > 100000\n');
+    assert.equal(JSON.parse(ledger(sb, 'report', RUN, '--json').out).cap, 100000);
+  });
+
+  test('AC11: a run with no run-state start uses the current setting', () => {
+    const sb = sandbox();
+    user(sb, { context_cap: 120000 });
+    assert.equal(ledger(sb, 'add', RUN, 'step', '01', 'qa', 'a1', '120000').code, 0);
+    const r = ledger(sb, 'add', RUN, 'step', '02', 'qa', 'a2', '120001');
+    assert.equal(r.code, 4);
+    assert.equal(r.out, 'over cap: step 02 qa ctx_end 120001 > 120000\n');
+  });
+
+  test('AC11: a bad stored cap in settings leaves the ledger at 180000', () => {
+    const sb = sandbox();
+    user(sb, { context_cap: '120000' });
+    assert.equal(ledger(sb, 'add', RUN, 'step', '01', 'qa', 'a1', '150000').code, 0);
+    assert.equal(ledger(sb, 'add', RUN, 'step', '02', 'qa', 'a2', '180001').code, 4);
+  });
+
+  test('AC10: the Lead reading is marked over cap against the run cap, not a fixed 95000', () => {
+    const lead = script('lead-handover');
+    const sb = sandbox();
+    user(sb, { context_cap: 60000 });
+    const dir = path.join(sb.home, '.claude', 'projects', 'p1');
+    fs.mkdirSync(dir, { recursive: true });
+    const at = new Date(Date.now() - 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    fs.writeFileSync(path.join(sb.work, 'run-state.jsonl'), `${JSON.stringify({ v: 1, at, ev: 'start' })}\n`);
+    const file = path.join(dir, 'session.jsonl');
+    const usage = { input_tokens: 1000, cache_creation_input_tokens: 4000, cache_read_input_tokens: 80000, output_tokens: 500 };
+    fs.writeFileSync(file, `${[{ type: 'user', message: { role: 'user', content: 'hello' } }, { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }], usage } }].map((r) => JSON.stringify(r)).join('\n')}\n`);
+    node(sb, lead, ['measure'], { input: JSON.stringify({ hook_event_name: 'Stop', transcript_path: file }) });
+    const read = node(sb, lead, ['read', RUN]).out.split('\n');
+    assert.ok(read.includes('lead peak 85500 over cap'), read.join('|'));
   });
 });
 
@@ -358,12 +410,12 @@ const TRACE = {
   AC2: [['scripts/context-cap-text.test.mjs', 'a Step is never resumed']],
   AC3: [['scripts/step-split.test.mjs', 'a 3000-line diff splits into 3 groups'], ['scripts/context-cap-text.test.mjs', 'one Step per review or Fix group']],
   AC4: [['scripts/step-split-fix.test.mjs', '11 blockers in 2 areas become groups of at most 8'], ['scripts/context-cap-text.test.mjs', 'one Step per review or Fix group']],
-  AC5: [['scripts/ledger-cap.test.mjs', 'add above 95000 writes the row, prints the over cap line and exits 4'], ['scripts/qa-context-cap.test.mjs', 'run.mjs passes exit 4']],
+  AC5: [['scripts/ledger-cap.test.mjs', 'AC11: run cap 120000: 130000 writes the row, prints the over cap line with that cap and exits 4'], ['scripts/qa-context-cap.test.mjs', 'run.mjs passes exit 4']],
   AC6: [['scripts/context-cap-text.test.mjs', 'ledger exit 4 routes to one fresh check Step'], ['scripts/qa-context-cap.test.mjs', 'the check Step after an exit-4 handover Step']],
-  AC7: [['scripts/ledger-cap.test.mjs', 'report text ends with an over cap line'], ['scripts/qa-context-cap.test.mjs', 'AC7: the report text counts over-cap Steps']],
+  AC7: [['scripts/ledger-cap.test.mjs', 'report text ends with an over cap line for the run cap'], ['scripts/qa-context-cap.test.mjs', 'AC11: the report text counts over-cap Steps']],
   AC8: [['scripts/lead-context.test.mjs', 'writes ctx, peak and time'], ['scripts/qa-context-cap.test.mjs', 'Stop, PreCompact and SessionStart in a row']],
-  AC9: [['mods/test/savvy-ctx.test.tsx', 'a running agent at 90000 tokens shows ctx 90.0k near cap']],
-  AC10: [['scripts/ctx-row-lib.test.mjs', 'ctxCell: plain, near cap past 85500, over cap past 95000'], ['mods/test/savvy-ctx.test.tsx', 'a count past 95000 shows over cap']],
+  AC9: [['mods/test/savvy-ctx.test.tsx', 'a running agent at 110000 tokens shows ctx 110.0k near cap']],
+  AC10: [['scripts/ctx-row-lib.test.mjs', 'AC11: ctxCell with run cap 120000 and handover 108000: near cap past 108000, over cap past 120000'], ['mods/test/savvy-ctx.test.tsx', 'a count past the run cap 120000 shows over cap']],
   AC11: [['scripts/ledger-cap.test.mjs', 'agent-ctx refuses hostile ids'], ['mods/test/savvy-ctx.test.tsx', 'failures draw ctx ? and never block the pane']],
   AC12: [['scripts/qa-context-cap.test.mjs', 'check.mjs --drift reports 0 errors']],
   AC13: [['scripts/context-cap-text.test.mjs', 'Ship Gate shows over cap and the Lead peak'], ['scripts/lead-context.test.mjs', 'read prints ctx and peak, with over cap past CAP']],

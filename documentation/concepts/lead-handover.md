@@ -1,10 +1,10 @@
 # Lead hand-over
 
 ## In short
-The Lead can run out of room, just like any Role. At 85500 tokens aico writes a Lead Handoff file and freezes that session. You start a new session with one command, and it continues from the file. No setup is needed.
+The Lead can run out of room, just like any Role. At the run's hand-over point (162000 tokens at the default cap of 180000) aico writes a Lead Handoff file and freezes that session. You start a new session with one command, and it continues from the file. No setup is needed.
 
 ## How it works
-1. At 85500 tokens, at a clean point, a hook writes the Lead Handoff.
+1. At the hand-over point, at a clean point, a hook writes the Lead Handoff.
 2. If a Step is running, no new Step starts; the Handoff is written after it ends.
 3. The frozen Lead calls `lead_new_session` or shows you a command. Run it in the product folder, and close the old session.
 4. The new session starts from that file, reading only a short resume page before its first Step so it keeps room to work, and an open Gate or form is shown again.
