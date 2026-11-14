@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-hook.md v1
+// contract: docs/contracts/mod-hook.md v1.1
 // The hook engine: one process per hook call. Reads one hook payload on stdin, checks the pins, normalizes the
 // event, runs the rule table in one worker and prints one verdict. This file reads nothing from hooks/lib until
 // the pins match, so a changed engine file is never loaded.
@@ -18,6 +18,10 @@ const MAX_FIXTURE_BYTES = 64 * 1024;
 const FIXED = ['hooks/rules.json', 'hooks/hooks.json', 'hooks/schema/hook-fields.json', 'company/model-floor.json'];
 const FOLDERS = [['hooks/lib', /\.mjs$/], ['hooks/rules', /\.mjs$/], ['hooks/manifests', /\.json$/]];
 
+const REBUILD_MSG = {
+  floor: 'snapshot rebuild failed: model floor file unreadable; fix: reinstall the aico plugin; escape: restart the Lead with AICO_GUARDS=off',
+  settings: 'snapshot rebuild failed: settings invalid; fix: repair the aico settings files (config.json, .company/settings.json); escape: restart the Lead with AICO_GUARDS=off'
+};
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -174,6 +178,8 @@ async function main() {
     let drift = event.drift.length > 0;
     if (drift) notices.push(`aico guards: hook payload changed: ${event.drift.join(', ')}; guards deny, savers are off`);
     const prov = snap.buildSnapshot({ pluginRoot: ROOT, mcsHome, root, manifests, drift: false });
+    // The snapshot is written before the fixture check, so a self-exit mid-check leaves a valid file, not none.
+    if (prov) snap.writeLead(snapCtx, drift ? { ...prov, drift: true } : prov);
     if (prov && !tableError) {
       const failed = await checkFixtures({ rows, prov, ctx, run, ev });
       if (failed.length > 0) { drift = true; notices.push(`aico guards: fixture check failed for ${failed.join(', ')}; guards deny, savers are off`); }
@@ -200,7 +206,12 @@ async function main() {
   const off = guardsOff && event.session === 'lead';
   if (off) await eff.recordGuardsOff(event, root);
   const guardRows = tableError ? [] : rows.filter((r) => r.kind === 'guard' && applies(r, event));
-  const s = snap.readSnapshot(snapCtx, event);
+  let s = snap.readSnapshot(snapCtx, event);
+  let rebuildCause = null;
+  if (!off && !tableError && guardRows.length > 0 && !s.ok) {
+    const rb = snap.rebuildSnapshot(snapCtx, event, { pluginRoot: ROOT, manifests });
+    if (rb.ok) s = { ok: true, snapshot: rb.snapshot }; else rebuildCause = rb.cause;
+  }
   const notes = [];
   let denied = null;
   const extra = {};
@@ -208,7 +219,7 @@ async function main() {
 
   if (!off) {
     if (tableError) fail('table-invalid', 'deny', 'the rule table cannot be read');
-    else if (guardRows.length > 0 && !s.ok) fail('snapshot-invalid', 'deny', 'no valid settings snapshot');
+    else if (guardRows.length > 0 && !s.ok) fail('snapshot-invalid', 'deny', REBUILD_MSG[rebuildCause] ?? REBUILD_MSG.settings);
     else if (guardRows.length > 0 && (s.snapshot.drift || event.drift.length > 0)) fail('hook-payload-changed', 'deny', event.drift.length > 0 ? event.drift.join(', ') : 'the session start check failed');
   }
   const applyEff = async (v) => { if (v.effect) Object.assign(extra, (await eff.applyEffect(v, event, root)).extra); };
