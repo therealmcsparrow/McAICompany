@@ -178,11 +178,25 @@ test('AC4 fixtures: synthetic PreToolUse payloads of the allow-list, no real ses
     assert.ok(!('agent_id' in j) || /^[A-Za-z0-9_-]+$/.test(j.agent_id));
   }
 });
+// Directories the host would probe for a command: each word that is a directory under the
+// repo root, or under a `-C` / `cd` target.
+function probeDirs(command) {
+  const toks = (command.match(/"[^"]*"|'[^']*'|[^\s;&|(){}]+/g) ?? []).map((t) => t.replace(/^["']|["']$/g, ''));
+  const bases = [''];
+  toks.forEach((t, i) => { if ((t === '-C' || t === 'cd') && toks[i + 1]) bases.push(toks[i + 1]); });
+  const found = new Set();
+  for (const t of toks) {
+    for (const b of bases) {
+      try { if (fs.statSync(path.resolve(root, b, t)).isDirectory()) found.add(t); } catch { /* not on disk */ }
+    }
+  }
+  return [...found];
+}
 test('AC4 fixtures: judge allows each pass-* and denies each block-* with rule git-add.M-SEC1', async () => {
   const judge = await load();
   for (const f of fixtures()) {
     const j = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8'));
-    const v = await judge(ev(j.tool_input.command, { tool: j.tool_name }), SNAP);
+    const v = await judge(ev(j.tool_input.command, { tool: j.tool_name, dirs: probeDirs(j.tool_input.command) }), SNAP);
     if (f.startsWith('pass-')) assert.deepEqual(v, { v: 'allow' }, f);
     else { assert.equal(v.v, 'deny', f); assert.equal(v.rule, RULE, f); }
   }
