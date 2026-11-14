@@ -54,7 +54,9 @@ export async function capEnv({ cap, run = true, slug = SLUG } = {}) {
     const dir = t.replace(/\.jsonl$/, '');
     fs.mkdirSync(path.join(dir, 'subagents'), { recursive: true });
     const lines = [{ type: 'meta' }, row(500, true), ...(tokens === null ? [] : [row(tokens, true)])];
-    fs.writeFileSync(path.join(dir, 'subagents', `agent-${agent}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+    const file = path.join(dir, 'subagents', `agent-${agent}.jsonl`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
     return env.run(env.event('PreToolUse', { tool_name: tool, tool_input: input, transcript_path: t, agent_id: agent, agent_type: 'aico:qa', cwd, ...over }), { cwd });
   };
   out.stop = (tokens = 150000, { agent = AGENT, active = false, cwd = env.project } = {}) => {

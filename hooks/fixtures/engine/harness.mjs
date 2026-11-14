@@ -42,6 +42,11 @@ function buildTemplate() {
   }
   if (fs.existsSync(path.join(REPO, 'mods', 'lib'))) fs.cpSync(path.join(REPO, 'mods', 'lib'), path.join(t, 'mods', 'lib'), { recursive: true });
   if (fs.existsSync(path.join(REPO, 'hooks', 'lib'))) fs.cpSync(path.join(REPO, 'hooks', 'lib'), path.join(t, 'hooks', 'lib'), { recursive: true });
+  // mods/lib/context-cap.mjs imports the cap rule.
+  if (fs.existsSync(path.join(REPO, 'hooks', 'rules', 'cap.mjs'))) {
+    fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'cap.mjs'), path.join(t, 'hooks', 'rules', 'cap.mjs'));
+  }
   fs.mkdirSync(path.join(t, 'company'), { recursive: true });
   fs.copyFileSync(path.join(REPO, 'company', 'model-floor.json'), path.join(t, 'company', 'model-floor.json'));
   template = t;
