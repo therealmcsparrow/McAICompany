@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Edit","tool_input":{"file_path":".company/settings.json","old_string":"a","new_string":"b"},"permission_mode":"default"}

@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Bash","tool_input":{"command":"node \"~/.claude/plugins/cache/aico/aico/0.39.0/scripts/settings.mjs\" serve"},"permission_mode":"default"}
