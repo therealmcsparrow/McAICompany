@@ -21,12 +21,12 @@ const parallel = read('skills/pipeline/references/parallel.md');
 
 // No script reads the line: the Role reads it from the prose rule, so the test pins that rule text only.
 test('the contract rule for malformed cap lines gives the default values plus the Nit', () => {
-  has(contract, 'not two integers', '`<n>` > `<cap>`', 'cap 180000, handover at 162000, and a Nit `invalid Context cap`', 'at most 35 characters');
+  has(contract, 'not two integers', '`<n>` > `<cap>`', /cap 180000, handover at 162000( \(v5\.3\))?, and a Nit `invalid Context cap`/, 'at most 35 characters');
   has(handoff, 'Absent → cap 180000, handover at 162000', 'Malformed → the same, plus a Nit `invalid Context cap`');
 });
 
 test('absent cap line reads 180000 and 162000, not the old fixed pair', () => {
-  has(contract, '→ cap 180000, handover at 162000.');
+  has(contract, /→ cap 180000, handover at 162000( \(v5\.3\))?\./);
   hasNot(contract, '→ cap 95000, handover at 85500.');
   hasNot(handoff, 'Absent → cap 95000', /always `95000 handover 85500`/, /150000|120000/);
 });
@@ -35,7 +35,7 @@ test('Setup item 8 takes the run cap from run-state and no longer states a fixed
   const item8 = pipeline.split('\n').find((l) => l.startsWith('8. **Context cap'));
   assert.ok(item8, 'Setup item 8 exists');
   has(item8, 'run-state show', 'handover', 'pipeline.context_cap', '`cap`');
-  hasNot(item8, OLD_LINE, 'every Role and Risk tier', 'no settings read', /floor\(.*0\.8/);
+  hasNot(item8, OLD_LINE, 'no settings read', /floor\(.*0\.8/);
   hasNot(pipeline, 'roles.<role>.context_cap');
 });
 

@@ -129,7 +129,7 @@ describe('leftover sweep over tracked files', () => {
 });
 
 describe('both Contracts', () => {
-  const VERSION = { 'aico-mods': 'v2.0', 'aico-settings': 'v2.1' };
+  const VERSION = { 'aico-mods': 'v2.1', 'aico-settings': 'v2.2' };
   for (const [rel, name] of [['docs/contracts/aico-mods.md', 'aico-mods'], ['docs/contracts/aico-settings.md', 'aico-settings']]) {
     test(`${name} is at ${VERSION[name]} with a v2.0 line in its history`, () => {
       const text = read(rel);

@@ -310,7 +310,7 @@ describe('per-session reading', () => {
     assert.equal(o.peak, 147000);
     const read = main(['read', fx.slug], fx.root, {}).out.split('\n');
     assert.ok(read.includes('lead ctx unknown'), read.join('|'));
-    assert.ok(read.includes('lead peak 147000 over cap'));
+    assert.ok(read.includes('lead peak 147000'), read.join('|')); // 147000 is under the 180000 default run cap (lead-handover v1.2 reads the run's cap)
     assert.deepEqual(JSON.parse(main(['ctx', fx.slug, '--json'], fx.root, {}).out), { v: 1, ctx: null, peak: 147000, at: o.at, ttl: null });
   });
 

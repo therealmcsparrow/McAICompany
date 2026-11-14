@@ -39,9 +39,9 @@ test('worktrees.md cites join-project.md', () => {
   assert.match(read('skills/pipeline/references/worktrees.md'), CITE);
 });
 
-test('dispatch-prompt Contract is v5.2 and cites join-project.md for the project: line', () => {
+test('dispatch-prompt Contract is v5.3 and cites join-project.md for the project: line', () => {
   const t = read('docs/contracts/dispatch-prompt.md');
-  assert.match(t.split('\n')[0], /^# Contract: dispatch-prompt v5\.2$/);
+  assert.match(t.split('\n')[0], /^# Contract: dispatch-prompt v5[.]3$/);
   assert.match(t, CITE);
   assert.match(t, /project: <ProjectID>/);
 });

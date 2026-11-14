@@ -33,12 +33,12 @@ function* files(dir) {
   }
 }
 
-test('the index reads handoff as major 2, minor 6, and version.txt holds 2.6', () => {
+test('the index reads handoff as major 2, minor 7, and version.txt holds 2.7', () => {
   const h = buildIndex(ROOT).get('handoff');
   assert.equal(h.major, 2);
-  assert.equal(h.minor, 6);
-  assert.equal(read('tests/contracts/handoff/version.txt').trim(), '2.6');
-  assert.equal(read('docs/contracts/handoff.md').split('\n')[0], '# Contract: handoff v2.6');
+  assert.equal(h.minor, 7);
+  assert.equal(read('tests/contracts/handoff/version.txt').trim(), '2.7');
+  assert.equal(read('docs/contracts/handoff.md').split('\n')[0], '# Contract: handoff v2.7');
 });
 
 test('the repo has no handoff drift', () => {
@@ -65,11 +65,11 @@ const withCite = cite => `---\nstep: 05\nrole: backend-engineer\ntask: t\nstatus
 
 test('a handoff cite is stale below or above v2.1 and passes at v2.0 and v2.1', () => {
   const index = buildIndex(ROOT);
-  for (const cite of ['handoff v1.2', 'handoff v1.3', 'handoff v2.7']) {
+  for (const cite of ['handoff v1.2', 'handoff v1.3', 'handoff v2.8']) {
     assert.deepEqual(lint(withCite(cite), { index }).errors.filter(e => /contracts cite/.test(e)),
-      [`frontmatter: contracts cite ${cite} is stale, current v2.6`], cite);
+      [`frontmatter: contracts cite ${cite} is stale, current v2.7`], cite);
   }
-  for (const ok of ['handoff v2.0', 'handoff v2.1', 'handoff v2.2', 'handoff v2.3', 'handoff v2.4', 'handoff v2.5', 'handoff v2.6']) assert.deepEqual(lint(withCite(ok), { index }).errors, []);
+  for (const ok of ['handoff v2.0', 'handoff v2.1', 'handoff v2.2', 'handoff v2.3', 'handoff v2.4', 'handoff v2.5', 'handoff v2.6', 'handoff v2.7']) assert.deepEqual(lint(withCite(ok), { index }).errors, []);
 });
 
 test('the Contract carries the migration section and no longer calls part 5 a minor bump', () => {

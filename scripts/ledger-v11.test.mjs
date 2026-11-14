@@ -203,7 +203,9 @@ test('report output for v1 ledgers matches the v1 script byte for byte', (t) => 
   for (const args of argLists) {
     const before = spawnSync(process.execPath, [baseScript, ...args], { cwd: sb.dir, encoding: 'utf8', env });
     const after = spawnSync(process.execPath, [script, ...args], { cwd: sb.dir, encoding: 'utf8', env });
-    assert.equal(after.stdout, before.stdout, args.join(' '));
+    // token-ledger v1.13 adds the top-level `cap` key to report --json; everything else stays byte-identical
+    const norm = (s) => (args.includes('--json') ? s.replace(/,"cap":\d+\}(\r?\n)?$/, '}$1') : s);
+    assert.equal(norm(after.stdout), before.stdout, args.join(' '));
     assert.equal(after.status, before.status, args.join(' '));
   }
 });
