@@ -105,7 +105,7 @@ const isDirIn = (t, cwd) => {
   try { return fs.statSync(path.resolve(cwd || process.cwd(), t)).isDirectory(); } catch { return false; }
 };
 
-const CD_WORDS = new Set(['cd', 'pushd', 'chdir', 'set-location', 'sl']);
+const CD_WORDS = new Set(['cd', 'pushd', 'chdir', 'set-location', 'sl', 'push-location']);
 const MAX_CWDS = 8;
 
 // Path-like tokens, plus bare tokens (and the rest of a `:/x` pathspec) that name a directory under cwd
@@ -121,7 +121,11 @@ function shellTokens(command, cwd) {
   };
   const follow = (t) => {
     const next = [];
-    for (const c of cwds) if (isDirIn(t, c)) next.push(path.resolve(c || process.cwd(), t));
+    for (const c of cwds) {
+      if (state.probes >= MAX_SHELL_PATHS) { state.limited = true; break; }
+      state.probes++;
+      if (isDirIn(t, c)) next.push(path.resolve(c || process.cwd(), t));
+    }
     if (next.length === 0) { state.limited = true; return; }
     for (const n of next) if (cwds.length < MAX_CWDS && !cwds.includes(n)) cwds.push(n);
   };

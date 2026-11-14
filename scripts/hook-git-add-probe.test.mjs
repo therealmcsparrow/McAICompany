@@ -55,6 +55,19 @@ test('long commit message then -- <dir> denies; named file passes', () => withRe
   assert.equal(await verdict(`git commit -m "${words}"`, cwd), 'allow');
 }));
 
+test('Push-Location and pushd variants are followed like cd', () => withRepo(async (tmp) => {
+  assert.equal(await verdict('Push-Location repo/hooks; git add lib', tmp), 'deny');
+  assert.equal(await verdict('push-location repo/hooks; git add lib', tmp), 'deny');
+  assert.equal(await verdict('pushd repo/hooks && git add lib', tmp), 'deny');
+}));
+
+test('a huge command of cd targets stays fast and fails closed', () => withRepo(async (tmp) => {
+  const cds = Array.from({ length: 8000 }, () => 'cd repo; cd ..;').join(' ');
+  const start = Date.now();
+  assert.equal(await verdict(`${cds} git add scripts`, tmp), 'deny');
+  assert.ok(Date.now() - start < 1500);
+}));
+
 test('an unreadable -C or cd target fails closed', () => withRepo(async (tmp) => {
   assert.equal(await verdict('git -C missing add scripts', tmp), 'deny');
   assert.equal(await verdict('git -C "$R" add scripts', tmp), 'deny');
