@@ -61,3 +61,26 @@ test('R-2 a renamed real field in a cap.M1 fixture still fails the session start
   const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'hook-host.mjs')], { input, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
   assert.match(JSON.parse(r.stdout).systemMessage, /fixture check failed for cap.M1/);
 });
+
+// A host without the fixture's drive (CI Windows has no Z:, POSIX reads `z:/x` as a cwd-relative name) must judge a pass fixture
+// the same as a dev machine, so a pass fixture carries no drive-letter paths and its run folder is resolved against cwd.
+test('R-2 cap.M1 pass fixtures carry no drive letter and pass the check from a cwd on any drive', () => {
+  const dir = path.join(ROOT, 'hooks', 'fixtures', 'cap.M1');
+  for (const n of fs.readdirSync(dir).filter((x) => /^pass-.+\.json$/.test(x))) {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'));
+    if (j.tool_name !== 'Write') continue; // only a Write is judged by its path against the run folder
+    for (const v of [j.tool_input?.file_path, j._synthetic?.run?.folder]) {
+      if (typeof v === 'string') assert.doesNotMatch(v, /^[a-z]:/i, `${n}: ${v}`);
+    }
+  }
+  const root = copyRoot();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-fx-'));
+  homes.push(home);
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-fxcwd-'));
+  homes.push(cwd);
+  const input = JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'fx', transcript_path: 'fx.jsonl', cwd, source: 'startup' });
+  const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'hook-host.mjs')], { input, cwd, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
+  let msg = '';
+  try { msg = JSON.parse(r.stdout).systemMessage ?? ''; } catch { /* silent */ }
+  assert.doesNotMatch(msg, /fixture check failed/, msg);
+});

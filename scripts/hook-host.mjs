@@ -306,7 +306,10 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
           fe = { ...fe };
           if (syn.session === 'lead' || syn.session === 'step') fe.session = syn.session;
           if (syn.tokens && typeof syn.tokens === 'object') fe.tokens = { state: syn.tokens.state, total: syn.tokens.total };
-          if (syn.run !== undefined) fe.run = syn.run;
+          // A relative fixture run folder is resolved against the payload cwd the way its paths are, so the same fixture
+          // reads alike on every host (no drive letter in the data).
+          const rf = syn.run && typeof syn.run.folder === 'string' && !path.isAbsolute(syn.run.folder) ? ev.realOf(syn.run.folder, norm.cwd) : null;
+          if (syn.run !== undefined) fe.run = rf ? { ...syn.run, folder: rf } : syn.run;
           fe = Object.freeze(fe);
         }
         // A rule may have several rows (one per event); a fixture is judged only by the row(s) of its own event.
