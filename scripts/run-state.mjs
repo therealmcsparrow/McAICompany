@@ -55,7 +55,7 @@ const EXTRA = { start: [], ceo: ['gate', 'n'], sub: ['role', 'id', 'phase'], wav
 // Optional keys per event.
 const OPTIONAL = { start: ['aico', 'cap'], sub: ['session'] };
 
-// A cap is a whole number inside the settings range; anything else is not a cap.
+// A cap is a whole number inside the settings range; anything else is not a cap. A start record with a bad cap is kept and its cap ignored.
 export const validCap = n => Number.isSafeInteger(n) && n >= CONTEXT_CAP_MIN && n <= CONTEXT_CAP_MAX;
 
 const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -129,7 +129,7 @@ function validRecord(o) {
   const required = ['v', 'at', 'ev', ...EXTRA[o.ev]];
   const optional = OPTIONAL[o.ev] ?? [];
   if (!required.every(k => Object.hasOwn(o, k)) || !keys.every(k => required.includes(k) || optional.includes(k))) return false;
-  if (o.ev === 'start') return (!('aico' in o) || (typeof o.aico === 'string' && AICO_RE.test(o.aico))) && (!('cap' in o) || validCap(o.cap));
+  if (o.ev === 'start') return (!('aico' in o) || (typeof o.aico === 'string' && AICO_RE.test(o.aico)));
   if (o.ev === 'ceo') return typeof o.gate === 'string' && CEO_GATES.has(o.gate) && Number.isInteger(o.n) && o.n >= 1 && o.n <= 20;
   if (o.ev === 'sub') {
     return typeof o.role === 'string' && ROLE_RE.test(o.role) && typeof o.id === 'string' && SUB_ID_RE.test(o.id)
@@ -158,9 +158,15 @@ function readRecords(file, verified = false) {
     const n = i + 1;
     const line = lines[i];
     if (n > MAX_LINES) { out.warnings.push(`line ${n} skipped`); continue; }
-    if (line.includes('\r') || Buffer.byteLength(line, 'utf8') > MAX_LINE) { out.warnings.push(`line ${n} skipped`); continue; }
+    if (line.includes('\r')) { out.warnings.push(`line ${n} skipped`); continue; }
     let o;
     try { o = JSON.parse(line); } catch { out.warnings.push(`line ${n} skipped`); continue; }
+    // An over-long line counts only as a bare start: the run stays active, nothing else on it is read.
+    if (Buffer.byteLength(line, 'utf8') > MAX_LINE) {
+      const bare = o !== null && typeof o === 'object' && o.ev === 'start' && o.v === 1 && typeof o.at === 'string' ? { v: 1, at: o.at, ev: 'start' } : null;
+      if (bare && validRecord(bare)) out.records.push(bare); else out.warnings.push(`line ${n} skipped`);
+      continue;
+    }
     if (!validRecord(o)) { out.warnings.push(`line ${n} skipped`); continue; }
     out.records.push(o);
   }
@@ -248,7 +254,7 @@ function load(root, slug, now) {
   view.steps = steps.map(({ tier, ...s }) => s);
   view.round = round;
   view.tier = ['unknown', 'low', 'medium', 'high'][tierRank];
-  const first = rec.unreadable ? undefined : rec.records.find(r => r.ev === 'start' && 'cap' in r);
+  const first = rec.unreadable ? undefined : rec.records.find(r => r.ev === 'start' && validCap(r.cap));
   if (first) { view.cap = first.cap; view.handover = handoverOf(first.cap); }
   const seg = rec.unreadable ? [] : lastSegment(rec.records);
   let activity = 0;
@@ -302,7 +308,7 @@ export function recordedCap(root, slug) {
   if (!dst || !dst.isDirectory() || !insideWork(root, partsOf(slug))) return null;
   const rec = readRecords(file);
   if (rec.unreadable) return null;
-  return rec.records.find(r => r.ev === 'start' && 'cap' in r)?.cap ?? null;
+  return rec.records.find(r => r.ev === 'start' && validCap(r.cap))?.cap ?? null;
 }
 
 // The cap a new run freezes: the resolved pipeline.context_cap, the default when settings cannot be read.
