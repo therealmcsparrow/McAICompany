@@ -12,7 +12,7 @@ Tariq, the tech researcher, checks whether an idea can be built: which libraries
 ## Technical details
 - Agent file: `agents/tech-researcher.md`
 - Default name: Tariq
-- Model: sonnet (the tech-researcher runs on Sonnet; see [Which model a Role runs on](../concepts/model-choice.md)). Effort: medium. Set the model with `roles.<role>.model` in `/aico:settings`, for example `opus`.
+- Model: opus (the tech-researcher runs on Opus; see [Which model a Role runs on](../concepts/model-choice.md)). Effort: medium. Set the model with `roles.<role>.model` in `/aico:settings`, for example `sonnet`.
 - Tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
 - Inputs: the Input Handoffs named in the dispatch. Output: one Handoff file at the Output path.
 - Researchers write only their own Handoff and never install anything.
