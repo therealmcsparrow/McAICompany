@@ -1106,7 +1106,8 @@ const ignoredUntouched = (rec) => rec.ignored && !touched.has(touchKey(rec));
 
 function setError(rec, message) {
   rec.error = message;
-  if (message) rec.control.setAttribute('aria-invalid', 'true'); else rec.control.removeAttribute('aria-invalid');
+  const host = rec.host ?? rec.control;
+  if (message) host.setAttribute('aria-invalid', 'true'); else host.removeAttribute('aria-invalid');
   rec.errEl.textContent = message;
   rec.errEl.hidden = message === '';
   describe(rec);
@@ -1117,7 +1118,8 @@ function describe(rec) {
   if (rec.countEl) ids.push(rec.countEl.id);
   if (rec.error) ids.push(rec.errEl.id);
   if (!rec.hintEl.hidden) ids.push(rec.hintEl.id);
-  if (ids.length) rec.control.setAttribute('aria-describedby', ids.join(' ')); else rec.control.removeAttribute('aria-describedby');
+  const host = rec.host ?? rec.control;
+  if (ids.length) host.setAttribute('aria-describedby', ids.join(' ')); else host.removeAttribute('aria-describedby');
 }
 function editRecord(rec) {
   if (rec.ignored) touched.add(touchKey(rec));
@@ -1179,7 +1181,9 @@ function personalityField(role, level, key, rule, ignoredPaths, off) {
   pRoles[role].recs.push(rec);
   const label = `${P_LABELS[key]}`;
   if (isText) return el('div', { class: 'ctl' }, el('label', { class: 'ctl-label', for: id }, label), control, rec.errEl, rec.hintEl);
+  // The segmented control has no role of its own, so the group wrapper carries the description and the invalid state.
   const group = el('div', { class: 'ctl', role: 'group', 'aria-labelledby': `${id}-lbl` }, el('span', { class: 'ctl-label', id: `${id}-lbl` }, label), control, rec.errEl, rec.hintEl);
+  rec.host = group;
   return group;
 }
 
