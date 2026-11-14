@@ -2,7 +2,7 @@
 // No Node import, no engine handle: the pane reads the scripts and passes their parsed JSON in.
 
 // The first aico release whose runs are guarded. Baseline runs are shipped runs whose last `meta` version is below it.
-export const GUARDS_SINCE = '0.39.0';
+export const GUARDS_SINCE = '0.40.0';
 
 const MAX_TEXT = 40;
 const MAX_BASELINE_RUNS = 10;

@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-14
+
+Rollback: node scripts/stable.mjs 0.39.0
+
 ### Added
 - **Five guards check every tool call.** Rules aico used to leave to skill text now run as hooks, in the Lead and in every Step, so a Role cannot skip them. A refused call shows a short reason with a rule ID. The first refusal of each guard shows you one note; later ones are counted. See [Guards](documentation/concepts/guards.md).
 - **Switchboard, `/aico-mods`.** One pane lists every mod and guard, switches the savers on or off and shows the last five refusals. Guards show `locked on`. It writes through aico settings only.
