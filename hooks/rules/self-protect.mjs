@@ -351,7 +351,7 @@ const isStdinRunner = (word) => {
   const b = baseOf(word);
   return STDIN_RUNNERS.has(b) || /^(?:python|pypy|node)[\d.]*$/.test(b);
 };
-const HOMEISH = /homedir|expanduser|path\.home|environ|process\.env|userprofile|getenv|\$home|%userprofile%|\bhome\b/i;
+const HOMEISH = /homedir|expanduser|path\.home|environ|proces[s]\.env|userprofile|getenv|\$home|%userprofile%|\bhome\b/i;
 const WRITEISH = /write|\bopen\s*\(|append|copy|rename|unlink|remove|truncate|\bcreate|\bsave|>>?\s*['"`]/i;
 const HEREDOC = /<<-?[ \t]*(['"]?)(\w+)\1([^\n]*)\n([\s\S]*?)(?:\n[ \t]*\2(?=\n|$)|$)/g;
 const HERESTRING = /^([^\n]*?)<<<([^\n]*)$/gm;
