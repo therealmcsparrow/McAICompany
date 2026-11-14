@@ -80,18 +80,19 @@ test('roles/README.md lists every default name', () => {
 test('aico-settings v1.3 or later keeps the v1.1 cap range, the brainstorm keys and their defaults', () => {
   const doc = read('docs/contracts/aico-settings.md');
   assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:[3-9]|\d{2,})|[2-9]\.\d+)$/m);
-  assert.equal(PIPELINE_DEFAULTS.context_cap, 95000);
-  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 95000/);
+  assert.equal(PIPELINE_DEFAULTS.context_cap, 180000);
+  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 180000/);
   assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
   assert.match(doc, /refused: context_cap must be a whole number from 60000 to 1000000/);
   assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:1[1-9]|[2-9]\d|\d{3,})|[2-9]\.\d+)$/m);
   assert.match(doc, /deprecated/);
-  assert.match(doc, /always as `95000`/);
+  assert.match(doc, /`pipeline\.context_handover`/);
+  assert.doesNotMatch(doc.slice(doc.search(/^## /m)), /always as `95000`|95000|85500/);
   assert.deepEqual(BRAINSTORM_DEFAULTS, { film_script: false, debate: 'crossfire' });
   assert.match(doc, /`brainstorm\.film_script` \| boolean; default `false`/);
   assert.match(doc, /`brainstorm\.debate` \| `crossfire \\| full_pass`; default `crossfire`/);
   assert.match(doc, /refused: brainstorm\.debate must be crossfire or full_pass/);
-  assert.match(doc, /Plugin defaults include `context_cap` 95000, `review_format` `plain`, `film_script` false and `debate` `crossfire`/);
+  assert.match(doc, /Plugin defaults include `context_cap` 180000 \(handover 162000, v2\.2\), `review_format` `plain`, `film_script` false and `debate` `crossfire`/);
   assert.equal(PIPELINE_DEFAULTS.review_format, 'plain');
   assert.match(doc, /`pipeline\.review_format` \| `plain \\| pilot`; default `plain`/);
   assert.match(doc, /refused: pipeline\.review_format must be plain or pilot/);
@@ -163,7 +164,7 @@ test('aico-settings v1.7 names pipeline.parallel_cap, its range, default, refusa
   assert.equal(PIPELINE_DEFAULTS.parallel_cap, 4);
   assert.match(doc, /\| `pipeline\.parallel_cap` \| integer 3-5; default 4 \(v1\.7\) \|/);
   assert.match(doc, /refused: pipeline\.parallel_cap must be a whole number from 3 to 5, nothing written \(v1\.7\)/);
-  assert.match(doc, /pipeline: \{fix_rounds, dispatch, parallel_cap, short_path, second_reviewer, second_reviewer_model, second_reviewer_model_effective, worktrees, context_cap, review_format, lanes\}/);
+  assert.match(doc, /pipeline: \{fix_rounds, dispatch, parallel_cap, short_path, second_reviewer, second_reviewer_model, second_reviewer_model_effective, worktrees, context_cap, context_handover, review_format, lanes, source: \{context_cap\}\}/);
   assert.match(doc, /"At most this many Steps run at once \(builders, reviewers, QA and security\)\. Plan tasks with no parallel mark, or that share a file with an earlier task, still wait their turn\. Ignored when Dispatch is sequential\."/);
   assert.match(doc, /`pipeline\.dispatch: sequential` overrides it with 1\. Absent or invalid → 4\./);
 });
@@ -179,4 +180,15 @@ test('aico-settings v1.8 names pipeline.short_path, off wins, the refusal, the p
   assert.match(doc, /Absent, invalid or no `get` JSON → `off`\./);
   assert.match(doc, /"short path off"/);
   assert.ok(!doc.includes('\r'), 'LF only');
+});
+
+test('the settings guide describes Max context as a working setting: default 180000, handover 162000, project over user, frozen at run start', () => {
+  const t = commandPage(root, 'settings');
+  const at = t.indexOf('**Max context**');
+  assert.ok(at >= 0, 'Max context entry');
+  const entry = t.slice(at, t.indexOf('\n\n', at));
+  for (const s of ['`context_cap`', '180000', '162000', '60000', '1000000']) assert.ok(entry.includes(s), `entry names ${s}`);
+  assert.match(entry, /project/i);
+  assert.match(entry, /next run|run starts|start of a run|frozen/i);
+  assert.doesNotMatch(entry, /deprecated|nothing reads|fixed text|fixed at|95000|85500/i);
 });

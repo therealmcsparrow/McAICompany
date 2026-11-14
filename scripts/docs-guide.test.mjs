@@ -26,12 +26,16 @@ test('guide has overview, one route table, a section per step', () => {
   assert.match(g, /Only the Ship Gate is left/);
 });
 
-test('cap text reads 95000 and 85500 in every place, no old cap', () => {
-  const groups = { 'documentation/start': START, 'documentation/concepts': CONCEPTS, 'GLOSSARY.md': read('GLOSSARY.md'), 'README.md': read('README.md') };
+test('cap text reads 180000 and 162000 where numbers are given, never the old 95000 and 85500, no older cap', () => {
+  const groups = { 'documentation/start': START, 'documentation/concepts': CONCEPTS, 'README.md': read('README.md') };
   for (const [f, t] of Object.entries(groups)) {
-    assert.ok(t.includes('95000'), `${f} 95000`);
-    assert.ok(t.includes('85500'), `${f} 85500`);
+    assert.ok(t.includes('180000'), `${f} 180000`);
+    assert.ok(t.includes('162000'), `${f} 162000`);
   }
+  for (const [f, t] of Object.entries({ ...groups, 'GLOSSARY.md': read('GLOSSARY.md') })) {
+    assert.doesNotMatch(t, /95000|85500|fixed cap|one fixed (context )?cap/i, `${f} old cap`);
+  }
+  assert.match(read('GLOSSARY.md'), /\*\*Context cap\*\* — [^\n]*`pipeline\.context_cap`[^\n]*180000/);
   for (const f of [...FILES, ...CONCEPT_FILES]) assert.doesNotMatch(read(f), /150000|150k|120000/, `${f} old cap`);
 });
 
@@ -40,7 +44,8 @@ test('setup page says no setup is needed and names the hard hand-over', () => {
   assert.match(t, /^# No setup needed: the hand-over point$/m);
   assert.ok(t.includes('lead_new_session'));
   assert.ok(t.includes('AICO_CONTEXT_GUARD=off'));
-  assert.ok(t.includes('85500'));
+  assert.ok(t.includes('162000'));
+  assert.ok(!t.includes('85500'));
   assert.doesNotMatch(t, /"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98500"/);
   for (const f of ['README.md', 'GLOSSARY.md', 'documentation/commands/setup.md','skills/pipeline/references/lead-handover.md']) assert.doesNotMatch(read(f), /One-time setup|"98500"|set to `98500`|= `98500`/, f);
 });
