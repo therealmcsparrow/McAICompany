@@ -5,11 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  BRAINSTORM_DEFAULTS, CONTEXT_CAP_DEFAULT, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, PLAN_CHECK_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
+  BRAINSTORM_DEFAULTS, GATE_DEFAULTS, checkLayers, resolvePersonalities, MODS_DEFAULTS, PIPELINE_DEFAULTS, PLAN_CHECK_DEFAULTS, REPROMPT_DEFAULTS, Refusal, SKILLSPECTOR_DEFAULTS, pluginDefaults, readLayer, readProfile, resolveSettings, run,
   MODEL_RANK, loadModelFloor, modelEnvLine, readClaudeVersion, templateOptions, validateLayer, writeLayer, writeProfile
 } from './settings.mjs';
 
 const script = path.join(import.meta.dirname, 'settings.mjs');
+
+// The one cap formula lives in mods/lib; loaded per test so a missing module fails that test, not the file.
+const capLib = () => import('../mods/lib/context-cap.mjs');
 
 const PROTECTED_IN_SANDBOX = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'];
 
@@ -81,13 +84,13 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
   assert.deepEqual(d.brainstorm, { film_script: false, debate: 'crossfire' });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 95000, floor: 'sonnet', protected: false, skills: [],
+    name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 180000, floor: 'sonnet', protected: false, skills: [],
     source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin', skills: 'plugin' }
   });
-  assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, second_reviewer_model_effective: 'opus' });
+  assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, second_reviewer_model_effective: 'opus', context_handover: 162000, source: { context_cap: 'plugin' } });
   assert.deepEqual(r.gates, GATE_DEFAULTS);
   assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
-  assert.equal(r.pipeline.context_cap, 95000);
+  assert.equal(r.pipeline.context_cap, 180000);
   assert.deepEqual(r.unlocked, []);
   assert.deepEqual(r.ignored, []);
   assert.deepEqual(r.warnings, []);
@@ -100,7 +103,7 @@ test('project beats user beats plugin, per field', (t) => {
   s.project({ roles: { qa: { effort: 'high' } }, pipeline: { fix_rounds: 0, lanes: { legal: 'on' } } });
   const r = resolveSettings(s.ctx);
   assert.deepEqual(r.roles.qa, {
-    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 95000, floor: 'sonnet', protected: false, skills: [],
+    name: 'Quinn', model: 'opus', effort: 'high', context_cap: 180000, floor: 'sonnet', protected: false, skills: [],
     source: { name: 'plugin', model: 'user', effort: 'project', context_cap: 'plugin', skills: 'plugin' }
   });
   assert.equal(r.pipeline.fix_rounds, 0);
@@ -227,7 +230,7 @@ test('broken config.json falls back to defaults with a warning', (t) => {
   assert.equal(r.pipeline.dispatch, 'sequential');
   assert.deepEqual(r.gates, GATE_DEFAULTS);
   assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
-  assert.equal(r.pipeline.context_cap, 95000);
+  assert.equal(r.pipeline.context_cap, 180000);
   assert.equal(r.warnings.length, 4, JSON.stringify(r.warnings));
 
   const { layer, warnings } = readLayer('user', s.ctx);
@@ -523,31 +526,159 @@ test('names refuse edge spaces and double spaces, allow combining marks, clash c
   assert.ok(resolveSettings(s.ctx).warnings.some((w) => w.includes('qa') && w.includes('security')));
 });
 
-test('context_cap is deprecated and reported 95000', (t) => {
+test('AC1: with no stored cap the cap is 180000 from the plugin and the handover is 162000', (t) => {
   const s = sandbox(t);
-  let r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.context_cap, 95000);
-  assert.equal(r.roles.qa.context_cap, 95000);
-  assert.equal(r.roles.qa.source.context_cap, 'plugin');
-  s.user({ roles: { qa: { context_cap: 200000 } }, pipeline: { context_cap: 100000 } });
-  s.project({ roles: { qa: { context_cap: 60000 } }, pipeline: { context_cap: 1000000 } });
-  r = resolveSettings(s.ctx);
-  assert.equal(r.roles.qa.context_cap, 95000);
-  assert.equal(r.roles.qa.source.context_cap, 'plugin');
-  assert.equal(r.roles.architect.context_cap, 95000);
-  assert.equal(r.pipeline.context_cap, 95000);
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.context_cap, 180000);
+  assert.equal(r.pipeline.context_handover, 162000);
+  assert.equal(r.pipeline.source.context_cap, 'plugin');
   assert.deepEqual(r.warnings, []);
-  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '95000\n');
-  assert.equal(s.cli('get', 'pipeline.context_cap').out, '95000\n');
+  assert.equal(s.cli('get', 'pipeline.context_cap').out, '180000\n');
+  assert.equal(s.cli('get', 'pipeline.context_handover').out, '162000\n');
+  assert.equal(s.cli('get', 'pipeline.source.context_cap').out, 'plugin\n');
+  const json = JSON.parse(s.cli('get').out);
+  assert.equal(json.pipeline.context_cap, 180000);
+  assert.equal(json.pipeline.context_handover, 162000);
+  assert.equal(json.pipeline.source.context_cap, 'plugin');
 });
 
-test('a stored context_cap stays on disk and is still accepted by set', (t) => {
+test('AC2: the handover is floor(cap x 0.9) in the one formula and in every resolved value', async (t) => {
+  const lib = await capLib();
+  assert.equal(lib.CONTEXT_CAP_DEFAULT, 180000);
+  assert.equal(lib.CONTEXT_CAP_MIN, 60000);
+  assert.equal(lib.CONTEXT_CAP_MAX, 1000000);
+  assert.equal(PIPELINE_DEFAULTS.context_cap, 180000);
+  for (const [cap, handover] of [[60000, 54000], [123457, 111111], [1000000, 900000]]) {
+    assert.equal(lib.handoverOf(cap), handover, String(cap));
+    const s = sandbox(t);
+    s.user({ pipeline: { context_cap: cap } });
+    const r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.context_cap, cap);
+    assert.equal(r.pipeline.context_handover, handover);
+    assert.equal(s.cli('get', 'pipeline.context_handover').out, `${handover}\n`);
+  }
+});
+
+test('AC4: project beats user beats the plugin default, with the source named', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { context_cap: 150000 } });
+  s.project({ pipeline: { context_cap: 120000 } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.context_cap, 120000);
+  assert.equal(r.pipeline.context_handover, 108000);
+  assert.equal(r.pipeline.source.context_cap, 'project');
+  assert.equal(s.cli('get', 'pipeline.source.context_cap').out, 'project\n');
+  fs.rmSync(s.projectFile);
+  r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.context_cap, 150000);
+  assert.equal(r.pipeline.context_handover, 135000);
+  assert.equal(r.pipeline.source.context_cap, 'user');
+  fs.rmSync(s.config);
+  r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.context_cap, 180000);
+  assert.equal(r.pipeline.source.context_cap, 'plugin');
+});
+
+test('AC6: every Role reports the one resolved cap and source; a stored role cap changes nothing', (t) => {
+  const s = sandbox(t);
+  s.user({ roles: { qa: { context_cap: 200000 }, architect: { context_cap: 60000 } }, pipeline: { context_cap: 150000 } });
+  s.project({ roles: { qa: { context_cap: 61000 } }, pipeline: { context_cap: 120000 } });
+  let r = resolveSettings(s.ctx);
+  for (const role of roleSet) {
+    assert.equal(r.roles[role].context_cap, 120000, role);
+    assert.equal(r.roles[role].source.context_cap, 'project', role);
+  }
+  assert.deepEqual(r.warnings, []);
+  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '120000\n');
+  assert.equal(s.cli('get', 'roles.security.context_cap').out, '120000\n');
+  fs.rmSync(s.projectFile);
+  r = resolveSettings(s.ctx);
+  for (const role of roleSet) {
+    assert.equal(r.roles[role].context_cap, 150000, role);
+    assert.equal(r.roles[role].source.context_cap, 'user', role);
+  }
+  fs.rmSync(s.config);
+  r = resolveSettings(s.ctx);
+  for (const role of roleSet) assert.equal(r.roles[role].source.context_cap, 'plugin', role);
+});
+
+test('a stored context_cap stays on disk, is accepted by writeLayer and takes effect', (t) => {
   const s = sandbox(t);
   s.user({ pipeline: { context_cap: 100000 } });
   assert.deepEqual(readLayer('user', s.ctx).layer.pipeline, { context_cap: 100000 });
   assert.deepEqual(resolveSettings(s.ctx).warnings, []);
-  assert.equal(PIPELINE_DEFAULTS.context_cap, 95000);
-  assert.equal(CONTEXT_CAP_DEFAULT, 95000);
+  writeLayer('user', { version: 1, pipeline: { context_cap: 140000 } }, s.ctx);
+  assert.equal(readLayer('user', s.ctx).layer.pipeline.context_cap, 140000);
+  assert.equal(resolveSettings(s.ctx).pipeline.context_cap, 140000);
+});
+
+const HOSTILE_CAPS = ['120000', 120000.5, 59999, 1000001, -0, Number.NaN, null, [], {}, '150000​', '​', true, -1, Infinity];
+
+test('AC3: every hostile cap is refused with the fixed text, at the pipeline and the role level', () => {
+  for (const bad of HOSTILE_CAPS) {
+    for (const layer of [{ pipeline: { context_cap: bad } }, { roles: { qa: { context_cap: bad } } }]) {
+      const reasons = validateLayer({ version: 1, ...layer }, roleSet);
+      assert.deepEqual(reasons, ['context_cap must be a whole number from 60000 to 1000000'], JSON.stringify(layer));
+    }
+  }
+  for (const ok of [60000, 150000, 180000, 1000000]) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { context_cap: ok } }, roleSet), []);
+  }
+});
+
+test('AC3: prototype keys and a stored context_handover beside a cap are unknown keys', () => {
+  const hostile = JSON.parse('{"version":1,"pipeline":{"__proto__":{"x":1},"constructor":5,"context_cap":150000}}');
+  assert.deepEqual(validateLayer(hostile, roleSet), ['pipeline.__proto__: unknown key', 'pipeline.constructor: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, pipeline: { context_cap: 150000, context_handover: 135000 } }, roleSet), ['pipeline.context_handover: unknown key']);
+  assert.deepEqual(validateLayer({ version: 1, pipeline: { source: { context_cap: 'user' } } }, roleSet), ['pipeline.source: unknown key']);
+});
+
+test('AC3: a refused save writes nothing, names no stored value and leaves the file byte-identical', (t) => {
+  const s = sandbox(t);
+  for (const bad of HOSTILE_CAPS) {
+    for (const level of ['user', 'project']) {
+      const file = level === 'user' ? s.config : s.projectFile;
+      fs.rmSync(file, { force: true });
+      assert.throws(() => writeLayer(level, { version: 1, pipeline: { context_cap: bad } }, s.ctx),
+        (e) => e instanceof Refusal && e.message === 'context_cap must be a whole number from 60000 to 1000000', `${level} ${JSON.stringify(bad)}`);
+      assert.equal(fs.existsSync(file), false, `${level} created a file`);
+      (level === 'user' ? s.user : s.project)({ pipeline: { context_cap: 150000 }, gates: { brief: 'ask' } });
+      const before = fs.readFileSync(file);
+      assert.throws(() => writeLayer(level, { version: 1, pipeline: { context_cap: bad }, gates: { brief: 'ask' } }, s.ctx), Refusal);
+      assert.deepEqual(fs.readFileSync(file), before, `${level} ${JSON.stringify(bad)}`);
+    }
+  }
+});
+
+test('AC3: a bad stored cap falls back to the level below with a warning that names the field, not the value', (t) => {
+  for (const bad of HOSTILE_CAPS) {
+    const s = sandbox(t);
+    s.user({ pipeline: { context_cap: 150000 } });
+    s.project({ pipeline: { context_cap: bad } });
+    let r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.context_cap, 150000, JSON.stringify(bad));
+    assert.equal(r.pipeline.context_handover, 135000);
+    assert.equal(r.pipeline.source.context_cap, 'user');
+    const mine = r.warnings.filter((w) => w.includes('context_cap'));
+    assert.equal(mine.length, 1, JSON.stringify(r.warnings));
+    assert.ok(mine[0].includes('pipeline.context_cap'), mine[0]);
+    assert.ok(!mine[0].includes('120000') && !mine[0].includes('​'), mine[0]);
+    s.user({ pipeline: { context_cap: bad } });
+    fs.rmSync(s.projectFile);
+    r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.context_cap, 180000, JSON.stringify(bad));
+    assert.equal(r.pipeline.source.context_cap, 'plugin');
+    assert.equal(r.warnings.filter((w) => w.includes('pipeline.context_cap')).length, 1);
+  }
+});
+
+test('AC3: a stored context_handover is dropped with a warning and never changes the derived value', (t) => {
+  const s = sandbox(t);
+  s.user({ pipeline: { context_cap: 150000, context_handover: 70000 } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.context_handover, 135000);
+  assert.ok(r.warnings.some((w) => w.includes('pipeline.context_handover')), JSON.stringify(r.warnings));
+  assert.equal(s.cli('get', 'pipeline.context_handover').out, '135000\n');
 });
 
 test('context_cap refuses anything but a whole number from 60000 to 1000000', () => {
@@ -585,8 +716,9 @@ test('a bad brainstorm or context_cap layer falls back to the level below with a
   s.project({ brainstorm: { debate: 'duel' }, pipeline: { context_cap: 5 }, roles: { qa: { context_cap: 'big' } } });
   const r = resolveSettings(s.ctx);
   assert.equal(r.brainstorm.debate, 'full_pass');
-  assert.equal(r.pipeline.context_cap, 95000);
-  assert.equal(r.roles.qa.context_cap, 95000);
+  assert.equal(r.pipeline.context_cap, 90000);
+  assert.equal(r.pipeline.source.context_cap, 'user');
+  assert.equal(r.roles.qa.context_cap, 90000);
   assert.equal(r.warnings.filter((w) => /brainstorm\.debate|context_cap/.test(w)).length, 3);
 });
 
