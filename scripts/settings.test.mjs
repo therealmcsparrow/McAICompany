@@ -308,8 +308,8 @@ test('get roles.qa.model prints sonnet', (t) => {
 
 test('unknown commands print usage and exit 2', (t) => {
   const s = sandbox(t);
-  const usage = 'refused: usage: settings.mjs get [key] | serve [--no-open] | model-env';
-  for (const args of [[], ['bogus'], ['serve', '--bogus'], ['serve', '--no-open', 'x'], ['get', 'a', 'b'], ['model-env', 'x']]) {
+  const usage = 'refused: usage: settings.mjs get [key] | serve [--no-open] | model-env | set-mod <id> on|off';
+  for (const args of [[], ['bogus'], ['serve', '--bogus'], ['serve', '--no-open', 'x'], ['get', 'a', 'b'], ['model-env', 'x'], ['set-mod'], ['set-mod', 'savings'], ['set-mod', 'savings', 'on', 'x']]) {
     assert.deepEqual(run(args, s.ctx), { code: 2, out: usage }, args.join(' '));
   }
   assert.deepEqual(run(['serve'], s.ctx), { code: 0, serve: { open: true } });
@@ -546,9 +546,9 @@ test('AC2: the handover is floor(cap x 0.9) in the one formula and in every reso
   const lib = await capLib();
   assert.equal(lib.CONTEXT_CAP_DEFAULT, 180000);
   assert.equal(lib.CONTEXT_CAP_MIN, 60000);
-  assert.equal(lib.CONTEXT_CAP_MAX, 1000000);
+  assert.equal(lib.CONTEXT_CAP_MAX, 250000);
   assert.equal(PIPELINE_DEFAULTS.context_cap, 180000);
-  for (const [cap, handover] of [[60000, 54000], [123457, 111111], [1000000, 900000]]) {
+  for (const [cap, handover] of [[60000, 54000], [123457, 111111], [250000, 225000]]) {
     assert.equal(lib.handoverOf(cap), handover, String(cap));
     const s = sandbox(t);
     s.user({ pipeline: { context_cap: cap } });
@@ -559,47 +559,56 @@ test('AC2: the handover is floor(cap x 0.9) in the one formula and in every reso
   }
 });
 
-test('AC4: project beats user beats the plugin default, with the source named', (t) => {
+test('AC4 (v3.0): user beats the plugin default; a project cap is ignored and listed in ignored', (t) => {
   const s = sandbox(t);
   s.user({ pipeline: { context_cap: 150000 } });
   s.project({ pipeline: { context_cap: 120000 } });
   let r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.context_cap, 120000);
-  assert.equal(r.pipeline.context_handover, 108000);
-  assert.equal(r.pipeline.source.context_cap, 'project');
-  assert.equal(s.cli('get', 'pipeline.source.context_cap').out, 'project\n');
-  fs.rmSync(s.projectFile);
-  r = resolveSettings(s.ctx);
   assert.equal(r.pipeline.context_cap, 150000);
   assert.equal(r.pipeline.context_handover, 135000);
   assert.equal(r.pipeline.source.context_cap, 'user');
+  assert.equal(s.cli('get', 'pipeline.source.context_cap').out, 'user\n');
+  assert.equal(s.cli('get', 'pipeline.context_cap').out, '150000\n');
+  assert.ok(r.ignored.some((i) => typeof i === 'string' && i.includes('pipeline.context_cap')), JSON.stringify(r.ignored));
   fs.rmSync(s.config);
   r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.context_cap, 180000);
+  assert.equal(r.pipeline.context_cap, 180000, 'a project cap never applies, even with no user value');
   assert.equal(r.pipeline.source.context_cap, 'plugin');
+  assert.ok(r.ignored.some((i) => typeof i === 'string' && i.includes('pipeline.context_cap')), JSON.stringify(r.ignored));
+  fs.rmSync(s.projectFile);
+  r = resolveSettings(s.ctx);
+  assert.equal(r.pipeline.context_cap, 180000);
+  assert.ok(!r.ignored.some((i) => typeof i === 'string' && i.includes('context_cap')), 'nothing to ignore');
 });
 
-test('AC6: every Role reports the one resolved cap and source; a stored role cap changes nothing', (t) => {
+test('AC15 (v3.0): a project cap never reaches the guard threshold: 250000 or 1 in the project changes nothing', (t) => {
+  for (const projectCap of [250000, 60000, 250001, 1, 'abc']) {
+    const s = sandbox(t);
+    s.project({ pipeline: { context_cap: projectCap } });
+    const r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.context_cap, 180000, String(projectCap));
+    assert.equal(r.pipeline.context_handover, 162000);
+    assert.equal(r.pipeline.source.context_cap, 'plugin');
+  }
+});
+
+test('AC6 (v3.0): every Role reports the one resolved cap and source; a stored role cap changes nothing', (t) => {
   const s = sandbox(t);
   s.user({ roles: { qa: { context_cap: 200000 }, architect: { context_cap: 60000 } }, pipeline: { context_cap: 150000 } });
   s.project({ roles: { qa: { context_cap: 61000 } }, pipeline: { context_cap: 120000 } });
   let r = resolveSettings(s.ctx);
   for (const role of roleSet) {
-    assert.equal(r.roles[role].context_cap, 120000, role);
-    assert.equal(r.roles[role].source.context_cap, 'project', role);
-  }
-  assert.deepEqual(r.warnings, []);
-  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '120000\n');
-  assert.equal(s.cli('get', 'roles.security.context_cap').out, '120000\n');
-  fs.rmSync(s.projectFile);
-  r = resolveSettings(s.ctx);
-  for (const role of roleSet) {
     assert.equal(r.roles[role].context_cap, 150000, role);
     assert.equal(r.roles[role].source.context_cap, 'user', role);
   }
+  assert.equal(s.cli('get', 'roles.qa.context_cap').out, '150000\n');
+  assert.equal(s.cli('get', 'roles.security.context_cap').out, '150000\n');
   fs.rmSync(s.config);
   r = resolveSettings(s.ctx);
-  for (const role of roleSet) assert.equal(r.roles[role].source.context_cap, 'plugin', role);
+  for (const role of roleSet) {
+    assert.equal(r.roles[role].context_cap, 180000, `${role}: the project cap is ignored`);
+    assert.equal(r.roles[role].source.context_cap, 'plugin', role);
+  }
 });
 
 test('a stored context_cap stays on disk, is accepted by writeLayer and takes effect', (t) => {
@@ -612,16 +621,16 @@ test('a stored context_cap stays on disk, is accepted by writeLayer and takes ef
   assert.equal(resolveSettings(s.ctx).pipeline.context_cap, 140000);
 });
 
-const HOSTILE_CAPS = ['120000', 120000.5, 59999, 1000001, -0, Number.NaN, null, [], {}, '150000​', '​', true, -1, Infinity];
+const HOSTILE_CAPS = ['120000', 120000.5, 59999, 250001, 1000001, 1e9, -0, Number.NaN, null, [], {}, '150000​', '​', true, -1, Infinity];
 
 test('AC3: every hostile cap is refused with the fixed text, at the pipeline and the role level', () => {
   for (const bad of HOSTILE_CAPS) {
     for (const layer of [{ pipeline: { context_cap: bad } }, { roles: { qa: { context_cap: bad } } }]) {
       const reasons = validateLayer({ version: 1, ...layer }, roleSet);
-      assert.deepEqual(reasons, ['context_cap must be a whole number from 60000 to 1000000'], JSON.stringify(layer));
+      assert.deepEqual(reasons, ['context_cap must be a whole number from 60000 to 250000'], JSON.stringify(layer));
     }
   }
-  for (const ok of [60000, 150000, 180000, 1000000]) {
+  for (const ok of [60000, 150000, 180000, 200000, 250000]) {
     assert.deepEqual(validateLayer({ version: 1, pipeline: { context_cap: ok } }, roleSet), []);
   }
 });
@@ -640,7 +649,7 @@ test('AC3: a refused save writes nothing, names no stored value and leaves the f
       const file = level === 'user' ? s.config : s.projectFile;
       fs.rmSync(file, { force: true });
       assert.throws(() => writeLayer(level, { version: 1, pipeline: { context_cap: bad } }, s.ctx),
-        (e) => e instanceof Refusal && e.message === 'context_cap must be a whole number from 60000 to 1000000', `${level} ${JSON.stringify(bad)}`);
+        (e) => e instanceof Refusal && e.message === 'context_cap must be a whole number from 60000 to 250000', `${level} ${JSON.stringify(bad)}`);
       assert.equal(fs.existsSync(file), false, `${level} created a file`);
       (level === 'user' ? s.user : s.project)({ pipeline: { context_cap: 150000 }, gates: { brief: 'ask' } });
       const before = fs.readFileSync(file);
@@ -650,25 +659,35 @@ test('AC3: a refused save writes nothing, names no stored value and leaves the f
   }
 });
 
-test('AC3: a bad stored cap falls back to the level below with a warning that names the field, not the value', (t) => {
-  for (const bad of HOSTILE_CAPS) {
+test('AC12: a bad user cap falls back to 180000 with one warning that names the field and the value (cut to 35 characters)', (t) => {
+  for (const bad of [0, -1, 'abc', null, 1.5, '200k', 250001, 1e9, 59999, true, [], {}]) {
     const s = sandbox(t);
-    s.user({ pipeline: { context_cap: 150000 } });
-    s.project({ pipeline: { context_cap: bad } });
-    let r = resolveSettings(s.ctx);
-    assert.equal(r.pipeline.context_cap, 150000, JSON.stringify(bad));
-    assert.equal(r.pipeline.context_handover, 135000);
-    assert.equal(r.pipeline.source.context_cap, 'user');
-    const mine = r.warnings.filter((w) => w.includes('context_cap'));
-    assert.equal(mine.length, 1, JSON.stringify(r.warnings));
-    assert.ok(mine[0].includes('pipeline.context_cap'), mine[0]);
-    assert.ok(!mine[0].includes('120000') && !mine[0].includes('​'), mine[0]);
     s.user({ pipeline: { context_cap: bad } });
-    fs.rmSync(s.projectFile);
-    r = resolveSettings(s.ctx);
+    const r = resolveSettings(s.ctx);
     assert.equal(r.pipeline.context_cap, 180000, JSON.stringify(bad));
+    assert.equal(r.pipeline.context_handover, 162000);
     assert.equal(r.pipeline.source.context_cap, 'plugin');
-    assert.equal(r.warnings.filter((w) => w.includes('pipeline.context_cap')).length, 1);
+    const mine = r.warnings.filter((w) => w.includes('pipeline.context_cap'));
+    assert.equal(mine.length, 1, JSON.stringify([bad, r.warnings]));
+    if (typeof bad === 'number' && Number.isFinite(bad)) assert.ok(mine[0].includes(String(bad)), `names the value: ${mine[0]}`);
+    if (typeof bad === 'string' && bad !== '') assert.ok(mine[0].includes(bad), `names the value: ${mine[0]}`);
+  }
+  const s = sandbox(t);
+  const long = 'x'.repeat(80);
+  s.user({ pipeline: { context_cap: long } });
+  const [line] = resolveSettings(s.ctx).warnings.filter((w) => w.includes('pipeline.context_cap'));
+  assert.ok(line.includes('x'.repeat(35)) && !line.includes('x'.repeat(36)), line);
+});
+
+test('AC12: a missing cap is the default with no warning; 200000 and 250000 resolve with the handover at 90%', (t) => {
+  const s = sandbox(t);
+  assert.deepEqual(resolveSettings(s.ctx).warnings, []);
+  for (const [cap, handover] of [[200000, 180000], [250000, 225000]]) {
+    s.user({ pipeline: { context_cap: cap } });
+    const r = resolveSettings(s.ctx);
+    assert.equal(r.pipeline.context_cap, cap);
+    assert.equal(r.pipeline.context_handover, handover);
+    assert.deepEqual(r.warnings, []);
   }
 });
 
@@ -681,14 +700,14 @@ test('AC3: a stored context_handover is dropped with a warning and never changes
   assert.equal(s.cli('get', 'pipeline.context_handover').out, '135000\n');
 });
 
-test('context_cap refuses anything but a whole number from 60000 to 1000000', () => {
-  for (const bad of [59999, 1000001, 150000.5, '150000', null, true, -1, Number.NaN]) {
+test('context_cap refuses anything but a whole number from 60000 to 250000', () => {
+  for (const bad of [59999, 250001, 1000001, 150000.5, '150000', null, true, -1, Number.NaN]) {
     for (const layer of [{ pipeline: { context_cap: bad } }, { roles: { qa: { context_cap: bad } } }]) {
       const reasons = validateLayer({ version: 1, ...layer }, roleSet);
-      assert.deepEqual(reasons, ['context_cap must be a whole number from 60000 to 1000000'], JSON.stringify(layer));
+      assert.deepEqual(reasons, ['context_cap must be a whole number from 60000 to 250000'], JSON.stringify(layer));
     }
   }
-  for (const ok of [60000, 150000, 1000000]) {
+  for (const ok of [60000, 150000, 250000]) {
     assert.deepEqual(validateLayer({ version: 1, pipeline: { context_cap: ok }, roles: { qa: { context_cap: ok } } }, roleSet), []);
   }
 });
@@ -719,7 +738,9 @@ test('a bad brainstorm or context_cap layer falls back to the level below with a
   assert.equal(r.pipeline.context_cap, 90000);
   assert.equal(r.pipeline.source.context_cap, 'user');
   assert.equal(r.roles.qa.context_cap, 90000);
-  assert.equal(r.warnings.filter((w) => /brainstorm\.debate|context_cap/.test(w)).length, 3);
+  assert.ok(r.warnings.some((w) => w.includes('brainstorm.debate')), r.warnings.join(' | '));
+  assert.ok(r.warnings.some((w) => w.includes('roles.qa.context_cap')), r.warnings.join(' | '));
+  assert.ok(r.ignored.some((i) => typeof i === 'string' && i.includes('pipeline.context_cap')), 'the project cap is ignored (v3.0)');
 });
 
 test('a bad project debate value changes no lock and the fail-closed rule still holds', (t) => {
@@ -793,14 +814,18 @@ test('no keep-warm key exists in the schema', () => {
 const MODS_ALL = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' }
+  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
+  efficient_browser_use: { enabled: false },
+  switchboard: { enabled: true, seen: false },
+  savings: { enabled: true }
 };
+const MOD_KEYS = ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard'];
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const modsOf = (s) => plain(resolveSettings(s.ctx).mods);
 
-test('MODS_DEFAULTS: three mods on (savvy, cache_tax, reflect), no keep-warm key', () => {
+test('MODS_DEFAULTS (v3.0): the three mods plus the saver switches, efficient browser off, no keep-warm key', () => {
   assert.deepEqual(plain(MODS_DEFAULTS), MODS_ALL);
-  assert.deepEqual(Object.keys(MODS_DEFAULTS), ['savvy', 'cache_tax', 'reflect']);
+  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), MOD_KEYS);
   assert.ok(!JSON.stringify(MODS_DEFAULTS).includes('keep_warm'));
 });
 
@@ -809,7 +834,7 @@ test('a fresh install resolves every mod on, through get and get <key>', (t) => 
   assert.deepEqual(modsOf(s), MODS_ALL);
   assert.deepEqual(plain(pluginDefaults(s.pluginRoot).mods), MODS_ALL);
   assert.deepEqual(JSON.parse(s.cli('get').out).mods, MODS_ALL);
-  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).mods), ['savvy', 'cache_tax', 'reflect']);
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).mods).sort(), MOD_KEYS);
   assert.equal(s.cli('get', 'mods.reflect.mode').out, 'deterministic\n');
 });
 
@@ -891,7 +916,7 @@ test('Reflect model is the only mods lock: every other mods key is free and no l
   s.user({ mods: { savvy: { enabled: false }, cache_tax: { pane: 'auto' }, reflect: { enabled: false } } });
   s.project({ mods: { savvy: { enabled: true, pane: 'command' }, cache_tax: { enabled: false } } });
   const r = resolveSettings(s.ctx);
-  assert.deepEqual(Object.keys(r.mods), ['savvy', 'cache_tax', 'reflect']);
+  assert.deepEqual(Object.keys(r.mods).sort(), MOD_KEYS);
   assert.deepEqual(r.mods.savvy, { enabled: true, pane: 'command' });
   assert.deepEqual(r.mods.cache_tax, { enabled: false, pane: 'auto' });
   assert.equal(r.mods.reflect.enabled, false);
@@ -2399,4 +2424,43 @@ test('an unread user layer takes its stored names back as they are and keeps the
   assert.deepEqual(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.roles.qa.skills, stored);
   const added = { version: 1, roles: { qa: { skills: [{ name: 'ghost-skill' }, { name: 'qa-helper' }, { name: 'qa-second' }] } } };
   assert.equal(checkLayers(added, { version: 1 }, { ...ctx, levels: ['user'] }).length, 1);
+});
+
+// ---------- aico-settings v3.0: guards have no key, saver switches ----------
+test('AC15 (v3.0): a hand-written guard key is an unknown key, refused on write, dropped on read, and changes nothing', (t) => {
+  for (const guard of ['cap', 'git_add', 'dotenv', 'model_floor', 'self_protect', 'guards']) {
+    assert.deepEqual(validateLayer({ version: 1, mods: { [guard]: { enabled: false } } }, roleSet), [`mods.${guard}: unknown key`], guard);
+  }
+  assert.deepEqual(validateLayer({ version: 1, guards: { cap: false } }, roleSet).length > 0, true);
+  const s = sandbox(t);
+  s.user({ mods: { cap: { enabled: false }, git_add: { enabled: false } } });
+  const r = resolveSettings(s.ctx);
+  assert.deepEqual(Object.keys(r.mods).sort(), MOD_KEYS);
+  assert.ok(r.warnings.some((w) => w.includes('mods.cap')), r.warnings.join(' | '));
+  assert.throws(() => writeLayer('user', { version: 1, mods: { cap: { enabled: false } } }, s.ctx), Refusal);
+});
+
+test('v3.0 saver switches validate as booleans at the user and the project level', (t) => {
+  for (const [key, bad] of [['efficient_browser_use', 'yes'], ['switchboard', 1], ['savings', null]]) {
+    assert.deepEqual(validateLayer({ version: 1, mods: { [key]: { enabled: bad } } }, roleSet), [`mods.${key}.enabled must be true or false`], key);
+  }
+  const s = sandbox(t);
+  s.user({ mods: { savings: { enabled: false } } });
+  s.project({ mods: { efficient_browser_use: { enabled: true } } });
+  const r = resolveSettings(s.ctx);
+  assert.equal(r.mods.savings.enabled, false);
+  assert.equal(r.mods.efficient_browser_use.enabled, true, 'a project may switch a saver');
+});
+
+test('v3.0 mods.switchboard.seen is user level only: a project value is ignored', (t) => {
+  assert.deepEqual(validateLayer({ version: 1, mods: { switchboard: { seen: 'yes' } } }, roleSet), ['mods.switchboard.seen must be true or false']);
+  const s = sandbox(t);
+  s.project({ mods: { switchboard: { seen: true } } });
+  let r = resolveSettings(s.ctx);
+  assert.equal(r.mods.switchboard.seen, false);
+  assert.ok(r.ignored.some((i) => typeof i === 'string' && i.includes('mods.switchboard.seen')), JSON.stringify(r.ignored));
+  s.user({ mods: { switchboard: { seen: true } } });
+  r = resolveSettings(s.ctx);
+  assert.equal(r.mods.switchboard.seen, true);
+  assert.equal(s.cli('get', 'mods.switchboard.seen').out, 'true\n');
 });

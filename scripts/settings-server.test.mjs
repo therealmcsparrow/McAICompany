@@ -354,7 +354,7 @@ test('save round-trips context_cap and brainstorm keys, refuses bad ones and wri
   assert.equal(bad.status, 400);
   const { refused } = await bad.json();
   assert.ok(refused.some((r) => r.includes('brainstorm.debate must be crossfire or full_pass')), refused.join(' | '));
-  assert.ok(refused.some((r) => r.includes('context_cap must be a whole number from 60000 to 1000000')), refused.join(' | '));
+  assert.ok(refused.some((r) => r.includes('context_cap must be a whole number from 60000 to 250000')), refused.join(' | '));
   assert.equal(read(s.config), null);
   const ok = await post('/api/save', {
     revision: before.resolved.revision,
@@ -374,13 +374,13 @@ test('save round-trips context_cap and brainstorm keys, refuses bad ones and wri
   assert.ok(!Object.hasOwn(JSON.parse(read(s.config)).aico_settings.pipeline, 'context_handover'), 'the handover is derived, never stored');
 });
 
-const CAP_REFUSAL = 'context_cap must be a whole number from 60000 to 1000000';
+const CAP_REFUSAL = 'context_cap must be a whole number from 60000 to 250000';
 
 test('Save refuses every bad context_cap with the contract text, echoes no value and writes nothing', async (t) => {
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   const revision = (await state()).resolved.revision;
-  const hostile = [50000, 59999, 1000001, 0, -120000, 120000.5, 1e7, '120000', '12e4', ' 120000', '120000abc', '١٢٠٠٠٠', '9'.repeat(10000), null, true, [], {}, [120000]];
+  const hostile = [50000, 59999, 250001, 1000001, 0, -120000, 120000.5, 1e7, '120000', '12e4', ' 120000', '120000abc', '١٢٠٠٠٠', '9'.repeat(10000), null, true, [], {}, [120000]];
   for (const level of ['user', 'project']) {
     for (const value of hostile) {
       const res = await post('/api/save', { revision, [level]: { version: 1, pipeline: { context_cap: value } } });
@@ -412,11 +412,11 @@ test('a stored Role context_cap is still validated: a bad one is refused with th
   assert.equal(JSON.parse(read(s.config)).aico_settings.roles.qa.context_cap, 70000);
 });
 
-test('Save accepts the range ends, resolves project over user and never stores the derived handover', async (t) => {
+test('Save accepts the range ends, ignores a project cap (user level only) and never stores the derived handover', async (t) => {
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   let revision = (await state()).resolved.revision;
-  for (const [value, handover] of [[60000, 54000], [1000000, 900000], [123457, 111111]]) {
+  for (const [value, handover] of [[60000, 54000], [250000, 225000], [123457, 111111]]) {
     const res = await post('/api/save', { revision, user: { version: 1, pipeline: { context_cap: value } } });
     assert.equal(res.status, 200, String(value));
     const next = (await res.json()).state;
@@ -427,10 +427,11 @@ test('Save accepts the range ends, resolves project over user and never stores t
   const both = await post('/api/save', { revision, user: { version: 1, pipeline: { context_cap: 150000 } }, project: { version: 1, pipeline: { context_cap: 120000 } } });
   assert.equal(both.status, 200);
   const won = (await both.json()).state;
-  assert.equal(won.resolved.pipeline.context_cap, 120000);
-  assert.equal(won.resolved.pipeline.source.context_cap, 'project');
-  assert.equal(won.resolved.roles.qa.context_cap, 120000);
-  assert.equal(won.resolved.roles.qa.source.context_cap, 'project');
+  assert.equal(won.resolved.pipeline.context_cap, 150000, 'the project cap never applies (v3.0)');
+  assert.equal(won.resolved.pipeline.source.context_cap, 'user');
+  assert.equal(won.resolved.roles.qa.context_cap, 150000);
+  assert.equal(won.resolved.roles.qa.source.context_cap, 'user');
+  assert.ok(won.resolved.ignored.some((i) => typeof i === 'string' && i.includes('pipeline.context_cap')), JSON.stringify(won.resolved.ignored));
   const bad = await post('/api/save', { revision: won.resolved.revision, user: { version: 1, pipeline: { context_cap: 150000, context_handover: 135000 } } });
   assert.equal(bad.status, 400);
   assert.ok((await bad.json()).refused.some((r) => r.includes('context_handover') && r.includes('unknown key')));
@@ -2304,4 +2305,16 @@ test('a stored repeated name sent once keeps its date', async (t) => {
   const res = await post('/api/save', { revision: before.resolved.revision, user: { version: 1, roles: { qa: { skills: [{ name: 'qa-helper' }] } } } });
   assert.equal(res.status, 200);
   assert.deepEqual(JSON.parse(fs.readFileSync(s.config, 'utf8')).aico_settings.roles.qa.skills, [{ name: 'qa-helper', approved: '2025-01-01' }]);
+});
+
+test('AC12 (v3.0): the server state never lets a stored project cap or a cap above 250000 reach the resolved value', async (t) => {
+  const s = sandbox(t);
+  fs.writeFileSync(s.projectFile, JSON.stringify({ aico_settings: { version: 1, pipeline: { context_cap: 250000 } } }));
+  fs.writeFileSync(s.config, JSON.stringify({ aico_settings: { version: 1, pipeline: { context_cap: 250001 } } }));
+  const { state } = await start(t, s);
+  const st = await state();
+  assert.equal(st.resolved.pipeline.context_cap, 180000);
+  assert.equal(st.resolved.pipeline.context_handover, 162000);
+  assert.equal(st.resolved.pipeline.source.context_cap, 'plugin');
+  assert.equal(st.resolved.warnings.filter((w) => w.includes('pipeline.context_cap')).length, 1, JSON.stringify(st.resolved.warnings));
 });

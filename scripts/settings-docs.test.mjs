@@ -81,9 +81,9 @@ test('aico-settings v1.3 or later keeps the v1.1 cap range, the brainstorm keys 
   const doc = read('docs/contracts/aico-settings.md');
   assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:[3-9]|\d{2,})|[2-9]\.\d+)$/m);
   assert.equal(PIPELINE_DEFAULTS.context_cap, 180000);
-  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–1000000; default 180000/);
-  assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–1000000/);
-  assert.match(doc, /refused: context_cap must be a whole number from 60000 to 1000000/);
+  assert.match(doc, /`pipeline\.context_cap` \| integer 60000–250000, user level only; default 180000/);
+  assert.match(doc, /`roles\.<role>\.context_cap` \| integer 60000–250000/);
+  assert.match(doc, /refused: context_cap must be a whole number from 60000 to 250000/);
   assert.match(doc, /^# Contract: aico-settings v(?:1\.(?:1[1-9]|[2-9]\d|\d{3,})|[2-9]\.\d+)$/m);
   assert.match(doc, /deprecated/);
   assert.match(doc, /`pipeline\.context_handover`/);
@@ -182,13 +182,26 @@ test('aico-settings v1.8 names pipeline.short_path, off wins, the refusal, the p
   assert.ok(!doc.includes('\r'), 'LF only');
 });
 
-test('the settings guide describes Max context as a working setting: default 180000, handover 162000, project over user, frozen at run start', () => {
+test('the settings guide describes Max context as a working setting: default 180000, handover 162000, user level only (a project value is ignored), read at the next Step', () => {
   const t = commandPage(root, 'settings');
   const at = t.indexOf('**Max context**');
   assert.ok(at >= 0, 'Max context entry');
   const entry = t.slice(at, t.indexOf('\n\n', at));
-  for (const s of ['`context_cap`', '180000', '162000', '60000', '1000000']) assert.ok(entry.includes(s), `entry names ${s}`);
+  for (const s of ['`context_cap`', '180000', '162000', '60000', '250000']) assert.ok(entry.includes(s), `entry names ${s}`);
   assert.match(entry, /project/i);
-  assert.match(entry, /next run|run starts|start of a run|frozen/i);
+  assert.match(entry, /ignored/i);
+  assert.match(entry, /user level|your own settings/i);
+  assert.match(entry, /next Step/i);
+  assert.doesNotMatch(entry, /1000000/);
   assert.doesNotMatch(entry, /deprecated|nothing reads|fixed text|fixed at|95000|85500/i);
+});
+
+test('aico-settings v3.0 documents set-mod, the saver switches and the cap range in the Contract', () => {
+  const doc = read('docs/contracts/aico-settings.md');
+  assert.match(doc, /^# Contract: aico-settings v3\.0$/m);
+  assert.match(doc, /settings\.mjs set-mod <id> on\|off/);
+  assert.match(doc, /refused: <id> cannot be switched/);
+  assert.match(doc, /refused: <id> is set in \.company\/settings\.json/);
+  assert.match(doc, /`mods\.switchboard\.seen`/);
+  assert.match(doc, /`mods\.efficient_browser_use\.enabled`/);
 });

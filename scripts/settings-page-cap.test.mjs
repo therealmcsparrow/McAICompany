@@ -153,7 +153,7 @@ function walkAll(node, pred, out = []) {
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-const RANGE = 'a whole number from 60000 to 1000000';
+const RANGE = 'a whole number from 60000 to 250000';
 const NOT_WHOLE = `Error: Context cap must be ${RANGE}.`;
 const OUT_OF_RANGE = `Error: Context cap is out of range. Use ${RANGE}.`;
 // The server's line for a bad context_cap has no `pipeline.` path (the rule is shared with the stored Role value).
@@ -161,8 +161,9 @@ const REFUSAL_LINE = (level) => `${level} context_cap must be ${RANGE}`;
 
 // Resolved values as the server reports them: one cap, its handover and its source.
 function capState({ user, project, plugin = 180000, roleStored } = {}) {
-  const cap = project ?? user ?? plugin;
-  const source = project !== undefined ? 'project' : user !== undefined ? 'user' : 'plugin';
+  // v3.0: the cap is user level only; a stored project value never resolves.
+  const cap = user ?? plugin;
+  const source = user !== undefined ? 'user' : 'plugin';
   const roles = ['architect', 'qa'];
   const defaults = pluginDefaults();
   const layer = (v, extra = {}) => ({ version: 1, ...(v === undefined ? {} : { pipeline: { context_cap: v } }), ...extra });
@@ -224,7 +225,7 @@ test('AC5: the hint states the range and the 90 percent hand-over and is tied to
   const { input } = capRow(page);
   const hint = page.find((n) => n.id === 'context-cap-hint');
   assert.ok(hint, 'hint id context-cap-hint');
-  assert.ok(hint.textContent.includes('60000') && hint.textContent.includes('1000000'), hint.textContent);
+  assert.ok(hint.textContent.includes('60000') && hint.textContent.includes('250000'), hint.textContent);
   assert.ok(hint.textContent.includes('90%'), hint.textContent);
   assert.ok(hint.textContent.includes('162000'), 'names the default hand-over');
   assert.ok(!/fixed/i.test(hint.textContent));
@@ -262,22 +263,23 @@ test('slice: typing 120000 at user level shows cap 120000 handover 108000 and sa
 test('AC2 on the page: the handover is floor(cap x 0.9), integer math', async () => {
   const page = await openCap();
   const { input, readout } = capRow(page);
-  for (const [cap, handover] of [['60000', 54000], ['123457', 111111], ['1000000', 900000], [' 120000 ', 108000]]) {
+  for (const [cap, handover] of [['60000', 54000], ['123457', 111111], ['250000', 225000], [' 120000 ', 108000]]) {
     await typeCap(input, cap);
     assert.equal(input.getAttribute('aria-invalid'), null, cap);
     assert.ok(readout.textContent.includes(`handover ${handover}`), `${cap}: ${readout.textContent}`);
   }
 });
 
-test('AC4 on the page: project over user, and an empty project field falls back to the user cap', async () => {
+test('AC4 on the page (v3.0): a stored project cap never shows as in effect, and the project level has no cap input', async () => {
   const page = await openCap(capState({ user: 150000, project: 120000 }));
-  await page.setLevel('project');
   const { input, readout } = capRow(page);
-  assert.equal(input.value, '120000');
-  assert.ok(readout.textContent.includes('120000') && readout.textContent.includes('project') && readout.textContent.includes('handover 108000'), readout.textContent);
-  await typeCap(input, '');
-  assert.equal(input.getAttribute('aria-invalid'), null, 'empty means inherit, never an error');
+  assert.equal(input.value, '150000');
   assert.ok(readout.textContent.includes('150000') && readout.textContent.includes('user') && readout.textContent.includes('handover 135000'), readout.textContent);
+  assert.ok(!readout.textContent.includes('120000'), readout.textContent);
+  await page.setLevel('project');
+  const label = page.find((n) => n.tagName === 'LABEL' && n.textContent.startsWith('Context cap'));
+  const projectInput = label ? page.find((n) => n.tagName === 'INPUT' && n.id === label.getAttribute('for')) : null;
+  assert.equal(projectInput, null, 'no editable Context cap at the project level (user level only)');
 });
 
 test('AC3 on the page: not a whole number gets the whole-number text and is marked, tied and announced', async () => {
@@ -296,14 +298,14 @@ test('AC3 on the page: not a whole number gets the whole-number text and is mark
 });
 
 test('AC3 on the page: all-digit values outside the range get the out-of-range text, whatever their length', async () => {
-  for (const text of ['0', '50000', '59999', '1000001', '12345678', '9'.repeat(10000)]) {
+  for (const text of ['0', '50000', '59999', '250001', '1000001', '12345678', '9'.repeat(10000)]) {
     const page = await openCap();
     const { input, err } = capRow(page);
     await typeCap(input, text);
     assert.equal(input.value.length, text.length, 'no silent truncation');
     assert.equal(err.textContent, OUT_OF_RANGE, text.slice(0, 12));
     assert.equal(input.getAttribute('aria-invalid'), 'true');
-    assert.ok(live(page).startsWith('Context cap, user level: ') && live(page).includes('60000 to 1000000'), live(page));
+    assert.ok(live(page).startsWith('Context cap, user level: ') && live(page).includes('60000 to 250000'), live(page));
     assert.ok(live(page).length < 200 && err.textContent.length < 200, 'no value echo');
   }
 });
@@ -325,7 +327,7 @@ test('AC3 on the page: the readout keeps the value in effect while the draft is 
   const page = await openCap(capState({ user: 150000 }));
   const { input, readout } = capRow(page);
   // typed values must not be substrings of the cap (150000) or handover (135000), or the negative check can never hold
-  for (const text of ['abc', '59999', '1000001']) {
+  for (const text of ['abc', '59999', '250001']) {
     assert.ok(!'150000 handover 135000'.includes(text), `${text} must not be a substring of the expected readout`);
     await typeCap(input, text);
     assert.ok(readout.textContent.includes('150000') && readout.textContent.includes('handover 135000'), `${text}: ${readout.textContent}`);
@@ -376,15 +378,15 @@ test('AC5: a server refusal is shown under the field, announced, sticky until th
   assert.ok(!live(page).startsWith('Context cap, user level:'), live(page));
 });
 
-test('AC5: a refusal for the hidden project level is listed with its level word and the line is not repeated raw', async () => {
-  const page = await openCap(capState(), { saveReply: { status: 400, body: { refused: [REFUSAL_LINE('project')] } } });
+test('AC5 (v3.0): a Save never sends a project cap and a project level cap refusal cannot occur on the page', async () => {
+  const saved = capState({ user: 120000 });
+  const page = await openCap(capState(), { saveReply: { status: 200, body: { state: saved } } });
   const { input } = capRow(page);
   await typeCap(input, '120000');
   await page.ids.save.fire('click');
   await settle();
-  const text = page.ids.status.textContent;
-  assert.ok(text.includes(`Context cap, project level: must be ${RANGE}.`), text);
-  assert.ok(!text.includes(REFUSAL_LINE('project')), text);
+  assert.equal(saves(page).length, 1);
+  assert.equal(saves(page)[0].body.project?.pipeline?.context_cap, undefined);
 });
 
 test('AC5 keyboard and screen reader: one tab stop, label before input before readout, no tabindex, level spoken', async () => {
@@ -398,18 +400,12 @@ test('AC5 keyboard and screen reader: one tab stop, label before input before re
   assert.ok(at(label) < at(input) && at(input) < at(readout), 'reading order: label, input, readout');
   assert.equal(label.getAttribute('for'), input.id);
   assert.equal(walkAll(label, (n) => n.className === 'vh' && n.textContent === ', user level').length, 1, 'the level is spoken, not only seen');
-  await page.setLevel('project');
-  const projectRow = capRow(page);
-  assert.ok(projectRow.label.textContent.includes(', project level'));
-  assert.notEqual(projectRow.input.id, input.id, 'each level has its own id');
-  assert.equal(projectRow.input.disabled, false);
 });
 
-test('AC5: with no .company folder the project level input is disabled', async () => {
+test('AC5 (v3.0): with no .company folder the user level cap input stays editable', async () => {
   const page = await openCap({ ...capState(), hasProject: false });
-  await page.setLevel('project');
   const { input } = capRow(page);
-  assert.equal(input.disabled, true);
+  assert.equal(input.disabled, false);
 });
 
 test('AC6: every Role readout on the Roles tab shows the one resolved cap and handover', async () => {
