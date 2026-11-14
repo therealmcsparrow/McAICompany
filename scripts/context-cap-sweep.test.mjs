@@ -48,13 +48,23 @@ test('95000, 85500 and "fixed cap" appear only on the allowed list (CHANGELOG hi
   assert.deepEqual(bad, [], `old cap text outside the allowed list:\n${bad.join('\n')}`);
 });
 
-test('the code defaults are the new cap: lead-handover, ledger, dashboard tokens, ctx-row and settings name no 95000/85500 and carry 180000/162000 where they hold a default', () => {
+// T20 (P20261114.000001), AC13: the numbers 180000 and 162000 now live only in hooks/rules/cap.mjs
+// (scripts/cap-literals.test.mjs scans for them). This sweep pins that the old readers keep their export names.
+test('the cap readers hold no default of their own: lead-handover re-exports CAP and HANDOVER_AT, the formula lives in the cap rule module', async () => {
   const lead = read('scripts/lead-handover.mjs');
-  assert.match(lead, /export const CAP = 180000;/);
-  assert.match(lead, /export const HANDOVER_AT = 162000;/);
-  assert.match(read('scripts/settings.mjs'), /CONTEXT_CAP_DEFAULT\b[^\n]*180000|from '\.\.\/mods\/lib\/context-cap\.mjs'/);
-  assert.ok(fs.existsSync(path.join(root, 'mods/lib/context-cap.mjs')), 'the one formula lives in mods/lib/context-cap.mjs');
+  assert.match(lead, /\bCAP\b/);
+  assert.match(lead, /\bHANDOVER_AT\b/);
+  assert.doesNotMatch(lead, /export const CAP = 180000;|export const HANDOVER_AT = 162000;/);
+  assert.ok(fs.existsSync(path.join(root, 'hooks/rules/cap.mjs')), 'the cap constants and formulas live in hooks/rules/cap.mjs');
   assert.ok(fs.existsSync(path.join(root, 'scripts/run-cap.mjs')), 'runCap lives in scripts/run-cap.mjs');
+  const m = await import('./lead-handover.mjs');
+  assert.equal(m.CAP, 180000);
+  assert.equal(m.HANDOVER_AT, 162000);
+});
+
+test('ADR 0069 is marked superseded by ADR 0070 (the cap is the handoff mod, no longer frozen per run)', () => {
+  assert.ok(fs.existsSync(path.join(root, 'docs/adr/0070-cap-in-handoff-mod.md')), 'ADR 0070 exists');
+  assert.match(read('docs/adr/0069-configurable-context-cap.md'), /^Status: superseded by docs\/adr\/0070-cap-in-handoff-mod\.md/m);
 });
 
 test('ADR 0047 is marked superseded by 0069 and ADR 0069 exists with the new default', () => {
@@ -69,12 +79,11 @@ test('ADR 0047 is marked superseded by 0069 and ADR 0069 exists with the new def
 
 // release.mjs moves [Unreleased] into a version section, so the newest non-empty entry (Unreleased or a
 // released version) holds the note. AICO_CHANGELOG_FILE lets a run point at a changelog copy.
-const newestEntry = (log) => {
-  const sections = log.split(/^## \[/m).slice(1);
-  return sections.find((s, i) => i > 0 || s.replace(/^[^\n]*\n/, '').trim().length > 0) ?? '';
-};
+// T20: the note belongs to 0.39.0, the release that shipped the configurable cap; release 1 adds a newer entry
+// above it, so the newest entry is no longer the one to read.
+const entryOf = (log, version) => log.split(/^## \[/m).slice(1).find((s) => s.startsWith(`${version}]`)) ?? '';
 const checkNote = (top) => {
-  assert.match(top, /^(Unreleased|\d+\.\d+\.\d+)\]/, 'the newest entry (Unreleased or a released version) holds the note');
+  assert.match(top, /^\d+\.\d+\.\d+\]/, 'the 0.39.0 entry exists and holds the note');
   for (const s of ['180000', '162000', 'aico-settings', 'ADR 0069']) assert.ok(top.includes(s), `the note names ${s}`);
   assert.match(top, /context_cap/);
   assert.match(top, /take(s)? effect/);
@@ -82,17 +91,16 @@ const checkNote = (top) => {
 
 test('the CHANGELOG records the new default and that a stored context_cap now takes effect', () => {
   const log = process.env.AICO_CHANGELOG_FILE ? fs.readFileSync(process.env.AICO_CHANGELOG_FILE, 'utf8') : read('CHANGELOG.md');
-  checkNote(newestEntry(log));
+  checkNote(entryOf(log, '0.39.0'));
 });
 
-test('changelog note check accepts the note under Unreleased or the released version, rejects it missing', () => {
+test('changelog note check finds the 0.39.0 entry below a newer one, rejects a missing note or entry', () => {
   const note = '- 180000 and 162000 via aico-settings, ADR 0069: a stored context_cap takes effect.\n';
   const old = '## [0.38.1] - 2026-11-14\n\n- old\n';
-  const before = '# Changelog\n\n## [Unreleased]\n\n' + note + '\n' + old;
-  const after = '# Changelog\n\n## [Unreleased]\n\n## [0.39.0] - 2026-11-14\n\n' + note + '\n' + old;
-  checkNote(newestEntry(before));
-  checkNote(newestEntry(after));
-  assert.throws(() => checkNote(newestEntry(after.replace(note, '- other\n'))));
+  const log = '# Changelog\n\n## [Unreleased]\n\n## [0.40.0] - 2026-11-20\n\n- later\n\n## [0.39.0] - 2026-11-14\n\n' + note + '\n' + old;
+  checkNote(entryOf(log, '0.39.0'));
+  assert.throws(() => checkNote(entryOf(log.replace(note, '- other\n'), '0.39.0')));
+  assert.throws(() => checkNote(entryOf('# Changelog\n', '0.39.0')));
 });
 
 test('shipped docs and skills touched by the cap are LF only', () => {

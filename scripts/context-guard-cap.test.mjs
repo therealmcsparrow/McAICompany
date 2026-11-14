@@ -1,229 +1,134 @@
-// Tests for context-guard v1.2: the hand-over point of the guard is the handover of the active run's cap
-// (recorded cap, else the current setting, else 180000), floor(cap * 9 / 10). An unreadable cap gives 162000.
-// Below 54000 tokens (floor(60000 * 9 / 10)) the run is never looked up. No active run stays a no-op.
+// Threshold tests of the cap guard, rewritten red-first for the engine (T20, P20261114.000001; AC11, AC12, AC17).
+// Was: context-guard v1.2, the hand-over point is the run's recorded cap. Now: the threshold T is the snapshot's
+// `threshold` (`aico-settings` v3.0 `pipeline.context_cap`, user level, 60000-250000, default 180000), the
+// freeze point is F = floor(T * 0.9) (`context-guard` v2.0). Runs scripts/hook-host.mjs with the real cap.M1 rule.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { pre } from './context-guard.mjs';
+import { capEnv, cleanup } from '../tests/context-guard/cap-engine.mjs';
 
-const SLUG = 'P20261112.000001/07-feature';
-const AGENT = 'a1b2c3d4e5f60718';
-const SESSION = 'sess-cap-lead-1';
-const NOW = Math.floor(Date.now() / 1000) * 1000;
-const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
-const usage = (n) => ({ input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: n - 15 });
-const quiet = { code: 0, out: '', err: '' };
-const decision = (r) => JSON.parse(r.out).hookSpecificOutput.permissionDecision;
-const isDeny = (r) => r.out !== '' && decision(r) === 'deny';
+after(cleanup);
 
-const tmps = [];
-after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
-// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
-const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
-tmps.push(isoHome);
-const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
-process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
-process.env.HOME = isoHome;
-process.env.USERPROFILE = isoHome;
-after(() => { for (const [k, v] of Object.entries(savedHome)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
-
-
-// One product root and one Claude dir per test, under a temp dir; nothing reads the real home.
-// `starts` are the extra fields of each run-state line; the default is one start with no cap.
-function fixture({ tokens, starts = [{ ev: 'start' }], run = true, lead = false } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'context-guard-cap-'));
-  tmps.push(base);
-  const root = path.join(base, 'product');
-  const claudeDir = path.join(base, 'claude');
-  const dir = path.join(root, '.company', 'work', ...SLUG.split('/'));
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(root, '.company', 'work', SLUG.split('/')[0], '00-project.md'), 'Demo project\n');
-  if (run) {
-    const rows = starts.map((s, i) => JSON.stringify({ v: 1, at: iso(NOW - 60000 + i * 1000), ...s }));
-    fs.writeFileSync(path.join(dir, 'run-state.jsonl'), `${rows.join('\n')}\n`);
-  }
-  const proj = path.join(claudeDir, 'projects', 'p');
-  fs.mkdirSync(path.join(proj, 'sess', 'subagents'), { recursive: true });
-  const transcript = path.join(proj, 'sess.jsonl');
-  const row = (u, side) => `${JSON.stringify({ type: 'assistant', isSidechain: side, message: { usage: u } })}\n`;
-  fs.writeFileSync(transcript, row(usage(lead ? tokens : 1000), false));
-  const agentFile = path.join(proj, 'sess', 'subagents', `agent-${AGENT}.jsonl`);
-  fs.writeFileSync(agentFile, `${JSON.stringify({ type: 'meta' })}\n${row(usage(lead ? 500 : tokens), true)}`);
-  const stepInput = (extra = {}) => JSON.stringify({ hook_event_name: 'PreToolUse', transcript_path: transcript, session_id: 's', agent_id: AGENT, tool_name: 'Read', tool_input: {}, ...extra });
-  const leadInput = (extra = {}) => JSON.stringify({ hook_event_name: 'PreToolUse', transcript_path: transcript, session_id: SESSION, tool_name: 'Bash', tool_input: {}, ...extra });
-  const opts = { root, claudeDir, env: {}, now: NOW };
-  const handovers = () => {
-    const f = path.join(dir, 'lead-handover.jsonl');
-    return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((e) => e.ev === 'handover') : [];
-  };
-  return { base, root, dir, stepInput, leadInput, opts, handovers };
+async function booted(cap, opts = {}) {
+  const fx = await capEnv({ cap, ...opts });
+  fx.boot();
+  return fx;
 }
+const stepAt = async (cap, n) => { const fx = await booted(cap); return fx.capDeny(fx.step(n)); };
+const leadAt = async (cap, n) => { const fx = await booted(cap); return fx.capDeny(fx.lead(n)); };
 
-const withCap = (cap) => [{ ev: 'start', cap }];
-// The reading is the Step's own, so each case builds its own transcript at the given token count.
-const stepAt = (tokens, cap, extra) => {
-  const fx = fixture({ tokens, starts: cap === undefined ? undefined : withCap(cap), ...extra });
-  return { fx, r: pre(fx.stepInput(), fx.opts) };
-};
-const leadAt = (tokens, cap, extra) => {
-  const fx = fixture({ tokens, lead: true, starts: cap === undefined ? undefined : withCap(cap), ...extra });
-  return { fx, r: pre(fx.leadInput(), fx.opts) };
-};
-
-describe('Step: the hand-over point is the run handover', () => {
-  test('cap 120000: a Step at 108000 is refused, at 100000 it is allowed', () => {
-    assert.equal(isDeny(stepAt(108000, 120000).r), true);
-    assert.deepEqual(stepAt(100000, 120000).r, quiet);
-  });
-
-  test('cap 120000: the edge is exact, 107999 allows and 108000 refuses', () => {
-    assert.deepEqual(stepAt(107999, 120000).r, quiet);
-    assert.equal(isDeny(stepAt(108000, 120000).r), true);
-  });
-
-  test('the handover is floored: cap 100001 gives 90000', () => {
-    assert.deepEqual(stepAt(89999, 100001).r, quiet);
-    assert.equal(isDeny(stepAt(90000, 100001).r), true);
-  });
-
-  test('the smallest and the largest cap give 54000 and 900000', () => {
-    assert.deepEqual(stepAt(53999, 60000).r, quiet);
-    assert.equal(isDeny(stepAt(54000, 60000).r), true);
-    assert.deepEqual(stepAt(899999, 1000000).r, quiet);
-    assert.equal(isDeny(stepAt(900000, 1000000).r), true);
-  });
-
-  test('a run with no recorded cap and no setting uses 180000, so 162000 refuses and 161999 allows', () => {
-    assert.deepEqual(stepAt(161999).r, quiet);
-    assert.equal(isDeny(stepAt(162000).r), true);
-  });
-
-  test('a refused Step may still write its Handoff and nothing else', () => {
-    const { fx } = stepAt(108000, 120000);
-    const handoff = path.join(fx.dir, '04-qa.md');
-    const w = pre(fx.stepInput({ tool_name: 'Write', tool_input: { file_path: handoff } }), fx.opts);
-    assert.deepEqual(w, quiet);
-    assert.equal(isDeny(pre(fx.stepInput({ tool_name: 'Bash' }), fx.opts)), true);
-  });
-});
-
-describe('Step: a recorded cap that cannot be read gives 162000 and the guard keeps guarding', () => {
-  // Each value is hostile or out of range; none of them may switch the guard off or pick another point.
-  const BAD = ['120000', 0, -1, 2e9, 59999, 1000001, 120000.5, null, true, [120000], { n: 1 }, 'x'.repeat(300)];
-  for (const bad of BAD) {
-    test(`cap ${JSON.stringify(bad).slice(0, 40)}: refuses at 162000, allows at 150000`, () => {
-      const hi = stepAt(162000, bad);
-      assert.equal(isDeny(hi.r), true, 'still refuses at the fallback handover');
-      assert.deepEqual(stepAt(150000, bad).r, quiet);
+describe('AC11 the freeze point is floor(threshold x 0.9)', () => {
+  const TABLE = [
+    [120000, 108000], [100001, 90000], [60000, 54000], [250000, 225000], [200000, 180000], [123457, 111111], [undefined, 162000]
+  ];
+  for (const [cap, F] of TABLE) {
+    test(`threshold ${cap ?? 'unset'}: a Step at ${F - 1} passes, at ${F} is refused`, async () => {
+      assert.equal(await stepAt(cap, F - 1), false, 'below F');
+      assert.equal(await stepAt(cap, F), true, 'at F');
+    });
+    test(`threshold ${cap ?? 'unset'}: the Lead at ${F - 1} passes, at ${F} freezes`, async () => {
+      assert.equal(await leadAt(cap, F - 1), false, 'below F');
+      assert.equal(await leadAt(cap, F), true, 'at F');
     });
   }
 
-  test('a run-state file with a broken line before a valid start still guards', () => {
-    const fx = fixture({ tokens: 162000, starts: withCap(120000) });
-    fs.appendFileSync(path.join(fx.dir, 'run-state.jsonl'), '{not json\n');
-    assert.equal(isDeny(pre(fx.stepInput(), fx.opts)), true);
+  test('the Lead freeze at 108000 (threshold 120000) records one handover; at 100000 nothing happens', async () => {
+    const hi = await booted(120000);
+    assert.ok(hi.capDeny(hi.lead(108000)));
+    const hs = hi.handovers();
+    assert.equal(hs.length, 1);
+    assert.equal(hs[0].trigger, 'context');
+    assert.equal(hs[0].tokens, 108000);
+    const lo = await booted(120000);
+    lo.quiet(lo.lead(100000));
+    assert.deepEqual(lo.handovers(), []);
   });
 
-  test('two start lines: the first recorded cap is kept', () => {
-    const starts = [{ ev: 'start', cap: 120000 }, { ev: 'end', outcome: 'ship' }, { ev: 'start', cap: 600000 }];
-    const a = fixture({ tokens: 108000, starts });
-    assert.equal(isDeny(pre(a.stepInput(), a.opts)), true);
-    const b = fixture({ tokens: 100000, starts });
-    assert.deepEqual(pre(b.stepInput(), b.opts), quiet);
+  test('hand over at T: the Lead turn ends at the threshold, not before (threshold 120000)', async () => {
+    const fx = await booted(120000);
+    assert.equal(fx.lead(119999).json.continue, undefined);
+    assert.equal(fx.lead(120000).json.continue, false);
+  });
+});
+
+describe('AC12 a bad threshold gives 180000 and one warning naming the value', () => {
+  const BAD = ['120000', '200k', 0, -1, 59999, 250001, 1e9, 2e9, 120000.5, null, true, [120000], { n: 1 }, 'x'.repeat(300)];
+  for (const bad of BAD) {
+    const label = JSON.stringify(bad).slice(0, 30);
+    test(`threshold ${label}: a Step is refused at 162000 and allowed at 150000`, async () => {
+      assert.equal(await stepAt(bad, 162000), true);
+      assert.equal(await stepAt(bad, 150000), false);
+    });
+  }
+
+  test('the snapshot holds exactly one warning naming the bad value, cut to 35 characters', async () => {
+    for (const bad of ['200k', 250001, 59999]) {
+      const fx = await booted(bad);
+      const snap = JSON.parse(fs.readFileSync(fx.env.leadFile, 'utf8'));
+      assert.equal(snap.threshold, 180000);
+      assert.equal(snap.settingsWarnings.length, 1, JSON.stringify(snap.settingsWarnings));
+      assert.ok(snap.settingsWarnings[0].includes(String(bad)), snap.settingsWarnings[0]);
+    }
+    const long = await booted('x'.repeat(300));
+    const w = JSON.parse(fs.readFileSync(long.env.leadFile, 'utf8')).settingsWarnings;
+    assert.equal(w.length, 1);
+    assert.ok(!w[0].includes('x'.repeat(36)), 'the value is cut to 35 characters');
   });
 
-  test('a cap recorded on a later start counts when no earlier start carries one', () => {
-    const starts = [{ ev: 'start' }, { ev: 'end', outcome: 'ship' }, { ev: 'start', cap: 120000 }];
-    const fx = fixture({ tokens: 108000, starts });
-    assert.equal(isDeny(pre(fx.stepInput(), fx.opts)), true);
+  test('the bounds 60000 and 250000 are valid and give no warning', async () => {
+    for (const ok of [60000, 250000]) {
+      const fx = await booted(ok);
+      const snap = JSON.parse(fs.readFileSync(fx.env.leadFile, 'utf8'));
+      assert.equal(snap.threshold, ok);
+      assert.deepEqual(snap.settingsWarnings, []);
+    }
+  });
+
+  test('a project-level threshold is ignored: the guard threshold is user level only', async () => {
+    const fx = await capEnv({});
+    fs.writeFileSync(path.join(fx.env.project, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, pipeline: { context_cap: 100000 } } }));
+    fx.boot();
+    assert.equal(JSON.parse(fs.readFileSync(fx.env.leadFile, 'utf8')).threshold, 180000);
+    fx.quiet(fx.step(150000));
+  });
+});
+
+describe('AC17 a settings edit applies at the next Step dispatch, never mid-Step', () => {
+  test('the running Step keeps the threshold of its dispatch; the next Step gets the new one', async () => {
+    const fx = await booted(120000);
+    fx.env.setConfig({ pipeline: { context_cap: 200000 } });
+    assert.ok(fx.capDeny(fx.step(110000)), 'agent-a1 still works to 120000');
+    fx.env.run(fx.env.event('SubagentStart', { agent_id: 'agent-b2' }));
+    fx.quiet(fx.step(110000, { agent: 'agent-b2' }), 'agent-b2 works to 200000');
+    assert.ok(fx.capDeny(fx.step(180000, { agent: 'agent-b2' })));
+  });
+
+  test('a resumed Step keeps its file (cch.M15): a second SubagentStart of the same agent does not re-read settings', async () => {
+    const fx = await booted(120000);
+    fx.env.setConfig({ pipeline: { context_cap: 200000 } });
+    fx.env.run(fx.env.event('SubagentStart', { agent_id: 'agent-a1' }));
+    assert.ok(fx.capDeny(fx.step(110000)));
+  });
+});
+
+describe('the fast path: below floor(60000 x 0.9) = 54000 nothing can trigger', () => {
+  test('a Step and a Lead at 53999 pass with threshold 60000 and record nothing; at 54000 both are refused', async () => {
+    const fx = await booted(60000);
+    fx.quiet(fx.step(53999));
+    fx.quiet(fx.lead(53999));
+    assert.deepEqual(fx.handovers(), []);
+    assert.deepEqual(fx.guardRecord(), []);
+    assert.ok(fx.capDeny(fx.step(54000)));
+    assert.ok(fx.capDeny(fx.lead(54000)));
   });
 });
 
 describe('no active run is a no-op', () => {
-  test('a Step far over any handover with no run-state is allowed', () => {
-    assert.deepEqual(stepAt(900000, undefined, { run: false }).r, quiet);
-  });
-
-  test('a Lead far over any handover with no run-state is allowed and writes nothing', () => {
-    const { fx, r } = leadAt(900000, undefined, { run: false });
-    assert.deepEqual(r, quiet);
-    assert.deepEqual(fx.handovers(), []);
-  });
-
-  test('an ended run is not active', () => {
-    const fx = fixture({ tokens: 200000, starts: [{ ev: 'start', cap: 120000 }, { ev: 'end', outcome: 'ship' }] });
-    assert.deepEqual(pre(fx.stepInput(), fx.opts), quiet);
-  });
-});
-
-describe('below 54000 the cap is never read', () => {
-  // The run lookup walks .company; count the lstat calls on a path inside it.
-  const companyStats = (t, fx, input) => {
-    const calls = [];
-    const real = fs.lstatSync;
-    t.mock.method(fs, 'lstatSync', (p, ...a) => { if (String(p).includes('.company')) calls.push(String(p)); return real(p, ...a); });
-    const r = pre(input, fx.opts);
-    return { r, calls };
-  };
-
-  test('a Step at 53999 allows without touching the run folder', (t) => {
-    const fx = fixture({ tokens: 53999, starts: withCap(60000) });
-    const a = companyStats(t, fx, fx.stepInput());
-    assert.deepEqual(a.r, quiet);
-    assert.deepEqual(a.calls, []);
-  });
-
-  test('a Step at 54000 looks the run up and refuses at cap 60000', (t) => {
-    const fx = fixture({ tokens: 54000, starts: withCap(60000) });
-    const b = companyStats(t, fx, fx.stepInput());
-    assert.equal(isDeny(b.r), true);
-    assert.ok(b.calls.length > 0);
-  });
-
-  test('a Lead at 53999 allows without touching the run folder and records nothing', (t) => {
-    const fx = fixture({ tokens: 53999, lead: true, starts: withCap(60000) });
-    const a = companyStats(t, fx, fx.leadInput());
-    assert.deepEqual(a.r, quiet);
-    assert.deepEqual(a.calls, []);
-    assert.deepEqual(fx.handovers(), []);
-  });
-
-  test('a Lead at 54000 looks the run up and freezes at cap 60000', (t) => {
-    const fx = fixture({ tokens: 54000, lead: true, starts: withCap(60000) });
-    const b = companyStats(t, fx, fx.leadInput());
-    assert.equal(isDeny(b.r), true);
-    assert.ok(b.calls.length > 0);
-  });
-});
-
-describe('Lead: the freeze point is the run handover', () => {
-  test('cap 120000: the Lead at 108000 is frozen and a hand-over is recorded, at 100000 nothing happens', () => {
-    const { fx, r } = leadAt(108000, 120000);
-    assert.equal(isDeny(r), true);
-    const hs = fx.handovers();
-    assert.equal(hs.length, 1);
-    assert.equal(hs[0].trigger, 'context');
-    assert.equal(hs[0].tokens, 108000);
-    const low = leadAt(100000, 120000);
-    assert.deepEqual(low.r, quiet);
-    assert.deepEqual(low.fx.handovers(), []);
-  });
-
-  test('no recorded cap: the Lead freezes at 162000, not before', () => {
-    const below = leadAt(161999);
-    assert.deepEqual(below.r, quiet);
-    assert.deepEqual(below.fx.handovers(), []);
-    const at = leadAt(162000);
-    assert.equal(isDeny(at.r), true);
-    assert.equal(at.fx.handovers().length, 1);
-  });
-
-  test('an unreadable cap freezes the Lead at 162000', () => {
-    for (const bad of ['120000', 0, -5, 2e9, null]) {
-      assert.deepEqual(leadAt(150000, bad).r, quiet, JSON.stringify(bad));
-      assert.equal(isDeny(leadAt(162000, bad).r), true, JSON.stringify(bad));
-    }
+  test('a Step and a Lead far over any threshold pass and write nothing', async () => {
+    const fx = await booted(120000, { run: false });
+    fx.quiet(fx.step(900000));
+    fx.quiet(fx.lead(900000));
+    assert.deepEqual(fx.handovers(fx.env.project), []);
   });
 });

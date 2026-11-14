@@ -128,3 +128,28 @@ test('shipped files are LF only', () => {
   }
   assert.ok(pipeline.split('\n').length <= 125 && handoff.split('\n').length <= 125);
 });
+
+// ---------- T20 (P20261114.000001): release 1 moves the cap into the handoff mod (context-guard v2.0, run-state v3.0) ----------
+// Red until T33 (pipeline and handoff skill text, Core edits approved in the plan) and T36 (setup doc) ship.
+test('Setup item 8 no longer calls the cap one value for the whole run: a settings edit applies at the next Step dispatch (snapshot)', () => {
+  const item8 = pipeline.split('\n').find((l) => l.startsWith('8. **Context cap'));
+  assert.ok(item8, 'Setup item 8 exists');
+  hasNot(item8, 'one value for the whole run');
+  has(item8, /next Step|snapshot/i, 'run-state show');
+});
+
+test('the handoff skill names the cap guard of context-guard v2.0, not v1', () => {
+  hasNot(handoff, '`context-guard` v1,');
+  has(handoff, /`context-guard` v2/, 'cap.M1');
+});
+
+test('shipped text no longer names AICO_CONTEXT_GUARD as the escape: AICO_GUARDS=off, Lead session only, replaces it', () => {
+  const bad = [];
+  for (const p of [...walk('skills'), ...walk('agents'), ...walk('documentation'), 'README.md']) {
+    read(p).split('\n').forEach((line, i) => {
+      if (/AICO_CONTEXT_GUARD/.test(line) && !/\b(retired|no longer|was|replaced|replaces)\b/i.test(line)) bad.push(`${p}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(bad, []);
+  has(read('documentation/start/setup.md'), 'AICO_GUARDS=off', /Lead/);
+});
