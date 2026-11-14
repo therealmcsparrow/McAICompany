@@ -22,7 +22,7 @@ One local server, no Roles, no Gates, no branch or commit.
 
 **Two levels.** Your user default (`config.json` under `~/.mcsparrow/`, or the folder in `MCSPARROW_HOME`) and a project override (`.company/settings.json`, with the profile in `.company/project.md`). The project wins.
 
-**Max context** (`context_cap`): deprecated. The Context cap is fixed at 95000 for every Role and tier, and Roles hand over at 85500. The old keys are still accepted so old settings files keep working, but nothing reads them; the page shows the value as fixed text.
+**Max context** (`pipeline.context_cap`, shown as `context_cap`): how much text a Role may hold at once, a whole number from 60000 to 1000000, default 180000. Roles hand over at 90% of it, 162000 at the default. A project value wins over your user value. The value is frozen at the start of a run, so a change applies from the next run, not the one in progress. A stored value now takes effect.
 
 **You get.** The full link to the page in the terminal, and the settings saved to the level you chose.
 

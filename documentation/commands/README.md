@@ -19,7 +19,7 @@ This page lists every command once. Start here, find the command for your job in
 - **Gate**: a point where the company stops and asks you to Approve, Change or Stop.
 - **Handoff**: the one short file a Role writes at the end of its step, so the next Role knows what happened.
 - **Slug**: the short task name a run picks, used as a folder name.
-- **Context cap**: how much text a Role may keep in its head at once. It is fixed at 95000 tokens for every Role, and a Role hands over to a fresh one at 85500.
+- **Context cap**: how much text a Role may keep in its head at once. The default is 180000 tokens for every Role; you can change it in `/aico:settings` (60000 to 1000000), and it is frozen when a run starts. A Role hands over to a fresh one at 90% of it, 162000 at the default.
 - **Core and Contract**: the Core is the small base of a product; a Contract is the written rule for how two parts of it talk to each other.
 - **Ticket**: one small task cut from a spec, with a Role, the files it touches and what it depends on.
 
@@ -70,7 +70,7 @@ Most commands run through the shared pipeline, so a few conventions hold everywh
 
 Nothing is pushed or published by these commands.
 
-**Hand-over of the Lead.** A long run can fill the Lead's context. At 85500 tokens a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then freezes that session; it reads token counts from the local transcript and stores none of its text. The `lead_new_session` tool returns the command for a new session, which continues from that file. Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md).
+**Hand-over of the Lead.** A long run can fill the Lead's context. At the hand-over point (162000 tokens at the default cap) a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then freezes that session; it reads token counts from the local transcript and stores none of its text. The `lead_new_session` tool returns the command for a new session, which continues from that file. Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md).
 
 ### Build and change
 | Command | What it does |

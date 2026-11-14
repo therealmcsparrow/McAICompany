@@ -85,7 +85,7 @@ Then run `/plugin install aico@aico` as above. The tag form was checked with the
 
 ### The context cap
 
-Every Role works under one fixed cap: 95000 tokens, with a hand-over at 85500. The old `context_cap` setting has no effect. The Lead's own hand-over needs [no setup](setup.md).
+Every Role in a run works under one cap: 180000 tokens by default, with a hand-over at 90% of it, 162000 at the default. You can change it with the `context_cap` setting; it is frozen when a run starts. The Lead's own hand-over needs [no setup](setup.md).
 
 ### Tune the company
 
@@ -93,7 +93,7 @@ Run `/aico:settings` to open the settings page in your browser. There you can:
 - rename Roles
 - move a Role to another model or effort level
 - change how many Fix rounds run before aico asks you
-- see the max context, fixed at 95000 with a hand-over at 85500
+- set the max context (default 180000, hand-over at 90%, 162000 at the default)
 - pick the brainstorm debate style, or turn on the film script
 - choose which review lanes run
 - let a Brief or Plan Gate continue on its own (feature and fix have neither)
