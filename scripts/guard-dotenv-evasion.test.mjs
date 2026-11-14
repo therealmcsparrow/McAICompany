@@ -13,6 +13,7 @@ const ev = (name, { paths = [], command = null } = {}) => ({ tool: { name, comma
 const denies = (e, label) => assert.equal(judge(e).v, 'deny', label);
 const allows = (e, label) => assert.deepEqual(judge(e), { v: 'allow' }, label);
 const bash = (command) => ev('Bash', { command });
+const ps = (command) => ev('PowerShell', { command });
 
 test('over-long command denies even when the secret path is at the tail', () => {
   denies(bash(`echo ${'a '.repeat(40000)} cat .env`), 'tail past 65536');
@@ -101,21 +102,29 @@ test('an unclosed sequence brace over long dotted words stays linear', () => {
 });
 
 test('powershell wildcards that match a leading dot deny', () => {
-  denies(bash('Get-Content *env'), 'star env');
-  denies(bash('Get-Content *nv'), 'star nv');
-  denies(bash('Get-Content ?env'), 'question env');
-  denies(bash('Get-Content src\\*env'), 'after a directory');
-  denies(bash('cat *.env'), 'star dot env');
+  denies(ps('Get-Content *env'), 'star env');
+  denies(ps('Get-Content *nv'), 'star nv');
+  denies(ps('Get-Content ?env'), 'question env');
+  denies(ps('Get-Content src\\*env'), 'after a directory');
+  denies(ps('cat *.env'), 'star dot env');
 });
 
-test('typed non-dot wildcards deny when they match a dotenv sample', () => {
-  denies(bash('Get-Content *'), 'bare star');
-  denies(bash('cat *'), 'cat star');
-  denies(bash('Get-Content *.local'), 'star dot local');
-  denies(bash('Get-Content *nv.local'), 'star nv dot local');
-  denies(bash('Get-Content ?env.production'), 'question env production');
+test('typed non-dot wildcards deny in powershell when they match a dotenv sample', () => {
+  denies(ps('Get-Content *'), 'bare star');
+  denies(ps('cat *'), 'cat star');
+  denies(ps('Get-Content *.local'), 'star dot local');
+  denies(ps('Get-Content *nv.local'), 'star nv dot local');
+  denies(ps('Get-Content ?env.production'), 'question env production');
+  allows(ps('ls *.mjs *.md'), 'extension globs');
+  allows(ps('Get-Content *.json'), 'json glob');
+});
+
+test('bash star and question wildcards skip dotfiles and allow', () => {
+  allows(bash('cat *'), 'cat star');
+  allows(bash('cat *.local'), 'star dot local');
   allows(bash('ls *.mjs *.md'), 'extension globs');
-  allows(bash('Get-Content *.json'), 'json glob');
+  denies(bash('cat .e*'), 'dot-led star');
+  denies(bash('cat .*'), 'dot star');
 });
 
 test('an over-long token denies', () => {
