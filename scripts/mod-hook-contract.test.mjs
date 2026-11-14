@@ -1,5 +1,5 @@
 // docs/contracts/mod-hook.md at v1.1: a missing or invalid snapshot is rebuilt on the first guarded call, and the
-// guard denies `snapshot-invalid` only when the rebuild fails (P20261114.000003). Text checks on short phrases.
+// guard denies `snapshot-invalid` only when the rebuild fails. Text checks on short phrases.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

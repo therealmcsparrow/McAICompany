@@ -1,4 +1,4 @@
-// Regression tests for P20261114.000003: the Lead snapshot must exist after a fresh start, and a guarded call
+// Regression tests: the Lead snapshot must exist after a fresh start, and a guarded call
 // with no valid snapshot rebuilds it instead of denying `snapshot-invalid` (mod-hook v1.1).
 // Every case runs the real engine (scripts/hook-host.mjs) from a temp plugin root built and pinned by the engine
 // harness, with a temp MCSPARROW_HOME, so nothing here reads the repo's hooks/pins.json.
