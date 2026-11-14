@@ -539,7 +539,50 @@ function programDenied(body) {
 }
 
 const PS_HERE_OPEN = /@(["'])[ \t]*\r?\n/g;
-const PIPED_TEXT = /(["'])((?:\\[\s\S]|(?!\1)[^\\])*\\?)\1[ \t]*\|[ \t]*([^\n|;&]*)/g;
+const PIPE_AFTER = /[ \t]*\|[ \t]*([^\n|;&]*)/y;
+
+// Quoted text followed by a pipe, found in one forward scan: [text, first words of the receiving command].
+// A backslash skips the next character; a quote after a backslash also counts as a closer, so a text that ends in a
+// lone backslash is still read. Each quote kind that never closes is dropped after one scan.
+function* pipedTexts(text) {
+  const unclosed = new Set();
+  const pipeAt = (at) => { PIPE_AFTER.lastIndex = at; return PIPE_AFTER.exec(text); };
+  let i = 0;
+  while (i < text.length) {
+    const q = text[i];
+    if (q !== '"' && q !== "'") { i++; continue; }
+    if (unclosed.has(q)) { i++; continue; }
+    let j = i + 1;
+    let escaped = null;
+    let closer = -1;
+    while (j < text.length) {
+      const c = text[j];
+      if (c === '\\') {
+        if (text[j + 1] === q) {
+          const hit = pipeAt(j + 2);
+          if (hit) escaped = { at: j, end: PIPE_AFTER.lastIndex, rest: hit[1] };
+        }
+        j += 2;
+        continue;
+      }
+      if (c === q) { closer = j; break; }
+      j++;
+    }
+    const plain = closer >= 0 ? pipeAt(closer + 1) : null;
+    if (plain) {
+      yield [text.slice(i + 1, closer), plain[1]];
+      i = PIPE_AFTER.lastIndex;
+    } else if (escaped) {
+      yield [text.slice(i + 1, escaped.at + 1), escaped.rest];
+      i = escaped.end;
+    } else if (closer >= 0) {
+      i = closer + 1;
+    } else {
+      unclosed.add(q);
+      i++;
+    }
+  }
+}
 
 // PowerShell here-strings found in one forward pass: [body, rest of the closing line].
 function* psHereStrings(text) {
@@ -576,8 +619,8 @@ function stdinProgramDenied(text) {
   for (const [body, rest] of psHereStrings(text)) {
     if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
   }
-  for (const m of text.matchAll(PIPED_TEXT)) {
-    if (headWords(m[3]).some(isStdinRunner) && programDenied(m[2])) return true;
+  for (const [body, rest] of pipedTexts(text)) {
+    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
   }
   return false;
 }
