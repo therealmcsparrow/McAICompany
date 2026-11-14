@@ -345,9 +345,69 @@ function targetsOf(words, redirs) {
   return out;
 }
 
+// Interpreter words whose standard input is a program. A heredoc or here-string on such a line is code, not data.
+const STDIN_RUNNERS = new Set([...Object.keys(INTERPRETERS), 'bun', 'deno', 'tsx', 'ts-node', 'npx']);
+const isStdinRunner = (word) => {
+  const b = baseOf(word);
+  return STDIN_RUNNERS.has(b) || /^(?:python|pypy|node)[\d.]*$/.test(b);
+};
+const HOMEISH = /homedir|expanduser|path\.home|environ|process\.env|userprofile|getenv|\$home|%userprofile%|\bhome\b/i;
+const WRITEISH = /write|\bopen\s*\(|append|copy|rename|unlink|remove|truncate|\bcreate|\bsave|>>?\s*['"`]/i;
+const HEREDOC = /<<-?[ \t]*(['"]?)(\w+)\1([^\n]*)\n([\s\S]*?)(?:\n[ \t]*\2(?=\n|$)|$)/g;
+const HERESTRING = /^([^\n]*?)<<<([^\n]*)$/gm;
+
+// A program fed to an interpreter on stdin denies when it names a settings word, or reaches for the home
+// folder or environment and writes: the target may be built at run time, so it cannot be read from the text.
+function programDenied(body) {
+  return namesSettingsWord(body) || (HOMEISH.test(body) && WRITEISH.test(body));
+}
+
+function stdinProgramDenied(text) {
+  if (!text.includes('<<')) return false;
+  const headWords = (head) => head.split(/[\s;|&()]+/).filter(Boolean);
+  for (const m of text.matchAll(HEREDOC)) {
+    const lineStart = text.lastIndexOf('\n', m.index) + 1;
+    const head = `${text.slice(lineStart, m.index)} ${m[3]}`;
+    if (headWords(head).some(isStdinRunner) && programDenied(m[4])) return true;
+  }
+  for (const m of text.matchAll(HERESTRING)) {
+    if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2])) return true;
+  }
+  return false;
+}
+
+const NET_FILE_CALL = /\[(?:system\.)?io\.(?:file|directory)\]::(\w+)\s*\(\s*/gi;
+const NET_WRITE_METHOD = /^(?:write|append|create|copy|move|delete|replace|set|openwrite|open$)/i;
+const NET_WRITER_NEW = /(?:\[(?:system\.)?io\.(?:streamwriter|filestream|binarywriter)\]::new|new-object\s+(?:system\.)?io\.(?:streamwriter|filestream|binarywriter))\s*\(?\s*/gi;
+
+// A .NET file write is allowed only when its first argument is a quoted literal that names no settings word.
+function netTargetDenied(text, from) {
+  const c = text[from];
+  if (c !== '"' && c !== "'") return true;
+  const end = text.indexOf(c, from + 1);
+  if (end === -1) return true;
+  const after = /^\s*([,)])/.exec(text.slice(end + 1, end + 20));
+  if (!after) return true;
+  const call = text.slice(from, text.indexOf(')', end) === -1 ? from + 400 : text.indexOf(')', end));
+  return namesSettingsWord(text.slice(from, end + 1)) || namesSettingsWord(call);
+}
+
+function dotnetWriteDenied(text) {
+  if (!text.includes('::') && !/new-object/i.test(text)) return false;
+  for (const m of text.matchAll(NET_FILE_CALL)) {
+    if (NET_WRITE_METHOD.test(m[1]) && netTargetDenied(text, m.index + m[0].length)) return true;
+  }
+  for (const m of text.matchAll(NET_WRITER_NEW)) {
+    if (netTargetDenied(text, m.index + m[0].length)) return true;
+  }
+  return false;
+}
+
 function analyze(ctx, text, powershell, depth, acc) {
   const subshells = [];
-  const stmts = tokenize(stripHeredocs(text), powershell, (s) => subshells.push(s));
+  const stripped = stripHeredocs(text);
+  const stmts = tokenize(stripped, powershell, (s) => subshells.push(s));
+  const names = namesSettingsWord(stripped);
   for (const { words, redirs } of stmts) {
     const vi = verbIndex(words);
     const verb = vi < words.length ? baseOf(words[vi]) : '';
@@ -359,6 +419,7 @@ function analyze(ctx, text, powershell, depth, acc) {
     }
     for (const t of targetsOf(words, redirs)) {
       if (hits(ctx, t.word, t.ancestor)) return true;
+      if (names && /^\$|\$\(/.test(t.word) && !VAR_LED.test(t.word)) return true;
       acc.writes.push(t.word);
     }
   }
@@ -368,6 +429,7 @@ function analyze(ctx, text, powershell, depth, acc) {
 
 function judgeShell(ctx, command, powershell) {
   const acc = { cd: false, cdProt: false, writes: [] };
+  if (stdinProgramDenied(command) || dotnetWriteDenied(command)) return true;
   if (analyze(ctx, command, powershell, 0, acc)) return true;
   if (!acc.cd) return false;
   return acc.writes.some((w) => isRelative(w) && (acc.cdProt || ctx.bases.has(tailOf(normalizePath(w)))));

@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Bash","tool_input":{"command":"python3 - <<'EOF'\nopen('.claude/settings.json','w').write('{}')\nEOF"},"permission_mode":"default"}

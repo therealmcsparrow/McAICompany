@@ -213,13 +213,51 @@ export function projectRoot(cwd) {
   }
 }
 
-export function protectedPaths(ctx, root) {
+const readSmall = (file) => {
+  try {
+    const l = fs.lstatSync(file);
+    if (l.isSymbolicLink() || !l.isFile() || l.size > 4096) return null;
+    return fs.readFileSync(file, 'utf8');
+  } catch { return null; }
+};
+
+// The main tree of a linked git worktree, from the nearest `.git` pointer file above cwd; null when the
+// pointer is absent or is not confirmed from both sides (back link, common dir, a .company/work folder).
+export function worktreeMain(cwd) {
+  const start = realOf(cwd || '.', process.cwd());
+  if (!start) return null;
+  for (let cur = start; ; cur = path.dirname(cur)) {
+    const g = path.join(cur, '.git');
+    let l = null;
+    try { l = fs.lstatSync(g); } catch { /* none here */ }
+    if (l && l.isDirectory()) return null;
+    if (l && l.isFile()) {
+      const text = readSmall(g);
+      const m = text === null ? null : /^gitdir: (.+?)\r?\n?$/.exec(text);
+      if (!m) return null;
+      const gitdir = path.resolve(cur, m[1]);
+      const wt = path.dirname(gitdir);
+      if (path.basename(wt) !== 'worktrees' || path.basename(path.dirname(wt)) !== '.git') return null;
+      const main = path.dirname(path.dirname(wt));
+      const back = readSmall(path.join(gitdir, 'gitdir'));
+      const common = readSmall(path.join(gitdir, 'commondir'));
+      if (back === null || common === null) return null;
+      if (path.resolve(gitdir, back.trim()) !== path.resolve(g)) return null;
+      if (path.resolve(gitdir, common.trim()) !== path.join(main, '.git')) return null;
+      return main;
+    }
+    if (path.dirname(cur) === cur) return null;
+  }
+}
+
+export function protectedPaths(ctx, root, main = null) {
   const home = homeOf(ctx.env);
   const list = [ctx.pluginRoot, path.join(ctx.mcsHome, 'config.json'), path.join(ctx.mcsHome, 'hook-snapshots'),
     path.join(home, '.claude', 'settings.json'), path.join(home, '.claude', 'settings.local.json')];
-  if (root) list.push(path.join(root, '.claude', 'settings.json'), path.join(root, '.claude', 'settings.local.json'), path.join(root, '.company', 'settings.json'));
-  if (root) {
-    const work = path.join(root, '.company', 'work');
+  for (const r of [root, main]) {
+    if (!r) continue;
+    list.push(path.join(r, '.claude', 'settings.json'), path.join(r, '.claude', 'settings.local.json'), path.join(r, '.company', 'settings.json'));
+    const work = path.join(r, '.company', 'work');
     try {
       for (const d of fs.readdirSync(work, { withFileTypes: true }).slice(0, MAX_RUNS)) if (d.isDirectory()) list.push(path.join(work, d.name, 'guard.jsonl'));
     } catch { /* no work folder */ }
@@ -275,7 +313,7 @@ export async function normalize(raw, ctx) {
       subagentModel: envStr(ctx.env, 'CLAUDE_CODE_SUBAGENT_MODEL'),
       subagentModelForce: envStr(ctx.env, 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE')
     },
-    protected: protectedPaths(ctx, root),
+    protected: protectedPaths(ctx, root, worktreeMain(cwd)),
     run: null,
     drift,
     stopHookActive: name === 'SubagentStop' && typeof raw.stop_hook_active === 'boolean' ? raw.stop_hook_active : null
