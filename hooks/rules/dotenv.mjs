@@ -132,10 +132,12 @@ function globMatches(tokens, text) {
   return ti === tokens.length;
 }
 
-function globNamesDotenv(base) {
+// A star that stands for a shell expansion is a guess, not a typed wildcard: a non-dot base
+// from an expansion must hold a letter of the name and match `.env` itself.
+function globNamesDotenv(base, fromExpansion) {
   if (!GLOB_CHARS.test(base)) return false;
   if (base.length > MAX_GLOB_CHARS) return true;
-  if (!base.startsWith('.') && !base.includes('~')) {
+  if (fromExpansion && !base.startsWith('.') && !base.includes('~')) {
     return /[env]/i.test(base) && globMatches(globTokens(base), '.env');
   }
   const samples = base.includes('~') ? [...GLOB_SAMPLES, 'env~1'] : GLOB_SAMPLES;
@@ -191,13 +193,13 @@ function expandBraces(text, budget) {
   return done;
 }
 
-function namesDotenv(base) {
+function namesDotenv(base, fromExpansion = false) {
   if (TEMPLATES.has(base)) return false;
   if (base === '.env') return true;
   if (base.startsWith('.env.')) return true;
   if (SHORT_NAME.test(base)) return true;
   if (/^\.env[*?[{]/.test(base)) return true;
-  return globNamesDotenv(base);
+  return globNamesDotenv(base, fromExpansion);
 }
 
 const ANSI_SIMPLE = { a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' };
@@ -258,11 +260,11 @@ function commandTokens(command) {
 }
 
 // True when any brace alternative of the spelling names a denied file; unbounded expansion denies.
-function deniesSpelling(text, budget) {
+function deniesSpelling(text, budget, fromExpansion = false) {
   const alternatives = expandBraces(text, budget);
   if (alternatives === null) return true;
-  return alternatives.some((alt) => namesDotenv(baseName(normalizePath(alt)))
-    || (alt.includes('[') && namesDotenv(baseName(alt.replace(/\\/g, '/')))));
+  return alternatives.some((alt) => namesDotenv(baseName(normalizePath(alt)), fromExpansion)
+    || (alt.includes('[') && namesDotenv(baseName(alt.replace(/\\/g, '/')), fromExpansion)));
 }
 
 function deniesPath(raw, budget) {
@@ -349,7 +351,7 @@ function decide(event) {
     }
     for (const word of expansionWords(tool.command)) {
       if (word.length > MAX_PATH_CHARS && !SEPARATORS.test(word)) return true;
-      if (word.length <= MAX_PATH_CHARS && deniesSpelling(word, budget)) return true;
+      if (word.length <= MAX_PATH_CHARS && deniesSpelling(word, budget, true)) return true;
     }
   }
   return false;

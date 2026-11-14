@@ -108,6 +108,16 @@ test('powershell wildcards that match a leading dot deny', () => {
   denies(bash('cat *.env'), 'star dot env');
 });
 
+test('typed non-dot wildcards deny when they match a dotenv sample', () => {
+  denies(bash('Get-Content *'), 'bare star');
+  denies(bash('cat *'), 'cat star');
+  denies(bash('Get-Content *.local'), 'star dot local');
+  denies(bash('Get-Content *nv.local'), 'star nv dot local');
+  denies(bash('Get-Content ?env.production'), 'question env production');
+  allows(bash('ls *.mjs *.md'), 'extension globs');
+  allows(bash('Get-Content *.json'), 'json glob');
+});
+
 test('an over-long token denies', () => {
   denies(bash('cat ' + './'.repeat(2100) + '.env'), 'padded dot path');
   denies(bash('cat ' + 'a/'.repeat(2100) + '.e{n,x}v'), 'padded brace');
@@ -121,7 +131,7 @@ test('expansions that cannot reach a dotenv name pass', () => {
   allows(bash('cat ${HOME}/notes.txt'), 'braced parameter');
   allows(bash('echo $(date) `date`'), 'substitutions');
   allows(bash('echo file{1..3}.txt'), 'sequence in a plain name');
-  allows(bash('ls *'), 'bare star');
+  allows(bash('echo $?'), 'status parameter alone');
   allows(bash('ls *.mjs *.md'), 'extension globs');
   allows(bash('node --test scripts/*.test.mjs'), 'test glob');
   allows(bash('echo $?'), 'status parameter');
