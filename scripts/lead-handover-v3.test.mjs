@@ -17,6 +17,15 @@ const SESSION = 'abcdef012345';
 
 const tmps = [];
 after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
+// The cap lookup falls back to the user settings file: point it at an empty temp home so a stored cap never leaks in.
+const isoHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-home-'));
+tmps.push(isoHome);
+const savedHome = { MCSPARROW_HOME: process.env.MCSPARROW_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+process.env.MCSPARROW_HOME = path.join(isoHome, '.mcsparrow');
+process.env.HOME = isoHome;
+process.env.USERPROFILE = isoHome;
+after(() => { for (const [k, v] of Object.entries(savedHome)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 // A product root with a v3 project folder and one run folder; `running` leaves a Step open.
