@@ -171,6 +171,7 @@ test('AC6/AC21: the rule is pure and does not mutate the event', async () => {
 const toEvent = (raw) => {
   const ti = raw.tool_input || {};
   const paths = [ti.file_path, ti.notebook_path, ti.path, ti.pattern].filter(x => typeof x === 'string').map(x => P(x));
+  if (raw.tool_name === 'Grep' && typeof ti.glob === 'string' && ti.glob) paths.push(P(ti.glob));
   if (typeof ti.command === 'string') for (const t of ti.command.split(/\s+/)) if (/[.\\/]/.test(t)) paths.push(P(t));
   return ev(raw.tool_name, { paths, command: typeof ti.command === 'string' ? ti.command : null });
 };
