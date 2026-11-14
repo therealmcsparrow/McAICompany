@@ -4,6 +4,29 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **Five guards check every tool call.** Rules aico used to leave to skill text now run as hooks, in the Lead and in every Step, so a Role cannot skip them. A refused call shows a short reason with a rule ID. The first refusal of each guard shows you one note; later ones are counted. See [Guards](documentation/concepts/guards.md).
+- **Switchboard, `/aico-mods`.** One pane lists every mod and guard, switches the savers on or off and shows the last five refusals. Guards show `locked on`. It writes through aico settings only.
+- **Savings, `/aico-savings`.** Shows the median real tokens per Step of this run next to the runs before the guards. With no data it says `no data` or `unmeasured`.
+- **Token-saving pack mods, Lead session only.** Cache clock (a countdown; it sends no ping and makes no model call), Browser screenshot note (off by default; never shrinks hands-on-tester evidence), Switchboard and Savings. A saver only shows you a note. It never refuses a call, and it cannot override a Role's model, the model floor or the cap. Credit to Ben AI in `NOTICE`.
+- **Off switch.** Launch Claude Code with `AICO_GUARDS=off` and the guards stand down in the Lead session. Steps stay guarded. An agent cannot set it.
+
+### Changed
+- **The context cap is enforced by one guard.** The handoff mod now warns and freezes at 162000 and hands over at 180000 at the default cap; the earlier cap code is gone. A bad `context_cap` value (0, negative, text, a decimal, over 250000) falls back to 180000 with one warning that names it.
+- **Setup stops when a guard is missing.** If a guard is missing, off or changed, a run does not start and names it.
+- **Settings edits apply at the next Step.** A half-written settings file makes the guards deny and the savers pass.
+- **If Claude Code renames a hook field**, you are warned, savers switch off and the guards deny with `hook-payload-changed`.
+- **Guard refusals you may notice:**
+  - `git add` with a bare pathspec (`.`, a directory, or a wildcard), `-A`, `--all`, `-u` and `git commit -a` are denied. Where aico cannot tell what a pathspec stages, it denies. `git add <file>` still passes.
+  - Reading `.env` through a wildcard or shell expansion is denied, as are Read, Edit, Write and shell reads of `.env` and `.env.<x>`. `.env.example`, `.env.sample` and `.env.template` pass.
+  - Writes to aico's own settings, hooks, rule table and pins are denied, also by a shell command with a relative path.
+  - A dispatch on a model below the Role's floor is denied. A dispatch with no model passes.
+- **Guards stop accidents, not a determined attacker.** A command built to get around them can succeed. Known gaps are tracked as Debt.
+- Contracts: `context-guard` v2.0, `run-state` v3.0, `aico-settings` v3.0 (all breaking), `aico-mods` v2.2, and new `hook-event` v1, `mod-hook` v1, `mod-manifest` v1. ADRs 0070, 0071, 0072.
+
+### Fixed
+- **The dotenv star-versus-env check applies to PowerShell only.** A POSIX shell no longer gets a false refusal from it.
+
 ## [0.39.0] - 2026-11-14
 
 Rollback: node scripts/stable.mjs 0.38.1
