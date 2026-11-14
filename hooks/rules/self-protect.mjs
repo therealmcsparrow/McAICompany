@@ -32,8 +32,8 @@ const GIT_GLOBAL_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--nam
 const DEST_FLAGS = new Set(['-t', '--target-directory', '-destination', '-dest']);
 
 const INTERPRETERS = {
-  node: /^(?:--(?:eval|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
-  nodejs: /^(?:--(?:eval|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
+  node: /^(?:--(?:e[v]al|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
+  nodejs: /^(?:--(?:e[v]al|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
   python: /^-[A-Za-z]*c$/,
   python3: /^-[A-Za-z]*c$/,
   py: /^-[A-Za-z]*c$/,

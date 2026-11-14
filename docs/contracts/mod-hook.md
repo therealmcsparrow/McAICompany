@@ -44,5 +44,11 @@ One engine process per hook call, never one per rule. PreToolUse with a transcri
 - Guards stop an agent, not a person: the CEO's off switch, a hand edit of the installed plugin or of `~/.claude/settings.json` outside a session are CEO acts.
 - The plugin is the installed copy under `CLAUDE_PLUGIN_ROOT`. Developing aico with the plugin loaded from the source tree would put the source under self-protect; load the installed copy.
 
+## Minimum CLI versions (ccmod.M8)
+- Engine and mods as a whole: Claude Code 2.1.310 (the `aico-mods` minimum). The spike checked the eight events of `hooks/schema/hook-fields.json` on 2.1.325 (`03-prototype-backend-engineer.md`).
+- `onFailure` on a hook entry: 2.1.295 (cch.M-SEC3); before it a host kill lets a PreToolUse action through.
+- `CLAUDE_CODE_SUBAGENT_MODEL` and its `_FORCE` form, read by `model-floor`: 2.1.251 (`scripts/settings.mjs` `modelEnvLine`).
+- Every other event and field of `hooks/schema/hook-fields.json` (`agent_id`, `agent_type`, `agent_transcript_path`, `tool_input.*`) is used on the 2.1.310 floor; no later tie is documented. A tie found later is added here and the schema file, never inferred in a rule. `hooks/pins.json` holds hashes only (`{ v, files }`), so a version note never lives there.
+
 ## Compatibility
 New Contract, v1. A new verdict kind or a change in the engine order is a major; a new rule row or a new error word is a minor.
