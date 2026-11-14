@@ -13,6 +13,7 @@ const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
 const SELF_EXIT_MS = 3800;
 const MAX_TOTAL_FIXTURES = 400;
+const MAX_FIXTURE_DETAILS = 5;
 const MAX_FIXTURES = 24;
 const MAX_FIXTURE_BYTES = 64 * 1024;
 const FIXED = ['hooks/rules.json', 'hooks/hooks.json', 'hooks/schema/hook-fields.json', 'company/model-floor.json'];
@@ -182,7 +183,11 @@ async function main() {
     if (prov) snap.writeLead(snapCtx, drift ? { ...prov, drift: true } : prov);
     if (prov && !tableError) {
       const failed = await checkFixtures({ rows, prov, ctx, run, ev });
-      if (failed.length > 0) { drift = true; notices.push(`aico guards: fixture check failed for ${failed.join(', ')}; guards deny, savers are off`); }
+      if (failed.rules.length > 0) {
+        drift = true;
+        const more = failed.details.length > 0 ? ` (${failed.details.join('; ')})` : '';
+        notices.push(`aico guards: fixture check failed for ${failed.rules.join(', ')}${more}; guards deny, savers are off`);
+      }
     }
     const full = snap.buildSnapshot({ pluginRoot: ROOT, mcsHome, root, manifests, drift });
     if (full) {
@@ -273,23 +278,29 @@ async function main() {
 // The budget counts fixtures, not time, so machine load never reads as drift; a runaway set still fails closed.
 async function checkFixtures({ rows, prov, ctx, run, ev }) {
   const failed = new Set();
+  const details = [];
+  // Only a short lowercase word is echoed; fixture names already match a strict pattern. Never free text.
+  const note = (rule, name, word) => {
+    if (details.length < MAX_FIXTURE_DETAILS) details.push(`${rule}/${name}: ${typeof word === 'string' && /^[a-z-]{1,16}$/.test(word) ? word : 'error'}`);
+  };
   let seen = 0;
   for (const r of rows.filter((x) => x.kind === 'guard')) {
     const dir = path.join(ROOT, 'hooks', 'fixtures', r.rule);
     let names = [];
     try { names = fs.readdirSync(dir).filter((n) => /^(pass|block)-[A-Za-z0-9._-]+\.json$/.test(n)).sort().slice(0, MAX_FIXTURES); } catch { continue; }
     for (const n of names) {
-      if (++seen > MAX_TOTAL_FIXTURES) { failed.add('fixture-budget'); return [...failed]; }
+      if (++seen > MAX_TOTAL_FIXTURES) { failed.add('fixture-budget'); return { rules: [...failed], details }; }
       const wantDeny = n.startsWith('block-');
       let verdictDeny = false;
+      let verdictWord = 'verdict';
       try {
         const f = path.join(dir, n);
-        if (fs.statSync(f).size > MAX_FIXTURE_BYTES) throw new Error('large');
+        if (fs.statSync(f).size > MAX_FIXTURE_BYTES) throw Object.assign(new Error('large'), { word: 'large' });
         // `_synthetic` is the fixtures' own channel for state the host reads from disk (session, tokens, run);
         // it is stripped before normalize, so a renamed real field still drifts.
         const { _synthetic: syn, ...payload } = JSON.parse(fs.readFileSync(f, 'utf8'));
         const norm = await ev.normalize(payload, { ...ctx, resolveRun: null });
-        if (!norm.ok || norm.event.drift.length > 0) throw new Error('payload');
+        if (!norm.ok || norm.event.drift.length > 0) throw Object.assign(new Error('payload'), { word: 'payload' });
         let fe = norm.event;
         if (syn && typeof syn === 'object') {
           fe = { ...fe };
@@ -303,13 +314,14 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
         if (r.event === fe.event && (fe.tool === null || r.matcher.includes('*') || r.matcher.includes(fe.tool.name))) {
           const out = await run(r, fe, prov);
           verdictDeny = !out.ok || out.verdict.v === 'deny';
-          if (!out.ok && wantDeny === false) throw new Error('failed');
+          if (!out.ok) verdictWord = out.word;
+          if (!out.ok && wantDeny === false) throw Object.assign(new Error('failed'), { word: out.word });
         }
-      } catch { failed.add(r.rule); continue; }
-      if (verdictDeny !== wantDeny) failed.add(r.rule);
+      } catch (e) { failed.add(r.rule); note(r.rule, n, e && e.word); continue; }
+      if (verdictDeny !== wantDeny) { failed.add(r.rule); note(r.rule, n, verdictWord); }
     }
   }
-  return [...failed];
+  return { rules: [...failed], details };
 }
 
 // Compare realpaths: a symlinked or 8.3 short path must not turn the guard into a silent no-op.

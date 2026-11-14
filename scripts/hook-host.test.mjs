@@ -478,6 +478,23 @@ describe('AC18: drift and the session-start check', () => {
     denied(env, env.run(env.pre('ls')), 'hook-payload-changed');
   });
 
+  test('fixture check notice names <rule>/<fixture>: <word>, bounded', () => {
+    const env = makeEnv();
+    const dir = path.join(env.plugin, 'hooks', 'fixtures', 'stub-guard.M1');
+    const f = path.join(dir, 'block-deny.json');
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    j.tool_input.command = 'ls';
+    fs.writeFileSync(f, JSON.stringify(j));
+    const bad = JSON.parse(fs.readFileSync(f, 'utf8'));
+    bad.tool_name_renamed = bad.tool_name;
+    delete bad.tool_name;
+    fs.writeFileSync(path.join(dir, 'pass-renamed.json'), JSON.stringify(bad));
+    const m = sys(env.run(env.event('SessionStart')));
+    assert.match(m, /stub-guard\.M1\/block-deny\.json: verdict/);
+    assert.match(m, /stub-guard\.M1\/pass-renamed\.json: payload/);
+    assert.ok(m.length < 600, `notice is bounded, got ${m.length}`);
+  });
+
   test('a clean SessionStart is silent and drift is false', () => {
     const env = makeEnv();
     const r = env.run(env.event('SessionStart'));
