@@ -7,12 +7,14 @@ import { registerReflect } from '../mods/reflect'
 import { registerRepromptGate } from '../mods/reprompt-gate'
 import { registerSavvy } from '../mods/savvy'
 import { registerShell } from '../mods/shared/shell'
+import { registerSwitchboard } from '../mods/switchboard'
 
 export const register: Register = on => {
   registerShell(on)
   registerSavvy(on)
   registerCacheTax(on)
   registerReflect(on)
+  registerSwitchboard(on)
   registerPlanGate(on)
   registerFreshStep(on)
   // Last, so the other mods' guards keep answering for their own failures as before.

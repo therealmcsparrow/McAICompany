@@ -1,0 +1,1 @@
+{ "v": 1, "id": "switchboard", "kind": "saver", "title": "Switchboard", "owner": "frontend-engineer", "sessions": "lead", "events": [], "rules": [], "fail": "open", "switch": "mods.switchboard.enabled", "lock": false, "upstream": null }
