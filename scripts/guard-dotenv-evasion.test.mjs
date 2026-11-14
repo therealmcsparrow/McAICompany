@@ -121,3 +121,17 @@ test('a malformed event or throwing input denies instead of allowing', () => {
   const hostile = { tool: { name: 'Bash', command: 'cat x', get paths() { throw new Error('boom'); } } };
   assert.equal(judge(hostile).v, 'deny');
 });
+
+test('a Grep glob with braces is judged through the normalized event', async () => {
+  const { normalize } = await import(pathToFileURL(path.join(root, 'hooks', 'lib', 'event.mjs')).href);
+  const ctx = { env: {}, schema: null, pluginRoot: root, mcsHome: path.join(root, '.mcs-none'), resolveRun: null };
+  const verdict = async (glob) => {
+    const r = await normalize({ hook_event_name: 'PreToolUse', session_id: 's', cwd: root, tool_name: 'Grep', tool_input: { glob } }, ctx);
+    assert.ok(r.ok, 'normalize ok');
+    return judge(r.event);
+  };
+  assert.equal((await verdict('{.env,x}')).v, 'deny', 'brace glob naming .env');
+  assert.equal((await verdict('x{a,.env}')).v, 'allow', 'brace glob with no dotenv name');
+  assert.deepEqual(await verdict('*.{mjs,json}'), { v: 'allow' }, 'ordinary brace glob');
+  denies(ev('Grep', { paths: [P('{.env,x}')] }), 'brace path entry');
+});
