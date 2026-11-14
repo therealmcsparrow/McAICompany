@@ -43,19 +43,25 @@ const reply = (text, code = 0) => (child) => {
   child.emit('close', code);
 };
 
-test('totals and over-cap rows from the report', async (t) => {
+const overOf = async (t, rows, extra) => {
+  const { root } = makeRoot(t);
+  const { spawn } = fakeSpawn(reply(report(rows, extra)));
+  return (await readLedger(root, SLUG, { spawn, cache: new Map() })).overCap;
+};
+
+test('totals and over-cap rows are judged against the report cap', async (t) => {
   const { root } = makeRoot(t);
   const rows = [
     { id: '05', role: 'qa', ctx_end: 40000 },
     { id: '06', role: 'backend-engineer', ctx_end: 96000 },
     { id: '07', role: 'frontend-engineer', ctx_end: null },
-    { id: '08', role: 'code-reviewer', ctx_end: 99000 }
+    { id: '08', role: 'code-reviewer', ctx_end: 130000 }
   ];
-  const { spawn, calls } = fakeSpawn(reply(report(rows)));
+  const { spawn, calls } = fakeSpawn(reply(report(rows, { cap: 120000 })));
   const out = await readLedger(root, SLUG, { spawn, cache: new Map() });
   assert.deepEqual(out, {
     state: 'ok', totals: { spend: 1200, cacheRead: 3400 },
-    overCap: [{ step: '06', role: 'backend-engineer', ctxEnd: 96000 }, { step: '08', role: 'code-reviewer', ctxEnd: 99000 }]
+    overCap: [{ step: '08', role: 'code-reviewer', ctxEnd: 130000 }]
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].file, process.execPath);
@@ -65,11 +71,22 @@ test('totals and over-cap rows from the report', async (t) => {
   assert.equal(calls[0].opts.cwd, root);
 });
 
-test('ctx_end of exactly 95000 is not over cap', async (t) => {
-  const { root } = makeRoot(t);
-  const { spawn } = fakeSpawn(reply(report([{ id: '05', role: 'qa', ctx_end: 95000 }, { id: '06', role: 'qa', ctx_end: 95001 }])));
-  const out = await readLedger(root, SLUG, { spawn, cache: new Map() });
-  assert.deepEqual(out.overCap, [{ step: '06', role: 'qa', ctxEnd: 95001 }]);
+test('AC11: the report cap is the line: exactly the cap is not over, one above is', async (t) => {
+  const rows = [{ id: '05', role: 'qa', ctx_end: 120000 }, { id: '06', role: 'qa', ctx_end: 120001 }];
+  assert.deepEqual(await overOf(t, rows, { cap: 120000 }), [{ step: '06', role: 'qa', ctxEnd: 120001 }]);
+  assert.deepEqual(await overOf(t, rows, { cap: 200000 }), []);
+});
+
+test('AC9: a report without cap uses 180000, so 95001 is not over cap', async (t) => {
+  const rows = [{ id: '05', role: 'qa', ctx_end: 95001 }, { id: '06', role: 'qa', ctx_end: 180000 }, { id: '07', role: 'qa', ctx_end: 180001 }];
+  assert.deepEqual(await overOf(t, rows), [{ step: '07', role: 'qa', ctxEnd: 180001 }]);
+});
+
+test('a hostile report cap (string, null, negative, fraction, below 60000, above 1000000, object) falls back to 180000', async (t) => {
+  const rows = [{ id: '05', role: 'qa', ctx_end: 130000 }, { id: '06', role: 'qa', ctx_end: 180001 }];
+  for (const cap of ['120000', null, -1, 0, 120000.5, 59999, 1000001, NaN, Infinity, { a: 1 }, [120000], true]) {
+    assert.deepEqual(await overOf(t, rows, { cap }), [{ step: '06', role: 'qa', ctxEnd: 180001 }], JSON.stringify(cap));
+  }
 });
 
 test('an unchanged ledger spawns once, a changed one again', async (t) => {
