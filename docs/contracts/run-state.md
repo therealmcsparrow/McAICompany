@@ -94,6 +94,7 @@ Writes are append with `O_APPEND`; the script checks the size limit before writi
 - Times and order come from the file; the view uses only the last segment (from the last `start`), except `cap` and `handover`.
 
 ## Run cap (v2.1)
+v3.0 (planned, task P20261114.000001/01-feature, major, breaking, CEO approved at the Plan Gate 2026-11-14; ADR `docs/adr/0070-cap-in-handoff-mod.md`; line 1 changes with the build task): the cap is no longer frozen per run. `runCap(root, slug, opts)` returns `{ cap, handover, from: 'snapshot'|'default' }`: the `threshold` of the project's Lead snapshot (`mod-hook` v1 "Snapshot"), else `180000` from the cap module. `start` stops writing `cap`; an old `cap` in a record is ignored on read. The run view keys `cap` and `handover` keep their names and types and carry the `runCap` value. Every other v2.1 row stays.
 `runCap(root, slug, opts)`, exported by `scripts/run-cap.mjs`, returns `{ cap, handover, from: 'run'|'settings'|'default' }`: the view's recorded `cap` (`from: 'run'`); else the current resolved `pipeline.context_cap` (`'settings'`); else `180000` (`'default'`). `handover` is always `handoverOf(cap)`. A run without a run-state `start` (idea flows: grill, to-spec, research) gets the current setting, the value Setup §1.7 item 8 reads, so dispatch and guard agree. An unreadable view or settings falls through to the next source; it writes nothing. Consumers: `context-guard` v1.2, `lead-handoff` v2.3, `token-ledger` v1.13.
 
 ## Active run

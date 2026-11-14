@@ -161,6 +161,10 @@ _Avoid_: orchestrator (use Lead).
 
 **Reflect** — the mod that checks each finished Step and the finished run, and suggests Lessons. Each is `suggested` until the CEO presses Accept; Decline writes nothing.
 
+**Guard** — a fail-closed deny hook, locked on, that runs in every session (the Lead and every Step). On a crash, timeout or unreadable input it denies. Only the CEO's one-session off switch stands it down. Proposed in ADR 0071.
+
+**Saver** — a fail-open advisory mod, switchable in settings, that runs in the Lead session only. It may allow or add a note, never deny or change a tool call; on any failure it passes the call through unchanged. Proposed in ADR 0071.
+
 **Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
 
 **Work folder name** — the name of a run's folder under `.company/work/`: `YYYY-MM-DD HH.MM - Topic` in local start time, Topic 1 to 5 Title Case ASCII words (at most 60 characters), then an optional helper word (`Build`, `Draft`) and a collision number 2 to 9. Git branches and worktrees use its branch id (`2026-10-30-2345-fix-login`), never the name. Older lowercase slugs stay valid.
