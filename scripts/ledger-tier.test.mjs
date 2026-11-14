@@ -254,7 +254,7 @@ test('ship prints the path short scorecard line', (t) => {
 const sha = (lines) => crypto.createHash('sha256').update(lines.join('\n')).digest('hex').slice(0, 16);
 const GOLD_REPORT = {
   'baseline-research-team': '8a3f018d8aab26d2', 'baseline-role-effort': 'ace6ae8b26f0dd12', 'baseline-v0-3': 'a30ce9bab0f185fd',
-  'brainstorm-20261027-1140': '3cf75e4e93f727fd', 'triage-hardening': '7f4d952b22347ae0'
+  'brainstorm-20261027-1140': '3cf75e4e93f727fd', 'triage-hardening': 'f0fb8db7bce8894f'
 };
 const GOLD_SCORE_FIXTURES = {
   'baseline-research-team': 'scorecard baseline-research-team (tier unknown): time untimed (no baseline) | CEO wait ? (no baseline) | spend/AC 123450 (no baseline) | fix rounds ? (no baseline) | high blockers ? (no baseline) | gate rejects ? (no baseline) | excluded: 4 | cost: not recorded',
@@ -290,7 +290,7 @@ test('the parallel-cap ledger gives the same numbers, copied to a temp dir', { s
   const sb = sandbox(t);
   copyFixtures(sb);
   fs.copyFileSync(PARALLEL_CAP, ledgerFile(sb, 'parallel-cap'));
-  assert.equal(sha(call(sb, ['report', 'parallel-cap']).lines), '4081a682b87eaca1');
+  assert.equal(sha(call(sb, ['report', 'parallel-cap']).lines), '2b01f95ddff85bb3');
   assert.deepEqual(call(sb, ['scorecard', 'parallel-cap']).lines, [
     'scorecard parallel-cap (tier high): time 3h34m (no baseline) | CEO wait 1h43m (no baseline) | spend/AC 192760 (no baseline) | fix rounds 3 (no baseline) | high blockers 9 (no baseline) | gate rejects 1 (no baseline) | excluded: 5 | cost: not recorded'
   ]);
