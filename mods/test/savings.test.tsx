@@ -259,12 +259,14 @@ test('AC24: narrow width (under 80 cols) puts the value on the line after its la
   expect(rows[at + 1].trim()).toBe('48200')
 })
 
-test('AC25: the command opens the pane when savings is on; off prints one line and does not open', async ($, on) => {
+test('AC25: the command opens the pane when savings is on', async ($, on) => {
   const w = makeWorld()
   await boot($, on, w)
   await $.command.run({ command: 'aico-savings', args: '' } as never)
   expect(w.opened).toContain(PANE)
+})
 
+test('AC25: when savings is off the command prints one line and does not open', async ($, on) => {
   const off = makeWorld()
   off.settings = SETTINGS(false)
   await boot($, on, off)
