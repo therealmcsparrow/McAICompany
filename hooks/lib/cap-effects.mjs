@@ -2,6 +2,8 @@
 // Rules never write; every write of the guard record happens here.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { importPinned, verifyDeps } from './dep-pins.mjs';
 
 export const GUARD_RECORD = 'guard.jsonl';
 const MAX_LINES = 1000;
@@ -15,8 +17,13 @@ const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { return null
 const isFile = (p) => { const l = lstatOrNull(p); return l !== null && l.isFile() && !l.isSymbolicLink(); };
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
+// The run scripts load only when every file of their import graph matches its pin.
+const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const badDeps = verifyDeps(PLUGIN_ROOT);
+if (badDeps.length > 0) throw new Error(`pins-mismatch: ${badDeps.slice(0, 5).join(', ')}`);
+
 async function modules() {
-  const [lh, rs] = await Promise.all([import('../../scripts/lead-handover.mjs'), import('../../scripts/run-state.mjs')]);
+  const [lh, rs] = await Promise.all([importPinned(PLUGIN_ROOT, 'scripts/lead-handover.mjs'), importPinned(PLUGIN_ROOT, 'scripts/run-state.mjs')]);
   return { lh, rs };
 }
 

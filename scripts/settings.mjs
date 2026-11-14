@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { MODS_DEFAULTS } from '../hooks/lib/mods-defaults.mjs';
 import { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MAX, CONTEXT_CAP_MIN, handoverOf } from '../mods/lib/context-cap.mjs';
 import { NAME_RE, PERSONALITY_KEYS, personalityProblem } from './check.mjs';
 import { headerEnd, resolve as resolveLanguage, validate as validateLanguage } from './language.mjs';
@@ -40,14 +41,7 @@ export const BRAINSTORM_DEFAULTS = { film_script: false, debate: 'crossfire' };
 export const MODS = ['savvy', 'cache_tax', 'reflect'];
 // A mod key removed from the schema: dropped on read with one warning, refused on write as an unknown key.
 const RETIRED_MOD = 'blast_radius';
-export const MODS_DEFAULTS = {
-  savvy: { enabled: true, pane: 'auto' },
-  cache_tax: { enabled: true, pane: 'command' },
-  reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  efficient_browser_use: { enabled: false },
-  switchboard: { enabled: true, seen: false },
-  savings: { enabled: true }
-};
+export { MODS_DEFAULTS };
 // Saver ids `set-mod` may switch; the stored key is mods.<id with underscores>.enabled.
 const SWITCHABLE = ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard'];
 const switchKey = (id) => id.replaceAll('-', '_');

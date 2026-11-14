@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { hash12 } from './event.mjs';
-import { MODS_DEFAULTS } from '../../scripts/settings.mjs';
+import { MODS_DEFAULTS } from './mods-defaults.mjs';
 
 export const MAX_BYTES = 4096;
 export const MAX_STEP_FILES = 200;
