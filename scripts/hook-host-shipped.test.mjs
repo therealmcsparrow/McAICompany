@@ -1,4 +1,4 @@
-// Tests (qa-owned): the shipped hooks/rules.json, the real rule modules and the shipped fixtures, run through
+// Tests the shipped hooks/rules.json, the real rule modules and the shipped fixtures, run through
 // the real engine path (scripts/hook-host.mjs, real plugin root). MCSPARROW_HOME points at a temp dir.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';

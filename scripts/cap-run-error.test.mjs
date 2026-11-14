@@ -1,4 +1,4 @@
-// cap.M1 R-8: a run-lookup error is not "no active run"; at the hand-over point it fails closed.
+// cap.M1: a run-lookup error is not "no active run"; at the hand-over point it fails closed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
