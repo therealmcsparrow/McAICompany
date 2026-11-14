@@ -362,8 +362,11 @@ function programDenied(body) {
   return namesSettingsWord(body) || (HOMEISH.test(body) && WRITEISH.test(body));
 }
 
+const PS_HERE = /@(["'])[ \t]*\r?\n([\s\S]*?)\r?\n\1@([^\n]*)/g;
+const PIPED_TEXT = /(["'])((?:\\.|(?!\1)[\s\S])*)\1[ \t]*\|[ \t]*([^\n|;&]*)/g;
+
 function stdinProgramDenied(text) {
-  if (!text.includes('<<')) return false;
+  if (!/<<|@["']|\|/.test(text)) return false;
   const headWords = (head) => head.split(/[\s;|&()]+/).filter(Boolean);
   for (const m of text.matchAll(HEREDOC)) {
     const lineStart = text.lastIndexOf('\n', m.index) + 1;
@@ -372,6 +375,12 @@ function stdinProgramDenied(text) {
   }
   for (const m of text.matchAll(HERESTRING)) {
     if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2])) return true;
+  }
+  for (const m of text.matchAll(PS_HERE)) {
+    if (headWords(m[3]).some(isStdinRunner) && programDenied(m[2])) return true;
+  }
+  for (const m of text.matchAll(PIPED_TEXT)) {
+    if (headWords(m[3]).some(isStdinRunner) && programDenied(m[2])) return true;
   }
   return false;
 }
