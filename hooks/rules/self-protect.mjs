@@ -31,6 +31,11 @@ const GIT_WRITE = new Set(['checkout', 'restore', 'rm', 'mv']);
 const GIT_GLOBAL_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env']);
 const DEST_FLAGS = new Set(['-t', '--target-directory', '-destination', '-dest']);
 
+const GLOB_CHARS = /[*?[{]/;
+const RISKY_UNRESOLVED = /[*?[{$%`]/;
+const MAX_GLOB_CHARS = 256;
+const MAX_VARIANTS = 64;
+
 const INTERPRETERS = {
   node: /^(?:--(?:e[v]al|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
   nodejs: /^(?:--(?:e[v]al|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
@@ -209,7 +214,9 @@ function makeContext(event) {
   }
   const bases = new Set(FIXED_BASES);
   for (const p of prot) bases.add(tailOf(p));
-  return { prot, entries, homes, mshs, plugins, bases };
+  const protSegs = prot.map((p) => p.split('/'));
+  const limited = entries.has('');
+  return { prot, protSegs, entries, homes, mshs, plugins, bases, limited };
 }
 
 function insideProtected(ctx, norm) {
@@ -323,6 +330,175 @@ function gitTargets(args) {
   return nonFlags(args.slice(i + 1));
 }
 
+// The first brace group that holds a comma list or a `..` sequence, as { i, j, cuts, seq }.
+function braceGroup(s) {
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '{') continue;
+    let depth = 0;
+    const cuts = [];
+    let seq = false;
+    for (let j = i; j < s.length; j++) {
+      const c = s[j];
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          if (cuts.length > 0 || seq) return { i, j, cuts, seq };
+          break;
+        }
+      } else if (depth === 1 && c === ',') cuts.push(j);
+      else if (depth === 1 && c === '.' && s[j + 1] === '.') seq = true;
+    }
+  }
+  return null;
+}
+
+// Comma braces are expanded; a `{a..b}` sequence becomes `*`. Null when the result would pass the cap.
+function expandBraces(word) {
+  const work = [word];
+  const done = [];
+  while (work.length > 0) {
+    if (work.length + done.length > MAX_VARIANTS) return null;
+    const s = work.pop();
+    const g = braceGroup(s);
+    if (!g) { done.push(s); continue; }
+    const head = s.slice(0, g.i);
+    const tail = s.slice(g.j + 1);
+    if (g.cuts.length === 0) { work.push(`${head}*${tail}`); continue; }
+    const bounds = [g.i, ...g.cuts, g.j];
+    for (let k = 0; k + 1 < bounds.length; k++) work.push(head + s.slice(bounds[k] + 1, bounds[k + 1]) + tail);
+  }
+  return done;
+}
+
+function setMatches(body, ch) {
+  let negate = false;
+  let i = 0;
+  if (body[0] === '!' || body[0] === '^') { negate = true; i = 1; }
+  const set = body.slice(i);
+  if (set.includes('[:') || set.includes('[=') || set.includes('[.')) return true;
+  let found = false;
+  for (let k = 0; k < set.length; k++) {
+    if (set[k + 1] === '-' && k + 2 < set.length) {
+      if (set[k] > set[k + 2] || (ch >= set[k] && ch <= set[k + 2])) found = true;
+      k += 2;
+    } else if (set[k] === ch) found = true;
+  }
+  return negate ? !found : found;
+}
+
+// One path segment as glob tokens: literal, `?`, `*` or a bracket set.
+function compileSeg(seg) {
+  const out = [];
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (c === '*') {
+      if (!out.length || out[out.length - 1].k !== '*') out.push({ k: '*' });
+    } else if (c === '?') out.push({ k: '?' });
+    else if (c === '[') {
+      let j = i + 1;
+      if (seg[j] === '!' || seg[j] === '^') j++;
+      if (seg[j] === ']') j++;
+      while (j < seg.length && seg[j] !== ']') {
+        if (seg[j] === '[' && /[:=.]/.test(seg[j + 1] || '')) {
+          const e = seg.indexOf(`${seg[j + 1]}]`, j + 2);
+          if (e !== -1) { j = e + 2; continue; }
+        }
+        j++;
+      }
+      if (j >= seg.length) out.push({ k: 'c', c });
+      else { out.push({ k: 'set', body: seg.slice(i + 1, j) }); i = j; }
+    } else out.push({ k: 'c', c });
+  }
+  return out;
+}
+
+function oneMatches(t, ch) {
+  if (t.k === '?') return true;
+  if (t.k === 'set') return setMatches(t.body, ch);
+  return t.c === ch;
+}
+
+// Greedy match with one star mark: work is at most the segment length times the pattern length.
+function segMatches(tokens, str) {
+  let p = 0;
+  let s = 0;
+  let star = -1;
+  let mark = 0;
+  while (s < str.length) {
+    const t = tokens[p];
+    if (t && t.k === '*') { star = p++; mark = s; }
+    else if (t && oneMatches(t, str[s])) { p++; s++; }
+    else if (star !== -1) { p = star + 1; s = ++mark; }
+    else return false;
+  }
+  while (p < tokens.length && tokens[p].k === '*') p++;
+  return p === tokens.length;
+}
+
+const segsMatch = (pat, segs) => pat.every((t, i) => segMatches(t, segs[i]));
+
+function patternForms(ctx, word) {
+  const out = new Set();
+  for (const f of forms(ctx, word)) {
+    out.add(normalizePath(f));
+    out.add(normalizePath(/^[A-Za-z]:/.test(f) ? f.slice(0, 2) + f.slice(2).replaceAll(':', '\u0001') : f.replaceAll(':', '\u0001')));
+  }
+  out.delete('');
+  return [...out];
+}
+
+// A glob-shaped write target hits when its pattern matches a protected path, or a folder above one when the
+// verb acts on the folder itself. Absolute forms align from the root; relative ones align to the path's end.
+function globHit(ctx, t, acc) {
+  const w = t.word;
+  if (!GLOB_CHARS.test(w)) return false;
+  if (w.length > MAX_GLOB_CHARS) return true;
+  const variants = expandBraces(w);
+  if (variants === null) return true;
+  acc.variants += variants.length;
+  if (acc.variants > MAX_VARIANTS) return true;
+  for (const v of variants) {
+    const cands = patternForms(ctx, v);
+    const abs = cands.filter((n) => /^(?:[a-z]:|\/)/.test(n));
+    if (abs.length > 0) {
+      for (const n of abs) {
+        const pat = n.split('/').map(compileSeg);
+        for (const ps of ctx.protSegs) {
+          const len = Math.min(pat.length, ps.length);
+          if (!segsMatch(pat.slice(0, len), ps)) continue;
+          if (pat.length >= ps.length || t.ancestor) return true;
+        }
+      }
+      continue;
+    }
+    for (const n of cands) {
+      const segs = n.split('/');
+      const pat = segs.map(compileSeg);
+      for (const ps of ctx.protSegs) {
+        const top = t.ancestor ? segs.length : ps.length;
+        for (let end = ps.length; end >= top && end >= segs.length; end--) {
+          if (segsMatch(pat, ps.slice(end - segs.length, end))) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// A relative glob after a directory change may name a protected base inside the new directory.
+function globBaseHit(ctx, word) {
+  if (!GLOB_CHARS.test(word)) return false;
+  if (word.length > MAX_GLOB_CHARS) return true;
+  const variants = expandBraces(word);
+  if (variants === null) return true;
+  for (const v of variants) {
+    const tail = compileSeg(tailOf(v.replaceAll('\\', '/').toLowerCase()));
+    for (const b of ctx.bases) if (segMatches(tail, b)) return true;
+  }
+  return false;
+}
+
 // Collects every write target of a statement as { word, ancestor }.
 function targetsOf(words, redirs) {
   const out = redirs.map((word) => ({ word, ancestor: false }));
@@ -433,6 +609,12 @@ function dotnetWriteDenied(text) {
   return false;
 }
 
+// With the token list cut short, a target the host never resolved is judged by its text alone.
+function unresolvedRisky(ctx, word) {
+  if (ctx.entries.has(word)) return false;
+  return RISKY_UNRESOLVED.test(word) || namesSettingsWord(word) || ctx.bases.has(tailOf(normalizePath(word)));
+}
+
 function analyze(ctx, text, powershell, depth, acc) {
   const subshells = [];
   const stripped = stripHeredocs(text);
@@ -448,7 +630,8 @@ function analyze(ctx, text, powershell, depth, acc) {
       if (target !== undefined && hits(ctx, target, false)) acc.cdProt = true;
     }
     for (const t of targetsOf(words, redirs)) {
-      if (hits(ctx, t.word, t.ancestor)) return true;
+      if (hits(ctx, t.word, t.ancestor) || globHit(ctx, t, acc)) return true;
+      if (ctx.limited && unresolvedRisky(ctx, t.word)) return true;
       if (names && /^\$|\$\(/.test(t.word) && !VAR_LED.test(t.word)) return true;
       acc.writes.push(t.word);
     }
@@ -458,11 +641,11 @@ function analyze(ctx, text, powershell, depth, acc) {
 }
 
 function judgeShell(ctx, command, powershell) {
-  const acc = { cd: false, cdProt: false, writes: [] };
+  const acc = { cd: false, cdProt: false, writes: [], variants: 0 };
   if (stdinProgramDenied(command) || dotnetWriteDenied(command)) return true;
   if (analyze(ctx, command, powershell, 0, acc)) return true;
   if (!acc.cd) return false;
-  return acc.writes.some((w) => isRelative(w) && (acc.cdProt || ctx.bases.has(tailOf(normalizePath(w)))));
+  return acc.writes.some((w) => isRelative(w) && (acc.cdProt || ctx.bases.has(tailOf(normalizePath(w))) || globBaseHit(ctx, w)));
 }
 
 function judgeFile(ctx, tool) {
