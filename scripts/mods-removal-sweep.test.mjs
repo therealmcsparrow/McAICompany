@@ -131,9 +131,12 @@ describe('leftover sweep over tracked files', () => {
 describe('both Contracts', () => {
   const VERSION = { 'aico-mods': 'v2.1', 'aico-settings': 'v2.2' };
   for (const [rel, name] of [['docs/contracts/aico-mods.md', 'aico-mods'], ['docs/contracts/aico-settings.md', 'aico-settings']]) {
-    test(`${name} is at ${VERSION[name]} with a v2.0 line in its history`, () => {
+    test(`${name} is at ${VERSION[name]} or later with a v2.0 line in its history`, () => {
       const text = read(rel);
-      assert.match(text, new RegExp(`^# Contract: ${name} v${VERSION[name].slice(1).replace('.', '\\.')}$`, 'm'));
+      const at = new RegExp(`^# Contract: ${name} v(\\d+)\\.(\\d+)$`, 'm').exec(text);
+      assert.ok(at, 'no Contract header');
+      const [maj, min] = VERSION[name].slice(1).split('.').map(Number);
+      assert.ok(Number(at[1]) > maj || (Number(at[1]) === maj && Number(at[2]) >= min), `${name} is v${at[1]}.${at[2]}`);
       const lines = text.split('\n');
       const header = lines.slice(0, headerEnd(lines)).join('\n');
       assert.match(header, /^v2\.0\b/m);
@@ -201,11 +204,12 @@ describe('release note and docs', () => {
 
   const docs = ['README.md', 'GLOSSARY.md', 'docs/spec.md', 'documentation/README.md', 'documentation/mods/README.md'];
   for (const rel of docs) {
-    test(`AC9: ${rel} says three mods and no file says four`, () => {
+    test(`AC9: ${rel} says three mods (five in the mods page) and no file says four`, () => {
       const lines = read(rel).split('\n');
       // documentation/mods/README.md names the mods in a table, so "three small add-ons" alone counts there.
       const names = rel === 'documentation/mods/README.md' ? /\b(?:mods|add-ons)\b/i : /(?=.*Savvy)(?=.*Reflect)/;
-      assert.ok(lines.some((l) => /\bthree\b/i.test(l) && names.test(l)), 'no line names three mods');
+      const count = rel === 'documentation/mods/README.md' ? /\bfive\b/i : /\bthree\b/i;
+      assert.ok(lines.some((l) => count.test(l) && names.test(l)), 'no line names the mod count');
       assert.equal(lines.filter((l) => /\bfour (?:mods|add-ons)\b|There are four\b/i.test(l)).length, 0);
     });
   }

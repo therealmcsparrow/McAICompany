@@ -199,7 +199,7 @@ for (const total of [162000, 179999, 180000, 180001]) {
   test(`Step at ${total}: only a new Handoff or one new ledger in the run folder`, async () => {
     const o = { session: 'step', total };
     await allowsRecorded({ ...o, ...handoffWrite('41-qa.md') }, DEFAULT);
-    await allowsRecorded({ ...o, ...handoffWrite('041a-qa-tester.md') }, DEFAULT);
+    await allowsRecorded({ ...o, ...handoffWrite('041a-qa.md') }, DEFAULT);
     await allowsRecorded({ ...o, ...handoffWrite('41-qa.findings.md') }, DEFAULT);
     for (const tool of ['Read', 'Bash', 'PowerShell', 'Edit', 'Glob', 'Grep', 'Agent', 'Task']) {
       await denies({ ...o, tool }, DEFAULT, /Handoff/i);

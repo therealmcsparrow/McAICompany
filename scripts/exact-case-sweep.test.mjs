@@ -50,7 +50,6 @@ const ALLOW = [
   ['scripts/plan-review.mjs', '/^none\\b/i', 'Blocking row text'],
   ['scripts/review-loop.mjs', '/^GIT_/i', 'environment variable names'],
   ['scripts/handoff-lint.mjs', 'NONE_RE =', 'Handoff section text'],
-  ['scripts/handoff-lint.mjs', "DEVICE_RE.test(", 'Windows device names'],
   ['scripts/handoff-lint.mjs', "=== '.git'", '.git/.env guard, not a work path'],
   ['scripts/handoff-lint.mjs', 'const fold = x => x.toLowerCase();', 'wrongWorkCase: finds a typed .company/work pair in any case so it is refused'],
   ['scripts/plan-check.mjs', 'SECTION_TITLE =', 'plan heading text'],
