@@ -60,6 +60,19 @@ describe('reference', () => {
     assert.doesNotMatch(text, /Default 150000/);
   });
 
+  it('cap range is 60000 to 250000 at user level only; mods commands named; retired switch gone (T36)', async () => {
+    assert.match(text, /60000 to 250000/);
+    assert.doesNotMatch(text, /1000000/);
+    assert.doesNotMatch(text, /AICO_CONTEXT_GUARD/);
+    const st = entry('settings');
+    assert.match(st, /60000 to 250000/);
+    assert.match(st, /user level|user-level|user file/i);
+    assert.doesNotMatch(st, /A project value wins over your user value/);
+    assert.doesNotMatch(st, /frozen at the start of a run/);
+    assert.match(text, /\/aico-mods/);
+    assert.match(text, /\/aico-savings/);
+  });
+
   it('LF only', async () => {
     assert.ok(!text.includes('\r'));
   });
