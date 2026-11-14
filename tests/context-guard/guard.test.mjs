@@ -129,7 +129,8 @@ describe('Step: fail closed in a run, open outside one (R-14, AC9)', () => {
   test('a bad agent id is malformed: the guard denies instead of passing', async () => {
     const fx = await booted();
     const r = fx.step(170000, { agent: '../x' });
-    assert.match(fx.denyOf(r), /cap\.M1/);
+    // hook-event: bad agent_id is malformed; the engine denies with the host reason (no rule id).
+    assert.match(fx.denyOf(r), /malformed: bad agent id/);
   });
 
   test('no active run: a Step far over the point is allowed, and an unreadable transcript too', async () => {
