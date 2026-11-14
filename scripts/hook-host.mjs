@@ -265,10 +265,21 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
       try {
         const f = path.join(dir, n);
         if (fs.statSync(f).size > MAX_FIXTURE_BYTES) throw new Error('large');
-        const norm = await ev.normalize(JSON.parse(fs.readFileSync(f, 'utf8')), { ...ctx, resolveRun: null });
+        // `_synthetic` is the fixtures' own channel for state the host reads from disk (session, tokens, run);
+        // it is stripped before normalize, so a renamed real field still drifts.
+        const { _synthetic: syn, ...payload } = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const norm = await ev.normalize(payload, { ...ctx, resolveRun: null });
         if (!norm.ok || norm.event.drift.length > 0) throw new Error('payload');
-        if (r.event === norm.event.event && (norm.event.tool === null || r.matcher.includes('*') || r.matcher.includes(norm.event.tool.name))) {
-          const out = await run(r, norm.event, prov);
+        let fe = norm.event;
+        if (syn && typeof syn === 'object') {
+          fe = { ...fe };
+          if (syn.session === 'lead' || syn.session === 'step') fe.session = syn.session;
+          if (syn.tokens && typeof syn.tokens === 'object') fe.tokens = { state: syn.tokens.state, total: syn.tokens.total };
+          if (syn.run !== undefined) fe.run = syn.run;
+          fe = Object.freeze(fe);
+        }
+        if (r.event === fe.event && (fe.tool === null || r.matcher.includes('*') || r.matcher.includes(fe.tool.name))) {
+          const out = await run(r, fe, prov);
           verdictDeny = !out.ok || out.verdict.v === 'deny';
           if (!out.ok && wantDeny === false) throw new Error('failed');
         }

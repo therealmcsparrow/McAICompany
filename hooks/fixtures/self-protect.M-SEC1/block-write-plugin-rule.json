@@ -1,1 +1,1 @@
-{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Write","tool_input":{"file_path":"~/.claude/plugins/cache/aico/aico/0.39.0/hooks/rules/cap.mjs","content":"x"},"permission_mode":"default"}
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Write","tool_input":{"file_path":"${CLAUDE_PLUGIN_ROOT}/hooks/rules/cap.mjs","content":"x"},"permission_mode":"default"}
