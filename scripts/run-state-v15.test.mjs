@@ -118,10 +118,10 @@ test('start: aico is an anchored version, nothing written otherwise', () => {
   }
   const root = repo();
   assert.equal(go(root, ['start', 'x', '0.19.1']).code, 0);
-  assert.deepEqual(JSON.parse(raw(root, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start', aico: '0.19.1' });
+  assert.deepEqual(JSON.parse(raw(root, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start', aico: '0.19.1', cap: 180000 });
   const plain = repo();
   assert.equal(go(plain, ['start', 'x']).code, 0);
-  assert.deepEqual(JSON.parse(raw(plain, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start' });
+  assert.deepEqual(JSON.parse(raw(plain, 'x')), { v: 1, at: '2026-10-26T10:00:00Z', ev: 'start', cap: 180000 });
   assert.equal(show(root, 'x', { now: T0 + 1000 }).state, 'running');
   assert.deepEqual(show(root, 'x', { now: T0 + 1000 }).warnings, []);
 });
@@ -212,7 +212,7 @@ test('v1.4 file: same view plus the new empty keys', () => {
   assert.deepEqual([v.ceo, v.subs, v.sessions, v.warnings], [[], [], [], []]);
   const reader = oldReader();
   if (reader) {
-    const { ceo, subs, sessions, state, waves, open_ask, ...rest } = v;
+    const { ceo, subs, sessions, state, waves, open_ask, cap, handover, ...rest } = v;
     const { state: oldState, ...oldRest } = oldView(reader, root);
     assert.deepEqual(rest, oldRest);
   }
@@ -226,8 +226,8 @@ test('a v1.4 reader skips the new lines with its warning', t => {
   go(root, ['sub', 'x', 'start', 'qa', ID, SID], 2000);
   go(root, ['wave', 'x', '2'], 3000);
   const v = oldView(reader, root);
-  assert.deepEqual(v.warnings, ['line 2 skipped', 'line 3 skipped']);
-  assert.equal(v.wave, 2);
+  assert.deepEqual(v.warnings, ['line 1 skipped', 'line 2 skipped', 'line 3 skipped']);
+  assert.equal(v.wave, null); // the old reader skipped the start line, so it sees no run segment
 });
 
 test('a v1.4 reader skips a start line that carries aico', t => {

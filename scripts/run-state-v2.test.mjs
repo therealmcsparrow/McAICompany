@@ -1,4 +1,4 @@
-// Tests for run-state v2.0: `runSlugs`, and `list` / `active` over a tree with v3 projects and v2 folders.
+// Tests for run-state v2.1: `runSlugs`, and `list` / `active` over a tree with v3 projects and v2 folders.
 // Slugs may now hold one `/`: `<ID>/<NN>-<playbook>`.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,7 +41,7 @@ const startRun = (root, slug, ms) => assert.equal(go(root, ['start', slug], ms).
 // NN 100..(100 + count - 1): three-digit run numbers are the only ones that keep the same width past 99.
 const manyRuns = count => Array.from({ length: count }, (_, i) => `${100 + i}-feature`);
 
-describe('runSlugs (run-state v2.0)', () => {
+describe('runSlugs (run-state v2.1)', () => {
   test('is exported; an empty or missing work folder gives no slugs', () => {
     assert.equal(typeof rs.runSlugs, 'function');
     const root = repo();
@@ -267,9 +267,9 @@ describe('active over a mixed tree', () => {
 });
 
 describe('the Contract', () => {
-  test('the doc is v2.0 and says v2, v1.1 and legacy names behave as before', () => {
+  test('the doc is v2.1 and says v2, v1.1 and legacy names behave as before', () => {
     const text = fs.readFileSync(path.join(REPO, 'docs', 'contracts', 'run-state.md'), 'utf8');
-    assert.match(text, /^# Contract: run-state v2\.0\r?$/m);
+    assert.match(text, /^# Contract: run-state v2\.1\r?$/m);
     assert.ok(text.includes('runSlugs'));
     assert.match(text, /byte-identical/);
   });
