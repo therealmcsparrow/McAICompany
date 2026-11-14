@@ -16,7 +16,7 @@ after(() => { for (const h of homes) fs.rmSync(h, { recursive: true, force: true
 function copyRoot() {
   const dst = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-fxroot-'));
   homes.push(dst);
-  for (const d of ['hooks', 'scripts', 'mods', 'skills', 'docs']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(dst, d), { recursive: true });
+  for (const d of ['hooks', 'scripts', 'mods', 'skills', 'docs', 'company']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(dst, d), { recursive: true });
   for (const f of ['package.json']) if (fs.existsSync(path.join(ROOT, f))) fs.copyFileSync(path.join(ROOT, f), path.join(dst, f));
   const w = spawnSync(process.execPath, [path.join(dst, 'scripts', 'hook-pins.mjs'), 'write'], { encoding: 'utf8' });
   assert.equal(w.status, 0, w.stderr);
@@ -44,4 +44,20 @@ test('R-2 the shipped cap.M1 and self-protect fixtures pass the session start ch
 test('R-2 the self-protect plugin-rule fixture builds its path from CLAUDE_PLUGIN_ROOT', () => {
   const j = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'fixtures', 'self-protect.M-SEC1', 'block-write-plugin-rule.json'), 'utf8'));
   assert.match(j.tool_input.file_path, /^\$\{CLAUDE_PLUGIN_ROOT\}\//);
+});
+
+test('R-2 a renamed real field in a cap.M1 fixture still fails the session start check', () => {
+  const root = copyRoot();
+  const p = path.join(root, 'hooks', 'fixtures', 'cap.M1', 'block-lead-read-at-freeze.json');
+  const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+  j.tool_name_renamed = j.tool_name;
+  delete j.tool_name;
+  fs.writeFileSync(p, JSON.stringify(j));
+  const w = spawnSync(process.execPath, [path.join(root, 'scripts', 'hook-pins.mjs'), 'write'], { encoding: 'utf8' });
+  assert.equal(w.status, 0, w.stderr);
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-fx-'));
+  homes.push(home);
+  const input = JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'fx', transcript_path: 'fx.jsonl', cwd: ROOT, source: 'startup' });
+  const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'hook-host.mjs')], { input, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
+  assert.match(JSON.parse(r.stdout).systemMessage, /fixture check failed for cap.M1/);
 });

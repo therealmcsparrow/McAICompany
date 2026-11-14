@@ -278,6 +278,8 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
           if (syn.run !== undefined) fe.run = syn.run;
           fe = Object.freeze(fe);
         }
+        // A rule may have several rows (one per event); a fixture is judged only by the row(s) of its own event.
+        if (r.event !== fe.event && rows.some((x) => x.rule === r.rule && x.event === fe.event)) continue;
         if (r.event === fe.event && (fe.tool === null || r.matcher.includes('*') || r.matcher.includes(fe.tool.name))) {
           const out = await run(r, fe, prov);
           verdictDeny = !out.ok || out.verdict.v === 'deny';
