@@ -32,16 +32,18 @@ New Contract (task P20261114.000001/01-feature; the brief calls it `aico.mod-man
 | `lock` | `true` (guard, gate) or `false` (saver) |
 | `upstream` | `null`, or for a pack-derived saver `{ "name": "<pack>", "version": "<version>", "licence": "<SPDX id or none>" }` (credit and audit; NOTICE names the same) |
 
-Kind fixes the rest: a guard is `sessions: all`, `fail: closed`, `switch: null`, `lock: true`; a saver is `sessions: lead`, `fail: open`, `lock: false` and has a `switch`. Any other combination is invalid.
+Kind fixes the rest: a guard is `sessions: all`, `fail: closed`, `switch: null`, `lock: true`; a gate is `sessions: lead`, `fail: closed`, `switch: null`, `lock: true`; a saver is `sessions: lead`, `fail: open`, `lock: false` and has a `switch`. A manifest whose keys match none of these three rows is invalid.
+
+Mod file to manifest: a mod file `mods/<id>.ts` or `mods/<id>.tsx` maps to `hooks/manifests/<id>.json` (same `id`). Files under `mods/shared/` (the shell, the status composer) and `mods/lib/` are shared code, not mods, and need no manifest even when `hooks/register.tsx` calls them. A rule module `hooks/rules/<name>.mjs` is covered when a rule-table row names it and that row's rule ID is in exactly one manifest's `rules`.
 
 ## Rules for the engine and the check
 - Load: only from the installed plugin root (`CLAUDE_PLUGIN_ROOT`), real path inside it, regular file, at most 8 KiB. A manifest anywhere else (a project repo, a symlink out) is never loaded.
 - Each rule-table row names a rule ID; the row is used only when exactly one manifest lists that ID and the row's `fail` equals the manifest's `fail`. The kind comes from the manifest, never from the row or the rule code.
-- The check fails (and the release does not ship) when: a manifest is invalid; a mod file under `mods/` (each `*.ts` / `*.tsx` registered in `hooks/register.tsx`) or a rule module has no manifest; a manifest lists an event that no `hooks/hooks.json` entry or register hook wires; a rule ID has no table row, or a row has no manifest; a guard rule ID lacks a `pass` or a `block` fixture (`mod-hook` v1 "Fixtures").
+- The check fails (and the release does not ship) when: a manifest is invalid; a mod file (each `mods/<id>.ts` / `mods/<id>.tsx` imported by `hooks/register.tsx`, `mods/shared/` and `mods/lib/` excepted) or a rule module has no manifest by the mapping above; a manifest lists an event that no `hooks/hooks.json` entry or register hook wires; a rule ID has no table row, or a row has no manifest; a guard rule ID lacks a `pass` or a `block` fixture (`mod-hook` v1 "Fixtures").
 - Switchboard: one row per manifest, guards and gates read-only with the words `locked on`; a saver row shows its switch. It writes only through `settings.mjs` (`aico-settings`), never a second switch file.
 
 ## Release 1 manifests
-Guards (kind `guard`): `cap` (rule `cap.M1`), `git-add` (`git-add.M-SEC1`), `dotenv` (`dotenv.M-SEC1`), `model-floor` (`model-floor.M1`), `self-protect` (`self-protect.M-SEC1`). Savers (kind `saver`): `cache-clock` (the existing Cache Tax mod; view only), `efficient-browser-use` (`browser.Y1`, note only, default off), `switchboard` (view only), `savings` (view only), `savvy`, `reflect` (existing). Gates (kind `gate`): `plan-gate`, `fresh-step`, `reprompt-gate` (existing, unchanged behaviour).
+Guards (kind `guard`): `cap` (rule `cap.M1`), `git-add` (`git-add.M-SEC1`), `dotenv` (`dotenv.M-SEC1`), `model-floor` (`model-floor.M1`), `self-protect` (`self-protect.M-SEC1`). Savers (kind `saver`): `cache-tax` (the existing Cache Tax mod, `mods/cache-tax.tsx`, title `Cache clock`, switch `mods.cache_tax.enabled`; view only), `efficient-browser-use` (`browser.Y1`, note only, default off), `switchboard` (view only), `savings` (view only), `savvy`, `reflect` (existing). Gates (kind `gate`): `plan-gate`, `fresh-step`, `reprompt-gate` (existing, unchanged behaviour).
 
 ## Error cases
 | Case | Result |
