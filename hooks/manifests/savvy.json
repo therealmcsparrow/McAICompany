@@ -1,0 +1,1 @@
+{ "v": 1, "id": "savvy", "kind": "saver", "title": "Savvy", "owner": "frontend-engineer", "sessions": "lead", "events": [], "rules": [], "fail": "open", "switch": "mods.savvy.enabled", "lock": false, "upstream": null }

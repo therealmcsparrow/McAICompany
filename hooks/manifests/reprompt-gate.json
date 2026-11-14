@@ -1,0 +1,1 @@
+{ "v": 1, "id": "reprompt-gate", "kind": "gate", "title": "Reprompt write gate", "owner": "frontend-engineer", "sessions": "lead", "events": ["PreToolUse", "SubagentStart"], "rules": [], "fail": "closed", "switch": null, "lock": true, "upstream": null }
