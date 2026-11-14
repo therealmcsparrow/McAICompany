@@ -92,8 +92,15 @@ export async function resolveRun(event, root, now = Date.now()) {
   if (!slug) return null;
   const dir = lh.workDir(base, slug);
   if (!dir) return null;
-  const frozen = lh.loadRecord(dir).some((e) => e.ev === 'handover' && e.trigger === 'context' && e.session === event.sessionKey);
-  const stepRunning = rs.show(base, slug, { now }).subs.some((s) => s.start !== null && s.stop === null);
+  let frozen;
+  let stepRunning;
+  try {
+    frozen = lh.loadRecord(dir).some((e) => e.ev === 'handover' && e.trigger === 'context' && e.session === event.sessionKey);
+    stepRunning = rs.show(base, slug, { now }).subs.some((s) => s.start !== null && s.stop === null);
+  } catch {
+    // An active run whose state cannot be read is not "no run": the cap rule fails closed on it.
+    return { error: true, slug, folder: dir };
+  }
   const mine = event.agentKey ? readGuard(dir).rows.filter((r) => r.id === event.agentKey) : [];
   return {
     slug, folder: dir, stepRunning, frozen,

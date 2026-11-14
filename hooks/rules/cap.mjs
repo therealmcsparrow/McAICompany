@@ -17,6 +17,7 @@ const FREEZE_REASON = 'aico context cap: the Lead Handoff is written and this se
 const FROZEN_REASON = 'aico context cap: this session is frozen. Start a new session in the product folder with:';
 const WAIT_REASON = 'aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.';
 const UNREADABLE = `${RULE}: unreadable`;
+const RUN_UNREADABLE = `${RULE}: unreadable. The run state of the active run cannot be read at the hand-over point. Fix or remove the malformed lead-handover.jsonl in the run folder, or check the run state with run-state show, then retry.`;
 
 const isObj = (v) => v !== null && typeof v === 'object';
 
@@ -83,6 +84,7 @@ export function judge(event, snapshot) {
   const total = tokens.state === 'none' || !Number.isFinite(tokens.total) ? 0 : tokens.total;
   if (total < freezeAt(snapshot.threshold)) return { v: 'allow' };
   if (!isObj(event.tool)) return deny(UNREADABLE);
+  if (event.run.error === true) return deny(RUN_UNREADABLE);
   return event.session === 'step' ? judgeStep(event, event.run) : judgeLead(event, event.run);
 }
 
