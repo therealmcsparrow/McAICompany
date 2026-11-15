@@ -48,8 +48,8 @@ function firstBackground(dir, session) {
   return null;
 }
 
-// 'done' once no background shell of the claude process lives, 'failed: session gone' when claude ends first.
-export async function backgroundDone({ dir, session, claudePid, list, alive, now = Date.now, sleep = realSleep }) {
+// 'done' once no background shell of the claude process lives (onLive(t) gets the start time of each poll that saw one), 'failed: session gone' when claude ends first.
+export async function backgroundDone({ dir, session, claudePid, list, alive, now = Date.now, sleep = realSleep, onLive }) {
   const cutoff = firstBackground(dir, session);
   if (cutoff === null) return 'done';
   let prev = new Set();
@@ -57,6 +57,7 @@ export async function backgroundDone({ dir, session, claudePid, list, alive, now
   let idle = 0;
   for (;;) {
     if (!alive(claudePid)) return 'failed: session gone';
+    const t = now();
     const rows = await list(claudePid);
     const cur = new Set();
     for (const r of rows) {
@@ -67,6 +68,7 @@ export async function backgroundDone({ dir, session, claudePid, list, alive, now
       if (cur.has(p)) continue;
       if (missed + 1 >= 2) live.delete(p); else live.set(p, missed + 1);
     }
+    if (onLive && cur.size > 0 && [...cur].some((p) => live.has(p))) onLive(t);
     idle = live.size === 0 ? idle + 1 : 0;
     if (idle >= 2) return 'done';
     prev = cur;
@@ -83,8 +85,8 @@ function readReading(dir) {
   } catch { return null; }
 }
 
-// 'done' once the Stop reading of `session` is at or after armAt and after idleAt (epoch ms, when the last background task was seen
-// ended): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes.
+// 'done' once the Stop reading of `session` is at or after armAt and at or after idleAt (epoch ms, the start of the last poll that saw a live
+// background task, so the task ended later): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes.
 export async function turnOver({ dir, session, armAt, idleAt = 0, now = Date.now, sleep = realSleep }) {
   // Readings keep whole seconds, so the arm time is compared at whole seconds too.
   const arm = Math.max(Math.floor(Date.parse(armAt) / 1000) * 1000, Math.floor(idleAt / 1000) * 1000);
@@ -173,7 +175,8 @@ export function checkArgs(args) {
   return { slug, pid };
 }
 
-export async function main(args, root = cwd()) {
+export async function main(args, root = cwd(), deps = {}) {
+  const { list = listChildren, alive = alivePid, now = Date.now, sleep = realSleep, type = typeInto } = deps;
   const a = checkArgs(args);
   if (a === null) { stderr.write('usage: lead-replace.mjs <slug> <claudePid>\n'); return 2; }
   const dir = workDir(root, a.slug);
@@ -190,14 +193,14 @@ export async function main(args, root = cwd()) {
     stderr.write('lead-replace: start, 3 phases (background, turn, type)\n');
     step('waiting-background');
     const pid = Number(a.pid);
-    const bg = await backgroundDone({ dir, session: arm.session, claudePid: pid, list: listChildren, alive: alivePid });
+    let idleAt = 0;
+    const bg = await backgroundDone({ dir, session: arm.session, claudePid: pid, list, alive, now, sleep, onLive: (t) => { idleAt = t; } });
     if (bg !== 'done') { step(bg); return 1; }
-    const idleAt = Date.now();
     step('waiting-turn');
-    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt });
+    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, now, sleep });
     if (turn !== 'done') { step(turn); return 1; }
     step('typing');
-    const out = await typeInto(text, { dir, session: arm.session, claudePid: pid });
+    const out = await type(text, { dir, session: arm.session, claudePid: pid });
     step(out === 'typed' ? 'typed' : out === 'unsupported' ? 'failed: unsupported terminal' : out);
     stderr.write(`lead-replace: end ${out}, ${Math.round((Date.now() - t0) / 1000)}s\n`);
     return out === 'typed' ? 0 : 1;
