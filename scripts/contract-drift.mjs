@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Contract drift (contract: docs/contracts/contract-index.md v1). Node built-ins only; read-only, writes nothing.
+// Contract drift (contract: docs/contracts/contract-index.md v1.1). Node built-ins only; read-only, writes nothing.
 // The index is computed from the `# Contract: <name> v<x>[.<y>]` headers, so no second list exists.
 // Checks: a Module's declared Contract version, version cites in skills and agents, and the
 // paths and exports the Contracts and ADRs point at. Scanned text is untrusted: every pattern is
