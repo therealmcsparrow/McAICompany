@@ -115,6 +115,7 @@ describe('main takes idleAt from the last poll that saw a live task', () => {
     const deps = {
       list: async () => { polls += 1; return polls <= 3 ? [{ pid: 7, image: 'bash.exe', created: T0 }] : []; },
       alive: () => true,
+      identify: async () => ({ image: 'claude.exe', created: T0 - 60000 }),
       now: () => c.t,
       sleep: async (ms) => { c.t += ms; },
       type: async (text) => { c.typed.push(text); return 'typed'; },
