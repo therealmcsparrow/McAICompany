@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-11-15
+
+Rollback: node scripts/stable.mjs 0.40.0
+
+### Fixed
+- **Guards no longer refuse the first guarded call of a session.** A missing or invalid guard snapshot is now rebuilt on the spot and used for that call, instead of denying with `snapshot-invalid`. See the `mod-hook` contract.
+
 ## [0.40.0] - 2026-11-14
 
 Rollback: node scripts/stable.mjs 0.39.0
