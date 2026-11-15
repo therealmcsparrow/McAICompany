@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Changed
+- **No background-task record with `AICO_GUARDS=off`.** `context-guard` v2.2 states it: the host writes no `bg` row then, so a hand-over does not wait for background tasks.
+
 ## [0.41.0] - 2026-11-15
 
 Rollback: node scripts/stable.mjs 0.40.1
