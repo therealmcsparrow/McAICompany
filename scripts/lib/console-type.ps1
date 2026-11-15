@@ -41,12 +41,15 @@ if ($args.Count -ne 2 -or $idx -ne 0) { exit 2 }
 [uint32]$target = 0
 if ($args[1] -notmatch '^[1-9][0-9]{0,9}$' -or -not [uint32]::TryParse($args[1], [ref]$target)) { exit 2 }
 
-$raw = [Console]::In.ReadToEnd()
-$text = $raw
-if ($text.Length -eq 0) { exit 2 }
-foreach ($ch in $text.ToCharArray()) {
-  if ($ch -ne "`r" -and ([int]$ch -lt 32 -or [int]$ch -gt 126)) { exit 2 }
+$stdin = [Console]::OpenStandardInput()
+$ms = New-Object System.IO.MemoryStream
+$stdin.CopyTo($ms)
+$bytes = $ms.ToArray()
+if ($bytes.Length -eq 0) { exit 2 }
+foreach ($b in $bytes) {
+  if ($b -ne 13 -and ($b -lt 32 -or $b -gt 126)) { exit 2 }
 }
+$text = [System.Text.Encoding]::ASCII.GetString($bytes)
 
 Add-Type -TypeDefinition $src
 [void][CT]::FreeConsole()
