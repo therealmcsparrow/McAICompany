@@ -100,3 +100,42 @@ Installed: Claude Code 2.1.317, aico 0.26.0 (installed plugin, no context guard)
 - Bare `node -e ""`: median 32.4 ms, p90 34.1 ms, max 107.6 ms.
 - `node scripts/context-guard.mjs pre`: median 51.3 ms, p90 109.0 ms, max 127.3 ms.
 - Overhead over bare node at the median: 18.9 ms. Target: 200 ms per call (`docs/contracts/context-guard.md:22`). Met at median, p90 and max (127.3 ms absolute). The p90 spread is machine noise (bare node also hit 107 ms once); one run, not a controlled benchmark. Only the fast path was timed, which is the path of every call below the hand-over point.
+
+## Spike S2, Bash background shells and classic conhost (2026-11-15)
+
+Claude Code 2.1.325, model alias haiku, Windows 11, Git Bash on PATH (`CLAUDE_CODE_GIT_BASH_PATH` set). One interactive claude run in a classic conhost window (`conhost.exe` host, not Windows Terminal), throwaway cwd, throwaway hooks and status line that only log. Process tree polled by a sampler (about 0.6 s between polls). Raw logs and code stay in the run folder `spike/s2/`. No user name, home path or token is kept here.
+
+### Result per question
+- Pass: the background `Bash` task is a direct child of claude with image `bash` (`bash.exe`).
+- Pass: hook and status-line shells live under 2 s.
+- Pass: `/clear` typed into classic conhost works.
+- No blocking answer.
+
+### Evidence rows
+| Shell | Image | Parent | Lifetime vs completion |
+|---|---|---|---|
+| Background `Bash` task (`sleep 25`, `run_in_background` true) | `bash.exe`, with one child `bash.exe` that runs the command | claude pid (direct child) | Same pid seen in 6 polls in a row; alive 25.4 s from creation, gone 0.2 s after the sleep ended (completion). |
+| Hook shell (PreToolUse, SessionStart, Stop) | `bash.exe`, then a second `bash.exe`, then `node` | outer `bash.exe` is a direct child of claude | Seen in 1 poll; about 0.2 to 0.6 s. The hook script finished 3 to 4 ms after node started, and node started about 0.2 s after the shell. |
+| Status-line shell | `bash.exe`, then a second `bash.exe`, then `node` | outer `bash.exe` is a direct child of claude | Same as the hook shell: node started 0.19 s after the shell, script work done at once. |
+| Other direct children of claude | `skillspector.exe`, `node.exe` (MCP and plugin servers), short `node.exe` (0.2 s) | claude pid | Long-lived ones are not shells; the short `node.exe` is not a shell image. |
+
+Notes on the rows
+- On Windows the image name carries `.exe`; the shell-image rule must match `bash` with the suffix stripped.
+- Hook and status-line shells are always two levels deep (`bash` under `bash`) and both are direct children of claude at the outer level, so they match the shell-image rule. Only the two-polls-in-a-row rule separates them from a live background shell.
+- Lifetimes of 1.0 to 2.5 s seen in the sampler for hook shells on `SessionStart` and the first status line came from the spike probe itself (a PowerShell lookup run inside the hook while its shell was alive). With the lookup removed the shells were seen once only. The production helper must not run slow work while it holds a hook shell.
+- A poll interval near 0.6 s is enough to see a 25 s task in every poll and a 0.2 to 0.6 s hook shell in at most one. If the production poll is much faster than 0.2 s, a hook shell can show in two polls in a row; keep the poll interval at 0.5 s or more.
+
+### Typing `/clear` into classic conhost
+- Typer: S1 harness `console-type.ps1` (`FreeConsole`, `AttachConsole(claudePid)`, `WriteConsoleInputW` on `CONIN$`), pid argument the claude pid of the instance started for this spike. It was never pointed at another console.
+- `/clear` then Enter (14 records written) ran: `SessionStart` with source `clear` arrived within 0.3 s, twice. `/exit` typed the same way ended the session.
+- The console process list showed the typer, claude and the launcher shell, so the attach did reach claude's console under classic conhost.
+- Extra finding: the first-run trust dialog opens on "No, exit"; Enter alone exits claude, digit keys do nothing. The spike used a Down arrow (virtual key 40) then Enter. The helper does not need this (it types into a trusted, running session), but a test harness must handle it.
+
+## S1 answers (a) to (d), copied from the S1 Handoff (2026-11-15)
+
+| | Question | Answer | Evidence |
+|---|---|---|---|
+| a | Does `WriteConsoleInputW` from a grandchild reach the claude TUI so `/clear` runs? | No as designed; yes with one change | MCP servers get their own hidden console, so `CONIN$` there is the wrong console and the text went nowhere (run 1). With `FreeConsole` plus `AttachConsole(claudePid)` before opening `CONIN$`, `/clear` ran (`SessionStart` source `clear`, new session id, 0.3 s later) and a 94-character prompt ran a turn (run 2). |
+| b | Does the helper survive the MCP call and `/clear`? | Yes | The detached helper (`spawn`, stdio ignored, `unref`) kept running and typed the post-clear text; the MCP server was not restarted by `/clear`. When claude exits, the MCP server exits and the helper dies with it. |
+| c | Is the MCP `process.ppid` the claude process, and are background shells its direct children? | Yes for the PowerShell tool; the Bash tool is answered by S2 above | MCP ppid was claude in both runs. The background PowerShell task was a direct child `cmd.exe` of claude, gone when the task finished. A transient `powershell.exe` child (a probe) also showed up. |
+| d | Does PreToolUse carry `tool_input.run_in_background` as a boolean? | Yes | JSON boolean `true` alongside `command` and `description`; absent for tools that do not set it. Tool name was `PowerShell`; S2 saw `Bash` with the same boolean (`true`). |
