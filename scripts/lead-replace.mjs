@@ -87,12 +87,13 @@ function readReading(dir) {
 
 // 'done' once the Stop reading of `session` is at or after armAt and at or after idleAt (epoch ms, the start of the last poll that saw a live
 // background task, so the task ended later): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes.
-export async function turnOver({ dir, session, armAt, idleAt = 0, now = Date.now, sleep = realSleep }) {
+export async function turnOver({ dir, session, armAt, idleAt = 0, claudePid, alive = () => true, now = Date.now, sleep = realSleep }) {
   // Readings keep whole seconds, so the arm time is compared at whole seconds too.
   const arm = Math.max(Math.floor(Date.parse(armAt) / 1000) * 1000, Math.floor(idleAt / 1000) * 1000);
   if (!Number.isFinite(arm)) return 'failed: turn';
   const start = now();
   for (;;) {
+    if (!alive(claudePid)) return 'failed: session gone';
     const o = readReading(dir);
     if (o && o.session === session && Date.parse(o.at) >= arm) return 'done';
     if (now() - start >= TURN_MS) return 'failed: turn';
@@ -113,11 +114,23 @@ function defaultRun(argv, input) {
 const typedStatus = (status) => (status === 0 ? 'typed' : status === 1 || status === null || status === undefined ? 'failed: attach' : 'failed: type');
 
 // Types /clear + Enter, waits for a new session, then types the text + Enter. Windows only.
-export async function typeInto(text, { platform = osPlatform, run = defaultRun, dir, session, claudePid, now = Date.now, sleep = realSleep }) {
+// Before each send the pid must still live and, when `identify` is given, still be the process seen at start (`baseline` {image, created}); else nothing is typed.
+export async function typeInto(text, { platform = osPlatform, run = defaultRun, dir, session, claudePid, alive = () => true, identify = null, baseline = null, now = Date.now, sleep = realSleep }) {
   const build = typer(platform);
   if (build === null) return 'unsupported';
   const argv = [powershellPath(), ...build(claudePid)];
-  const send = async (s) => typedStatus((await run(argv, Buffer.from(`${s}\r`, 'utf8'))).status);
+  const same = async () => {
+    if (!alive(claudePid)) return false;
+    if (identify === null) return true;
+    try {
+      const cur = await identify(claudePid);
+      return Boolean(baseline && cur && cur.image === baseline.image && cur.created === baseline.created);
+    } catch { return false; }
+  };
+  const send = async (s) => {
+    if (!(await same())) return 'failed: session gone';
+    return typedStatus((await run(argv, Buffer.from(`${s}\r`, 'utf8'))).status);
+  };
   const first = await send('/clear');
   if (first !== 'typed') return first;
   const start = now();
@@ -142,6 +155,18 @@ function listChildren(claudePid) {
         const v = JSON.parse(String(out).trim() || '[]');
         resolve(Array.isArray(v) ? v : [v]);
       } catch (e) { reject(e); }
+    });
+  });
+}
+
+// { image, created } of one process, or null when it is gone. Windows only (CIM, like listChildren).
+function identifyPid(pid) {
+  const script = `$ErrorActionPreference='Stop'; $p = Get-CimInstance Win32_Process -Filter 'ProcessId=${Number(pid)}'; if ($p) { ConvertTo-Json -Compress @{ image=[string]$p.Name; created=[int64]([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() } }`;
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script];
+  return new Promise((resolve, reject) => {
+    execFile(powershellPath(), args, { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024, shell: false }, (err, out) => {
+      if (err) { reject(err); return; }
+      try { const t = String(out).trim(); resolve(t ? JSON.parse(t) : null); } catch (e) { reject(e); }
     });
   });
 }
@@ -176,7 +201,7 @@ export function checkArgs(args) {
 }
 
 export async function main(args, root = cwd(), deps = {}) {
-  const { list = listChildren, alive = alivePid, now = Date.now, sleep = realSleep, type = typeInto } = deps;
+  const { list = listChildren, alive = alivePid, now = Date.now, sleep = realSleep, type = typeInto, identify = identifyPid } = deps;
   const a = checkArgs(args);
   if (a === null) { stderr.write('usage: lead-replace.mjs <slug> <claudePid>\n'); return 2; }
   const dir = workDir(root, a.slug);
@@ -193,14 +218,16 @@ export async function main(args, root = cwd(), deps = {}) {
     stderr.write('lead-replace: start, 3 phases (background, turn, type)\n');
     step('waiting-background');
     const pid = Number(a.pid);
+    let baseline = null;
+    try { baseline = await identify(pid); } catch { /* no baseline: typeInto then refuses to type */ }
     let idleAt = 0;
     const bg = await backgroundDone({ dir, session: arm.session, claudePid: pid, list, alive, now, sleep, onLive: (t) => { idleAt = t; } });
     if (bg !== 'done') { step(bg); return 1; }
     step('waiting-turn');
-    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, now, sleep });
+    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, claudePid: pid, alive, now, sleep });
     if (turn !== 'done') { step(turn); return 1; }
     step('typing');
-    const out = await type(text, { dir, session: arm.session, claudePid: pid });
+    const out = await type(text, { dir, session: arm.session, claudePid: pid, alive, identify, baseline });
     step(out === 'typed' ? 'typed' : out === 'unsupported' ? 'failed: unsupported terminal' : out);
     stderr.write(`lead-replace: end ${out}, ${Math.round((Date.now() - t0) / 1000)}s\n`);
     return out === 'typed' ? 0 : 1;
