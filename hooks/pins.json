@@ -1,19 +1,19 @@
 {
   "v": 1,
   "files": {
-    "scripts/hook-host.mjs": "5184db3737948d62ebf8faa42bdcf1f88e8085c135b6f6103049a7d6663edda7",
-    "hooks/lib/cap-effects.mjs": "ea724b9a549539e3a3574318a1b8ccf69741103831a03a998fe3d23356e4be25",
+    "scripts/hook-host.mjs": "9c0ca895cd27baacb5f4858b2b39e21bb4fd06a5ba8bbf230fc9ca7f0d32e1c5",
+    "hooks/lib/cap-effects.mjs": "8588f6fa885451ebefdce638a80daa9619106aa34076846854c1fcbfd21f803b",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
     "hooks/lib/dep-hashes.mjs": "948d2ae635d6d962a55b476d8d6975c51bbdd516bef74925171614f3c564d461",
     "hooks/lib/dep-pins.mjs": "01e2861d2d8f778ae8c3b3e8e3d511ae749746973cd712fe6f5090ecad2f61c6",
-    "hooks/lib/event.mjs": "2d3c5ec684f5c0de3bb9978463f074d2ff4238af3f1e2b61827b9ac370f5a27d",
+    "hooks/lib/event.mjs": "d74859a1152dbbdedacabfc3afbceb31c4016881e2809e953a167d6f72871dbd",
     "hooks/lib/mods-defaults.mjs": "472436b346eb5178a51bcf0ad12e69baf9d51126c10aac239b80148d36971ec2",
     "hooks/lib/paths.mjs": "ec20f185c22c4402650b9d051691affcf9f6da8b1897037e5c92be29bbacc821",
     "hooks/lib/rule-id.mjs": "942c6663b64f7e4de11a24ca5856c422542797bf3437c518a9444b8254acd42e",
     "hooks/lib/rule-runner.mjs": "7ba077f3cbd66ae4bb3dbf04919ae54159387a82d851644942ae7938e508aa69",
     "hooks/lib/snapshot.mjs": "ff5dcb5632ed8e52ca32d80ea6c42647fdd7fe9acda7736bbe30d55bee684980",
     "hooks/rules/browser.mjs": "895ee95287943d9c6627f8475d2f73223610d08256d208a668f76144618d032d",
-    "hooks/rules/cap.mjs": "b96816382d0695c5194c738fe2b5bbb195f8f4fc6af4582a14b2032f639bf788",
+    "hooks/rules/cap.mjs": "ce64a6720de46270e2ab7925eaa519cb1e328d79885180a6ab9f3d33f7a3fde6",
     "hooks/rules/dotenv.mjs": "53e10047a416281c49aecc114dd64ecebdf86b579835b97ec400c7e47c950a84",
     "hooks/rules/git-add.mjs": "4b514e4e6028a4a170d27c921fe714a968a8a70a7c911ddc8d18844fe03e61c6",
     "hooks/rules/model-floor.mjs": "27f00952600bf5bdcf79c6245063d2c554e3fa40dca201444e3a13964fd4d653",
@@ -34,7 +34,7 @@
     "hooks/manifests/switchboard.json": "ae7fdabf10889772e5208239c7e5e8c193094bcd58fe8befbcbed7bd3fec7a6e",
     "hooks/rules.json": "9c78d787fe1b316463f939ef4e58cc8f310b741673f4b0f6a3e93e81d6584c94",
     "hooks/hooks.json": "8b051711f0c4d834a78d2eb4feaaac80d3c3e3e6952cfd64395bca9be8f57499",
-    "hooks/schema/hook-fields.json": "43055b2a7846b1235200a8d21023cde58df36eaf3753802308f7e59a18599102",
+    "hooks/schema/hook-fields.json": "ad8358bb3128fc5dc20c637330e33798f7a7627ac9b70758ca5a6a06a5962100",
     "company/model-floor.json": "c96e1efa9f7753a4039d90731c73a2b46ab6b74e771336b89ab5e837dd039032"
   }
 }
