@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { listContractNames } from './handoff-lint.mjs';
+import { listContractNames, readInside } from './handoff-lint.mjs';
 
 const script = path.join(import.meta.dirname, 'handoff-lint.mjs');
 const roots = [];
@@ -197,8 +197,9 @@ test('an empty or header-less .md file in docs/contracts is skipped, not fatal',
 
 // listContractNames(dir, maxEntries, maxFiles): the bounded directory walk, tested with a fake Dir (no filesystem order).
 function fakeDir(entries, { throwAt } = {}) {
-  const d = { reads: 0, closes: 0 };
+  const d = { reads: 0, calls: 0, closes: 0 };
   d.readSync = () => {
+    d.calls++;
     if (throwAt !== undefined && d.reads === throwAt) throw new Error('read failed');
     return d.reads < entries.length ? { name: entries[d.reads++] } : null;
   };
@@ -244,5 +245,42 @@ test('listContractNames: an empty directory gives an empty list and no extra rea
   const d = fakeDir([]);
   assert.deepEqual(listContractNames(d, 5000, 500), []);
   assert.equal(d.reads, 0);
+  assert.equal(d.calls, 1, 'one readSync call (the null end), no more');
   assert.equal(d.closes, 1);
+});
+
+// readInside(realRoot, segments, cap, take): the `take` cap is the 300-byte header bound, tested directly.
+function realTmp() {
+  const r = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'hl-inside-')));
+  roots.push(r);
+  return r;
+}
+
+test('readInside: take caps the bytes read at 300 of a 1000-byte file; without take the whole file is read', () => {
+  const root = realTmp();
+  fs.writeFileSync(path.join(root, 'f.md'), 'a'.repeat(1000));
+  const cut = readInside(root, ['f.md'], 64 * 1024, 300);
+  assert.equal(cut.status, 'ok');
+  assert.equal(cut.text.length, 300);
+  const full = readInside(root, ['f.md'], 64 * 1024);
+  assert.equal(full.status, 'ok');
+  assert.equal(full.text.length, 1000);
+});
+
+test('readInside: a file shorter than take is read whole, and take never lifts the size cap', () => {
+  const root = realTmp();
+  fs.writeFileSync(path.join(root, 'short.md'), 'b'.repeat(100));
+  fs.writeFileSync(path.join(root, 'big.md'), 'c'.repeat(1000));
+  assert.equal(readInside(root, ['short.md'], 64 * 1024, 300).text.length, 100);
+  assert.equal(readInside(root, ['big.md'], 500, 300).status, 'refused');
+});
+
+test('readInside: the cut is by bytes, so a multi-byte character straddling byte 300 is not returned whole', () => {
+  const root = realTmp();
+  // 299 ASCII bytes, then a 2-byte char (bytes 299-300), then more: the cut keeps only its first byte.
+  fs.writeFileSync(path.join(root, 'mb.md'), `${'a'.repeat(299)}é${'b'.repeat(100)}`);
+  const r = readInside(root, ['mb.md'], 64 * 1024, 300);
+  assert.equal(r.status, 'ok');
+  assert.ok(!r.text.includes('é'), 'the straddling character is cut, not completed');
+  assert.ok(r.text.startsWith('a'.repeat(299)));
 });
