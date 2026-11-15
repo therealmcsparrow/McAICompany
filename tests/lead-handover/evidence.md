@@ -139,3 +139,22 @@ Notes on the rows
 | b | Does the helper survive the MCP call and `/clear`? | Yes | The detached helper (`spawn`, stdio ignored, `unref`) kept running and typed the post-clear text; the MCP server was not restarted by `/clear`. When claude exits, the MCP server exits and the helper dies with it. |
 | c | Is the MCP `process.ppid` the claude process, and are background shells its direct children? | Yes for the PowerShell tool; the Bash tool is answered by S2 above | MCP ppid was claude in both runs. The background PowerShell task was a direct child `cmd.exe` of claude, gone when the task finished. A transient `powershell.exe` child (a probe) also showed up. |
 | d | Does PreToolUse carry `tool_input.run_in_background` as a boolean? | Yes | JSON boolean `true` alongside `command` and `description`; absent for tools that do not set it. Tool name was `PowerShell`; S2 saw `Bash` with the same boolean (`true`). |
+
+## R-7 live check, server -> helper -> typer chain (QA, 2026-11-15)
+
+Windows 11, Node v26.7.0, branch tip of `aico/P20261115.000001`, Claude Code not involved. The real `scripts/lead-launch-mcp.mjs`, `scripts/lead-replace.mjs` and `scripts/lib/console-type.ps1` ran unchanged. The stand-in for claude was a throwaway node script (own console window, started with `Start-Process`, scratchpad outside the repo) that spawned the server as its child (so the server's `process.ppid` was the stand-in), called `lead_new_session` over stdio, and logged each line typed into its console. Fixture: temp run folder with a `context` hand-over record (session `aaaaaaaaaaaa`). The stand-in wrote the `lead-context.json` Stop readings itself, and a new session id after it read `/clear`. No running Claude console was typed into or closed; the typer's target pid was only the stand-in.
+
+| Run | Setup | Result |
+|---|---|---|
+| 1 | No background task | Tool result: the success text. Helper armed (`armAt` 03:41:02), Stop reading at +3 s, `/clear` typed 03:41:07.999, new session reading, then the hand-over prompt typed 03:41:11.482 (about 2 s settle plus polls). Both lines arrived intact in the target console (second line is the exact `newSessionCommand` text without `claude "`). Arm file state `typed`. |
+| 2 | One background shell: a detached `cmd.exe` child of the stand-in, 11 s, listed by a `bg` row in `guard.jsonl` | Helper polled the real `Get-CimInstance` child list, saw the shell live, did not type while it ran. Shell ended 03:43:27.6, Stop reading 03:43:32.3, `/clear` typed 03:43:37.6, prompt typed 03:43:40.1. Arm file state `typed`. |
+
+What this proves: the MCP call arms and starts the detached helper; the helper survives the call; `listChildren` (CIM query, image and creation-time fields) works on a real process tree and `isShell` matches `cmd.exe`; `typeInto` attaches to a foreign console with `FreeConsole` + `AttachConsole` and writes both texts through `WriteConsoleInputW` (CR gives Enter, ASCII only, the quotes and `'` in the prompt survive).
+
+Not proved (limits)
+- Not the real claude TUI: the two typed lines were read by a node `readline`, not by Claude Code. S1 and S2 above cover typing `/clear` into the real TUI and classic conhost; this run did not repeat that.
+- Not a real `/clear`: the stand-in wrote the new-session reading; the real `SessionStart` hook path was not used.
+- R-18 (a Stop reading that lands between the task end and `idleAt`) not run live: the helper would wait the full 10 minutes (`TURN_MS`) before `failed: turn`. Run 2 wrote its Stop after the task end plus 4.7 s, which is after `idleAt` and so shows the happy path only. The case stays covered at unit level only.
+- Windows Terminal (ConPTY) was not tried; the stand-in's window used whatever host `Start-Process node` opens here.
+
+Harness note (an artifact, not a product defect): the first run-2 attempt spawned the shell child with `stdio: 'ignore'` and no `detached`; the stand-in itself died when that child ended (its helper died with its console, leaving the arm file at `waiting-background`). With `detached: true` the child has its own console and the run passed. Raw logs stay in the scratchpad.
