@@ -140,9 +140,9 @@ describe('lead_new_session arms once and starts the helper (CEO decision 3)', ()
     assert.equal(fs.readFileSync(armFile(fx), 'utf8'), before, 'arm file unchanged');
   });
 
-  test('an arm file already there: same success text, nothing started', () => {
+  test('an arm file already there for the same session: same success text, nothing started', () => {
     const fx = fixture();
-    fs.writeFileSync(armFile(fx), '{"v":1,"session":"x","armAt":"2026-01-01T00:00:00Z","state":"waiting-background"}\n');
+    fs.writeFileSync(armFile(fx), `{"v":1,"session":"${SESSION}","armAt":"2026-01-01T00:00:00Z","state":"waiting-background"}\n`);
     const s = spy();
     const r = callOn('win32', fx.root, { start: s.start });
     assert.equal(r.isError, undefined);
