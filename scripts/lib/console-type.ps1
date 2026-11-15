@@ -1,6 +1,7 @@
 # Types stdin text into the console of one process: console-type.ps1 --pid <claudePid>
-# Text is read from stdin first (UTF-8, CR = Enter); only printable ASCII and CR are typed.
-# Exit 0 typed, 1 attach failed, 2 bad arguments or open or write failed.
+# Text is read from stdin first (UTF-8, CR = Enter); only printable ASCII and CR are allowed.
+# Any other char (non-ASCII, control) refuses the whole text: nothing is typed.
+# Exit 0 typed, 1 attach failed, 2 bad arguments, refused text, or open or write failed.
 $src = @'
 using System;
 using System.Collections.Generic;
@@ -41,8 +42,11 @@ if ($args.Count -ne 2 -or $idx -ne 0) { exit 2 }
 if ($args[1] -notmatch '^[1-9][0-9]{0,9}$' -or -not [uint32]::TryParse($args[1], [ref]$target)) { exit 2 }
 
 $raw = [Console]::In.ReadToEnd()
-$text = -join ($raw.ToCharArray() | Where-Object { $_ -eq "`r" -or ([int]$_ -ge 32 -and [int]$_ -le 126) })
+$text = $raw
 if ($text.Length -eq 0) { exit 2 }
+foreach ($ch in $text.ToCharArray()) {
+  if ($ch -ne "`r" -and ([int]$ch -lt 32 -or [int]$ch -gt 126)) { exit 2 }
+}
 
 Add-Type -TypeDefinition $src
 [void][CT]::FreeConsole()
