@@ -1133,6 +1133,19 @@ const MAX_CONTRACT_BYTES = 64 * 1024; // size above which a file is refused
 const CONTRACT_HEADER_BYTES = 300; // only the header line is read
 const CONTRACT_HEADER = /^# Contract: ([a-z][a-z0-9]*(?:-[a-z0-9]+)*) v(\d+(?:\.\d+)?)[ \t]*$/;
 
+// Reads at most maxEntries entries from an open Dir-like object (readSync, closeSync), counting every entry
+// (non-.md too), and always closes it. Returns the sorted .md names, cut to maxFiles.
+export function listContractNames(dir, maxEntries, maxFiles) {
+  const names = [];
+  try {
+    for (let e, seen = 0; seen < maxEntries && (e = dir.readSync()) !== null; seen++) {
+      if (e.name.endsWith('.md')) names.push(e.name);
+    }
+  } finally { dir.closeSync(); }
+  names.sort().splice(maxFiles);
+  return names;
+}
+
 // The plugin's Contracts with the product's laid over them (product wins on the same name). Product files are read
 // through readInside and the entry count is capped.
 function contractIndex(file) {
@@ -1143,14 +1156,7 @@ function contractIndex(file) {
     if (ctx && resolve(ctx.root) !== pluginRoot) {
       const dir = join(ctx.root, 'docs', 'contracts');
       if (lstatSync(dir).isDirectory() && realpathSync.native(dir) === join(ctx.realRoot, 'docs', 'contracts')) {
-        const names = [];
-        const d = opendirSync(dir);
-        try {
-          for (let e, seen = 0; seen < MAX_CONTRACT_ENTRIES && (e = d.readSync()) !== null; seen++) {
-            if (e.name.endsWith('.md')) names.push(e.name);
-          }
-        } finally { d.closeSync(); }
-        names.sort().splice(MAX_CONTRACT_FILES);
+        const names = listContractNames(opendirSync(dir), MAX_CONTRACT_ENTRIES, MAX_CONTRACT_FILES);
         for (const n of names) {
           const got = readInside(ctx.realRoot, ['docs', 'contracts', n], MAX_CONTRACT_BYTES, CONTRACT_HEADER_BYTES);
           if (got.status !== 'ok') continue;
