@@ -45,12 +45,26 @@ describe('turn adapter', () => {
     });
   }
 
-  test('a Step (agent_id present) and other events write nothing', () => {
+  test('a Step (agent_id present) writes nothing', () => {
     const p = product();
     turn(ev('PreToolUse', { agent_id: 'a1' }), { root: p.root, now: T0 });
+    turn(ev('UserPromptSubmit', { agent_id: 'a1' }), { root: p.root, now: T0 });
+    assert.equal(fs.existsSync(p.file), false);
+  });
+
+  test('other events and input that is not JSON write nothing', () => {
+    const p = product();
     turn(ev('Stop'), { root: p.root, now: T0 });
+    turn(ev('SessionStart'), { root: p.root, now: T0 });
     turn('not json', { root: p.root, now: T0 });
     assert.equal(fs.existsSync(p.file), false);
+  });
+
+  test('a later turn replaces the mark with the newer time', () => {
+    const p = product();
+    turn(ev('UserPromptSubmit'), { root: p.root, now: T0 });
+    turn(ev('PreToolUse'), { root: p.root, now: T0 + 7000 });
+    assert.equal(JSON.parse(fs.readFileSync(p.file, 'utf8')).at, '2026-11-15T10:00:07.000Z');
   });
 
   test('hooks.json runs the adapter on UserPromptSubmit and PreToolUse', () => {
@@ -129,6 +143,35 @@ describe('typeInto with a turn mark', () => {
     const s = setup();
     reading(s.p.dir, FROZEN, T0);
     fs.writeFileSync(path.join(s.p.dir, 'lead-turn.json'), '{broken');
+    assert.equal(await typeInto(PROMPT, s.opts), 'failed: turn changed');
+    assert.deepEqual(s.r.calls, []);
+  });
+
+  test('a mark that is valid JSON of the wrong shape counts as a new turn', async () => {
+    const { typeInto } = await load();
+    for (const body of ['{}', '{"v":1,"session":"abc"}', '{"v":1,"session":5,"at":"2026-11-15T10:00:00Z"}', '{"v":1,"session":"abc","at":"nope"}']) {
+      const s = setup();
+      reading(s.p.dir, FROZEN, T0);
+      fs.writeFileSync(path.join(s.p.dir, 'lead-turn.json'), body);
+      assert.equal(await typeInto(PROMPT, s.opts), 'failed: turn changed', body);
+      assert.deepEqual(s.r.calls, [], body);
+    }
+  });
+
+  test('a mark one second after the Stop reading -> nothing typed', async () => {
+    const { typeInto } = await load();
+    const s = setup();
+    reading(s.p.dir, FROZEN, T0);
+    mark(s.p.dir, FROZEN, '2026-11-15T10:00:01.000Z');
+    assert.equal(await typeInto(PROMPT, s.opts), 'failed: turn changed');
+    assert.deepEqual(s.r.calls, []);
+  });
+
+  test('the accepted reading is of another session than the one frozen -> nothing typed', async () => {
+    const { typeInto } = await load();
+    const s = setup();
+    reading(s.p.dir, FROZEN, T0);
+    s.opts.accepted = { session: 'ffffffffffff', at: iso(T0) };
     assert.equal(await typeInto(PROMPT, s.opts), 'failed: turn changed');
     assert.deepEqual(s.r.calls, []);
   });
