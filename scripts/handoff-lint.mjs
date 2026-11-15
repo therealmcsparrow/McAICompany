@@ -1125,6 +1125,23 @@ function folderContext(file) {
   return { folder, summary: readInside(ctx.realRoot, ['.company', 'work', folder, '00-summary.md'], MAX_BYTES) };
 }
 
+// Contract index of the product under build: the Handoff's product root when its docs/contracts is a real
+// folder inside that root (repo text, so a symlink is never followed) and yields Contracts; else the plugin root.
+function contractIndex(file) {
+  const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  try {
+    const ctx = runContext(dirname(resolve(file)));
+    if (ctx && resolve(ctx.root) !== pluginRoot) {
+      const dir = join(ctx.root, 'docs', 'contracts');
+      if (lstatSync(dir).isDirectory() && realpathSync.native(dir) === join(ctx.realRoot, 'docs', 'contracts')) {
+        const own = buildIndex(ctx.root);
+        if (own.size > 0) return own;
+      }
+    }
+  } catch { /* no product Contracts: use the plugin's */ }
+  return buildIndex(pluginRoot);
+}
+
 function main(argv) {
   const USAGE = 'usage: node scripts/handoff-lint.mjs <handoff.md> [--require-top] | --findings <ledger.md> | --contests <run folder> | --applied <run folder> | --exceptions-for <slug>';
   const args = argv.slice(2);
@@ -1171,7 +1188,7 @@ function main(argv) {
     console.log('ERROR cannot read file');
     return 1;
   }
-  const index = !wantLedger && /^contracts:/m.test(text) ? buildIndex(resolve(dirname(fileURLToPath(import.meta.url)), '..')) : undefined;
+  const index = !wantLedger && /^contracts:/m.test(text) ? contractIndex(file) : undefined;
   const where = wantLedger ? {} : folderContext(file);
   const r = wantLedger ? lintFindings(text) : lint(text, { requireTop, index, ...where });
   if (!wantLedger && requireTop && r.routing?.status === 'handover') r.errors.push(...checkLedger(file, r.routing.findings));
