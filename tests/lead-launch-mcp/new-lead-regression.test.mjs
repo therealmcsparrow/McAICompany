@@ -54,7 +54,7 @@ describe('frozen guard (decision 4)', () => {
   });
 });
 
-// ---------- (b) lead_new_session arms and starts the replace helper (lead-session-mcp v2.0) ----------
+// ---------- (b) lead_new_session arms and starts the replace helper (lead-session-mcp v2.1) ----------
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const SESSION = 'abcdef012345';
 const DESCRIPTION = 'Starts the new Lead in this terminal after a context hand-over: waits for background tasks and the end of this turn, then types /clear and the hand-over prompt.';
