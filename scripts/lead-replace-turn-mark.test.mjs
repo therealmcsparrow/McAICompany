@@ -115,12 +115,32 @@ describe('typeInto with a turn mark', () => {
     assert.deepEqual(s.r.calls, ['/clear\r', `${PROMPT}\r`]);
   });
 
-  test('a mark of another session before /clear is ignored', async () => {
-    const { typeInto } = await load();
+  // R-14: both sessions write through the real `turn` adapter, so the test holds for any mark layout.
+  const twoSessions = (order) => {
     const s = setup();
-    reading(s.p.dir, FROZEN, T0);
-    mark(s.p.dir, 'ffffffffffff', '2026-11-15T10:00:30.000Z');
-    assert.equal(await typeInto(PROMPT, s.opts), 'typed');
+    const frozen = 'frozen-lead-session';
+    const other = 'other-main-session';
+    s.opts.session = h12(frozen);
+    s.opts.accepted = { session: h12(frozen), at: iso(T0) };
+    reading(s.p.dir, h12(frozen), T0);
+    const ev = (id) => JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: id });
+    const roles = { frozen, other };
+    for (const [who, dt] of order) turn(ev(roles[who]), { root: s.p.root, now: T0 + dt });
+    return s;
+  };
+
+  test('frozen Lead starts a turn after the Stop reading, then another main session marks -> nothing typed', async () => {
+    const { typeInto } = await load();
+    const s = twoSessions([['frozen', 5000], ['other', 6000]]);
+    assert.equal(await typeInto(PROMPT, s.opts), 'failed: turn changed');
+    assert.deepEqual(s.r.calls, []);
+  });
+
+  test('another main session marks first, then the frozen Lead starts a turn -> nothing typed', async () => {
+    const { typeInto } = await load();
+    const s = twoSessions([['other', 5000], ['frozen', 6000]]);
+    assert.equal(await typeInto(PROMPT, s.opts), 'failed: turn changed');
+    assert.deepEqual(s.r.calls, []);
   });
 
   test('the reading is gone before /clear -> nothing typed', async () => {
