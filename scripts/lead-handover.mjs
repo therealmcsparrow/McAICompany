@@ -47,6 +47,7 @@ const MAX_RUN_STATE = 64 * 1024;
 const MAX_STEP_FILE = 8 * 1024;
 const MAX_READING = 256;
 const READING_FILE = 'lead-context.json';
+const TURN_FILE = 'lead-turn.json';
 const MAX_HANDOFF = 8 * 1024;
 const MAX_LINES = 1000;
 const MAX_LINE = 512;
@@ -681,6 +682,38 @@ export function start(text, options) {
   }
 }
 
+// UserPromptSubmit and PreToolUse adapter: marks that the Lead is in a turn, `{v, session, at}` in lead-turn.json (atomic
+// rename, `at` with milliseconds). lead-replace.mjs types nothing while this mark is newer than the Stop reading it accepted.
+// Steps (agent_id) write nothing. Always { code: 0, err: '' }.
+export function turn(text, options) {
+  const { root, now } = defaults(options);
+  const quiet = { code: 0, err: '' };
+  try {
+    const p = parsePayload(text);
+    if (!p || (p.event !== 'UserPromptSubmit' && p.event !== 'PreToolUse') || p.subagent || p.session === null) return quiet;
+    const slug = findRun(root, now);
+    if (!slug) return quiet;
+    exactWorkPath({ fs, path }, root, workParts(slug));
+    const dir = runExists(root, slug);
+    if (!dir) return quiet;
+    const file = path.join(dir, TURN_FILE);
+    const l = lstatOrNull(file);
+    if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return quiet;
+    const tmp = path.join(dir, `.${TURN_FILE}.${process.pid}.tmp`);
+    const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+    try {
+      try { fs.writeSync(fd, `${JSON.stringify({ v: 1, session: p.session, at: new Date(now).toISOString() })}\n`); } finally { fs.closeSync(fd); }
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+      throw e;
+    }
+    return quiet;
+  } catch {
+    return quiet;
+  }
+}
+
 // SessionStart adapter. Returns { code: 0, out }; out is the hook JSON or empty.
 export function resume(text, options) {
   const { root, now } = defaults(options);
@@ -841,6 +874,9 @@ async function hook(kind) {
   } else if (kind === 'start') {
     start(text);
     process.exitCode = 0;
+  } else if (kind === 'turn') {
+    turn(text);
+    process.exitCode = 0;
   } else {
     const r = resume(text);
     if (r.out) process.stdout.write(r.out);
@@ -850,7 +886,7 @@ async function hook(kind) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [cmd] = process.argv.slice(2);
-  if ((cmd === 'watch' || cmd === 'resume' || cmd === 'measure' || cmd === 'start') && process.argv.length === 3) {
+  if ((cmd === 'watch' || cmd === 'resume' || cmd === 'measure' || cmd === 'start' || cmd === 'turn') && process.argv.length === 3) {
     hook(cmd).catch(() => { process.exitCode = 0; });
   } else {
     const r = main(process.argv.slice(2));

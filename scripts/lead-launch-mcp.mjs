@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// lead-session-mcp v2.0 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It arms lead-replace.json in the
+// lead-session-mcp v2.1 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It arms lead-replace.json in the
 // run folder and starts one helper (scripts/lead-replace.mjs) that types the new Lead into this terminal. Node built-ins only; no network.
 import fs from 'node:fs';
 import path from 'node:path';

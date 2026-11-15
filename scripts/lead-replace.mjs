@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-session-mcp.md v2.0
+// contract: docs/contracts/lead-session-mcp.md v2.1
 // Helper started by the lead-session server: waits for background tasks and the end of the turn, then types /clear and the hand-over
 // prompt into the claude console. Usage: lead-replace.mjs <slug> <claudePid>. Exit 0 typed, 1 failed, 2 bad arguments.
 // The state is in lead-replace.json of the run folder (atomic rename); phase lines go to stderr. Only two fixed texts are ever typed.
@@ -86,8 +86,8 @@ function readReading(dir) {
 }
 
 // 'done' once the Stop reading of `session` is at or after armAt and at or after idleAt (epoch ms, the start of the last poll that saw a live
-// background task, so the task ended later): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes.
-export async function turnOver({ dir, session, armAt, idleAt = 0, claudePid, alive = () => true, now = Date.now, sleep = realSleep }) {
+// background task, so the task ended later): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes. `onAccept(reading)` gets the reading that was accepted.
+export async function turnOver({ dir, session, armAt, idleAt = 0, claudePid, alive = () => true, now = Date.now, sleep = realSleep, onAccept }) {
   // Readings keep whole seconds, so the arm time is compared at whole seconds too.
   const arm = Math.max(Math.floor(Date.parse(armAt) / 1000) * 1000, Math.floor(idleAt / 1000) * 1000);
   if (!Number.isFinite(arm)) return 'failed: turn';
@@ -95,10 +95,28 @@ export async function turnOver({ dir, session, armAt, idleAt = 0, claudePid, ali
   for (;;) {
     if (!alive(claudePid)) return 'failed: session gone';
     const o = readReading(dir);
-    if (o && o.session === session && Date.parse(o.at) >= arm) return 'done';
+    if (o && o.session === session && Date.parse(o.at) >= arm) { if (onAccept) onAccept(o); return 'done'; }
     if (now() - start >= TURN_MS) return 'failed: turn';
     await sleep(POLL_MS);
   }
+}
+
+// The turn mark written at the start of a Lead turn or tool call: null when there is none, 'bad' when the file cannot be read.
+function readMark(dir) {
+  const text = readSmall(path.join(dir, 'lead-turn.json'), MAX_SMALL);
+  if (text === null) return null;
+  try {
+    const o = JSON.parse(text);
+    return o && typeof o === 'object' && typeof o.session === 'string' && Number.isFinite(Date.parse(o.at)) ? o : 'bad';
+  } catch { return 'bad'; }
+}
+
+// True when a turn of `session` started after the Stop reading `since` (readings keep whole seconds, so the mark is cut to whole seconds).
+function turnSince(dir, session, since) {
+  const m = readMark(dir);
+  if (m === null) return false;
+  if (m === 'bad') return true;
+  return m.session === session && Math.floor(Date.parse(m.at) / 1000) * 1000 > Date.parse(since.at);
 }
 
 function powershellPath() {
@@ -115,7 +133,7 @@ const typedStatus = (status) => (status === 0 ? 'typed' : status === 1 || status
 
 // Types /clear + Enter, waits for a new session, then types the text + Enter. Windows only.
 // Before each send the pid must still live and, when `identify` is given, still be the process seen at start (`baseline` {image, created}); else nothing is typed.
-export async function typeInto(text, { platform = osPlatform, run = defaultRun, dir, session, claudePid, alive = () => true, identify = null, baseline = null, now = Date.now, sleep = realSleep }) {
+export async function typeInto(text, { platform = osPlatform, run = defaultRun, dir, session, claudePid, alive = () => true, identify = null, baseline = null, accepted = null, now = Date.now, sleep = realSleep }) {
   const build = typer(platform);
   if (build === null) return 'unsupported';
   const argv = [powershellPath(), ...build(claudePid)];
@@ -133,9 +151,11 @@ export async function typeInto(text, { platform = osPlatform, run = defaultRun, 
     if (!ok()) return 'failed: turn changed';
     return typedStatus((await run(argv, Buffer.from(`${s}\r`, 'utf8'))).status);
   };
+  // The Stop reading the turn-over wait accepted; without one, the reading found now.
+  const stop = accepted ?? readReading(dir);
   const first = await send('/clear', () => {
     const o = readReading(dir);
-    return !o || o.session === session;
+    return Boolean(stop) && Boolean(o) && o.session === session && stop.session === session && o.at === stop.at && !turnSince(dir, session, stop);
   });
   if (first !== 'typed') return first;
   const start = now();
@@ -149,7 +169,7 @@ export async function typeInto(text, { platform = osPlatform, run = defaultRun, 
   await sleep(SETTLE_MS);
   return send(text, () => {
     const o = readReading(dir);
-    return Boolean(o) && o.session === seen.session && o.at === seen.at;
+    return Boolean(o) && o.session === seen.session && o.at === seen.at && !turnSince(dir, seen.session, seen);
   });
 }
 
@@ -233,10 +253,11 @@ export async function main(args, root = cwd(), deps = {}) {
     const bg = await backgroundDone({ dir, session: arm.session, claudePid: pid, list, alive, now, sleep, onLive: (t) => { idleAt = t; } });
     if (bg !== 'done') { step(bg); return 1; }
     step('waiting-turn');
-    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, claudePid: pid, alive, now, sleep });
+    let accepted = null;
+    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, claudePid: pid, alive, now, sleep, onAccept: (o) => { accepted = o; } });
     if (turn !== 'done') { step(turn); return 1; }
     step('typing');
-    const out = await type(text, { dir, session: arm.session, claudePid: pid, alive, identify, baseline });
+    const out = await type(text, { dir, session: arm.session, claudePid: pid, alive, identify, baseline, accepted });
     step(out === 'typed' ? 'typed' : out === 'unsupported' ? 'failed: unsupported terminal' : out);
     stderr.write(`lead-replace: end ${out}, ${Math.round((Date.now() - t0) / 1000)}s\n`);
     return out === 'typed' ? 0 : 1;

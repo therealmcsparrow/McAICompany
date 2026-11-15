@@ -4,7 +4,7 @@
     "scripts/hook-host.mjs": "c7631d9aea3f8e7babd924702754f99ec67f4b65b34e69b4e6d120052c675ff7",
     "hooks/lib/cap-effects.mjs": "8588f6fa885451ebefdce638a80daa9619106aa34076846854c1fcbfd21f803b",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
-    "hooks/lib/dep-hashes.mjs": "499597c033602b468467e53586fcba09bc54055fde373a1c765d6f8b83c41ea4",
+    "hooks/lib/dep-hashes.mjs": "934aec6c3bea3d9b65f5e9a0148da6f72d37647c4ecf0984a4a92f0b60303ed6",
     "hooks/lib/dep-pins.mjs": "01e2861d2d8f778ae8c3b3e8e3d511ae749746973cd712fe6f5090ecad2f61c6",
     "hooks/lib/event.mjs": "d74859a1152dbbdedacabfc3afbceb31c4016881e2809e953a167d6f72871dbd",
     "hooks/lib/mods-defaults.mjs": "472436b346eb5178a51bcf0ad12e69baf9d51126c10aac239b80148d36971ec2",
@@ -33,7 +33,7 @@
     "hooks/manifests/self-protect.json": "7150cebdba16bb8f1e986c0c48449845085e7d1967c280a704fc5921fb7709df",
     "hooks/manifests/switchboard.json": "ae7fdabf10889772e5208239c7e5e8c193094bcd58fe8befbcbed7bd3fec7a6e",
     "hooks/rules.json": "9c78d787fe1b316463f939ef4e58cc8f310b741673f4b0f6a3e93e81d6584c94",
-    "hooks/hooks.json": "8b051711f0c4d834a78d2eb4feaaac80d3c3e3e6952cfd64395bca9be8f57499",
+    "hooks/hooks.json": "56969f48b72392a7f433b3ff36cc980217b6c560e59e1868db62a216c8f69ebc",
     "hooks/schema/hook-fields.json": "ad8358bb3128fc5dc20c637330e33798f7a7627ac9b70758ca5a6a06a5962100",
     "company/model-floor.json": "c96e1efa9f7753a4039d90731c73a2b46ab6b74e771336b89ab5e837dd039032"
   }

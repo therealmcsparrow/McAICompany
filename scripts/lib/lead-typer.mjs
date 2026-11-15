@@ -1,4 +1,4 @@
-// Terminal typer lookup for lead-session-mcp v2.0. Windows only: a platform with no typer returns null.
+// Terminal typer lookup for lead-session-mcp v2.1. Windows only: a platform with no typer returns null.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

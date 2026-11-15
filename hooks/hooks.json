@@ -5,7 +5,11 @@
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" watch", "timeout": 5 }] }
     ],
     "PreToolUse": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" turn", "timeout": 5 }] },
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-host.mjs\"", "timeout": 10, "onFailure": "block" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" turn", "timeout": 5 }] }
     ],
     "SessionStart": [
       { "matcher": "compact", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" resume", "timeout": 5 }] },
