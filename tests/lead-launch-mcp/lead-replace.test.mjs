@@ -239,6 +239,94 @@ describe('turnOver (Helper item 2)', () => {
   });
 });
 
+// R-18: idle seam = start of the last poll that saw a live background task (backgroundDone onLive(t) -> turnOver idleAt).
+describe('idle seam (R-18)', () => {
+  const live = (dir, c, script) => {
+    const seen = [];
+    const l = lister(script);
+    const p = backgroundDoneOf(dir, l, c, (t) => seen.push(t));
+    return { seen, p };
+  };
+  const backgroundDoneOf = async (dir, l, c, onLive) => {
+    const { backgroundDone } = await load();
+    return backgroundDone({ dir, session: FROZEN, claudePid: CLAUDE, list: l.list, alive: () => true, now: c.now, sleep: c.sleep, onLive });
+  };
+
+  test('(a) a notice Stop between the task end and seam 1 done counts at once', async () => {
+    const { turnOver } = await load();
+    const { dir } = runDir();
+    guard(dir, [BG]);
+    const c = clock();
+    const { seen, p } = live(dir, c, (n) => (n < 4 ? [shell(50)] : []));   // live polls 0-3 start T0..T0+6000
+    assert.equal(await p, 'done');
+    const idleAt = seen[seen.length - 1];
+    assert.equal(idleAt, T0 + 6000);
+    assert.ok(c.t > idleAt, 'seam 1 reports done after the last live poll start');
+    reading(dir, FROZEN, idleAt + 1000);   // Stop of the notice turn: after the last live start, before done
+    const sleepsBefore = c.sleeps.length;
+    assert.equal(await turnOver({ dir, session: FROZEN, armAt: iso(T0), idleAt, now: c.now, sleep: c.sleep }), 'done');
+    assert.equal(c.sleeps.length, sleepsBefore, 'counts on the first look, no wait');
+  });
+
+  test('(b) a frozen Stop before the last live poll start does not count; a later Stop does', async () => {
+    const { turnOver } = await load();
+    const { dir } = runDir();
+    guard(dir, [BG]);
+    const c = clock();
+    const { seen, p } = live(dir, c, (n) => (n < 4 ? [shell(50)] : []));
+    assert.equal(await p, 'done');
+    const idleAt = seen[seen.length - 1];
+    reading(dir, FROZEN, idleAt - 3000);   // after armAt, but before the last live poll
+    const t1 = c.t;
+    const r = await turnOver({
+      dir, session: FROZEN, armAt: iso(T0), idleAt, now: c.now,
+      sleep: async (ms) => { await c.sleep(ms); if (c.t >= t1 + 20000) reading(dir, FROZEN, c.t); },
+    });
+    assert.equal(r, 'done');
+    assert.ok(c.t >= t1 + 20000, 'must wait for the newer Stop');
+  });
+
+  test('(b2) a frozen Stop before the last live poll start alone ends in failed: turn', async () => {
+    const { turnOver } = await load();
+    const { dir } = runDir();
+    guard(dir, [BG]);
+    const c = clock();
+    const { seen, p } = live(dir, c, (n) => (n < 4 ? [shell(50)] : []));
+    assert.equal(await p, 'done');
+    const idleAt = seen[seen.length - 1];
+    reading(dir, FROZEN, idleAt - 3000);
+    assert.equal(await turnOver({ dir, session: FROZEN, armAt: iso(T0), idleAt, now: c.now, sleep: c.sleep }), 'failed: turn');
+  });
+
+  test('(c) no bg row: onLive is never called, so armAt alone decides', async () => {
+    const { turnOver } = await load();
+    const { dir } = runDir();
+    guard(dir, [{ ev: 'stop', id: 'x', at: iso(T0) }]);
+    const c = clock();
+    const { seen, p } = live(dir, c, () => [shell(50)]);
+    assert.equal(await p, 'done');
+    assert.deepEqual(seen, []);
+    const armAt = iso(T0 + 2000);
+    reading(dir, FROZEN, T0 + 1000);   // before armAt: no
+    const t1 = c.t;
+    const r = await turnOver({
+      dir, session: FROZEN, armAt, idleAt: 0, now: c.now,
+      sleep: async (ms) => { await c.sleep(ms); if (c.t >= t1 + 6000) reading(dir, FROZEN, T0 + 2000); },   // exactly armAt: yes
+    });
+    assert.equal(r, 'done');
+    assert.ok(c.t >= t1 + 6000, 'the reading before armAt did not count');
+  });
+
+  test('onLive is not called for a pid seen in one poll only', async () => {
+    const { dir } = runDir();
+    guard(dir, [BG]);
+    const c = clock();
+    const { seen, p } = live(dir, c, (n) => (n === 0 ? [shell(50)] : []));
+    assert.equal(await p, 'done');
+    assert.deepEqual(seen, []);
+  });
+});
+
 describe('typeInto (Helper item 3)', () => {
   const PROMPT = 'aico lead hand-over: run lead-handover read \'P20261115.000001/01-fix\' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file.';
 
