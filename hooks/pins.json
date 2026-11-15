@@ -1,7 +1,7 @@
 {
   "v": 1,
   "files": {
-    "scripts/hook-host.mjs": "9c0ca895cd27baacb5f4858b2b39e21bb4fd06a5ba8bbf230fc9ca7f0d32e1c5",
+    "scripts/hook-host.mjs": "c7631d9aea3f8e7babd924702754f99ec67f4b65b34e69b4e6d120052c675ff7",
     "hooks/lib/cap-effects.mjs": "8588f6fa885451ebefdce638a80daa9619106aa34076846854c1fcbfd21f803b",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
     "hooks/lib/dep-hashes.mjs": "499597c033602b468467e53586fcba09bc54055fde373a1c765d6f8b83c41ea4",
