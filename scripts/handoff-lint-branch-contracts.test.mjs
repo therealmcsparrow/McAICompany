@@ -1,6 +1,5 @@
 // Regression: handoff-lint resolves Contract versions from the repo under build (the product root of the
 // Handoff's .company/work folder), not only from the plugin the script was installed with.
-// Bug: run P20261115.000001, Roles cited Contract versions raised on the branch and lint rejected them as stale.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -77,4 +76,77 @@ test('a Contract that exists only on the branch is known', () => {
   const file = product({ 'brand-new-thing': '1.0' });
   const r = lintCite(file, 'brand-new-thing v1.0');
   assert.equal(r.code, 0, r.out);
+});
+
+// aico's own current Contract version, read from this repo (never hard-coded).
+const aicoHandoff = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'handoff.md'), 'utf8')
+  .match(/^# Contract: handoff v(\d+\.\d+)/m)[1];
+
+// Link makers return false where the OS refuses (no privilege), so a case can skip instead of passing falsely.
+function tryLink(make) { try { make(); return true; } catch { return false; } }
+
+test('a product whose docs/contracts has no aico Contract still accepts aico cites beside its own', () => {
+  const file = product({ 'billing-api': '1.0' });
+  const r = lintCite(file, `handoff v${aicoHandoff}, billing-api v1.0`);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(!/is not a Contract/.test(r.out), r.out);
+});
+
+test('a product Contract wins over the plugin one of the same name; other aico cites still resolve', () => {
+  const file = product({ handoff: '99.5' });
+  const r = lintCite(file, 'handoff v99.5, context-guard v2.0');
+  assert.equal(r.code, 0, r.out);
+});
+
+test('a docs/contracts link pointing outside the product root is not followed (plugin index is used)', (t) => {
+  const file = product({});
+  const root = path.resolve(path.dirname(file), '..', '..', '..', '..');
+  fs.rmSync(path.join(root, 'docs'), { recursive: true, force: true });
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'hl-outside-'));
+  roots.push(outside);
+  fs.writeFileSync(path.join(outside, 'outside-thing.md'), '# Contract: outside-thing v1.0\n\nbody\n');
+  fs.mkdirSync(path.join(root, 'docs'));
+  if (!tryLink(() => fs.symlinkSync(outside, path.join(root, 'docs', 'contracts'), 'junction'))) return t.skip('cannot create a link');
+  const bad = lintCite(file, 'outside-thing v1.0');
+  assert.equal(bad.code, 1, bad.out);
+  assert.match(bad.out, /is not a Contract/);
+  const ok = lintCite(file, `handoff v${aicoHandoff}`);
+  assert.equal(ok.code, 0, ok.out);
+});
+
+test('a hard-linked contract file in docs/contracts is refused', (t) => {
+  const file = product({ 'billing-api': '1.0' });
+  const root = path.resolve(path.dirname(file), '..', '..', '..', '..');
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'hl-outside-'));
+  roots.push(outside);
+  const target = path.join(outside, 'secret.md');
+  fs.writeFileSync(target, '# Contract: linked-thing v1.0\n\nbody\n');
+  if (!tryLink(() => fs.linkSync(target, path.join(root, 'docs', 'contracts', 'linked-thing.md')))) return t.skip('cannot create a hard link');
+  const bad = lintCite(file, 'linked-thing v1.0');
+  assert.equal(bad.code, 1, bad.out);
+  assert.match(bad.out, /is not a Contract/);
+  const ok = lintCite(file, 'billing-api v1.0');
+  assert.equal(ok.code, 0, ok.out);
+});
+
+test('a wrong-case Docs folder is not read as the product docs/contracts', () => {
+  const file = product({});
+  const root = path.resolve(path.dirname(file), '..', '..', '..', '..');
+  fs.rmSync(path.join(root, 'docs'), { recursive: true, force: true });
+  fs.mkdirSync(path.join(root, 'Docs', 'contracts'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'Docs', 'contracts', 'casey.md'), '# Contract: casey v1.0\n\nbody\n');
+  const bad = lintCite(file, 'casey v1.0');
+  assert.equal(bad.code, 1, bad.out);
+  assert.match(bad.out, /is not a Contract/);
+});
+
+test('an over-cap number of entries in docs/contracts is bounded: not every file is indexed', () => {
+  const names = Array.from({ length: 700 }, (_, i) => `c${String(i).padStart(3, '0')}`);
+  const file = product(Object.fromEntries(names.map((n) => [n, '1.0'])));
+  const started = Date.now();
+  const probed = names.filter((_, i) => i % 10 === 0);
+  const rejected = probed.filter((n) => lintCite(file, `${n} v1.0`).code === 1);
+  assert.ok(rejected.length > 0, 'entries past the cap must be unknown');
+  assert.ok(rejected.length < probed.length, 'entries under the cap must still be known');
+  assert.ok(Date.now() - started < 20000, 'lint stays fast');
 });
