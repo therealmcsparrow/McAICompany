@@ -68,4 +68,26 @@ describe('main passes the typing step its checks', () => {
     assert.equal(seen.opts.baseline, null);
     assert.equal(typeof seen.opts.identify, 'function');
   });
+
+  test('R-6: claude dies in the waiting-turn phase -> failed: session gone, nothing typed', async () => {
+    const fx = setup();
+    // A reading older than the arm time keeps turnOver polling; liveness is only false once the turn phase has started.
+    fs.writeFileSync(path.join(fx.dir, 'lead-context.json'), `${JSON.stringify({ v: 1, session: SESSION, ctx: 1, peak: 2, at: iso(T0 - 100000), ttl: null })}\n`);
+    const stateNow = () => JSON.parse(fs.readFileSync(path.join(fx.dir, 'lead-replace.json'), 'utf8')).state;
+    let typed = false;
+    let tick = 0;   // the clock moves on, so a turn wait that ignores liveness ends in 'failed: turn' instead of hanging
+    const deps = {
+      list: async () => [],
+      alive: () => stateNow() !== 'waiting-turn',
+      identify: async () => ({ image: 'claude.exe', created: 1 }),
+      now: () => T0 + 100000 + 60000 * tick++,
+      sleep: async () => {},
+      type: async () => { typed = true; return 'typed'; },
+    };
+    const { main } = await load();
+    const code = await main([SLUG, '4242'], fx.root, deps);
+    assert.equal(code, 1);
+    assert.equal(stateNow(), 'failed: session gone');
+    assert.equal(typed, false);
+  });
 });
