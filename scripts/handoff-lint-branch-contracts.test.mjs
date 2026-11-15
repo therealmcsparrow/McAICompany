@@ -152,3 +152,44 @@ test('an over-cap number of entries in docs/contracts is bounded: not every file
   assert.equal(first.code, 0, 'entries under the cap must still be known');
   assert.ok(elapsed < 20000, `one lint call stays fast (took ${Math.round(elapsed)} ms)`);
 });
+
+// Bounded header read: only the first 300 bytes of a Contract file are read, so the body size never matters.
+function addContract(file, fname, text) {
+  const root = path.resolve(path.dirname(file), '..', '..', '..', '..');
+  fs.writeFileSync(path.join(root, 'docs', 'contracts', fname), text);
+}
+
+test('a Contract file well over 300 bytes still indexes its header', () => {
+  const file = product({ 'billing-api': '1.0' });
+  addContract(file, 'big-body.md', `# Contract: big-body v1.0\n\n${'body line\n'.repeat(5000)}`);
+  const ok = lintCite(file, 'big-body v1.0');
+  assert.equal(ok.code, 0, ok.out);
+});
+
+test('a CRLF header and a header with trailing blanks past byte 300 are still indexed', () => {
+  const file = product({ 'billing-api': '1.0' });
+  addContract(file, 'crlf-one.md', '# Contract: crlf-one v1.0\r\nrest\r\n');
+  addContract(file, 'padded.md', `# Contract: padded v1.0${' '.repeat(400)}
+rest
+`);
+  assert.equal(lintCite(file, 'crlf-one v1.0').code, 0);
+  assert.equal(lintCite(file, 'padded v1.0').code, 0);
+});
+
+test('a Contract file over the 64 KiB size limit is refused even with a valid header', () => {
+  const file = product({ 'billing-api': '1.0' });
+  addContract(file, 'huge.md', `# Contract: huge v1.0\n${'x'.repeat(64 * 1024 + 10)}`);
+  const bad = lintCite(file, 'huge v1.0');
+  assert.equal(bad.code, 1, bad.out);
+  assert.match(bad.out, /is not a Contract/);
+  assert.equal(lintCite(file, 'billing-api v1.0').code, 0);
+});
+
+test('an empty or header-less .md file in docs/contracts is skipped, not fatal', () => {
+  const file = product({ 'billing-api': '1.0' });
+  addContract(file, 'empty.md', '');
+  addContract(file, 'nohead.md', 'just text\n');
+  addContract(file, 'notes.txt', '# Contract: txt-thing v1.0\n');
+  assert.equal(lintCite(file, 'billing-api v1.0').code, 0);
+  assert.equal(lintCite(file, 'txt-thing v1.0').code, 1);
+});
