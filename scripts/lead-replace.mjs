@@ -111,12 +111,13 @@ function readMark(dir) {
   } catch { return 'bad'; }
 }
 
-// True when a turn of `session` started after the Stop reading `since` (readings keep whole seconds, so the mark is cut to whole seconds).
-function turnSince(dir, session, since) {
+// True when the mark of any main session is newer than the Stop reading `since` (readings keep whole seconds, so the mark is cut to whole seconds).
+// The single mark file holds only the last writer, so another session's mark could hide the Lead's turn: any newer mark fails closed.
+function turnSince(dir, since) {
   const m = readMark(dir);
   if (m === null) return false;
   if (m === 'bad') return true;
-  return m.session === session && Math.floor(Date.parse(m.at) / 1000) * 1000 > Date.parse(since.at);
+  return Math.floor(Date.parse(m.at) / 1000) * 1000 > Date.parse(since.at);
 }
 
 function powershellPath() {
@@ -155,7 +156,7 @@ export async function typeInto(text, { platform = osPlatform, run = defaultRun, 
   const stop = accepted ?? readReading(dir);
   const first = await send('/clear', () => {
     const o = readReading(dir);
-    return Boolean(stop) && Boolean(o) && o.session === session && stop.session === session && o.at === stop.at && !turnSince(dir, session, stop);
+    return Boolean(stop) && Boolean(o) && o.session === session && stop.session === session && o.at === stop.at && !turnSince(dir, stop);
   });
   if (first !== 'typed') return first;
   const start = now();
@@ -169,7 +170,7 @@ export async function typeInto(text, { platform = osPlatform, run = defaultRun, 
   await sleep(SETTLE_MS);
   return send(text, () => {
     const o = readReading(dir);
-    return Boolean(o) && o.session === seen.session && o.at === seen.at && !turnSince(dir, seen.session, seen);
+    return Boolean(o) && o.session === seen.session && o.at === seen.at && !turnSince(dir, seen);
   });
 }
 
