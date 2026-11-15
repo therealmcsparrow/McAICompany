@@ -41,6 +41,7 @@ const RECORD_FILES = ['run-state.jsonl', 'idea-flow.jsonl', 'tickets.jsonl', 'le
 
 const MAX_ARG = 4096;
 const MAX_STDIN = 64 * 1024;
+const OVERSIZE = Symbol('oversize stdin');
 const MAX_TAIL = 1024 * 1024;
 const MAX_TOKENS = 10_000_000;
 const MAX_RUN_STATE = 64 * 1024;
@@ -689,8 +690,10 @@ export function turn(text, options) {
   const { root, now } = defaults(options);
   const quiet = { code: 0, err: '' };
   try {
-    const p = parsePayload(text);
-    if (!p || (p.event !== 'UserPromptSubmit' && p.event !== 'PreToolUse') || p.subagent || p.session === null) return quiet;
+    // A payload over MAX_STDIN cannot be read: mark with an unknown session (session null), which lead-replace reads as 'bad' and refuses to type over.
+    const over = text === OVERSIZE;
+    const p = over ? { session: null } : parsePayload(text);
+    if (!p || (!over && ((p.event !== 'UserPromptSubmit' && p.event !== 'PreToolUse') || p.subagent || p.session === null))) return quiet;
     const slug = findRun(root, now);
     if (!slug) return quiet;
     exactWorkPath({ fs, path }, root, workParts(slug));
@@ -854,7 +857,7 @@ function readStdin() {
       if (total > MAX_STDIN) over = true;
       else chunks.push(c);
     });
-    const done = () => resolve(over ? '' : Buffer.concat(chunks).toString('utf8'));
+    const done = () => resolve(over ? OVERSIZE : Buffer.concat(chunks).toString('utf8'));
     process.stdin.on('end', done);
     process.stdin.on('error', done);
     process.stdin.on('close', done);
@@ -863,7 +866,8 @@ function readStdin() {
 
 async function hook(kind) {
   setTimeout(() => process.exit(0), SELF_EXIT_MS).unref();
-  const text = await readStdin();
+  const raw = await readStdin();
+  const text = raw === OVERSIZE && kind !== 'turn' ? '' : raw;
   if (kind === 'watch') {
     const r = watch(text);
     if (r.err) process.stderr.write(r.err);
