@@ -4,6 +4,16 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-15
+
+Rollback: node scripts/stable.mjs 0.40.1
+
+### Added
+- **A new Lead starts by itself at the context cap, on Windows.** When the frozen Lead calls `lead_new_session`, a helper waits for background tasks and the end of the turn, then types `/clear` and the hand-over prompt into the same console. On macOS and Linux the call returns `refused: unsupported terminal` and the frozen Lead shows the command to run by hand. Not yet proven in a real Claude session; the first real hand-over is the test. Contracts: `lead-session-mcp` v2.0.
+
+### Changed
+- **A frozen Lead may call `SendFeedback`.** `context-guard` v2.1. Background launches are now recorded as `bg` rows (`hook-event` v1.2).
+
 ## [0.40.1] - 2026-11-15
 
 Rollback: node scripts/stable.mjs 0.40.0
