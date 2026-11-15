@@ -1,18 +1,22 @@
 #!/usr/bin/env node
-// lead-session-mcp v1.2 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It only points: it returns the command
-// for a new Lead session and starts nothing. Node built-ins only; no process start, no network, no write.
+// lead-session-mcp v2.0 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It arms lead-replace.json in the
+// run folder and starts one helper (scripts/lead-replace.mjs) that types the new Lead into this terminal. Node built-ins only; no network.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findRun, newSessionCommand, main as handover, readSmall } from './lead-handover.mjs';
-import { isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, workParts, exactWorkPath } from '../mods/lib/work-folder.mjs';
+import { typer } from './lib/lead-typer.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAX_LINE = 64 * 1024;
 const MAX_RECORD = 512 * 1024;
 const DEFAULT_PROTOCOL = '2025-06-18';
 const TOOL = 'lead_new_session';
-const DESCRIPTION = 'Returns the command that starts a new Lead session after a context hand-over. Starts nothing.';
+const DESCRIPTION = 'Starts the new Lead in this terminal after a context hand-over: waits for background tasks and the end of this turn, then types /clear and the hand-over prompt.';
+const HELPER = path.join(HERE, 'lead-replace.mjs');
+const SESSION_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 function pluginVersion() {
   try { return String(JSON.parse(fs.readFileSync(path.join(HERE, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version); } catch { return '0.0.0'; }
@@ -32,7 +36,15 @@ function newestHandover(root, slug) {
   return last;
 }
 
-export function newSession(root = process.cwd(), now = Date.now()) {
+// The one process this server starts: the replace helper, run by this node, no shell, outliving the call, not waited for.
+function startHelper(argv, root) {
+  const child = spawn(process.execPath, argv, { cwd: root, stdio: 'ignore', windowsHide: true });
+  child.on('error', () => {});
+  child.unref();
+}
+
+export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
+  let armed = null;
   try {
     const slug = findRun(root, now);
     if (!slug) return refusal('no run');
@@ -44,8 +56,26 @@ export function newSession(root = process.cwd(), now = Date.now()) {
     if (!last || last.trigger !== 'context') return refusal('no context handover');
     const command = newSessionCommand(slug);
     if (command === null) return refusal('bad slug');
-    return { content: [{ type: 'text', text: `Open a new terminal in the product folder and run:\n${command}` }] };
+    if (typer(process.platform) === null) return refusal('unsupported terminal');
+    if (typeof last.session !== 'string' || !SESSION_RE.test(last.session)) return refusal('error');
+    const ppid = String(process.ppid);
+    if (!/^[1-9][0-9]*$/.test(ppid)) return refusal('error');
+    const parts = workParts(slug);
+    exactWorkPath({ fs, path }, root, parts);
+    const file = path.join(root, '.company', 'work', ...parts, 'lead-replace.json');
+    const arm = { v: 1, session: last.session, armAt: new Date(now).toISOString(), state: 'waiting-background' };
+    let fresh = true;
+    try {
+      fs.writeFileSync(file, `${JSON.stringify(arm)}\n`, { flag: 'wx' });
+      armed = file;
+    } catch (e) {
+      if (e && e.code === 'EEXIST') fresh = false; else throw e;
+    }
+    if (fresh) (deps.start ?? ((argv) => startHelper(argv, root)))([HELPER, slug, ppid]);
+    armed = null;
+    return { content: [{ type: 'text', text: `The new Lead starts in this terminal once every background task has ended and this turn is over.\nIf it has not started, run in the product folder:\n${command}` }] };
   } catch {
+    if (armed) { try { fs.rmSync(armed, { force: true }); } catch { /* best effort */ } }
     return refusal('error');
   }
 }
