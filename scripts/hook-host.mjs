@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-hook.md v1
+// contract: docs/contracts/mod-hook.md v1.1
 // The hook engine: one process per hook call. Reads one hook payload on stdin, checks the pins, normalizes the
 // event, runs the rule table in one worker and prints one verdict. This file reads nothing from hooks/lib until
 // the pins match, so a changed engine file is never loaded.
@@ -13,11 +13,16 @@ const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
 const SELF_EXIT_MS = 3800;
 const MAX_TOTAL_FIXTURES = 400;
+const MAX_FIXTURE_DETAILS = 5;
 const MAX_FIXTURES = 24;
 const MAX_FIXTURE_BYTES = 64 * 1024;
 const FIXED = ['hooks/rules.json', 'hooks/hooks.json', 'hooks/schema/hook-fields.json', 'company/model-floor.json'];
 const FOLDERS = [['hooks/lib', /\.mjs$/], ['hooks/rules', /\.mjs$/], ['hooks/manifests', /\.json$/]];
 
+const REBUILD_MSG = {
+  floor: 'snapshot rebuild failed: model floor file unreadable; fix: reinstall the aico plugin; escape: restart the Lead with AICO_GUARDS=off',
+  settings: 'snapshot rebuild failed: settings invalid; fix: repair the aico settings files (config.json, .company/settings.json); escape: restart the Lead with AICO_GUARDS=off'
+};
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -174,9 +179,15 @@ async function main() {
     let drift = event.drift.length > 0;
     if (drift) notices.push(`aico guards: hook payload changed: ${event.drift.join(', ')}; guards deny, savers are off`);
     const prov = snap.buildSnapshot({ pluginRoot: ROOT, mcsHome, root, manifests, drift: false });
+    // The snapshot is written before the fixture check, so a self-exit mid-check leaves a valid file, not none.
+    if (prov) snap.writeLead(snapCtx, drift ? { ...prov, drift: true } : prov);
     if (prov && !tableError) {
       const failed = await checkFixtures({ rows, prov, ctx, run, ev });
-      if (failed.length > 0) { drift = true; notices.push(`aico guards: fixture check failed for ${failed.join(', ')}; guards deny, savers are off`); }
+      if (failed.rules.length > 0) {
+        drift = true;
+        const more = failed.details.length > 0 ? ` (${failed.details.join('; ')})` : '';
+        notices.push(`aico guards: fixture check failed for ${failed.rules.join(', ')}${more}; guards deny, savers are off`);
+      }
     }
     const full = snap.buildSnapshot({ pluginRoot: ROOT, mcsHome, root, manifests, drift });
     if (full) {
@@ -200,7 +211,12 @@ async function main() {
   const off = guardsOff && event.session === 'lead';
   if (off) await eff.recordGuardsOff(event, root);
   const guardRows = tableError ? [] : rows.filter((r) => r.kind === 'guard' && applies(r, event));
-  const s = snap.readSnapshot(snapCtx, event);
+  let s = snap.readSnapshot(snapCtx, event);
+  let rebuildCause = null;
+  if (!off && !tableError && guardRows.length > 0 && !s.ok) {
+    const rb = snap.rebuildSnapshot(snapCtx, event, { pluginRoot: ROOT, manifests });
+    if (rb.ok) s = { ok: true, snapshot: rb.snapshot }; else rebuildCause = rb.cause;
+  }
   const notes = [];
   let denied = null;
   const extra = {};
@@ -208,7 +224,7 @@ async function main() {
 
   if (!off) {
     if (tableError) fail('table-invalid', 'deny', 'the rule table cannot be read');
-    else if (guardRows.length > 0 && !s.ok) fail('snapshot-invalid', 'deny', 'no valid settings snapshot');
+    else if (guardRows.length > 0 && !s.ok) fail('snapshot-invalid', 'deny', REBUILD_MSG[rebuildCause] ?? REBUILD_MSG.settings);
     else if (guardRows.length > 0 && (s.snapshot.drift || event.drift.length > 0)) fail('hook-payload-changed', 'deny', event.drift.length > 0 ? event.drift.join(', ') : 'the session start check failed');
   }
   const applyEff = async (v) => { if (v.effect) Object.assign(extra, (await eff.applyEffect(v, event, root)).extra); };
@@ -262,29 +278,38 @@ async function main() {
 // The budget counts fixtures, not time, so machine load never reads as drift; a runaway set still fails closed.
 async function checkFixtures({ rows, prov, ctx, run, ev }) {
   const failed = new Set();
+  const details = [];
+  // Only a short lowercase word is echoed; fixture names already match a strict pattern. Never free text.
+  const note = (rule, name, word) => {
+    if (details.length < MAX_FIXTURE_DETAILS) details.push(`${rule}/${name}: ${typeof word === 'string' && /^[a-z-]{1,16}$/.test(word) ? word : 'error'}`);
+  };
   let seen = 0;
   for (const r of rows.filter((x) => x.kind === 'guard')) {
     const dir = path.join(ROOT, 'hooks', 'fixtures', r.rule);
     let names = [];
     try { names = fs.readdirSync(dir).filter((n) => /^(pass|block)-[A-Za-z0-9._-]+\.json$/.test(n)).sort().slice(0, MAX_FIXTURES); } catch { continue; }
     for (const n of names) {
-      if (++seen > MAX_TOTAL_FIXTURES) { failed.add('fixture-budget'); return [...failed]; }
+      if (++seen > MAX_TOTAL_FIXTURES) { failed.add('fixture-budget'); return { rules: [...failed], details }; }
       const wantDeny = n.startsWith('block-');
       let verdictDeny = false;
+      let verdictWord = 'verdict';
       try {
         const f = path.join(dir, n);
-        if (fs.statSync(f).size > MAX_FIXTURE_BYTES) throw new Error('large');
+        if (fs.statSync(f).size > MAX_FIXTURE_BYTES) throw Object.assign(new Error('large'), { word: 'large' });
         // `_synthetic` is the fixtures' own channel for state the host reads from disk (session, tokens, run);
         // it is stripped before normalize, so a renamed real field still drifts.
         const { _synthetic: syn, ...payload } = JSON.parse(fs.readFileSync(f, 'utf8'));
         const norm = await ev.normalize(payload, { ...ctx, resolveRun: null });
-        if (!norm.ok || norm.event.drift.length > 0) throw new Error('payload');
+        if (!norm.ok || norm.event.drift.length > 0) throw Object.assign(new Error('payload'), { word: 'payload' });
         let fe = norm.event;
         if (syn && typeof syn === 'object') {
           fe = { ...fe };
           if (syn.session === 'lead' || syn.session === 'step') fe.session = syn.session;
           if (syn.tokens && typeof syn.tokens === 'object') fe.tokens = { state: syn.tokens.state, total: syn.tokens.total };
-          if (syn.run !== undefined) fe.run = syn.run;
+          // A relative fixture run folder is resolved against the payload cwd the way its paths are, so the same fixture
+          // reads alike on every host (no drive letter in the data).
+          const rf = syn.run && typeof syn.run.folder === 'string' && !path.isAbsolute(syn.run.folder) ? ev.realOf(syn.run.folder, norm.cwd) : null;
+          if (syn.run !== undefined) fe.run = rf ? { ...syn.run, folder: rf } : syn.run;
           fe = Object.freeze(fe);
         }
         // A rule may have several rows (one per event); a fixture is judged only by the row(s) of its own event.
@@ -292,15 +317,25 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
         if (r.event === fe.event && (fe.tool === null || r.matcher.includes('*') || r.matcher.includes(fe.tool.name))) {
           const out = await run(r, fe, prov);
           verdictDeny = !out.ok || out.verdict.v === 'deny';
-          if (!out.ok && wantDeny === false) throw new Error('failed');
+          if (!out.ok) verdictWord = out.word;
+          if (!out.ok && wantDeny === false) throw Object.assign(new Error('failed'), { word: out.word });
         }
-      } catch { failed.add(r.rule); continue; }
-      if (verdictDeny !== wantDeny) failed.add(r.rule);
+      } catch (e) { failed.add(r.rule); note(r.rule, n, e && e.word); continue; }
+      if (verdictDeny !== wantDeny) { failed.add(r.rule); note(r.rule, n, verdictWord); }
     }
   }
-  return [...failed];
+  return { rules: [...failed], details };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+// Compare realpaths: a symlinked or 8.3 short path must not turn the guard into a silent no-op.
+function isMain() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && isMain()) {
   main().catch(() => finish(preDeny('host', 'crash')));
 }

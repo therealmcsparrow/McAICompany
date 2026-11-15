@@ -12,3 +12,4 @@ node_modules/
 
 # per-run reprompt folders hold CEO text and stay local
 .company/work/
+tmp/

@@ -13,7 +13,7 @@ const BASE_COMMIT = '246448c';
 
 // Every test works in its own temp project dir, removed when the test ends.
 function sandbox(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-v11-'));
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ledger-v11-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const home = path.join(dir, 'home');
   fs.mkdirSync(home);

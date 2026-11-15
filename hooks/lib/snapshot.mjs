@@ -63,21 +63,48 @@ export function resolveSnapshotSettings({ mcsHome, root, manifests }) {
   return { threshold, savers, warnings };
 }
 
-// The snapshot object, or null when the model floor cannot be read.
-export function buildSnapshot({ pluginRoot, mcsHome, root, manifests, drift, now = Date.now() }) {
+// { snapshot } or { cause: 'floor' | 'settings' }.
+function build({ pluginRoot, mcsHome, root, manifests, drift, now = Date.now() }) {
   let floor;
   try {
     const f = readJson(path.join(pluginRoot, 'company', 'model-floor.json'));
-    if (!isObj(f) || !isObj(f.floor)) return null;
+    if (!isObj(f) || !isObj(f.floor)) return { cause: 'floor' };
     floor = f.floor;
-  } catch { return null; }
+  } catch { return { cause: 'floor' }; }
   const s = resolveSnapshotSettings({ mcsHome, root, manifests });
   const snap = {
     v: 1, at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), threshold: s.threshold, savers: s.savers, floor,
     drift: drift === true,
     settingsWarnings: s.warnings.slice(0, MAX_WARNINGS).map((w) => w.slice(0, MAX_WARNING_CHARS))
   };
-  return Buffer.byteLength(JSON.stringify(snap)) <= MAX_BYTES ? snap : null;
+  return Buffer.byteLength(JSON.stringify(snap)) <= MAX_BYTES && validSnapshot(snap) ? { snapshot: snap } : { cause: 'settings' };
+}
+
+// The snapshot object, or null when the model floor cannot be read.
+export function buildSnapshot(args) {
+  return build(args).snapshot ?? null;
+}
+
+// mod-hook v1.1: the first guarded call without a valid snapshot rebuilds the file the read would have used.
+// No fixture check runs here. A failed save does not fail the rebuild.
+export function rebuildSnapshot({ mcsHome, root }, event, { pluginRoot, manifests }) {
+  const lead = () => parseSnapshot(leadFile(mcsHome, root));
+  let target = 'lead';
+  let drift = false;
+  if (event.session === 'step' && event.agentKey) {
+    const own = parseSnapshot(stepFile(mcsHome, event.agentKey));
+    if (own.ok) return { ok: true, snapshot: own.snapshot };
+    const l = lead();
+    if (!own.missing) { target = 'step'; drift = l.ok ? l.snapshot.drift : false; }
+    else if (l.ok) return { ok: true, snapshot: l.snapshot };
+  }
+  const b = build({ pluginRoot, mcsHome, root, manifests, drift });
+  if (!b.snapshot) return { ok: false, cause: b.cause };
+  try {
+    if (target === 'step') writeAtomic(stepFile(mcsHome, event.agentKey), JSON.stringify(b.snapshot));
+    else writeAtomic(leadFile(mcsHome, root), JSON.stringify(b.snapshot));
+  } catch { /* the call is judged with the snapshot in memory */ }
+  return { ok: true, snapshot: b.snapshot };
 }
 
 export function validSnapshot(s) {
