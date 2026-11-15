@@ -1,6 +1,8 @@
-# Contract: contract-index v1
+# Contract: contract-index v1.1
 
-Provider: `scripts/contract-drift.mjs` (Node built-ins only; read-only, writes nothing); `buildIndex(root)` and `checkDrift(root)` exported by `scripts/contract-drift.mjs`. Consumers: `scripts/check.mjs --drift` (the one call; no check logic in Core), `aico:maintain`, CI. Rationale: `docs/adr/0036-contract-index-from-headers.md`; the cite rule is `docs/adr/0007-contract-minor-versions.md`.
+Provider: `scripts/contract-drift.mjs` (Node built-ins only; read-only, writes nothing); `buildIndex(root)` and `checkDrift(root)` exported by `scripts/contract-drift.mjs`. Consumers: `scripts/check.mjs --drift` (the one call; no check logic in Core), `scripts/handoff-lint.mjs` (the `contracts:` frontmatter cite check, `handoff` v2.8), `aico:maintain`, CI. Rationale: `docs/adr/0036-contract-index-from-headers.md`; the cite rule is `docs/adr/0007-contract-minor-versions.md`.
+
+v1.1 (task P20261115.000002/02-lead, minor, wording only): names `scripts/handoff-lint.mjs` as a consumer. No index, cite, anchor or error rule changes; v1.0 declarations and cites stay valid under the cite rule.
 
 ## Index
 `buildIndex(root)` returns `Map` of name → `{ major, minor, file }`, computed from line 1 of each `docs/contracts/*.md`: `# Contract: <name> v<x>` or `v<x>.<y>` (a missing minor is 0). No other list exists. A file whose line 1 does not match is not in the index.
