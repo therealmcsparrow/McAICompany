@@ -805,7 +805,7 @@ describe('hooks.json and source', () => {
   });
 
   test('no PostToolUse hook and the step-times entries are unchanged', () => {
-    assert.deepEqual(Object.keys(cfg.hooks).sort(), ['PreCompact', 'PreToolUse', 'SessionStart', 'Stop', 'SubagentStart', 'SubagentStop']);
+    assert.deepEqual(Object.keys(cfg.hooks).sort(), ['PreCompact', 'PreToolUse', 'SessionStart', 'Stop', 'SubagentStart', 'SubagentStop', 'UserPromptSubmit']);
     assert.deepEqual(cfg.hooks.Stop[0].hooks, [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" measure', timeout: 5 }]);
     assert.equal(cfg.hooks.SubagentStart[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/step-times.mjs" start');
     assert.equal(cfg.hooks.SubagentStop[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/step-times.mjs" stop');
