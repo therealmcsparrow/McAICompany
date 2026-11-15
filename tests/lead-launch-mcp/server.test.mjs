@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { newSession } from '../../scripts/lead-launch-mcp.mjs';
 import { contextHandover, main as handoverMain } from '../../scripts/lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -72,7 +73,7 @@ describe('protocol', () => {
     assert.equal(t.length, 1);
     assert.deepEqual(t[0], {
       name: 'lead_new_session',
-      description: 'Returns the command that starts a new Lead session after a context hand-over. Starts nothing.',
+      description: 'Starts the new Lead in this terminal after a context hand-over: waits for background tasks and the end of this turn, then types /clear and the hand-over prompt.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     });
   });
@@ -173,19 +174,29 @@ describe('lead_new_session refusals', () => {
 });
 
 describe('lead_new_session success', () => {
-  const want = (slug) => `Open a new terminal in the product folder and run:\nclaude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`;
+  const want = (slug) => `The new Lead starts in this terminal once every background task has ended and this turn is over.\nIf it has not started, run in the product folder:\nclaude "aico lead hand-over: run lead-handover read '${slug}' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`;
+  // In-process with a fake deps.start and win32 pinned: a spawned server would start the real helper.
+  const onWin = (root, calls = 1) => {
+    const d = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const starts = [];
+    try {
+      const rs = Array.from({ length: calls }, () => newSession(root, Date.now(), { start: (a) => { starts.push(a); } }));
+      return { rs, starts };
+    } finally { Object.defineProperty(process, 'platform', d); }
+  };
 
-  test('returns the two-line text with the fixed command, the same on every call, and writes nothing', () => {
+  test('returns the three-line text with the fixed command, the same on every call, arms once, starts once', () => {
     const fx = fixture();
     contextHandover(fx.root, fx.slug, { tokens: 85600, session: SESSION });
-    const before = snapshot(fx.dir);
-    const r = run(call(1) + call(2), fx.root);
-    assert.equal(r.out[0].result.isError, undefined);
-    assert.equal(text(r.out[0]), want(fx.slug));
-    assert.equal(text(r.out[1]), want(fx.slug));
-    assert.equal(text(r.out[0]).split('\n').length, 2);
-    assert.equal(r.out[0].result.content.length, 1);
-    assert.deepEqual(snapshot(fx.dir), before);
+    const { rs, starts } = onWin(fx.root, 2);
+    assert.equal(rs[0].isError, undefined);
+    assert.equal(rs[0].content[0].text, want(fx.slug));
+    assert.equal(rs[1].content[0].text, want(fx.slug));
+    assert.equal(rs[0].content[0].text.split('\n').length, 3);
+    assert.equal(rs[0].content.length, 1);
+    assert.equal(starts.length, 1);
+    assert.ok(fs.existsSync(path.join(fx.dir, 'lead-replace.json')));
   });
 
   test('the newest handover decides: context then manual is refused, manual then context succeeds', () => {
@@ -199,16 +210,18 @@ describe('lead_new_session success', () => {
     const b = fixture();
     assert.equal(handoverMain(['write', b.slug], b.root, {}).code, 0);
     contextHandover(b.root, b.slug, { tokens: 85600, session: SESSION });
-    const rb = run(call(1), b.root);
-    assert.equal(rb.out[0].result.isError, undefined);
-    assert.equal(text(rb.out[0]), want(b.slug));
+    const { rs, starts } = onWin(b.root);
+    assert.equal(rs[0].isError, undefined);
+    assert.equal(rs[0].content[0].text, want(b.slug));
+    assert.equal(starts.length, 1);
   });
 });
 
-describe('only points', () => {
-  test('the server source starts no process and opens no network', () => {
+describe('registration and process start', () => {
+  test('the server opens no network and starts no shell or claude', () => {
     const src = fs.readFileSync(SERVER, 'utf8');
-    assert.doesNotMatch(src, /child_process|node:net|node:http|node:dgram|fetch\(|\bspawn|\bexec(Sync|File)?\(/);
+    assert.doesNotMatch(src, /node:net|node:http|node:dgram|fetch\(|shell:\s*true|\bexec(Sync)?\(/);
+    assert.doesNotMatch(src, /\b(spawn|spawnSync|execFile|execFileSync|fork)\(\s*['"`]claude/);
   });
 
   test('plugin.json registers the server as the contract says, no root .mcp.json', () => {
