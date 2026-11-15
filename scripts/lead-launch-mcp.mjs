@@ -43,6 +43,20 @@ function startHelper(argv, root) {
   child.unref();
 }
 
+// Session named by the arm file already there, or null when it is unreadable or not an arm.
+function armedSession(file) {
+  const text = readSmall(file, 64 * 1024);
+  if (text === null) return null;
+  try { const o = JSON.parse(text); return o && typeof o.session === 'string' ? o.session : null; } catch { return null; }
+}
+
+// An arm of an earlier session is replaced by temp file and rename.
+function replaceArm(file, arm) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(arm)}\n`);
+  try { fs.renameSync(tmp, file); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+}
+
 export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
   let armed = null;
   try {
@@ -69,7 +83,8 @@ export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
       fs.writeFileSync(file, `${JSON.stringify(arm)}\n`, { flag: 'wx' });
       armed = file;
     } catch (e) {
-      if (e && e.code === 'EEXIST') fresh = false; else throw e;
+      if (!e || e.code !== 'EEXIST') throw e;
+      if (armedSession(file) === last.session) fresh = false; else replaceArm(file, arm);
     }
     if (fresh) (deps.start ?? ((argv) => startHelper(argv, root)))([HELPER, slug, ppid]);
     armed = null;

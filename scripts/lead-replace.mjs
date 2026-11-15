@@ -83,10 +83,11 @@ function readReading(dir) {
   } catch { return null; }
 }
 
-// 'done' once the Stop reading of `session` is at or after armAt, 'failed: turn' after 10 minutes.
-export async function turnOver({ dir, session, armAt, now = Date.now, sleep = realSleep }) {
+// 'done' once the Stop reading of `session` is at or after armAt and after idleAt (epoch ms, when the last background task was seen
+// ended): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes.
+export async function turnOver({ dir, session, armAt, idleAt = 0, now = Date.now, sleep = realSleep }) {
   // Readings keep whole seconds, so the arm time is compared at whole seconds too.
-  const arm = Math.floor(Date.parse(armAt) / 1000) * 1000;
+  const arm = Math.max(Math.floor(Date.parse(armAt) / 1000) * 1000, Math.floor(idleAt / 1000) * 1000);
   if (!Number.isFinite(arm)) return 'failed: turn';
   const start = now();
   for (;;) {
@@ -191,8 +192,9 @@ export async function main(args, root = cwd()) {
     const pid = Number(a.pid);
     const bg = await backgroundDone({ dir, session: arm.session, claudePid: pid, list: listChildren, alive: alivePid });
     if (bg !== 'done') { step(bg); return 1; }
+    const idleAt = Date.now();
     step('waiting-turn');
-    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt });
+    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt });
     if (turn !== 'done') { step(turn); return 1; }
     step('typing');
     const out = await typeInto(text, { dir, session: arm.session, claudePid: pid });
