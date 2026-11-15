@@ -85,7 +85,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Ticket approval** — the CEO's one-by-one approval of the tickets (tasks of a plan) in the idea flow. An approval counts only for the ticket text it was given for; a ticket changed afterwards is asked again. The plan sections before the tasks are approved the same way as one item, `S0`. No Gate reads the record. Record: `.company/work/<slug>/tickets.jsonl`. Contract `ticket-approval` v1.4.
 
-**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at the run's hand-over point (see Context cap), after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v2.4, `context-guard` v2.0; ADR 0049, ADR 0056, ADR 0070.
+**Lead Handoff** — the file `.company/work/<slug>/lead-handoff-<n>.md` that a hook writes from the run's records at a clean point at the run's hand-over point (see Context cap), after which the session is frozen and the next session continues from it. No setting needed. Contracts `lead-handoff` v2.5, `context-guard` v2.0; ADR 0049, ADR 0056, ADR 0070.
 
 **Token ledger** — a counts-only record of tokens per Step and per run in `.company/ledger/`, never prompt text. Feeds the cost line at the Ship Gate. Savings come from reading less; no saving percentage is claimed yet.
 
