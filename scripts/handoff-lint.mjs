@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v2.7): machine-read parts stay English whatever `Language:` is.
-// uses: docs/contracts/contract-index.md v1
+// Lints a Handoff file (contract: docs/contracts/handoff.md v2.8): machine-read parts stay English whatever `Language:` is.
+// uses: docs/contracts/contract-index.md v1.1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
-import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, opendirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, parseVersion } from './contract-drift.mjs';
@@ -653,7 +653,7 @@ const WRONG_CASE = 'ERROR wrong letter case';
 
 // Reads a regular file below `realRoot`. The real path of the lexical path must equal it, the file must have one link and
 // the opened handle must be the file that was checked. A miss is refused; the lexical path is never read as a fallback.
-export function readInside(realRoot, segments, cap) {
+export function readInside(realRoot, segments, cap, take = Infinity) {
   const lexical = join(realRoot, ...segments);
   let lst;
   try {
@@ -670,10 +670,11 @@ export function readInside(realRoot, segments, cap) {
     fd = openSync(lexical, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     const st = fstatSync(fd);
     if (!st.isFile() || st.nlink !== 1 || st.size > cap || (lst.ino !== 0 && (st.ino !== lst.ino || st.dev !== lst.dev))) return { status: 'refused' };
-    const buf = Buffer.alloc(st.size);
+    const want = Math.min(st.size, take);
+    const buf = Buffer.alloc(want);
     let off = 0;
-    while (off < st.size) {
-      const n = readSync(fd, buf, off, st.size - off, off);
+    while (off < want) {
+      const n = readSync(fd, buf, off, want - off, off);
       if (n === 0) break;
       off += n;
     }
@@ -1125,10 +1126,11 @@ function folderContext(file) {
   return { folder, summary: readInside(ctx.realRoot, ['.company', 'work', folder, '00-summary.md'], MAX_BYTES) };
 }
 
-// Contract index of the product under build: the Handoff's product root when its docs/contracts is a real
-// folder inside that root (repo text, so a symlink is never followed) and yields Contracts; else the plugin root.
+// Product Contract limits: files must be real files inside the product root (repo text, so a symlink is never followed).
 const MAX_CONTRACT_FILES = 500;
-const MAX_CONTRACT_BYTES = 64 * 1024;
+const MAX_CONTRACT_ENTRIES = 5000; // hard ceiling on directory entries listed, before the 500 cap
+const MAX_CONTRACT_BYTES = 64 * 1024; // size above which a file is refused
+const CONTRACT_HEADER_BYTES = 300; // only the header line is read
 const CONTRACT_HEADER = /^# Contract: ([a-z][a-z0-9]*(?:-[a-z0-9]+)*) v(\d+(?:\.\d+)?)[ \t]*$/;
 
 // The plugin's Contracts with the product's laid over them (product wins on the same name). Product files are read
@@ -1141,11 +1143,18 @@ function contractIndex(file) {
     if (ctx && resolve(ctx.root) !== pluginRoot) {
       const dir = join(ctx.root, 'docs', 'contracts');
       if (lstatSync(dir).isDirectory() && realpathSync.native(dir) === join(ctx.realRoot, 'docs', 'contracts')) {
-        const names = readdirSync(dir).filter(n => n.endsWith('.md')).sort().slice(0, MAX_CONTRACT_FILES);
+        const names = [];
+        const d = opendirSync(dir);
+        try {
+          for (let e, seen = 0; seen < MAX_CONTRACT_ENTRIES && (e = d.readSync()) !== null; seen++) {
+            if (e.name.endsWith('.md')) names.push(e.name);
+          }
+        } finally { d.closeSync(); }
+        names.sort().splice(MAX_CONTRACT_FILES);
         for (const n of names) {
-          const got = readInside(ctx.realRoot, ['docs', 'contracts', n], MAX_CONTRACT_BYTES);
+          const got = readInside(ctx.realRoot, ['docs', 'contracts', n], MAX_CONTRACT_BYTES, CONTRACT_HEADER_BYTES);
           if (got.status !== 'ok') continue;
-          const m = CONTRACT_HEADER.exec(got.text.slice(0, 300).split(/\r?\n/, 1)[0]);
+          const m = CONTRACT_HEADER.exec(got.text.split(/\r?\n/, 1)[0]);
           const v = m ? parseVersion(m[2]) : null;
           if (m && v) index.set(m[1], { ...v, file: `docs/contracts/${n}` });
         }
