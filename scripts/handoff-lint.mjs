@@ -1127,19 +1127,32 @@ function folderContext(file) {
 
 // Contract index of the product under build: the Handoff's product root when its docs/contracts is a real
 // folder inside that root (repo text, so a symlink is never followed) and yields Contracts; else the plugin root.
+const MAX_CONTRACT_FILES = 500;
+const MAX_CONTRACT_BYTES = 64 * 1024;
+const CONTRACT_HEADER = /^# Contract: ([a-z][a-z0-9]*(?:-[a-z0-9]+)*) v(\d+(?:\.\d+)?)[ \t]*$/;
+
+// The plugin's Contracts with the product's laid over them (product wins on the same name). Product files are read
+// through readInside and the entry count is capped.
 function contractIndex(file) {
   const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const index = buildIndex(pluginRoot);
   try {
     const ctx = runContext(dirname(resolve(file)));
     if (ctx && resolve(ctx.root) !== pluginRoot) {
       const dir = join(ctx.root, 'docs', 'contracts');
       if (lstatSync(dir).isDirectory() && realpathSync.native(dir) === join(ctx.realRoot, 'docs', 'contracts')) {
-        const own = buildIndex(ctx.root);
-        if (own.size > 0) return own;
+        const names = readdirSync(dir).filter(n => n.endsWith('.md')).sort().slice(0, MAX_CONTRACT_FILES);
+        for (const n of names) {
+          const got = readInside(ctx.realRoot, ['docs', 'contracts', n], MAX_CONTRACT_BYTES);
+          if (got.status !== 'ok') continue;
+          const m = CONTRACT_HEADER.exec(got.text.slice(0, 300).split(/\r?\n/, 1)[0]);
+          const v = m ? parseVersion(m[2]) : null;
+          if (m && v) index.set(m[1], { ...v, file: `docs/contracts/${n}` });
+        }
       }
     }
-  } catch { /* no product Contracts: use the plugin's */ }
-  return buildIndex(pluginRoot);
+  } catch { /* no product Contracts: the plugin's stand */ }
+  return index;
 }
 
 function main(argv) {
