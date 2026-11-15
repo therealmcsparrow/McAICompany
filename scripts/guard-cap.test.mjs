@@ -254,6 +254,14 @@ for (const total of [162000, 179999, 180000, 180001]) {
     }
     await allows({ session: 'lead', total, tool: MCP, run }, DEFAULT);
   });
+  test(`Lead at ${total}: frozen session allows SendFeedback (CEO-4), exact name only`, async () => {
+    const run = { frozen: true };
+    await allows({ session: 'lead', total, tool: 'SendFeedback', run }, DEFAULT);
+    for (const tool of ['sendfeedback', 'SendFeedbackX', 'XSendFeedback', 'SendFeedback ', 'mcp__x__SendFeedback']) {
+      const v = await denies({ session: 'lead', total, tool, run }, DEFAULT);
+      assert.equal(v.effect, 'cap-lead-frozen', `frozen deny effect for ${tool}`);
+    }
+  });
   test(`Lead at ${total}: a Step running denies Agent and Task with the wait reason, other tools pass`, async () => {
     const run = { stepRunning: true };
     await denies({ session: 'lead', total, tool: 'Agent', run }, DEFAULT, /wait/i);

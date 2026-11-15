@@ -34,7 +34,8 @@
       "glob": "string",
       "model": "string",
       "subagent_type": "string",
-      "prompt": "string"
+      "prompt": "string",
+      "run_in_background": "boolean"
     }
   },
   "SubagentStart": {

@@ -125,6 +125,20 @@ export async function recordGuardsOff(event, root, now = Date.now()) {
   } catch { return false; }
 }
 
+// One `bg` row per Lead launch of a background shell or Step; the run is looked up here at every token level.
+export async function recordBackground(event, root, now = Date.now()) {
+  try {
+    if (event.session !== 'lead' || !event.tool || event.tool.background !== true) return false;
+    const { lh } = await modules();
+    const base = mainRoot(root);
+    const slug = lh.findRun(base, now);
+    const dir = slug ? lh.workDir(base, slug) : null;
+    if (!dir) return false;
+    const { count } = readGuard(dir);
+    return appendGuard(dir, count, { ev: 'bg', session: event.sessionKey }, now);
+  } catch { return false; }
+}
+
 // Applies the effect of a `cap.M1` verdict. Returns { extra }: output keys to merge into the hook output.
 export async function applyEffect(verdict, event, root, now = Date.now()) {
   const extra = {};

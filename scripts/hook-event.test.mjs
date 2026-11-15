@@ -73,11 +73,11 @@ describe('session mapping (hook-event v1 "Normalized event")', () => {
     assert.equal(seen(env, env.pre('ls')).sh, null);
   });
 
-  test('the event holds exactly the contract keys: 14 top-level, 6 in tool', () => {
+  test('the event holds exactly the contract keys: 14 top-level, 7 in tool', () => {
     const env = probeEnv();
     const e = seen(env, env.pre('ls'));
     assert.equal(e.kn, 14);
-    assert.equal(e.tn, 6);
+    assert.equal(e.tn, 7);
   });
 
   test('agent ids of the allowed alphabet pass; others are malformed', () => {

@@ -22,6 +22,7 @@ const PROMPT_BYTES = 64 * 1024;
 // Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
 const FAST_FLOOR = await import('../rules/cap.mjs').then((m) => m.freezeAt(m.MIN_THRESHOLD), () => Infinity);
 const SHELL = new Set(['Bash', 'PowerShell']);
+const BG_TOOLS = new Set(['Bash', 'PowerShell', 'Agent', 'Task']);
 const FILE_FIELDS = ['file_path', 'notebook_path', 'path'];
 
 export const hash12 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex').slice(0, 12);
@@ -195,7 +196,8 @@ function toolOf(name, input, ctx, cwd) {
       }
     }
   }
-  return { name, command, paths, model, subagentType, outputRole };
+  const background = BG_TOOLS.has(name) && own(input, 'run_in_background') && input.run_in_background === true;
+  return { name, command, paths, model, subagentType, outputRole, background };
 }
 
 const usageTotal = (u) => {

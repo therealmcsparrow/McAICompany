@@ -7,6 +7,7 @@ export const MAX_THRESHOLD = 250000;
 const FREEZE_NUM = 9;
 const FREEZE_DEN = 10;
 const MCP_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
+const FEEDBACK_TOOL = 'SendFeedback';
 const HANDOFF_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.md$/;
 const LEDGER_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.findings\.md$/;
 const MAX_NAMED = 35;
@@ -71,7 +72,7 @@ function judgeStep(event, run) {
 
 function judgeLead(event, run) {
   const name = event.tool.name;
-  if (run.frozen === true) return name === MCP_TOOL ? { v: 'allow' } : deny(FROZEN_REASON, 'cap-lead-frozen');
+  if (run.frozen === true) return name === MCP_TOOL || name === FEEDBACK_TOOL ? { v: 'allow' } : deny(FROZEN_REASON, 'cap-lead-frozen');
   if (run.stepRunning === true) return name === 'Agent' || name === 'Task' ? deny(WAIT_REASON) : { v: 'allow' };
   return name === MCP_TOOL ? { v: 'allow' } : deny(FREEZE_REASON, 'cap-lead-freeze');
 }
