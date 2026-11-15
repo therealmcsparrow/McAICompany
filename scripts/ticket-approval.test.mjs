@@ -713,13 +713,20 @@ describe('build-plan', () => {
   });
 
   test('a long run of headings with no lower level is read in linear time', () => {
-    const heads = Array.from({ length: 30000 }, () => `## a${NL}b`);
-    const fx = fixture(planText(ticket('T1')).replace('## Tasks', `${heads.join(NL)}${NL}## Tasks`));
-    const t0 = process.hrtime.bigint();
-    const r = startPlan(fx);
-    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-    assert.equal(r.code, 0, r.lines.join(NL));
-    assert.ok(ms < 400, `tickets took ${ms} ms`);
+    // Ratio against a small run of the same shape: process spawn cost is in both,
+    // so a slow runner does not fail it, while quadratic reading (900x work) still does.
+    const timed = (n) => {
+      const heads = Array.from({ length: n }, () => `## a${NL}b`);
+      const fx = fixture(planText(ticket('T1')).replace('## Tasks', `${heads.join(NL)}${NL}## Tasks`));
+      const t0 = process.hrtime.bigint();
+      const r = startPlan(fx);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      assert.equal(r.code, 0, r.lines.join(NL));
+      return ms;
+    };
+    const small = timed(1000);
+    const big = timed(30000);
+    assert.ok(big < 10 * small + 1500, `tickets took ${big} ms for 30000 headings, ${small} ms for 1000`);
   });
 
   test('an unclosed code fence is refused: no plan file, no build event', () => {
