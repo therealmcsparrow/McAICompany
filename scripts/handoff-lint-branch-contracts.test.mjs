@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { listContractNames } from './handoff-lint.mjs';
 
 const script = path.join(import.meta.dirname, 'handoff-lint.mjs');
 const roots = [];
@@ -192,4 +193,56 @@ test('an empty or header-less .md file in docs/contracts is skipped, not fatal',
   addContract(file, 'notes.txt', '# Contract: txt-thing v1.0\n');
   assert.equal(lintCite(file, 'billing-api v1.0').code, 0);
   assert.equal(lintCite(file, 'txt-thing v1.0').code, 1);
+});
+
+// listContractNames(dir, maxEntries, maxFiles): the bounded directory walk, tested with a fake Dir (no filesystem order).
+function fakeDir(entries, { throwAt } = {}) {
+  const d = { reads: 0, closes: 0 };
+  d.readSync = () => {
+    if (throwAt !== undefined && d.reads === throwAt) throw new Error('read failed');
+    return d.reads < entries.length ? { name: entries[d.reads++] } : null;
+  };
+  d.closeSync = () => { d.closes++; };
+  return d;
+}
+
+test('listContractNames: 5001 non-.md entries then one .md: the .md is not listed and readSync is called 5000 times', () => {
+  const entries = [...Array.from({ length: 5001 }, (_, i) => `n${i}.txt`), 'late.md'];
+  const d = fakeDir(entries);
+  assert.deepEqual(listContractNames(d, 5000, 500), []);
+  assert.equal(d.reads, 5000);
+  assert.equal(d.closes, 1);
+});
+
+test('listContractNames: a .md at entry 5000 is listed, one at entry 5001 is not (non-.md counted)', () => {
+  const inside = fakeDir([...Array.from({ length: 4999 }, (_, i) => `n${i}.txt`), 'last.md', 'after.md']);
+  assert.deepEqual(listContractNames(inside, 5000, 500), ['last.md']);
+  assert.equal(inside.reads, 5000);
+});
+
+test('listContractNames: a readSync throw closes the Dir exactly once and the error propagates', () => {
+  const d = fakeDir(['a.md', 'b.md', 'c.md'], { throwAt: 2 });
+  assert.throws(() => listContractNames(d, 5000, 500), /read failed/);
+  assert.equal(d.closes, 1);
+});
+
+test('listContractNames: closes the Dir once on a normal end, and a throw on the first read also closes', () => {
+  const d = fakeDir(['a.md']);
+  listContractNames(d, 10, 10);
+  assert.equal(d.closes, 1);
+  const e = fakeDir([], { throwAt: 0 });
+  assert.throws(() => listContractNames(e, 10, 10), /read failed/);
+  assert.equal(e.closes, 1);
+});
+
+test('listContractNames: returns only .md names, sorted, cut to maxFiles after sorting', () => {
+  const d = fakeDir(['z.md', 'a.txt', 'b.md', 'a.md', 'c.MD', 'd.md']);
+  assert.deepEqual(listContractNames(d, 100, 3), ['a.md', 'b.md', 'd.md']);
+});
+
+test('listContractNames: an empty directory gives an empty list and no extra reads', () => {
+  const d = fakeDir([]);
+  assert.deepEqual(listContractNames(d, 5000, 500), []);
+  assert.equal(d.reads, 0);
+  assert.equal(d.closes, 1);
 });
