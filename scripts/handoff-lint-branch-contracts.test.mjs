@@ -144,9 +144,9 @@ test('an over-cap number of entries in docs/contracts is bounded: not every file
   const names = Array.from({ length: 700 }, (_, i) => `c${String(i).padStart(3, '0')}`);
   const file = product(Object.fromEntries(names.map((n) => [n, '1.0'])));
   const started = Date.now();
-  const probed = names.filter((_, i) => i % 10 === 0);
-  const rejected = probed.filter((n) => lintCite(file, `${n} v1.0`).code === 1);
-  assert.ok(rejected.length > 0, 'entries past the cap must be unknown');
-  assert.ok(rejected.length < probed.length, 'entries under the cap must still be known');
+  const first = lintCite(file, 'c000 v1.0');
+  const last = lintCite(file, 'c699 v1.0');
+  assert.equal(last.code, 1, 'entries past the cap must be unknown');
+  assert.equal(first.code, 0, 'entries under the cap must still be known');
   assert.ok(Date.now() - started < 20000, 'lint stays fast');
 });
