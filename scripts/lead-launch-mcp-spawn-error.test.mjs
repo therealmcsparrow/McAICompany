@@ -1,4 +1,4 @@
-// Regression for S-5 (lead-session-mcp v2.0): the helper's async spawn `error` must not leave the arm file behind.
+// Regression: the helper's async spawn `error` must not leave the arm file behind (lead-session-mcp v2.0).
 // The real startHelper runs (no deps.start seam); process.execPath points at a missing file so spawn emits `error` after newSession returned.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';

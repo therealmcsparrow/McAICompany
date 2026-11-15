@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
-// Regression for S-2 (.company/work/P20261115.000001/01-fix/30-security.md): scripts/lead-replace.mjs types blind keystrokes
+// Regression: scripts/lead-replace.mjs types blind keystrokes
 // with Enter; the UI state (lead-context.json) is not re-read right before each send, so a new turn between the check and the
 // send can put a permission dialog up and the typed Enter confirms its default. Red until typeInto re-reads lead-context.json
 // before each send and aborts (any 'failed: ...' result, nothing typed) when the reading changed.

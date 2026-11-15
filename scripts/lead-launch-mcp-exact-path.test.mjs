@@ -1,4 +1,4 @@
-// Regression for S-4 (security nit, P20261115.000001/01-fix/30-security.md): lead-launch-mcp.mjs newSession ignores the
+// Regression: lead-launch-mcp.mjs newSession ignores the
 // exactWorkPath result, so the arm write relies on the earlier `handover read`. A non-'exact' result must give `refused: error`
 // and write no arm file. Suspected Module: scripts/lead-launch-mcp.mjs (newSession), not mods/lib/work-folder.mjs.
 // Seam: exactWorkPath reads the folders with fs.readdirSync; for the one call made directly by newSession it is made to fail,

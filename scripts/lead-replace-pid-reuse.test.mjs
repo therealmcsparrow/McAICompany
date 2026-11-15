@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
-// QA regression for S-1 (.company/work/P20261115.000001/01-fix/30-security.md): scripts/lead-replace.mjs never re-checks claudePid
+// Regression: scripts/lead-replace.mjs never re-checks claudePid
 // after start, so a reused pid gets /clear + Enter. Seams pinned here (new, optional deps):
 //   turnOver({ ..., claudePid, alive })  -> 'failed: session gone' once alive(claudePid) is false, checked every poll.
 //   typeInto(text, { ..., alive, identify, baseline }) -> before EACH send: !alive(pid) -> 'failed: session gone';

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
-// QA tests for P20261115.000001-T9 (scripts/lead-replace.mjs), written before the build; red until it lands.
+// Tests for scripts/lead-replace.mjs, written before the build; red until it lands.
 // Spec: docs/contracts/lead-session-mcp.md `## Helper`. The seams are the Contract's, with the injectable deps pinned here:
 //   backgroundDone({ dir, session, claudePid, list, alive, now, sleep }) -> 'done' | 'failed: session gone'
 //     list(claudePid) -> [{ pid, image, created }] (direct children; created = epoch ms); alive(pid) -> boolean.
@@ -239,7 +239,7 @@ describe('turnOver (Helper item 2)', () => {
   });
 });
 
-// R-18: idle seam = start of the last poll that saw a live background task (backgroundDone onLive(t) -> turnOver idleAt).
+// Idle seam = start of the last poll that saw a live background task (backgroundDone onLive(t) -> turnOver idleAt).
 describe('idle seam (R-18)', () => {
   const live = (dir, c, script) => {
     const seen = [];
@@ -389,7 +389,7 @@ describe('typeInto (Helper item 3)', () => {
     const { typeInto } = await load();
     const { dir } = runDir();
     reading(dir, FROZEN, T0);
-    // The new session is written once (S-2: a rewrite during the settle wait counts as a new turn and aborts).
+    // The new session is written once (a rewrite during the settle wait counts as a new turn and aborts).
     let wrote = false;
     const c = clock(T0, (t) => { if (!wrote && t >= T0 + 14000) { wrote = true; reading(dir, 'newsession001', t); } });
     const r = runner(dir, c, { noClear: true });

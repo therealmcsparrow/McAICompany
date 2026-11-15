@@ -1,4 +1,4 @@
-// Regression: S-6 (P20261115.000001/01-fix/30-security.md). With AICO_GUARDS=off the host must not
+// Regression: with AICO_GUARDS=off the host must not
 // append a `bg` guard row: the Lead opted out of guard bookkeeping, only the one `guards-off` row is written.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,4 @@
-// Regression for S-3: console-type.ps1 must refuse non-ASCII text, never strip it silently.
+// Regression: console-type.ps1 must refuse non-ASCII text, never strip it silently.
 // A bogus PID makes a typed attempt exit 1 (attach failed); a refusal must exit 2 before any attach.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
