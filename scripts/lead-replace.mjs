@@ -127,21 +127,30 @@ export async function typeInto(text, { platform = osPlatform, run = defaultRun, 
       return Boolean(baseline && cur && cur.image === baseline.image && cur.created === baseline.created);
     } catch { return false; }
   };
-  const send = async (s) => {
+  // ok() re-reads lead-context.json right before the send; false means a new turn started, so nothing is typed.
+  const send = async (s, ok) => {
     if (!(await same())) return 'failed: session gone';
+    if (!ok()) return 'failed: turn changed';
     return typedStatus((await run(argv, Buffer.from(`${s}\r`, 'utf8'))).status);
   };
-  const first = await send('/clear');
+  const first = await send('/clear', () => {
+    const o = readReading(dir);
+    return !o || o.session === session;
+  });
   if (first !== 'typed') return first;
   const start = now();
+  let seen;
   for (;;) {
     const o = readReading(dir);
-    if (o && o.session !== session) break;
+    if (o && o.session !== session) { seen = o; break; }
     if (now() - start >= CLEAR_MS) return 'failed: clear';
     await sleep(CLEAR_POLL_MS);
   }
   await sleep(SETTLE_MS);
-  return send(text);
+  return send(text, () => {
+    const o = readReading(dir);
+    return Boolean(o) && o.session === seen.session && o.at === seen.at;
+  });
 }
 
 // Direct children of the claude process: [{ pid, image, created }], created in epoch ms.
