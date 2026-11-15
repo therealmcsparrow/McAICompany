@@ -37,9 +37,12 @@ function newestHandover(root, slug) {
 }
 
 // The one process this server starts: the replace helper, run by this node, no shell, outliving the call, not waited for.
-function startHelper(argv, root) {
+// A start that fails later (async `error`) removes the arm it armed, so a retry can arm again.
+function startHelper(argv, root, file, session) {
   const child = spawn(process.execPath, argv, { cwd: root, stdio: 'ignore', windowsHide: true });
-  child.on('error', () => {});
+  child.on('error', () => {
+    try { if (armedSession(file) === session) fs.rmSync(file, { force: true }); } catch { /* best effort */ }
+  });
   child.unref();
 }
 
@@ -86,7 +89,7 @@ export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
       if (!e || e.code !== 'EEXIST') throw e;
       if (armedSession(file) === last.session) fresh = false; else { replaceArm(file, arm); armed = file; }
     }
-    if (fresh) (deps.start ?? ((argv) => startHelper(argv, root)))([HELPER, slug, ppid]);
+    if (fresh) (deps.start ?? ((argv) => startHelper(argv, root, file, last.session)))([HELPER, slug, ppid]);
     armed = null;
     return { content: [{ type: 'text', text: `The new Lead starts in this terminal once every background task has ended and this turn is over.\nIf it has not started, run in the product folder:\n${command}` }] };
   } catch {
