@@ -75,7 +75,7 @@ export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
     const ppid = String(process.ppid);
     if (!/^[1-9][0-9]*$/.test(ppid)) return refusal('error');
     const parts = workParts(slug);
-    exactWorkPath({ fs, path }, root, parts);
+    if (exactWorkPath({ fs, path }, root, parts) !== 'exact') return refusal('error');
     const file = path.join(root, '.company', 'work', ...parts, 'lead-replace.json');
     const arm = { v: 1, session: last.session, armAt: new Date(now).toISOString(), state: 'waiting-background' };
     let fresh = true;
