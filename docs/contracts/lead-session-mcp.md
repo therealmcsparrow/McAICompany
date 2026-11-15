@@ -1,10 +1,12 @@
-# Contract: lead-session-mcp v1.2
+# Contract: lead-session-mcp v2.0
+
+v2.0 (task P20261115.000001/01-fix, major, breaking): the tool no longer only points. From the frozen state it starts one helper, `scripts/lead-replace.mjs`, that waits for every background task and the end of the frozen turn, then types `/clear` and the hand-over prompt into the session's own terminal. Rationale: `docs/adr/0074-lead-replaced-in-place.md`, which supersedes the "starts nothing" clause of ADR 0056. New description, success text and refusals below; protocol and registration unchanged. Needs a security review (Compatibility).
 
 v1.2 (task P20261109.000009-T13, additive): `lead_new_session` accepts a v3 run slug `<ProjectID>/<NN>-<playbook>` (checked with `isRunSlug`, its folder through `workParts`) and returns the `lead-handoff` v2.1 command naming it. Result and refusal texts for v2, v1.1 and legacy names are byte-identical to v1.1. Uses `lead-handoff` v2.1.
 
 New Contract (task 2026-11-02 18.32 - Context Cap Hand Over, T2). Provider: `scripts/lead-launch-mcp.mjs` (Node built-ins only, no MCP SDK), registered by `mcpServers` in `.claude-plugin/plugin.json` (v1.1; v1 used a plugin root `.mcp.json`). Consumer: the frozen Lead (`context-guard` v1 allows this one tool). Uses `lead-handoff` v1.8 (`findRun`, `newSessionCommand`, `readSmall`, and `main` for `read`) and `work-folder-name` v1.1 (`isWorkFolder`). Rationale: `docs/adr/0056-hard-handover-outside-agent.md`.
 
-A convenience on top of the hook: it gives the Lead the command for a new session, on every OS. **It only points.** It returns the command and starts nothing: no `node:child_process` in this script, no console, no terminal. The hand-over itself never needs it.
+v2.0: the frozen Lead calls it and the new Lead starts in the same terminal by itself. **It starts exactly one process**, the helper below, never `claude`, never a shell with model text. The hand-over itself still never needs it: where typing is unsupported or fails, the freeze reason's command stands.
 
 ## Registration
 `mcpServers` in `.claude-plugin/plugin.json`: `{"lead-session":{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs"]}}`. There is no root `.mcp.json`: this repo is the plugin source and also a product folder, so Claude Code would read a root file a second time as project scope, where `CLAUDE_PLUGIN_ROOT` is unset, the path does not resolve, node exits 1 and the client shows `lead-session (CONNECTION_CLOSED)`. A root `.mcp.json` must not come back (`tests/lead-launch-mcp/registration.test.mjs`).
@@ -25,9 +27,9 @@ MCP over stdio: one JSON-RPC 2.0 object per line, UTF-8, LF. A line over 64 KiB 
 Method names are written in quotes inside the code marks, so the drift check never reads them as file paths.
 
 ## Tool `lead_new_session`
-No arguments: `inputSchema` `{"type":"object","properties":{},"additionalProperties":false}`. The slug comes from the active run, never from the model. Description: `Returns the command that starts a new Lead session after a context hand-over. Starts nothing.`
+No arguments: `inputSchema` `{"type":"object","properties":{},"additionalProperties":false}`. The slug comes from the active run, never from the model. Description: `Starts the new Lead in this terminal after a context hand-over: waits for background tasks and the end of this turn, then types /clear and the hand-over prompt.`
 
-Read-only. On each call, in this order, stopping at the first that applies; a refusal is `isError: true` with the one text line, never a JSON-RPC error:
+On each call, in this order, stopping at the first that applies; a refusal is `isError: true` with the one text line, never a JSON-RPC error, and starts nothing:
 | Check | Text |
 |---|---|
 | No active run (`findRun`) | `refused: no run` |
@@ -35,26 +37,37 @@ Read-only. On each call, in this order, stopping at the first that applies; a re
 | Run record broken or fails its file checks | `refused: broken record` |
 | A `subs` entry of the run with `stop` null | `refused: step running` |
 | Newest `handover` of the record is not trigger `context` | `refused: no context handover` |
-| Own exception | `refused: error` |
+| No typer for this OS (`typer(process.platform)` null; Linux also when `/proc/sys/dev/tty/legacy_tiocsti` is not `1`) | `refused: unsupported terminal` |
+| Own exception, or the helper fails to start | `refused: error` |
 
-Success, one text content, two lines:
+Then it arms once: exclusive-create `lead-replace.json` in the run folder, `{"v":1,"session":<session of that newest handover>,"armAt":<ISO>,"state":"waiting-background"}`. The file already there → no second helper, same success text. Then it starts the helper: `process.execPath` with argv `[<plugin>/scripts/lead-replace.mjs, <slug>, <process.ppid>]`, cwd the product root, no shell, `stdio: 'ignore'`, `windowsHide: true`, not detached (it keeps the session's console or controlling terminal), `unref()`. The seam is `newSession(root, now, deps)` with `deps.start(argv)`, so tests pass a fake.
+
+Success, one text content, three lines:
 ```
-Open a new terminal in the product folder and run:
+The new Lead starts in this terminal once every background task has ended and this turn is over.
+If it has not started, run in the product folder:
 <command>
 ```
-`<command>` = `newSessionCommand(slug)`: `claude "aico lead hand-over: run lead-handover read '<name>' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`, the `lead-handoff` v1.8 new-session line inside double quotes. The name shape (`work-folder-name` v1.1) rules out quotes, `$`, backtick, `%`, `\` and control characters, so the line is one safe argument in cmd, PowerShell and POSIX shells when the CEO pastes it. Calling again returns the same text: no state, no record written.
+`<command>` = `newSessionCommand(slug)`: `claude "aico lead hand-over: run lead-handover read '<name>' first, as set out in references/lead-resume.md of the skill aico:pipeline, then follow that file."`, the `lead-handoff` v1.8 new-session line inside double quotes. The name shape (`work-folder-name` v1.1) rules out quotes, `$`, backtick, `%`, `\` and control characters, so the line is one safe argument in cmd, PowerShell and POSIX shells when the CEO pastes it. The prompt the helper types is the text inside its double quotes.
+
+## Helper `scripts/lead-replace.mjs <slug> <claudePid>`
+Internal to this Contract. Each wait writes its `state` to `lead-replace.json` (atomic rename); it ends at `typed` or `failed: <reason>`. Seams, each a function with injectable deps:
+1. **Background tasks ended** `backgroundDone({ dir, session, claudePid, list })`. Launches come from the guard record: one `{"ev":"bg","session"}` row per allowed Lead-session `Bash`, `PowerShell`, `Agent` or `Task` call with `run_in_background` true (`hook-event` v1.2 reads the flag; the cap engine writes the row). No row → done. Otherwise poll `list(claudePid)` (`[{pid,image,created}]`; Windows `Get-CimInstance Win32_Process` by `ParentProcessId`, POSIX `ps -A -o pid=,ppid=,lstart=,comm=`) every 2 s; a live background task is a direct child of `claudePid` with a shell image (`bash`, `sh`, `zsh`, `dash`, `pwsh`, `powershell`, `cmd`) created at or after the first `bg` row. Done after two empty polls in a row. Background `Agent`s are Steps: the `step running` check covers them. No time limit; `claudePid` gone → `failed: session gone`.
+2. **Turn over** `turnOver({ dir, session, armAt })`: `lead-context.json` names `session` with `at` at or after `armAt` (the `Stop` hook `measure`). At most 10 min, else `failed: turn`.
+3. **Type** `typeInto(text, { platform, run })` → `typed | unsupported | failed`: first `/clear` + Enter, then wait until `lead-context.json` names another session (SessionStart `clear`, `start`), at most 15 s, else `failed: clear`; then the prompt + Enter. Windows: `powershell.exe -NoProfile -NonInteractive -File <plugin>/scripts/lib/console-type.ps1`, text on stdin, `WriteConsoleInputW` on `CONIN$`. macOS and Linux: `perl` `TIOCSTI` on `/dev/tty`. Only these two texts are ever typed, both built from a validated slug.
 
 ## Limits (not enforceable)
 - Tools are model-called: nothing forces the Lead to call it. A hook cannot call it. The `context-guard` routes hold without it.
-- It does not close the old session; the CEO does. Called in another session of the same run it returns the same command, which is harmless.
-- It appears in every Role's tool list as well. A Role calling it gets a refusal or the command and nothing changes.
+- It types into the caller's own terminal only (the helper inherits it). Keys the CEO types during the wait mix with the typed text; the helper types only after the turn is over.
+- Background tasks other than shells (`Monitor`, a non-Step background agent) are not seen. A background task that never ends keeps the old session; the CEO can stop it.
+- It appears in every Role's tool list. A Role calling it is refused (`step running`) and nothing starts.
 - The server starts with each session. If it fails to start, no hand-over step depends on it.
 
 ## Personal data and destinations
-Holds nothing. Reads the run's record and returns the work folder name in the command, to the Claude model of the session and the CEO's screen. No network, no file written, no recipient added.
+Holds nothing personal. Reads the run's record, `lead-context.json` and the pid, image and start time of the direct children of the claude process, all local; writes only `lead-replace.json`. Types the run name into the session's own terminal. No network, no recipient added.
 
 ## Error cases
-Refusals above. Server down or tool not approved: the Lead uses the command from the freeze reason.
+Refusals above. Helper `failed: <reason>`, server down or tool not approved: the CEO uses the command from the success text or the freeze reason.
 
 ## Compatibility
-v1.1: the returned `<command>` text now names `references/lead-resume.md` (the `lead-handoff` v1.8 new-session line; v1 returned the v1.7 text naming `references/lead-handover.md`), and the registration moves from the root `.mcp.json` to `plugin.json` `mcpServers`; same server name, same tool name, same protocol, so no consumer changes. v1: new Contract. A new tool, an argument, a new refusal text or any process start needs a new version; starting a process is a major bump and needs a security review.
+v2.0 (breaking): new description, success text and refusal `unsupported terminal`, a process start, the run-folder file `lead-replace.json`. Same server, tool name, protocol and arguments. Consumers to update: the frozen Lead's routes (`context-guard` wording only), `tests/lead-launch-mcp/server.test.mjs`, `scripts/guard-cap.test.mjs`. Needs a security review before release. v1.1: the returned `<command>` text now names `references/lead-resume.md` (the `lead-handoff` v1.8 new-session line; v1 returned the v1.7 text naming `references/lead-handover.md`), and the registration moves from the root `.mcp.json` to `plugin.json` `mcpServers`; same server name, same tool name, same protocol, so no consumer changes. v1: new Contract. A new tool, an argument, a new refusal text or any process start needs a new version; starting a process is a major bump and needs a security review.
