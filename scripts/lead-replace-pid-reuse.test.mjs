@@ -71,9 +71,9 @@ describe('S-1 PID reuse', () => {
     const sent = [];
     let up = true;
     const c = clock();
-    reading(dir, 'newsession0001', T0);
+    reading(dir, FROZEN, T0);   // frozen reading first; the new session appears when /clear is typed (as SessionStart does)
     const r = await typeInto('hello', {
-      platform: 'win32', run: async (a, i) => { sent.push(String(i)); up = false; return { status: 0 }; },
+      platform: 'win32', run: async (a, i) => { sent.push(String(i)); up = false; reading(dir, 'newsession0001', c.t + 500); return { status: 0 }; },
       dir, session: FROZEN, claudePid: CLAUDE, alive: () => up, now: c.now, sleep: c.sleep,
     });
     assert.equal(r, 'failed: session gone');

@@ -389,7 +389,9 @@ describe('typeInto (Helper item 3)', () => {
     const { typeInto } = await load();
     const { dir } = runDir();
     reading(dir, FROZEN, T0);
-    const c = clock(T0, (t) => { if (t >= T0 + 14000) reading(dir, 'newsession001', t); });
+    // The new session is written once (S-2: a rewrite during the settle wait counts as a new turn and aborts).
+    let wrote = false;
+    const c = clock(T0, (t) => { if (!wrote && t >= T0 + 14000) { wrote = true; reading(dir, 'newsession001', t); } });
     const r = runner(dir, c, { noClear: true });
     const out = await typeInto(PROMPT, { platform: 'win32', run: r.run, dir, session: FROZEN, claudePid: CLAUDE, now: c.now, sleep: c.sleep });
     assert.equal(out, 'typed');
