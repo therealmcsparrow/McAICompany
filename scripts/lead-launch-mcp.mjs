@@ -84,7 +84,7 @@ export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
       armed = file;
     } catch (e) {
       if (!e || e.code !== 'EEXIST') throw e;
-      if (armedSession(file) === last.session) fresh = false; else replaceArm(file, arm);
+      if (armedSession(file) === last.session) fresh = false; else { replaceArm(file, arm); armed = file; }
     }
     if (fresh) (deps.start ?? ((argv) => startHelper(argv, root)))([HELPER, slug, ppid]);
     armed = null;
