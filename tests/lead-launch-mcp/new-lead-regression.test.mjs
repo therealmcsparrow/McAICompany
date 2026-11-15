@@ -157,6 +157,20 @@ describe('lead_new_session arms once and starts the helper (CEO decision 3)', ()
     assert.equal(text(r), 'refused: error');
   });
 
+  test('R-17: second hand-over (replace path), start throws: refused: error, arm gone, retry starts a helper', () => {
+    const fx = fixture();
+    fs.writeFileSync(armFile(fx), '{"v":1,"session":"0123456789ab","armAt":"2026-01-01T00:00:00Z","state":"waiting-background"}\n');
+    const r = callOn('win32', fx.root, { start: () => { throw new Error('spawn failed'); } });
+    assert.equal(r.isError, true);
+    assert.equal(text(r), 'refused: error');
+    assert.equal(fs.existsSync(armFile(fx)), false, 'new arm removed after the failed start');
+    const s = spy();
+    const r2 = callOn('win32', fx.root, { start: s.start });
+    assert.equal(r2.isError, undefined, JSON.stringify(r2));
+    assert.equal(s.calls.length, 1, 'retry starts a helper');
+    assert.equal(JSON.parse(fs.readFileSync(armFile(fx), 'utf8')).session, SESSION);
+  });
+
   test('the tool description is the v2.0 text, not "Starts nothing"', () => {
     const r = spawnSync(process.execPath, [SERVER], { cwd: repo, input: `${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' })}\n`, encoding: 'utf8', timeout: 10000 });
     const d = JSON.parse(r.stdout.split('\n').filter(Boolean)[0]).result.tools[0].description;
