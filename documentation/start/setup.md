@@ -14,8 +14,8 @@ You have three things to know:
 
 1. A Role reaches the hand-over point. Every tool except writing its Handoff file is refused, so it writes the Handoff and ends. The Lead starts a fresh Role from that file.
 2. The Lead reaches the hand-over point. aico writes the Lead Handoff from the run records and freezes that session.
-3. The frozen Lead calls the `lead_new_session` tool. On Windows, a helper waits until background tasks have ended and the turn is over, then types `/clear` and the resume prompt into your console. Expected result: a new session continues from the Lead Handoff file. Do not type while it waits. If the new session has not started, run the command the tool printed in the product folder. On macOS and Linux nothing is typed: run the command the frozen Lead shows you in the product folder.
-4. Close the old session yourself. It stays frozen.
+3. The frozen Lead calls the `lead_new_session` tool. On Windows, a helper waits until background tasks have ended and the turn is over, then types `/clear` and the resume prompt into your console. Expected result: a new session continues from the Lead Handoff file. Do not type while it waits. There is nothing to close: the new session runs in the same console.
+4. On macOS and Linux nothing is typed. The same applies on Windows if the new session has not started. Run the command the frozen Lead shows you in the product folder, then close the old session. It stays frozen.
 
 Claude Code may ask once to allow the `lead_new_session` tool. Automatic compaction is blocked while a job runs. Typing `/compact` yourself still works.
 

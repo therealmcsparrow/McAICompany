@@ -71,7 +71,7 @@ Most commands run through the shared pipeline, so a few conventions hold everywh
 
 Nothing is pushed or published by these commands.
 
-**Hand-over of the Lead.** A long run can fill the Lead's context. At the hand-over point (162000 tokens at the default cap) a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then freezes that session; it reads token counts from the local transcript and stores none of its text. The `lead_new_session` tool returns the command for a new session, which continues from that file. Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md).
+**Hand-over of the Lead.** A long run can fill the Lead's context. At the hand-over point (162000 tokens at the default cap) a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then freezes that session; it reads token counts from the local transcript and stores none of its text. The `lead_new_session` tool continues from that file: on Windows a helper types `/clear` and the resume prompt into the same console (nothing to close); elsewhere, or on failure, it gives you a command to run, and then you close the old session. Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md).
 
 ### Build and change
 | Command | What it does |
