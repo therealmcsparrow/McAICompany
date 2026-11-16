@@ -690,10 +690,11 @@ export function turn(text, options) {
   const { root, now } = defaults(options);
   const quiet = { code: 0, err: '' };
   try {
-    // A payload over MAX_STDIN cannot be read: mark with an unknown session (session null), which lead-replace reads as 'bad' and refuses to type over.
-    const over = text === OVERSIZE;
-    const p = over ? { session: null } : parsePayload(text);
-    if (!p || (!over && ((p.event !== 'UserPromptSubmit' && p.event !== 'PreToolUse') || p.subagent || p.session === null))) return quiet;
+    // A payload that cannot be read (over MAX_STDIN, not JSON) or has no usable session_id marks with an unknown session
+    // (session null), which lead-replace reads as 'bad' and refuses to type over. Only a readable payload from another event or a Step writes nothing.
+    const parsed = text === OVERSIZE ? null : parsePayload(text);
+    if (parsed && ((parsed.event !== 'UserPromptSubmit' && parsed.event !== 'PreToolUse') || parsed.subagent)) return quiet;
+    const p = { session: parsed ? parsed.session : null };
     const slug = findRun(root, now);
     if (!slug) return quiet;
     exactWorkPath({ fs, path }, root, workParts(slug));
