@@ -1,0 +1,181 @@
+{
+ "columns": [
+  "v",
+  "step",
+  "dispatch",
+  "model",
+  "inputs",
+  "node",
+  "os",
+  "lock",
+  "check",
+  "env"
+ ],
+ "base": {
+  "v": 1,
+  "step": "qa",
+  "dispatch": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "model": "sonnet",
+  "inputs": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "node": "v22.1.0",
+  "os": "linux-x64",
+  "lock": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "check": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "env": [
+   [
+    "AICO_FLAG",
+    "0123456789abcdef"
+   ],
+   [
+    "NODE_ENV",
+    "fedcba9876543210"
+   ]
+  ]
+ },
+ "rows": [
+  {
+   "name": "identical columns",
+   "change": {},
+   "expect": "hit"
+  },
+  {
+   "name": "v alone",
+   "change": {
+    "v": 2
+   },
+   "expect": "miss v"
+  },
+  {
+   "name": "step alone",
+   "change": {
+    "step": "qa:T3"
+   },
+   "expect": "miss step"
+  },
+  {
+   "name": "dispatch alone",
+   "change": {
+    "dispatch": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+   },
+   "expect": "miss dispatch"
+  },
+  {
+   "name": "model alone",
+   "change": {
+    "model": "opus"
+   },
+   "expect": "miss model"
+  },
+  {
+   "name": "inputs alone",
+   "change": {
+    "inputs": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+   },
+   "expect": "miss inputs"
+  },
+  {
+   "name": "node alone",
+   "change": {
+    "node": "v22.2.0"
+   },
+   "expect": "miss node"
+  },
+  {
+   "name": "os alone",
+   "change": {
+    "os": "win32-x64"
+   },
+   "expect": "miss os"
+  },
+  {
+   "name": "lock alone",
+   "change": {
+    "lock": "none"
+   },
+   "expect": "miss lock"
+  },
+  {
+   "name": "check alone",
+   "change": {
+    "check": "1111111111111111111111111111111111111111111111111111111111111111"
+   },
+   "expect": "miss check"
+  },
+  {
+   "name": "env value alone",
+   "change": {
+    "env": [
+     [
+      "AICO_FLAG",
+      "0000000000000000"
+     ],
+     [
+      "NODE_ENV",
+      "fedcba9876543210"
+     ]
+    ]
+   },
+   "expect": "miss env"
+  },
+  {
+   "name": "env name added",
+   "change": {
+    "env": [
+     [
+      "AICO_FLAG",
+      "0123456789abcdef"
+     ],
+     [
+      "AICO_NEW",
+      "1111111111111111"
+     ],
+     [
+      "NODE_ENV",
+      "fedcba9876543210"
+     ]
+    ]
+   },
+   "expect": "miss env"
+  },
+  {
+   "name": "env name removed",
+   "change": {
+    "env": [
+     [
+      "AICO_FLAG",
+      "0123456789abcdef"
+     ]
+    ]
+   },
+   "expect": "miss env"
+  },
+  {
+   "name": "env emptied",
+   "change": {
+    "env": []
+   },
+   "expect": "miss env"
+  },
+  {
+   "name": "two columns report the first in table order",
+   "change": {
+    "os": "darwin-arm64",
+    "model": "haiku",
+    "env": []
+   },
+   "expect": "miss model"
+  },
+  {
+   "name": "the last column alone is still found",
+   "change": {
+    "env": [
+     [
+      "AICO_FLAG",
+      "0123456789abcdef"
+     ]
+    ]
+   },
+   "expect": "miss env"
+  }
+ ]
+}
