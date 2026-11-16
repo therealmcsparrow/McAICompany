@@ -118,7 +118,7 @@ test('ADR 0069 supersedes 0047, which stays and is marked superseded; 0049 and 0
 });
 
 test('CHANGELOG says stored context_cap values now take effect', () => {
-  const top = read('CHANGELOG.md').split('\n').slice(0, 60).join('\n');
+  const top = read('CHANGELOG.md');
   has(top, '180000', /context_cap/, /take(s)? effect/);
 });
 

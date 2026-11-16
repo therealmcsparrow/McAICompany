@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-16
+
+Rollback: node scripts/stable.mjs 0.41.0
+
 ### Added
 - **Handoff lint reads product docs and contracts.** `handoff-lint` takes the Contract versions it checks from the product's own `docs/contracts` files, so the installed lint and the repo lint agree (PR #81). An opt-in test, `AICO_CHECK_INSTALLED=1 node --test scripts/handoff-lint-installed-agree.test.mjs`, compares the installed plugin with the repo.
 
