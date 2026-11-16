@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Fixed
+- **Cooler and brainstorm dispatch real Role agents.** Each Role turn in `/aico:cooler` and `/aico:brainstorm` is one `aico:<role>` Agent call. The Lead never writes or speaks a Role's line; a Role line enters the file only from an Agent result. The cooler data rule, above Turns, covers the CEO's topic again. Regression test: `scripts/playbook-role-dispatch.test.mjs`.
+
 ## [0.42.0] - 2026-11-16
 
 Rollback: node scripts/stable.mjs 0.41.0
