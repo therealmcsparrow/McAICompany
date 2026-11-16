@@ -52,11 +52,10 @@ describe('turn adapter', () => {
     assert.equal(fs.existsSync(p.file), false);
   });
 
-  test('other events and input that is not JSON write nothing', () => {
+  test('other events write nothing (input that is not JSON: see lead-replace-turn-bad-input.test.mjs)', () => {
     const p = product();
     turn(ev('Stop'), { root: p.root, now: T0 });
     turn(ev('SessionStart'), { root: p.root, now: T0 });
-    turn('not json', { root: p.root, now: T0 });
     assert.equal(fs.existsSync(p.file), false);
   });
 
