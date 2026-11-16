@@ -23,7 +23,8 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 9. **Run state**: once the slug is known, record the run with the five `run-state.mjs` commands (start, wave, ask, gate, end). Load `references/run-state.md` in Setup for when each runs and its rules; it never blocks a Step or a Gate.
 10. **Plan check**: load `references/plan-check.md` in Setup.
 11. **Parallel plan**: load `references/parallel.md` in Setup.
-12. **Tier path** (feature and fix only): load references/tier-path.md in Setup, and `references/route.md` (route, diff-facts and stepKey around every Step; the Steps come from `route next`).
+12. **Tier path** (feature and fix only): load references/tier-path.md in Setup.
+12b. **Route** (feature and fix only): load `references/route.md` in Setup (route, diff-facts and stepKey around every Step; the Steps come from `route next`).
 13. **CEO pack**: load `references/ceo-pack.md` in Setup (how `needs-ceo` questions are held and shown as one form). Step times need nothing from you: the hooks record each subagent's start and stop (`step-times` v1).
 14. **Plan review** (feature only, when `plan-review` is in the tier set and `plan-review.mjs majors` finds a Contract major): load `references/plan-review.md` before the Plan Gate.
 15. **Review loop**: load `references/review-loop.md` before the first review Step (failed review Steps, `mark` and `churn` in Fix rounds, the Ship Gate list, the second reviewer).
@@ -112,8 +113,9 @@ At **Brief**, **Plan** and **Ship**, stop. Directly before each Gate form run `r
 When the Reviewer, QA, Security or the Senior Engineer (compliance) returns items under `## Blocking`:
 1. **One Fix round** = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel). Pass `Round: N` in each dispatch. With a parallel record, the builders sent back are the tasks `plan-tasks.mjs round` names, started through `next` under the same cap and overlap rules (`references/parallel.md` step 8).
 2. The count lives in the Handoffs' `round:` field, not in your memory. After compaction, read the latest `round:` value. The limit is `pipeline.fix_rounds` (§1.7; by default at most 2 rounds). **Still blocking after the last allowed round → stop and escalate to the CEO** in a form, with the reviewer Handoff paths. Don't start another round, however close it looks. At 0, the first blocking review goes straight to the CEO.
-3. Nits never trigger a round; they are listed in the Ship Gate summary. A nit on a Contract or Core path gets one builder Fix Step (`route fix`, `references/route.md`): not a Fix round, its own nits never loop.
+3. Nits never trigger a round. They are listed in the Ship Gate summary.
    - Each blocker is tagged `contract|spec|security|test` (`aico:handoff`): send `security`/`contract` blockers to the owning builder first, and a `contract` blocker to the Architect if it needs a Contract change (a Plan Gate, not a Fix round).
+   - A nit on a Contract or Core path gets one builder Fix Step (`route fix`, `references/route.md`): not a Fix round, its own nits never loop.
 4. A builder's Must exception (`needs-ceo`, `aico:ruleset`) is a CEO question, not a Fix round. Debt never triggers a round; an exploitable security Must is not Debt but Blocking (`aico:ruleset`).
 
 ## 6. Finish
