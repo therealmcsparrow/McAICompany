@@ -77,7 +77,8 @@ jobs:
         env:
           RUN_ID: ${{ github.run_id }}
           JOB_OS: ${{ matrix.os }}
-        run: echo "nightly red: check ($JOB_OS) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "nightly red: check ($JOB_OS) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 
   # Windows runs the suite in four shards; each shard uploads the list of files it ran.
   windows-test:
@@ -125,7 +126,7 @@ jobs:
           GIT_NO_LAZY_FETCH: "1"
         run: node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output
       # if first: the Windows test step has no separate guard line (ci-speed pins that).
-      - if: !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true')
+      - if: ${{ !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true') }}
         name: Test shard
         env:
           AICO_TEST_SHARD: ${{ matrix.shard }}/4
@@ -191,7 +192,8 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           RUN_ID: ${{ github.run_id }}
-        run: echo "nightly red: check (windows-latest) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "nightly red: check (windows-latest) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 
   # Static a11y smoke on HTML pages. On a PR it runs only when diff-facts says ui_changed is
   # exactly true; tags, the nightly, a cold override (repo variable CI_COLD=1) and non-PR
