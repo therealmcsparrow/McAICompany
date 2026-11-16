@@ -558,6 +558,30 @@ test('show: facts of a commit range, written nowhere', async t => {
     assert.equal(facts.contract_changed, true);
     assert.equal(facts.ui_changed, true);
   });
+  await t.test('NUL file under docs with a diff attribute is binary', () => {
+    const s = sandbox();
+    s.put('.gitattributes', 'docs/* diff\n');
+    s.put('README.md', '# r\n');
+    const base = s.commit('base');
+    s.put('docs/blob.md', Buffer.from([0x61, 0, 0x62, 0x0a]));
+    const head = s.commit('head');
+    const facts = parse(s.cli(['show', '--base', base, '--head', head]));
+    assert.deepEqual(kindsOf(facts), { 'docs/blob.md': 'binary' });
+    assert.equal(facts.contract_changed, true);
+    assert.equal(facts.docs_only, false);
+  });
+  await t.test('text file marked -diff is classified by path', () => {
+    const s = sandbox();
+    s.put('.gitattributes', 'docs/* -diff\n');
+    s.put('README.md', '# r\n');
+    const base = s.commit('base');
+    s.put('docs/note.md', 'plain text\n');
+    const head = s.commit('head');
+    const facts = parse(s.cli(['show', '--base', base, '--head', head]));
+    assert.deepEqual(kindsOf(facts), { 'docs/note.md': 'docs' });
+    assert.equal(facts.docs_only, true);
+    assert.equal(facts.contract_changed, false);
+  });
   await t.test('rename only', () => {
     const s = sandbox();
     s.put('src/old.mjs', Array.from({ length: 30 }, (_, i) => `export const v${i} = ${i};\n`).join(''));
