@@ -19,6 +19,7 @@ Rationale: the Steps a run takes are data in one ledger, so skips and merges hav
 - `ERROR route: <playbook> over budget: budget <b>, count <c>` — count = `steps` entries (a merged pair counts once) + `tasks.n`.
 - `ERROR route: no budget for <playbook>`; `ERROR route: unknown role <slug>`; `ERROR route: <slug> may not be skipped`; `ERROR route: step <i> has no why`.
 - `ERROR route: merge needs size S` and `ERROR route: merge must be code-reviewer with qa` — the only merge is the S QA verify plus the review checklist, dispatched as one `code-reviewer` Step. A QA test-first Step is never merged.
+- A Role may appear in `steps` more than once (`fix`: `qa` reproduces, then verifies; `feature`: `architect` designs, then signs off the ruleset). A repeated Role is never a lint error.
 
 ## CLI (`node scripts/route.mjs <cmd>`, cwd = product repo; refusals `refused: <reason>` on stdout, exit 2; nothing written on a refusal)
 | Command | Does |
