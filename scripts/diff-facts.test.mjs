@@ -437,7 +437,7 @@ test('classify: every non-docs, non-test kind turns ui_changed on', async () => 
   }
 });
 
-test('classify: more than 5000 entries is truncated and every flag is true', async () => {
+test('classify: more than 5000 entries is truncated and every flag is fail-safe', async () => {
   const { classify } = await load();
   const many = n => Array.from({ length: n }, (_, i) => entry(`docs/${String(i).padStart(5, '0')}.md`));
   const over = classify(many(5001), null);
@@ -446,6 +446,7 @@ test('classify: more than 5000 entries is truncated and every flag is true', asy
   for (const f of FLAGS.filter(f => f !== 'docs_only')) assert.equal(over[f], true, f);
   assert.equal(over.ui_changed, true);
   assert.equal(over.contract_changed, true);
+  assert.equal(over.docs_only, false);
   const exact = classify(many(5000), null);
   assert.equal(exact.truncated, false);
   assert.equal(exact.paths.length, 5000);
@@ -598,6 +599,7 @@ test('show: facts of a commit range, written nowhere', async t => {
     assert.equal(facts.truncated, true);
     assert.equal(facts.paths.length, 5000);
     assert.equal(facts.ui_changed, true);
+    assert.equal(facts.docs_only, false);
     assert.ok(r.stdout.length < 1024 * 1024);
   });
 });
