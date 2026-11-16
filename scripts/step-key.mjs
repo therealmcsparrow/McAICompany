@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { exactWorkPath } from '../mods/lib/work-folder.mjs';
 
 const MAX_LOG = 256 * 1024;
 const MAX_ROW = 1024;
@@ -287,16 +288,47 @@ function pluginRoot() {
   return e ? path.resolve(e) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 }
 
-function readBounded(abs, limit) {
-  let st;
-  try { st = fs.lstatSync(abs); } catch { throw new SkErr('read'); }
-  if (!st.isFile()) throw new SkErr('read');
-  if (st.size > limit) throw new SkErr('limit');
-  let real;
-  try { real = fs.realpathSync.native(abs); } catch { throw new SkErr('read'); }
+// A regular file with one link, whose real path equals its lexical path under the real root, read through a handle
+// tied by device and inode to the checked entry. Status 'missing' only for an absent entry.
+function readPlain(abs, limit) {
   const rr = fs.realpathSync.native(root());
-  if (!real.startsWith(rr + path.sep)) throw new SkErr('read');
-  try { return fs.readFileSync(abs); } catch { throw new SkErr('read'); }
+  const rel = path.relative(root(), abs);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return { status: 'refused' };
+  const lexical = path.join(rr, rel);
+  let lst;
+  try { lst = fs.lstatSync(lexical, { bigint: true }); } catch (e) {
+    return { status: e.code === 'ENOENT' || e.code === 'ENOTDIR' ? 'missing' : 'error' };
+  }
+  if (!lst.isFile() || lst.nlink !== 1n || lst.ino === 0n) return { status: 'refused' };
+  if (lst.size > BigInt(limit)) return { status: 'big' };
+  let real;
+  try { real = fs.realpathSync.native(lexical); } catch { return { status: 'refused' }; }
+  if (real !== lexical || !real.startsWith(rr + path.sep)) return { status: 'refused' };
+  let fd;
+  try {
+    fd = fs.openSync(lexical, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const st = fs.fstatSync(fd, { bigint: true });
+    if (!st.isFile() || st.nlink !== 1n || st.size > BigInt(limit)) return { status: 'refused' };
+    if (st.ino !== lst.ino || st.dev !== lst.dev) return { status: 'refused' };
+    const buf = Buffer.alloc(Number(st.size));
+    let off = 0;
+    while (off < buf.length) {
+      const n = fs.readSync(fd, buf, off, buf.length - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    return { status: 'ok', buf: buf.subarray(0, off) };
+  } catch {
+    return { status: 'error' };
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function readBounded(abs, limit, kind = 'read') {
+  const r = readPlain(abs, limit);
+  if (r.status === 'ok') return r.buf;
+  throw new SkErr(r.status === 'big' ? 'limit' : kind);
 }
 
 function readStdin() {
@@ -325,6 +357,10 @@ function runPaths(segs) {
 }
 
 function checkRunDir(run, kind) {
+  try {
+    const rr = fs.realpathSync.native(root());
+    if (exactWorkPath({ fs, path }, rr, run.chain.slice(2)) !== 'exact') throw new SkErr(kind);
+  } catch { throw new SkErr(kind); }
   let cur = root();
   for (const seg of run.chain) {
     cur = path.join(cur, seg);
@@ -348,15 +384,11 @@ function validRow(r) {
 function readRows(run) {
   checkRunDir(run, 'log');
   const p = logFile(run);
-  let st;
-  try { st = fs.lstatSync(p); } catch (e) {
-    if (e.code === 'ENOENT') return [];
-    throw new SkErr('log');
-  }
-  if (!st.isFile()) throw new SkErr('log');
-  if (st.size > MAX_LOG) throw new SkErr('limit');
-  let text;
-  try { text = fs.readFileSync(p, 'utf8'); } catch { throw new SkErr('log'); }
+  const r = readPlain(p, MAX_LOG);
+  if (r.status === 'missing') return [];
+  if (r.status === 'big') throw new SkErr('limit');
+  if (r.status !== 'ok') throw new SkErr('log');
+  const text = r.buf.toString('utf8');
   if (text.length > MAX_LOG) throw new SkErr('limit');
   if (text === '') return [];
   if (!text.endsWith('\n')) throw new SkErr('parse');
@@ -422,26 +454,22 @@ function tryAppend(run, row) {
 function loadSalt(run) {
   const p = path.join(run.abs, 'step-keys.salt');
   for (let attempt = 0; attempt < 2; attempt++) {
-    let st;
-    try { st = fs.lstatSync(p); } catch (e) {
-      if (e.code !== 'ENOENT') throw new SkErr('salt');
-      let fd;
-      try {
-        fd = fs.openSync(p, 'wx', 0o600);
-        fs.writeSync(fd, crypto.randomBytes(32));
-      } catch (err) {
-        if (err.code === 'EEXIST') continue;
-        throw new SkErr('salt');
-      } finally {
-        if (fd !== undefined) fs.closeSync(fd);
-      }
-      continue;
+    checkRunDir(run, 'salt');
+    const r = readPlain(p, 32);
+    if (r.status !== 'missing') {
+      if (r.status !== 'ok' || r.buf.length !== 32) throw new SkErr('salt');
+      return r.buf;
     }
-    if (!st.isFile() || st.size !== 32) throw new SkErr('salt');
-    let buf;
-    try { buf = fs.readFileSync(p); } catch { throw new SkErr('salt'); }
-    if (buf.length !== 32) throw new SkErr('salt');
-    return buf;
+    let fd;
+    try {
+      fd = fs.openSync(p, 'wx', 0o600);
+      fs.writeSync(fd, crypto.randomBytes(32));
+    } catch (err) {
+      if (err.code === 'EEXIST') continue;
+      throw new SkErr('salt');
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+    }
   }
   throw new SkErr('salt');
 }
@@ -515,6 +543,7 @@ function handoffInRun(run, rel) {
 function readHandoffRel(run, rel) {
   const abs = handoffInRun(run, rel);
   if (!abs) throw new SkErr('read');
+  checkRunDir(run, 'read');
   return readBounded(abs, MAX_FILE);
 }
 
