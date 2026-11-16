@@ -4,15 +4,29 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions:
   contents: read
 
+# One run per workflow and ref; only a superseded pull_request run is cancelled.
+# Main, tags and the nightly always finish, so a red there is never lost.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Full matrix on tags (ubuntu, macos), ubuntu only on the nightly. On a PR or main push the
+  # steps are skipped one by one, so the required check names still report success.
+  # Cold: no npm cache, so a tag or nightly never trusts a cache.
   check:
     name: check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    env:
+      AICO_COLD: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -23,20 +37,36 @@ jobs:
         working-directory: repo with space
     steps:
       # Check out into a path with a space so scripts that mishandle spaces fail on every OS.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: repo with space
           persist-credentials: false
           fetch-depth: 0
       # setup-node resolves node-version-file from the workspace root, so expose .nvmrc there.
-      - run: cp .nvmrc ../.nvmrc
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Expose .nvmrc
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        run: cp .nvmrc ../.nvmrc
+      - name: Setup Node
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
       # Deterministic, zero-token structural checks: frontmatter, names, broken
       # aico: references, size budgets and version consistency across files.
-      - run: npm test
-      - run: npm run check
+      - name: Test suite
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        run: npm test
+      - name: Structural checks
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        run: npm run check
+      - name: Report red nightly
+        if: failure() && github.event_name == 'schedule'
+        env:
+          RUN_ID: ${{ github.run_id }}
+          JOB_OS: ${{ matrix.os }}
+        run: echo "nightly red: check ($JOB_OS) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 
   # Windows runs the suite in four shards; each shard uploads the list of files it ran.
   windows-test:
@@ -58,7 +88,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - run: cp .nvmrc ../.nvmrc
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # Warm on PRs and main: npm cache from the checked-out lockfile. Tags and the nightly
+      # run the cold step instead, with no cache.
+      - name: Setup Node (warm)
+        if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/v')
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: repo with space/tools/claude-cli/package-lock.json
+      - name: Setup Node (cold)
+        if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v')
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
       - name: Test shard
@@ -111,6 +152,11 @@ jobs:
         run: |
           echo "windows-test: $SHARDS_RESULT"
           test "$SHARDS_RESULT" = success
+      - name: Report red nightly
+        if: failure() && github.event_name == 'schedule'
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: echo "nightly red: check (windows-latest) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 
   # Report-only: names stored Handoff fixtures that lack a required section. Never fails the build.
   golden-warn:
