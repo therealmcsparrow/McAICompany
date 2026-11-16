@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// lead-session-mcp v2.0 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It arms lead-replace.json in the
+// lead-session-mcp v2.1 (scripts/lead-launch-mcp.mjs): MCP over stdio, one tool, `lead_new_session`. It arms lead-replace.json in the
 // run folder and starts one helper (scripts/lead-replace.mjs) that types the new Lead into this terminal. Node built-ins only; no network.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,9 +37,12 @@ function newestHandover(root, slug) {
 }
 
 // The one process this server starts: the replace helper, run by this node, no shell, outliving the call, not waited for.
-function startHelper(argv, root) {
+// A start that fails later (async `error`) removes the arm it armed, so a retry can arm again.
+function startHelper(argv, root, file, session) {
   const child = spawn(process.execPath, argv, { cwd: root, stdio: 'ignore', windowsHide: true });
-  child.on('error', () => {});
+  child.on('error', () => {
+    try { if (armedSession(file) === session) fs.rmSync(file, { force: true }); } catch { /* best effort */ }
+  });
   child.unref();
 }
 
@@ -75,7 +78,7 @@ export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
     const ppid = String(process.ppid);
     if (!/^[1-9][0-9]*$/.test(ppid)) return refusal('error');
     const parts = workParts(slug);
-    exactWorkPath({ fs, path }, root, parts);
+    if (exactWorkPath({ fs, path }, root, parts) !== 'exact') return refusal('error');
     const file = path.join(root, '.company', 'work', ...parts, 'lead-replace.json');
     const arm = { v: 1, session: last.session, armAt: new Date(now).toISOString(), state: 'waiting-background' };
     let fresh = true;
@@ -86,7 +89,7 @@ export function newSession(root = process.cwd(), now = Date.now(), deps = {}) {
       if (!e || e.code !== 'EEXIST') throw e;
       if (armedSession(file) === last.session) fresh = false; else { replaceArm(file, arm); armed = file; }
     }
-    if (fresh) (deps.start ?? ((argv) => startHelper(argv, root)))([HELPER, slug, ppid]);
+    if (fresh) (deps.start ?? ((argv) => startHelper(argv, root, file, last.session)))([HELPER, slug, ppid]);
     armed = null;
     return { content: [{ type: 'text', text: `The new Lead starts in this terminal once every background task has ended and this turn is over.\nIf it has not started, run in the product folder:\n${command}` }] };
   } catch {

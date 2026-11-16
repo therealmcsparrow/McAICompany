@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v2.4
+// contract: docs/contracts/lead-handoff.md v2.5
 // uses: docs/contracts/run-state.md v3.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a SessionStart hook that
-// injects it after compaction, a Stop hook that keeps the Lead's context reading, a SessionStart hook that resets the current reading for a new session, plus a small CLI. Every hook payload, transcript line, record line and Step
+// injects it after compaction, a Stop hook that keeps the Lead's context reading, a SessionStart hook that resets the current reading for a new session, a UserPromptSubmit and PreToolUse hook (turn) that marks the Lead in a turn, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
 // Handoff holds only values derived from the run records. No transcript text is stored or echoed.
 import crypto from 'node:crypto';
@@ -41,12 +41,14 @@ const RECORD_FILES = ['run-state.jsonl', 'idea-flow.jsonl', 'tickets.jsonl', 'le
 
 const MAX_ARG = 4096;
 const MAX_STDIN = 64 * 1024;
+const OVERSIZE = Symbol('oversize stdin');
 const MAX_TAIL = 1024 * 1024;
 const MAX_TOKENS = 10_000_000;
 const MAX_RUN_STATE = 64 * 1024;
 const MAX_STEP_FILE = 8 * 1024;
 const MAX_READING = 256;
 const READING_FILE = 'lead-context.json';
+const TURN_FILE = 'lead-turn.json';
 const MAX_HANDOFF = 8 * 1024;
 const MAX_LINES = 1000;
 const MAX_LINE = 512;
@@ -681,6 +683,41 @@ export function start(text, options) {
   }
 }
 
+// UserPromptSubmit and PreToolUse adapter: marks that the Lead is in a turn, `{v, session, at}` in lead-turn.json (atomic
+// rename, `at` with milliseconds). lead-replace.mjs types nothing while this mark is newer than the Stop reading it accepted.
+// Steps (agent_id) write nothing. Always { code: 0, err: '' }.
+export function turn(text, options) {
+  const { root, now } = defaults(options);
+  const quiet = { code: 0, err: '' };
+  try {
+    // A payload that cannot be read (over MAX_STDIN, not JSON) or has no usable session_id marks with an unknown session
+    // (session null), which lead-replace reads as 'bad' and refuses to type over. Only a readable payload from another event or a Step writes nothing.
+    const parsed = text === OVERSIZE ? null : parsePayload(text);
+    if (parsed && ((parsed.event !== 'UserPromptSubmit' && parsed.event !== 'PreToolUse') || parsed.subagent)) return quiet;
+    const p = { session: parsed ? parsed.session : null };
+    const slug = findRun(root, now);
+    if (!slug) return quiet;
+    exactWorkPath({ fs, path }, root, workParts(slug));
+    const dir = runExists(root, slug);
+    if (!dir) return quiet;
+    const file = path.join(dir, TURN_FILE);
+    const l = lstatOrNull(file);
+    if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return quiet;
+    const tmp = path.join(dir, `.${TURN_FILE}.${process.pid}.tmp`);
+    const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+    try {
+      try { fs.writeSync(fd, `${JSON.stringify({ v: 1, session: p.session, at: new Date(now).toISOString() })}\n`); } finally { fs.closeSync(fd); }
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+      throw e;
+    }
+    return quiet;
+  } catch {
+    return quiet;
+  }
+}
+
 // SessionStart adapter. Returns { code: 0, out }; out is the hook JSON or empty.
 export function resume(text, options) {
   const { root, now } = defaults(options);
@@ -821,7 +858,7 @@ function readStdin() {
       if (total > MAX_STDIN) over = true;
       else chunks.push(c);
     });
-    const done = () => resolve(over ? '' : Buffer.concat(chunks).toString('utf8'));
+    const done = () => resolve(over ? OVERSIZE : Buffer.concat(chunks).toString('utf8'));
     process.stdin.on('end', done);
     process.stdin.on('error', done);
     process.stdin.on('close', done);
@@ -830,7 +867,8 @@ function readStdin() {
 
 async function hook(kind) {
   setTimeout(() => process.exit(0), SELF_EXIT_MS).unref();
-  const text = await readStdin();
+  const raw = await readStdin();
+  const text = raw === OVERSIZE && kind !== 'turn' ? '' : raw;
   if (kind === 'watch') {
     const r = watch(text);
     if (r.err) process.stderr.write(r.err);
@@ -841,6 +879,9 @@ async function hook(kind) {
   } else if (kind === 'start') {
     start(text);
     process.exitCode = 0;
+  } else if (kind === 'turn') {
+    turn(text);
+    process.exitCode = 0;
   } else {
     const r = resume(text);
     if (r.out) process.stdout.write(r.out);
@@ -850,7 +891,7 @@ async function hook(kind) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [cmd] = process.argv.slice(2);
-  if ((cmd === 'watch' || cmd === 'resume' || cmd === 'measure' || cmd === 'start') && process.argv.length === 3) {
+  if ((cmd === 'watch' || cmd === 'resume' || cmd === 'measure' || cmd === 'start' || cmd === 'turn') && process.argv.length === 3) {
     hook(cmd).catch(() => { process.exitCode = 0; });
   } else {
     const r = main(process.argv.slice(2));

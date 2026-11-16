@@ -241,7 +241,7 @@ async function main() {
     }
   }
   if (!denied && s.ok && !off && guardRows.length > 0) await eff.freezeOnMcp(event, s.snapshot, root);
-  if (!denied && evName === 'PreToolUse') await eff.recordBackground(event, root);
+  if (!denied && !off && evName === 'PreToolUse') await eff.recordBackground(event, root);
   if (!denied && s.ok && event.session === 'lead' && !s.snapshot.drift && event.drift.length === 0) {
     for (const r of rows.filter((x) => x.kind === 'saver' && applies(x, event) && s.snapshot.savers[x.id] === true)) {
       const out = await run(r, event, s.snapshot);

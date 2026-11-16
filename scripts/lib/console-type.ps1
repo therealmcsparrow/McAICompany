@@ -1,6 +1,7 @@
 # Types stdin text into the console of one process: console-type.ps1 --pid <claudePid>
-# Text is read from stdin first (UTF-8, CR = Enter); only printable ASCII and CR are typed.
-# Exit 0 typed, 1 attach failed, 2 bad arguments or open or write failed.
+# Text is read from stdin first (UTF-8, CR = Enter); only printable ASCII and CR are allowed.
+# Any other char (non-ASCII, control) refuses the whole text: nothing is typed.
+# Exit 0 typed, 1 attach failed, 2 bad arguments, refused text, or open or write failed.
 $src = @'
 using System;
 using System.Collections.Generic;
@@ -40,9 +41,15 @@ if ($args.Count -ne 2 -or $idx -ne 0) { exit 2 }
 [uint32]$target = 0
 if ($args[1] -notmatch '^[1-9][0-9]{0,9}$' -or -not [uint32]::TryParse($args[1], [ref]$target)) { exit 2 }
 
-$raw = [Console]::In.ReadToEnd()
-$text = -join ($raw.ToCharArray() | Where-Object { $_ -eq "`r" -or ([int]$_ -ge 32 -and [int]$_ -le 126) })
-if ($text.Length -eq 0) { exit 2 }
+$stdin = [Console]::OpenStandardInput()
+$ms = New-Object System.IO.MemoryStream
+$stdin.CopyTo($ms)
+$bytes = $ms.ToArray()
+if ($bytes.Length -eq 0) { exit 2 }
+foreach ($b in $bytes) {
+  if ($b -ne 13 -and ($b -lt 32 -or $b -gt 126)) { exit 2 }
+}
+$text = [System.Text.Encoding]::ASCII.GetString($bytes)
 
 Add-Type -TypeDefinition $src
 [void][CT]::FreeConsole()

@@ -1,4 +1,4 @@
-// Tests for lead-session-mcp v2.0. `lead_new_session` on a v3 run slug `<ID>/<NN>-<playbook>`.
+// Tests for lead-session-mcp v2.1. `lead_new_session` on a v3 run slug `<ID>/<NN>-<playbook>`.
 // Nothing real is started: every call goes through the deps.start seam (a spy) with process.platform pinned to win32.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -54,12 +54,12 @@ function onWin32(fn) {
 const call = (root, now, s = spy()) => onWin32(() => newSession(root, now, { start: s.start }));
 const OPEN = 'The new Lead starts in this terminal once every background task has ended and this turn is over.\nIf it has not started, run in the product folder:\n';
 
-describe('the Contract and the header (lead-session-mcp v2.0)', () => {
-  test('the Contract header is v2.0 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-session-mcp v2.1)', () => {
+  test('the Contract header is v2.1 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-session-mcp.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-session-mcp v2\.0$/m);
+    assert.match(doc, /^# Contract: lead-session-mcp v2\.1$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.match(lines[1], /^\/\/ lead-session-mcp v2\.0 /);
+    assert.match(lines[1], /^\/\/ lead-session-mcp v2\.1 /);
   });
 
   test('the Contract keeps the v1.2 paragraph: v2, v1.1 and legacy names are byte-identical (isRunSlug)', () => {

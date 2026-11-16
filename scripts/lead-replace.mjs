@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-session-mcp.md v2.0
+// contract: docs/contracts/lead-session-mcp.md v2.1
 // Helper started by the lead-session server: waits for background tasks and the end of the turn, then types /clear and the hand-over
 // prompt into the claude console. Usage: lead-replace.mjs <slug> <claudePid>. Exit 0 typed, 1 failed, 2 bad arguments.
 // The state is in lead-replace.json of the run folder (atomic rename); phase lines go to stderr. Only two fixed texts are ever typed.
@@ -86,18 +86,41 @@ function readReading(dir) {
 }
 
 // 'done' once the Stop reading of `session` is at or after armAt and at or after idleAt (epoch ms, the start of the last poll that saw a live
-// background task, so the task ended later): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes.
-export async function turnOver({ dir, session, armAt, idleAt = 0, now = Date.now, sleep = realSleep }) {
+// background task, so the task ended later): a turn that began after that moment is the one to wait for. 'failed: turn' after 10 minutes. `onAccept(reading)` gets the reading that was accepted.
+export async function turnOver({ dir, session, armAt, idleAt = 0, claudePid, alive = () => true, now = Date.now, sleep = realSleep, onAccept }) {
   // Readings keep whole seconds, so the arm time is compared at whole seconds too.
   const arm = Math.max(Math.floor(Date.parse(armAt) / 1000) * 1000, Math.floor(idleAt / 1000) * 1000);
   if (!Number.isFinite(arm)) return 'failed: turn';
   const start = now();
   for (;;) {
+    if (!alive(claudePid)) return 'failed: session gone';
     const o = readReading(dir);
-    if (o && o.session === session && Date.parse(o.at) >= arm) return 'done';
+    if (o && o.session === session && Date.parse(o.at) >= arm) { if (onAccept) onAccept(o); return 'done'; }
     if (now() - start >= TURN_MS) return 'failed: turn';
     await sleep(POLL_MS);
   }
+}
+
+// The turn mark written at the start of a Lead turn or tool call: null when there is none, 'bad' when the file cannot be read.
+function readMark(dir) {
+  const file = path.join(dir, 'lead-turn.json');
+  try { fs.lstatSync(file); } catch (e) { return e && e.code === 'ENOENT' ? null : 'bad'; }
+  // Present but not a readable regular file (link, folder, over the size cap, no access): fail closed.
+  const text = readSmall(file, MAX_SMALL);
+  if (text === null) return 'bad';
+  try {
+    const o = JSON.parse(text);
+    return o && typeof o === 'object' && typeof o.session === 'string' && Number.isFinite(Date.parse(o.at)) ? o : 'bad';
+  } catch { return 'bad'; }
+}
+
+// True when the mark of any main session is newer than the Stop reading `since` (readings keep whole seconds, so the mark is cut to whole seconds).
+// The single mark file holds only the last writer, so another session's mark could hide the Lead's turn: any newer mark fails closed.
+function turnSince(dir, since) {
+  const m = readMark(dir);
+  if (m === null) return false;
+  if (m === 'bad') return true;
+  return Math.floor(Date.parse(m.at) / 1000) * 1000 > Date.parse(since.at);
 }
 
 function powershellPath() {
@@ -113,22 +136,45 @@ function defaultRun(argv, input) {
 const typedStatus = (status) => (status === 0 ? 'typed' : status === 1 || status === null || status === undefined ? 'failed: attach' : 'failed: type');
 
 // Types /clear + Enter, waits for a new session, then types the text + Enter. Windows only.
-export async function typeInto(text, { platform = osPlatform, run = defaultRun, dir, session, claudePid, now = Date.now, sleep = realSleep }) {
+// Before each send the pid must still live and, when `identify` is given, still be the process seen at start (`baseline` {image, created}); else nothing is typed.
+export async function typeInto(text, { platform = osPlatform, run = defaultRun, dir, session, claudePid, alive = () => true, identify = null, baseline = null, accepted = null, now = Date.now, sleep = realSleep }) {
   const build = typer(platform);
   if (build === null) return 'unsupported';
   const argv = [powershellPath(), ...build(claudePid)];
-  const send = async (s) => typedStatus((await run(argv, Buffer.from(`${s}\r`, 'utf8'))).status);
-  const first = await send('/clear');
+  const same = async () => {
+    if (!alive(claudePid)) return false;
+    if (identify === null) return true;
+    try {
+      const cur = await identify(claudePid);
+      return Boolean(baseline && cur && cur.image === baseline.image && cur.created === baseline.created);
+    } catch { return false; }
+  };
+  // ok() re-reads lead-context.json right before the send; false means a new turn started, so nothing is typed.
+  const send = async (s, ok) => {
+    if (!(await same())) return 'failed: session gone';
+    if (!ok()) return 'failed: turn changed';
+    return typedStatus((await run(argv, Buffer.from(`${s}\r`, 'utf8'))).status);
+  };
+  // The Stop reading the turn-over wait accepted; without one, the reading found now.
+  const stop = accepted ?? readReading(dir);
+  const first = await send('/clear', () => {
+    const o = readReading(dir);
+    return Boolean(stop) && Boolean(o) && o.session === session && stop.session === session && o.at === stop.at && !turnSince(dir, stop);
+  });
   if (first !== 'typed') return first;
   const start = now();
+  let seen;
   for (;;) {
     const o = readReading(dir);
-    if (o && o.session !== session) break;
+    if (o && o.session !== session) { seen = o; break; }
     if (now() - start >= CLEAR_MS) return 'failed: clear';
     await sleep(CLEAR_POLL_MS);
   }
   await sleep(SETTLE_MS);
-  return send(text);
+  return send(text, () => {
+    const o = readReading(dir);
+    return Boolean(o) && o.session === seen.session && o.at === seen.at && !turnSince(dir, seen);
+  });
 }
 
 // Direct children of the claude process: [{ pid, image, created }], created in epoch ms.
@@ -142,6 +188,18 @@ function listChildren(claudePid) {
         const v = JSON.parse(String(out).trim() || '[]');
         resolve(Array.isArray(v) ? v : [v]);
       } catch (e) { reject(e); }
+    });
+  });
+}
+
+// { image, created } of one process, or null when it is gone. Windows only (CIM, like listChildren).
+function identifyPid(pid) {
+  const script = `$ErrorActionPreference='Stop'; $p = Get-CimInstance Win32_Process -Filter 'ProcessId=${Number(pid)}'; if ($p) { ConvertTo-Json -Compress @{ image=[string]$p.Name; created=[int64]([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() } }`;
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script];
+  return new Promise((resolve, reject) => {
+    execFile(powershellPath(), args, { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024, shell: false }, (err, out) => {
+      if (err) { reject(err); return; }
+      try { const t = String(out).trim(); resolve(t ? JSON.parse(t) : null); } catch (e) { reject(e); }
     });
   });
 }
@@ -176,7 +234,7 @@ export function checkArgs(args) {
 }
 
 export async function main(args, root = cwd(), deps = {}) {
-  const { list = listChildren, alive = alivePid, now = Date.now, sleep = realSleep, type = typeInto } = deps;
+  const { list = listChildren, alive = alivePid, now = Date.now, sleep = realSleep, type = typeInto, identify = identifyPid } = deps;
   const a = checkArgs(args);
   if (a === null) { stderr.write('usage: lead-replace.mjs <slug> <claudePid>\n'); return 2; }
   const dir = workDir(root, a.slug);
@@ -193,14 +251,17 @@ export async function main(args, root = cwd(), deps = {}) {
     stderr.write('lead-replace: start, 3 phases (background, turn, type)\n');
     step('waiting-background');
     const pid = Number(a.pid);
+    let baseline = null;
+    try { baseline = await identify(pid); } catch { /* no baseline: typeInto then refuses to type */ }
     let idleAt = 0;
     const bg = await backgroundDone({ dir, session: arm.session, claudePid: pid, list, alive, now, sleep, onLive: (t) => { idleAt = t; } });
     if (bg !== 'done') { step(bg); return 1; }
     step('waiting-turn');
-    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, now, sleep });
+    let accepted = null;
+    const turn = await turnOver({ dir, session: arm.session, armAt: arm.armAt, idleAt, claudePid: pid, alive, now, sleep, onAccept: (o) => { accepted = o; } });
     if (turn !== 'done') { step(turn); return 1; }
     step('typing');
-    const out = await type(text, { dir, session: arm.session, claudePid: pid });
+    const out = await type(text, { dir, session: arm.session, claudePid: pid, alive, identify, baseline, accepted });
     step(out === 'typed' ? 'typed' : out === 'unsupported' ? 'failed: unsupported terminal' : out);
     stderr.write(`lead-replace: end ${out}, ${Math.round((Date.now() - t0) / 1000)}s\n`);
     return out === 'typed' ? 0 : 1;
