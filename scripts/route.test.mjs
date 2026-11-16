@@ -127,7 +127,6 @@ describe('hostile drafts are refused and write nothing (AC8, AC9)', () => {
     'over-long why': (d) => { d.steps[1] = step('backend-engineer', 'x'.repeat(121)); },
     'control char in why': (d) => { d.steps[1] = step('backend-engineer', 'bad\u0007why'); },
     'newline in why': (d) => { d.steps[1] = step('backend-engineer', 'a\nb'); },
-    'duplicate step': (d) => { d.steps.push(step('backend-engineer')); },
     'skip qa': (d) => { d.skips.push(step('qa', 'not needed')); },
     'skip security': (d) => { d.skips.push(step('security', 'not needed')); },
     'skip code-reviewer': (d) => { d.skips.push(step('code-reviewer', 'not needed')); },
@@ -147,6 +146,15 @@ describe('hostile drafts are refused and write nothing (AC8, AC9)', () => {
       assert.equal(ledger(sb), '');
     });
   }
+
+  test('accepts a repeated Role (route contract: never a lint error)', () => {
+    const sb = sandbox(); seed(sb);
+    const d = baseDraft(); d.steps.push(step('backend-engineer'));
+    const r = cli(sb, ['write', SLUG, draft(sb, d)]);
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.doesNotMatch(r.out + r.err, /duplicate/);
+    assert.notEqual(ledger(sb), '');
+  });
 
   test('refuses a draft with a __proto__ key and does not pollute', () => {
     const sb = sandbox(); seed(sb);
