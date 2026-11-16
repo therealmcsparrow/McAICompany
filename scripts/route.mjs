@@ -507,7 +507,9 @@ export async function main(argv, cwd = process.cwd()) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const r = await main(process.argv.slice(2));
-  process.stdout.write(r.out);
-  process.exitCode = r.code;
+  // No top-level await: check.mjs imports this file and is loaded through require().
+  main(process.argv.slice(2)).then((r) => {
+    process.stdout.write(r.out);
+    process.exitCode = r.code;
+  });
 }
