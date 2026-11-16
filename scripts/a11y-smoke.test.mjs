@@ -20,13 +20,16 @@ before(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-smoke-'));
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home);
+  // os.devNull is "\\.\nul" on Windows and git rejects it; use a real empty file instead.
+  const emptyGitConfig = path.join(tmp, 'empty.gitconfig');
+  fs.writeFileSync(emptyGitConfig, '');
   env = {
     PATH: process.env.PATH,
     SystemRoot: process.env.SystemRoot,
     HOME: home,
     USERPROFILE: home,
     MCSPARROW_HOME: path.join(home, '.mcsparrow'),
-    GIT_CONFIG_GLOBAL: os.devNull,
+    GIT_CONFIG_GLOBAL: emptyGitConfig,
     GIT_CONFIG_NOSYSTEM: '1',
   };
 });
