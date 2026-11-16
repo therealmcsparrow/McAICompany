@@ -4,8 +4,16 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **Handoff lint reads product docs and contracts.** `handoff-lint` takes the Contract versions it checks from the product's own `docs/contracts` files, so the installed lint and the repo lint agree (PR #81). An opt-in test, `AICO_CHECK_INSTALLED=1 node --test scripts/handoff-lint-installed-agree.test.mjs`, compares the installed plugin with the repo.
+
 ### Changed
-- **No background-task record with `AICO_GUARDS=off`.** `context-guard` v2.2 states it: the host writes no `bg` row then, so a hand-over does not wait for background tasks.
+- **No background-task record with `AICO_GUARDS=off`.** `context-guard` v2.2 states it: the host writes no `bg` row then, so a hand-over does not wait for background tasks. `hook-event` v1.3 lists the `bg` row as written only with guards on.
+- **Contracts bumped.** `lead-session-mcp` v2.1, `context-guard` v2.2, `hook-event` v1.3, `lead-handoff` v2.5 (turn adapter and turn mark documented).
+
+### Fixed
+- **Security hardening of the automatic new Lead (S-1 to S-6).** `lead-replace` rechecks the Claude PID (S-1) and the turn before each send (S-2); `console-type` refuses non-ASCII text (S-3) and checks raw stdin bytes (R-5); `lead-launch` refuses a failed `exactWorkPath` (S-4) and handles an async spawn error (S-5); the hook host skips the guard row when guards are off (S-6).
+- **Turn mark nits.** A non-regular turn file now blocks typing (R-22); a bad turn payload, including an oversize one, still writes a mark (R-23, R-13); any newer turn mark blocks typing (R-14).
 
 ## [0.41.0] - 2026-11-15
 
