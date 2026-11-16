@@ -103,8 +103,11 @@ export async function turnOver({ dir, session, armAt, idleAt = 0, claudePid, ali
 
 // The turn mark written at the start of a Lead turn or tool call: null when there is none, 'bad' when the file cannot be read.
 function readMark(dir) {
-  const text = readSmall(path.join(dir, 'lead-turn.json'), MAX_SMALL);
-  if (text === null) return null;
+  const file = path.join(dir, 'lead-turn.json');
+  try { fs.lstatSync(file); } catch (e) { return e && e.code === 'ENOENT' ? null : 'bad'; }
+  // Present but not a readable regular file (link, folder, over the size cap, no access): fail closed.
+  const text = readSmall(file, MAX_SMALL);
+  if (text === null) return 'bad';
   try {
     const o = JSON.parse(text);
     return o && typeof o === 'object' && typeof o.session === 'string' && Number.isFinite(Date.parse(o.at)) ? o : 'bad';
