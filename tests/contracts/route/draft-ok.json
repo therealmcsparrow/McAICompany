@@ -1,0 +1,1 @@
+{"playbook":"feature","size":"S","steps":[{"role":"product-manager","why":"brief"},{"role":"backend-engineer","why":"build"},{"role":"code-reviewer","merge":"qa","why":"S verify plus review"},{"role":"security","why":"never skipped"}],"skips":[{"role":"localizer","why":"one language"}]}
