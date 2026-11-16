@@ -26,7 +26,7 @@ File name: `YYYY-MM-DD HH.MM - <Short Topic>.md` (local time at start). Never a 
 6. Tell the CEO in one line: topic, Roles, mode (**ideas** unless the CEO named another), debate style. Then start round 1.
 
 ## 2. Rounds
-Format 2 rounds follow [references/format-2.md](references/format-2.md), which you load now: the constant Goal, the apply JSON, both debate styles, the ledger. Rule: before every dispatch run `stage` for exactly the Roles dispatched; it writes each Role's round input file and prints its absolute path. Dispatch prompt per Role (nothing more):
+Format 2 rounds follow [references/format-2.md](references/format-2.md), which you load now: the constant Goal, the apply JSON, both debate styles, the ledger. Rule: before every dispatch run `stage` for exactly the Roles dispatched; it writes each Role's round input file and prints its absolute path. Each Role turn is one Agent call of that Role's own subagent `aico:<role>`; the Lead never writes, speaks or answers for a Role, and a Role's reply enters the file only from the dispatched Agent result. Dispatch prompt per Role (nothing more):
 ```
 Project profile: .company/project.md
 Company profile: <absolute path to PROFILE.md>
