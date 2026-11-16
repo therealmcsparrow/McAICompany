@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 
 // Regression: /aico:cooler and /aico:brainstorm must dispatch real Role agents; the Lead in the main
 // session never speaks for a Role. Pins "each Role turn is an Agent dispatch of that Role" in the
-// Playbook text (the public interface of both Playbooks). Task P20261116.000002/01-fix.
+// Playbook text (the public interface of both Playbooks).
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const files = {
