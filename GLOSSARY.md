@@ -180,3 +180,11 @@ _Avoid_: orchestrator (use Lead).
 **Lock** — a setting that could skip a safety check (auto Ship Gate, auto installs, turning off the security or compliance lane) and starts locked. Unlocks count only from the CEO's user settings; a project can lock again but never unlock, and a broken project settings file keeps its locks.
 
 **ADHD mode** — session-only output style from `aico:i-have-adhd`, off by "stop adhd mode" / "normal mode".
+
+**Diff facts** — one file per Step with the change classification every gate reads (paths touched, `ui_changed`, `contract_changed`, `strings_changed`). Contract `diff-facts` v1.0; ADR 0075.
+
+**Route** — triage's ledger list of Steps, merges and skips, each with a reason. The pipeline runs that list and nothing else. Contract `route` v1.0.
+
+**stepKey** — versioned cache key deciding if a Fix round may reuse a Handoff. On a hit the Lead reuses the earlier Handoff instead of dispatching; every doubt is a miss and Ship Gate inputs are never reused. Contract `step-key` v1.0; ADR 0076.
+
+**Cold run** — a run that bypasses every cache (`--cold` or `AICO_COLD=1`). Tags, the nightly run and the Ship Gate always run cold.
