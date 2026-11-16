@@ -17,12 +17,12 @@ Rationale: one classification of a change that every gate reads, so gates never 
 - Output never carries a raw control character: JSON on stdout escapes U+0000 to U+001F and U+007F as `\uXXXX`; stderr never echoes a path.
 
 ## Kinds (first match wins)
-A path is matched on `path`; a deleted path on its old path. Globs use `/` and are case-sensitive.
+A path is matched on `path`; a deleted path on its old path. A rename (`R`) that rules 1 to 3 did not catch is matched on both `path` and `from`; when the two kinds differ, its kind is `unknown`. A copy (`C`) is matched on `path` only (its `from` is unchanged), except for rule 2. Globs use `/` and are case-sensitive.
 | # | kind | rule |
 |---|---|---|
-| 1 | `binary` | numstat shows `-` `-` (in `classify` entries: `added` and `removed` each `null` or `"-"`) |
-| 2 | `rename` | status `R` with similarity 100 and 0 lines added and removed |
-| 3 | `contract` | `docs/contracts/**`, `contracts/**`, `**/*.proto`, `**/openapi*.json`, `**/openapi*.yaml`, `**/openapi*.yml`, `**/*.schema.json`; also when `from` matches one of these |
+| 1 | `binary` | the base or tip content has a NUL byte in its first 8000 bytes (in `classify` entries: `added` and `removed` each `null` or `"-"`) |
+| 2 | `contract` | `**/contracts/**` (any depth, so `docs/contracts/**` and `tests/contracts/**` too), `**/*.proto`, `**/openapi*.json`, `**/openapi*.yaml`, `**/openapi*.yml`, `**/*.schema.json`; also when `from` matches one of these |
+| 3 | `rename` | status `R` with similarity 100 and 0 lines added and removed |
 | 4 | `test` | `tests/**`, `test/**`, `**/__tests__/**`, `**/fixtures/**`, `**/*.test.*`, `**/*.spec.*` |
 | 5 | `docs` | `docs/**`, `documentation/**`, `.company/**`, a root `*.md`, a root `LICENSE*`, minus every `not_docs` glob of the config |
 | 6 | `locale` | `**/locales/**`, `**/locale/**`, `**/i18n/**`, `**/l10n/**`, `**/*.po`, `**/*.pot`, `**/*.ftl`, `**/*.arb`, `**/*.resx`, `**/*.xlf`, `**/*.xliff`, `**/*.strings` |
@@ -32,6 +32,8 @@ A path is matched on `path`; a deleted path on its old path. Globs use `/` and a
 | 10 | `code` | `**/*.mjs`, `**/*.cjs`, `**/*.js`, `**/*.ts`, `**/*.py`, `**/*.go`, `**/*.rs`, `**/*.java`, `**/*.kt`, `**/*.cs`, `**/*.rb`, `**/*.php`, `**/*.swift`, `**/*.c`, `**/*.h`, `**/*.cpp`, `**/*.sh`, `**/*.ps1`, `**/*.md` |
 | 11 | `unknown` | anything else |
 
+Binary by content (git.M-SEC4 (3)): attributes, a diff driver and `core.bigFileThreshold` never decide rule 1. The CLI reads each path's base blob and tip content raw (`cat-file`, never `--textconv` or `--filters`; for `write` the tip is the working-tree file, read by the real-path rule; an added path has no base, a deleted one no tip) and passes `added` and `removed` as `"-"` when either side has a NUL in its first 8000 bytes. Tip content the real-path rule refuses (a link, not a plain file) counts as binary. A path numstat shows as `-` `-` whose sides are both NUL-free is text: its counts come from the one-path call of git.M-SEC4 (3) (`--name-only -z -- <path>` must list exactly that path, then `--numstat --text -z -- <path>`). Any of these calls failing is a refusal (git.M-SEC4 (4)).
+
 ## Flags
 - `ui_changed` is `false` only when `paths` is not empty and every kind is `docs` or `test`. An empty diff gives `true`.
 - `strings_changed` is `false` only when `paths` is not empty and every kind is `docs`, `test` or `style`.
@@ -39,7 +41,7 @@ A path is matched on `path`; a deleted path on its old path. Globs use `/` and a
 - `docs_only` is `true` only when `paths` is not empty and every kind is `docs`.
 
 ## Config (optional, narrow only)
-`diff-facts.config.json` at the repo root, tracked, a plain file of at most 16 KiB: `{ "v": 1, "not_docs": ["<glob>", ...] }`, at most 100 globs. A path matching a `not_docs` glob skips rule 5 and goes on to rule 6. The config can only move paths out of `docs`, so it can only turn flags to `true`. A missing config is normal; a bad one (link, too big, bad JSON, wrong keys) is ignored with one warning `diff-facts: config ignored: <reason>` on stderr, and no path is `docs`.
+`diff-facts.config.json` at the repo root, a plain file of at most 16 KiB: `{ "v": 1, "not_docs": ["<glob>", ...] }`, at most 100 globs. It is not checked for being tracked: it can only move paths out of `docs`, and an edit to it, tracked or untracked, is itself a `config` path in `paths`. A path matching a `not_docs` glob skips rule 5 and goes on to rule 6. The config can only move paths out of `docs`, so it can only turn flags to `true`. A missing config is normal; a bad one (link, too big, bad JSON, wrong keys) is ignored with one warning `diff-facts: config ignored: <reason>` on stderr, and no path is `docs`.
 
 ## CLI (cwd = product repo; refusals `refused: <reason>` on stdout, exit 2)
 | Command | Does |
