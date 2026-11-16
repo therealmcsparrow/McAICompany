@@ -10,8 +10,8 @@ const probe = process.platform === 'win32' ? spawnSync('powershell.exe', ['-NoPr
 const skip = !probe || probe.status !== 0 ? 'needs Windows PowerShell' : false;
 
 function run(bytes, codePage) {
-  const cmd = `chcp ${codePage} >nul & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ${ps1} --pid 4000000000`;
-  return spawnSync('cmd.exe', ['/d', '/c', cmd], { input: Buffer.from(bytes), timeout: 60000 }).status;
+  const cmd = `chcp ${codePage} >nul & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${ps1}" --pid 4000000000`;
+  return spawnSync('cmd.exe', ['/d', '/s', '/c', `"${cmd}"`], { input: Buffer.from(bytes), timeout: 60000, windowsVerbatimArguments: true }).status;
 }
 
 for (const cp of ['437', '932', '936', '949', '950']) {
