@@ -184,18 +184,14 @@ export function lintRoute(route, data) {
   }
 
   const known = (r) => typeof r === 'string' && (r === 'tasks' || (SLUG.test(r) && roles.has(r)));
-  const seen = new Set();
-  const dup = (r) => { if (seen.has(r)) err(`duplicate step ${clean(r)}`); seen.add(r); };
   steps.forEach((s, i) => {
     if (!isPlain(s)) { err(`step ${i} is not an object`); return; }
     if (Object.keys(s).some((k) => !['role', 'why', 'merge'].includes(k))) err(`step ${i} has an unknown key`);
     if (!known(s.role)) err(`unknown role ${clean(s.role)}`);
-    else dup(s.role);
     if (!validWhy(s.why)) err(`step ${i} has no why`);
     if (hasOwn(s, 'merge')) {
       if (route.size !== 'S') err('merge needs size S');
       if (s.role !== 'code-reviewer' || s.merge !== 'qa') err('merge must be code-reviewer with qa');
-      else dup('qa');
     }
   });
   skips.forEach((s, i) => {
@@ -363,12 +359,10 @@ function draftRoute(value) {
   return value;
 }
 
+const PROTECTED = Object.freeze(['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner']);
+
 async function protectedList() {
-  try {
-    const m = await import('./settings.mjs');
-    if (Array.isArray(m.PROTECTED_ROLES)) return [...m.PROTECTED_ROLES];
-  } catch { /* fall through */ }
-  return refuse('protected Roles unavailable');
+  return [...PROTECTED];
 }
 
 function printErrors(errors) {
