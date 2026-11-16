@@ -701,6 +701,50 @@ test('show --github-output: appends docs_only and ui_changed and nothing else', 
   });
 });
 
+// ---------------------------------------------------------------- git.M-SEC4 rename reading (d): the two -z -M calls must agree
+
+const DIVERGENT = fileURLToPath(new URL('../tests/contracts/diff-facts/divergent-git.mjs', import.meta.url));
+
+test('git.M-SEC4 rename reading (d): differing path sets from the two -z -M calls refuse', async t => {
+  const range = () => {
+    const s = sandbox();
+    s.put('README.md', '# r\n');
+    s.put('src/keep.mjs', 'export const k = 1;\n');
+    const base = s.commit('base');
+    s.put('docs/a.md', 'a\n');
+    s.put('src/ui.tsx', 'export const u = 1;\n');
+    const head = s.commit('head');
+    return { s, base, head };
+  };
+  const run = (s, base, head, mode, path) => {
+    const r = spawnSync(process.execPath, [DIVERGENT, 'show', '--base', base, '--head', head], {
+      cwd: s.repo, env: { ...s.env, DF_MODE: mode, DF_PATH: path }, encoding: 'utf8', timeout: 30000,
+    });
+    return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  };
+  await t.test('control: the runner is transparent when both calls agree', () => {
+    const { s, base, head } = range();
+    const r = run(s, base, head, 'none', '');
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.deepEqual(Object.keys(kindsOf(parse(r))).sort(), ['docs/a.md', 'src/ui.tsx']);
+  });
+  await t.test('a path only the status call lists (numstat dropped it) is refused, not read as binary', () => {
+    const { s, base, head } = range();
+    const r = run(s, base, head, 'numstat-drop', 'src/ui.tsx');
+    assert.ok(refused(r), `expected refusal, got ${r.status}: ${r.stdout}`);
+  });
+  await t.test('a path only the numstat call lists is refused, not dropped', () => {
+    const { s, base, head } = range();
+    const r = run(s, base, head, 'numstat-extra', 'src/extra.tsx');
+    assert.ok(refused(r), `expected refusal, got ${r.status}: ${r.stdout}`);
+  });
+  await t.test('a path the status call lost is refused, not dropped from the facts', () => {
+    const { s, base, head } = range();
+    const r = run(s, base, head, 'status-drop', 'src/ui.tsx');
+    assert.ok(refused(r), `expected refusal, got ${r.status}: ${r.stdout}`);
+  });
+});
+
 // ---------------------------------------------------------------- write and latest
 
 function writeRepo() {
