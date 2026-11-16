@@ -1,0 +1,1547 @@
+{
+  "classify": [
+    {
+      "name": "empty diff is ui and strings",
+      "entries": [],
+      "kinds": {},
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "rename only, same content",
+      "entries": [
+        {
+          "path": "src/new.mjs",
+          "from": "src/old.mjs",
+          "status": "R",
+          "added": 0,
+          "removed": 0,
+          "similarity": 100
+        }
+      ],
+      "kinds": {
+        "src/new.mjs": "rename"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "rename only of a docs file is still rename",
+      "entries": [
+        {
+          "path": "docs/b.md",
+          "from": "docs/a.md",
+          "status": "R",
+          "added": 0,
+          "removed": 0,
+          "similarity": 100
+        }
+      ],
+      "kinds": {
+        "docs/b.md": "rename"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "rename with edits is classified by path",
+      "entries": [
+        {
+          "path": "docs/b.md",
+          "from": "docs/a.md",
+          "status": "R",
+          "added": 2,
+          "removed": 1,
+          "similarity": 90
+        }
+      ],
+      "kinds": {
+        "docs/b.md": "docs"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": true
+      }
+    },
+    {
+      "name": "css only",
+      "entries": [
+        {
+          "path": "src/app.css",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "src/app.css": "style"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "scss and less only",
+      "entries": [
+        {
+          "path": "a/b.scss",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/c.less",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "a/b.scss": "style",
+        "a/c.less": "style"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "binary with null counts",
+      "entries": [
+        {
+          "path": "assets/logo.png",
+          "from": null,
+          "status": "M",
+          "added": null,
+          "removed": null,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "assets/logo.png": "binary"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "binary with dash counts",
+      "entries": [
+        {
+          "path": "assets/logo.png",
+          "from": null,
+          "status": "M",
+          "added": "-",
+          "removed": "-",
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "assets/logo.png": "binary"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "binary beats docs",
+      "entries": [
+        {
+          "path": "docs/shot.png",
+          "from": null,
+          "status": "M",
+          "added": null,
+          "removed": null,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/shot.png": "binary"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "locale json beats config",
+      "entries": [
+        {
+          "path": "src/locales/en.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "src/locales/en.json": "locale"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "locale files by extension",
+      "entries": [
+        {
+          "path": "a/b.po",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.pot",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.ftl",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.arb",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.resx",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.xlf",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.xliff",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.strings",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "a/b.po": "locale",
+        "a/b.pot": "locale",
+        "a/b.ftl": "locale",
+        "a/b.arb": "locale",
+        "a/b.resx": "locale",
+        "a/b.xlf": "locale",
+        "a/b.xliff": "locale",
+        "a/b.strings": "locale"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "locale folders",
+      "entries": [
+        {
+          "path": "app/i18n/x.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "app/l10n/x.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "app/locale/x.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "app/i18n/x.js": "locale",
+        "app/l10n/x.js": "locale",
+        "app/locale/x.js": "locale"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "theme token json only",
+      "entries": [
+        {
+          "path": "src/theme/colors.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/tokens.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "src/theme/colors.json": "style",
+        "src/tokens.json": "style"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "theme and tokens by name",
+      "entries": [
+        {
+          "path": "a/dark.theme.ts",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/brand.tokens.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/theme.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/themes/x.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/tokens/x.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "a/dark.theme.ts": "style",
+        "a/brand.tokens.json": "style",
+        "a/theme.js": "style",
+        "a/themes/x.js": "style",
+        "a/tokens/x.js": "style"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "config only",
+      "entries": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "package.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.toml",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.ini",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/.env.local",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "eslint.config.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": ".eslintrc",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        ".github/workflows/ci.yml": "config",
+        "package.json": "config",
+        "a/b.toml": "config",
+        "a/b.ini": "config",
+        "a/.env.local": "config",
+        "eslint.config.js": "config",
+        ".eslintrc": "config"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "github script is config",
+      "entries": [
+        {
+          "path": ".github/scripts/x.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        ".github/scripts/x.mjs": "config"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "ui markup",
+      "entries": [
+        {
+          "path": "a/b.html",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.htm",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.jsx",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.tsx",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.vue",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.svelte",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.svg",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.xaml",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "a/b.html": "ui",
+        "a/b.htm": "ui",
+        "a/b.jsx": "ui",
+        "a/b.tsx": "ui",
+        "a/b.vue": "ui",
+        "a/b.svelte": "ui",
+        "a/b.svg": "ui",
+        "a/b.xaml": "ui"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "code",
+      "entries": [
+        {
+          "path": "src/a.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/a.cjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/a.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/a.ts",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a.py",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a.go",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a.rs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a.sh",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a.ps1",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/NOTES.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "src/a.mjs": "code",
+        "src/a.cjs": "code",
+        "src/a.js": "code",
+        "src/a.ts": "code",
+        "a.py": "code",
+        "a.go": "code",
+        "a.rs": "code",
+        "a.sh": "code",
+        "a.ps1": "code",
+        "src/NOTES.md": "code"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "mixed docs test code",
+      "entries": [
+        {
+          "path": "README.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "tests/a.test.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/a.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "README.md": "docs",
+        "tests/a.test.mjs": "test",
+        "src/a.mjs": "code"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "docs only",
+      "entries": [
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "README.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "LICENSE",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "LICENSE-MIT",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": ".company/notes.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "documentation/x.html",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/a.md": "docs",
+        "README.md": "docs",
+        "LICENSE": "docs",
+        "LICENSE-MIT": "docs",
+        ".company/notes.json": "docs",
+        "documentation/x.html": "docs"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": true
+      }
+    },
+    {
+      "name": "tests only is not docs_only",
+      "entries": [
+        {
+          "path": "tests/a.test.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "test/b.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/__tests__/c.js",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/fixtures/d.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/e.spec.ts",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "tests/a.test.mjs": "test",
+        "test/b.js": "test",
+        "src/__tests__/c.js": "test",
+        "src/fixtures/d.json": "test",
+        "src/e.spec.ts": "test"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "docs and tests",
+      "entries": [
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "tests/a.test.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/a.md": "docs",
+        "tests/a.test.mjs": "test"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "tests and css",
+      "entries": [
+        {
+          "path": "tests/a.test.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a.css",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "tests/a.test.mjs": "test",
+        "a.css": "style"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "nested md is code, not docs",
+      "entries": [
+        {
+          "path": "src/README.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "src/README.md": "code"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "globs are case sensitive",
+      "entries": [
+        {
+          "path": "DOCS/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "Tests/a.txt",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "DOCS/a.md": "code",
+        "Tests/a.txt": "unknown"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "unknown path",
+      "entries": [
+        {
+          "path": "Makefile",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "data/blob.xyz",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "Makefile": "unknown",
+        "data/blob.xyz": "unknown"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "unknown beside docs",
+      "entries": [
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "data/blob.xyz",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/a.md": "docs",
+        "data/blob.xyz": "unknown"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "contract paths",
+      "entries": [
+        {
+          "path": "docs/contracts/x.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "contracts/y.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "api/z.proto",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "api/openapi.v1.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "api/openapi.yaml",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "api/openapi-x.yml",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "a/b.schema.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/contracts/x.md": "contract",
+        "contracts/y.json": "contract",
+        "api/z.proto": "contract",
+        "api/openapi.v1.json": "contract",
+        "api/openapi.yaml": "contract",
+        "api/openapi-x.yml": "contract",
+        "a/b.schema.json": "contract"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "deleted contract",
+      "entries": [
+        {
+          "path": "docs/contracts/old.md",
+          "from": null,
+          "status": "D",
+          "added": 0,
+          "removed": 12,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/contracts/old.md": "contract"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "deleted proto",
+      "entries": [
+        {
+          "path": "api/old.proto",
+          "from": null,
+          "status": "D",
+          "added": 0,
+          "removed": 4,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "api/old.proto": "contract"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "rename out of a contract folder",
+      "entries": [
+        {
+          "path": "docs/other.md",
+          "from": "docs/contracts/x.md",
+          "status": "R",
+          "added": 1,
+          "removed": 1,
+          "similarity": 80
+        }
+      ],
+      "kinds": {
+        "docs/other.md": "contract"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "contract beats docs and tests",
+      "entries": [
+        {
+          "path": "docs/contracts/x.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "tests/contracts/x/cases.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/contracts/x.md": "contract",
+        "tests/contracts/x/cases.json": "contract"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": true,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "test beats docs",
+      "entries": [
+        {
+          "path": "tests/docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "tests/docs/a.md": "test"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "unsorted entries come out sorted",
+      "entries": [
+        {
+          "path": "src/b.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "src/a.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "kinds": {
+        "docs/a.md": "docs",
+        "src/a.mjs": "code",
+        "src/b.mjs": "code"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "not_docs narrows docs",
+      "entries": [
+        {
+          "path": "docs/generated/api.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": {
+        "v": 1,
+        "not_docs": [
+          "docs/generated/**"
+        ]
+      },
+      "kinds": {
+        "docs/generated/api.md": "code"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "not_docs leaves other docs alone",
+      "entries": [
+        {
+          "path": "docs/generated/api.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        },
+        {
+          "path": "docs/guide.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": {
+        "v": 1,
+        "not_docs": [
+          "docs/generated/**"
+        ]
+      },
+      "kinds": {
+        "docs/generated/api.md": "code",
+        "docs/guide.md": "docs"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "not_docs moves a path on to the locale rule",
+      "entries": [
+        {
+          "path": "docs/locales/en.json",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": {
+        "v": 1,
+        "not_docs": [
+          "docs/locales/**"
+        ]
+      },
+      "kinds": {
+        "docs/locales/en.json": "locale"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "not_docs on a docs-only diff turns ui on",
+      "entries": [
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": {
+        "v": 1,
+        "not_docs": [
+          "docs/**"
+        ]
+      },
+      "kinds": {
+        "docs/a.md": "code"
+      },
+      "flags": {
+        "ui_changed": true,
+        "strings_changed": true,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "empty not_docs changes nothing",
+      "entries": [
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": {
+        "v": 1,
+        "not_docs": []
+      },
+      "kinds": {
+        "docs/a.md": "docs"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": true
+      }
+    },
+    {
+      "name": "not_docs cannot touch tests",
+      "entries": [
+        {
+          "path": "tests/a.test.mjs",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": {
+        "v": 1,
+        "not_docs": [
+          "tests/**"
+        ]
+      },
+      "kinds": {
+        "tests/a.test.mjs": "test"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": false
+      }
+    },
+    {
+      "name": "null config is a missing config",
+      "entries": [
+        {
+          "path": "docs/a.md",
+          "from": null,
+          "status": "M",
+          "added": 1,
+          "removed": 1,
+          "similarity": null
+        }
+      ],
+      "config": null,
+      "kinds": {
+        "docs/a.md": "docs"
+      },
+      "flags": {
+        "ui_changed": false,
+        "strings_changed": false,
+        "contract_changed": false,
+        "docs_only": true
+      }
+    }
+  ],
+  "badConfigs": [
+    {
+      "name": "not json",
+      "raw": "{ not json"
+    },
+    {
+      "name": "empty file",
+      "raw": ""
+    },
+    {
+      "name": "array",
+      "raw": "[]"
+    },
+    {
+      "name": "wrong version",
+      "raw": "{\"v\":2,\"not_docs\":[]}"
+    },
+    {
+      "name": "missing version",
+      "raw": "{\"not_docs\":[]}"
+    },
+    {
+      "name": "not_docs not an array",
+      "raw": "{\"v\":1,\"not_docs\":\"docs/**\"}"
+    },
+    {
+      "name": "not_docs holds a number",
+      "raw": "{\"v\":1,\"not_docs\":[1]}"
+    },
+    {
+      "name": "not_docs holds a null",
+      "raw": "{\"v\":1,\"not_docs\":[null]}"
+    },
+    {
+      "name": "widening key docs",
+      "raw": "{\"v\":1,\"not_docs\":[],\"docs\":[\"src/**\"]}"
+    },
+    {
+      "name": "widening key is_docs",
+      "raw": "{\"v\":1,\"is_docs\":[\"src/**\"]}"
+    },
+    {
+      "name": "extra key beside a valid one",
+      "raw": "{\"v\":1,\"not_docs\":[\"docs/generated/**\"],\"extra\":true}"
+    },
+    {
+      "name": "proto key",
+      "raw": "{\"v\":1,\"not_docs\":[],\"__proto__\":{\"docs\":[\"src/**\"]}}"
+    }
+  ]
+}
