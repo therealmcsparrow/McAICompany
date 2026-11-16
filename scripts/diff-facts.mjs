@@ -126,16 +126,8 @@ function validConfig(config) {
   return config.not_docs.every(g => typeof g === 'string' && g.length > 0 && g.length <= MAX_GLOB_LENGTH && !/[\x00-\x1f\x7f]/.test(g));
 }
 
-function kindOf(e, notDocs) {
-  const { path, from } = e;
-  if (hostile(path) || (from !== null && hostile(from))) return 'unknown';
-  if (!STATUSES.includes(e.status)) return 'unknown';
-  if (!(Number.isInteger(e.added) && Number.isInteger(e.removed))) {
-    if (isCount(e.added) && isCount(e.removed)) return 'binary';
-    return 'unknown';
-  }
-  if (e.status === 'R' && e.similarity === 100 && e.added === 0 && e.removed === 0) return 'rename';
-  if (anyMatch(CONTRACT, path) || (from !== null && anyMatch(CONTRACT, from))) return 'contract';
+// Rules 4 to 10 for one path.
+function pathKind(path, notDocs) {
   if (anyMatch(TEST, path)) return 'test';
   if (anyMatch(DOCS, path) && !anyMatch(notDocs, path)) return 'docs';
   if (anyMatch(LOCALE, path)) return 'locale';
@@ -144,6 +136,21 @@ function kindOf(e, notDocs) {
   if (anyMatch(CONFIG, path)) return 'config';
   if (anyMatch(CODE, path)) return 'code';
   return 'unknown';
+}
+
+function kindOf(e, notDocs) {
+  const { path, from } = e;
+  if (hostile(path) || (from !== null && hostile(from))) return 'unknown';
+  if (!STATUSES.includes(e.status)) return 'unknown';
+  if (!(Number.isInteger(e.added) && Number.isInteger(e.removed))) {
+    if (isCount(e.added) && isCount(e.removed)) return 'binary';
+    return 'unknown';
+  }
+  if (anyMatch(CONTRACT, path) || (from !== null && anyMatch(CONTRACT, from))) return 'contract';
+  if (e.status === 'R' && e.similarity === 100 && e.added === 0 && e.removed === 0) return 'rename';
+  const kind = pathKind(path, notDocs);
+  if (e.status === 'R' && from !== null && pathKind(from, notDocs) !== kind) return 'unknown';
+  return kind;
 }
 
 function estimate(p) {
@@ -336,18 +343,98 @@ function parseNumstat(buf) {
   return map;
 }
 
-function listChanges(cwd, revs) {
-  const base = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none', '-z', '-M'];
+function gitInput(cwd, args, input) {
+  try {
+    return execFileSync('git', [...GIT_PREFIX, ...args], {
+      cwd, env: gitEnv(), input, maxBuffer: MAX_GIT_OUTPUT, timeout: GIT_TIMEOUT_MS, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+    });
+  } catch {
+    return refuse('git failed');
+  }
+}
+
+// Reads each `<id>:<path>` spec raw with one cat-file process: 'nul' when the first bytes hold a NUL, a non-blob or a missing object.
+function probeBlobs(cwd, specs) {
+  if (specs.length === 0) return [];
+  const out = gitInput(cwd, ['cat-file', '--batch'], Buffer.from(specs.map(x => `${x}\n`).join(''), 'utf8'));
+  const result = [];
+  let pos = 0;
+  for (let i = 0; i < specs.length; i++) {
+    const nl = out.indexOf(10, pos);
+    if (nl < 0) refuse('git output not understood');
+    const header = out.toString('latin1', pos, nl);
+    pos = nl + 1;
+    if (header.endsWith(' missing')) { result.push(true); continue; }
+    const m = /^[0-9a-f]{40,64} ([a-z]+) (\d{1,12})$/.exec(header);
+    if (m === null) refuse('git output not understood');
+    const size = Number(m[2]);
+    if (pos + size + 1 > out.length) refuse('git output not understood');
+    result.push(m[1] !== 'blob' || out.subarray(pos, pos + Math.min(size, BINARY_PROBE)).includes(0));
+    pos += size + 1;
+  }
+  if (pos !== out.length) refuse('git output not understood');
+  return result;
+}
+
+// The tip side read from the working tree by the real-path rule; anything not a plain readable file counts as binary.
+function worktreeHasNul(realRoot, rel) {
+  const r = readPlain(realRoot, join(realRoot, ...rel.split('/')), MAX_GIT_OUTPUT);
+  return r.status !== 'ok' || r.buf.subarray(0, BINARY_PROBE).includes(0);
+}
+
+// A path numstat shows as binary whose sides hold no NUL: its counts come from the one-path call.
+function textCounts(cwd, flags, tail, path) {
+  const only = parseNameOnly(git(cwd, [...flags, '--name-only', ...tail, path]));
+  if (only.length !== 1 || decode(only[0]) !== path) refuse('git output not understood');
+  const counts = parseNumstat(git(cwd, [...flags, '--numstat', '--text', ...tail, path]));
+  if (counts.size !== 1) refuse('git output not understood');
+  const c = [...counts.values()][0];
+  // A `-diff` attribute keeps numstat at `-` even with --text; the content is NUL-free, so it is text, with counts git will not give.
+  return Number.isInteger(c.added) && Number.isInteger(c.removed) ? c : { added: 1, removed: 1 };
+}
+
+function parseNameOnly(buf) {
+  return nulTokens(buf);
+}
+
+// tip: { commit } reads the tip blob at that commit, { worktree } reads the working-tree file.
+function listChanges(cwd, revs, tip) {
+  const flags = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none', '-z', '-M'];
   const tail = ['--end-of-options', ...revs, '--'];
-  const status = parseNameStatus(git(cwd, [...base, '--name-status', ...tail]));
-  const counts = parseNumstat(git(cwd, [...base, '--numstat', ...tail]));
-  return status.map(s => {
+  const status = parseNameStatus(git(cwd, [...flags, '--name-status', ...tail]));
+  const counts = parseNumstat(git(cwd, [...flags, '--numstat', ...tail]));
+  if (counts.size !== status.length || status.some(s => !counts.has(s.path))) refuse('git output not understood');
+  const entries = status.map(s => {
     const c = counts.get(s.path);
     return {
       path: decode(s.path), from: s.from === null ? null : decode(s.from), status: s.status, similarity: s.similarity,
-      added: c === undefined ? null : c.added, removed: c === undefined ? null : c.removed,
+      added: c.added, removed: c.removed,
     };
   });
+  const probed = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).slice(0, MAX_PATHS)
+    .filter(e => !hostile(e.path) && (e.from === null || !hostile(e.from)));
+  const specs = [];
+  for (const e of probed) {
+    if (e.status !== 'A') specs.push(`${revs[0]}:${e.from ?? e.path}`);
+    if (e.status !== 'D' && tip.commit !== undefined) specs.push(`${tip.commit}:${e.path}`);
+  }
+  const nuls = probeBlobs(cwd, specs);
+  const realRoot = tip.worktree === true ? realpathSync.native(cwd) : null;
+  let at = 0;
+  for (const e of probed) {
+    let nul = false;
+    if (e.status !== 'A' && nuls[at++]) nul = true;
+    if (e.status !== 'D') {
+      if (tip.commit !== undefined) { if (nuls[at++]) nul = true; } else if (worktreeHasNul(realRoot, e.path)) nul = true;
+    }
+    if (nul) { e.added = '-'; e.removed = '-'; continue; }
+    if (e.added === '-' && e.removed === '-') {
+      const c = textCounts(cwd, flags, tail, e.path);
+      e.added = c.added;
+      e.removed = c.removed;
+    }
+  }
+  return entries;
 }
 
 // An untracked file counts as binary when its first bytes hold a NUL, and when it cannot be read as a plain file.
@@ -409,7 +496,7 @@ function show(cwd, opts) {
   if (opts.head !== null) requireCommit(cwd, opts.head);
   noGrafts(cwd);
   const head = opts.head ?? headId(cwd);
-  const entries = listChanges(cwd, [opts.base, head]);
+  const entries = listChanges(cwd, [opts.base, head], { commit: head });
   return buildFacts(cwd, opts.base, head, entries, null);
 }
 
@@ -463,7 +550,7 @@ function write(cwd, slug, step) {
   const ref = git(cwd, ['symbolic-ref', '-q', 'HEAD']).toString('utf8').trim();
   if (!/^refs\/heads\/[^\x00-\x20\x7f~^:?*[\\]+$/.test(ref)) refuse('not on a run branch');
   const head = headId(cwd);
-  const entries = [...listChanges(cwd, [base]), ...listUntracked(cwd)];
+  const entries = [...listChanges(cwd, [base], { worktree: true }), ...listUntracked(cwd)];
   const { text } = buildFacts(cwd, base, head, entries, step);
   try { mkdirSync(factsDir); } catch (e) { if (e.code !== 'EEXIST') refuse('cannot create the facts folder'); }
   if (!isRealDir(factsDir)) refuse('facts folder is not a plain folder');
