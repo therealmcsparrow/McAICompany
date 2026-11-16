@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "not_docs": [
+    "docs/adr/**",
+    "docs/specs/**",
+    "docs/superpowers/**",
+    "docs/spec.md",
+    "docs/idea.md",
+    "docs/pack-clash-table.md",
+    "documentation/**",
+    "README.md",
+    "CHANGELOG.md",
+    "CLAUDE.md",
+    "GLOSSARY.md"
+  ]
+}
