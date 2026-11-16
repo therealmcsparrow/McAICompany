@@ -1,4 +1,4 @@
-# Contract: test-run v1.1
+# Contract: test-run v1.2
 
 Provider: `scripts/test-run.mjs` and its per-file watchdog `scripts/test-watchdog.mjs` (Node built-ins only). Consumers: the `test` script in `package.json` (the one place the test patterns live), `.github/workflows/ci.yml`, QA.
 Rationale: Windows CI splits `npm test` over parallel jobs. A hanging test file must fail by name instead of running into the job timeout, and a split run must prove that every test file ran exactly once. The split is node's own `--test-shard` (by file count, not duration): one file, `scripts/worktree.test.mjs`, takes about 95% of the slowest shard, so no file-level split can beat it by much.
@@ -32,12 +32,20 @@ Rationale: Windows CI splits `npm test` over parallel jobs. A hanging test file 
 - Any finding, no list, a missing or unreadable `<dir>`, a list over 1 MiB or a pattern whose files cannot be listed: prints the findings or one line `cover: error <reason>` and exits 1. A reason never repeats list content.
 
 ## CI jobs (`.github/workflows/ci.yml`)
-- `check`, matrix `os: [ubuntu-latest, macos-latest]`: `npm test`, then `npm run check`, as before v1.
-- `windows-test`, matrix `shard: [1, 2, 3, 4]`, `fail-fast: false`, `runs-on: windows-latest`, same checkout into a path with a space. Env `AICO_TEST_SHARD` is `<shard>/4` and `AICO_TEST_FILES_OUT` is `<runner temp>/shard-files/shard-<shard>.txt`, both set in `env:` blocks, never as `${{ }}` on a `run:` line. Runs `npm test -- "--test-shard=$AICO_TEST_SHARD"`. Shard 1 also runs `npm run check`; no other Windows job runs it. Uploads its list as artifact `shard-files-<shard>`, even when tests fail.
+- Triggers: `pull_request`, `push` to `main`, `push` of tags `v*`, and a nightly `schedule` (cron `17 3 * * *`). No `paths` or `paths-ignore` filter.
+- Concurrency: group `<workflow>-<ref>`; `cancel-in-progress` only on `pull_request`, so main, tags and the nightly always finish.
+- Cold and warm: tags and the nightly run cold (`AICO_COLD: "1"` in job env, no npm cache). PRs and pushes to `main` run warm (npm cache from the lockfile). `AICO_COLD` governs caches only.
+- `check`, matrix `os: [ubuntu-latest, macos-latest]`: `npm test`, then `npm run check`. Its test steps run on tags (both OSes) and on the nightly (ubuntu only). On a PR or a push to `main` they are skipped at step level, so the required names report success.
+- `windows-test`, matrix `shard: [1, 2, 3, 4]`, `fail-fast: false`, `runs-on: windows-latest`, same checkout into a path with a space. This is the one Windows cell a PR or a push to `main` runs. Env `AICO_TEST_SHARD` is `<shard>/4` and `AICO_TEST_FILES_OUT` is `<runner temp>/shard-files/shard-<shard>.txt`, both set in `env:` blocks, never as `${{ }}` on a `run:` line. Runs `npm test -- "--test-shard=$AICO_TEST_SHARD"`. Shard 1 also runs `npm run check`; no other Windows job runs it. Uploads its list as artifact `shard-files-<shard>`, even when tests fail.
 - `windows-check`, `name: check (windows-latest)`, `needs: windows-test`, `if: always()`, `runs-on: ubuntu-latest`. Downloads `shard-files-*` into one folder (`merge-multiple: true`), runs `npm test -- "--aico-cover=<that folder>"`, and fails when `needs.windows-test.result` (passed through `env:`) is not `success`.
+- `a11y`, `runs-on: ubuntu-latest`, `permissions: contents: read`: runs `node scripts/a11y-smoke.mjs`. On a PR it runs only when the facts output `ui_changed` is exactly `true`; tags, the nightly, a cold override (repo variable `CI_COLD` is `1`) and every non-PR event always run it.
+- Facts step: `check`, `windows-test`, `windows-check` and `a11y` each run `node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output` (id `facts`) on `pull_request` only, right after checkout and Node setup. The two shas come from the event through `env:` and are quoted; no `${{ }}` sits on a `run:` line. The checkout is full depth (no partial clone) and the step sets `GIT_NO_LAZY_FETCH=1`, so the diff never fetches.
+- Facts skip: on a `pull_request` whose facts output `docs_only` is exactly `true`, the `npm test`, `npm run check` and cover steps are skipped at step level, never at job level (a job-level `if` on a matrix leaves the required name pending). Any other value, a missing output and every other event run everything. A red is never hidden: no `continue-on-error` on a test or check step and no retry.
 - Required-check names stay `check (ubuntu-latest)`, `check (windows-latest)` and `check (macos-latest)`. `check (windows-latest)` is red when any shard fails, is cancelled or is skipped, or when cover mode finds a gap.
+- A nightly red is reported by the red run itself plus one `$GITHUB_STEP_SUMMARY` line.
 - New actions are pinned to a full commit with a `# vX.Y.Z` comment, like every other `uses:` line.
 
 ## Compatibility
+v1.2 (minor, additive): `## CI jobs` now states triggers, concurrency, cold and warm runs, the Windows-only PR cell, the facts step with its docs-only skip, and the `a11y` job. No flag, file-list or cover format, exit code or required check name changes.
 v1.1 (minor, per spike S1): the per-file watchdog (`scripts/test-watchdog.mjs`, env `AICO_TEST_WATCHDOG_MS`, the `--import` preload) and two refusals before node starts (`bad --test-timeout`, `--test-isolation=none`). `--test-force-exit` is not used. No flag, file-list or cover format, exit code or CI job changes. v1 had no implementation, so no consumer breaks.
 v1. A new flag or a new CI job is a minor bump. These are major bumps: a changed default timeout or watchdog deadline rule, a changed file-list or cover output format, a changed cover exit code, or a renamed required check.

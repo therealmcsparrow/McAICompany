@@ -1,5 +1,5 @@
 // npm test wrapper and node:test reporter in one file.
-// contract: docs/contracts/test-run.md v1.1
+// contract: docs/contracts/test-run.md v1.2
 // CLI: node scripts/test-run.mjs [flag...] <test file or "<dir>/*<suffix>" pattern>...
 //   flags reach node unchanged and come before the patterns; --test-timeout defaults to 20 minutes.
 //   runs `node --test` with node's reporter on stdout (unchanged) and this file as a
