@@ -12,14 +12,15 @@ Rationale: one classification of a change that every gate reads, so gates never 
 ```
 - Exactly these keys. `v` is `1`. `step` matches `^\d{2,3}-[a-z][a-z0-9-]{0,40}$`. `base` is the run's Base commit; `head` is `HEAD` at write time.
 - `paths`: the change from `base` to the working tree (`git diff --name-status -M --numstat <base>`), plus untracked files that git does not ignore (`git ls-files --others --exclude-standard`), sorted by `path`, at most 5000 entries. `path` and `from` are repo-relative with `/`; `from` is the old path of a rename or copy, else `null`. `status` is one of `A M D R C T` (untracked = `A`).
-- More than 5000 entries: the first 5000 are kept, `truncated` is `true`, and all four flags are `true`.
-- Paths are data. A path with a control character or `..` segment is stored with kind `unknown`.
+- More than 5000 entries: the first 5000 are kept, `truncated` is `true`, `ui_changed`, `strings_changed` and `contract_changed` are `true`, and `docs_only` is `false` (each flag at its fail-safe value).
+- Paths are data. A path is stored with kind `unknown` (no rule below is tried) when `path` or `from` has a control character (U+0000 to U+001F, U+007F), a `..` segment, a segment that starts with `-`, a U+FFFD (a name that is not valid UTF-8 is decoded with replacement), or more than 4096 UTF-8 bytes.
+- Output never carries a raw control character: JSON on stdout escapes U+0000 to U+001F and U+007F as `\uXXXX`; stderr never echoes a path.
 
 ## Kinds (first match wins)
 A path is matched on `path`; a deleted path on its old path. Globs use `/` and are case-sensitive.
 | # | kind | rule |
 |---|---|---|
-| 1 | `binary` | numstat shows `-` `-` |
+| 1 | `binary` | numstat shows `-` `-` (in `classify` entries: `added` and `removed` each `null` or `"-"`) |
 | 2 | `rename` | status `R` with similarity 100 and 0 lines added and removed |
 | 3 | `contract` | `docs/contracts/**`, `contracts/**`, `**/*.proto`, `**/openapi*.json`, `**/openapi*.yaml`, `**/openapi*.yml`, `**/*.schema.json`; also when `from` matches one of these |
 | 4 | `test` | `tests/**`, `test/**`, `**/__tests__/**`, `**/fixtures/**`, `**/*.test.*`, `**/*.spec.*` |
@@ -44,13 +45,15 @@ A path is matched on `path`; a deleted path on its old path. Globs use `/` and a
 | Command | Does |
 |---|---|
 | `write <slug> <NN-role>` | Reads the run's Base commit from the Step's Handoff frontmatter `base-commit`, writes the facts file, prints its path. Refused for a bad slug or step, no Handoff, a file that exists, or a git error; nothing written. |
-| `show --base <commit> [--head <commit>]` | Prints the facts object for `base..head` (commits only, no working tree), writes nothing. `--head` defaults to `HEAD`. |
-| `show ... --github-output` | Also appends `docs_only=<bool>` and `ui_changed=<bool>` to the file named by `GITHUB_OUTPUT`; nothing else is written. |
-| `latest <slug>` | Prints the newest facts file of the run (highest `NN`), or `none`. |
-Exports: `classify(entries, config)` (pure; entries are `{ path, from, status, added, removed, similarity }`) and `readLatest(runDir)` (returns the object or `null`; a bad file is `null`).
+| `show --base <commit> [--head <commit>]` | Prints the facts object for `base..head` as one JSON object (the facts-file keys without `step`; commits only, no working tree), writes nothing. A given `<commit>` must be a full 40-hex lowercase id, else refused before git runs; an id not in the repo is refused. `--head` defaults to `HEAD`. Reads `diff-facts.config.json` from the working tree at cwd. |
+| `show ... --github-output` | Also appends `docs_only=<bool>` and `ui_changed=<bool>` to the file named by `GITHUB_OUTPUT`; nothing else is written. A refusal appends nothing. |
+| `latest <slug>` | Prints the path of the newest facts file of the run (highest `NN`, compared as a number), or `none`. |
+Exports:
+- `classify(entries, config)`: pure, never mutates its input. Entries are `{ path, from, status, added, removed, similarity }`; `config` is the parsed config or `null`. Returns `{ paths, truncated, ui_changed, strings_changed, contract_changed, docs_only }`, each path exactly `{ path, from, status, kind }`.
+- `readLatest(runDir)`: `runDir` is `.company/work/<parts>`; reads the highest-`NN` file in `<runDir>/facts/` and returns its object, or `null`. `null` when the folder or file is missing or a link, or the newest file is bad (fails any `## Facts file` rule, incl. missing or extra keys); never falls back to an older file.
 
 ## Readers
-A reader that gets `null`, a parse error, a file over 1 MiB or `v` other than `1` treats every flag as `true`.
+A reader that gets `null`, a parse error, a file over 1 MiB or `v` other than `1` treats `ui_changed`, `strings_changed` and `contract_changed` as `true` and `docs_only` as `false`.
 
 ## Compatibility
-v1.0. A new kind, a new optional key or a new `not_docs`-style narrowing key is a minor bump. Changing a flag rule toward `false`, removing a key or a widening config key is a major bump and needs the CEO.
+v1.0. A new kind, a new optional key or a new `not_docs`-style narrowing key is a minor bump. Changing a flag rule toward its unsafe value (`false` for `ui_changed`, `strings_changed`, `contract_changed`; `true` for `docs_only`), removing a key or a widening config key is a major bump and needs the CEO.
