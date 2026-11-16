@@ -44,7 +44,7 @@ function sandbox() {
   const root = mkdtempSync(join(tmpdir(), 'dfacts-'));
   roots.push(root);
   mkdirSync(join(root, 'home'));
-  writeFileSync(join(root, 'gitconfig'), '[user]\n\tname = Test\n\temail = test@example.invalid\n[commit]\n\tgpgsign = false\n[core]\n\tautocrlf = false\n');
+  writeFileSync(join(root, 'gitconfig'), '[user]\n\tname = Test\n\temail = test@example.invalid\n[commit]\n\tgpgsign = false\n[core]\n\tautocrlf = false\n\tprotectNTFS = false\n\tprotectHFS = false\n');
   const repo = join(root, 'repo');
   mkdirSync(repo);
   const env = childEnv(root);
@@ -77,14 +77,38 @@ function sandbox() {
 }
 
 // A commit on top of `parent` that adds files with arbitrary path bytes, through plumbing only.
+// Trees are built with mktree -z: update-index refuses names such as '..' or control characters on some platforms.
 function commitPaths(s, parent, paths) {
+  const run = (args, input) => execFileSync('git', args, { cwd: s.repo, env: s.env, input, maxBuffer: 1 << 26 });
   const blob = s.git(['hash-object', '-w', '--stdin'], 'x\n').trim();
-  const input = Buffer.concat(paths.flatMap(p => [
-    Buffer.from(`100644 ${blob} 0\t`), Buffer.isBuffer(p) ? p : Buffer.from(p), Buffer.from([0]),
-  ]));
-  execFileSync('git', ['update-index', '-z', '--index-info'], { cwd: s.repo, env: s.env, input });
-  const tree = s.git(['write-tree']).trim();
-  return s.git(['commit-tree', tree, '-p', parent, '-m', 'paths']).trim();
+  const root = new Map(); // name (latin1 string of the bytes) -> { mode, id } | Map
+  const add = (bytes, mode, id) => {
+    const parts = [];
+    let from = 0;
+    for (let i = 0; i <= bytes.length; i++) {
+      if (i === bytes.length || bytes[i] === 0x2f) { parts.push(bytes.subarray(from, i).toString('latin1')); from = i + 1; }
+    }
+    let dir = root;
+    for (const seg of parts.slice(0, -1)) {
+      if (!(dir.get(seg) instanceof Map)) dir.set(seg, new Map());
+      dir = dir.get(seg);
+    }
+    dir.set(parts.at(-1), { mode, id });
+  };
+  for (const rec of run(['ls-tree', '-r', '-z', parent]).toString('latin1').split('\0').filter(Boolean)) {
+    const tab = rec.indexOf('\t');
+    const [mode, , id] = rec.slice(0, tab).split(' ');
+    add(Buffer.from(rec.slice(tab + 1), 'latin1'), mode, id);
+  }
+  for (const p of paths) add(Buffer.isBuffer(p) ? p : Buffer.from(p), '100644', blob);
+  const write = dir => {
+    const input = Buffer.concat([...dir].map(([name, v]) => {
+      const [mode, type, id] = v instanceof Map ? ['040000', 'tree', write(v)] : [v.mode, 'blob', v.id];
+      return Buffer.concat([Buffer.from(`${mode} ${type} ${id}\t`), Buffer.from(name, 'latin1'), Buffer.from([0])]);
+    }));
+    return run(['mktree', '-z'], input).toString().trim();
+  };
+  return s.git(['commit-tree', write(root), '-p', parent, '-m', 'paths']).trim();
 }
 
 const parse = r => JSON.parse(r.stdout);
