@@ -544,8 +544,18 @@ describe('dry prints the decision per entry and writes nothing', () => {
     const sb = sandbox(); seed(sb);
     const d = draft(sb, baseDraft());
     const snap = tree(sb.root);
-    const r = cli(sb, ['dry', d, '--base', '--oops']);
+    const r = cli(sb, ['dry', d, '--base', '--oops', '--head', 'HEAD']);
     assert.equal(r.code, 2, r.out + r.err);
+    assert.deepEqual(tree(sb.root), snap);
+  });
+
+  test('dry without --head is refused and writes nothing', () => {
+    const sb = sandbox(); seed(sb);
+    const d = draft(sb, baseDraft());
+    const snap = tree(sb.root);
+    const r = cli(sb, ['dry', d, '--base', 'HEAD']);
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.match(r.out + r.err, /--head is required/);
     assert.deepEqual(tree(sb.root), snap);
   });
 
@@ -563,7 +573,8 @@ describe('dry prints the decision per entry and writes nothing', () => {
     git('add', 'README.md'); assert.equal(git('commit', '-q', '-m', 'docs').status, 0);
     const d = draft(sb, baseDraft({ steps: [step('writer'), step('accessibility-tester'), step('qa')] }));
     const snap = tree(sb.root);
-    const r = cli(sb, ['dry', d, '--base', base]);
+    const head = git('rev-parse', 'HEAD').stdout.trim();
+    const r = cli(sb, ['dry', d, '--base', base, '--head', head]);
     assert.equal(r.code, 0, r.out + r.err);
     const rows = lines(r.out);
     assert.equal(rows.length, 3, r.out);
