@@ -21,7 +21,7 @@ test('every Gate defaults to ask, as the pipeline prose says', () => {
   for (const gate of GATES) assert.equal(GATE_DEFAULTS[gate], 'ask', gate);
   assert.deepEqual(Object.keys(GATE_DEFAULTS).sort(), [...GATES].sort());
   assert.match(pipeline, /A Gate is never skipped/);
-  assert.match(pipeline, /ask in a form \(Approve \/ Change \/ Stop\)/);
+  assert.match(pipeline, /open the form `gate:<brief\|plan\|ship>` \(Approve \/ Change \/ Stop/);
   assert.match(pipeline, /every Gate `ask`/);
 });
 

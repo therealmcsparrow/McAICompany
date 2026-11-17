@@ -38,6 +38,7 @@ for (const m of manifests) {
       const listing = manifests.filter((x) => x.playbooks.includes(playbook));
       for (const f of files(playbook)) {
         for (const line of read(f).split('\n')) for (const [, name] of line.matchAll(/aico:([a-z][a-z0-9-]*)/g)) {
+          if (name === 'project-manager') continue; // the Lead runs every Playbook (Runs-in line)
           if (agents.has(name)) {
             for (const x of listing) assert.ok(x.roles.includes(name), `${f}: aico:${name} is not a Role of ${x.id}`);
           } else if (isPlaybook(name) || ALWAYS.includes(name)) {

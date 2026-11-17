@@ -1,4 +1,4 @@
-// docs/contracts/mod-hook.md at v1.1: a missing or invalid snapshot is rebuilt on the first guarded call, and the
+// docs/contracts/mod-hook.md at v1.2: a missing or invalid snapshot is rebuilt on the first guarded call, and the
 // guard denies `snapshot-invalid` only when the rebuild fails. Text checks on short phrases.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,9 +18,9 @@ const section = (name) => {
   return rest.slice(0, to === -1 ? undefined : to).join('\n');
 };
 
-describe('mod-hook v1.1 Contract text', () => {
-  test('the heading is "# Contract: mod-hook v1.1"', () => {
-    assert.equal(lines[0], '# Contract: mod-hook v1.1');
+describe('mod-hook v1.2 Contract text', () => {
+  test('the heading is "# Contract: mod-hook v1.2"', () => {
+    assert.equal(lines[0], '# Contract: mod-hook v1.2');
   });
 
   test('engine step 3 names a rebuild on the first guarded call', () => {

@@ -410,14 +410,15 @@ test('reprompt Playbook: the guard sentence is the shared one, and the other mod
   }
 });
 
-test('reprompt Playbook: the Help line is the first body line and is the always-on template for reprompt', () => {
+test('reprompt Playbook: the Help line follows the Runs-in line and is the always-on template for reprompt', () => {
   assert.equal(playbookLines[titleAt + 1], '');
-  assert.equal(playbookLines[titleAt + 2], helpTemplate('reprompt'));
+  assert.ok(playbookLines[titleAt + 2].startsWith('**Runs in:**'));
+  assert.equal(playbookLines[titleAt + 4], helpTemplate('reprompt'));
   const triage = read('skills/triage/SKILL.md').split('\n');
   const triageTitle = triage.findIndex((l) => l.startsWith('# Playbook: triage'));
-  assert.equal(triage[triageTitle + 2], helpTemplate('triage'), 'the derivation matches an existing always-on Playbook');
+  assert.equal(triage[triageTitle + 4], helpTemplate('triage'), 'the derivation matches an existing always-on Playbook');
   assert.equal(playbook.split('\n').filter((l) => l.startsWith('**Help:**')).length, 1);
-  assert.ok(!playbookLines[titleAt + 2].includes('aico:help'));
+  assert.ok(!playbookLines[titleAt + 4].includes('aico:help'));
 });
 
 test('reprompt Playbook: the Help line answers from the page documentation/commands/reprompt.md', () => {
@@ -429,8 +430,8 @@ test('reprompt Playbook: the Help line answers from the page documentation/comma
 });
 
 test('reprompt Playbook: the Trust line follows the Help line directly, before Start', () => {
-  assert.equal(playbookLines[titleAt + 3], '');
-  assert.ok(playbookLines[titleAt + 4].startsWith('**Trust:**'));
+  assert.equal(playbookLines[titleAt + 5], '');
+  assert.ok(playbookLines[titleAt + 6].startsWith('**Trust:**'));
   assert.ok(playbook.indexOf('**Trust:**') < playbook.indexOf('## 1. Start'));
   assert.equal(playbook.split('\n').filter((l) => l.startsWith('**Trust:**')).length, 1);
 });

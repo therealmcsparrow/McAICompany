@@ -69,7 +69,7 @@ test('report Playbook: runs with aico:pipeline, states the Ship meaning, Gates a
   assert.ok(playbook.indexOf('Plan Gate**') < playbook.indexOf('## 3. Research'));
   assert.match(playbook.slice(playbook.indexOf('## 2. Plan'), playbook.indexOf('## 3. Research')), /no Core, Contracts or Ruleset line/);
   assert.match(playbook, /## 7\. Ship Gate/);
-  const used = [...playbook.matchAll(/`aico:([a-z-]+)`/g)].map((m) => m[1]).filter((n) => fs.existsSync(path.join(root, 'agents', `${n}.md`)));
+  const used = [...playbook.matchAll(/`aico:([a-z-]+)`/g)].map((m) => m[1]).filter((n) => n !== 'project-manager' && fs.existsSync(path.join(root, 'agents', `${n}.md`)));
   for (const r of used) assert.ok(manifest.roles.includes(r), `${r} is not a research Role`);
 });
 

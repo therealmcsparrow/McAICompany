@@ -81,7 +81,7 @@ for (const name of ['campaign', 'content']) {
     assert.ok(!/No Plan Gate/.test(t));
     for (const n of ['testimonials or reviews', 'sponsored-content labels', 'price and green claims', '2024/825', 'comparative advertising']) assert.ok(t.includes(n), n);
     const used = new Set([...t.matchAll(/`aico:([a-z-]+)`/g)].map((m) => m[1]));
-    const allowed = new Set([...manifest.roles, ...manifest.playbooks, 'pipeline', 'writing', 'eu-compliance', 'art-direction', 'help']);
+    const allowed = new Set([...manifest.roles, ...manifest.playbooks, 'pipeline', 'writing', 'eu-compliance', 'art-direction', 'help', 'project-manager', 'lead']);
     for (const u of used) assert.ok(allowed.has(u), `${name} dispatches ${u}, not in the marketing company`);
   });
 }

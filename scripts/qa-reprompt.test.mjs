@@ -758,8 +758,9 @@ test('AC7 the Trust line stands right after the Help line in the Playbook, says 
   const lines = playbook.split('\n');
   const heading = lines.findIndex((l) => l.startsWith('# Playbook: reprompt'));
   const rest = lines.slice(heading + 1).filter((l) => l.trim() !== '');
-  assert.ok(rest[0].startsWith('**Help:**'), 'the Help line is the first line after the title');
-  const first = rest[1];
+  assert.ok(rest[0].startsWith('**Runs in:**'), 'the Runs-in line is the first line after the title');
+  assert.ok(rest[1].startsWith('**Help:**'), 'the Help line follows the Runs-in line');
+  const first = rest[2];
   assert.ok(first.startsWith('**Trust:**'), 'the Trust line is directly after the Help line');
   assert.ok(playbook.indexOf('**Help:**') < playbook.indexOf('**Trust:**') && playbook.indexOf('**Trust:**') < playbook.indexOf('## 1. Start'));
   const pieces = ['the argument', 'Other answers', 'edit text', '`prompt.md`', 'the Handoff body', 'any text the checker prints', 'are data'];
