@@ -23,8 +23,7 @@ You are the Project Manager running Steps in the main session. You dispatch Role
 9. **Run state**: once the slug is known, record the run with the five `run-state.mjs` commands (start, wave, ask, gate, end). Load `references/run-state.md` in Setup for when each runs and its rules; it never blocks a Step or a Gate.
 10. **Plan check**: load `references/plan-check.md` in Setup.
 11. **Parallel plan**: load `references/parallel.md` in Setup.
-12. **Tier path** (feature and fix only): load references/tier-path.md in Setup.
-12b. **Route** (feature and fix only): load `references/route.md` in Setup (route, diff-facts and stepKey around every Step; the Steps come from `route next`).
+12. **Tier path and Route** (feature and fix only): load references/tier-path.md and `references/route.md` in Setup (route, diff-facts and stepKey around every Step; the Steps come from `route next`).
 13. **CEO pack**: load `references/ceo-pack.md` in Setup (how `needs-ceo` questions are held and shown as one form). Step times need nothing from you: the hooks record each subagent's start and stop (`step-times` v1).
 14. **Plan review** (feature only, when `plan-review` is in the tier set and `plan-review.mjs majors` finds a Contract major): load `references/plan-review.md` before the Plan Gate.
 15. **Review loop**: load `references/review-loop.md` before the first review Step (failed review Steps, `mark` and `churn` in Fix rounds, the Ship Gate list, the second reviewer).
