@@ -1,0 +1,127 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as route from './route.mjs';
+import { PROTECTED_ROLES as SETTINGS_PROTECTED } from './settings.mjs';
+import { PROTECTED_ROLES as CHECK_PROTECTED } from './check.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const temps = [];
+after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
+
+// A product root holding the plugin data the CLI reads (company/ and agents/).
+function product(mutate) {
+  const dir = mkdtempSync(join(tmpdir(), 'route-protected-'));
+  temps.push(dir);
+  for (const d of ['company', 'agents']) cpSync(join(root, d), join(dir, d), { recursive: true });
+  mkdirSync(join(dir, '.company'), { recursive: true });
+  if (mutate) mutate(join(dir, 'company', 'model-floor.json'), dir);
+  return dir;
+}
+const floorWith = (f) => (p) => writeFileSync(p, typeof f === 'string' ? f : JSON.stringify(f));
+const sorted = (a) => [...a].sort();
+
+function cli(dir, args) {
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'route.mjs'), ...args], { cwd: dir, encoding: 'utf8' });
+  return { code: r.status, out: r.stdout, err: r.stderr };
+}
+// A harmless draft; any data-loading command must refuse before using it.
+function draft(dir) {
+  const f = join(dir, 'draft.json');
+  writeFileSync(f, JSON.stringify({ playbook: 'feature', size: 'M', steps: [{ role: 'qa', why: 'tests' }], skips: [] }));
+  return f;
+}
+const readP = async (dir) => {
+  try { return await route.readProtected(dir); } catch { return null; }
+};
+
+test('route.mjs exports readProtected', () => {
+  assert.equal(typeof route.readProtected, 'function');
+});
+
+test('readProtected(repo root) equals both PROTECTED_ROLES exports, as sets', async () => {
+  const got = await route.readProtected(root);
+  assert.deepEqual(sorted(got), sorted(SETTINGS_PROTECTED));
+  assert.deepEqual(sorted(got), sorted(CHECK_PROTECTED));
+  const floor = JSON.parse(readFileSync(join(root, 'company', 'model-floor.json'), 'utf8'));
+  assert.deepEqual(sorted(got), sorted(floor.protected));
+});
+
+test('readProtected reads the file, not a copy: a changed array is returned', async () => {
+  const dir = product(floorWith({ ...JSON.parse(readFileSync(join(root, 'company', 'model-floor.json'), 'utf8')), protected: ['architect', 'qa'] }));
+  assert.deepEqual(sorted(await route.readProtected(dir)), ['architect', 'qa']);
+});
+
+test('route.mjs holds no copy of the list and imports no Core or settings', () => {
+  const src = readFileSync(join(root, 'scripts', 'route.mjs'), 'utf8');
+  for (const name of ['fresh-reviewer', 'vuln-scanner', 'pentester', 'code-reviewer']) {
+    assert.ok(!src.includes(`'${name}'`) && !src.includes(`"${name}"`), `literal ${name}`);
+  }
+  assert.doesNotMatch(src, /from\s+['"]\.\/(settings|check)\.mjs['"]/);
+  assert.doesNotMatch(src, /import\(\s*['"]\.\/(settings|check)\.mjs['"]/);
+});
+
+const broken = {
+  'file missing': (p) => rmSync(p),
+  'not JSON': floorWith('{ nope'),
+  'protected missing': floorWith({ v: 1, floor: {} }),
+  'protected not an array': floorWith({ protected: 'architect' }),
+  'protected empty': floorWith({ protected: [] }),
+  'protected has a duplicate': floorWith({ protected: ['architect', 'architect'] }),
+  'protected has a slug with no agents file': floorWith({ protected: ['architect', 'no-such-role'] }),
+  'protected has a non-string': floorWith({ protected: ['architect', 7] }),
+  'protected has a path-like slug': floorWith({ protected: ['../agents/architect'] }),
+  'protected has 51 entries': floorWith({ protected: Array.from({ length: 51 }, (_, i) => `r${i}`) }),
+  'file over 16 KiB': floorWith(JSON.stringify({ protected: ['architect'], pad: 'x'.repeat(16 * 1024) })),
+  'file is a directory': (p) => { rmSync(p); mkdirSync(p); },
+};
+
+for (const [name, mutate] of Object.entries(broken)) {
+  test(`broken floor (${name}): readProtected does not return a list`, async () => {
+    assert.equal(typeof route.readProtected, 'function');
+    const got = await readP(product(mutate));
+    assert.ok(!Array.isArray(got) || got.length === 0, String(got));
+  });
+
+  test(`broken floor (${name}): check refuses "model floor unreadable"`, () => {
+    const dir = product(mutate);
+    const r = cli(dir, ['check', draft(dir)]);
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.match(r.out, /^refused: model floor unreadable$/m);
+  });
+
+  test(`broken floor (${name}): write refuses and writes nothing`, () => {
+    const dir = product(mutate);
+    const r = cli(dir, ['write', 'P20261116.000003/01-feature', draft(dir)]);
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.match(r.out, /^refused: model floor unreadable$/m);
+    const ls = spawnSync(process.execPath, ['-e', "const f=require('fs');const p='.company/work';process.stdout.write(f.existsSync(p)?'work':'none')"], { cwd: dir, encoding: 'utf8' });
+    assert.equal(ls.stdout, 'none');
+  });
+
+  test(`broken floor (${name}): dry, next, tasks, fix also refuse`, () => {
+    const dir = product(mutate);
+    const slug = 'P20261116.000003/01-feature';
+    const cases = [
+      ['dry', draft(dir), '--base', 'HEAD'],
+      ['next', slug],
+      ['tasks', slug, '3'],
+      ['fix', slug, 'qa', 'why'],
+    ];
+    for (const args of cases) {
+      const r = cli(dir, args);
+      assert.equal(r.code, 2, `${args[0]}: ${r.out}${r.err}`);
+      assert.match(r.out, /^refused: model floor unreadable$/m, args[0]);
+    }
+  });
+}
+
+test('intact floor: check does not refuse with model floor unreadable', () => {
+  const dir = product();
+  const r = cli(dir, ['check', draft(dir)]);
+  assert.doesNotMatch(r.out, /model floor unreadable/);
+});
