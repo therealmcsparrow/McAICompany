@@ -24,6 +24,7 @@ const SIZES = ['XS', 'S', 'M', 'L'];
 const CONDITIONS = ['ui_changed', 'strings_changed', 'contract_changed', 'languages>1'];
 const FLAG_CONDITIONS = ['ui_changed', 'strings_changed', 'contract_changed'];
 const NEVER_SKIP = ['qa', 'security'];
+const MERGE_ROLE = `code-reviewer`;
 const SLUG = /^[a-z][a-z0-9-]{0,40}$/;
 const HANDOFF_NAME = /^(\d{2,3})-[a-z][a-z0-9-]{0,40}\.md$/;
 const CONTROL = /[\p{Cc}\p{Zl}\p{Zp}]/u;
@@ -191,7 +192,7 @@ export function lintRoute(route, data) {
     if (!validWhy(s.why)) err(`step ${i} has no why`);
     if (hasOwn(s, 'merge')) {
       if (route.size !== 'S') err('merge needs size S');
-      if (s.role !== 'code-reviewer' || s.merge !== 'qa') err('merge must be code-reviewer with qa');
+      if (s.role !== MERGE_ROLE || s.merge !== 'qa') err('merge must be code-reviewer with qa');
     }
   });
   skips.forEach((s, i) => {
@@ -315,9 +316,8 @@ function needsCeo(runDir) {
     let head;
     try { head = readPlain(join(runDir, n), 256 * KiB); } catch { return `Handoff ${n.slice(0, -3)} unreadable`; }
     if (head === null) continue;
-    const fm = head.slice(0, MAX_HANDOFF_HEAD);
-    const m = /^---\n([\s\S]*?)\n---/.exec(fm.replace(/\r/g, ''));
-    if (m === null) continue;
+    const m = /^---\n([\s\S]*?)\n---/.exec(head.replace(/\r/g, ''));
+    if (m === null || m[0].length > MAX_HANDOFF_HEAD) return `Handoff ${n.slice(0, -3)} frontmatter unreadable`;
     const s = /^status:[ \t]*(\S+)[ \t]*$/m.exec(m[1]);
     if (s !== null && s[1] === 'needs-ceo') return `Handoff ${n.slice(0, -3)} has status needs-ceo`;
   }
@@ -328,7 +328,7 @@ function needsCeo(runDir) {
 function decide(root, runDir, route, entry, data, facts) {
   if (entry.role === 'tasks') return { do: 'tasks', why: 'run the plan tasks through plan-tasks, then call next again' };
   if (hasOwn(entry, 'merge')) {
-    const split = (why) => ({ do: 'split', why: clean(why, MAX_WHY), roles: ['qa', 'code-reviewer'] });
+    const split = (why) => ({ do: 'split', why: clean(why, MAX_WHY), roles: ['qa', MERGE_ROLE] });
     if (route.size !== 'S') return split('merge needs size S');
     if (facts === null) return split('facts missing: split the merge');
     if (facts.contract_changed !== false) return split(`contract_changed in facts ${facts.step}`);
@@ -359,10 +359,28 @@ function draftRoute(value) {
   return value;
 }
 
-const PROTECTED = Object.freeze(['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner']);
+// The protected Roles: the `protected` array of company/model-floor.json, or a refusal.
+export function readProtected(root) {
+  const unreadable = () => refuse('model floor unreadable');
+  let v;
+  try {
+    const text = readPlain(join(root, 'company', 'model-floor.json'), MAX_DATA_BYTES);
+    if (text === null) return unreadable();
+    v = parseJson(text);
+  } catch { return unreadable(); }
+  const list = isPlain(v) && hasOwn(v, 'protected') ? v.protected : null;
+  if (!Array.isArray(list) || list.length < 1 || list.length > 50) return unreadable();
+  const roles = agentSlugs(root);
+  const seen = new Set();
+  for (const r of list) {
+    if (typeof r !== 'string' || !SLUG.test(r) || !roles.has(r) || seen.has(r)) return unreadable();
+    seen.add(r);
+  }
+  return [...list];
+}
 
-async function protectedList() {
-  return [...PROTECTED];
+async function protectedList(root) {
+  return readProtected(root);
 }
 
 function printErrors(errors) {
@@ -391,9 +409,10 @@ function lintEvents(events, data) {
 
 async function run(argv, root) {
   const [cmd, ...rest] = argv;
+  if (['check', 'dry', 'write', 'tasks', 'fix', 'next'].includes(cmd)) await protectedList(root);
   if (cmd === 'check') {
     if (rest.length !== 1) refuse('usage: check <file>');
-    const prot = await protectedList();
+    const prot = await protectedList(root);
     const text = readPlain(resolve(rest[0]), MAX_LEDGER_BYTES);
     if (text === null) refuse('file not found');
     const { data, errors: dataErrors } = loadData(root, prot);
@@ -419,7 +438,7 @@ async function run(argv, root) {
       o[k.slice(2)] = opts[i + 1];
     }
     if (o.base === null) refuse('--base is required');
-    const prot = await protectedList();
+    const prot = await protectedList(root);
     const route = draftRoute(readDraft(file).value);
     const { data, errors } = loadData(root, prot);
     const lint = [...errors, ...lintRoute(route, data)];
@@ -441,7 +460,7 @@ async function run(argv, root) {
 
   const slug = rest[0];
   const parts = slugParts(slug);
-  const prot = await protectedList();
+  const prot = await protectedList(root);
   const runDir = runDirOf(root, parts);
   const { events, size } = readLedger(runDir);
   const { data, errors: dataErrors } = loadData(root, prot);
