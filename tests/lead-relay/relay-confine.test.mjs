@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'lead-relay.mjs');
 const ID = 'P20261117.000001';
@@ -95,5 +95,53 @@ describe('R-1: preset fails closed', () => {
     const ok = JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_input: { questions: [] } });
     const r = spawnSync(process.execPath, [SCRIPT, 'preset'], { input: ok, encoding: 'utf8', timeout: 20000 });
     assert.deepEqual([r.status, r.stdout], [0, '']);
+  });
+});
+
+// Round 3 (149): R-1 confined() follows proj.M-SEC7 (native realpath, real == typed, exactWorkPath under .company/work/).
+describe('R-1 (148): confined() real-path equality', async () => {
+  const { confined } = await import(pathToFileURL(SCRIPT).href);
+  const real = (map) => (p) => map[p] ?? p;
+  const fake = (fx, over) => ({ fs, path, realpath: real({ [fx.root]: fx.root, ...over }) });
+
+  test('a file that resolves to the same path is returned', () => {
+    const fx = fixture();
+    const f = path.join(fx.root, 'q.json');
+    fs.writeFileSync(f, Q);
+    assert.equal(confined(fx.root, 'q.json', fake(fx, {})), f);
+  });
+
+  test('a real path that differs from the typed path is refused, though inside the repo', () => {
+    const fx = fixture();
+    const f = path.join(fx.root, 'q.json');
+    fs.writeFileSync(f, Q);
+    const other = path.join(fx.root, 'other.json');
+    assert.throws(() => confined(fx.root, 'q.json', fake(fx, { [f]: other })), /refused|outside|differs/);
+  });
+
+  test('a questions file under .company/ outside work/ is refused', () => {
+    const fx = fixture();
+    const f = path.join(fx.root, '.company', 'standards.md');
+    fs.writeFileSync(f, Q);
+    assert.throws(() => confined(fx.root, '.company/standards.md', fake(fx, {})), /refused|\.company/);
+  });
+
+  test('a file under .company/work/ passes exactWorkPath only with exact letter case', () => {
+    const fx = fixture();
+    const f = path.join(fx.dir, 'q.json');
+    fs.writeFileSync(f, Q);
+    assert.equal(confined(fx.root, path.join('.company', 'work', ID, '01-feature', 'q.json'), fake(fx, {})), f);
+    const wrong = path.join('.company', 'work', ID, '01-feature', 'Q.json');
+    assert.throws(() => confined(fx.root, wrong, { fs, path, realpath: (p) => (p === path.join(fx.dir, 'Q.json') ? f : p) }), /differs|case|exact/);
+  });
+
+  test('a junction inside the repo to another repo file is refused (real, needs link right)', (t) => {
+    const fx = fixture();
+    const target = path.join(fx.root, 'real.json');
+    fs.writeFileSync(target, Q);
+    const link = path.join(fx.root, 'link.json');
+    try { fs.symlinkSync(target, link); } catch { t.skip('no symlink right'); return; }
+    assert.equal(open(fx, 'link.json').status, 1);
+    assert.ok(!formsExist(fx));
   });
 });

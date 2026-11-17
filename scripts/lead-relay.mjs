@@ -11,7 +11,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { main as handover, workDir, openRegular, readSmall, lstatOrNull, iso } from './lead-handover.mjs';
 import { runSlugs, show } from './run-state.mjs';
-import { isRunSlug } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, exactWorkPath } from '../mods/lib/work-folder.mjs';
 
 const FORMS = 'forms.jsonl';
 const MAX_ARG = 4096;
@@ -124,13 +124,32 @@ function lastHandoff(root, slug) {
   return /^last (lead-handoff-\d+\.md)$/m.exec(r.out)?.[1] ?? 'none';
 }
 
-// The questions file must resolve (symlinks followed) to a path inside the repo root, else refused.
-function confined(root, file) {
+// proj.M-SEC7: the questions file's native real path must equal its typed absolute path (letter case may differ on win32/darwin,
+// never under .company/work/) and lie inside the native real root; under .company/ only .company/work/ is allowed, by exactWorkPath.
+export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.native }) {
+  const sep = path.sep;
+  const fold = process.platform === 'win32' || process.platform === 'darwin';
+  const lexical = path.resolve(root, file);
   let real;
   let base;
-  try { real = fs.realpathSync(path.resolve(root, file)); base = fs.realpathSync(root); } catch { return refuse('questions file unreadable'); }
+  try { real = io.realpath(lexical); base = io.realpath(path.resolve(root)); } catch { return refuse('questions file unreadable'); }
+  const outside = (rel) => rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || path.isAbsolute(rel);
+  const typed = path.relative(path.resolve(root), lexical);
+  if (outside(typed)) refuse('questions file is outside the repo');
   const rel = path.relative(base, real);
-  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) refuse('questions file is outside the repo');
+  if (outside(rel)) refuse('questions file is outside the repo');
+  const parts = typed.split(sep);
+  const inCompany = parts[0].toLowerCase() === '.company';
+  const inWork = inCompany && parts[0] === '.company' && parts[1] === 'work';
+  if (inCompany && !inWork) refuse('questions file is under .company');
+  const want = path.join(base, typed);
+  const same = inWork || !fold ? real === want : real.toLowerCase() === want.toLowerCase();
+  if (!same) refuse('questions file path differs from its real path');
+  if (inWork) {
+    let r;
+    try { r = exactWorkPath({ fs: io.fs, path: io.path }, base, parts.slice(2)); } catch { refuse('questions file path letter case'); }
+    if (r !== 'exact') refuse('questions file path is not an exact work path');
+  }
   return real;
 }
 
