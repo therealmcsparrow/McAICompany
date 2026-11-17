@@ -5,6 +5,9 @@ import { normalizePath } from '../lib/paths.mjs';
 
 const RULE = 'self-protect.M-SEC1';
 const MESSAGE = 'aico guard self-protect.M-SEC1: plugin and settings files are protected; change them through the settings console.';
+const RECORD_MESSAGE = 'aico guard self-protect.M-SEC1: run records are written by aico scripts only';
+const RECORD_WORDS = ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl'];
+const RECORD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
 const MAX_COMMAND_CHARS = 200000;
 const MAX_DEPTH = 3;
 const FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -184,14 +187,14 @@ function isRelative(word) {
   return !/^(?:[A-Za-z]:|[\\/]|~|\$|%)/.test(word);
 }
 
-function makeContext(event) {
+function makeContext(event, rec) {
   const tool = event.tool;
   const prot = [];
   if (Array.isArray(event.protected)) {
     for (const p of event.protected) {
       if (typeof p === 'string') {
         const norm = normalizePath(p);
-        if (norm !== '') prot.push(norm);
+        if (norm !== '' && (!rec || RECORD_SHAPE.test(norm))) prot.push(norm);
       }
     }
   }
@@ -212,13 +215,13 @@ function makeContext(event) {
     const pl = /^(.*\/plugins\/cache\/[^/]+\/[^/]+\/[^/]+)/.exec(p);
     if (pl) plugins.add(pl[1]);
   }
-  const bases = new Set(FIXED_BASES);
+  const bases = new Set(rec ? RECORD_WORDS : FIXED_BASES);
   for (const p of prot) bases.add(tailOf(p));
   const protSegs = prot.map((p) => p.split('/'));
   const marker = entries.get('');
   const limited = marker !== undefined;
   const cwdHot = limited && marker.cwdHot !== false;
-  return { prot, protSegs, entries, homes, mshs, plugins, bases, limited, cwdHot };
+  return { rec, prot, protSegs, entries, homes, mshs, plugins, bases, limited, cwdHot };
 }
 
 function insideProtected(ctx, norm) {
@@ -254,7 +257,7 @@ function forms(ctx, word) {
 }
 
 function hits(ctx, word, ancestor) {
-  if (VAR_LED.test(word) && namesSettingsWord(word)) return true;
+  if (VAR_LED.test(word) && namesSettingsWord(word, ctx)) return true;
   for (const f of forms(ctx, word)) {
     const norm = normalizePath(f);
     if (insideProtected(ctx, norm)) return true;
@@ -263,9 +266,9 @@ function hits(ctx, word, ancestor) {
   return false;
 }
 
-function namesSettingsWord(text) {
+function namesSettingsWord(text, ctx) {
   const t = text.toLowerCase();
-  return SETTINGS_WORDS.some((w) => t.includes(w));
+  return (ctx && ctx.rec ? RECORD_WORDS : SETTINGS_WORDS).some((w) => t.includes(w));
 }
 
 function nonFlags(args) {
@@ -282,18 +285,30 @@ function destinationValues(args) {
   return out;
 }
 
-function inlineDenied(words) {
+function inlineDenied(words, ctx) {
   for (let i = 0; i < words.length; i++) {
     const base = baseOf(words[i]);
     if (EVAL_VERBS.has(base)) {
-      if (namesSettingsWord(words.slice(i + 1).join(' '))) return true;
+      if (namesSettingsWord(words.slice(i + 1).join(' '), ctx)) return true;
       continue;
     }
     const flag = INTERPRETERS[base];
     if (!flag) continue;
     const rest = words.slice(i + 1);
-    if (POWERSHELLS.has(base) && rest.some((a) => ENCODED.test(a))) return true;
-    if (rest.some((a) => flag.test(a)) && namesSettingsWord(words.slice(i).join(' '))) return true;
+    if (POWERSHELLS.has(base) && rest.some((a) => ENCODED.test(a)) && (!ctx.rec || encodedNamesRecord(rest))) return true;
+    if (rest.some((a) => flag.test(a)) && namesSettingsWord(words.slice(i).join(' '), ctx)) return true;
+  }
+  return false;
+}
+
+// A PowerShell -EncodedCommand is base64 of UTF-16LE text; a payload that does not decode names no record.
+function encodedNamesRecord(rest) {
+  for (let i = 0; i < rest.length; i++) {
+    if (!ENCODED.test(rest[i]) || i + 1 >= rest.length) continue;
+    try {
+      const text = Buffer.from(rest[i + 1], 'base64').toString('utf16le');
+      if (namesSettingsWord(text, { rec: true })) return true;
+    } catch { /* an unreadable payload names no record */ }
   }
   return false;
 }
@@ -537,8 +552,8 @@ const HERESTRING = /^([^\n]*?)<<<([^\n]*)$/gm;
 
 // A program fed to an interpreter on stdin denies when it names a settings word, or reaches for the home
 // folder or environment and writes: the target may be built at run time, so it cannot be read from the text.
-function programDenied(body) {
-  return namesSettingsWord(body) || (HOMEISH.test(body) && WRITEISH.test(body));
+function programDenied(body, ctx) {
+  return namesSettingsWord(body, ctx) || (!ctx.rec && HOMEISH.test(body) && WRITEISH.test(body));
 }
 
 const PS_HERE_OPEN = /@(["'])[ \t]*\r?\n/g;
@@ -617,22 +632,22 @@ function* psHereStrings(text) {
   }
 }
 
-function stdinProgramDenied(text) {
+function stdinProgramDenied(text, ctx) {
   if (!/<<|@["']|\|/.test(text)) return false;
   const headWords = (head) => head.split(/[\s;|&()]+/).filter(Boolean);
   for (const m of text.matchAll(HEREDOC)) {
     const lineStart = text.lastIndexOf('\n', m.index) + 1;
     const head = `${text.slice(lineStart, m.index)} ${m[3]}`;
-    if (headWords(head).some(isStdinRunner) && programDenied(m[4])) return true;
+    if (headWords(head).some(isStdinRunner) && programDenied(m[4], ctx)) return true;
   }
   for (const m of text.matchAll(HERESTRING)) {
-    if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2])) return true;
+    if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2], ctx)) return true;
   }
   for (const [body, rest] of psHereStrings(text)) {
-    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
+    if (headWords(rest).some(isStdinRunner) && programDenied(body, ctx)) return true;
   }
   for (const [body, rest] of pipedTexts(text)) {
-    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
+    if (headWords(rest).some(isStdinRunner) && programDenied(body, ctx)) return true;
   }
   return false;
 }
@@ -642,7 +657,7 @@ const NET_WRITE_METHOD = /^(?:write|append|create|copy|move|delete|replace|set|o
 const NET_WRITER_NEW = /(?:\[(?:system\.)?io\.(?:streamwriter|filestream|binarywriter)\]::new|new-object\s+(?:system\.)?io\.(?:streamwriter|filestream|binarywriter))\s*\(?\s*/gi;
 
 // A .NET file write is allowed only when its first argument is a quoted literal that names no settings word.
-function netTargetDenied(text, from) {
+function netTargetDenied(text, from, ctx) {
   const c = text[from];
   if (c !== '"' && c !== "'") return true;
   const end = text.indexOf(c, from + 1);
@@ -650,16 +665,16 @@ function netTargetDenied(text, from) {
   const after = /^\s*([,)])/.exec(text.slice(end + 1, end + 20));
   if (!after) return true;
   const call = text.slice(from, text.indexOf(')', end) === -1 ? from + 400 : text.indexOf(')', end));
-  return namesSettingsWord(text.slice(from, end + 1)) || namesSettingsWord(call);
+  return namesSettingsWord(text.slice(from, end + 1), ctx) || namesSettingsWord(call, ctx);
 }
 
-function dotnetWriteDenied(text) {
+function dotnetWriteDenied(text, ctx) {
   if (!text.includes('::') && !/new-object/i.test(text)) return false;
   for (const m of text.matchAll(NET_FILE_CALL)) {
-    if (NET_WRITE_METHOD.test(m[1]) && netTargetDenied(text, m.index + m[0].length)) return true;
+    if (NET_WRITE_METHOD.test(m[1]) && netTargetDenied(text, m.index + m[0].length, ctx)) return true;
   }
   for (const m of text.matchAll(NET_WRITER_NEW)) {
-    if (netTargetDenied(text, m.index + m[0].length)) return true;
+    if (netTargetDenied(text, m.index + m[0].length, ctx)) return true;
   }
   return false;
 }
@@ -668,18 +683,19 @@ function dotnetWriteDenied(text) {
 function unresolvedRisky(ctx, word) {
   if (ctx.entries.has(word)) return false;
   if (ctx.cwdHot && isRelative(word)) return true;
-  return RISKY_UNRESOLVED.test(word) || namesSettingsWord(word) || ctx.bases.has(tailOf(normalizePath(word)));
+  if (ctx.rec) return namesSettingsWord(word, ctx) || ctx.bases.has(tailOf(normalizePath(word)));
+  return RISKY_UNRESOLVED.test(word) || namesSettingsWord(word, ctx) || ctx.bases.has(tailOf(normalizePath(word)));
 }
 
 function analyze(ctx, text, powershell, depth, acc) {
   const subshells = [];
   const stripped = stripHeredocs(text);
   const stmts = tokenize(stripped, powershell, (s) => subshells.push(s));
-  const names = namesSettingsWord(stripped);
+  const names = namesSettingsWord(stripped, ctx);
   for (const { words, redirs } of stmts) {
     const vi = verbIndex(words);
     const verb = vi < words.length ? baseOf(words[vi]) : '';
-    if (guardScriptDenied(words, vi, verb) || inlineDenied(words)) return true;
+    if ((!ctx.rec && guardScriptDenied(words, vi, verb)) || inlineDenied(words, ctx)) return true;
     if (CD_VERBS.has(verb)) {
       acc.cd = true;
       const target = nonFlags(words.slice(vi + 1))[0];
@@ -698,7 +714,7 @@ function analyze(ctx, text, powershell, depth, acc) {
 
 function judgeShell(ctx, command, powershell) {
   const acc = { cd: false, cdProt: false, writes: [], variants: 0 };
-  if (stdinProgramDenied(command) || dotnetWriteDenied(command)) return true;
+  if (stdinProgramDenied(command, ctx) || dotnetWriteDenied(command, ctx)) return true;
   if (analyze(ctx, command, powershell, 0, acc)) return true;
   if (!acc.cd) return false;
   return acc.writes.some((w) => isRelative(w) && (acc.cdProt || ctx.bases.has(tailOf(normalizePath(w))) || globBaseHit(ctx, w)));
@@ -723,4 +739,15 @@ export function judge(event) {
   if (!SHELL_TOOLS.has(tool.name) || typeof tool.command !== 'string') return allow();
   if (tool.command.length > MAX_COMMAND_CHARS) return deny();
   return judgeShell(ctx, tool.command, tool.name === 'PowerShell') ? deny() : allow();
+}
+
+// The run-record check alone: only a write to a run record denies. The host runs it before the `off` branch.
+export function judgeRecord(event) {
+  const tool = event && event.tool;
+  if (!tool || typeof tool !== 'object') return allow();
+  const ctx = makeContext(event, true);
+  if (FILE_TOOLS.has(tool.name)) return judgeFile(ctx, tool) ? { v: 'deny', rule: RULE, message: RECORD_MESSAGE } : allow();
+  if (!SHELL_TOOLS.has(tool.name) || typeof tool.command !== 'string') return allow();
+  if (tool.command.length > MAX_COMMAND_CHARS || judgeShell(ctx, tool.command, tool.name === 'PowerShell')) return { v: 'deny', rule: RULE, message: RECORD_MESSAGE };
+  return allow();
 }

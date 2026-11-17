@@ -114,7 +114,11 @@ async function main() {
   if (!pins.ok) {
     const msg = `pins-mismatch: ${pins.files.slice(0, 5).join(', ')}`;
     if (name === 'SessionStart') return finish({ systemMessage: `aico guards: ${msg}; guards deny until the plugin is reinstalled` });
-    if (guardsOff && peekLead) return finish(null);
+    if (guardsOff && peekLead) {
+      // The pinned rule cannot be trusted, so a call that names a run record is denied by text alone.
+      if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
+      return finish(null);
+    }
     if (name === 'SubagentStart' || name === 'SubagentStop') return finish(null);
     return finish(preDeny('pins-mismatch', pins.files.slice(0, 5).join(', ')));
   }
@@ -204,6 +208,19 @@ async function main() {
     if (full) {
       snap.writeLead(snapCtx, full);
       if (event.agentKey) snap.writeStepOnce(snapCtx, event.agentKey, full);
+    }
+  }
+
+  // Run records are shielded for every session, before the off branch, with no snapshot or rule table.
+  if (evName === 'PreToolUse' && event.tool) {
+    let rec = null;
+    try {
+      const sp = await import(pathToFileURL(path.join(ROOT, 'hooks', 'rules', 'self-protect.mjs')).href);
+      rec = sp.judgeRecord(event);
+    } catch { rec = { v: 'deny', message: 'aico guard self-protect.M-SEC1: run records are written by aico scripts only' }; }
+    if (rec && rec.v === 'deny') {
+      log.appendDeny(snap.denyDir(mcsHome, root), { rule: 'self-protect.M-SEC1', kind: 'deny', session: event.sessionKey, agent: event.agentKey });
+      return done(denyOut(evName, stopActive, 'self-protect.M-SEC1', rec.message, {}));
     }
   }
 

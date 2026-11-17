@@ -17,7 +17,7 @@ const MAX_PATHS = 80;
 const MAX_SHELL_PATHS = 64;
 const MAX_MODEL = 64;
 const MAX_RUNS = 500;
-const GUARD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+guard\.jsonl$/;
+const GUARD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
 const LEAD_TYPE = 'aico:project-manager';
 const PROMPT_BYTES = 64 * 1024;
 // Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
@@ -386,8 +386,10 @@ export async function normalize(raw, ctx) {
     if (typeof e.real === 'string' && GUARD_SHAPE.test(fold(e.real)) && !event.protected.includes(fold(e.real))) event.protected.push(fold(e.real));
   }
   if (event.run && typeof event.run.folder === 'string') {
-    const g = realOf(path.join(event.run.folder, 'guard.jsonl'), root || process.cwd());
-    if (g && !event.protected.includes(fold(g))) event.protected.push(fold(g));
+    for (const n of ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl']) {
+      const g = realOf(path.join(event.run.folder, n), root || process.cwd());
+      if (g && !event.protected.includes(fold(g))) event.protected.push(fold(g));
+    }
   }
   for (const e of tool ? tool.paths : []) {
     if (e.raw !== '' || !Array.isArray(e.cwds)) continue;
