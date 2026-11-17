@@ -13,7 +13,7 @@
     "hooks/lib/rule-runner.mjs": "7ba077f3cbd66ae4bb3dbf04919ae54159387a82d851644942ae7938e508aa69",
     "hooks/lib/snapshot.mjs": "ff5dcb5632ed8e52ca32d80ea6c42647fdd7fe9acda7736bbe30d55bee684980",
     "hooks/rules/browser.mjs": "895ee95287943d9c6627f8475d2f73223610d08256d208a668f76144618d032d",
-    "hooks/rules/cap.mjs": "7b385115c9ba76468800ae3c63c92ff389d61ef55bad207b863e3397e04357fe",
+    "hooks/rules/cap.mjs": "30800916b4877e17ddedbd1a7438aeb51594f853c1912c1991759d74b5915eaf",
     "hooks/rules/dotenv.mjs": "53e10047a416281c49aecc114dd64ecebdf86b579835b97ec400c7e47c950a84",
     "hooks/rules/model-floor.mjs": "27f00952600bf5bdcf79c6245063d2c554e3fa40dca201444e3a13964fd4d653",
     "hooks/rules/self-protect.mjs": "5e0a2e3e962cdee1da1f32988c91191a4db08178cdc72abbf552ed970afc49be",
