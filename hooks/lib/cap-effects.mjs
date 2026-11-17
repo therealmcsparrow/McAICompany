@@ -124,10 +124,14 @@ export async function recordGuardsOff(event, root, now = Date.now()) {
   } catch { return false; }
 }
 
-// `bg` rows are gone (context-guard v3.0): the host still calls this; it records nothing.
-export async function recordBackground() {
-  return false;
+// The file of this session's last context `handover` event, or null.
+function lastHandoverFile(lh, run, session) {
+  try {
+    const hits = lh.loadRecord(run.folder).filter((e) => e.ev === 'handover' && e.trigger === 'context' && e.session === session && typeof e.file === 'string' && HANDOFF_FILE.test(e.file));
+    return hits.length > 0 ? hits[hits.length - 1].file : null;
+  } catch { return null; }
 }
+const HANDOFF_FILE = /^lead-handoff-[1-9]\d{0,3}\.md$/;
 
 // Applies the effect of a `cap.M1` verdict. Returns { extra }: output keys to merge into the hook output.
 export async function applyEffect(verdict, event, root, now = Date.now()) {
@@ -152,15 +156,17 @@ export async function applyEffect(verdict, event, root, now = Date.now()) {
       case 'cap-lead-freeze': {
         if (!run) break;
         const { lh } = await modules();
-        try { lh.contextHandover(mainRoot(root), run.slug, { tokens: event.tokens.total, session: event.sessionKey, now }); } catch { /* refused: the deny stands */ }
-        const cmd = lh.newSessionCommand(run.slug);
-        if (cmd) extra.reasonSuffix = cmd;
+        let name = null;
+        try { name = lh.contextHandover(mainRoot(root), run.slug, { tokens: event.tokens.total, session: event.sessionKey, now }); } catch { /* refused: the deny stands */ }
+        if (typeof name !== 'string') name = lastHandoverFile(lh, run, event.sessionKey);
+        if (name) extra.reasonSuffix = `handoff: .company/work/${run.slug}/${name}`;
         break;
       }
       case 'cap-lead-frozen': {
+        if (!run) break;
         const { lh } = await modules();
-        const cmd = run ? lh.newSessionCommand(run.slug) : null;
-        if (cmd) extra.reasonSuffix = cmd;
+        const name = lastHandoverFile(lh, run, event.sessionKey);
+        if (name) extra.reasonSuffix = `handoff: .company/work/${run.slug}/${name}`;
         break;
       }
       case 'cap-warn':
@@ -171,11 +177,6 @@ export async function applyEffect(verdict, event, root, now = Date.now()) {
     }
   } catch { /* the verdict stands unrecorded */ }
   return { extra };
-}
-
-// The MCP tool is no longer allowed at the hand-over point (context-guard v3.0): nothing freezes on it. Kept as the host's call site.
-export async function freezeOnMcp() {
-  return false;
 }
 
 // One `stop` row per agent: the stop block is given once.

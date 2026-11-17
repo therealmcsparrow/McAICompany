@@ -80,7 +80,7 @@ function judgeLead(event, run) {
 }
 
 const isSpawn = (event) => isObj(event.tool) && (event.tool.name === 'Agent' || event.tool.name === 'Task');
-const isLeadTarget = (tool) => tool.subagentType === 'project-manager';
+const isLeadTarget = (tool) => typeof tool.subagentType === 'string' && tool.subagentType.trim().toLowerCase() === 'project-manager';
 
 // Spawn limits, checked before any token reading. Returns a deny or null.
 function judgeSpawn(event) {

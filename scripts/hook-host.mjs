@@ -264,8 +264,6 @@ async function main() {
       if (v.v === 'note') notes.push(v.message);
     }
   }
-  if (!denied && s.ok && !off && guardRows.length > 0) await eff.freezeOnMcp(event, s.snapshot, root);
-  if (!denied && !off && evName === 'PreToolUse') await eff.recordBackground(event, root);
   if (!denied && s.ok && event.session === 'lead' && !s.snapshot.drift && event.drift.length === 0) {
     for (const r of rows.filter((x) => x.kind === 'saver' && applies(x, event) && s.snapshot.savers[x.id] === true)) {
       const out = await run(r, event, s.snapshot);
@@ -289,7 +287,6 @@ async function main() {
   delete rest.reasonSuffix;
   if (denied) {
     const full = extra.reasonSuffix ? `${denied.message} ${extra.reasonSuffix}` : denied.message;
-    if (rest.continue === false) rest.stopReason = full;
     return done(denyOut(evName, stopActive, denied.rule, full, { ...rest, ...(msg ? { systemMessage: msg } : {}) }));
   }
   const out = { ...rest, ...(msg ? { systemMessage: msg } : {}) };

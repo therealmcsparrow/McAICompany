@@ -183,9 +183,11 @@ function toolOf(name, input, ctx, cwd) {
   let model = null;
   let subagentType = null;
   let outputRole = null;
+  // Unicode whitespace is stripped so a padded name cannot slip past the Lead match.
+  const stRaw = (name === 'Agent' || name === 'Task') ? str(input, 'subagent_type') : null;
+  const st = typeof stRaw === 'string' ? stRaw.replace(/^[\s​-‍⁠﻿]+|[\s​-‍⁠﻿]+$/g, '') : null;
   if (name === 'Agent' || name === 'Task') {
     model = str(input, 'model');
-    const st = str(input, 'subagent_type');
     const m = st ? ROLE_RE.exec(st) : null;
     subagentType = m ? m[1] : null;
     const prompt = str(input, 'prompt');
@@ -197,7 +199,7 @@ function toolOf(name, input, ctx, cwd) {
       }
     }
   }
-  const leadTarget = (name === 'Agent' || name === 'Task') && /(^|:)project-manager$/.test((str(input, 'subagent_type') ?? '').toLowerCase());
+  const leadTarget = (name === 'Agent' || name === 'Task') && /(^|:)project-manager$/.test((st ?? '').toLowerCase());
   const background = BG_TOOLS.has(name) && own(input, 'run_in_background') && input.run_in_background === true;
   return { name, command, paths, model, subagentType, outputRole, background, leadTarget };
 }
@@ -332,7 +334,7 @@ function deepFreeze(o) {
   return o;
 }
 
-// ctx: { env, schema, pluginRoot, mcsHome, resolveRun(event, root) (may be async) }. Returns { ok: true, event } or { ok: false, why }.
+// ctx: { env, schema, pluginRoot, mcsHome, resolveRun(event, root) (may be async), memo? (Map, optional cwd cache) }. Returns { ok: true, event } or { ok: false, why }.
 export async function normalize(raw, ctx) {
   if (!isObj(raw)) return { ok: false, why: 'not an object' };
   const name = str(raw, 'hook_event_name');
