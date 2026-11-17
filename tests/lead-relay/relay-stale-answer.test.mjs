@@ -1,4 +1,4 @@
-// lead-relay answer: a run whose only run-state activity is older than 12 h is `stale`, yet its open form must still record the answer (141 R-5).
+// lead-relay answer: a run whose only run-state activity is older than 12 h is `stale`, yet its open form must still record the answer.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

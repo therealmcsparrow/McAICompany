@@ -206,9 +206,11 @@ describe('lead-relay answer: no row (fail closed, cch.M20, cch.M-SEC8)', () => {
     const fx = fixture([`${ID}/01-feature`, `${ID}/02-fix`]);
     const qs = [single()];
     assert.equal(openForm(fx, qs, { slug: fx.slugs[0] }).code, 0);
-    assert.equal(openForm(fx, qs, { slug: fx.slugs[1] }).code, 0);
+    // `open` refuses the second form, so write the same open row straight into run 2.
+    const first = rowsOf(fx, fx.slugs[0])[0];
+    fs.writeFileSync(path.join(fx.work, ...fx.slugs[1].split('/'), 'forms.jsonl'), `${JSON.stringify(first)}\n`);
     hook(fx, 'answer', post(qs, answerOf(qs, ['Alpha'])));
-    assert.equal(answers(fx, fx.slugs[0]).length + answers(fx, fx.slugs[1]).length, 0);
+    assert.equal(answers(fx, fx.slugs[0]).length +answers(fx, fx.slugs[1]).length, 0);
   });
   test('an already answered form gets no second answer', () => {
     const qs = [single()];

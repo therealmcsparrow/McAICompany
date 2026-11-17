@@ -1,4 +1,4 @@
-// Round 2 fixes for lead-relay v1: R-1 `preset` fails closed (oversize payload, stalled stdin), R-2 `open` reads only inside the repo.
+// lead-relay v1: `preset` fails closed (oversize payload, stalled stdin); `open` reads only inside the repo.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -31,7 +31,7 @@ const denied = (out) => {
   assert.equal(o.hookSpecificOutput.permissionDecision, 'deny');
 };
 
-describe('R-2: open confines the questions file to the repo', () => {
+describe('open confines the questions file to the repo', () => {
   test('a file inside the repo is read', () => {
     const fx = fixture();
     const f = path.join(fx.root, 'q.json');
@@ -71,7 +71,7 @@ describe('R-2: open confines the questions file to the repo', () => {
   });
 });
 
-describe('R-1: preset fails closed', () => {
+describe('preset fails closed', () => {
   test('an oversize payload is denied', () => {
     const big = JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_input: { questions: [], answers: { a: 'x'.repeat(70 * 1024) } } });
     const r = spawnSync(process.execPath, [SCRIPT, 'preset'], { input: big, encoding: 'utf8', timeout: 20000 });
@@ -98,8 +98,8 @@ describe('R-1: preset fails closed', () => {
   });
 });
 
-// Round 3 (149): R-1 confined() follows proj.M-SEC7 (native realpath, real == typed, exactWorkPath under .company/work/).
-describe('R-1 (148): confined() real-path equality', async () => {
+// confined() follows proj.M-SEC7 (native realpath, real == typed, exactWorkPath under .company/work/).
+describe('confined() real-path equality', async () => {
   const { confined } = await import(pathToFileURL(SCRIPT).href);
   const real = (map) => (p) => map[p] ?? p;
   const fake = (fx, over) => ({ fs, path, realpath: real({ [fx.root]: fx.root, ...over }) });
