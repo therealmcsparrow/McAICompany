@@ -14,7 +14,7 @@ const skill = (name) => read(`skills/${name}/SKILL.md`);
 
 test("pipeline Setup names references/tier-path.md and the file exists", () => {
   const text = skill("pipeline");
-  assert.match(text, /12\. \*\*Tier path\*\* \(feature and fix only\): load references\/tier-path\.md in Setup\./);
+  assert.match(text, /12\. \*\*Tier path and Route\*\* \(feature and fix only\): load references\/tier-path\.md and `references\/route\.md` in Setup /);
   assert.ok(existsSync(join(ROOT, "skills/pipeline/references/tier-path.md")));
 });
 
