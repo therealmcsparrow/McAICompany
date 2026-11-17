@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // contract: docs/contracts/lead-relay.md v1
-// uses: docs/contracts/lead-handoff.md v3.0 docs/contracts/run-state.md v3.0
+// uses: docs/contracts/lead-handoff.md v2.5 docs/contracts/run-state.md v3.0
 // Lead relay: CLI words `open`, `again`, `read` for the Lead, plus the hook adapters `answer` (PostToolUse, records the CEO's pick
 // from tool_response.answers) and `preset` (PreToolUse, denies a pre-filled form). Every stdin field, argument and record line is
 // untrusted: sizes are capped before parsing, every field is matched against an allow-list, and a shape that is not pinned in
