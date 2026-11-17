@@ -15,15 +15,23 @@ const SLUG = 'P20261116.000003/01-feature';
 const BASE40 = 'a'.repeat(40);
 
 const sandboxes = [];
+const REPO = path.join(HERE, '..');
+// root is the product (cwd, no plugin data). plugin is a fake plugin root: a copy of route.mjs and the
+// two files it imports, so the script's own folder decides where company/ and agents/ are read.
 function sandbox() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'route-test-'));
-  sandboxes.push(root);
-  fs.mkdirSync(path.join(root, 'company'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'agents'), { recursive: true });
+  const plugin = fs.mkdtempSync(path.join(os.tmpdir(), 'route-plugin-'));
+  sandboxes.push(root, plugin);
+  fs.mkdirSync(path.join(plugin, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(plugin, 'mods', 'lib'), { recursive: true });
+  for (const f of ['route.mjs', 'diff-facts.mjs']) fs.copyFileSync(path.join(HERE, f), path.join(plugin, 'scripts', f));
+  fs.copyFileSync(path.join(REPO, 'mods', 'lib', 'work-folder.mjs'), path.join(plugin, 'mods', 'lib', 'work-folder.mjs'));
+  fs.mkdirSync(path.join(plugin, 'company'), { recursive: true });
+  fs.mkdirSync(path.join(plugin, 'agents'), { recursive: true });
   fs.mkdirSync(path.join(root, '.company'), { recursive: true });
   const home = path.join(root, 'home');
   fs.mkdirSync(home);
-  return { root, home, run: path.join(root, '.company', 'work', ...SLUG.split('/')) };
+  return { root, plugin, home, run: path.join(root, '.company', 'work', ...SLUG.split('/')) };
 }
 after(() => { for (const r of sandboxes) fs.rmSync(r, { recursive: true, force: true }); });
 
@@ -37,16 +45,16 @@ const WHEN = {
 };
 
 function seed(sb, { budgets = { feature: 10, fix: 6 }, when = WHEN, languages = 'en' } = {}) {
-  for (const a of AGENTS) fs.writeFileSync(path.join(sb.root, 'agents', `${a}.md`), `---\nname: ${a}\n---\n`);
-  fs.writeFileSync(path.join(sb.root, 'company', 'model-floor.json'), JSON.stringify({ v: 1, protected: PROTECTED }));
-  fs.writeFileSync(path.join(sb.root, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets, source: 'test fixture' }));
-  fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
+  for (const a of AGENTS) fs.writeFileSync(path.join(sb.plugin, 'agents', `${a}.md`), `---\nname: ${a}\n---\n`);
+  fs.writeFileSync(path.join(sb.plugin, 'company', 'model-floor.json'), JSON.stringify({ v: 1, protected: PROTECTED }));
+  fs.writeFileSync(path.join(sb.plugin, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets, source: 'test fixture' }));
+  fs.writeFileSync(path.join(sb.plugin, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
   fs.writeFileSync(path.join(sb.root, '.company', 'project.md'), `# Project\nlanguages: ${languages}\n`);
   fs.mkdirSync(sb.run, { recursive: true });
 }
 
 function cli(sb, args) {
-  const r = spawnSync(process.execPath, [ROUTE, ...args], {
+  const r = spawnSync(process.execPath, [path.join(sb.plugin, 'scripts', 'route.mjs'), ...args], {
     cwd: sb.root, encoding: 'utf8', timeout: 20000,
     env: { ...process.env, HOME: sb.home, USERPROFILE: sb.home, MCSPARROW_HOME: path.join(sb.home, '.mcsparrow'), AICO_COLD: '' },
   });
@@ -517,6 +525,68 @@ describe('next: merged pair decision (AC11, AC17)', () => {
     });
   });
 
+  describe('only <NN>-<agents slug>.md files count as Handoffs', () => {
+    const noFm = 'By: x\nno frontmatter here\n';
+    const good = '---\nstep: 01\nstatus: done\n---\nBy: x\n';
+    const merged = (files) => {
+      const sb = sandbox(); seed(sb);
+      facts(sb, { contract_changed: false }, ['code']);
+      for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(sb.run, name), text);
+      written(sb, pair());
+      return next(sb)[0];
+    };
+
+    test('a real run folder (00-summary.md, 00-project.md, plan.md, spec.md, architect plan, findings) still merges', () => {
+      const d = merged({
+        '00-summary.md': noFm, '00-project.md': noFm, 'plan.md': noFm, 'spec.md': noFm,
+        '03-architect-plan.md': noFm, '02-architect.findings.md': noFm, '01-product-manager.md': good,
+      });
+      assert.equal(d.do, 'run', JSON.stringify(d));
+      assert.equal(d.role, 'code-reviewer');
+    });
+
+    test('00-summary.md alone does not split', () => {
+      assert.equal(merged({ '00-summary.md': noFm }).do, 'run');
+    });
+
+    test('a name that is not an agents slug is ignored', () => {
+      assert.equal(merged({ '04-ghost-role.md': noFm }).do, 'run');
+    });
+
+    test('NN of all zeros is ignored, even for an agents slug', () => {
+      assert.equal(merged({ '00-qa.md': noFm, '000-qa.md': noFm }).do, 'run');
+    });
+
+    test('four digits or one digit is not a Handoff name', () => {
+      assert.equal(merged({ '0001-qa.md': noFm, '1-qa.md': noFm }).do, 'run');
+    });
+
+    test('a directory named like a Handoff is not read', () => {
+      const sb = sandbox(); seed(sb);
+      facts(sb, { contract_changed: false }, ['code']);
+      fs.mkdirSync(path.join(sb.run, '03-qa.md'));
+      written(sb, pair());
+      assert.equal(next(sb)[0].do, 'run');
+    });
+
+    test('a matching file with bad frontmatter splits, beside a no-frontmatter 00-summary.md', () => {
+      const d = merged({ '00-summary.md': noFm, '03-qa.md': noFm });
+      assert.equal(d.do, 'split');
+      assert.match(d.why, /frontmatter unreadable/);
+    });
+
+    test('a 3-digit matching file with needs-ceo splits', () => {
+      const d = merged({ '00-summary.md': noFm, '101-architect.md': '---\nstep: 101\nstatus: needs-ceo\n---\nBy: x\n' });
+      assert.equal(d.do, 'split');
+      assert.match(d.why, /needs-ceo/);
+    });
+
+    test('an architect-plan file claiming needs-ceo is not a Handoff', () => {
+      const d = merged({ '03-architect-plan.md': '---\nstep: 03\nstatus: needs-ceo\n---\nBy: x\n' });
+      assert.equal(d.do, 'run');
+    });
+  });
+
   test('a bad facts file splits', () => {
     const sb = sandbox(); seed(sb);
     fs.mkdirSync(path.join(sb.run, 'facts'));
@@ -646,12 +716,92 @@ describe('ledger limits and links (proj.M-SEC7)', () => {
   });
 });
 
+describe('plugin data comes from the plugin root, never from cwd', () => {
+  const nonQa = () => Array.from({ length: 5 }, () => step('qa'));
+
+  test('a product folder with no company/ or agents/ routes: check, write, next, fix, tasks', () => {
+    const sb = sandbox(); seed(sb);
+    assert.equal(fs.existsSync(path.join(sb.root, 'company')), false);
+    assert.equal(fs.existsSync(path.join(sb.root, 'agents')), false);
+    const d = draft(sb, baseDraft());
+    assert.equal(cli(sb, ['check', d]).code, 0);
+    written(sb, baseDraft());
+    assert.equal(next(sb)[0].do, 'run');
+    assert.equal(cli(sb, ['fix', SLUG, 'qa', 'round 1']).code, 0);
+    assert.equal(cli(sb, ['tasks', SLUG, '2']).code, 0);
+  });
+
+  test('the repo route.mjs routes in a product folder that holds no plugin data', () => {
+    const sb = sandbox(); seed(sb);
+    const d = draft(sb, baseDraft({ steps: [step('qa')] }));
+    const r = spawnSync(process.execPath, [ROUTE, 'check', d], { cwd: sb.root, encoding: 'utf8', timeout: 20000 });
+    assert.doesNotMatch(r.stdout, /model floor unreadable/);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('a company/step-budgets.json in the product folder does not raise the budget', () => {
+    const sb = sandbox(); seed(sb, { budgets: { feature: 3, fix: 3 } });
+    fs.mkdirSync(path.join(sb.root, 'company'));
+    fs.writeFileSync(path.join(sb.root, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets: { feature: 200, fix: 200 }, source: 'decoy' }));
+    const r = cli(sb, ['write', SLUG, draft(sb, baseDraft())]);
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.match(r.out, /over budget: budget 3/);
+  });
+
+  test('a company/role-when.json in the product folder does not remove a skip', () => {
+    const sb = sandbox(); seed(sb);
+    fs.mkdirSync(path.join(sb.root, 'company'));
+    fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), JSON.stringify({ v: 1, when: {} }));
+    facts(sb, { ui_changed: false }, ['docs']);
+    written(sb, baseDraft({ steps: [step('accessibility-tester', 'ui check'), step('qa')] }));
+    assert.equal(next(sb)[0].do, 'skip');
+  });
+
+  test('an agents/ folder in the product folder does not make a slug known', () => {
+    const sb = sandbox(); seed(sb);
+    fs.mkdirSync(path.join(sb.root, 'agents'));
+    fs.writeFileSync(path.join(sb.root, 'agents', 'ghost-role.md'), '---\nname: ghost-role\n---\n');
+    const r = cli(sb, ['write', SLUG, draft(sb, baseDraft({ steps: [step('ghost-role'), step('qa')] }))]);
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.equal(ledger(sb), '');
+  });
+
+  test('a plugin root with no model-floor.json refuses "model floor unreadable" and writes nothing', () => {
+    const sb = sandbox(); seed(sb);
+    fs.rmSync(path.join(sb.plugin, 'company', 'model-floor.json'));
+    const r = cli(sb, ['write', SLUG, draft(sb, baseDraft())]);
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.match(r.out, /^refused: model floor unreadable$/m);
+    assert.equal(ledger(sb), '');
+  });
+
+  test('main takes the plugin root as its third argument', async () => {
+    const { main } = await import(pathToFileURL(ROUTE).href);
+    const sb = sandbox(); seed(sb, { budgets: { feature: 3, fix: 3 } });
+    const d = draft(sb, baseDraft());
+    const r = await main(['check', d], sb.root, sb.plugin);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /over budget: budget 3/);
+  });
+
+  test('CLAUDE_PLUGIN_ROOT is not read: it cannot point route at another budget', () => {
+    const sb = sandbox(); seed(sb, { budgets: { feature: 3, fix: 3 } });
+    const other = sandbox(); seed(other, { budgets: { feature: 200, fix: 200 } });
+    const d = draft(sb, baseDraft({ steps: nonQa() }));
+    const r = spawnSync(process.execPath, [path.join(sb.plugin, 'scripts', 'route.mjs'), 'check', d], {
+      cwd: sb.root, encoding: 'utf8', timeout: 20000, env: { ...process.env, CLAUDE_PLUGIN_ROOT: other.plugin },
+    });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /over budget: budget 3/);
+  });
+});
+
 describe('lintData: tracked data files (AC9)', () => {
   async function lint(sb) {
     const { lintData } = await import(pathToFileURL(ROUTE).href);
-    return lines(lintData(sb.root, PROTECTED));
+    return lines(lintData(sb.plugin, PROTECTED));
   }
-  const putWhen = (sb, when) => fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
+  const putWhen = (sb, when) => fs.writeFileSync(path.join(sb.plugin, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
 
   test('valid data gives no errors', async () => {
     const sb = sandbox(); seed(sb);
@@ -676,7 +826,7 @@ describe('lintData: tracked data files (AC9)', () => {
 
   test('hostile keys are refused', async () => {
     const sb = sandbox(); seed(sb);
-    fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), '{"v":1,"when":{"__proto__":["ui_changed"],"constructor":["ui_changed"]}}');
+    fs.writeFileSync(path.join(sb.plugin, 'company', 'role-when.json'), '{"v":1,"when":{"__proto__":["ui_changed"],"constructor":["ui_changed"]}}');
     assert.ok((await lint(sb)).length > 0);
   });
 
@@ -695,30 +845,30 @@ describe('lintData: tracked data files (AC9)', () => {
 
   test('a data file over 16 KiB is refused', async () => {
     const sb = sandbox(); seed(sb);
-    fs.writeFileSync(path.join(sb.root, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets: { feature: 5 }, source: 'x'.repeat(20000) }));
+    fs.writeFileSync(path.join(sb.plugin, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets: { feature: 5 }, source: 'x'.repeat(20000) }));
     assert.ok((await lint(sb)).length > 0);
   });
 
   test('a source line over 200 characters is refused', async () => {
     const sb = sandbox(); seed(sb);
-    fs.writeFileSync(path.join(sb.root, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets: { feature: 5, fix: 5 }, source: 'x'.repeat(201) }));
+    fs.writeFileSync(path.join(sb.plugin, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets: { feature: 5, fix: 5 }, source: 'x'.repeat(201) }));
     assert.ok((await lint(sb)).length > 0);
   });
 
   test('a linked data file is refused', async () => {
     const sb = sandbox(); seed(sb);
-    const real = path.join(sb.root, 'real-when');
+    const real = path.join(sb.plugin, 'real-when');
     fs.mkdirSync(real);
-    fs.rmSync(path.join(sb.root, 'company', 'role-when.json'));
-    linkTo(real, path.join(sb.root, 'company', 'role-when.json'));
+    fs.rmSync(path.join(sb.plugin, 'company', 'role-when.json'));
+    linkTo(real, path.join(sb.plugin, 'company', 'role-when.json'));
     assert.ok((await lint(sb)).length > 0);
   });
 
   test('bad JSON and wrong v are refused', async () => {
     const sb = sandbox(); seed(sb);
-    fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), '{nope');
+    fs.writeFileSync(path.join(sb.plugin, 'company', 'role-when.json'), '{nope');
     assert.ok((await lint(sb)).length > 0);
-    fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), JSON.stringify({ v: 2, when: WHEN }));
+    fs.writeFileSync(path.join(sb.plugin, 'company', 'role-when.json'), JSON.stringify({ v: 2, when: WHEN }));
     assert.ok((await lint(sb)).length > 0);
   });
 });

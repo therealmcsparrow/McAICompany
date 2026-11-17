@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, symlinkSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { check } from './check.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
 const CHECK = join(HERE, 'check.mjs');
+const isShipped = src => !/\.test\.mjs$/.test(src);
 const dirs = [];
 after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 
@@ -31,6 +32,8 @@ function repo({ budgets = { feature: 3, fix: 3 }, when = { 'ui-ux-designer': ['u
   write(root, 'company/model-floor.json', { v: 1, protected: ['code-reviewer'] });
   write(root, 'company/step-budgets.json', { v: 1, budgets, source: 'test fixture' });
   write(root, 'company/role-when.json', { v: 1, when });
+  // The script reads its data from the folder above its own, so this fixture is also a plugin root.
+  for (const d of ['scripts', 'hooks/lib', 'mods/lib']) cpSync(join(REPO, d), join(root, d), { recursive: true, filter: isShipped });
   return root;
 }
 
@@ -42,7 +45,7 @@ const env = () => {
   delete e.AICO_COLD;
   return e;
 };
-const run = (cwd, args) => spawnSync(process.execPath, [CHECK, ...args], { cwd, encoding: 'utf8', env: env(), timeout: 60000 });
+const run = (cwd, args, script = join(cwd, 'scripts', 'check.mjs')) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', env: env(), timeout: 60000 });
 const out = r => `${r.stdout}${r.stderr}`;
 
 test('AC10: a route over its Playbook budget fails check.mjs --route and names Playbook, budget and count', () => {
@@ -231,4 +234,22 @@ test('route data: the real repo ships both data files and check(root) has no rou
   }
   const { errors } = check(REPO);
   assert.deepEqual(errors.filter(e => /role-when|step-budgets|route/i.test(e)), []);
+});
+
+test('route data: a product folder without company/ or agents/ is checked against the plugin data', () => {
+  const product = temp();
+  write(product, 'r.jsonl', routeLine(stepsOf(2)));
+  const r = run(product, ['--route', 'r.jsonl'], CHECK);
+  assert.equal(r.status, 0, out(r));
+  assert.doesNotMatch(out(r), /model floor unreadable/);
+  assert.match(r.stdout, /0 error\(s\)/);
+});
+
+test('route data: a company/ folder in the product does not replace the plugin data', () => {
+  const product = temp();
+  write(product, 'company/step-budgets.json', { v: 1, budgets: { feature: 200, fix: 200 }, source: 'decoy' });
+  write(product, 'r.jsonl', routeLine(stepsOf(150)));
+  const r = run(product, ['--route', 'r.jsonl'], CHECK);
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /over budget/);
 });

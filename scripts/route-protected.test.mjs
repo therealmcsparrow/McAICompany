@@ -13,12 +13,15 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const temps = [];
 after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
 
-// A product root holding the plugin data the CLI reads (company/ and agents/).
+// A fake plugin root holding the data the script reads (company/, agents/) beside a copy of the script.
+// The product (cwd) is the folder `product` inside it and holds no plugin data.
 function product(mutate) {
   const dir = mkdtempSync(join(tmpdir(), 'route-protected-'));
   temps.push(dir);
   for (const d of ['company', 'agents']) cpSync(join(root, d), join(dir, d), { recursive: true });
-  mkdirSync(join(dir, '.company'), { recursive: true });
+  for (const f of ['route.mjs', 'diff-facts.mjs']) cpSync(join(root, 'scripts', f), join(dir, 'scripts', f));
+  cpSync(join(root, 'mods', 'lib', 'work-folder.mjs'), join(dir, 'mods', 'lib', 'work-folder.mjs'));
+  mkdirSync(join(dir, 'product', '.company'), { recursive: true });
   if (mutate) mutate(join(dir, 'company', 'model-floor.json'), dir);
   return dir;
 }
@@ -26,12 +29,12 @@ const floorWith = (f) => (p) => writeFileSync(p, typeof f === 'string' ? f : JSO
 const sorted = (a) => [...a].sort();
 
 function cli(dir, args) {
-  const r = spawnSync(process.execPath, [join(root, 'scripts', 'route.mjs'), ...args], { cwd: dir, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [join(dir, 'scripts', 'route.mjs'), ...args], { cwd: join(dir, 'product'), encoding: 'utf8' });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 // A harmless draft; any data-loading command must refuse before using it.
 function draft(dir) {
-  const f = join(dir, 'draft.json');
+  const f = join(dir, 'product', 'draft.json');
   writeFileSync(f, JSON.stringify({ playbook: 'feature', size: 'M', steps: [{ role: 'qa', why: 'tests' }], skips: [] }));
   return f;
 }
@@ -105,7 +108,7 @@ for (const [name, mutate] of Object.entries(broken)) {
     const r = cli(dir, ['write', 'P20261116.000003/01-feature', draft(dir)]);
     assert.equal(r.code, 2, r.out + r.err);
     assert.match(r.out, /^refused: model floor unreadable$/m);
-    const ls = spawnSync(process.execPath, ['-e', "const f=require('fs');const p='.company/work';process.stdout.write(f.existsSync(p)?'work':'none')"], { cwd: dir, encoding: 'utf8' });
+    const ls = spawnSync(process.execPath, ['-e', "const f=require('fs');const p='.company/work';process.stdout.write(f.existsSync(p)?'work':'none')"], { cwd: join(dir, 'product'), encoding: 'utf8' });
     assert.equal(ls.stdout, 'none');
   });
 
@@ -130,4 +133,32 @@ test('intact floor: check does not refuse with model floor unreadable', () => {
   const dir = product();
   const r = cli(dir, ['check', draft(dir)]);
   assert.doesNotMatch(r.out, /model floor unreadable/);
+});
+
+test('a model-floor.json in the product folder is never read: the plugin floor stands', () => {
+  const dir = product();
+  mkdirSync(join(dir, 'product', 'company'), { recursive: true });
+  writeFileSync(join(dir, 'product', 'company', 'model-floor.json'), '{ not json');
+  const r = cli(dir, ['check', draft(dir)]);
+  assert.doesNotMatch(r.out, /model floor unreadable/);
+});
+
+test('a broken plugin floor refuses even when the product folder holds a good one', () => {
+  const dir = product(floorWith('{ not json'));
+  mkdirSync(join(dir, 'product', 'company'), { recursive: true });
+  cpSync(join(root, 'company', 'model-floor.json'), join(dir, 'product', 'company', 'model-floor.json'));
+  const r = cli(dir, ['check', draft(dir)]);
+  assert.equal(r.code, 2, r.out + r.err);
+  assert.match(r.out, /^refused: model floor unreadable$/m);
+});
+
+test('main(argv, cwd, pluginRoot): the plugin root argument picks the floor, cwd does not', async () => {
+  const good = product();
+  const bad = product(floorWith('{ not json'));
+  const cwd = join(good, 'product');
+  const ok = await route.main(['check', draft(good)], cwd, good);
+  assert.doesNotMatch(ok.out, /model floor unreadable/);
+  const refused = await route.main(['check', draft(good)], cwd, bad);
+  assert.equal(refused.code, 2, refused.out);
+  assert.match(refused.out, /^refused: model floor unreadable$/m);
 });
