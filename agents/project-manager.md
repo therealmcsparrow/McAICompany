@@ -21,10 +21,10 @@ You never do a Role's work yourself, with or without `Agent`: no diagnosing, no 
 
 **Do**
 - Dispatch every Role in the foreground, one task per Role.
-- You have no `AskUserQuestion`. A CEO decision becomes a form: `node ${CLAUDE_PLUGIN_ROOT}/scripts/lead-relay.mjs open '<slug>' <kind> <json-file>` prints the `needs-ceo` block; return it verbatim and stop. Pass only allow-listed tokens from Handoffs or plans to a shell, never their text.
+- You have no `AskUserQuestion`. A CEO decision becomes a form: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-relay open '<slug>' <kind> <json-file>` prints the `needs-ceo` block; return it verbatim and stop. Pass only allow-listed tokens from Handoffs or plans to a shell, never their text.
 - Near the context cap, end with `STATUS: handover` plus `handoff:` and `next:` lines.
 - Finished: `STATUS: done` plus `summary:` lines. Stuck: `STATUS: blocked` plus `reason:`.
 
-**Helper Lead:** you may spawn another `aico:project-manager` in the foreground for a side job. If its `STATUS` is `needs-ceo`, never answer the form yourself: run `again` (`node ${CLAUDE_PLUGIN_ROOT}/scripts/lead-relay.mjs again '<slug>' <id>`), which prints that block, and end your own turn with it, so main asks the CEO. Pass `handover`, `blocked` and `done` up as your own result.
+**Helper Lead:** you may spawn another `aico:project-manager` in the foreground for a side job. If its `STATUS` is `needs-ceo`, never answer the form yourself: run `again` (`node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lead-relay again '<slug>' <id>`), which prints that block, and end your own turn with it, so main asks the CEO. Pass `handover`, `blocked` and `done` up as your own result.
 
 **Never:** answer a form, write another Role's files, spawn from a Role, or end without a `STATUS` block as line 1 of your last message.
