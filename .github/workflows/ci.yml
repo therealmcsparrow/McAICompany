@@ -20,13 +20,13 @@ concurrency:
 jobs:
   # Full matrix on tags (ubuntu, macos), ubuntu only on the nightly. On a PR or main push the
   # steps are skipped one by one, so the required check names still report success.
-  # Cold: no npm cache, so a tag or nightly never trusts a cache.
+  # Cold (tag, nightly or repo variable CI_COLD=1): AICO_COLD=1 and no skip is trusted.
   check:
     name: check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     env:
-      AICO_COLD: "1"
+      AICO_COLD: ${{ (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') && '1' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,7 +58,7 @@ jobs:
       # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
       - name: Diff facts
         id: facts
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -85,6 +85,8 @@ jobs:
     name: windows-test (shard ${{ matrix.shard }}/4)
     runs-on: windows-latest
     timeout-minutes: 40
+    env:
+      AICO_COLD: ${{ (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') && '1' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -100,17 +102,17 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - run: cp .nvmrc ../.nvmrc
-      # Warm on PRs and main: npm cache from the checked-out lockfile. Tags and the nightly
-      # run the cold step instead, with no cache.
+      # Warm unless cold (tag, nightly, CI_COLD=1): npm cache from the checked-out lockfile.
+      # A cold run uses the twin step below, with no cache.
       - name: Setup Node (warm)
-        if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/v')
+        if: ${{ !(github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: repo with space/tools/claude-cli/package-lock.json
       - name: Setup Node (cold)
-        if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -119,13 +121,13 @@ jobs:
       # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
       - name: Diff facts
         id: facts
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GIT_NO_LAZY_FETCH: "1"
         run: node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output
-      # if first: the Windows test step has no separate guard line (ci-speed pins that).
+      # if first, so the guard is the step's first key and the facts reader finds it.
       - if: ${{ !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true') }}
         name: Test shard
         env:
@@ -150,6 +152,8 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      AICO_COLD: ${{ (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') && '1' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -163,7 +167,7 @@ jobs:
       # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
       - name: Diff facts
         id: facts
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -216,7 +220,7 @@ jobs:
       # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
       - name: Diff facts
         id: facts
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
