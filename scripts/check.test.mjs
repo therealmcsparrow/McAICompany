@@ -1241,7 +1241,7 @@ test('the Lead agent still needs a name, so names.json without it is an error', 
   assert.ok(r.errors.some(e => e.includes('names.json') && e.includes('project-manager has no name')), r.errors.join('\n'));
 });
 
-test('the shipped plugin passes check.mjs with the Lead in no company type and no roles page', () => {
+test('the shipped plugin passes check.mjs with the Lead in no company type and a project-manager row on the roles page', () => {
   const home = mkdtempSync(join(tmpdir(), 'aico-home-'));
   const saved = { m: process.env.MCSPARROW_HOME, h: process.env.HOME, u: process.env.USERPROFILE };
   process.env.MCSPARROW_HOME = home; process.env.HOME = home; process.env.USERPROFILE = home;
@@ -1252,7 +1252,7 @@ test('the shipped plugin passes check.mjs with the Lead in no company type and n
     for (const f of readdirSync(join(REPO, 'company', 'types'))) {
       assert.ok(!/"project-manager"/.test(readFileSync(join(REPO, 'company', 'types', f), 'utf8')), f);
     }
-    assert.ok(!readFileSync(join(REPO, 'documentation', 'roles', 'README.md'), 'utf8').includes('**project-manager**'));
+    assert.ok(readFileSync(join(REPO, 'documentation', 'roles', 'README.md'), 'utf8').includes('**project-manager**'));
   } finally {
     for (const [k, v] of [['MCSPARROW_HOME', saved.m], ['HOME', saved.h], ['USERPROFILE', saved.u]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
