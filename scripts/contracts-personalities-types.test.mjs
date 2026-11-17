@@ -54,6 +54,7 @@ function sandbox({ projectMd = null } = {}) {
 }
 
 const AGENTS = fs.readdirSync(path.join(root, 'agents')).filter(f => f.endsWith('.md')).map(f => f.slice(0, -3)).sort();
+const LEAD = 'project-manager';
 const frontmatter = text => Object.fromEntries((/^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? '').split('\n').map(l => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
 const PLAYBOOKS = fs.readdirSync(path.join(root, 'skills'))
   .filter(n => exists(`skills/${n}/SKILL.md`) && Boolean(frontmatter(read(`skills/${n}/SKILL.md`))['argument-hint'])).sort();
@@ -117,7 +118,9 @@ test('role-names: the code rules are the rules the Contract prints', () => {
 test('role-names: one name per Role, valid and unique, the editor is Role 34 and the reprompter Role 35, the fresh-reviewer Role 36', () => {
   const names = json('company/names.json');
   assert.deepEqual(Object.keys(names).sort(), AGENTS);
-  assert.equal(AGENTS.length, 36);
+  assert.equal(AGENTS.length, 37);
+  assert.equal(AGENTS.filter(a => a !== LEAD).length, 36);
+  assert.ok(AGENTS.includes(LEAD));
   assert.ok(AGENTS.includes('editor'));
   assert.ok(AGENTS.includes('reprompter'));
   for (const [role, name] of Object.entries(names)) assert.ok(DOC_NAME_RE.test(name), `${role}: ${name}`);
@@ -589,7 +592,7 @@ test('company-type: the four shipped types are the table of the Contract', () =>
     if (roles[id]) assert.deepEqual(sorted(m.roles), sorted(roles[id].split(', ')), id);
     assert.ok(typeDoc.includes(`| \`${id}\` |`), `${id} is in the Contract table`);
   }
-  assert.deepEqual(sorted(manifest('software').roles), AGENTS.filter(a => a !== 'editor'));
+  assert.deepEqual(sorted(manifest('software').roles), AGENTS.filter(a => a !== 'editor' && a !== LEAD));
   // The research example printed in the Contract is the shipped research manifest.
   const example = JSON.parse(/```json\n([\s\S]*?)```/.exec(typeDoc)[1]);
   const research = manifest('research');

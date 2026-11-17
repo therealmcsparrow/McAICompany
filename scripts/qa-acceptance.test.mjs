@@ -117,6 +117,7 @@ function sandbox({ projectMd = null } = {}) {
 
 const json = f => JSON.parse(read(f));
 const AGENTS = fs.readdirSync(path.join(root, 'agents')).filter(f => f.endsWith('.md')).map(f => f.slice(0, -3)).sort();
+const LEAD = 'project-manager';
 const DEFAULTS = json('company/personalities.json');
 
 // The fixed level phrases and the block, taken from the Contract text, not from the code under test.
@@ -201,7 +202,7 @@ async function staticCheckWith(rel, mutate) {
 // ----- personalities ------------------------------------------------------------------------
 
 test('AC1 a Role with no personality set gets its shipped default, for every Role, in a cooler turn', () => {
-  assert.equal(AGENTS.length, 36);
+  assert.equal(AGENTS.length, 37);
   assert.deepEqual(Object.keys(DEFAULTS).sort(), AGENTS);
   const sb = sandbox();
   const { result, text } = stage(sb, AGENTS);
@@ -289,7 +290,7 @@ test('AC4 the settings every other prompt is built from are identical whatever t
   const strip = out => out.replace(/"revision":"[0-9a-f]{64}"/, '"revision":"R"');
   const base = sb.run('settings.mjs', ['get']);
   assert.equal(base.code, 0, base.err);
-  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 36);
+  assert.equal(Object.keys(JSON.parse(base.out).roles).length, 37);
   const variants = [
     () => sb.user({ roles: { architect: { personality: { temperament: 'loud and brave', talk: 'big words', topic: 'ZQXtopicZQX', intelligence: 'low', creativity: 'high' } } } }),
     () => { fs.rmSync(sb.userFile); sb.project({ roles: { qa: { personality: { intelligence: 'high', creativity: 'low' } }, writer: { personality: { topic: 'tea' } } } }); },
@@ -855,7 +856,7 @@ test('AC8 the software manifest has the v0.12.0 Roles and Playbooks, the repromp
   const m = manifest('software');
   const expectedPlaybooks = ['audit', 'brainstorm', 'bug', 'client', 'cooler', 'dashboard', 'feature', 'feedback', 'fix', 'grill', 'grill-me', 'grill-with-docs', 'idea', 'incident', 'launch', 'maintain', 'pentest', 'refactor', 'research', 'standards', 'to-spec', 'to-tickets', 'usability-test', 'vulnscan'];
   assert.deepEqual([...m.playbooks].sort(), expectedPlaybooks);
-  assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor'));
+  assert.deepEqual([...m.roles].sort(), AGENTS.filter(a => a !== 'editor' && a !== LEAD));
   assert.equal(m.roles.length, 35);
   assert.deepEqual(m.ship, { kind: 'release', meaning: 'Push, merge, release or deploy.', lanes: [], checks: [] });
   assert.deepEqual(m.work, ['feature', 'fix']);

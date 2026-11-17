@@ -1223,3 +1223,37 @@ test('company types: the flag and guard rules run only when company/types exists
   const root = fixture({ skills: { fix: flagged, setup: playbook('setup').replace('disable-model-invocation: true\n', '') } });
   assert.deepEqual(check(root).errors, []);
 });
+
+test('the Lead agent project-manager is no Role: counts, roles page and roster list only the Roles', () => {
+  const agents = { qa: agent('qa'), 'project-manager': agent('project-manager') };
+  const root = fixture({ agents, names: { qa: 'Quinn', 'project-manager': 'Paula' } });
+  write(root, '.claude-plugin/plugin.json', '{ "description": "a Lead and 1 Role agents" }');
+  write(root, 'README.md', 'routes work to 1 **Role** agents.');
+  write(root, 'documentation/roles/README.md', PAGE('# Roles', 'The company has **1 Role agents**. **qa**'));
+  write(root, 'docs/spec.md', '| qa | x |\n1 Role agents.');
+  const r = check(root);
+  assert.deepEqual(r.errors.filter(e => /Role count|project-manager/.test(e)), [], r.errors.join('\n'));
+});
+
+test('the Lead agent still needs a name, so names.json without it is an error', () => {
+  const agents = { qa: agent('qa'), 'project-manager': agent('project-manager') };
+  const r = check(fixture({ agents, names: { qa: 'Quinn' } }));
+  assert.ok(r.errors.some(e => e.includes('names.json') && e.includes('project-manager has no name')), r.errors.join('\n'));
+});
+
+test('the shipped plugin passes check.mjs with the Lead in no company type and no roles page', () => {
+  const home = mkdtempSync(join(tmpdir(), 'aico-home-'));
+  const saved = { m: process.env.MCSPARROW_HOME, h: process.env.HOME, u: process.env.USERPROFILE };
+  process.env.MCSPARROW_HOME = home; process.env.HOME = home; process.env.USERPROFILE = home;
+  try {
+    assert.ok(existsSync(join(REPO, 'agents', 'project-manager.md')));
+    const r = check(REPO);
+    assert.deepEqual(r.errors, [], r.errors.join('\n'));
+    for (const f of readdirSync(join(REPO, 'company', 'types'))) {
+      assert.ok(!/"project-manager"/.test(readFileSync(join(REPO, 'company', 'types', f), 'utf8')), f);
+    }
+    assert.ok(!readFileSync(join(REPO, 'documentation', 'roles', 'README.md'), 'utf8').includes('**project-manager**'));
+  } finally {
+    for (const [k, v] of [['MCSPARROW_HOME', saved.m], ['HOME', saved.h], ['USERPROFILE', saved.u]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
