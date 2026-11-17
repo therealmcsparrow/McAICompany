@@ -89,6 +89,15 @@ describe('Lead agent Frozen: every tool denied, never continue:false (AC5, AC7)'
     assert.match(text(fx.agentLead(T, { tool: 'Read' })), /STATUS: handover/);
   });
 
+  test('R-8: the frozen deny names the real lead-handoff-<n>.md path and holds no claude "..." command', async () => {
+    const fx = await frozen();
+    for (const [n, tool] of [[F, 'Read'], [T, 'Bash'], [T + 20000, 'Write']]) {
+      const reason = fx.denyOf(fx.agentLead(n, { tool }));
+      assert.match(reason, /handoff: \.company\/work\/[^\s;]+\/lead-handoff-[1-9]\d{0,3}\.md/, `${tool} at ${n}`);
+      assert.doesNotMatch(reason, /claude\s+"/, `${tool} at ${n}`);
+    }
+  });
+
   test('a Lead first seen at T is denied for every tool without continue:false', async () => {
     const fx = await fixture();
     for (const tool of TOOLS) {
