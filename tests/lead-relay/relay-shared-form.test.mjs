@@ -68,3 +68,34 @@ test('the same questions open in another run are refused by open and again; allo
   const last = relay(['open', B, 'ask', same]);
   assert.equal(last.status, 0, last.stdout + last.stderr);
 });
+
+test('a Gate form open in run A refuses the same-text ask form in run B, by open and again (R-11)', () => {
+  const A2 = 'P20261115.000001/01-feature';
+  setup(A2, 13 * 3600000);
+  fs.rmSync(path.join(dirOf(B), 'forms.jsonl'), { force: true });
+  const opts = (result) => [{ label: 'Pass', description: 'Pass it', ...(result ? { result: 'pass' } : {}) }, { label: 'Stop', description: 'Stop it', ...(result ? { result: 'stop' } : {}) }];
+  const mk = (name, result) => {
+    const f = path.join(root, name);
+    fs.writeFileSync(f, JSON.stringify([{ q: 'Gate-vs-ask text?', header: 'Gate', multi: false, options: opts(result) }]));
+    return f;
+  };
+
+  const g = relay(['open', A2, 'gate:ship', mk('gate.json', true)]);
+  assert.equal(g.status, 0, g.stdout + g.stderr);
+  const rowG = JSON.parse(fs.readFileSync(path.join(dirOf(A2), 'forms.jsonl'), 'utf8').trim().split('\n')[0]);
+  assert.equal(rowG.kind, 'gate:ship');
+  assert.equal(rowG.questions[0].options[0].result, 'pass');
+
+  const b = relay(['open', B, 'ask', mk('ask.json', false)]);
+  assert.equal(b.status, 1, b.stdout + b.stderr);
+  assert.ok((b.stdout + b.stderr).includes(`refused: same questions open in run ${A2}`), b.stdout + b.stderr);
+  assert.ok(!fs.existsSync(formsB()));
+
+  // again on the ask-shaped row (no result) written into B
+  const askRow = { ...rowG, kind: 'ask', questions: [{ ...rowG.questions[0], options: rowG.questions[0].options.map(({ result, ...o }) => o) }] };
+  fs.writeFileSync(formsB(), `${JSON.stringify(askRow)}\n`);
+  const again = relay(['again', B, askRow.id]);
+  assert.equal(again.status, 1, again.stdout + again.stderr);
+  assert.ok((again.stdout + again.stderr).includes(`refused: same questions open in run ${A2}`), again.stdout + again.stderr);
+  fs.rmSync(formsB());
+});
