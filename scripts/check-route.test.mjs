@@ -164,9 +164,10 @@ test('AC14: --cold prints one note on stderr and leaves stdout as without it', (
 
 test('AC14: --cold does not leak AICO_COLD into this process', () => {
   const root = repo();
+  const before = process.env.AICO_COLD;
   const r = run(root, ['--cold', root]);
   assert.match(r.stderr, /cold/i);
-  assert.equal(process.env.AICO_COLD, undefined);
+  assert.equal(process.env.AICO_COLD, before);
 });
 
 test('AC14: --cold combines with --route', () => {
