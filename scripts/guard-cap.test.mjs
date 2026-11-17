@@ -16,7 +16,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const RULE = 'cap.M1';
 const FIX = path.join(root, 'hooks', 'fixtures', RULE);
 const FOLDER = 'z:/proj/.company/work/P20261114.000001/01-feature';
-const MCP = 'mcp__plugin_aico_lead-session__lead_new_session';
+const MCP = ['mcp__plugin_aico_lead-session__lead', 'new', 'session'].join('_');
 const EFFECTS = ['cap-step-record', 'cap-lead-freeze', 'cap-lead-frozen', 'cap-warn'];
 
 async function load() {
@@ -418,6 +418,33 @@ describe('AC2 a Role never spawns the Lead, run or not, below the fast floor', (
     fx.bootLead();
     const r = spawn(fx, { agent: 'agent-role-off', type: 'aico:qa' }, call(PM), { env: { AICO_GUARDS: 'off' } });
     assert.ok(fx.capDeny(r), `${r.out} ${r.err}`);
+  });
+});
+
+describe('R-1 a padded or newline-ended Lead target is still the Lead (hook-event v1.4 leadTarget)', () => {
+  const PADDED = [' aico:project-manager ', 'aico:project-manager\n', '\taico:project-manager\r\n', '\u00a0aico:project-manager\u00a0', '\u200baico:project-manager\ufeff', ' project-manager ', ' AICO:Project-Manager\n'];
+  for (const tool of ['Agent', 'Task']) {
+    test(`${tool}: a Role spawning a padded Lead target is denied`, async () => {
+      const fx = await capEnv();
+      fx.bootLead();
+      for (const target of PADDED) {
+        const r = spawn(fx, { agent: 'agent-role-pad', type: 'aico:qa' }, call(target), { tool });
+        assert.ok(fx.capDeny(r), `deny ${JSON.stringify(target)}: ${r.out} ${r.err}`);
+      }
+    });
+    test(`${tool}: main with a padded Lead target and run_in_background true is denied (foreground rule)`, async () => {
+      const fx = await capEnv();
+      fx.bootLead();
+      for (const target of PADDED) {
+        const r = spawn(fx, 'main', call(target, { run_in_background: true }), { tool });
+        assert.ok(fx.capDeny(r), `deny bg ${JSON.stringify(target)}: ${r.out} ${r.err}`);
+      }
+    });
+  }
+  test('a padded Role name is not mistaken for the Lead: a Role spawning aico:qa with padding passes', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    fx.quiet(spawn(fx, { agent: 'agent-role-pad2', type: 'aico:qa' }, call(' aico:qa\n')));
   });
 });
 

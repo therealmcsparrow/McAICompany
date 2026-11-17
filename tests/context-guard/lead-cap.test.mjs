@@ -37,6 +37,9 @@ describe('Lead agent at the clean point (F <= tokens < T) (AC5)', () => {
     assert.match(reason, /STATUS: handover/);
     assert.match(reason, /handoff:/);
     assert.match(reason, /next:/);
+    // R-5: the deny names the real Lead Handoff file, not the old `claude "..."` command.
+    assert.match(reason, /handoff: \.company\/work\/[^\s;]+\/lead-handoff-[1-9]\d{0,3}\.md/);
+    assert.doesNotMatch(reason, /claude\s+"/);
     assert.notEqual(r.json.continue, false, 'a freeze deny does not end the turn');
   });
 
