@@ -37,7 +37,10 @@ const allowed = (tool, command) => {
 test('a PowerShell here-string piped into an interpreter denies when it names a run record', () => {
   denied('PowerShell', `@'\nopen(".company/work/p1/01-feature/forms.jsonl","w").write("{}")\n'@ | python -`);
   denied('PowerShell', `@"\nopen('.company/work/p1/01-feature/forms.jsonl','w')\n"@ | python3 -`);
-  denied('PowerShell', `@'\nimport pathlib\npathlib.Path.home().joinpath('x').write_text('{}')\n'@ | python -`);
+});
+
+test('a PowerShell here-string that writes under home with no run record passes (ADR 0079)', () => {
+  allowed('PowerShell', `@'\nimport pathlib\npathlib.Path.home().joinpath('x').write_text('{}')\n'@ | python -`);
 });
 
 test('quoted text piped into an interpreter denies when it names a run record', () => {
