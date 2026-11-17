@@ -17,11 +17,8 @@ test('inventory: hooks name `node` with a quoted plugin-root script, nothing els
   for (const c of cmds) assert.match(c, /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/[\w-]+\.mjs"( [\w-]+)?$/, c)
 })
 
-test('inventory: the only plugin MCP server is lead-session, `node` + plugin-root script', () => {
-  const m = json('.claude-plugin/plugin.json').mcpServers
-  assert.deepEqual(Object.keys(m), ['lead-session'])
-  assert.equal(m['lead-session'].command, 'node')
-  assert.deepEqual(m['lead-session'].args, ['${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs'])
+test('inventory: the plugin declares no MCP server', () => {
+  assert.ok(!('mcpServers' in json('.claude-plugin/plugin.json')))
 })
 
 test('inventory: no other plugin-level config files name an interpreter', () => {

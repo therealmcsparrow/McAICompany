@@ -42,7 +42,7 @@ test('cap text reads 180000 and 162000 where numbers are given, never the old 95
 test('setup page says no setup is needed and names the hard hand-over', () => {
   const t = read('documentation/start/setup.md');
   assert.match(t, /^# No setup needed: the hand-over point$/m);
-  assert.ok(t.includes('lead_new_session'));
+  assert.ok(!t.includes(['lead', 'new', 'session'].join('_')), 'retired tool not named');
   assert.ok(t.includes('AICO_GUARDS=off'));
   assert.ok(!t.includes('AICO_CONTEXT_GUARD'));
   assert.ok(t.includes('162000'));
