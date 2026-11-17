@@ -6,6 +6,8 @@ argument-hint: <request>
 
 # Playbook: triage
 
+**Runs in:** the Lead agent `aico:project-manager`. In the main session, run none of the steps below: follow `aico:lead` `references/main-loop.md`, which spawns the Lead with `aico start: <playbook>` and `Request:`.
+
 **Help:** argument is exactly `help` or `--help` → read `documentation/commands/triage.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 A fast pre-router. It builds nothing and dispatches no Role; it ends by recommending a route the CEO approves. Use it when a request's size or risk is unclear, or the Lead runs it as its first step.
