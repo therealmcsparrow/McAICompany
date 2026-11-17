@@ -203,7 +203,7 @@ const PS_PASS = [
 ];
 for (const c of PS_PASS) test(`AC8 pass PowerShell: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
-// ---------- shell denies ----------
+// ---------- shell passes: ADR 0079, the guard judges a shell command only for a run-record write ----------
 const SET_MOD = [
   `node "${PLUGIN}/scripts/settings.mjs" set-mod switchboard enabled false`,
   'node scripts/settings.mjs set-mod cache_tax enabled false', 'node settings.mjs set-mod switchboard seen',
@@ -212,13 +212,13 @@ const SET_MOD = [
   'cd scripts && node settings.mjs set-mod a b', 'node scripts/settings.mjs get cap; node scripts/settings.mjs set-mod a b',
   'echo ok && node scripts/settings.mjs set-mod a b',
 ];
-for (const c of SET_MOD) for (const tool of SH) test(`AC8 deny ${tool}: set-mod: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of SET_MOD) for (const tool of SH) test(`AC8 pass ${tool}: set-mod: ${c}`, async () => { await allows(c, { tool }); });
 const PINS = [
   `node "${PLUGIN}/scripts/hook-pins.mjs" write`, 'node scripts/hook-pins.mjs check', 'node scripts/hook-pins.mjs',
   'node "$CLAUDE_PLUGIN_ROOT/scripts/hook-pins.mjs" write', 'node scripts/hook-pins.mjs --help', 'node hook-pins.mjs write; echo done',
   'git status && node scripts/hook-pins.mjs verify',
 ];
-for (const c of PINS) for (const tool of SH) test(`AC8 deny ${tool}: hook-pins: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of PINS) for (const tool of SH) test(`AC8 pass ${tool}: hook-pins: ${c}`, async () => { await allows(c, { tool }); });
 
 const WRITES = [
   'echo x > ~/.mcsparrow/config.json', 'echo x >> ~/.mcsparrow/config.json', 'echo x>~/.mcsparrow/config.json',
@@ -237,12 +237,12 @@ const WRITES = [
   'echo x > .claude/settings.json', 'echo x > .company/settings.json', 'echo x >> .claude/settings.local.json',
   'echo x > $CLAUDE_PLUGIN_ROOT/hooks/rules.json', 'rm -rf $CLAUDE_PLUGIN_ROOT/hooks/rules', 'rm -rf ~/.mcsparrow/hook-snapshots',
   'cp x.mjs $CLAUDE_PLUGIN_ROOT/hooks/rules/cap.mjs', 'echo x > ~/.mcsparrow/hook-snapshots/r/denies.jsonl',
-  'echo x > C:/proj/.company/work/p1/guard.jsonl', 'cat a.json > ~/.mcsparrow/config.json',
+  'cat a.json > ~/.mcsparrow/config.json',
   'echo x > "C:/Users/test/.mcsparrow/config.json"', "echo x > 'C:/Users/test/.mcsparrow/config.json'",
   'echo x > C:\\USERS\\TEST\\.MCSPARROW\\CONFIG.JSON', 'echo x > ~/.mcsparrow/config.json.',
   'true && echo x > ~/.mcsparrow/config.json', 'echo hi; rm ~/.mcsparrow/config.json', 'git status | tee ~/.mcsparrow/config.json',
 ];
-for (const c of WRITES) for (const tool of SH) test(`AC8 deny ${tool}: write form: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of WRITES) for (const tool of SH) test(`AC8 pass ${tool}: write form: ${c}`, async () => { await allows(c, { tool }); });
 const PS_WRITES = [
   'Set-Content $env:USERPROFILE\\.mcsparrow\\config.json x', 'Set-Content -Path $env:USERPROFILE\\.mcsparrow\\config.json -Value x',
   'Add-Content $env:USERPROFILE\\.mcsparrow\\config.json x', '"x" | Out-File $env:USERPROFILE\\.mcsparrow\\config.json',
@@ -256,20 +256,20 @@ const PS_WRITES = [
   'Set-Content .claude\\settings.json x', 'Set-Content .company\\settings.json x', 'Set-Content %USERPROFILE%\\.mcsparrow\\config.json x',
   'Get-Date; Set-Content $env:USERPROFILE\\.mcsparrow\\config.json x', 'echo x > $env:USERPROFILE\\.mcsparrow\\config.json',
 ];
-for (const c of PS_WRITES) test(`AC8 deny PowerShell: write form: ${c}`, async () => { await denies(c, { tool: 'PowerShell' }); });
+for (const c of PS_WRITES) test(`AC8 pass PowerShell: write form: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
-test('AC8 deny: a copy whose target is protected only through a junction (real)', async () => {
+test('AC8 pass: a shell copy whose target is protected only through a junction (real) is not judged', async () => {
   const links = { 'C:/proj/link': MSH };
-  await denies('cp a.json link/config.json', { links });
-  await denies('echo x > link/config.json', { links });
-  await denies('echo x > C:/proj/link/config.json', { links });
-  await denies('Set-Content link\\config.json x', { links, tool: 'PowerShell' });
-  await denies('rm link/config.json', { links });
+  await allows('cp a.json link/config.json', { links });
+  await allows('echo x > link/config.json', { links });
+  await allows('echo x > C:/proj/link/config.json', { links });
+  await allows('Set-Content link\\config.json x', { links, tool: 'PowerShell' });
+  await allows('rm link/config.json', { links });
 });
-test('AC8 deny: a new file in the snapshot folder from a shell (nearest existing ancestor)', async () => {
-  await denies('echo x > ~/.mcsparrow/hook-snapshots/newroot/steps/new.json', { exists: false });
-  await denies('cp a.json $HOME/.mcsparrow/hook-snapshots/n/steps/s.json', { exists: false });
-  await denies('Set-Content $env:USERPROFILE\\.mcsparrow\\hook-snapshots\\n\\x.json x', { exists: false, tool: 'PowerShell' });
+test('AC8 pass: a new file in the snapshot folder from a shell is not judged', async () => {
+  await allows('echo x > ~/.mcsparrow/hook-snapshots/newroot/steps/new.json', { exists: false });
+  await allows('cp a.json $HOME/.mcsparrow/hook-snapshots/n/steps/s.json', { exists: false });
+  await allows('Set-Content $env:USERPROFILE\\.mcsparrow\\hook-snapshots\\n\\x.json x', { exists: false, tool: 'PowerShell' });
 });
 
 // ---------- evasion: inline interpreters ----------
@@ -278,7 +278,7 @@ const INLINE = [
   `node --eval "fs.writeFileSync('config.json','{}')"`, `node -p "fs.writeFileSync('config.json','{}')"`, `node --print "'config.json'"`,
   `node -e "fs.writeFileSync('settings.json','{}')"`, `node -e "fs.writeFileSync('settings.local.json','{}')"`,
   `node -e "x('.mcsparrow')"`, `node -e "process.env.MCSPARROW_HOME"`, `node -e "x('hook-snapshots')"`, `node -e "x('pins.json')"`,
-  `node -e "x('rules.json')"`, `node -e "x('guard.jsonl')"`, `node -e "process.env.CLAUDE_PLUGIN_ROOT"`, `node -e "x('.claude')"`,
+  `node -e "x('rules.json')"`, `node -e "process.env.CLAUDE_PLUGIN_ROOT"`, `node -e "x('.claude')"`,
   `node -e "x('plugins/cache')"`,
   `python -c "open('config.json','w').write('{}')"`, `python3 -c "open('config.json','w')"`, `py -c "open('config.json','w')"`,
   `python -c "import os; open(os.environ['MCSPARROW_HOME']+'/x','w')"`,
@@ -289,17 +289,17 @@ const INLINE = [
   `iex "Set-Content config.json x"`, `Invoke-Expression "Set-Content config.json x"`, `& iex 'x .mcsparrow'`,
   `node -e "x('CONFIG.JSON')"`,
 ];
-for (const c of INLINE) for (const tool of SH) test(`evasion deny ${tool}: inline interpreter: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of INLINE) for (const tool of SH) test(`evasion pass ${tool}: inline interpreter: ${c}`, async () => { await allows(c, { tool }); });
 
-test('evasion deny: -EncodedCommand always, whatever the text or the interpreter', async () => {
+test('evasion pass: -EncodedCommand that decodes to no record path (ADR 0079)', async () => {
   for (const c of ['powershell -EncodedCommand SQBFAFgA', 'pwsh -EncodedCommand ZQBjAGgAbwA=', 'powershell.exe -NoProfile -EncodedCommand AAAA',
     'powershell -encodedcommand AAAA', 'pwsh -enc AAAA -NoProfile', 'powershell -e AAAA', 'pwsh -ec AAAA'])
-    for (const tool of SH) await denies(c, { tool });
+    for (const tool of SH) await allows(c, { tool });
 });
-test('evasion deny: inline text naming a settings word hides in a longer command', async () => {
-  await denies('echo start; node -e "x(\'config.json\')"; echo end');
-  await denies('cd src && python -c "open(\'.mcsparrow/config.json\',\'w\')"');
-  await denies('npm test && node -e "x(\'config.json\')"');
+test('evasion pass: inline text naming a settings word hides in a longer command', async () => {
+  await allows('echo start; node -e "x(\'config.json\')"; echo end');
+  await allows('cd src && python -c "open(\'.mcsparrow/config.json\',\'w\')"');
+  await allows('npm test && node -e "x(\'config.json\')"');
 });
 
 // ---------- evasion: directory change plus a relative write ----------
@@ -313,21 +313,21 @@ const CD = [
   'cd $CLAUDE_PLUGIN_ROOT/hooks && echo x > hooks.json', 'cd ~/.mcsparrow && echo x | tee config.json',
   'cd ~/.mcsparrow/hook-snapshots/r && echo x > denies.jsonl', 'cd /somewhere && echo x > config.json',
 ];
-for (const c of CD) for (const tool of SH) test(`evasion deny ${tool}: cd plus relative write: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of CD) for (const tool of SH) test(`evasion pass ${tool}: cd plus relative write: ${c}`, async () => { await allows(c, { tool }); });
 const PS_CD = [
   'Set-Location $env:USERPROFILE\\.mcsparrow; Set-Content config.json x', 'Set-Location $env:USERPROFILE\\.mcsparrow; "x" | Out-File config.json',
   'sl ~\\.mcsparrow; Set-Content config.json x', 'Push-Location $env:MCSPARROW_HOME; Add-Content config.json x',
   'cd $env:USERPROFILE\\.claude; Set-Content settings.json x', 'Set-Location $env:USERPROFILE\\.mcsparrow; echo x > config.json',
   'Set-Location $env:USERPROFILE\\.mcsparrow; Remove-Item config.json', 'chdir ~\\.mcsparrow; Set-Content config.json x',
 ];
-for (const c of PS_CD) test(`evasion deny PowerShell: Set-Location plus relative write: ${c}`, async () => { await denies(c, { tool: 'PowerShell' }); });
+for (const c of PS_CD) test(`evasion pass PowerShell: Set-Location plus relative write: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
 // ---------- evasion: path spelling in a shell ----------
-test('evasion deny: protected target behind dot segments, redundant slashes and case', async () => {
+test('evasion pass: shell write to a settings target behind dot segments, redundant slashes and case', async () => {
   for (const c of ['echo x > ~/.mcsparrow/./config.json', 'echo x > ~/.mcsparrow/../.mcsparrow/config.json',
     'echo x > ~//.mcsparrow//config.json', 'echo x > C:/Users/test/.MCSPARROW/Config.Json', 'echo x > c:\\users\\test\\.mcsparrow\\config.json',
     'echo x > C:/Users/test/.mcsparrow/config.json:stream', 'echo x > C:/Users/test/.mcsparrow/config.json ', 'echo x > C:/Users/test/.mcsparrow/config.json...'])
-    for (const tool of SH) await denies(c, { tool });
+    for (const tool of SH) await allows(c, { tool });
 });
 
 // ---------- a hand-written guard key changes nothing ----------
@@ -335,14 +335,14 @@ test('AC15: the verdict ignores any snapshot key that tries to switch the guard 
   const hand = deepFreeze({ ...SNAP, guards: { 'self-protect': false }, guardsOff: true, selfProtect: 'off', savers: { 'self-protect': { enabled: false } },
     settingsWarnings: ['self-protect off'], 'self-protect': { enabled: false } });
   await denies('~/.mcsparrow/config.json', { tool: 'Write' }, hand);
-  await denies('echo x > ~/.mcsparrow/config.json', {}, hand);
-  await denies('node scripts/settings.mjs set-mod switchboard enabled false', {}, hand);
+  await allows('echo x > ~/.mcsparrow/config.json', {}, hand);
+  await allows('node scripts/settings.mjs set-mod switchboard enabled false', {}, hand);
   await allows('src/a.js', { tool: 'Write' }, hand);
 });
-test('AC15: a Write that would hand-edit a switch or the threshold into settings is denied, whatever it says', async () => {
+test('AC15: a Write that would hand-edit a switch or the threshold into settings is denied, whatever it says; the same text from a shell passes', async () => {
   for (const p of ['~/.mcsparrow/config.json', 'C:/proj/.company/settings.json', 'C:/proj/.claude/settings.json', `${HOME}/.claude/settings.local.json`])
     for (const tool of FILE_TOOLS) await denies(p, { tool });
-  await denies('echo {"guards":{"cap":false},"mods":{"switchboard":{"enabled":false}}} > ~/.mcsparrow/config.json');
+  await allows('echo {"guards":{"cap":false},"mods":{"switchboard":{"enabled":false}}} > ~/.mcsparrow/config.json');
 });
 test('AC15: the event env switch does not weaken the judge (the engine handles the Lead off switch, the rule never reads it)', async () => {
   const judge = await load();
@@ -354,11 +354,14 @@ test('AC15: the event env switch does not weaken the judge (the engine handles t
 });
 
 // ---------- scope and shape ----------
-test('an empty protected list: set-mod and hook-pins still deny, a path write has nothing to match', async () => {
+test('an empty protected list: set-mod and hook-pins pass, a path write has nothing to match', async () => {
   const judge = await load();
   const e = evRaw('node scripts/settings.mjs set-mod a b');
   e.protected = [];
-  assert.equal((await judge(deepFreeze(e), SNAP)).v, 'deny');
+  assert.deepEqual(await judge(deepFreeze(e), SNAP), { v: 'allow' });
+  const e2 = evRaw('node scripts/hook-pins.mjs write');
+  e2.protected = [];
+  assert.deepEqual(await judge(deepFreeze(e2), SNAP), { v: 'allow' });
   const f = evRaw('~/.mcsparrow/config.json', { tool: 'Write' });
   f.protected = [];
   assert.deepEqual(await judge(deepFreeze(f), SNAP), { v: 'allow' });
@@ -425,20 +428,22 @@ test('AC4 fixtures: judge allows each pass-* and denies each block-* with rule s
     else { assert.equal(v.v, 'deny', f); assert.equal(v.rule, RULE, f); }
   }
 });
-test('fixtures cover the Decided forms: file tool, redirect, PowerShell variable, set-mod, hook-pins, inline interpreter, -EncodedCommand, cd plus write, new snapshot file; passes cover the R-1 verbs', () => {
+test('fixtures cover the Decided forms: file tool and run-record shell writes block; settings, set-mod, hook-pins, home, inline interpreter, -EncodedCommand and snapshot shell forms pass; passes cover the R-1 verbs', () => {
   const all = fixtures().map((f) => ({ f, j: readFx(f) }));
   const block = all.filter((x) => x.f.startsWith('block-')).map((x) => x.j);
   const pass = all.filter((x) => x.f.startsWith('pass-')).map((x) => x.j);
   const has = (list, re, tool) => list.some((j) => re.test(specOf(j)) && (!tool || j.tool_name === tool));
   assert.ok(block.some((j) => ['Write', 'Edit'].includes(j.tool_name)), 'a Write or Edit block');
-  assert.ok(has(block, />\s*~\/\.mcsparrow\/config\.json/), 'redirect with ~');
-  assert.ok(has(block, /\$env:USERPROFILE/, 'PowerShell'), 'PowerShell $env:USERPROFILE');
-  assert.ok(has(block, /set-mod/), 'set-mod');
-  assert.ok(has(block, /hook-pins/), 'hook-pins');
-  assert.ok(has(block, /node -e|python -c/), 'inline interpreter');
-  assert.ok(has(block, /-EncodedCommand/i), '-EncodedCommand');
-  assert.ok(has(block, /^cd .*; .*> config\.json/), 'cd plus relative write');
-  assert.ok(has(block, /hook-snapshots/), 'a new file in the snapshot folder');
+  assert.ok(has(block, /(forms|run-state|guard)\.jsonl/, 'Bash'), 'a Bash run-record write');
+  assert.ok(has(block, /(forms|run-state|guard)\.jsonl/, 'PowerShell'), 'a PowerShell run-record write');
+  assert.ok(block.some((j) => SH.includes(j.tool_name) && /guard\.jsonl/.test(specOf(j))), 'the guard record block stays');
+  assert.ok(has(pass, /\.mcsparrow/), 'a home shell write passes');
+  assert.ok(has(pass, /\$env:USERPROFILE/, 'PowerShell'), 'PowerShell $env:USERPROFILE passes');
+  assert.ok(has(pass, /set-mod/), 'set-mod passes');
+  assert.ok(has(pass, /hook-pins/), 'hook-pins passes');
+  assert.ok(has(pass, /node -e|python -c/), 'inline interpreter passes');
+  assert.ok(has(pass, /-EncodedCommand/i), '-EncodedCommand passes');
+  assert.ok(has(pass, /hook-snapshots/), 'a shell write in the snapshot folder passes');
   for (const re of [/settings\.mjs"? get/, /settings\.mjs"? serve/, /run-state triage/, /ledger\.mjs/, /handoff-lint/, /rule-check/, /hook-check\.mjs"? setup/])
     assert.ok(has(pass, re), `pass fixture ${re}`);
   assert.ok(pass.some((j) => j.tool_name === 'Read'), 'a Read of a protected file passes');
@@ -504,6 +509,25 @@ test('AC7 pass: reading a run record', async () => {
   const judge = await load();
   for (const t of REC_TARGETS) for (const tool of ['Read', 'Grep']) assert.deepEqual(await judge(withRecords(t, { tool }), SNAP), { v: 'allow' }, `${tool} ${t}`);
   assert.deepEqual(await judge(withRecords('cat C:/proj/.company/work/p1/forms.jsonl', { tool: 'Bash' }), SNAP), { v: 'allow' });
+});
+
+test('AC7 deny: a record path bound to a variable in the same command denies; the variable alone passes (Handoff 88)', async () => {
+  await recordDenies('p=C:/proj/.company/work/p1/guard.jsonl; echo hi > $p', { tool: 'Bash' });
+  await recordDenies('$p = "C:/proj/.company/work/p1/forms.jsonl"; Set-Content $p x', { tool: 'PowerShell' });
+  const judge = await load();
+  for (const tool of SH) assert.deepEqual(await judge(withRecords('echo hi > $p', { tool }), SNAP), { v: 'allow' }, tool);
+});
+test('AC7 deny: record write shapes (node -e, cd then relative, redirect) still deny, Lead and Role', async () => {
+  for (const session of ['lead', 'step']) {
+    await recordDenies("node -e \"require('fs').writeFileSync('C:/proj/.company/work/p1/forms.jsonl','x')\"", { tool: 'Bash', session });
+    await recordDenies('cd C:/proj/.company/work/p1 && echo x > run-state.jsonl', { tool: 'Bash', session });
+    await recordDenies('echo x > C:/proj/.company/work/p1/guard.jsonl', { tool: 'Bash', session });
+    await recordDenies("node -e \"x('guard.jsonl')\"", { tool: 'Bash', session });
+  }
+});
+test('AC7 deny: a command over 200000 chars is denied (fail closed), on both shell tools', async () => {
+  const big = `echo ${'a'.repeat(200001)}`;
+  for (const tool of SH) await recordDenies(big, { tool });
 });
 
 // ---------- run records through the host (AC7: main, Lead, Role; below the fast floor; guards off) ----------
