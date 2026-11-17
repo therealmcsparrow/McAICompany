@@ -1,4 +1,4 @@
-// Guard self-protect.M-SEC1: plugin and settings files are not written by a tool call.
+// Guard self-protect.M-SEC1: plugin and settings files are not written by a file tool; run records are not written by any tool.
 // judge(event, snapshot) is pure and synchronous: it reads the normalized event and returns a verdict object.
 // It never reads the snapshot or the event env, so no stored switch weakens it.
 import { normalizePath } from '../lib/paths.mjs';
@@ -8,19 +8,12 @@ const MESSAGE = 'aico guard self-protect.M-SEC1: plugin and settings files are p
 const RECORD_MESSAGE = 'run records are written by aico scripts only';
 const RECORD_WORDS = ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl'];
 const RECORD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
+const SHELL_MESSAGE = `aico guard ${RULE}: ${RECORD_MESSAGE}`;
+const RECORD_TEXT = /(?:^|\/)\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
 const MAX_COMMAND_CHARS = 200000;
 const MAX_DEPTH = 3;
 const FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
-
-const SETTINGS_WORDS = [
-  'settings.json', 'settings.local.json', 'config.json', '.mcsparrow', 'mcsparrow_home', 'hook-snapshots',
-  'pins.json', 'rules.json', 'guard.jsonl', 'claude_plugin_root', '.claude', 'plugins/cache', 'plugins\\cache',
-  'set-mod', 'hook-pins',
-];
-const FIXED_BASES = [
-  'config.json', 'settings.json', 'settings.local.json', 'guard.jsonl', 'denies.jsonl', 'pins.json', 'rules.json', 'hooks.json',
-];
 
 const WRAPPERS = new Set(['env', 'sudo', 'nice', 'nohup', 'time', 'command', 'exec', 'builtin', '{', '}', '!', 'then', 'do', 'else', 'elif', 'if', 'while', 'until']);
 const ENV_ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -35,7 +28,6 @@ const GIT_GLOBAL_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--nam
 const DEST_FLAGS = new Set(['-t', '--target-directory', '-destination', '-dest']);
 
 const GLOB_CHARS = /[*?[{]/;
-const RISKY_UNRESOLVED = /[*?[{$%`]/;
 const MAX_GLOB_CHARS = 256;
 const MAX_VARIANTS = 64;
 
@@ -59,13 +51,8 @@ const INTERPRETERS = {
 const POWERSHELLS = new Set(['pwsh', 'powershell']);
 const ENCODED = /^-(?:e|ec|en[a-z]*)$/i;
 const EVAL_VERBS = new Set(['iex', 'invoke-expression']);
-const RUNNERS = new Set(['node', 'nodejs', 'bun', 'deno', 'tsx', 'ts-node', 'npx', 'sh', 'bash', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd', 'python', 'python3', 'py', 'perl', 'ruby', 'start', 'call']);
 
-const HOME_VAR = /^(?:~|\$HOME|\$\{HOME\}|\$env:HOME|\$env:USERPROFILE|%USERPROFILE%|%HOMEDRIVE%%HOMEPATH%)(?=[\\/]|$)/i;
-const MSH_VAR = /^(?:\$MCSPARROW_HOME|\$\{MCSPARROW_HOME\}|\$env:MCSPARROW_HOME|%MCSPARROW_HOME%)(?=[\\/]|$)/i;
-const PLUGIN_VAR = /^(?:\$CLAUDE_PLUGIN_ROOT|\$\{CLAUDE_PLUGIN_ROOT\}|\$env:CLAUDE_PLUGIN_ROOT|%CLAUDE_PLUGIN_ROOT%)(?=[\\/]|$)/i;
-
-const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE|MCSPARROW_HOME|CLAUDE_PLUGIN_ROOT)|%(?:USERPROFILE|HOMEDRIVE|MCSPARROW_HOME|CLAUDE_PLUGIN_ROOT)%)/i;
+const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE)|%(?:USERPROFILE|HOMEDRIVE)%)/i;
 
 function allow() {
   return { v: 'allow' };
@@ -204,24 +191,13 @@ function makeContext(event, rec) {
       if (e && typeof e === 'object' && typeof e.raw === 'string' && !entries.has(e.raw)) entries.set(e.raw, e);
     }
   }
-  const homes = new Set();
-  const mshs = new Set();
-  const plugins = new Set();
-  for (const p of prot) {
-    const h = /^(.+?)\/\.(?:mcsparrow|claude)(?=\/|$)/.exec(p);
-    if (h) { homes.add(h[1]); mshs.add(`${h[1]}/.mcsparrow`); }
-    const m = /^(.+)\/(?:config\.json|hook-snapshots)(?=\/|$)/.exec(p);
-    if (m) mshs.add(m[1]);
-    const pl = /^(.*\/plugins\/cache\/[^/]+\/[^/]+\/[^/]+)/.exec(p);
-    if (pl) plugins.add(pl[1]);
-  }
-  const bases = new Set(rec ? RECORD_WORDS : FIXED_BASES);
+  const bases = new Set(RECORD_WORDS);
   for (const p of prot) bases.add(tailOf(p));
   const protSegs = prot.map((p) => p.split('/'));
   const marker = entries.get('');
   const limited = marker !== undefined;
-  const cwdHot = limited && (rec ? marker.cwdRec === true : marker.cwdHot !== false);
-  return { rec, prot, protSegs, entries, homes, mshs, plugins, bases, limited, cwdHot };
+  const cwdHot = limited && marker.cwdRec === true;
+  return { prot, protSegs, entries, bases, limited, cwdHot };
 }
 
 function insideProtected(ctx, norm) {
@@ -235,40 +211,28 @@ function holdsProtected(ctx, norm) {
   return ctx.prot.some((p) => p.startsWith(pre));
 }
 
-function inferred(ctx, word) {
-  const out = [];
-  for (const [re, set] of [[HOME_VAR, ctx.homes], [MSH_VAR, ctx.mshs], [PLUGIN_VAR, ctx.plugins]]) {
-    const m = re.exec(word);
-    if (!m) continue;
-    const rest = word.slice(m[0].length);
-    for (const root of set) out.push(`${root}/${rest}`);
-  }
-  return out;
-}
-
 function forms(ctx, word) {
   const out = [word];
   const e = ctx.entries.get(word);
   if (e) {
     for (const k of ['expanded', 'real']) if (typeof e[k] === 'string') out.push(e[k]);
   }
-  out.push(...inferred(ctx, word));
   return out;
 }
 
 function hits(ctx, word, ancestor) {
-  if (VAR_LED.test(word) && namesSettingsWord(word, ctx)) return true;
+  if (VAR_LED.test(word) && namesRecord(word)) return true;
   for (const f of forms(ctx, word)) {
     const norm = normalizePath(f);
-    if (insideProtected(ctx, norm)) return true;
+    if (insideProtected(ctx, norm) || RECORD_TEXT.test(norm)) return true;
     if (ancestor && holdsProtected(ctx, norm)) return true;
   }
   return false;
 }
 
-function namesSettingsWord(text, ctx) {
+function namesRecord(text) {
   const t = text.toLowerCase();
-  return (ctx && ctx.rec ? RECORD_WORDS : SETTINGS_WORDS).some((w) => t.includes(w));
+  return RECORD_WORDS.some((w) => t.includes(w));
 }
 
 function nonFlags(args) {
@@ -285,18 +249,18 @@ function destinationValues(args) {
   return out;
 }
 
-function inlineDenied(words, ctx) {
+function inlineDenied(words) {
   for (let i = 0; i < words.length; i++) {
     const base = baseOf(words[i]);
     if (EVAL_VERBS.has(base)) {
-      if (namesSettingsWord(words.slice(i + 1).join(' '), ctx)) return true;
+      if (namesRecord(words.slice(i + 1).join(' '))) return true;
       continue;
     }
     const flag = INTERPRETERS[base];
     if (!flag) continue;
     const rest = words.slice(i + 1);
-    if (POWERSHELLS.has(base) && rest.some((a) => ENCODED.test(a)) && (!ctx.rec || encodedNamesRecord(rest))) return true;
-    if (rest.some((a) => flag.test(a)) && namesSettingsWord(words.slice(i).join(' '), ctx)) return true;
+    if (POWERSHELLS.has(base) && rest.some((a) => ENCODED.test(a)) && encodedNamesRecord(rest)) return true;
+    if (rest.some((a) => flag.test(a)) && namesRecord(words.slice(i).join(' '))) return true;
   }
   return false;
 }
@@ -307,19 +271,8 @@ function encodedNamesRecord(rest) {
     if (!ENCODED.test(rest[i]) || i + 1 >= rest.length) continue;
     try {
       const text = Buffer.from(rest[i + 1], 'base64').toString('utf16le');
-      if (namesSettingsWord(text, { rec: true })) return true;
+      if (namesRecord(text)) return true;
     } catch { /* an unreadable payload names no record */ }
-  }
-  return false;
-}
-
-function guardScriptDenied(words, vi, verb) {
-  let settingsAt = -1;
-  for (let i = 0; i < words.length; i++) {
-    const b = baseOf(words[i]);
-    if (b === 'hook-pins.mjs' && (i === vi || RUNNERS.has(verb))) return true;
-    if (b === 'settings.mjs') settingsAt = i;
-    else if (settingsAt !== -1 && words[i].toLowerCase() === 'set-mod') return true;
   }
   return false;
 }
@@ -545,15 +498,15 @@ const isStdinRunner = (word) => {
   const b = baseOf(word);
   return STDIN_RUNNERS.has(b) || /^(?:python|pypy|node)[\d.]*$/.test(b);
 };
-const HOMEISH = /homedir|expanduser|path\.home|environ|proces[s]\.env|userprofile|getenv|\$home|%userprofile%|\bhome\b/i;
-const WRITEISH = /write|\bopen\s*\(|append|copy|rename|unlink|remove|truncate|\bcreate|\bsave|>>?\s*['"`]/i;
 const HEREDOC = /<<-?[ \t]*(['"]?)(\w+)\1([^\n]*)\n([\s\S]*?)(?:\n[ \t]*\2(?=\n|$)|$)/g;
 const HERESTRING = /^([^\n]*?)<<<([^\n]*)$/gm;
 
-// A program fed to an interpreter on stdin denies when it names a settings word, or reaches for the home
-// folder or environment and writes: the target may be built at run time, so it cannot be read from the text.
-function programDenied(body, ctx) {
-  return namesSettingsWord(body, ctx) || (!ctx.rec && HOMEISH.test(body) && WRITEISH.test(body));
+// A program fed to an interpreter on stdin denies when it names a run record, or names the run folder and writes:
+// the record file name may be built at run time, so it cannot be read from the text.
+const RECORD_DIR = /\.company[\\/]+work\b/i;
+const WRITEISH = /write|\bopen\s*\(|append|copy|rename|unlink|remove|truncate|\bcreate|\bsave|>>?\s*['"`]/i;
+function programDenied(body) {
+  return namesRecord(body) || (RECORD_DIR.test(body) && WRITEISH.test(body));
 }
 
 const PS_HERE_OPEN = /@(["'])[ \t]*\r?\n/g;
@@ -632,22 +585,22 @@ function* psHereStrings(text) {
   }
 }
 
-function stdinProgramDenied(text, ctx) {
+function stdinProgramDenied(text) {
   if (!/<<|@["']|\|/.test(text)) return false;
   const headWords = (head) => head.split(/[\s;|&()]+/).filter(Boolean);
   for (const m of text.matchAll(HEREDOC)) {
     const lineStart = text.lastIndexOf('\n', m.index) + 1;
     const head = `${text.slice(lineStart, m.index)} ${m[3]}`;
-    if (headWords(head).some(isStdinRunner) && programDenied(m[4], ctx)) return true;
+    if (headWords(head).some(isStdinRunner) && programDenied(m[4])) return true;
   }
   for (const m of text.matchAll(HERESTRING)) {
-    if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2], ctx)) return true;
+    if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2])) return true;
   }
   for (const [body, rest] of psHereStrings(text)) {
-    if (headWords(rest).some(isStdinRunner) && programDenied(body, ctx)) return true;
+    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
   }
   for (const [body, rest] of pipedTexts(text)) {
-    if (headWords(rest).some(isStdinRunner) && programDenied(body, ctx)) return true;
+    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
   }
   return false;
 }
@@ -656,25 +609,26 @@ const NET_FILE_CALL = /\[(?:system\.)?io\.(?:file|directory)\]::(\w+)\s*\(\s*/gi
 const NET_WRITE_METHOD = /^(?:write|append|create|copy|move|delete|replace|set|openwrite|open$)/i;
 const NET_WRITER_NEW = /(?:\[(?:system\.)?io\.(?:streamwriter|filestream|binarywriter)\]::new|new-object\s+(?:system\.)?io\.(?:streamwriter|filestream|binarywriter))\s*\(?\s*/gi;
 
-// A .NET file write is allowed only when its first argument is a quoted literal that names no settings word.
-function netTargetDenied(text, from, ctx) {
+// A .NET file write denies when its target names a run record. A target that is not a quoted literal
+// may hold the record path from elsewhere in the command, so it denies only when the command text names one.
+function netTargetDenied(text, from) {
   const c = text[from];
-  if (c !== '"' && c !== "'") return true;
+  if (c !== '"' && c !== "'") return namesRecord(text);
   const end = text.indexOf(c, from + 1);
-  if (end === -1) return true;
+  if (end === -1) return namesRecord(text);
   const after = /^\s*([,)])/.exec(text.slice(end + 1, end + 20));
-  if (!after) return true;
+  if (!after) return namesRecord(text);
   const call = text.slice(from, text.indexOf(')', end) === -1 ? from + 400 : text.indexOf(')', end));
-  return namesSettingsWord(text.slice(from, end + 1), ctx) || namesSettingsWord(call, ctx);
+  return namesRecord(text.slice(from, end + 1)) || namesRecord(call);
 }
 
-function dotnetWriteDenied(text, ctx) {
+function dotnetWriteDenied(text) {
   if (!text.includes('::') && !/new-object/i.test(text)) return false;
   for (const m of text.matchAll(NET_FILE_CALL)) {
-    if (NET_WRITE_METHOD.test(m[1]) && netTargetDenied(text, m.index + m[0].length, ctx)) return true;
+    if (NET_WRITE_METHOD.test(m[1]) && netTargetDenied(text, m.index + m[0].length)) return true;
   }
   for (const m of text.matchAll(NET_WRITER_NEW)) {
-    if (netTargetDenied(text, m.index + m[0].length, ctx)) return true;
+    if (netTargetDenied(text, m.index + m[0].length)) return true;
   }
   return false;
 }
@@ -683,19 +637,18 @@ function dotnetWriteDenied(text, ctx) {
 function unresolvedRisky(ctx, word) {
   if (ctx.entries.has(word)) return false;
   if (ctx.cwdHot && isRelative(word)) return true;
-  if (ctx.rec) return namesSettingsWord(word, ctx) || ctx.bases.has(tailOf(normalizePath(word)));
-  return RISKY_UNRESOLVED.test(word) || namesSettingsWord(word, ctx) || ctx.bases.has(tailOf(normalizePath(word)));
+  return namesRecord(word) || ctx.bases.has(tailOf(normalizePath(word)));
 }
 
 function analyze(ctx, text, powershell, depth, acc) {
   const subshells = [];
   const stripped = stripHeredocs(text);
   const stmts = tokenize(stripped, powershell, (s) => subshells.push(s));
-  const names = namesSettingsWord(stripped, ctx);
+  const names = namesRecord(stripped);
   for (const { words, redirs } of stmts) {
     const vi = verbIndex(words);
     const verb = vi < words.length ? baseOf(words[vi]) : '';
-    if ((!ctx.rec && guardScriptDenied(words, vi, verb)) || inlineDenied(words, ctx)) return true;
+    if (inlineDenied(words)) return true;
     if (CD_VERBS.has(verb)) {
       acc.cd = true;
       const target = nonFlags(words.slice(vi + 1))[0];
@@ -714,7 +667,7 @@ function analyze(ctx, text, powershell, depth, acc) {
 
 function judgeShell(ctx, command, powershell) {
   const acc = { cd: false, cdProt: false, writes: [], variants: 0 };
-  if (stdinProgramDenied(command, ctx) || dotnetWriteDenied(command, ctx)) return true;
+  if (stdinProgramDenied(command) || dotnetWriteDenied(command)) return true;
   if (analyze(ctx, command, powershell, 0, acc)) return true;
   if (!acc.cd) return false;
   return acc.writes.some((w) => isRelative(w) && (acc.cdProt || ctx.bases.has(tailOf(normalizePath(w))) || globBaseHit(ctx, w)));
@@ -734,11 +687,10 @@ function judgeFile(ctx, tool) {
 export function judge(event) {
   const tool = event && event.tool;
   if (!tool || typeof tool !== 'object') return allow();
-  const ctx = makeContext(event);
-  if (FILE_TOOLS.has(tool.name)) return judgeFile(ctx, tool) ? deny() : allow();
+  if (FILE_TOOLS.has(tool.name)) return judgeFile(makeContext(event), tool) ? deny() : allow();
   if (!SHELL_TOOLS.has(tool.name) || typeof tool.command !== 'string') return allow();
-  if (tool.command.length > MAX_COMMAND_CHARS) return deny();
-  return judgeShell(ctx, tool.command, tool.name === 'PowerShell') ? deny() : allow();
+  if (tool.command.length > MAX_COMMAND_CHARS || judgeShell(makeContext(event, true), tool.command, tool.name === 'PowerShell')) return { v: 'deny', rule: RULE, message: SHELL_MESSAGE };
+  return allow();
 }
 
 // The run-record check alone: only a write to a run record denies. The host runs it before the `off` branch.
