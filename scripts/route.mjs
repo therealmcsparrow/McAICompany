@@ -6,7 +6,7 @@ import {
   closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, writeSync,
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readLatest, main as factsMain } from './diff-facts.mjs';
 import { isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
@@ -26,7 +26,8 @@ const FLAG_CONDITIONS = ['ui_changed', 'strings_changed', 'contract_changed'];
 const NEVER_SKIP = ['qa', 'security'];
 const MERGE_ROLE = `code-reviewer`;
 const SLUG = /^[a-z][a-z0-9-]{0,40}$/;
-const HANDOFF_NAME = /^(\d{2,3})-[a-z][a-z0-9-]{0,40}\.md$/;
+const HANDOFF_NAME = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
+const PLUGIN_ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const CONTROL = /[\p{Cc}\p{Zl}\p{Zp}]/u;
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -308,9 +309,16 @@ function skipReason(root, role, data, facts) {
   return null;
 }
 
-function needsCeo(runDir) {
+// A Handoff counts only as <NN>-<agents slug>.md with NN not all zero.
+function isHandoffName(n, roles) {
+  const m = HANDOFF_NAME.exec(n);
+  return m !== null && /[1-9]/.test(m[1]) && roles.has(m[2]);
+}
+
+function needsCeo(runDir, roles) {
   let names;
-  try { names = readdirSync(runDir).filter((n) => HANDOFF_NAME.test(n)).sort(); } catch { return 'run folder unreadable'; }
+  try { names = readdirSync(runDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && isHandoffName(e.name, roles)).map((e) => e.name).sort(); } catch { return 'run folder unreadable'; }
   if (names.length > MAX_HANDOFFS) return 'too many Handoffs to check';
   for (const n of names) {
     let head;
@@ -333,7 +341,7 @@ function decide(root, runDir, route, entry, data, facts) {
     if (facts === null) return split('facts missing: split the merge');
     if (facts.contract_changed !== false) return split(`contract_changed in facts ${facts.step}`);
     if (runDir !== null) {
-      const c = needsCeo(runDir);
+      const c = needsCeo(runDir, data.roles);
       if (c !== null) return split(c);
     }
     return { do: 'run', why: `merged qa and code-reviewer: S, contract_changed false in facts ${facts.step}` };
@@ -407,15 +415,15 @@ function lintEvents(events, data) {
   return errors;
 }
 
-async function run(argv, root) {
+async function run(argv, root, pluginRoot) {
   const [cmd, ...rest] = argv;
-  if (['check', 'dry', 'write', 'tasks', 'fix', 'next'].includes(cmd)) await protectedList(root);
+  if (['check', 'dry', 'write', 'tasks', 'fix', 'next'].includes(cmd)) await protectedList(pluginRoot);
   if (cmd === 'check') {
     if (rest.length !== 1) refuse('usage: check <file>');
-    const prot = await protectedList(root);
+    const prot = await protectedList(pluginRoot);
     const text = readPlain(resolve(rest[0]), MAX_LEDGER_BYTES);
     if (text === null) refuse('file not found');
-    const { data, errors: dataErrors } = loadData(root, prot);
+    const { data, errors: dataErrors } = loadData(pluginRoot, prot);
     let errors;
     let whole = null;
     try { whole = parseJson(text); } catch (e) { if (e instanceof Refusal && e.message === 'forbidden key') throw e; }
@@ -439,9 +447,9 @@ async function run(argv, root) {
     }
     if (o.base === null) refuse('--base is required');
     if (o.head === null) refuse('--head is required');
-    const prot = await protectedList(root);
+    const prot = await protectedList(pluginRoot);
     const route = draftRoute(readDraft(file).value);
-    const { data, errors } = loadData(root, prot);
+    const { data, errors } = loadData(pluginRoot, prot);
     const lint = [...errors, ...lintRoute(route, data)];
     if (lint.length > 0) return { code: 2, out: `${printErrors(lint)}refused: ${lint.length} lint error(s)\n` };
     const args = ['show', '--base', o.base, '--head', o.head];
@@ -460,10 +468,10 @@ async function run(argv, root) {
 
   const slug = rest[0];
   const parts = slugParts(slug);
-  const prot = await protectedList(root);
+  const prot = await protectedList(pluginRoot);
   const runDir = runDirOf(root, parts);
   const { events, size } = readLedger(runDir);
-  const { data, errors: dataErrors } = loadData(root, prot);
+  const { data, errors: dataErrors } = loadData(pluginRoot, prot);
   const routeEvent = events.find((e) => e.ev === 'route');
   const appended = (event) => appendEvent(runDir, event, size);
 
@@ -517,9 +525,9 @@ async function run(argv, root) {
   return refuse('usage: write | tasks | next | fix | dry | check');
 }
 
-export async function main(argv, cwd = process.cwd()) {
+export async function main(argv, cwd = process.cwd(), pluginRoot = PLUGIN_ROOT) {
   try {
-    return await run(argv, cwd);
+    return await run(argv, cwd, pluginRoot);
   } catch (e) {
     return { code: 2, out: `refused: ${e instanceof Refusal ? e.message : 'internal error'}\n` };
   }

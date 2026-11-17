@@ -997,7 +997,7 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) 
       const rel = relative(realpathSync.native(cwd), realpathSync.native(file));
       if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) fail('route file is outside the repo');
     } catch { fail('route file not found'); }
-    routeMain(['check', file], cwd).then(r => { process.stdout.write(r.out); process.exitCode = r.code; });
+    routeMain(['check', file], cwd, join(fileURLToPath(import.meta.url), '..', '..')).then(r => { process.stdout.write(r.out); process.exitCode = r.code; });
   } else {
     const root = args[0] ?? join(fileURLToPath(import.meta.url), '..', '..');
     const { errors, warnings, notes } = check(root, { progress: total => createProgress({ command: 'aico check', total, unit: 'phases' }) });
