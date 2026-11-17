@@ -700,7 +700,7 @@ describe('v1.7 contextHandover', () => {
 describe('hooks.json and source', () => {
   const cfg = JSON.parse(fs.readFileSync(path.join(repo, 'hooks', 'hooks.json'), 'utf8'));
 
-  const cmdOf = (word) => `node "${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" ${word}`;
+  const cmdOf = (word) => `node "\${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs" ${word}`;
 
   test('PreCompact runs watch; SessionStart has no compact resume adapter (lead-handoff v3.0)', () => {
     const pre = cfg.hooks.PreCompact;
