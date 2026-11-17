@@ -6,17 +6,14 @@ export const MIN_THRESHOLD = 60000;
 export const MAX_THRESHOLD = 250000;
 const FREEZE_NUM = 9;
 const FREEZE_DEN = 10;
-const MCP_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
-const FEEDBACK_TOOL = 'SendFeedback';
 const HANDOFF_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.md$/;
 const LEDGER_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.findings\.md$/;
 const MAX_NAMED = 35;
 
 const STEP_REASON = 'aico context cap: this Step reached the hand-over point. Write your Handoff with status: handover to your Output path now, then end. Every other tool is refused.';
 const STOP_REASON = 'aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.';
-const FREEZE_REASON = 'aico context cap: the Lead Handoff is written and this session is frozen. Call lead_new_session, or show the CEO the new session command.';
-const FROZEN_REASON = 'aico context cap: this session is frozen. Start a new session in the product folder with:';
-const WAIT_REASON = 'aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.';
+const FREEZE_REASON = 'aico context cap: the Lead agent reached the hand-over point and the Lead Handoff is written. End your turn now with these lines, and call no tool: STATUS: handover; handoff: <path of the Lead Handoff>; next: <what the next Lead session does first>. Every tool is refused.';
+const FROZEN_REASON = 'aico context cap: this Lead agent is frozen. Every tool is refused. End your turn now with these lines: STATUS: handover; handoff: <path of the Lead Handoff>; next: <what the next Lead session does first>.';
 const UNREADABLE = `${RULE}: unreadable`;
 const RUN_UNREADABLE = `${RULE}: unreadable. The run state of the active run cannot be read at the hand-over point. Fix or remove the malformed lead-handover.jsonl in the run folder, or check the run state with run-state show, then retry.`;
 
@@ -70,15 +67,15 @@ function judgeStep(event, run) {
   return deny(STEP_REASON, 'cap-step-record');
 }
 
-function judgeLead(event, run) {
-  const name = event.tool.name;
-  if (run.frozen === true) return name === MCP_TOOL || name === FEEDBACK_TOOL ? { v: 'allow' } : deny(FROZEN_REASON, 'cap-lead-frozen');
-  if (run.stepRunning === true) return name === 'Agent' || name === 'Task' ? deny(WAIT_REASON) : { v: 'allow' };
-  return name === MCP_TOOL ? { v: 'allow' } : deny(FREEZE_REASON, 'cap-lead-freeze');
+// The Lead agent at its hand-over point: every tool is denied, the first time with the freeze effect. Main never reaches here.
+function judgeLead(run) {
+  return run.frozen === true ? deny(FROZEN_REASON, 'cap-lead-frozen') : deny(FREEZE_REASON, 'cap-lead-freeze');
 }
 
 export function judge(event, snapshot) {
   if (!isObj(event) || !isObj(event.run)) return { v: 'allow' };
+  // main (session lead, no agent) is never capped, at any token level.
+  if (event.session === 'lead' && !event.agentKey) return { v: 'allow' };
   const tokens = isObj(event.tokens) ? event.tokens : {};
   if (tokens.state === 'error') return deny(UNREADABLE);
   if (!isObj(snapshot) || !Number.isInteger(snapshot.threshold) || snapshot.threshold <= 0) return deny(`${RULE}: snapshot-invalid`);
@@ -86,7 +83,7 @@ export function judge(event, snapshot) {
   if (total < freezeAt(snapshot.threshold)) return { v: 'allow' };
   if (!isObj(event.tool)) return deny(UNREADABLE);
   if (event.run.error === true) return deny(RUN_UNREADABLE);
-  return event.session === 'step' ? judgeStep(event, event.run) : judgeLead(event, event.run);
+  return event.session === 'step' ? judgeStep(event, event.run) : judgeLead(event.run);
 }
 
 // SubagentStop: block once when this Step was refused tools and has no Handoff on record.

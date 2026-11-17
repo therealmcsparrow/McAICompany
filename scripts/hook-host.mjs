@@ -265,9 +265,6 @@ async function main() {
   delete rest.reasonSuffix;
   if (denied) {
     const full = extra.reasonSuffix ? `${denied.message} ${extra.reasonSuffix}` : denied.message;
-    // The Lead ends its turn at the hand-over point on every cap deny.
-    if (denied.rule === 'cap.M1' && denied.kind === 'deny' && evName === 'PreToolUse' && event.session === 'lead' && s.ok
-      && event.tokens.state === 'read' && event.tokens.total >= s.snapshot.threshold) rest.continue = false;
     if (rest.continue === false) rest.stopReason = full;
     return done(denyOut(evName, stopActive, denied.rule, full, { ...rest, ...(msg ? { systemMessage: msg } : {}) }));
   }
