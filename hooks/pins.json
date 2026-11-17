@@ -4,7 +4,7 @@
     "scripts/hook-host.mjs": "c7631d9aea3f8e7babd924702754f99ec67f4b65b34e69b4e6d120052c675ff7",
     "hooks/lib/cap-effects.mjs": "8588f6fa885451ebefdce638a80daa9619106aa34076846854c1fcbfd21f803b",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
-    "hooks/lib/dep-hashes.mjs": "10a4852934e43526eac3387c91835ead561934240bad2d269ad93257a2c1aaac",
+    "hooks/lib/dep-hashes.mjs": "67d87f14a4d5fd13af562ac5fc0af45ca29549160e483718997899d618dfa9bd",
     "hooks/lib/dep-pins.mjs": "01e2861d2d8f778ae8c3b3e8e3d511ae749746973cd712fe6f5090ecad2f61c6",
     "hooks/lib/event.mjs": "bce4016e1de47919ce68c035df3d24da9a7924471ce3b1a0b8f094dd2e64b6ff",
     "hooks/lib/mods-defaults.mjs": "472436b346eb5178a51bcf0ad12e69baf9d51126c10aac239b80148d36971ec2",

@@ -13,8 +13,7 @@ import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
 import { isWorkFolder, isProjectId, parseProject, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 import { runCap } from './run-cap.mjs';
-import { leadFile } from '../hooks/lib/snapshot.mjs';
-import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 
@@ -23,7 +22,8 @@ export const MAX_LINE = 256;
 export const MAX_LINES = 1000;
 const MAX_STEPS = 200;
 const MAX_FORMS = 256 * 1024;
-const MAX_SNAPSHOT = 4096;
+const SETTINGS_TIMEOUT_MS = 10000;
+const SETTINGS_MAX_OUT = 1024;
 const MAX_FOLDERS = 200;
 const MAX_FM = 8 * 1024;
 const STALE_MS = 12 * 60 * 60 * 1000;
@@ -637,16 +637,17 @@ function planGate(root, slug, home) {
   if (result.state !== 'pass') refuse(`plan gate: ${result.reason}`);
 }
 
-// True when the Lead snapshot of this product root says `gate` is auto. Only the snapshot is read, never an argument; any failure is false.
+// True when the resolved settings say `gate` is auto: `settings.mjs get gates.<gate>` run in the product root exits 0 and prints exactly `auto`.
+// The gate name is checked against the Gate list first. Any other outcome (exit, signal, timeout, extra output, spawn error) is false.
 function gateIsAuto(root, gate, home) {
+  if (!GATES.has(gate)) return false;
   try {
-    const base = typeof home === 'string' && home !== '' ? home
-      : process.env.MCSPARROW_HOME || join(process.env.USERPROFILE || process.env.HOME || homedir(), '.mcsparrow');
-    const file = leadFile(base, realpathSync(root));
-    const st = lstatSync(file);
-    if (!st.isFile() || st.size > MAX_SNAPSHOT) return false;
-    const gates = JSON.parse(readCapped(file, MAX_SNAPSHOT).toString('utf8'))?.gates;
-    return gates !== null && typeof gates === 'object' && Object.hasOwn(gates, gate) && gates[gate] === 'auto';
+    const env = { ...process.env };
+    if (typeof home === 'string' && home !== '') env.MCSPARROW_HOME = home;
+    const r = spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'settings.mjs'), 'get', `gates.${gate}`], {
+      cwd: realpathSync(root), env, shell: false, stdio: ['ignore', 'pipe', 'ignore'], timeout: SETTINGS_TIMEOUT_MS, maxBuffer: SETTINGS_MAX_OUT, windowsHide: true,
+    });
+    return r.error === undefined && r.signal === null && r.status === 0 && r.stdout.toString('utf8') === 'auto\n';
   } catch { return false; }
 }
 
