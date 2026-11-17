@@ -38,6 +38,7 @@ const WHEN = {
 
 function seed(sb, { budgets = { feature: 10, fix: 6 }, when = WHEN, languages = 'en' } = {}) {
   for (const a of AGENTS) fs.writeFileSync(path.join(sb.root, 'agents', `${a}.md`), `---\nname: ${a}\n---\n`);
+  fs.writeFileSync(path.join(sb.root, 'company', 'model-floor.json'), JSON.stringify({ v: 1, protected: PROTECTED }));
   fs.writeFileSync(path.join(sb.root, 'company', 'step-budgets.json'), JSON.stringify({ v: 1, budgets, source: 'test fixture' }));
   fs.writeFileSync(path.join(sb.root, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
   fs.writeFileSync(path.join(sb.root, '.company', 'project.md'), `# Project\nlanguages: ${languages}\n`);
@@ -478,6 +479,42 @@ describe('next: merged pair decision (AC11, AC17)', () => {
     const [d] = next(sb);
     assert.equal(d.do, 'split');
     assert.match(d.why, /needs-ceo/);
+  });
+
+  describe('R-5: needs-ceo status read from a bounded frontmatter block', () => {
+    const put = (sb, text) => fs.writeFileSync(path.join(sb.run, '02-architect.md'), text);
+    const setup = (text) => {
+      const sb = sandbox(); seed(sb);
+      facts(sb, { contract_changed: false }, ['code']);
+      put(sb, text);
+      written(sb, pair());
+      return next(sb)[0];
+    };
+
+    test('frontmatter over 2048 bytes with status after byte 2048 splits', () => {
+      const pad = `note: ${'x'.repeat(2100)}\n`;
+      const d = setup(`---\nstep: 02\n${pad}status: needs-ceo\n---\nBy: x\n`);
+      assert.equal(d.do, 'split');
+      assert.match(d.why, /frontmatter unreadable/);
+    });
+
+    test('a Handoff with no frontmatter splits', () => {
+      const d = setup('By: x\nno frontmatter here\n');
+      assert.equal(d.do, 'split');
+      assert.match(d.why, /frontmatter unreadable/);
+    });
+
+    test('a Handoff with an unclosed --- splits', () => {
+      const d = setup('---\nstep: 02\nstatus: done\nBy: x\n');
+      assert.equal(d.do, 'split');
+      assert.match(d.why, /frontmatter unreadable/);
+    });
+
+    test('a valid short Handoff still merges', () => {
+      const d = setup('---\nstep: 02\nstatus: done\n---\nBy: x\n');
+      assert.equal(d.do, 'run');
+      assert.equal(d.role, 'code-reviewer');
+    });
   });
 
   test('a bad facts file splits', () => {

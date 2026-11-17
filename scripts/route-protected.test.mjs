@@ -58,9 +58,15 @@ test('readProtected reads the file, not a copy: a changed array is returned', as
 
 test('route.mjs holds no copy of the list and imports no Core or settings', () => {
   const src = readFileSync(join(root, 'scripts', 'route.mjs'), 'utf8');
-  for (const name of ['fresh-reviewer', 'vuln-scanner', 'pentester', 'code-reviewer']) {
+  // The test guards the protected list. code-reviewer is also the merge-pair Role of the route
+  // contract (merge must be code-reviewer with qa), so it may appear as a plain constant.
+  for (const name of ['fresh-reviewer', 'vuln-scanner', 'pentester']) {
     assert.ok(!src.includes(`'${name}'`) && !src.includes(`"${name}"`), `literal ${name}`);
   }
+  const names = ['architect', 'code-reviewer', 'fresh-reviewer', 'pentester', 'security', 'vuln-scanner'];
+  // A copy of the list would name most of them; code-reviewer (merge) and security (QA/route steps) are ordinary Roles.
+  const hits = names.filter((n) => src.includes(`'${n}'`) || src.includes(`"${n}"`) || src.includes('`' + n + '`'));
+  assert.ok(hits.length <= 2, `a list of protected slugs: ${hits.join(',')}`);
   assert.doesNotMatch(src, /from\s+['"]\.\/(settings|check)\.mjs['"]/);
   assert.doesNotMatch(src, /import\(\s*['"]\.\/(settings|check)\.mjs['"]/);
 });

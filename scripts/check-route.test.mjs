@@ -28,6 +28,7 @@ const agent = name => `---\nname: ${name}\ndescription: Dispatch when testing.\n
 function repo({ budgets = { feature: 3, fix: 3 }, when = { 'ui-ux-designer': ['ui_changed'] }, roles = ['qa', 'ui-ux-designer', 'code-reviewer', 'senior-engineer'] } = {}) {
   const root = temp();
   for (const r of roles) write(root, `agents/${r}.md`, agent(r));
+  write(root, 'company/model-floor.json', { v: 1, protected: ['code-reviewer'] });
   write(root, 'company/step-budgets.json', { v: 1, budgets, source: 'test fixture' });
   write(root, 'company/role-when.json', { v: 1, when });
   return root;
