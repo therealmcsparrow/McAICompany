@@ -505,7 +505,7 @@ test('show: facts of a commit range, written nowhere', async t => {
     assert.equal(s.git(['status', '--porcelain']), before);
     assert.equal(existsSync(join(s.repo, '.company')), false);
   });
-  await t.test('54-architect Blocking 2: without --head show refuses, it never picks HEAD itself', () => {
+  await t.test('without --head show refuses, it never picks HEAD itself', () => {
     const s = sandbox();
     s.put('README.md', '# r\n');
     const base = s.commit('base');
@@ -519,7 +519,7 @@ test('show: facts of a commit range, written nowhere', async t => {
       assert.equal(existsSync(out), false, 'nothing may be appended to GITHUB_OUTPUT');
     }
   });
-  await t.test('54-architect Blocking 2: an explicit full --head still works', () => {
+  await t.test('an explicit full --head still works', () => {
     const s = sandbox();
     s.put('README.md', '# r\n');
     const base = s.commit('base');
@@ -761,7 +761,7 @@ test('git.M-SEC4 rename reading (d): differing path sets from the two -z -M call
 
 // ---------------------------------------------------------------- write and latest
 
-// `write` only judges on the run branch: refs/heads/aico/<branchId(slug)> (54-architect Blocking 3).
+// `write` only judges on the run branch: refs/heads/aico/<branchId(slug)>.
 const RUN_BRANCH = `aico/${branchId(SLUG)}`;
 
 function writeRepo() {
@@ -973,7 +973,7 @@ test('fixtures: version.txt matches the Contract header', () => {
   assert.equal(g.version, '1.0');
 });
 
-// ---------------------------------------------------------------- 54-architect Blocking 1-3, code-reviewer R-6, 48-qa write gaps
+// ---------------------------------------------------------------- write branch, git environment, blob probe and write path sets
 
 const ENV_PROBE = fileURLToPath(new URL('../tests/contracts/diff-facts/env-probe-git.mjs', import.meta.url));
 const MIB = 1024 * 1024;
@@ -987,7 +987,7 @@ function factsOf(s, step = '05-backend-engineer') {
   return JSON.parse(readFileSync(join(s.factsDir(), `${step}.json`), 'utf8'));
 }
 
-test('54-architect Blocking 3: write judges only on refs/heads/aico/<branchId(slug)>', async t => {
+test('write judges only on refs/heads/aico/<branchId(slug)>', async t => {
   assert.equal(RUN_BRANCH, 'aico/P20261116.000003');
   const attempt = (s, base) => {
     s.put('docs/new.md', 'x\n');
@@ -1027,7 +1027,7 @@ test('54-architect Blocking 3: write judges only on refs/heads/aico/<branchId(sl
   });
 });
 
-test('54-architect Blocking 1: every git child runs with GIT_NO_LAZY_FETCH=1 and no other caller GIT_ variable', async t => {
+test('every git child runs with GIT_NO_LAZY_FETCH=1 and no other caller GIT_ variable', async t => {
   const calls = (s, args, extra) => {
     const log = join(s.root, 'env.log');
     const r = runScript(s, ENV_PROBE, args, { DF_LOG: log, ...extra });
@@ -1067,7 +1067,7 @@ test('54-architect Blocking 1: every git child runs with GIT_NO_LAZY_FETCH=1 and
   });
 });
 
-test('code-reviewer R-6: the blob probe reads a bounded prefix, so big blobs are not refused for size', async t => {
+test('the blob probe reads a bounded prefix, so big blobs are not refused for size', async t => {
   const line = `${'x'.repeat(79)}\n`;
   const big = (n, extra = '') => `${extra}${line.repeat(n * MIB / 80)}`;
   await t.test('a text blob of 20 MiB on both sides (over 32 MiB together) gives facts, not "git failed"', () => {
@@ -1116,7 +1116,7 @@ test('code-reviewer R-6: the blob probe reads a bounded prefix, so big blobs are
   });
 });
 
-test('48-qa gaps: write path sets and attributes', async t => {
+test('write path sets and attributes', async t => {
   const stepArgs = ['write', SLUG, '05-backend-engineer'];
   await t.test('path set: the two -z -M calls must agree in write too', async t2 => {
     const prep = () => {

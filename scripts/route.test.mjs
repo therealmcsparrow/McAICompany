@@ -481,7 +481,7 @@ describe('next: merged pair decision (AC11, AC17)', () => {
     assert.match(d.why, /needs-ceo/);
   });
 
-  describe('R-5: needs-ceo status read from a bounded frontmatter block', () => {
+  describe('needs-ceo status read from a bounded frontmatter block', () => {
     const put = (sb, text) => fs.writeFileSync(path.join(sb.run, '02-architect.md'), text);
     const setup = (text) => {
       const sb = sandbox(); seed(sb);

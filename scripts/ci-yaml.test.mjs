@@ -1,5 +1,5 @@
 // ci.yml must load as YAML. No YAML library is a dependency of this repo, so this is a
-// scalar-level lint of the two failure classes that broke the workflow before (code-reviewer R-1):
+// scalar-level lint of the two failure classes that broke the workflow before:
 // a plain scalar holding `: ` (or ending in `:`) and a plain scalar starting with a YAML
 // indicator such as `!`. The lint is proven against the old broken forms below.
 import { describe, test } from 'node:test';
@@ -49,7 +49,7 @@ export function yamlScalarProblems(text) {
   return out;
 }
 
-describe('ci.yml loads as YAML (code-reviewer R-1, R-2)', () => {
+describe('ci.yml loads as YAML', () => {
   test('no plain scalar holds ": " or starts with a YAML indicator, no tab indent', () => {
     assert.deepEqual(yamlScalarProblems(ci), []);
   });
