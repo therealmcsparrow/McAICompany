@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { run, show, active, append, MAX_FILE } from './run-state.mjs';
+import { run as runRaw, show, active, append, MAX_FILE } from './run-state.mjs';
 import { runCap } from './run-cap.mjs';
 
 const script = path.join(import.meta.dirname, 'run-state.mjs');
@@ -21,6 +21,25 @@ after(() => {
   for (const [k, v] of Object.entries(savedHome)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   fs.rmSync(isoHome, { recursive: true, force: true });
 });
+
+// v3.1: `gate` for a non-auto Gate needs a CEO answer row in forms.jsonl. This wrapper records one (at the call's clock) before a valid gate call.
+let formN = 0;
+function run(argv, opts = {}) {
+  if (argv[0] === 'gate' && argv.length === 4 && opts.root && /^[a-z0-9-]+$/.test(argv[1])) {
+    const dir = path.join(opts.root, '.company', 'work', argv[1]);
+    if (fs.existsSync(dir) && fs.lstatSync(dir).isDirectory()) {
+      const id = `f${formN++}`;
+      const when = at(opts.now ?? Date.now());
+      const rows = [
+        { v: 1, at: when, ev: 'open', id, kind: `gate:${argv[2]}`, questions: [{ options: [{ label: 'pick', result: argv[3] }] }] },
+        { v: 1, at: when, ev: 'answer', id, answers: [{ labels: ['pick'] }] },
+      ];
+      fs.appendFileSync(path.join(dir, 'forms.jsonl'), rows.map(r => `${JSON.stringify(r)}
+`).join(''));
+    }
+  }
+  return runRaw(argv, opts);
+}
 
 let n = 0;
 function repo() {
@@ -820,8 +839,8 @@ test('v3.0 show: the view cap and handover follow the snapshot, an edit applies 
   assert.deepEqual([viewOf(root).cap, viewOf(root).handover], [180000, 162000]);
 });
 
-test('v3.0 header: the Contract is run-state v3.0 and the script declares it', () => {
+test('v3.1 header: the Contract is run-state v3.1 and the script declares it', () => {
   const doc = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'run-state.md'), 'utf8');
-  assert.match(doc, /^# Contract: run-state v3\.0\r?$/m);
-  assert.match(fs.readFileSync(script, 'utf8').split('\n').slice(0, 3).join('\n'), /docs\/contracts\/run-state\.md v3\.0(?![\d.])/);
+  assert.match(doc, /^# Contract: run-state v3\.1\r?$/m);
+  assert.match(fs.readFileSync(script, 'utf8').split('\n').slice(0, 3).join('\n'), /docs\/contracts\/run-state\.md v3\.1(?![\d.])/);
 });

@@ -16,6 +16,18 @@ after(() => {
   for (const r of roots) fs.rmSync(r, { recursive: true, force: true });
 });
 
+// v3.1: a non-auto Gate needs a recorded CEO answer (forms.jsonl) before `gate`. Fixture: one open + one answer row choosing `result`.
+let formSeq = 0;
+function answerGate(dir, gate, result, when = new Date().toISOString().slice(0, 19) + "Z") {
+  const id = `f${formSeq++}`;
+  const rows = [
+    { v: 1, at: when, ev: 'open', id, kind: `gate:${gate}`, questions: [{ options: [{ label: 'pick', result }] }] },
+    { v: 1, at: when, ev: 'answer', id, answers: [{ labels: ['pick'] }] },
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(path.join(dir, 'forms.jsonl'), rows.map((r) => `${JSON.stringify(r)}\n`).join(''));
+}
+
 const CLEAN = [
   '## Tasks',
   '### T1 first task',
@@ -53,7 +65,10 @@ function env({ policy = 'block', projectPolicy } = {}) {
   if (policy) e.setUser(policy);
   if (projectPolicy) e.setProject(projectPolicy);
   e.plan = (text, name = '02-plan.md') => fs.writeFileSync(path.join(dir, name), text);
-  e.state = (...a) => runState(a, { root: product, now: NOW, home });
+  e.state = (...a) => {
+    if (a[0] === 'gate' && a.length === 4) answerGate(dir, a[2], a[3]);
+    return runState(a, { root: product, now: NOW, home });
+  };
   e.tasks = (...a) => planTasks(a, { root: product, now: NOW, home, pluginRoot });
   e.check = (...a) => planCheck(a, { root: product, now: NOW, home });
   e.begin = (name = '02-plan.md') => e.tasks('begin', SLUG, name, '--cap', '3', '--mode', 'parallel');
@@ -314,6 +329,7 @@ describe('hostile cases under block with one open decision', () => {
     fs.copyFileSync(path.join(import.meta.dirname, '..', 'mods', 'lib', 'context-cap.mjs'), path.join(plugin, 'mods', 'lib', 'context-cap.mjs'));
     // The patterns file is absent from the copy.
     assert.equal(node('run-state.mjs', 'start', SLUG).status, 0);
+    answerGate(e.dir, 'plan', 'passed');
     const gate = node('run-state.mjs', 'gate', SLUG, 'plan', 'passed');
     assert.equal(gate.status, 2);
     assert.match(gate.stdout, /^refused: plan gate: patterns/);

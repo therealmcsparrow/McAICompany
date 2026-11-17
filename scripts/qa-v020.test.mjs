@@ -61,6 +61,18 @@ function node(sb, cwd, script, args = [], { env = {}, input } = {}) {
   return { code: r.status, out, err, all: out + err, lines: out.split('\n').filter((l) => l !== '') };
 }
 
+// v3.1: a non-auto Gate needs a recorded CEO answer (forms.jsonl) before `gate`. Fixture: one open + one answer row choosing `result`.
+let formSeq = 0;
+function answerGate(dir, gate, result, when = new Date().toISOString().slice(0, 19) + "Z") {
+  const id = `f${formSeq++}`;
+  const rows = [
+    { v: 1, at: when, ev: 'open', id, kind: `gate:${gate}`, questions: [{ options: [{ label: 'pick', result }] }] },
+    { v: 1, at: when, ev: 'answer', id, answers: [{ labels: ['pick'] }] },
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(path.join(dir, 'forms.jsonl'), rows.map((r) => `${JSON.stringify(r)}\n`).join(''));
+}
+
 function gitIn(sb, cwd, args, { env = {}, input } = {}) {
   const r = spawnSync('git', args, { cwd, env: cleanEnv(sb, env), input, encoding: 'utf8', timeout: 60000 });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
@@ -351,7 +363,10 @@ function gateEnv({ user, project } = {}) {
   e.setProject = (policy) => fs.writeFileSync(path.join(product, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, plan_check: { policy } } }));
   e.plan = (name, text) => fs.writeFileSync(path.join(dir, name), text);
   e.sh = (script, ...args) => node(sb, product, script, args);
-  e.gate = () => e.sh('run-state.mjs', 'gate', 'demo', 'plan', 'passed');
+  e.gate = () => {
+    answerGate(e.dir, 'plan', 'passed');
+    return e.sh('run-state.mjs', 'gate', 'demo', 'plan', 'passed');
+  };
   e.open = () => {
     assert.equal(e.sh('run-state.mjs', 'start', 'demo').code, 0);
     assert.equal(e.sh('run-state.mjs', 'ask', 'demo', 'plan').code, 0);
@@ -403,6 +418,7 @@ describe('AC4 plan_check.policy block refuses an open plan', () => {
     const e = gateEnv({ user: 'block' });
     e.plan('02-plan.md', OPEN_PLAN);
     e.open();
+    answerGate(e.dir, 'plan', 'passed');
     const g = e.sh('run.mjs', 'run-state', 'gate', 'demo', 'plan', 'passed');
     gateRefused(g);
   });
@@ -1927,6 +1943,7 @@ function recordedRun(sb, run, aico, { fixRounds = 1, minutes = 30 } = {}) {
   assert.equal(p.run('run-state.mjs', 'start', run, aico).code, 0);
   assert.equal(p.run('run-state.mjs', 'ask', run, 'plan').code, 0);
   assert.equal(p.run('run-state.mjs', 'ceo', run, 'plan', '2').code, 0);
+  answerGate(path.join(p.dir, '.company', 'work', run), 'plan', 'passed');
   assert.equal(p.run('run-state.mjs', 'gate', run, 'plan', 'passed').code, 0);
   assert.equal(p.run('run-state.mjs', 'sub', run, 'start', 'architect', 'aaaaaaaaaaaa').code, 0);
   assert.equal(p.run('run-state.mjs', 'sub', run, 'stop', 'architect', 'aaaaaaaaaaaa').code, 0);
@@ -2020,6 +2037,7 @@ describe('AC34 the run receipt quotes only recorded numbers', () => {
     const sb = sandbox();
     const p = costRun(sb);
     assert.equal(p.run('run-state.mjs', 'ask', 'demo', 'plan').code, 0);
+    answerGate(path.join(p.dir, '.company', 'work', 'demo'), 'plan', 'passed');
     assert.equal(p.run('run-state.mjs', 'gate', 'demo', 'plan', 'passed').code, 0);
     const r = p.run('ledger.mjs', 'receipt', 'demo');
     assert.equal(r.code, 0, r.all);
