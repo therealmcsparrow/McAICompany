@@ -96,9 +96,9 @@ describe('calibration', () => {
     assert.equal(lead.COMPACT_RESERVE, undefined);
   });
 
-  test('the Contract is v2.5 and holds the run cap, not the window setup', () => {
+  test('the Contract is v3.0 and holds the run cap, not the window setup', () => {
     const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v2\.5$/m);
+    assert.match(text, /^# Contract: lead-handoff v3\.0$/m);
     assert.ok(text.includes('162000'));
     assert.ok(text.includes('runCap'));
     assert.ok(text.includes('no setup'));
@@ -107,7 +107,7 @@ describe('calibration', () => {
 
   test('the script header names the Contract and what it uses', () => {
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.5');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.0');
     assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v3\.0 /);
   });
 });
@@ -792,7 +792,7 @@ describe('pipeline wiring', () => {
     const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
     assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
     assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v2.5'));
+    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v3.0'));
   });
 
   test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {
@@ -817,7 +817,7 @@ describe('run-state v2.0 cites and v3 runs', () => {
     const uses = (f) => fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/)[2];
     assert.equal(fs.existsSync(path.join(here, 'context-guard.mjs')), false, 'context-guard v2.0 retires scripts/context-guard.mjs');
     assert.match(uses('run-guard.mjs'), /docs\/contracts\/run-state\.md v3\.0(?![\d.])/);
-    const triage = fs.readFileSync(path.join(repo, 'skills', 'triage', 'SKILL.md'), 'utf8').split(/\r?\n/)[23];
+    const triage = fs.readFileSync(path.join(repo, 'skills', 'triage', 'SKILL.md'), 'utf8').split(/\r?\n/).find((l) => /run-state v\d/.test(l)) ?? '';
     assert.match(triage, /run-state v3\.0/);
     assert.ok(!/run-state v1/.test(triage));
   });

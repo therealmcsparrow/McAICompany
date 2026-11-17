@@ -64,12 +64,12 @@ function transcript(fx) {
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_GUARDS: 'off' } });
 
-describe('the Contract and the header (lead-handoff v2.5)', () => {
-  test('the Contract header is v2.5 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-handoff v3.0)', () => {
+  test('the Contract header is v3.0 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v2\.5$/m);
+    assert.match(doc, /^# Contract: lead-handoff v3\.0$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.5');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.0');
   });
 
   test('line 3 cites run-state v3.0', () => {
