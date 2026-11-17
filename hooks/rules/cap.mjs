@@ -92,7 +92,7 @@ function judgeSpawn(event) {
   }
   if (event.session !== 'lead') return null;
   if (event.agentKey) return hasRun && tool.background === true ? deny(LEAD_BG_REASON) : null;
-  if (isLeadTarget(tool)) return tool.background === true ? deny(MAIN_BG_REASON) : null;
+  if (tool.leadTarget === true || isLeadTarget(tool)) return tool.background === true ? deny(MAIN_BG_REASON) : null;
   return hasRun ? deny(MAIN_ONLY_LEAD_REASON) : null;
 }
 
