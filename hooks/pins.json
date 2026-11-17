@@ -1,8 +1,8 @@
 {
   "v": 1,
   "files": {
-    "scripts/hook-host.mjs": "c7631d9aea3f8e7babd924702754f99ec67f4b65b34e69b4e6d120052c675ff7",
-    "hooks/lib/cap-effects.mjs": "8588f6fa885451ebefdce638a80daa9619106aa34076846854c1fcbfd21f803b",
+    "scripts/hook-host.mjs": "d1891f5270b59db403e6ef180dcb43863924597f579fcce4f2fe346afba0f118",
+    "hooks/lib/cap-effects.mjs": "0fa510766eb9d792d4c4992bd8c6bf93b01846ac7ea3b2c556a217436a60d2cb",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
     "hooks/lib/dep-hashes.mjs": "67d87f14a4d5fd13af562ac5fc0af45ca29549160e483718997899d618dfa9bd",
     "hooks/lib/dep-pins.mjs": "01e2861d2d8f778ae8c3b3e8e3d511ae749746973cd712fe6f5090ecad2f61c6",
@@ -13,7 +13,7 @@
     "hooks/lib/rule-runner.mjs": "7ba077f3cbd66ae4bb3dbf04919ae54159387a82d851644942ae7938e508aa69",
     "hooks/lib/snapshot.mjs": "ff5dcb5632ed8e52ca32d80ea6c42647fdd7fe9acda7736bbe30d55bee684980",
     "hooks/rules/browser.mjs": "895ee95287943d9c6627f8475d2f73223610d08256d208a668f76144618d032d",
-    "hooks/rules/cap.mjs": "ce64a6720de46270e2ab7925eaa519cb1e328d79885180a6ab9f3d33f7a3fde6",
+    "hooks/rules/cap.mjs": "c023645e3136cf362c3e49074ad92bae8d5debc84e39e1664c328393bfd7f58c",
     "hooks/rules/dotenv.mjs": "53e10047a416281c49aecc114dd64ecebdf86b579835b97ec400c7e47c950a84",
     "hooks/rules/git-add.mjs": "4b514e4e6028a4a170d27c921fe714a968a8a70a7c911ddc8d18844fe03e61c6",
     "hooks/rules/model-floor.mjs": "27f00952600bf5bdcf79c6245063d2c554e3fa40dca201444e3a13964fd4d653",
