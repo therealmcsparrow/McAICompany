@@ -5,14 +5,13 @@
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" watch", "timeout": 5 }] }
     ],
     "PreToolUse": [
-      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" turn", "timeout": 5 }] },
+      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-relay.mjs\" preset", "timeout": 5, "onFailure": "block" }] },
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-host.mjs\"", "timeout": 10, "onFailure": "block" }] }
     ],
-    "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" turn", "timeout": 5 }] }
+    "PostToolUse": [
+      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-relay.mjs\" answer", "timeout": 5, "onFailure": "block" }] }
     ],
     "SessionStart": [
-      { "matcher": "compact", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" resume", "timeout": 5 }] },
       { "matcher": "startup|resume|clear", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" start", "timeout": 5 }] },
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-host.mjs\"", "timeout": 10 }] }
     ],
@@ -25,6 +24,7 @@
     ],
     "SubagentStop": [
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/step-times.mjs\" stop", "timeout": 5 }] },
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/lead-handover.mjs\" measure", "timeout": 5 }] },
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-host.mjs\"", "timeout": 10 }] }
     ]
   }
