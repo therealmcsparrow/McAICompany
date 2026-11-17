@@ -34,7 +34,6 @@ The tech-researcher runs on Opus; every other Role keeps the model it had in v0.
 | **product-manager** | opus | medium | Nora | Turns a request into a brief: problem, users, scope, acceptance criteria. Decides *what* and *why*, never *how*. [Page](product-manager.md) |
 | **reprompter** | sonnet | medium | Lynn | Turns a rough prompt into a complete one (goal, context, inputs, constraints, output format, done-check). Asks only when a gap would change the result; never runs the prompt. Use it through `/aico:reprompt`. [Page](reprompter.md) |
 | **account-manager** | sonnet | low | Carmen | Client intake, proposals, estimates, status reports and handoff letters. [Page](account-manager.md) |
-| **project-manager** | sonnet | medium | Pieter | The Lead. Runs one Playbook for you: dispatches the Roles one task at a time, never does a Role's work itself, and ends every turn with one `STATUS` block. Started by the main session, not called directly. |
 
 ### Market & tech research
 | Role | Model | Effort | Name | What it's for |
