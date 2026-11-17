@@ -6,7 +6,7 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { capEnv, cleanup } from './cap-engine.mjs';
+import { capEnv, cleanup, LEAD_TYPE, LEAD_AGENT } from './cap-engine.mjs';
 import { newSessionCommand, HEADER, resume } from '../../scripts/lead-handover.mjs';
 
 // The freeze checks run through the engine (scripts/hook-host.mjs, real cap.M1 rule);
@@ -15,11 +15,13 @@ import { newSessionCommand, HEADER, resume } from '../../scripts/lead-handover.m
 const SLUG = 'P20261114.000099/01-feature';
 after(cleanup);
 
-// A run, a snapshot taken with `cap` (undefined = the default) and the Lead's call at the last reading.
+// A run, a snapshot taken with `cap` (undefined = the default) and the Lead AGENT's call at the last reading
+// (context-guard v3.0: the cap covers the Lead agent, never main).
 async function fixture(readings, cap) {
   const fx = await capEnv({ cap });
   fx.bootLead();
-  return { fx, call: () => fx.lead(readings[readings.length - 1], { rows: readings }), root: fx.env.project };
+  return { fx, call: () => fx.step(readings[readings.length - 1], { tool: 'Bash', input: { command: 'ls' }, agent: LEAD_AGENT, over: { agent_type: LEAD_TYPE } }),
+    mainCall: () => fx.lead(readings[readings.length - 1], { rows: readings }), root: fx.env.project };
 }
 
 const repo = path.join(import.meta.dirname, '..', '..');
@@ -65,6 +67,12 @@ describe('Lead hand-over loop: lean boot path', () => {
 });
 
 describe('Lead hand-over loop: the guard still freezes a session over the point', () => {
+  test('main is never frozen, even far over the point (v3.0)', async () => {
+    const f = await fixture([55558, 100000, 150000], 120000);
+    f.fx.quiet(f.mainCall());
+    assert.deepEqual(f.fx.handovers(), []);
+  });
+
   test('control: a session far over the handover (55558 -> 150000, threshold 120000) is frozen, one handover recorded', async () => {
     const f = await fixture([55558, 100000, 150000], 120000);
     const r = f.call();
