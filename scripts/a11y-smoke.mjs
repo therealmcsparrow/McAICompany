@@ -264,7 +264,9 @@ function listTracked() {
 }
 
 function main() {
+  const t0 = Date.now();
   const lines = [];
+  let failed = 0;
   let barriers = 0;
   let files = process.argv.slice(2);
   if (files.length === 0) {
@@ -289,10 +291,12 @@ function main() {
       const why = err.code === 'NOTFILE' ? 'not a regular file' : err.code === 'TOOBIG' ? `larger than ${MAX_BYTES} bytes` : `cannot read (${esc(err.code ?? 'error')})`;
       lines.push(`${label}: unreadable: ${why}`);
       barriers++;
+      failed++;
       return;
     }
     const found = checkSource(src);
     barriers += found.length;
+    if (found.length > 0) failed++;
     found.slice(0, MAX_REPORTED).forEach((f) => {
       lines.push(`${label}:${lineAt(src, f.pos)}: ${f.rule}: ${f.msg}`);
     });
@@ -302,7 +306,7 @@ function main() {
     ? `smoke check: ${files.length} file(s), no barrier found (a smoke check covers a few markup rules, not a full audit)`
     : `smoke check: ${files.length} file(s), ${barriers} barrier(s) found`);
   process.stdout.write(`${lines.join('\n')}\n`);
-  process.stderr.write(`a11y smoke check: done, ${barriers} barrier(s)\n`);
+  process.stderr.write(`a11y smoke check: done, ${files.length - failed}/${files.length} file(s) passed, ${barriers} barrier(s), ${Math.round((Date.now() - t0) / 1000)}s\n`);
   process.exitCode = barriers === 0 ? 0 : 1;
 }
 
