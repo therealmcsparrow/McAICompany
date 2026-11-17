@@ -438,13 +438,13 @@ async function run(argv, root) {
       o[k.slice(2)] = opts[i + 1];
     }
     if (o.base === null) refuse('--base is required');
+    if (o.head === null) refuse('--head is required');
     const prot = await protectedList(root);
     const route = draftRoute(readDraft(file).value);
     const { data, errors } = loadData(root, prot);
     const lint = [...errors, ...lintRoute(route, data)];
     if (lint.length > 0) return { code: 2, out: `${printErrors(lint)}refused: ${lint.length} lint error(s)\n` };
-    const args = ['show', '--base', o.base];
-    if (o.head !== null) args.push('--head', o.head);
+    const args = ['show', '--base', o.base, '--head', o.head];
     const shown = factsMain(args, root);
     if (shown.code !== 0) return { code: 2, out: shown.out };
     let facts;

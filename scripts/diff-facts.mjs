@@ -11,7 +11,7 @@ import {
 import { join, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { WorkFolderRefusal, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
+import { WorkFolderRefusal, branchId, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const MiB = 1024 * 1024;
 const MAX_FACTS_BYTES = MiB;
@@ -25,6 +25,7 @@ const GIT_TIMEOUT_MS = 60000;
 const PATH_BUDGET = MAX_FACTS_BYTES - 64 * 1024;
 const ENTRY_OVERHEAD = 64;
 const BINARY_PROBE = 8000;
+const SMALL_BLOB = 2048;
 const FULL_ID = /^[0-9a-f]{40}$/;
 const STEP = /^\d{2,3}-[a-z][a-z0-9-]{0,40}$/;
 const FACTS_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.json$/;
@@ -196,11 +197,11 @@ export function classify(entries, config) {
 const bigStat = (p) => lstatSync(p, { bigint: true });
 
 // A plain regular file with one link at exactly `lexical`, whose real path equals it and lies under `realRoot`.
-function readPlain(realRoot, lexical, cap) {
+function readPlain(realRoot, lexical, cap, prefix = false) {
   let lst;
   try { lst = bigStat(lexical); } catch (e) { return { status: e.code === 'ENOENT' || e.code === 'ENOTDIR' ? 'missing' : 'error' }; }
   if (!lst.isFile() || lst.nlink !== 1n) return { status: 'refused' };
-  if (lst.size > BigInt(cap)) return { status: 'big' };
+  if (!prefix && lst.size > BigInt(cap)) return { status: 'big' };
   let real;
   try { real = realpathSync.native(lexical); } catch { return { status: 'refused' }; }
   if (real !== lexical || !real.startsWith(realRoot + sep)) return { status: 'refused' };
@@ -208,9 +209,9 @@ function readPlain(realRoot, lexical, cap) {
   try {
     fd = openSync(lexical, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     const st = fstatSync(fd, { bigint: true });
-    if (!st.isFile() || st.nlink !== 1n || st.size > BigInt(cap)) return { status: 'refused' };
+    if (!st.isFile() || st.nlink !== 1n || (!prefix && st.size > BigInt(cap))) return { status: 'refused' };
     if (lst.ino !== 0n && (st.ino !== lst.ino || st.dev !== lst.dev)) return { status: 'refused' };
-    const buf = Buffer.alloc(Number(st.size));
+    const buf = Buffer.alloc(prefix ? Number(st.size < BigInt(cap) ? st.size : BigInt(cap)) : Number(st.size));
     let off = 0;
     while (off < buf.length) {
       const n = readSync(fd, buf, off, buf.length - off, off);
@@ -263,6 +264,7 @@ function gitEnv() {
   return {
     ...env,
     GIT_NO_REPLACE_OBJECTS: '1',
+    GIT_NO_LAZY_FETCH: '1',
     GIT_LITERAL_PATHSPECS: '1',
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_OPTIONAL_LOCKS: '0',
@@ -353,32 +355,58 @@ function gitInput(cwd, args, input) {
   }
 }
 
-// Reads each `<id>:<path>` spec raw with one cat-file process: 'nul' when the first bytes hold a NUL, a non-blob or a missing object.
+// Reads the first bytes of each `<id>:<path>` spec raw: true when they hold a NUL, a non-blob or a missing object.
+// Sizes come from one cat-file --batch-check; a blob over SMALL_BLOB is read through a capped pipe, never whole.
 function probeBlobs(cwd, specs) {
   if (specs.length === 0) return [];
-  const out = gitInput(cwd, ['cat-file', '--batch'], Buffer.from(specs.map(x => `${x}\n`).join(''), 'utf8'));
-  const result = [];
-  let pos = 0;
-  for (let i = 0; i < specs.length; i++) {
-    const nl = out.indexOf(10, pos);
-    if (nl < 0) refuse('git output not understood');
-    const header = out.toString('latin1', pos, nl);
-    pos = nl + 1;
-    if (header.endsWith(' missing')) { result.push(true); continue; }
-    const m = /^[0-9a-f]{40,64} ([a-z]+) (\d{1,12})$/.exec(header);
+  const checked = gitInput(cwd, ['cat-file', '--batch-check'], Buffer.from(specs.map(x => `${x}\n`).join(''), 'utf8')).toString('latin1');
+  const lines = checked.split('\n');
+  if (lines.pop() !== '' || lines.length !== specs.length) refuse('git output not understood');
+  const info = lines.map(line => {
+    if (line.endsWith(' missing')) return null;
+    const m = /^[0-9a-f]{40,64} ([a-z]+) (\d{1,12})$/.exec(line);
     if (m === null) refuse('git output not understood');
-    const size = Number(m[2]);
-    if (pos + size + 1 > out.length) refuse('git output not understood');
-    result.push(m[1] !== 'blob' || out.subarray(pos, pos + Math.min(size, BINARY_PROBE)).includes(0));
-    pos += size + 1;
+    return { type: m[1], size: Number(m[2]) };
+  });
+  const result = new Array(specs.length).fill(true);
+  const small = [];
+  for (let i = 0; i < specs.length; i++) {
+    if (info[i] === null || info[i].type !== 'blob') continue;
+    if (info[i].size <= SMALL_BLOB) small.push(i);
+    else result[i] = gitPrefix(cwd, ['cat-file', 'blob', specs[i]]).includes(0);
   }
-  if (pos !== out.length) refuse('git output not understood');
+  if (small.length > 0) {
+    const out = gitInput(cwd, ['cat-file', '--batch'], Buffer.from(small.map(i => `${specs[i]}\n`).join(''), 'utf8'));
+    let pos = 0;
+    for (const i of small) {
+      const nl = out.indexOf(10, pos);
+      if (nl < 0) refuse('git output not understood');
+      pos = nl + 1;
+      const size = info[i].size;
+      if (pos + size + 1 > out.length) refuse('git output not understood');
+      result[i] = out.subarray(pos, pos + size).includes(0);
+      pos += size + 1;
+    }
+    if (pos !== out.length) refuse('git output not understood');
+  }
   return result;
+}
+
+// The first BINARY_PROBE bytes of a git output; git is stopped once the pipe cap is passed.
+function gitPrefix(cwd, args) {
+  try {
+    return execFileSync('git', [...GIT_PREFIX, ...args], {
+      cwd, env: gitEnv(), maxBuffer: BINARY_PROBE, timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    });
+  } catch (e) {
+    if (e !== null && typeof e === 'object' && e.code === 'ENOBUFS' && Buffer.isBuffer(e.stdout)) return e.stdout;
+    return refuse('git failed');
+  }
 }
 
 // The tip side read from the working tree by the real-path rule; anything not a plain readable file counts as binary.
 function worktreeHasNul(realRoot, rel) {
-  const r = readPlain(realRoot, join(realRoot, ...rel.split('/')), MAX_GIT_OUTPUT);
+  const r = readPlain(realRoot, join(realRoot, ...rel.split('/')), BINARY_PROBE, true);
   return r.status !== 'ok' || r.buf.subarray(0, BINARY_PROBE).includes(0);
 }
 
@@ -397,9 +425,16 @@ function parseNameOnly(buf) {
   return nulTokens(buf);
 }
 
+// The empty tree id of the repo's hash: attributes are read from it, so no .gitattributes filter= runs a configured clean command.
+function emptyTree(cwd) {
+  const id = gitInput(cwd, ['hash-object', '-t', 'tree', '--stdin'], Buffer.alloc(0)).toString('utf8').trim();
+  if (!/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(id)) refuse('git output not understood');
+  return id;
+}
+
 // tip: { commit } reads the tip blob at that commit, { worktree } reads the working-tree file.
 function listChanges(cwd, revs, tip) {
-  const flags = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none', '-z', '-M'];
+  const flags = ['--attr-source', emptyTree(cwd), 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--ignore-submodules=none', '-z', '-M'];
   const tail = ['--end-of-options', ...revs, '--'];
   const status = parseNameStatus(git(cwd, [...flags, '--name-status', ...tail]));
   const counts = parseNumstat(git(cwd, [...flags, '--numstat', ...tail]));
@@ -493,9 +528,9 @@ function headId(cwd) {
 
 function show(cwd, opts) {
   requireCommit(cwd, opts.base);
-  if (opts.head !== null) requireCommit(cwd, opts.head);
+  requireCommit(cwd, opts.head);
   noGrafts(cwd);
-  const head = opts.head ?? headId(cwd);
+  const head = opts.head;
   const entries = listChanges(cwd, [opts.base, head], { commit: head });
   return buildFacts(cwd, opts.base, head, entries, null);
 }
@@ -548,7 +583,8 @@ function write(cwd, slug, step) {
   requireCommit(cwd, base);
   noGrafts(cwd);
   const ref = git(cwd, ['symbolic-ref', '-q', 'HEAD']).toString('utf8').trim();
-  if (!/^refs\/heads\/[^\x00-\x20\x7f~^:?*[\\]+$/.test(ref)) refuse('not on a run branch');
+  const runId = branchId(slug);
+  if (runId === null || ref !== `refs/heads/aico/${runId}`) refuse('not on the run branch');
   const head = headId(cwd);
   const entries = [...listChanges(cwd, [base], { worktree: true }), ...listUntracked(cwd)];
   const { text } = buildFacts(cwd, base, head, entries, step);
@@ -635,7 +671,8 @@ function parseShow(args) {
     }
   }
   if (opts.base === null) refuse('--base is required');
-  if (!FULL_ID.test(opts.base) || (opts.head !== null && !FULL_ID.test(opts.head))) refuse('not a full commit id');
+  if (opts.head === null) refuse('--head is required');
+  if (!FULL_ID.test(opts.base) || !FULL_ID.test(opts.head)) refuse('not a full commit id');
   return opts;
 }
 
