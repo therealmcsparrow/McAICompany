@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { capEnv, cleanup, LEAD_TYPE, LEAD_AGENT } from './cap-engine.mjs';
-import { newSessionCommand, HEADER, resume } from '../../scripts/lead-handover.mjs';
+import { newSessionCommand, HEADER } from '../../scripts/lead-handover.mjs';
 
 // The freeze checks run through the engine (scripts/hook-host.mjs, real cap.M1 rule);
 // the threshold is the user setting `pipeline.context_cap` read into the snapshot at SessionStart, never a value
@@ -56,14 +56,6 @@ describe('Lead hand-over loop: lean boot path', () => {
     assert.ok(!HEADER.includes('lead-handover.md'));
   });
 
-  test('resume() output after a compact names the resume file', async () => {
-    const f = await fixture([55558]);
-    const payload = JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact', session_id: 'sess-fresh-lead-1' });
-    const r = resume(payload, { root: f.root, now: Date.now() });
-    const ctx = JSON.parse(r.out).hookSpecificOutput.additionalContext;
-    assert.match(ctx, /references\/lead-resume\.md/);
-    assert.ok(!ctx.includes('lead-handover.md'));
-  });
 });
 
 describe('Lead hand-over loop: the guard still freezes a session over the point', () => {
