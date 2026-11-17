@@ -1,12 +1,12 @@
 {
   "v": 1,
   "files": {
-    "scripts/hook-host.mjs": "34aac3fa1c9e2ef8b1c022842ed21f0acbe88373feaea314f4566ae471f89086",
+    "scripts/hook-host.mjs": "6813767845dec1de70ccafbb5bac0b93771b3d51ddafb98922efa2b9f6767a3a",
     "hooks/lib/cap-effects.mjs": "0fa510766eb9d792d4c4992bd8c6bf93b01846ac7ea3b2c556a217436a60d2cb",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
     "hooks/lib/dep-hashes.mjs": "67d87f14a4d5fd13af562ac5fc0af45ca29549160e483718997899d618dfa9bd",
     "hooks/lib/dep-pins.mjs": "01e2861d2d8f778ae8c3b3e8e3d511ae749746973cd712fe6f5090ecad2f61c6",
-    "hooks/lib/event.mjs": "bb82fee74650428d8300c207e6c02016ea79099d429a6db9b584c30f67695e90",
+    "hooks/lib/event.mjs": "82c0abf1f5c890045312b85ce61504f039edf9431afc63071207ab47f259fdd3",
     "hooks/lib/mods-defaults.mjs": "472436b346eb5178a51bcf0ad12e69baf9d51126c10aac239b80148d36971ec2",
     "hooks/lib/paths.mjs": "ec20f185c22c4402650b9d051691affcf9f6da8b1897037e5c92be29bbacc821",
     "hooks/lib/rule-id.mjs": "942c6663b64f7e4de11a24ca5856c422542797bf3437c518a9444b8254acd42e",
@@ -17,7 +17,7 @@
     "hooks/rules/dotenv.mjs": "53e10047a416281c49aecc114dd64ecebdf86b579835b97ec400c7e47c950a84",
     "hooks/rules/git-add.mjs": "4b514e4e6028a4a170d27c921fe714a968a8a70a7c911ddc8d18844fe03e61c6",
     "hooks/rules/model-floor.mjs": "27f00952600bf5bdcf79c6245063d2c554e3fa40dca201444e3a13964fd4d653",
-    "hooks/rules/self-protect.mjs": "294eccb743ebeb33014e54766f60aff107376a2dadfb2f81829913a40b28315c",
+    "hooks/rules/self-protect.mjs": "de2baf5c235322ecf34f98b4b0210237f0fae7c451e6a0a401e1e3a94dd70117",
     "hooks/manifests/cache-tax.json": "c596ed897b7d66be69c803474ba12e41dd339bd1017f120a01ae37d38d504852",
     "hooks/manifests/cap.json": "b121570ec0a01bbeb0dce34236ae60c93c7080c22b1c1094eb8db1fcd4fb2882",
     "hooks/manifests/dotenv.json": "e6a08ed81bcdb5b60ff52d6908729b45e33df468c8921dd2f2b484a122bef228",
