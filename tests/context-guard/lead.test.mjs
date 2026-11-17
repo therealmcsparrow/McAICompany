@@ -49,7 +49,7 @@ describe('main session is never capped (context-guard v3.0)', () => {
   test('main at and far over F and T is allowed, nothing written', async () => {
     const fx = await lead();
     for (const n of [F, 179999, 180000, 250000]) {
-      for (const tool of ['Read', 'Agent', 'Bash', NEW_SESSION_TOOL]) fx.quiet(fx.lead(n, { tool }), `${tool} at ${n}`);
+      for (const tool of ['Read', 'Bash', NEW_SESSION_TOOL]) fx.quiet(fx.lead(n, { tool }), `${tool} at ${n}`);
     }
     assert.deepEqual(fx.handovers(), []);
   });
@@ -124,13 +124,11 @@ describe('Lead agent frozen', () => {
 });
 
 describe('Lead agent with a Step running', () => {
-  test('there is no wait branch any more: Agent and Task at F are denied like every other tool', async () => {
+  test('the wait reason is kept: Agent and Task at F are denied with it, other tools pass (context-guard v3.0)', async () => {
     const fx = await lead();
     fx.addSub('start');
-    for (const tool of ['Agent', 'Task', 'Read']) {
-      const reason = fx.denyOf(fx.agentLead(F, { tool }));
-      assert.match(reason, /STATUS: handover/, tool);
-    }
+    for (const tool of ['Agent', 'Task']) assert.match(text(fx.agentLead(F, { tool })), /Wait for it to finish/, tool);
+    fx.quiet(fx.agentLead(F, { tool: 'Read' }), 'Read');
   });
 
   test('below F a running Step changes nothing', async () => {

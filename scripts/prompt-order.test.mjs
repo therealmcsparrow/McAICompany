@@ -326,8 +326,8 @@ test('the pipeline task slug item refuses a new slug with exceptions on file', (
   has(skillOnly, '`references/plan-review.md`', '`references/review-loop.md`');
 });
 
-test('the pipeline stays at 125 lines with room for two more pointer lines', () => {
-  assert.ok(skillOnly.replace(/\n$/, '').split('\n').length <= 123);
+test('the pipeline stays at 124 lines or fewer (Helper Lead bullet, lead-relay v1)', () => {
+  assert.ok(skillOnly.replace(/\n$/, '').split('\n').length <= 124);
 });
 
 test('feature and fix name the plan review and the second reviewer; the architect answers findings', () => {

@@ -36,7 +36,8 @@ const PRE = {
   // code-reviewer: +232 B for the judging diff paragraph and the finding ID row rule (rule git.M-SEC4, handoff v1.2).
   // standards: 1230 + 90 B for the company-type line it now carries + 360 B for the Playbook guard sentence (ADR 0026).
   // standards: +434 B for the pack reuse line (rule-pack v1.2) and the run.mjs resolver form of the Type line (plugin-root v1).
-  'skills/standards/SKILL.md': 2114, 'agents/code-reviewer.md': 3187, 'agents/senior-engineer.md': 3340,
+  // standards: +196 B for the Runs-in head line every Playbook carries (lead-relay v1, AC1); raises the per-file cap and so the senior-engineer load sum.
+  'skills/standards/SKILL.md': 2310, 'agents/code-reviewer.md': 3187, 'agents/senior-engineer.md': 3340,
 };
 // Extra bytes a load may carry over the PRE sum. The handoff skill grew 110 B (Starting a Step item 5: Roles never start a Playbook,
 // ADR 0026): code-reviewer is 127 B over its PRE sum (14 B of handoff growth, 113 B of open-decision Nit text, plan-check v1), senior-engineer 110 B over on top of its 22 B of drift and the standards line above.

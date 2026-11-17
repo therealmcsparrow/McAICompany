@@ -11,7 +11,7 @@ const NAME = ['lead', 'new', 'session'].join('_');
 const LAUNCH = ['lead', 'launch', 'mcp'].join('-');
 const norm = p => p.replaceAll(String.fromCharCode(92), '/');
 // History is exempt (AC10).
-const EXEMPT = [/^docs\/adr\//, /^CHANGELOG\.md$/, /^tests\/lead-handover\/evidence\.md$/, /^\.company\//, /^tests\/lead-subagent\/retired\.test\.mjs$/];
+const EXEMPT = [/^docs\/adr\//, /^CHANGELOG\.md$/, /^tests\/lead-handover\/evidence\.md$/, /^\.company\//, /^tests\/lead-subagent\/retired\.test\.mjs$/, /^docs\/specs\/P20261117\.000001~/];
 const live = () => {
   const r = spawnSync('git', ['-C', root, 'ls-files', '--cached'], { encoding: 'utf8', maxBuffer: 1 << 26 });
   assert.equal(r.status, 0, 'git ls-files');

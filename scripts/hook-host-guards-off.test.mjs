@@ -16,9 +16,9 @@ async function leadPre(guardEnv) {
   return fx.guardRecord();
 }
 
-test('control: guards on, a Lead background launch writes one bg row', async () => {
+test('control: guards on, a Lead background launch writes no bg row (context-guard v3.0 retired it)', async () => {
   const rows = await leadPre({});
-  assert.equal(rows.filter((r) => r.ev === 'bg').length, 1, JSON.stringify(rows));
+  assert.equal(rows.filter((r) => r.ev === 'bg').length, 0, JSON.stringify(rows));
 });
 
 test('S-6: AICO_GUARDS=off, a Lead background launch writes no bg row', async () => {

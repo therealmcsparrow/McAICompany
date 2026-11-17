@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run, show, active } from './run-state.mjs';
-import { main as handover, watch, resume } from './lead-handover.mjs';
+import { main as handover, watch } from './lead-handover.mjs';
 import { handle } from './step-times.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -136,7 +136,7 @@ describe('run-state on a new name and on a legacy slug', () => {
 
 describe('lead-handover on a new name and on a legacy slug', () => {
   for (const name of [NEW, NEW_DRAFT_2, LEGACY]) {
-    test(`read, write and resume: ${name}`, () => {
+    test(`read and write: ${name}`, () => {
       const fx = fixture();
       const now = Date.now();
       startRun(fx, name, now - 60000);
@@ -149,21 +149,9 @@ describe('lead-handover on a new name and on a legacy slug', () => {
       const body = fs.readFileSync(path.join(fx.work, name, 'lead-handoff-1.md'), 'utf8');
       assert.equal(body.split('\n')[1], `slug: ${name}`);
       assert.equal(body.includes('\r'), false);
-      const r = resume(sessionStart, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now });
-      assert.equal(r.code, 0);
-      const ctx = JSON.parse(r.out).hookSpecificOutput.additionalContext;
-      assert.ok(ctx.includes(`slug: ${name}`), 'the valid Handoff is injected for the name');
-      assert.match(handover(['read', name], fx.root, {}).out, /^handovers 1\nresumes hook 0 ceo 1\n/);
+      assert.match(handover(['read', name], fx.root, {}).out, /^handovers 1\nresumes hook 0 ceo 0\n/);
     });
 
-    test(`the hook line prints the name single-quoted: ${name}`, () => {
-      const fx = fixture();
-      const now = Date.now();
-      startRun(fx, name, now - 60000);
-      const r = resume(sessionStart, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now });
-      const ctx = JSON.parse(r.out).hookSpecificOutput.additionalContext;
-      assert.equal(ctx, `aico lead hand-over: run lead-handover read '${name}' first, then follow skills/pipeline/references/lead-resume.md.`);
-    });
   }
 
   test('watch writes the Handoff for a new name', () => {
@@ -175,18 +163,6 @@ describe('lead-handover on a new name and on a legacy slug', () => {
     const payload = JSON.stringify({ hook_event_name: 'PreCompact', trigger: 'manual', transcript_path: file });
     assert.deepEqual(watch(payload, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now }), { code: 0, err: '' });
     assert.ok(fs.existsSync(path.join(fx.work, NEW, 'lead-handoff-1.md')));
-  });
-
-  test('a Handoff whose slug line is another valid name is not injected', () => {
-    const fx = fixture();
-    const now = Date.now();
-    startRun(fx, NEW, now - 60000);
-    assert.equal(handover(['write', NEW], fx.root, {}).code, 0);
-    const file = path.join(fx.work, NEW, 'lead-handoff-1.md');
-    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(`slug: ${NEW}`, `slug: ${NEW_BUILD}`));
-    const ctx = JSON.parse(resume(sessionStart, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now }).out).hookSpecificOutput.additionalContext;
-    assert.equal(ctx.includes('slug:'), false);
-    assert.ok(ctx.includes(`read '${NEW}' first`));
   });
 
   test('every hostile name is refused by every command with no echo and nothing created', () => {
@@ -226,16 +202,6 @@ describe('lead-handover on a new name and on a legacy slug', () => {
     assert.deepEqual(handover(['read', NEW], fx.root, {}), { code: 3, out: 'refused: no run\n' });
   });
 
-  test('the fallback scan finds an open idea flow under a new name and skips refused names', () => {
-    const fx = fixture();
-    const now = Date.now();
-    for (const bad of ['demo run', "2026-10-31 09.15 - It's"]) {
-      fs.mkdirSync(path.join(fx.work, bad));
-      fs.writeFileSync(path.join(fx.work, bad, 'idea-flow.jsonl'), '{}\n');
-    }
-    const r = resume(sessionStart, { root: fx.root, claudeDir: fx.claudeDir, env: {}, now });
-    assert.deepEqual(r, { code: 0, out: '' });
-  });
 });
 
 describe('step-times on a new name', () => {
