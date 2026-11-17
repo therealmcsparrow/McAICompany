@@ -88,14 +88,14 @@ test('glob characters in a write target that reach a settings file allow', () =>
 
 test('a POSIX class in a write target that reaches a run record denies', () => withProject(async (tmp) => {
   for (const t of [
-    `${REC}/forms.jso[[:alpha:]]`, `${REC}/forms.js[[:lower:]]n`, `${REC}/forms[[:punct:]]jsonl`,
-    `${REC}/forms.jso[[=n=]]`, `${REC}/forms.js[[.o.]]nl`, `${REC}/[[:alpha:]]orms.jsonl`,
-    `${tmp.replaceAll('\\', '/')}/${REC}/run-state.jso[[:alpha:]]`,
+    `${REC}/forms.json[[:alpha:]]`, `${REC}/forms.js[[:lower:]]nl`, `${REC}/forms[[:punct:]]jsonl`,
+    `${REC}/forms.jso[[=n=]]l`, `${REC}/forms.js[[.o.]]nl`, `${REC}/[[:alpha:]]orms.jsonl`,
+    `${tmp.replaceAll('\\', '/')}/${REC}/run-state.json[[:alpha:]]`,
   ]) {
     assert.equal(await bash(tmp, `echo x >> ${t}`), 'deny', t);
   }
-  assert.equal(await bash(tmp, `tee ${REC}/forms.jso[[:alpha:]] < /dev/null`), 'deny');
-  assert.equal(await bash(tmp, `cd ${REC} && echo x >> forms.jso[[:alpha:]]`), 'deny');
+  assert.equal(await bash(tmp, `tee ${REC}/forms.json[[:alpha:]] < /dev/null`), 'deny');
+  assert.equal(await bash(tmp, `cd ${REC} && echo x >> forms.json[[:alpha:]]`), 'deny');
 }));
 
 test('a POSIX class that reaches a settings file or misses every record allows', () => withProject(async (tmp) => {
@@ -116,9 +116,9 @@ test('glob write targets in PowerShell deny for a run record and allow for a set
 }));
 
 test('a glob after cd into a run folder denies, into a settings folder allows', () => withProject(async (tmp) => {
-  assert.equal(await bash(tmp, `cd ${REC} && echo x >> forms.jso?`), 'deny');
+  assert.equal(await bash(tmp, `cd ${REC} && echo x >> forms.json?`), 'deny');
   assert.equal(await bash(tmp, `cd ${REC} && echo x >> run-state.js{o,x}nl`), 'deny');
-  assert.equal(await ps(tmp, `Set-Location ${REC}; Set-Content forms.jso? x`), 'deny');
+  assert.equal(await ps(tmp, `Set-Location ${REC}; Set-Content forms.json? x`), 'deny');
   assert.equal(await bash(tmp, 'cd .claude && echo x >> settings.jso?'), 'allow');
   assert.equal(await ps(tmp, 'Set-Location .claude; Set-Content settings.jso? x'), 'allow');
 }));
@@ -174,4 +174,10 @@ test('a run record target over 4096 chars denies, any other target allows', () =
 test('a command over 200000 chars denies', () => withProject(async (tmp) => {
   assert.equal(await bash(tmp, `echo ${'a'.repeat(200001)}`), 'deny');
   assert.equal(await ps(tmp, `Write-Output ${'a'.repeat(200001)}`), 'deny');
+}));
+
+test('a POSIX class or glob that stops short of a record name allows (ADR 0079: run-record target set only)', () => withProject(async (tmp) => {
+  assert.equal(await bash(tmp, `echo x >> ${REC}/forms.jso[[:alpha:]]`), 'allow');
+  assert.equal(await bash(tmp, `cd ${REC} && echo x >> forms.jso?`), 'allow');
+  assert.equal(await ps(tmp, `Set-Location ${REC}; Set-Content forms.jso? x`), 'allow');
 }));
