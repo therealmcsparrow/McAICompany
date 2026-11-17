@@ -153,6 +153,21 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
   return real;
 }
 
+// An open form with the same questions in another unended run would make `answer` match twice and drop the answer.
+function refuseSharedForm(root, slug, questions) {
+  const want = JSON.stringify(questions);
+  for (const other of runSlugs(root, { max: MAX_RUNS }).slugs) {
+    if (other === slug) continue;
+    try {
+      const st = show(root, other).state;
+      if (st !== 'running' && st !== 'stale') continue;
+      const dir = workDir(root, other);
+      if (!dir) continue;
+      for (const r of openForms(loadRows(path.join(dir, FORMS)))) if (JSON.stringify(r.questions) === want) refuse(`same questions open in run ${other}`);
+    } catch (e) { if (e instanceof Refusal) throw e; /* a broken run is skipped */ }
+  }
+}
+
 function cmdOpen(root, [slug, kind, file, ...more]) {
   if (typeof file !== 'string' || more.length) refuse('usage');
   if (!isRunSlug(slug)) refuse('bad slug');
@@ -165,6 +180,7 @@ function cmdOpen(root, [slug, kind, file, ...more]) {
   const rows = loadRows(f);
   const open = openForms(rows);
   if (open.length) refuse(`open form ${open[0].id}`);
+  refuseSharedForm(root, slug, questions);
   const used = new Set(rows.map((r) => r.id));
   let n = 1;
   while (n < 100 && used.has(`f${String(n).padStart(2, '0')}`)) n++;
@@ -183,6 +199,7 @@ function cmdAgain(root, [slug, id, ...more]) {
   const rows = loadRows(formsPath(root, slug));
   const row = openForms(rows).find((r) => r.id === id);
   if (!row) refuse('no open form with that id');
+  refuseSharedForm(root, slug, row.questions);
   return statusBlock(slug, lastHandoff(root, slug), row);
 }
 
