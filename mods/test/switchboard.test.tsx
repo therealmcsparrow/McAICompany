@@ -27,7 +27,7 @@ const SAVER = (id: string, title: string) => ({
 })
 const FILES = (): Record<string, unknown> => ({
   'cap.json': GUARD('cap', 'cap.M1'),
-  'git-add.json': GUARD('git-add', 'git-add.M-SEC1'),
+  'dotenv.json': GUARD('dotenv', 'dotenv.M-SEC1'),
   'cache-tax.json': SAVER('cache-tax', 'Cache clock'),
   'savings.json': SAVER('savings', 'Savings pane'),
   'switchboard.json': SAVER('switchboard', 'Switchboard'),
@@ -147,7 +147,7 @@ test('AC14/AC15: one row per manifest, guards first and marked LOCKED ON, savers
   await boot($, on, w)
   const ui = await open($, w)
   const text = await all(ui)
-  const order = ['GUARDS', 'cap guard', 'git-add guard', 'SAVERS', 'Cache clock', 'Savings pane', 'RECENT DENIES']
+  const order = ['GUARDS', 'cap guard', 'dotenv guard', 'SAVERS', 'Cache clock', 'Savings pane', 'RECENT DENIES']
   let at = -1
   for (const part of order) {
     const i = text.indexOf(part, at + 1)
@@ -258,11 +258,11 @@ test('RECENT DENIES: none -> "No denies this session."', async ($, on) => {
 
 test('RECENT DENIES: one deny reads rule, who and time', async ($, on) => {
   const w = makeWorld()
-  w.denies = ok(JSON.stringify([DENY('git-add.M-SEC1', 2)]))
+  w.denies = ok(JSON.stringify([DENY('dotenv.M-SEC1', 2)]))
   await boot($, on, w)
   const ui = await open($, w)
   const text = await all(ui)
-  expect(text).toMatch(/git-add\.M-SEC1, main chat, \d\d:\d\d/)
+  expect(text).toMatch(/dotenv\.M-SEC1, main chat, \d\d:\d\d/)
   expect(text).not.toContain('No denies this session.')
   await ui.unmount()
 })

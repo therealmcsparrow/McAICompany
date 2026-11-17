@@ -82,7 +82,8 @@ test('every saver manifest id with a switch is accepted and writes its own key; 
 
 test('AC15: a guard or gate id is refused as not switchable, exit 2, nothing written', (t) => {
   const locked = manifests().filter((m) => m.kind === 'guard' || m.kind === 'gate');
-  for (const id of ['cap', 'git-add', 'dotenv', 'model-floor', 'self-protect']) assert.ok(locked.some((m) => m.id === id), `guard manifest ${id}`);
+  for (const id of ['cap', 'dotenv', 'model-floor', 'self-protect']) assert.ok(locked.some((m) => m.id === id), `guard manifest ${id}`);
+  assert.ok(!locked.some((m) => m.id === 'git-add'), 'git-add guard is gone (ADR 0079)');
   for (const m of locked) {
     for (const word of ['on', 'off']) {
       const s = sandbox(t);

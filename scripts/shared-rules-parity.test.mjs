@@ -118,7 +118,7 @@ function ruleRoot(name, standards, checks) {
 const STANDARDS = `# Standards
 ## Project rules
 - cap.M1 — a cap rule — why: x
-- git-add.M-SEC1 — no bulk add — source: y — check: grep
+- dotenv.M-SEC1 — no bulk add — source: y — check: grep
 - dotenv.M-SEC1 — no env — enforced-by: hook
 - Cap.M2 — upper case is not a rule
 - bad.X1 — wrong class

@@ -265,7 +265,7 @@ test('clash.7 AC15 AC23 AC26: set-mod refuses a guard id and writes nothing; a s
   const home = tmp();
   const proj = tmp();
   const run = (...args) => spawnSync(process.execPath, [rel('scripts', 'settings.mjs'), ...args], { cwd: proj, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
-  for (const id of ['cap', 'model-floor', 'self-protect', 'git-add', 'dotenv', 'switches', 'handoff']) {
+  for (const id of ['cap', 'model-floor', 'self-protect', 'dotenv', 'switches', 'handoff']) {
     const r = run('set-mod', id, 'off');
     assert.equal(r.status, 2, `${id}: ${r.stdout}${r.stderr}`);
     assert.match(r.stdout, /^refused: /);

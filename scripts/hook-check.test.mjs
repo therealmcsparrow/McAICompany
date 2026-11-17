@@ -29,16 +29,16 @@ function put(root, rel, content) {
 
 const PURE_RULE = 'export function judge(event, snapshot) { return { v: \'allow\' }; }\n';
 const GUARD = {
-  v: 1, id: 'git-add', kind: 'guard', title: 'git add -A deny', owner: 'backend-engineer', sessions: 'all',
-  events: ['PreToolUse'], rules: ['git-add.M-SEC1'], fail: 'closed', switch: null, lock: true, upstream: null,
+  v: 1, id: 'dotenv', kind: 'guard', title: 'dotenv deny', owner: 'backend-engineer', sessions: 'all',
+  events: ['PreToolUse'], rules: ['dotenv.M-SEC1'], fail: 'closed', switch: null, lock: true, upstream: null,
 };
 const SAVER = {
   v: 1, id: 'cache-tax', kind: 'saver', title: 'Cache clock', owner: 'backend-engineer', sessions: 'lead',
   events: [], rules: [], fail: 'open', switch: 'mods.cache_tax.enabled', lock: false, upstream: null,
 };
 const ROW = {
-  event: 'PreToolUse', matcher: ['Bash', 'PowerShell'], rule: 'git-add.M-SEC1', module: 'git-add.mjs', export: 'judge',
-  fail: 'closed', timeoutMs: 300, message: 'aico guard git-add.M-SEC1: stage files by name',
+  event: 'PreToolUse', matcher: ['Bash', 'PowerShell'], rule: 'dotenv.M-SEC1', module: 'dotenv.mjs', export: 'judge',
+  fail: 'closed', timeoutMs: 300, message: 'aico guard dotenv.M-SEC1: no .env reads',
 };
 const LIBS = ['event', 'snapshot', 'cap-effects', 'paths', 'rule-id', 'rule-runner', 'deny-log'];
 
@@ -58,12 +58,12 @@ function repin(root) {
   put(root, 'hooks/pins.json', JSON.stringify(pins, null, 2));
 }
 
-// A valid minimal plugin root: one guard (git-add), one saver mod (cache-tax), shared shell, all pinned.
+// A valid minimal plugin root: one guard (dotenv), one saver mod (cache-tax), shared shell, all pinned.
 function makeRoot(mutate) {
   const root = tmp('hook-check-root-');
   put(root, 'scripts/hook-host.mjs', '// host\n');
   for (const l of LIBS) put(root, `hooks/lib/${l}.mjs`, `export const ${l.replace(/-/g, '_')} = 1;\n`);
-  put(root, 'hooks/rules/git-add.mjs', PURE_RULE);
+  put(root, 'hooks/rules/dotenv.mjs', PURE_RULE);
   put(root, 'hooks/rules.json', JSON.stringify([ROW], null, 2));
   put(root, 'hooks/hooks.json', JSON.stringify({
     modules: ['./register.tsx'],
@@ -71,10 +71,10 @@ function makeRoot(mutate) {
   }, null, 2));
   put(root, 'hooks/schema/hook-fields.json', '{"v":1}\n');
   put(root, 'company/model-floor.json', '{"v":1}\n');
-  put(root, 'hooks/manifests/git-add.json', JSON.stringify(GUARD, null, 2));
+  put(root, 'hooks/manifests/dotenv.json', JSON.stringify(GUARD, null, 2));
   put(root, 'hooks/manifests/cache-tax.json', JSON.stringify(SAVER, null, 2));
-  put(root, 'hooks/fixtures/git-add.M-SEC1/pass-1.json', '{"v":1}\n');
-  put(root, 'hooks/fixtures/git-add.M-SEC1/block-1.json', '{"v":1}\n');
+  put(root, 'hooks/fixtures/dotenv.M-SEC1/pass-1.json', '{"v":1}\n');
+  put(root, 'hooks/fixtures/dotenv.M-SEC1/block-1.json', '{"v":1}\n');
   put(root, 'mods/cache-tax.tsx', 'export function registerCacheTax() {}\n');
   put(root, 'mods/shared/shell.ts', 'export function registerShell() {}\n');
   put(root, 'hooks/register.tsx',
@@ -164,50 +164,50 @@ test('AC2: a rule module with no rule-table row and no manifest fails, naming it
 test('AC2: a rule-table row whose rule ID is in no manifest fails, naming the rule ID', () => {
   const root = makeRoot((r) => {
     const rows = json(r, 'hooks/rules.json');
-    rows.push({ ...ROW, rule: 'dotenv.M-SEC1', module: 'git-add.mjs' });
+    rows.push({ ...ROW, rule: 'model-floor.M1', module: 'dotenv.mjs' });
     put(r, 'hooks/rules.json', JSON.stringify(rows));
   });
-  expectFail('ci', root, 'dotenv.M-SEC1');
+  expectFail('ci', root, 'model-floor.M1');
 });
 
 test('AC2: a manifest event that nothing wires fails', () => {
   const root = makeRoot((r) => {
-    const m = json(r, 'hooks/manifests/git-add.json');
+    const m = json(r, 'hooks/manifests/dotenv.json');
     m.events = ['SubagentStop'];
-    put(r, 'hooks/manifests/git-add.json', JSON.stringify(m));
+    put(r, 'hooks/manifests/dotenv.json', JSON.stringify(m));
   });
-  expectFail('ci', root, 'git-add');
+  expectFail('ci', root, 'dotenv');
 });
 
 // a guard missing, off (not a locked guard) or hash-mismatched stops ci and setup.
 test('AC4: a guard rule with no block fixture fails, naming the rule ID', () => {
-  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/fixtures/git-add.M-SEC1/block-1.json')));
-  expectFail('ci', root, 'git-add.M-SEC1');
+  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/fixtures/dotenv.M-SEC1/block-1.json')));
+  expectFail('ci', root, 'dotenv.M-SEC1');
 });
 
 test('AC4: a guard rule with no pass fixture fails, naming the rule ID', () => {
-  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/fixtures/git-add.M-SEC1/pass-1.json')));
-  expectFail('ci', root, 'git-add.M-SEC1');
+  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/fixtures/dotenv.M-SEC1/pass-1.json')));
+  expectFail('ci', root, 'dotenv.M-SEC1');
 });
 
 test('AC14: a missing guard (manifest deleted) stops setup, naming the guard', () => {
-  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/manifests/git-add.json')));
-  expectFail('setup', root, 'git-add');
+  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/manifests/dotenv.json')));
+  expectFail('setup', root, 'dotenv');
 });
 
 test('AC14: a missing guard (rule module deleted) stops setup, naming the guard', () => {
-  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/rules/git-add.mjs')));
-  expectFail('setup', root, 'git-add');
+  const root = makeRoot((r) => fs.rmSync(path.join(r, 'hooks/rules/dotenv.mjs')));
+  expectFail('setup', root, 'dotenv');
 });
 
 test('AC14: an off guard (switch set, lock false) stops setup, naming the guard', () => {
   const root = makeRoot((r) => {
-    const m = json(r, 'hooks/manifests/git-add.json');
+    const m = json(r, 'hooks/manifests/dotenv.json');
     m.switch = 'mods.git_add.enabled';
     m.lock = false;
-    put(r, 'hooks/manifests/git-add.json', JSON.stringify(m));
+    put(r, 'hooks/manifests/dotenv.json', JSON.stringify(m));
   });
-  expectFail('setup', root, 'git-add');
+  expectFail('setup', root, 'dotenv');
 });
 
 test('AC14: a guard whose manifest fail differs from its table row stops setup', () => {
@@ -216,19 +216,19 @@ test('AC14: a guard whose manifest fail differs from its table row stops setup',
     rows[0].fail = 'open';
     put(r, 'hooks/rules.json', JSON.stringify(rows));
   });
-  expectFail('setup', root, 'git-add');
+  expectFail('setup', root, 'dotenv');
 });
 
 test('AC14: a hash-mismatched guard rule module stops setup, naming the file', () => {
   const root = makeRoot();
-  fs.appendFileSync(path.join(root, 'hooks/rules/git-add.mjs'), '// tampered\n');
-  expectFail('setup', root, 'hooks/rules/git-add.mjs');
+  fs.appendFileSync(path.join(root, 'hooks/rules/dotenv.mjs'), '// tampered\n');
+  expectFail('setup', root, 'hooks/rules/dotenv.mjs');
 });
 
 // one pins mismatch per file of the pinned set; the output names that file.
 const PINNED_SAMPLE = [
-  'scripts/hook-host.mjs', ...LIBS.map((l) => `hooks/lib/${l}.mjs`), 'hooks/rules/git-add.mjs',
-  'hooks/manifests/git-add.json', 'hooks/manifests/cache-tax.json', 'hooks/rules.json', 'hooks/hooks.json',
+  'scripts/hook-host.mjs', ...LIBS.map((l) => `hooks/lib/${l}.mjs`), 'hooks/rules/dotenv.mjs',
+  'hooks/manifests/dotenv.json', 'hooks/manifests/cache-tax.json', 'hooks/rules.json', 'hooks/hooks.json',
   'hooks/schema/hook-fields.json', 'company/model-floor.json',
 ];
 for (const rel of PINNED_SAMPLE) {
@@ -293,10 +293,10 @@ const IMPURE = [
 ];
 for (const [name, src] of IMPURE) {
   test(`AC21: rule importing or reading ${name} fails the purity scan, naming the module`, () => {
-    const root = makeRoot((r) => put(r, 'hooks/rules/git-add.mjs', src));
+    const root = makeRoot((r) => put(r, 'hooks/rules/dotenv.mjs', src));
     const r = run('ci', root);
     assert.equal(r.code, 1, r.out);
-    assert.ok(r.out.includes('hooks/rules/git-add.mjs') || r.out.includes('git-add.mjs'), r.out);
+    assert.ok(r.out.includes('hooks/rules/dotenv.mjs') || r.out.includes('dotenv.mjs'), r.out);
     assert.ok(!r.out.includes('pins-mismatch'), `pins are rewritten, only purity may fail: ${r.out}`);
   });
 }
@@ -344,7 +344,7 @@ test('denies: newest 5 rows of that session only', () => {
   const env = denyEnv();
   const lines = [];
   for (let i = 0; i < 8; i++) lines.push(row(i, 's1'));
-  lines.splice(3, 0, row(30, 's2', 'git-add.M-SEC1'), row(31, 's2', 'git-add.M-SEC1'));
+  lines.splice(3, 0, row(30, 's2', 'dotenv.M-SEC1'), row(31, 's2', 'dotenv.M-SEC1'));
   fs.writeFileSync(env.log, lines.join('\n') + '\n');
   const r = denies(env, 's1');
   assert.equal(r.code, 0, r.err);

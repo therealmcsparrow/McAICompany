@@ -91,11 +91,11 @@ test('AC6: normalizePath returns an empty string for non-strings and does not th
 test('AC20: rule-id.mjs exports the rule-check grammar RULE_ID (anchored) and RULE_ID_ANY (global)', async () => {
   const { RULE_ID, RULE_ID_ANY } = await load(idFile);
   assert.ok(RULE_ID instanceof RegExp && RULE_ID_ANY instanceof RegExp);
-  for (const id of ['cap.M1', 'git-add.M-SEC1', 'dotenv.M-SEC1', 'model-floor.M1', 'self-protect.M-SEC1', 'browser.Y1', 'a.S12']) assert.ok(RULE_ID.test(id), id);
+  for (const id of ['cap.M1', 'dotenv.M-SEC1', 'model-floor.M1', 'self-protect.M-SEC1', 'browser.Y1', 'a.S12']) assert.ok(RULE_ID.test(id), id);
   for (const id of ['Cap.M1', 'cap.M', 'cap.X1', 'cap.m1', '1cap.M1', 'cap M1', `${'a'.repeat(25)}.M1`, 'cap.M1 ', ' cap.M1']) assert.equal(RULE_ID.test(id), false, id);
   assert.equal(RULE_ID.global, false);
   assert.equal(RULE_ID_ANY.global, true);
-  assert.deepEqual('see cap.M1 and git-add.M-SEC1, not Cap.M1'.match(RULE_ID_ANY), ['cap.M1', 'git-add.M-SEC1']);
+  assert.deepEqual('see cap.M1 and dotenv.M-SEC1, not Cap.M1'.match(RULE_ID_ANY), ['cap.M1', 'dotenv.M-SEC1']);
 });
 
 test('AC20: the scripts import the shared modules and no longer define the logic', () => {

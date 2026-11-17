@@ -152,16 +152,23 @@ describe('reload: the Lead snapshot is missing or invalid at the first guarded c
     assert.equal(readJson(env.leadFile).threshold, 60000);
   });
 
-  test('a rebuilt snapshot still denies a git-add.M-SEC1 block fixture', () => {
-    const row = repoJson('hooks', 'rules.json').find((r) => r.rule === 'git-add.M-SEC1');
-    const env = makeEnv({ rows: [row], manifests: [repoJson('hooks', 'manifests', 'git-add.json')] });
-    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'git-add.mjs'), path.join(env.plugin, 'hooks', 'rules', 'git-add.mjs'));
+  test('a rebuilt snapshot still denies a dotenv.M-SEC1 block fixture; git add -A and git commit -a pass (ADR 0079)', () => {
+    const rows = repoJson('hooks', 'rules.json');
+    assert.ok(!rows.some((r) => r.rule === 'git-add.M-SEC1'), 'git-add.M-SEC1 row removed');
+    assert.ok(!fs.existsSync(path.join(REPO, 'hooks', 'manifests', 'git-add.json')), 'git-add manifest removed');
+    const row = rows.find((r) => r.rule === 'dotenv.M-SEC1');
+    const env = makeEnv({ rows: [row], manifests: [repoJson('hooks', 'manifests', 'dotenv.json')] });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'dotenv.mjs'), path.join(env.plugin, 'hooks', 'rules', 'dotenv.mjs'));
     env.repin();
     startLead(env);
     dropLead(env);
-    const fx = repoJson('hooks', 'fixtures', 'git-add.M-SEC1', 'block-add-all.json');
-    const r = env.run({ ...fx, session_id: 'sess-lead-1', cwd: env.project, transcript_path: path.join(env.base, 'transcripts', 'none.jsonl') });
-    assert.match(reasonOf(env, r), /git-add\.M-SEC1/);
+    const base = { session_id: 'sess-lead-1', cwd: env.project, transcript_path: path.join(env.base, 'transcripts', 'none.jsonl') };
+    const fx = repoJson('hooks', 'fixtures', 'dotenv.M-SEC1', 'block-bash-cat-env.json');
+    assert.match(reasonOf(env, env.run({ ...fx, ...base })), /dotenv\.M-SEC1/);
+    for (const command of ['git add -A', 'git commit -a']) {
+      const r = env.run({ ...fx, ...base, tool_input: { command } });
+      assert.doesNotMatch(r.out, /deny/i, command);
+    }
   });
 });
 

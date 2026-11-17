@@ -53,13 +53,13 @@ function problems(m, fileId) {
 }
 
 test('AC2: the validator rejects bad manifests (self-check of the test)', () => {
-  const good = load('git-add');
-  assert.deepEqual(problems(good, 'git-add'), []);
-  assert.notDeepEqual(problems({ ...good, extra: 1 }, 'git-add'), []);
-  assert.notDeepEqual(problems({ ...good, fail: 'open' }, 'git-add'), []);
-  assert.notDeepEqual(problems({ ...good, id: 'other' }, 'git-add'), []);
+  const good = load('dotenv');
+  assert.deepEqual(problems(good, 'dotenv'), []);
+  assert.notDeepEqual(problems({ ...good, extra: 1 }, 'dotenv'), []);
+  assert.notDeepEqual(problems({ ...good, fail: 'open' }, 'dotenv'), []);
+  assert.notDeepEqual(problems({ ...good, id: 'other' }, 'dotenv'), []);
   const { title, ...noTitle } = good;
-  assert.notDeepEqual(problems(noTitle, 'git-add'), []);
+  assert.notDeepEqual(problems(noTitle, 'dotenv'), []);
 });
 
 test('AC2: there is at least one mod file to check', () => {
@@ -116,7 +116,7 @@ test('AC2: every manifest file is valid and unique by id and rule ID', () => {
 
 test('AC2: kinds of the release 1 manifests', () => {
   const kinds = {
-    cap: 'guard', 'git-add': 'guard', dotenv: 'guard', 'model-floor': 'guard',
+    cap: 'guard', 'self-protect': 'guard', dotenv: 'guard', 'model-floor': 'guard',
     'cache-tax': 'saver', savvy: 'saver', reflect: 'saver', 'efficient-browser-use': 'saver', switchboard: 'saver', savings: 'saver',
     'plan-gate': 'gate', 'fresh-step': 'gate', 'reprompt-gate': 'gate'
   };
@@ -162,4 +162,17 @@ test('AC2: every guard event is wired to the hook host in hooks/hooks.json', () 
     for (const e of m.events) if (!wired(e)) bad.push(`${m.id}: ${e} not wired`);
   }
   assert.deepEqual(bad, []);
+});
+
+test('ADR 0079: exactly four guard manifests and no git-add anywhere', () => {
+  const guards = manifestFiles().map((f) => load(f.replace(/\.json$/, ''))).filter((m) => m.kind === 'guard').map((m) => m.id).sort();
+  assert.deepEqual(guards, ['cap', 'dotenv', 'model-floor', 'self-protect']);
+  assert.ok(!fs.existsSync(path.join(manifestDir, 'git-add.json')), 'hooks/manifests/git-add.json removed');
+  assert.ok(!fs.existsSync(path.join(root, 'hooks', 'rules', 'git-add.mjs')), 'hooks/rules/git-add.mjs removed');
+  assert.ok(!fs.existsSync(path.join(root, 'hooks', 'fixtures', 'git-add.M-SEC1')), 'hooks/fixtures/git-add.M-SEC1 removed');
+  const rules = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'rules.json'), 'utf8'));
+  assert.deepEqual(rules.filter((r) => /git-add/.test(JSON.stringify(r))), [], 'no git-add row in hooks/rules.json');
+  const pins = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'pins.json'), 'utf8'));
+  assert.deepEqual(Object.keys(pins.files).filter((k) => /git-add/.test(k)), [], 'no git-add pin in hooks/pins.json');
+  assert.ok(!/git-add/.test(fs.readFileSync(path.join(root, 'hooks', 'lib', 'dep-hashes.mjs'), 'utf8')), 'no git-add in dep-hashes.mjs');
 });
