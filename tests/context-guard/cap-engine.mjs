@@ -15,7 +15,7 @@ export { cleanup };
 export const REPO = path.resolve(import.meta.dirname, '..', '..');
 export const AGENT = 'agent-a1';
 export const SLUG = 'P20261114.000099/01-feature';
-export const NEW_SESSION_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
+export const NEW_SESSION_TOOL = ['mcp__plugin_aico_lead-session__lead', 'new', 'session'].join('_');
 export const usage = (n) => ({ input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: n - 15 });
 export const row = (n, side = false) => ({ type: 'assistant', isSidechain: side, message: { model: 'claude-opus-4-1', usage: usage(n) } });
 

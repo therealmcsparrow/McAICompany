@@ -71,5 +71,7 @@ test('lead agent: 37 agent files but 36 Roles; the Lead is in no company type an
   assert.equal(agents.length, 37);
   assert.equal(agents.filter(f => f !== 'project-manager.md').length, 36);
   for (const f of readdirSync(join(root, 'company', 'types'))) assert.ok(!read(`company/types/${f}`).includes('project-manager'), f);
-  assert.ok(!read('documentation/roles/README.md').includes('**project-manager**'));
+  const page = read('documentation/roles/README.md');
+  assert.match(page, /36 Role agents/);
+  assert.match(page, /not counted among the 36/);
 });
