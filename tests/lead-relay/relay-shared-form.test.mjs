@@ -69,9 +69,10 @@ test('the same questions open in another run are refused by open and again; allo
   assert.equal(last.status, 0, last.stdout + last.stderr);
 });
 
-test('a Gate form open in run A refuses the same-text ask form in run B, by open and again (R-11)', () => {
+test('a Gate form open in run A refuses the same-text ask form in run B, by open and again', () => {
   const A2 = 'P20261115.000001/01-feature';
   setup(A2, 13 * 3600000);
+  setup(B, 60000);
   fs.rmSync(path.join(dirOf(B), 'forms.jsonl'), { force: true });
   const opts = (result) => [{ label: 'Pass', description: 'Pass it', ...(result ? { result: 'pass' } : {}) }, { label: 'Stop', description: 'Stop it', ...(result ? { result: 'stop' } : {}) }];
   const mk = (name, result) => {
