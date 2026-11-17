@@ -373,7 +373,7 @@ function probeBlobs(cwd, specs) {
   for (let i = 0; i < specs.length; i++) {
     if (info[i] === null || info[i].type !== 'blob') continue;
     if (info[i].size <= SMALL_BLOB) small.push(i);
-    else result[i] = gitPrefix(cwd, ['cat-file', 'blob', specs[i]]).includes(0);
+    else result[i] = gitPrefix(cwd, ['cat-file', 'blob', '--end-of-options', specs[i]], info[i].size).includes(0);
   }
   if (small.length > 0) {
     const out = gitInput(cwd, ['cat-file', '--batch'], Buffer.from(small.map(i => `${specs[i]}\n`).join(''), 'utf8'));
@@ -381,6 +381,7 @@ function probeBlobs(cwd, specs) {
     for (const i of small) {
       const nl = out.indexOf(10, pos);
       if (nl < 0) refuse('git output not understood');
+      if (out.subarray(pos, nl).toString('latin1') !== lines[i]) refuse('git output not understood');
       pos = nl + 1;
       const size = info[i].size;
       if (pos + size + 1 > out.length) refuse('git output not understood');
@@ -392,16 +393,21 @@ function probeBlobs(cwd, specs) {
   return result;
 }
 
-// The first BINARY_PROBE bytes of a git output; git is stopped once the pipe cap is passed.
-function gitPrefix(cwd, args) {
+// The first BINARY_PROBE bytes of a blob of `size` bytes. The pipe cap stops git once the window arrived; that stop
+// counts only with a full window of a blob over the window. A call that ends on its own must return exactly `size` bytes.
+function gitPrefix(cwd, args, size) {
+  let out;
   try {
-    return execFileSync('git', [...GIT_PREFIX, ...args], {
+    out = execFileSync('git', [...GIT_PREFIX, ...args], {
       cwd, env: gitEnv(), maxBuffer: BINARY_PROBE, timeout: GIT_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
     });
   } catch (e) {
-    if (e !== null && typeof e === 'object' && e.code === 'ENOBUFS' && Buffer.isBuffer(e.stdout)) return e.stdout;
+    if (e !== null && typeof e === 'object' && e.code === 'ENOBUFS' && Buffer.isBuffer(e.stdout)
+      && e.stdout.length >= BINARY_PROBE && size > BINARY_PROBE) return e.stdout.subarray(0, BINARY_PROBE);
     return refuse('git failed');
   }
+  if (out.length !== size) refuse('git output not understood');
+  return out.subarray(0, BINARY_PROBE);
 }
 
 // The tip side read from the working tree by the real-path rule; anything not a plain readable file counts as binary.
