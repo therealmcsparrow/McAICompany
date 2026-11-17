@@ -25,6 +25,15 @@ for (const part of jobsText.split(/\n(?=  [A-Za-z0-9_-]+:\n)/).slice(1)) {
 const stepsOf = (job) => job.split(/\n      - /).slice(1);
 const stepsWith = (job, needle) => stepsOf(job).filter((s) => s.includes(needle));
 const jobsWith = (re) => [...jobs].filter(([, t]) => re.test(t));
+// The step's own if: value (works when `if:` is the first key, `- if:`, or a later one).
+const ifOf = (step) => (step.match(/^\s*(?:- )?if:\s*(.+)$/m) ?? [, ''])[1].trim();
+const norm = (s) => s.replace(/\s+/g, ' ').trim();
+
+// test-run v1.2 `## CI jobs`: the one cold condition C and the AICO_COLD value built from it.
+const C = "github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1'";
+const COLD_VALUE = `\${{ (${C}) && '1' || '' }}`;
+const WARM_IF = `\${{ !(${C}) }}`;
+const COLD_IF = new Set([C, `\${{ ${C} }}`]);
 
 // Every run: body (single line or block scalar).
 function runBodies(text) {
@@ -123,7 +132,7 @@ describe('AC1 concurrency cancels superseded PR runs and nothing else', () => {
 
 describe('AC3 setup-node uses the npm cache and a miss never fails', () => {
   test('a warm job caches npm from a checked-out lockfile', () => {
-    const warm = jobsWith(/cache: npm/).filter(([, t]) => !/AICO_COLD/.test(t));
+    const warm = jobsWith(/cache: npm/);
     assert.ok(warm.length >= 1, 'no warm job sets cache: npm');
     for (const [name, t] of warm) {
       const p = t.match(/cache-dependency-path: ([^\n]+)/)?.[1]?.trim();
@@ -178,33 +187,64 @@ describe('AC4 a PR runs one Windows cell; a tag runs the full matrix', () => {
   test('the Windows cell has no step guard that drops it on PRs, main, tags or the nightly', () => {
     const t = testSteps(win).filter((s) => /npm test/.test(s));
     assert.ok(t.length >= 1, 'windows-test lost its test step');
-    for (const s of t) assert.doesNotMatch(s, /\n\s+if:/, 'the Windows test step must always run');
+    // One guard form, in any key order: the docs-only skip on a pull_request (ci-facts pins it
+    // there). Nothing may drop the cell on a tag, schedule, push to main or cold run.
+    for (const s of t) {
+      const cond = ifOf(s);
+      if (!cond) continue;
+      assert.match(cond, /docs_only/, `Windows test step guard is not the docs-only skip: ${cond}`);
+      assert.match(cond, /github\.event_name == 'pull_request'/, cond);
+      assert.doesNotMatch(cond, /schedule|refs\/tags|ref_type|matrix\.|always\(\)|github\.event_name != /, cond);
+    }
     assert.match(win, /runs-on: windows-latest/);
     assert.match(agg, /needs: windows-test/);
   });
 });
 
-describe('AC14 tags and the nightly run cold, so setting the env alone rolls the cache back', () => {
-  test('a cold job sets AICO_COLD to 1 in job env and never caches npm', () => {
-    const cold = jobsWith(/AICO_COLD/);
-    assert.ok(cold.length >= 1, 'no job sets AICO_COLD');
-    for (const [name, t] of cold) {
-      assert.doesNotMatch(t, /cache: npm|cache-dependency-path/, `${name} caches while cold`);
-      assert.match(t, /\n {6}AICO_COLD: ['"]?1['"]?\s*\n/, `${name} sets AICO_COLD to something other than 1`);
+describe('AC14 one cold condition C: tags, the nightly and CI_COLD=1 run cold (test-run v1.2)', () => {
+  const testJobs = jobsWith(/run: npm test|run: npm run check/);
+  test('the jobs that run npm test or npm run check are check, windows-test and windows-check', () => {
+    assert.deepEqual(testJobs.map(([n]) => n).sort(), ['check', 'windows-check', 'windows-test']);
+  });
+  test('each such job has exactly one AICO_COLD line, in job env, equal to the Contract expression', () => {
+    for (const [name, t] of testJobs) {
+      const lines = t.split('\n').filter((l) => /^\s*AICO_COLD:/.test(l));
+      assert.equal(lines.length, 1, `${name}: ${lines.length} AICO_COLD lines`);
+      assert.match(lines[0], /^ {6}AICO_COLD: /, `${name}: AICO_COLD not at job-env indent`);
+      assert.equal(norm(lines[0].replace(/^\s*AICO_COLD:\s*/, '')), COLD_VALUE, name);
+      const env = t.match(/\n {4}env:\n((?: {6}[^\n]*\n)+)/)?.[1] ?? '';
+      assert.match(env, /AICO_COLD:/, `${name}: AICO_COLD is not in the job env block`);
     }
   });
-  test('cold applies to tags and to the schedule', () => {
-    const cold = jobsWith(/AICO_COLD/).map(([, t]) => t).join('\n');
-    assert.match(cold, /refs\/tags\/|ref_type == 'tag'/);
-    assert.match(cold, /github\.event_name == 'schedule'/);
+  test('hostile: every AICO_COLD value is exactly the Contract expression, none at step indent', () => {
+    const all = [...code.matchAll(/^( *)AICO_COLD:[ \t]*(.*)$/gm)];
+    assert.ok(all.length >= 3, `found ${all.length}`);
+    for (const m of all) {
+      assert.equal(m[1].length, 6, `AICO_COLD at indent ${m[1].length}`);
+      assert.equal(norm(m[2]), COLD_VALUE, m[0]);
+    }
   });
-  test('hostile: no job mixes a warm cache with AICO_COLD and the value is a literal', () => {
-    for (const m of code.matchAll(/AICO_COLD: ([^\n]+)/g)) assert.match(m[1].trim(), /^['"]?1['"]?$/, m[0]);
+  test('C names the nightly, tags and the CI_COLD repo variable', () => {
+    assert.match(C, /github\.event_name == 'schedule'/);
+    assert.match(C, /startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+    assert.match(C, /vars\.CI_COLD == '1'/);
+    for (const [name, t] of testJobs) assert.match(t, /vars\.CI_COLD == '1'/, name);
   });
-  test('a PR run is warm: no PR-only job sets AICO_COLD', () => {
-    const warm = jobsWith(/cache: npm/);
-    assert.ok(warm.length >= 1);
-    for (const [name, t] of warm) assert.doesNotMatch(t, /AICO_COLD/, name);
+  test('every cache: npm step is warm-only and its job has a cold twin without a cache', () => {
+    const cachers = [...jobs].flatMap(([name, t]) => stepsOf(t).filter((s) => /cache: npm/.test(s)).map((s) => [name, t, s]));
+    assert.ok(cachers.length >= 1, 'no cache: npm step');
+    for (const [name, t, s] of cachers) {
+      assert.equal(norm(ifOf(s)), WARM_IF, `${name}: warm setup-node if`);
+      const twins = stepsOf(t).filter((x) => /actions\/setup-node@/.test(x) && !/\n\s+cache:|cache-dependency-path/.test(x));
+      assert.equal(twins.length, 1, `${name}: want one cold setup-node twin`);
+      assert.ok(COLD_IF.has(norm(ifOf(twins[0]))), `${name}: cold twin if is ${ifOf(twins[0])}`);
+    }
+  });
+  test('a job with one setup-node step never caches', () => {
+    for (const [name, t] of jobs) {
+      const sn = stepsOf(t).filter((x) => /actions\/setup-node@/.test(x));
+      if (sn.length < 2) for (const s of sn) assert.doesNotMatch(s, /cache:/, `${name}: lone setup-node caches`);
+    }
   });
 });
 

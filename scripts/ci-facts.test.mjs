@@ -88,6 +88,14 @@ describe('facts step reads the diff through env only (AC2, git.M-SEC4 CI reading
     assert.match(env, /\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}/);
     assert.match(env, /\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
   });
+  test('every facts step runs only on a warm pull_request (cold wins, ADR 0076)', () => {
+    const all = stepsOf(ci).filter((s) => s.includes('diff-facts.mjs show'));
+    assert.equal(all.length, 4, 'check, windows-test, windows-check and a11y each have one');
+    for (const s of all) {
+      const cond = ifOf(s).replace(/\s+/g, ' ').trim();
+      assert.equal(cond, "github.event_name == 'pull_request' && vars.CI_COLD != '1'", cond);
+    }
+  });
   test('the run text has no ${{ expression (gha.M-SEC3)', () => {
     const bodies = runBodies(facts).join('\n');
     assert.ok(bodies.length > 0);
