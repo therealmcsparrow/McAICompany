@@ -5,7 +5,7 @@ import { normalizePath } from '../lib/paths.mjs';
 
 const RULE = 'self-protect.M-SEC1';
 const MESSAGE = 'aico guard self-protect.M-SEC1: plugin and settings files are protected; change them through the settings console.';
-const RECORD_MESSAGE = 'aico guard self-protect.M-SEC1: run records are written by aico scripts only';
+const RECORD_MESSAGE = 'run records are written by aico scripts only';
 const RECORD_WORDS = ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl'];
 const RECORD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
 const MAX_COMMAND_CHARS = 200000;
@@ -220,7 +220,7 @@ function makeContext(event, rec) {
   const protSegs = prot.map((p) => p.split('/'));
   const marker = entries.get('');
   const limited = marker !== undefined;
-  const cwdHot = limited && marker.cwdHot !== false;
+  const cwdHot = limited && (rec ? marker.cwdRec === true : marker.cwdHot !== false);
   return { rec, prot, protSegs, entries, homes, mshs, plugins, bases, limited, cwdHot };
 }
 

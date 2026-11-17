@@ -314,7 +314,7 @@ export function protectedPaths(ctx, root, main = null) {
     const queue = [work];
     for (let seen = 0; queue.length > 0 && seen < MAX_RUNS; seen++) {
       const dir = queue.shift();
-      list.push(path.join(dir, 'guard.jsonl'));
+      for (const n of ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl']) list.push(path.join(dir, n));
       let kids = [];
       try { kids = fs.readdirSync(dir, { withFileTypes: true }); } catch { /* unreadable or absent */ }
       for (const d of kids) if (d.isDirectory()) queue.push(path.join(dir, d.name));
@@ -393,11 +393,13 @@ export async function normalize(raw, ctx) {
   }
   for (const e of tool ? tool.paths : []) {
     if (e.raw !== '' || !Array.isArray(e.cwds)) continue;
-    e.cwdHot = e.cwds.some((c) => {
+    const hot = (list) => e.cwds.some((c) => {
       const r = typeof c === 'string' ? realOf(c, root || process.cwd()) : null;
       const f = r ? fold(r) : null;
-      return f !== null && event.protected.some((p) => f === p || f.startsWith(`${p}/`));
+      return f !== null && list.some((p) => f === p || f.startsWith(`${p}/`));
     });
+    e.cwdHot = hot(event.protected);
+    e.cwdRec = hot(event.protected.filter((p) => GUARD_SHAPE.test(p)));
     delete e.cwds;
   }
   return { ok: true, event: deepFreeze(event), cwd, root };

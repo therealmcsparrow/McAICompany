@@ -217,7 +217,7 @@ async function main() {
     try {
       const sp = await import(pathToFileURL(path.join(ROOT, 'hooks', 'rules', 'self-protect.mjs')).href);
       rec = sp.judgeRecord(event);
-    } catch { rec = { v: 'deny', message: 'aico guard self-protect.M-SEC1: run records are written by aico scripts only' }; }
+    } catch { rec = { v: 'deny', message: 'run records are written by aico scripts only' }; }
     if (rec && rec.v === 'deny') {
       log.appendDeny(snap.denyDir(mcsHome, root), { rule: 'self-protect.M-SEC1', kind: 'deny', session: event.sessionKey, agent: event.agentKey });
       return done(denyOut(evName, stopActive, 'self-protect.M-SEC1', rec.message, {}));
