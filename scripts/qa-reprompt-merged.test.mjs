@@ -97,14 +97,14 @@ for (const type of TYPE_ORDER) {
   });
 }
 
-test('AC10: software resolved without a company_type line (default type) has the reprompter and every agent but the editor', () => {
+test('AC10: software resolved without a company_type line (default type) has the reprompter and every agent but the editor and project-manager', () => {
   const s = sandbox();
   const r = s.node(companyType, 'resolve', '--json');
   assert.equal(r.code, 0, r.out);
   const resolved = JSON.parse(r.out);
   assert.equal(resolved.id, 'software');
   assert.equal(resolved.source, 'default');
-  assert.deepEqual([...resolved.roles].sort(), agents.filter((a) => a !== 'editor'));
+  assert.deepEqual([...resolved.roles].sort(), agents.filter((a) => a !== 'editor' && a !== 'project-manager'));
   assert.equal(resolved.roles.length, 35);
   assert.equal(resolved.playbooks.filter((p) => ALWAYS.includes(p)).length, ALWAYS.length);
   const role = s.node(companyType, 'check-role', 'reprompter');
@@ -142,35 +142,35 @@ test('AC10: the plugin check passes, so counts, names and Playbook rules agree',
   assert.deepEqual(errors, []);
 });
 
-// ---------- 36 Roles, unique default names, Lynn last ----------
+// ---------- 37 Roles, unique default names, Lynn last ----------
 
-test('AC12: 36 agents, one default name each, names.json has no extra and no missing Role', () => {
-  assert.equal(agents.length, 36);
+test('AC12: 37 agents, one default name each, names.json has no extra and no missing Role', () => {
+  assert.equal(agents.length, 37);
   const names = readJson('company/names.json');
   assert.deepEqual(Object.keys(names).sort(), agents);
 });
 
-test('AC12: the 36 default names are valid and unique case-insensitively', () => {
+test('AC12: the 37 default names are valid and unique case-insensitively', () => {
   const names = Object.values(readJson('company/names.json'));
-  assert.equal(names.length, 36);
+  assert.equal(names.length, 37);
   for (const n of names) assert.match(n, NAME_RE, n);
-  assert.equal(new Set(names.map((n) => n.toLocaleLowerCase('en'))).size, 36);
+  assert.equal(new Set(names.map((n) => n.toLocaleLowerCase('en'))).size, 37);
 });
 
 test('AC12: Lynn is the reprompter and the last default name before the fresh-reviewer', () => {
   const names = readJson('company/names.json');
   assert.equal(names.reprompter, 'Lynn');
-  assert.deepEqual(Object.keys(names).at(-2), 'reprompter');
-  assert.equal(Object.values(names).at(-2), 'Lynn');
+  assert.deepEqual(Object.keys(names).at(-3), 'reprompter');
+  assert.equal(Object.values(names).at(-3), 'Lynn');
   assert.equal(Object.values(names).filter((n) => n === 'Lynn').length, 1);
 });
 
-test('AC12: the effective name through the settings resolver is Lynn, and all 36 stay unique', () => {
+test('AC12: the effective name through the settings resolver is Lynn, and all 37 stay unique', () => {
   const s = sandbox();
   const roles = resolveSettings(s.ctx).roles;
-  assert.equal(Object.keys(roles).length, 36);
+  assert.equal(Object.keys(roles).length, 37);
   assert.equal(roles.reprompter.name, 'Lynn');
-  assert.equal(new Set(Object.values(roles).map((r) => r.name.toLocaleLowerCase('en'))).size, 36);
+  assert.equal(new Set(Object.values(roles).map((r) => r.name.toLocaleLowerCase('en'))).size, 37);
 });
 
 test('AC12: a rename that would clash with Lynn, in any letter case, is refused and nothing is written', () => {
@@ -186,7 +186,7 @@ test('AC12: a rename that would clash with Lynn, in any letter case, is refused 
 test('AC12: the reprompter personality entry is complete, valid and last', () => {
   const personalities = readJson('company/personalities.json');
   assert.deepEqual(Object.keys(personalities).sort(), agents);
-  assert.equal(Object.keys(personalities).at(-2), 'reprompter');
+  assert.equal(Object.keys(personalities).at(-3), 'reprompter');
   const entry = personalities.reprompter;
   assert.deepEqual(Object.keys(entry).sort(), [...PERSONALITY_KEYS].sort());
   for (const key of PERSONALITY_KEYS) assert.equal(personalityProblem(key, entry[key]), null, key);
