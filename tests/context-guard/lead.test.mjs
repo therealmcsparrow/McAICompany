@@ -53,6 +53,16 @@ describe('main session is never capped (context-guard v3.0)', () => {
     }
     assert.deepEqual(fx.handovers(), []);
   });
+
+  test('R-14 main spawning aico:project-manager (Agent) at and over F and T is allowed, nothing written', async () => {
+    const fx = await lead();
+    const input = { subagent_type: LEAD_TYPE, description: 'run lead', prompt: 'go' };
+    for (const n of [F, 179999, 180000, 250000]) {
+      for (const tool of ['Agent', 'Task']) fx.quiet(fx.lead(n, { tool, input }), `${tool} at ${n}`);
+    }
+    assert.deepEqual(fx.handovers(), []);
+    assert.deepEqual(fx.guardRecord(), []);
+  });
 });
 
 describe('Lead agent clean point (freeze band F <= tokens < T)', () => {
