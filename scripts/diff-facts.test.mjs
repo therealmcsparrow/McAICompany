@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadGolden } from './contract-fixtures.mjs';
+import { branchId } from '../mods/lib/work-folder.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./diff-facts.mjs', import.meta.url));
 const SLUG = 'P20261116.000003/01-feature';
@@ -504,15 +505,28 @@ test('show: facts of a commit range, written nowhere', async t => {
     assert.equal(s.git(['status', '--porcelain']), before);
     assert.equal(existsSync(join(s.repo, '.company')), false);
   });
-  await t.test('--head defaults to HEAD', () => {
+  await t.test('54-architect Blocking 2: without --head show refuses, it never picks HEAD itself', () => {
+    const s = sandbox();
+    s.put('README.md', '# r\n');
+    const base = s.commit('base');
+    s.put('docs/new.md', 'x\n');
+    s.commit('head');
+    for (const args of [['show', '--base', base], ['show', '--base', base, '--github-output']]) {
+      const out = join(s.root, 'gh-out.txt');
+      const r = s.cli(args, { GITHUB_OUTPUT: out });
+      assert.equal(refused(r), true, `${args.join(' ')} -> ${r.status} ${r.stdout}`);
+      assert.match(r.stdout, /--head is required/);
+      assert.equal(existsSync(out), false, 'nothing may be appended to GITHUB_OUTPUT');
+    }
+  });
+  await t.test('54-architect Blocking 2: an explicit full --head still works', () => {
     const s = sandbox();
     s.put('README.md', '# r\n');
     const base = s.commit('base');
     s.put('docs/new.md', 'x\n');
     const head = s.commit('head');
-    const a = parse(s.cli(['show', '--base', base]));
-    const b = parse(s.cli(['show', '--base', base, '--head', head]));
-    assert.deepEqual(kindsOf(a), kindsOf(b));
+    const a = parse(s.cli(['show', '--base', base, '--head', head]));
+    assert.equal(a.head, head);
     assert.equal(a.ui_changed, false);
   });
   await t.test('working tree and untracked files are not part of show', () => {
@@ -747,12 +761,16 @@ test('git.M-SEC4 rename reading (d): differing path sets from the two -z -M call
 
 // ---------------------------------------------------------------- write and latest
 
+// `write` only judges on the run branch: refs/heads/aico/<branchId(slug)> (54-architect Blocking 3).
+const RUN_BRANCH = `aico/${branchId(SLUG)}`;
+
 function writeRepo() {
   const s = sandbox();
   s.put('README.md', '# r\n');
   s.put('src/app.mjs', 'export const a = 1;\n');
   s.put('.gitignore', 'ignored.log\n');
   const base = s.commit('base');
+  s.git(['checkout', '-q', '-b', RUN_BRANCH]);
   return { s, base };
 }
 
@@ -953,4 +971,231 @@ test('readLatest: newest valid facts object, otherwise null', async t => {
 test('fixtures: version.txt matches the Contract header', () => {
   const g = loadGolden('diff-facts');
   assert.equal(g.version, '1.0');
+});
+
+// ---------------------------------------------------------------- 54-architect Blocking 1-3, code-reviewer R-6, 48-qa write gaps
+
+const ENV_PROBE = fileURLToPath(new URL('../tests/contracts/diff-facts/env-probe-git.mjs', import.meta.url));
+const MIB = 1024 * 1024;
+
+function runScript(s, script, args, extra = {}) {
+  const r = spawnSync(process.execPath, [script, ...args], { cwd: s.repo, env: { ...s.env, ...extra }, encoding: 'utf8', timeout: 120000, maxBuffer: 1 << 26 });
+  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+
+function factsOf(s, step = '05-backend-engineer') {
+  return JSON.parse(readFileSync(join(s.factsDir(), `${step}.json`), 'utf8'));
+}
+
+test('54-architect Blocking 3: write judges only on refs/heads/aico/<branchId(slug)>', async t => {
+  assert.equal(RUN_BRANCH, 'aico/P20261116.000003');
+  const attempt = (s, base) => {
+    s.put('docs/new.md', 'x\n');
+    s.handoff('05-backend-engineer', base);
+    return s.cli(['write', SLUG, '05-backend-engineer']);
+  };
+  for (const other of ['feature/x', 'aico/P20261116.000004', `${RUN_BRANCH}x`, 'aico/other', 'main2']) {
+    await t.test(`branch ${other} is refused`, () => {
+      const { s, base } = writeRepo();
+      s.git(['checkout', '-q', '-b', other]);
+      const r = attempt(s, base);
+      assert.equal(refused(r), true, `${r.status} ${r.stdout}`);
+      assert.match(r.stdout, /not on the run branch/);
+      assert.equal(existsSync(s.factsDir()), false);
+    });
+  }
+  await t.test('the default branch is refused', () => {
+    const s = sandbox();
+    s.put('README.md', '# r\n');
+    const base = s.commit('base');
+    const r = attempt(s, base);
+    assert.equal(refused(r), true, `${r.status} ${r.stdout}`);
+    assert.match(r.stdout, /not on the run branch/);
+    assert.equal(existsSync(s.factsDir()), false);
+  });
+  await t.test('a detached HEAD is refused', () => {
+    const { s, base } = writeRepo();
+    s.git(['checkout', '-q', '--detach']);
+    const r = attempt(s, base);
+    assert.equal(refused(r), true, `${r.status} ${r.stdout}`);
+    assert.equal(existsSync(s.factsDir()), false);
+  });
+  await t.test('control: on the run branch the same call succeeds', () => {
+    const { s, base } = writeRepo();
+    const r = attempt(s, base);
+    assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+  });
+});
+
+test('54-architect Blocking 1: every git child runs with GIT_NO_LAZY_FETCH=1 and no other caller GIT_ variable', async t => {
+  const calls = (s, args, extra) => {
+    const log = join(s.root, 'env.log');
+    const r = runScript(s, ENV_PROBE, args, { DF_LOG: log, ...extra });
+    assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+    return readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  };
+  const hostileEnv = { GIT_NO_LAZY_FETCH: '0', GIT_EXTERNAL_DIFF: 'evil', GIT_SSH_COMMAND: 'evil' };
+  const check = list => {
+    assert.ok(list.length >= 3, 'git was called');
+    assert.ok(list.some(c => c.sub === 'cat-file'), 'the blob probe ran');
+    for (const c of list) {
+      assert.equal(c.env.GIT_NO_LAZY_FETCH, '1', `${c.sub}: ${JSON.stringify(c.env)}`);
+      for (const k of ['GIT_EXTERNAL_DIFF', 'GIT_SSH_COMMAND']) assert.equal(Object.hasOwn(c.env, k), false, `${c.sub} leaks ${k}`);
+    }
+  };
+  await t.test('show', () => {
+    const s = sandbox();
+    s.put('src/a.mjs', 'a\n');
+    const base = s.commit('base');
+    s.put('src/a.mjs', 'b\n');
+    const head = s.commit('head');
+    check(calls(s, ['show', '--base', base, '--head', head], hostileEnv));
+  });
+  await t.test('write', () => {
+    const { s, base } = writeRepo();
+    s.put('src/app.mjs', 'export const a = 2;\n');
+    s.handoff('05-backend-engineer', base);
+    check(calls(s, ['write', SLUG, '05-backend-engineer'], hostileEnv));
+  });
+  await t.test('also when the caller sets nothing', () => {
+    const s = sandbox();
+    s.put('src/a.mjs', 'a\n');
+    const base = s.commit('base');
+    s.put('src/a.mjs', 'b\n');
+    const head = s.commit('head');
+    check(calls(s, ['show', '--base', base, '--head', head], {}));
+  });
+});
+
+test('code-reviewer R-6: the blob probe reads a bounded prefix, so big blobs are not refused for size', async t => {
+  const line = `${'x'.repeat(79)}\n`;
+  const big = (n, extra = '') => `${extra}${line.repeat(n * MIB / 80)}`;
+  await t.test('a text blob of 20 MiB on both sides (over 32 MiB together) gives facts, not "git failed"', () => {
+    const s = sandbox();
+    s.put('src/big.mjs', big(20));
+    s.put('README.md', '# r\n');
+    const base = s.commit('base');
+    s.put('src/big.mjs', `${big(20)}tail\n`);
+    const head = s.commit('head');
+    const r = s.cli(['show', '--base', base, '--head', head]);
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    const facts = parse(r);
+    assert.equal(kindsOf(facts)['src/big.mjs'], 'code');
+    assert.equal(facts.truncated, false);
+  });
+  await t.test('a big blob with a NUL in its first 8000 bytes is still binary', () => {
+    const s = sandbox();
+    s.put('assets/big.dat', big(20, '\0'));
+    s.put('README.md', '# r\n');
+    const base = s.commit('base');
+    s.put('assets/big.dat', `${big(20, '\0')}tail\n`);
+    const head = s.commit('head');
+    const r = s.cli(['show', '--base', base, '--head', head]);
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    assert.equal(kindsOf(parse(r))['assets/big.dat'], 'binary');
+  });
+  await t.test('many mid-size blobs adding up over 32 MiB are not refused either', () => {
+    const s = sandbox();
+    s.put('README.md', '# r\n');
+    const names = Array.from({ length: 8 }, (_, i) => `src/m${i}.mjs`);
+    for (const n of names) s.put(n, big(5));
+    const base = s.commit('base');
+    for (const n of names) s.put(n, `${big(5)}tail\n`);
+    const head = s.commit('head');
+    const r = s.cli(['show', '--base', base, '--head', head]);
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    assert.equal(Object.keys(kindsOf(parse(r))).length, 8);
+  });
+  await t.test('write: a changed 40 MiB worktree file is not refused (guard: the worktree probe is bounded too)', () => {
+    const { s, base } = writeRepo();
+    s.put('src/app.mjs', big(40));
+    s.handoff('05-backend-engineer', base);
+    const r = s.cli(['write', SLUG, '05-backend-engineer']);
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    assert.ok(Object.hasOwn(kindsOf(factsOf(s)), 'src/app.mjs'));
+  });
+});
+
+test('48-qa gaps: write path sets and attributes', async t => {
+  const stepArgs = ['write', SLUG, '05-backend-engineer'];
+  await t.test('path set: the two -z -M calls must agree in write too', async t2 => {
+    const prep = () => {
+      const { s, base } = writeRepo();
+      s.put('src/ui.tsx', 'export const u = 1;\n');
+      s.put('src/app.mjs', 'export const a = 2;\n');
+      s.git(['add', 'src/ui.tsx']);
+      s.handoff('05-backend-engineer', base);
+      return s;
+    };
+    const run = (s, mode, path) => runScript(s, DIVERGENT, stepArgs, { DF_MODE: mode, DF_PATH: path });
+    await t2.test('control: transparent when both calls agree', () => {
+      const s = prep();
+      const r = run(s, 'none', '');
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.ok(Object.hasOwn(kindsOf(factsOf(s)), 'src/ui.tsx'));
+    });
+    for (const [mode, path] of [['numstat-drop', 'src/ui.tsx'], ['numstat-extra', 'src/extra.tsx'], ['status-drop', 'src/ui.tsx']]) {
+      await t2.test(`${mode} is refused and nothing is written`, () => {
+        const s = prep();
+        const r = run(s, mode, path);
+        assert.equal(refused(r), true, `${r.status} ${r.stdout}`);
+        assert.equal(existsSync(join(s.factsDir(), '05-backend-engineer.json')), false);
+      });
+    }
+  });
+  await t.test('a staged rename is R with its from path', () => {
+    const { s, base } = writeRepo();
+    s.git(['mv', 'src/app.mjs', 'src/moved.mjs']);
+    s.handoff('05-backend-engineer', base);
+    const r = s.cli(stepArgs);
+    assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+    const e = factsOf(s).paths.find(p => p.path === 'src/moved.mjs');
+    assert.equal(e.status, 'R');
+    assert.equal(e.from, 'src/app.mjs');
+  });
+  await t.test('a tracked file that gains a NUL, and an untracked file with a NUL, are binary', () => {
+    const { s, base } = writeRepo();
+    s.put('src/app.mjs', 'a\0b\n');
+    s.put('assets/new.dat', 'a\0b\n');
+    s.handoff('05-backend-engineer', base);
+    const r = s.cli(stepArgs);
+    assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+    const k = kindsOf(factsOf(s));
+    assert.equal(k['src/app.mjs'], 'binary');
+    assert.equal(k['assets/new.dat'], 'binary');
+  });
+  const attrCase = (name, attrs, body = 'export const a = 2;\n', want = 'code') => t.test(`attributes: ${name}`, () => {
+    const { s, base } = writeRepo();
+    s.put('.gitattributes', attrs);
+    s.put('src/app.mjs', body);
+    s.handoff('05-backend-engineer', base);
+    const r = s.cli(stepArgs);
+    assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+    const facts = factsOf(s);
+    assert.equal(kindsOf(facts)['src/app.mjs'], want);
+    assert.equal(facts.paths.find(p => p.path === 'src/app.mjs').status, 'M');
+    assert.equal(facts.ui_changed, true);
+  });
+  await attrCase('-diff on a text file does not hide it', '*.mjs -diff\n');
+  await attrCase('binary on a text file does not hide it', '* binary\n');
+  await attrCase('eol=crlf and text', '*.mjs text eol=crlf\n');
+  await attrCase('-text', '*.mjs -text\n');
+  await attrCase('diff forced on a file with a NUL is still binary', '*.mjs diff\n', 'a\0b\n', 'binary');
+  const hook = (key, attr, cfg) => t.test(`attributes: a configured ${key} command is never run`, () => {
+    const { s, base } = writeRepo();
+    const marker = join(s.root, `${key}.ran`).replaceAll('\\', '/');
+    const script = join(s.root, 'mark.mjs').replaceAll('\\', '/');
+    writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'ran'); process.stdin.pipe(process.stdout);\n`);
+    s.git(['config', cfg, `node "${script}"`]);
+    s.put('.gitattributes', `*.mjs ${attr}\n`);
+    s.put('src/app.mjs', 'export const a = 2;\n');
+    s.handoff('05-backend-engineer', base);
+    const r = s.cli(stepArgs);
+    assert.equal(existsSync(marker), false, `${key} ran during write`);
+    assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+    assert.equal(kindsOf(factsOf(s))['src/app.mjs'], 'code');
+  });
+  await hook('textconv', 'diff=evil', 'diff.evil.textconv');
+  await hook('clean', 'filter=evil', 'filter.evil.clean');
+  await hook('external-diff', 'diff=evil', 'diff.external');
 });
