@@ -32,7 +32,7 @@ Rationale: the Steps a run takes are data in one ledger, so skips and merges hav
 | `tasks <slug> <n>` | Appends `tasks`, refused when the new count is over budget or `tasks` exists. |
 | `next <slug>` | Decides the next entry, appends a `step` event and prints it as one JSON line; prints `{"do":"end"}` when the list is done. |
 | `fix <slug> <role> <why>` | Appends `fix`. |
-| `dry <draft.json> --base <commit> [--head <commit>]` | Prints one line per entry, `<i> <role> <run|skip|split> <why>`, for the diff given (`diff-facts show`), writes nothing. |
+| `dry <draft.json> --base <commit> --head <commit>` | Prints one line per entry, `<i> <role> <run|skip|split> <why>`, for the diff given (`diff-facts show`), writes nothing. Both commits are required (`--head is required`; `dry` never fills a side from `HEAD`). A preview only: its lines never set a skip, a Gate or a pass; `next` decides from `write` facts alone. |
 | `check <file>` | Lints a draft or a route ledger, prints the lines and `<n> error(s)`, exit 1 on any error. |
 
 ## `next` decision (fail-open)
