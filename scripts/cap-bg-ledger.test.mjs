@@ -1,10 +1,11 @@
-// Tests: the background launch ledger (P20261115.000001-T4, red until T5 lands).
+// Tests: the background launch ledger. Retired by context-guard v3.0 (T20): no `bg` row is ever written.
+// Was (P20261115.000001-T4): a Lead launch with run_in_background appended one bg row. Kept as inverted no-row tests.
 // A Lead PreToolUse with tool_input.run_in_background === true in an active run appends one
 // {"ev":"bg","session":<sessionKey>} row (plus v, at) to <run folder>/guard.jsonl through the real host.
 // No row for a Step session, a denied call, the flag false or no active run. A row at every token level.
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { capEnv, cleanup } from '../tests/context-guard/cap-engine.mjs';
+import { capEnv, cleanup, LEAD_TYPE, LEAD_AGENT } from '../tests/context-guard/cap-engine.mjs';
 import { key12 } from '../hooks/fixtures/engine/harness.mjs';
 
 after(cleanup);
@@ -18,51 +19,40 @@ async function lead(opts) {
   return fx;
 }
 
-describe('bg row, Lead', () => {
+// context-guard v3.0 (T20): bg rows are removed. Every case that expected a row now expects none.
+describe('v3.0: no bg row for any Lead launch', () => {
   for (const tool of ['Bash', 'PowerShell', 'Agent', 'Task']) {
-    test(`${tool} with run_in_background true: one row with the session key`, async () => {
+    test(`${tool} with run_in_background true: no row`, async () => {
       const fx = await lead();
       const input = tool === 'Agent' || tool === 'Task' ? { prompt: 'x', subagent_type: 'aico:qa', run_in_background: true } : bg;
       const r = fx.lead(50000, { tool, input });
       assert.equal(r.code, 0, r.err);
-      const rows = bgRows(fx);
-      assert.equal(rows.length, 1, JSON.stringify(fx.guardRecord()));
-      assert.equal(rows[0].v, 1);
-      assert.equal(rows[0].session, key12(SESSION));
-      assert.match(rows[0].at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
-      assert.deepEqual(Object.keys(rows[0]).sort(), ['at', 'ev', 'session', 'v']);
+      assert.deepEqual(bgRows(fx), [], JSON.stringify(fx.guardRecord()));
     });
   }
 
-  // 1000 is below the fast floor (no run lookup); 161999 is just below the freeze point.
-  for (const tokens of [1000, 50000, 100000, 161999]) {
-    test(`row at ${tokens} tokens`, async () => {
+  for (const tokens of [1000, 50000, 100000, 161999, 200000]) {
+    test(`no row at ${tokens} tokens`, async () => {
       const fx = await lead();
       const r = fx.lead(tokens, { input: bg });
       assert.equal(r.code, 0, r.err);
-      assert.equal(bgRows(fx).length, 1, `at ${tokens}: ${JSON.stringify(fx.guardRecord())}`);
+      assert.deepEqual(bgRows(fx), []);
     });
   }
 
-  test('row also when the transcript has no readable usage (tokens unknown)', async () => {
+  test('no row when the transcript has no readable usage', async () => {
     const fx = await lead();
     const r = fx.env.run(fx.env.event('PreToolUse', { tool_name: 'Bash', tool_input: bg }));
     assert.equal(r.code, 0, r.err);
-    assert.equal(bgRows(fx).length, 1);
+    assert.deepEqual(bgRows(fx), []);
   });
 
-  test('the tool call itself stays allowed and silent below the freeze point', async () => {
+  test('the tool call stays allowed and silent; two launches write nothing', async () => {
     const fx = await lead();
     fx.quiet(fx.lead(50000, { input: bg }));
-  });
-
-  test('two launches give two rows, same session', async () => {
-    const fx = await lead();
-    fx.lead(50000, { input: bg });
-    fx.lead(50000, { input: bg });
-    const rows = bgRows(fx);
-    assert.equal(rows.length, 2);
-    assert.ok(rows.every((x) => x.session === key12(SESSION)));
+    fx.quiet(fx.lead(50000, { input: bg }));
+    assert.deepEqual(bgRows(fx), []);
+    assert.deepEqual(fx.guardRecord(), []);
   });
 });
 
@@ -94,9 +84,9 @@ describe('no bg row', () => {
     assert.deepEqual(bgRows(fx), []);
   });
 
-  test('a denied call (over the freeze point) leaves no row', async () => {
+  test('a Lead agent call denied over the freeze point leaves no row', async () => {
     const fx = await lead();
-    const r = fx.lead(200000, { input: bg });
+    const r = fx.step(200000, { tool: 'Bash', input: bg, agent: LEAD_AGENT, over: { agent_type: LEAD_TYPE } });
     assert.ok(fx.capDeny(r), `expected a cap deny: ${r.out} ${r.err}`);
     assert.deepEqual(bgRows(fx), []);
   });

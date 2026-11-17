@@ -6,7 +6,7 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { capEnv, cleanup } from '../tests/context-guard/cap-engine.mjs';
+import { capEnv, cleanup, LEAD_TYPE, LEAD_AGENT } from '../tests/context-guard/cap-engine.mjs';
 
 after(cleanup);
 
@@ -16,7 +16,10 @@ async function booted(cap, opts = {}) {
   return fx;
 }
 const stepAt = async (cap, n) => { const fx = await booted(cap); return fx.capDeny(fx.step(n)); };
-const leadAt = async (cap, n) => { const fx = await booted(cap); return fx.capDeny(fx.lead(n)); };
+// context-guard v3.0 (T20): the cap guards the Lead AGENT (agent_id payload, type aico:project-manager), never main.
+const agentLead = (fx, n, o = {}) => fx.step(n, { tool: 'Bash', input: { command: 'ls' }, agent: LEAD_AGENT, over: { agent_type: LEAD_TYPE }, ...o });
+const leadAt = async (cap, n) => { const fx = await booted(cap); return fx.capDeny(agentLead(fx, n)); };
+const mainAt = async (cap, n) => { const fx = await booted(cap); return fx.capDeny(fx.lead(n)); };
 
 describe('AC11 the freeze point is floor(threshold x 0.9)', () => {
   const TABLE = [
@@ -27,28 +30,35 @@ describe('AC11 the freeze point is floor(threshold x 0.9)', () => {
       assert.equal(await stepAt(cap, F - 1), false, 'below F');
       assert.equal(await stepAt(cap, F), true, 'at F');
     });
-    test(`threshold ${cap ?? 'unset'}: the Lead at ${F - 1} passes, at ${F} freezes`, async () => {
+    test(`threshold ${cap ?? 'unset'}: the Lead agent at ${F - 1} passes, at ${F} freezes`, async () => {
       assert.equal(await leadAt(cap, F - 1), false, 'below F');
       assert.equal(await leadAt(cap, F), true, 'at F');
     });
+    test(`threshold ${cap ?? 'unset'}: main is never capped, at ${F} or far above`, async () => {
+      assert.equal(await mainAt(cap, F), false);
+      assert.equal(await mainAt(cap, 900000), false);
+    });
   }
 
-  test('the Lead freeze at 108000 (threshold 120000) records one handover; at 100000 nothing happens', async () => {
+  test('the Lead agent freeze at 108000 (threshold 120000) records one handover; at 100000 nothing happens', async () => {
     const hi = await booted(120000);
-    assert.ok(hi.capDeny(hi.lead(108000)));
+    assert.ok(hi.capDeny(agentLead(hi, 108000)));
     const hs = hi.handovers();
     assert.equal(hs.length, 1);
     assert.equal(hs[0].trigger, 'context');
     assert.equal(hs[0].tokens, 108000);
     const lo = await booted(120000);
-    lo.quiet(lo.lead(100000));
+    lo.quiet(agentLead(lo, 100000));
     assert.deepEqual(lo.handovers(), []);
   });
 
-  test('hand over at T: the Lead turn ends at the threshold, not before (threshold 120000)', async () => {
+  test('v3.0: the Lead agent deny never ends the turn, at T or above (threshold 120000)', async () => {
     const fx = await booted(120000);
-    assert.equal(fx.lead(119999).json.continue, undefined);
-    assert.equal(fx.lead(120000).json.continue, false);
+    for (const n of [119999, 120000, 130000]) {
+      const r = agentLead(fx, n);
+      assert.ok(fx.capDeny(r), `denied at ${n}`);
+      assert.notEqual(r.json.continue, false, `no continue:false at ${n}`);
+    }
   });
 });
 
@@ -116,14 +126,16 @@ describe('AC17 a settings edit applies at the next Step dispatch, never mid-Step
 });
 
 describe('the fast path: below floor(60000 x 0.9) = 54000 nothing can trigger', () => {
-  test('a Step and a Lead at 53999 pass with threshold 60000 and record nothing; at 54000 both are refused', async () => {
+  test('a Step and a Lead agent at 53999 pass with threshold 60000 and record nothing; at 54000 both are refused; main passes', async () => {
     const fx = await booted(60000);
     fx.quiet(fx.step(53999));
+    fx.quiet(agentLead(fx, 53999));
     fx.quiet(fx.lead(53999));
     assert.deepEqual(fx.handovers(), []);
     assert.deepEqual(fx.guardRecord(), []);
     assert.ok(fx.capDeny(fx.step(54000)));
-    assert.ok(fx.capDeny(fx.lead(54000)));
+    assert.ok(fx.capDeny(agentLead(fx, 54000)));
+    fx.quiet(fx.lead(54000), 'main is never capped');
   });
 });
 
@@ -131,6 +143,7 @@ describe('no active run is a no-op', () => {
   test('a Step and a Lead far over any threshold pass and write nothing', async () => {
     const fx = await booted(120000, { run: false });
     fx.quiet(fx.step(900000));
+    fx.quiet(agentLead(fx, 900000));
     fx.quiet(fx.lead(900000));
     assert.deepEqual(fx.handovers(fx.env.project), []);
   });
