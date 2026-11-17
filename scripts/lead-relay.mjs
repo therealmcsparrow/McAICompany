@@ -224,7 +224,8 @@ export function answer(text, root = process.cwd()) {
   const hits = [];
   for (const slug of runSlugs(root, { max: MAX_RUNS }).slugs) {
     try {
-      if (show(root, slug).state !== 'running') continue;
+      const st = show(root, slug).state;
+      if (st !== 'running' && st !== 'stale') continue; // a form waits past the 12 h stale mark; only ended/none runs are skipped
       const file = path.join(workDir(root, slug) ?? '', FORMS);
       if (!workDir(root, slug)) continue;
       const open = openForms(loadRows(file));
