@@ -18,6 +18,7 @@ const MAX_SHELL_PATHS = 64;
 const MAX_MODEL = 64;
 const MAX_RUNS = 500;
 const GUARD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+guard\.jsonl$/;
+const LEAD_TYPE = 'aico:project-manager';
 const PROMPT_BYTES = 64 * 1024;
 // Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
 const FAST_FLOOR = await import('../rules/cap.mjs').then((m) => m.freezeAt(m.MIN_THRESHOLD), () => Infinity);
@@ -341,7 +342,9 @@ export async function normalize(raw, ctx) {
     if (typeof raw.agent_id !== 'string' || !AGENT_RE.test(raw.agent_id)) return { ok: false, why: 'bad agent id' };
     agentKey = hash12(raw.agent_id);
   }
-  const session = name === 'SubagentStop' || (name === 'PreToolUse' && hasAgent) ? 'step' : 'lead';
+  const isLeadAgent = hasAgent && raw.agent_type === LEAD_TYPE;
+  const session = name === 'SubagentStop' || (name === 'PreToolUse' && hasAgent) ? (isLeadAgent ? 'lead' : 'step') : 'lead';
+  const fromAgentFile = session === 'step' || isLeadAgent;
   const sessionKey = hash12(str(raw, 'session_id') ?? '');
   const cwd = str(raw, 'cwd') ?? process.cwd();
   const drift = driftOf(raw, ctx.schema, name);
@@ -352,7 +355,7 @@ export async function normalize(raw, ctx) {
   let usage = { state: 'none', total: 0, model: null };
   if (name === 'PreToolUse' || name === 'SubagentStop') {
     const tp = str(raw, 'transcript_path');
-    if (session === 'lead') usage = readUsage(tp, false);
+    if (!fromAgentFile) usage = readUsage(tp, false);
     else if (name === 'SubagentStop') usage = readUsage(str(raw, 'agent_transcript_path'), true);
     else if (tp && tp.endsWith('.jsonl') && !mainReadable(tp)) usage = { state: 'error', total: null, model: null };
     else if (tp && tp.endsWith('.jsonl')) usage = readUsage(path.join(tp.slice(0, -'.jsonl'.length), 'subagents', `agent-${raw.agent_id}.jsonl`), true);
@@ -374,7 +377,8 @@ export async function normalize(raw, ctx) {
     drift,
     stopHookActive: name === 'SubagentStop' && typeof raw.stop_hook_active === 'boolean' ? raw.stop_hook_active : null
   };
-  if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error') {
+  const leadSpawn = session === 'lead' && name === 'PreToolUse' && tool !== null && (tool.name === 'Agent' || tool.name === 'Task');
+  if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error' || leadSpawn) {
     try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = null; }
   }
   for (const e of tool ? tool.paths : []) {
