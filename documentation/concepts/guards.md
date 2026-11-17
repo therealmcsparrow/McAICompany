@@ -17,7 +17,6 @@ Guards stop accidents, not a determined attacker. They block common mistakes, su
 | Guard | What it refuses |
 |---|---|
 | `cap` (`cap.M1`) | Tools past the freeze point, 162000 tokens at the default cap of 180000. A Step may then only write its Handoff and one findings ledger. The Lead freezes at 162000 and ends its turn at 180000. See [Context budget](context-budget.md). |
-| `git add` (`git-add.M-SEC1`) | Any form that stages files not named one by one: `-A`, `--all`, `-u`, a pathspec such as `.` or one with `*`, a directory, and `git commit -a`. `git add <file>` and `git add -p <file>` pass. |
 | `.env` (`dotenv.M-SEC1`) | Tool calls that touch `.env` and `.env.<x>`, except `.env.example`, `.env.sample` and `.env.template`. |
 | `model floor` (`model-floor.M1`) | A Role dispatched on a model below its floor. A dispatch with no model passes, and the Role's own file applies. |
 | `self-protect` (`self-protect.M-SEC1`) | Writes to aico's own settings, hooks and pins, by a file tool or a shell command. It is hygiene against a model that follows the rules, not a sandbox. |

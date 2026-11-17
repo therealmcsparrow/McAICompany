@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-hook.md v1.1
+// contract: docs/contracts/mod-hook.md v1.2
 // The hook engine: one process per hook call. Reads one hook payload on stdin, checks the pins, normalizes the
 // event, runs the rule table in one worker and prints one verdict. This file reads nothing from hooks/lib until
 // the pins match, so a changed engine file is never loaded.

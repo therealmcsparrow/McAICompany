@@ -1,4 +1,4 @@
-# Contract: mod-hook v1.1
+# Contract: mod-hook v1.2
 
 New Contract (task P20261114.000001/01-feature; the brief calls it `aico.mod-hook` v1). What a rule may answer and how the one engine runs the rule table. Provider: the hook engine, scripts/hook-host.mjs with the rule table hooks/rules.json and the pins hooks/pins.json (created by the build), wired in `hooks/hooks.json`. Consumers: every rule module under hooks/rules/, the hook check script, `context-guard` v2.0 (the `cap` guard), the savers. Uses `hook-event` v1, `mod-manifest` v1, `aico-settings` v3.0. Rationale: `docs/adr/0071-guards-as-rule-table.md`, `docs/adr/0072-guards-before-release.md`.
 
@@ -7,7 +7,7 @@ New Contract (task P20261114.000001/01-feature; the brief calls it `aico.mod-hoo
 Verdict (allow-list): `{ v: 'allow' }`, `{ v: 'deny', rule: '<rule ID>', message: '<1-300 printable chars>' }` or `{ v: 'note', rule: '<rule ID>', message: '…' }`. A deny or allow of rule `cap.M1` only may also carry `effect`: one of `cap-step-record`, `cap-lead-freeze`, `cap-lead-frozen`, `cap-warn`; the engine (pinned engine code, hooks/lib/cap-effects.mjs) then does the record writes and output shapes of `context-guard` v2.0. A rule never writes. Anything else (another key, another value, a changed event object, a thrown error, a promise) is invalid: a guard's invalid verdict is a deny `<rule ID>: invalid verdict`, a saver's is ignored (AC3). A rule never rewrites a payload: the engine never emits `updatedInput`.
 
 ## Rule table (hooks/rules.json, one row per rule ID)
-`{ "event": "PreToolUse", "matcher": ["Bash","PowerShell"], "rule": "git-add.M-SEC1", "module": "git-add.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "aico guard git-add.M-SEC1: stage files by name" }`. `matcher` is a list of tool names or `["*"]`; `module` a file name in hooks/rules/; `fail` `closed|open`. Loaded only from the plugin root; a row whose rule ID has no manifest, or whose `fail` differs from its manifest, is unused (`mod-manifest` v1).
+`{ "event": "PreToolUse", "matcher": ["*"], "rule": "dotenv.M-SEC1", "module": "dotenv.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "aico guard dotenv.M-SEC1: .env files are not read or written" }`. `matcher` is a list of tool names or `["*"]`; `module` a file name in hooks/rules/; `fail` `closed|open`. Loaded only from the plugin root; a row whose rule ID has no manifest, or whose `fail` differs from its manifest, is unused (`mod-manifest` v1).
 
 ## Engine, per hook call
 1. `env.guardsOff` and `event.session` is `lead` → no guard runs; savers run as usual. Once per session per active run, append `guards-off` to the guard record (`context-guard` v2.0) (AC16). In a `step` session `env.guardsOff` is ignored: Steps are always guarded, even when launched from a Lead with the switch on (CEO, Plan Gate). Only the CEO sets it, at launch; no tool call can reach the hook process environment.

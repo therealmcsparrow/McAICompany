@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-manifest.md v1
+// contract: docs/contracts/mod-manifest.md v1.1
 // Checks the hook set of a plugin root. Usage:
 //   hook-check.mjs ci|setup [--root <plugin root>]   exit 1 and one line per problem
 //   hook-check.mjs denies --session <key> --json     newest 5 deny rows of a session, read-only
