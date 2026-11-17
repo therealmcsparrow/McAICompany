@@ -155,7 +155,8 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
 
 // An open form with the same questions in another unended run would make `answer` match twice and drop the answer.
 function refuseSharedForm(root, slug, questions) {
-  const want = JSON.stringify(questions);
+  // Same comparison `answer` uses (sameQuestions): a Gate option's `result` is not compared.
+  const want = questions.map((q) => ({ question: q.q, header: q.header, multiSelect: q.multi, options: q.options.map((o) => ({ label: o.label, description: o.description })) }));
   for (const other of runSlugs(root, { max: MAX_RUNS }).slugs) {
     if (other === slug) continue;
     try {
@@ -163,7 +164,7 @@ function refuseSharedForm(root, slug, questions) {
       if (st !== 'running' && st !== 'stale') continue;
       const dir = workDir(root, other);
       if (!dir) continue;
-      for (const r of openForms(loadRows(path.join(dir, FORMS)))) if (JSON.stringify(r.questions) === want) refuse(`same questions open in run ${other}`);
+      for (const r of openForms(loadRows(path.join(dir, FORMS)))) if (sameQuestions(r.questions, want)) refuse(`same questions open in run ${other}`);
     } catch (e) { if (e instanceof Refusal) throw e; /* a broken run is skipped */ }
   }
 }
