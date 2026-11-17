@@ -47,6 +47,11 @@ function buildTemplate() {
     fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'cap.mjs'), path.join(t, 'hooks', 'rules', 'cap.mjs'));
   }
+  // The host imports hooks/rules/self-protect.mjs from the plugin root and fails closed without it.
+  if (fs.existsSync(path.join(REPO, 'hooks', 'rules', 'self-protect.mjs'))) {
+    fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'self-protect.mjs'), path.join(t, 'hooks', 'rules', 'self-protect.mjs'));
+  }
   fs.mkdirSync(path.join(t, 'company'), { recursive: true });
   fs.copyFileSync(path.join(REPO, 'company', 'model-floor.json'), path.join(t, 'company', 'model-floor.json'));
   template = t;
