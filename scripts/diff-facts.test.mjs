@@ -1211,7 +1211,7 @@ function probeShow(mode, size, extra = {}) {
   s.put('src/a.mjs', body(size));
   s.put('README.md', '# r\n');
   const base = s.commit('base');
-  s.put('src/a.mjs', `${body(size).slice(0, -1)}y\n`);
+  s.put('src/a.mjs', `${body(size).slice(0, -2)}y\n`); // same length as base
   const head = s.commit('head');
   const r = runScript(s, PROBE_GIT, ['show', '--base', base, '--head', head], { DF_MODE: mode, ...extra });
   return { s, r };
