@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.0). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.1). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -13,6 +13,8 @@ import { createRequire } from 'node:module';
 import { lint } from './handoff-lint.mjs';
 import { isWorkFolder, isProjectId, parseProject, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 import { runCap } from './run-cap.mjs';
+import { leadFile } from '../hooks/lib/snapshot.mjs';
+import { homedir } from 'node:os';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 
@@ -20,6 +22,8 @@ export const MAX_FILE = 64 * 1024;
 export const MAX_LINE = 256;
 export const MAX_LINES = 1000;
 const MAX_STEPS = 200;
+const MAX_FORMS = 256 * 1024;
+const MAX_SNAPSHOT = 4096;
 const MAX_FOLDERS = 200;
 const MAX_FM = 8 * 1024;
 const STALE_MS = 12 * 60 * 60 * 1000;
@@ -633,6 +637,68 @@ function planGate(root, slug, home) {
   if (result.state !== 'pass') refuse(`plan gate: ${result.reason}`);
 }
 
+// True when the Lead snapshot of this product root says `gate` is auto. Only the snapshot is read, never an argument; any failure is false.
+function gateIsAuto(root, gate, home) {
+  try {
+    const base = typeof home === 'string' && home !== '' ? home
+      : process.env.MCSPARROW_HOME || join(process.env.USERPROFILE || process.env.HOME || homedir(), '.mcsparrow');
+    const file = leadFile(base, realpathSync(root));
+    const st = lstatSync(file);
+    if (!st.isFile() || st.size > MAX_SNAPSHOT) return false;
+    const gates = JSON.parse(readCapped(file, MAX_SNAPSHOT).toString('utf8'))?.gates;
+    return gates !== null && typeof gates === 'object' && Object.hasOwn(gates, gate) && gates[gate] === 'auto';
+  } catch { return false; }
+}
+
+// The `forms.jsonl` rows that parse; a bad line is skipped. Unreadable or over the cap reads as no rows.
+function readFormRows(file) {
+  const st = lstatBigOrNull(file);
+  if (!st || !st.isFile() || st.size > MAX_FORMS) return [];
+  let buf;
+  try { buf = readCapped(file, MAX_FORMS, st); } catch { return []; }
+  const rows = [];
+  for (const line of buf.toString('utf8').split('\n')) {
+    if (line === '' || line.includes('\r')) continue;
+    try {
+      const o = JSON.parse(line);
+      if (o !== null && typeof o === 'object' && !Array.isArray(o) && o.v === 1 && typeof o.at === 'string' && AT_RE.test(o.at)) rows.push(o);
+    } catch { /* skipped */ }
+  }
+  return rows;
+}
+
+// The `at` of the latest answer of a `gate:<gate>` form whose single chosen option means `result`, or null.
+function gateAnswerAt(rows, gate, result) {
+  const forms = new Map();
+  for (const r of rows) {
+    if (r.ev === 'open' && typeof r.id === 'string' && !forms.has(r.id) && r.kind === `gate:${gate}`) forms.set(r.id, r);
+  }
+  let latest = null;
+  for (const r of rows) {
+    if (r.ev === 'answer' && typeof r.id === 'string' && forms.has(r.id)) latest = r;
+  }
+  if (latest === null) return null;
+  const q = forms.get(latest.id).questions;
+  const a = latest.answers;
+  if (!Array.isArray(q) || q.length !== 1 || !Array.isArray(a) || a.length !== 1) return null;
+  const labels = a[0]?.labels;
+  if (!Array.isArray(labels) || labels.length !== 1 || typeof labels[0] !== 'string') return null;
+  const options = Array.isArray(q[0]?.options) ? q[0].options : [];
+  const option = options.find(o => o !== null && typeof o === 'object' && o.label === labels[0]);
+  return option && option.result === result ? latest.at : null;
+}
+
+// A Gate that is not auto passes only on a recorded CEO answer newer than the previous `gate` record for it. Throws Refusal.
+function requireGateAnswer(root, slug, gate, result, home) {
+  if (gateIsAuto(root, gate, home)) return;
+  const { dir, file } = paths(root, slug);
+  const answerAt = gateAnswerAt(readFormRows(join(dir, 'forms.jsonl')), gate, result);
+  if (answerAt === null) refuse(`no CEO answer for ${gate}`);
+  let prev = -Infinity;
+  for (const r of readRecords(file, true).records) if (r.ev === 'gate' && r.gate === gate) prev = Math.max(prev, Date.parse(r.at));
+  if (!(Date.parse(answerAt) > prev)) refuse(`no CEO answer for ${gate}`);
+}
+
 // argv[1] is not resolved, import.meta.url is: a symlinked folder (macOS /var -> /private/var) must still run.
 function isMainReal() {
   try { return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); } catch { return false; }
@@ -691,6 +757,8 @@ export function run(argv, { root = process.cwd(), now = Date.now(), home } = {})
         if (rest.length !== 3) refuse(usage());
         if (!GATES.has(rest[1])) refuse('gate must be brief, plan or ship');
         if (!RESULTS.has(rest[2])) refuse('result must be passed, changed or stopped');
+        checkSlug(root, rest[0]);
+        requireGateAnswer(root, rest[0], rest[1], rest[2], home);
         if (rest[1] === 'plan' && rest[2] === 'passed') planGate(root, rest[0], home);
         append(root, rest[0], { ev: 'gate', gate: rest[1], result: rest[2] }, opts);
         return { out: `ok: gate ${rest[1]} ${rest[2]}`, code: 0 };
