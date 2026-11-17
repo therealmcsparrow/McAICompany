@@ -35,7 +35,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Voice profile** — the style features of a product's writing: tone, sentence length, person, preferred and avoided terms. Learned fresh each run from its shipped docs and README, printed and never stored, with no names or quotes. With no such text the writing pass uses the Project profile's voice line and says so. Proposed in ADR 0055.
 
-**Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After the Fix-round limit (2 by default, 0–5 in settings) on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded, never looped.
+**Fix round** — a reviewing Role rejects work for a blocking issue and it goes back to the builder. After the Fix-round limit (2 by default, 0–5 in settings) on the same work, the Lead escalates to the CEO. Non-blocking remarks (nits) are recorded and never start a round; a nit on a Contract or Core path gets one extra builder Fix Step, which is not a Fix round.
 
 **Core** — the minimal part of a product that everything else depends on. Proposed by the Architect, approved by the CEO at the Plan Gate, or, in feature and fix, which have no Plan Gate, at the Ship Gate. Nothing enters Core without that approval. The approved Core list enters `.company/project.md` after Ship Gate approval in feature and fix; until then reviewers judge Core against the list in the Architect's Handoff.
 
@@ -180,3 +180,11 @@ _Avoid_: orchestrator (use Lead).
 **Lock** — a setting that could skip a safety check (auto Ship Gate, auto installs, turning off the security or compliance lane) and starts locked. Unlocks count only from the CEO's user settings; a project can lock again but never unlock, and a broken project settings file keeps its locks.
 
 **ADHD mode** — session-only output style from `aico:i-have-adhd`, off by "stop adhd mode" / "normal mode".
+
+**Diff facts** — one file per Step with the change classification every gate reads (paths touched, `ui_changed`, `contract_changed`, `strings_changed`). Contract `diff-facts` v1.0; ADR 0075.
+
+**Route** — triage's ledger list of Steps, merges and skips, each with a reason. The pipeline runs that list and nothing else. Contract `route` v1.0.
+
+**stepKey** — versioned cache key deciding if a Fix round may reuse a Handoff. On a hit the Lead reuses the earlier Handoff instead of dispatching; every doubt is a miss and Ship Gate inputs are never reused. Contract `step-key` v1.0; ADR 0076.
+
+**Cold run** — a run that bypasses every cache (`--cold` or `AICO_COLD=1`). Tags, the nightly run and the Ship Gate always run cold.

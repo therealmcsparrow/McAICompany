@@ -25,4 +25,6 @@ A fast pre-router. It builds nothing and dispatches no Role; it ends by recommen
 
 Record the request: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" intake add '<intake|needs-info|rejected>' '<topic>'` (`intake` approved, `needs-info` held, `rejected` declined). The Topic names the subject of the request (a feature, a bug area, a product part), never a person, client or company. Keep the id it prints in your context and in `.company/intake/intake.jsonl` only: never in a file, Handoff, run folder, dispatch or hand-over argument. The Lead runs `intake set` later. A refused write is named to the CEO and triage goes on.
 
+For `aico:feature` and `aico:fix`, draft the Step list as a route (route v1.0; `route.mjs dry` prints the skips, the Lead runs `route.mjs write`; `aico:pipeline` `references/route.md`).
+
 Triage is advisory: it never skips a Gate a Playbook mandates, and the CEO can always choose a longer route.

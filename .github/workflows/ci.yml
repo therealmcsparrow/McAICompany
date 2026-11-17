@@ -4,15 +4,29 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions:
   contents: read
 
+# One run per workflow and ref; only a superseded pull_request run is cancelled.
+# Main, tags and the nightly always finish, so a red there is never lost.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Full matrix on tags (ubuntu, macos), ubuntu only on the nightly. On a PR or main push the
+  # steps are skipped one by one, so the required check names still report success.
+  # Cold (tag, nightly or repo variable CI_COLD=1): AICO_COLD=1 and no skip is trusted.
   check:
     name: check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    env:
+      AICO_COLD: ${{ (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') && '1' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -23,26 +37,56 @@ jobs:
         working-directory: repo with space
     steps:
       # Check out into a path with a space so scripts that mishandle spaces fail on every OS.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout
+        if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: repo with space
           persist-credentials: false
           fetch-depth: 0
       # setup-node resolves node-version-file from the workspace root, so expose .nvmrc there.
-      - run: cp .nvmrc ../.nvmrc
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Expose .nvmrc
+        if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        run: cp .nvmrc ../.nvmrc
+      - name: Setup Node
+        if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+      # Facts: the PR base and head sha come through env and are passed quoted. Both commits are
+      # present from the full-depth checkout (no partial clone), and GIT_NO_LAZY_FETCH stops any
+      # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
+      - name: Diff facts
+        id: facts
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_LAZY_FETCH: "1"
+        run: node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output
       # Deterministic, zero-token structural checks: frontmatter, names, broken
       # aico: references, size budgets and version consistency across files.
-      - run: npm test
-      - run: npm run check
+      - name: Test suite
+        if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')) && !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true')
+        run: npm test
+      - name: Structural checks
+        if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'schedule' && matrix.os == 'ubuntu-latest')) && !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true')
+        run: npm run check
+      - name: Report red nightly
+        if: failure() && github.event_name == 'schedule'
+        env:
+          RUN_ID: ${{ github.run_id }}
+          JOB_OS: ${{ matrix.os }}
+        run: |
+          echo "nightly red: check ($JOB_OS) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 
   # Windows runs the suite in four shards; each shard uploads the list of files it ran.
   windows-test:
     name: windows-test (shard ${{ matrix.shard }}/4)
     runs-on: windows-latest
     timeout-minutes: 40
+    env:
+      AICO_COLD: ${{ (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') && '1' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,16 +102,40 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - run: cp .nvmrc ../.nvmrc
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # Warm unless cold (tag, nightly, CI_COLD=1): npm cache from the checked-out lockfile.
+      # A cold run uses the twin step below, with no cache.
+      - name: Setup Node (warm)
+        if: ${{ !(github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-      - name: Test shard
+          cache: npm
+          cache-dependency-path: repo with space/tools/claude-cli/package-lock.json
+      - name: Setup Node (cold)
+        if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Facts: the PR base and head sha come through env and are passed quoted. Both commits are
+      # present from the full-depth checkout (no partial clone), and GIT_NO_LAZY_FETCH stops any
+      # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
+      - name: Diff facts
+        id: facts
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_LAZY_FETCH: "1"
+        run: node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output
+      # if first, so the guard is the step's first key and the facts reader finds it.
+      - if: ${{ !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true') }}
+        name: Test shard
         env:
           AICO_TEST_SHARD: ${{ matrix.shard }}/4
           AICO_TEST_FILES_OUT: ${{ runner.temp }}/shard-files/shard-${{ matrix.shard }}.txt
         run: npm test -- "--test-shard=$AICO_TEST_SHARD"
       - name: Structural checks
-        if: matrix.shard == 1
+        if: matrix.shard == 1 && !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true')
         run: npm run check
       - name: Upload shard file list
         if: always()
@@ -84,6 +152,8 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      AICO_COLD: ${{ (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v') || vars.CI_COLD == '1') && '1' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -92,15 +162,26 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+      # Facts: the PR base and head sha come through env and are passed quoted. Both commits are
+      # present from the full-depth checkout (no partial clone), and GIT_NO_LAZY_FETCH stops any
+      # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
+      - name: Diff facts
+        id: facts
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_LAZY_FETCH: "1"
+        run: node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output
       - name: Download shard file lists
-        if: always()
+        if: always() && !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true')
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: shard-files-*
           merge-multiple: true
           path: ${{ runner.temp }}/shard-files
       - name: Cover check
-        if: always()
+        if: always() && !(github.event_name == 'pull_request' && steps.facts.outputs.docs_only == 'true')
         env:
           SHARD_DIR: ${{ runner.temp }}/shard-files
         run: npm test -- "--aico-cover=$SHARD_DIR"
@@ -111,6 +192,43 @@ jobs:
         run: |
           echo "windows-test: $SHARDS_RESULT"
           test "$SHARDS_RESULT" = success
+      - name: Report red nightly
+        if: failure() && github.event_name == 'schedule'
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "nightly red: check (windows-latest) run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+
+  # Static a11y smoke on HTML pages. On a PR it runs only when diff-facts says ui_changed is
+  # exactly true; tags, the nightly, a cold override (repo variable CI_COLD=1) and non-PR
+  # events always run it.
+  a11y:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Facts: the PR base and head sha come through env and are passed quoted. Both commits are
+      # present from the full-depth checkout (no partial clone), and GIT_NO_LAZY_FETCH stops any
+      # lazy fetch. Only an exact 'true' output skips; other events and any other value run.
+      - name: Diff facts
+        id: facts
+        if: github.event_name == 'pull_request' && vars.CI_COLD != '1'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_LAZY_FETCH: "1"
+        run: node scripts/diff-facts.mjs show --base "$BASE_SHA" --head "$HEAD_SHA" --github-output
+      - name: A11y smoke
+        if: github.event_name != 'pull_request' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || vars.CI_COLD == '1' || steps.facts.outputs.ui_changed == 'true'
+        run: node scripts/a11y-smoke.mjs
 
   # Report-only: names stored Handoff fixtures that lack a required section. Never fails the build.
   golden-warn:

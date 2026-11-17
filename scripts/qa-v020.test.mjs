@@ -1371,8 +1371,8 @@ describe('AC22 CI runs the checks on three OSes with the Node LTS, in a path wit
     assert.match(job, /fail-fast: false/);
     assert.match(winJob, /runs-on: windows-latest/);
     assert.match(winJob, /fail-fast: false/);
-    assert.match(job, /run: npm test/);
-    assert.match(job, /run: npm run check/);
+    assert.match(job, /^\s*(?:- )?run: npm test\s*$/m);
+    assert.match(job, /^\s*(?:- )?run: npm run check\s*$/m);
     assert.match(winJob, /npm test/);
   });
   test('Node comes from .nvmrc and is an LTS line', () => {

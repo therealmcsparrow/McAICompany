@@ -1,0 +1,51 @@
+# Contract: route v1.0
+
+Provider: `scripts/route.mjs` (Node built-ins only; plan task P20261116.000003-T10). Data: `company/step-budgets.json`, `company/role-when.json`. Consumers: the Lead through `aico:pipeline` (`write`, `tasks`, `next`, `fix`), `aico:triage` (the route draft), `scripts/check.mjs` (`--route <file>` and the data lint; it calls `lintRoute` and `lintData` only, no route logic in Core). Uses: `diff-facts` v1.0 (`readLatest`), `work-folder-name` v3.0 (`isRunSlug`, `workParts`), `handoff` v2.8 (frontmatter `status` only), `aico-settings` v3.0 (the `protected` array of `company/model-floor.json` only).
+Rationale: the Steps a run takes are data in one ledger, so skips and merges have reasons, the Step budget is a lint, and the pipeline runs that list and nothing else. v1.0 covers the `feature` and `fix` Playbooks; others keep their prose order.
+
+## Roots (two, never mixed)
+- Plugin root: the parent of the folder that holds `scripts/route.mjs`, from `import.meta.url` (the root `scripts/settings.mjs` and `scripts/handoff-lint.mjs` read the floor from). `company/step-budgets.json`, `company/role-when.json`, `company/model-floor.json` and `agents/` are read there and nowhere else. `CLAUDE_PLUGIN_ROOT` is not read: the never-skippable list comes from the files shipped with the script, and no env value can point it at another file.
+- Product root: cwd. `.company/work/<parts>/` (ledger, facts, run Handoffs) and `.company/project.md` (`languages:`) are read there and nowhere else. A product needs no `company/` or `agents/` folder.
+- Exports take the plugin root as an argument: `main(argv, cwd, pluginRoot)` (default: the plugin root above, so a test can pass a fake one), `loadData(pluginRoot, …)`, `lintData(pluginRoot, …)`, `readProtected(pluginRoot)`. `check.mjs` passes its repo root, which is the plugin root in this repo.
+
+## Data files (tracked, plain files of at most 16 KiB, keys read with `Object.hasOwn`)
+- `company/step-budgets.json`: `{ "v": 1, "budgets": { "feature": <n>, "fix": <n> }, "source": "<one line, at most 200 characters>" }`. Each budget is a whole number 1-200: the most Steps a route of that Playbook may plan (round 0). `source` says how the numbers were measured.
+- `company/role-when.json`: `{ "v": 1, "when": { "<agents/ slug>": ["<cond>", ...] } }`. Conditions (all must hold for the Role to run): `ui_changed`, `strings_changed`, `contract_changed` (the diff-facts flag is `true`), `languages>1` (the `languages:` line of `.company/project.md` lists two or more tags). v1.0 lists `accessibility-tester`, `ui-ux-designer`, `hands-on-tester`, `persona-tester` with `["ui_changed"]` and `localizer` with `["strings_changed", "languages>1"]`.
+- Never skippable: `qa`, `security` and every protected Role. The protected list has one data source: the `protected` array of `company/model-floor.json` (`aico-settings` v3.0, same root as the two files above). `check.mjs` already lints its `PROTECTED_ROLES` against that array, and `settings.mjs` treats a floor file whose array differs from its own as unreadable (every Role protected).
+- `lintData(root, protectedRoles)` takes the list as an argument. `check.mjs` passes its `PROTECTED_ROLES`. The CLI passes `readProtected(root)`, exported by `scripts/route.mjs`, which reads the floor file's `protected` array. `scripts/route.mjs` imports neither Core nor `scripts/settings.mjs` (settings.mjs imports check.mjs, which imports route.mjs: a cycle, and `require()` of the graph fails) and holds no copy of the list.
+- `readProtected` returns the array only when the floor file is a plain file of at most 16 KiB, parses, and `protected` is an array of 1-50 distinct slugs that each have an `agents/` file. Otherwise every CLI command that loads the data files refuses with `refused: model floor unreadable` and writes nothing (fail-closed: a broken install never skips a protected Role).
+- `lintData` refuses a `when` entry for these Roles and for a slug with no `agents/` file.
+- Drift: a test pins `readProtected(<repo root>)` to both `PROTECTED_ROLES` exports (`scripts/check.mjs`, `scripts/settings.mjs`), as sets.
+
+## Route ledger
+`.company/work/<parts>/route.jsonl`, append-only, LF, one JSON object per line, a line at most 4096 bytes, a file at most 64 KiB, opened with `lstat` (a link is refused). Every `why` is 1-120 characters with no control character. Events:
+- `{"v":1,"ev":"route","playbook":"feature|fix","size":"XS|S|M|L","steps":[{"role":"<slug>","why":"..."},{"role":"code-reviewer","merge":"qa","why":"..."}],"skips":[{"role":"<slug>","why":"..."}]}` — once, first line.
+- `{"v":1,"ev":"tasks","n":<1-200>}` — the plan's task count, once, after the Plan Gate or plan-tasks `begin`.
+- `{"v":1,"ev":"step","i":<index>,"role":"<slug>","do":"run|skip|split|tasks","why":"...","facts":"<NN-role>|none"}` — one per `next`.
+- `{"v":1,"ev":"fix","role":"<slug>","why":"..."}` — a Fix-round or nit Fix Step; never counted toward the budget.
+
+## Lint (`lintRoute(route, data)`; one line per error, all errors listed)
+- `ERROR route: <playbook> over budget: budget <b>, count <c>` — count = `steps` entries (a merged pair counts once) + `tasks.n`.
+- `ERROR route: no budget for <playbook>`; `ERROR route: unknown role <slug>`; `ERROR route: <slug> may not be skipped`; `ERROR route: step <i> has no why`.
+- `ERROR route: merge needs size S` and `ERROR route: merge must be code-reviewer with qa` — the only merge is the S QA verify plus the review checklist, dispatched as one `code-reviewer` Step. A QA test-first Step is never merged.
+- A Role may appear in `steps` more than once (`fix`: `qa` reproduces, then verifies; `feature`: `architect` designs, then signs off the ruleset). A repeated Role is never a lint error.
+
+## CLI (`node <plugin root>/scripts/route.mjs <cmd>`, cwd = product repo, data files from the plugin root (`## Roots`); refusals `refused: <reason>` on stdout, exit 2; nothing written on a refusal)
+| Command | Does |
+|---|---|
+| `write <slug> <draft.json>` | Lints the draft (the `route` event without `v` and `ev`), appends it. Refused on any lint error (the lines are printed), a second `route`, or a bad slug. |
+| `tasks <slug> <n>` | Appends `tasks`, refused when the new count is over budget or `tasks` exists. |
+| `next <slug>` | Decides the next entry, appends a `step` event and prints it as one JSON line; prints `{"do":"end"}` when the list is done. |
+| `fix <slug> <role> <why>` | Appends `fix`. |
+| `dry <draft.json> --base <commit> --head <commit>` | Prints one line per entry, `<i> <role> <run|skip|split> <why>`, for the diff given (`diff-facts show`), writes nothing. Both commits are required (`--head is required`; `dry` never fills a side from `HEAD`). A preview only: its lines never set a skip, a Gate or a pass; `next` decides from `write` facts alone. |
+| `check <file>` | Lints a draft or a route ledger, prints the lines and `<n> error(s)`, exit 1 on any error. |
+
+## `next` decision (fail-open)
+1. A `tasks` placeholder entry → `do: tasks` (the Lead runs the plan's tasks through plan-tasks, then calls `next` again).
+2. A Role in `role-when.json` → read `readLatest` of the run. `skip` only when facts exist, `v` is 1, no path has kind `unknown`, and a listed condition is `false`; `why` names the condition and the facts file. No facts, a bad file, an unknown path or an unreadable `languages:` line → `run`.
+3. A merged entry → `run` as one Step only when the route size is `S`, the newest facts give `contract_changed: false`, and no earlier Handoff in the run folder has `status: needs-ceo`; else `split` (`qa`, then `code-reviewer`, two Steps, `why` names the failed test). A Handoff for this check is a plain file directly in the run folder named `<NN>-<role>.md`: `<NN>` two or three digits, not all zero, and `<role>` the slug of an `agents/` file in the plugin root. So `00-summary.md`, `00-project.md`, `plan.md`, `spec.md`, `<NN>-architect-plan.md`, `<NN>-<role>.findings.md`, `route.jsonl` and `facts/` never count, and are not read. A file that counts but is unreadable, or whose frontmatter is missing, unclosed or over the head cap → `split` (fail-closed).
+4. Anything else → `run`. `AICO_COLD` does not change Role decisions (it governs caches, `step-key` v1.0).
+A merged pair (not the wave "Merge Step" of `skills/pipeline/references/parallel.md`) is one Step: one Goal, one Handoff, the run's Context cap and forced hand-over, counted once.
+
+## Compatibility
+v1.0. A new condition, event, data key or Playbook budget is a minor bump. A rule that skips more (a new skip reason, a removed never-skippable Role, fail-closed turned fail-open) is a major bump and needs the CEO.

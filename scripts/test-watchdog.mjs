@@ -1,5 +1,5 @@
 // Per-file watchdog preloaded into every test file's child process.
-// contract: docs/contracts/test-run.md v1.1
+// contract: docs/contracts/test-run.md v1.2
 // Arms one unref'd timer of AICO_TEST_WATCHDOG_MS when this process is a test file's child
 // (the runner process has --test in its execArgv and never arms). When the timer fires the
 // child ends with exit code 1, so node fails that file by name and the other files go on.

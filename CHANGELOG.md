@@ -4,6 +4,23 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-17
+
+Rollback: node scripts/stable.mjs 0.42.1
+
+### Added
+- **Diff facts.** `node scripts/diff-facts.mjs write <slug> <NN-role>` classifies a finished Step's change once and saves it under `.company/work/<run>/facts/`. Triage, the merge test and CI read that file instead of working it out again. `ui_changed` is `false` only when every path is docs or tests; locale, theme, CSS, config, rename-only, binary and unknown paths all count as UI. `show --base <commit> --head <commit>` prints the same facts for two commits. Needs git 2.40 or later; older git refuses every command with `git failed`. Contract: `diff-facts` v1.0.
+- **Route.** Triage writes the Steps of a `feature` or `fix` run, with merges and skips and a one-line reason for each, to `route.jsonl` in the run folder. The pipeline runs that list and nothing else. `node scripts/route.mjs dry <draft.json> --base <commit> --head <commit>` previews which Roles a diff would skip; the preview sets no skip and no Gate. A Role with no `when:` entry, a path of unknown kind or missing facts always runs. `qa`, `security` and protected Roles are never skipped. The only merge is the size S QA check and the review into one `code-reviewer` Step, and it splits back into two Steps when a Contract changed or an earlier Handoff is `needs-ceo`. Contract: `route` v1.0; data in `company/step-budgets.json` and `company/role-when.json`.
+- **Step budget lint.** `node scripts/check.mjs --route <file>` fails a route that is over its Playbook's Step budget and names the Playbook, the budget and the count.
+- **stepKey.** `node scripts/step-key.mjs` builds a versioned key per Step (dispatch, model, input hashes, Node version, OS, lockfile, `check.mjs` hash, names and salted hashes of env vars) and logs every result to `step-keys.jsonl`. Env values never reach the log. Any doubt, error or missing input is a miss. stepKey reuses a Handoff only on a full key hit in a Fix round; the Ship Gate never does. `step-key.mjs stats <slug>` shows how many Steps were reused. Contract: `step-key` v1.0.
+- **Cold runs.** `node scripts/check.mjs --cold` (or `AICO_COLD=1`) reads and writes no cache. Tags, the nightly run and the Ship Gate always run cold. If a cold and a cached result differ, cold wins, the entry is purged and both results are logged.
+- **A11y smoke job.** `scripts/a11y-smoke.mjs` is a static check of tracked HTML pages for a few markup barriers, with no browser. Run it by hand with `node scripts/a11y-smoke.mjs [file.html ...]`; it exits 1 on a barrier or an unreadable file.
+
+### Changed
+- **Faster CI on pull requests.** A new push cancels the older run on the same branch; a tag run is never cancelled. On a PR the Windows tests run and the Linux and macOS `check` steps are skipped one by one, so the required check names still report success. A docs-only PR skips the test steps the same way. `setup-node` uses the npm cache; a cache miss is not a failure.
+- **Cold runs in CI.** Tags run cold on the full OS matrix (Linux, macOS, Windows). The nightly run (03:17 UTC) runs cold on Linux and Windows. The a11y job runs on a PR only when `ui_changed` is true, and always on tags and the nightly run.
+- **Contracts.** `test-run` v1.2, plus the new `diff-facts`, `route` and `step-key` above.
+
 ## [0.42.1] - 2026-11-16
 
 Rollback: node scripts/stable.mjs 0.42.0

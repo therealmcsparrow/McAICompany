@@ -1,5 +1,5 @@
 // Static reads of .github/workflows/ci.yml for the sharded Windows jobs
-// (test-run v1.1 `## CI jobs`).
+// (test-run `## CI jobs`, v1.1 shape plus step-level `if:` guards).
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -62,7 +62,7 @@ describe('windows-test job shards the tests (AC1, AC3)', () => {
   test('npm run check runs only under matrix.shard == 1, after npm test', () => {
     const s = step(win, 'npm run check');
     assert.ok(s, 'no npm run check step');
-    assert.match(s, /if: matrix\.shard == 1/);
+    assert.match(s, /\n\s+if: [^\n]*matrix\.shard == 1\b/);
     assert.equal((win.match(/npm run check/g) ?? []).length, 1);
     assert.ok(win.indexOf('npm run check') > win.indexOf('npm test'));
   });

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Structural checker for the aico plugin. Errors fail; size overruns only warn.
-import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { readdirSync, readFileSync, existsSync, statSync, lstatSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALWAYS, CEO_ONLY, loadRegistry } from './company-type.mjs';
 import { checkDrift } from './contract-drift.mjs';
 import { probe } from './drift-probe.mjs';
 import { expandGroups, parseBaseline } from './skill-catalog.mjs';
 import { createProgress } from './progress.mjs';
+import { lintData, main as routeMain } from './route.mjs';
 
 const LIMITS = { agent: 50, skill: 125, description: 1024 };
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'inherit']);
@@ -949,6 +950,8 @@ export function check(root, { today, progress } = {}) {
     checkModelFloor(root, agentFm, errors);
     checkDescriptionBudget(agentDescs, errors, notes);
     checkPersonalities(root, agentNames, errors);
+    const hasRouteData = ['step-budgets.json', 'role-when.json'].some(f => existsSync(join(root, 'company', f)));
+    if (hasRouteData || existsSync(join(root, '.claude-plugin', 'plugin.json'))) errors.push(...lintData(root, PROTECTED_ROLES));
   });
   phase('local', () => checkLocalCompany(root, todayString(today), errors, notes));
   tracker?.end();
@@ -975,9 +978,31 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) 
     console.log(`${errors.length} error(s)`);
     process.exit(errors.length ? 1 : 0);
   }
-  const root = args[0] ?? join(fileURLToPath(import.meta.url), '..', '..');
-  const { errors, warnings, notes } = check(root, { progress: total => createProgress({ command: 'aico check', total, unit: 'phases' }) });
-  [...errors, ...warnings, ...notes].forEach(l => console.log(l));
-  console.log(`${errors.length} error(s), ${warnings.length} warning(s)`);
-  process.exit(errors.length ? 1 : 0);
+  const coldAt = args.indexOf('--cold');
+  if (coldAt >= 0) {
+    args.splice(coldAt, 1);
+    process.env.AICO_COLD = '1';
+    console.error('note: cold run, AICO_COLD=1 so caches are not read');
+  }
+  if (args[0] === '--route') {
+    // The file is checked here (a plain file inside the working folder, no link); the lint is route.mjs.
+    if (!args[1] || args.length > 2) { console.error('usage: check.mjs --route <file>'); process.exit(2); }
+    const fail = why => { console.error(`refused: ${why}`); process.exit(2); };
+    const cwd = process.cwd();
+    let file;
+    try {
+      if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(args[1])) fail('bad route file path');
+      file = resolve(cwd, args[1]);
+      if (lstatSync(file).isSymbolicLink()) fail('route file is a link');
+      const rel = relative(realpathSync.native(cwd), realpathSync.native(file));
+      if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) fail('route file is outside the repo');
+    } catch { fail('route file not found'); }
+    routeMain(['check', file], cwd, join(fileURLToPath(import.meta.url), '..', '..')).then(r => { process.stdout.write(r.out); process.exitCode = r.code; });
+  } else {
+    const root = args[0] ?? join(fileURLToPath(import.meta.url), '..', '..');
+    const { errors, warnings, notes } = check(root, { progress: total => createProgress({ command: 'aico check', total, unit: 'phases' }) });
+    [...errors, ...warnings, ...notes].forEach(l => console.log(l));
+    console.log(`${errors.length} error(s), ${warnings.length} warning(s)`);
+    process.exit(errors.length ? 1 : 0);
+  }
 }

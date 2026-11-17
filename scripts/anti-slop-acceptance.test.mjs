@@ -179,7 +179,7 @@ test('AC7: the test script picks up the scanner tests and CI runs it', () => {
   for (const f of ['scripts/slop-scan.test.mjs', 'scripts/slop-catalog.test.mjs', 'scripts/voice-profile.test.mjs']) {
     assert.ok(fs.existsSync(path.join(root, f)), f);
   }
-  assert.match(read('.github/workflows/ci.yml'), /^\s*- run: npm test\s*$/m);
+  assert.match(read('.github/workflows/ci.yml'), /^\s*(?:- )?run: npm test\s*$/m);
 });
 
 function docsFixture(name, docs) {
