@@ -13,18 +13,19 @@ const homes = [];
 after(() => { for (const h of homes) fs.rmSync(h, { recursive: true, force: true }); });
 
 // Copy of the shipped tree with pins rewritten, so other Steps' pinned-file edits cannot mask the fixture result.
-function copyRoot() {
+function copyRoot(patch) {
   const dst = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-fxroot-'));
   homes.push(dst);
   for (const d of ['hooks', 'scripts', 'mods', 'skills', 'docs', 'company']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(dst, d), { recursive: true });
   for (const f of ['package.json']) if (fs.existsSync(path.join(ROOT, f))) fs.copyFileSync(path.join(ROOT, f), path.join(dst, f));
+  if (patch) patch(dst);
   const w = spawnSync(process.execPath, [path.join(dst, 'scripts', 'hook-pins.mjs'), 'write'], { encoding: 'utf8' });
   assert.equal(w.status, 0, w.stderr);
   return dst;
 }
 
-function sessionStart() {
-  const root = copyRoot();
+function sessionStart(patch) {
+  const root = copyRoot(patch);
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aico-fx-'));
   homes.push(home);
   const input = JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'fx', transcript_path: 'fx.jsonl', cwd: ROOT, source: 'startup' });
@@ -39,6 +40,16 @@ test('R-2 the shipped cap.M1 and self-protect fixtures pass the session start ch
   assert.doesNotMatch(msg, /pins-mismatch/, msg);
   assert.doesNotMatch(msg, /cap\.M1/, msg);
   assert.doesNotMatch(msg, /self-protect/, msg);
+});
+
+test('R-2 the fixture replay has its own deadline, apart from the per-call runner deadline', () => {
+  const msg = sessionStart((dst) => {
+    const f = path.join(dst, 'hooks', 'lib', 'rule-runner.mjs');
+    const src = fs.readFileSync(f, 'utf8');
+    assert.match(src, /CALL_DEADLINE_MS = 3500;/);
+    fs.writeFileSync(f, src.replace('CALL_DEADLINE_MS = 3500;', 'CALL_DEADLINE_MS = 1;'));
+  });
+  assert.doesNotMatch(msg, /fixture check failed/, msg);
 });
 
 test('R-2 the self-protect plugin-rule fixture builds its path from CLAUDE_PLUGIN_ROOT', () => {

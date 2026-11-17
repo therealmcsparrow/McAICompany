@@ -12,6 +12,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
 const SELF_EXIT_MS = 3800;
+const START_EXIT_MS = 9500;
 const MAX_TOTAL_FIXTURES = 400;
 const MAX_FIXTURE_DETAILS = 5;
 const MAX_FIXTURES = 24;
@@ -94,12 +95,15 @@ function denyOut(name, stopActive, rule, message, extra = {}) {
 const sysOf = (list) => { const t = list.filter(Boolean).join('\n'); return t.length > 0 ? t.slice(0, 2000) : null; };
 
 async function main() {
-  setTimeout(() => finish(preDeny('host', 'timeout')), SELF_EXIT_MS).unref();
+  const exitTimer = setTimeout(() => finish(preDeny('host', 'timeout')), SELF_EXIT_MS);
+  exitTimer.unref();
   const { text, over } = await readStdin();
   let peek = null;
   try { peek = JSON.parse(text); } catch { /* malformed below */ }
   const name = isObj(peek) && typeof peek.hook_event_name === 'string' ? peek.hook_event_name : null;
   const peekLead = isObj(peek) && (name !== 'PreToolUse' || !Object.hasOwn(peek, 'agent_id')) && name !== 'SubagentStop';
+  // The session start replay is bounded by its fixture count, so it gets its own, longer self-exit (the hook timeout is 10 s).
+  if (name === 'SessionStart') { clearTimeout(exitTimer); setTimeout(() => finish(null), START_EXIT_MS).unref(); }
   const guardsOff = process.env.AICO_GUARDS === 'off';
 
   let pins = checkPins(ROOT);
@@ -186,7 +190,10 @@ async function main() {
     // The snapshot is written before the fixture check, so a self-exit mid-check leaves a valid file, not none.
     if (prov) snap.writeLead(snapCtx, drift ? { ...prov, drift: true } : prov);
     if (prov && !tableError) {
-      const failed = await checkFixtures({ rows, prov, ctx, run, ev });
+      const replay = runnerLib.createRunner(ROOT, { deadlineMs: MAX_TOTAL_FIXTURES * runnerLib.ROW_TIMEOUT_MAX_MS });
+      const replayRun = (r, e, s) => replay.run({ module: r.module, export: r.export, event: e, snapshot: s, timeoutMs: r.timeoutMs });
+      let failed;
+      try { failed = await checkFixtures({ rows, prov, ctx, run: replayRun, ev }); } finally { replay.close(); }
       if (failed.rules.length > 0) {
         drift = true;
         const more = failed.details.length > 0 ? ` (${failed.details.join('; ')})` : '';
