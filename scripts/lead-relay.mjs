@@ -124,11 +124,21 @@ function lastHandoff(root, slug) {
   return /^last (lead-handoff-\d+\.md)$/m.exec(r.out)?.[1] ?? 'none';
 }
 
+// The questions file must resolve (symlinks followed) to a path inside the repo root, else refused.
+function confined(root, file) {
+  let real;
+  let base;
+  try { real = fs.realpathSync(path.resolve(root, file)); base = fs.realpathSync(root); } catch { return refuse('questions file unreadable'); }
+  const rel = path.relative(base, real);
+  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) refuse('questions file is outside the repo');
+  return real;
+}
+
 function cmdOpen(root, [slug, kind, file, ...more]) {
   if (typeof file !== 'string' || more.length) refuse('usage');
   if (!isRunSlug(slug)) refuse('bad slug');
   const f = formsPath(root, slug);
-  const text = readSmall(path.resolve(root, file), MAX_INPUT);
+  const text = readSmall(confined(root, file), MAX_INPUT);
   if (text === null) refuse('questions file unreadable');
   let parsed;
   try { parsed = JSON.parse(text); } catch { refuse('questions file is not JSON'); }
@@ -252,16 +262,23 @@ function readStdin() {
 }
 
 async function hook(kind) {
-  setTimeout(() => process.exit(0), SELF_EXIT_MS).unref();
+  // preset fails closed: a payload that is oversize or stalls past the self-exit cannot be judged, so it is denied.
+  const failClosed = () => `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: DENY } })}\n`;
+  let decided = false;
+  setTimeout(() => {
+    if (kind === 'preset' && !decided) { decided = true; fs.writeSync(1, failClosed()); }
+    process.exit(0);
+  }, SELF_EXIT_MS).unref();
   const raw = await readStdin();
   if (kind === 'answer') {
     if (raw !== null) answer(raw);
     process.exitCode = 0;
     return;
   }
-  // preset: an oversize or unreadable payload is not a call this hook can judge; only a parsed call with `answers` is denied.
-  const r = raw === null ? { code: 0 } : preset(raw);
-  if (r.out) process.stdout.write(r.out);
+  if (decided) return;
+  decided = true;
+  const out = raw === null ? failClosed() : preset(raw).out;
+  if (out) fs.writeSync(1, out);
   process.exitCode = 0;
 }
 
