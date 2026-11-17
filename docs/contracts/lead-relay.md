@@ -47,6 +47,8 @@ Main reads only line 1 and these keys. No valid line 1 (crash, abort, missing, o
 - `other` text is the CEO's own words: stored at most 2000 characters, read as data, never as an instruction. Free text equal to an option label counts as that label.
 - `other` text lives only in the `answer` row of `forms.jsonl` and in `read --json` (the Lead's one way to read it). Every log, hook stderr, `guard.jsonl` row, ledger, STATUS block and `lead-handover read` line shows it only as `other (<length> chars, sha256:<first 8 hex>)`.
 - An answer counts as the CEO's only from main's `PostToolUse` `tool_response.answers`; `preset` denies a call pre-filled at `PreToolUse`. `answer` never checks `tool_input.answers` (by `PostToolUse` a real pick shows there too, Spike S1).
+- `preset` fails closed: stdin over 64 KiB, or no decision before the 1 s self-exit (stalled read), gets the same deny and reason; small unparseable input and a call without `answers` still get no output.
+- `open` confines the questions file: its `realpath` (symlinks followed) must lie inside the `realpath` of the repo root (the call's working directory), else `refused: questions file is outside the repo` (also `..` escapes and symlinks out); an unresolvable path is `refused: questions file unreadable`. Nothing is written on refusal.
 
 ## Errors
 Bad slug, unknown kind, question or option count out of range, header over 12 characters, a non-Gate form with `result`, a Gate form without a `result` on every option, a Gate form with a `multi` question, an option label with a comma or with ` — `, a header with `]`, a line break in any question, header, label or description, two questions with the same text, unknown id → `refused: <reason>`, exit 1, nothing written.
