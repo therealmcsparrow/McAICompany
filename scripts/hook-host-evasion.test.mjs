@@ -1,6 +1,7 @@
 // Tests: evasion cases the shipped guards must deny through the real host, run against a copy of the plugin tree
 // whose pins are rewritten (so a stale pin file cannot mask the verdict). The new block fixtures are replayed
-// here, and the cases a fixture cannot hold (oversize or plugin-root cwd) are built in code.
+// here, and the cases a fixture cannot hold (oversize or plugin-root cwd) are built in code. Shell writes to
+// plugin, settings or home files pass in every session; shell writes to a run record deny.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,10 +17,14 @@ const FIXTURE_FILES = [
   ['dotenv.M-SEC1', 'block-bash-glob-variable-brace.json'],
   ['dotenv.M-SEC1', 'block-ps-get-content-star.json'],
   ['dotenv.M-SEC1', 'block-ps-get-content-star-local.json'],
-  ['self-protect.M-SEC1', 'block-bash-settings-glob-question.json'],
-  ['self-protect.M-SEC1', 'block-bash-settings-glob-posix-class.json'],
-  ['git-add.M-SEC1', 'block-ps-push-location-add.json'],
 ];
+const SP_DIR = 'self-protect.M-SEC1';
+const SP_FIXTURES = fs.readdirSync(path.join(ROOT, 'hooks', 'fixtures', SP_DIR)).filter((n) => /^(?:block|pass)-(?:bash|ps)-.+\.json$/.test(n));
+const WHO = {
+  main: {},
+  lead: { agent_id: 'lead1', agent_type: 'aico:project-manager' },
+  role: { agent_id: 'role1', agent_type: 'aico:backend-engineer' },
+};
 
 let tmp, home, project, plugin;
 
@@ -70,43 +75,106 @@ describe('evasion block fixtures through the real host', () => {
   }
 });
 
+describe('self-protect shell fixtures through the real host in main, the Lead and a Role', () => {
+  const replay = (name, who) => {
+    const { _synthetic, ...raw } = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'fixtures', SP_DIR, name), 'utf8'));
+    return host({ ...raw, ...WHO[who], cwd: fwd(project) }, project);
+  };
+  for (const name of SP_FIXTURES) {
+    for (const who of Object.keys(WHO)) {
+      if (name.startsWith('block-')) {
+        test(`${name} denies for ${who}`, () => {
+          const r = replay(name, who);
+          assert.equal(r.code, 0, r.err);
+          assert.ok(r.reason, `expected a deny, got ${r.out}`);
+          assert.ok(r.reason.startsWith(`aico guard ${SP_DIR}:`), `denied by another rule: ${r.reason}`);
+        });
+      } else {
+        test(`${name} passes for ${who}`, () => {
+          const r = replay(name, who);
+          assert.equal(r.code, 0, r.err);
+          assert.equal(r.reason, null, `unexpected deny: ${r.reason}`);
+        });
+      }
+    }
+  }
+
+  test('every shell block fixture names a run record', () => {
+    for (const name of SP_FIXTURES.filter((n) => n.startsWith('block-'))) {
+      const j = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'fixtures', SP_DIR, name), 'utf8'));
+      assert.match(j.tool_input.command, /(?:guard|forms|run-state)\.jsonl|-EncodedCommand/, name);
+    }
+  });
+
+  test('block-bash-guard-record-two-level is still a block fixture', () => {
+    assert.ok(SP_FIXTURES.includes('block-bash-guard-record-two-level.json'));
+  });
+});
+
 describe('long command lists and long targets through the real host', () => {
   const junk = (n) => Array.from({ length: n }, (_, i) => `j${i}`).join(' ');
+  const REC = '.company/work/P1/01-feature';
+  const asWho = (who, command, cwd = project) => host({ tool_name: 'Bash', tool_input: { command }, ...WHO[who] }, cwd);
 
-  test('64+ tokens with cwd in the plugin root: a redirect into hooks/rules denies', () => {
-    const r = bash(`echo ${junk(70)} x >> hooks/rules/x.mjs`, plugin);
-    assert.equal(r.code, 0, r.err);
+  for (const who of Object.keys(WHO)) {
+    test(`64+ tokens then a forms.jsonl redirect denies for ${who}`, () => {
+      const r = asWho(who, `echo ${junk(70)} x >> ${REC}/forms.jsonl`);
+      assert.equal(r.code, 0, r.err);
+      assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out);
+    });
+
+    test(`64+ tokens then a run-state.jsonl cp denies for ${who}`, () => {
+      const r = asWho(who, `echo ${junk(70)}; cp x ${REC}/run-state.jsonl`);
+      assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out);
+    });
+
+    test(`a relative write into the plugin tree with cwd in the plugin root passes for ${who}`, () => {
+      const r = asWho(who, 'echo x >> hooks/rules/x.mjs', plugin);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(r.reason, null, `unexpected deny: ${r.reason}`);
+    });
+
+    test(`64+ tokens then a settings write passes for ${who}`, () => {
+      const r = asWho(who, `echo ${junk(70)} x >> .claude/settings.json`);
+      assert.equal(r.reason, null, `unexpected deny: ${r.reason}`);
+    });
+
+    test(`a command naming hook-pins or set-mod passes for ${who}`, () => {
+      assert.equal(asWho(who, 'node scripts/hook-pins.mjs check').reason, null);
+      assert.equal(asWho(who, 'node scripts/settings.mjs set-mod switchboard enabled false').reason, null);
+    });
+
+    test(`a command over 200000 chars denies for ${who}`, () => {
+      const r = asWho(who, `echo ${'a'.repeat(200001)}`);
+      assert.equal(r.code, 0, r.err);
+      assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out.slice(0, 200));
+    });
+  }
+
+  test('Write of a plugin file still denies', () => {
+    const r = host({ tool_name: 'Write', tool_input: { file_path: fwd(path.join(plugin, 'hooks', 'rules', 'x.mjs')), content: 'x' } }, project);
     assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out);
   });
 
-  test('64+ tokens with cwd in the plugin root: a cp into hooks/rules denies', () => {
-    const r = bash(`echo ${junk(70)}; cp /etc/hosts hooks/rules/dotenv.mjs`, plugin);
+  test('Edit of a settings file still denies', () => {
+    const r = host({ tool_name: 'Edit', tool_input: { file_path: fwd(path.join(project, '.claude', 'settings.json')), old_string: 'a', new_string: 'b' } }, project);
     assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out);
   });
 
-  test('the same plugin-root write with few tokens denies', () => {
-    const r = bash('echo x >> hooks/rules/x.mjs', plugin);
-    assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out);
-  });
-
-  test('64+ tokens with cwd in the project: a settings write denies', () => {
-    const r = bash(`echo ${junk(70)} x >> .claude/settings.json`);
-    assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out);
-  });
-
-  test('a target over 4096 chars that resolves to .claude/settings.json denies', () => {
+  test('a target over 4096 chars that resolves to a run folder record denies', () => {
     const pad = 'a=b/../'.repeat(600);
-    const command = `echo y >> ${pad}${pad}.claude/settings.json`;
-    assert.ok(command.length > 4096);
-    const r = bash(command);
-    assert.equal(r.code, 0, r.err);
-    assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out.slice(0, 200));
+    for (const rec of ['guard', 'forms', 'run-state']) {
+      const r = bash(`echo y >> ${pad}${REC}/${rec}.jsonl`);
+      assert.equal(r.code, 0, r.err);
+      assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, `${rec}: ${r.out.slice(0, 200)}`);
+    }
   });
 
-  test('a target over 4096 chars that resolves into the run folder guard record denies', () => {
+  test('a target over 4096 chars that resolves to .claude/settings.json passes', () => {
     const pad = 'a=b/../'.repeat(600);
-    const r = bash(`echo y >> ${pad}.company/work/P1/01-feature/guard.jsonl`);
-    assert.match(r.reason ?? '', /^aico guard self-protect\.M-SEC1:/, r.out.slice(0, 200));
+    const r = bash(`echo y >> ${pad}${pad}.claude/settings.json`);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.reason, null, `unexpected deny: ${r.reason}`);
   });
 
   test('a long harmless command with few protected-looking words still allows in the project', () => {
@@ -153,9 +221,9 @@ describe('dotenv wildcard forms through the real host', () => {
 
 describe('quoted text piped to an interpreter keeps denying through the real host', () => {
   const payloads = [
-    [`printf '%s${BS}n' '#${BS}' 'open(".claude/settings.json","w").write("{}")' | python`, 'hash-backslash'],
-    [`printf '%s${BS}n' '#${BS}' 'open(".cl"+"aude/settings.json","w").write("{}")' | python`, 'split-literal'],
-    [`echo 'x${BS}' 'open(".claude/settings.json","w")' | node`, 'echo-node'],
+    [`printf '%s${BS}n' '#${BS}' 'open(".company/work/p1/01-feature/forms.jsonl","a").write("{}")' | python`, 'hash-backslash'],
+    [`printf '%s${BS}n' '#${BS}' 'open(".company/work/p1/01-feature/for"+"ms.jsonl","a").write("{}")' | python`, 'split-literal'],
+    [`echo 'x${BS}' 'open(".company/work/p1/01-feature/run-state.jsonl","a")' | node`, 'echo-node'],
   ];
   for (const [command, name] of payloads) {
     test(`${name} denies`, () => {
