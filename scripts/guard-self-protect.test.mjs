@@ -1,8 +1,9 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeEnv, startLead, cleanup } from '../hooks/fixtures/engine/harness.mjs';
 
 // Tests for the self-protect guard (rule self-protect.M-SEC1): file tools, shell, guard keys and evasion.
 // Seam: hooks/rules/self-protect.mjs#judge(event, snapshot) -> verdict (mod-hook v1, hook-event v1). Every
@@ -441,4 +442,193 @@ test('fixtures cover the Decided forms: file tool, redirect, PowerShell variable
   for (const re of [/settings\.mjs"? get/, /settings\.mjs"? serve/, /run-state triage/, /ledger\.mjs/, /handoff-lint/, /rule-check/, /hook-check\.mjs"? setup/])
     assert.ok(has(pass, re), `pass fixture ${re}`);
   assert.ok(pass.some((j) => j.tool_name === 'Read'), 'a Read of a protected file passes');
+});
+
+// ---------- run records: forms.jsonl, run-state.jsonl, guard.jsonl (AC7) ----------
+after(cleanup);
+const RECORDS = ['forms.jsonl', 'run-state.jsonl', 'guard.jsonl'];
+const RECORD_DIRS = ['C:/proj/.company/work/p1', 'C:/proj/.company/work/p1/01-feature'];
+const RECORD_REASON = /aico guard self-protect\.M-SEC1: run records are written by aico scripts only/;
+
+// judge level: the host fills event.protected with the record shape paths
+function withRecords(spec, opts) {
+  const e = evRaw(spec, opts);
+  for (const d of RECORD_DIRS) for (const r of RECORDS) {
+    const f = `${d}/${r}`.toLowerCase();
+    if (!e.protected.includes(f)) e.protected.push(f);
+  }
+  return deepFreeze(e);
+}
+async function recordDenies(spec, opts) {
+  const judge = await load();
+  const v = await judge(withRecords(spec, opts), SNAP);
+  assert.equal(v.v, 'deny', `deny: ${spec} ${JSON.stringify(opts)} (got ${JSON.stringify(v)})`);
+  assert.equal(v.rule, RULE);
+  assert.ok(!v.message.includes(spec), 'the deny message never echoes the input');
+}
+const REC_TARGETS = RECORD_DIRS.flatMap((d) => RECORDS.map((r) => `${d}/${r}`));
+for (const session of ['lead', 'step']) {
+  for (const tool of ['Write', 'Edit']) for (const t of REC_TARGETS) {
+    test(`AC7 deny ${tool} (${session}): ${t}`, async () => { await recordDenies(t, { tool, session }); });
+  }
+  for (const t of REC_TARGETS) {
+    test(`AC7 deny Bash writes (${session}): ${t}`, async () => {
+      await recordDenies(`echo x > ${t}`, { tool: 'Bash', session });
+      await recordDenies(`echo x >> ${t}`, { tool: 'Bash', session });
+      await recordDenies(`echo x | tee -a ${t}`, { tool: 'Bash', session });
+      await recordDenies(`cp a.json ${t}`, { tool: 'Bash', session });
+      await recordDenies(`rm ${t}`, { tool: 'Bash', session });
+    });
+    test(`AC7 deny PowerShell writes (${session}): ${t}`, async () => {
+      await recordDenies(`Set-Content ${t} x`, { tool: 'PowerShell', session });
+      await recordDenies(`Add-Content -Path ${t} -Value x`, { tool: 'PowerShell', session });
+      await recordDenies(`"x" | Out-File ${t}`, { tool: 'PowerShell', session });
+      await recordDenies(`echo x > ${t}`, { tool: 'PowerShell', session });
+    });
+  }
+}
+test('cch.M17 deny: separator, case and dot-segment variants of a record path', async () => {
+  for (const t of ['C:\\proj\\.company\\work\\p1\\forms.jsonl', 'C:/PROJ/.COMPANY/WORK/P1/RUN-STATE.JSONL',
+    'C:/proj/.company/work/p1/./01-feature/../forms.jsonl', 'C:/proj/.company//work/p1/forms.jsonl'])
+    for (const tool of ['Write', 'Edit']) await recordDenies(t, { tool });
+  await recordDenies('echo x > C:\\proj\\.company\\work\\p1\\run-state.jsonl', { tool: 'Bash' });
+  await recordDenies('Set-Content C:\\PROJ\\.company\\work\\p1\\FORMS.JSONL x', { tool: 'PowerShell' });
+});
+test('AC7 pass: other files in a run folder and a record name elsewhere', async () => {
+  const judge = await load();
+  for (const t of ['C:/proj/.company/work/p1/01-qa.md', 'C:/proj/.company/work/p1/forms.json', 'C:/proj/.company/work/p1/run-state.jsonl.bak',
+    'C:/proj/src/forms.jsonl', 'C:/proj/.company/work/p1/xforms.jsonl'])
+    for (const tool of ['Write', 'Edit']) assert.deepEqual(await judge(withRecords(t, { tool }), SNAP), { v: 'allow' }, `${tool} ${t}`);
+});
+test('AC7 pass: reading a run record', async () => {
+  const judge = await load();
+  for (const t of REC_TARGETS) for (const tool of ['Read', 'Grep']) assert.deepEqual(await judge(withRecords(t, { tool }), SNAP), { v: 'allow' }, `${tool} ${t}`);
+  assert.deepEqual(await judge(withRecords('cat C:/proj/.company/work/p1/forms.jsonl', { tool: 'Bash' }), SNAP), { v: 'allow' });
+});
+
+// ---------- run records through the host (AC7: main, Lead, Role; below the fast floor; guards off) ----------
+const REPO_RULES = path.join(root, 'hooks', 'rules.json');
+const LEAD_ID = 'agent-lead1';
+const ROLE_ID = 'agent-role1';
+const HOST_REC = ['forms.jsonl', 'run-state.jsonl', 'guard.jsonl'];
+const slashOf = (p) => p.replace(/\\/g, '/');
+
+async function hostEnv({ run = false } = {}) {
+  const rows = JSON.parse(fs.readFileSync(REPO_RULES, 'utf8')).filter((r) => r.rule === 'self-protect.M-SEC1');
+  assert.equal(rows.length, 1, 'hooks/rules.json has the self-protect.M-SEC1 row');
+  const env = makeEnv();
+  for (const rel of ['hooks/rules/self-protect.mjs', 'hooks/manifests/self-protect.json']) {
+    fs.mkdirSync(path.dirname(path.join(env.plugin, rel)), { recursive: true });
+    fs.copyFileSync(path.join(root, rel), path.join(env.plugin, rel));
+  }
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
+  env.repin();
+  const folder = path.join(env.project, '.company', 'work', 'P20261117.000099', '01-feature');
+  if (run) await env.startRun('P20261117.000099/01-feature');
+  else fs.mkdirSync(folder, { recursive: true });
+  startLead(env);
+  for (const [id, type] of [[LEAD_ID, 'aico:project-manager'], [ROLE_ID, 'aico:qa']])
+    assert.equal(env.run(env.event('SubagentStart', { agent_id: id, agent_type: type })).code, 0);
+  env.recordPath = (name) => path.join(folder, name);
+  return env;
+}
+function callOf(env, who, tool, target) {
+  const input = tool === 'Write' ? { file_path: target, content: 'x' }
+    : tool === 'Edit' ? { file_path: target, old_string: 'a', new_string: 'b' }
+      : tool === 'Bash' ? { command: `echo x > "${slashOf(target)}"` }
+        : { command: `Set-Content -Path "${target}" -Value x` };
+  const over = { tool_name: tool, tool_input: input };
+  if (who === 'lead') Object.assign(over, { agent_id: LEAD_ID, agent_type: 'aico:project-manager' });
+  if (who === 'role') Object.assign(over, { agent_id: ROLE_ID, agent_type: 'aico:qa' });
+  return env.event('PreToolUse', over);
+}
+const WHO = ['main', 'lead', 'role'];
+const TOOLS = ['Write', 'Edit', 'Bash', 'PowerShell'];
+function assertDeny(env, r, re, label) {
+  assert.equal(r.code, 0, `${label}: ${r.err}`);
+  const reason = env.reason(r);
+  assert.ok(reason, `${label}: expected a deny, got ${r.out} ${r.err}`);
+  if (re) assert.match(reason, re, label);
+  return reason;
+}
+const OFF = { env: { AICO_GUARDS: 'off' } };
+
+for (const run of [false, true]) {
+  test(`AC7 host deny: record write by Write, Edit, Bash, PowerShell for main, Lead and Role (${run ? 'active run' : 'no run, below the fast floor'})`, async () => {
+    const env = await hostEnv({ run });
+    for (const who of WHO) for (const tool of TOOLS) for (const name of HOST_REC)
+      assertDeny(env, env.run(callOf(env, who, tool, env.recordPath(name))), /self-protect\.M-SEC1/, `${who} ${tool} ${name}`);
+  });
+}
+test('AC7 host deny: AICO_GUARDS=off, main and the Lead, with the record reason', async () => {
+  const env = await hostEnv();
+  for (const who of ['main', 'lead']) for (const tool of TOOLS) for (const name of HOST_REC)
+    assertDeny(env, env.run(callOf(env, who, tool, env.recordPath(name)), OFF), RECORD_REASON, `${who} ${tool} ${name} off`);
+});
+test('AC7 host deny: AICO_GUARDS=off never lets a Role write a record', async () => {
+  const env = await hostEnv();
+  for (const tool of TOOLS) for (const name of HOST_REC)
+    assertDeny(env, env.run(callOf(env, 'role', tool, env.recordPath(name)), OFF), /self-protect\.M-SEC1/, `role ${tool} ${name} off`);
+});
+test('AC7 host deny: a broken snapshot does not open a record write (with and without off)', async () => {
+  const env = await hostEnv();
+  fs.writeFileSync(env.leadFile, '{not json');
+  fs.writeFileSync(env.stepFile(ROLE_ID), '{not json');
+  for (const who of WHO) for (const tool of TOOLS) {
+    assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('forms.jsonl'))), null, `${who} ${tool} broken snapshot`);
+    if (who !== 'role')
+      assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('run-state.jsonl')), OFF), RECORD_REASON, `${who} ${tool} broken snapshot off`);
+  }
+});
+test('AC7 host deny: a missing snapshot does not open a record write under off', async () => {
+  const env = await hostEnv();
+  fs.rmSync(env.leadFile, { force: true });
+  for (const tool of TOOLS)
+    assertDeny(env, env.run(callOf(env, 'main', tool, env.recordPath('guard.jsonl')), OFF), RECORD_REASON, `main ${tool} no snapshot off`);
+});
+test('AC7 host deny: an unreadable rule table does not open a record write (cch.M-SEC3)', async () => {
+  const env = await hostEnv();
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), '{not json');
+  for (const who of WHO) for (const tool of TOOLS) {
+    assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('forms.jsonl'))), null, `${who} ${tool} bad table`);
+    if (who !== 'role')
+      assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('forms.jsonl')), OFF), null, `${who} ${tool} bad table off`);
+  }
+});
+test('AC7 host deny: the record check needs neither the rule table nor the snapshot under off', async () => {
+  const env = await hostEnv();
+  fs.rmSync(path.join(env.plugin, 'hooks', 'rules.json'), { force: true });
+  fs.rmSync(env.leadFile, { force: true });
+  for (const tool of TOOLS)
+    assertDeny(env, env.run(callOf(env, 'lead', tool, env.recordPath('run-state.jsonl')), OFF), null, `lead ${tool} nothing readable off`);
+});
+if (process.platform === 'win32') {
+  test('cch.M17 host deny: backslash and upper-case spelling of a record path', async () => {
+    const env = await hostEnv();
+    const odd = env.recordPath('forms.jsonl').replace(/\//g, '\\').toUpperCase();
+    for (const who of WHO) for (const tool of ['Write', 'Edit'])
+      assertDeny(env, env.run(callOf(env, who, tool, odd)), /self-protect\.M-SEC1/, `${who} ${tool} upper`);
+    for (const tool of ['Write', 'Edit'])
+      assertDeny(env, env.run(callOf(env, 'main', tool, odd), OFF), RECORD_REASON, `main ${tool} upper off`);
+  });
+}
+test('AC7 host pass: AICO_GUARDS=off lets main and the Lead write a settings file; the rest of off is unchanged', async () => {
+  const env = await hostEnv();
+  const settings = path.join(env.project, '.company', 'settings.json');
+  for (const who of ['main', 'lead']) for (const tool of ['Write', 'Edit']) {
+    const r = env.run(callOf(env, who, tool, settings), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `${who} ${tool} settings under off passes: ${r.out}`);
+  }
+  assertDeny(env, env.run(callOf(env, 'main', 'Write', settings)), /self-protect\.M-SEC1/, 'settings write with guards on');
+  assertDeny(env, env.run(callOf(env, 'role', 'Write', settings), OFF), /self-protect\.M-SEC1/, 'role settings write under off');
+});
+test('AC7 host pass: an ordinary write in the run folder passes with guards on and off', async () => {
+  const env = await hostEnv();
+  const note = env.recordPath('01-qa.md');
+  for (const extra of [{}, OFF]) {
+    const r = env.run(callOf(env, 'main', 'Write', note), extra);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, r.out);
+  }
 });
