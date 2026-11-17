@@ -8,6 +8,10 @@ const MESSAGE = 'aico guard self-protect.M-SEC1: plugin and settings files are p
 const RECORD_MESSAGE = 'run records are written by aico scripts only';
 const RECORD_WORDS = ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl'];
 const RECORD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
+const ANSWER_REASON = 'the CEO answer hook runs from the harness only, not from a shell (CEO answer)';
+const ANSWER_MESSAGE = `aico guard ${RULE}: ${ANSWER_REASON}`;
+const RELAY_WORD = /^lead-relay(?:\.mjs)?$/;
+const ANSWER_TEXT = /lead-relay[\s\S]*\banswer\b|\banswer\b[\s\S]*lead-relay/i;
 const SHELL_MESSAGE = `aico guard ${RULE}: ${RECORD_MESSAGE}`;
 const RECORD_TEXT = /(?:^|\/)\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
 const MAX_COMMAND_CHARS = 200000;
@@ -585,22 +589,22 @@ function* psHereStrings(text) {
   }
 }
 
-function stdinProgramDenied(text) {
+function stdinProgramDenied(text, programTest = programDenied) {
   if (!/<<|@["']|\|/.test(text)) return false;
   const headWords = (head) => head.split(/[\s;|&()]+/).filter(Boolean);
   for (const m of text.matchAll(HEREDOC)) {
     const lineStart = text.lastIndexOf('\n', m.index) + 1;
     const head = `${text.slice(lineStart, m.index)} ${m[3]}`;
-    if (headWords(head).some(isStdinRunner) && programDenied(m[4])) return true;
+    if (headWords(head).some(isStdinRunner) && programTest(m[4])) return true;
   }
   for (const m of text.matchAll(HERESTRING)) {
-    if (headWords(m[1]).some(isStdinRunner) && programDenied(m[2])) return true;
+    if (headWords(m[1]).some(isStdinRunner) && programTest(m[2])) return true;
   }
   for (const [body, rest] of psHereStrings(text)) {
-    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
+    if (headWords(rest).some(isStdinRunner) && programTest(body)) return true;
   }
   for (const [body, rest] of pipedTexts(text)) {
-    if (headWords(rest).some(isStdinRunner) && programDenied(body)) return true;
+    if (headWords(rest).some(isStdinRunner) && programTest(body)) return true;
   }
   return false;
 }
@@ -665,6 +669,30 @@ function analyze(ctx, text, powershell, depth, acc) {
   return subshells.some((s) => analyze(ctx, s, powershell, depth + 1, acc));
 }
 
+// The lead-relay `answer` adapter records the CEO's pick, so a shell never runs it: a statement that runs the
+// script with the word `answer`, an inline interpreter program naming both, or a program fed on stdin that does.
+function answerStatement(words, depth) {
+  const at = words.findIndex((w) => RELAY_WORD.test(baseOf(w)));
+  if (at !== -1 && words.slice(at + 1).some((w) => w.toLowerCase() === 'answer')) return true;
+  return depth >= 0 && inlineProgram(words) && ANSWER_TEXT.test(words.join(' '));
+}
+
+function inlineProgram(words) {
+  for (let i = 0; i < words.length; i++) {
+    const flag = INTERPRETERS[baseOf(words[i])];
+    if (flag && words.slice(i + 1).some((a) => flag.test(a))) return true;
+  }
+  return false;
+}
+
+function answerDenied(command, powershell, depth = 0) {
+  if (stdinProgramDenied(command, (body) => ANSWER_TEXT.test(body))) return true;
+  const subshells = [];
+  const stmts = tokenize(stripHeredocs(command), powershell, (s) => subshells.push(s));
+  if (stmts.some(({ words }) => answerStatement(words, depth))) return true;
+  return depth < MAX_DEPTH && subshells.some((s) => answerDenied(s, powershell, depth + 1));
+}
+
 function judgeShell(ctx, command, powershell) {
   const acc = { cd: false, cdProt: false, writes: [], variants: 0 };
   if (stdinProgramDenied(command) || dotnetWriteDenied(command)) return true;
@@ -689,6 +717,7 @@ export function judge(event) {
   if (!tool || typeof tool !== 'object') return allow();
   if (FILE_TOOLS.has(tool.name)) return judgeFile(makeContext(event), tool) ? deny() : allow();
   if (!SHELL_TOOLS.has(tool.name) || typeof tool.command !== 'string') return allow();
+  if (tool.command.length <= MAX_COMMAND_CHARS && answerDenied(tool.command, tool.name === 'PowerShell')) return { v: 'deny', rule: RULE, message: ANSWER_MESSAGE };
   if (tool.command.length > MAX_COMMAND_CHARS || judgeShell(makeContext(event, true), tool.command, tool.name === 'PowerShell')) return { v: 'deny', rule: RULE, message: SHELL_MESSAGE };
   return allow();
 }
@@ -700,6 +729,7 @@ export function judgeRecord(event) {
   const ctx = makeContext(event, true);
   if (FILE_TOOLS.has(tool.name)) return judgeFile(ctx, tool) ? { v: 'deny', rule: RULE, message: RECORD_MESSAGE } : allow();
   if (!SHELL_TOOLS.has(tool.name) || typeof tool.command !== 'string') return allow();
+  if (tool.command.length <= MAX_COMMAND_CHARS && answerDenied(tool.command, tool.name === 'PowerShell')) return { v: 'deny', rule: RULE, message: ANSWER_REASON };
   if (tool.command.length > MAX_COMMAND_CHARS || judgeShell(ctx, tool.command, tool.name === 'PowerShell')) return { v: 'deny', rule: RULE, message: RECORD_MESSAGE };
   return allow();
 }
