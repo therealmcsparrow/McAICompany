@@ -197,8 +197,9 @@ function toolOf(name, input, ctx, cwd) {
       }
     }
   }
+  const leadTarget = (name === 'Agent' || name === 'Task') && /(^|:)project-manager$/.test((str(input, 'subagent_type') ?? '').toLowerCase());
   const background = BG_TOOLS.has(name) && own(input, 'run_in_background') && input.run_in_background === true;
-  return { name, command, paths, model, subagentType, outputRole, background };
+  return { name, command, paths, model, subagentType, outputRole, background, leadTarget };
 }
 
 const usageTotal = (u) => {
