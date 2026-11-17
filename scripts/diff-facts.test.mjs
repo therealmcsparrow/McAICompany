@@ -1199,3 +1199,114 @@ test('write path sets and attributes', async t => {
   await hook('clean', 'filter=evil', 'filter.evil.clean');
   await hook('external-diff', 'diff=evil', 'diff.external');
 });
+
+// ---------------------------------------------------------------- blob probe reads (git.M-SEC4 batch and prefix readings)
+
+const PROBE_GIT = fileURLToPath(new URL('../tests/contracts/diff-facts/probe-git.mjs', import.meta.url));
+
+// One changed file of `size` bytes on both sides; returns the show call through the tampering runner.
+function probeShow(mode, size, extra = {}) {
+  const s = sandbox();
+  const body = n => `${'x'.repeat(n - 1)}\n`;
+  s.put('src/a.mjs', body(size));
+  s.put('README.md', '# r\n');
+  const base = s.commit('base');
+  s.put('src/a.mjs', `${body(size).slice(0, -1)}y\n`);
+  const head = s.commit('head');
+  const r = runScript(s, PROBE_GIT, ['show', '--base', base, '--head', head], { DF_MODE: mode, ...extra });
+  return { s, r };
+}
+
+test('cat-file blob passes --end-of-options before the spec', () => {
+  const s = sandbox();
+  s.put('src/a.mjs', `${'x'.repeat(5000)}\n`);
+  const base = s.commit('base');
+  s.put('src/a.mjs', `${'x'.repeat(5000)}y\n`);
+  const head = s.commit('head');
+  const log = join(s.root, 'blob.log');
+  const r = runScript(s, PROBE_GIT, ['show', '--base', base, '--head', head], { DF_MODE: 'log', DF_LOG: log });
+  assert.equal(r.status, 0, `${r.stdout} ${r.stderr}`);
+  const calls = readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(calls.length >= 1, 'a blob over the small size was read with cat-file blob');
+  for (const a of calls) {
+    const i = a.indexOf('blob');
+    assert.equal(a[i + 1], '--end-of-options', JSON.stringify(a));
+    assert.match(a[i + 2], /^[0-9a-f]{40,64}:/, JSON.stringify(a));
+    assert.equal(a.length, i + 3, JSON.stringify(a));
+  }
+});
+
+test('a blob read that git cap-stops: counts only with 8000 bytes and a sized length over 8000', async t => {
+  await t.test('control: stop with 8192 bytes of a 20000-byte blob is the read, text', () => {
+    const { r } = probeShow('blob-enobufs', 20000, { DF_LEN: '8192' });
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    assert.equal(kindsOf(JSON.parse(r.stdout))['src/a.mjs'], 'code');
+  });
+  await t.test('stop with 100 bytes (short, e.g. stderr overflow) is refused', () => {
+    const { r } = probeShow('blob-enobufs', 20000, { DF_LEN: '100' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('stop with 0 stdout bytes is refused', () => {
+    const { r } = probeShow('blob-enobufs', 20000, { DF_LEN: '0' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('stop with 7999 bytes is refused', () => {
+    const { r } = probeShow('blob-enobufs', 20000, { DF_LEN: '7999' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('stop on a blob sized 5000 (not over 8000) is refused even with 8000 bytes', () => {
+    const { r } = probeShow('blob-enobufs', 5000, { DF_LEN: '8000' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('only the first 8000 bytes decide: a NUL at index 8100 stays text', () => {
+    const { r } = probeShow('blob-enobufs', 20000, { DF_LEN: '8192', DF_NUL: '8100' });
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    assert.equal(kindsOf(JSON.parse(r.stdout))['src/a.mjs'], 'code');
+  });
+  await t.test('a NUL at index 7999 is binary', () => {
+    const { r } = probeShow('blob-enobufs', 20000, { DF_LEN: '8192', DF_NUL: '7999' });
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+    assert.equal(kindsOf(JSON.parse(r.stdout))['src/a.mjs'], 'binary');
+  });
+});
+
+test('a blob read that ends on its own must return exactly the sized length', async t => {
+  await t.test('control: 5000 bytes for a 5000-byte blob', () => {
+    const { r } = probeShow('blob-exit', 5000, { DF_LEN: '5000' });
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+  });
+  await t.test('4999 bytes for a 5000-byte blob is refused', () => {
+    const { r } = probeShow('blob-exit', 5000, { DF_LEN: '4999' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('5001 bytes for a 5000-byte blob is refused', () => {
+    const { r } = probeShow('blob-exit', 5000, { DF_LEN: '5001' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('0 bytes for a 5000-byte blob is refused', () => {
+    const { r } = probeShow('blob-exit', 5000, { DF_LEN: '0' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+  await t.test('a normal exit with fewer bytes than sized, for a blob over 8000, is refused', () => {
+    const { r } = probeShow('blob-exit', 20000, { DF_LEN: '8000' });
+    assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+  });
+});
+
+test('each --batch header must equal its --batch-check line', async t => {
+  await t.test('control: untouched batch output gives facts', () => {
+    const { r } = probeShow('none', 100);
+    assert.equal(r.status, 0, `${r.stdout.slice(0, 200)} ${r.stderr.slice(0, 200)}`);
+  });
+  for (const [mode, what] of [
+    ['batch-id', 'a different object id'],
+    ['batch-size', 'a different size (framing still valid)'],
+    ['batch-type', 'a different type'],
+    ['batch-missing', 'a missing header'],
+  ]) {
+    await t.test(`${what} is refused`, () => {
+      const { r } = probeShow(mode, 100);
+      assert.equal(refused(r), true, `${r.status} ${r.stdout.slice(0, 200)}`);
+    });
+  }
+});
