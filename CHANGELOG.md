@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-17
+
+Rollback: node scripts/stable.mjs 0.42.1
+
 ### Added
 - **Diff facts.** `node scripts/diff-facts.mjs write <slug> <NN-role>` classifies a finished Step's change once and saves it under `.company/work/<run>/facts/`. Triage, the merge test and CI read that file instead of working it out again. `ui_changed` is `false` only when every path is docs or tests; locale, theme, CSS, config, rename-only, binary and unknown paths all count as UI. `show --base <commit> --head <commit>` prints the same facts for two commits. Needs git 2.40 or later; older git refuses every command with `git failed`. Contract: `diff-facts` v1.0.
 - **Route.** Triage writes the Steps of a `feature` or `fix` run, with merges and skips and a one-line reason for each, to `route.jsonl` in the run folder. The pipeline runs that list and nothing else. `node scripts/route.mjs dry <draft.json> --base <commit> --head <commit>` previews which Roles a diff would skip; the preview sets no skip and no Gate. A Role with no `when:` entry, a path of unknown kind or missing facts always runs. `qa`, `security` and protected Roles are never skipped. The only merge is the size S QA check and the review into one `code-reviewer` Step, and it splits back into two Steps when a Contract changed or an earlier Handoff is `needs-ceo`. Contract: `route` v1.0; data in `company/step-budgets.json` and `company/role-when.json`.
