@@ -362,7 +362,15 @@ export async function normalize(raw, ctx) {
     else if (tp && tp.endsWith('.jsonl')) usage = readUsage(path.join(tp.slice(0, -'.jsonl'.length), 'subagents', `agent-${raw.agent_id}.jsonl`), true);
   }
   const mainModel = session === 'lead' && tool && (tool.name === 'Agent' || tool.name === 'Task') ? usage.model : null;
-  const root = projectRoot(cwd);
+  // A caller-owned Map keeps the per-cwd lookups for one replay; without it every call reads the disk.
+  const memo = ctx.memo instanceof Map ? ctx.memo : null;
+  let hit = memo ? memo.get(cwd) : undefined;
+  if (!hit) {
+    const r = projectRoot(cwd);
+    hit = { root: r, base: protectedPaths(ctx, r, worktreeMain(cwd)) };
+    if (memo) memo.set(cwd, hit);
+  }
+  const root = hit.root;
   const event = {
     v: 1, event: name, session, sessionKey, agentKey, agentType: hasAgent ? str(raw, 'agent_type') : null,
     tool,
@@ -373,7 +381,7 @@ export async function normalize(raw, ctx) {
       subagentModel: envStr(ctx.env, 'CLAUDE_CODE_SUBAGENT_MODEL'),
       subagentModelForce: envStr(ctx.env, 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE')
     },
-    protected: protectedPaths(ctx, root, worktreeMain(cwd)),
+    protected: [...hit.base],
     run: null,
     drift,
     stopHookActive: name === 'SubagentStop' && typeof raw.stop_hook_active === 'boolean' ? raw.stop_hook_active : null

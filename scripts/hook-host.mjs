@@ -306,6 +306,7 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
     if (details.length < MAX_FIXTURE_DETAILS) details.push(`${rule}/${name}: ${typeof word === 'string' && /^[a-z-]{1,16}$/.test(word) ? word : 'error'}`);
   };
   let seen = 0;
+  const memo = new Map();
   for (const r of rows.filter((x) => x.kind === 'guard')) {
     const dir = path.join(ROOT, 'hooks', 'fixtures', r.rule);
     let names = [];
@@ -321,7 +322,7 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
         // `_synthetic` is the fixtures' own channel for state the host reads from disk (session, tokens, run);
         // it is stripped before normalize, so a renamed real field still drifts.
         const { _synthetic: syn, ...payload } = JSON.parse(fs.readFileSync(f, 'utf8'));
-        const norm = await ev.normalize(payload, { ...ctx, resolveRun: null });
+        const norm = await ev.normalize(payload, { ...ctx, resolveRun: null, memo });
         if (!norm.ok || norm.event.drift.length > 0) throw Object.assign(new Error('payload'), { word: 'payload' });
         let fe = norm.event;
         if (syn && typeof syn === 'object') {
