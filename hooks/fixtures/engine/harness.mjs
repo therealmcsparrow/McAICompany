@@ -52,6 +52,11 @@ function buildTemplate() {
     fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'self-protect.mjs'), path.join(t, 'hooks', 'rules', 'self-protect.mjs'));
   }
+  // The guards-off host path imports hooks/rules/dotenv.mjs and fails closed without it.
+  if (fs.existsSync(path.join(REPO, 'hooks', 'rules', 'dotenv.mjs'))) {
+    fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'dotenv.mjs'), path.join(t, 'hooks', 'rules', 'dotenv.mjs'));
+  }
   fs.mkdirSync(path.join(t, 'company'), { recursive: true });
   fs.copyFileSync(path.join(REPO, 'company', 'model-floor.json'), path.join(t, 'company', 'model-floor.json'));
   template = t;

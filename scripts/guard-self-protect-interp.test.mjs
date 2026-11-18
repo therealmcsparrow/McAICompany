@@ -244,3 +244,43 @@ test('nested -c / double-encoded -enc that name no record allow (218 R-3)', () =
   allowed('PowerShell', `pwsh -enc ${b64(`pwsh -enc ${ok}`)}`);
   allowed('Bash', `pwsh -c "Write-Output 1"`);
 });
+
+// 229 R-3: nesting past the depth limit, or an inline -c program at the limit, denies a run-record write (fail closed).
+const { judgeRecord } = await import(url('hooks/rules/self-protect.mjs'));
+const deniedBoth = (tool, command) => {
+  denied(tool, command);
+  for (const session of SESSIONS) assert.equal(judgeRecord(ev(tool, command, session)).v, 'deny', `judgeRecord deny (${session}): ${command}`);
+};
+const allowedBoth = (tool, command) => {
+  allowed(tool, command);
+  for (const session of SESSIONS) assert.equal(judgeRecord(ev(tool, command, session)).v, 'allow', `judgeRecord allow (${session}): ${command}`);
+};
+const wrapEnc = (n, inner) => { let t = inner; for (let i = 0; i < n; i++) t = `pwsh -enc ${b64(t)}`; return t; };
+
+test('5- and 6-layer pwsh -enc around a forms.jsonl write denies in judge and judgeRecord (229)', () => {
+  const write = `Set-Content "${REC}/forms.jsonl" "{}"`;
+  for (const shell of ['PowerShell', 'Bash']) for (const n of [4, 5, 6]) deniedBoth(shell, wrapEnc(n, write));
+});
+
+test('an inline -c program at the depth limit denies (229, fail closed)', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    deniedBoth(shell, wrapEnc(3, 'pwsh -c "Write-Output 1"'));
+    deniedBoth(shell, wrapEnc(3, 'python3 -c "print(1)"'));
+  }
+});
+
+test('a missing or non-base64 -enc payload denies at any depth (229)', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of ['pwsh -enc', 'pwsh -enc !!!', 'pwsh -EncodedCommand:***', wrapEnc(1, 'Write-Output 1') + ' ; pwsh -enc']) deniedBoth(shell, cmd);
+    deniedBoth(shell, `pwsh -c "pwsh -enc !!!"`);
+  }
+});
+
+test('shallow harmless nesting and odd-length -EncodedCommand AAAA still allow (229)', () => {
+  const ok = b64('Write-Output 1');
+  for (const shell of ['PowerShell', 'Bash']) {
+    allowedBoth(shell, wrapEnc(2, 'Write-Output 1'));
+    allowedBoth(shell, 'pwsh -EncodedCommand AAAA');
+    allowedBoth(shell, `pwsh -enc ${ok}`);
+  }
+});

@@ -33,6 +33,7 @@ export async function capEnv({ cap, run = true, slug = SLUG } = {}) {
   const put = (rel) => { fs.mkdirSync(path.dirname(path.join(env.plugin, rel)), { recursive: true }); fs.copyFileSync(path.join(REPO, rel), path.join(env.plugin, rel)); };
   put('hooks/rules/cap.mjs');
   put('hooks/rules/self-protect.mjs'); // the host imports it from the plugin root and fails closed without it
+  put('hooks/rules/dotenv.mjs'); // the guards-off host path imports it and fails closed without it
   put('hooks/manifests/cap.json');
   fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
   env.repin();

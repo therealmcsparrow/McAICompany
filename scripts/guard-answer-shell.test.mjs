@@ -114,3 +114,37 @@ for (const name of ['Bash', 'PowerShell']) {
     ]) for (const v of verdicts(name, cmd)) assert.equal(v.v, 'allow', cmd);
   });
 }
+
+// 229 R-3: at the nesting depth limit a still-decodable -enc payload denies (fail closed), in judge and judgeRecord.
+const layers = (n, inner) => { let t = inner; for (let i = 0; i < n; i++) t = `pwsh -enc ${b64(t)}`; return t; };
+for (const name of ['Bash', 'PowerShell']) {
+  for (const n of [4, 5, 6]) {
+    test(`${name} denies ${n}-layer pwsh -enc around a relay answer call (229)`, () => {
+      for (const v of verdicts(name, layers(n, NEST_ANSWER))) assert.equal(v.v, 'deny', `${n} layers`);
+    });
+    test(`${name} denies ${n}-layer pwsh -enc around a harmless payload at the depth limit (229, fail closed)`, () => {
+      for (const v of verdicts(name, layers(n, 'Write-Output ok'))) assert.equal(v.v, 'deny', `${n} layers`);
+    });
+  }
+  test(`${name} still passes a 2-layer pwsh -enc around a harmless payload (229)`, () => {
+    for (const v of verdicts(name, layers(2, 'Write-Output ok'))) assert.equal(v.v, 'allow');
+  });
+  // 229 R-3: a missing, empty or non-base64 -enc payload cannot be read, so it denies.
+  const BAD = [
+    'pwsh -enc', 'pwsh -EncodedCommand', 'pwsh -enc ""', 'pwsh -enc !!!', 'pwsh -enc "not base64 at all"',
+    'pwsh -enc not_base64$', 'pwsh -EncodedCommand:!!!', 'powershell -enc -NoProfile', 'pwsh /enc ***', 'pwsh –enc ###',
+  ];
+  for (const cmd of BAD) {
+    test(`${name} denies an unreadable -enc payload (229): ${cmd}`, () => {
+      for (const v of verdicts(name, cmd)) assert.equal(v.v, 'deny', cmd);
+    });
+  }
+  test(`${name} passes an odd-length base64 -EncodedCommand AAAA (229)`, () => {
+    for (const v of verdicts(name, 'pwsh -EncodedCommand AAAA')) assert.equal(v.v, 'allow');
+  });
+  test(`${name} passes a pwsh call without an encoded flag (229)`, () => {
+    for (const cmd of ['pwsh -NoProfile -File x.ps1', 'pwsh -ExecutionPolicy Bypass -File x.ps1']) {
+      for (const v of verdicts(name, cmd)) assert.equal(v.v, 'allow', cmd);
+    }
+  });
+}
