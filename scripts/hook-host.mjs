@@ -121,6 +121,12 @@ async function main() {
     if (guardsOff && peekLead) {
       // The pinned rule cannot be trusted, so a call that names a run record is denied by text alone.
       if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
+      // The same holds for the .env read check and the answer shell block: text only, no pinned module.
+      if (name === 'PreToolUse') {
+        const envHit = [...text.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
+        if (envHit) return finish(preDeny('dotenv.M-SEC1', '.env files are not read or written'));
+        if (/lead-relay/i.test(text) && /\banswer\b/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
+      }
       return finish(null);
     }
     if (name === 'SubagentStart' || name === 'SubagentStop') return finish(null);
