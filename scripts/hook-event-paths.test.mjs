@@ -49,9 +49,10 @@ test('ctx.memo keeps protected per cwd for one Map only and never aliases the ca
     assert.ok(fresh.event.protected.includes(rec('P2', '01-b')));
     const extra = path.join(tmp, '.company', 'work', 'X', 'guard.jsonl');
     const w = await normalize(pre('Write', { file_path: extra, content: 'x' }, tmp), mk({ memo }));
-    assert.ok(w.event.protected.includes(fold(extra)));
+    const extraReal = path.join(fs.realpathSync.native(tmp), '.company', 'work', 'X', 'guard.jsonl');
+    assert.ok(w.event.protected.includes(fold(extraReal)));
     const again = await normalize(pre('Read', { file_path: 'a.txt' }, tmp), mk({ memo }));
-    assert.ok(!again.event.protected.includes(fold(extra)));
+    assert.ok(!again.event.protected.includes(fold(extraReal)));
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
