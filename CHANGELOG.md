@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.44.1] - 2026-11-18
+
+Rollback: node scripts/stable.mjs 0.44.0
+
+### Fixed
+- **Run-stage accepts `shipped`.** `shipped` is now a valid final close-out stage in a run record, so a finished run no longer fails the stage check. The dashboard maps `shipped` to the ship-gate column. Contracts: `run-stage` v1.2 and `dashboard` v2.2.
+
 ## [0.44.0] - 2026-11-18
 
 Rollback: node scripts/stable.mjs 0.43.0

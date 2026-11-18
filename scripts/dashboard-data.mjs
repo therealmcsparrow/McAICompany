@@ -108,6 +108,7 @@ async function buildCard(root, entry, view, now, deps) {
   else {
     const st = safe(() => deps.readStage(root, slug), null);
     if (st?.state === 'recorded' && STAGE_COLUMNS.has(st.stage)) column = st.stage;
+    else if (st?.state === 'recorded' && st.stage === 'shipped') column = 'ship-gate';
     else {
       column = gateColumn(src);
       stageNote = 'stage not recorded';

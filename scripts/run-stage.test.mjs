@@ -152,7 +152,8 @@ describe('set and show', () => {
   test('every stage is accepted and the last line wins', () => {
     const root = repo();
     for (const s of STAGES) assert.equal(run(root, 'set', SLUG, s).code, 0);
-    assert.equal(readStage(root, SLUG).stage, 'ship-gate');
+    assert.equal(readStage(root, SLUG).stage, 'shipped');
+    assert.equal(STAGES[STAGES.length - 1], 'shipped');
     assert.equal(fs.readFileSync(stageFile(root), 'utf8').split('\n').length, STAGES.length + 1);
   });
 

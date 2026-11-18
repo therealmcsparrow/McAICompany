@@ -1,4 +1,6 @@
-# Contract: dashboard v2.1
+# Contract: dashboard v2.2
+
+v2.2 (task P20261118.000001/01-fix; minor; uses `run-stage` v1.2): column rule 3 maps a recorded stage `shipped` (not yet `ended`) to `ship-gate`, `stageNote` `null`. Shapes, routes and fields are unchanged.
 
 v2.1 (task P20261112.000001/07-feature; minor; ADR 0069; uses `token-ledger` v1.13): `readLedger` `overCap` lists rows with `ctx_end` above the report's `cap` (the run's cap), not the fixed 95000; a report with no valid `cap` (an older ledger script) → 180000. Shapes, routes and fields are unchanged.
 
@@ -50,7 +52,7 @@ Why it exists: the CEO sees every run, its stage, the Gate it waits on and its t
 ### Column rule (first match wins; exactly one column per run)
 1. Run `ended` is not `null` → `done`.
 2. `needsCeo` → `needs-ceo`.
-3. run-stage v1 `readStage` gives `state: recorded` → its `stage`.
+3. run-stage v1 `readStage` gives `state: recorded` → its `stage`; stage `shipped` → `ship-gate`.
 4. Else from the view `gates`, with `stageNote: "stage not recorded"`: any `ship` entry → `ship-gate`; a `plan` entry with result `passed` → `build`; a `brief` entry with result `passed` → `plan`; else `brief`.
 
 `stageNote` is `null` unless rule 4 placed the card. A `stale` run keeps its column.
