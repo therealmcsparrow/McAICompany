@@ -1,12 +1,12 @@
 // Stage record of a run: where a run stands between Gates. Report only; nothing here blocks a Step or a Gate.
-// contract: docs/contracts/run-stage.md v1.1
+// contract: docs/contracts/run-stage.md v1.2
 // Storage: .company/work/<slug>/stage.jsonl (<slug> is a work folder name or <ID>/<NN>-<pb>), append-only, one JSON object per line, LF.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
-export const STAGES = ['brief', 'plan', 'build', 'review', 'ship-gate'];
+export const STAGES = ['brief', 'plan', 'build', 'review', 'ship-gate', 'shipped'];
 export const MAX_LINE = 128;
 export const MAX_FILE = 16 * 1024;
 export const MAX_LINES = 200;

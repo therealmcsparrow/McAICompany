@@ -13,7 +13,7 @@ const triage = read('skills/triage/SKILL.md');
 const SCRIPT = '${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs';
 
 test('run-state reference names run-stage set with every stage and when to write it', () => {
-  assert.ok(ref.includes(`node "${SCRIPT}" run-stage set '<slug>' '<brief|plan|build|review|ship-gate>'`));
+  assert.ok(ref.includes(`node "${SCRIPT}" run-stage set '<slug>' '<brief|plan|build|review|ship-gate|shipped>'`));
   assert.match(ref, /run-stage set[^\n]*\n[\s\S]*\bbuild\b/);
   assert.match(ref, /never blocks/i);
 });
