@@ -679,3 +679,32 @@ test('AC7 host deny: AICO_GUARDS=off, the answer adapter shell call, main, Lead 
     assert.equal(env.reason(r), null, `${who} ${tool} open passes under off: ${r.out}`);
   }
 });
+test('AC7 host deny: AICO_GUARDS=off, .env Read and `cat .env` denied for main and Lead; .env.example passes; Role denied by the normal guard (R-23)', async () => {
+  const env = await hostEnv();
+  const rows = JSON.parse(fs.readFileSync(path.join(env.plugin, 'hooks', 'rules.json'), 'utf8'));
+  rows.push(...JSON.parse(fs.readFileSync(REPO_RULES, 'utf8')).filter((r) => r.rule === 'dotenv.M-SEC1'));
+  fs.mkdirSync(path.join(env.plugin, 'hooks', 'manifests'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'hooks', 'manifests', 'dotenv.json'), path.join(env.plugin, 'hooks', 'manifests', 'dotenv.json'));
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
+  env.repin();
+  const dotenv = path.join(env.project, '.env');
+  const example = path.join(env.project, '.env.example');
+  const call = (who, tool, input) => {
+    const over = { tool_name: tool, tool_input: input };
+    if (who === 'lead') Object.assign(over, { agent_id: LEAD_ID, agent_type: 'aico:project-manager' });
+    if (who === 'role') Object.assign(over, { agent_id: ROLE_ID, agent_type: 'aico:qa' });
+    return env.event('PreToolUse', over);
+  };
+  for (const who of ['main', 'lead']) {
+    assertDeny(env, env.run(call(who, 'Read', { file_path: dotenv }), OFF), /dotenv\.M-SEC1/, `${who} Read .env off`);
+    assertDeny(env, env.run(call(who, 'Bash', { command: 'cat .env' }), OFF), /dotenv\.M-SEC1/, `${who} cat .env off`);
+    for (const [tool, input] of [['Read', { file_path: example }], ['Bash', { command: 'cat .env.example' }]]) {
+      const r = env.run(call(who, tool, input), OFF);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(env.reason(r), null, `${who} ${tool} .env.example passes under off: ${r.out}`);
+    }
+  }
+  assertDeny(env, env.run(call('role', 'Read', { file_path: dotenv }), OFF), /dotenv\.M-SEC1/, 'role Read .env off');
+  assertDeny(env, env.run(call('role', 'Bash', { command: 'cat .env' }), OFF), /dotenv\.M-SEC1/, 'role cat .env off');
+  assertDeny(env, env.run(call('role', 'Read', { file_path: dotenv })), /dotenv\.M-SEC1/, 'role Read .env on');
+});
