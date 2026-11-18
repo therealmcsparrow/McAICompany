@@ -141,6 +141,7 @@ test('guards off + pins mismatch: >20 levels nested with a unicode-escaped forms
     const r = env.run(raw, OFF);
     assert.equal(verdict(r), 'deny', `depth ${n}`);
     assert.match(JSON.stringify(r.json), /self-protect\.M-SEC1/, `depth ${n}`);
+    assert.match(reason(r), /nested too deep/, `depth ${n} reason: ${reason(r)}`);
   }
 });
 

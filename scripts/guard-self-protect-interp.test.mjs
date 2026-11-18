@@ -372,3 +372,61 @@ test('allow stays: direct pwsh -enc, nested -c, harmless dynamic code', () => {
     ]) allowedBoth(shell, cmd);
   }
 });
+
+// Fix round 16 (P20261117.000001 step 248): brace-glued scriptblock forms, call operator after = , ! ( {,
+// the whole-text encoded-flag rule, and depth 3. E forges a forms or answer record.
+const encAnswer = b64(`Set-Content "${REC}/answer.json" "{}"`);
+const braceForms = (E) => [
+  `& {pwsh -enc ${E}}`, `& { pwsh -enc ${E} }`, `. {pwsh -enc ${E}}`, `{pwsh -enc ${E}}.Invoke()`,
+  `Invoke-Command {pwsh -enc ${E}}`, `Invoke-Command -ScriptBlock {pwsh -enc ${E}}`,
+  `icm -ScriptBlock {pwsh -enc ${E}}`, `Start-Job {pwsh -enc ${E}}`, `Start-Job -ScriptBlock {pwsh -enc ${E}}`,
+];
+const opForms = (E) => [
+  `$o=&$p -enc ${E}`, `$o=& $p -enc ${E}`, `$o,&$p -enc ${E}`, `$o, & $p -enc ${E}`, `!&$p -enc ${E}`, `! & $p -enc ${E}`,
+  `$p='pwsh';$o=&$p -enc ${E}`, `$o=(&$p -enc ${E})`, `{&$p -enc ${E}}`, `$o=.$p -enc ${E}`, `$o=. $p -enc ${E}`,
+];
+
+for (const [name, E] of [['forms', encWrite], ['answer', encAnswer]]) {
+  test(`brace-glued scriptblock forms around an encoded ${name} write deny (depth 0 and 3)`, () => {
+    for (const shell of ['PowerShell', 'Bash']) for (const cmd of braceForms(E)) { deniedBoth(shell, cmd); deniedBoth(shell, wrapEnc(3, cmd)); }
+  });
+  test(`call operator after = , ! ( { around an encoded ${name} write denies (depth 0 and 3)`, () => {
+    for (const shell of ['PowerShell', 'Bash']) for (const cmd of opForms(E)) { deniedBoth(shell, cmd); deniedBoth(shell, wrapEnc(3, cmd)); }
+  });
+}
+
+test('depth-3 call forms around an encoded forms.jsonl write deny', () => {
+  for (const shell of ['PowerShell', 'Bash']) for (const cmd of callForms(encWrite)) deniedBoth(shell, wrapEnc(3, cmd));
+});
+
+test('a harmless payload behind a brace-glued or = call form denies (fail-closed over-deny)', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [`& {pwsh -e ${encOk}}`, `. {pwsh -enc ${encOk}}`, `$o=&$p -enc ${encOk}`, `Start-Job {pwsh -enc ${encOk}}`]) deniedBoth(shell, cmd);
+  }
+});
+
+test('whole-text rule: an encoded flag in any dash form with pwsh not the first token denies', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const dash of ['-', '--', '/', '–', '—']) {
+      for (const cmd of [`echo x; pwsh ${dash}enc ${encOk}`, `Write-Output 1 | pwsh ${dash}EncodedCommand ${encOk}`, `echo x && powershell ${dash}e ${encOk}`]) {
+        deniedBoth(shell, cmd);
+        deniedBoth(shell, wrapEnc(3, cmd));
+      }
+    }
+  }
+});
+
+test('whole-text rule: two pwsh -enc in one text deny, also at depth 3', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [`pwsh -enc ${encOk}; pwsh -enc ${encOk}`, `pwsh -enc ${encWrite}; pwsh -enc ${encOk}`, `pwsh -enc ${encOk} | pwsh -enc ${encOk}`]) {
+      deniedBoth(shell, cmd);
+      deniedBoth(shell, wrapEnc(3, cmd));
+    }
+  }
+});
+
+test('allow kept: direct pwsh -enc harmless, FOO=1 prefix, pwsh -c with a harmless inner pwsh -enc', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [`pwsh -enc ${encOk}`, `FOO=1 pwsh -enc ${encOk}`, `pwsh -c "pwsh -enc ${encOk}"`, `powershell -EncodedCommand ${encOk}`]) allowedBoth(shell, cmd);
+  }
+});
