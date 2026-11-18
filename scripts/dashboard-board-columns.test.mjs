@@ -112,3 +112,15 @@ test('a real empty root gives an empty board', async (t) => {
   assert.equal(b.columns.length, 8);
   assert.equal(allCards(b).length, 0);
 });
+
+test('recorded stage shipped with ended null lands in ship-gate with no stageNote', async () => {
+  const runs = [entry('r-shipped')];
+  const views = { 'r-shipped': view({ gates: [{ gate: 'brief', result: 'passed' }] }) };
+  const stages = { 'r-shipped': { state: 'recorded', stage: 'shipped' } };
+  const { deps } = makeDeps({ runs, views, stages });
+  const b = await board('/x', { now: NOW, deps });
+  const c = allCards(b).find((x) => x.slug === 'r-shipped');
+  assert.equal(c.ended, null);
+  assert.equal(c.column, 'ship-gate');
+  assert.equal(c.stageNote, null);
+});

@@ -1,5 +1,5 @@
-// Regression: at close-out of run P20261117.000001/01-feature `run-stage set <slug> shipped` was refused,
-// so the stage stayed `ship-gate` after the run shipped. Pins a final stage `shipped` across script, contract and pipeline doc.
+// Regression: `run-stage set <slug> shipped` must be accepted at close-out, so a finished run does not stay on `ship-gate`.
+// Pins a final stage `shipped` across script, contract and pipeline doc.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
