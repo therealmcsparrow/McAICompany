@@ -541,7 +541,7 @@ async function hostEnv({ run = false } = {}) {
   const rows = JSON.parse(fs.readFileSync(REPO_RULES, 'utf8')).filter((r) => r.rule === 'self-protect.M-SEC1');
   assert.equal(rows.length, 1, 'hooks/rules.json has the self-protect.M-SEC1 row');
   const env = makeEnv();
-  for (const rel of ['hooks/rules/self-protect.mjs', 'hooks/manifests/self-protect.json']) {
+  for (const rel of ['hooks/rules/self-protect.mjs', 'hooks/manifests/self-protect.json', 'hooks/rules/dotenv.mjs']) {
     fs.mkdirSync(path.dirname(path.join(env.plugin, rel)), { recursive: true });
     fs.copyFileSync(path.join(root, rel), path.join(env.plugin, rel));
   }
@@ -654,5 +654,28 @@ test('AC7 host pass: an ordinary write in the run folder passes with guards on a
     const r = env.run(callOf(env, 'main', 'Write', note), extra);
     assert.equal(r.code, 0, r.err);
     assert.equal(env.reason(r), null, r.out);
+  }
+});
+test('AC7 host deny: AICO_GUARDS=off, the answer adapter shell call, main, Lead and Role; open passes (R-21)', async () => {
+  const env = await hostEnv();
+  const relay = `${slashOf(env.plugin)}/scripts/lead-relay.mjs`;
+  const shell = (who, tool, command) => {
+    const over = { tool_name: tool, tool_input: { command } };
+    if (who === 'lead') Object.assign(over, { agent_id: LEAD_ID, agent_type: 'aico:project-manager' });
+    if (who === 'role') Object.assign(over, { agent_id: ROLE_ID, agent_type: 'aico:qa' });
+    return env.event('PreToolUse', over);
+  };
+  const cmds = {
+    Bash: [`node "${relay}" answer < f.json`, `cat f.json | node ${relay} answer`],
+    PowerShell: [`node "${relay.replace(/\//g, String.fromCharCode(92))}" answer`],
+  };
+  for (const who of WHO) for (const tool of SH) for (const cmd of cmds[tool]) {
+    assertDeny(env, env.run(shell(who, tool, cmd), OFF), /CEO answer/, `${who} ${tool} answer off: ${cmd}`);
+    assertDeny(env, env.run(shell(who, tool, cmd)), /CEO answer/, `${who} ${tool} answer on: ${cmd}`);
+  }
+  for (const who of WHO) for (const tool of SH) {
+    const r = env.run(shell(who, tool, `node "${relay}" open 'P1/x' gate:g1 f.json`), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `${who} ${tool} open passes under off: ${r.out}`);
   }
 });
