@@ -7,8 +7,16 @@ import { spawnSync } from 'node:child_process';
 import { gateReport, runsOf } from './gate-report.mjs';
 import { run as runState } from './run-state.mjs';
 
+// Hermetic settings: gates brief/plan read as auto from a temp MCSPARROW_HOME, never the dev's own ~/.mcsparrow.
+const settingsHome = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-report-settings-'));
+fs.writeFileSync(path.join(settingsHome, 'config.json'), JSON.stringify({ aico_settings: { version: 1, gates: { brief: 'auto', plan: 'auto' } } }));
+process.env.MCSPARROW_HOME = settingsHome;
+
 const script = path.join(import.meta.dirname, 'gate-report.mjs');
 const T0 = Date.parse('2026-10-20T10:00:00Z');
+
+import { after } from 'node:test';
+after(() => fs.rmSync(settingsHome, { recursive: true, force: true }));
 
 function tmp(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-report-'));

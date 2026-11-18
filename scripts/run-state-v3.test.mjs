@@ -9,6 +9,12 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as rs from './run-state.mjs';
 
+// Hermetic settings: gates brief/plan read as auto from a temp MCSPARROW_HOME, never the dev's own ~/.mcsparrow.
+const settingsHome = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-v3-settings-'));
+fs.writeFileSync(path.join(settingsHome, 'config.json'), JSON.stringify({ aico_settings: { version: 1, gates: { brief: 'auto', plan: 'auto' } } }));
+process.env.MCSPARROW_HOME = settingsHome;
+after(() => fs.rmSync(settingsHome, { recursive: true, force: true }));
+
 const SCRIPT = fileURLToPath(new URL('./run-state.mjs', import.meta.url));
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'run-state-v3-'));
 after(() => fs.rmSync(base, { recursive: true, force: true }));
