@@ -231,6 +231,19 @@ async function main() {
     }
   }
 
+  // With guards off the .env read check still runs for the Lead session, before the off branch, with no snapshot or rule table.
+  if (guardsOff && event.session === 'lead' && evName === 'PreToolUse' && event.tool) {
+    let env = null;
+    try {
+      const de = await import(pathToFileURL(path.join(ROOT, 'hooks', 'rules', 'dotenv.mjs')).href);
+      env = de.judge(event);
+    } catch { env = { v: 'deny', message: '.env files are not read or written' }; }
+    if (env && env.v === 'deny') {
+      log.appendDeny(snap.denyDir(mcsHome, root), { rule: 'dotenv.M-SEC1', kind: 'deny', session: event.sessionKey, agent: event.agentKey });
+      return done(denyOut(evName, stopActive, 'dotenv.M-SEC1', env.message, {}));
+    }
+  }
+
   // Engine, per hook call (mod-hook v1).
   const off = guardsOff && event.session === 'lead';
   if (off) await eff.recordGuardsOff(event, root);
