@@ -53,7 +53,7 @@ const INTERPRETERS = {
   ruby: /^-[a-z]*e[a-z]*$/,
 };
 const POWERSHELLS = new Set(['pwsh', 'powershell']);
-const ENCODED = /^-(?:e|ec|en[a-z]*)$/i;
+const ENCODED = /^[-/](?:e|ec|en[a-z]*)(?::(.*))?$/i;
 const EVAL_VERBS = new Set(['iex', 'invoke-expression']);
 
 const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE)|%(?:USERPROFILE|HOMEDRIVE)%)/i;
@@ -272,9 +272,13 @@ function inlineDenied(words) {
 // A PowerShell -EncodedCommand is base64 of UTF-16LE text; a payload that does not decode names no record.
 function encodedNamesRecord(rest) {
   for (let i = 0; i < rest.length; i++) {
-    if (!ENCODED.test(rest[i]) || i + 1 >= rest.length) continue;
+    const m = ENCODED.exec(rest[i]);
+    if (!m) continue;
+    // Colon form carries the payload in the same word; otherwise it is the next word.
+    const payload = m[1] !== undefined ? m[1] : rest[i + 1];
+    if (!payload) continue;
     try {
-      const text = Buffer.from(rest[i + 1], 'base64').toString('utf16le');
+      const text = Buffer.from(payload, 'base64').toString('utf16le');
       if (namesRecord(text)) return true;
     } catch { /* an unreadable payload names no record */ }
   }
