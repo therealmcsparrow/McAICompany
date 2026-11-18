@@ -110,6 +110,23 @@ test('PowerShell file work that names no record allows', () => {
   allowed('PowerShell', '$f = "out\\a.txt"; Set-Content $f hi');
 });
 
+// R-2: -EncodedCommand:<b64> (colon form) and /EncodedCommand <b64> (slash form) decode like the plain flag.
+const b64 = (s) => Buffer.from(s, 'utf16le').toString('base64');
+test('PowerShell -EncodedCommand:<b64> and /EncodedCommand <b64> to a run record deny', () => {
+  const payload = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
+  denied('PowerShell', `powershell -EncodedCommand:${payload}`);
+  denied('Bash', `pwsh -NoProfile -EncodedCommand:${payload}`);
+  denied('PowerShell', `powershell /EncodedCommand ${payload}`);
+  denied('Bash', `pwsh /EncodedCommand ${payload}`);
+  denied('PowerShell', `powershell -enc:${payload}`);
+});
+
+test('PowerShell -EncodedCommand:<b64> and /EncodedCommand <b64> that name no record allow', () => {
+  const payload = b64('Write-Output 1');
+  allowed('PowerShell', `powershell -EncodedCommand:${payload}`);
+  allowed('PowerShell', `powershell /EncodedCommand ${payload}`);
+});
+
 test('a command over 200000 chars denies in every session', () => {
   denied('Bash', `echo ${'a'.repeat(200001)}`);
   denied('PowerShell', `Write-Output ${'a'.repeat(200001)}`);

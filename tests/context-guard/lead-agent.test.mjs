@@ -125,3 +125,43 @@ describe('.env shell reads are denied in every session (cch.M-SEC7, AC5)', () =>
     assert.equal(env.reason(r), null);
   });
 });
+
+// R-3 (fail closed): a throwing resolveRun on a Lead Agent/Task PreToolUse is an unreadable run, never "no run".
+describe('resolveRun failure on a Lead spawn (hook-event v1.4, context-guard v3.0)', async () => {
+  const nodeFs = await import('node:fs');
+  const nodeOs = await import('node:os');
+  const nodePath = await import('node:path');
+  const { normalize } = await import('../../hooks/lib/event.mjs');
+  const { judge, freezeAt } = await import('../../hooks/rules/cap.mjs');
+  const base = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'rr-'));
+  after(() => nodeFs.rmSync(base, { recursive: true, force: true }));
+  const ctx = (resolveRun) => ({
+    env: { USERPROFILE: nodePath.join(base, 'home'), HOME: nodePath.join(base, 'home') },
+    schema: null, pluginRoot: nodePath.join(base, 'plugin'), mcsHome: nodePath.join(base, 'msh'), resolveRun
+  });
+  const raw = (tool) => ({
+    hook_event_name: 'PreToolUse', session_id: 's-rr', transcript_path: nodePath.join(base, 'none.jsonl'), cwd: base,
+    agent_id: LEAD_AGENT, agent_type: LEAD_TYPE, tool_name: tool,
+    tool_input: { subagent_type: 'aico:qa', prompt: 'x' }, permission_mode: 'default'
+  });
+
+  for (const tool of ['Agent', 'Task']) {
+    test(`${tool}: a throwing resolveRun gives event.run { error: true } and a cap deny (RUN_UNREADABLE)`, async () => {
+      const r = await normalize(raw(tool), ctx(async () => { throw new Error('boom'); }));
+      assert.ok(r.ok, 'normalize ok');
+      assert.equal(r.event.session, 'lead');
+      assert.deepEqual(r.event.run, { error: true });
+      const v = judge({ ...r.event, tokens: { state: 'read', total: freezeAt(180000) } }, { threshold: 180000 });
+      assert.equal(v.v, 'deny');
+      assert.equal(v.rule, 'cap.M1');
+      assert.match(v.message, /unreadable/);
+    });
+
+    test(`${tool}: a null resolveRun still allows`, async () => {
+      const r = await normalize(raw(tool), ctx(async () => null));
+      assert.ok(r.ok, 'normalize ok');
+      assert.equal(r.event.run, null);
+      assert.equal(judge({ ...r.event, tokens: { state: 'read', total: freezeAt(180000) } }, { threshold: 180000 }).v, 'allow');
+    });
+  }
+});
