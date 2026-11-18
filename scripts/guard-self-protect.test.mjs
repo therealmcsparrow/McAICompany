@@ -708,3 +708,41 @@ test('AC7 host deny: AICO_GUARDS=off, .env Read and `cat .env` denied for main a
   assertDeny(env, env.run(call('role', 'Bash', { command: 'cat .env' }), OFF), /dotenv\.M-SEC1/, 'role cat .env off');
   assertDeny(env, env.run(call('role', 'Read', { file_path: dotenv })), /dotenv\.M-SEC1/, 'role Read .env on');
 });
+
+// ---------- pin mismatch plus AICO_GUARDS=off: the host's text-only deny (214 R-3) ----------
+async function mismatchEnv() {
+  const env = await hostEnv();
+  fs.appendFileSync(path.join(env.plugin, 'hooks', 'rules', 'dotenv.mjs'), '\n// pin drift\n');
+  return env;
+}
+const leadCall = (env, tool, input) => env.event('PreToolUse', { tool_name: tool, tool_input: input });
+
+test('R-3 host deny: pin mismatch + AICO_GUARDS=off, the Lead `cat .env` denies with dotenv.M-SEC1', async () => {
+  const env = await mismatchEnv();
+  const r = env.run(leadCall(env, 'Bash', { command: 'cat .env' }), OFF);
+  assertDeny(env, r, /dotenv\.M-SEC1/, 'cat .env pin mismatch off');
+  assert.doesNotMatch(env.reason(r), /pins-mismatch/);
+  assertDeny(env, env.run(leadCall(env, 'Bash', { command: 'cat .env.local' }), OFF), /dotenv\.M-SEC1/, 'cat .env.local');
+});
+test('R-3 host pass: pin mismatch + AICO_GUARDS=off, a .env.example read passes (null output)', async () => {
+  const env = await mismatchEnv();
+  for (const [tool, input] of [['Bash', { command: 'cat .env.example' }], ['Read', { file_path: path.join(env.project, '.env.sample') }]]) {
+    const r = env.run(leadCall(env, tool, input), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `${tool} .env.example under mismatch+off: ${r.out}`);
+    assert.equal(r.out.trim(), '', `${tool} output is empty`);
+  }
+});
+test('R-3 host deny: pin mismatch + AICO_GUARDS=off, the answer adapter shell call denies with self-protect.M-SEC1; a harmless call passes', async () => {
+  const env = await mismatchEnv();
+  for (const command of ['node scripts/lead-relay.mjs answer < f.json', 'cat f.json | node scripts/lead-relay.mjs answer']) {
+    const r = env.run(leadCall(env, 'Bash', { command }), OFF);
+    assertDeny(env, r, /self-protect\.M-SEC1/, `answer under mismatch+off: ${command}`);
+    assert.doesNotMatch(env.reason(r), /pins-mismatch/);
+  }
+  for (const command of ['echo hello', 'node scripts/lead-relay.mjs open P1/x gate:g1 f.json']) {
+    const r = env.run(leadCall(env, 'Bash', { command }), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `harmless passes under mismatch+off: ${command}: ${r.out}`);
+  }
+});
