@@ -1,7 +1,7 @@
-# Contract: run-stage v1.1
+# Contract: run-stage v1.2
 
 Provider: `scripts/run-stage.mjs` (Node built-ins only). Writer: the Lead (`aico:pipeline`), one `set` each time a run enters a new stage. Consumers: `scripts/dashboard-data.mjs` (`dashboard` v1, `board` and `refreshActive`), through `readStage` only.
-Why it exists: run-state v1.8 records waves and Gates but not where a run stands between them (a build wave and a review round look the same), so the dashboard cannot place a card in a column from records alone. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md`. Report only; a stage never blocks a Step or a Gate. v1.1 is additive (T33; `work-folder-name` v3.0 `isRunSlug`, `workParts`): `<slug>` may be a v3 run slug `<ProjectID>/<NN>-<playbook>`; the stage file is `.company/work/<ID>/<NN>-<pb>/stage.jsonl`, found with `exactWorkPath(io, root, workParts(slug))`, and both folders must be real directories (no link) inside the real `.company/work`. A slug with a second `/`, `..`, `\` or a bare project ID is `bad slug`. v2, v1.1 and legacy names give byte-identical output to v1.
+Why it exists: run-state v1.8 records waves and Gates but not where a run stands between them (a build wave and a review round look the same), so the dashboard cannot place a card in a column from records alone. Rationale: `docs/adr/0057-dashboard-reads-script-json-only.md`. Report only; a stage never blocks a Step or a Gate. v1.2 is additive: stage `shipped` after `ship-gate` (a run that shipped read `ship-gate` for good, and `set ... shipped` was refused); the dashboard ignores it (`STAGE_COLUMNS` unchanged, a finished run is already in `done`). v1.1 is additive (T33; `work-folder-name` v3.0 `isRunSlug`, `workParts`): `<slug>` may be a v3 run slug `<ProjectID>/<NN>-<playbook>`; the stage file is `.company/work/<ID>/<NN>-<pb>/stage.jsonl`, found with `exactWorkPath(io, root, workParts(slug))`, and both folders must be real directories (no link) inside the real `.company/work`. A slug with a second `/`, `..`, `\` or a bare project ID is `bad slug`. v2, v1.1 and legacy names give byte-identical output to v1.
 
 ## Storage
 - `.company/work/<slug>/stage.jsonl`, append-only, one JSON object per line, LF. Committed with the run's Handoffs (it sits in the run folder).
@@ -12,7 +12,7 @@ Why it exists: run-state v1.8 records waves and Gates but not where a run stands
 ## Record (allow-list; unknown keys refused)
 - `v`: `1`.
 - `at`: UTC time `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`, written by the script, never typed by the Lead.
-- `stage`: `brief | plan | build | review | ship-gate`.
+- `stage`: `brief | plan | build | review | ship-gate | shipped`. `shipped` is the final stage: the Lead sets it at close-out, after the Ship Gate passed and the run ended.
 
 Example line: `{"v":1,"at":"2026-11-04T01:19:00Z","stage":"build"}`.
 
