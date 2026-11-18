@@ -35,14 +35,18 @@ const GLOB_CHARS = /[*?[{]/;
 const MAX_GLOB_CHARS = 256;
 const MAX_VARIANTS = 64;
 
+// PowerShell flag prefix: ASCII dash or slash, en dash, em dash, horizontal bar, and pwsh 7 double dash.
+const PS_PREFIX = '(?:[-/\\u2013\\u2014\\u2015]-?)';
+const PS_COMMAND = new RegExp(`^${PS_PREFIX}c(?:o|om|omm|omma|omman|ommand)?$`, 'i');
+
 const INTERPRETERS = {
   node: /^(?:--(?:e[v]al|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
   nodejs: /^(?:--(?:e[v]al|print)(?:=|$)|-[a-z]*[ep][a-z]*$)/,
   python: /^-[A-Za-z]*c$/,
   python3: /^-[A-Za-z]*c$/,
   py: /^-[A-Za-z]*c$/,
-  pwsh: /^-c(?:o|om|omm|omma|omman|ommand)?$/i,
-  powershell: /^-c(?:o|om|omm|omma|omman|ommand)?$/i,
+  pwsh: PS_COMMAND,
+  powershell: PS_COMMAND,
   bash: /^-[a-z]*c[a-z]*$/,
   sh: /^-[a-z]*c[a-z]*$/,
   zsh: /^-[a-z]*c[a-z]*$/,
@@ -53,7 +57,7 @@ const INTERPRETERS = {
   ruby: /^-[a-z]*e[a-z]*$/,
 };
 const POWERSHELLS = new Set(['pwsh', 'powershell']);
-const ENCODED = /^[-/](?:e|ec|en[a-z]*)(?::(.*))?$/i;
+const ENCODED = new RegExp(`^${PS_PREFIX}(?:e|ec|en[a-z]*)(?::(.*))?$`, 'i');
 const EVAL_VERBS = new Set(['iex', 'invoke-expression']);
 
 const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE)|%(?:USERPROFILE|HOMEDRIVE)%)/i;
@@ -271,18 +275,22 @@ function inlineDenied(words) {
 
 // A PowerShell -EncodedCommand is base64 of UTF-16LE text; a payload that does not decode names no record.
 function encodedNamesRecord(rest) {
+  return encodedTexts(rest).some((text) => namesRecord(text));
+}
+
+// Decoded text of each -EncodedCommand payload among the words (colon form in the same word, else the next word).
+function encodedTexts(rest) {
+  const out = [];
   for (let i = 0; i < rest.length; i++) {
     const m = ENCODED.exec(rest[i]);
     if (!m) continue;
-    // Colon form carries the payload in the same word; otherwise it is the next word.
     const payload = m[1] !== undefined ? m[1] : rest[i + 1];
     if (!payload) continue;
     try {
-      const text = Buffer.from(payload, 'base64').toString('utf16le');
-      if (namesRecord(text)) return true;
-    } catch { /* an unreadable payload names no record */ }
+      out.push(Buffer.from(payload, 'base64').toString('utf16le'));
+    } catch { /* an unreadable payload decodes to no text */ }
   }
-  return false;
+  return out;
 }
 
 function verbIndex(words) {
@@ -678,7 +686,15 @@ function analyze(ctx, text, powershell, depth, acc) {
 function answerStatement(words, depth) {
   const at = words.findIndex((w) => RELAY_WORD.test(baseOf(w)));
   if (at !== -1 && words.slice(at + 1).some((w) => w.toLowerCase() === 'answer')) return true;
-  return depth >= 0 && inlineProgram(words) && ANSWER_TEXT.test(words.join(' '));
+  if (depth >= 0 && inlineProgram(words) && ANSWER_TEXT.test(words.join(' '))) return true;
+  return encodedAnswer(words);
+}
+
+function encodedAnswer(words) {
+  for (let i = 0; i < words.length; i++) {
+    if (POWERSHELLS.has(baseOf(words[i])) && encodedTexts(words.slice(i + 1)).some((t) => ANSWER_TEXT.test(t))) return true;
+  }
+  return false;
 }
 
 function inlineProgram(words) {
