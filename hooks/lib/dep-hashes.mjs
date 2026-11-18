@@ -2,7 +2,7 @@ export const DEP_HASHES = {
   "mods/lib/context-cap.mjs": "ca49c3a89f368ba621b886334ac1031e7fca9b2f4f636ffd0213b5bbe8570281",
   "mods/lib/work-folder.mjs": "74db87715c63e3c3875a4f2f49e187c37eb372befcc2c4a65348782b50b9d9c1",
   "scripts/company-type.mjs": "967e95594fb7dc5695d4d61d4fc89288d0291059bc1fcdc35ed394fb11b9094b",
-  "scripts/contract-drift.mjs": "bb7a410fd913cdf65bfcc6bb4737d885bc11f0e39d4678209c6d00249cd6561c",
+  "scripts/contract-drift.mjs": "b20d322156d07763f0393c56ce68330c9d91297f3c86d52610dd83f3652f84d9",
   "scripts/handoff-lint.mjs": "4fd7e81e79abe365cac9380edc220367df892291ee97e74b486e1c3ee1a1959f",
   "scripts/idea-flow.mjs": "dab49706de84f46a37d85e3c13f87fd205a76cf2381d4bf3d845471b39ed1430",
   "scripts/lead-handover.mjs": "7fd6e476bd0aab7522ee991a9edaf8d1a41bcb5bcae0b0482d053f4002fb4e74",
