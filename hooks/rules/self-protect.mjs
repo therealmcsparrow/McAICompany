@@ -60,6 +60,8 @@ const POWERSHELLS = new Set(['pwsh', 'powershell']);
 const ENCODED = new RegExp(`^${PS_PREFIX}(?:e|ec|en[a-z]*)(?::(.*))?$`, 'i');
 const EVAL_VERBS = new Set(['iex', 'invoke-expression']);
 
+const SPAWN_VERBS = new Set([...EVAL_VERBS, 'start-process', 'saps', 'start', 'invoke-command', 'icm']);
+
 const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE)|%(?:USERPROFILE|HOMEDRIVE)%)/i;
 
 function allow() {
@@ -306,6 +308,10 @@ function encodedUnreadable(rest) {
 
 // Fail closed: nested text that cannot be read, or that cannot be parsed further at the depth limit.
 function nestingDenied(words, depth) {
+  // Broad fail-closed: a pwsh name, an encoded flag and an eval/process-spawn verb in one statement, in any order
+  // and inside any quoting (`iex "pwsh -enc .."`, `Start-Process pwsh -ArgumentList '-enc','..'`).
+  const parts = words.flatMap((w) => w.split(/[\s'",;()]+/)).filter(Boolean);
+  if (parts.some((p) => POWERSHELLS.has(baseOf(p))) && parts.some((p) => ENCODED.test(p)) && parts.some((p) => SPAWN_VERBS.has(baseOf(p)))) return true;
   for (let i = 0; i < words.length; i++) {
     const base = baseOf(words[i]);
     const rest = words.slice(i + 1);
