@@ -687,12 +687,28 @@ function answerStatement(words, depth) {
   const at = words.findIndex((w) => RELAY_WORD.test(baseOf(w)));
   if (at !== -1 && words.slice(at + 1).some((w) => w.toLowerCase() === 'answer')) return true;
   if (depth >= 0 && inlineProgram(words) && ANSWER_TEXT.test(words.join(' '))) return true;
-  return encodedAnswer(words);
+  return encodedAnswer(words) || nestedAnswer(words, depth);
 }
 
 function encodedAnswer(words) {
   for (let i = 0; i < words.length; i++) {
     if (POWERSHELLS.has(baseOf(words[i])) && encodedTexts(words.slice(i + 1)).some((t) => ANSWER_TEXT.test(t))) return true;
+  }
+  return false;
+}
+
+// Each decoded -EncodedCommand text and each inline program is parsed again, one level deeper, so a nested
+// or double-encoded answer call is judged like a direct one.
+function nestedAnswer(words, depth) {
+  if (depth >= MAX_DEPTH) return false;
+  for (let i = 0; i < words.length; i++) {
+    const base = baseOf(words[i]);
+    const rest = words.slice(i + 1);
+    if (POWERSHELLS.has(base) && encodedTexts(rest).some((t) => answerDenied(t, true, depth + 1))) return true;
+    const flag = INTERPRETERS[base];
+    if (!flag) continue;
+    const at = rest.findIndex((a) => flag.test(a));
+    if (at !== -1 && answerDenied(rest.slice(at + 1).join(' '), POWERSHELLS.has(base), depth + 1)) return true;
   }
   return false;
 }
