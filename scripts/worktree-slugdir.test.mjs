@@ -104,8 +104,22 @@ describe('worktree cleanup slug folder', () => {
     }
     if (!kind) { t.skip('cannot create a symlink or junction on this OS/account'); return; }
     assert.equal(fs.lstatSync(r.slugDir).isSymbolicLink(), true, 'setup: slug folder is a link');
-    r.run('cleanup', RUN);
+    const res = r.run('cleanup', RUN);
+    assert.equal(res.code, 0, res.lines.join('\n'));
     assert.equal(fs.lstatSync(r.slugDir).isSymbolicLink(), true, 'link was removed');
     assert.equal(fs.existsSync(target), true, 'link target was removed');
+  });
+
+  test('guard: cleanup that ends in a record mismatch exits 2 and keeps the empty <ProjectID> folder', () => {
+    const r = makeRepo();
+    assert.equal(r.run('add', RUN, 'proto', '--base', r.head()).code, 0);
+    // Hand-remove worktree and branch, no reconcile: the record still lists proto.
+    git(r.repo, 'worktree', 'remove', '--force', r.wt('proto'));
+    git(r.repo, 'branch', '-D', `aico-wt/${ID}/proto`);
+    assert.equal(fs.existsSync(r.slugDir), true, 'setup: empty slug folder exists');
+    const res = r.run('cleanup', RUN);
+    assert.equal(res.code, 2, res.lines.join('\n'));
+    assert.match(res.lines.join('\n'), /record mismatch proto/);
+    assert.equal(fs.existsSync(r.slugDir), true, 'slug folder dropped after a record mismatch');
   });
 });
