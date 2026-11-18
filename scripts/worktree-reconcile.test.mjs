@@ -175,6 +175,18 @@ describe('worktree reconcile', () => {
     assert.equal(r.events().at(-1).task, 'proto');
   });
 
+  test('reconciled key: a remove record with a non-true reconciled value is refused by the reader', () => {
+    for (const bad of ['yes', false, 1, null]) {
+      const r = makeRepo();
+      withProto(r);
+      const line = JSON.stringify({ v: 1, at: '2026-11-17T12:00:00Z', ev: 'remove', task: 'proto', commit: r.head(), reconciled: bad });
+      fs.appendFileSync(r.record, line + '\n');
+      const res = r.run('protocheck', RUN);
+      assert.equal(res.code, 1, `reconciled=${JSON.stringify(bad)}: ${res.lines.join('\n')}`);
+      assert.match(res.lines.join('\n'), /reconciled must be true/);
+    }
+  });
+
   test('bad usage is refused', () => {
     const r = makeRepo();
     for (const res of [r.run('reconcile', RUN), r.run('reconcile')]) {
