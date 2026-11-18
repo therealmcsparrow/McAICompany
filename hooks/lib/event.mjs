@@ -185,7 +185,7 @@ function toolOf(name, input, ctx, cwd) {
   let outputRole = null;
   // Unicode whitespace is stripped so a padded name cannot slip past the Lead match.
   const stRaw = (name === 'Agent' || name === 'Task') ? str(input, 'subagent_type') : null;
-  const st = typeof stRaw === 'string' ? stRaw.replace(/^[\s​-‍⁠﻿]+|[\s​-‍⁠﻿]+$/g, '') : null;
+  const st = typeof stRaw === 'string' ? stRaw.replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '') : null;
   if (name === 'Agent' || name === 'Task') {
     model = str(input, 'model');
     const m = st ? ROLE_RE.exec(st) : null;

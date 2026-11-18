@@ -19,7 +19,7 @@ const ROLE_SPAWN_REASON = `${RULE}: a Role never spawns the Lead.`;
 const LEAD_BG_REASON = `${RULE}: the Lead dispatches Roles in the foreground.`;
 const MAIN_BG_REASON = `${RULE}: main runs the Lead in the foreground.`;
 const MAIN_ONLY_LEAD_REASON = `${RULE}: main spawns only the Lead. Spawn aico:project-manager; the Lead dispatches the Roles.`;
-const UNREADABLE =`${RULE}: unreadable`;
+const UNREADABLE = `${RULE}: unreadable`;
 const RUN_UNREADABLE = `${RULE}: unreadable. The run state of the active run cannot be read at the hand-over point. Fix or remove the malformed lead-handover.jsonl in the run folder, or check the run state with run-state show, then retry.`;
 
 const isObj = (v) => v !== null && typeof v === 'object';
