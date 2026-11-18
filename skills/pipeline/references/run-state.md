@@ -17,7 +17,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" run-stage set '<slug>' '<brief|plan
 ```
 
 ## When
-- `run-stage set`: when the run enters a phase: `brief` at Setup, `plan` after the Brief Gate passed, `build` after the Plan Gate passed, `review` when the reviewer lane starts, `ship-gate` just before the Ship Gate `ask`, `shipped` at close-out once the Ship Gate passed and the run ended. Same rules as below; it never blocks a Step or a Gate.
+- `run-stage set`: when the run enters a phase: `brief` at Setup, `plan` after the Brief Gate passed, `build` after the Plan Gate passed, `review` when the reviewer lane starts, `ship-gate` just before the Ship Gate `ask`, `shipped` at close-out once the Ship Gate passed and the run ended. Same rules as below; it never blocks a Step or a Gate. A refused `set ... shipped` at close-out is named in the close-out message and `00-summary.md`.
 - `start`: in Setup, once the task slug is known. A run resumed with "resume <slug>" after an `end` runs `start` again.
 - `wave`: at the start of each wave of the plan, `<n>` the plan's wave number (1 to 99). A Fix round keeps the wave it belongs to.
 - `ask`: directly before each Brief, Plan and Ship Gate form is shown, so the CEO's wait can be told from run time. An `auto` Gate shows no form and gets no `ask`.
