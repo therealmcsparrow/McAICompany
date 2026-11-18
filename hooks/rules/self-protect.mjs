@@ -147,6 +147,8 @@ function tokenize(text, powershell, onSubshell) {
       endStmt();
     } else if (c === '&') {
       if (text[i + 1] === '>') i = redirect(i + 1);
+      else if (text[i + 1] === '&') { endStmt(); i++; }
+      else if (!has && !words.length && !redirs.length) { has = true; word = '&'; } // call operator at statement start
       else endStmt();
     } else if (c === '>') {
       i = redirect(i);
@@ -310,8 +312,11 @@ function encodedUnreadable(rest) {
 function nestingDenied(words, depth) {
   // Broad fail-closed: a pwsh name, an encoded flag and an eval/process-spawn verb in one statement, in any order
   // and inside any quoting (`iex "pwsh -enc .."`, `Start-Process pwsh -ArgumentList '-enc','..'`).
+  // The PowerShell call operators `&` and `.` (also glued: `&pwsh`) are spawn forms like iex.
   const parts = words.flatMap((w) => w.split(/[\s'",;()]+/)).filter(Boolean);
-  if (parts.some((p) => POWERSHELLS.has(baseOf(p))) && parts.some((p) => ENCODED.test(p)) && parts.some((p) => SPAWN_VERBS.has(baseOf(p)))) return true;
+  const callOp = (p) => p === '&' || p === '.' || /^&[^&]/.test(p);
+  if (parts.some((p) => POWERSHELLS.has(baseOf(p.replace(/^&+/, '')))) && parts.some((p) => ENCODED.test(p))
+    && parts.some((p) => SPAWN_VERBS.has(baseOf(p)) || callOp(p))) return true;
   for (let i = 0; i < words.length; i++) {
     const base = baseOf(words[i]);
     const rest = words.slice(i + 1);
