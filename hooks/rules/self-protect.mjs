@@ -293,6 +293,32 @@ function encodedTexts(rest) {
   return out;
 }
 
+// Fail closed: a -EncodedCommand flag whose payload is missing, not base64, or not whole UTF-16LE units.
+function encodedUnreadable(rest) {
+  for (let i = 0; i < rest.length; i++) {
+    const m = ENCODED.exec(rest[i]);
+    if (!m) continue;
+    const payload = m[1] !== undefined ? m[1] : rest[i + 1];
+    if (!payload || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) return true;
+  }
+  return false;
+}
+
+// Fail closed: nested text that cannot be read, or that cannot be parsed further at the depth limit.
+function nestingDenied(words, depth) {
+  for (let i = 0; i < words.length; i++) {
+    const base = baseOf(words[i]);
+    const rest = words.slice(i + 1);
+    if (POWERSHELLS.has(base)) {
+      if (encodedUnreadable(rest)) return true;
+      if (depth >= MAX_DEPTH && encodedTexts(rest).length > 0) return true;
+    }
+    const flag = INTERPRETERS[base];
+    if (flag && depth >= MAX_DEPTH && rest.some((a) => flag.test(a))) return true;
+  }
+  return false;
+}
+
 function verbIndex(words) {
   let i = 0;
   while (i < words.length) {
@@ -679,7 +705,7 @@ function analyze(ctx, text, powershell, depth, acc) {
   for (const { words, redirs } of stmts) {
     const vi = verbIndex(words);
     const verb = vi < words.length ? baseOf(words[vi]) : '';
-    if (inlineDenied(words)) return true;
+    if (inlineDenied(words) || nestingDenied(words, depth)) return true;
     if (CD_VERBS.has(verb)) {
       acc.cd = true;
       const target = nonFlags(words.slice(vi + 1))[0];
@@ -716,6 +742,7 @@ function encodedAnswer(words) {
 // Each decoded -EncodedCommand text and each inline program is parsed again, one level deeper, so a nested
 // or double-encoded answer call is judged like a direct one.
 function nestedAnswer(words, depth) {
+  if (nestingDenied(words, depth)) return true;
   if (depth >= MAX_DEPTH) return false;
   for (let i = 0; i < words.length; i++) {
     const base = baseOf(words[i]);
