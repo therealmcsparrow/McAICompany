@@ -248,7 +248,7 @@ for (const total of [162000, 179999, 180000, 180001]) {
   test(`Lead at ${total} (${hand ? 'hand over' : 'freeze'}): clean point denies and tells it to end with STATUS: handover`, async () => {
     const v = await denies({ session: 'lead', total, tool: 'Read' }, DEFAULT, /STATUS: handover/);
     assert.equal(v.effect, 'cap-lead-freeze', 'clean point: engine writes the Lead Handoff then denies');
-    assert.match(v.message, /handoff:/);
+    assert.match(v.message, /handoff line below/);
     assert.match(v.message, /next:/);
     await denies({ session: 'lead', total, tool: MCP }, DEFAULT, /STATUS: handover/);
   });

@@ -324,7 +324,7 @@ test('call operator . before pwsh -enc around a forms.jsonl write denies', () =>
 // Expected-deny probes: a harmless payload behind a call operator is allowed today (no spawn verb). Marked todo until
 // `&` and `.` join the spawn list; node:test reports a todo failure without failing the run.
 for (const op of ['&', '.']) {
-  test(`call operator '${op}' before pwsh -enc is a spawn form and denies like iex`, { todo: 'add & and . to SPAWN_VERBS' }, () => {
+  test(`call operator '${op}' before pwsh -enc is a spawn form and denies like iex`, () => {
     const ok = b64('Write-Output 1');
     for (const shell of ['PowerShell', 'Bash']) deniedBoth(shell, `${op} pwsh -enc ${ok}`);
   });
