@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.44.2] - 2026-11-18
+
+Rollback: node scripts/stable.mjs 0.44.1
+
+### Fixed
+- **Worktree reconcile.** After a worktree and its branch were removed by hand, `worktree cleanup` stopped for ever on `record mismatch` and nothing could clear the record. The new `worktree reconcile <slug> <id>` command writes a `remove` event with `reconciled: true`, and `protocheck` reads such an end as unknown. Contract: `worktree` v1.5 (additive).
+
 ## [0.44.1] - 2026-11-18
 
 Rollback: node scripts/stable.mjs 0.44.0
