@@ -60,7 +60,8 @@ const POWERSHELLS = new Set(['pwsh', 'powershell']);
 const ENCODED = new RegExp(`^${PS_PREFIX}(?:e|ec|en[a-z]*)(?::(.*))?$`, 'i');
 const EVAL_VERBS = new Set(['iex', 'invoke-expression']);
 
-const SPAWN_VERBS = new Set([...EVAL_VERBS, 'start-process', 'saps', 'start', 'invoke-command', 'icm']);
+const DYNAMIC_CODE = /\[scriptblock\]|::create\b|invokescript|invokecommand|\binvoke-expression\b|\biex\b|\bgcm\b|\bget-command\b|(?:^|[\s;|({])[&.]\s*[($]/i;
+const TOUCHES = /\banswer\b|\bforms?\b|\.env\b/i;
 
 const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE)|%(?:USERPROFILE|HOMEDRIVE)%)/i;
 
@@ -308,15 +309,23 @@ function encodedUnreadable(rest) {
   return false;
 }
 
+// Fail closed on the whole text (call forms split across statements by parens included): a dynamic-code construct
+// next to an answer, forms or .env target, or next to an encoded flag.
+function dynamicCodeDenied(text, names) {
+  if (!DYNAMIC_CODE.test(text)) return false;
+  return names || TOUCHES.test(text) || text.split(/[\s'",;()|&{}]+/).some((p) => ENCODED.test(p));
+}
+
 // Fail closed: nested text that cannot be read, or that cannot be parsed further at the depth limit.
 function nestingDenied(words, depth) {
-  // Broad fail-closed: a pwsh name, an encoded flag and an eval/process-spawn verb in one statement, in any order
-  // and inside any quoting (`iex "pwsh -enc .."`, `Start-Process pwsh -ArgumentList '-enc','..'`).
-  // The PowerShell call operators `&` and `.` (also glued: `&pwsh`) are spawn forms like iex.
+  // Broad fail-closed, whatever the spawn word or call form: (a) a pwsh name and an encoded flag in one statement
+  // that does not run pwsh directly as its verb (a direct call is read by the nested checks below);
+  // (b) a dynamic-code construct in a statement that touches an answer, forms or .env target or is itself encoded.
   const parts = words.flatMap((w) => w.split(/[\s'",;()]+/)).filter(Boolean);
-  const callOp = (p) => p === '&' || p === '.' || /^&[^&]/.test(p);
-  if (parts.some((p) => POWERSHELLS.has(baseOf(p.replace(/^&+/, '')))) && parts.some((p) => ENCODED.test(p))
-    && parts.some((p) => SPAWN_VERBS.has(baseOf(p)) || callOp(p))) return true;
+  const encoded = parts.some((p) => ENCODED.test(p));
+  const vi = verbIndex(words);
+  const direct = vi < words.length && POWERSHELLS.has(baseOf(words[vi]));
+  if (encoded && !direct && parts.some((p) => POWERSHELLS.has(baseOf(p.replace(/^&+/, ''))))) return true;
   for (let i = 0; i < words.length; i++) {
     const base = baseOf(words[i]);
     const rest = words.slice(i + 1);
@@ -713,6 +722,7 @@ function analyze(ctx, text, powershell, depth, acc) {
   const stripped = stripHeredocs(text);
   const stmts = tokenize(stripped, powershell, (s) => subshells.push(s));
   const names = namesRecord(stripped);
+  if (dynamicCodeDenied(stripped, names)) return true;
   for (const { words, redirs } of stmts) {
     const vi = verbIndex(words);
     const verb = vi < words.length ? baseOf(words[vi]) : '';
