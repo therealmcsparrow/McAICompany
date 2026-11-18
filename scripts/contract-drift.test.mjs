@@ -128,6 +128,20 @@ describe('anchors', () => {
       'ERROR docs/adr/0001-x.md:1 anchor scripts/../../etc/passwd refused',
       'ERROR docs/adr/0001-x.md:1 anchor docs/../scripts/real.mjs refused']);
   });
+  test('R-23: an anchor in node_modules is skipped even when the target is absent', () => {
+    const root = repo({ ...base, 'node_modules/pkg/readme.md': 'x\n', 'docs/adr/0001-x.md': '`node_modules/.bin` and `node_modules/pkg/gone.js`\n' });
+    assert.deepEqual(checkDrift(root), []);
+  });
+  test('R-23: a non-ignored folder with a missing target still reports anchor missing', () => {
+    const root = repo({ ...base, 'node_modules/pkg/readme.md': 'x\n', 'scripts/real.mjs': '\n', 'docs/adr/0001-x.md': '`node_modules/.bin` and `scripts/gone.mjs`\n' });
+    assert.deepEqual(checkDrift(root), ['ERROR docs/adr/0001-x.md:1 anchor scripts/gone.mjs missing']);
+  });
+  test('R-23: a .gitignore d folder in a git root is skipped', (t) => {
+    const root = repo({ ...base, '.gitignore': 'dist/\n', 'dist/a.txt': 'x\n', 'tools/real.mjs': '\n', 'docs/adr/0001-x.md': '`dist/gone.js` and `tools/gone.mjs`\n' });
+    const g = spawnSync('git', ['init', '-q', root], { stdio: 'ignore' });
+    if (g.status !== 0) return t.skip('git unavailable');
+    assert.deepEqual(checkDrift(root), ['ERROR docs/adr/0001-x.md:1 anchor tools/gone.mjs missing']);
+  });
   test('a missing export names the provider', () => {
     const root = repo({ ...base,
       'docs/contracts/b.md': '# Contract: b v1\n\nValidator: `checkIt(text)` exported by `scripts/beta.mjs`, and `other` exported by `scripts/beta.mjs`.\n',
