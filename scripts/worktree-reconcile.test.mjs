@@ -93,7 +93,7 @@ describe('worktree reconcile', () => {
     const r = makeRepo();
     withProto(r, { dropBranch: false });
     const res = r.run('reconcile', RUN, 'proto');
-    assert.notEqual(res.code, 0);
+    assert.equal(res.code, 3, res.lines.join('\n'));
     assert.notDeepEqual(res.lines, []);
     assert.doesNotMatch(res.lines.join('\n'), /usage: worktree <command>/, 'reconcile must be a known command');
     assert.equal(r.events().length, 1, 'record unchanged');
@@ -106,7 +106,7 @@ describe('worktree reconcile', () => {
     git(r.repo, 'update-ref', '-d', r.ref('proto'));
     assert.ok(fs.existsSync(r.wt('proto')));
     const res = r.run('reconcile', RUN, 'proto');
-    assert.notEqual(res.code, 0);
+    assert.equal(res.code, 3, res.lines.join('\n'));
     assert.doesNotMatch(res.lines.join('\n'), /usage: worktree <command>/, 'reconcile must be a known command');
     assert.equal(r.events().length, 1, 'record unchanged');
   });
@@ -115,7 +115,7 @@ describe('worktree reconcile', () => {
     const r = makeRepo();
     withProto(r, { dropTree: false, dropBranch: false });
     const res = r.run('reconcile', RUN, 'proto');
-    assert.notEqual(res.code, 0);
+    assert.equal(res.code, 3, res.lines.join('\n'));
     assert.doesNotMatch(res.lines.join('\n'), /usage: worktree <command>/, 'reconcile must be a known command');
     assert.equal(r.events().length, 1);
     assert.ok(fs.existsSync(r.wt('proto')), 'worktree untouched');
@@ -130,12 +130,39 @@ describe('worktree reconcile', () => {
     withProto(r);
     assert.equal(r.run('reconcile', RUN, 'proto').code, 0);
     const again = r.run('reconcile', RUN, 'proto');
-    assert.notEqual(again.code, 0);
+    assert.equal(again.code, 3, again.lines.join('\n'));
     assert.doesNotMatch(again.lines.join('\n'), /usage: worktree <command>/);
     assert.equal(r.events().length, 2, 'no second remove');
     const unknown = r.run('reconcile', RUN, 't9');
-    assert.notEqual(unknown.code, 0);
+    assert.equal(unknown.code, 3, unknown.lines.join('\n'));
     assert.equal(r.events().length, 2);
+  });
+
+  test('R-3: refuses when the worktree is still registered after prune (locked, folder and branch gone)', () => {
+    const r = makeRepo();
+    withProto(r, { dropTree: false, dropBranch: false });
+    git(r.repo, 'worktree', 'lock', r.wt('proto'));
+    fs.rmSync(r.wt('proto'), { recursive: true, force: true });
+    git(r.repo, 'update-ref', '-d', r.ref('proto'));
+    assert.ok(!fs.existsSync(r.wt('proto')));
+    const res = r.run('reconcile', RUN, 'proto');
+    assert.equal(res.code, 3, res.lines.join('\n'));
+    assert.match(res.lines.join('\n'), /still registered/);
+    assert.equal(r.events().length, 1, 'record unchanged');
+    assert.equal(r.events()[0].ev, 'add');
+  });
+
+  test('R-1: protocheck keeps reporting prototype: unknown (exit 2) after reconcile of a hand-removed proto', () => {
+    const r = makeRepo();
+    withProto(r);
+    const before = r.run('protocheck', RUN);
+    assert.equal(before.code, 2, before.lines.join('\n'));
+    assert.deepEqual(before.lines, ['prototype: unknown']);
+    assert.equal(r.run('reconcile', RUN, 'proto').code, 0);
+    const after = r.run('protocheck', RUN);
+    assert.doesNotMatch(after.lines.join('\n'), /not in diff/, 'reconcile must not give a false all-clear');
+    assert.deepEqual(after.lines, ['prototype: unknown']);
+    assert.equal(after.code, 2);
   });
 
   test('reconcile touches only the named id; another live worktree stays', () => {
@@ -151,7 +178,7 @@ describe('worktree reconcile', () => {
   test('bad usage is refused', () => {
     const r = makeRepo();
     for (const res of [r.run('reconcile', RUN), r.run('reconcile')]) {
-      assert.notEqual(res.code, 0);
+      assert.equal(res.code, 3, res.lines.join('\n'));
       assert.match(res.lines.join('\n'), /reconcile <slug> <id>/, 'usage lists reconcile');
     }
   });
