@@ -311,7 +311,7 @@ export function denies(session, env = process.env, cwd = process.cwd()) {
   const home = env.MCSPARROW_HOME || path.join(env.USERPROFILE || env.HOME || os.homedir(), '.mcsparrow');
   const root = projectRoot(cwd);
   if (!root) return [];
-  const file = path.join(home, 'hook-snapshots', sha(root).slice(0, 12), 'denies.jsonl');
+  const file = path.join(home, 'hook-snapshots', crypto.createHash('sha256').update(root).digest('hex').slice(0, 12), 'denies.jsonl');
   let text;
   try {
     const st = fs.statSync(file);
