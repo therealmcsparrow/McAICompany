@@ -28,7 +28,15 @@ const WHO = {
 
 let tmp, home, project, plugin;
 
+// A rule row gets a 1 s budget that includes the worker start; under full-suite CPU load the first rule (cap.M1) can
+// miss it and the host fails closed with "cap.M1: timeout". That is load noise, not a verdict: ask again, up to 3 tries.
+const LOAD_TIMEOUT = /cap\.M1: timeout/;
 function host(payload, cwd) {
+  let r = hostOnce(payload, cwd);
+  for (let i = 0; i < 2 && LOAD_TIMEOUT.test(`${r.reason ?? ''}${r.out}`); i++) r = hostOnce(payload, cwd);
+  return r;
+}
+function hostOnce(payload, cwd) {
   const env = { ...process.env, CLAUDE_PLUGIN_ROOT: plugin, MCSPARROW_HOME: home, HOME: tmp, USERPROFILE: tmp };
   delete env.AICO_GUARDS;
   const r = spawnSync(process.execPath, [path.join(plugin, 'scripts', 'hook-host.mjs')], {
