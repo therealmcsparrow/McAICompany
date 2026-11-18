@@ -124,3 +124,30 @@ test('guards off + pins mismatch: JSON-escaped pwsh without an encoded flag stil
   const lit = '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"p\\u0077sh \\u002dFile a.ps1"}}';
   assert.notEqual(verdict(env.run(lit, OFF)), 'deny', lit);
 });
+
+// Depth limit: input nested past 20 levels cannot be read, so guards off + pins mismatch denies it (fail closed).
+const nest = (n, leaf) => { let v = leaf; for (let i = 0; i < n; i++) v = { a: v }; return v; };
+const rawNested = (env, n, leaf, chars) => {
+  const ev = env.pre('echo x');
+  ev.tool_input = { command: 'echo x', deep: nest(n, leaf) };
+  return esc(JSON.stringify(ev), chars);
+};
+
+test('guards off + pins mismatch: >20 levels nested with a unicode-escaped forms.jsonl path denies self-protect.M-SEC1', () => {
+  const env = mismatchEnv();
+  for (const n of [21, 25, 40]) {
+    const raw = rawNested(env, n, '.company/work/p1/01-feature/forms.jsonl', 'fm');
+    assert.ok(raw.includes(`${String.fromCharCode(92)}u0066or`), 'fixture escapes the f');
+    const r = env.run(raw, OFF);
+    assert.equal(verdict(r), 'deny', `depth ${n}`);
+    assert.match(JSON.stringify(r.json), /self-protect\.M-SEC1/, `depth ${n}`);
+  }
+});
+
+test('guards off + pins mismatch: shallow harmless nested input still allows', () => {
+  const env = mismatchEnv();
+  for (const n of [1, 3, 5]) {
+    const r = env.run(rawNested(env, n, 'hello world', 'hw'), OFF);
+    assert.notEqual(verdict(r), 'deny', `depth ${n}: ${reason(r)}`);
+  }
+});

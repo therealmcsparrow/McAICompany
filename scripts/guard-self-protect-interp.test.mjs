@@ -321,11 +321,54 @@ test('call operator . before pwsh -enc around a forms.jsonl write denies', () =>
   const e = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
   for (const shell of ['PowerShell', 'Bash']) deniedBoth(shell, `. pwsh -enc ${e}`);
 });
-// Expected-deny probes: a harmless payload behind a call operator is allowed today (no spawn verb). Marked todo until
-// `&` and `.` join the spawn list; node:test reports a todo failure without failing the run.
+// A harmless payload behind a call operator denies: rule (a) denies an encoded flag next to a pwsh name
+// unless pwsh is the statement's own verb (the spawn-verb list is gone).
 for (const op of ['&', '.']) {
   test(`call operator '${op}' before pwsh -enc is a spawn form and denies like iex`, () => {
     const ok = b64('Write-Output 1');
     for (const shell of ['PowerShell', 'Bash']) deniedBoth(shell, `${op} pwsh -enc ${ok}`);
   });
 }
+
+// Rule (a) and (b) call and spawn forms (P20261117.000001 step 242).
+const encWrite = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
+const encOk = b64('Write-Output 1');
+const callForms = (E) => [
+  `[scriptblock]::Create('pwsh -enc ${E}').Invoke()`,
+  `$ExecutionContext.InvokeCommand.InvokeScript('pwsh -enc ${E}')`,
+  `& (gcm pwsh) -enc ${E}`,
+  `& (Get-Command pwsh) -enc ${E}`,
+  `. (gcm powershell) -EncodedCommand ${E}`,
+];
+
+test('scriptblock, InvokeScript and gcm forms around an encoded forms.jsonl write deny', () => {
+  for (const shell of ['PowerShell', 'Bash']) for (const cmd of callForms(encWrite)) deniedBoth(shell, cmd);
+});
+
+test('an encoded flag with a harmless payload denies under every spawn or call form', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [
+      `[scriptblock]::Create('pwsh -enc ${encOk}').Invoke()`, `& (gcm pwsh) -enc ${encOk}`,
+      `$ExecutionContext.InvokeCommand.InvokeScript('pwsh -e ${encOk}')`,
+      `Start-Process pwsh -ArgumentList '-ec','${encOk}'`, `& $p -enc ${encOk}`, `. ('pw'+'sh') -e ${encOk}`,
+      `& pwsh \u2013enc ${encOk}`, `& pwsh --enc ${encOk}`, `& pwsh /enc ${encOk}`,
+    ]) deniedBoth(shell, cmd);
+  }
+});
+
+test('rule (b): dynamic code naming a record, .env, answer or form denies without a pwsh name', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [
+      `& ([scriptblock]::Create('Add-Content forms.jsonl x'))`, `iex (gcm cat) .env`, `& $c answer`, `Invoke-Expression 'cat .env'`,
+    ]) deniedBoth(shell, cmd);
+  }
+});
+
+test('allow stays: direct pwsh -enc, nested -c, harmless dynamic code', () => {
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [
+      `pwsh -enc ${encOk}`, 'pwsh -EncodedCommand AAAA', `pwsh -c "pwsh -enc ${encOk}"`, 'Get-Command git',
+      '& (gcm pwsh) -c 1', `iex 'Get-Date'`, `[scriptblock]::Create('1+1').Invoke()`,
+    ]) allowedBoth(shell, cmd);
+  }
+});
