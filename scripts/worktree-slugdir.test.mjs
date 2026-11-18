@@ -87,4 +87,25 @@ describe('worktree cleanup slug folder', () => {
     assert.equal(res.code, 0, res.lines.join('\n'));
     assert.equal(fs.existsSync(path.join(r.slugDir, 'keep-me')), true);
   });
+
+  test('guard: a <ProjectID> folder that is a link or junction to an empty folder is not removed', (t) => {
+    const r = makeRepo();
+    assert.equal(r.run('add', RUN, 'proto', '--base', r.head()).code, 0);
+    git(r.repo, 'worktree', 'remove', '--force', r.wt('proto'));
+    git(r.repo, 'branch', '-D', `aico-wt/${ID}/proto`);
+    assert.equal(r.run('reconcile', RUN, 'proto').code, 0);
+    // The slug folder is now empty; swap it for a link to an empty folder elsewhere.
+    const target = path.join(path.dirname(r.slugDir), 'link-target');
+    fs.mkdirSync(target);
+    fs.rmdirSync(r.slugDir);
+    let kind = null;
+    for (const type of process.platform === 'win32' ? ['junction', 'dir'] : ['dir']) {
+      try { fs.symlinkSync(target, r.slugDir, type); kind = type; break; } catch { /* try next */ }
+    }
+    if (!kind) { t.skip('cannot create a symlink or junction on this OS/account'); return; }
+    assert.equal(fs.lstatSync(r.slugDir).isSymbolicLink(), true, 'setup: slug folder is a link');
+    r.run('cleanup', RUN);
+    assert.equal(fs.lstatSync(r.slugDir).isSymbolicLink(), true, 'link was removed');
+    assert.equal(fs.existsSync(target), true, 'link target was removed');
+  });
 });
