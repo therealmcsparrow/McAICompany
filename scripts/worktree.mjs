@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Worktree (contract: docs/contracts/worktree.md v1.5). Node built-ins only; cwd = product root.
+// Worktree (contract: docs/contracts/worktree.md v1.6). Node built-ins only; cwd = product root.
 // uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/tier-sets.md v1.1
 // One git worktree per parallel task, merged back into the run branch in plan order. Every git call is a fixed argument
 // list run without a shell, in a scrubbed environment, with replace refs and grafts off; branches, worktree folders,
@@ -935,7 +935,19 @@ function cmdCleanup(args, env) {
     if (r.stop) stopped = true;
   }
   ctx.git(['worktree', 'prune']);
+  dropEmptySlugDir(layoutOf(ctx.realRoot, slug, 'x'));
   return { code: stopped ? 2 : 0, lines };
+}
+
+// Removes the project folder when cleanup left it empty. Non-recursive, so a folder with content (or the run
+// worktree, which has a .git entry) stays; a missing or non-empty folder is not an error.
+function dropEmptySlugDir(layout) {
+  if (!segmentsOk(layout)) return;
+  try {
+    fs.rmdirSync(layout.slugDir);
+  } catch (e) {
+    if (!['ENOTEMPTY', 'ENOENT', 'EEXIST', 'EBUSY', 'EPERM', 'EACCES'].includes(e && e.code)) throw e;
+  }
 }
 
 // ---------------------------------------------------------------- reconcile
