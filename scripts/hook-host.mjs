@@ -103,7 +103,14 @@ function denyOut(name, stopActive, rule, message, extra = {}) {
   return preDeny(rule, message, extra);
 }
 
-const decodedStrings = (v, d = 0) => (d > 20 ? [] : typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.entries(v).flatMap(([k, x]) => [k, ...decodedStrings(x, d + 1)]) : []);
+// Past this nesting depth the strings are not read; the caller fails closed on `tooDeep`.
+const MAX_DECODE_DEPTH = 20;
+function decodedStrings(v, d = 0, state = { tooDeep: false, out: [] }) {
+  if (d > MAX_DECODE_DEPTH) { state.tooDeep = true; return state; }
+  if (typeof v === 'string') state.out.push(v);
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { state.out.push(k); decodedStrings(x, d + 1, state); }
+  return state;
+}
 
 const sysOf = (list) => { const t = list.filter(Boolean).join('\n'); return t.length > 0 ? t.slice(0, 2000) : null; };
 
@@ -134,7 +141,10 @@ async function main() {
     if (guardsOff && peekLead) {
       // The pinned rule cannot be trusted, so a call that names a run record is denied by text alone.
       // JSON escapes (unicode escapes) hide words in the raw text, so these checks run on the raw text plus every decoded string.
-      const scan = `${text}\n${decodedStrings(peek).join('\n')}`;
+      const decoded = decodedStrings(peek);
+      // Input nested past the limit cannot be read in full, so it is denied (fail closed).
+      if (name === 'PreToolUse' && decoded.tooDeep) return finish(preDeny('self-protect.M-SEC1', 'input is nested too deep to read'));
+      const scan = `${text}\n${decoded.out.join('\n')}`;
       if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
       // The same holds for the .env read check and the answer shell block: text only, no pinned module.
       if (name === 'PreToolUse') {
