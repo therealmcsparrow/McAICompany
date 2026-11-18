@@ -12,8 +12,8 @@ const MAX_NAMED = 35;
 
 const STEP_REASON = 'aico context cap: this Step reached the hand-over point. Write your Handoff with status: handover to your Output path now, then end. Every other tool is refused.';
 const STOP_REASON = 'aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.';
-const FREEZE_REASON = 'aico context cap: the Lead agent reached the hand-over point and the Lead Handoff is written. End your turn now with these lines, and call no tool: STATUS: handover; handoff: <path of the Lead Handoff>; next: <what the next Lead session does first>. Every tool is refused.';
-const FROZEN_REASON = 'aico context cap: this Lead agent is frozen. Every tool is refused. End your turn now with these lines: STATUS: handover; handoff: <path of the Lead Handoff>; next: <what the next Lead session does first>.';
+const FREEZE_REASON = 'aico context cap: the Lead Handoff is written. End your turn now, call no tool, with these lines: STATUS: handover; the handoff line below; next: <what the next Lead session does first>. Every tool is refused.';
+const FROZEN_REASON = 'aico context cap: this Lead agent is frozen. Every tool is refused. End your turn now with these lines: STATUS: handover; the handoff line below; next: <what the next Lead session does first>.';
 const WAIT_REASON = `${RULE}: a Step is still running. Wait for it to finish before you dispatch another.`;
 const ROLE_SPAWN_REASON = `${RULE}: a Role never spawns the Lead.`;
 const LEAD_BG_REASON = `${RULE}: the Lead dispatches Roles in the foreground.`;
