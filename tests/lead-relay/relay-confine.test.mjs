@@ -135,13 +135,29 @@ describe('confined() real-path equality', async () => {
     assert.throws(() => confined(fx.root, wrong, { fs, path, realpath: (p) => (p === path.join(fx.dir, 'Q.json') ? f : p) }), /differs|case|exact/);
   });
 
-  test('a junction inside the repo to another repo file is refused (real, needs link right)', (t) => {
+  test('a file symlink inside the repo to another repo file is refused (real, needs link right)', (t) => {
     const fx = fixture();
     const target = path.join(fx.root, 'real.json');
     fs.writeFileSync(target, Q);
     const link = path.join(fx.root, 'link.json');
     try { fs.symlinkSync(target, link); } catch { t.skip('no symlink right'); return; }
     assert.equal(open(fx, 'link.json').status, 1);
+    assert.ok(!formsExist(fx));
+  });
+
+  // Real junction directory, no admin needed; runs on win32 only. confined() uses the real fs.realpathSync.native.
+  test('a junction directory inside the repo to another repo directory is refused by confined()', { skip: process.platform !== 'win32' && 'junctions are win32 only' }, () => {
+    const fx = fixture();
+    const targetDir = path.join(fx.root, 'realdir');
+    fs.mkdirSync(targetDir);
+    fs.writeFileSync(path.join(targetDir, 'q.json'), Q);
+    const link = path.join(fx.root, 'linkdir');
+    fs.symlinkSync(targetDir, link, 'junction');
+    assert.ok(fs.lstatSync(link).isSymbolicLink());
+    assert.throws(() => confined(fx.root, path.join('linkdir', 'q.json')), /questions file path differs from its real path/);
+    const r = open(fx, path.join('linkdir', 'q.json'));
+    assert.equal(r.status, 1);
+    assert.match(r.stdout + r.stderr, /questions file path differs from its real path/);
     assert.ok(!formsExist(fx));
   });
 });
