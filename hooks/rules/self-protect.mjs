@@ -60,7 +60,8 @@ const POWERSHELLS = new Set(['pwsh', 'powershell']);
 const ENCODED = new RegExp(`^${PS_PREFIX}(?:e|ec|en[a-z]*)(?::(.*))?$`, 'i');
 const EVAL_VERBS = new Set(['iex', 'invoke-expression']);
 
-const DYNAMIC_CODE = /\[scriptblock\]|::create\b|invokescript|invokecommand|\binvoke-expression\b|\biex\b|\bgcm\b|\bget-command\b|(?:^|[\s;|({])[&.]\s*[($]/i;
+const DYNAMIC_CODE = /\[scriptblock\]|::create\b|invokescript|invokecommand|\binvoke-expression\b|\biex\b|\bgcm\b|\bget-command\b|(?:^|[^\w$`])[&.]\s*[($\{]/i;
+const SEP = /[\s'",;(){}=|&!]+/;
 const TOUCHES = /\banswer\b|\bforms?\b|\.env\b/i;
 
 const VAR_LED = /^(?:~|\$(?:env:)?\{?(?:HOME|USERPROFILE)|%(?:USERPROFILE|HOMEDRIVE)%)/i;
@@ -309,11 +310,37 @@ function encodedUnreadable(rest) {
   return false;
 }
 
+// Tokens of a whole text, cut at every separator that can sit next to a command name or flag.
+function psTokens(text) {
+  return text.replace(/`/g, '').split(SEP).filter(Boolean);
+}
+
+// Fail closed: an encoded flag anywhere in text that names pwsh/powershell denies, whatever sits between them.
+// Only one direct `pwsh -enc <payload>` whose pwsh is the first command token of the whole text is left to the decode.
+function encodedPwshDenied(text) {
+  const parts = psTokens(text);
+  const flags = parts.filter((p) => ENCODED.test(p)).length;
+  if (flags === 0) return false;
+  const names = parts.filter((p) => POWERSHELLS.has(baseOf(p))).length;
+  if (names === 0) return false;
+  if (flags === 1) {
+    const toks = text.trimStart().split(/\s+/);
+    let i = 0;
+    while (i < toks.length && ENV_ASSIGN.test(toks[i])) i++;
+    if (i < toks.length && POWERSHELLS.has(baseOf(toks[i]))) {
+      // `pwsh -c "pwsh -enc <payload>"`: the body is read again as its own text.
+      const body = PS_COMMAND.test(toks[i + 1] || '') && POWERSHELLS.has(baseOf((toks[i + 2] || '').replace(/^['"]/, '')));
+      if (names === (body ? 2 : 1)) return false;
+    }
+  }
+  return true;
+}
+
 // Fail closed on the whole text (call forms split across statements by parens included): a dynamic-code construct
 // next to an answer, forms or .env target, or next to an encoded flag.
 function dynamicCodeDenied(text, names) {
   if (!DYNAMIC_CODE.test(text)) return false;
-  return names || TOUCHES.test(text) || text.split(/[\s'",;()|&{}]+/).some((p) => ENCODED.test(p));
+  return names || TOUCHES.test(text) || psTokens(text).some((p) => ENCODED.test(p));
 }
 
 // Fail closed: nested text that cannot be read, or that cannot be parsed further at the depth limit.
@@ -321,7 +348,7 @@ function nestingDenied(words, depth) {
   // Broad fail-closed, whatever the spawn word or call form: (a) a pwsh name and an encoded flag in one statement
   // that does not run pwsh directly as its verb (a direct call is read by the nested checks below);
   // (b) a dynamic-code construct in a statement that touches an answer, forms or .env target or is itself encoded.
-  const parts = words.flatMap((w) => w.split(/[\s'",;()]+/)).filter(Boolean);
+  const parts = words.flatMap((w) => psTokens(w));
   const encoded = parts.some((p) => ENCODED.test(p));
   const vi = verbIndex(words);
   const direct = vi < words.length && POWERSHELLS.has(baseOf(words[vi]));
@@ -722,7 +749,7 @@ function analyze(ctx, text, powershell, depth, acc) {
   const stripped = stripHeredocs(text);
   const stmts = tokenize(stripped, powershell, (s) => subshells.push(s));
   const names = namesRecord(stripped);
-  if (dynamicCodeDenied(stripped, names)) return true;
+  if (encodedPwshDenied(stripped) || dynamicCodeDenied(stripped, names)) return true;
   for (const { words, redirs } of stmts) {
     const vi = verbIndex(words);
     const verb = vi < words.length ? baseOf(words[vi]) : '';
@@ -786,7 +813,7 @@ function inlineProgram(words) {
 }
 
 function answerDenied(command, powershell, depth = 0) {
-  if (stdinProgramDenied(command, (body) => ANSWER_TEXT.test(body))) return true;
+  if (encodedPwshDenied(command) || stdinProgramDenied(command, (body) => ANSWER_TEXT.test(body))) return true;
   const subshells = [];
   const stmts = tokenize(stripHeredocs(command), powershell, (s) => subshells.push(s));
   if (stmts.some(({ words }) => answerStatement(words, depth))) return true;
