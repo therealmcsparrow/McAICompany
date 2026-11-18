@@ -103,6 +103,8 @@ function denyOut(name, stopActive, rule, message, extra = {}) {
   return preDeny(rule, message, extra);
 }
 
+const decodedStrings = (v, d = 0) => (d > 20 ? [] : typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.entries(v).flatMap(([k, x]) => [k, ...decodedStrings(x, d + 1)]) : []);
+
 const sysOf = (list) => { const t = list.filter(Boolean).join('\n'); return t.length > 0 ? t.slice(0, 2000) : null; };
 
 async function main() {
@@ -131,14 +133,16 @@ async function main() {
     if (name === 'SessionStart') return finish({ systemMessage: `aico guards: ${msg}; guards deny until the plugin is reinstalled` });
     if (guardsOff && peekLead) {
       // The pinned rule cannot be trusted, so a call that names a run record is denied by text alone.
-      if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
+      // JSON escapes (unicode escapes) hide words in the raw text, so these checks run on the raw text plus every decoded string.
+      const scan = `${text}\n${decodedStrings(peek).join('\n')}`;
+      if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
       // The same holds for the .env read check and the answer shell block: text only, no pinned module.
       if (name === 'PreToolUse') {
-        const envHit = [...text.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
+        const envHit = [...scan.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
         if (envHit) return finish(preDeny('dotenv.M-SEC1', '.env files are not read or written'));
-        if (/lead-relay/i.test(text) && /\banswer\b/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
+        if (/lead-relay/i.test(scan) && /\banswer\b/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
         // An encoded PowerShell program hides its words, so any prefix of -EncodedCommand after any dash-like lead (-, --, /, Unicode dash) is denied here (fail closed).
-        if (/pwsh|powershell/i.test(text) && /[-\/\p{Pd}−]+(?:ec|e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?)?)(?![\p{L}\p{N}])/iu.test(text)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
+        if (/pwsh|powershell/i.test(scan) && /[-\/\p{Pd}−]+(?:ec|e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?)?)(?![\p{L}\p{N}])/iu.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
       }
       return finish(null);
     }
