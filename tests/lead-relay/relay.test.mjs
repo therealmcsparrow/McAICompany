@@ -210,7 +210,7 @@ describe('lead-relay answer: no row (fail closed, cch.M20, cch.M-SEC8)', () => {
     const first = rowsOf(fx, fx.slugs[0])[0];
     fs.writeFileSync(path.join(fx.work, ...fx.slugs[1].split('/'), 'forms.jsonl'), `${JSON.stringify(first)}\n`);
     hook(fx, 'answer', post(qs, answerOf(qs, ['Alpha'])));
-    assert.equal(answers(fx, fx.slugs[0]).length +answers(fx, fx.slugs[1]).length, 0);
+    assert.equal(answers(fx, fx.slugs[0]).length + answers(fx, fx.slugs[1]).length, 0);
   });
   test('an already answered form gets no second answer', () => {
     const qs = [single()];

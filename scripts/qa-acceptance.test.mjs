@@ -737,7 +737,7 @@ test('AC7 with no company_type line keeps the v0.12.0 Playbooks, steps and Gates
   // 28 since the work folder names: the Setup slug and branch lines, the ledger and rule-check calls and the push lines now quote the run name, and the Branch line takes the printed branch value.
   // Still 28: the Plan check bullet (B6) was added after v0.12.0, so rewording it removes no v0.12.0 line. B5 only adds lines (Setup item 18, one Gate bullet).
   // 31 since role skills: the dispatch line, the sentence under it and the Always-a-form line are reworded in place; the Auto Gates line had already moved.
-  // 33 since the Lead relay run (lead-relay v1): the Project Manager intro line and one more v0.12.0 line (Gate form / Lead hand-over wording) are reworded in place.
+  // 33 since the Lead relay run (lead-relay v1): the Project Manager intro line and one more v0.12.0 line (the "Every ask to the CEO is a form" line) are reworded in place.
   assert.equal(Number(removedFromPipeline), 33);
   assert.match(read('skills/pipeline/SKILL.md'), /\*\*Ship Gate, company types other than `software`\*\*[^\n]*For `software` none of this applies\./);
 });
