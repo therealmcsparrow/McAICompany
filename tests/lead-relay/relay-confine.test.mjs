@@ -116,14 +116,14 @@ describe('confined() real-path equality', async () => {
     const f = path.join(fx.root, 'q.json');
     fs.writeFileSync(f, Q);
     const other = path.join(fx.root, 'other.json');
-    assert.throws(() => confined(fx.root, 'q.json', fake(fx, { [f]: other })), /refused|outside|differs/);
+    assert.throws(() => confined(fx.root, 'q.json', fake(fx, { [f]: other })), /questions file path differs from its real path/);
   });
 
   test('a questions file under .company/ outside work/ is refused', () => {
     const fx = fixture();
     const f = path.join(fx.root, '.company', 'standards.md');
     fs.writeFileSync(f, Q);
-    assert.throws(() => confined(fx.root, '.company/standards.md', fake(fx, {})), /refused|\.company/);
+    assert.throws(() => confined(fx.root, '.company/standards.md', fake(fx, {})), /questions file is under \.company/);
   });
 
   test('a file under .company/work/ passes exactWorkPath only with exact letter case', () => {
