@@ -390,7 +390,7 @@ export async function normalize(raw, ctx) {
   };
   const leadSpawn = session === 'lead' && name === 'PreToolUse' && tool !== null && (tool.name === 'Agent' || tool.name === 'Task');
   if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error' || leadSpawn) {
-    try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = null; }
+    try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = { error: true }; }
   }
   for (const e of tool ? tool.paths : []) {
     if (typeof e.real === 'string' && GUARD_SHAPE.test(fold(e.real)) && !event.protected.includes(fold(e.real))) event.protected.push(fold(e.real));
