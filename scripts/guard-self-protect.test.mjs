@@ -746,3 +746,26 @@ test('R-3 host deny: pin mismatch + AICO_GUARDS=off, the answer adapter shell ca
     assert.equal(env.reason(r), null, `harmless passes under mismatch+off: ${command}: ${r.out}`);
   }
 });
+
+// 218 R-5: under pin mismatch + guards off the host cannot decode, so an encoded answer fails closed.
+test('R-5 host deny: pin mismatch + AICO_GUARDS=off, an encoded answer shell call denies; a plain harmless call passes', async () => {
+  const env = await mismatchEnv();
+  const b64 = (t) => Buffer.from(t, 'utf16le').toString('base64');
+  const answer = 'node scripts/lead-relay.mjs answer < f.json';
+  for (const [tool, command] of [
+    ['PowerShell', `pwsh -enc ${b64(answer)}`],
+    ['Bash', `pwsh -EncodedCommand ${b64(answer)}`],
+    ['PowerShell', `powershell -NoProfile -EncodedCommand:${b64(answer)}`],
+    ['Bash', `pwsh -c "pwsh -enc ${b64(answer)}"`],
+    ['PowerShell', `pwsh -enc ${b64(`pwsh -enc ${b64(answer)}`)}`],
+    ['PowerShell', `pwsh -enc ${b64('Set-Content .company/work/p1/01-feature/forms.jsonl x')}`],
+  ]) {
+    const r = env.run(leadCall(env, tool, { command }), OFF);
+    assertDeny(env, r, /self-protect\.M-SEC1|pins-mismatch/, `encoded answer under mismatch+off: ${command}`);
+  }
+  for (const command of ['echo hello', 'Write-Output ok']) {
+    const r = env.run(leadCall(env, 'PowerShell', { command }), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `harmless passes under mismatch+off: ${command}: ${r.out}`);
+  }
+});

@@ -223,3 +223,24 @@ test('a forged .git pointer in cwd does not widen protection, and a plain repo c
     assert.equal(plain.v.v, 'deny');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+// 218 R-3: a run-record write hidden behind a nested or double-encoded PowerShell command denies.
+test('nested -c / double-encoded -enc write to forms.jsonl denies (218 R-3)', () => {
+  const write = `Set-Content "${REC}/forms.jsonl" "{}"`;
+  const inner = b64(write);
+  for (const shell of ['PowerShell', 'Bash']) {
+    denied(shell, `pwsh -c "pwsh -enc ${inner}"`);
+    denied(shell, `pwsh -Command "powershell -EncodedCommand ${inner}"`);
+    denied(shell, `pwsh -c "${write}"`);
+    denied(shell, `pwsh -enc ${b64(`pwsh -enc ${inner}`)}`);
+    denied(shell, `powershell -EncodedCommand ${b64(`pwsh -enc ${b64(`pwsh -enc ${inner}`)}`)}`);
+    denied(shell, `pwsh -enc ${b64(`pwsh -c "${write}"`)}`);
+  }
+});
+
+test('nested -c / double-encoded -enc that name no record allow (218 R-3)', () => {
+  const ok = b64('Write-Output 1');
+  allowed('PowerShell', `pwsh -c "pwsh -enc ${ok}"`);
+  allowed('PowerShell', `pwsh -enc ${b64(`pwsh -enc ${ok}`)}`);
+  allowed('Bash', `pwsh -c "Write-Output 1"`);
+});
