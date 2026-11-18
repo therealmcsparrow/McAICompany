@@ -656,6 +656,21 @@ function unresolvedRisky(ctx, word) {
   return namesRecord(word) || ctx.bases.has(tailOf(normalizePath(word)));
 }
 
+// Decoded -EncodedCommand texts and inline -c programs of a statement, judged again like a direct command.
+function nestedTexts(words) {
+  const out = [];
+  for (let i = 0; i < words.length; i++) {
+    const base = baseOf(words[i]);
+    const rest = words.slice(i + 1);
+    if (POWERSHELLS.has(base)) for (const t of encodedTexts(rest)) out.push({ text: t, powershell: true });
+    const flag = INTERPRETERS[base];
+    if (!flag) continue;
+    const at = rest.findIndex((a) => flag.test(a));
+    if (at !== -1) out.push({ text: rest.slice(at + 1).join(' '), powershell: POWERSHELLS.has(base) });
+  }
+  return out;
+}
+
 function analyze(ctx, text, powershell, depth, acc) {
   const subshells = [];
   const stripped = stripHeredocs(text);
@@ -676,6 +691,7 @@ function analyze(ctx, text, powershell, depth, acc) {
       if (names && /^\$|\$\(/.test(t.word) && !VAR_LED.test(t.word)) return true;
       acc.writes.push(t.word);
     }
+    if (depth < MAX_DEPTH && nestedTexts(words).some((n) => analyze(ctx, n.text, n.powershell, depth + 1, acc))) return true;
   }
   if (depth >= MAX_DEPTH) return false;
   return subshells.some((s) => analyze(ctx, s, powershell, depth + 1, acc));
