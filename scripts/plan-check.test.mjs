@@ -251,9 +251,13 @@ describe('loadPatterns', () => {
     for (const p of loadPatterns().patterns) {
       const re = new RegExp(p.re, p.flags ?? '');
       for (const line of lines) {
-        const t0 = performance.now();
-        re.test(line);
-        const ms = performance.now() - t0;
+        // Best of 3: a GC pause or scheduler stall under suite load hits one run, a backtracking regex hits all of them.
+        let ms = Infinity;
+        for (let i = 0; i < 3 && ms >= 50; i++) {
+          const t0 = performance.now();
+          re.test(line);
+          ms = Math.min(ms, performance.now() - t0);
+        }
         assert.ok(ms < 50, `${p.id} took ${ms} ms`);
       }
     }
