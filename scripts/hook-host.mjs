@@ -25,7 +25,18 @@ const REBUILD_MSG = {
   settings: 'snapshot rebuild failed: settings invalid; fix: repair the aico settings files (config.json, .company/settings.json); escape: restart the Lead with AICO_GUARDS=off'
 };
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// Hash input: line-ending-normalized bytes (CRLF read as LF) so a CRLF working copy and an LF clone pin alike; a buffer with a NUL byte is binary and hashed as is.
+function pinBytes(buf) {
+  if (buf.includes(0)) return buf;
+  const out = Buffer.allocUnsafe(buf.length);
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) continue;
+    out[n++] = buf[i];
+  }
+  return out.subarray(0, n);
+}
+const sha = (file) => crypto.createHash('sha256').update(pinBytes(fs.readFileSync(file))).digest('hex');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 // Every file the pins cover, as plugin-relative paths with forward slashes. A directory or a file of another
