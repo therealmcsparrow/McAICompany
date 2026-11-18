@@ -127,6 +127,35 @@ test('PowerShell -EncodedCommand:<b64> and /EncodedCommand <b64> that name no re
   allowed('PowerShell', `powershell /EncodedCommand ${payload}`);
 });
 
+// R-5: every dash form of -EncodedCommand and -Command (en dash, em dash, horizontal bar, --, /) to a run record denies.
+const DASHES = ['-', '--', '/', '–', '—', '―'];
+test('PowerShell -EncodedCommand in every dash form to a run record denies', () => {
+  const payload = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
+  for (const d of DASHES) {
+    denied('PowerShell', `powershell ${d}EncodedCommand ${payload}`);
+    denied('Bash', `pwsh ${d}EncodedCommand ${payload}`);
+    denied('PowerShell', `powershell ${d}EncodedCommand:${payload}`);
+    denied('PowerShell', `powershell ${d}enc ${payload}`);
+  }
+});
+
+test('PowerShell -Command in every dash form to a run record denies', () => {
+  for (const d of DASHES) {
+    denied('PowerShell', `powershell ${d}Command "Set-Content ${REC}/forms.jsonl x"`);
+    denied('Bash', `pwsh ${d}Command "Set-Content ${REC}/forms.jsonl x"`);
+    denied('Bash', `pwsh ${d}c "Set-Content ${REC}/forms.jsonl x"`);
+  }
+});
+
+test('PowerShell -EncodedCommand and -Command in every dash form with a harmless payload allow', () => {
+  const payload = b64('Write-Output ok');
+  for (const d of DASHES) {
+    allowed('PowerShell', `powershell ${d}EncodedCommand ${payload}`);
+    allowed('Bash', `pwsh ${d}EncodedCommand:${payload}`);
+    allowed('PowerShell', `powershell ${d}Command "Write-Output ok"`);
+  }
+});
+
 test('a command over 200000 chars denies in every session', () => {
   denied('Bash', `echo ${'a'.repeat(200001)}`);
   denied('PowerShell', `Write-Output ${'a'.repeat(200001)}`);
