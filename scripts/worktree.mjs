@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Worktree (contract: docs/contracts/worktree.md v1.4). Node built-ins only; cwd = product root.
+// Worktree (contract: docs/contracts/worktree.md v1.5). Node built-ins only; cwd = product root.
 // uses: docs/contracts/plan-tasks.md v1.3 docs/contracts/tier-sets.md v1.1
 // One git worktree per parallel task, merged back into the run branch in plan order. Every git call is a fixed argument
 // list run without a shell, in a scrubbed environment, with replace refs and grafts off; branches, worktree folders,
@@ -41,6 +41,7 @@ const USAGE = [
   '  changed <slug> <id>',
   '  merge <slug>',
   '  cleanup <slug> [--archive]',
+  '  reconcile <slug> <id>',
   '  leftovers',
   '  protocheck <slug>'
 ].join('\n');
@@ -936,6 +937,29 @@ function cmdCleanup(args, env) {
   return { code: stopped ? 2 : 0, lines };
 }
 
+// ---------------------------------------------------------------- reconcile
+
+// Closes a live add whose worktree folder and branch were both removed outside this script (hand removal).
+// Appends one remove event (commit = the recorded base). Refuses while the folder or the branch is still there,
+// or when the id has no live add. A registration left behind with its folder gone (prunable) is pruned first,
+// as cleanup does, because cleanup itself refuses on the mismatch; a registration whose folder exists is refused.
+function cmdReconcile(args, env) {
+  if (args.length !== 2) throw new Refusal(USAGE);
+  const slug = checkSlug(args[0], env.root);
+  const id = checkId(args[1]);
+  const ctx = openGit(env);
+  const rec = loadRecord(env.root, slug);
+  const st = rec.ids.get(id);
+  if (!st?.live) throw new Refusal(id + " has no live add in the record");
+  const { wt } = layoutOf(ctx.realRoot, slug, id);
+  if (lstatOrNull(wt)) throw new Refusal("worktree " + id + " still exists");
+  if (listBranches(ctx, slug).includes(refOf(slug, id))) throw new Refusal("branch of " + id + " still exists");
+  ctx.git(["worktree", "prune"]);
+  if (listWorktrees(ctx).some((p) => sameKey(p) === sameKey(wt))) throw new Refusal("worktree " + id + " is still registered in git");
+  appendEvent(env, slug, { v: 1, at: utc(env.now), ev: "remove", task: id, commit: st.base });
+  return { code: 0, lines: ["reconciled " + id] };
+}
+
 // ---------------------------------------------------------------- leftovers
 
 function cmdLeftovers(args, env) {
@@ -1000,7 +1024,7 @@ function cmdProtocheck(args, env) {
 
 // ---------------------------------------------------------------- main
 
-const HANDLERS = { add: cmdAdd, changed: cmdChanged, merge: cmdMerge, cleanup: cmdCleanup, leftovers: cmdLeftovers, protocheck: cmdProtocheck };
+const HANDLERS = { add: cmdAdd, changed: cmdChanged, merge: cmdMerge, cleanup: cmdCleanup, reconcile: cmdReconcile, leftovers: cmdLeftovers, protocheck: cmdProtocheck };
 
 // The product root is resolved to its real path once here; every path the script derives, prints or compares starts from it.
 function realRootOf(root) {
