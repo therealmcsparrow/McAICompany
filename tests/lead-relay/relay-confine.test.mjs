@@ -132,7 +132,7 @@ describe('confined() real-path equality', async () => {
     fs.writeFileSync(f, Q);
     assert.equal(confined(fx.root, path.join('.company', 'work', ID, '01-feature', 'q.json'), fake(fx, {})), f);
     const wrong = path.join('.company', 'work', ID, '01-feature', 'Q.json');
-    assert.throws(() => confined(fx.root, wrong, { fs, path, realpath: (p) => (p === path.join(fx.dir, 'Q.json') ? f : p) }), /differs|case|exact/);
+    assert.throws(() => confined(fx.root, wrong, { fs, path, realpath: (p) => (p === path.join(fx.dir, 'Q.json') ? f : p) }), { message: 'questions file path differs from its real path' });
   });
 
   test('a file symlink inside the repo to another repo file is refused (real, needs link right)', (t) => {

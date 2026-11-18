@@ -182,7 +182,7 @@ test('grill: wrong letter case of the v3 run folder is refused', () => {
   assert.match(r.lines[0], /wrong letter case/);
 });
 
-// ---------- reprompt gate (reprompt v2.6) ----------
+// ---------- reprompt gate (reprompt v2.7) ----------
 test('isRunName: a v3 run slug is a run name, a malformed one is not, v2 names unchanged', () => {
   for (const good of [V3, `${PID}/12-reprompt`, `${PID}/999-reprompt`, PID, V2, 'reprompt-20261027-0905']) {
     assert.equal(isRunName(good), true, good);
@@ -226,7 +226,7 @@ test('allowsTool: the recorded reprompter writes only its two files of a v3 run 
   assert.equal(allowsTool('Write', { file_path: `${run3}/x/prompt.md` }, { ...rec, slug: `${V3}/x` }, '/plug', process.platform), false);
 });
 
-// ---------- reprompt-check (reprompt v2.6) ----------
+// ---------- reprompt-check (reprompt v2.7) ----------
 function project() {
   const rootDir = root();
   const home = path.join(rootDir, '..', `${path.basename(rootDir)}-home`);
