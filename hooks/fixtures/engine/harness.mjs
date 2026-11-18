@@ -75,7 +75,9 @@ export function pinnedFiles(plugin) {
 
 export function writePins(plugin) {
   const files = {};
-  for (const rel of pinnedFiles(plugin)) files[rel] = sha256(fs.readFileSync(path.join(plugin, rel)));
+  // The host hashes line-ending-normalized bytes (CRLF read as LF, binary as is); match it so a CRLF working copy pins alike.
+  const pinBytes = (b) => (b.includes(0) ? b : Buffer.from(b.toString('latin1').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10)), 'latin1'));
+  for (const rel of pinnedFiles(plugin)) files[rel] = sha256(pinBytes(fs.readFileSync(path.join(plugin, rel))));
   writeJson(path.join(plugin, 'hooks', 'pins.json'), { v: 1, files });
 }
 
