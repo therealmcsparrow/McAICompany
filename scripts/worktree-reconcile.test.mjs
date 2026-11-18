@@ -119,7 +119,10 @@ describe('worktree reconcile', () => {
     assert.doesNotMatch(res.lines.join('\n'), /usage: worktree <command>/, 'reconcile must be a known command');
     assert.equal(r.events().length, 1);
     assert.ok(fs.existsSync(r.wt('proto')), 'worktree untouched');
-    assert.equal(r.run('cleanup', RUN).code, 0);
+    const c = r.run('cleanup', RUN);
+    assert.equal(c.code, 2, c.lines.join('\n'));
+    assert.match(c.lines.join('\n'), /kept proto: unmerged work/);
+    assert.ok(fs.existsSync(r.wt('proto')), 'cleanup kept the worktree');
   });
 
   test('refuses an id with no live add and writes nothing', () => {
