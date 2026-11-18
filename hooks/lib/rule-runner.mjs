@@ -52,6 +52,7 @@ if (!isMainThread && workerData && workerData.aicoRunner === true) {
       reply(verdict ? { ok: true, verdict } : { ok: false, word: 'invalid' });
     } catch { reply({ ok: false, word: 'crash' }); }
   });
+  parentPort.postMessage({ ready: true });
 }
 
 // Absolute path of a rule module under hooks/rules, or { word } when it cannot be loaded.
@@ -74,6 +75,8 @@ export function createRunner(pluginRoot, { deadlineMs = CALL_DEADLINE_MS, now = 
   const kill = () => { const w = worker; worker = null; if (w) w.terminate().catch(() => {}); };
   const spawn = () => {
     const w = new Worker(fileURLToPath(import.meta.url), { workerData: { aicoRunner: true }, resourceLimits: { maxOldGenerationSizeMb: 64 } });
+    // Settles true when the worker has started, false if it dies first. Start-up is not part of a row's clock.
+    w.ready = new Promise((res) => { w.on('message', (m) => { if (m && m.ready === true) res(true); }); w.on('error', () => res(false)); w.on('exit', () => res(false)); });
     w.on('message', (m) => { if (current && m.id === current.id) current.finish(m.ok ? { ok: true, verdict: m.verdict } : { ok: false, word: m.word }); });
     w.on('error', () => { if (current) current.finish({ ok: false, word: 'crash' }); kill(); });
     w.on('exit', () => { if (worker === w) worker = null; if (current) current.finish({ ok: false, word: 'crash' }); });
@@ -85,27 +88,42 @@ export function createRunner(pluginRoot, { deadlineMs = CALL_DEADLINE_MS, now = 
     // job: { module, export, event, snapshot, timeoutMs }. Resolves { ok: true, verdict } or { ok: false, word }.
     run(job) {
       return new Promise((resolve) => {
-        const remaining = end - now();
         const target = resolveModule(pluginRoot, job.module);
         if (!target.file) { resolve({ ok: false, word: target.word }); return; }
-        if (remaining <= 0) { resolve({ ok: false, word: 'timeout' }); return; }
-        const limit = Math.min(Number.isInteger(job.timeoutMs) && job.timeoutMs > 0 ? job.timeoutMs : ROW_TIMEOUT_MAX_MS, ROW_TIMEOUT_MAX_MS, remaining);
-        let timer = null;
-        const id = ++seq;
-        const finish = (r) => {
-          if (!current || current.id !== id) return;
-          clearTimeout(timer);
-          current = null;
-          resolve(r);
-        };
-        current = { id, finish };
-        timer = setTimeout(() => { finish({ ok: false, word: 'timeout' }); kill(); }, limit);
-        try {
-          if (!worker) worker = spawn();
-          worker.postMessage({ id, url: pathToFileURL(target.file).href, exportName: job.export, event: job.event, snapshot: job.snapshot });
-        } catch { finish({ ok: false, word: 'crash' }); kill(); }
+        if (end - now() <= 0) { resolve({ ok: false, word: 'timeout' }); return; }
+        let w;
+        try { if (!worker) worker = spawn(); w = worker; } catch { kill(); resolve({ ok: false, word: 'crash' }); return; }
+        // Wait for worker start-up outside the row clock, bounded by the call deadline.
+        let startTimer = null;
+        const expired = new Promise((res) => { startTimer = setTimeout(() => res('timeout'), Math.max(0, end - now())); });
+        Promise.race([w.ready, expired]).then((r) => {
+          clearTimeout(startTimer);
+          if (r === 'timeout') { kill(); resolve({ ok: false, word: 'timeout' }); return; }
+          if (r !== true) { kill(); resolve({ ok: false, word: 'crash' }); return; }
+          runRow(job, target, resolve);
+        });
       });
     },
     close() { kill(); }
   };
+
+  function runRow(job, target, resolve) {
+    const remaining = end - now();
+    if (remaining <= 0) { resolve({ ok: false, word: 'timeout' }); return; }
+    const limit = Math.min(Number.isInteger(job.timeoutMs) && job.timeoutMs > 0 ? job.timeoutMs : ROW_TIMEOUT_MAX_MS, ROW_TIMEOUT_MAX_MS, remaining);
+    let timer = null;
+    const id = ++seq;
+    const finish = (r) => {
+      if (!current || current.id !== id) return;
+      clearTimeout(timer);
+      current = null;
+      resolve(r);
+    };
+    current = { id, finish };
+    timer = setTimeout(() => { finish({ ok: false, word: 'timeout' }); kill(); }, limit);
+    try {
+      if (!worker) worker = spawn();
+      worker.postMessage({ id, url: pathToFileURL(target.file).href, exportName: job.export, event: job.event, snapshot: job.snapshot });
+    } catch { finish({ ok: false, word: 'crash' }); kill(); }
+  }
 }
