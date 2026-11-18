@@ -145,7 +145,7 @@ const EVENT_KEYS = {
   remove: ['task', 'commit'],
   archive: ['task', 'commit', 'patch']
 };
-const OPTIONAL_KEYS = { remove: ['ignored'], archive: ['ignored'] };
+const OPTIONAL_KEYS = { remove: ['ignored', 'reconciled'], archive: ['ignored'] };
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -173,6 +173,7 @@ function applyEvent(ids, rec) {
       if (!n.ok || n.key !== k) return 'paths holds a bad path key';
     }
   }
+  if (Object.hasOwn(rec, 'reconciled') && rec.reconciled !== true) return 'reconciled must be true';
   if (rec.ev === 'archive' && !(typeof rec.patch === 'string' && PATCH_NAME.test(rec.patch))) return 'patch is not a patch file name';
   if (Object.hasOwn(rec, 'ignored') && !(typeof rec.ignored === 'string' && IGNORED_NAME.test(rec.ignored) && rec.ignored.startsWith(`${rec.task}-`))) {
     return 'ignored is not an ignored-files folder name';
@@ -187,7 +188,7 @@ function applyEvent(ids, rec) {
   if (rec.ev === 'merge') cur.merge = { commit: rec.commit, tip: rec.tip };
   if (rec.ev === 'remove' || rec.ev === 'archive') {
     cur.live = false;
-    cur.end = { ev: rec.ev, commit: rec.commit };
+    cur.end = { ev: rec.ev, commit: rec.commit, reconciled: rec.reconciled === true };
   }
   return null;
 }
@@ -940,9 +941,10 @@ function cmdCleanup(args, env) {
 // ---------------------------------------------------------------- reconcile
 
 // Closes a live add whose worktree folder and branch were both removed outside this script (hand removal).
-// Appends one remove event (commit = the recorded base). Refuses while the folder or the branch is still there,
-// or when the id has no live add. A registration left behind with its folder gone (prunable) is pruned first,
-// as cleanup does, because cleanup itself refuses on the mismatch; a registration whose folder exists is refused.
+// Appends one remove event with reconciled: true; its commit is the recorded base, not a branch head, so protocheck
+// reads such an end as unknown. Refuses while the folder or the branch is still there, or when the id has no live add.
+// A registration left behind with its folder gone (prunable) is pruned first, as cleanup does (the prune is repo-wide),
+// because cleanup itself refuses on the mismatch; a registration whose folder exists is refused.
 function cmdReconcile(args, env) {
   if (args.length !== 2) throw new Refusal(USAGE);
   const slug = checkSlug(args[0], env.root);
@@ -950,14 +952,16 @@ function cmdReconcile(args, env) {
   const ctx = openGit(env);
   const rec = loadRecord(env.root, slug);
   const st = rec.ids.get(id);
-  if (!st?.live) throw new Refusal(id + " has no live add in the record");
-  const { wt } = layoutOf(ctx.realRoot, slug, id);
-  if (lstatOrNull(wt)) throw new Refusal("worktree " + id + " still exists");
-  if (listBranches(ctx, slug).includes(refOf(slug, id))) throw new Refusal("branch of " + id + " still exists");
-  ctx.git(["worktree", "prune"]);
-  if (listWorktrees(ctx).some((p) => sameKey(p) === sameKey(wt))) throw new Refusal("worktree " + id + " is still registered in git");
-  appendEvent(env, slug, { v: 1, at: utc(env.now), ev: "remove", task: id, commit: st.base });
-  return { code: 0, lines: ["reconciled " + id] };
+  if (!st?.live) throw new Refusal(`${id} has no live add in the record`);
+  const layout = layoutOf(ctx.realRoot, slug, id);
+  if (!segmentsOk(layout)) throw new Refusal('a segment of the worktree path is a link or not a folder');
+  const { wt } = layout;
+  if (lstatOrNull(wt)) throw new Refusal(`worktree ${id} still exists`);
+  if (listBranches(ctx, slug).includes(refOf(slug, id))) throw new Refusal(`branch of ${id} still exists`);
+  ctx.git(['worktree', 'prune']);
+  if (listWorktrees(ctx).some((p) => sameKey(p) === sameKey(wt))) throw new Refusal(`worktree ${id} is still registered in git`);
+  appendEvent(env, slug, { v: 1, at: utc(env.now), ev: 'remove', task: id, commit: st.base, reconciled: true });
+  return { code: 0, lines: [`reconciled ${id}`] };
 }
 
 // ---------------------------------------------------------------- leftovers
@@ -995,7 +999,7 @@ function protoCommits(ctx, slug, st) {
   const exists = ctx.git(['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`], { codes: [0, 1] });
   let head;
   if (exists.code === 0) head = lineOf(exists.out);
-  else if (st.end?.commit) head = st.end.commit;
+  else if (st.end?.commit && !st.end.reconciled) head = st.end.commit;
   else return null;
   if (!FULL_ID.test(head)) return null;
   const lines = (argv) => ctx.git(argv).out.toString('utf8').split('\n').filter(Boolean);
