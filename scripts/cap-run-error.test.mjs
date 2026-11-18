@@ -9,11 +9,11 @@ import { resolveRun } from '../hooks/lib/cap-effects.mjs';
 
 const snap = { threshold: 180000 };
 const over = freezeAt(180000);
-const ev = (run, total, session = 'lead') => ({
-  run, session, tokens: { state: 'read', total }, tool: { name: 'Bash', paths: [] }
+const ev = (run, total, session = 'lead', agentKey = session === 'lead' ? 'lead-agent' : 'step-agent') => ({
+  run, session, agentKey, tokens: { state: 'read', total }, tool: { name: 'Bash', paths: [] }
 });
 
-test('lookup error at or over the freeze point denies and names the fix', () => {
+test('lookup error at or over the freeze point denies the Lead agent and a Step and names the fix', () => {
   for (const session of ['lead', 'step']) {
     const v = judge(ev({ error: true, slug: 'x', folder: null }, over, session), snap);
     assert.equal(v.v, 'deny');
@@ -21,6 +21,10 @@ test('lookup error at or over the freeze point denies and names the fix', () => 
     assert.match(v.message, /unreadable/);
     assert.match(v.message, /lead-handover\.jsonl|run state/);
   }
+});
+
+test('v3.0: main (no agentKey) is never capped, even on a lookup error over the freeze point', () => {
+  assert.equal(judge(ev({ error: true, slug: 'x', folder: null }, over, 'lead', null), snap).v, 'allow');
 });
 
 test('lookup error below the freeze point still allows', () => {

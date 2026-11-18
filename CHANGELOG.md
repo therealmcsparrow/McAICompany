@@ -4,6 +4,23 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-18
+
+Rollback: node scripts/stable.mjs 0.43.0
+
+### Added
+- **The Lead runs as a subagent.** The Project Manager is now the plugin agent `aico:project-manager`, started by the main session in the foreground. Main only spawns it; the Lead spawns every Role. The Lead is not a Role, so the count stays 36 Role agents. When the Lead nears its context cap it ends with `STATUS: handover` and main starts a fresh Lead. Contract: `lead-relay` v1 (new).
+- **CEO answers come from the hook.** A Gate or question form goes through `lead-relay open`; the CEO's pick is recorded by a hook, not typed back by the Lead. A non-auto Gate passes only on a recorded answer that is newer than the last pass of that Gate, so one pick passes one Gate once. `auto` is read from the resolved settings. A shell run of the `answer` adapter is denied.
+- **Runs-in line.** Each Playbook that has the CEO-only guard now opens with a `Runs-in` line before its Help line, so the CEO sees where it runs. Contracts: `company-type` v2.3 and `reprompt` v2.7.
+
+### Changed
+- **Hand-over has one path.** A capped Lead ends its turn and main starts a fresh Lead; a declined form waits for `resume`. The cap budgets the Lead, never main. Contracts: `context-guard` v3.0 and `lead-handoff` v3.0 (majors), `hook-event` v1.4, `run-state` v3.1, `step-times` v1.3.
+- **Guards leave the shell alone** (ADR 0079). The `git add` guard is gone: four guards remain (`cap`, `dotenv`, `model-floor`, `self-protect`). Shell commands are checked only for `.env` and for writes to run records; a target the check cannot resolve passes, and a command over 200000 characters is refused. `self-protect` fails closed on a `pwsh` command with an encoded flag. Contracts: `mod-hook` v1.2, `mod-manifest` v1.1.
+- **Hook pins hash the same bytes on every OS.** A pin is the SHA-256 of the file with CRLF turned into LF, so Windows and Linux agree. Every pin was rewritten once.
+
+### Removed
+- **`lead-session-mcp` is retired.** The `lead_new_session` tool and its MCP server are deleted; the history is in ADR 0077. Contract: `lead-session-mcp` v2.1 retired.
+
 ## [0.43.0] - 2026-11-17
 
 Rollback: node scripts/stable.mjs 0.42.1

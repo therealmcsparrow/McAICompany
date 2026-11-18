@@ -387,8 +387,21 @@ describe('per-session reading', () => {
     const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, HOME: fx.base, USERPROFILE: fx.base, MCSPARROW_HOME: fx.base };
     const r = spawnSync(process.execPath, [SCRIPT, 'start'], { cwd: fx.root, input: begin(), env, encoding: 'utf8' });
     assert.equal(r.status, 0);
-    assert.equal(r.stdout, '');
+    assert.match(r.stdout, /^aico: run \S+ waits for a Lead \([^)\n]+\); say resume\n$/); // lead-handoff v3.0: one line for main
+    assert.ok(r.stdout.includes(fx.slug), r.stdout);
     assert.equal(stored(fx).ctx, null);
+  });
+
+  test('start prints nothing for a subagent, a compact source, or no active run (lead-handoff v3.0)', () => {
+    const fx = fixture();
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: fx.claudeDir, HOME: fx.base, USERPROFILE: fx.base, MCSPARROW_HOME: fx.base };
+    for (const input of [begin({ agent_id: 'x' }), begin({ source: 'compact' }), '{not json']) {
+      const r = spawnSync(process.execPath, [SCRIPT, 'start'], { cwd: fx.root, input, env, encoding: 'utf8' });
+      assert.deepEqual([r.status, r.stdout], [0, '']);
+    }
+    fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
+    const r = spawnSync(process.execPath, [SCRIPT, 'start'], { cwd: fx.root, input: begin(), env, encoding: 'utf8' });
+    assert.deepEqual([r.status, r.stdout], [0, '']);
   });
 
   test('hooks.json wires start to SessionStart startup|resume|clear', () => {

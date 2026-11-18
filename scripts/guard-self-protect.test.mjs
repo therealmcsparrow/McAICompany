@@ -1,8 +1,9 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeEnv, startLead, cleanup } from '../hooks/fixtures/engine/harness.mjs';
 
 // Tests for the self-protect guard (rule self-protect.M-SEC1): file tools, shell, guard keys and evasion.
 // Seam: hooks/rules/self-protect.mjs#judge(event, snapshot) -> verdict (mod-hook v1, hook-event v1). Every
@@ -202,7 +203,7 @@ const PS_PASS = [
 ];
 for (const c of PS_PASS) test(`AC8 pass PowerShell: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
-// ---------- shell denies ----------
+// ---------- shell passes: ADR 0079, the guard judges a shell command only for a run-record write ----------
 const SET_MOD = [
   `node "${PLUGIN}/scripts/settings.mjs" set-mod switchboard enabled false`,
   'node scripts/settings.mjs set-mod cache_tax enabled false', 'node settings.mjs set-mod switchboard seen',
@@ -211,13 +212,13 @@ const SET_MOD = [
   'cd scripts && node settings.mjs set-mod a b', 'node scripts/settings.mjs get cap; node scripts/settings.mjs set-mod a b',
   'echo ok && node scripts/settings.mjs set-mod a b',
 ];
-for (const c of SET_MOD) for (const tool of SH) test(`AC8 deny ${tool}: set-mod: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of SET_MOD) for (const tool of SH) test(`AC8 pass ${tool}: set-mod: ${c}`, async () => { await allows(c, { tool }); });
 const PINS = [
   `node "${PLUGIN}/scripts/hook-pins.mjs" write`, 'node scripts/hook-pins.mjs check', 'node scripts/hook-pins.mjs',
   'node "$CLAUDE_PLUGIN_ROOT/scripts/hook-pins.mjs" write', 'node scripts/hook-pins.mjs --help', 'node hook-pins.mjs write; echo done',
   'git status && node scripts/hook-pins.mjs verify',
 ];
-for (const c of PINS) for (const tool of SH) test(`AC8 deny ${tool}: hook-pins: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of PINS) for (const tool of SH) test(`AC8 pass ${tool}: hook-pins: ${c}`, async () => { await allows(c, { tool }); });
 
 const WRITES = [
   'echo x > ~/.mcsparrow/config.json', 'echo x >> ~/.mcsparrow/config.json', 'echo x>~/.mcsparrow/config.json',
@@ -236,12 +237,12 @@ const WRITES = [
   'echo x > .claude/settings.json', 'echo x > .company/settings.json', 'echo x >> .claude/settings.local.json',
   'echo x > $CLAUDE_PLUGIN_ROOT/hooks/rules.json', 'rm -rf $CLAUDE_PLUGIN_ROOT/hooks/rules', 'rm -rf ~/.mcsparrow/hook-snapshots',
   'cp x.mjs $CLAUDE_PLUGIN_ROOT/hooks/rules/cap.mjs', 'echo x > ~/.mcsparrow/hook-snapshots/r/denies.jsonl',
-  'echo x > C:/proj/.company/work/p1/guard.jsonl', 'cat a.json > ~/.mcsparrow/config.json',
+  'cat a.json > ~/.mcsparrow/config.json',
   'echo x > "C:/Users/test/.mcsparrow/config.json"', "echo x > 'C:/Users/test/.mcsparrow/config.json'",
   'echo x > C:\\USERS\\TEST\\.MCSPARROW\\CONFIG.JSON', 'echo x > ~/.mcsparrow/config.json.',
   'true && echo x > ~/.mcsparrow/config.json', 'echo hi; rm ~/.mcsparrow/config.json', 'git status | tee ~/.mcsparrow/config.json',
 ];
-for (const c of WRITES) for (const tool of SH) test(`AC8 deny ${tool}: write form: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of WRITES) for (const tool of SH) test(`AC8 pass ${tool}: write form: ${c}`, async () => { await allows(c, { tool }); });
 const PS_WRITES = [
   'Set-Content $env:USERPROFILE\\.mcsparrow\\config.json x', 'Set-Content -Path $env:USERPROFILE\\.mcsparrow\\config.json -Value x',
   'Add-Content $env:USERPROFILE\\.mcsparrow\\config.json x', '"x" | Out-File $env:USERPROFILE\\.mcsparrow\\config.json',
@@ -255,20 +256,20 @@ const PS_WRITES = [
   'Set-Content .claude\\settings.json x', 'Set-Content .company\\settings.json x', 'Set-Content %USERPROFILE%\\.mcsparrow\\config.json x',
   'Get-Date; Set-Content $env:USERPROFILE\\.mcsparrow\\config.json x', 'echo x > $env:USERPROFILE\\.mcsparrow\\config.json',
 ];
-for (const c of PS_WRITES) test(`AC8 deny PowerShell: write form: ${c}`, async () => { await denies(c, { tool: 'PowerShell' }); });
+for (const c of PS_WRITES) test(`AC8 pass PowerShell: write form: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
-test('AC8 deny: a copy whose target is protected only through a junction (real)', async () => {
+test('AC8 pass: a shell copy whose target is protected only through a junction (real) is not judged', async () => {
   const links = { 'C:/proj/link': MSH };
-  await denies('cp a.json link/config.json', { links });
-  await denies('echo x > link/config.json', { links });
-  await denies('echo x > C:/proj/link/config.json', { links });
-  await denies('Set-Content link\\config.json x', { links, tool: 'PowerShell' });
-  await denies('rm link/config.json', { links });
+  await allows('cp a.json link/config.json', { links });
+  await allows('echo x > link/config.json', { links });
+  await allows('echo x > C:/proj/link/config.json', { links });
+  await allows('Set-Content link\\config.json x', { links, tool: 'PowerShell' });
+  await allows('rm link/config.json', { links });
 });
-test('AC8 deny: a new file in the snapshot folder from a shell (nearest existing ancestor)', async () => {
-  await denies('echo x > ~/.mcsparrow/hook-snapshots/newroot/steps/new.json', { exists: false });
-  await denies('cp a.json $HOME/.mcsparrow/hook-snapshots/n/steps/s.json', { exists: false });
-  await denies('Set-Content $env:USERPROFILE\\.mcsparrow\\hook-snapshots\\n\\x.json x', { exists: false, tool: 'PowerShell' });
+test('AC8 pass: a new file in the snapshot folder from a shell is not judged', async () => {
+  await allows('echo x > ~/.mcsparrow/hook-snapshots/newroot/steps/new.json', { exists: false });
+  await allows('cp a.json $HOME/.mcsparrow/hook-snapshots/n/steps/s.json', { exists: false });
+  await allows('Set-Content $env:USERPROFILE\\.mcsparrow\\hook-snapshots\\n\\x.json x', { exists: false, tool: 'PowerShell' });
 });
 
 // ---------- evasion: inline interpreters ----------
@@ -277,7 +278,7 @@ const INLINE = [
   `node --eval "fs.writeFileSync('config.json','{}')"`, `node -p "fs.writeFileSync('config.json','{}')"`, `node --print "'config.json'"`,
   `node -e "fs.writeFileSync('settings.json','{}')"`, `node -e "fs.writeFileSync('settings.local.json','{}')"`,
   `node -e "x('.mcsparrow')"`, `node -e "process.env.MCSPARROW_HOME"`, `node -e "x('hook-snapshots')"`, `node -e "x('pins.json')"`,
-  `node -e "x('rules.json')"`, `node -e "x('guard.jsonl')"`, `node -e "process.env.CLAUDE_PLUGIN_ROOT"`, `node -e "x('.claude')"`,
+  `node -e "x('rules.json')"`, `node -e "process.env.CLAUDE_PLUGIN_ROOT"`, `node -e "x('.claude')"`,
   `node -e "x('plugins/cache')"`,
   `python -c "open('config.json','w').write('{}')"`, `python3 -c "open('config.json','w')"`, `py -c "open('config.json','w')"`,
   `python -c "import os; open(os.environ['MCSPARROW_HOME']+'/x','w')"`,
@@ -288,17 +289,17 @@ const INLINE = [
   `iex "Set-Content config.json x"`, `Invoke-Expression "Set-Content config.json x"`, `& iex 'x .mcsparrow'`,
   `node -e "x('CONFIG.JSON')"`,
 ];
-for (const c of INLINE) for (const tool of SH) test(`evasion deny ${tool}: inline interpreter: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of INLINE) for (const tool of SH) test(`evasion pass ${tool}: inline interpreter: ${c}`, async () => { await allows(c, { tool }); });
 
-test('evasion deny: -EncodedCommand always, whatever the text or the interpreter', async () => {
+test('evasion pass: -EncodedCommand that decodes to no record path (ADR 0079)', async () => {
   for (const c of ['powershell -EncodedCommand SQBFAFgA', 'pwsh -EncodedCommand ZQBjAGgAbwA=', 'powershell.exe -NoProfile -EncodedCommand AAAA',
     'powershell -encodedcommand AAAA', 'pwsh -enc AAAA -NoProfile', 'powershell -e AAAA', 'pwsh -ec AAAA'])
-    for (const tool of SH) await denies(c, { tool });
+    for (const tool of SH) await allows(c, { tool });
 });
-test('evasion deny: inline text naming a settings word hides in a longer command', async () => {
-  await denies('echo start; node -e "x(\'config.json\')"; echo end');
-  await denies('cd src && python -c "open(\'.mcsparrow/config.json\',\'w\')"');
-  await denies('npm test && node -e "x(\'config.json\')"');
+test('evasion pass: inline text naming a settings word hides in a longer command', async () => {
+  await allows('echo start; node -e "x(\'config.json\')"; echo end');
+  await allows('cd src && python -c "open(\'.mcsparrow/config.json\',\'w\')"');
+  await allows('npm test && node -e "x(\'config.json\')"');
 });
 
 // ---------- evasion: directory change plus a relative write ----------
@@ -312,21 +313,21 @@ const CD = [
   'cd $CLAUDE_PLUGIN_ROOT/hooks && echo x > hooks.json', 'cd ~/.mcsparrow && echo x | tee config.json',
   'cd ~/.mcsparrow/hook-snapshots/r && echo x > denies.jsonl', 'cd /somewhere && echo x > config.json',
 ];
-for (const c of CD) for (const tool of SH) test(`evasion deny ${tool}: cd plus relative write: ${c}`, async () => { await denies(c, { tool }); });
+for (const c of CD) for (const tool of SH) test(`evasion pass ${tool}: cd plus relative write: ${c}`, async () => { await allows(c, { tool }); });
 const PS_CD = [
   'Set-Location $env:USERPROFILE\\.mcsparrow; Set-Content config.json x', 'Set-Location $env:USERPROFILE\\.mcsparrow; "x" | Out-File config.json',
   'sl ~\\.mcsparrow; Set-Content config.json x', 'Push-Location $env:MCSPARROW_HOME; Add-Content config.json x',
   'cd $env:USERPROFILE\\.claude; Set-Content settings.json x', 'Set-Location $env:USERPROFILE\\.mcsparrow; echo x > config.json',
   'Set-Location $env:USERPROFILE\\.mcsparrow; Remove-Item config.json', 'chdir ~\\.mcsparrow; Set-Content config.json x',
 ];
-for (const c of PS_CD) test(`evasion deny PowerShell: Set-Location plus relative write: ${c}`, async () => { await denies(c, { tool: 'PowerShell' }); });
+for (const c of PS_CD) test(`evasion pass PowerShell: Set-Location plus relative write: ${c}`, async () => { await allows(c, { tool: 'PowerShell' }); });
 
 // ---------- evasion: path spelling in a shell ----------
-test('evasion deny: protected target behind dot segments, redundant slashes and case', async () => {
+test('evasion pass: shell write to a settings target behind dot segments, redundant slashes and case', async () => {
   for (const c of ['echo x > ~/.mcsparrow/./config.json', 'echo x > ~/.mcsparrow/../.mcsparrow/config.json',
     'echo x > ~//.mcsparrow//config.json', 'echo x > C:/Users/test/.MCSPARROW/Config.Json', 'echo x > c:\\users\\test\\.mcsparrow\\config.json',
     'echo x > C:/Users/test/.mcsparrow/config.json:stream', 'echo x > C:/Users/test/.mcsparrow/config.json ', 'echo x > C:/Users/test/.mcsparrow/config.json...'])
-    for (const tool of SH) await denies(c, { tool });
+    for (const tool of SH) await allows(c, { tool });
 });
 
 // ---------- a hand-written guard key changes nothing ----------
@@ -334,14 +335,14 @@ test('AC15: the verdict ignores any snapshot key that tries to switch the guard 
   const hand = deepFreeze({ ...SNAP, guards: { 'self-protect': false }, guardsOff: true, selfProtect: 'off', savers: { 'self-protect': { enabled: false } },
     settingsWarnings: ['self-protect off'], 'self-protect': { enabled: false } });
   await denies('~/.mcsparrow/config.json', { tool: 'Write' }, hand);
-  await denies('echo x > ~/.mcsparrow/config.json', {}, hand);
-  await denies('node scripts/settings.mjs set-mod switchboard enabled false', {}, hand);
+  await allows('echo x > ~/.mcsparrow/config.json', {}, hand);
+  await allows('node scripts/settings.mjs set-mod switchboard enabled false', {}, hand);
   await allows('src/a.js', { tool: 'Write' }, hand);
 });
-test('AC15: a Write that would hand-edit a switch or the threshold into settings is denied, whatever it says', async () => {
+test('AC15: a Write that would hand-edit a switch or the threshold into settings is denied, whatever it says; the same text from a shell passes', async () => {
   for (const p of ['~/.mcsparrow/config.json', 'C:/proj/.company/settings.json', 'C:/proj/.claude/settings.json', `${HOME}/.claude/settings.local.json`])
     for (const tool of FILE_TOOLS) await denies(p, { tool });
-  await denies('echo {"guards":{"cap":false},"mods":{"switchboard":{"enabled":false}}} > ~/.mcsparrow/config.json');
+  await allows('echo {"guards":{"cap":false},"mods":{"switchboard":{"enabled":false}}} > ~/.mcsparrow/config.json');
 });
 test('AC15: the event env switch does not weaken the judge (the engine handles the Lead off switch, the rule never reads it)', async () => {
   const judge = await load();
@@ -353,11 +354,14 @@ test('AC15: the event env switch does not weaken the judge (the engine handles t
 });
 
 // ---------- scope and shape ----------
-test('an empty protected list: set-mod and hook-pins still deny, a path write has nothing to match', async () => {
+test('an empty protected list: set-mod and hook-pins pass, a path write has nothing to match', async () => {
   const judge = await load();
   const e = evRaw('node scripts/settings.mjs set-mod a b');
   e.protected = [];
-  assert.equal((await judge(deepFreeze(e), SNAP)).v, 'deny');
+  assert.deepEqual(await judge(deepFreeze(e), SNAP), { v: 'allow' });
+  const e2 = evRaw('node scripts/hook-pins.mjs write');
+  e2.protected = [];
+  assert.deepEqual(await judge(deepFreeze(e2), SNAP), { v: 'allow' });
   const f = evRaw('~/.mcsparrow/config.json', { tool: 'Write' });
   f.protected = [];
   assert.deepEqual(await judge(deepFreeze(f), SNAP), { v: 'allow' });
@@ -424,21 +428,344 @@ test('AC4 fixtures: judge allows each pass-* and denies each block-* with rule s
     else { assert.equal(v.v, 'deny', f); assert.equal(v.rule, RULE, f); }
   }
 });
-test('fixtures cover the Decided forms: file tool, redirect, PowerShell variable, set-mod, hook-pins, inline interpreter, -EncodedCommand, cd plus write, new snapshot file; passes cover the R-1 verbs', () => {
+test('fixtures cover the Decided forms: file tool and run-record shell writes block; settings, set-mod, hook-pins, home, inline interpreter, -EncodedCommand and snapshot shell forms pass; passes cover the run-state verbs', () => {
   const all = fixtures().map((f) => ({ f, j: readFx(f) }));
   const block = all.filter((x) => x.f.startsWith('block-')).map((x) => x.j);
   const pass = all.filter((x) => x.f.startsWith('pass-')).map((x) => x.j);
   const has = (list, re, tool) => list.some((j) => re.test(specOf(j)) && (!tool || j.tool_name === tool));
   assert.ok(block.some((j) => ['Write', 'Edit'].includes(j.tool_name)), 'a Write or Edit block');
-  assert.ok(has(block, />\s*~\/\.mcsparrow\/config\.json/), 'redirect with ~');
-  assert.ok(has(block, /\$env:USERPROFILE/, 'PowerShell'), 'PowerShell $env:USERPROFILE');
-  assert.ok(has(block, /set-mod/), 'set-mod');
-  assert.ok(has(block, /hook-pins/), 'hook-pins');
-  assert.ok(has(block, /node -e|python -c/), 'inline interpreter');
-  assert.ok(has(block, /-EncodedCommand/i), '-EncodedCommand');
-  assert.ok(has(block, /^cd .*; .*> config\.json/), 'cd plus relative write');
-  assert.ok(has(block, /hook-snapshots/), 'a new file in the snapshot folder');
+  assert.ok(has(block, /(forms|run-state|guard)\.jsonl/, 'Bash'), 'a Bash run-record write');
+  assert.ok(has(block, /(forms|run-state|guard)\.jsonl/, 'PowerShell'), 'a PowerShell run-record write');
+  assert.ok(block.some((j) => SH.includes(j.tool_name) && /guard\.jsonl/.test(specOf(j))), 'the guard record block stays');
+  assert.ok(has(pass, /\.mcsparrow/), 'a home shell write passes');
+  assert.ok(has(pass, /\$env:USERPROFILE/, 'PowerShell'), 'PowerShell $env:USERPROFILE passes');
+  assert.ok(has(pass, /set-mod/), 'set-mod passes');
+  assert.ok(has(pass, /hook-pins/), 'hook-pins passes');
+  assert.ok(has(pass, /node -e|python -c/), 'inline interpreter passes');
+  assert.ok(has(pass, /-EncodedCommand/i), '-EncodedCommand passes');
+  assert.ok(has(pass, /hook-snapshots/), 'a shell write in the snapshot folder passes');
   for (const re of [/settings\.mjs"? get/, /settings\.mjs"? serve/, /run-state triage/, /ledger\.mjs/, /handoff-lint/, /rule-check/, /hook-check\.mjs"? setup/])
     assert.ok(has(pass, re), `pass fixture ${re}`);
   assert.ok(pass.some((j) => j.tool_name === 'Read'), 'a Read of a protected file passes');
+});
+
+// ---------- run records: forms.jsonl, run-state.jsonl, guard.jsonl (AC7) ----------
+after(cleanup);
+const RECORDS = ['forms.jsonl', 'run-state.jsonl', 'guard.jsonl'];
+const RECORD_DIRS = ['C:/proj/.company/work/p1', 'C:/proj/.company/work/p1/01-feature'];
+const RECORD_REASON = /aico guard self-protect\.M-SEC1: run records are written by aico scripts only/;
+
+// judge level: the host fills event.protected with the record shape paths
+function withRecords(spec, opts) {
+  const e = evRaw(spec, opts);
+  for (const d of RECORD_DIRS) for (const r of RECORDS) {
+    const f = `${d}/${r}`.toLowerCase();
+    if (!e.protected.includes(f)) e.protected.push(f);
+  }
+  return deepFreeze(e);
+}
+async function recordDenies(spec, opts) {
+  const judge = await load();
+  const v = await judge(withRecords(spec, opts), SNAP);
+  assert.equal(v.v, 'deny', `deny: ${spec} ${JSON.stringify(opts)} (got ${JSON.stringify(v)})`);
+  assert.equal(v.rule, RULE);
+  assert.ok(!v.message.includes(spec), 'the deny message never echoes the input');
+}
+const REC_TARGETS = RECORD_DIRS.flatMap((d) => RECORDS.map((r) => `${d}/${r}`));
+for (const session of ['lead', 'step']) {
+  for (const tool of ['Write', 'Edit']) for (const t of REC_TARGETS) {
+    test(`AC7 deny ${tool} (${session}): ${t}`, async () => { await recordDenies(t, { tool, session }); });
+  }
+  for (const t of REC_TARGETS) {
+    test(`AC7 deny Bash writes (${session}): ${t}`, async () => {
+      await recordDenies(`echo x > ${t}`, { tool: 'Bash', session });
+      await recordDenies(`echo x >> ${t}`, { tool: 'Bash', session });
+      await recordDenies(`echo x | tee -a ${t}`, { tool: 'Bash', session });
+      await recordDenies(`cp a.json ${t}`, { tool: 'Bash', session });
+      await recordDenies(`rm ${t}`, { tool: 'Bash', session });
+    });
+    test(`AC7 deny PowerShell writes (${session}): ${t}`, async () => {
+      await recordDenies(`Set-Content ${t} x`, { tool: 'PowerShell', session });
+      await recordDenies(`Add-Content -Path ${t} -Value x`, { tool: 'PowerShell', session });
+      await recordDenies(`"x" | Out-File ${t}`, { tool: 'PowerShell', session });
+      await recordDenies(`echo x > ${t}`, { tool: 'PowerShell', session });
+    });
+  }
+}
+test('cch.M17 deny: separator, case and dot-segment variants of a record path', async () => {
+  for (const t of ['C:\\proj\\.company\\work\\p1\\forms.jsonl', 'C:/PROJ/.COMPANY/WORK/P1/RUN-STATE.JSONL',
+    'C:/proj/.company/work/p1/./01-feature/../forms.jsonl', 'C:/proj/.company//work/p1/forms.jsonl'])
+    for (const tool of ['Write', 'Edit']) await recordDenies(t, { tool });
+  await recordDenies('echo x > C:\\proj\\.company\\work\\p1\\run-state.jsonl', { tool: 'Bash' });
+  await recordDenies('Set-Content C:\\PROJ\\.company\\work\\p1\\FORMS.JSONL x', { tool: 'PowerShell' });
+});
+test('AC7 pass: other files in a run folder and a record name elsewhere', async () => {
+  const judge = await load();
+  for (const t of ['C:/proj/.company/work/p1/01-qa.md', 'C:/proj/.company/work/p1/forms.json', 'C:/proj/.company/work/p1/run-state.jsonl.bak',
+    'C:/proj/src/forms.jsonl', 'C:/proj/.company/work/p1/xforms.jsonl'])
+    for (const tool of ['Write', 'Edit']) assert.deepEqual(await judge(withRecords(t, { tool }), SNAP), { v: 'allow' }, `${tool} ${t}`);
+});
+test('AC7 pass: reading a run record', async () => {
+  const judge = await load();
+  for (const t of REC_TARGETS) for (const tool of ['Read', 'Grep']) assert.deepEqual(await judge(withRecords(t, { tool }), SNAP), { v: 'allow' }, `${tool} ${t}`);
+  assert.deepEqual(await judge(withRecords('cat C:/proj/.company/work/p1/forms.jsonl', { tool: 'Bash' }), SNAP), { v: 'allow' });
+});
+
+test('AC7 deny: a record path bound to a variable in the same command denies; the variable alone passes (Handoff 88)', async () => {
+  await recordDenies('p=C:/proj/.company/work/p1/guard.jsonl; echo hi > $p', { tool: 'Bash' });
+  await recordDenies('$p = "C:/proj/.company/work/p1/forms.jsonl"; Set-Content $p x', { tool: 'PowerShell' });
+  const judge = await load();
+  for (const tool of SH) assert.deepEqual(await judge(withRecords('echo hi > $p', { tool }), SNAP), { v: 'allow' }, tool);
+});
+test('AC7 deny: record write shapes (node -e, cd then relative, redirect) still deny, Lead and Role', async () => {
+  for (const session of ['lead', 'step']) {
+    await recordDenies("node -e \"require('fs').writeFileSync('C:/proj/.company/work/p1/forms.jsonl','x')\"", { tool: 'Bash', session });
+    await recordDenies('cd C:/proj/.company/work/p1 && echo x > run-state.jsonl', { tool: 'Bash', session });
+    await recordDenies('echo x > C:/proj/.company/work/p1/guard.jsonl', { tool: 'Bash', session });
+    await recordDenies("node -e \"x('guard.jsonl')\"", { tool: 'Bash', session });
+  }
+});
+test('AC7 deny: a command over 200000 chars is denied (fail closed), on both shell tools', async () => {
+  const big = `echo ${'a'.repeat(200001)}`;
+  for (const tool of SH) await recordDenies(big, { tool });
+});
+
+// ---------- run records through the host (AC7: main, Lead, Role; below the fast floor; guards off) ----------
+const REPO_RULES = path.join(root, 'hooks', 'rules.json');
+const LEAD_ID = 'agent-lead1';
+const ROLE_ID = 'agent-role1';
+const HOST_REC = ['forms.jsonl', 'run-state.jsonl', 'guard.jsonl'];
+const slashOf = (p) => p.replace(/\\/g, '/');
+
+async function hostEnv({ run = false } = {}) {
+  const rows = JSON.parse(fs.readFileSync(REPO_RULES, 'utf8')).filter((r) => r.rule === 'self-protect.M-SEC1');
+  assert.equal(rows.length, 1, 'hooks/rules.json has the self-protect.M-SEC1 row');
+  const env = makeEnv();
+  for (const rel of ['hooks/rules/self-protect.mjs', 'hooks/manifests/self-protect.json', 'hooks/rules/dotenv.mjs']) {
+    fs.mkdirSync(path.dirname(path.join(env.plugin, rel)), { recursive: true });
+    fs.copyFileSync(path.join(root, rel), path.join(env.plugin, rel));
+  }
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
+  env.repin();
+  const folder = path.join(env.project, '.company', 'work', 'P20261117.000099', '01-feature');
+  if (run) await env.startRun('P20261117.000099/01-feature');
+  else fs.mkdirSync(folder, { recursive: true });
+  startLead(env);
+  for (const [id, type] of [[LEAD_ID, 'aico:project-manager'], [ROLE_ID, 'aico:qa']])
+    assert.equal(env.run(env.event('SubagentStart', { agent_id: id, agent_type: type })).code, 0);
+  env.recordPath = (name) => path.join(folder, name);
+  return env;
+}
+function callOf(env, who, tool, target) {
+  const input = tool === 'Write' ? { file_path: target, content: 'x' }
+    : tool === 'Edit' ? { file_path: target, old_string: 'a', new_string: 'b' }
+      : tool === 'Bash' ? { command: `echo x > "${slashOf(target)}"` }
+        : { command: `Set-Content -Path "${target}" -Value x` };
+  const over = { tool_name: tool, tool_input: input };
+  if (who === 'lead') Object.assign(over, { agent_id: LEAD_ID, agent_type: 'aico:project-manager' });
+  if (who === 'role') Object.assign(over, { agent_id: ROLE_ID, agent_type: 'aico:qa' });
+  return env.event('PreToolUse', over);
+}
+const WHO = ['main', 'lead', 'role'];
+const TOOLS = ['Write', 'Edit', 'Bash', 'PowerShell'];
+function assertDeny(env, r, re, label) {
+  assert.equal(r.code, 0, `${label}: ${r.err}`);
+  const reason = env.reason(r);
+  assert.ok(reason, `${label}: expected a deny, got ${r.out} ${r.err}`);
+  if (re) assert.match(reason, re, label);
+  return reason;
+}
+const OFF = { env: { AICO_GUARDS: 'off' } };
+
+for (const run of [false, true]) {
+  test(`AC7 host deny: record write by Write, Edit, Bash, PowerShell for main, Lead and Role (${run ? 'active run' : 'no run, below the fast floor'})`, async () => {
+    const env = await hostEnv({ run });
+    for (const who of WHO) for (const tool of TOOLS) for (const name of HOST_REC)
+      assertDeny(env, env.run(callOf(env, who, tool, env.recordPath(name))), /self-protect\.M-SEC1/, `${who} ${tool} ${name}`);
+  });
+}
+test('AC7 host deny: AICO_GUARDS=off, main and the Lead, with the record reason', async () => {
+  const env = await hostEnv();
+  for (const who of ['main', 'lead']) for (const tool of TOOLS) for (const name of HOST_REC)
+    assertDeny(env, env.run(callOf(env, who, tool, env.recordPath(name)), OFF), RECORD_REASON, `${who} ${tool} ${name} off`);
+});
+test('AC7 host deny: AICO_GUARDS=off never lets a Role write a record', async () => {
+  const env = await hostEnv();
+  for (const tool of TOOLS) for (const name of HOST_REC)
+    assertDeny(env, env.run(callOf(env, 'role', tool, env.recordPath(name)), OFF), /self-protect\.M-SEC1/, `role ${tool} ${name} off`);
+});
+test('AC7 host deny: a broken snapshot does not open a record write (with and without off)', async () => {
+  const env = await hostEnv();
+  fs.writeFileSync(env.leadFile, '{not json');
+  fs.writeFileSync(env.stepFile(ROLE_ID), '{not json');
+  for (const who of WHO) for (const tool of TOOLS) {
+    assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('forms.jsonl'))), null, `${who} ${tool} broken snapshot`);
+    if (who !== 'role')
+      assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('run-state.jsonl')), OFF), RECORD_REASON, `${who} ${tool} broken snapshot off`);
+  }
+});
+test('AC7 host deny: a missing snapshot does not open a record write under off', async () => {
+  const env = await hostEnv();
+  fs.rmSync(env.leadFile, { force: true });
+  for (const tool of TOOLS)
+    assertDeny(env, env.run(callOf(env, 'main', tool, env.recordPath('guard.jsonl')), OFF), RECORD_REASON, `main ${tool} no snapshot off`);
+});
+test('AC7 host deny: an unreadable rule table does not open a record write (cch.M-SEC3)', async () => {
+  const env = await hostEnv();
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), '{not json');
+  for (const who of WHO) for (const tool of TOOLS) {
+    assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('forms.jsonl'))), null, `${who} ${tool} bad table`);
+    if (who !== 'role')
+      assertDeny(env, env.run(callOf(env, who, tool, env.recordPath('forms.jsonl')), OFF), null, `${who} ${tool} bad table off`);
+  }
+});
+test('AC7 host deny: the record check needs neither the rule table nor the snapshot under off', async () => {
+  const env = await hostEnv();
+  fs.rmSync(path.join(env.plugin, 'hooks', 'rules.json'), { force: true });
+  fs.rmSync(env.leadFile, { force: true });
+  for (const tool of TOOLS)
+    assertDeny(env, env.run(callOf(env, 'lead', tool, env.recordPath('run-state.jsonl')), OFF), null, `lead ${tool} nothing readable off`);
+});
+if (process.platform === 'win32') {
+  test('cch.M17 host deny: backslash and upper-case spelling of a record path', async () => {
+    const env = await hostEnv();
+    const odd = env.recordPath('forms.jsonl').replace(/\//g, '\\').toUpperCase();
+    for (const who of WHO) for (const tool of ['Write', 'Edit'])
+      assertDeny(env, env.run(callOf(env, who, tool, odd)), /self-protect\.M-SEC1/, `${who} ${tool} upper`);
+    for (const tool of ['Write', 'Edit'])
+      assertDeny(env, env.run(callOf(env, 'main', tool, odd), OFF), RECORD_REASON, `main ${tool} upper off`);
+  });
+}
+test('AC7 host pass: AICO_GUARDS=off lets main and the Lead write a settings file; the rest of off is unchanged', async () => {
+  const env = await hostEnv();
+  const settings = path.join(env.project, '.company', 'settings.json');
+  for (const who of ['main', 'lead']) for (const tool of ['Write', 'Edit']) {
+    const r = env.run(callOf(env, who, tool, settings), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `${who} ${tool} settings under off passes: ${r.out}`);
+  }
+  assertDeny(env, env.run(callOf(env, 'main', 'Write', settings)), /self-protect\.M-SEC1/, 'settings write with guards on');
+  assertDeny(env, env.run(callOf(env, 'role', 'Write', settings), OFF), /self-protect\.M-SEC1/, 'role settings write under off');
+});
+test('AC7 host pass: an ordinary write in the run folder passes with guards on and off', async () => {
+  const env = await hostEnv();
+  const note = env.recordPath('01-qa.md');
+  for (const extra of [{}, OFF]) {
+    const r = env.run(callOf(env, 'main', 'Write', note), extra);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, r.out);
+  }
+});
+test('AC7 host deny: AICO_GUARDS=off, the answer adapter shell call, main, Lead and Role; open passes', async () => {
+  const env = await hostEnv();
+  const relay = `${slashOf(env.plugin)}/scripts/lead-relay.mjs`;
+  const shell = (who, tool, command) => {
+    const over = { tool_name: tool, tool_input: { command } };
+    if (who === 'lead') Object.assign(over, { agent_id: LEAD_ID, agent_type: 'aico:project-manager' });
+    if (who === 'role') Object.assign(over, { agent_id: ROLE_ID, agent_type: 'aico:qa' });
+    return env.event('PreToolUse', over);
+  };
+  const cmds = {
+    Bash: [`node "${relay}" answer < f.json`, `cat f.json | node ${relay} answer`],
+    PowerShell: [`node "${relay.replace(/\//g, String.fromCharCode(92))}" answer`],
+  };
+  for (const who of WHO) for (const tool of SH) for (const cmd of cmds[tool]) {
+    assertDeny(env, env.run(shell(who, tool, cmd), OFF), /CEO answer/, `${who} ${tool} answer off: ${cmd}`);
+    assertDeny(env, env.run(shell(who, tool, cmd)), /CEO answer/, `${who} ${tool} answer on: ${cmd}`);
+  }
+  for (const who of WHO) for (const tool of SH) {
+    const r = env.run(shell(who, tool, `node "${relay}" open 'P1/x' gate:g1 f.json`), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `${who} ${tool} open passes under off: ${r.out}`);
+  }
+});
+test('AC7 host deny: AICO_GUARDS=off, .env Read and `cat .env` denied for main and Lead; .env.example passes; Role denied by the normal guard', async () => {
+  const env = await hostEnv();
+  const rows = JSON.parse(fs.readFileSync(path.join(env.plugin, 'hooks', 'rules.json'), 'utf8'));
+  rows.push(...JSON.parse(fs.readFileSync(REPO_RULES, 'utf8')).filter((r) => r.rule === 'dotenv.M-SEC1'));
+  fs.mkdirSync(path.join(env.plugin, 'hooks', 'manifests'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'hooks', 'manifests', 'dotenv.json'), path.join(env.plugin, 'hooks', 'manifests', 'dotenv.json'));
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
+  env.repin();
+  const dotenv = path.join(env.project, '.env');
+  const example = path.join(env.project, '.env.example');
+  const call = (who, tool, input) => {
+    const over = { tool_name: tool, tool_input: input };
+    if (who === 'lead') Object.assign(over, { agent_id: LEAD_ID, agent_type: 'aico:project-manager' });
+    if (who === 'role') Object.assign(over, { agent_id: ROLE_ID, agent_type: 'aico:qa' });
+    return env.event('PreToolUse', over);
+  };
+  for (const who of ['main', 'lead']) {
+    assertDeny(env, env.run(call(who, 'Read', { file_path: dotenv }), OFF), /dotenv\.M-SEC1/, `${who} Read .env off`);
+    assertDeny(env, env.run(call(who, 'Bash', { command: 'cat .env' }), OFF), /dotenv\.M-SEC1/, `${who} cat .env off`);
+    for (const [tool, input] of [['Read', { file_path: example }], ['Bash', { command: 'cat .env.example' }]]) {
+      const r = env.run(call(who, tool, input), OFF);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(env.reason(r), null, `${who} ${tool} .env.example passes under off: ${r.out}`);
+    }
+  }
+  assertDeny(env, env.run(call('role', 'Read', { file_path: dotenv }), OFF), /dotenv\.M-SEC1/, 'role Read .env off');
+  assertDeny(env, env.run(call('role', 'Bash', { command: 'cat .env' }), OFF), /dotenv\.M-SEC1/, 'role cat .env off');
+  assertDeny(env, env.run(call('role', 'Read', { file_path: dotenv })), /dotenv\.M-SEC1/, 'role Read .env on');
+});
+
+// ---------- pin mismatch plus AICO_GUARDS=off: the host's text-only deny ----------
+async function mismatchEnv() {
+  const env = await hostEnv();
+  fs.appendFileSync(path.join(env.plugin, 'hooks', 'rules', 'dotenv.mjs'), '\n// pin drift\n');
+  return env;
+}
+const leadCall = (env, tool, input) => env.event('PreToolUse', { tool_name: tool, tool_input: input });
+
+test('host deny: pin mismatch + AICO_GUARDS=off, the Lead `cat .env` denies with dotenv.M-SEC1', async () => {
+  const env = await mismatchEnv();
+  const r = env.run(leadCall(env, 'Bash', { command: 'cat .env' }), OFF);
+  assertDeny(env, r, /dotenv\.M-SEC1/, 'cat .env pin mismatch off');
+  assert.doesNotMatch(env.reason(r), /pins-mismatch/);
+  assertDeny(env, env.run(leadCall(env, 'Bash', { command: 'cat .env.local' }), OFF), /dotenv\.M-SEC1/, 'cat .env.local');
+});
+test('host pass: pin mismatch + AICO_GUARDS=off, a .env.example read passes (null output)', async () => {
+  const env = await mismatchEnv();
+  for (const [tool, input] of [['Bash', { command: 'cat .env.example' }], ['Read', { file_path: path.join(env.project, '.env.sample') }]]) {
+    const r = env.run(leadCall(env, tool, input), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `${tool} .env.example under mismatch+off: ${r.out}`);
+    assert.equal(r.out.trim(), '', `${tool} output is empty`);
+  }
+});
+test('host deny: pin mismatch + AICO_GUARDS=off, the answer adapter shell call denies with self-protect.M-SEC1; a harmless call passes', async () => {
+  const env = await mismatchEnv();
+  for (const command of ['node scripts/lead-relay.mjs answer < f.json', 'cat f.json | node scripts/lead-relay.mjs answer']) {
+    const r = env.run(leadCall(env, 'Bash', { command }), OFF);
+    assertDeny(env, r, /self-protect\.M-SEC1/, `answer under mismatch+off: ${command}`);
+    assert.doesNotMatch(env.reason(r), /pins-mismatch/);
+  }
+  for (const command of ['echo hello', 'node scripts/lead-relay.mjs open P1/x gate:g1 f.json']) {
+    const r = env.run(leadCall(env, 'Bash', { command }), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `harmless passes under mismatch+off: ${command}: ${r.out}`);
+  }
+});
+
+// under pin mismatch + guards off the host cannot decode, so an encoded answer fails closed.
+test('host deny: pin mismatch + AICO_GUARDS=off, an encoded answer shell call denies; a plain harmless call passes', async () => {
+  const env = await mismatchEnv();
+  const b64 = (t) => Buffer.from(t, 'utf16le').toString('base64');
+  const answer = 'node scripts/lead-relay.mjs answer < f.json';
+  for (const [tool, command] of [
+    ['PowerShell', `pwsh -enc ${b64(answer)}`],
+    ['Bash', `pwsh -EncodedCommand ${b64(answer)}`],
+    ['PowerShell', `powershell -NoProfile -EncodedCommand:${b64(answer)}`],
+    ['Bash', `pwsh -c "pwsh -enc ${b64(answer)}"`],
+    ['PowerShell', `pwsh -enc ${b64(`pwsh -enc ${b64(answer)}`)}`],
+    ['PowerShell', `pwsh -enc ${b64('Set-Content .company/work/p1/01-feature/forms.jsonl x')}`],
+  ]) {
+    const r = env.run(leadCall(env, tool, { command }), OFF);
+    assertDeny(env, r, /self-protect\.M-SEC1|pins-mismatch/, `encoded answer under mismatch+off: ${command}`);
+  }
+  for (const command of ['echo hello', 'Write-Output ok']) {
+    const r = env.run(leadCall(env, 'PowerShell', { command }), OFF);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(env.reason(r), null, `harmless passes under mismatch+off: ${command}: ${r.out}`);
+  }
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-manifest.md v1
+// contract: docs/contracts/mod-manifest.md v1.1
 // Checks the hook set of a plugin root. Usage:
 //   hook-check.mjs ci|setup [--root <plugin root>]   exit 1 and one line per problem
 //   hook-check.mjs denies --session <key> --json     newest 5 deny rows of a session, read-only
@@ -25,7 +25,18 @@ const KIND_FIXED = {
 };
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+// Hash input: line-ending-normalized bytes (CRLF read as LF) so a CRLF working copy and an LF clone pin alike; a buffer with a NUL byte is binary and hashed as is.
+function pinBytes(buf) {
+  if (buf.includes(0)) return buf;
+  const out = Buffer.allocUnsafe(buf.length);
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) continue;
+    out[n++] = buf[i];
+  }
+  return out.subarray(0, n);
+}
+const sha = (buf) => crypto.createHash('sha256').update(pinBytes(buf)).digest('hex');
 
 function readText(file, max = MAX_FILE) {
   const st = fs.statSync(file);
@@ -300,7 +311,7 @@ export function denies(session, env = process.env, cwd = process.cwd()) {
   const home = env.MCSPARROW_HOME || path.join(env.USERPROFILE || env.HOME || os.homedir(), '.mcsparrow');
   const root = projectRoot(cwd);
   if (!root) return [];
-  const file = path.join(home, 'hook-snapshots', sha(root).slice(0, 12), 'denies.jsonl');
+  const file = path.join(home, 'hook-snapshots', crypto.createHash('sha256').update(root).digest('hex').slice(0, 12), 'denies.jsonl');
   let text;
   try {
     const st = fs.statSync(file);

@@ -10,7 +10,6 @@ const MAX_LINES = 1000;
 const MAX_LINE = 512;
 const HANDOFF_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.md$/;
 const LEDGER_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.findings\.md$/;
-const MCP_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
 const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 
 const lstatOrNull = (p) => { try { return fs.lstatSync(p); } catch { return null; } };
@@ -125,19 +124,14 @@ export async function recordGuardsOff(event, root, now = Date.now()) {
   } catch { return false; }
 }
 
-// One `bg` row per Lead launch of a background shell or Step; the run is looked up here at every token level.
-export async function recordBackground(event, root, now = Date.now()) {
+// The file of this session's last context `handover` event, or null.
+function lastHandoverFile(lh, run, session) {
   try {
-    if (event.session !== 'lead' || !event.tool || event.tool.background !== true) return false;
-    const { lh } = await modules();
-    const base = mainRoot(root);
-    const slug = lh.findRun(base, now);
-    const dir = slug ? lh.workDir(base, slug) : null;
-    if (!dir) return false;
-    const { count } = readGuard(dir);
-    return appendGuard(dir, count, { ev: 'bg', session: event.sessionKey }, now);
-  } catch { return false; }
+    const hits = lh.loadRecord(run.folder).filter((e) => e.ev === 'handover' && e.trigger === 'context' && e.session === session && typeof e.file === 'string' && HANDOFF_FILE.test(e.file));
+    return hits.length > 0 ? hits[hits.length - 1].file : null;
+  } catch { return null; }
 }
+const HANDOFF_FILE = /^lead-handoff-[1-9]\d{0,3}\.md$/;
 
 // Applies the effect of a `cap.M1` verdict. Returns { extra }: output keys to merge into the hook output.
 export async function applyEffect(verdict, event, root, now = Date.now()) {
@@ -162,17 +156,17 @@ export async function applyEffect(verdict, event, root, now = Date.now()) {
       case 'cap-lead-freeze': {
         if (!run) break;
         const { lh } = await modules();
-        try { lh.contextHandover(mainRoot(root), run.slug, { tokens: event.tokens.total, session: event.sessionKey, now }); } catch { /* refused: the deny stands */ }
-        const cmd = lh.newSessionCommand(run.slug);
-        if (cmd) extra.reasonSuffix = cmd;
+        let name = null;
+        try { name = lh.contextHandover(mainRoot(root), run.slug, { tokens: event.tokens.total, session: event.sessionKey, now }); } catch { /* refused: the deny stands */ }
+        if (typeof name !== 'string') name = lastHandoverFile(lh, run, event.sessionKey);
+        if (name) extra.reasonSuffix = `handoff: .company/work/${run.slug}/${name}`;
         break;
       }
       case 'cap-lead-frozen': {
+        if (!run) break;
         const { lh } = await modules();
-        const cmd = run ? lh.newSessionCommand(run.slug) : null;
-        if (cmd) extra.reasonSuffix = cmd;
-        extra.continue = false;
-        extra.systemMessage = cmd ? `${verdict.message} ${cmd}` : verdict.message;
+        const name = lastHandoverFile(lh, run, event.sessionKey);
+        if (name) extra.reasonSuffix = `handoff: .company/work/${run.slug}/${name}`;
         break;
       }
       case 'cap-warn':
@@ -183,20 +177,6 @@ export async function applyEffect(verdict, event, root, now = Date.now()) {
     }
   } catch { /* the verdict stands unrecorded */ }
   return { extra };
-}
-
-// The MCP tool call at the clean point is allowed by the rule; the engine freezes the session on it.
-export async function freezeOnMcp(event, snapshot, root, now = Date.now()) {
-  try {
-    const run = event.run;
-    if (!run || event.session !== 'lead' || run.frozen === true || run.stepRunning === true) return false;
-    if (!event.tool || event.tool.name !== MCP_TOOL || event.tokens.state !== 'read') return false;
-    if (!snapshot || !Number.isInteger(snapshot.threshold) || snapshot.threshold <= 0) return false;
-    const { freezeAt } = await import('../rules/cap.mjs');
-    if (event.tokens.total < freezeAt(snapshot.threshold)) return false;
-    await applyEffect({ v: 'allow', rule: 'cap.M1', effect: 'cap-lead-freeze' }, event, root, now);
-    return true;
-  } catch { return false; }
 }
 
 // One `stop` row per agent: the stop block is given once.

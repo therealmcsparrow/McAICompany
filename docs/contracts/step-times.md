@@ -1,4 +1,6 @@
-# Contract: step-times v1.2
+# Contract: step-times v1.3
+
+v1.3 (task P20261117.000001-T12; minor, uses `hook-event` v1.4): `start` and `stop` skip the Lead agent: a payload whose `agent_type` equals `aico:project-manager` exactly writes no `sub` row and no step file (the Lead is not a Role; its peak is kept by `lead-handover measure`). Any other `agent_type`, including near misses, is handled as before.
 
 v1.2 (task P20261109.000009-T11; additive, uses `run-state` v2.0): the active run name is checked with `isRunSlug` (`work-folder-name`), so a nested slug `<ProjectID>/<NN>-<playbook>` is passed on as one argument to `run-state sub`. Any other value still writes nothing. v1.1, v2 and legacy names behave byte-identically.
 

@@ -334,7 +334,8 @@ test('AC-chain-3j: every Help line answers from documentation/commands/<name>.md
     const always = ALWAYS.includes(n);
     if (l !== helpLine(n, always)) why.push(`differs from the ${always ? 'ALWAYS' : 'standard'} template`);
     const title = ls.findIndex((x) => /^# /.test(x));
-    const first = ls.findIndex((x, i) => i > title && x.trim() !== '');
+    let first = ls.findIndex((x, i) => i > title && x.trim() !== '');
+    if (ls[first]?.startsWith('**Runs in:**')) first = ls.findIndex((x, i) => i > first && x.trim() !== '');
     if (ls[first] !== l) why.push('is not the first body line after the title');
     if (!always) {
       const at = ls.indexOf(l);

@@ -15,7 +15,7 @@ export { cleanup };
 export const REPO = path.resolve(import.meta.dirname, '..', '..');
 export const AGENT = 'agent-a1';
 export const SLUG = 'P20261114.000099/01-feature';
-export const NEW_SESSION_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
+export const NEW_SESSION_TOOL = ['mcp__plugin_aico_lead-session__lead', 'new', 'session'].join('_');
 export const usage = (n) => ({ input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: n - 15 });
 export const row = (n, side = false) => ({ type: 'assistant', isSidechain: side, message: { model: 'claude-opus-4-1', usage: usage(n) } });
 
@@ -32,6 +32,8 @@ export async function capEnv({ cap, run = true, slug = SLUG } = {}) {
   const env = makeEnv();
   const put = (rel) => { fs.mkdirSync(path.dirname(path.join(env.plugin, rel)), { recursive: true }); fs.copyFileSync(path.join(REPO, rel), path.join(env.plugin, rel)); };
   put('hooks/rules/cap.mjs');
+  put('hooks/rules/self-protect.mjs'); // the host imports it from the plugin root and fails closed without it
+  put('hooks/rules/dotenv.mjs'); // the guards-off host path imports it and fails closed without it
   put('hooks/manifests/cap.json');
   fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
   env.repin();
@@ -82,4 +84,63 @@ export async function capEnv({ cap, run = true, slug = SLUG } = {}) {
   // True when the call was refused as a cap freeze or hand over.
   out.capDeny = (r) => out.isDeny(r) && /cap\.M1/.test(r.json.hookSpecificOutput.permissionDecisionReason);
   return out;
+}
+
+// ---- T17 (hook-event v1.4, context-guard v3.0): Lead agent harness ----
+export const LEAD_TYPE = 'aico:project-manager';
+export const LEAD_AGENT = 'agent-lead1';
+
+// A throw-away plugin root with a probe rule that reports what a rule sees: session, key, agent type, tool, run folder.
+// Own rule file, so the shared probe fixture stays untouched. Starts an active run and the Lead session.
+export async function seenEnv({ run = true } = {}) {
+  const env = makeEnv({
+    manifests: [{ v: 1, id: 'seen', kind: 'guard', title: 'Seen', owner: 'qa', sessions: 'all', events: ['PreToolUse', 'SubagentStop'], rules: ['seen.M1', 'seen.M2'], fail: 'closed', switch: null, lock: true, upstream: null }],
+    rows: [
+      { event: 'PreToolUse', matcher: ['*'], rule: 'seen.M1', module: 'seen.mjs', export: 'judge', fail: 'closed', timeoutMs: 300, message: 'seen' },
+      { event: 'SubagentStop', matcher: ['*'], rule: 'seen.M2', module: 'seen.mjs', export: 'judge', fail: 'closed', timeoutMs: 300, message: 'seen' }
+    ]
+  });
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules', 'seen.mjs'),
+    "export function judge(e) {\n  return { v: 'note', rule: 'seen.M1', message: JSON.stringify({ s: e.session, ak: e.agentKey, at: e.agentType, t: e.tool ? e.tool.name : null, run: e.run ? (e.run.folder ?? true) : null }) };\n}\n");
+  env.repin();
+  const out = { env };
+  if (run) out.runDir = await env.startRun(SLUG);
+  startLead(env);
+  // Main transcript with one small reading; the agent file (flat, any depth) with its own small reading.
+  out.payload = (name, { agent = null, type, tool = 'Bash', input = { command: 'ls' }, tokens = 0 } = {}) => {
+    const t = env.transcript(`seen-${agent ?? 'main'}`, [row(tokens + 15)]);
+    const over = { transcript_path: t, tool_name: tool, tool_input: input };
+    if (agent) {
+      const dir = t.replace(/\.jsonl$/, '');
+      fs.mkdirSync(path.join(dir, 'subagents'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'subagents', `agent-${agent}.jsonl`), [JSON.stringify({ type: 'meta' }), JSON.stringify(row(tokens + 15, true))].join('\n') + '\n');
+      over.agent_id = agent;
+      if (type !== undefined) over.agent_type = type;
+    }
+    if (name === 'SubagentStop') { over.agent_transcript_path = t; over.stop_hook_active = false; }
+    return env.event(name, over);
+  };
+  out.seen = (payload) => {
+    const r = env.run(payload);
+    assert.equal(r.code, 0, r.err);
+    const m = String(r.json?.systemMessage ?? '').match(/\{.*\}/s);
+    assert.ok(m, `no probe note in: ${r.out.slice(0, 300)} ${r.err.slice(0, 300)}`);
+    return JSON.parse(m[0]);
+  };
+  return out;
+}
+
+// A throw-away plugin root with the REAL dotenv.M-SEC1 rule (all sessions), for the shell `.env` deny.
+export function dotenvEnv() {
+  const rows = readJson(path.join(REPO, 'hooks', 'rules.json')).filter((r) => r.rule === 'dotenv.M-SEC1');
+  assert.ok(rows.length >= 1, 'hooks/rules.json has a dotenv.M-SEC1 row');
+  const env = makeEnv();
+  for (const rel of ['hooks/rules/dotenv.mjs', 'hooks/manifests/dotenv.json']) {
+    fs.mkdirSync(path.dirname(path.join(env.plugin, rel)), { recursive: true });
+    fs.copyFileSync(path.join(REPO, rel), path.join(env.plugin, rel));
+  }
+  fs.writeFileSync(path.join(env.plugin, 'hooks', 'rules.json'), JSON.stringify(rows, null, 2));
+  env.repin();
+  startLead(env);
+  return env;
 }

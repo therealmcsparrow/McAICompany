@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Bash","tool_input":{"command":"tee -a .company/work/p1/01-feature/run-state.jsonl < /dev/null"},"permission_mode":"default"}

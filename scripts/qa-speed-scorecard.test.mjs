@@ -27,6 +27,18 @@ after(() => {
 });
 process.chdir(decoy);
 
+// v3.1: a non-auto Gate needs a recorded CEO answer (forms.jsonl) before `gate`. Fixture: one open + one answer row choosing `result`.
+let formSeq = 0;
+function answerGate(dir, gate, result, when = new Date().toISOString().slice(0, 19) + "Z") {
+  const id = `f${formSeq++}`;
+  const rows = [
+    { v: 1, at: when, ev: 'open', id, kind: `gate:${gate}`, questions: [{ options: [{ label: 'pick', result }] }] },
+    { v: 1, at: when, ev: 'answer', id, answers: [{ labels: ['pick'] }] },
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(path.join(dir, 'forms.jsonl'), rows.map((r) => `${JSON.stringify(r)}\n`).join(''));
+}
+
 let counter = 0;
 function mkRoot() {
   const root = path.join(base, `root${counter++}`);
@@ -932,7 +944,10 @@ test('AC2 run-state view: wait is the seconds from the latest ask after the prev
   const root = mkRoot();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const slug = 'demo';
-  const step = (cmd, when) => assert.equal(runState(cmd, { root, now: epoch(when) }).code, 0, cmd.join(' '));
+  const step = (cmd, when) => {
+    if (cmd[0] === 'gate') answerGate(path.join(root, '.company', 'work', slug), cmd[2], cmd[3], when);
+    assert.equal(runState(cmd, { root, now: epoch(when) }).code, 0, cmd.join(' '));
+  };
   step(['start', slug], T(9));
   step(['ask', slug, 'brief'], T(9, 1));
   step(['ask', slug, 'brief'], T(9, 2));

@@ -1,17 +1,17 @@
-# Contract: mod-manifest v1
+# Contract: mod-manifest v1.1
 
 New Contract (task P20261114.000001/01-feature; the brief calls it `aico.mod-manifest` v1: aico's Contract index uses bare kebab names). Provider: one JSON file per mod in the installed plugin, hooks/manifests/<mod-id>.json (created by the build). Consumers: the hook engine (`hook-event` v1, `mod-hook` v1; checks every manifest at load), the hook check script (CI and pipeline Setup), the switchboard saver (draws its rows from the manifests), `aico-settings` (which switch keys exist). Rationale: `docs/adr/0071-guards-as-rule-table.md`.
 
 ## Shape (allow-list; an unknown key, a missing key or a wrong type makes the manifest invalid)
 ```json
 { "v": 1,
-  "id": "git-add",
+  "id": "dotenv",
   "kind": "guard",
-  "title": "git add -A deny",
+  "title": ".env read guard",
   "owner": "backend-engineer",
   "sessions": "all",
   "events": ["PreToolUse"],
-  "rules": ["git-add.M-SEC1"],
+  "rules": ["dotenv.M-SEC1"],
   "fail": "closed",
   "switch": null,
   "lock": true,
@@ -43,7 +43,7 @@ Mod file to manifest: a mod file `mods/<id>.ts` or `mods/<id>.tsx` maps to `hook
 - Switchboard: one row per manifest, guards and gates read-only with the words `locked on`; a saver row shows its switch. It writes only through `settings.mjs` (`aico-settings`), never a second switch file.
 
 ## Release 1 manifests
-Guards (kind `guard`): `cap` (rule `cap.M1`), `git-add` (`git-add.M-SEC1`), `dotenv` (`dotenv.M-SEC1`), `model-floor` (`model-floor.M1`), `self-protect` (`self-protect.M-SEC1`). Savers (kind `saver`): `cache-tax` (the existing Cache Tax mod, `mods/cache-tax.tsx`, title `Cache clock`, switch `mods.cache_tax.enabled`; view only), `efficient-browser-use` (`browser.Y1`, note only, default off), `switchboard` (view only), `savings` (view only), `savvy`, `reflect` (existing). Gates (kind `gate`): `plan-gate`, `fresh-step`, `reprompt-gate` (existing, unchanged behaviour).
+Guards (kind `guard`): `cap` (rule `cap.M1`), `dotenv` (`dotenv.M-SEC1`), `model-floor` (`model-floor.M1`), `self-protect` (`self-protect.M-SEC1`). Savers (kind `saver`): `cache-tax` (the existing Cache Tax mod, `mods/cache-tax.tsx`, title `Cache clock`, switch `mods.cache_tax.enabled`; view only), `efficient-browser-use` (`browser.Y1`, note only, default off), `switchboard` (view only), `savings` (view only), `savvy`, `reflect` (existing). Gates (kind `gate`): `plan-gate`, `fresh-step`, `reprompt-gate` (existing, unchanged behaviour).
 
 ## Error cases
 | Case | Result |

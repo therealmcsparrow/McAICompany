@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/step-times.md v1.2
+// contract: docs/contracts/step-times.md v1.3
 // SubagentStart / SubagentStop adapter: appends one `sub` event to the active run through run-state.
 // Every path ends in exit 0 with nothing on stdout or stderr; the time is the receipt time run-state stamps.
 import { execFile } from 'node:child_process';
@@ -17,6 +17,7 @@ const SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // Agent file names are role ids: lower-case words joined by single hyphens.
 const AGENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_AGENT_NAME = 64;
+const LEAD_TYPE = 'aico:project-manager';
 
 function agentSlugs(dir) {
   try {
@@ -38,6 +39,7 @@ export function extract(text, slugs) {
   const agentId = field(data, 'agent_id');
   if (typeof agentId !== 'string' || agentId.length === 0 || agentId.length > 512) return null;
   const type = field(data, 'agent_type');
+  if (type === LEAD_TYPE) return null; // v1.3: the Lead agent has no sub row and no step file
   const role = typeof type === 'string' && slugs.has(type) ? type : 'other';
   const sid = field(data, 'session_id');
   const out = { role, id: createHash('sha256').update(agentId).digest('hex').slice(0, 12) };

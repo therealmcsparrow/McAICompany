@@ -430,7 +430,7 @@ test('software is every agent but the editor: 35 Roles, 24 Playbooks, 35 command
   assert.equal(out.roles.length, 35);
   assert.ok(!out.roles.includes('editor'));
   const agents = fs.readdirSync(path.join(REAL_ROOT, 'agents')).map(f => f.slice(0, -3));
-  assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor').sort());
+  assert.deepEqual([...out.roles].sort(), agents.filter(a => a !== 'editor' && a !== 'project-manager').sort());
   assert.equal(ALWAYS.length, 11);
   assert.equal(out.playbooks.length, 35);
   assert.deepEqual(out.playbooks.slice(24), ALWAYS);

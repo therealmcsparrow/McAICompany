@@ -1,6 +1,6 @@
 {
   "name": "aico",
-  "version": "0.43.0",
+  "version": "0.44.0",
   "description": "McSparrow AI company: a Lead, Playbooks and 36 Role agents (product, engineering, games, design, art, user testing, content, editing, prompt writing, localization, support, quality, security, legal, market and tech research) that hand off work through files.",
   "author": {
     "name": "McSparrow"
@@ -15,13 +15,5 @@
   "dependencies": [
     "superpowers@claude-plugins-official"
   ],
-  "types": "./types/index.d.ts",
-  "mcpServers": {
-    "lead-session": {
-      "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/scripts/lead-launch-mcp.mjs"
-      ]
-    }
-  }
+  "types": "./types/index.d.ts"
 }

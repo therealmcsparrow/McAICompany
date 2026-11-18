@@ -17,7 +17,8 @@ const MAX_PATHS = 80;
 const MAX_SHELL_PATHS = 64;
 const MAX_MODEL = 64;
 const MAX_RUNS = 500;
-const GUARD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+guard\.jsonl$/;
+const GUARD_SHAPE = /\/\.company\/work\/(?:[^/]+\/)+(?:guard|forms|run-state)\.jsonl$/;
+const LEAD_TYPE = 'aico:project-manager';
 const PROMPT_BYTES = 64 * 1024;
 // Below the lowest freeze point no run is looked up. A plugin root without the cap rule never looks one up.
 const FAST_FLOOR = await import('../rules/cap.mjs').then((m) => m.freezeAt(m.MIN_THRESHOLD), () => Infinity);
@@ -182,9 +183,11 @@ function toolOf(name, input, ctx, cwd) {
   let model = null;
   let subagentType = null;
   let outputRole = null;
+  // Unicode whitespace is stripped so a padded name cannot slip past the Lead match.
+  const stRaw = (name === 'Agent' || name === 'Task') ? str(input, 'subagent_type') : null;
+  const st = typeof stRaw === 'string' ? stRaw.replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '') : null;
   if (name === 'Agent' || name === 'Task') {
     model = str(input, 'model');
-    const st = str(input, 'subagent_type');
     const m = st ? ROLE_RE.exec(st) : null;
     subagentType = m ? m[1] : null;
     const prompt = str(input, 'prompt');
@@ -196,8 +199,9 @@ function toolOf(name, input, ctx, cwd) {
       }
     }
   }
+  const leadTarget = (name === 'Agent' || name === 'Task') && /(^|:)project-manager$/.test((st ?? '').toLowerCase());
   const background = BG_TOOLS.has(name) && own(input, 'run_in_background') && input.run_in_background === true;
-  return { name, command, paths, model, subagentType, outputRole, background };
+  return { name, command, paths, model, subagentType, outputRole, background, leadTarget };
 }
 
 const usageTotal = (u) => {
@@ -312,7 +316,7 @@ export function protectedPaths(ctx, root, main = null) {
     const queue = [work];
     for (let seen = 0; queue.length > 0 && seen < MAX_RUNS; seen++) {
       const dir = queue.shift();
-      list.push(path.join(dir, 'guard.jsonl'));
+      for (const n of ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl']) list.push(path.join(dir, n));
       let kids = [];
       try { kids = fs.readdirSync(dir, { withFileTypes: true }); } catch { /* unreadable or absent */ }
       for (const d of kids) if (d.isDirectory()) queue.push(path.join(dir, d.name));
@@ -330,7 +334,7 @@ function deepFreeze(o) {
   return o;
 }
 
-// ctx: { env, schema, pluginRoot, mcsHome, resolveRun(event, root) (may be async) }. Returns { ok: true, event } or { ok: false, why }.
+// ctx: { env, schema, pluginRoot, mcsHome, resolveRun(event, root) (may be async), memo? (Map, optional cwd cache) }. Returns { ok: true, event } or { ok: false, why }.
 export async function normalize(raw, ctx) {
   if (!isObj(raw)) return { ok: false, why: 'not an object' };
   const name = str(raw, 'hook_event_name');
@@ -341,7 +345,9 @@ export async function normalize(raw, ctx) {
     if (typeof raw.agent_id !== 'string' || !AGENT_RE.test(raw.agent_id)) return { ok: false, why: 'bad agent id' };
     agentKey = hash12(raw.agent_id);
   }
-  const session = name === 'SubagentStop' || (name === 'PreToolUse' && hasAgent) ? 'step' : 'lead';
+  const isLeadAgent = hasAgent && raw.agent_type === LEAD_TYPE;
+  const session = name === 'SubagentStop' || (name === 'PreToolUse' && hasAgent) ? (isLeadAgent ? 'lead' : 'step') : 'lead';
+  const fromAgentFile = session === 'step' || isLeadAgent;
   const sessionKey = hash12(str(raw, 'session_id') ?? '');
   const cwd = str(raw, 'cwd') ?? process.cwd();
   const drift = driftOf(raw, ctx.schema, name);
@@ -352,13 +358,21 @@ export async function normalize(raw, ctx) {
   let usage = { state: 'none', total: 0, model: null };
   if (name === 'PreToolUse' || name === 'SubagentStop') {
     const tp = str(raw, 'transcript_path');
-    if (session === 'lead') usage = readUsage(tp, false);
+    if (!fromAgentFile) usage = readUsage(tp, false);
     else if (name === 'SubagentStop') usage = readUsage(str(raw, 'agent_transcript_path'), true);
     else if (tp && tp.endsWith('.jsonl') && !mainReadable(tp)) usage = { state: 'error', total: null, model: null };
     else if (tp && tp.endsWith('.jsonl')) usage = readUsage(path.join(tp.slice(0, -'.jsonl'.length), 'subagents', `agent-${raw.agent_id}.jsonl`), true);
   }
   const mainModel = session === 'lead' && tool && (tool.name === 'Agent' || tool.name === 'Task') ? usage.model : null;
-  const root = projectRoot(cwd);
+  // A caller-owned Map keeps the per-cwd lookups for one replay; without it every call reads the disk.
+  const memo = ctx.memo instanceof Map ? ctx.memo : null;
+  let hit = memo ? memo.get(cwd) : undefined;
+  if (!hit) {
+    const r = projectRoot(cwd);
+    hit = { root: r, base: protectedPaths(ctx, r, worktreeMain(cwd)) };
+    if (memo) memo.set(cwd, hit);
+  }
+  const root = hit.root;
   const event = {
     v: 1, event: name, session, sessionKey, agentKey, agentType: hasAgent ? str(raw, 'agent_type') : null,
     tool,
@@ -369,28 +383,33 @@ export async function normalize(raw, ctx) {
       subagentModel: envStr(ctx.env, 'CLAUDE_CODE_SUBAGENT_MODEL'),
       subagentModelForce: envStr(ctx.env, 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE')
     },
-    protected: protectedPaths(ctx, root, worktreeMain(cwd)),
+    protected: [...hit.base],
     run: null,
     drift,
     stopHookActive: name === 'SubagentStop' && typeof raw.stop_hook_active === 'boolean' ? raw.stop_hook_active : null
   };
-  if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error') {
-    try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = null; }
+  const leadSpawn = session === 'lead' && name === 'PreToolUse' && tool !== null && (tool.name === 'Agent' || tool.name === 'Task');
+  if ((usage.state === 'read' && usage.total >= FAST_FLOOR) || usage.state === 'error' || leadSpawn) {
+    try { event.run = (ctx.resolveRun ? await ctx.resolveRun(event, root) : null) ?? null; } catch { event.run = { error: true }; }
   }
   for (const e of tool ? tool.paths : []) {
     if (typeof e.real === 'string' && GUARD_SHAPE.test(fold(e.real)) && !event.protected.includes(fold(e.real))) event.protected.push(fold(e.real));
   }
   if (event.run && typeof event.run.folder === 'string') {
-    const g = realOf(path.join(event.run.folder, 'guard.jsonl'), root || process.cwd());
-    if (g && !event.protected.includes(fold(g))) event.protected.push(fold(g));
+    for (const n of ['guard.jsonl', 'forms.jsonl', 'run-state.jsonl']) {
+      const g = realOf(path.join(event.run.folder, n), root || process.cwd());
+      if (g && !event.protected.includes(fold(g))) event.protected.push(fold(g));
+    }
   }
   for (const e of tool ? tool.paths : []) {
     if (e.raw !== '' || !Array.isArray(e.cwds)) continue;
-    e.cwdHot = e.cwds.some((c) => {
+    const hot = (list) => e.cwds.some((c) => {
       const r = typeof c === 'string' ? realOf(c, root || process.cwd()) : null;
       const f = r ? fold(r) : null;
-      return f !== null && event.protected.some((p) => f === p || f.startsWith(`${p}/`));
+      return f !== null && list.some((p) => f === p || f.startsWith(`${p}/`));
     });
+    e.cwdHot = hot(event.protected);
+    e.cwdRec = hot(event.protected.filter((p) => GUARD_SHAPE.test(p)));
     delete e.cwds;
   }
   return { ok: true, event: deepFreeze(event), cwd, root };

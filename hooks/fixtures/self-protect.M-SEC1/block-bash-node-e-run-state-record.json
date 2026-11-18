@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"fixture","transcript_path":"fixture.jsonl","cwd":"C:/proj","tool_name":"Bash","tool_input":{"command":"node -e \"require('fs').appendFileSync('.company/work/p1/01-feature/run-state.jsonl','x')\""},"permission_mode":"default"}

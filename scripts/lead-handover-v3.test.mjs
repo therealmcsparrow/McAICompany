@@ -7,7 +7,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { main, contextHandover, newSessionCommand, watch, resume, findRun } from './lead-handover.mjs';
+import { main, contextHandover, newSessionCommand, watch, measure, findRun } from './lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..');
@@ -64,12 +64,12 @@ function transcript(fx) {
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_GUARDS: 'off' } });
 
-describe('the Contract and the header (lead-handoff v2.5)', () => {
-  test('the Contract header is v2.5 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-handoff v3.0)', () => {
+  test('the Contract header is v3.0 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v2\.5$/m);
+    assert.match(doc, /^# Contract: lead-handoff v3\.0$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v2.5');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.0');
   });
 
   test('line 3 cites run-state v3.0', () => {
@@ -266,20 +266,88 @@ describe('hooks and context hand-over on a v3 run', () => {
     assert.equal(watch(atY(180000), opts(fy)).code, 0);
   });
 
-  test('resume prints the fixed line with the quoted slug', () => {
-    const fx = fixture();
-    // the run must be active: leave only the start and the Step start rows
-    const rows = fs.readFileSync(path.join(fx.dir, 'run-state.jsonl'), 'utf8').trim().split('\n');
-    fs.writeFileSync(path.join(fx.dir, 'run-state.jsonl'), `${rows.slice(0, 2).join('\n')}\n`);
-    const r = resume(JSON.stringify({ hook_event_name: 'SessionStart', source: 'compact' }), opts(fx));
-    assert.equal(r.code, 0);
-    assert.ok(r.out.includes(`lead-handover read '${SLUG}' first`), r.out);
-  });
-
   test('a legacy run still hands over to its flat folder (byte-identical layout)', () => {
     const fx = fixture({ slug: 'demo-run' });
     assert.equal(main(['write', 'demo-run'], fx.root, {}).out, 'wrote lead-handoff-1.md\n');
     const text = fs.readFileSync(path.join(fx.work, 'demo-run', 'lead-handoff-1.md'), 'utf8');
     assert.ok(text.split('\n').includes('slug: demo-run'));
+  });
+});
+
+// lead-handoff v3.0 (AC2, AC6, AC12): `measure` also runs on SubagentStop of the Lead agent (agent_type exactly aico:project-manager,
+// usage read from <main>/subagents/agent-<id>.jsonl); `read` adds `leads <n>`, `main peak <n>` and the `form:` line of lead-relay v1.
+describe('lead-handoff v3.0: leads, lead peak and main peak in read', () => {
+  const usageOf = (n) => ({ input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: n - 15 });
+  const row = (n, side) => `${JSON.stringify({ type: 'assistant', isSidechain: side, message: { role: 'assistant', content: [{ type: 'text', text: 'x' }], usage: usageOf(n) } })}
+`;
+  const proj = (fx) => path.join(fx.claudeDir, 'projects', 'p1');
+  const mainFile = (fx, n) => { const f = path.join(proj(fx), 'session.jsonl'); fs.writeFileSync(f, row(n, false)); return f; };
+  const agentFile = (fx, id, n) => {
+    const d = path.join(proj(fx), 'session', 'subagents');
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, `agent-${id}.jsonl`), row(n, true));
+  };
+  const stopOf = (fx, id, type) => JSON.stringify({ hook_event_name: 'SubagentStop', session_id: 'sess-1', transcript_path: mainFile(fx, 40000), agent_id: id, agent_type: type });
+  const mainStop = (fx, n) => JSON.stringify({ hook_event_name: 'Stop', session_id: 'sess-1', transcript_path: mainFile(fx, n) });
+  const o = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: {}, now: fx.now });
+  const lines = (fx) => main(['read', fx.slug], fx.root, {}).out.split('\n');
+  const LEAD = 'aico:project-manager';
+
+  test('two Lead SubagentStop payloads, a main Stop and a cap hand-over: leads 2, lead peak, main peak, form line', () => {
+    const fx = fixture();
+    agentFile(fx, 'aid01', 90000);
+    agentFile(fx, 'aid02', 120000);
+    measure(stopOf(fx, 'aid01', LEAD), o(fx));
+    measure(stopOf(fx, 'aid02', LEAD), o(fx));
+    measure(mainStop(fx, 70000), o(fx));
+    measure(mainStop(fx, 50000), o(fx));
+    contextHandover(fx.root, fx.slug, { tokens: 150000, session: 'abcdef012345', now: fx.now });
+    const out = lines(fx);
+    assert.ok(out.includes('leads 2'), out.join('|'));
+    assert.ok(out.includes('lead peak 120000'), out.join('|'));
+    assert.ok(out.includes('main peak 70000'), out.join('|'));
+    assert.ok(out.includes('handovers 1') || out.some((l) => /^handovers [1-9]/.test(l)), out.join('|'));
+    assert.ok(out.some((l) => /^form: /.test(l)), out.join('|'));
+  });
+
+  test('a Role SubagentStop, a foreign agent_type and a main Stop are not counted as Leads', () => {
+    const fx = fixture();
+    agentFile(fx, 'aid03', 100000);
+    agentFile(fx, 'aid04', 100000);
+    agentFile(fx, 'aid05', 100000);
+    measure(stopOf(fx, 'aid03', 'aico:qa'), o(fx));
+    measure(stopOf(fx, 'aid04', 'other:project-manager'), o(fx));
+    measure(stopOf(fx, 'aid05', undefined), o(fx));
+    measure(mainStop(fx, 60000), o(fx));
+    const out = lines(fx);
+    assert.ok(!out.some((l) => /^leads [1-9]/.test(l)), out.join('|'));
+    assert.ok(out.includes('main peak 60000'), out.join('|'));
+  });
+
+  test('the same Lead agent stopping twice counts once; each Lead keeps its own peak', () => {
+    const fx = fixture();
+    agentFile(fx, 'aid06', 80000);
+    measure(stopOf(fx, 'aid06', LEAD), o(fx));
+    measure(stopOf(fx, 'aid06', LEAD), o(fx));
+    assert.ok(lines(fx).includes('leads 1'), lines(fx).join('|'));
+    assert.ok(lines(fx).includes('lead peak 80000'));
+  });
+
+  test('an unreadable agent file or a payload without a transcript writes no reading', () => {
+    const fx = fixture();
+    measure(stopOf(fx, 'nofile', LEAD), o(fx));
+    measure(JSON.stringify({ hook_event_name: 'SubagentStop', agent_id: 'x', agent_type: LEAD }), o(fx));
+    assert.ok(!lines(fx).some((l) => /^leads [1-9]/.test(l)), lines(fx).join('|'));
+  });
+
+  test('an open lead-relay form shows as a form line with its id and open', () => {
+    const fx = fixture();
+    fs.writeFileSync(path.join(fx.dir, 'forms.jsonl'), `${JSON.stringify({ v: 1, at: iso(fx.now - 1000), ev: 'open', id: 'f01', kind: 'ask',
+      questions: [{ q: 'Which?', header: 'Pick', multi: false, options: [{ label: 'A', description: 'a' }, { label: 'B', description: 'b' }] }] })}
+`);
+    assert.ok(lines(fx).includes('form: f01 open'), lines(fx).join('|'));
+    fs.appendFileSync(path.join(fx.dir, 'forms.jsonl'), `${JSON.stringify({ v: 1, at: iso(fx.now), ev: 'answer', id: 'f01', src: 'hook', answers: [{ labels: ['A'], other: null }] })}
+`);
+    assert.ok(lines(fx).includes('form: f01 answered'), lines(fx).join('|'));
   });
 });

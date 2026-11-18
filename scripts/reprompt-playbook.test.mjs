@@ -33,14 +33,16 @@ test('frontmatter: name, guard description, model-startable, no allowed-tools, n
   assert.doesNotMatch(text, /^\*\*Type:\*\*/m);
 });
 
-test('Help line is the first body line, the Trust line is right below it, before Start', () => {
+test('Runs-in line, then the Help line, the Trust line right below it, before Start (company-type v2.3)', () => {
   const lines = text.split('\n');
   const title = lines.findIndex((l) => l.startsWith('# Playbook: reprompt'));
   assert.ok(title > 0);
   assert.equal(lines[title + 1], '');
-  assert.equal(lines[title + 2], "**Help:** argument is exactly `help` or `--help` → read `documentation/commands/reprompt.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
+  assert.ok(lines[title + 2].startsWith('**Runs in:**'));
   assert.equal(lines[title + 3], '');
-  assert.ok(lines[title + 4].startsWith('**Trust:**'));
+  assert.equal(lines[title + 4], "**Help:** argument is exactly `help` or `--help` → read `documentation/commands/reprompt.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.");
+  assert.equal(lines[title + 5], '');
+  assert.ok(lines[title + 6].startsWith('**Trust:**'));
   const i = text.indexOf('**Trust:**');
   assert.ok(i > 0 && i < text.indexOf('## 1. Start'));
   const line = text.slice(i, text.indexOf('\n', i));

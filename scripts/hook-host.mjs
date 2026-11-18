@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-hook.md v1.1
+// contract: docs/contracts/mod-hook.md v1.2
 // The hook engine: one process per hook call. Reads one hook payload on stdin, checks the pins, normalizes the
 // event, runs the rule table in one worker and prints one verdict. This file reads nothing from hooks/lib until
 // the pins match, so a changed engine file is never loaded.
@@ -12,6 +12,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
 const SELF_EXIT_MS = 3800;
+const START_EXIT_MS = 9500;
 const MAX_TOTAL_FIXTURES = 400;
 const MAX_FIXTURE_DETAILS = 5;
 const MAX_FIXTURES = 24;
@@ -24,7 +25,18 @@ const REBUILD_MSG = {
   settings: 'snapshot rebuild failed: settings invalid; fix: repair the aico settings files (config.json, .company/settings.json); escape: restart the Lead with AICO_GUARDS=off'
 };
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// Hash input: line-ending-normalized bytes (CRLF read as LF) so a CRLF working copy and an LF clone pin alike; a buffer with a NUL byte is binary and hashed as is.
+function pinBytes(buf) {
+  if (buf.includes(0)) return buf;
+  const out = Buffer.allocUnsafe(buf.length);
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) continue;
+    out[n++] = buf[i];
+  }
+  return out.subarray(0, n);
+}
+const sha = (file) => crypto.createHash('sha256').update(pinBytes(fs.readFileSync(file))).digest('hex');
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 // Every file the pins cover, as plugin-relative paths with forward slashes. A directory or a file of another
@@ -91,15 +103,27 @@ function denyOut(name, stopActive, rule, message, extra = {}) {
   return preDeny(rule, message, extra);
 }
 
+// Past this nesting depth the strings are not read; the caller fails closed on `tooDeep`.
+const MAX_DECODE_DEPTH = 20;
+function decodedStrings(v, d = 0, state = { tooDeep: false, out: [] }) {
+  if (d > MAX_DECODE_DEPTH) { state.tooDeep = true; return state; }
+  if (typeof v === 'string') state.out.push(v);
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { state.out.push(k); decodedStrings(x, d + 1, state); }
+  return state;
+}
+
 const sysOf = (list) => { const t = list.filter(Boolean).join('\n'); return t.length > 0 ? t.slice(0, 2000) : null; };
 
 async function main() {
-  setTimeout(() => finish(preDeny('host', 'timeout')), SELF_EXIT_MS).unref();
+  const exitTimer = setTimeout(() => finish(preDeny('host', 'timeout')), SELF_EXIT_MS);
+  exitTimer.unref();
   const { text, over } = await readStdin();
   let peek = null;
   try { peek = JSON.parse(text); } catch { /* malformed below */ }
   const name = isObj(peek) && typeof peek.hook_event_name === 'string' ? peek.hook_event_name : null;
   const peekLead = isObj(peek) && (name !== 'PreToolUse' || !Object.hasOwn(peek, 'agent_id')) && name !== 'SubagentStop';
+  // The session start replay is bounded by its fixture count, so it gets its own, longer self-exit (the hook timeout is 10 s).
+  if (name === 'SessionStart') { clearTimeout(exitTimer); setTimeout(() => finish(null), START_EXIT_MS).unref(); }
   const guardsOff = process.env.AICO_GUARDS === 'off';
 
   let pins = checkPins(ROOT);
@@ -114,7 +138,24 @@ async function main() {
   if (!pins.ok) {
     const msg = `pins-mismatch: ${pins.files.slice(0, 5).join(', ')}`;
     if (name === 'SessionStart') return finish({ systemMessage: `aico guards: ${msg}; guards deny until the plugin is reinstalled` });
-    if (guardsOff && peekLead) return finish(null);
+    if (guardsOff && peekLead) {
+      // The pinned rule cannot be trusted, so a call that names a run record is denied by text alone.
+      // JSON escapes (unicode escapes) hide words in the raw text, so these checks run on the raw text plus every decoded string.
+      const decoded = decodedStrings(peek);
+      // Input nested past the limit cannot be read in full, so it is denied (fail closed).
+      if (name === 'PreToolUse' && decoded.tooDeep) return finish(preDeny('self-protect.M-SEC1', 'input is nested too deep to read'));
+      const scan = `${text}\n${decoded.out.join('\n')}`;
+      if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
+      // The same holds for the .env read check and the answer shell block: text only, no pinned module.
+      if (name === 'PreToolUse') {
+        const envHit = [...scan.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
+        if (envHit) return finish(preDeny('dotenv.M-SEC1', '.env files are not read or written'));
+        if (/lead-relay/i.test(scan) && /\banswer\b/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
+        // An encoded PowerShell program hides its words, so any prefix of -EncodedCommand after any dash-like lead (-, --, /, Unicode dash) is denied here (fail closed).
+        if (/pwsh|powershell/i.test(scan) && /[-\/\p{Pd}−]+(?:ec|e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?)?)(?![\p{L}\p{N}])/iu.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
+      }
+      return finish(null);
+    }
     if (name === 'SubagentStart' || name === 'SubagentStop') return finish(null);
     return finish(preDeny('pins-mismatch', pins.files.slice(0, 5).join(', ')));
   }
@@ -182,7 +223,10 @@ async function main() {
     // The snapshot is written before the fixture check, so a self-exit mid-check leaves a valid file, not none.
     if (prov) snap.writeLead(snapCtx, drift ? { ...prov, drift: true } : prov);
     if (prov && !tableError) {
-      const failed = await checkFixtures({ rows, prov, ctx, run, ev });
+      const replay = runnerLib.createRunner(ROOT, { deadlineMs: MAX_TOTAL_FIXTURES * runnerLib.ROW_TIMEOUT_MAX_MS });
+      const replayRun = (r, e, s) => replay.run({ module: r.module, export: r.export, event: e, snapshot: s, timeoutMs: r.timeoutMs });
+      let failed;
+      try { failed = await checkFixtures({ rows, prov, ctx, run: replayRun, ev }); } finally { replay.close(); }
       if (failed.rules.length > 0) {
         drift = true;
         const more = failed.details.length > 0 ? ` (${failed.details.join('; ')})` : '';
@@ -204,6 +248,32 @@ async function main() {
     if (full) {
       snap.writeLead(snapCtx, full);
       if (event.agentKey) snap.writeStepOnce(snapCtx, event.agentKey, full);
+    }
+  }
+
+  // Run records are shielded for every session, before the off branch, with no snapshot or rule table.
+  if (evName === 'PreToolUse' && event.tool) {
+    let rec = null;
+    try {
+      const sp = await import(pathToFileURL(path.join(ROOT, 'hooks', 'rules', 'self-protect.mjs')).href);
+      rec = sp.judgeRecord(event);
+    } catch { rec = { v: 'deny', message: 'run records are written by aico scripts only' }; }
+    if (rec && rec.v === 'deny') {
+      log.appendDeny(snap.denyDir(mcsHome, root), { rule: 'self-protect.M-SEC1', kind: 'deny', session: event.sessionKey, agent: event.agentKey });
+      return done(denyOut(evName, stopActive, 'self-protect.M-SEC1', rec.message, {}));
+    }
+  }
+
+  // With guards off the .env read check still runs for the Lead session, before the off branch, with no snapshot or rule table.
+  if (guardsOff && event.session === 'lead' && evName === 'PreToolUse' && event.tool) {
+    let env = null;
+    try {
+      const de = await import(pathToFileURL(path.join(ROOT, 'hooks', 'rules', 'dotenv.mjs')).href);
+      env = de.judge(event);
+    } catch { env = { v: 'deny', message: '.env files are not read or written' }; }
+    if (env && env.v === 'deny') {
+      log.appendDeny(snap.denyDir(mcsHome, root), { rule: 'dotenv.M-SEC1', kind: 'deny', session: event.sessionKey, agent: event.agentKey });
+      return done(denyOut(evName, stopActive, 'dotenv.M-SEC1', env.message, {}));
     }
   }
 
@@ -240,8 +310,6 @@ async function main() {
       if (v.v === 'note') notes.push(v.message);
     }
   }
-  if (!denied && s.ok && !off && guardRows.length > 0) await eff.freezeOnMcp(event, s.snapshot, root);
-  if (!denied && !off && evName === 'PreToolUse') await eff.recordBackground(event, root);
   if (!denied && s.ok && event.session === 'lead' && !s.snapshot.drift && event.drift.length === 0) {
     for (const r of rows.filter((x) => x.kind === 'saver' && applies(x, event) && s.snapshot.savers[x.id] === true)) {
       const out = await run(r, event, s.snapshot);
@@ -265,10 +333,6 @@ async function main() {
   delete rest.reasonSuffix;
   if (denied) {
     const full = extra.reasonSuffix ? `${denied.message} ${extra.reasonSuffix}` : denied.message;
-    // The Lead ends its turn at the hand-over point on every cap deny.
-    if (denied.rule === 'cap.M1' && denied.kind === 'deny' && evName === 'PreToolUse' && event.session === 'lead' && s.ok
-      && event.tokens.state === 'read' && event.tokens.total >= s.snapshot.threshold) rest.continue = false;
-    if (rest.continue === false) rest.stopReason = full;
     return done(denyOut(evName, stopActive, denied.rule, full, { ...rest, ...(msg ? { systemMessage: msg } : {}) }));
   }
   const out = { ...rest, ...(msg ? { systemMessage: msg } : {}) };
@@ -285,6 +349,7 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
     if (details.length < MAX_FIXTURE_DETAILS) details.push(`${rule}/${name}: ${typeof word === 'string' && /^[a-z-]{1,16}$/.test(word) ? word : 'error'}`);
   };
   let seen = 0;
+  const memo = new Map();
   for (const r of rows.filter((x) => x.kind === 'guard')) {
     const dir = path.join(ROOT, 'hooks', 'fixtures', r.rule);
     let names = [];
@@ -300,7 +365,7 @@ async function checkFixtures({ rows, prov, ctx, run, ev }) {
         // `_synthetic` is the fixtures' own channel for state the host reads from disk (session, tokens, run);
         // it is stripped before normalize, so a renamed real field still drifts.
         const { _synthetic: syn, ...payload } = JSON.parse(fs.readFileSync(f, 'utf8'));
-        const norm = await ev.normalize(payload, { ...ctx, resolveRun: null });
+        const norm = await ev.normalize(payload, { ...ctx, resolveRun: null, memo });
         if (!norm.ok || norm.event.drift.length > 0) throw Object.assign(new Error('payload'), { word: 'payload' });
         let fe = norm.event;
         if (syn && typeof syn === 'object') {

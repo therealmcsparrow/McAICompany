@@ -71,7 +71,7 @@ Most commands run through the shared pipeline, so a few conventions hold everywh
 
 Nothing is pushed or published by these commands.
 
-**Hand-over of the Lead.** A long run can fill the Lead's context. At the hand-over point (162000 tokens at the default cap) a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then freezes that session; it reads token counts from the local transcript and stores none of its text. The `lead_new_session` tool continues from that file: on Windows a helper types `/clear` and the resume prompt into the same console (nothing to close); on macOS and Linux the tool refuses (`refused: unsupported terminal`) and the frozen Lead shows you the command from the freeze reason, the same command you get if typing fails on Windows. Run it, then close the old session. The frozen Lead may also send feedback (`SendFeedback`). Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md).
+**Hand-over of the Lead.** A long run can fill the Lead's context. At the hand-over point (162000 tokens at the default cap) a hook writes the Lead Handoff file, `.company/work/<slug>/lead-handoff-<n>.md`, from the run records, then the Lead ends with `STATUS: handover`; the hook reads token counts from the local transcript and stores none of its text. Your main session starts a fresh Lead from that file. There is one path and nothing to type. Questions for you come back through the main session as forms; if you decline one, say `resume` to be asked again. Auto compaction is blocked during a run. No setting is needed. See [Setup](../start/setup.md) and [Lead hand-over](../concepts/lead-handover.md).
 
 ### Build and change
 | Command | What it does |

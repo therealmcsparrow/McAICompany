@@ -65,7 +65,7 @@ function realState(payload, syn, name) {
     made.push(path.join(project, '.company'));
   }
   const out = { ...payload };
-  const step = syn.session === 'step';
+  const step = syn.session === 'step' || typeof payload.agent_id === 'string'; // an agent's tokens live in its own subagent transcript, the Lead agent too (event.mjs)
   const tokens = syn.tokens ?? { state: 'none', total: 0 };
   const main = path.join(dir, 'session.jsonl');
   out.transcript_path = fwd(main);

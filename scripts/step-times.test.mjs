@@ -197,7 +197,7 @@ test('hooks.json entries carry timeout 5 and only the plugin root variable', () 
   assert.ok(!raw.includes('\r'));
   const cfg = JSON.parse(raw);
   assert.ok(Array.isArray(cfg.modules));
-  assert.deepEqual(Object.keys(cfg.hooks).sort(), ['PreCompact', 'PreToolUse', 'SessionStart', 'Stop', 'SubagentStart', 'SubagentStop', 'UserPromptSubmit']);
+  assert.deepEqual(Object.keys(cfg.hooks).sort(), ['PostToolUse', 'PreCompact', 'PreToolUse', 'SessionStart', 'Stop', 'SubagentStart', 'SubagentStop']);
   for (const [event, phase] of [['SubagentStart', 'start'], ['SubagentStop', 'stop']]) {
     const groups = cfg.hooks[event].filter((g) => g.hooks.some((x) => x.command.includes('step-times.mjs')));
     assert.equal(groups.length, 1);
@@ -221,6 +221,48 @@ test('step-times source: self-exit deadline stays under the hook timeout, call b
   const call = num('CALL_MS');
   assert.ok(deadline <= 4000, `DEADLINE_MS ${deadline} <= 4000`);
   assert.ok(call < deadline, `CALL_MS ${call} < DEADLINE_MS ${deadline}`);
+});
+
+// step-times v1.3: start and stop skip the Lead agent (exact agent_type aico:project-manager): no sub row, no step file.
+const LEAD = 'aico:project-manager';
+const stepFiles = (root) => {
+  const out = [];
+  const walk = (d) => { for (const e of fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : []) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else out.push(p); } };
+  walk(path.join(root, '.company'));
+  return out.filter((p) => !p.endsWith('run-state.jsonl')).map((p) => path.relative(root, p));
+};
+
+test('v1.3: a Lead start and stop write no sub row and no step file', () => {
+  const root = makeRoot();
+  const before = stepFiles(root);
+  for (const [phase, ev] of [['start', 'SubagentStart'], ['stop', 'SubagentStop']]) {
+    const r = hook(root, phase, payload({ hook_event_name: ev, agent_type: LEAD }));
+    assert.deepEqual([r.code, r.out, r.err], [0, '', '']);
+  }
+  assert.equal(subs(root).length, 0);
+  assert.deepEqual(stepFiles(root), before);
+});
+
+test('v1.3: only the exact Lead agent_type is skipped; a Role and near-misses still write rows', () => {
+  const root = makeRoot();
+  ['aico:qa', 'AICO:PROJECT-MANAGER', 'aico:project-manager ', 'other:project-manager', 'project-manager:aico'].forEach((type, i) => {
+    hook(root, 'start', payload({ agent_type: type, agent_id: `id-${i}` }));
+  });
+  assert.equal(subs(root).length, 5);
+});
+
+test('v1.3: a Lead and a Role in one run write one pair of rows, the Role pair', () => {
+  const root = makeRoot();
+  hook(root, 'start', payload({ agent_type: LEAD, agent_id: 'lead-1' }));
+  hook(root, 'start', payload({ agent_type: 'backend-engineer' }));
+  hook(root, 'stop', payload({ hook_event_name: 'SubagentStop', agent_type: 'backend-engineer' }));
+  hook(root, 'stop', payload({ hook_event_name: 'SubagentStop', agent_type: LEAD, agent_id: 'lead-1' }));
+  const s = subs(root);
+  assert.deepEqual(s.map((x) => [x.role, x.phase]), [['backend-engineer', 'start'], ['backend-engineer', 'stop']]);
+});
+
+test('v1.3: the script names step-times v1.3 on line 2', () => {
+  assert.equal(fs.readFileSync(script, 'utf8').split('\n')[1], '// contract: docs/contracts/step-times.md v1.3');
 });
 
 const hasClaude = spawnSync('claude', ['--version'], { shell: process.platform === 'win32' }).status === 0;

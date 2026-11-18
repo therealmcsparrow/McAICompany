@@ -6,6 +6,7 @@
 // anchored or bounded, files over the cap are skipped, and paths are joined lexically under the root.
 import { readFileSync, readdirSync, lstatSync, existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const MAX_BYTES = 2_000_000;
@@ -122,10 +123,22 @@ function exportsName(text, name) {
   return false;
 }
 
+// A gitignored folder (node_modules, build output) differs per checkout, so it never anchors.
+const ignoredCache = new Map();
+function isIgnored(root, folder) {
+  if (folder === 'node_modules') return true;
+  const key = `${root}\0${folder}`;
+  if (!ignoredCache.has(key)) {
+    const r = !existsSync(join(root, folder)) ? { status: 1 } : spawnSync('git', ['-C', root, 'check-ignore', '-q', '--', `${folder}/`], { stdio: 'ignore', timeout: 5000 });
+    ignoredCache.set(key, r.status === 0);
+  }
+  return ignoredCache.get(key);
+}
+
 // An anchor starts in a folder that exists at the repo root; a one-letter file name is an example.
 function isAnchor(root, path) {
   const m = ANCHOR.exec(path);
-  if (!m || PLACEHOLDER_STEM.test(path)) return false;
+  if (!m || PLACEHOLDER_STEM.test(path) || isIgnored(root, m[1])) return false;
   try { return lstatSync(join(root, m[1])).isDirectory(); } catch { return false; }
 }
 

@@ -6,17 +6,19 @@ export const MIN_THRESHOLD = 60000;
 export const MAX_THRESHOLD = 250000;
 const FREEZE_NUM = 9;
 const FREEZE_DEN = 10;
-const MCP_TOOL = 'mcp__plugin_aico_lead-session__lead_new_session';
-const FEEDBACK_TOOL = 'SendFeedback';
 const HANDOFF_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.md$/;
 const LEDGER_NAME = /^[0-9]{2,3}[a-z]?-[a-z0-9-]{1,64}\.findings\.md$/;
 const MAX_NAMED = 35;
 
 const STEP_REASON = 'aico context cap: this Step reached the hand-over point. Write your Handoff with status: handover to your Output path now, then end. Every other tool is refused.';
 const STOP_REASON = 'aico context cap: this Step was refused tools at the hand-over point. If your Handoff is not written yet, write it now with status: handover to your Output path. Then end.';
-const FREEZE_REASON = 'aico context cap: the Lead Handoff is written and this session is frozen. Call lead_new_session, or show the CEO the new session command.';
-const FROZEN_REASON = 'aico context cap: this session is frozen. Start a new session in the product folder with:';
-const WAIT_REASON = 'aico context cap: no new Step from this session. Wait for the running Step; the Lead Handoff is written after it.';
+const FREEZE_REASON = 'aico context cap: the Lead Handoff is written. End your turn now, call no tool, with these lines: STATUS: handover; the handoff line below; next: <what the next Lead session does first>. Every tool is refused.';
+const FROZEN_REASON = 'aico context cap: this Lead agent is frozen. Every tool is refused. End your turn now with these lines: STATUS: handover; the handoff line below; next: <what the next Lead session does first>.';
+const WAIT_REASON = `${RULE}: a Step is still running. Wait for it to finish before you dispatch another.`;
+const ROLE_SPAWN_REASON = `${RULE}: a Role never spawns the Lead.`;
+const LEAD_BG_REASON = `${RULE}: the Lead dispatches Roles in the foreground.`;
+const MAIN_BG_REASON = `${RULE}: main runs the Lead in the foreground.`;
+const MAIN_ONLY_LEAD_REASON = `${RULE}: main spawns only the Lead. Spawn aico:project-manager; the Lead dispatches the Roles.`;
 const UNREADABLE = `${RULE}: unreadable`;
 const RUN_UNREADABLE = `${RULE}: unreadable. The run state of the active run cannot be read at the hand-over point. Fix or remove the malformed lead-handover.jsonl in the run folder, or check the run state with run-state show, then retry.`;
 
@@ -70,15 +72,37 @@ function judgeStep(event, run) {
   return deny(STEP_REASON, 'cap-step-record');
 }
 
+// The Lead agent at its hand-over point. Frozen denies every tool; a Step still running denies only a new dispatch; else the first call freezes. Main never reaches here.
 function judgeLead(event, run) {
-  const name = event.tool.name;
-  if (run.frozen === true) return name === MCP_TOOL || name === FEEDBACK_TOOL ? { v: 'allow' } : deny(FROZEN_REASON, 'cap-lead-frozen');
-  if (run.stepRunning === true) return name === 'Agent' || name === 'Task' ? deny(WAIT_REASON) : { v: 'allow' };
-  return name === MCP_TOOL ? { v: 'allow' } : deny(FREEZE_REASON, 'cap-lead-freeze');
+  if (run.frozen === true) return deny(FROZEN_REASON, 'cap-lead-frozen');
+  if (run.stepRunning === true) return isSpawn(event) ? deny(WAIT_REASON) : { v: 'allow' };
+  return deny(FREEZE_REASON, 'cap-lead-freeze');
+}
+
+const isSpawn = (event) => isObj(event.tool) && (event.tool.name === 'Agent' || event.tool.name === 'Task');
+const isLeadTarget = (tool) => typeof tool.subagentType === 'string' && tool.subagentType.trim().toLowerCase() === 'project-manager';
+
+// Spawn limits, checked before any token reading. Returns a deny or null.
+function judgeSpawn(event) {
+  if (!isSpawn(event)) return null;
+  const tool = event.tool;
+  const hasRun = isObj(event.run);
+  if (event.session === 'step') {
+    return tool.leadTarget === true || isLeadTarget(tool) ? deny(ROLE_SPAWN_REASON) : null;
+  }
+  if (event.session !== 'lead') return null;
+  if (event.agentKey) return hasRun && tool.background === true ? deny(LEAD_BG_REASON) : null;
+  if (tool.leadTarget === true || isLeadTarget(tool)) return tool.background === true ? deny(MAIN_BG_REASON) : null;
+  return hasRun ? deny(MAIN_ONLY_LEAD_REASON) : null;
 }
 
 export function judge(event, snapshot) {
-  if (!isObj(event) || !isObj(event.run)) return { v: 'allow' };
+  if (!isObj(event)) return { v: 'allow' };
+  const spawn = judgeSpawn(event);
+  if (spawn) return spawn;
+  if (!isObj(event.run)) return { v: 'allow' };
+  // main (session lead, no agent) is never capped, at any token level.
+  if (event.session === 'lead' && !event.agentKey) return { v: 'allow' };
   const tokens = isObj(event.tokens) ? event.tokens : {};
   if (tokens.state === 'error') return deny(UNREADABLE);
   if (!isObj(snapshot) || !Number.isInteger(snapshot.threshold) || snapshot.threshold <= 0) return deny(`${RULE}: snapshot-invalid`);

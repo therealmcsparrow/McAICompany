@@ -85,7 +85,7 @@ test('rows: guards and gates are one read-only group, savers another, manifest o
 
 test('AC15: a hand-edited guard key in settings changes nothing, the guard row stays LOCKED ON', () => {
   const edited = { ...MODS, cap: { enabled: false }, git_add: { enabled: false }, dotenv: false, plan_gate: { enabled: false } };
-  const r = rows([GUARD('cap', 'cap.M1'), GUARD('git-add', 'git-add.M-SEC1'), GUARD('dotenv', 'dotenv.M-SEC1'), GATE('plan-gate')], SETTINGS(edited));
+  const r = rows([GUARD('cap', 'cap.M1'), GUARD('self-protect', 'self-protect.M-SEC1'), GUARD('dotenv', 'dotenv.M-SEC1'), GATE('plan-gate')], SETTINGS(edited));
   assert.deepEqual(r.guards.map((x) => x.state), ['LOCKED ON', 'LOCKED ON', 'LOCKED ON', 'LOCKED ON']);
   assert.ok(r.guards.every((x) => x.canChange === false));
 });
@@ -137,9 +137,9 @@ test('denyLines: none -> empty list; not JSON, not an array, or wrong item type 
 });
 
 test('denyLines: one deny reads `<rule>, main chat, <hh:mm>`; a Step row says task step', () => {
-  const lines = denyLines(JSON.stringify([ROW('git-add.M-SEC1', '2026-11-14T14:52:00Z'), ROW('cap.M1', '2026-11-14T14:50:00Z', { agent: 'abc123' })]));
+  const lines = denyLines(JSON.stringify([ROW('dotenv.M-SEC1', '2026-11-14T14:52:00Z'), ROW('cap.M1', '2026-11-14T14:50:00Z', { agent: 'abc123' })]));
   assert.equal(lines.length, 2);
-  assert.match(lines[0], /^git-add\.M-SEC1, main chat, \d\d:\d\d$/);
+  assert.match(lines[0], /^dotenv\.M-SEC1, main chat, \d\d:\d\d$/);
   assert.match(lines[1], /^cap\.M1, task step, \d\d:\d\d$/);
 });
 

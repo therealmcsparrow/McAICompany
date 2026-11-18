@@ -15,7 +15,20 @@ function repo() {
   return root;
 }
 const T0 = Date.parse('2026-11-04T10:00:00Z');
-const go = (root, args, ms = 0) => run(args, { root, now: T0 + ms });
+// Isolated home: the user's real settings never decide whether a Gate is auto.
+const home = path.join(base, 'home');
+fs.mkdirSync(home, { recursive: true });
+const go = (root, args, ms = 0) => run(args, { root, now: T0 + ms, home });
+const iso = (ms) => new Date(T0 + ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+// A recorded CEO answer (open + answer rows in forms.jsonl) so `run-state gate` passes without auto Gates (run-state v3.1).
+function answered(root, slug, gate, ms) {
+  const id = `${gate}-${ms}`;
+  const rows = [
+    { v: 1, at: iso(ms - 1), ev: 'open', id, kind: `gate:${gate}`, questions: [{ options: [{ label: 'Approve', result: 'passed' }] }] },
+    { v: 1, at: iso(ms - 1), ev: 'answer', id, answers: [{ labels: ['Approve'] }] },
+  ];
+  fs.appendFileSync(path.join(dir(root, slug), 'forms.jsonl'), rows.map((r) => `${JSON.stringify(r)}\n`).join(''));
+}
 const dir = (root, slug) => path.join(root, '.company', 'work', slug);
 const SLUG_A = '2026-11-01 10.00 - Alpha Build';
 const SLUG_B = '2026-11-02 10.00 - Beta Build';
@@ -109,11 +122,13 @@ test('open_ask is null, set, null again, and the latest of two', () => {
   assert.equal(show(root, SLUG_A, { now: T0 }).open_ask, null);
   go(root, ['ask', SLUG_A, 'plan'], 1000);
   assert.deepEqual(show(root, SLUG_A, { now: T0 + 2000 }).open_ask, { gate: 'plan', at: '2026-11-04T10:00:01Z' });
+  answered(root, SLUG_A, 'plan', 3000);
   go(root, ['gate', SLUG_A, 'plan', 'passed'], 3000);
   assert.equal(show(root, SLUG_A, { now: T0 + 4000 }).open_ask, null);
   go(root, ['ask', SLUG_A, 'brief'], 5000);
   go(root, ['ask', SLUG_A, 'ship'], 6000);
   assert.deepEqual(show(root, SLUG_A, { now: T0 + 7000 }).open_ask, { gate: 'ship', at: '2026-11-04T10:00:06Z' });
+  answered(root, SLUG_A, 'ship', 8000);
   go(root, ['gate', SLUG_A, 'ship', 'passed'], 8000);
   assert.deepEqual(show(root, SLUG_A, { now: T0 + 9000 }).open_ask, { gate: 'brief', at: '2026-11-04T10:00:05Z' });
 });

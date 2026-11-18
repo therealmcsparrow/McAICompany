@@ -328,7 +328,7 @@ describe('the Lead Handoff still resumes after measure wrote lead-context.json',
   }
   const hook = (sb, cmd, payload) => node(sb, lead, [cmd], { input: JSON.stringify(payload) });
 
-  test('Stop, PreCompact and SessionStart in a row: the Handoff is injected and keeps its exact keys', () => {
+  test('Stop and PreCompact in a row: the Handoff is written and keeps its exact keys (resume leg retired, context-guard v3.0)', () => {
     const { sb, file } = leadRun();
     assert.equal(hook(sb, 'measure', { hook_event_name: 'Stop', transcript_path: file }).code, 0);
     const reading = JSON.parse(fs.readFileSync(path.join(sb.work, 'lead-context.json'), 'utf8'));
@@ -338,11 +338,6 @@ describe('the Lead Handoff still resumes after measure wrote lead-context.json',
     const written = fs.readFileSync(path.join(sb.work, 'lead-handoff-1.md'), 'utf8');
     const keys = written.split('\n').slice(1, written.split('\n').indexOf('---', 1)).map((l) => l.split(':')[0]);
     assert.deepEqual(keys, ['slug', 'playbook', 'step', 'round', 'base-commit', 'risk-tier', 'tier-path', 'tier-set', 'gate', 'form', 'records', 'running', 'tokens-at-handover', 'window', 'trigger']);
-    const r = hook(sb, 'resume', { hook_event_name: 'SessionStart', source: 'compact' });
-    assert.equal(r.code, 0);
-    const context = JSON.parse(r.out).hookSpecificOutput.additionalContext;
-    assert.ok(context.includes('tokens-at-handover: 85500'), context);
-    assert.ok(!context.includes('lead-context'));
   });
 
   test('read shows the Lead reading with its over cap marker, ctx --json shows the stored object', () => {

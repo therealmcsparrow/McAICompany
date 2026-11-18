@@ -83,6 +83,9 @@ test('a Contract that exists only on the branch is known', () => {
 const aicoHandoff = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'handoff.md'), 'utf8')
   .match(/^# Contract: handoff v(\d+\.\d+)/m)[1];
 
+const aicoGuard = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'context-guard.md'), 'utf8')
+  .match(/^# Contract: context-guard v(\d+\.\d+)/m)[1];
+
 // Link makers return false where the OS refuses (no privilege), so a case can skip instead of passing falsely.
 function tryLink(make) { try { make(); return true; } catch { return false; } }
 
@@ -95,7 +98,7 @@ test('a product whose docs/contracts has no aico Contract still accepts aico cit
 
 test('a product Contract wins over the plugin one of the same name; other aico cites still resolve', () => {
   const file = product({ handoff: '99.5' });
-  const r = lintCite(file, 'handoff v99.5, context-guard v2.0');
+  const r = lintCite(file, `handoff v99.5, context-guard v${aicoGuard}`);
   assert.equal(r.code, 0, r.out);
 });
 

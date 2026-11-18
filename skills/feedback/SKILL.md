@@ -6,6 +6,8 @@ argument-hint: "<reports: path, paste or export>"
 
 # Playbook: feedback
 
+**Runs in:** the Lead agent `aico:project-manager`. In the main session, run none of the steps below: follow `aico:lead` `references/main-loop.md`, which spawns the Lead with `aico start: <playbook>` and `Request:`.
+
 **Help:** argument is exactly `help` or `--help` → do the **Type:** step below first; then read `documentation/commands/feedback.md` (plugin root = two folders above this skill's base directory) and reply with its usage, options, what it does and an example, in the language of `aico:pipeline` §1.6; change nothing, start nothing, and stop.
 
 **Type:** run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook feedback` first; exit not 0 → show its output line and stop.
@@ -24,6 +26,6 @@ Run with `aico:pipeline`. No Plan or Ship Gate: nothing is built or shipped. Rea
    Low path: run node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ledger low-path-verdict --runs 10 (fixed). Put both lines printed, unchanged, under ## Low path in feedback-report.md, as plain sentences under a real heading. It never stops the run; an error is quoted as it is, never read as a pass.
    Cited: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" cited report --runs 10` (fixed). Put every line printed, unchanged, under `## Cited` in `feedback-report.md`, as plain lines under a real heading. `keep` Roles are never removal candidates; only the CEO decides a removal, from the `never cited` lines. It never stops the run; an error is quoted as it is, never read as a pass.
 3. `aico:product-manager` (`check-role product-manager` first): read the clusters, the `## Cost` lines and the success metric in `.company/project.md`, rank the top 5, and propose a fix or feature for each.
-   **→ Brief Gate** (the CEO picks in a form, `multiSelect`)
+   The CEO's picks first: an `ask` form (`lead-relay` v1; `multi` allowed, labels without commas). Then **→ Brief Gate** as a single-select `gate:brief` form. One open form at a time.
 4. Lessons: each lesson from the reports or the run is filed with `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" lessons accept --role <role> --class <mechanical|judgement> --target <target> --text <text>`, only after the CEO accepts that one lesson. A failure a script could catch (`mechanical`) proposes a check: target `check: <script|lint|test> <name>`. A failure that needs a reader's call (`judgement`) goes to the ruleset or review skill: target `standard: .company/standards.md`, `standard: skills/review/SKILL.md` or `standard: skills/review/references/<name>.md`. Lessons never go to CLAUDE.md, AGENTS.md or an agent prompt; the script refuses those targets.
 5. You (the Lead) tell the CEO which runs of the `work:` type line Playbooks to start (`fix` and `feature` for software). Never start them yourself.

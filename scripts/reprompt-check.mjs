@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checker for the reprompt Playbook (reprompt v2.6). Three subcommands, run from the product root:
+// Checker for the reprompt Playbook (reprompt v2.7). Three subcommands, run from the product root:
 //   snap <name> [walk-less|raise|both]          records the run and a baseline of the watched files before a dispatch
 //   arm <name> <NN>                  marks dispatch NN as seen by the write gate (run by the gate only)
 //   reply <name> <NN> <hex> <asks>   compares the tree to the baseline and checks the reply against an allow-list

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { describe, after } from 'node:test';
+import { capEnv, cleanup, LEAD_TYPE, LEAD_AGENT } from '../tests/context-guard/cap-engine.mjs';
 
 // Tests for the cap guard (rule cap.M1).
 // Seams: hooks/rules/cap.mjs#judge(event, snapshot) and hooks/rules/cap.mjs#resolveThreshold(raw).
@@ -14,7 +16,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const RULE = 'cap.M1';
 const FIX = path.join(root, 'hooks', 'fixtures', RULE);
 const FOLDER = 'z:/proj/.company/work/P20261114.000001/01-feature';
-const MCP = 'mcp__plugin_aico_lead-session__lead_new_session';
+const MCP = ['mcp__plugin_aico_lead-session__lead', 'new', 'session'].join('_');
 const EFFECTS = ['cap-step-record', 'cap-lead-freeze', 'cap-lead-frozen', 'cap-warn'];
 
 async function load() {
@@ -34,12 +36,14 @@ function runOf(o = {}) {
   return { slug: 'P20261114.000001/01-feature', folder: FOLDER, stepRunning: false, frozen: false,
     agent: { deny: false, handoff: false, ledger: false }, ...o };
 }
-// opts: session, total, state, run (object | null | undefined = default run), tool, paths, runOver
-function ev({ session = 'lead', total = 0, state = 'read', run, tool = 'Read', paths = [], runOver = {} } = {}) {
+// opts: session ('step' | 'lead' = the Lead agent | 'main'), total, state, run (object | null | undefined = default run),
+// tool, paths, runOver, subagentType, background
+function ev({ session = 'lead', total = 0, state = 'read', run, tool = 'Read', paths = [], runOver = {}, subagentType = null, background = false } = {}) {
+  const agent = session !== 'main';
   return deepFreeze({
-    v: 1, event: 'PreToolUse', session, sessionKey: 'aaaaaaaaaaaa',
-    agentKey: session === 'step' ? 'bbbbbbbbbbbb' : null, agentType: session === 'step' ? 'aico:qa' : null,
-    tool: { name: tool, command: null, paths, model: null, subagentType: null, outputRole: null },
+    v: 1, event: 'PreToolUse', session: session === 'main' ? 'lead' : session, sessionKey: 'aaaaaaaaaaaa',
+    agentKey: agent ? 'bbbbbbbbbbbb' : null, agentType: session === 'step' ? 'aico:qa' : session === 'lead' ? LEAD_TYPE : null,
+    tool: { name: tool, command: null, paths, model: null, subagentType, outputRole: null, background },
     tokens: { state, total: state === 'error' ? null : total }, mainModel: null,
     env: { guardsOff: false, subagentModel: null, subagentModelForce: null },
     protected: [], run: run === null ? null : runOf({ ...(run || {}), ...runOver }), drift: [], stopHookActive: null,
@@ -241,24 +245,17 @@ test('Step acts the same in both bands: same verdict at F and at T for a refused
 // ---------- Lead bands ----------
 for (const total of [162000, 179999, 180000, 180001]) {
   const hand = total >= 180000;
-  test(`Lead at ${total} (${hand ? 'hand over' : 'freeze'}): clean point hands over and denies`, async () => {
-    const v = await denies({ session: 'lead', total, tool: 'Read' }, DEFAULT, /lead_new_session|new session/i);
+  test(`Lead at ${total} (${hand ? 'hand over' : 'freeze'}): clean point denies and tells it to end with STATUS: handover`, async () => {
+    const v = await denies({ session: 'lead', total, tool: 'Read' }, DEFAULT, /STATUS: handover/);
     assert.equal(v.effect, 'cap-lead-freeze', 'clean point: engine writes the Lead Handoff then denies');
-    await allows({ session: 'lead', total, tool: MCP }, DEFAULT);
+    assert.match(v.message, /handoff line below/);
+    assert.match(v.message, /next:/);
+    await denies({ session: 'lead', total, tool: MCP }, DEFAULT, /STATUS: handover/);
   });
-  test(`Lead at ${total}: frozen session denies all but the MCP tool`, async () => {
+  test(`Lead at ${total}: frozen session denies every tool, the MCP name and SendFeedback included`, async () => {
     const run = { frozen: true };
-    for (const tool of ['Read', 'Bash', 'PowerShell', 'Write', 'Agent', 'Task']) {
-      const v = await denies({ session: 'lead', total, tool, run }, DEFAULT);
-      assert.equal(v.effect, 'cap-lead-frozen', `frozen deny effect for ${tool}`);
-    }
-    await allows({ session: 'lead', total, tool: MCP, run }, DEFAULT);
-  });
-  test(`Lead at ${total}: frozen session allows SendFeedback (CEO-4), exact name only`, async () => {
-    const run = { frozen: true };
-    await allows({ session: 'lead', total, tool: 'SendFeedback', run }, DEFAULT);
-    for (const tool of ['sendfeedback', 'SendFeedbackX', 'XSendFeedback', 'SendFeedback ', 'mcp__x__SendFeedback']) {
-      const v = await denies({ session: 'lead', total, tool, run }, DEFAULT);
+    for (const tool of ['Read', 'Bash', 'PowerShell', 'Write', 'Agent', 'Task', MCP, 'SendFeedback']) {
+      const v = await denies({ session: 'lead', total, tool, run }, DEFAULT, /STATUS: handover/);
       assert.equal(v.effect, 'cap-lead-frozen', `frozen deny effect for ${tool}`);
     }
   });
@@ -330,4 +327,176 @@ test('judge reads the threshold from the snapshot only, not from a constant', as
   // 150000 is below the default F, above F for T=150000 -> 135000.
   assert.equal((await verdict({ session: 'lead', total: 140000 }, 150000)).v, 'deny');
   await allows({ session: 'lead', total: 140000 }, 180000);
+});
+
+// ---------- main is never capped ----------
+test('main (session lead, no agent) is never capped: every tool passes at and far over F and T', async () => {
+  for (const total of [0, 162000, 180000, 900000]) {
+    for (const tool of ['Read', 'Bash', 'Write']) await allows({ session: 'main', total, tool }, DEFAULT);
+  }
+  await allows({ session: 'main', state: 'error' }, DEFAULT);
+});
+
+// ---------- spawn rules, judge level: background and main (AC1, AC2) ----------
+test('AC1 Lead agent Agent or Task with run_in_background true in a run: denied below F', async () => {
+  for (const total of [0, 100000, 161999]) {
+    for (const tool of ['Agent', 'Task']) {
+      await denies({ session: 'lead', total, tool, subagentType: 'qa', background: true }, DEFAULT, /foreground/i);
+    }
+  }
+});
+test('AC1 Lead agent foreground Agent to a Role in a run below F passes', async () => {
+  await allows({ session: 'lead', total: 100000, tool: 'Agent', subagentType: 'qa', background: false }, DEFAULT);
+});
+test('AC1 Lead agent background Agent with no active run passes the cap rule', async () => {
+  await allows({ session: 'lead', run: null, tool: 'Agent', subagentType: 'qa', background: true }, DEFAULT);
+});
+test('AC1 main background Agent to aico:project-manager is denied with and without an active run', async () => {
+  await denies({ session: 'main', tool: 'Agent', subagentType: 'project-manager', background: true }, DEFAULT, /foreground/i);
+  await denies({ session: 'main', run: null, tool: 'Agent', subagentType: 'project-manager', background: true }, DEFAULT, /foreground/i);
+});
+test('AC1 main foreground Agent to aico:project-manager passes, in a run and outside one', async () => {
+  await allows({ session: 'main', tool: 'Agent', subagentType: 'project-manager' }, DEFAULT);
+  await allows({ session: 'main', run: null, tool: 'Agent', subagentType: 'project-manager' }, DEFAULT);
+});
+test('AC1 main Agent or Task to a Role in a run is denied; outside a run it passes', async () => {
+  for (const tool of ['Agent', 'Task']) {
+    await denies({ session: 'main', tool, subagentType: 'qa' }, DEFAULT, /Lead/);
+    await denies({ session: 'main', tool, subagentType: null }, DEFAULT, /Lead/);
+  }
+  await allows({ session: 'main', run: null, tool: 'Agent', subagentType: 'qa' }, DEFAULT);
+});
+
+// ---------- spawn rules through the host: raw subagent_type, depth, agent_type, tokens, run, AICO_GUARDS ----------
+after(cleanup);
+const PM = 'aico:project-manager';
+const row0 = (n) => ({ type: 'assistant', isSidechain: false, message: { model: 'claude-opus-4-1', usage: { input_tokens: n, output_tokens: 0 } } });
+const call = (sub, extra = {}) => ({ subagent_type: sub, prompt: 'x', ...extra });
+
+// Runs one Agent or Task call through the host. who: 'main' or { agent, type } (a payload with agent_id; type undefined = no agent_type).
+function spawn(fx, who, input, { tool = 'Agent', env } = {}) {
+  if (who === 'main') {
+    const t = fx.env.transcript('spawn-main', [row0(15)]);
+    return fx.env.run(fx.env.event('PreToolUse', { tool_name: tool, tool_input: input, transcript_path: t }), { env });
+  }
+  const t = fx.env.transcript(`main-${who.agent}`, [row0(1000)]);
+  const dir = t.replace(/\.jsonl$/, '');
+  fs.mkdirSync(path.join(dir, 'subagents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'subagents', `agent-${who.agent}.jsonl`), `${JSON.stringify({ type: 'meta' })}\n${JSON.stringify(row0(500))}\n`);
+  const ev = fx.env.event('PreToolUse', { tool_name: tool, tool_input: input, transcript_path: t, agent_id: who.agent, agent_type: who.type });
+  return fx.env.run(ev, { env });
+}
+
+describe('AC2 a Role never spawns the Lead, run or not, below the fast floor', () => {
+  const TYPES = [['aico:qa', 'aico:qa'], ['general-purpose', 'general-purpose'], ['AICO:project-manager', 'AICO:project-manager'],
+    ['other:project-manager', 'other:project-manager'], ['missing agent_type', undefined]];
+  const TARGETS = ['aico:project-manager', 'project-manager', 'AICO:Project-Manager', 'other:project-manager'];
+  for (const run of [true, false]) {
+    for (const [label, type] of TYPES) {
+      for (const [depth, agent] of [[1, 'agent-role-d1'], [2, 'agent-role-d2']]) {
+        test(`${label} at depth ${depth}, ${run ? 'in a run' : 'no run'}: every Lead target form is denied`, async () => {
+          const fx = await capEnv({ run });
+          fx.bootLead();
+          for (const target of TARGETS) {
+            for (const tool of ['Agent', 'Task']) {
+              const r = spawn(fx, { agent, type }, call(target), { tool });
+              assert.ok(fx.capDeny(r), `deny ${target} ${tool}: ${r.out} ${r.err}`);
+            }
+          }
+        });
+      }
+    }
+  }
+  test('a Role spawning another Role passes the cap rule, foreground and background', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    fx.quiet(spawn(fx, { agent: 'agent-role-d1', type: 'aico:qa' }, call('aico:qa')));
+    fx.quiet(spawn(fx, { agent: 'agent-role-d1', type: 'aico:qa' }, call('aico:qa', { run_in_background: true })));
+  });
+  test('AICO_GUARDS=off never stands a Role down: the Lead spawn stays denied', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    const r = spawn(fx, { agent: 'agent-role-off', type: 'aico:qa' }, call(PM), { env: { AICO_GUARDS: 'off' } });
+    assert.ok(fx.capDeny(r), `${r.out} ${r.err}`);
+  });
+});
+
+describe('a padded or newline-ended Lead target is still the Lead (hook-event v1.4 leadTarget)', () => {
+  const PADDED = [' aico:project-manager ', 'aico:project-manager\n', '\taico:project-manager\r\n', '\u00a0aico:project-manager\u00a0', '\u200baico:project-manager\ufeff', ' project-manager ', ' AICO:Project-Manager\n'];
+  for (const tool of ['Agent', 'Task']) {
+    test(`${tool}: a Role spawning a padded Lead target is denied`, async () => {
+      const fx = await capEnv();
+      fx.bootLead();
+      for (const target of PADDED) {
+        const r = spawn(fx, { agent: 'agent-role-pad', type: 'aico:qa' }, call(target), { tool });
+        assert.ok(fx.capDeny(r), `deny ${JSON.stringify(target)}: ${r.out} ${r.err}`);
+      }
+    });
+    test(`${tool}: main with a padded Lead target and run_in_background true is denied (foreground rule)`, async () => {
+      const fx = await capEnv();
+      fx.bootLead();
+      for (const target of PADDED) {
+        const r = spawn(fx, 'main', call(target, { run_in_background: true }), { tool });
+        assert.ok(fx.capDeny(r), `deny bg ${JSON.stringify(target)}: ${r.out} ${r.err}`);
+      }
+    });
+  }
+  test('a padded Role name is not mistaken for the Lead: a Role spawning aico:qa with padding passes', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    fx.quiet(spawn(fx, { agent: 'agent-role-pad2', type: 'aico:qa' }, call(' aico:qa\n')));
+  });
+});
+
+describe('AC1 the Lead and main spawn rules through the host', () => {
+  test('main Agent to a Role in a run is denied at 0 tokens, whatever model is given', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    for (const model of [undefined, 'opus', 'claude-opus-4-1']) {
+      const r = spawn(fx, 'main', call('aico:qa', model ? { model } : {}));
+      assert.ok(fx.capDeny(r), `deny model ${model}: ${r.out} ${r.err}`);
+    }
+  });
+  test('main Agent to a Role with no active run passes', async () => {
+    const fx = await capEnv({ run: false });
+    fx.bootLead();
+    fx.quiet(spawn(fx, 'main', call('aico:qa')));
+  });
+  test('main Agent to aico:project-manager: foreground passes, background is denied, with and without a run', async () => {
+    for (const run of [true, false]) {
+      const fx = await capEnv({ run });
+      fx.bootLead();
+      fx.quiet(spawn(fx, 'main', call(PM)), `fg run=${run}`);
+      const r = spawn(fx, 'main', call(PM, { run_in_background: true }));
+      assert.ok(fx.capDeny(r), `bg denied run=${run}: ${r.out} ${r.err}`);
+    }
+  });
+  test('Lead agent Agent to aico:qa in a run: foreground passes, background is denied below F', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    fx.quiet(spawn(fx, { agent: LEAD_AGENT, type: LEAD_TYPE }, call('aico:qa')));
+    const r = spawn(fx, { agent: LEAD_AGENT, type: LEAD_TYPE }, call('aico:qa', { run_in_background: true }));
+    assert.ok(fx.capDeny(r), `${r.out} ${r.err}`);
+  });
+  test('Lead at depth 1 and a helper Lead at depth 2 spawn aico:project-manager in the foreground; background is denied', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    for (const agent of [LEAD_AGENT, 'agent-lead2']) {
+      fx.quiet(spawn(fx, { agent, type: LEAD_TYPE }, call(PM)), agent);
+      const r = spawn(fx, { agent, type: LEAD_TYPE }, call(PM, { run_in_background: true }));
+      assert.ok(fx.capDeny(r), `${agent}: ${r.out} ${r.err}`);
+    }
+  });
+  test('Lead agent background Agent with no active run passes the cap rule', async () => {
+    const fx = await capEnv({ run: false });
+    fx.bootLead();
+    fx.quiet(spawn(fx, { agent: LEAD_AGENT, type: LEAD_TYPE }, call('aico:qa', { run_in_background: true })));
+  });
+  test('AICO_GUARDS=off: a Lead background Agent passes, and so does a main background Lead spawn', async () => {
+    const fx = await capEnv();
+    fx.bootLead();
+    const env = { AICO_GUARDS: 'off' };
+    fx.quiet(spawn(fx, { agent: 'agent-lead-off', type: LEAD_TYPE }, call('aico:qa', { run_in_background: true }), { env }));
+    fx.quiet(spawn(fx, 'main', call(PM, { run_in_background: true }), { env }));
+  });
 });

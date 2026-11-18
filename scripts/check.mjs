@@ -279,6 +279,9 @@ export function checkPersonalities(root, agentNames, errors) {
 const PERSONALITY_LINE_FILES = new Set(['skills/cooler/SKILL.md', 'skills/brainstorm/references/format-1.md']);
 const PERSONALITY_SCRIPT_FILES = new Set([...PERSONALITY_LINE_FILES, 'skills/settings/SKILL.md']);
 
+// The Lead agent runs the Playbooks and is not a Role: it is left out of Role counts, types, the roles page and the catalog.
+export const LEAD_AGENT = 'project-manager';
+
 // Role count in the plugin description and docs, and every agent listed in roles.md and the spec roster.
 function checkRoleCounts(root, roleNames, errors, roleFm = new Map()) {
   if (!roleNames.size) return;
@@ -941,11 +944,12 @@ export function check(root, { today, progress } = {}) {
       errors.push(`ERROR ${p.rel}: Playbook mentions neither aico:pipeline nor §1.6 (Language rule)`);
   });
 
-  phase('docs', () => checkDocPages(root, playbooks.map(p => p.name), agentNames, errors));
-  phase('catalog', () => checkCatalog(root, agentNames, errors));
+  const roleNames = new Set([...agentNames].filter(a => a !== LEAD_AGENT));
+  phase('docs', () => checkDocPages(root, playbooks.map(p => p.name), roleNames, errors));
+  phase('catalog', () => checkCatalog(root, roleNames, errors));
   phase('company', () => {
-    checkCompanyTypes(root, agentNames, playbooks, skills, errors);
-    checkRoleCounts(root, agentNames, errors, agentFm);
+    checkCompanyTypes(root, roleNames, playbooks, skills, errors);
+    checkRoleCounts(root, roleNames, errors, agentFm);
     checkNames(root, agentNames, errors);
     checkModelFloor(root, agentFm, errors);
     checkDescriptionBudget(agentDescs, errors, notes);

@@ -47,6 +47,16 @@ function buildTemplate() {
     fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'cap.mjs'), path.join(t, 'hooks', 'rules', 'cap.mjs'));
   }
+  // The host imports hooks/rules/self-protect.mjs from the plugin root and fails closed without it.
+  if (fs.existsSync(path.join(REPO, 'hooks', 'rules', 'self-protect.mjs'))) {
+    fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'self-protect.mjs'), path.join(t, 'hooks', 'rules', 'self-protect.mjs'));
+  }
+  // The guards-off host path imports hooks/rules/dotenv.mjs and fails closed without it.
+  if (fs.existsSync(path.join(REPO, 'hooks', 'rules', 'dotenv.mjs'))) {
+    fs.mkdirSync(path.join(t, 'hooks', 'rules'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'dotenv.mjs'), path.join(t, 'hooks', 'rules', 'dotenv.mjs'));
+  }
   fs.mkdirSync(path.join(t, 'company'), { recursive: true });
   fs.copyFileSync(path.join(REPO, 'company', 'model-floor.json'), path.join(t, 'company', 'model-floor.json'));
   template = t;
@@ -65,7 +75,9 @@ export function pinnedFiles(plugin) {
 
 export function writePins(plugin) {
   const files = {};
-  for (const rel of pinnedFiles(plugin)) files[rel] = sha256(fs.readFileSync(path.join(plugin, rel)));
+  // The host hashes line-ending-normalized bytes (CRLF read as LF, binary as is); match it so a CRLF working copy pins alike.
+  const pinBytes = (b) => (b.includes(0) ? b : Buffer.from(b.toString('latin1').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10)), 'latin1'));
+  for (const rel of pinnedFiles(plugin)) files[rel] = sha256(pinBytes(fs.readFileSync(path.join(plugin, rel))));
   writeJson(path.join(plugin, 'hooks', 'pins.json'), { v: 1, files });
 }
 

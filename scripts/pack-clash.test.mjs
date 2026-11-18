@@ -38,9 +38,9 @@ function saverCombos() {
   return out;
 }
 const snap = (over = {}) => ({ v: 1, at: 'x', threshold: 180000, savers: {}, floor: { qa: 'sonnet', architect: 'opus', localizer: 'haiku' }, drift: false, settingsWarnings: [], ...over });
-function ev({ tool = {}, session = 'lead', tokens = { state: 'read', total: 0 }, run = null, event = 'PreToolUse', agentType = null, mainModel = null, env = {} } = {}) {
+function ev({ tool = {}, session = 'lead', tokens = { state: 'read', total: 0 }, run = null, event = 'PreToolUse', agentType = null, mainModel = null, env = {}, agentKey } = {}) {
   return deepFreeze({
-    v: 1, event, session, sessionKey: 'aaaaaaaaaaaa', agentKey: session === 'step' ? 'bbbbbbbbbbbb' : null, agentType,
+    v: 1, event, session, sessionKey: 'aaaaaaaaaaaa', agentKey: agentKey !== undefined ? agentKey : session === 'step' ? 'bbbbbbbbbbbb' : null, agentType,
     tool: { name: 'Read', command: null, paths: [], model: null, subagentType: null, outputRole: null, ...tool },
     tokens, mainModel, env: { guardsOff: false, subagentModel: null, subagentModelForce: null, ...env },
     protected: [], run, drift: [], stopHookActive: null,
@@ -95,8 +95,8 @@ test('clash.1 AC26: at the freeze point of the default cap the guard acts under 
   const { judge, freezeAt } = await imp('hooks', 'rules', 'cap.mjs');
   assert.equal(freezeAt(180000), 162000);
   const tool = { name: 'Read' };
-  const at = ev({ tool, session: 'lead', tokens: { state: 'read', total: 162000 }, run: RUN });
-  const below = ev({ tool, session: 'lead', tokens: { state: 'read', total: 161999 }, run: RUN });
+  const at = ev({ tool, session: 'lead', agentKey: 'cccccccccccc', tokens: { state: 'read', total: 162000 }, run: RUN });
+  const below = ev({ tool, session: 'lead', agentKey: 'cccccccccccc', tokens: { state: 'read', total: 161999 }, run: RUN });
   // 200000 tokens is under the pack's 250k offer point but over the freeze point of 180000.
   const packOffer = ev({ tool, session: 'step', tokens: { state: 'read', total: 200000 }, run: RUN });
   const base = judge(at, snap());
@@ -265,7 +265,7 @@ test('clash.7 AC15 AC23 AC26: set-mod refuses a guard id and writes nothing; a s
   const home = tmp();
   const proj = tmp();
   const run = (...args) => spawnSync(process.execPath, [rel('scripts', 'settings.mjs'), ...args], { cwd: proj, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: home } });
-  for (const id of ['cap', 'model-floor', 'self-protect', 'git-add', 'dotenv', 'switches', 'handoff']) {
+  for (const id of ['cap', 'model-floor', 'self-protect', 'dotenv', 'switches', 'handoff']) {
     const r = run('set-mod', id, 'off');
     assert.equal(r.status, 2, `${id}: ${r.stdout}${r.stderr}`);
     assert.match(r.stdout, /^refused: /);

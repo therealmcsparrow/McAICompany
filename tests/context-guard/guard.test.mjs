@@ -175,8 +175,18 @@ describe('Step: the off switches', () => {
     const fx = await booted();
     const t = fx.env.transcript('lead-retired', [{ type: 'assistant', isSidechain: false, message: { usage: { input_tokens: 170000, output_tokens: 0 } } }]);
     const ev = fx.env.event('PreToolUse', { tool_name: 'Read', tool_input: { file_path: 'x' }, transcript_path: t });
-    const r = fx.env.run(ev, { env: { AICO_CONTEXT_GUARD: 'off' } });
-    assert.ok(fx.isDeny(r), 'the Lead is still guarded');
+    // main is never capped (context-guard v3.0): the retired variable changes nothing for it
+    fx.quiet(fx.env.run(ev, { env: { AICO_CONTEXT_GUARD: 'off' } }), 'main allowed');
+    // the Lead agent is still guarded with the retired variable set
+    const lt = fx.env.transcript('main-agent-lead1', [{ type: 'assistant', isSidechain: false, message: { usage: { input_tokens: 1000, output_tokens: 0 } } }]);
+    const sub = path.join(lt.replace(/\.jsonl$/, ''), 'subagents');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(sub, 'agent-agent-lead1.jsonl'), `${JSON.stringify({ type: 'meta' })}
+${JSON.stringify({ type: 'assistant', isSidechain: true, message: { usage: { input_tokens: 170000, output_tokens: 0 } } })}
+`);
+    const lev = fx.env.event('PreToolUse', { tool_name: 'Read', tool_input: { file_path: 'x' }, transcript_path: lt, agent_id: 'agent-lead1', agent_type: 'aico:project-manager' });
+    const r = fx.env.run(lev, { env: { AICO_CONTEXT_GUARD: 'off' } });
+    assert.ok(fx.isDeny(r), 'the Lead agent is still guarded');
   });
 });
 

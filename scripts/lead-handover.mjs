@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v2.5
+// contract: docs/contracts/lead-handoff.md v3.0
 // uses: docs/contracts/run-state.md v3.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
-// Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a SessionStart hook that
-// injects it after compaction, a Stop hook that keeps the Lead's context reading, a SessionStart hook that resets the current reading for a new session, a UserPromptSubmit and PreToolUse hook (turn) that marks the Lead in a turn, plus a small CLI. Every hook payload, transcript line, record line and Step
+// Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a Stop hook that keeps main's context
+// reading, a SubagentStop hook that keeps each Lead agent's peak, a SessionStart hook that resets the current reading for a
+// new session and tells main the run waits for a Lead, plus a small CLI. Every hook payload, transcript line, record line and Step
 // file is untrusted: sizes are capped before parsing, every field is matched against an allow-list, and the
 // Handoff holds only values derived from the run records. No transcript text is stored or echoed.
 import crypto from 'node:crypto';
@@ -48,7 +49,12 @@ const MAX_RUN_STATE = 64 * 1024;
 const MAX_STEP_FILE = 8 * 1024;
 const MAX_READING = 256;
 const READING_FILE = 'lead-context.json';
-const TURN_FILE = 'lead-turn.json';
+const LEADS_FILE = 'lead-agents.json';
+const MAX_LEADS_FILE = 4096;
+const MAX_LEADS = 64;
+const LEAD_TYPE = 'aico:project-manager';
+const AGENT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const FORM_ID_RE = /^f(0[1-9]|[1-9]\d)$/;
 const MAX_HANDOFF = 8 * 1024;
 const MAX_LINES = 1000;
 const MAX_LINE = 512;
@@ -56,7 +62,6 @@ const MAX_FOLDERS = 200;
 const MAX_NAMES = 2000;
 const MAX_SCAN = 20000;
 const FRESH_MS = 12 * 60 * 60 * 1000;
-const RESUME_MS = 10 * 60 * 1000;
 const SELF_EXIT_MS = 4000;
 const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 
@@ -339,39 +344,6 @@ function handoffText(st, { tokens, window, trigger, command }) {
   ].join('\n');
 }
 
-const FM_KEYS = [
-  ['slug', { test: isRunSlug }], ['playbook', PLAYBOOK], ['step', /^(none|\d{2,3} [a-z][a-z0-9-]{0,40})$/], ['round', /^\d{1,3}$/],
-  ['base-commit', /^([0-9a-f]{7,40}|[0-9a-f]{64}|unknown)$/], ['risk-tier', /^(low|medium|high|unknown)$/],
-  ['tier-path', /^(none|broken|(feature|fix) (short|full))$/], ['tier-set', /^\[(?:[a-z][a-z0-9-]{0,40}(?:, [a-z][a-z0-9-]{0,40})*)?\]$/],
-  ['gate', /^(none|(brief|plan|ship) (open|passed|changed|stopped))$/],
-  ['form', /^(none|pending gate-(brief|plan|ship)|pending idea-(grill|routes|tickets)|pending step-[a-z-]{1,20})$/],
-  ['records', /^\[(?:[a-z-]+\.jsonl(?:, [a-z-]+\.jsonl)*)?\]$/], ['running', /^none$/],
-  ['tokens-at-handover', /^(\d{1,8}|unknown)$/], ['window', /^(\d{1,8}|unknown)$/], ['trigger', /^(auto|manual|context)$/],
-];
-const NEXT_LINE = /^- (Gate (brief|plan|ship) is open\. Run run-state ask for it and show that Gate form again\.|Form (grill|routes|tickets) is open\. Run idea-flow options and show the form again\.|Step [a-z-]{1,20} is in progress\. Continue it from its file\.|Continue the run from the newest Step Handoff\.|The run records beat this summary\.)$/;
-const SESSION_LINE = /^- New session command: claude "aico lead hand-over: run lead-handover read '[^'%^&|<>"]{1,200}' first, as set out in references\/lead-resume\.md of the skill aico:pipeline, then follow that file\."$/;
-
-// True when the text is exactly a Handoff this script writes for the slug and trigger.
-function validHandoff(text, slug, trigger) {
-  const lines = text.split('\n');
-  if (lines.pop() !== '' || lines[0] !== '---') return false;
-  for (const [i, [key, re]] of FM_KEYS.entries()) {
-    const l = lines[i + 1] ?? '';
-    if (!l.startsWith(`${key}: `)) return false;
-    const v = l.slice(key.length + 2);
-    if (!re.test(v)) return false;
-    if (key === 'slug' && v !== slug) return false;
-    if (key === 'trigger' && v !== trigger) return false;
-  }
-  const at = FM_KEYS.length + 1;
-  if (lines[at] !== '---' || lines[at + 1] !== '## Next') return false;
-  const rest = lines.slice(at + 2);
-  if (trigger !== 'context') return rest.length >= 1 && rest.length <= 2 && rest.every((l) => NEXT_LINE.test(l));
-  const last = rest[rest.length - 1] ?? '';
-  return rest.length >= 2 && rest.length <= 3 && rest.slice(0, -1).every((l) => NEXT_LINE.test(l)) && SESSION_LINE.test(last)
-    && last === `- New session command: ${newSessionCommand(slug)}`;
-}
-
 function writeHandoff(root, slug, dir, events, st, { tokens, window, trigger, now, session }) {
   let names = [];
   try { names = fs.readdirSync(dir).slice(0, MAX_NAMES); } catch { broken('not a regular file'); }
@@ -470,6 +442,8 @@ function parsePayload(text) {
     source: o.source,
     transcript: o.transcript_path,
     subagent: Object.hasOwn(o, 'agent_id'),
+    agentId: typeof o.agent_id === 'string' && AGENT_ID_RE.test(o.agent_id) ? o.agent_id : null,
+    agentType: typeof o.agent_type === 'string' ? o.agent_type : null,
     session: typeof o.session_id === 'string' && o.session_id.length > 0 && o.session_id.length <= 512
       ? crypto.createHash('sha256').update(o.session_id).digest('hex').slice(0, 12) : null,
   };
@@ -569,8 +543,17 @@ function readReading(dir) {
   let text;
   try {
     const realDir = fs.realpathSync.native(dir);
-    const realRoot = path.dirname(path.dirname(path.dirname(realDir)));
-    const r = readInside(realRoot, ['.company', 'work', path.basename(realDir), READING_FILE], MAX_READING);
+    // The run folder is `.company/work/<slug parts>`; a v3 slug has two parts, so climb to the `.company` folder.
+    const tail = [];
+    let up = realDir;
+    while (path.basename(up) !== '.company') {
+      const next = path.dirname(up);
+      if (next === up || tail.length > 4) return null;
+      tail.unshift(path.basename(up));
+      up = next;
+    }
+    const realRoot = path.dirname(up);
+    const r = readInside(realRoot, ['.company', ...tail, READING_FILE], MAX_READING);
     if (r.status !== 'ok') return null;
     text = r.text;
   } catch { return null; }
@@ -638,18 +621,68 @@ function writeReading(dir, build, needLock = false) {
   }
 }
 
-// Stop adapter. Keeps the newest context reading (tagged with its session) and the run-wide peak; always { code: 0, err: '' }.
+// The per-Lead peaks of a run: { id12: peak }, from lead-agents.json; empty when missing or not the shape this script writes.
+function readLeads(dir) {
+  const text = readSmall(path.join(dir, LEADS_FILE), MAX_LEADS_FILE);
+  if (text === null) return {};
+  try {
+    const o = JSON.parse(text);
+    if (o === null || typeof o !== 'object' || o.v !== 1 || o.leads === null || typeof o.leads !== 'object' || Array.isArray(o.leads)) return {};
+    const out = {};
+    for (const [k, v] of Object.entries(o.leads)) if (/^[0-9a-f]{12}$/.test(k) && Number.isInteger(v) && v >= 0 && v <= MAX_TOKENS) out[k] = v;
+    return Object.keys(out).length <= MAX_LEADS ? out : {};
+  } catch { return {}; }
+}
+
+// Keeps the highest reading of one Lead agent; the same agent stopping again counts once. Same lock and rename as the reading.
+function writeLeads(dir, id, tokens) {
+  const file = path.join(dir, LEADS_FILE);
+  const lock = lockReading(dir);
+  if (!lock) return;
+  try {
+    const l = lstatOrNull(file);
+    if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return;
+    const leads = readLeads(dir);
+    if (!(id in leads) && Object.keys(leads).length >= MAX_LEADS) return;
+    leads[id] = Math.max(leads[id] ?? 0, tokens);
+    const text = `${JSON.stringify({ v: 1, leads })}\n`;
+    if (Buffer.byteLength(text) > MAX_LEADS_FILE) return;
+    const tmp = path.join(dir, `.${LEADS_FILE}.${process.pid}.tmp`);
+    const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+    try {
+      try { fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+      throw e;
+    }
+  } finally {
+    try { fs.unlinkSync(lock); } catch { /* already gone */ }
+  }
+}
+
+// Stop adapter (main) and SubagentStop adapter (Lead agent, exact agent_type aico:project-manager). Main: keeps the newest context
+// reading (tagged with its session) and the run-wide peak. Lead: keeps that Lead's own peak. Always { code: 0, err: '' }.
 export function measure(text, options) {
   const { root, claudeDir, now } = defaults(options);
   const quiet = { code: 0, err: '' };
   try {
     const p = parsePayload(text);
-    if (!p || p.event !== 'Stop' || p.subagent) return quiet;
+    if (!p) return quiet;
+    const lead = p.event === 'SubagentStop';
+    if (lead ? p.agentType !== LEAD_TYPE || p.agentId === null : p.event !== 'Stop' || p.subagent) return quiet;
     const slug = findRun(root, now);
     if (!slug) return quiet;
     exactWorkPath({ fs, path }, root, workParts(slug));
     const dir = runExists(root, slug);
     if (!dir) return quiet;
+    if (lead) {
+      const t = p.transcript;
+      if (typeof t !== 'string' || !t.endsWith('.jsonl')) return quiet;
+      const tokens = transcriptTokens(`${t.slice(0, -6)}${path.sep}subagents${path.sep}agent-${p.agentId}.jsonl`, claudeDir, true);
+      if (tokens !== null) writeLeads(dir, crypto.createHash('sha256').update(p.agentId).digest('hex').slice(0, 12), tokens);
+      return quiet;
+    }
     const ctx = transcriptTokens(p.transcript, claudeDir);
     if (ctx === null) return quiet;
     const seen = transcriptTtl(p.transcript, claudeDir);
@@ -666,8 +699,14 @@ export function measure(text, options) {
 // SessionStart adapter for a new, resumed or cleared session (v1.8): the current reading is unknown until the
 // session's first Stop; the run-wide peak stays. Always { code: 0, err: '' }.
 export function start(text, options) {
+  startRun(text, options);
+  return { code: 0, err: '' };
+}
+
+// The same, and the one line main is told (lead-handoff v3.0); '' when nothing was written.
+function startRun(text, options) {
   const { root, now } = defaults(options);
-  const quiet = { code: 0, err: '' };
+  const quiet = '';
   try {
     const p = parsePayload(text);
     if (!p || p.event !== 'SessionStart' || !['startup', 'resume', 'clear'].includes(p.source) || p.subagent || p.session === null) return quiet;
@@ -677,72 +716,9 @@ export function start(text, options) {
     const dir = runExists(root, slug);
     if (!dir) return quiet;
     writeReading(dir, (old) => ({ session: p.session, ctx: null, peak: old ? old.peak : 0, at: iso(now), ttl: null }));
-    return quiet;
+    return `aico: run ${slug} waits for a Lead (${gateState(dir)}); say resume\n`;
   } catch {
     return quiet;
-  }
-}
-
-// UserPromptSubmit and PreToolUse adapter: marks that the Lead is in a turn, `{v, session, at}` in lead-turn.json (atomic
-// rename, `at` with milliseconds). lead-replace.mjs types nothing while this mark is newer than the Stop reading it accepted.
-// Steps (agent_id) write nothing. Always { code: 0, err: '' }.
-export function turn(text, options) {
-  const { root, now } = defaults(options);
-  const quiet = { code: 0, err: '' };
-  try {
-    // A payload that cannot be read (over MAX_STDIN, not JSON) or has no usable session_id marks with an unknown session
-    // (session null), which lead-replace reads as 'bad' and refuses to type over. Only a readable payload from another event or a Step writes nothing.
-    const parsed = text === OVERSIZE ? null : parsePayload(text);
-    if (parsed && ((parsed.event !== 'UserPromptSubmit' && parsed.event !== 'PreToolUse') || parsed.subagent)) return quiet;
-    const p = { session: parsed ? parsed.session : null };
-    const slug = findRun(root, now);
-    if (!slug) return quiet;
-    exactWorkPath({ fs, path }, root, workParts(slug));
-    const dir = runExists(root, slug);
-    if (!dir) return quiet;
-    const file = path.join(dir, TURN_FILE);
-    const l = lstatOrNull(file);
-    if (l && (l.isSymbolicLink() || !l.isFile() || l.nlink !== 1)) return quiet;
-    const tmp = path.join(dir, `.${TURN_FILE}.${process.pid}.tmp`);
-    const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
-    try {
-      try { fs.writeSync(fd, `${JSON.stringify({ v: 1, session: p.session, at: new Date(now).toISOString() })}\n`); } finally { fs.closeSync(fd); }
-      fs.renameSync(tmp, file);
-    } catch (e) {
-      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
-      throw e;
-    }
-    return quiet;
-  } catch {
-    return quiet;
-  }
-}
-
-// SessionStart adapter. Returns { code: 0, out }; out is the hook JSON or empty.
-export function resume(text, options) {
-  const { root, now } = defaults(options);
-  try {
-    const p = parsePayload(text);
-    if (!p || p.event !== 'SessionStart' || p.source !== 'compact' || p.subagent) return { code: 0, out: '' };
-    const slug = findRun(root, now);
-    if (!slug) return { code: 0, out: '' };
-    const dir = runExists(root, slug);
-    if (!dir) return { code: 0, out: '' };
-    const events = loadRecord(dir);
-    const wrap = (ctx) => `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } })}\n`;
-    const fixed = wrap(`aico lead hand-over: run lead-handover read '${slug}' first, then follow skills/pipeline/references/lead-resume.md.`);
-    const last = events.findLast((e) => e.ev === 'handover');
-    if (!last) return { code: 0, out: fixed };
-    const num = Number(HANDOFF_RE.exec(last.file)[1]);
-    const used = events.some((e) => e.ev === 'resume' && e.of === num);
-    const fresh = now - Date.parse(last.at) <= RESUME_MS;
-    if (used || !fresh) return { code: 0, out: fixed };
-    const body = readSmall(path.join(dir, last.file), MAX_HANDOFF);
-    if (body === null || !validHandoff(body, slug, last.trigger)) return { code: 0, out: fixed };
-    appendEvent(dir, events, { ev: 'resume', of: num, via: last.trigger === 'auto' ? 'hook' : 'ceo' }, now);
-    return { code: 0, out: wrap(`${HEADER}\n${body}`) };
-  } catch {
-    return { code: 0, out: '' };
   }
 }
 
@@ -778,8 +754,28 @@ function recordedLines(root, slug, st) {
 function readingLines(dir, cap) {
   const overCap = (n) => (n > cap ? ' over cap' : '');
   const r = readReading(dir);
-  return [`lead ctx ${r && r.ctx !== null ? r.ctx + overCap(r.ctx) : 'unknown'}`, `lead peak ${r ? r.peak + overCap(r.peak) : 'unknown'}`,
-    `lead session ${r ? (r.session || 'none') : 'unknown'}`];
+  const leads = Object.values(readLeads(dir));
+  const lead = leads.length > 0 ? Math.max(...leads) : (r ? r.peak : null);
+  return [`lead ctx ${r && r.ctx !== null ? r.ctx + overCap(r.ctx) : 'unknown'}`, `lead peak ${lead !== null ? lead + overCap(lead) : 'unknown'}`,
+    `lead session ${r ? (r.session || 'none') : 'unknown'}`,
+    ...(leads.length > 0 ? [`leads ${leads.length}`] : []), ...(r ? [`main peak ${r.peak + overCap(r.peak)}`] : [])];
+}
+
+// `form: <id> <open|answered>` of the newest lead-relay form (forms.jsonl); no line when there is none or the record is unreadable.
+// Only ids and events are read, so the CEO's Other text never reaches the output.
+function relayFormLine(dir) {
+  const text = readSmall(path.join(dir, 'forms.jsonl'), 1024 * 1024);
+  if (text === null || !text.endsWith('\n')) return [];
+  let id = null;
+  const answered = new Set();
+  for (const line of text.slice(0, -1).split('\n')) {
+    let o;
+    try { o = JSON.parse(line); } catch { return []; }
+    if (o === null || typeof o !== 'object' || typeof o.id !== 'string' || !FORM_ID_RE.test(o.id)) return [];
+    if (o.ev === 'open') id = o.id;
+    else if (o.ev === 'answer') answered.add(o.id);
+  }
+  return id === null ? [] : [`form: ${id} ${answered.has(id) ? 'answered' : 'open'}`];
 }
 
 function exec(argv, root, env) {
@@ -801,7 +797,7 @@ function exec(argv, root, env) {
       const hs = events.filter((e) => e.ev === 'handover');
       const rs = events.filter((e) => e.ev === 'resume');
       return [`handovers ${hs.length}`, `resumes hook ${rs.filter((e) => e.via === 'hook').length} ceo ${rs.filter((e) => e.via === 'ceo').length}`,
-        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st), ...recordedLines(root, slug, st), ...readingLines(dir, runCap(root, slug).cap)].join('\n') + '\n';
+        `last ${hs.length ? hs[hs.length - 1].file : 'none'}`, ...stateLines(st), ...relayFormLine(dir), ...recordedLines(root, slug, st), ...readingLines(dir, runCap(root, slug).cap)].join('\n') + '\n';
     }
     case 'ctx': {
       if (rest.length !== 1 || rest[0] !== '--json') refuse('usage');
@@ -868,7 +864,7 @@ function readStdin() {
 async function hook(kind) {
   setTimeout(() => process.exit(0), SELF_EXIT_MS).unref();
   const raw = await readStdin();
-  const text = raw === OVERSIZE && kind !== 'turn' ? '' : raw;
+  const text = raw === OVERSIZE ? '' : raw;
   if (kind === 'watch') {
     const r = watch(text);
     if (r.err) process.stderr.write(r.err);
@@ -876,22 +872,16 @@ async function hook(kind) {
   } else if (kind === 'measure') {
     measure(text);
     process.exitCode = 0;
-  } else if (kind === 'start') {
-    start(text);
-    process.exitCode = 0;
-  } else if (kind === 'turn') {
-    turn(text);
-    process.exitCode = 0;
   } else {
-    const r = resume(text);
-    if (r.out) process.stdout.write(r.out);
+    const line = startRun(text);
+    if (line) process.stdout.write(line);
     process.exitCode = 0;
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [cmd] = process.argv.slice(2);
-  if ((cmd === 'watch' || cmd === 'resume' || cmd === 'measure' || cmd === 'start' || cmd === 'turn') && process.argv.length === 3) {
+  if ((cmd === 'watch' || cmd === 'measure' || cmd === 'start') && process.argv.length === 3) {
     hook(cmd).catch(() => { process.exitCode = 0; });
   } else {
     const r = main(process.argv.slice(2));

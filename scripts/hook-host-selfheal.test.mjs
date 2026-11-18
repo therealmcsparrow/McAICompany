@@ -133,7 +133,7 @@ describe('reload: the Lead snapshot is missing or invalid at the first guarded c
     assert.equal(readJson(env.leadFile).drift, false);
   });
 
-  test('a rebuilt snapshot still denies a cap.M1 call over the threshold set in config.json', async () => {
+  test('a rebuilt snapshot still denies a cap.M1 Lead-agent call (never main) over the threshold set in config.json', async () => {
     const capRow = repoJson('hooks', 'rules.json').find((r) => r.rule === 'cap.M1' && r.event === 'PreToolUse');
     const env = makeEnv({ rows: [capRow], manifests: [repoJson('hooks', 'manifests', 'cap.json')] });
     env.setConfig({ pipeline: { context_cap: 60000 } });
@@ -141,21 +141,34 @@ describe('reload: the Lead snapshot is missing or invalid at the first guarded c
     startLead(env);
     dropLead(env);
     const t = env.transcript('over-cap', [{ type: 'assistant', isSidechain: false, message: { model: 'claude-opus-4', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 58000, output_tokens: 10 } } }]);
-    const r = env.run(env.pre('ls', { transcript_path: t }));
-    assert.match(reasonOf(env, r), /cap\.M1|context cap/);
+    // v3.0: main is never capped; only the Lead agent (agent_id, type aico:project-manager) is.
+    allowed(env, env.run(env.pre('ls', { transcript_path: t })));
+    const sub = path.join(t.slice(0, -'.jsonl'.length), 'subagents', 'agent-agent-lead-1.jsonl');
+    fs.mkdirSync(path.dirname(sub), { recursive: true });
+    fs.writeFileSync(sub, `${JSON.stringify({ type: 'assistant', isSidechain: true, message: { model: 'claude-opus-4', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 58000, output_tokens: 10 } } })}
+`);
+    const r = env.run(env.pre('ls', { transcript_path: t, agent_id: 'agent-lead-1', agent_type: 'aico:project-manager' }));
+    assert.match(reasonOf(env, r), /cap\.M1|context cap|handover/);
     assert.equal(readJson(env.leadFile).threshold, 60000);
   });
 
-  test('a rebuilt snapshot still denies a git-add.M-SEC1 block fixture', () => {
-    const row = repoJson('hooks', 'rules.json').find((r) => r.rule === 'git-add.M-SEC1');
-    const env = makeEnv({ rows: [row], manifests: [repoJson('hooks', 'manifests', 'git-add.json')] });
-    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'git-add.mjs'), path.join(env.plugin, 'hooks', 'rules', 'git-add.mjs'));
+  test('a rebuilt snapshot still denies a dotenv.M-SEC1 block fixture; git add -A and git commit -a pass (ADR 0079)', () => {
+    const rows = repoJson('hooks', 'rules.json');
+    assert.ok(!rows.some((r) => r.rule === 'git-add.M-SEC1'), 'git-add.M-SEC1 row removed');
+    assert.ok(!fs.existsSync(path.join(REPO, 'hooks', 'manifests', 'git-add.json')), 'git-add manifest removed');
+    const row = rows.find((r) => r.rule === 'dotenv.M-SEC1');
+    const env = makeEnv({ rows: [row], manifests: [repoJson('hooks', 'manifests', 'dotenv.json')] });
+    fs.copyFileSync(path.join(REPO, 'hooks', 'rules', 'dotenv.mjs'), path.join(env.plugin, 'hooks', 'rules', 'dotenv.mjs'));
     env.repin();
     startLead(env);
     dropLead(env);
-    const fx = repoJson('hooks', 'fixtures', 'git-add.M-SEC1', 'block-add-all.json');
-    const r = env.run({ ...fx, session_id: 'sess-lead-1', cwd: env.project, transcript_path: path.join(env.base, 'transcripts', 'none.jsonl') });
-    assert.match(reasonOf(env, r), /git-add\.M-SEC1/);
+    const base = { session_id: 'sess-lead-1', cwd: env.project, transcript_path: path.join(env.base, 'transcripts', 'none.jsonl') };
+    const fx = repoJson('hooks', 'fixtures', 'dotenv.M-SEC1', 'block-bash-cat-env.json');
+    assert.match(reasonOf(env, env.run({ ...fx, ...base })), /dotenv\.M-SEC1/);
+    for (const command of ['git add -A', 'git commit -a']) {
+      const r = env.run({ ...fx, ...base, tool_input: { command } });
+      assert.doesNotMatch(r.out, /deny/i, command);
+    }
   });
 });
 

@@ -73,11 +73,11 @@ describe('session mapping (hook-event v1 "Normalized event")', () => {
     assert.equal(seen(env, env.pre('ls')).sh, null);
   });
 
-  test('the event holds exactly the contract keys: 14 top-level, 7 in tool', () => {
+  test('the event holds exactly the contract keys: 14 top-level, 8 in tool', () => {
     const env = probeEnv();
     const e = seen(env, env.pre('ls'));
     assert.equal(e.kn, 14);
-    assert.equal(e.tn, 7);
+    assert.equal(e.tn, 8); // 7 plus leadTarget (hook-event v1.4, T22)
   });
 
   test('agent ids of the allowed alphabet pass; others are malformed', () => {
@@ -252,7 +252,8 @@ describe('input limits and unknown events', () => {
 
   test('an input just under 4 MiB is accepted', () => {
     const env = probeEnv();
-    const e = seen(env, env.pre('x'.repeat(4 * 1024 * 1024 - 1024)));
+    // Pad an unread field: a shell command over 200000 chars is denied by self-protect (context-guard v3.0), so the size limit is probed without it.
+    const e = seen(env, env.pre('ls', { tool_input: { command: 'ls', pad: 'x'.repeat(4 * 1024 * 1024 - 1024) } }));
     assert.equal(e.e, 'PreToolUse');
   });
 
