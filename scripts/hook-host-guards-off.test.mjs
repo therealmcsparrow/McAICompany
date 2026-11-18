@@ -31,7 +31,7 @@ test('S-6: AICO_GUARDS=off, a Lead background launch writes no bg row', async ()
   assert.equal(rows.filter((r) => r.ev === 'guards-off').length, 1, 'the one guards-off row is still recorded');
 });
 
-// 230 R-5: AICO_GUARDS=off with a pins mismatch falls back to text checks; any prefix of -EncodedCommand
+// AICO_GUARDS=off with a pins mismatch falls back to text checks; any prefix of -EncodedCommand
 // after any dash-like lead denies (fail closed), in any case.
 const OFF = { env: { AICO_GUARDS: 'off' } };
 function mismatchEnv() {
@@ -84,4 +84,43 @@ test('guards off + pins mismatch: pwsh without an encoded flag, and non-pwsh tex
     'pwsh -Encx 1', 'pwsh -ecx 1', 'pwsh -EncodedCommandX 1', 'ls -e', 'git log --encoding=utf8', `echo -enc ${PAYLOAD}`,
     'pwsh -NoLogo',
   ]) assert.notEqual(verdict(env.run(env.pre(cmd), OFF)), 'deny', cmd);
+});
+
+// Under guards off with a pins mismatch the host also checks the JSON-decoded stdin strings, so a
+// JSON-escaped dash or letter cannot hide the flag or the name. The escapes are written literally in the raw stdin text.
+const esc = (s, chars) => s.replace(new RegExp(`[${chars}]`, 'g'), (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+const rawPre = (env, command, chars) => esc(JSON.stringify(env.pre(command)), chars);
+
+test('guards off + pins mismatch: JSON-escaped dash or name in stdin still denies encoded pwsh', () => {
+  const env = mismatchEnv();
+  const cmds = [`pwsh -enc ${PAYLOAD}`, `pwsh -EncodedCommand ${PAYLOAD}`, `powershell -e ${PAYLOAD}`];
+  for (const cmd of cmds) {
+    for (const [what, chars] of [['dash', '-'], ['name letters', 'wsh'], ['dash and name letters', '-wsh'], ['every letter', 'a-zA-Z']]) {
+      const raw = rawPre(env, cmd, chars);
+      if (!/\u00/.test(raw)) continue;
+      const r = env.run(raw, OFF);
+      assert.equal(verdict(r), 'deny', `${what}: ${raw.slice(0, 120)}`);
+      assert.match(reason(r), /encoded PowerShell/, what);
+    }
+  }
+  const lit = '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"p\\u0077sh \\u002denc AAAA"}}';
+  assert.equal(verdict(env.run(lit, OFF)), 'deny', lit);
+});
+
+test('guards off + pins mismatch: an en dash written as a JSON escape in stdin still denies encoded pwsh', () => {
+  const env = mismatchEnv();
+  const lit = `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pwsh \\u2013enc ${PAYLOAD}"}}`;
+  assert.equal(verdict(env.run(lit, OFF)), 'deny', lit);
+});
+
+test('guards off + pins mismatch: JSON-escaped pwsh without an encoded flag still allows', () => {
+  const env = mismatchEnv();
+  for (const cmd of ['pwsh -File a.ps1', 'pwsh -ExecutionPolicy Bypass -File x.ps1', 'powershell -NoProfile']) {
+    for (const chars of ['-', 'wsh', '-wsh', 'a-zA-Z']) {
+      const r = env.run(rawPre(env, cmd, chars), OFF);
+      assert.notEqual(verdict(r), 'deny', `${chars}: ${cmd}`);
+    }
+  }
+  const lit = '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"p\\u0077sh \\u002dFile a.ps1"}}';
+  assert.notEqual(verdict(env.run(lit, OFF)), 'deny', lit);
 });

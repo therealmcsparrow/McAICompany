@@ -15,7 +15,7 @@ function repo() {
   return root;
 }
 const T0 = Date.parse('2026-11-04T10:00:00Z');
-// Isolated home: the user's real settings never decide whether a Gate is auto (R-9).
+// Isolated home: the user's real settings never decide whether a Gate is auto.
 const home = path.join(base, 'home');
 fs.mkdirSync(home, { recursive: true });
 const go = (root, args, ms = 0) => run(args, { root, now: T0 + ms, home });

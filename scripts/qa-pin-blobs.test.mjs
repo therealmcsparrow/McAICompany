@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-// 218 R-2: every pin is the SHA-256 of the LF content git stores, so a clean clone or plugin install verifies.
+// every pin is the SHA-256 of the LF content git stores, so a clean clone or plugin install verifies.
 // Read-only git only: `git show HEAD:<file>` bytes against the pins as committed.
 const root = path.resolve(import.meta.dirname, '..');
 const show = (rel) => execFileSync('git', ['-C', root, 'show', `HEAD:${rel}`], { maxBuffer: 64 * 1024 * 1024 });

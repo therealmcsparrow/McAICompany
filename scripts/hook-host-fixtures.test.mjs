@@ -42,7 +42,7 @@ test('R-2 the shipped cap.M1 and self-protect fixtures pass the session start ch
   assert.doesNotMatch(msg, /self-protect/, msg);
 });
 
-test('R-2 the fixture replay has its own deadline, apart from the per-call runner deadline', () => {
+test('the fixture replay has its own deadline, apart from the per-call runner deadline', () => {
   const msg = sessionStart((dst) => {
     const f = path.join(dst, 'hooks', 'lib', 'rule-runner.mjs');
     const src = fs.readFileSync(f, 'utf8');

@@ -110,7 +110,7 @@ test('PowerShell file work that names no record allows', () => {
   allowed('PowerShell', '$f = "out\\a.txt"; Set-Content $f hi');
 });
 
-// R-2: -EncodedCommand:<b64> (colon form) and /EncodedCommand <b64> (slash form) decode like the plain flag.
+// -EncodedCommand:<b64> (colon form) and /EncodedCommand <b64> (slash form) decode like the plain flag.
 const b64 = (s) => Buffer.from(s, 'utf16le').toString('base64');
 test('PowerShell -EncodedCommand:<b64> and /EncodedCommand <b64> to a run record deny', () => {
   const payload = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
@@ -127,7 +127,7 @@ test('PowerShell -EncodedCommand:<b64> and /EncodedCommand <b64> that name no re
   allowed('PowerShell', `powershell /EncodedCommand ${payload}`);
 });
 
-// R-5: every dash form of -EncodedCommand and -Command (en dash, em dash, horizontal bar, --, /) to a run record denies.
+// every dash form of -EncodedCommand and -Command (en dash, em dash, horizontal bar, --, /) to a run record denies.
 const DASHES = ['-', '--', '/', '–', '—', '―'];
 test('PowerShell -EncodedCommand in every dash form to a run record denies', () => {
   const payload = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
@@ -224,8 +224,8 @@ test('a forged .git pointer in cwd does not widen protection, and a plain repo c
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
-// 218 R-3: a run-record write hidden behind a nested or double-encoded PowerShell command denies.
-test('nested -c / double-encoded -enc write to forms.jsonl denies (218 R-3)', () => {
+// a run-record write hidden behind a nested or double-encoded PowerShell command denies.
+test('nested -c / double-encoded -enc write to forms.jsonl denies', () => {
   const write = `Set-Content "${REC}/forms.jsonl" "{}"`;
   const inner = b64(write);
   for (const shell of ['PowerShell', 'Bash']) {
@@ -238,14 +238,14 @@ test('nested -c / double-encoded -enc write to forms.jsonl denies (218 R-3)', ()
   }
 });
 
-test('nested -c / double-encoded -enc that name no record allow (218 R-3)', () => {
+test('nested -c / double-encoded -enc that name no record allow', () => {
   const ok = b64('Write-Output 1');
   allowed('PowerShell', `pwsh -c "pwsh -enc ${ok}"`);
   allowed('PowerShell', `pwsh -enc ${b64(`pwsh -enc ${ok}`)}`);
   allowed('Bash', `pwsh -c "Write-Output 1"`);
 });
 
-// 229 R-3: nesting past the depth limit, or an inline -c program at the limit, denies a run-record write (fail closed).
+// nesting past the depth limit, or an inline -c program at the limit, denies a run-record write (fail closed).
 const { judgeRecord } = await import(url('hooks/rules/self-protect.mjs'));
 const deniedBoth = (tool, command) => {
   denied(tool, command);
@@ -257,26 +257,26 @@ const allowedBoth = (tool, command) => {
 };
 const wrapEnc = (n, inner) => { let t = inner; for (let i = 0; i < n; i++) t = `pwsh -enc ${b64(t)}`; return t; };
 
-test('5- and 6-layer pwsh -enc around a forms.jsonl write denies in judge and judgeRecord (229)', () => {
+test('5- and 6-layer pwsh -enc around a forms.jsonl write denies in judge and judgeRecord', () => {
   const write = `Set-Content "${REC}/forms.jsonl" "{}"`;
   for (const shell of ['PowerShell', 'Bash']) for (const n of [4, 5, 6]) deniedBoth(shell, wrapEnc(n, write));
 });
 
-test('an inline -c program at the depth limit denies (229, fail closed)', () => {
+test('an inline -c program at the depth limit denies (fail closed)', () => {
   for (const shell of ['PowerShell', 'Bash']) {
     deniedBoth(shell, wrapEnc(3, 'pwsh -c "Write-Output 1"'));
     deniedBoth(shell, wrapEnc(3, 'python3 -c "print(1)"'));
   }
 });
 
-test('a missing or non-base64 -enc payload denies at any depth (229)', () => {
+test('a missing or non-base64 -enc payload denies at any depth', () => {
   for (const shell of ['PowerShell', 'Bash']) {
     for (const cmd of ['pwsh -enc', 'pwsh -enc !!!', 'pwsh -EncodedCommand:***', wrapEnc(1, 'Write-Output 1') + ' ; pwsh -enc']) deniedBoth(shell, cmd);
     deniedBoth(shell, `pwsh -c "pwsh -enc !!!"`);
   }
 });
 
-test('shallow harmless nesting and odd-length -EncodedCommand AAAA still allow (229)', () => {
+test('shallow harmless nesting and odd-length -EncodedCommand AAAA still allow', () => {
   const ok = b64('Write-Output 1');
   for (const shell of ['PowerShell', 'Bash']) {
     allowedBoth(shell, wrapEnc(2, 'Write-Output 1'));
@@ -284,3 +284,48 @@ test('shallow harmless nesting and odd-length -EncodedCommand AAAA still allow (
     allowedBoth(shell, `pwsh -enc ${ok}`);
   }
 });
+
+// A spawn verb with pwsh and an encoded flag denies a run-record write at depth 0 and 3, in every session, on both shell tools.
+test('iex / Invoke-Expression / Start-Process / saps around pwsh -enc deny, with a forms.jsonl write inside', () => {
+  const write = `Set-Content "${REC}/forms.jsonl" "{}"`;
+  const e = b64(write);
+  for (const shell of ['PowerShell', 'Bash']) {
+    for (const cmd of [
+      `iex "pwsh -enc ${e}"`, `Invoke-Expression "powershell -EncodedCommand ${e}"`,
+      `Start-Process pwsh -ArgumentList '-enc','${e}'`, `saps powershell -ArgumentList '-EncodedCommand','${e}'`,
+      `Start-Process -FilePath pwsh -ArgumentList "-e ${e}"`, `iex "pwsh -enc ${e}" ; pwsh -c x`,
+    ]) {
+      deniedBoth(shell, cmd);
+      deniedBoth(shell, wrapEnc(3, cmd));
+    }
+  }
+});
+
+test('the spawn rule is a fail-closed over-deny: a harmless payload behind iex or Start-Process denies; plain forms allow', () => {
+  const ok = b64('Write-Output 1');
+  for (const shell of ['PowerShell', 'Bash']) {
+    deniedBoth(shell, `iex "pwsh -enc ${ok}"`);
+    deniedBoth(shell, `Start-Process pwsh -ArgumentList '-enc','${ok}'`);
+    allowedBoth(shell, `pwsh -enc ${ok}`);
+    allowedBoth(shell, 'iex "Write-Output 1"');
+    allowedBoth(shell, "Start-Process pwsh -ArgumentList '-File','a.ps1'");
+  }
+});
+
+// Call operators: `& pwsh -enc <b64>` and `. pwsh -enc <b64>` carry a run-record write.
+test('call operator & before pwsh -enc around a forms.jsonl write denies', () => {
+  const e = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
+  for (const shell of ['PowerShell', 'Bash']) deniedBoth(shell, `& pwsh -enc ${e}`);
+});
+test('call operator . before pwsh -enc around a forms.jsonl write denies', () => {
+  const e = b64(`Set-Content "${REC}/forms.jsonl" "{}"`);
+  for (const shell of ['PowerShell', 'Bash']) deniedBoth(shell, `. pwsh -enc ${e}`);
+});
+// Expected-deny probes: a harmless payload behind a call operator is allowed today (no spawn verb). Marked todo until
+// `&` and `.` join the spawn list; node:test reports a todo failure without failing the run.
+for (const op of ['&', '.']) {
+  test(`call operator '${op}' before pwsh -enc is a spawn form and denies like iex`, { todo: 'add & and . to SPAWN_VERBS' }, () => {
+    const ok = b64('Write-Output 1');
+    for (const shell of ['PowerShell', 'Bash']) deniedBoth(shell, `${op} pwsh -enc ${ok}`);
+  });
+}

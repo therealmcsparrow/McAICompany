@@ -1,4 +1,4 @@
-// R-31 (192): worker start-up must not eat the rule row's budget; the row clock starts after ready.
+// worker start-up must not eat the rule row's budget; the row clock starts after ready.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -26,7 +26,7 @@ function makePlugin() {
   return dir;
 }
 
-test('R-31 cold start: row clock starts after ready; start-up past deadline times out; death before ready crashes', async () => {
+test('cold start: row clock starts after ready; start-up past deadline times out; death before ready crashes', async () => {
   const dir = makePlugin();
   const { createRunner } = await import(pathToFileURL(path.join(dir, 'hooks', 'lib', 'rule-runner.mjs')).href);
   const job = (timeoutMs) => ({ module: 'ok.mjs', export: 'check', event: {}, snapshot: {}, timeoutMs });

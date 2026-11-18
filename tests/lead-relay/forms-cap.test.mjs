@@ -1,4 +1,4 @@
-// Tests for lead-relay v1 + run-state v3.1 (R-8): one forms.jsonl cap, MAX_FORMS (256 KiB), for the writer and the gate reader.
+// Tests for lead-relay v1 + run-state v3.1: one forms.jsonl cap, MAX_FORMS (256 KiB), for the writer and the gate reader.
 // An append that would pass the cap is refused and leaves the file unchanged (the writer throws `forms record full`; the CLI reports
 // `error: failed`, the answer hook swallows it); at or under the cap it appends and the run-state gate reads the answer.
 import { test, after } from 'node:test';
@@ -63,11 +63,11 @@ function fill(fx, size) {
   assert.equal(fs.statSync(fx.forms).size, size);
 }
 
-test('R-8 MAX_FORMS is 256 KiB', () => {
+test('MAX_FORMS is 256 KiB', () => {
   assert.equal(MAX_FORMS, 256 * 1024);
 });
 
-test('R-8 open whose row would pass the cap by one byte fails and leaves forms.jsonl unchanged', () => {
+test('open whose row would pass the cap by one byte fails and leaves forms.jsonl unchanged', () => {
   const fx = fixture();
   fill(fx, MAX_FORMS - Buffer.byteLength(openLine()) + 1);
   const before = fs.readFileSync(fx.forms);
@@ -78,7 +78,7 @@ test('R-8 open whose row would pass the cap by one byte fails and leaves forms.j
   assert.deepEqual(fs.readFileSync(fx.forms), before, 'no byte written');
 });
 
-test('R-8 open whose row lands exactly on the cap appends and the file stays readable by the gate', () => {
+test('open whose row lands exactly on the cap appends and the file stays readable by the gate', () => {
   const fx = fixture();
   fill(fx, MAX_FORMS - Buffer.byteLength(openLine()));
   const r = open(fx);
@@ -89,7 +89,7 @@ test('R-8 open whose row lands exactly on the cap appends and the file stays rea
   assert.equal(rows.at(-1).id, 'f02');
 });
 
-test('R-8 answer hook whose row would pass the cap records nothing and leaves forms.jsonl unchanged', () => {
+test('answer hook whose row would pass the cap records nothing and leaves forms.jsonl unchanged', () => {
   const fx = fixture();
   const row = { v: 1, at: iso(Date.now() - 30000), ev: 'open', id: 'f01', kind: 'gate:ship', questions: QUESTIONS };
   const base = Buffer.byteLength(`${JSON.stringify({ ...row, pad: '' })}\n`);
@@ -106,7 +106,7 @@ test('R-8 answer hook whose row would pass the cap records nothing and leaves fo
   assert.deepEqual(fs.readFileSync(fx.forms), before, 'no byte written');
 });
 
-test('R-8 under the cap: open and answer append, and run-state gate reads the answer', () => {
+test('under the cap: open and answer append, and run-state gate reads the answer', () => {
   const fx = fixture();
   fill(fx, MAX_FORMS - 16 * 1024);
   const o = open(fx);

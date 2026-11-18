@@ -37,7 +37,7 @@ describe('Lead agent at the clean point (F <= tokens < T) (AC5)', () => {
     assert.match(reason, /STATUS: handover/);
     assert.match(reason, /handoff:/);
     assert.match(reason, /next:/);
-    // R-5: the deny names the real Lead Handoff file, not the old `claude "..."` command.
+    // the deny names the real Lead Handoff file, not the old `claude "..."` command.
     assert.match(reason, /handoff: \.company\/work\/[^\s;]+\/lead-handoff-[1-9]\d{0,3}\.md/);
     assert.doesNotMatch(reason, /claude\s+"/);
     assert.notEqual(r.json.continue, false, 'a freeze deny does not end the turn');
@@ -89,7 +89,7 @@ describe('Lead agent Frozen: every tool denied, never continue:false (AC5, AC7)'
     assert.match(text(fx.agentLead(T, { tool: 'Read' })), /STATUS: handover/);
   });
 
-  test('R-8: the frozen deny names the real lead-handoff-<n>.md path and holds no claude "..." command', async () => {
+  test('the frozen deny names the real lead-handoff-<n>.md path and holds no claude "..." command', async () => {
     const fx = await frozen();
     for (const [n, tool] of [[F, 'Read'], [T, 'Bash'], [T + 20000, 'Write']]) {
       const reason = fx.denyOf(fx.agentLead(n, { tool }));

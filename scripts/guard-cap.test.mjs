@@ -421,7 +421,7 @@ describe('AC2 a Role never spawns the Lead, run or not, below the fast floor', (
   });
 });
 
-describe('R-1 a padded or newline-ended Lead target is still the Lead (hook-event v1.4 leadTarget)', () => {
+describe('a padded or newline-ended Lead target is still the Lead (hook-event v1.4 leadTarget)', () => {
   const PADDED = [' aico:project-manager ', 'aico:project-manager\n', '\taico:project-manager\r\n', '\u00a0aico:project-manager\u00a0', '\u200baico:project-manager\ufeff', ' project-manager ', ' AICO:Project-Manager\n'];
   for (const tool of ['Agent', 'Task']) {
     test(`${tool}: a Role spawning a padded Lead target is denied`, async () => {

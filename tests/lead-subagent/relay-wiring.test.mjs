@@ -1,6 +1,6 @@
 // Tests for the hooks.json wiring of lead-relay v1 and lead-handoff v3.0 (AC2, AC6, AC12).
 // PostToolUse `answer` and PreToolUse `preset` (both matcher AskUserQuestion), SubagentStop `measure`, the Stop `measure` stays,
-// the `turn` and `resume` adapters are gone, and the pins match the wired files (mod-hook v1.1 step 2).
+// the `turn` and `resume` adapters are gone, and the pins match the wired files (mod-hook v1.1).
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

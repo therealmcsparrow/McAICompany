@@ -126,7 +126,7 @@ describe('.env shell reads are denied in every session (cch.M-SEC7, AC5)', () =>
   });
 });
 
-// R-3 (fail closed): a throwing resolveRun on a Lead Agent/Task PreToolUse is an unreadable run, never "no run".
+// Fail closed: a throwing resolveRun on a Lead Agent/Task PreToolUse is an unreadable run, never "no run".
 describe('resolveRun failure on a Lead spawn (hook-event v1.4, context-guard v3.0)', async () => {
   const nodeFs = await import('node:fs');
   const nodeOs = await import('node:os');

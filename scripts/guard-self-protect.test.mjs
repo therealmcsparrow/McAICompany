@@ -428,7 +428,7 @@ test('AC4 fixtures: judge allows each pass-* and denies each block-* with rule s
     else { assert.equal(v.v, 'deny', f); assert.equal(v.rule, RULE, f); }
   }
 });
-test('fixtures cover the Decided forms: file tool and run-record shell writes block; settings, set-mod, hook-pins, home, inline interpreter, -EncodedCommand and snapshot shell forms pass; passes cover the R-1 verbs', () => {
+test('fixtures cover the Decided forms: file tool and run-record shell writes block; settings, set-mod, hook-pins, home, inline interpreter, -EncodedCommand and snapshot shell forms pass; passes cover the run-state verbs', () => {
   const all = fixtures().map((f) => ({ f, j: readFx(f) }));
   const block = all.filter((x) => x.f.startsWith('block-')).map((x) => x.j);
   const pass = all.filter((x) => x.f.startsWith('pass-')).map((x) => x.j);
@@ -656,7 +656,7 @@ test('AC7 host pass: an ordinary write in the run folder passes with guards on a
     assert.equal(env.reason(r), null, r.out);
   }
 });
-test('AC7 host deny: AICO_GUARDS=off, the answer adapter shell call, main, Lead and Role; open passes (R-21)', async () => {
+test('AC7 host deny: AICO_GUARDS=off, the answer adapter shell call, main, Lead and Role; open passes', async () => {
   const env = await hostEnv();
   const relay = `${slashOf(env.plugin)}/scripts/lead-relay.mjs`;
   const shell = (who, tool, command) => {
@@ -679,7 +679,7 @@ test('AC7 host deny: AICO_GUARDS=off, the answer adapter shell call, main, Lead 
     assert.equal(env.reason(r), null, `${who} ${tool} open passes under off: ${r.out}`);
   }
 });
-test('AC7 host deny: AICO_GUARDS=off, .env Read and `cat .env` denied for main and Lead; .env.example passes; Role denied by the normal guard (R-23)', async () => {
+test('AC7 host deny: AICO_GUARDS=off, .env Read and `cat .env` denied for main and Lead; .env.example passes; Role denied by the normal guard', async () => {
   const env = await hostEnv();
   const rows = JSON.parse(fs.readFileSync(path.join(env.plugin, 'hooks', 'rules.json'), 'utf8'));
   rows.push(...JSON.parse(fs.readFileSync(REPO_RULES, 'utf8')).filter((r) => r.rule === 'dotenv.M-SEC1'));
@@ -709,7 +709,7 @@ test('AC7 host deny: AICO_GUARDS=off, .env Read and `cat .env` denied for main a
   assertDeny(env, env.run(call('role', 'Read', { file_path: dotenv })), /dotenv\.M-SEC1/, 'role Read .env on');
 });
 
-// ---------- pin mismatch plus AICO_GUARDS=off: the host's text-only deny (214 R-3) ----------
+// ---------- pin mismatch plus AICO_GUARDS=off: the host's text-only deny ----------
 async function mismatchEnv() {
   const env = await hostEnv();
   fs.appendFileSync(path.join(env.plugin, 'hooks', 'rules', 'dotenv.mjs'), '\n// pin drift\n');
@@ -717,14 +717,14 @@ async function mismatchEnv() {
 }
 const leadCall = (env, tool, input) => env.event('PreToolUse', { tool_name: tool, tool_input: input });
 
-test('R-3 host deny: pin mismatch + AICO_GUARDS=off, the Lead `cat .env` denies with dotenv.M-SEC1', async () => {
+test('host deny: pin mismatch + AICO_GUARDS=off, the Lead `cat .env` denies with dotenv.M-SEC1', async () => {
   const env = await mismatchEnv();
   const r = env.run(leadCall(env, 'Bash', { command: 'cat .env' }), OFF);
   assertDeny(env, r, /dotenv\.M-SEC1/, 'cat .env pin mismatch off');
   assert.doesNotMatch(env.reason(r), /pins-mismatch/);
   assertDeny(env, env.run(leadCall(env, 'Bash', { command: 'cat .env.local' }), OFF), /dotenv\.M-SEC1/, 'cat .env.local');
 });
-test('R-3 host pass: pin mismatch + AICO_GUARDS=off, a .env.example read passes (null output)', async () => {
+test('host pass: pin mismatch + AICO_GUARDS=off, a .env.example read passes (null output)', async () => {
   const env = await mismatchEnv();
   for (const [tool, input] of [['Bash', { command: 'cat .env.example' }], ['Read', { file_path: path.join(env.project, '.env.sample') }]]) {
     const r = env.run(leadCall(env, tool, input), OFF);
@@ -733,7 +733,7 @@ test('R-3 host pass: pin mismatch + AICO_GUARDS=off, a .env.example read passes 
     assert.equal(r.out.trim(), '', `${tool} output is empty`);
   }
 });
-test('R-3 host deny: pin mismatch + AICO_GUARDS=off, the answer adapter shell call denies with self-protect.M-SEC1; a harmless call passes', async () => {
+test('host deny: pin mismatch + AICO_GUARDS=off, the answer adapter shell call denies with self-protect.M-SEC1; a harmless call passes', async () => {
   const env = await mismatchEnv();
   for (const command of ['node scripts/lead-relay.mjs answer < f.json', 'cat f.json | node scripts/lead-relay.mjs answer']) {
     const r = env.run(leadCall(env, 'Bash', { command }), OFF);
@@ -747,8 +747,8 @@ test('R-3 host deny: pin mismatch + AICO_GUARDS=off, the answer adapter shell ca
   }
 });
 
-// 218 R-5: under pin mismatch + guards off the host cannot decode, so an encoded answer fails closed.
-test('R-5 host deny: pin mismatch + AICO_GUARDS=off, an encoded answer shell call denies; a plain harmless call passes', async () => {
+// under pin mismatch + guards off the host cannot decode, so an encoded answer fails closed.
+test('host deny: pin mismatch + AICO_GUARDS=off, an encoded answer shell call denies; a plain harmless call passes', async () => {
   const env = await mismatchEnv();
   const b64 = (t) => Buffer.from(t, 'utf16le').toString('base64');
   const answer = 'node scripts/lead-relay.mjs answer < f.json';

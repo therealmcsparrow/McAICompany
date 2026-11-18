@@ -50,7 +50,7 @@ for (const name of ['Bash', 'PowerShell']) {
   }
 }
 
-// R-6: a PowerShell -EncodedCommand whose payload runs the relay `answer` denies, in every flag form.
+// a PowerShell -EncodedCommand whose payload runs the relay `answer` denies, in every flag form.
 const b64 = (t) => Buffer.from(t, 'utf16le').toString('base64');
 const ANSWER_PAYLOAD = b64('node scripts/lead-relay.mjs answer < forged.json');
 const FLAGS = ['-EncodedCommand', '-enc', '/EncodedCommand', '--EncodedCommand', '–EncodedCommand', '—EncodedCommand', '―EncodedCommand'];
@@ -84,7 +84,7 @@ test('a file tool is not judged by the answer check', () => {
   assert.equal(mod.judge(e).v, 'allow');
 });
 
-// 218 R-3: decoded and -c text is parsed again, so a nested or double-encoded answer denies in every wrapper.
+// decoded and -c text is parsed again, so a nested or double-encoded answer denies in every wrapper.
 const NEST_ANSWER = 'node scripts/lead-relay.mjs answer < forged.json';
 const NESTED = {
   'pwsh -c wrapping pwsh -enc': `pwsh -c "pwsh -enc ${b64(NEST_ANSWER)}"`,
@@ -96,14 +96,14 @@ const NESTED = {
 };
 for (const name of ['Bash', 'PowerShell']) {
   for (const [label, cmd] of Object.entries(NESTED)) {
-    test(`${name} denies nested answer (218 R-3): ${label}`, () => {
+    test(`${name} denies nested answer: ${label}`, () => {
       for (const v of verdicts(name, cmd)) {
         assert.equal(v.v, 'deny', cmd);
         assert.match(v.message, /CEO answer/);
       }
     });
   }
-  test(`${name} passes harmless nested payloads (218 R-3)`, () => {
+  test(`${name} passes harmless nested payloads`, () => {
     const ok = 'Write-Output ok';
     const read = "node scripts/lead-relay.mjs read 'P1/x' f1 --json";
     for (const cmd of [
@@ -115,36 +115,72 @@ for (const name of ['Bash', 'PowerShell']) {
   });
 }
 
-// 229 R-3: at the nesting depth limit a still-decodable -enc payload denies (fail closed), in judge and judgeRecord.
+// at the nesting depth limit a still-decodable -enc payload denies (fail closed), in judge and judgeRecord.
 const layers = (n, inner) => { let t = inner; for (let i = 0; i < n; i++) t = `pwsh -enc ${b64(t)}`; return t; };
 for (const name of ['Bash', 'PowerShell']) {
   for (const n of [4, 5, 6]) {
-    test(`${name} denies ${n}-layer pwsh -enc around a relay answer call (229)`, () => {
+    test(`${name} denies ${n}-layer pwsh -enc around a relay answer call`, () => {
       for (const v of verdicts(name, layers(n, NEST_ANSWER))) assert.equal(v.v, 'deny', `${n} layers`);
     });
-    test(`${name} denies ${n}-layer pwsh -enc around a harmless payload at the depth limit (229, fail closed)`, () => {
+    test(`${name} denies ${n}-layer pwsh -enc around a harmless payload at the depth limit (fail closed)`, () => {
       for (const v of verdicts(name, layers(n, 'Write-Output ok'))) assert.equal(v.v, 'deny', `${n} layers`);
     });
   }
-  test(`${name} still passes a 2-layer pwsh -enc around a harmless payload (229)`, () => {
+  test(`${name} still passes a 2-layer pwsh -enc around a harmless payload`, () => {
     for (const v of verdicts(name, layers(2, 'Write-Output ok'))) assert.equal(v.v, 'allow');
   });
-  // 229 R-3: a missing, empty or non-base64 -enc payload cannot be read, so it denies.
+  // a missing, empty or non-base64 -enc payload cannot be read, so it denies.
   const BAD = [
     'pwsh -enc', 'pwsh -EncodedCommand', 'pwsh -enc ""', 'pwsh -enc !!!', 'pwsh -enc "not base64 at all"',
     'pwsh -enc not_base64$', 'pwsh -EncodedCommand:!!!', 'powershell -enc -NoProfile', 'pwsh /enc ***', 'pwsh –enc ###',
   ];
   for (const cmd of BAD) {
-    test(`${name} denies an unreadable -enc payload (229): ${cmd}`, () => {
+    test(`${name} denies an unreadable -enc payload: ${cmd}`, () => {
       for (const v of verdicts(name, cmd)) assert.equal(v.v, 'deny', cmd);
     });
   }
-  test(`${name} passes an odd-length base64 -EncodedCommand AAAA (229)`, () => {
+  test(`${name} passes an odd-length base64 -EncodedCommand AAAA`, () => {
     for (const v of verdicts(name, 'pwsh -EncodedCommand AAAA')) assert.equal(v.v, 'allow');
   });
-  test(`${name} passes a pwsh call without an encoded flag (229)`, () => {
+  test(`${name} passes a pwsh call without an encoded flag`, () => {
     for (const cmd of ['pwsh -NoProfile -File x.ps1', 'pwsh -ExecutionPolicy Bypass -File x.ps1']) {
       for (const v of verdicts(name, cmd)) assert.equal(v.v, 'allow', cmd);
     }
   });
+}
+
+// A spawn verb (iex, Invoke-Expression, Start-Process, saps, start, icm) with pwsh and an encoded flag denies in any order,
+// in judge and judgeRecord, on both shell tools. A pwsh call without an encoded flag, or an encoded flag with no spawn verb, still follows the payload.
+const SPAWN_B64 = b64(NEST_ANSWER);
+const SPAWN_DENY = {
+  'iex with a quoted pwsh -enc': `iex "pwsh -enc ${SPAWN_B64}"`,
+  'Invoke-Expression with powershell -EncodedCommand': `Invoke-Expression "powershell -EncodedCommand ${SPAWN_B64}"`,
+  'Start-Process -ArgumentList with -enc': `Start-Process pwsh -ArgumentList '-enc','${SPAWN_B64}'`,
+  'saps -ArgumentList with -EncodedCommand': `saps powershell -ArgumentList '-EncodedCommand','${SPAWN_B64}'`,
+  'Start-Process -FilePath with -e prefix': `Start-Process -FilePath pwsh -ArgumentList "-e ${SPAWN_B64}"`,
+  'spawn verb after the flag': `pwsh -enc ${SPAWN_B64} ; iex x`,
+  'iex over a harmless encoded payload': `iex "pwsh -enc ${b64('Write-Output 1')}"`,
+  'icm with pwsh -enc': `icm { pwsh -enc ${SPAWN_B64} }`,
+};
+for (const name of ['Bash', 'PowerShell']) {
+  for (const [label, cmd] of Object.entries(SPAWN_DENY)) {
+    test(`${name} denies a spawn verb around pwsh -enc: ${label}`, () => {
+      for (const v of verdicts(name, cmd)) assert.equal(v.v, 'deny', cmd);
+    });
+  }
+  test(`${name} still passes a plain pwsh -enc around a harmless payload and a spawn verb without pwsh`, () => {
+    for (const cmd of [`pwsh -enc ${b64('Write-Output 1')}`, 'iex "Write-Output 1"', "Start-Process notepad -ArgumentList 'a.txt'", 'echo hi']) {
+      for (const v of verdicts(name, cmd)) assert.equal(v.v, 'allow', cmd);
+    }
+  });
+}
+
+// Call operators in front of pwsh: `&` and `.` are not on the spawn list, so the spawn rule does not fire for them.
+// The answer payload is still decoded and denied; the over-deny for a harmless payload is the expected-deny probe below.
+for (const name of ['Bash', 'PowerShell']) {
+  for (const op of ['&', '.']) {
+    test(`${name} denies a call operator '${op}' before pwsh -enc around a relay answer call`, () => {
+      for (const v of verdicts(name, `${op} pwsh -enc ${SPAWN_B64}`)) assert.equal(v.v, 'deny', op);
+    });
+  }
 }
