@@ -935,7 +935,19 @@ function cmdCleanup(args, env) {
     if (r.stop) stopped = true;
   }
   ctx.git(['worktree', 'prune']);
+  dropEmptySlugDir(layoutOf(ctx.realRoot, slug, 'x'));
   return { code: stopped ? 2 : 0, lines };
+}
+
+// Removes the project folder when cleanup left it empty. Non-recursive, so a folder with content (or the run
+// worktree, which has a .git entry) stays; a missing or non-empty folder is not an error.
+function dropEmptySlugDir(layout) {
+  if (!segmentsOk(layout)) return;
+  try {
+    fs.rmdirSync(layout.slugDir);
+  } catch (e) {
+    if (!['ENOTEMPTY', 'ENOENT', 'EEXIST', 'EBUSY', 'EPERM', 'EACCES'].includes(e && e.code)) throw e;
+  }
 }
 
 // ---------------------------------------------------------------- reconcile
