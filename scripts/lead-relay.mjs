@@ -10,14 +10,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { main as handover, workDir, openRegular, readSmall, lstatOrNull, iso } from './lead-handover.mjs';
-import { runSlugs, show } from './run-state.mjs';
+import { runSlugs, show, MAX_FORMS } from './run-state.mjs';
 import { isRunSlug, exactWorkPath } from '../mods/lib/work-folder.mjs';
 
 const FORMS = 'forms.jsonl';
 const MAX_ARG = 4096;
 const MAX_STDIN = 64 * 1024;
 const MAX_INPUT = 64 * 1024;
-const MAX_FORMS_FILE = 1024 * 1024;
 const MAX_OTHER = 2000;
 const MAX_TEXT = 500;
 const MAX_RUNS = 200;
@@ -48,7 +47,7 @@ function formsPath(root, slug) {
 function loadRows(file) {
   const st = lstatOrNull(file);
   if (!st) return [];
-  const text = readSmall(file, MAX_FORMS_FILE);
+  const text = readSmall(file, MAX_FORMS);
   if (text === null || !text.endsWith('\n')) throw new Error('forms record unreadable');
   const rows = [];
   for (const line of text.slice(0, -1).split('\n')) {
@@ -64,7 +63,9 @@ const openForms = (rows) => rows.filter((r) => r.ev === 'open' && !rows.some((a)
 
 function appendRow(file, row) {
   const line = `${JSON.stringify(row)}\n`;
-  if (!lstatOrNull(file)) {
+  const cur = lstatOrNull(file);
+  if ((cur ? cur.size : 0) + Buffer.byteLength(line) > MAX_FORMS) throw new Error('forms record full');
+  if (!cur) {
     const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
     try { fs.writeSync(fd, line); } finally { fs.closeSync(fd); }
     return;
