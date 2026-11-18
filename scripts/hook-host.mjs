@@ -137,8 +137,8 @@ async function main() {
         const envHit = [...text.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
         if (envHit) return finish(preDeny('dotenv.M-SEC1', '.env files are not read or written'));
         if (/lead-relay/i.test(text) && /\banswer\b/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
-        // An encoded PowerShell program hides its words, so any encoded-command flag is denied here.
-        if (/pwsh|powershell/i.test(text) && /(?:^|[\s"'\\;|&(])[-\/]e(?:c|n[a-z]*)?(?::|[\s"'\\]|$)/i.test(text)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
+        // An encoded PowerShell program hides its words, so any prefix of -EncodedCommand after any dash-like lead (-, --, /, Unicode dash) is denied here (fail closed).
+        if (/pwsh|powershell/i.test(text) && /[-\/\p{Pd}−]+(?:ec|e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?)?)(?![\p{L}\p{N}])/iu.test(text)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
       }
       return finish(null);
     }
