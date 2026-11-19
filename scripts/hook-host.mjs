@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/mod-hook.md v1.2
+// contract: docs/contracts/mod-hook.md v1.3
 // The hook engine: one process per hook call. Reads one hook payload on stdin, checks the pins, normalizes the
 // event, runs the rule table in one worker and prints one verdict. This file reads nothing from hooks/lib until
 // the pins match, so a changed engine file is never loaded.
@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
-const SELF_EXIT_MS = 3800;
+const SELF_EXIT_MS = 8500; // under the 10 s hook timeout; a CPU-loaded start must not deny a spawn at 3.8 s
 const START_EXIT_MS = 9500;
 const MAX_TOTAL_FIXTURES = 400;
 const MAX_FIXTURE_DETAILS = 5;
@@ -145,12 +145,12 @@ async function main() {
       // Input nested past the limit cannot be read in full, so it is denied (fail closed).
       if (name === 'PreToolUse' && decoded.tooDeep) return finish(preDeny('self-protect.M-SEC1', 'input is nested too deep to read'));
       const scan = `${text}\n${decoded.out.join('\n')}`;
-      if (name === 'PreToolUse' && /(?:forms|run-state|guard)\.jsonl/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
+      if (name === 'PreToolUse' && /(?:(?:forms|run-state|guard)\.jsonl|lead-result\.txt)/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'run records are written by aico scripts only'));
       // The same holds for the .env read check and the answer shell block: text only, no pinned module.
       if (name === 'PreToolUse') {
         const envHit = [...scan.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
         if (envHit) return finish(preDeny('dotenv.M-SEC1', '.env files are not read or written'));
-        if (/lead-relay/i.test(scan) && /\banswer\b/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
+        if (/lead-relay/i.test(scan) && /\b(?:answer|leadstart|leadstop|leadreset)\b/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
         // An encoded PowerShell program hides its words, so any prefix of -EncodedCommand after any dash-like lead (-, --, /, Unicode dash) is denied here (fail closed).
         if (/pwsh|powershell/i.test(scan) && /[-\/\p{Pd}−]+(?:ec|e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?)?)(?![\p{L}\p{N}])/iu.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
       }
@@ -184,6 +184,16 @@ async function main() {
   const snapCtx = { mcsHome, root };
   const runner = runnerLib.createRunner(ROOT);
   const done = (obj) => { runner.close(); finish(obj); };
+  // Lead result record (lead-relay v1.1): the relay script is loaded only after its import graph matches the pins; any failure records nothing.
+  // Only a Lead's own start/stop, or main's spawn of a Lead, loads the script (no load for another Role).
+  const leadResult = async (fn) => {
+    if (fn === 'leadReset' ? !(event.session === 'lead' && !event.agentKey && event.tool?.leadTarget === true) : peek?.agent_type !== 'aico:project-manager') return;
+    try {
+      const deps = await import(pathToFileURL(path.join(ROOT, 'hooks', 'lib', 'dep-pins.mjs')).href);
+      const relay = await deps.importPinned(ROOT, 'scripts/lead-relay.mjs');
+      relay[fn](text, root, snap.denyDir(mcsHome, root));
+    } catch { /* nothing recorded */ }
+  };
 
   // Rule table and manifests.
   let table = null;
@@ -249,6 +259,7 @@ async function main() {
       snap.writeLead(snapCtx, full);
       if (event.agentKey) snap.writeStepOnce(snapCtx, event.agentKey, full);
     }
+    await leadResult('leadStart');
   }
 
   // Run records are shielded for every session, before the off branch, with no snapshot or rule table.
@@ -327,6 +338,9 @@ async function main() {
     }
     if (evName === 'SubagentStop' && !stopActive && denied.rule === 'cap.M1' && denied.kind === 'deny') eff.recordStopBlock(event);
   }
+  // The Lead's final STATUS block is kept only when this stop is not blocked (lead-relay v1.1).
+  if (evName === 'SubagentStop' && (!denied || stopActive)) await leadResult('leadStop');
+  if (evName === 'PreToolUse' && !denied) await leadResult('leadReset');
   const msg = sysOf([...notes, extra.systemMessage, toast]);
   const rest = { ...extra };
   delete rest.systemMessage;

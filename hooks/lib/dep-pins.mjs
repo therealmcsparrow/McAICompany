@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DEP_HASHES } from './dep-hashes.mjs';
 
-export const DEP_ENTRIES = ['scripts/lead-handover.mjs', 'scripts/run-state.mjs'];
+export const DEP_ENTRIES = ['scripts/lead-handover.mjs', 'scripts/run-state.mjs', 'scripts/lead-relay.mjs'];
 const MAX_FILES = 200;
 const MAX_BYTES = 1024 * 1024;
 const FROM_RE = /(?:^|\n)\s*(?:import|export)\b[^'"`;]*?\bfrom\s*['"](\.[^'"\n]*)['"]/g;
