@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-relay.md v1
+// contract: docs/contracts/lead-relay.md v1.1
 // uses: docs/contracts/lead-handoff.md v3.0 docs/contracts/run-state.md v3.1
 // Lead relay: CLI words `open`, `again`, `read` for the Lead, plus the hook adapters `answer` (PostToolUse, records the CEO's pick
 // from tool_response.answers) and `preset` (PreToolUse, denies a pre-filled form). Every stdin field, argument and record line is
@@ -288,22 +288,86 @@ export function answer(text, root = process.cwd()) {
   try { appendRow(hits[0].file, { v: 1, at: iso(Date.now()), ev: 'answer', id: hits[0].form.id, src: 'hook', answers }); } catch { /* nothing recorded */ }
 }
 
-// SubagentStop adapter: keeps the final STATUS block of a Lead in the run folder, so main can poll `result` when the
-// platform backgrounds the spawn and drops the task-notification. The run comes from the block's own `run:` line.
-export function record(text, root = process.cwd()) {
+// ---- Lead result (written by the hook host, read by `result`) ----------------------------------------------------------
+// No CLI word writes lead-result.txt: hook-host calls leadStart (SubagentStart) and leadStop (SubagentStop, only when it does
+// not block the stop). The file is shielded like forms.jsonl, so a Role cannot write it. A Lead start deletes every recorded
+// result of the project, so a result on disk comes from a Lead that started after the last one was acted on.
+
+const BAD_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}᠎⁥\u{E0000}-\u{E007F}]/gu;
+const STATUS_RE = /^STATUS: (needs-ceo|handover|done|blocked)$/;
+const LIVE = 'lead-live.json';
+const LIVE_TTL_MS = 3 * 3600 * 1000;
+const MAX_LIVE = 16;
+
+const plain = (s) => s.replace(/\t/g, ' ').replace(BAD_TEXT, '');
+
+// Bytes, not characters: cut at a UTF-8 boundary.
+function capBytes(text, max) {
+  const buf = Buffer.from(text, 'utf8');
+  if (buf.length <= max) return text;
+  return new TextDecoder().decode(buf.subarray(0, max)).replace(/�+$/, '');
+}
+
+// Create-new write on a random name (O_EXCL never follows a planted link), then rename over the target entry.
+function writeFresh(dir, name, text) {
+  const tmp = path.join(dir, `${name}.${crypto.randomBytes(8).toString('hex')}.tmp`);
+  const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+  try { fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
+  try { fs.renameSync(tmp, path.join(dir, name)); } catch (e) { try { fs.unlinkSync(tmp); } catch { /* gone */ } throw e; }
+}
+
+// Live Lead agents of the project: { <agent id>: <start ms> }, entries past the TTL dropped.
+function readLive(stateDir, now) {
+  const text = readSmall(path.join(stateDir, LIVE), 4096);
+  let o = {};
+  try { o = text === null ? {} : JSON.parse(text); } catch { o = {}; }
+  const out = {};
+  if (isObj(o)) for (const [k, v] of Object.entries(o)) if (typeof v === 'number' && now - v < LIVE_TTL_MS && Object.keys(out).length < MAX_LIVE) out[k] = v;
+  return out;
+}
+
+function leadPayload(text, event) {
   let p;
-  try { p = JSON.parse(text); } catch { return; }
-  if (!isObj(p) || p.hook_event_name !== 'SubagentStop' || p.agent_type !== LEAD_TYPE || typeof p.last_assistant_message !== 'string') return;
-  const lines = p.last_assistant_message.trim().split(/\r?\n/).slice(0, MAX_RESULT_LINES);
-  if (!/^STATUS: (needs-ceo|handover|done|blocked)\s*$/.test(lines[0])) return;
-  const m = lines.map((l) => /^run: \.company\/work\/(\S+)\s*$/.exec(l)).find(Boolean);
-  if (!m || !isRunSlug(m[1])) return;
+  try { p = JSON.parse(text); } catch { return null; }
+  if (!isObj(p) || p.hook_event_name !== event || p.agent_type !== LEAD_TYPE) return null;
+  return typeof p.agent_id === 'string' && p.agent_id.length > 0 && p.agent_id.length <= 512 ? p : null;
+}
+
+// SubagentStart of a Lead: it joins the live set, and every recorded result of the project is dropped (older than this Lead).
+export function leadStart(text, root, stateDir, now = Date.now()) {
+  const p = leadPayload(text, 'SubagentStart');
+  if (!p) return;
   try {
+    const live = readLive(stateDir, now);
+    live[p.agent_id] = now;
+    fs.mkdirSync(stateDir, { recursive: true });
+    writeFresh(stateDir, LIVE, JSON.stringify(live));
+  } catch { /* without a live set a helper Lead's block counts as final */ }
+  try {
+    for (const slug of runSlugs(root, { max: MAX_RUNS }).slugs) {
+      const dir = workDir(root, slug);
+      if (dir && lstatOrNull(path.join(dir, RESULT))) fs.unlinkSync(path.join(dir, RESULT));
+    }
+  } catch { /* nothing dropped */ }
+}
+
+// SubagentStop of a Lead that the host lets end (no cap.M1 block): keeps its STATUS block, unless another Lead is still live
+// (a helper Lead's block goes to the Lead that spawned it, not to main). The run comes from the block's own `run:` line.
+export function leadStop(text, root, stateDir, now = Date.now()) {
+  const p = leadPayload(text, 'SubagentStop');
+  if (!p) return;
+  try {
+    const live = readLive(stateDir, now);
+    delete live[p.agent_id];
+    try { writeFresh(stateDir, LIVE, JSON.stringify(live)); } catch { /* the next start rewrites it */ }
+    if (Object.keys(live).length > 0 || typeof p.last_assistant_message !== 'string') return;
+    const lines = p.last_assistant_message.slice(0, 4 * MAX_RESULT_BYTES).trim().split(/\r?\n/).slice(0, MAX_RESULT_LINES).map(plain);
+    if (!STATUS_RE.test(lines[0])) return;
+    const m = lines.map((l) => /^run: \.company\/work\/(\S+)\s*$/.exec(l)).find(Boolean);
+    if (!m || !isRunSlug(m[1])) return;
     const dir = workDir(root, m[1]);
     if (!dir || !lstatOrNull(path.join(dir, 'run-state.jsonl'))?.isFile()) return;
-    const tmp = path.join(dir, `${RESULT}.tmp`);
-    fs.writeFileSync(tmp, `${lines.join('\n').slice(0, MAX_RESULT_BYTES)}\n`);
-    fs.renameSync(tmp, path.join(dir, RESULT));
+    writeFresh(dir, RESULT, `${capBytes(lines.join('\n'), MAX_RESULT_BYTES)}\n`);
   } catch { /* nothing recorded */ }
 }
 
@@ -312,7 +376,7 @@ function cmdResult(root, [slug, ...more]) {
   if (more.length) refuse('usage');
   let files;
   if (slug === undefined) {
-    files = runSlugs(root, { max: MAX_RUNS }).slugs.map((s) => path.join(workDir(root, s) ?? '', RESULT));
+    files = runSlugs(root, { max: MAX_RUNS }).slugs.map((s) => workDir(root, s)).filter(Boolean).map((d) => path.join(d, RESULT));
   } else {
     if (!isRunSlug(slug)) refuse('bad slug');
     const dir = workDir(root, slug);
@@ -320,8 +384,11 @@ function cmdResult(root, [slug, ...more]) {
     files = [path.join(dir, RESULT)];
   }
   const hits = files.map((f) => ({ f, st: lstatOrNull(f) })).filter((h) => h.st?.isFile()).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
-  const text = hits.length ? readSmall(hits[0].f, MAX_RESULT_BYTES + 16) : null;
-  return text === null ? 'result: none\n' : `recorded: ${iso(hits[0].st.mtimeMs)}\n${text}`;
+  const raw = hits.length ? readSmall(hits[0].f, MAX_RESULT_BYTES + 16) : null;
+  // Read side: the same text filter and line 1 check as the write side, whatever is on disk.
+  const lines = raw === null ? [] : raw.split(/\r?\n/).slice(0, MAX_RESULT_LINES).map(plain);
+  if (!STATUS_RE.test(lines[0] ?? '')) return 'result: none\n';
+  return `recorded: ${iso(hits[0].st.mtimeMs)}\n${lines.join('\n').trimEnd()}\n`;
 }
 
 export function preset(text) {
@@ -356,11 +423,6 @@ async function hook(kind) {
     process.exit(0);
   }, SELF_EXIT_MS).unref();
   const raw = await readStdin();
-  if (kind === 'record') {
-    if (raw !== null) record(raw);
-    process.exitCode = 0;
-    return;
-  }
   if (kind === 'answer') {
     if (raw !== null) answer(raw);
     process.exitCode = 0;
@@ -381,7 +443,7 @@ export function main(argv, root = process.cwd()) {
     if (cmd === 'again') return { code: 0, out: cmdAgain(root, rest) };
     if (cmd === 'read') return { code: 0, out: cmdRead(root, rest) };
     if (cmd === 'result') return { code: 0, out: cmdResult(root, rest) };
-    return refuse('usage: open <slug> <kind> <json-file> | again <slug> <id> | read <slug> [<id>] --json | result <slug>');
+    return refuse('usage: open <slug> <kind> <json-file> | again <slug> <id> | read <slug> [<id>] --json | result [<slug>]');
   } catch (e) {
     if (e instanceof Refusal) return { code: 1, out: `refused: ${e.message}\n` };
     return { code: 1, out: 'error: failed\n' };
@@ -390,7 +452,7 @@ export function main(argv, root = process.cwd()) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [cmd] = process.argv.slice(2);
-  if ((cmd === 'answer' || cmd === 'preset' || cmd === 'record') && process.argv.length === 3) {
+  if ((cmd === 'answer' || cmd === 'preset') && process.argv.length === 3) {
     hook(cmd).catch(() => { process.exitCode = 0; });
   } else {
     const r = main(process.argv.slice(2));
