@@ -154,8 +154,15 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
   return real;
 }
 
-// An open form with the same questions in another unended run would make `answer` match twice and drop the answer.
-function refuseSharedForm(root, slug, questions) {
+const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+// An ended run takes an answer only for a form opened at or after its end (same second counts); a live run takes any open form.
+const eligible = (form, view) => view.state !== 'ended' || (typeof form.at === 'string' && AT_RE.test(form.at) && typeof view.ended === 'string' && form.at >= view.ended);
+// Total order of ended matches: newest `at`, then slug byte order.
+const ranksAbove = (a, b) => a.at > b.at || (a.at === b.at && a.slug > b.slug);
+
+// An open form with the same questions in another run that would take the answer instead: any live run; an ended run only when
+// both runs ended, its form is eligible and it ranks above this form.
+function refuseSharedForm(root, slug, questions, at) {
   // Same comparison `answer` uses (sameQuestions): a Gate option's `result` is not compared.
   const want = questions.map((q) => ({ question: q.q, header: q.header, multiSelect: q.multi, options: q.options.map((o) => ({ label: o.label, description: o.description })) }));
   let mine = null;
@@ -163,12 +170,16 @@ function refuseSharedForm(root, slug, questions) {
   for (const other of runSlugs(root, { max: MAX_RUNS }).slugs) {
     if (other === slug) continue;
     try {
-      const st = show(root, other).state;
-      // An ended run takes answers only when no live run matches, so two ended runs with the same form clash only with each other.
-      if (st !== 'running' && st !== 'stale' && !(st === 'ended' && mine === 'ended')) continue;
+      const view = show(root, other);
+      const st = view.state;
+      const live = st === 'running' || st === 'stale';
+      if (!live && !(st === 'ended' && mine === 'ended')) continue;
       const dir = workDir(root, other);
       if (!dir) continue;
-      for (const r of openForms(loadRows(path.join(dir, FORMS)))) if (sameQuestions(r.questions, want)) refuse(`same questions open in run ${other}`);
+      for (const r of openForms(loadRows(path.join(dir, FORMS)))) {
+        if (!sameQuestions(r.questions, want)) continue;
+        if (live || (eligible(r, view) && ranksAbove({ at: r.at, slug: other }, { at, slug }))) refuse(`same questions open in run ${other}`);
+      }
     } catch (e) { if (e instanceof Refusal) throw e; /* a broken run is skipped */ }
   }
 }
@@ -185,12 +196,13 @@ function cmdOpen(root, [slug, kind, file, ...more]) {
   const rows = loadRows(f);
   const open = openForms(rows);
   if (open.length) refuse(`open form ${open[0].id}`);
-  refuseSharedForm(root, slug, questions);
+  const at = iso(Date.now());
+  refuseSharedForm(root, slug, questions, at);
   const used = new Set(rows.map((r) => r.id));
   let n = 1;
   while (n < 100 && used.has(`f${String(n).padStart(2, '0')}`)) n++;
   if (n > 99) refuse('no free form id');
-  const row = { v: 1, at: iso(Date.now()), ev: 'open', id: `f${String(n).padStart(2, '0')}`, kind, questions };
+  const row = { v: 1, at, ev: 'open', id: `f${String(n).padStart(2, '0')}`, kind, questions };
   appendRow(f, row);
   const w = handover(['write', slug], root);
   const m = /^wrote (.+)$/m.exec(w.out);
@@ -204,7 +216,9 @@ function cmdAgain(root, [slug, id, ...more]) {
   const rows = loadRows(formsPath(root, slug));
   const row = openForms(rows).find((r) => r.id === id);
   if (!row) refuse('no open form with that id');
-  refuseSharedForm(root, slug, row.questions);
+  const view = show(root, slug);
+  if (view.state === 'ended' && !eligible(row, view)) refuse('form opened before the run ended');
+  refuseSharedForm(root, slug, row.questions, row.at);
   return statusBlock(slug, lastHandoff(root, slug), row);
 }
 
@@ -264,24 +278,34 @@ export function answer(text, root = process.cwd()) {
   if (!isObj(p.tool_input) || !isObj(p.tool_response)) return;
   const live = [];
   const ended = [];
+  let liveAmbiguous = false;
+  let endedAmbiguous = false;
   for (const slug of runSlugs(root, { max: MAX_RUNS }).slugs) {
     try {
-      const st = show(root, slug).state;
+      const view = show(root, slug);
+      const st = view.state;
       if (st !== 'running' && st !== 'stale' && st !== 'ended') continue; // a form waits past the 12 h stale mark; run-less folders are skipped
-      const hits = st === 'ended' ? ended : live;
-      const file = path.join(workDir(root, slug) ?? '', FORMS);
       if (!workDir(root, slug)) continue;
+      const file = path.join(workDir(root, slug), FORMS);
       const open = openForms(loadRows(file));
-      if (open.length > 1) { hits.push(null, null); continue; }
-      if (open.length === 1 && sameQuestions(open[0].questions, p.tool_input.questions)) hits.push({ file, form: open[0] });
+      if (open.length > 1) { if (st === 'ended') endedAmbiguous = true; else liveAmbiguous = true; continue; }
+      if (open.length === 1 && sameQuestions(open[0].questions, p.tool_input.questions)) (st === 'ended' ? ended : live).push({ file, form: open[0], slug, view });
     } catch { /* a broken run is skipped */ }
   }
-  // Live runs win; an ended run (a form opened after its end outcome) takes the answer only when no live run matched.
-  const hits = live.length ? live : ended;
-  if (hits.length !== 1 || hits[0] === null) return;
-  const answers = mapAnswers(hits[0].form.questions, p.tool_response.answers);
+  // Live runs win and an ambiguous live run stops the search. Otherwise only an ended run's form opened at or after its end is
+  // eligible, and the newest (`at`, then slug) takes the answer.
+  let hit = null;
+  if (liveAmbiguous || live.length) {
+    if (live.length === 1 && !liveAmbiguous) hit = live[0];
+  } else if (!endedAmbiguous) {
+    for (const h of ended.filter((e) => eligible(e.form, e.view))) {
+      if (!hit || ranksAbove({ at: h.form.at, slug: h.slug }, { at: hit.form.at, slug: hit.slug })) hit = h;
+    }
+  }
+  if (!hit) return;
+  const answers = mapAnswers(hit.form.questions, p.tool_response.answers);
   if (!answers) return;
-  try { appendRow(hits[0].file, { v: 1, at: iso(Date.now()), ev: 'answer', id: hits[0].form.id, src: 'hook', answers }); } catch { /* nothing recorded */ }
+  try { appendRow(hit.file, { v: 1, at: iso(Date.now()), ev: 'answer', id: hit.form.id, src: 'hook', answers }); } catch { /* nothing recorded */ }
 }
 
 export function preset(text) {
