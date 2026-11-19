@@ -7,6 +7,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { main, contextHandover, newSessionCommand, watch, measure, findRun } from './lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -64,12 +65,12 @@ function transcript(fx) {
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_GUARDS: 'off' } });
 
-describe('the Contract and the header (lead-handoff v3.0)', () => {
-  test('the Contract header is v3.0 and the script line 2 declares it', () => {
+describe('the Contract and the header (lead-handoff v3.1)', () => {
+  test('the Contract header is v3.1 and the script line 2 declares it', () => {
     const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v3\.0$/m);
+    assert.match(doc, /^# Contract: lead-handoff v3\.1$/m);
     const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.0');
+    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.1');
   });
 
   test('line 3 cites run-state v3.0', () => {
@@ -369,5 +370,98 @@ describe('read accepts the short slug forms of an existing v3 run', () => {
     const r = main(['read', '01-feature'], fx.root, {});
     assert.equal(r.code, 0, r.out);
     assert.equal(r.out, full.out);
+  });
+});
+
+// lead-handoff v3.1: ambiguity, writers, legacy folders, the CLI root in a linked worktree.
+function addRun(fx, id, sub, { records = true } = {}) {
+  const dir = path.join(fx.work, id, sub);
+  fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(path.join(fx.work, id, '00-project.md'))) fs.writeFileSync(path.join(fx.work, id, '00-project.md'), 'x\n');
+  if (records) fs.copyFileSync(path.join(fx.dir, 'run-state.jsonl'), path.join(dir, 'run-state.jsonl'));
+  else fs.writeFileSync(path.join(dir, 'form.json'), '{}\n');
+  return dir;
+}
+
+describe('lead-handoff v3.1 short slug resolution', () => {
+  test('a bare ID with two runs is ambiguous and lists both, exit 3', () => {
+    const fx = fixture();
+    addRun(fx, ID, '02-fix');
+    const r = main(['read', ID], fx.root, {});
+    assert.equal(r.code, 3);
+    assert.equal(r.out, `refused: ambiguous slug: ${ID}/02-fix ${SLUG}\n`);
+  });
+
+  test('a flat name in two projects is ambiguous', () => {
+    const fx = fixture();
+    const other = 'P20261108.000002';
+    addRun(fx, other, '01-feature');
+    const r = main(['read', '01-feature'], fx.root, {});
+    assert.equal(r.code, 3);
+    assert.equal(r.out, `refused: ambiguous slug: ${SLUG} ${other}/01-feature\n`);
+  });
+
+  test('a bare ID or flat name whose folder has no records is no run', () => {
+    const fx = fixture({ slug: `${ID}/01-feature` });
+    fs.rmSync(path.join(fx.dir, 'run-state.jsonl'));
+    fs.writeFileSync(path.join(fx.dir, 'form.json'), '{}\n');
+    assert.equal(main(['read', ID], fx.root, {}).out, 'refused: no run\n');
+    assert.equal(main(['read', '01-feature'], fx.root, {}).out, 'refused: no run\n');
+    assert.equal(main(['read', '09-lead'], fx.root, {}).out, 'refused: no run\n');
+  });
+
+  test('a legacy flat folder of that name keeps the v3.0 path', () => {
+    const fx = fixture();
+    const legacy = path.join(fx.work, '01-feature');
+    fs.mkdirSync(legacy);
+    fs.copyFileSync(path.join(fx.dir, 'run-state.jsonl'), path.join(legacy, 'run-state.jsonl'));
+    const r = main(['read', '01-feature'], fx.root, {});
+    assert.equal(r.code, 0, r.out);
+  });
+
+  test('writers stay strict: bare ID is bad slug, flat name is no run', () => {
+    const fx = fixture();
+    for (const argv of [['write'], ['begin'], ['base']]) {
+      const extra = argv[0] === 'begin' ? ['feature'] : argv[0] === 'base' ? ['a'.repeat(40)] : [];
+      assert.equal(main([...argv, ID, ...extra], fx.root, {}).out, 'refused: bad slug\n', argv[0]);
+      assert.equal(main([...argv, '01-feature', ...extra], fx.root, {}).out, 'refused: no run\n', argv[0]);
+    }
+    assert.deepEqual(tree(fx.dir), ['run-state.jsonl']);
+  });
+
+  test('ctx with a bare ID equals the full slug output', () => {
+    const fx = fixture();
+    const full = main(['ctx', SLUG, '--json'], fx.root, {});
+    assert.equal(full.code, 0, full.out);
+    assert.equal(main(['ctx', ID, '--json'], fx.root, {}).out, full.out);
+  });
+
+  test('more than 5 candidates list 5 names and a rest count', () => {
+    const fx = fixture();
+    for (const n of ['02', '03', '04', '05', '06', '07', '08']) addRun(fx, ID, `${n}-fix`);
+    const out = main(['read', ID], fx.root, {}).out;
+    const m = /^refused: ambiguous slug: (.+?)(?: \+(\d+))?\n$/.exec(out);
+    assert.ok(m, out);
+    assert.equal(m[1].split(' ').length, 5);
+    assert.equal(m[2], '3');
+    assert.ok(m[1].startsWith(`${ID}/08-fix `), out);
+  });
+});
+
+describe('lead-handoff v3.1 CLI root in a linked worktree', () => {
+  test('read <full slug> from a linked worktree cwd reads the main tree run', () => {
+    const fx = fixture();
+    const main0 = fx.root;
+    fs.mkdirSync(path.join(main0, '.git', 'worktrees', 'wt'), { recursive: true });
+    const wt = path.join(fx.base, 'wt');
+    fs.mkdirSync(path.join(wt, '.company', 'work', ID, '01-feature'), { recursive: true });
+    fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(main0, '.git', 'worktrees', 'wt')}\n`);
+    fs.writeFileSync(path.join(main0, '.git', 'worktrees', 'wt', 'gitdir'), `${path.join(wt, '.git')}\n`);
+    fs.writeFileSync(path.join(main0, '.git', 'worktrees', 'wt', 'commondir'), '../..\n');
+    const run = (cwd, slug) => spawnSync(process.execPath, [SCRIPT, 'read', slug], { cwd, encoding: 'utf8', env: { ...process.env, AICO_GUARDS: 'off' } });
+    const r = run(wt, SLUG);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(r.stdout, main(['read', SLUG], fx.root, {}).out);
+    assert.equal(run(wt, ID).stdout, r.stdout);
   });
 });
