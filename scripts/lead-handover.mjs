@@ -749,11 +749,13 @@ function resolveSlug(root, s) {
   return refuse('ambiguous slug: ' + found.slice(0, 5).join(' ') + (rest > 0 ? ' +' + rest : ''));
 }
 
-// An entry named `name` directly in .company/work, in any letter case.
+// An entry named `name` directly in .company/work. exactWorkPath decides the letter case; a wrong-case entry
+// counts as present so the name stays unresolved and checkSlug refuses it.
 function legacyEntry(root, name) {
-  const work = path.join(root, '.company', 'work');
-  if (lstatOrNull(path.join(work, name)) !== null) return true;
-  try { return fs.readdirSync(work).some((n) => n.toLowerCase() === name.toLowerCase()); } catch { return false; }
+  try { return exactWorkPath({ fs, path }, root, [name]) === 'exact'; } catch (e) {
+    if (e instanceof WorkFolderRefusal) return true;
+    throw e;
+  }
 }
 
 // CLI root: the main tree of the linked worktree holding cwd when it has a real .company/work folder, else cwd.
