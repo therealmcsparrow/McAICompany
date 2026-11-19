@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v3.0
+// contract: docs/contracts/lead-handoff.md v3.1
 // uses: docs/contracts/run-state.md v3.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a Stop hook that keeps main's context
 // reading, a SubagentStop hook that keeps each Lead agent's peak, a SessionStart hook that resets the current reading for a
