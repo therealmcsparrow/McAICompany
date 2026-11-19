@@ -410,13 +410,29 @@ describe('lead-handoff v3.1 short slug resolution', () => {
     assert.equal(main(['read', '09-lead'], fx.root, {}).out, 'refused: no run\n');
   });
 
-  test('a legacy flat folder of that name keeps the v3.0 path', () => {
-    const fx = fixture();
-    const legacy = path.join(fx.work, '01-feature');
-    fs.mkdirSync(legacy);
-    fs.copyFileSync(path.join(fx.dir, 'run-state.jsonl'), path.join(legacy, 'run-state.jsonl'));
+  test('a legacy flat folder of that name is the only match and keeps the v3.0 path', () => {
+    const fx = fixture({ slug: '01-feature' });
     const r = main(['read', '01-feature'], fx.root, {});
     assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /^handovers 0\n/);
+  });
+
+  test('a legacy folder in another letter case is refused, not resolved to a run', () => {
+    const fx = fixture();
+    fs.mkdirSync(path.join(fx.work, '01-Feature'));
+    const r = main(['read', '01-feature'], fx.root, {});
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /wrong letter case/);
+  });
+
+  test('a 3-digit flat name at the longest legal run slug (80 characters) resolves', () => {
+    const fx = fixture();
+    const sub = '100-' + 'a'.repeat(59);
+    assert.equal(`${ID}/${sub}`.length, 80);
+    addRun(fx, ID, sub);
+    const r = main(['read', sub], fx.root, {});
+    assert.equal(r.code, 0, r.out);
+    assert.equal(r.out, main(['read', `${ID}/${sub}`], fx.root, {}).out);
   });
 
   test('writers stay strict: bare ID is bad slug, flat name is no run', () => {
@@ -463,5 +479,42 @@ describe('lead-handoff v3.1 CLI root in a linked worktree', () => {
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.stdout, main(['read', SLUG], fx.root, {}).out);
     assert.equal(run(wt, ID).stdout, r.stdout);
+  });
+
+  // A linked worktree `wt` of `main0`; the worktree holds its own run folder.
+  function linked(fx) {
+    const main0 = fx.root;
+    fs.mkdirSync(path.join(main0, '.git', 'worktrees', 'wt'), { recursive: true });
+    const wt = path.join(fx.base, 'wt');
+    fs.mkdirSync(path.join(wt, '.company', 'work', ID, '01-feature'), { recursive: true });
+    fs.copyFileSync(path.join(fx.dir, 'run-state.jsonl'), path.join(wt, '.company', 'work', ID, '01-feature', 'run-state.jsonl'));
+    fs.writeFileSync(path.join(wt, '.company', 'work', ID, '00-project.md'), 'x\n');
+    fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(main0, '.git', 'worktrees', 'wt')}\n`);
+    fs.writeFileSync(path.join(main0, '.git', 'worktrees', 'wt', 'gitdir'), `${path.join(wt, '.git')}\n`);
+    fs.writeFileSync(path.join(main0, '.git', 'worktrees', 'wt', 'commondir'), '../..\n');
+    return wt;
+  }
+  const runIn = (cwd, slug) => spawnSync(process.execPath, [SCRIPT, 'read', slug], { cwd, encoding: 'utf8', env: { ...process.env, AICO_GUARDS: 'off' } });
+
+  test('a main tree without .company/work falls back to the worktree own folder', () => {
+    const fx = fixture();
+    const wt = linked(fx);
+    fs.rmSync(fx.work, { recursive: true, force: true });
+    const r = runIn(wt, SLUG);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /^handovers 0\n/);
+  });
+
+  test('a main .company/work that is a link falls back to the worktree cwd', () => {
+    const fx = fixture();
+    const wt = linked(fx);
+    const real = path.join(fx.base, 'elsewhere');
+    fs.renameSync(fx.work, real);
+    try { fs.symlinkSync(real, fx.work, 'junction'); } catch { return; } // links not creatable here
+    // The linked target still holds the run; reading through cwd must give the worktree's own folder.
+    fs.rmSync(path.join(wt, '.company', 'work', ID, '01-feature'), { recursive: true, force: true });
+    const r = runIn(wt, SLUG);
+    assert.equal(r.status, 3, r.stdout + r.stderr);
+    assert.match(r.stdout + r.stderr, /refused: no run/);
   });
 });

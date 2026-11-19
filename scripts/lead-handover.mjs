@@ -738,7 +738,7 @@ const FLAT_RUN = /^(0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 function resolveSlug(root, s) {
   let match;
   if (isProjectId(s)) match = (x) => parseRun(x)?.id === s;
-  else if (typeof s === 'string' && FLAT_RUN.test(s) && s.length - 3 <= 64 && !legacyEntry(root, s)) match = (x) => x.slice(x.indexOf('/') + 1) === s;
+  else if (typeof s === 'string' && FLAT_RUN.test(s) && !legacyEntry(root, s)) match = (x) => x.slice(x.indexOf('/') + 1) === s;
   else return s;
   let slugs;
   try { slugs = runSlugs(root, { max: MAX_SCAN }).slugs; } catch { slugs = []; }
