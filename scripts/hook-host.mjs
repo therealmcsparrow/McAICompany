@@ -150,7 +150,7 @@ async function main() {
       if (name === 'PreToolUse') {
         const envHit = [...scan.matchAll(/\.env(?:\.[\w.-]*)?(?![\w])/gi)].some((m) => !/^\.env\.(?:example|sample|template)$/i.test(m[0]));
         if (envHit) return finish(preDeny('dotenv.M-SEC1', '.env files are not read or written'));
-        if (/lead-relay/i.test(scan) && /\banswer\b/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
+        if (/lead-relay/i.test(scan) && /\b(?:answer|leadstart|leadstop|leadreset)\b/i.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'answers are recorded by the CEO form only'));
         // An encoded PowerShell program hides its words, so any prefix of -EncodedCommand after any dash-like lead (-, --, /, Unicode dash) is denied here (fail closed).
         if (/pwsh|powershell/i.test(scan) && /[-\/\p{Pd}−]+(?:ec|e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?)?)(?![\p{L}\p{N}])/iu.test(scan)) return finish(preDeny('self-protect.M-SEC1', 'encoded PowerShell commands are not run without the pinned guards'));
       }
@@ -185,7 +185,9 @@ async function main() {
   const runner = runnerLib.createRunner(ROOT);
   const done = (obj) => { runner.close(); finish(obj); };
   // Lead result record (lead-relay v1.1): the relay script is loaded only after its import graph matches the pins; any failure records nothing.
+  // Only a Lead's own start/stop, or main's spawn of a Lead, loads the script (no load for another Role).
   const leadResult = async (fn) => {
+    if (fn === 'leadReset' ? !(event.session === 'lead' && !event.agentKey && event.tool?.leadTarget === true) : peek?.agent_type !== 'aico:project-manager') return;
     try {
       const deps = await import(pathToFileURL(path.join(ROOT, 'hooks', 'lib', 'dep-pins.mjs')).href);
       const relay = await deps.importPinned(ROOT, 'scripts/lead-relay.mjs');
@@ -338,6 +340,7 @@ async function main() {
   }
   // The Lead's final STATUS block is kept only when this stop is not blocked (lead-relay v1.1).
   if (evName === 'SubagentStop' && (!denied || stopActive)) await leadResult('leadStop');
+  if (evName === 'PreToolUse' && !denied) await leadResult('leadReset');
   const msg = sysOf([...notes, extra.systemMessage, toast]);
   const rest = { ...extra };
   delete rest.systemMessage;

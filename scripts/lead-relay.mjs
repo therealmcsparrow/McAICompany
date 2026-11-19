@@ -293,7 +293,7 @@ export function answer(text, root = process.cwd()) {
 // not block the stop). The file is shielded like forms.jsonl, so a Role cannot write it. A Lead start deletes every recorded
 // result of the project, so a result on disk comes from a Lead that started after the last one was acted on.
 
-const BAD_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}᠎⁥\u{E0000}-\u{E007F}]/gu;
+const BAD_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u180E\u2065\u{E0000}-\u{E007F}]/gu;
 const STATUS_RE = /^STATUS: (needs-ceo|handover|done|blocked)$/;
 const LIVE = 'lead-live.json';
 const LIVE_TTL_MS = 3 * 3600 * 1000;
@@ -305,7 +305,7 @@ const plain = (s) => s.replace(/\t/g, ' ').replace(BAD_TEXT, '');
 function capBytes(text, max) {
   const buf = Buffer.from(text, 'utf8');
   if (buf.length <= max) return text;
-  return new TextDecoder().decode(buf.subarray(0, max)).replace(/�+$/, '');
+  return new TextDecoder().decode(buf.subarray(0, max)).replace(/\uFFFD+$/, '');
 }
 
 // Create-new write on a random name (O_EXCL never follows a planted link), then rename over the target entry.
@@ -345,10 +345,18 @@ export function leadStart(text, root, stateDir, now = Date.now()) {
   } catch { /* without a live set a helper Lead's block counts as final */ }
   try {
     for (const slug of runSlugs(root, { max: MAX_RUNS }).slugs) {
-      const dir = workDir(root, slug);
-      if (dir && lstatOrNull(path.join(dir, RESULT))) fs.unlinkSync(path.join(dir, RESULT));
+      try {
+        const dir = workDir(root, slug);
+        if (dir && lstatOrNull(path.join(dir, RESULT))) fs.unlinkSync(path.join(dir, RESULT));
+      } catch { /* this one stays; the others are still dropped */ }
     }
   } catch { /* nothing dropped */ }
+}
+
+// Main's PreToolUse spawn of a Lead (the host checks the target): one Lead runs at a time, so a live entry left by a Lead that
+// ended with no SubagentStop (interrupt, crash) is dropped, or it would mute every later result for the TTL.
+export function leadReset(_text, _root, stateDir) {
+  try { fs.rmSync(path.join(stateDir, LIVE), { force: true }); } catch { /* the TTL ends it */ }
 }
 
 // SubagentStop of a Lead that the host lets end (no cap.M1 block): keeps its STATUS block, unless another Lead is still live

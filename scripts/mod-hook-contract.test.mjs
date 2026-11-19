@@ -18,9 +18,9 @@ const section = (name) => {
   return rest.slice(0, to === -1 ? undefined : to).join('\n');
 };
 
-describe('mod-hook v1.2 Contract text', () => {
-  test('the heading is "# Contract: mod-hook v1.2"', () => {
-    assert.equal(lines[0], '# Contract: mod-hook v1.2');
+describe('mod-hook v1.3 Contract text', () => {
+  test('the heading is "# Contract: mod-hook v1.3"', () => {
+    assert.equal(lines[0], '# Contract: mod-hook v1.3');
   });
 
   test('engine step 3 names a rebuild on the first guarded call', () => {
