@@ -5,7 +5,7 @@ export const DEP_HASHES = {
   "scripts/contract-drift.mjs": "b20d322156d07763f0393c56ce68330c9d91297f3c86d52610dd83f3652f84d9",
   "scripts/handoff-lint.mjs": "4fd7e81e79abe365cac9380edc220367df892291ee97e74b486e1c3ee1a1959f",
   "scripts/idea-flow.mjs": "dab49706de84f46a37d85e3c13f87fd205a76cf2381d4bf3d845471b39ed1430",
-  "scripts/lead-handover.mjs": "194b331ec882bc9dde8dbb4a329f9ee5e54831b167908d3e6a20b3fb012b6219",
+  "scripts/lead-handover.mjs": "6c122c83161043ed85240782c21d7d76fe9e86785449adc200848b0fcc09c160",
   "scripts/plan-markdown.mjs": "e4fbd913270cf1a3e9843d267e05297849fb9fd4ec7c7d898f7df391653d8891",
   "scripts/plan-tasks.mjs": "8e833667efb6184c180a6478a966053dab897a503fa03d58eee426edb0242860",
   "scripts/run-cap.mjs": "b71e9529372e10ecc7d9b59a8aeebf2436167697804b679e2277ca8eaad4078b",
