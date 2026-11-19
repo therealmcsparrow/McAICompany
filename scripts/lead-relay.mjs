@@ -14,6 +14,10 @@ import { runSlugs, show, MAX_FORMS } from './run-state.mjs';
 import { isRunSlug, exactWorkPath } from '../mods/lib/work-folder.mjs';
 
 const FORMS = 'forms.jsonl';
+const RESULT = 'lead-result.txt';
+const LEAD_TYPE = 'aico:project-manager';
+const MAX_RESULT_LINES = 40;
+const MAX_RESULT_BYTES = 8192;
 const MAX_ARG = 4096;
 const MAX_STDIN = 64 * 1024;
 const MAX_INPUT = 64 * 1024;
@@ -154,6 +158,11 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
   return real;
 }
 
+// A form of an ended run gets no reply recorded (the hook skips ended runs), so `open` and `again` refuse it.
+function refuseEnded(root, slug) {
+  if (show(root, slug).state === 'ended') refuse('run ended');
+}
+
 // An open form with the same questions in another unended run would make `answer` match twice and drop the answer.
 function refuseSharedForm(root, slug, questions) {
   // Same comparison `answer` uses (sameQuestions): a Gate option's `result` is not compared.
@@ -174,6 +183,7 @@ function cmdOpen(root, [slug, kind, file, ...more]) {
   if (typeof file !== 'string' || more.length) refuse('usage');
   if (!isRunSlug(slug)) refuse('bad slug');
   const f = formsPath(root, slug);
+  refuseEnded(root, slug);
   const text = readSmall(confined(root, file), MAX_INPUT);
   if (text === null) refuse('questions file unreadable');
   let parsed;
@@ -201,6 +211,7 @@ function cmdAgain(root, [slug, id, ...more]) {
   const rows = loadRows(formsPath(root, slug));
   const row = openForms(rows).find((r) => r.id === id);
   if (!row) refuse('no open form with that id');
+  refuseEnded(root, slug);
   refuseSharedForm(root, slug, row.questions);
   return statusBlock(slug, lastHandoff(root, slug), row);
 }
@@ -277,6 +288,42 @@ export function answer(text, root = process.cwd()) {
   try { appendRow(hits[0].file, { v: 1, at: iso(Date.now()), ev: 'answer', id: hits[0].form.id, src: 'hook', answers }); } catch { /* nothing recorded */ }
 }
 
+// SubagentStop adapter: keeps the final STATUS block of a Lead in the run folder, so main can poll `result` when the
+// platform backgrounds the spawn and drops the task-notification. The run comes from the block's own `run:` line.
+export function record(text, root = process.cwd()) {
+  let p;
+  try { p = JSON.parse(text); } catch { return; }
+  if (!isObj(p) || p.hook_event_name !== 'SubagentStop' || p.agent_type !== LEAD_TYPE || typeof p.last_assistant_message !== 'string') return;
+  const lines = p.last_assistant_message.trim().split(/\r?\n/).slice(0, MAX_RESULT_LINES);
+  if (!/^STATUS: (needs-ceo|handover|done|blocked)\s*$/.test(lines[0])) return;
+  const m = lines.map((l) => /^run: \.company\/work\/(\S+)\s*$/.exec(l)).find(Boolean);
+  if (!m || !isRunSlug(m[1])) return;
+  try {
+    const dir = workDir(root, m[1]);
+    if (!dir || !lstatOrNull(path.join(dir, 'run-state.jsonl'))?.isFile()) return;
+    const tmp = path.join(dir, `${RESULT}.tmp`);
+    fs.writeFileSync(tmp, `${lines.join('\n').slice(0, MAX_RESULT_BYTES)}\n`);
+    fs.renameSync(tmp, path.join(dir, RESULT));
+  } catch { /* nothing recorded */ }
+}
+
+// With no slug (a first Lead, whose run main does not know yet) the newest recorded result of the project.
+function cmdResult(root, [slug, ...more]) {
+  if (more.length) refuse('usage');
+  let files;
+  if (slug === undefined) {
+    files = runSlugs(root, { max: MAX_RUNS }).slugs.map((s) => path.join(workDir(root, s) ?? '', RESULT));
+  } else {
+    if (!isRunSlug(slug)) refuse('bad slug');
+    const dir = workDir(root, slug);
+    if (!dir || !lstatOrNull(path.join(dir, 'run-state.jsonl'))?.isFile()) refuse('no run');
+    files = [path.join(dir, RESULT)];
+  }
+  const hits = files.map((f) => ({ f, st: lstatOrNull(f) })).filter((h) => h.st?.isFile()).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
+  const text = hits.length ? readSmall(hits[0].f, MAX_RESULT_BYTES + 16) : null;
+  return text === null ? 'result: none\n' : `recorded: ${iso(hits[0].st.mtimeMs)}\n${text}`;
+}
+
 export function preset(text) {
   let p;
   try { p = JSON.parse(text); } catch { return { code: 0 }; }
@@ -309,6 +356,11 @@ async function hook(kind) {
     process.exit(0);
   }, SELF_EXIT_MS).unref();
   const raw = await readStdin();
+  if (kind === 'record') {
+    if (raw !== null) record(raw);
+    process.exitCode = 0;
+    return;
+  }
   if (kind === 'answer') {
     if (raw !== null) answer(raw);
     process.exitCode = 0;
@@ -328,7 +380,8 @@ export function main(argv, root = process.cwd()) {
     if (cmd === 'open') return { code: 0, out: cmdOpen(root, rest) };
     if (cmd === 'again') return { code: 0, out: cmdAgain(root, rest) };
     if (cmd === 'read') return { code: 0, out: cmdRead(root, rest) };
-    return refuse('usage: open <slug> <kind> <json-file> | again <slug> <id> | read <slug> [<id>] --json');
+    if (cmd === 'result') return { code: 0, out: cmdResult(root, rest) };
+    return refuse('usage: open <slug> <kind> <json-file> | again <slug> <id> | read <slug> [<id>] --json | result <slug>');
   } catch (e) {
     if (e instanceof Refusal) return { code: 1, out: `refused: ${e.message}\n` };
     return { code: 1, out: 'error: failed\n' };
@@ -337,7 +390,7 @@ export function main(argv, root = process.cwd()) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [cmd] = process.argv.slice(2);
-  if ((cmd === 'answer' || cmd === 'preset') && process.argv.length === 3) {
+  if ((cmd === 'answer' || cmd === 'preset' || cmd === 'record') && process.argv.length === 3) {
     hook(cmd).catch(() => { process.exitCode = 0; });
   } else {
     const r = main(process.argv.slice(2));

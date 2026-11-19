@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
-const SELF_EXIT_MS = 3800;
+const SELF_EXIT_MS = 8500; // under the 10 s hook timeout; a CPU-loaded start must not deny a spawn at 3.8 s
 const START_EXIT_MS = 9500;
 const MAX_TOTAL_FIXTURES = 400;
 const MAX_FIXTURE_DETAILS = 5;

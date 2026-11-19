@@ -1,7 +1,7 @@
 {
   "v": 1,
   "files": {
-    "scripts/hook-host.mjs": "e2bbc84ae5acb9e0e7de317f6756756c7244c795349ab2e8d7f911ff395e8fca",
+    "scripts/hook-host.mjs": "fd0dd46c891d689b1b2805be7dd5d02862c49697bf27d5262fb90bf7cdf396b7",
     "hooks/lib/cap-effects.mjs": "86c7dcdcc0575fd0700c2d353a77cce98741d27154f854e7c3fda033a7fe19cb",
     "hooks/lib/deny-log.mjs": "e3fd4b2dcbbb9ad093da8438a8553f6f070cdfcf58d613d749c5d196758fffc2",
     "hooks/lib/dep-hashes.mjs": "4eb701752fd454f7d208f5290e1e697e76d1be4aac1376c0a980cb2eb32237a7",
@@ -31,7 +31,7 @@
     "hooks/manifests/self-protect.json": "7150cebdba16bb8f1e986c0c48449845085e7d1967c280a704fc5921fb7709df",
     "hooks/manifests/switchboard.json": "ae7fdabf10889772e5208239c7e5e8c193094bcd58fe8befbcbed7bd3fec7a6e",
     "hooks/rules.json": "fe8bf7667f8da12df129b75856bc46e40e8ed81d566ee128d3e20d22d30df47a",
-    "hooks/hooks.json": "670cd85a3fff788c0304395fb6484258ec5a3f0d27fc3d22b6d370717ac519b1",
+    "hooks/hooks.json": "a991f098000ce61cba350066b58dfc2a773ad53fd45c17e1c4cc3a883a9e5269",
     "hooks/schema/hook-fields.json": "ad8358bb3128fc5dc20c637330e33798f7a7627ac9b70758ca5a6a06a5962100",
     "company/model-floor.json": "99d3def17ecb14ff44be986f3f907eb7dc17b464efde4d70d93e70c90460245f"
   }
