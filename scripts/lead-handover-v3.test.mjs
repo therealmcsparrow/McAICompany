@@ -351,3 +351,23 @@ describe('lead-handoff v3.0: leads, lead peak and main peak in read', () => {
     assert.ok(lines(fx).includes('form: f01 answered'), lines(fx).join('|'));
   });
 });
+
+// Bug 2 (P20261118.000002): `read` refused the short forms a Lead is handed for a run that exists.
+describe('read accepts the short slug forms of an existing v3 run', () => {
+  test('project-only `<ProjectID>` reads its one run, not refused: bad slug', () => {
+    const fx = fixture();
+    const full = main(['read', SLUG], fx.root, {});
+    assert.equal(full.code, 0, full.out);
+    const r = main(['read', ID], fx.root, {});
+    assert.equal(r.code, 0, r.out);
+    assert.equal(r.out, full.out);
+  });
+
+  test('flat `<NN>-<playbook>` reads the one matching run, not refused: no run', () => {
+    const fx = fixture();
+    const full = main(['read', SLUG], fx.root, {});
+    const r = main(['read', '01-feature'], fx.root, {});
+    assert.equal(r.code, 0, r.out);
+    assert.equal(r.out, full.out);
+  });
+});
