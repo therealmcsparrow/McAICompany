@@ -63,7 +63,7 @@ const timed = (tool, command) => {
 };
 
 const BS = String.fromCharCode(92);
-const LOOSE_MS = Number(process.env.GUARD_LOOSE_MS) || 3000; // loose: only catches backtracking blowups, not load jitter
+const LOOSE_MS = 3000; // loose: only catches backtracking blowups, not load jitter
 
 test('a quoted Windows path with a pipe does not backtrack and still allows', () => {
   const cmd = `echo "C:${BS.repeat(40)}" | grep x`;

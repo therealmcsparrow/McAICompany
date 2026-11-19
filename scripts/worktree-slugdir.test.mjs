@@ -117,6 +117,7 @@ describe('worktree cleanup slug folder', () => {
     git(r.repo, 'worktree', 'remove', '--force', r.wt('proto'));
     git(r.repo, 'branch', '-D', `aico-wt/${ID}/proto`);
     assert.equal(fs.existsSync(r.slugDir), true, 'setup: empty slug folder exists');
+    assert.equal(fs.readdirSync(r.slugDir).length, 0, 'setup: slug folder is empty');
     const res = r.run('cleanup', RUN);
     assert.equal(res.code, 2, res.lines.join('\n'));
     assert.match(res.lines.join('\n'), /record mismatch proto/);

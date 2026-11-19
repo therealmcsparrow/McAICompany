@@ -426,8 +426,8 @@ function layoutOf(realRoot, slug, id) {
 }
 
 // Every existing segment from the worktree root down is a plain folder whose real path is its lexical path.
-function segmentsOk(layout) {
-  for (const p of [layout.wtRoot, layout.slugDir, layout.wt]) {
+function segmentsOk(layout, { downToWt = true } = {}) {
+  for (const p of downToWt ? [layout.wtRoot, layout.slugDir, layout.wt] : [layout.wtRoot, layout.slugDir]) {
     const st = lstatOrNull(p);
     if (!st) continue;
     if (!isFolder(st) || !isUnlinked(p)) return false;
@@ -942,7 +942,7 @@ function cmdCleanup(args, env) {
 // Removes the project folder when cleanup left it empty. Non-recursive, so a folder with content (or the run
 // worktree, which has a .git entry) stays; a missing or non-empty folder is not an error.
 function dropEmptySlugDir(layout) {
-  if (!segmentsOk(layout)) return;
+  if (!segmentsOk(layout, { downToWt: false })) return;
   try {
     fs.rmdirSync(layout.slugDir);
   } catch (e) {
