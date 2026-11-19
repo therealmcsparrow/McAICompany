@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-relay.md v1
+// contract: docs/contracts/lead-relay.md v1.1
 // uses: docs/contracts/lead-handoff.md v3.0 docs/contracts/run-state.md v3.1
 // Lead relay: CLI words `open`, `again`, `read` for the Lead, plus the hook adapters `answer` (PostToolUse, records the CEO's pick
 // from tool_response.answers) and `preset` (PreToolUse, denies a pre-filled form). Every stdin field, argument and record line is
@@ -158,11 +158,14 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
 function refuseSharedForm(root, slug, questions) {
   // Same comparison `answer` uses (sameQuestions): a Gate option's `result` is not compared.
   const want = questions.map((q) => ({ question: q.q, header: q.header, multiSelect: q.multi, options: q.options.map((o) => ({ label: o.label, description: o.description })) }));
+  let mine = null;
+  try { mine = show(root, slug).state; } catch { /* unknown state: only live runs are compared */ }
   for (const other of runSlugs(root, { max: MAX_RUNS }).slugs) {
     if (other === slug) continue;
     try {
       const st = show(root, other).state;
-      if (st !== 'running' && st !== 'stale') continue;
+      // An ended run takes answers only when no live run matches, so two ended runs with the same form clash only with each other.
+      if (st !== 'running' && st !== 'stale' && !(st === 'ended' && mine === 'ended')) continue;
       const dir = workDir(root, other);
       if (!dir) continue;
       for (const r of openForms(loadRows(path.join(dir, FORMS)))) if (sameQuestions(r.questions, want)) refuse(`same questions open in run ${other}`);
@@ -259,11 +262,13 @@ export function answer(text, root = process.cwd()) {
   if (!isObj(p) || p.hook_event_name !== 'PostToolUse' || p.tool_name !== 'AskUserQuestion') return;
   if (Object.hasOwn(p, 'agent_id') || Object.hasOwn(p, 'agent_type')) return;
   if (!isObj(p.tool_input) || !isObj(p.tool_response)) return;
-  const hits = [];
+  const live = [];
+  const ended = [];
   for (const slug of runSlugs(root, { max: MAX_RUNS }).slugs) {
     try {
       const st = show(root, slug).state;
-      if (st !== 'running' && st !== 'stale') continue; // a form waits past the 12 h stale mark; only ended/none runs are skipped
+      if (st !== 'running' && st !== 'stale' && st !== 'ended') continue; // a form waits past the 12 h stale mark; run-less folders are skipped
+      const hits = st === 'ended' ? ended : live;
       const file = path.join(workDir(root, slug) ?? '', FORMS);
       if (!workDir(root, slug)) continue;
       const open = openForms(loadRows(file));
@@ -271,6 +276,8 @@ export function answer(text, root = process.cwd()) {
       if (open.length === 1 && sameQuestions(open[0].questions, p.tool_input.questions)) hits.push({ file, form: open[0] });
     } catch { /* a broken run is skipped */ }
   }
+  // Live runs win; an ended run (a form opened after its end outcome) takes the answer only when no live run matched.
+  const hits = live.length ? live : ended;
   if (hits.length !== 1 || hits[0] === null) return;
   const answers = mapAnswers(hits[0].form.questions, p.tool_response.answers);
   if (!answers) return;
