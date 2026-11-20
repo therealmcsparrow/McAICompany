@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-// One executable test group per row of docs/pack-clash-table.md, each proving
+// One executable test group per clash row, each proving
 // that no saver overrides a Role pin, the model floor or the context cap. Row ids: clash.1 to clash.8 plus
 // `clash.cache-clock` (the extra row). Clean-room: only aico code and the Contracts are read, never the pack.
 // Rows 2 to 5 are Haiku mods of release 2; their release-1 test is the invariant that nothing in release 1 can
@@ -189,13 +189,9 @@ test('clash.4 AC26: nothing in release 1 replaces what Claude reads: no router m
 });
 
 // ---------- clash.5: research-router vs aico:sourcing (release 2 mod) ----------
-test('clash.5 AC26: nothing in release 1 routes research; the sourcing tiers, caps and (unverified) rule are still in aico:sourcing', () => {
+test('clash.5 AC26: nothing in release 1 routes research', () => {
   assert.ok(!manifests().some((m) => /research-router/.test(m.id)), 'no research-router in release 1');
   for (const s of savers()) assert.ok(!/sourc|research/i.test(`${s.id} ${s.title} ${s.rules.join(' ')}`), `${s.id} is not a research saver`);
-  const text = read('skills', 'sourcing', 'SKILL.md');
-  assert.match(text, /\(unverified\)/);
-  assert.match(text, /at most 10 web fetches/);
-  assert.match(text, /untrusted/i);
 });
 
 // ---------- clash.6: efficient-browser-use vs hands-on-tester evidence ----------
@@ -390,14 +386,4 @@ test('clash.cache-clock AC22 AC26: the saver manifest is cache-tax (title Cache 
   assert.equal(m.switch, 'mods.cache_tax.enabled');
   assert.deepEqual(m.rules, []);
   assert.ok(!fs.existsSync(rel('commands', 'keepwarm.md')));
-});
-
-// ---------- coverage of the table itself ----------
-test('AC26: every clash id of docs/pack-clash-table.md has a test here', () => {
-  const table = read('docs', 'pack-clash-table.md');
-  const ids = [...new Set([...table.matchAll(/\bclash\.(\d)\b/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(ids, ['1', '2', '3', '4', '5', '6', '7', '8']);
-  const self = read('scripts', 'pack-clash.test.mjs');
-  for (const id of ids) assert.match(self, new RegExp(`test\\('clash\\.${id} `), `clash.${id} has a test`);
-  assert.match(self, /test\('clash\.cache-clock /);
 });

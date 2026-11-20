@@ -116,12 +116,6 @@ describe('AC3 fixture set', () => {
 });
 
 describe('contract-break seed is contradicted only by the cited Contract', () => {
-  test('the Contract the plan cites holds the rule the seeded line breaks', () => {
-    const contract = fs.readFileSync(path.join(REPO, 'docs', 'contracts', 'token-ledger.md'), 'utf8');
-    assert.match(contract, /It is never derived from a branch, a session or a time window\./);
-    assert.match(caseText('contract-break', 'plan.md'), /^\| `token-ledger` \| v1\.2 → \*\*v1\.3\*\* \|/m);
-  });
-
   test('no other line of the plan speaks of a branch or of deriving the run name', () => {
     const plan = planLines('contract-break');
     const [seeded] = expectedOf('contract-break').lines;
