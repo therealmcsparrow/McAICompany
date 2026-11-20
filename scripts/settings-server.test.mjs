@@ -482,19 +482,17 @@ test('page has a Reprompt table with a Question rounds row, 0 to 3, hint tied to
   assert.equal(JSON.stringify(Array.from(group.radios, (r) => r.value)), '["","0","1","2","3"]');
 });
 
-test('page has a Review format row built like the Dispatch row, with the Contract sentence', () => {
+test('page has a Plan review row built like the Dispatch row, and no Review format row', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  for (const needle of ["'Review format'", "['pipeline', 'review_format']", "['plain', 'pilot']",
-    'Pilot: the Code Reviewer and the compliance pass write a top block, finding rows and a findings ledger. Costs about 10% more tokens per review (T15d).']) {
-    assert.ok(html.includes(needle), needle);
-  }
+  for (const needle of ["'Plan review'", "['pipeline', 'plan_review']", "['off', 'on']"]) assert.ok(html.includes(needle), needle);
+  assert.ok(!html.includes('review_format') && !html.includes('Review format'));
 });
 
 test('save round-trips mods, refuses keep_warm and bad values with nothing written, and reports lock ignores', async (t) => {
   const s = sandbox(t);
   const { post, state } = await start(t, s);
   const before = await state();
-  assert.deepEqual(Object.keys(before.plugin.mods).sort(), ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard']);
+  assert.deepEqual(Object.keys(before.plugin.mods).sort(), ['cache_tax', 'reflect', 'savings', 'savvy', 'switchboard']);
   assert.equal(before.resolved.mods.cache_tax.pane, 'command');
   const bad = await post('/api/save', {
     revision: before.resolved.revision,
@@ -1690,7 +1688,7 @@ test('page has a Parallel cap row after Dispatch with label-for selects tied to 
   const body = html.slice(html.indexOf('function renderPipeline'));
   const dispatch = body.indexOf("label: 'Dispatch'");
   const row = body.indexOf('parallelCapRow(rack, defaults.parallel_cap)');
-  const review = body.indexOf("label: 'Review format'");
+  const review = body.indexOf("label: 'Plan review'");
   assert.ok(dispatch > 0 && dispatch < row && row < review, `order ${dispatch} ${row} ${review}`);
   assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function parallelCapRow'), html.indexOf('const REFUSED_SHORT_PATH'))));
   // Rendered: the key-cap group sits in a fieldset whose legend is the label and whose description is the hint.
@@ -1735,7 +1733,7 @@ test('page has a Short path row after Parallel cap with label-for selects tied t
   const body = html.slice(html.indexOf('function renderPipeline'));
   const cap = body.indexOf('parallelCapRow(rack, defaults.parallel_cap)');
   const row = body.indexOf('shortPathRow(rack, defaults.short_path)');
-  const review = body.indexOf("label: 'Review format'");
+  const review = body.indexOf("label: 'Plan review'");
   assert.ok(cap > 0 && cap < row && row < review, `order ${cap} ${row} ${review}`);
   assert.ok(!/tabindex/i.test(html.slice(html.indexOf('function shortPathRow'), html.indexOf('const REFUSED_PLAN_CHECK'))));
   assert.ok(!html.includes('innerHTML'));
@@ -1759,11 +1757,9 @@ test('user-only rows come after Short path in the pipeline panel, in order, and 
   const html = pageSource();
   const body = html.slice(html.indexOf('function renderPipeline'));
   const short = body.indexOf('shortPathRow(rack, defaults.short_path)');
-  const rev = body.indexOf('userOnlyRow(rack, USER_ONLY_ROWS.second_reviewer,');
-  const model = body.indexOf('userOnlyRow(rack, USER_ONLY_ROWS.second_reviewer_model,');
   const wt = body.indexOf('userOnlyRow(rack, USER_ONLY_ROWS.worktrees,');
-  const review = body.indexOf("label: 'Review format'");
-  assert.ok(short > 0 && short < rev && rev < model && model < wt && wt < review, `order ${short} ${rev} ${model} ${wt} ${review}`);
+  const review = body.indexOf("label: 'Plan review'");
+  assert.ok(short > 0 && short < wt && wt < review, `order ${short} ${wt} ${review}`);
   assert.ok(!html.includes('innerHTML'));
   const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
   assert.ok(!/tabindex/i.test(fn));
@@ -1774,29 +1770,17 @@ test('user-only rows come after Short path in the pipeline panel, in order, and 
   assert.ok(html.slice(html.indexOf('function refusalRec'), html.indexOf('function planRec(')).includes("getElementById('field-live')"), 'refusal is announced');
 });
 
-test('Second reviewer model offers only the values the code-reviewer floor allows', () => {
-  const html = pageSource();
-  const fn = html.slice(html.indexOf('function reviewerModelOptions'), html.indexOf('function userOnlyRow'));
-  assert.ok(fn.includes("protectedFloor('code-reviewer')"));
-  assert.ok(fn.includes('MODEL_RANK'));
-  // Run the page's own function against a floor of opus, sonnet and an unreadable floor.
-  const run = (floor) => [...vm.runInNewContext(`${'const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3 };'}\nconst protectedFloor = () => ${JSON.stringify(floor)};\n${fn}\nreviewerModelOptions()`)];
-  assert.deepEqual(run('opus'), ['default', 'opus']);
-  assert.deepEqual(run('sonnet'), ['default', 'sonnet', 'opus']);
-  assert.deepEqual(run(''), ['default', 'opus']);
-});
-
 test('user-only rows lock the Project column with a visible reason and have no project control', async () => {
   const html = pageSource();
   const fn = html.slice(html.indexOf('function userOnlyRow'), html.indexOf('const REFUSED_PLAN_CHECK'));
   assert.ok(fn.includes('User level only. A project value is ignored.'));
   assert.ok(!fn.includes("['user', 'project']"), 'no project select');
-  for (const key of ['second_reviewer', 'second_reviewer_model', 'worktrees']) assert.ok(html.includes(`${key}:`), key);
+  assert.ok(html.includes('worktrees:'));
   assert.ok(html.includes('REFUSED_USER_ONLY'));
   const page = loadPage(pageState());
   await settle();
   await page.setLevel('project');
-  for (const slug of ['second-reviewer', 'second-reviewer-model', 'worktrees']) {
+  for (const slug of ['worktrees']) {
     const note = byId(page, `${slug}-lock`);
     assert.ok(note, `${slug} shows its reason at the project level`);
     assert.equal(note.textContent, 'User level only. A project value is ignored.');
