@@ -13,7 +13,7 @@ const PARAPHRASE = 'The plan adds a lint rule so a contest needs evidence that a
 // A Handoff of any Role; `fm` adds frontmatter lines, `head` goes right after the By line, `body` between Did and Next.
 function handoff({ role = 'backend-engineer', fm = '', head = '', sections = {}, blocking = '- none' } = {}) {
   const extra = Object.entries(sections).map(([h, lines]) => `## ${h}\n${lines.join('\n')}\n`).join('');
-  return `---\nstep: 05\nrole: ${role}\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\ncontracts: [handoff v2.0]\n${fm}---\nBy: ${role}\n${head}## Did\n- work\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n${extra}## Next\n- go\n`;
+  return `---\nstep: 05\nrole: ${role}\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\ncontracts: [handoff v3.0]\n${fm}---\nBy: ${role}\n${head}## Did\n- work\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n${extra}## Next\n- go\n`;
 }
 const fresh = ({ mode = 'code', model, blocking } = {}) => handoff({
   role: 'fresh-reviewer',

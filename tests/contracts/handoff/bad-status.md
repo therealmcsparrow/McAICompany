@@ -6,20 +6,11 @@ status: finished
 round: 0
 base-commit: 0123456789abcdef0123456789abcdef01234567
 risk-tier: medium
-contracts: [handoff v2.0]
+contracts: [handoff v3.0]
 acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
 ---
 By: backend-engineer
-```aico-top
-status: finished
-files: [src/x.ts]
-ac_ids: [AC1, AC3]
-rule_ids: [proj.M3]
-risks: []
-read_next: [src/x.ts]
-tokens_used: unknown
-```
 ## Did
 - Changed src/x.ts.
 ## Decisions
