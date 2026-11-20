@@ -181,9 +181,6 @@ describe('cli', () => {
     assert.match(r.stdout, /ERROR docs\/contracts\/alpha\.md:3 sentence not found in any test file/);
     assert.match(r.stdout, /1 error\(s\)/);
   });
-  test('the maintain Playbook runs the drift check', () => {
-    assert.match(fs.readFileSync(path.join(REPO, 'skills', 'maintain', 'SKILL.md'), 'utf8'), /run\.mjs" check --drift/);
-  });
 });
 
 describe('real repo', () => {

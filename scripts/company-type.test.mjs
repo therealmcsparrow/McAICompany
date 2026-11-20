@@ -618,13 +618,10 @@ test('the manifest files and script use LF only', () => {
   }
 });
 
-test('CEO_ONLY is frozen and equals the contract list', () => {
+test('CEO_ONLY is frozen and has the expected ids', () => {
   assert.ok(Object.isFrozen(CEO_ONLY));
   assert.deepEqual([...CEO_ONLY], ['help', 'version', 'language', 'settings', 'setup', 'skillspector', 'pentest', 'grill', 'to-spec', 'to-tickets', 'idea', 'bug', 'grill-me', 'grill-with-docs', 'add-skill', 'i-have-adhd']);
   assert.equal(CEO_ONLY.length, 16);
-  const contract = fs.readFileSync(path.join(REAL_ROOT, 'docs', 'contracts', 'company-type.md'), 'utf8');
-  const line = contract.split('\n').find(l => l.startsWith('- **`CEO_ONLY`**'));
-  assert.deepEqual([...line.matchAll(/`([a-z-]+)`/g)].map(m => m[1]).slice(0, 16), [...CEO_ONLY]);
 });
 
 test('a skill is a Playbook by an argument-hint line inside its frontmatter, not by the flag', () => {

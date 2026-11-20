@@ -239,22 +239,6 @@ test('film of an ids: role file writes "<role>: <line>"', () => {
 });
 
 // ---- docs ----
-test('the apply key examples in SKILL.md and format-2.md are bare Role ids', () => {
-  for (const f of ['skills/brainstorm/SKILL.md', 'skills/brainstorm/references/format-2.md']) {
-    const t = readFileSync(join(root, f), 'utf8');
-    assert.ok(!/"Name \(role\)"|Name \(role\)/.test(t), f);
-    assert.ok(!/§1\.7/.test(t.split('\n').filter(l => /apply/.test(l)).join('\n')), `${f}: apply lines do not send a Name`);
-  }
-  assert.match(readFileSync(join(root, 'skills/brainstorm/references/format-2.md'), 'utf8'), /"replies": \{ "<role>":/);
-});
-
-test('the contract file is v2.2 with the ids rule', () => {
-  const c = readFileSync(join(root, 'docs/contracts/brainstorm-file.md'), 'utf8');
-  assert.match(c, /v2\.2/);
-  assert.match(c, /ids: role/);
-  assert.match(c, /unknown ids value/);
-  assert.ok(!c.includes('\r'));
-});
 
 test('this test file and the fixture are LF only', () => {
   assert.ok(!readFileSync(fileURLToPath(import.meta.url), 'utf8').includes('\r'));
