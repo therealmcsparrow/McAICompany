@@ -51,7 +51,6 @@ Risk tier: <low | medium | high: feature and fix from tier-set.mjs (references/t
 Base commit: <full object id (40 or 64 hex) the Step's range is cut from; reviewers diff against it>
 Round: <0 up to pipeline.fix_rounds>
 Review depth: <full | standard>   # code-reviewer only
-Review format: pilot   # code-reviewer and senior-engineer compliance, only when pipeline.review_format is pilot
 Input Handoffs: <paths, or "none: first Step" + the CEO's request verbatim>
 Rule slice: <1-3 paths>   # builders and devops only, when the product has a ruleset; omit the line otherwise
 Task: <id>   # plan-task Steps only: the two lines plan-tasks.mjs lines prints

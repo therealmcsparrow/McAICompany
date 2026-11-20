@@ -61,3 +61,11 @@ test('no fenced dispatch block in a skill or agent holds a Name: line', () => {
   }
   assert.deepEqual(offenders, []);
 });
+
+// ---- dispatch-prompt v6.0: no Review format line ----
+
+test('the canonical pipeline order has no Review format key and keeps Rule slice', () => {
+  assert.ok(!PIPELINE_ORDER.includes('Review format'));
+  assert.ok(PIPELINE_ORDER.includes('Rule slice') || PIPELINE_ORDER.includes('Task'));
+  assert.ok(!keys(stepBlock()).includes('Review format'));
+});
