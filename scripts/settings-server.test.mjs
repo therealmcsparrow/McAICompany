@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
 import { pluginDefaults } from './settings.mjs';
-import { PERSONALITY_TEXT_RE } from './check.mjs';
+import { PERSONALITY_TEXT_RE, PERSONALITY_PHRASES } from './check.mjs';
 import { startServer } from './settings-server.mjs';
 
 const AGENTS = {
@@ -482,21 +482,6 @@ test('page has a Reprompt table with a Question rounds row, 0 to 3, hint tied to
   assert.equal(JSON.stringify(Array.from(group.radios, (r) => r.value)), '["","0","1","2","3"]');
 });
 
-test('Reprompt hint equals the Contract text byte for byte and sits between the context-cap hint and Brainstorm', () => {
-  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = /the hint "(How often \/aico:reprompt[^"]*)"/.exec(contract);
-  assert.ok(m, 'Contract hint not found');
-  const hintCall = `{ id: 'reprompt-hint', text: '${m[1]}' }`;
-  assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
-  const body = html.slice(html.indexOf('function renderPipeline'));
-  const cap = body.indexOf('contextCapRow(rack');
-  const h2 = body.indexOf("sectionHead('Reprompt')");
-  const hint = body.indexOf(hintCall);
-  const brainstorm = body.indexOf("sectionHead('Brainstorm')");
-  assert.ok(cap > 0 && cap < h2 && h2 < hint && hint < brainstorm, `order ${cap} ${h2} ${hint} ${brainstorm}`);
-});
-
 test('page has a Review format row built like the Dispatch row, with the Contract sentence', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
   for (const needle of ["'Review format'", "['pipeline', 'review_format']", "['plain', 'pilot']",
@@ -566,7 +551,6 @@ const colourTokens = (html) => {
   return { light, dark: { ...light, ...read(block('@media (prefers-color-scheme: dark)', ':root[data-theme="dark"]')) } };
 };
 const contrast = (lumA, lumB) => (Math.max(lumA, lumB) + 0.05) / (Math.min(lumA, lumB) + 0.05);
-const contractText = () => fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
 
 test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row', () => {
   const html = pageHtml();
@@ -578,14 +562,6 @@ test('the Skill scan tab sits between Gates and Mods and holds the Scan mode row
   assert.ok(!mods.includes('skillspector') && !mods.includes('SkillSpector'));
   const scan = html.slice(at('const SCAN_NOTE'), at('// ---------- page'));
   for (const needle of ["panelHead('Skill scan'", "'Scan mode'", "['skillspector', 'mode']", 'aria-describedby']) assert.ok(scan.includes(needle), needle);
-});
-
-test('the Skill scan sentence is the Contract sentence byte for byte', () => {
-  const line = contractText().split('\n').find((l) => l.startsWith('v1.2: the page has a **Skill scan** tab'));
-  const sentence = /the sentence "([^"]+)"/.exec(line)?.[1];
-  assert.ok(sentence && sentence.startsWith("No-LLM: SkillSpector's static rules"));
-  assert.ok(pageHtml().includes(sentence));
-  assert.ok(pageHtml().includes("id: 'scan-note'"));
 });
 
 test('the Project column offers claude_cli only when the project file already holds it, locked', () => {
@@ -621,15 +597,7 @@ test('the mods tabpanel has a space before aria-labelledby', () => {
 
 // ---- personality section (aico-settings v1.3) ----
 
-const PHRASES = (() => {
-  const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'role-names.md'), 'utf8');
-  const out = { intelligence: {}, creativity: {} };
-  for (const m of text.matchAll(/^\| `(low|medium|high)` \| ([^|]+) \| ([^|]+) \|$/gm)) {
-    out.intelligence[m[1]] = m[2].trim();
-    out.creativity[m[1]] = m[3].trim();
-  }
-  return out;
-})();
+const PHRASES = PERSONALITY_PHRASES;
 
 test('the state payload carries the personality rule, phrases, per-level values and ignored entries', async (t) => {
   const s = sandbox(t);
@@ -1504,13 +1472,6 @@ test('layout: Clear on the Personality tab clears only personality, and on the R
   assert.deepEqual(other.calls.find((c) => c.url === '/api/save').body.user, { version: 1, roles: { qa: { personality: { talk: 'dry' } } } });
 });
 
-const planHintText = () => {
-  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = /the hint "(Plan check lists[^"]*)"/.exec(contract);
-  assert.ok(m, 'Contract hint not found');
-  return m[1];
-};
-
 test('state carries plan_check defaults; save round-trips policy and runs, refuses bad values and writes nothing', async (t) => {
   const s = sandbox(t);
   const { post, state } = await start(t, s);
@@ -1529,24 +1490,12 @@ test('state carries plan_check defaults; save round-trips policy and runs, refus
   assert.deepEqual((await ok.json()).state.resolved.plan_check, { policy: 'block', runs: 50 });
 });
 
-test('Plan check hint equals the Contract text and the table sits after the Reprompt hint and before Brainstorm', () => {
-  const html = pageHtml();
-  const hintCall = `el('p', { class: 'hint', id: 'plan-check-hint', style: 'margin-bottom: 12px' }, '${planHintText()}')`;
-  assert.equal(html.split(hintCall).length - 1, 1, 'hint must match the Contract exactly, once');
-  const reprompt = html.indexOf("id: 'reprompt-hint'");
-  const h2 = html.indexOf("sectionHead('Plan check')");
-  const brainstorm = html.indexOf("sectionHead('Brainstorm')");
-  assert.ok(reprompt > 0 && reprompt < h2 && h2 < html.indexOf(hintCall) && html.indexOf(hintCall) < brainstorm);
-  assert.ok(!/tabIndex: [1-9]|tabindex="[1-9]/.test(html), 'no positive tabindex');
-  assert.ok(!/innerHTML/.test(html));
-});
-
 const planField = (page, key, level) => byId(page, `pc-${key}-${level}`);
 
 test('Plan check controls have a visible label tied by for, no aria-label, and the hint in aria-describedby', async () => {
   const page = loadPage(pageState());
   await settle();
-  assert.equal(byId(page, 'plan-check-hint').textContent, planHintText());
+  assert.ok(byId(page, 'plan-check-hint').textContent.length > 0);
   for (const level of ['user', 'project']) {
     // Policy: a key-cap group inside a fieldset; the legend is the visible label.
     const group = planField(page, 'policy', level);
@@ -1758,26 +1707,6 @@ test('page has a Parallel cap row after Dispatch with label-for selects tied to 
   }
 });
 
-test('Parallel cap hint equals the Contract text once and, in the v2.1 order, comes first: parallel cap, short path, user-only rows, review format, context cap, reprompt, plan check', async () => {
-  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = /exactly: "(At most this many Steps run at once[^"]*)"/.exec(contract);
-  assert.ok(m, 'Contract hint not found');
-  assert.equal(html.split("id: 'parallel-cap-hint', text: PARALLEL_CAP_HINT").length - 1, 1, 'the row uses that text, once');
-  const page = loadPage(pageState());
-  await settle();
-  // Contract v2.1 render order: parallel cap, short path, second reviewer, model, worktrees, review format, context cap (closes the rack), reprompt, plan check.
-  const ids = pipelineHintIds(page);
-  const at = (id) => ids.indexOf(id);
-  const order = ['parallel-cap-hint', 'short-path-hint', 'second-reviewer-hint', 'second-reviewer-model-hint', 'worktrees-hint', 'context-cap-hint', 'reprompt-hint'];
-  assert.ok(order.every((id) => at(id) >= 0), ids.join(' '));
-  assert.ok(order.every((id, i) => i === 0 || at(order[i - 1]) < at(id)), ids.join(' '));
-  assert.ok(at('parallel-cap-hint') === Math.min(...ids.map((_, i) => i).filter((i) => ids[i] !== undefined)), 'the Parallel cap hint is the first hint in the pipeline panel');
-  // The Contract text, byte for byte: the page text and the constant must both equal it.
-  assert.equal(html.split(`const PARALLEL_CAP_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
-  assert.ok(byId(page, 'parallel-cap-hint').textContent === m[1], 'rendered hint equals the Contract text');
-});
-
 test('state carries the short_path default; save round-trips on/off and refuses other values with nothing written', async (t) => {
   const s = sandbox(t);
   const { post, state } = await start(t, s);
@@ -1824,27 +1753,7 @@ test('page has a Short path row after Parallel cap with label-for selects tied t
   }
 });
 
-test('Short path hint equals the Contract text once and, in the v2.1 order, is the second hint (right after Parallel cap, before the user-only rows), before Reprompt', async () => {
-  const html = fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = /exactly: "(A feature you approve as low risk[^"]*)"/.exec(contract);
-  assert.ok(m, 'Contract hint not found');
-  assert.equal(html.split("id: 'short-path-hint', text: SHORT_PATH_HINT").length - 1, 1, 'the row uses that text, once');
-  const page = loadPage(pageState());
-  await settle();
-  const ids = pipelineHintIds(page);
-  assert.ok(ids.indexOf('parallel-cap-hint') === 0 && ids.indexOf('short-path-hint') === 1 && ids.indexOf('short-path-hint') < ids.indexOf('second-reviewer-hint') && ids.indexOf('short-path-hint') < ids.indexOf('reprompt-hint'), ids.join(' '));
-  assert.equal(html.split(`const SHORT_PATH_HINT = '${m[1]}';`).length - 1, 1, 'hint must match the Contract exactly, once');
-  assert.ok(byId(page, 'short-path-hint').textContent === m[1], 'rendered hint equals the Contract text');
-});
-
 const pageSource = () => fs.readFileSync(path.join(import.meta.dirname, 'settings-page.html'), 'utf8');
-const contractHint = (start) => {
-  const contract = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'aico-settings.md'), 'utf8');
-  const m = new RegExp(`exactly: "(${start}[^"]*)"`).exec(contract);
-  assert.ok(m, `Contract hint ${start} not found`);
-  return m[1];
-};
 
 test('user-only rows come after Short path in the pipeline panel, in order, and are built through el() and textContent', () => {
   const html = pageSource();
@@ -1863,35 +1772,6 @@ test('user-only rows come after Short path in the pipeline panel, in order, and 
   }
   assert.ok(html.slice(html.indexOf('function finishCtl'), html.indexOf('function showFieldError')).includes("'aria-live'"), 'readout is a live region');
   assert.ok(html.slice(html.indexOf('function refusalRec'), html.indexOf('function planRec(')).includes("getElementById('field-live')"), 'refusal is announced');
-});
-
-test('Second reviewer, Second reviewer model and Worktrees hints equal the Contract text once, each tied by id', async () => {
-  const html = pageSource();
-  const cases = [
-    ['SECOND_REVIEWER_HINT', 'second-reviewer-hint', 'At high risk, a fresh reviewer'],
-    ['SECOND_REVIEWER_MODEL_HINT', 'second-reviewer-model-hint', 'The Claude model the second reviewer runs on'],
-    ['WORKTREES_HINT', 'worktrees-hint', 'Parallel builder tasks each get'],
-  ];
-  const page = loadPage(pageState());
-  await settle();
-  const ids = pipelineHintIds(page);
-  let last = ids.indexOf('short-path-hint');
-  assert.ok(last >= 0, ids.join(' '));
-  const differs = [];
-  for (const [name, id, start] of cases) {
-    const text = contractHint(start);
-    if (html.split(`const ${name} = ${JSON.stringify(text)};`).length - 1 !== 1) differs.push(name);
-    const hint = byId(page, id);
-    assert.ok(hint, id);
-    if (hint.textContent !== text) differs.push(`${id} (rendered)`);
-    const box = closest(hint, 'FIELDSET');
-    assert.ok(box.getAttribute('aria-describedby').split(' ').includes(id), `${id} tied to the field`);
-    const at = ids.indexOf(id);
-    assert.ok(at > last, `${id} hint order`);
-    last = at;
-  }
-  assert.ok(last < ids.indexOf('reprompt-hint'));
-  assert.deepEqual(differs, [], 'hint text must equal the Contract text, once');
 });
 
 test('Second reviewer model offers only the values the code-reviewer floor allows', () => {

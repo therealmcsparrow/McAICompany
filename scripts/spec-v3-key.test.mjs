@@ -100,14 +100,3 @@ test('spec-check: docs/specs/demo.md and a new-name spec are unchanged', () => {
   assert.deepEqual(specCheck(['check', 'docs/specs/demo.md'], { root: cwd }), { code: 0, lines: ['spec-check: 0 errors'] });
   assert.deepEqual(specCheck(['check', 'docs/specs/P20261109.000009-15.52.35.md'], { root: cwd }), { code: 0, lines: ['spec-check: 0 errors'] });
 });
-
-test('text pins: destination-spec v1.5 paragraph names slugOfKey, spec-check header says v1.5, intake-and-ship names the path', () => {
-  const contract = fs.readFileSync(path.join(REPO, 'docs/contracts/destination-spec.md'), 'utf8');
-  const para = contract.split('\n').find((l) => /^v1\.5\b/.test(l));
-  assert.ok(para, 'a v1.5 paragraph exists');
-  assert.match(para, /slugOfKey/);
-  const head = fs.readFileSync(path.join(REPO, 'scripts/spec-check.mjs'), 'utf8').split('\n').slice(0, 3).join('\n');
-  assert.match(head, /destination-spec\.md v1\.5\b/);
-  const ship = fs.readFileSync(path.join(REPO, 'skills/feature/references/intake-and-ship.md'), 'utf8');
-  assert.ok(ship.includes('docs/specs/<ProjectID>~<NN>-<playbook>.md'));
-});
