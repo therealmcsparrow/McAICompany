@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Plan review (contract: docs/contracts/plan-review.md v1.4). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v3.0
+// Plan review (contract: docs/contracts/plan-review.md v1.5). Node built-ins only.
+// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v3.0 docs/contracts/work-folder-name.md v3.0 docs/contracts/aico-settings.md v4.0
 // `lines` writes the inputs file a reviewer reads, `gate` prints the reviewer's paraphrase for the CEO,
 // `majors` says whether a plan raises a Contract's major version, `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
 // every pattern is anchored over a character class, sizes are capped before parsing, every file is read by
@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
 import { parseLocations } from './handoff-lint.mjs';
 import { normalizePath } from './plan-tasks.mjs';
+import { resolveSettings } from './settings.mjs';
 import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
@@ -387,6 +388,15 @@ function raisesMajor(line, index) {
   return false;
 }
 
+// pipeline.plan_review (aico-settings v4.0): off unless a layer says on. Any read failure counts as off.
+function planReviewOn(root) {
+  try {
+    return resolveSettings({ cwd: root }).pipeline.plan_review === 'on';
+  } catch {
+    return false;
+  }
+}
+
 function cmdMajors(args, env) {
   if (args.length !== 2) throw new Refused(USAGE);
   const slug = needSlug(args[0]);
@@ -395,6 +405,7 @@ function cmdMajors(args, env) {
   const realRoot = realRootOf(env.root);
   exactNames(realRoot, slug, [planName]);
   const text = planFile(realRoot, slug, planName, MAX_PLAN_BYTES);
+  if (!planReviewOn(env.root)) return { code: 0, lines: ['majors: skipped (settings off)'] };
   const index = buildIndex(realRoot);
   const lines = [];
   for (const [i, line] of text.split(/\r\n|\n|\r/).entries()) {

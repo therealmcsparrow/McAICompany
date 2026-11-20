@@ -288,6 +288,8 @@ describe('majors', () => {
   const planWith = (body) => {
     const root = product(`# Plan\n\n${body}\n`);
     put(root, 'docs/contracts/billing.md', '# Contract: billing v2.3\n');
+    // plan-review v1.5: majors runs only with pipeline.plan_review on (project layer beats the user's).
+    put(root, '.company/settings.json', JSON.stringify({ aico_settings: { version: 1, pipeline: { plan_review: 'on' } } }));
     return root;
   };
   const NONE = ['plan review: not run (no Contract major)'];
