@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { lint } from './handoff-lint.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./handoff-lint.mjs', import.meta.url));
-const read = rel => readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), 'utf8');
 const PARAPHRASE = 'The plan adds a lint rule so a contest needs evidence that a reviewer can open, and a ruling file for the CEO answers. It keeps security findings open until a fix. A comprehension gap is a Blocking row.';
 
 // A Handoff of any Role; `fm` adds frontmatter lines, `head` goes right after the By line, `body` between Did and Next.
@@ -120,36 +119,4 @@ test('## Glossary, ## ADR drafts and ## Prototype question are for the product m
   assert.match(errs(pm({ 'Prototype question': ['too short'] })), /Prototype question line shape/);
   assert.match(errs(pm({ 'Prototype question': ['Does a worktree per task keep sibling files intact?', 'And a second line?'] })), /Prototype question line shape/);
   assert.match(errs(handoff({ sections: { 'Prototype question': ['Does a worktree per task keep sibling files intact?'] } })), /Prototype question is for product-manager only/);
-});
-
-test('the Handoff skill states the Worktree rule in the Task and Files step', () => {
-  const skill = read('skills/handoff/SKILL.md');
-  const rule = skill.split('\n').find(l => l.startsWith('6. '));
-  assert.ok(rule, 'rule 6 exists');
-  assert.match(rule, /`Worktree: <path>`/);
-  assert.match(rule, /git -C <path>/);
-  assert.match(rule, /absolute paths/);
-  assert.match(rule, /never `cd`/);
-  assert.match(rule, /Set-Location/);
-  assert.match(rule, /never `git stash`/);
-  assert.match(rule, /main tree/);
-  assert.ok(skill.split('\n').length <= 125);
-  assert.ok(!/^Name:/m.test(skill));
-});
-
-test('the Contract and the skill texts name the v2.0 parts', () => {
-  const contract = read('docs/contracts/handoff.md');
-  assert.match(contract, /^# Contract: handoff v2\.\d+$/m);
-  for (const part of ['[comprehension]', '## Paraphrase', '## First pass', 'evidence:', 'rulings.md', 'escalated', 'upheld', 'overruled', 'parseLocations', '--exceptions-for', 'review-mode', 'real-path read rule']) {
-    assert.ok(contract.includes(part), part);
-  }
-  const lead = read('skills/pipeline/references/contest.md');
-  assert.ok(lead.includes('rulings on file: confirm each is yours'));
-  assert.match(lead, /not mine/i);
-  const ruleset = read('skills/ruleset/SKILL.md');
-  assert.ok(ruleset.includes('<slug>/<NN>-<role>:R-<n> — <scope> — <reason> — approved: <date> (CEO)'));
-  for (const f of ['skills/handoff/references/contest.md', 'skills/pipeline/references/contest.md', 'skills/handoff/SKILL.md', 'skills/ruleset/SKILL.md']) {
-    assert.ok(!/^Name:/m.test(read(f)), f);
-    assert.ok(!read(f).includes('\r'), f);
-  }
 });

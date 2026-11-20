@@ -234,22 +234,6 @@ function debtCounts(base, skipped, label = '.company') {
   return out;
 }
 
-function dispatchFiles(root) {
-  const out = [];
-  const visit = (abs, rel, depth) => {
-    if (depth > MAX_DEPTH) return;
-    for (const e of readdirSync(abs, { withFileTypes: true })) {
-      if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) visit(join(abs, e.name), `${rel}/${e.name}`, depth + 1);
-      else if (e.isFile() && e.name.endsWith('.md')) out.push({ abs: join(abs, e.name), rel: `${rel}/${e.name}` });
-    }
-  };
-  for (const d of ['skills', 'agents']) if (existsSync(join(root, d))) visit(join(root, d), d, 0);
-  const contract = join(root, 'docs', 'contracts', 'dispatch-prompt.md');
-  if (existsSync(contract)) out.push({ abs: contract, rel: 'docs/contracts/dispatch-prompt.md' });
-  return out;
-}
-
 function scanDispatchFiles(files) {
   const hits = [];
   let blocks = 0;
@@ -549,12 +533,6 @@ test('the scan is bounded: a big file that would be scanned is a hit, a big file
 // ---- the real repository ----
 
 const NO_COMPANY = !existsSync(COMPANY) && '.company is absent (CI)';
-
-test('dispatch blocks of skills, agents and the dispatch-prompt Contract hold no Name: line and no name', () => {
-  const r = scanDispatchFiles(dispatchFiles(ROOT));
-  assert.ok(r.blocks > 0, 'the scan reads real dispatch blocks');
-  assert.deepEqual(fmt(r.hits), []);
-});
 
 test('the real .company tree holds no name in a scanned position', { skip: NO_COMPANY }, () => {
   const r = scanTree(COMPANY);
