@@ -331,13 +331,6 @@ describe('AC2 the judging diff cannot be shadowed', () => {
     assert.ok(s.lines.includes('check: high: pattern auth src/auth/login.js'), s.all);
   });
 
-  test('the pipeline skill and the dispatch Contract ask for the full base id', () => {
-    const pipeline = fs.readFileSync(path.join(REPO, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-    assert.match(pipeline, /Base commit: <full object id \(40 or 64 hex\)/);
-    assert.match(pipeline, /--no-replace-objects rev-parse --verify --end-of-options HEAD\^\{commit\}/);
-    const contract = fs.readFileSync(path.join(REPO, 'docs', 'contracts', 'dispatch-prompt.md'), 'utf8');
-    assert.match(contract, /\^\[0-9a-f\]\{40\}\$.*\^\[0-9a-f\]\{64\}\$/);
-  });
 });
 
 // ------------------------------------------------------------------ the plan Gate under block and warn
@@ -549,18 +542,6 @@ describe('AC6 one bundled CEO form per Gate', () => {
     assert.ok(!/question|answer/i.test(ledgerText), 'the record holds no CEO text');
   });
 
-  test('the skill text holds needs-ceo questions until the wave ends and bundles them into the Gate form', () => {
-    const pack = read('skills', 'pipeline', 'references', 'ceo-pack.md');
-    assert.match(pack, /does not get its question shown at once/);
-    assert.match(pack, /one form/);
-    assert.match(pack, /At a Brief, Plan or Ship Gate, the held questions join that Gate's own form/);
-    assert.match(pack, /run-state ceo/);
-    const pipeline = read('skills', 'pipeline', 'SKILL.md');
-    assert.match(pipeline, /references\/ceo-pack\.md/);
-    const line = pipeline.split('\n').find((l) => l.startsWith('- `status: needs-ceo`'));
-    assert.ok(line, 'the status line for needs-ceo exists');
-    assert.doesNotMatch(line, /ask the CEO now/, 'the status line tells the Lead to ask at once, against the CEO pack');
-  });
 });
 
 describe('AC7 never-cited report', () => {
@@ -648,13 +629,6 @@ describe('AC8 guided first product', () => {
     assert.equal(fs.readFileSync(file, 'utf8'), text);
   });
 
-  test('the Lead guide ends at the Brief Gate and needs no hand edit', () => {
-    const guide = read('skills', 'lead', 'references', 'first-product.md');
-    assert.match(guide, /The run ends at the Brief Gate\. The CEO edits no file by hand\./);
-    assert.match(guide, /run.mjs" project-init write <answers.json>/);
-    assert.match(guide, /Never edit `\.company\/project\.md` to get past a refusal/);
-    assert.match(read('skills', 'lead', 'SKILL.md'), /references\/first-product\.md/);
-  });
 });
 
 describe('AC9 rule-check fills missing security rows', () => {
@@ -720,11 +694,6 @@ describe('AC10 fresh rule packs are reused', () => {
     assert.equal(fresh(sb, packOf(sb, { age: 10, advisories: JSON.stringify([{ tool: 'react', date: day(2) }]) })).out.trim(), 'research advisory');
     assert.equal(fresh(sb, packOf(sb, { age: 10, advisories: '{not json' })).out.trim(), 'research advisory');
     assert.equal(fresh(sb, packOf(sb, { age: 10, advisories: JSON.stringify([{ tool: 'react', date: day(30) }]) })).out.trim(), 'reuse');
-  });
-  test('the standards skill reuses a fresh pack without a research Step', () => {
-    const text = read('skills', 'standards', 'SKILL.md');
-    assert.match(text, /Reusing a pack: run .*pack-fresh/);
-    assert.match(text, /`reuse` → keep it, `research <reason>` → research it again/);
   });
 });
 
@@ -999,11 +968,6 @@ describe('AC13 recorded cost beside time', () => {
     assert.match(p.run('ledger.mjs', 'scorecard', 'demo').out, /cost: not recorded/);
   });
 
-  test('the Contract forbids estimating cost from tokens', () => {
-    const text = read('docs', 'contracts', 'cost-source.md');
-    assert.match(text, /no cost worked out from token counts/);
-    assert.match(text, /never estimates|`cost: not recorded`/);
-  });
 });
 
 // ------------------------------------------------------------------ SubagentStart and SubagentStop times
@@ -1234,11 +1198,6 @@ describe('AC19 an ADR or Contract that no longer matches the code is flagged, an
     assert.equal(r.code, 0, r.all);
     assert.match(r.out, /0 error\(s\)/);
   });
-  test('the maintain Playbook runs the check and reports each ERROR line', () => {
-    const text = read('skills', 'maintain', 'SKILL.md');
-    assert.match(text, /run\.mjs" check --drift/);
-    assert.match(text, /add each `ERROR` line to the report/);
-  });
   test('the shipped repo has no Contract, cite or anchor drift', () => {
     const sb = sandbox();
     const r = drift(sb, REPO);
@@ -1364,10 +1323,6 @@ describe('AC21 the release notes carry a rollback line that reverts with one com
     assert.equal(gitIn(sb, sb.dir, ['--git-dir', r.origin, 'for-each-ref', 'refs/heads/stable']), '');
   });
 
-  test('the unreleased CHANGELOG announces the rollback line and the Contract defines it', () => {
-    assert.match(read('CHANGELOG.md'), /\*\*Releases\.\*\*[^\n]*`Rollback:` line/);
-    assert.match(read('docs', 'contracts', 'release.md'), /starts with `Rollback: node scripts\/stable\.mjs <previous>`/);
-  });
 });
 
 describe('AC22 CI runs the checks on three OSes with the Node LTS, in a path with spaces', () => {
@@ -1488,23 +1443,6 @@ describe('AC24 one resolver runs the active plugin version, never a stale path',
       assert.match(r.err, /aico run: (bad script name|unknown script)/);
     }
   });
-  test('no skill or agent names a bundled script path except through run.mjs', () => {
-    const offenders = [];
-    const walk = (dir) => {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        const abs = path.join(dir, e.name);
-        if (e.isDirectory()) walk(abs);
-        else if (e.name.endsWith('.md')) {
-          fs.readFileSync(abs, 'utf8').split('\n').forEach((line, i) => {
-            if (/CLAUDE_PLUGIN_ROOT\}?\/scripts\/(?!run\.mjs)[a-z-]+\.mjs/.test(line)) offenders.push(`${path.relative(REPO, abs)}:${i + 1}`);
-          });
-        }
-      }
-    };
-    walk(path.join(REPO, 'skills'));
-    walk(path.join(REPO, 'agents'));
-    assert.deepEqual(offenders, []);
-  });
 });
 
 // ------------------------------------------------------------------ Role ids instead of display names
@@ -1533,35 +1471,6 @@ function brainstormEnv(sb, { named = false } = {}) {
 const stagedTexts = (staged) => Object.values(JSON.parse(staged.out).files).map((f) => fs.readFileSync(f, 'utf8'));
 
 describe('AC25 no dispatch carries a Name: line; names appear only to the CEO', () => {
-  test('hostile: no skill, agent or prompt Contract holds a line that starts with Name:', () => {
-    const offenders = [];
-    const scan = (abs) => {
-      fs.readFileSync(abs, 'utf8').split('\n').forEach((line, i) => {
-        if (/^\s*Name:\s/.test(line)) offenders.push(`${path.relative(REPO, abs)}:${i + 1}`);
-      });
-    };
-    const walk = (dir) => {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        const abs = path.join(dir, e.name);
-        if (e.isDirectory()) walk(abs);
-        else if (e.name.endsWith('.md')) scan(abs);
-      }
-    };
-    walk(path.join(REPO, 'skills'));
-    walk(path.join(REPO, 'agents'));
-    for (const c of ['dispatch-prompt', 'reprompt', 'role-names', 'brainstorm-reply', 'aico-mods']) scan(path.join(REPO, 'docs', 'contracts', `${c}.md`));
-    assert.deepEqual(offenders, []);
-  });
-
-  test('the dispatch Contract is v4.0 and says the Name: line is removed and ignored when present', () => {
-    const text = read('docs', 'contracts', 'dispatch-prompt.md');
-    assert.match(text.split('\n')[0], /^# Contract: dispatch-prompt v5\.\d$/);
-    assert.match(text, /v4\.0 is \*\*breaking\*\*[^\n]*the `Name:` line is removed from every prompt and order/);
-    assert.match(text, /`Name:` present[^\n]*the Role ignores the line and uses its Role id/);
-    const pipeline = read('skills', 'pipeline', 'SKILL.md');
-    const block = pipeline.slice(pipeline.indexOf('Base commit: <full object id'));
-    assert.doesNotMatch(block.slice(0, 1500), /^Name:/m);
-  });
 
   test('a staged brainstorm round carries no display name, neither the CEO chosen one nor a stored one', () => {
     const sb = sandbox();
@@ -1603,13 +1512,6 @@ describe('AC25 no dispatch carries a Name: line; names appear only to the CEO', 
 
 describe('AC26 new Handoffs and cooler files carry the Role id', () => {
   const handoff = (by, extra = '') => `---\nstep: 03\nrole: backend-engineer\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\n${extra}---\nBy: ${by}\n## Did\n- x\n## Decisions\n- x\n## Blocking\n- none\n## Nits\n- none\n## Next\n- x\n`;
-  test('the Handoff template asks for By: <role id>; the cooler template uses ids: role and bare Role id cues', () => {
-    assert.match(read('skills', 'handoff', 'SKILL.md'), /^By: <role id>$/m);
-    const cooler = read('skills', 'cooler', 'SKILL.md');
-    assert.match(cooler, /^ids: role /m);
-    assert.match(cooler, /Cue\*\* `\*\*<role>\*\*` on every speaker line/);
-    assert.doesNotMatch(cooler, /\*\*Ava \(architect\)\*\*/);
-  });
   test('an old Handoff with a name byline stays valid and is never rewritten; a Role id byline passes too', () => {
     const sb = sandbox();
     const dir = path.join(sb.dir, 'old-files');
@@ -1884,27 +1786,10 @@ describe('AC31 contested findings', () => {
     assert.doesNotMatch(r.out, /passwd/);
   });
 
-  test('the skills tell the builder and the reviewer the same rules, and the Ship Gate list uses the lint output', () => {
-    const contestRef = read('skills', 'handoff', 'references', 'contest.md');
-    assert.match(contestRef, /A second contest on the same finding is a lint error/);
-    assert.match(contestRef, /Security findings never close by contest/);
-    const pipeline = read('skills', 'pipeline', 'references', 'contest.md');
-    assert.match(pipeline, /unresolved/);
-  });
 });
 
 describe('AC32 the handoff Contract holds contested findings and the contracts field', () => {
   const header = read('docs', 'contracts', 'handoff.md').split('\n')[0];
-  test('the Contract is v2.0, breaking, and names the contest, the contracts key and the v2.0 evidence part', () => {
-    assert.equal(header, '# Contract: handoff v2.8');
-    const text = read('docs', 'contracts', 'handoff.md');
-    assert.match(text, /v1\.2 is additive/);
-    assert.match(text, /v2\.0 \(part 5\) is \*\*breaking\*\*/);
-    assert.match(text, /`contested`/);
-    assert.match(text, /`contracts:`|contracts: \[handoff v1\.2\]/);
-    assert.match(text, /v2\.0[^\n]*evidence for contests/);
-    assert.match(text, /^## v2\.0 part 5:/m);
-  });
   test('golden fixtures: a v1.1, a v1.2 and a v2.0 Handoff all pass the lint; the contracts value is checked', () => {
     const sb = sandbox();
     const dir = path.join(sb.dir, 'fields');

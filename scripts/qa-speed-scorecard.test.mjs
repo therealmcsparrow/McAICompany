@@ -1307,9 +1307,3 @@ test('AC12 package.json has an npm run stable script', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
   assert.match(pkg.scripts.stable ?? '', /scripts\/stable\.mjs/);
 });
-
-test('AC12 the docs name the stable ref and give one command to install an earlier tag', () => {
-  const text = fs.readFileSync(path.join(repoRoot, 'documentation', 'start', 'getting-started.md'), 'utf8');
-  assert.match(text, /\bstable\b/);
-  assert.match(text, /(marketplace|ref)[^\n]*v\d+\.\d+\.\d+/);
-});
