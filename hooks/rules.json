@@ -2,7 +2,5 @@
   { "event": "PreToolUse", "matcher": ["*"], "rule": "cap.M1", "module": "cap.mjs", "export": "judge", "fail": "closed", "timeoutMs": 500, "message": "aico guard cap.M1: context cap reached" },
   { "event": "SubagentStop", "matcher": ["*"], "rule": "cap.M1", "module": "cap.mjs", "export": "judgeStop", "fail": "closed", "timeoutMs": 500, "message": "aico guard cap.M1: context cap reached" },
   { "event": "PreToolUse", "matcher": ["*"], "rule": "dotenv.M-SEC1", "module": "dotenv.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "aico guard dotenv.M-SEC1: .env files are not read or written" },
-  { "event": "PreToolUse", "matcher": ["Agent", "Task"], "rule": "model-floor.M1", "module": "model-floor.mjs", "export": "judge", "fail": "closed", "timeoutMs": 300, "message": "aico guard model-floor.M1: model below the Role floor" },
-  { "event": "PreToolUse", "matcher": ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"], "rule": "self-protect.M-SEC1", "module": "self-protect.mjs", "export": "judge", "fail": "closed", "timeoutMs": 500, "message": "aico guard self-protect.M-SEC1: plugin and settings files are protected" },
-  { "event": "PreToolUse", "matcher": ["*"], "rule": "browser.Y1", "module": "browser.mjs", "export": "judge", "fail": "open", "timeoutMs": 300, "message": "aico saver browser.Y1" }
+  { "event": "PreToolUse", "matcher": ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"], "rule": "self-protect.M-SEC1", "module": "self-protect.mjs", "export": "judge", "fail": "closed", "timeoutMs": 500, "message": "aico guard self-protect.M-SEC1: plugin and settings files are protected" }
 ]

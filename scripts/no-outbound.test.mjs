@@ -69,12 +69,6 @@ test('AC22: every release 1 saver has production source in the scan set and none
   assert.deepEqual(missing, []);
 });
 
-test('AC22: the browser saver rule makes no call and spawns nothing', () => {
-  const text = strip(fs.readFileSync(path.join(root, 'hooks', 'rules', 'browser.mjs'), 'utf8'));
-  assert.ok(!/child_process|spawn|exec\w*\s*\(/.test(text));
-  for (const [re, name] of OUTBOUND) assert.ok(!re.test(text), name);
-});
-
 test('AC22: cache clock sends no ping: no model call, no process, one tick timer', () => {
   const clock = strip(fs.readFileSync(path.join(root, 'mods', 'lib', 'cache-clock.mjs'), 'utf8'));
   assert.ok(!/\bping\b/i.test(clock.replace(/no ping/gi, '')), 'cache-clock.mjs names a ping');

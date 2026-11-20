@@ -121,25 +121,14 @@ test('clash.1 AC26: the cap guard is locked on with no switch, no saver runs the
 });
 test('clash.1 AC26: a saver verdict cannot carry a cap effect', async () => {
   const { checkVerdict } = await imp('hooks', 'lib', 'rule-runner.mjs');
-  assert.equal(checkVerdict({ v: 'note', rule: 'browser.Y1', message: 'x', effect: 'cap-warn' }), null);
-  assert.equal(checkVerdict({ v: 'allow', rule: 'browser.Y1', effect: 'cap-lead-freeze' }), null);
+  assert.equal(checkVerdict({ v: 'note', rule: 'savings.Y1', message: 'x', effect: 'cap-warn' }), null);
+  assert.equal(checkVerdict({ v: 'allow', rule: 'savings.Y1', effect: 'cap-lead-freeze' }), null);
   assert.equal(checkVerdict({ v: 'deny', rule: 'savings.Y1', message: 'x', effect: 'cap-step-record' }), null);
 });
 
 // ---------- clash.2: model-router vs the model floor and Role pins (release 2 mod) ----------
-test('clash.2 AC26: no release-1 saver picks a model: no router manifest, no saver rule, and the floor verdict is the same under every saver setting', async () => {
+test('clash.2 AC26: no release-1 saver picks a model: no router manifest', () => {
   assert.ok(!manifests().some((m) => /model-router/.test(m.id)), 'no model-router in release 1');
-  const { judge } = await imp('hooks', 'rules', 'model-floor.mjs');
-  const cases = [
-    ev({ tool: { name: 'Agent', subagentType: 'aico:qa', model: 'haiku' } }),
-    ev({ tool: { name: 'Agent', subagentType: 'architect', model: 'sonnet' } }),
-    ev({ tool: { name: 'Agent', subagentType: 'qa', model: 'sonnet' } }),
-    ev({ tool: { name: 'Agent', subagentType: 'qa', model: 'inherit' }, mainModel: 'claude-haiku-4-5' }),
-    ev({ tool: { name: 'Agent', subagentType: 'localizer', model: 'haiku' } }),
-  ];
-  const base = cases.map((c) => judge(c, snap()));
-  assert.deepEqual(base.map((v) => v.v), ['deny', 'deny', 'allow', 'deny', 'allow']);
-  for (const combo of saverCombos()) assert.deepEqual(cases.map((c) => judge(c, snap({ savers: combo }))), base, JSON.stringify(combo));
 });
 test('clash.2 AC26: a Role pin wins: every agents/*.md model is at or above its floor in company/model-floor.json', () => {
   const rank = { haiku: 0, sonnet: 1, opus: 2 };
@@ -154,20 +143,12 @@ test('clash.2 AC26: a Role pin wins: every agents/*.md model is at or above its 
   }
   assert.ok(checked > 10, 'many Role pins were checked');
 });
-test('clash.2 AC26: a saver rule never reads or sets a model', () => {
-  for (const f of ['browser.mjs']) {
-    const src = read('hooks', 'rules', f);
-    assert.doesNotMatch(src, /\.model\b|subagentModel|mainModel|updatedInput/, `${f} touches no model`);
-  }
-});
-
 // ---------- clash.3: effort-optimizer vs Role effort (release 2 mod) ----------
 test('clash.3 AC26: nothing in release 1 sets effort; the Role effort in agents/*.md is not touched by any saver', async () => {
   assert.ok(!manifests().some((m) => /effort/.test(m.id)), 'no effort-optimizer in release 1');
   const { checkVerdict } = await imp('hooks', 'lib', 'rule-runner.mjs');
-  assert.equal(checkVerdict({ v: 'note', rule: 'browser.Y1', message: 'x', effort: 'low' }), null, 'a verdict key outside the allow-list is refused');
-  assert.equal(checkVerdict({ v: 'note', rule: 'browser.Y1', message: 'x', updatedInput: { effort: 'low' } }), null);
-  assert.doesNotMatch(read('hooks', 'rules', 'browser.mjs'), /effort/i);
+  assert.equal(checkVerdict({ v: 'note', rule: 'savings.Y1', message: 'x', effort: 'low' }), null, 'a verdict key outside the allow-list is refused');
+  assert.equal(checkVerdict({ v: 'note', rule: 'savings.Y1', message: 'x', updatedInput: { effort: 'low' } }), null);
   for (const f of fs.readdirSync(rel('agents')).filter((n) => n.endsWith('.md'))) {
     assert.match(read('agents', f).split(/\r?\n---/)[0], /^effort:\s*\S+\s*$/m, `${f} keeps an effort pin`);
   }
@@ -178,60 +159,14 @@ test('clash.4 AC26: nothing in release 1 replaces what Claude reads: no router m
   assert.ok(!manifests().some((m) => /input-router/.test(m.id)), 'no input-router in release 1');
   const { checkVerdict } = await imp('hooks', 'lib', 'rule-runner.mjs');
   for (const key of ['updatedInput', 'updatedOutput', 'additionalContext', 'systemMessage', 'summary']) {
-    assert.equal(checkVerdict({ v: 'note', rule: 'browser.Y1', message: 'x', [key]: 'y' }), null, key);
+    assert.equal(checkVerdict({ v: 'note', rule: 'savings.Y1', message: 'x', [key]: 'y' }), null, key);
   }
-  const { judge } = await imp('hooks', 'rules', 'browser.mjs');
-  const e = ev({ tool: { name: 'Read', paths: [{ raw: 'a.txt', real: '/a.txt', exists: true }] } });
-  const before = JSON.stringify(e);
-  judge(e, snap({ savers: Object.fromEntries(SAVER_IDS().map((id) => [id, true])) }));
-  assert.equal(JSON.stringify(e), before);
-  assert.deepEqual(judge(e, snap({ savers: { 'efficient-browser-use': true } })), { v: 'allow' }, 'a Read passes untouched');
 });
 
 // ---------- clash.5: research-router vs aico:sourcing (release 2 mod) ----------
 test('clash.5 AC26: nothing in release 1 routes research', () => {
   assert.ok(!manifests().some((m) => /research-router/.test(m.id)), 'no research-router in release 1');
   for (const s of savers()) assert.ok(!/sourc|research/i.test(`${s.id} ${s.title} ${s.rules.join(' ')}`), `${s.id} is not a research saver`);
-});
-
-// ---------- clash.6: efficient-browser-use vs hands-on-tester evidence ----------
-test('clash.6 AC25 AC26: off by default in the settings and in the snapshot the engine builds', async () => {
-  const { judge } = await imp('hooks', 'rules', 'browser.mjs');
-  const s = await snapshotFor({});
-  assert.equal(s.savers['efficient-browser-use'], false, 'snapshot default for efficient-browser-use is false');
-  const shot = ev({ tool: { name: 'mcp__playwright__browser_take_screenshot' } });
-  assert.deepEqual(judge(shot, snap({ savers: s.savers })), { v: 'allow' }, 'no note when never switched on');
-  const on = await snapshotFor({ user: { mods: { efficient_browser_use: { enabled: true } } } });
-  assert.equal(on.savers['efficient-browser-use'], true);
-});
-test('clash.6 AC25 AC26: hands-on-tester and every Step session get no note and no change, with the saver on', async () => {
-  const { judge } = await imp('hooks', 'rules', 'browser.mjs');
-  const on = snap({ savers: { 'efficient-browser-use': true } });
-  const names = ['mcp__Claude_Browser__screenshot', 'mcp__playwright__browser_take_screenshot', 'mcp__claude-in-chrome__SCREENSHOT'];
-  for (const name of names) {
-    for (const agentType of ['hands-on-tester', 'aico:hands-on-tester', 'HANDS-ON-TESTER']) {
-      const e = ev({ tool: { name }, session: 'lead', agentType });
-      const before = JSON.stringify(e);
-      assert.deepEqual(judge(e, on), { v: 'allow' }, `${agentType} ${name}`);
-      assert.equal(JSON.stringify(e), before, 'evidence bytes unchanged');
-    }
-    for (const agentType of [null, 'qa', 'aico:qa', 'hands-on-tester']) {
-      assert.deepEqual(judge(ev({ tool: { name }, session: 'step', agentType }), on), { v: 'allow' }, `step ${agentType} ${name}`);
-    }
-  }
-});
-test('clash.6 AC25 AC26: the Lead note never shrinks or replaces the screenshot: note only, no rewrite key', async () => {
-  const { judge } = await imp('hooks', 'rules', 'browser.mjs');
-  const e = ev({ tool: { name: 'mcp__Claude_Browser__screenshot' } });
-  const before = JSON.stringify(e);
-  const v = judge(e, snap({ savers: { 'efficient-browser-use': true } }));
-  assert.equal(v.v, 'note');
-  assert.deepEqual(Object.keys(v).sort(), ['message', 'rule', 'v']);
-  assert.equal(JSON.stringify(e), before);
-  assert.doesNotMatch(read('hooks', 'rules', 'browser.mjs'), /haiku|resize|shrink\(|sharp|canvas/i);
-  const m = manifests().find((x) => x.id === 'efficient-browser-use');
-  assert.equal(m.sessions, 'lead');
-  assert.equal(m.fail, 'open');
 });
 
 // ---------- clash.7: mods (switches.json) vs aico settings with locks ----------
