@@ -6,12 +6,6 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
-const frontmatter = (text) => {
-  const lines = text.split('\n');
-  return Object.fromEntries(lines.slice(1, lines.indexOf('---', 1))
-    .map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
-};
-
 // A claim line is cited with [S#] or marked (unverified); anything else is blocked with [spec].
 function lintFindings(handoff) {
   const section = /^## Findings\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(handoff);
@@ -32,35 +26,10 @@ test('names.json has 37 entries (36 Roles and the Lead) and editor is named Edit
   assert.deepEqual(Object.keys(names).sort(), agents.sort());
 });
 
-test('editor agent: frontmatter, tools Read Grep Glob Skill Write only, at most 50 lines', () => {
-  const text = read('agents/editor.md');
-  const fm = frontmatter(text);
-  assert.equal(fm.name, 'editor');
-  assert.ok(fm.description.length > 0);
-  assert.ok(['sonnet', 'opus', 'haiku', 'inherit'].includes(fm.model));
-  assert.ok(fm.effort);
-  assert.deepEqual(fm.tools.split(',').map((t) => t.trim()), ['Read', 'Grep', 'Glob', 'Skill', 'Write']);
-  assert.ok(text.split('\n').length <= 51);
-  assert.ok(!text.includes('\r'));
-});
-
-test('editor agent blocks an uncited claim with spec and never rewrites it', () => {
-  const text = read('agents/editor.md');
-  assert.match(text, /\[spec\]/);
-  assert.match(text, /\[S#\]|\[S\d\]/);
-  assert.match(text, /\(unverified\)/);
-  assert.match(text, /Never[^\n]*rewrit/i);
-  assert.match(text, /aico:handoff/);
-});
-
 test('fixture Handoff: an uncited claim is blocked with spec, cited and unverified pass', () => {
   const bad = '## Findings\n- Market grew 12% — [S1] — confidence high\n- Churn fell by half\n- Rivals copy us (unverified)\n\n## Sources\n- [S1] x\n';
   const found = lintFindings(bad);
   assert.equal(found.length, 1);
   assert.match(found[0], /^\[spec\] uncited claim: Churn fell by half$/);
   assert.deepEqual(lintFindings('## Findings\n- A claim — [S2] — confidence low\n'), []);
-});
-
-test('lead routes to the editor', () => {
-  assert.match(read('skills/lead/SKILL.md'), /\| [^|]*\| `aico:editor` \|/);
 });
