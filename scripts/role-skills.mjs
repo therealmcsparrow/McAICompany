@@ -3,10 +3,10 @@
 // Reads and writes files only. It starts no process and never runs a stored command.
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseDesignSkills, parseSkillsSection } from './install-skills.mjs';
-import { readCatalog, readBaseline, eligibleRoles, addUserEntry, validateEntry, userCatalogPath, licenseAsTyped } from './skill-catalog.mjs';
+import { readCatalog, readBaseline, eligibleRoles, addUserEntry, validateEntry, userCatalogPath, licenseAsTyped, skillStatus } from './skill-catalog.mjs';
 import { checkLayers, readLayer, resolveSettings, loadModelFloor, layerFileProblem } from './settings.mjs';
 
 const MAX_FILE_BYTES = 256 * 1024;
@@ -565,6 +565,65 @@ export function stale(options = {}) {
   return { stale: reason !== null, reason, names: [...names].sort() };
 }
 
+// ---------- stamp ----------
+
+const STAMP_FILE = path.join('.company', 'role-skills-stamp.json');
+const sha = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+// sha-256 of the three inputs of the Role skills setup: the merged catalog, the resolved selections, and the
+// status of each selected skill (what `install-skills --status` reports per line, minus the free-text line itself).
+export function stampHashes(options = {}) {
+  const opts = normalize(options);
+  const catalog = readCatalog({ home: opts.home });
+  const resolved = resolveSettings({ home: opts.settingsHome, cwd: opts.cwd, pluginRoot: opts.pluginRoot });
+  const byName = new Map(catalog.entries.map((e) => [e.skillname, e]));
+  const picked = new Map();
+  for (const role of Object.keys(resolved.roles ?? {}).sort(byText)) {
+    const r = resolved.roles[role];
+    for (const item of Array.isArray(r?.skills) ? r.skills : []) {
+      if (typeof item?.name !== 'string') continue;
+      const got = picked.get(item.name) ?? { roles: [], user: false };
+      got.roles.push(role);
+      if (r?.source?.skills === 'user') got.user = true;
+      picked.set(item.name, got);
+    }
+  }
+  const selections = [...picked].sort(([a], [b]) => byText(a, b)).map(([name, v]) => ({ name, roles: v.roles, user: v.user }));
+  const lines = selections.map((s) => {
+    const entry = byName.get(s.name);
+    if (!entry) return `${s.name}|not in the catalog`;
+    try {
+      const st = skillStatus(entry, { home: opts.home, productRoot: opts.cwd, scope: s.user ? 'user' : 'project' });
+      return `${s.name}|${st.status}|${st.place ?? '-'}|${st.license}|${st.vetted ?? '-'}`;
+    } catch { return `${s.name}|status unreadable`; }
+  });
+  const clean = catalog.errors.length === 0 && (catalog.warnings ?? []).length === 0;
+  return { catalog: sha([catalog.entries, catalog.errors, catalog.warnings ?? []]), selections: sha(selections), status: sha([lines, clean]) };
+}
+
+// `unchanged` only when a stamp file is readable and holds the same three hashes; anything else is `changed`.
+export function stampCheck(options = {}) {
+  const opts = normalize(options);
+  const now = stampHashes(options);
+  let got = null;
+  try {
+    got = readPlain(path.join(opts.cwd, STAMP_FILE), 'role skills stamp');
+    got = got === null ? null : JSON.parse(got.text);
+  } catch { got = null; }
+  const same = isPlain(got) && got.schema === 1 && got.catalog === now.catalog && got.selections === now.selections && got.status === now.status;
+  return same ? 'unchanged' : 'changed';
+}
+
+export function stampWrite(options = {}) {
+  const opts = normalize(options);
+  const now = stampHashes(options);
+  const file = path.join(opts.cwd, STAMP_FILE);
+  if (!realDir(path.dirname(file))) throw new Stop('role skills stamp cannot be written');
+  const before = readPlain(file, 'role skills stamp');
+  writePlain(file, `${JSON.stringify({ schema: 1, ...now })}\n`, before === null ? null : before.id, 'role skills stamp');
+}
+
 // ---------- add and record ----------
 
 const MAX_INPUT = 64 * 1024;
@@ -772,6 +831,7 @@ const USAGE = [
   'role-skills record   one line of JSON on stdin: { entry, license, roles }',
   'role-skills migrate  [--apply] [--line <n>:<name>=<role>[,<role>]] [--category <n>:<name>=<key>] [--move <n>:<name>]',
   'role-skills pending | stale',
+  'role-skills stamp check|write   check prints unchanged or changed; write stores .company/role-skills-stamp.json',
   'Values never go on the command line.'
 ];
 
@@ -836,6 +896,13 @@ export function main(args, ctx = {}) {
       r.lines.forEach(log);
       return r.ok ? 0 : 1;
     }
+    if (cmd === 'stamp') {
+      if (rest.length !== 1 || (rest[0] !== 'check' && rest[0] !== 'write')) { log('ERROR usage: role-skills stamp check|write'); return 1; }
+      if (rest[0] === 'check') { log(stampCheck(base)); return 0; }
+      stampWrite(base);
+      log('stamp written');
+      return 0;
+    }
     if (cmd === 'help' && rest.length === 0) { USAGE.forEach(log); return 0; }
     if (cmd === 'add' || cmd === 'record') {
       if (rest.length > 0) { log(`ERROR usage: role-skills ${cmd} takes its values as one line of JSON on stdin, not on the command line`); return 1; }
@@ -844,7 +911,7 @@ export function main(args, ctx = {}) {
       r.lines.forEach(log);
       return r.ok ? 0 : 1;
     }
-    log('ERROR usage: role-skills add | record | migrate | pending | stale | help');
+    log('ERROR usage: role-skills add | record | migrate | pending | stale | stamp | help');
     return 1;
   } catch (e) {
     log(failLine(e, 'role-skills failed'));
