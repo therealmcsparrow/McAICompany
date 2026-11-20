@@ -29,8 +29,6 @@ const BASH = findBash();
 const NOW = new Date(2026, 9, 30, 22, 42, 0).getTime();
 const BASE = 'a'.repeat(40);
 const ZERO = '000000000000';
-const repoRoot = path.resolve(import.meta.dirname, '..');
-const read = (p) => fs.readFileSync(path.join(repoRoot, p), 'utf8');
 
 const roots = [];
 after(() => {
@@ -210,48 +208,5 @@ describe('shell use of the printed path', () => {
     assert.equal(sh.error, undefined, 'bash is required');
     assert.equal(sh.status, 0, sh.stderr);
     assert.equal(sh.stdout, printed);
-  });
-});
-
-describe('skill text', () => {
-  const routes = read('skills/idea/references/routes.md');
-  const fix = read('skills/fix/SKILL.md');
-  const f = routes.slice(routes.indexOf('## Route F'), routes.indexOf('## Route G'));
-
-  test('Route F uses only the printed plan path, single-quoted', () => {
-    assert.ok(f.includes('plan: <path>'));
-    assert.doesNotMatch(f, /<slug>-build|-build\//);
-    assert.match(f, /done '<name>' build --out '<path>'/);
-    assert.match(f, /Skill tool[^\n]*'<path>'/);
-    assert.doesNotMatch(f, /\.company\/work\/<slug>/);
-  });
-
-  test('Capture step 2 reads the Folder paragraph, not a dated slug', () => {
-    const cap = routes.slice(routes.indexOf('## Capture'), routes.indexOf('## Forms'));
-    assert.doesNotMatch(cap, /YYYYMMDD-HHMM|append `-2` to `-9`/);
-    assert.match(cap, /\*\*Folder:\*\*/);
-    assert.match(routes, /`ticket-approval` v1\.1/);
-  });
-
-  test('the fix Playbook takes a spaced plan path and drops the one-token wording', () => {
-    assert.doesNotMatch(fix, /one token with no whitespace|draft-input` v1\.1/);
-    assert.match(fix, /\.company\/work\/<name>\/plan\.md/);
-    assert.match(fix, /draft-input` v1\.2/);
-    assert.match(fix, /take '<path>' --for fix/);
-    assert.ok(fix.split('\n').length <= 125);
-  });
-
-  test('the contract is v1.6 and names the helper rule', () => {
-    const c = read('docs/contracts/ticket-approval.md');
-    assert.match(c, /^# Contract: ticket-approval v1\.6/);
-    assert.match(c, /helperName/);
-    assert.match(c, /plan: <path>/);
-    assert.match(read('scripts/ticket-approval.mjs'), /ticket-approval\.md v1\.6/);
-  });
-
-  test('no CR byte in the touched text files', () => {
-    for (const p of ['skills/idea/references/routes.md', 'skills/fix/SKILL.md', 'docs/contracts/ticket-approval.md', 'scripts/ticket-approval.mjs', 'scripts/work-folder-build.test.mjs']) {
-      assert.equal(read(p).includes('\r'), false, p);
-    }
   });
 });

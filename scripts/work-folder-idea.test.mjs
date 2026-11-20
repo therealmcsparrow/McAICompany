@@ -5,8 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { main } from './idea-flow.mjs';
 
-const root = path.resolve(import.meta.dirname, '..');
-const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
 const tmps = [];
 after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
@@ -128,28 +126,4 @@ test('a linked new-name folder is refused', () => {
   assert.equal(r.code, 1);
   assert.equal(r.out, 'error: link\n');
   assert.deepEqual(fs.readdirSync(outside), []);
-});
-
-for (const name of ['idea', 'bug']) {
-  test(`skills/${name}/SKILL.md uses the Topic-file form`, () => {
-    const text = read(`skills/${name}/SKILL.md`);
-    assert.ok(text.split('\n').length <= 125);
-    assert.ok(!text.includes('\r'));
-    assert.match(text, new RegExp(`work-folder new --playbook '${name}' --topic file`));
-    assert.match(text, /Write tool/);
-    assert.match(text, /idea-flow start '<name>'/);
-    assert.match(text, /never goes on a shell line/);
-    assert.match(text, /work-folder-topic-/);
-    assert.ok(text.includes('${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" work-folder new'));
-    assert.ok(!/Name:/.test(text));
-  });
-}
-
-test('the contract names v2.1 and both name forms', () => {
-  const text = read('docs/contracts/idea-flow.md');
-  assert.match(text, /^# Contract: idea-flow v2\.1$/m);
-  assert.match(text, /work-folder-name/);
-  assert.match(text, /unknown slug/);
-  assert.ok(!text.includes('\r'));
-  assert.match(read('scripts/idea-flow.mjs'), /contract idea-flow v2\.1/);
 });

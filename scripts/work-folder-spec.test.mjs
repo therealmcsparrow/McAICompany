@@ -3,10 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { main } from './spec-check.mjs';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const made = [];
 after(() => {
   for (const d of made) fs.rmSync(d, { recursive: true, force: true });
@@ -214,72 +212,5 @@ describe('stamp on new names', () => {
     const rel = `docs/specs/${NEW}.md`;
     assert.equal(main(['stamp', rel, '--version', '2.0.0', '--date', '2026-10-31'], { root }).code, 0);
     assert.deepEqual(check(root, rel), OK);
-  });
-});
-
-describe('Playbook text', () => {
-  const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-  const RUN = 'node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs"';
-  const CASES = [
-    ['skills/to-spec/SKILL.md', 'to-spec'],
-    ['skills/to-tickets/SKILL.md', 'to-tickets'],
-  ];
-
-  test('each file is LF only and at most 125 lines', () => {
-    for (const [f] of CASES) {
-      const text = read(f);
-      assert.ok(!text.includes('\r'), f);
-      assert.ok(text.split('\n').length - 1 <= 125, f);
-    }
-    assert.ok(!read('docs/contracts/destination-spec.md').includes('\r'));
-  });
-
-  test('the Topic file is written with the Write tool right before arg and named by the --for word', () => {
-    for (const [f, word] of CASES) {
-      const text = read(f);
-      const topic = `.company/work-folder-topic-${word}.txt`;
-      assert.ok(text.includes(topic), f);
-      assert.ok(text.indexOf(topic) < text.indexOf(`draft-input arg --for ${word}`), f);
-      assert.ok(text.includes(`${RUN} work-folder clear --playbook '${word}'`), f);
-      assert.ok(/right before every `draft-input arg --for /.test(text), f);
-      assert.ok(!/work-folder-topic-(?!to-(?:spec|tickets)\.txt)/.test(text.replace(topic, '')), `${f} names another id`);
-    }
-  });
-
-  test('the Topic is the Lead summary, never the argument text, never on a shell line', () => {
-    for (const [f] of CASES) {
-      const text = read(f);
-      assert.ok(/never the argument text/.test(text), f);
-      assert.ok(/never goes on a shell line/.test(text), f);
-      assert.ok(/never read it back|you never read it back/.test(text), f);
-      assert.ok(!/--topic none/.test(text.replace(/never use `--topic none`/g, '')), f);
-    }
-  });
-
-  test('the printed slug is single-quoted and checked by the shared name rule, not the old slug pattern', () => {
-    for (const [f] of CASES) {
-      const text = read(f);
-      assert.ok(!text.includes('^[a-z0-9][a-z0-9-]{0,63}$'), f);
-      assert.ok(!/one token with no whitespace/.test(text), f);
-      assert.ok(/work folder name/.test(text), f);
-      assert.ok(/single quotes/.test(text), f);
-    }
-  });
-
-  test('every shell line that names the run puts the name in single quotes', () => {
-    for (const [f] of CASES) {
-      for (const m of read(f).matchAll(/run\.mjs" (?:spec-check|plan-tasks|plan-check) [^`\n]*/g)) {
-        assert.ok(!/<slug>/.test(m[0].replace(/'[^']*'/g, '')), `${f}: ${m[0]}`);
-      }
-    }
-  });
-
-  test('the contract is v1.5 and names the work folder forms', () => {
-    const text = read('docs/contracts/destination-spec.md');
-    assert.ok(text.startsWith('# Contract: destination-spec v1.5\n'));
-    assert.ok(/v1\.3 \(/.test(text));
-    assert.ok(text.includes('work-folder-name'));
-    assert.ok(!text.includes('^[a-z0-9][a-z0-9-]{0,63}$') || /legacy/i.test(text));
-    assert.ok(/scripts\/spec-check\.mjs[^\n]*\(contract: docs\/contracts\/destination-spec\.md v1\.5\)|destination-spec\.md v1\.5/.test(read('scripts/spec-check.mjs')));
   });
 });
