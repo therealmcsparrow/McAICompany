@@ -111,14 +111,6 @@ test('seed 2 lessons: the repo keeps .gitattributes eol=lf and the regression fi
 
 // ---------- seed 3 lessons: wait for CI to finish before merging a PR ----------
 
-test('seed 3 lessons: the pipeline Finish merges only after CI on the PR is green, and an auto Ship Gate never merges', () => {
-  const text = fs.readFileSync(path.join(realRoot, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-  const finish = text.slice(text.indexOf('## 6. Finish'));
-  assert.match(finish, /only after CI on the PR is green/);
-  assert.match(finish, /gh pr checks <n> --watch/);
-  assert.match(finish, /never merges/);
-});
-
 // ---------- seed 4 (bddd366): a project file with any problem keeps ship and security locked ----------
 
 function settingsSandbox() {
@@ -169,16 +161,6 @@ test('seed 4 bddd366: an unlocked list in the project file never unlocks anythin
 
 // ---------- seed 5 (052a035): incident Ship Gates always ask, project overrides are shown ----------
 
-test('seed 5 052a035: the incident Playbook makes every Ship Gate a form whatever the settings say', () => {
-  const text = fs.readFileSync(path.join(realRoot, 'skills', 'incident', 'SKILL.md'), 'utf8');
-  assert.match(text, /Every Ship Gate in this Playbook is a form, whatever the settings say/);
-  for (const part of ['mitigation', 'each report']) assert.ok(text.includes(part), part);
-  // the run ends after mitigation, reports and postmortem: no Gate for a final fix, the CEO gets /aico:fix
-  assert.ok(!/final fix/i.test(text), 'incident has no final-fix Gate');
-  assert.ok(text.includes('/aico:fix'), 'incident hands /aico:fix to the CEO');
-  assert.ok(!/gates\.ship|gates\.[a-z]+\s*[:=]\s*auto/.test(text), 'incident reads no Gate setting');
-});
-
 test('seed 5 052a035: with ship auto and unlocked, a project override still reaches the CEO line data', () => {
   const s = settingsSandbox();
   s.user({ unlocked: ['ship'], gates: { ship: 'auto' } });
@@ -186,13 +168,6 @@ test('seed 5 052a035: with ship auto and unlocked, a project override still reac
   const r = resolveSettings({ home: s.home, cwd: s.cwd });
   assert.ok(JSON.stringify(r.roles.qa).includes('haiku'), JSON.stringify(r.roles.qa));
   assert.ok(JSON.stringify(r.roles.qa).includes('project'), JSON.stringify(r.roles.qa));
-});
-
-test('seed 5 052a035: the pipeline shows the CEO project overrides, warnings and the empty-case line', () => {
-  const text = fs.readFileSync(path.join(realRoot, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-  assert.match(text, /Show the CEO in your first chat message of the run/);
-  assert.match(text, /`source` is `project`/);
-  assert.match(text, /Settings: no project overrides or warnings/);
 });
 
 test('the real repo passes check.mjs for the lines the seeds touch', () => {

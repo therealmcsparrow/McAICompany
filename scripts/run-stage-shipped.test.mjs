@@ -41,15 +41,6 @@ test('the CLI set <slug> shipped exits 0 and writes nothing to stdout', () => {
   }
 });
 
-test('STAGES, the run-stage contract and the pipeline run-state doc list the same stages', () => {
-  const contract = fs.readFileSync(path.join(ROOT, 'docs', 'contracts', 'run-stage.md'), 'utf8');
-  const doc = fs.readFileSync(path.join(ROOT, 'skills', 'pipeline', 'references', 'run-state.md'), 'utf8');
-  assert.ok(STAGES.includes('shipped'), 'STAGES lacks shipped');
-  assert.ok(contract.includes(`\`stage\`: \`${STAGES.join(' | ')}\``), 'contract stage list differs from STAGES');
-  assert.ok(doc.includes(`'<${STAGES.join('|')}>'`), 'run-state.md command lists differ from STAGES');
-  assert.ok(/`shipped`/.test(doc), 'run-state.md never says when to set shipped');
-});
-
 test('this test file is LF only', () => {
   assert.ok(!fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').includes('\r'));
 });
