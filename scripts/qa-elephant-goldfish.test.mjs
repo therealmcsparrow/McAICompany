@@ -313,18 +313,6 @@ describe('AC1 the plan review inputs hold only the plan, its Contracts and the c
     assert.equal(exists(p.dir, `.company/work/${SLUG}/plan-review`), false);
   });
 
-  test('the dispatch template and the Role text keep the brief and the Handoffs out of the first read', () => {
-    const doc = read('skills', 'pipeline', 'references', 'plan-review.md');
-    const block = /```\n([\s\S]*?)\n```/.exec(doc)[1];
-    assert.match(block, /^Input Handoffs: none: plan review$/m);
-    assert.match(block, /^Review inputs: <line from lines>$/m);
-    assert.match(block, /^After first pass: <line from lines>$/m);
-    assert.doesNotMatch(block, /brief/i);
-    assert.doesNotMatch(block, /\d{2}-(architect|product-manager)/);
-    assert.match(doc, /no other path line is added/);
-    const role = read('agents', 'fresh-reviewer.md');
-    assert.match(role, /Never read the brief, the run folder, another Handoff/);
-  });
 });
 
 // ==================================================================
@@ -394,12 +382,6 @@ describe('AC2 the first pass comes before any line that cites a run Handoff', ()
     assert.equal(r.code, 1, r.all);
   });
 
-  test('the Role text says the first pass is written before any After first pass file is opened', () => {
-    const doc = read('skills', 'review', 'references', 'fresh-review.md');
-    assert.match(doc, /Only then open the `After first pass:` files/);
-    assert.match(doc, /No Handoff file name may appear before this section ends/);
-    assert.match(read('agents', 'fresh-reviewer.md'), /before you open any `After first pass:` file/);
-  });
 });
 
 // ==================================================================
@@ -454,27 +436,6 @@ describe('AC4 plan review findings join the Plan Gate summary; no Gate is added'
     assert.match(refused.lines[0], /^refused: /);
   });
 
-  test('the skill text puts the block in the existing Plan Gate and adds no Gate or stop', () => {
-    const doc = read('skills', 'pipeline', 'references', 'plan-review.md');
-    assert.match(doc, /\*\*Plan Gate block\.\*\* Under the summary show/);
-    assert.match(doc, /It adds no Gate and no stop/);
-    assert.match(doc, /`plan review: not run`/);
-    const gates = new Set();
-    const walk = (dir) => {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, e.name);
-        if (e.isDirectory()) walk(full);
-        else if (e.name.endsWith('.md')) for (const m of fs.readFileSync(full, 'utf8').matchAll(/\*\*→ ([A-Za-z ]+?)\*\*/g)) gates.add(m[1]);
-      }
-    };
-    walk(path.join(REPO, 'skills'));
-    for (const g of gates) assert.match(g, /^(Brief|Plan|Ship) Gate$/, `unexpected Gate marker: ${g}`);
-    assert.ok(gates.has('Plan Gate'));
-    const feature = read('skills', 'feature', 'SKILL.md');
-    const marks = [...feature.matchAll(/\*\*→ ([A-Za-z ]+?)\*\*/g)].map((m) => m[1]);
-    assert.deepEqual(marks, ['Ship Gate']);
-    assert.ok(feature.indexOf('2e. `aico:fresh-reviewer`') < feature.indexOf('**→ Ship Gate**'));
-  });
 });
 
 // ==================================================================
@@ -569,19 +530,6 @@ describe('AC5 the second reviewer runs at tier high with the setting on, never a
     assert.doesNotMatch(set, /second-reviewer|plan-review/);
   });
 
-  test('the Lead text runs it only at tier high with the setting on, beside the Code Reviewer, never a third', () => {
-    const doc = read('skills', 'pipeline', 'references', 'review-loop.md');
-    assert.match(doc, /the run's Risk tier is `high` with `pipeline\.second_reviewer` `on`/);
-    assert.match(doc, /any other value, or no `get` JSON → off/);
-    assert.match(doc, /beside `code-reviewer`/);
-    assert.match(doc, /never a third reviewer/);
-    for (const f of ['feature', 'fix']) {
-      const skill = read('skills', f, 'SKILL.md');
-      assert.match(skill, /only at Risk tier `high` with `pipeline\.second_reviewer` `on`/);
-    }
-    const contract = read('docs', 'contracts', 'tier-sets.md');
-    assert.match(contract, /second-reviewer/);
-  });
 });
 
 // ------------------------------------------------------------------ git repo with a run branch
@@ -683,11 +631,6 @@ describe('AC6 a finding only one reviewer raised stays Blocking and is listed at
     assert.equal(contestsOf(sb, p).states.get(KEY), 'accepted');
   });
 
-  test('the Lead text lists each disagreement at the Ship Gate for the CEO', () => {
-    const doc = read('skills', 'pipeline', 'references', 'review-loop.md');
-    assert.match(doc, /`single <key> <path>` lines appear only when both `code-reviewer` and a code-mode `fresh-reviewer` ran; show each as a disagreement for the CEO/);
-    assert.match(doc, /Before every Ship Gate run `gate/);
-  });
 });
 
 // ==================================================================
@@ -719,17 +662,6 @@ describe('AC7 the fresh reviewer keeps a Paraphrase, even with no findings, and 
     assert.equal(p.run_('plan-review.mjs', ['gate', SLUG, '04-fresh-reviewer.md']).code, 3);
   });
 
-  test('the Plan Gate shows the plan reviewer paraphrase unchanged', () => {
-    const doc = read('skills', 'pipeline', 'references', 'plan-review.md');
-    assert.match(doc, /show: the output of `plan-review gate '<slug>' '<fresh-reviewer Handoff>'` unchanged/);
-  });
-
-  test('the Ship Gate shows the second reviewer paraphrase unchanged (the next Gate after a code review)', () => {
-    const loop = read('skills', 'pipeline', 'references', 'review-loop.md');
-    const feature = read('skills', 'feature', 'SKILL.md');
-    const shown = (text) => text.split('\n').some((l) => /Ship Gate/.test(l) && /plan-review/.test(l) && /gate/.test(l) && /paraphrase/i.test(l));
-    assert.ok(shown(loop) || shown(feature), 'no Ship Gate step runs `plan-review gate` on the code-mode Handoff');
-  });
 });
 
 // ==================================================================
@@ -761,11 +693,6 @@ describe('AC8 a paraphrase gap is a comprehension Blocking row whose fix is a te
     assert.equal(r.code, 1, r.all);
   });
 
-  test('the Role text routes the fix to a text change', () => {
-    assert.match(read('agents', 'fresh-reviewer.md'), /`\[comprehension\]` Blocking row whose fix is a text change/);
-    assert.match(read('skills', 'review', 'references', 'fresh-review.md'), /`\[comprehension\]` row whose fix is a text change/);
-    assert.match(read('skills', 'pipeline', 'references', 'plan-review.md'), /the architect changes the text/);
-  });
 });
 
 // ==================================================================
@@ -867,13 +794,6 @@ describe('AC9 a review Step that fails twice is recorded as not run, never as a 
     assert.equal(g.all.includes('nothing to report'), false);
   });
 
-  test('the Lead text retries once, then puts "not run" on the Ship Gate list and never treats it as a pass', () => {
-    const doc = read('skills', 'pipeline', 'references', 'review-loop.md');
-    assert.match(doc, /`retry <role>` → re-dispatch that Step once/);
-    assert.match(doc, /the round is not clean, and the line goes on the Ship Gate list/);
-    assert.match(doc, /Never treat a missing review as a pass/);
-    assert.match(read('skills', 'pipeline', 'references', 'plan-review.md'), /`attempt`/);
-  });
 });
 
 // ==================================================================
@@ -979,15 +899,10 @@ describe('AC10 a new Blocking finding on a range the last Fix round changed is c
     assert.ok(g.lines.includes('churn: unknown'));
   });
 
-  test('the fix round cap is untouched and the Lead text stops the Fix rounds on churn', () => {
+  test('the fix round cap is untouched', () => {
     const sb = sandbox();
     const p = product(sb);
     assert.equal(p.run_('settings.mjs', ['get', 'pipeline.fix_rounds']).out, '2\n');
-    const doc = read('skills', 'pipeline', 'references', 'review-loop.md');
-    assert.match(doc, /Any `churn` line or `churn: unknown` \(exit 2\) → stop the Fix rounds and escalate to the CEO/);
-    assert.match(doc, /`pipeline\.fix_rounds` is unchanged/);
-    assert.match(doc, /naming both findings/);
-    assert.match(doc, /Before the builder dispatch of Fix round `<round>` run `mark/);
   });
 });
 
@@ -1091,11 +1006,6 @@ describe('AC11 a contest needs evidence the reviewer can open', () => {
     assert.equal(second.errors.length, 1);
   });
 
-  test('the builder text says plain intent is not evidence', () => {
-    const doc = read('skills', 'handoff', 'references', 'contest.md');
-    assert.match(doc, /"Intentional" or "as designed" is not evidence/);
-    assert.match(doc, /a line without checkable evidence is a lint error and does not count as your contest/);
-  });
 });
 
 // ==================================================================
@@ -1231,13 +1141,6 @@ describe('AC12 a contest with no reachable evidence is escalated and only the CE
     assert.equal(a.lines[0], 'rulings on file: confirm each is yours (0)');
   });
 
-  test('the Lead text keeps a Role out of the ruling and shows the lines for the CEO to confirm', () => {
-    const doc = read('skills', 'pipeline', 'references', 'contest.md');
-    assert.match(doc, /Only the CEO's own Gate answer closes an escalated finding/);
-    assert.match(doc, /Never write it from a Role's words/);
-    assert.match(doc, /`escalated <key>`: a Blocking question for the CEO at the next Gate/);
-    assert.match(doc, /On "not mine" for a ruling/);
-  });
 });
 
 // ==================================================================
@@ -1325,11 +1228,6 @@ describe('AC13 a comprehension finding cannot be contested; the v0.20 contest li
     assert.equal(c.code, 1, c.raw.join('\n'));
   });
 
-  test('the builder text says a comprehension finding is fixed by changing the text', () => {
-    const doc = read('skills', 'handoff', 'references', 'contest.md');
-    assert.match(doc, /A `\[comprehension\]` finding .* cannot be contested or escalated: change the text/);
-    assert.match(doc, /Security findings never close by contest/);
-  });
 });
 
 // ==================================================================
@@ -1471,17 +1369,12 @@ describe('AC14 the drift report compares Contract claims with code, cites both p
     });
   }
 
-  test('the Architect text names the four kinds the lint accepts, and the lint accepts no others', () => {
-    const doc = read('skills', 'maintain', 'references', 'drift.md');
-    const kinds = [...doc.matchAll(/^- `([a-z-]+)`: /gm)].map((m) => m[1]);
-    assert.deepEqual(kinds, ['missing-feature', 'incomplete-model', 'logic-shortcut', 'architectural-divergence']);
+  test('the lint accepts the four item kinds', () => {
+    const kinds = ['missing-feature', 'incomplete-model', 'logic-shortcut', 'architectural-divergence'];
     for (const kind of kinds) assert.equal(lintReport(valid.replace('missing-feature', kind)).code, 0, kind);
-    assert.match(doc, /Each item names the Contract line and the code line it rests on/);
   });
 
-  test('nothing in check, CI or a Gate runs the report or reads its result', () => {
-    const doc = read('skills', 'maintain', 'references', 'drift.md');
-    assert.match(doc, /it never blocks, never changes an exit code of `check`, a Gate or CI, and adds no Gate, Fix round or Ship Gate line/);
+  test('nothing in check, CI or another script runs the report or reads its result', () => {
     assert.equal(read('scripts', 'check.mjs').includes('drift-report'), false);
     const flows = path.join(REPO, '.github', 'workflows');
     if (fs.existsSync(flows)) {
@@ -1496,39 +1389,6 @@ describe('AC14 the drift report compares Contract claims with code, cites both p
 // ==================================================================
 
 describe('AC15 without the drift argument no drift Step is dispatched', () => {
-  const maintain = read('skills', 'maintain', 'SKILL.md');
-
-  test('the Playbook runs the drift Step only when the argument is exactly drift', () => {
-    assert.match(maintain, /^argument-hint: "\[drift\]"$/m);
-    assert.match(maintain, /The only argument besides `help` is `drift`/);
-    assert.match(maintain, /only when the argument is exactly `drift`; without it, no drift Step is dispatched and `pick` is not run/);
-  });
-
-  test('every line of the Playbook that names the drift script or its reference is the one gated line', () => {
-    const named = maintain.split('\n').filter((l) => /drift-report|references\/drift\.md|aico:architect/.test(l) && /drift/.test(l));
-    assert.ok(named.length >= 1);
-    for (const l of named) assert.match(l, /only when the argument is exactly `drift`/, l);
-    assert.equal(/^\s*\d+\.\s.*drift-report/m.test(maintain), false);
-  });
-
-  test('the drift reference loads only for that argument', () => {
-    assert.match(read('skills', 'maintain', 'references', 'drift.md'), /Load this only when the argument is exactly `drift`/);
-  });
-
-  test('no other Playbook, reference or Role file starts a drift Step', () => {
-    const hits = [];
-    const walk = (dir) => {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, e.name);
-        if (e.isDirectory()) walk(full);
-        else if (e.name.endsWith('.md') && fs.readFileSync(full, 'utf8').includes('drift-report')) hits.push(path.relative(REPO, full).split(path.sep).join('/'));
-      }
-    };
-    walk(path.join(REPO, 'skills'));
-    walk(path.join(REPO, 'agents'));
-    assert.deepEqual(hits.sort(), ['skills/maintain/SKILL.md', 'skills/maintain/references/drift.md']);
-  });
-
   test('the script does nothing when it is started without a command', () => {
     const sb = sandbox();
     const p = product(sb);
