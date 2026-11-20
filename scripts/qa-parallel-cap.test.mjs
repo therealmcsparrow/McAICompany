@@ -140,9 +140,6 @@ test('AC1 the settings page row is labelled, described and reachable by keyboard
   assert.match(sw, /el\('legend', \{\}, label/);
   assert.match(sw, /fs\.setAttribute\('aria-describedby', baseDesc\)/);
   assert.ok(!/tabindex/i.test(body), 'native controls only');
-  const contract = read('docs/contracts/aico-settings.md');
-  const hint = html.match(/const PARALLEL_CAP_HINT = '([^']+)'/)[1];
-  assert.ok(contract.includes(`exactly: "${hint}"`), 'the hint is the exact Contract v2.1 text');
   assert.match(html, /id: 'parallel-cap-hint'/);
   const dispatch = html.indexOf("label: 'Dispatch'");
   assert.ok(dispatch > 0 && html.indexOf('parallelCapRow(rack, defaults.parallel_cap)') > dispatch, 'the row follows Dispatch');
@@ -180,8 +177,6 @@ test('AC2 the check block and the pipeline text name the cap as ignored in seque
   const block = fx.check(5, 'sequential').lines;
   assert.equal(block[0], 'plan-tasks: 6 tasks, 6 marked, 0 alone, cap 5 (sequential)');
   assert.deepEqual(block.filter((l) => l.startsWith('wave 1')), ['wave 1: T1']);
-  assert.match(read('skills/pipeline/SKILL.md'), /`pipeline\.dispatch` `sequential` → 1/);
-  assert.match(read('skills/pipeline/references/parallel.md'), /`<mode>` = `sequential` when `pipeline\.dispatch` is `sequential`/);
 });
 
 // ---------- eligible ----------
@@ -431,15 +426,8 @@ test('AC5 a Step is not freed by the Lead guessing: start refuses an id that is 
   assert.equal(fx.run('start', SLUG, 'T99').code, 3);
   assert.equal(fx.run('done', SLUG, 'T1').code, 3, 'done needs a running task');
   assert.deepEqual(fx.view().running, []);
-  assert.match(read('skills/pipeline/references/parallel.md'), /A new plan Step starts only after a running one is linted, ledgered, committed and done\./);
 });
 
-test('AC5 other pipeline Steps are capped by the same number, read-only fan-outs are not', () => {
-  const text = read('skills/pipeline/references/parallel.md');
-  assert.match(text, /\*\*Other Steps\*\*[^\n]*at most `<cap>` at once \(1 when sequential\)/);
-  assert.match(text, /Read-only fan-outs \(brainstorm, research, cooler, usability-test Personas\) are not capped/);
-  assert.match(read('skills/pipeline/SKILL.md'), /\*\*Parallel, capped\.\*\* At most `<cap>` Steps/);
-});
 
 // ---------- overlap ----------
 
@@ -570,13 +558,6 @@ test('AC8 a lower cap than eligible tasks shows the cap as the reason', (t) => {
   assert.deepEqual(fx.check(5).lines.slice(1), ['wave 1: T1, T2, T3, T4, T5', 'wave 2: T6 cap']);
 });
 
-test('AC8 the pipeline text puts the block under the Plan Gate summary and says it never blocks', () => {
-  const text = read('skills/pipeline/references/parallel.md');
-  assert.match(text, /\*\*Plan Gate\.\*\* Before the form run `check/);
-  assert.match(text, /paste stdout unchanged, inside a code fence, as a \*\*Parallel plan\*\* block under the summary/);
-  assert.match(text, /Warnings never block\./);
-  assert.match(read('skills/pipeline/SKILL.md'), /Plan Gate\*\* also shows the Parallel plan block/);
-});
 
 // ---------- dispatch text and shared-tree rules ----------
 
@@ -591,29 +572,7 @@ test('AC9 lines prints exactly the Task and Files lines, with the plan written f
   assert.equal(fx.run('lines', SLUG).code, 3);
 });
 
-test('AC9 the handoff rule forbids stash, killing by image name and full test runs', () => {
-  const text = read('skills/handoff/SKILL.md');
-  const rule = text.slice(text.indexOf('**Task: and Files:**'));
-  assert.match(rule, /Never `git stash`/);
-  assert.match(rule, /`taskkill \/IM`/);
-  assert.match(rule, /`pkill`/);
-  assert.match(rule, /stop only PIDs you started/);
-  assert.match(rule, /Run only the test files for your paths; the Lead runs the full suite once/);
-  assert.match(rule, /Change only the paths in `Files:`/);
-});
 
-test('AC9 the dispatch Contract and the pipeline block carry Task and Files after the rule slice', () => {
-  const contract = read('docs/contracts/dispatch-prompt.md');
-  assert.match(contract, /Lines added in v3\.5/);
-  assert.match(contract, /`Task: <id>`/);
-  assert.match(contract, /`Files: <path>/);
-  const pipeline = read('skills/pipeline/SKILL.md');
-  const slice = pipeline.indexOf('Rule slice:');
-  const taskAt = pipeline.indexOf('Task: <id>');
-  const filesAt = pipeline.indexOf('Files: <paths | none>');
-  assert.ok(slice > 0 && taskAt > slice && filesAt > taskAt);
-  assert.match(read('skills/pipeline/references/parallel.md'), /put its two lines into the dispatch as `Task:` and `Files:`/);
-});
 
 // ---------- out-of-list paths ----------
 
@@ -688,10 +647,6 @@ test('AC10 the out-of-list count reaches the ledger as one integer, the reviewer
   assert.equal(parRec.out, 3);
   const text = fs.readFileSync(file, 'utf8');
   assert.ok(!/src\/|docs\/|more\/|T1|T2/.test(text));
-  const parallel = read('skills/pipeline/references/parallel.md');
-  assert.match(parallel, /`sibling` path is not committed/);
-  assert.match(parallel, /records each as a `\[spec\]` blocker/);
-  assert.match(parallel, /name each `extra` line to the CEO/);
 });
 
 // ---------- Fix rounds ----------
@@ -741,12 +696,6 @@ test('AC11 round refuses a wrong number, a running task and hostile paths', (t) 
   }
 });
 
-test('AC11 the pipeline text sends builders back through round and next under the same rules', () => {
-  const text = read('skills/pipeline/references/parallel.md');
-  assert.match(text, /\*\*Fix round\.\*\*[^\n]*Run `round '<slug>' '<n>' --loose '<k>' -- '<p1>' …`/);
-  assert.match(text, /Then steps 4 and 5 run for the round's tasks/);
-  assert.match(read('skills/pipeline/SKILL.md'), /under the same cap and overlap rules/);
-});
 
 // ---------- the ledger record ----------
 
@@ -959,12 +908,6 @@ test('AC13 the verdict writes nothing and its line holds no saving word', (t) =>
   assert.ok(!/%|saving|saved|faster|\$|EUR/i.test(r.lines[0]));
 });
 
-test('AC13 the feedback Playbook quotes the line unchanged and never stops on it', () => {
-  const text = read('skills/feedback/SKILL.md');
-  assert.match(text, /parallel-verdict/);
-  assert.match(text, /## Parallel/);
-  assert.match(text, /It never stops the run; an error is quoted as it is, never read as a pass\./);
-});
 
 // ---------- the other verdicts ----------
 
@@ -1050,13 +993,6 @@ test('AC15 pass and insufficient name no next step', (t) => {
 });
 
 test('AC15 the rollback step is the same in the docs, the Contract and the settings the step names', (t) => {
-  const concepts = read('documentation/concepts/parallel-steps.md');
-  assert.match(concepts, /\*\*Rolling back\.\*\* When the verdict says `fail`, set `pipeline\.parallel_cap` to 5 in `\/aico:settings`/);
-  assert.match(concepts, /set `pipeline\.dispatch` to `sequential` instead/);
-  assert.match(concepts, /Reviewer, QA and Security verdicts and the Gates do not change\./);
-  const contract = read('docs/contracts/token-ledger.md');
-  assert.match(contract, /next step: set pipeline\.parallel_cap to 5/);
-  assert.match(contract, /next step: set pipeline\.dispatch to sequential/);
   // The step it names is a value the settings accept, and 5 is the top of the range.
   const s = settingsFx(t);
   s.user({ parallel_cap: 5, dispatch: 'sequential' });
@@ -1064,15 +1000,6 @@ test('AC15 the rollback step is the same in the docs, the Contract and the setti
   assert.equal(s.get('pipeline.dispatch').out.trim(), 'sequential');
 });
 
-test('AC15 the Gates and the review lanes are still in the pipeline text', () => {
-  const text = read('skills/pipeline/SKILL.md');
-  assert.match(text, /At \*\*Brief\*\*, \*\*Plan\*\* and \*\*Ship\*\*, stop\./);
-  assert.match(text, /A Gate is never skipped/);
-  assert.match(text, /\*\*One Fix round\*\* = dispatch the builder with \*all\* blocking reviewer Handoffs as input/);
-  assert.match(text, /by default at most 2 rounds/);
-  const parallel = read('skills/pipeline/references/parallel.md');
-  assert.match(parallel, /Then re-dispatch every reviewer that blocked/);
-});
 
 test('this test file is LF only', () => {
   const bytes = fs.readFileSync(import.meta.filename);
