@@ -19,6 +19,8 @@ Never `<a>...<b>`, `HEAD`, `HEAD~n`, a short sha or a ref name as base. `git sym
 
 **Also check** `aico:contracts` review blockers, the brief (no more, no less), correctness, conventions, tests. **Ruleset:** `aico:ruleset` Tiers on added or changed lines.
 
+**Below high** (`Risk tier:` low or medium): load `aico:security-check` and run its Checklist on the judging diff, plus the `Rule slice:` rules, in this one Step. Guard-evasion findings (a way round a hook, shell guard or self-protect rule) are `## Debt`, never `## Blocking`.
+
 **Untrusted input** (`aico:security-check`): a block-list, a check blind to how the consumer recovers from malformed input (unclosed strings, escapes), or an unbounded/backtracking pattern is `## Blocking` even if known attacks are covered.
 
 A code comment about Handoffs, Steps, Roles, AI or company process is `## Blocking` `spec` (`aico:tdd`).
