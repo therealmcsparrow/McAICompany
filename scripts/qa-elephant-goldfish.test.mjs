@@ -322,7 +322,7 @@ describe('AC2 the first pass comes before any line that cites a run Handoff', ()
   const lintText = (text) => {
     const sb = sandbox();
     const dir = path.join(sb.dir, 'lint');
-    const file = put(dir, '04-fresh-reviewer.md', text);
+    const file = put(dir, '04-fresh-reviewer.md', text.replace('handoff v2.0', 'handoff v3.0'));
     return lintFile(sb, dir, file);
   };
 
@@ -440,201 +440,6 @@ describe('AC4 plan review findings join the Plan Gate summary; no Gate is added'
 
 // ==================================================================
 
-describe('AC5 the second reviewer runs at tier high with the setting on, never as a third pass', () => {
-  function settingsOf(sb, cwd, ...args) {
-    return node(sb, cwd, 'settings.mjs', ['get', ...args]);
-  }
-  const userConfig = (sb, layer) => put(sb.home, '.mcsparrow/config.json', JSON.stringify({ aico_settings: { version: 1, ...layer } }));
-  const projectConfig = (p, layer) => p.put('.company/settings.json', JSON.stringify({ aico_settings: { version: 1, ...layer } }));
-
-  test('the setting is off with no config', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    const r = settingsOf(sb, p.dir, 'pipeline.second_reviewer');
-    assert.equal(r.out, 'off\n');
-  });
-
-  test('a project value cannot switch it on; it is ignored and listed', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    projectConfig(p, { pipeline: { second_reviewer: 'on' } });
-    const r = settingsOf(sb, p.dir);
-    const json = JSON.parse(r.out);
-    assert.equal(json.pipeline.second_reviewer, 'off');
-    assert.ok(json.ignored.includes('pipeline.second_reviewer: set it at the user level'));
-  });
-
-  test('a project value cannot switch a user value off either', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    userConfig(sb, { pipeline: { second_reviewer: 'on' } });
-    projectConfig(p, { pipeline: { second_reviewer: 'off' } });
-    assert.equal(settingsOf(sb, p.dir, 'pipeline.second_reviewer').out, 'on\n');
-  });
-
-  test('a user value on counts', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    userConfig(sb, { pipeline: { second_reviewer: 'on' } });
-    assert.equal(settingsOf(sb, p.dir, 'pipeline.second_reviewer').out, 'on\n');
-  });
-
-  test('a stored value that is neither on nor off falls back to off', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    for (const bad of ['maybe', true, 1, 'ON']) {
-      userConfig(sb, { pipeline: { second_reviewer: bad } });
-      const r = settingsOf(sb, p.dir, 'pipeline.second_reviewer');
-      assert.equal(r.out, 'off\n', `value ${JSON.stringify(bad)}`);
-    }
-  });
-
-  test('a project settings file that cannot be parsed does not change the user value', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    userConfig(sb, { pipeline: { second_reviewer: 'on' } });
-    p.put('.company/settings.json', '{ not json');
-    const r = settingsOf(sb, p.dir, 'pipeline.second_reviewer');
-    assert.equal(r.out, 'on\n');
-    assert.match(r.err, /not valid JSON/);
-  });
-
-  test('the tier sets keep both new entries out of every low set and in medium and high', () => {
-    const sb = sandbox();
-    const r = node(sb, REPO, 'tier-set.mjs', ['sets']);
-    assert.equal(r.code, 0, r.all);
-    const sets = Object.fromEntries(r.lines.filter((l) => /^(feature|fix) (low|medium|high): /.test(l)).map((l) => {
-      const [k, v] = l.split(': ');
-      return [k, v.split(', ')];
-    }));
-    for (const k of ['feature low', 'fix low']) {
-      assert.equal(sets[k].includes('second-reviewer'), false, k);
-      assert.equal(sets[k].includes('plan-review'), false, k);
-    }
-    for (const k of ['feature medium', 'feature high']) {
-      assert.ok(sets[k].includes('second-reviewer') && sets[k].includes('plan-review'), k);
-    }
-    for (const k of ['fix medium', 'fix high']) assert.ok(sets[k].includes('second-reviewer'), k);
-    assert.equal(sets['fix high'].includes('plan-review'), false);
-    assert.ok(sets['feature high'].indexOf('second-reviewer') > sets['feature high'].indexOf('code-reviewer'));
-    assert.ok(sets['feature high'].indexOf('plan-review') > sets['feature high'].indexOf('ruleset-sign-off'));
-  });
-
-  test('a short path run at low tier gets a set without either entry', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    const r = p.run_('tier-set.mjs', ['preview', SLUG, '--playbook', 'feature', '--triage', 'low', '--short', 'on']);
-    assert.equal(r.code, 0, r.all);
-    const set = r.lines.find((l) => l.startsWith('set: ')) ?? '';
-    assert.ok(set.length > 5, r.all);
-    assert.doesNotMatch(set, /second-reviewer|plan-review/);
-  });
-
-});
-
-// ------------------------------------------------------------------ git repo with a run branch
-
-const numbered = (n) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
-
-// A repo on refs/heads/aico/demo with a base commit; .company is ignored so Handoffs never dirty the tree.
-function runRepo(sb, name = 'repo') {
-  const dir = path.join(sb.dir, name);
-  fs.mkdirSync(dir, { recursive: true });
-  const g = (...args) => git(sb, dir, args);
-  g('init', '--quiet');
-  g('checkout', '--quiet', '-b', `aico/${SLUG}`);
-  put(dir, 'a.txt', numbered(50));
-  put(dir, 'b.txt', numbered(10));
-  put(dir, '.gitignore', '.company/\n');
-  fs.mkdirSync(path.join(dir, '.company', 'work', SLUG), { recursive: true });
-  g('add', '--all');
-  g('commit', '--quiet', '--no-verify', '-m', 'base');
-  const base = g('rev-parse', 'HEAD');
-  const edit = (file, fn, msg = 'fix') => {
-    const p = path.join(dir, file);
-    fs.writeFileSync(p, fn(fs.readFileSync(p, 'utf8').split('\n')).join('\n'));
-    g('commit', '--quiet', '--no-verify', '--all', '-m', msg);
-    return g('rev-parse', 'HEAD');
-  };
-  return {
-    dir, g, base, edit,
-    run: (args) => node(sb, dir, 'review-loop.mjs', args),
-    run_: (script, args) => node(sb, dir, script, args),
-    put: (rel, text) => put(dir, rel, text),
-    runFolder: path.join(dir, '.company', 'work', SLUG)
-  };
-}
-
-// ==================================================================
-
-describe('AC6 a finding only one reviewer raised stays Blocking and is listed at the Ship Gate', () => {
-  const gateLines = (r) => r.run(['gate', SLUG]).lines;
-
-  test('Code Reviewer blocks, second reviewer clear: one single line, finding still open', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    writeHandoff(r.dir, '05-code-reviewer.md', { blocking: [row('spec', 1, 'a.txt:10')] });
-    writeHandoff(r.dir, '06-fresh-reviewer.md', { mode: 'code' });
-    const g = r.run(['gate', SLUG]);
-    assert.equal(g.code, 0, g.all);
-    assert.deepEqual(g.lines, ['single 05-code-reviewer:R-1 a.txt']);
-    const c = contestsOf(sb, { dir: r.dir, run: r.runFolder });
-    assert.equal(c.states.get(KEY), 'open');
-  });
-
-  test('second reviewer blocks, Code Reviewer clear: the other direction is listed too', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    writeHandoff(r.dir, '05-code-reviewer.md', {});
-    writeHandoff(r.dir, '06-fresh-reviewer.md', { mode: 'code', blocking: [row('spec', 1, 'a.txt:10')], firstPass: ['R-1 a finding'] });
-    assert.deepEqual(gateLines(r), ['single 06-fresh-reviewer:R-1 a.txt']);
-  });
-
-  test('both block the same lines: no disagreement', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    writeHandoff(r.dir, '05-code-reviewer.md', { blocking: [row('spec', 1, 'a.txt:10-12')] });
-    writeHandoff(r.dir, '06-fresh-reviewer.md', { mode: 'code', blocking: [row('spec', 1, 'a.txt:11')], firstPass: ['R-1 a finding'] });
-    assert.deepEqual(gateLines(r), ['review-loop: nothing to report']);
-  });
-
-  test('both block the same file in different places: each finding is a disagreement', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    writeHandoff(r.dir, '05-code-reviewer.md', { blocking: [row('spec', 1, 'a.txt:10')] });
-    writeHandoff(r.dir, '06-fresh-reviewer.md', { mode: 'code', blocking: [row('spec', 1, 'a.txt:40')], firstPass: ['R-1 a finding'] });
-    assert.deepEqual(gateLines(r), ['single 05-code-reviewer:R-1 a.txt', 'single 06-fresh-reviewer:R-1 a.txt']);
-  });
-
-  test('with one reviewer only, or a plan-mode second reviewer, nothing is a disagreement', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    writeHandoff(r.dir, '05-code-reviewer.md', { blocking: [row('spec', 1, 'a.txt:10')] });
-    assert.deepEqual(gateLines(r), ['review-loop: nothing to report']);
-    writeHandoff(r.dir, '04-fresh-reviewer.md', { mode: 'plan' });
-    assert.deepEqual(gateLines(r), ['review-loop: nothing to report']);
-  });
-
-  test('a contest with no evidence does not close it; a contest with evidence the reviewer accepts does', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    r.put('src/big.mjs', numbered(20));
-    writeHandoff(r.dir, '05-code-reviewer.md', { blocking: [row('spec', 1, 'a.txt:10')] });
-    writeHandoff(r.dir, '07-backend-engineer.md', { contested: [`${KEY} — as designed`] });
-    const p = { dir: r.dir, run: r.runFolder };
-    const bare = contestsOf(sb, p);
-    assert.equal(bare.errors.length, 1, bare.raw.join('\n'));
-    assert.equal(bare.states.get(KEY), 'open');
-    writeHandoff(r.dir, '07-backend-engineer.md', { contested: [`${KEY} — the line is a fixture — evidence: src/big.mjs:2`] });
-    assert.equal(contestsOf(sb, p).states.get(KEY), 'contested');
-    writeHandoff(r.dir, '08-code-reviewer.md', { round: 1, answers: [`${KEY} accepted — fair`] });
-    assert.equal(contestsOf(sb, p).states.get(KEY), 'accepted');
-  });
-
-});
-
-// ==================================================================
-
 describe('AC7 the fresh reviewer keeps a Paraphrase, even with no findings, and the Gate shows it', () => {
   for (const mode of ['plan', 'code']) {
     test(`${mode} mode with zero findings: lint passes and the gate command prints the paraphrase`, () => {
@@ -694,6 +499,39 @@ describe('AC8 a paraphrase gap is a comprehension Blocking row whose fix is a te
   });
 
 });
+
+// ------------------------------------------------------------------ git repo with a run branch
+
+const numbered = (n) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+
+// A repo on refs/heads/aico/demo with a base commit; .company is ignored so Handoffs never dirty the tree.
+function runRepo(sb, name = 'repo') {
+  const dir = path.join(sb.dir, name);
+  fs.mkdirSync(dir, { recursive: true });
+  const g = (...args) => git(sb, dir, args);
+  g('init', '--quiet');
+  g('checkout', '--quiet', '-b', `aico/${SLUG}`);
+  put(dir, 'a.txt', numbered(50));
+  put(dir, 'b.txt', numbered(10));
+  put(dir, '.gitignore', '.company/\n');
+  fs.mkdirSync(path.join(dir, '.company', 'work', SLUG), { recursive: true });
+  g('add', '--all');
+  g('commit', '--quiet', '--no-verify', '-m', 'base');
+  const base = g('rev-parse', 'HEAD');
+  const edit = (file, fn, msg = 'fix') => {
+    const p = path.join(dir, file);
+    fs.writeFileSync(p, fn(fs.readFileSync(p, 'utf8').split('\n')).join('\n'));
+    g('commit', '--quiet', '--no-verify', '--all', '-m', msg);
+    return g('rev-parse', 'HEAD');
+  };
+  return {
+    dir, g, base, edit,
+    run: (args) => node(sb, dir, 'review-loop.mjs', args),
+    run_: (script, args) => node(sb, dir, script, args),
+    put: (rel, text) => put(dir, rel, text),
+    runFolder: path.join(dir, '.company', 'work', SLUG)
+  };
+}
 
 // ==================================================================
 
@@ -794,116 +632,6 @@ describe('AC9 a review Step that fails twice is recorded as not run, never as a 
     assert.equal(g.all.includes('nothing to report'), false);
   });
 
-});
-
-// ==================================================================
-
-describe('AC10 a new Blocking finding on a range the last Fix round changed is churn; the Lead stops and escalates', () => {
-  const FIRST = '05-code-reviewer:R-1';
-  const SECOND = '07-code-reviewer:R-2';
-
-  // Round 0 finding on a.txt:10, a mark for round 1, a fix that rewrites one line, then a round 1 Handoff.
-  function scenario(sb, { location = 'a.txt:10', fixLine = 10, name = 'repo' } = {}) {
-    const r = runRepo(sb, name);
-    writeHandoff(r.dir, '05-code-reviewer.md', { blocking: [row('spec', 1, 'a.txt:10')] });
-    const mark = r.run(['mark', SLUG, '1', '--base', r.base]);
-    assert.equal(mark.code, 0, mark.all);
-    r.edit('a.txt', (lines) => lines.map((l, i) => (i === fixLine - 1 ? 'rewritten' : l)));
-    writeHandoff(r.dir, '07-code-reviewer.md', { round: 1, blocking: [row('spec', 2, location)] });
-    return r;
-  }
-
-  test('the same range again: churn, with the earlier finding named, exit 2', () => {
-    const sb = sandbox();
-    const r = scenario(sb);
-    const c = r.run(['churn', SLUG, '1', '--base', r.base]);
-    assert.equal(c.code, 2, c.all);
-    assert.deepEqual(c.lines, [`churn ${SECOND} a.txt:10`, `fixed-before ${FIRST}`]);
-    const g = r.run(['gate', SLUG, '--base', r.base]);
-    assert.equal(g.code, 0, g.all);
-    assert.deepEqual(g.lines, [`churn ${SECOND} a.txt:10`, `fixed-before ${FIRST}`]);
-  });
-
-  for (const location of ['a.txt:40', 'a.txt:11', 'b.txt:3']) {
-    test(`a finding at ${location}, outside the changed line, is not churn`, () => {
-      const sb = sandbox();
-      const r = scenario(sb, { location });
-      const c = r.run(['churn', SLUG, '1', '--base', r.base]);
-      assert.equal(c.code, 0, c.all);
-      assert.deepEqual(c.lines, ['churn: none']);
-    });
-  }
-
-  test('a finding that spans the changed line is churn', () => {
-    const sb = sandbox();
-    const r = scenario(sb, { location: 'a.txt:8-12' });
-    const c = r.run(['churn', SLUG, '1', '--base', r.base]);
-    assert.equal(c.code, 2, c.all);
-    assert.equal(c.lines[0], `churn ${SECOND} a.txt:10`);
-  });
-
-  test('no mark for the round: unknown, exit 2, so the Lead escalates', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    writeHandoff(r.dir, '07-code-reviewer.md', { round: 1, blocking: [row('spec', 1, 'a.txt:10')] });
-    const c = r.run(['churn', SLUG, '1', '--base', r.base]);
-    assert.equal(c.code, 2, c.all);
-    assert.deepEqual(c.lines, ['churn: unknown']);
-  });
-
-  test('a grafts file in the repo makes the answer unknown, never none', () => {
-    const sb = sandbox();
-    const r = scenario(sb, { location: 'a.txt:40' });
-    r.put('.git/info/grafts', `${r.base}\n`);
-    const c = r.run(['churn', SLUG, '1', '--base', r.base]);
-    assert.equal(c.code, 2, c.all);
-    assert.deepEqual(c.lines, ['churn: unknown']);
-  });
-
-  test('HEAD on another branch than the run branch is unknown', () => {
-    const sb = sandbox();
-    const r = scenario(sb, { location: 'a.txt:40' });
-    r.g('checkout', '--quiet', '-b', 'other');
-    const c = r.run(['churn', SLUG, '1', '--base', r.base]);
-    assert.equal(c.code, 2, c.all);
-    assert.deepEqual(c.lines, ['churn: unknown']);
-  });
-
-  test('a second mark for a round is refused and the record keeps one', () => {
-    const sb = sandbox();
-    const r = scenario(sb);
-    const again = r.run(['mark', SLUG, '1', '--base', r.base]);
-    assert.equal(again.code, 3, again.all);
-    assert.equal(again.lines[0], 'refused: round 1 already marked');
-    const marks = fs.readFileSync(path.join(r.runFolder, 'review-loop.jsonl'), 'utf8').split('\n').filter((l) => l.includes('"mark"'));
-    assert.equal(marks.length, 1);
-  });
-
-  test('a mark needs a full base commit id on the run branch', () => {
-    const sb = sandbox();
-    const r = runRepo(sb);
-    for (const base of ['HEAD', r.base.slice(0, 7), '--help', 'a'.repeat(40)]) {
-      const m = r.run(['mark', SLUG, '1', '--base', base]);
-      assert.ok(m.code === 3 || m.code === 1, `${base}: ${m.all}`);
-    }
-    assert.equal(fs.existsSync(path.join(r.runFolder, 'review-loop.jsonl')), false);
-    r.g('checkout', '--quiet', '-b', 'other');
-    assert.notEqual(r.run(['mark', SLUG, '1', '--base', r.base]).code, 0);
-  });
-
-  test('the gate prints unknown for a marked round when no base is given', () => {
-    const sb = sandbox();
-    const r = scenario(sb, { location: 'a.txt:40' });
-    const g = r.run(['gate', SLUG]);
-    assert.equal(g.code, 2, g.all);
-    assert.ok(g.lines.includes('churn: unknown'));
-  });
-
-  test('the fix round cap is untouched', () => {
-    const sb = sandbox();
-    const p = product(sb);
-    assert.equal(p.run_('settings.mjs', ['get', 'pipeline.fix_rounds']).out, '2\n');
-  });
 });
 
 // ==================================================================

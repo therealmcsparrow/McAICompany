@@ -141,19 +141,19 @@ describe('hostile arguments first', () => {
 });
 
 describe('data file', () => {
-  test('the shipped file loads with rev 2; medium and high equal the v0.18 route', () => {
+  test('the shipped file loads with rev 3; high equals the route, medium drops the high-only entries', () => {
     const r = loadTierSets(REPO);
     assert.equal(r.ok, true);
-    assert.equal(r.rev, 2);
+    assert.equal(r.rev, 3);
     assert.equal(r.reason, null);
     for (const pb of PLAYBOOKS) {
-      assert.deepEqual(r.sets[pb].medium, [...ROUTE_V018[pb]]);
+      assert.deepEqual(r.sets[pb].medium, ROUTE_V018[pb].filter((e) => e !== 'senior-engineer-compliance'));
       assert.deepEqual(r.sets[pb].high, [...ROUTE_V018[pb]]);
     }
     assert.equal(r.sets.feature.low.length, 19);
     assert.deepEqual(r.sets.fix.low, ['qa-reproduce', 'owning-engineer', 'code-reviewer', 'qa-rerun', 'devops']);
-    assert.equal(ROUTE_V018.feature.length, 26);
-    assert.equal(ROUTE_V018.fix.length, 7);
+    assert.equal(ROUTE_V018.feature.length, 25);
+    assert.equal(ROUTE_V018.fix.length, 6);
   });
   test('forced_high in the file equals the frozen v1 list of 58 tokens; the file is small and LF only', () => {
     assert.equal(FORCED_HIGH_V1.length, 58);
@@ -175,30 +175,30 @@ describe('data file', () => {
       assert.ok(!l.includes('prototype') && !l.includes('destination-spec'), l);
     }
   });
-  test('sets prints plan-review and second-reviewer in route order at medium and high, and in no low set', () => {
+  test('sets prints plan-review in route order at medium and high, and in no low set; second-reviewer is in no set', () => {
     const f = fixture();
     const lines = f.run('sets').lines;
     const get = (name) => lines.find((l) => l.startsWith(`${name}:`)).slice(name.length + 2).split(', ');
     for (const t of ['feature medium', 'feature high']) {
       const e = get(t);
       assert.equal(e.indexOf('plan-review'), e.indexOf('ruleset-sign-off') + 1);
-      assert.equal(e.indexOf('second-reviewer'), e.indexOf('code-reviewer') + 1);
+      assert.ok(!e.includes('second-reviewer'));
     }
     for (const t of ['fix medium', 'fix high']) {
       const e = get(t);
-      assert.equal(e.indexOf('second-reviewer'), e.indexOf('code-reviewer') + 1);
+      assert.ok(!e.includes('second-reviewer'));
     }
     for (const t of ['feature low', 'fix low']) {
       assert.ok(!get(t).includes('plan-review') && !get(t).includes('second-reviewer'), t);
     }
   });
-  test('the data file refuses a low set that holds plan-review out of route order, and a medium set that drops second-reviewer', () => {
+  test('the data file refuses a low set that holds plan-review out of route order, and a medium set that drops security', () => {
     const swap = shipped();
     swap.playbooks.feature.low = ['plan-review', ...swap.playbooks.feature.low];
     assert.equal(loadTierSets(fixture({ data: swap }).pluginRoot).ok, false);
     const drop = shipped();
-    drop.playbooks.fix.medium = drop.playbooks.fix.medium.filter((e) => e !== 'second-reviewer');
-    assert.equal(loadTierSets(fixture({ data: drop }).pluginRoot).reason, 'fix medium differs from the v0.18 route');
+    drop.playbooks.fix.medium = drop.playbooks.fix.medium.filter((e) => e !== 'security');
+    assert.equal(loadTierSets(fixture({ data: drop }).pluginRoot).reason, 'fix medium differs from the v2.0 route');
   });
   test('a short record begun at rev 1 syncs to high with cause sets once the file is rev 2', () => {
     const old = shipped();
@@ -211,7 +211,7 @@ describe('data file', () => {
     assert.equal(f.lines()[1].cause, 'sets');
     assert.equal(f.lines()[1].tier, 'high');
     assert.ok(r.lines.includes('tier-sets: changed since begin'));
-    assert.ok(r.lines.some((l) => l.startsWith('add before ship: ') && l.includes('plan-review') && l.includes('second-reviewer')));
+    assert.ok(r.lines.some((l) => l.startsWith('add before ship: ') && l.includes('plan-review')));
   });
 
   test('sets prints the rev line and six set lines', () => {
@@ -219,9 +219,9 @@ describe('data file', () => {
     const r = f.run('sets');
     assert.equal(r.code, 0);
     assert.equal(r.lines.length, 7);
-    assert.equal(r.lines[0], 'tier-sets: rev 2');
+    assert.equal(r.lines[0], 'tier-sets: rev 3');
     assert.deepEqual(r.lines.slice(1).map((l) => l.split(':')[0]), ['feature low', 'feature medium', 'feature high', 'fix low', 'fix medium', 'fix high']);
-    assert.equal(r.lines[2], `feature medium: ${ROUTE_V018.feature.join(', ')}`);
+    assert.equal(r.lines[2], `feature medium: ${ROUTE_V018.feature.filter((e) => e !== 'senior-engineer-compliance').join(', ')}`);
   });
 
   const mut = (fn) => { const d = shipped(); fn(d); return d; };
@@ -248,8 +248,8 @@ describe('data file', () => {
     ['order: swapped', { data: mut((d) => { d.playbooks.fix.low.reverse(); }) }, 'fix low order'],
     ['lacks a required entry', { data: mut((d) => { d.playbooks.feature.low = d.playbooks.feature.low.filter((e) => e !== 'legal'); }) }, 'feature low lacks legal'],
     ['lacks a required fix entry', { data: mut((d) => { d.playbooks.fix.low = d.playbooks.fix.low.filter((e) => e !== 'qa-rerun'); }) }, 'fix low lacks qa-rerun'],
-    ['medium differs', { data: mut((d) => { d.playbooks.fix.medium = d.playbooks.fix.medium.filter((e) => e !== 'security'); }) }, 'fix medium differs from the v0.18 route'],
-    ['high differs', { data: mut((d) => { d.playbooks.feature.high = d.playbooks.feature.high.filter((e) => e !== 'writer'); }) }, 'feature high differs from the v0.18 route'],
+    ['medium differs', { data: mut((d) => { d.playbooks.fix.medium = d.playbooks.fix.medium.filter((e) => e !== 'security'); }) }, 'fix medium differs from the v2.0 route'],
+    ['high differs', { data: mut((d) => { d.playbooks.feature.high = d.playbooks.feature.high.filter((e) => e !== 'writer'); }) }, 'feature high differs from the v2.0 route'],
     ['forced_high empty', { data: mut((d) => { d.forced_high = []; }) }, 'forced_high'],
     ['forced_high duplicate', { data: mut((d) => { d.forced_high = ['auth', 'auth']; }) }, 'forced_high'],
     ['forced_high bad token', { data: mut((d) => { d.forced_high = ['Auth']; }) }, 'forced_high'],
@@ -347,9 +347,9 @@ describe('begin and preview', () => {
     assert.equal(fs.existsSync(f.record), false);
     const b = f.begin();
     assert.deepEqual(b.lines, p.lines);
-    assert.equal(b.lines[0], 'tier-path: feature tier low path short rev 2');
+    assert.equal(b.lines[0], 'tier-path: feature tier low path short rev 3');
     assert.equal(b.lines[1], 'path: short (low)');
-    assert.equal(b.lines[2], 'skipped by tier: persona-tester, senior-engineer-research, plan-review, second-reviewer, security, senior-engineer-compliance, hands-on-tester');
+    assert.equal(b.lines[2], 'skipped by tier: persona-tester, senior-engineer-research, plan-review, security, senior-engineer-compliance, hands-on-tester');
     assert.ok(b.lines.at(-1).startsWith('set: product-manager'));
   });
   test('why order: refused, tier, setting, ceo, short', () => {
@@ -370,14 +370,14 @@ describe('begin and preview', () => {
   test('a full run whose start tier is above low prints no path line and no skip line', () => {
     const f = fixture();
     const b = f.run('begin', f.slug, '--playbook', 'fix', '--triage', 'medium', '--short', 'on', '--base', SHA);
-    assert.equal(b.lines[0], 'tier-path: fix tier medium path full rev 2');
+    assert.equal(b.lines[0], 'tier-path: fix tier medium path full rev 3');
     assert.equal(b.lines[1].startsWith('set:'), true);
     assert.equal(b.lines.length, 2);
   });
   test('a fix run at low skips security', () => {
     const f = fixture();
     const b = f.run('begin', f.slug, '--playbook', 'fix', '--triage', 'low', '--short', 'on', '--base', SHA, '--ceo', 'short');
-    assert.equal(b.lines[2], 'skipped by tier: second-reviewer, security');
+    assert.equal(b.lines[2], 'skipped by tier: security');
   });
   test('the run-state Step tier counts at begin', () => {
     const f = fixture();
@@ -434,7 +434,7 @@ describe('sync', () => {
     f.begin();
     step(f, 'medium');
     const r = f.run('sync', f.slug);
-    assert.equal(r.lines[0], 'tier-path: feature tier medium path short rev 2');
+    assert.equal(r.lines[0], 'tier-path: feature tier medium path short rev 3');
     assert.equal(r.lines[1], 'path: short, raised to medium (step)');
     assert.ok(r.lines.some((l) => l.startsWith('add before ship: persona-tester')));
     assert.ok(!r.lines.some((l) => l.startsWith('skipped by tier')));
@@ -447,7 +447,7 @@ describe('sync', () => {
     f.run('begin', f.slug, '--playbook', 'fix', '--triage', 'low', '--short', 'on', '--base', SHA, '--ceo', 'short');
     step(f, 'medium');
     const r = f.run('sync', f.slug);
-    assert.ok(r.lines.includes('add before ship: second-reviewer, security'));
+    assert.ok(r.lines.includes('add before ship: security'));
   });
   test('the tier never lowers', () => {
     const f = fixture();
@@ -579,7 +579,7 @@ describe('sync', () => {
     const f = fixture();
     f.begin();
     const d = shipped();
-    d.rev = 3;
+    d.rev = 4;
     fs.writeFileSync(f.dataFile, JSON.stringify(d));
     const r = f.run('sync', f.slug);
     assert.equal(f.lines()[1].cause, 'sets');
@@ -795,14 +795,14 @@ describe('fix round: hostile and contract cases', () => {
     const f = fixture();
     const b = f.run('begin', f.slug, '--playbook', 'feature', '--triage', 'low', '--short', 'on', '--base', SHA);
     assert.equal(b.code, 0);
-    assert.equal(b.lines[0], 'tier-path: feature tier low path full rev 2');
+    assert.equal(b.lines[0], 'tier-path: feature tier low path full rev 3');
     assert.ok(b.lines.includes('path: full (ceo)'));
     assert.equal(f.lines()[0].why, 'ceo');
     assert.deepEqual(f.lines()[0].skip, []);
     const g = fixture();
-    assert.equal(g.begin().lines[0], 'tier-path: feature tier low path short rev 2');
+    assert.equal(g.begin().lines[0], 'tier-path: feature tier low path short rev 3');
     assert.equal(g.lines()[0].why, 'short');
-    assert.deepEqual(g.lines()[0].skip, ['persona-tester', 'senior-engineer-research', 'plan-review', 'second-reviewer', 'security', 'senior-engineer-compliance', 'hands-on-tester']);
+    assert.deepEqual(g.lines()[0].skip, ['persona-tester', 'senior-engineer-research', 'plan-review', 'security', 'senior-engineer-compliance', 'hands-on-tester']);
   });
   test('preview without --ceo shows the short offer; --ceo full shows the full path', () => {
     const f = fixture();
@@ -951,7 +951,7 @@ describe('fix round: hostile and contract cases', () => {
       if (refuse) fs.writeFileSync(f.dataFile, '{');
       else {
         const d = shipped();
-        d.rev = 3;
+        d.rev = 4;
         d.playbooks.feature.low = d.playbooks.feature.low.filter((e) => e !== 'brand-artist');
         fs.writeFileSync(f.dataFile, JSON.stringify(d));
       }

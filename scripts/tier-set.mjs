@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v1.8). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v2.0). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
@@ -46,11 +46,14 @@ export const ROUTE_V018 = Object.freeze({
   feature: Object.freeze([
     'product-manager', 'prototype', 'design-researcher', 'architect', 'ui-ux-designer', 'brand-artist', 'spikes', 'persona-tester',
     'senior-engineer-research', 'senior-engineer-map', 'ruleset-sign-off', 'plan-review', 'builders', 'asset-artists', 'code-reviewer',
-    'second-reviewer', 'qa', 'security', 'senior-engineer-compliance', 'legal', 'hands-on-tester', 'accessibility-tester', 'writer',
+    'qa', 'security', 'senior-engineer-compliance', 'legal', 'hands-on-tester', 'accessibility-tester', 'writer',
     'destination-spec', 'localizer', 'devops'
   ]),
-  fix: Object.freeze(['qa-reproduce', 'owning-engineer', 'code-reviewer', 'second-reviewer', 'qa-rerun', 'security', 'devops'])
+  fix: Object.freeze(['qa-reproduce', 'owning-engineer', 'code-reviewer', 'qa-rerun', 'security', 'devops'])
 });
+
+// The high-only entries: a medium start skips them, and a raise to high owes them (`add before ship:`).
+const MEDIUM_DROP = { feature: ['senior-engineer-compliance'], fix: [] };
 
 const REQUIRED = {
   feature: ['product-manager', 'builders', 'code-reviewer', 'qa', 'legal', 'accessibility-tester'],
@@ -73,6 +76,7 @@ const USAGE = [
   '  begin <slug> --playbook <feature|fix> --triage <low|medium|high> --short <on|off> --base <sha> [--ceo <short|full>]',
   '  sync <slug> [--plan <plan>] [--diff] [--base <sha>]',
   '  raise <slug> <medium|high>',
+  '  ran <slug> <entry>',
   '  read <slug>'
 ].join('\n');
 
@@ -187,7 +191,8 @@ function validate(data) {
       for (const need of REQUIRED[pb]) {
         if (!list.includes(need)) return `${pb} ${t} lacks ${need}`;
       }
-      if (t !== 'low' && !sameList(list, ROUTE_V018[pb])) return `${pb} ${t} differs from the v0.18 route`;
+      const want = t === 'medium' ? ROUTE_V018[pb].filter((e) => !MEDIUM_DROP[pb].includes(e)) : ROUTE_V018[pb];
+      if (t !== 'low' && !sameList(list, want)) return `${pb} ${t} differs from the v2.0 route`;
     }
   }
   const fh = data.forced_high;
@@ -499,11 +504,12 @@ function isIgnoreFile(p) {
 
 const BEGIN_KEYS = ['v', 'at', 'ev', 'pb', 'tier', 'path', 'why', 'rev', 'base', 'skip'];
 const RAISE_KEYS = ['v', 'at', 'ev', 'tier', 'cause'];
+const RAN_KEYS = ['v', 'at', 'ev', 'entry'];
 
 // The skip list of a begin line: route entries in route order, no repeats, none required, empty on a full path.
 function skipValid(rec) {
   if (!Array.isArray(rec.skip)) return false;
-  if (rec.path === 'full') return rec.skip.length === 0;
+  if (rec.path === 'full' && rec.tier !== 'medium') return rec.skip.length === 0;
   const index = new Map(ROUTE_V018[rec.pb].map((e, i) => [e, i]));
   let last = -1;
   for (const e of rec.skip) {
@@ -520,6 +526,8 @@ function parseRecordText(slug, text) {
   const lines = text.slice(0, -1).split('\n');
   if (lines.length > MAX_RECORD_LINES) throw new TierPathRecordError(slug, 0, 'more than 100 lines');
   let tier = null;
+  let beginRec = null;
+  const ranSet = new Set();
   lines.forEach((line, i) => {
     const n = i + 1;
     const bad = (reason) => new TierPathRecordError(slug, n, reason);
@@ -532,9 +540,17 @@ function parseRecordText(slug, text) {
     }
     if (!isObject(rec)) throw bad('not an object');
     if (rec.v !== 1) throw bad('unknown v');
-    if (rec.ev !== 'begin' && rec.ev !== 'raise') throw bad('unknown ev');
-    if (!keysAre(rec, rec.ev === 'begin' ? BEGIN_KEYS : RAISE_KEYS)) throw bad('keys');
+    if (rec.ev !== 'begin' && rec.ev !== 'raise' && rec.ev !== 'ran') throw bad('unknown ev');
+    if (!keysAre(rec, rec.ev === 'begin' ? BEGIN_KEYS : rec.ev === 'raise' ? RAISE_KEYS : RAN_KEYS)) throw bad('keys');
     if (typeof rec.at !== 'string' || !TIME.test(rec.at)) throw bad('at');
+    if (rec.ev === 'ran') {
+      if (i === 0) throw bad('first line is not begin');
+      if (tier === beginRec.tier) throw bad('ran before a raise');
+      if (typeof rec.entry !== 'string' || !beginRec.skip.includes(rec.entry) || ranSet.has(rec.entry)) throw bad('entry');
+      ranSet.add(rec.entry);
+      records.push(rec);
+      return;
+    }
     if (!TIERS.includes(rec.tier)) throw bad('tier');
     if (rec.ev === 'begin') {
       if (i !== 0) throw bad('second begin');
@@ -545,6 +561,7 @@ function parseRecordText(slug, text) {
       if (typeof rec.base !== 'string' || !FULL_SHA.test(rec.base)) throw bad('base');
       if (!skipValid(rec)) throw bad('skip');
       tier = rec.tier;
+      beginRec = rec;
     } else {
       if (i === 0) throw bad('first line is not begin');
       if (!CAUSES.includes(rec.cause)) throw bad('cause');
@@ -620,6 +637,7 @@ function utc(now) {
 function buildView(slug, records) {
   const begin = records[0];
   const raises = records.filter((r) => r.ev === 'raise');
+  const ran = new Set(records.filter((r) => r.ev === 'ran').map((r) => r.entry));
   const tier = raises.length > 0 ? raises.at(-1).tier : begin.tier;
   const cause = raises.length > 0 ? raises[0].cause : null;
   const route = ROUTE_V018[begin.pb];
@@ -627,7 +645,7 @@ function buildView(slug, records) {
   const set = raised ? [...route] : route.filter((e) => !begin.skip.includes(e));
   return {
     v: 1, slug, state: 'on', pb: begin.pb, start_tier: begin.tier, tier, path: begin.path, why: begin.why, rev: begin.rev,
-    base: begin.base, raised, cause, skipped: [...begin.skip], set, add: raised ? [...begin.skip] : []
+    base: begin.base, raised, cause, skipped: [...begin.skip], set, add: raised ? begin.skip.filter((e) => !ran.has(e)) : []
   };
 }
 
@@ -719,7 +737,7 @@ function beginRecord(env, slug, flags, sets, base, ceoDefault) {
   else if (short === 'off') why = 'setting';
   else if (ceo !== 'short') why = 'ceo';
   const short_ = why === 'short';
-  const skip = short_ ? ROUTE_V018[pb].filter((e) => !sets.sets[pb][tier].includes(e)) : [];
+  const skip = short_ || tier === 'medium' ? ROUTE_V018[pb].filter((e) => !sets.sets[pb][tier].includes(e)) : [];
   return { v: 1, at: utc(env.now), ev: 'begin', pb, tier, path: short_ ? 'short' : 'full', why, rev: sets.rev, base, skip };
 }
 
@@ -759,6 +777,31 @@ function cmdPreview(args, env, write) {
   }
   const view = buildView(slug, [rec]);
   return { code: 0, lines: statusLines(view, sets.ok ? null : `tier-sets: refused ${sets.reason}`) };
+}
+
+// The major of a Contract header line `# Contract: <name> v<major>.<minor>`, or null.
+function headerMajor(text) {
+  const m = /^# Contract: \S+ v(\d{1,4})\.\d{1,4}\s*$/.exec(String(text).split(/\r?\n/, 1)[0]);
+  return m ? Number(m[1]) : null;
+}
+
+// True when a Contract file of the diff is a major change: deleted, header unreadable, a different major, or any doubt.
+// A new file (not in the base) and a same-major edit are not. A file under docs/contracts that is not a .md file counts as major.
+function contractMajor(env, base, p) {
+  if (!/^docs\/contracts\/[^/]+\.md$/.test(p)) return true;
+  try {
+    const { top } = gitStart(env);
+    const file = path.join(top, p);
+    const st = lstatOrNull(file);
+    if (!st || !isPlain(st) || st.size > 1048576) return true;
+    const now = headerMajor(decode(readOpened(file, st, 1048576)));
+    if (now === null) return true;
+    if (gitRun(env, ['ls-tree', '--name-only', '-z', '--end-of-options', base, '--', p], 'diff').length === 0) return false;
+    const before = headerMajor(gitRun(env, ['cat-file', 'blob', '--end-of-options', `${base}:${p}`]).toString('utf8'));
+    return before === null || before !== now;
+  } catch {
+    return true;
+  }
 }
 
 function checkTo(env, slug, recBase, leadBase, flags) {
@@ -803,6 +846,7 @@ function checkTo(env, slug, recBase, leadBase, flags) {
     for (const x of all) {
       if (x.source === 'diff' && isIgnoreFile(x.p)) continue;
       const one = checkPaths([x.p], { core: core.core, forcedHigh: env.forcedHigh });
+      if (x.source === 'diff' && one.length > 0 && one[0].reason === 'contract' && !contractMajor(env, base, x.p)) continue;
       if (one.length > 0) hits.push({ source: x.source, reason: one[0].reason, path: one[0].path });
     }
   }
@@ -882,6 +926,20 @@ function cmdRaise(args, env) {
   return { code: 0, lines: statusLines(buildView(slug, records)) };
 }
 
+function cmdRan(args, env) {
+  const { positional } = takeFlags(args, {});
+  if (positional.length !== 2) throw new Refusal(USAGE);
+  const slug = slugArg([positional[0]], 1, env.root);
+  const cur = loadRecord(env.root, slug);
+  if (cur.records.length === 0) throw new Refusal('no begin record for this run');
+  const view = buildView(slug, cur.records);
+  const entry = positional[1];
+  if (!view.add.includes(entry)) throw new Refusal('entry is not owed');
+  const rec = { v: 1, at: utc(env.now), ev: 'ran', entry };
+  appendRecord(cur, slug, rec);
+  return { code: 0, lines: statusLines(buildView(slug, [...cur.records, rec])) };
+}
+
 function cmdRead(args, env) {
   const { positional } = takeFlags(args, {});
   const slug = slugArg(positional, 1, env.root);
@@ -896,6 +954,7 @@ const HANDLERS = {
   begin: (a, e) => cmdPreview(a, e, true),
   sync: cmdSync,
   raise: cmdRaise,
+  ran: cmdRan,
   read: cmdRead
 };
 
