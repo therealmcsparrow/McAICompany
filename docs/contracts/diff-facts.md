@@ -1,4 +1,4 @@
-# Contract: diff-facts v1.0
+# Contract: diff-facts v1.1
 
 Provider: `scripts/diff-facts.mjs` (Node built-ins and `git` only; plan task P20261116.000003-T4). Consumers: `scripts/route.mjs` (`route` v1.0: Role skips and the merge test), `.github/workflows/ci.yml` (docs-only skip and the a11y job, `test-run` v1.2), `scripts/step-key.mjs` (none in v1.0; read-only later). The Lead runs `write` once per Step; no consumer recomputes the diff.
 Rationale: one classification of a change that every gate reads, so gates never disagree on what changed. Fail-safe: anything unclear counts as UI, strings and Contract (ADR `docs/adr/0075-fail-safe-ui-changed.md`).
@@ -8,9 +8,9 @@ Rationale: one classification of a change that every gate reads, so gates never 
 ```json
 { "v": 1, "step": "05-backend-engineer", "base": "<40 hex>", "head": "<40 hex>",
   "paths": [ { "path": "a/b.css", "from": null, "status": "M", "kind": "style" } ],
-  "truncated": false, "ui_changed": true, "strings_changed": false, "contract_changed": false, "docs_only": false }
+  "truncated": false, "ui_changed": true, "strings_changed": false, "contract_changed": false, "docs_only": false, "security_changed": false }
 ```
-- Exactly these keys. `v` is `1`. `step` matches `^\d{2,3}-[a-z][a-z0-9-]{0,40}$`. `base` is the run's Base commit; `head` is `HEAD` at write time.
+- Exactly these keys (a v1.0 file without `security_changed` is still read; see Readers). `v` is `1`. `step` matches `^\d{2,3}-[a-z][a-z0-9-]{0,40}$`. `base` is the run's Base commit; `head` is `HEAD` at write time.
 - `paths`: the change from `base` to the working tree, read with two calls of the git.M-SEC4 form that share every mode flag (`git diff ... -z -M --name-status --end-of-options <base> --` and `git diff ... -z -M --numstat --end-of-options <base> --`; git.M-SEC4 rename reading), plus untracked files that git does not ignore (`git ls-files --others --exclude-standard`), sorted by `path`, at most 5000 entries. `path` and `from` are repo-relative with `/`; `from` is the old path of a rename or copy, else `null`. `status` is one of `A M D R C T` (untracked = `A`).
 - More than 5000 entries: the first 5000 are kept, `truncated` is `true`, `ui_changed`, `strings_changed` and `contract_changed` are `true`, and `docs_only` is `false` (each flag at its fail-safe value).
 - Paths are data. A path is stored with kind `unknown` (no rule below is tried) when `path` or `from` has a control character (U+0000 to U+001F, U+007F), a `..` segment, a segment that starts with `-`, a U+FFFD (a name that is not valid UTF-8 is decoded with replacement), or more than 4096 UTF-8 bytes.
@@ -41,9 +41,10 @@ Git env: every git call runs in the git.S6 env (caller `GIT_*` stripped) with `G
 - `strings_changed` is `false` only when `paths` is not empty and every kind is `docs`, `test` or `style`.
 - `contract_changed` is `true` when any kind is `contract`, `binary` or `unknown`, or `truncated` is `true`.
 - `docs_only` is `true` only when `paths` is not empty and every kind is `docs`.
+- `security_changed` is `true` when `truncated` is `true`, `paths` is empty, or any path (`path` or `from`) has kind `config`, `contract`, `binary` or `unknown`, lies under `hooks/`, `mods/`, `.claude/`, `.claude-plugin/`, `.github/` or `.husky/`, is `scripts/run-guard.mjs`, has a segment with a `forced_high` token (`tokens` of `scripts/tier-set.mjs`, `tier-sets` v1.8 Forced-high tokens; never under `.company/`), or matches a `security_paths` glob. Otherwise `false`.
 
 ## Config (optional, narrow only)
-`diff-facts.config.json` at the repo root, a plain file of at most 16 KiB: `{ "v": 1, "not_docs": ["<glob>", ...] }`, at most 100 globs. It is not checked for being tracked: it can only move paths out of `docs`, and an edit to it, tracked or untracked, is itself a `config` path in `paths`. A path matching a `not_docs` glob skips rule 5 and goes on to rule 6. The config can only move paths out of `docs`, so it can only turn flags to `true`. A missing config is normal; a bad one (link, too big, bad JSON, wrong keys) is ignored with one warning `diff-facts: config ignored: <reason>` on stderr, and no path is `docs`.
+`diff-facts.config.json` at the repo root, a plain file of at most 16 KiB: `{ "v": 1, "not_docs": ["<glob>", ...], "security_paths": ["<glob>", ...] }`, at most 100 globs per list; `security_paths` is optional and can only set `security_changed` to `true` (it never clears a built-in trigger). A `security_paths` that is not a list of 1-256 character strings makes the whole config bad (ignored with the warning below). It is not checked for being tracked: it can only move paths out of `docs`, and an edit to it, tracked or untracked, is itself a `config` path in `paths`. A path matching a `not_docs` glob skips rule 5 and goes on to rule 6. The config can only move paths out of `docs`, so it can only turn flags to `true`. A missing config is normal; a bad one (link, too big, bad JSON, wrong keys) is ignored with one warning `diff-facts: config ignored: <reason>` on stderr, and no path is `docs`.
 
 ## CLI (cwd = product repo; refusals `refused: <reason>` on stdout, exit 2)
 | Command | Does |
@@ -57,7 +58,7 @@ Exports:
 - `readLatest(runDir)`: `runDir` is `.company/work/<parts>`; reads the highest-`NN` file in `<runDir>/facts/` and returns its object, or `null`. `null` when the folder or file is missing or a link, or the newest file is bad (fails any `## Facts file` rule, incl. missing or extra keys); never falls back to an older file.
 
 ## Readers
-A reader that gets `null`, a parse error, a file over 1 MiB or `v` other than `1` treats `ui_changed`, `strings_changed` and `contract_changed` as `true` and `docs_only` as `false`.
+A reader that gets `null`, a parse error, a file over 1 MiB or `v` other than `1` treats `ui_changed`, `strings_changed`, `contract_changed` and `security_changed` as `true` and `docs_only` as `false`. A facts file without the `security_changed` key (written by v1.0) reads as `security_changed: true`.
 
 ## Compatibility
-v1.0. A new kind, a new optional key or a new `not_docs`-style narrowing key is a minor bump. Changing a flag rule toward its unsafe value (`false` for `ui_changed`, `strings_changed`, `contract_changed`; `true` for `docs_only`), removing a key or a widening config key is a major bump and needs the CEO.
+v1.1 (minor: flag `security_changed`, optional config key `security_paths`). v1.0 before that. A new kind, a new optional key or a new `not_docs`-style narrowing key is a minor bump. Changing a flag rule toward its unsafe value (`false` for `ui_changed`, `strings_changed`, `contract_changed`; `true` for `docs_only`), removing a key or a widening config key is a major bump and needs the CEO.

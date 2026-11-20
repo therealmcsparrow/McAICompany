@@ -12,5 +12,21 @@
     "CHANGELOG.md",
     "CLAUDE.md",
     "GLOSSARY.md"
+  ],
+  "security_paths": [
+    "scripts/run-guard.mjs",
+    "scripts/worktree.mjs",
+    "scripts/step-close.mjs",
+    "scripts/ship-check.mjs",
+    "scripts/tier-set.mjs",
+    "scripts/route.mjs",
+    "scripts/diff-facts.mjs",
+    "scripts/handoff-lint.mjs",
+    "scripts/plan-tasks.mjs",
+    "scripts/settings.mjs",
+    "scripts/hook-check.mjs",
+    "scripts/review-loop.mjs",
+    "scripts/rule-check.mjs",
+    "mods/lib/**"
   ]
 }
