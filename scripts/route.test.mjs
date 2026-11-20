@@ -24,8 +24,10 @@ function sandbox() {
   sandboxes.push(root, plugin);
   fs.mkdirSync(path.join(plugin, 'scripts'), { recursive: true });
   fs.mkdirSync(path.join(plugin, 'mods', 'lib'), { recursive: true });
-  for (const f of ['route.mjs', 'diff-facts.mjs']) fs.copyFileSync(path.join(HERE, f), path.join(plugin, 'scripts', f));
-  fs.copyFileSync(path.join(REPO, 'mods', 'lib', 'work-folder.mjs'), path.join(plugin, 'mods', 'lib', 'work-folder.mjs'));
+  // diff-facts imports tier-set, which reaches more scripts: copy the non-test scripts and mods/lib.
+  const keep = (src) => !/\.test\.mjs$/.test(src);
+  fs.cpSync(HERE, path.join(plugin, 'scripts'), { recursive: true, filter: (src) => (fs.statSync(src).isDirectory() ? src === HERE : keep(src)) });
+  for (const d of ['mods', 'hooks']) fs.cpSync(path.join(REPO, d), path.join(plugin, d), { recursive: true, filter: keep });
   fs.mkdirSync(path.join(plugin, 'company'), { recursive: true });
   fs.mkdirSync(path.join(plugin, 'agents'), { recursive: true });
   fs.mkdirSync(path.join(root, '.company'), { recursive: true });
@@ -908,5 +910,131 @@ describe('route v1.0 golden fixtures (public interface only)', () => {
     const r = cli(sb, ['check', draft(sb, g.text('draft-skip-qa.json'))]);
     assert.equal(r.code, 1);
     assert.equal(r.out, g.text('expected-skip-qa.txt'));
+  });
+});
+
+// route v2.0: security skippable below high on security_changed false; `owed` after a late raise.
+describe('next and owed: conditional security (route v2.0)', () => {
+  const SEC_WHEN = { ...WHEN, security: ['security_changed'] };
+  const SEC_STEPS = [step('backend-engineer'), step('security', 'audit'), step('qa')];
+  const secDraft = () => baseDraft({ steps: SEC_STEPS });
+  // A real tier-path.jsonl record in the run folder, read by the copied tier-set.mjs.
+  const REC = (o) => JSON.stringify({ v: 1, at: '2026-11-21T00:00:00Z', ...o });
+  function setTier(sb, view) {
+    fs.mkdirSync(sb.run, { recursive: true });
+    const f = path.join(sb.run, 'tier-path.jsonl');
+    if (view === null) { fs.rmSync(f, { force: true }); return; }
+    const rows = [REC({ ev: 'begin', pb: 'feature', tier: 'medium', path: 'full', why: 'tier', rev: 3, base: BASE40, skip: ['senior-engineer-compliance'] })];
+    if (view.tier === 'high') rows.push(REC({ ev: 'raise', tier: 'high', cause: 'diff' }));
+    if (view.tier === 'low') rows[0] = REC({ ev: 'begin', pb: 'feature', tier: 'low', path: 'full', why: 'tier', rev: 3, base: BASE40, skip: [] });
+    if (view.broken) rows.push('{nope');
+    fs.writeFileSync(f, rows.join('\n') + '\n');
+  }
+  const tier = (t) => ({ v: 1, state: 'on', tier: t });
+  function setup(t, flags = { security_changed: false }, kinds = ['code']) {
+    const sb = sandbox(); seed(sb, { when: SEC_WHEN });
+    if (t !== undefined && t !== 'none') setTier(sb, tier(t));
+    if (flags !== null) facts(sb, flags, kinds);
+    written(sb, secDraft());
+    return sb;
+  }
+  const secDecision = (sb) => next(sb, 2)[1];
+
+  test('medium with security_changed false skips security and says why', () => {
+    const d = secDecision(setup('medium'));
+    assert.equal(d.do, 'skip');
+    assert.match(d.why, /security_changed false in facts 05-backend-engineer/);
+  });
+  test('low with security_changed false skips too', () => {
+    assert.equal(secDecision(setup('low')).do, 'skip');
+  });
+  test('high runs security', () => {
+    assert.equal(secDecision(setup('high')).do, 'run');
+  });
+  test('no tier record runs security', () => {
+    assert.equal(secDecision(setup(undefined)).do, 'run');
+    assert.equal(secDecision(setup('none')).do, 'run');
+  });
+  test('a broken tier record runs security', () => {
+    const sb = setup('medium');
+    setTier(sb, { broken: true, tier: 'medium' });
+    assert.equal(secDecision(sb).do, 'run');
+  });
+  test('security_changed true, a missing key, missing facts and an unknown path run security', () => {
+    assert.equal(secDecision(setup('medium', { security_changed: true })).do, 'run');
+    assert.equal(secDecision(setup('medium', {})).do, 'run');
+    assert.equal(secDecision(setup('medium', null)).do, 'run');
+    assert.equal(secDecision(setup('medium', { security_changed: false }, ['unknown'])).do, 'run');
+  });
+  test('draft skips may still not list security', () => {
+    const sb = sandbox(); seed(sb, { when: SEC_WHEN });
+    const r = cli(sb, ['write', SLUG, draft(sb, baseDraft({ skips: [step('security', 'not needed')] }))]);
+    assert.equal(r.code, 2);
+    assert.match(r.out, /security may not be skipped/);
+  });
+
+  test('owed: none without a skip, and after a skip while still safe', () => {
+    const sb = setup('medium');
+    assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: none\n');
+    secDecision(sb);
+    assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: none\n');
+  });
+  test('owed: security after a skip then a raise to high; a fix event clears it', () => {
+    const sb = setup('medium');
+    secDecision(sb);
+    setTier(sb, tier('high'));
+    const o = cli(sb, ['owed', SLUG]);
+    assert.equal(o.code, 0);
+    assert.equal(o.out, 'owed: security\n');
+    assert.equal(cli(sb, ['fix', SLUG, 'security', 'ran late']).code, 0);
+    assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: none\n');
+  });
+  test('owed: security after a later facts file with security_changed true', () => {
+    const sb = setup('medium');
+    secDecision(sb);
+    facts(sb, { security_changed: true }, ['code'], '09-backend-engineer');
+    assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: security\n');
+  });
+  test('owed fails closed on an unreadable tier after a skip', () => {
+    const sb = setup('medium');
+    secDecision(sb);
+    setTier(sb, { broken: true, tier: 'medium' });
+    assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: security\n');
+  });
+  test('owed writes nothing and needs a route and a slug', () => {
+    const sb = setup('medium');
+    const before = ledger(sb);
+    cli(sb, ['owed', SLUG]);
+    assert.equal(ledger(sb), before);
+    assert.equal(cli(sb, ['owed']).code, 2);
+  });
+});
+
+describe('lintData: the one protected when entry (route v2.0)', () => {
+  const putWhen = (sb, when) => fs.writeFileSync(path.join(sb.plugin, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
+  async function lint(sb) {
+    const { lintData } = await import(pathToFileURL(ROUTE).href);
+    return lines(lintData(sb.plugin, PROTECTED));
+  }
+  test('security with ["security_changed"] is accepted', async () => {
+    const sb = sandbox(); seed(sb, { when: { ...WHEN, security: ['security_changed'] } });
+    assert.deepEqual(await lint(sb), []);
+  });
+  for (const [name, when] of [
+    ['security with another condition', { security: ['ui_changed'] }],
+    ['security with two conditions', { security: ['security_changed', 'ui_changed'] }],
+    ['architect on security_changed', { architect: ['security_changed'] }],
+    ['code-reviewer on security_changed', { 'code-reviewer': ['security_changed'] }],
+    ['a plain Role on security_changed', { writer: ['security_changed'] }],
+  ]) {
+    test(`${name} is refused`, async () => {
+      const sb = sandbox(); seed(sb, { when: { ...WHEN, ...when } });
+      assert.ok((await lint(sb)).length > 0);
+    });
+  }
+  test('the shipped role-when.json lints clean against the shipped data', async () => {
+    const { lintData } = await import(pathToFileURL(ROUTE).href);
+    const prot = JSON.parse(fs.readFileSync(path.join(REPO, 'company', 'model-floor.json'), 'utf8')).protected;
+    assert.deepEqual(lintData(REPO, prot), []);
   });
 });
