@@ -57,7 +57,7 @@ export const FLOOR_RELEASE_V017 = '0.16.0';
 const BUILDER_ROLES = ['backend-engineer', 'frontend-engineer', 'desktop-engineer', 'ai-data-engineer', 'game-engineer'];
 const FAMILIES = ['haiku', 'sonnet', 'opus'];
 const BASELINE_KEY = /^[0-9a-f]{8} [A-Za-z0-9._/-]{1,100}$/;
-const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect', 'meta', 'par'];
+const KINDS = ['step', 'round', 'crossfire', 'replay', 'total', 'ship', 'reflect', 'meta', 'par', 'lead'];
 const ADD_KINDS = ['step', 'round', 'crossfire', 'replay'];
 const TOKEN_KEYS = ['in', 'cache_write', 'cache_read', 'out'];
 const RECORD_KEYS = new Set([
@@ -197,19 +197,24 @@ export function validateRecord(input) {
     total: /^[0-9a-f]{8}$/,
     reflect: /^(\d{2,3}|RT)$/
   }[rec.kind];
-  if (typeof rec.id !== 'string' || !idOk.test(rec.id)) return fail('invalid id');
+  if (rec.kind === 'lead') {
+    if (Object.hasOwn(rec, 'id') && (typeof rec.id !== 'string' || !/^[0-9a-f]{12}$/.test(rec.id))) return fail('invalid id');
+    if (rec.role !== 'lead') return fail('lead needs role lead');
+    if (rec.src !== 'hook') return fail('lead needs src hook');
+  } else if (typeof rec.id !== 'string' || !idOk.test(rec.id)) return fail('invalid id');
+  if (rec.src === 'hook' && rec.kind !== 'lead' && !ADD_KINDS.includes(rec.kind)) return fail('src hook goes with a dispatch kind or lead only');
   if (typeof rec.role !== 'string' || !ROLE.test(rec.role)) return fail('invalid role');
   if (Object.hasOwn(rec, 'agent') && (typeof rec.agent !== 'string' || !AGENT.test(rec.agent))) return fail('invalid agent');
   if (rec.kind === 'reflect' && (rec.role !== 'lead' || Object.hasOwn(rec, 'agent'))) return fail('reflect needs role lead and no agent');
   if (rec.kind !== 'total' && rec.kind !== 'reflect' && !(Object.hasOwn(rec, 'agent'))) return fail('agent required');
   if (rec.kind === 'total' && !isInt(rec.dispatches, MAX_REQUESTS)) return fail('dispatches must be an integer 0-100000');
   if (rec.kind !== 'total' && Object.hasOwn(rec, 'dispatches')) return fail('dispatches only on total');
-  if (rec.src !== 'notification' && rec.src !== 'transcript' && rec.src !== 'mod') return fail('invalid src');
+  if (rec.src !== 'notification' && rec.src !== 'transcript' && rec.src !== 'mod' && rec.src !== 'hook') return fail('invalid src');
   if ((rec.kind === 'reflect') !== (rec.src === 'mod')) return fail('src mod goes with kind reflect only');
   if (rec.kind === 'total' && rec.src !== 'transcript') return fail('total needs src transcript');
-  if (rec.src === 'notification') {
+  if (rec.src === 'notification' || rec.src === 'hook') {
     if (!isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
-    if (Object.hasOwn(rec, 'tokens')) return fail('tokens not allowed on a notification');
+    if (Object.hasOwn(rec, 'tokens')) return fail('tokens not allowed on a notification or hook row');
   } else {
     if (rec.src === 'mod' && Object.hasOwn(rec, 'ctx_end')) return fail('ctx_end not allowed on a mod record');
     if (Object.hasOwn(rec, 'ctx_end') && !isInt(rec.ctx_end, 10000000)) return fail('ctx_end must be an integer 0-10000000');
@@ -449,7 +454,7 @@ function cmdReconcile(args) {
   const claudeHome = claudeHomeDir();
   let reconciled = 0;
   const pending = new Set();
-  for (const note of records.filter((r) => r.src === 'notification' && r.kind !== 'total')) {
+  for (const note of records.filter((r) => isNote(r) && r.kind !== 'total' && r.kind !== 'lead')) {
     if (done.has(note.agent)) continue;
     done.add(note.agent); // one transcript record per agent
     pending.add(note.agent);
@@ -732,6 +737,8 @@ function exactMedian(list) {
 }
 
 // A record with counts: a host transcript, an imported baseline, or a mod's own call.
+// A dispatch row with no counts: the Lead's notification or the hook's row; both carry the context size.
+const isNote = (r) => r.src === 'notification' || r.src === 'hook';
 const hasCounts = (r) => r.src === 'transcript' || r.src === 'mod';
 
 function summarize(records, acsOverride) {
@@ -739,7 +746,7 @@ function summarize(records, acsOverride) {
   const spend = transcripts.reduce((s, r) => s + spendOf(r.tokens), 0);
   const cacheRead = transcripts.reduce((s, r) => s + r.tokens.cache_read, 0);
   const matched = new Set(transcripts.map((r) => r.agent).filter(Boolean));
-  const unreconciled = records.filter((r) => r.src === 'notification' && !matched.has(r.agent));
+  const unreconciled = records.filter((r) => isNote(r) && r.kind !== 'lead' && !matched.has(r.agent));
   const ships = records.filter((r) => r.kind === 'ship');
   const acs = acsOverride ?? (ships.length ? ships[ships.length - 1].acs : 0);
   return { transcripts, spend, cacheRead, unreconciled, acs, any: transcripts.length > 0 };
@@ -748,7 +755,7 @@ function summarize(records, acsOverride) {
 const perAc = (value, acs) => (acs > 0 ? Math.round(value / acs) : undefined);
 
 function describe(rec, transcript) {
-  const head = `${rec.kind} ${rec.id} ${rec.role}`;
+  const head = `${rec.kind} ${rec.id ?? '-'} ${rec.role}`;
   if (!transcript) {
     return `${head}  context at end ${rec.ctx_end ? rec.ctx_end : 'unknown'} (not reconciled)`;
   }
@@ -761,10 +768,10 @@ function describe(rec, transcript) {
 // counted record on its own. A transcript whose agent has a notification is shown on that row.
 function dispatchRows(records, live) {
   const byAgent = new Map(records.filter((r) => r.src === 'transcript' && r.agent).map((r) => [r.agent, r]));
-  const noted = new Set(records.filter((r) => r.src === 'notification').map((r) => r.agent));
+  const noted = new Set(records.filter(isNote).map((r) => r.agent));
   const rows = [];
   for (const rec of records) {
-    if (rec.src === 'notification') rows.push({ rec, t: byAgent.get(rec.agent) });
+    if (isNote(rec)) rows.push({ rec, t: byAgent.get(rec.agent) });
     else if (hasCounts(rec) && !(rec.src === 'transcript' && noted.has(rec.agent))) rows.push({ rec, t: rec });
   }
   return rows.map(({ rec, t }) => ({
@@ -788,7 +795,7 @@ function liveRecords(records, warnings) {
   const claudeHome = claudeHomeDir();
   const live = [];
   let limited = false;
-  for (const note of records.filter((r) => r.src === 'notification' && r.kind !== 'total')) {
+  for (const note of records.filter((r) => isNote(r) && r.kind !== 'total' && r.kind !== 'lead')) {
     if (done.has(note.agent)) continue;
     if (done.size >= MAX_LIVE_AGENTS) {
       limited = true;
@@ -875,7 +882,7 @@ function cmdReport(args) {
   }
   out.push(`not reconciled: ${sum.unreconciled.length}`);
   const { cap } = runCap(env.root, run);
-  const over = stored.filter((r) => r.src === 'notification' && r.kind !== 'total' && r.ctx_end > cap);
+  const over = stored.filter((r) => isNote(r) && r.kind !== 'total' && r.ctx_end > cap);
   if (over.length > 0) out.push(`over cap: ${over.length} steps (max ${Math.max(...over.map((r) => r.ctx_end))})`);
   if (baselineRuns.length) {
     const spends = [];
@@ -1686,6 +1693,47 @@ export function main(args, { now, root, pluginRoot, loadFloor } = {}) {
   } finally {
     env = before;
   }
+}
+
+// ---------- hook rows (SubagentStop) ----------
+
+function withRoot(root, fn) {
+  const before = env;
+  env = { ...env, root: typeof root === 'string' && root !== '' ? root : env.root };
+  try { return fn(); } finally { env = before; }
+}
+
+// True when the run's ledger already holds a `hook` row for this Step id and role.
+export function hasHookRow(step, role, { root, run } = {}) {
+  return withRoot(root, () => {
+    try {
+      return readLedger(checkRun(run)).records.some((r) => r.src === 'hook' && r.kind !== 'lead' && r.id === step && r.role === role);
+    } catch { return false; }
+  });
+}
+
+// Appends one `hook` row from rec = { run, kind, id, role, agent, ctx_end, tool_uses?, ms? }: a Role row (kind step, round,
+// crossfire or replay) or a Lead row (kind lead, keyed by agent). A Role row for the same id and role, or a Lead row for
+// the same agent, is not written again. Returns { ok, added } or { ok: false, reason }.
+export function addFromHook(rec, { root } = {}) {
+  return withRoot(root, () => {
+    try {
+      const lead = rec.kind === 'lead';
+      const row = JSON.parse(JSON.stringify({
+        v: 1, run: rec.run, kind: rec.kind, id: rec.id, role: rec.role, agent: rec.agent, src: 'hook',
+        ctx_end: rec.ctx_end, tool_uses: rec.tool_uses, ms: rec.ms, model: rec.model
+      }));
+      const { records } = readLedger(checkRun(rec.run));
+      const dup = records.some((r) => r.src === 'hook' && r.kind === row.kind &&
+        (lead ? r.agent === row.agent : r.id === row.id && r.role === row.role));
+      if (dup) return { ok: true, added: false };
+      appendRecord(row);
+      return { ok: true, added: true };
+    } catch (error) {
+      if (error instanceof Refusal) return { ok: false, added: false, reason: error.message };
+      throw error;
+    }
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
