@@ -103,7 +103,7 @@ const PLAN_QA = `# Plan
 `;
 
 // A repo with one commit holding src/{a,b,free,clean}.txt; the working tree changes src/{a,b,free}.txt and adds a Handoff.
-function fixture({ running = [], withRecord = false, qa = false } = {}) {
+function fixture({ running = [], withRecord = false, qa = false, ignoreCompany = false } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'step-close-'));
   temps.push(base);
   const root = path.join(base, 'repo');
@@ -115,6 +115,7 @@ function fixture({ running = [], withRecord = false, qa = false } = {}) {
   git(root, home, 'add', '-A');
   git(root, home, 'commit', '-q', '-m', 'init');
   for (const f of ['a', 'b', 'free']) fs.writeFileSync(path.join(root, 'src', `${f}.txt`), `${f} changed\n`);
+  if (ignoreCompany) fs.appendFileSync(path.join(root, '.git', 'info', 'exclude'), '.company/\n');
   const dir = path.join(root, '.company', 'work', ...SLUG.split('/'));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '..', '00-project.md'), 'A demo project\n');
@@ -342,4 +343,16 @@ test('without --task, a plan edited after begin (hash mismatch) fails closed: sc
   assert.match(r.out, /step-close: scope failed/);
   assert.equal(f.head(), before);
   assert.equal(f.rows(), 0);
+});
+
+// R-16 (step-close v1.2): .company/ is gitignored in real repos, so a Handoff-only close has nothing to commit.
+test('R-16: gitignored .company/ and a Handoff-only close makes no commit, prints "commit none", runs the ledger, exits 0', () => {
+  const f = fixture({ ignoreCompany: true });
+  const before = f.count();
+  const r = f.run({ text: handoff(), args: ['--usage', '1000,3,500'] });
+  assert.equal(r.code, 0, r.all);
+  assert.match(r.out.split('\n')[0], /^step-close: 05 qa lint ok, commit none, 0 paths, [0-9]+ dropped, ledger added$/, r.all);
+  assert.equal(f.count(), before, 'no commit is made');
+  assert.match(r.out, /^ledger: added$/m, 'stages 4-7 still run');
+  assert.equal(f.rows(), 1);
 });
