@@ -19,6 +19,7 @@
     "scripts/lead-relay.mjs",
     "scripts/lead-handover.mjs",
     "scripts/step-times.mjs",
+    "scripts/forced-tokens.mjs",
     "scripts/worktree.mjs",
     "scripts/step-close.mjs",
     "scripts/ship-check.mjs",

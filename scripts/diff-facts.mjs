@@ -38,6 +38,7 @@ const SECURITY_DIRS = ['hooks/', 'mods/', '.claude/', '.claude-plugin/', '.githu
 // run-guard plus every script hooks/hooks.json runs: a change there can weaken or skip a guard.
 const SECURITY_FILES = [
   'scripts/run-guard.mjs', 'scripts/hook-host.mjs', 'scripts/lead-relay.mjs', 'scripts/lead-handover.mjs', 'scripts/step-times.mjs',
+  'scripts/forced-tokens.mjs',
 ];
 const SECURITY_KINDS = ['config', 'contract', 'binary', 'unknown'];
 const NO_DOCS_CONFIG = Object.freeze({ v: 1, not_docs: Object.freeze(['**']) });

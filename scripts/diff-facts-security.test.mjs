@@ -171,6 +171,13 @@ test('classify: each hook script (hook-host, lead-relay, lead-handover, step-tim
   assert.equal(classify([entry('scripts/foo.mjs')], null).security_changed, false, 'control: a plain script stays false');
 });
 
+test('classify: scripts/forced-tokens.mjs sets security_changed true, with or without a config list', async () => {
+  const { classify } = await load();
+  assert.equal(classify([entry('scripts/forced-tokens.mjs')], null).security_changed, true);
+  const config = { v: 1, not_docs: [], security_paths: ['nothing/**'] };
+  assert.equal(classify([entry('scripts/forced-tokens.mjs')], config).security_changed, true);
+});
+
 test('classify: the hook scripts stay security even when the config lists other security_paths', async () => {
   const { classify } = await load();
   const config = { v: 1, not_docs: [], security_paths: ['nothing/**'] };

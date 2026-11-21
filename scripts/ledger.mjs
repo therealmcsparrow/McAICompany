@@ -245,28 +245,89 @@ export function validateRecord(input) {
 
 const fileFor = (run) => path.join(ledgerDir(), `${runKey(checkRun(run))}.jsonl`);
 
+// The ledger folders must be real folders: no link in .company or .company/ledger. Returns false when absent.
+function checkLedgerDir() {
+  for (const dir of [path.join(env.root, '.company'), ledgerDir()]) {
+    let st;
+    try { st = fs.lstatSync(dir); } catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return false;
+      throw new Refusal('ledger folder cannot be read');
+    }
+    if (st.isSymbolicLink() || !st.isDirectory()) throw new Refusal('ledger folder is a link or not a folder');
+  }
+  return true;
+}
+
+const plainLedger = (st) => st.isFile() && !st.isSymbolicLink() && st.nlink === 1;
+
+// Opens the ledger with the lstat isFile, nlink 1, open, fstat dev/ino pattern. null when absent;
+// a Refusal when the file is a link, hard-linked or swapped.
+function openLedger(file, flags) {
+  let before = null;
+  try { before = fs.lstatSync(file); } catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw new Refusal('ledger file cannot be read');
+  }
+  if (before !== null && !plainLedger(before)) throw new Refusal('ledger file is a link or not a plain file');
+  let fd;
+  try { fd = fs.openSync(file, flags | (fs.constants.O_NOFOLLOW ?? 0)); } catch (error) {
+    if (before === null && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return null;
+    throw new Refusal('ledger file cannot be opened');
+  }
+  try {
+    const f = fs.fstatSync(fd);
+    const now = fs.lstatSync(file);
+    if (!plainLedger(f) || !plainLedger(now) || f.dev !== now.dev || f.ino !== now.ino ||
+      (before !== null && (f.dev !== before.dev || f.ino !== before.ino))) throw new Refusal('ledger file changed or is linked');
+    return { fd, size: f.size };
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
+  }
+}
+
 function appendRecord(rec) {
   const verdict = validateRecord(rec);
   if (!verdict.ok) throw new Refusal(verdict.reason);
   const line = `${JSON.stringify(rec)}\n`;
   if (Buffer.byteLength(line) > MAX_LINE_BYTES) throw new Refusal('record is over 512 bytes');
   const file = fileFor(rec.run);
-  const size = fs.existsSync(file) ? fs.statSync(file).size : 0;
-  if (size + Buffer.byteLength(line) > MAX_LEDGER_BYTES) throw new Refusal('ledger file would pass 1 MiB');
+  checkLedgerDir();
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, line);
+  checkLedgerDir();
+  const opened = openLedger(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT);
+  try {
+    if (opened.size + Buffer.byteLength(line) > MAX_LEDGER_BYTES) throw new Refusal('ledger file would pass 1 MiB');
+    fs.writeSync(opened.fd, line);
+  } finally {
+    fs.closeSync(opened.fd);
+  }
 }
 
 // Returns { exists, records, warnings }. A bad line is skipped with a warning, never fatal.
+// A linked, hard-linked or non-plain ledger is not read: the result is "no ledger" with a warning.
 function readLedger(run) {
   const file = fileFor(run);
-  if (!fs.existsSync(file)) return { exists: false, records: [], warnings: [] };
+  let opened;
+  try {
+    if (!checkLedgerDir()) return { exists: false, records: [], warnings: [] };
+    opened = openLedger(file, fs.constants.O_RDONLY);
+  } catch (error) {
+    if (error instanceof Refusal) return { exists: false, records: [], warnings: [`warning: ${error.message}, not read`] };
+    throw error;
+  }
+  if (opened === null) return { exists: false, records: [], warnings: [] };
   const warnings = [];
-  if (fs.statSync(file).size > 2 * MAX_LEDGER_BYTES) {
-    return { exists: true, records: [], warnings: ['warning: ledger over its size limit, not read'] };
+  let body;
+  try {
+    if (opened.size > 2 * MAX_LEDGER_BYTES) {
+      return { exists: true, records: [], warnings: ['warning: ledger over its size limit, not read'] };
+    }
+    body = fs.readFileSync(opened.fd, 'utf8');
+  } finally {
+    fs.closeSync(opened.fd);
   }
   const records = [];
-  fs.readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
+  body.split('\n').forEach((text, i) => {
     if (text === '') return;
     let rec;
     try {
