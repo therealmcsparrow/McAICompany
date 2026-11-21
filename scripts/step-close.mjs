@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// step-close (contract: docs/contracts/step-close.md v1.0, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
+// step-close (contract: docs/contracts/step-close.md v1.1, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
 // One call after a Step: lint the Handoff, scope the commit candidates, commit them, record the ledger row. Every argument is
 // untrusted; output holds fixed words, the slug, <NN>, <role>, digits and paths that passed the path rule.
 // Git and the sibling scripts are started with argv arrays, never through a shell.
@@ -8,7 +8,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isRunSlug, exactWorkPath, workParts, runKey } from '../mods/lib/work-folder.mjs';
-import { readParallel, parsePlan, normalizePath } from './plan-tasks.mjs';
+import { readParallel, readPlan, parsePlan, normalizePath } from './plan-tasks.mjs';
+import { hasHookRow } from './ledger.mjs';
 
 const HERE = import.meta.dirname;
 const PLUGIN_ROOT = path.resolve(HERE, '..');
@@ -99,7 +100,7 @@ function scope(root, a, candidates) {
         lines.push(`dropped: ${m[2]} (task ${m[1]})`);
         gone.add(m[2]);
         dropped++;
-      } else if ((m = /^extra (\S+)$/.exec(l))) lines.push(l);
+      } else if (/^extra \S+$/.test(l) || /^qa-owned \S+ \S+$/.test(l) || /^scope: \d+ extra, \d+ sibling(, \d+ qa-owned)?$/.test(l)) lines.push(l);
     }
     kept = candidates.filter((c) => !gone.has(c.replaceAll('\\', '/')));
     return { fail: false, lines, candidates: kept, dropped };
@@ -111,8 +112,9 @@ function scope(root, a, candidates) {
   try {
     view = readParallel(root, a.slug);
     if (view.state === 'none' || view.running.length === 0) return { fail: false, lines, candidates: kept, dropped };
-    const plan = fs.readFileSync(path.join(root, '.company', 'work', ...workParts(a.slug), view.plan), 'utf8');
-    tasks = parsePlan(plan, { slug: a.slug }).tasks;
+    const plan = readPlan(root, a.slug, view.plan);
+    if (plan.hash !== view.hash) return { fail: true, lines: [] };
+    tasks = parsePlan(plan.text, { slug: a.slug }).tasks;
   } catch {
     return { fail: true, lines: [] };
   }
@@ -131,19 +133,6 @@ function scope(root, a, candidates) {
 
 const charOk = (p) => p !== '' && !path.isAbsolute(p) && !/^[A-Za-z]:/.test(p) && !p.startsWith('-') && !p.startsWith(':')
   && !p.split('/').includes('..') && !BAD_CHARS.test(p);
-
-function hasHook(root, a) {
-  try {
-    const text = fs.readFileSync(path.join(root, '.company', 'ledger', `${runKey(a.slug)}.jsonl`), 'utf8');
-    for (const line of text.split('\n')) {
-      if (!line) continue;
-      let r;
-      try { r = JSON.parse(line); } catch { continue; }
-      if (r && (r.src ?? r.source) === 'hook' && r.kind !== 'lead' && (r.id ?? r.step) === a.nn && r.role === a.role) return true;
-    }
-  } catch { /* no ledger yet */ }
-  return false;
-}
 
 export function close(argv, root = process.cwd()) {
   let a;
@@ -182,7 +171,7 @@ export function close(argv, root = process.cwd()) {
 
   let ledger = 'missing';
   const tail = [];
-  if (hasHook(root, a)) ledger = 'hook';
+  if (hasHookRow(a.nn, a.role, { root, run: a.slug })) ledger = 'hook';
   else if (a.usage) {
     const r = node('ledger.mjs', ['add', a.slug, 'step', a.nn, a.role, 'step-close', ...a.usage.slice(0, 1), ...a.usage.slice(1)], root);
     if (r.code === 0 || r.code === 4) {
@@ -210,7 +199,7 @@ export function close(argv, root = process.cwd()) {
   }
   const first = `step-close: ${a.nn} ${a.role} lint ok, commit ${sha}, ${keep.length} paths, ${dropped} dropped, ledger ${ledger}`;
   const lines = [first, ...out, `ledger: ${ledger}`, ...tail, ...rest];
-  if (failed !== null) return { code: 1, lines: [...lines, `step-close: ${failed} failed`] };
+  if (failed !== null) return { code: 4, lines: [...lines, `step-close: ${failed} failed, commit kept`] };
   return { code: 0, lines };
 }
 

@@ -1,6 +1,8 @@
-# Contract: step-close v1.0
+# Contract: step-close v1.1
 
-Provider: `scripts/step-close.mjs` (Node built-ins only; plan tasks P20261120.000001-T25, -T26). Consumer: the Lead through `aico:pipeline` (one call after every Step). Uses: `handoff` v3.0 (lint, frontmatter `files-touched`), `plan-tasks` v1.11 (`scope`, `done`, `next`, the record's running task sets, read-only), `tier-sets` v2.0 (`sync`), `route` v2.0 (`next`), `token-ledger` v1.15 (hook-row lookup; `add` only with `--usage`), `work-folder-name` v3.0 (`isRunSlug`, `exactWorkPath`).
+v1.1 (additive): `scope` prints the `qa-owned` and `scope:` lines of `plan-tasks scope`; a failure of stages 5-7 exits 4, not 1; the plan and the ledger are read through `plan-tasks` `readPlan` (hash compared with the begin hash) and `ledger` `hasHookRow`, never with a plain file read (`proj.M-SEC7`).
+
+Provider: `scripts/step-close.mjs` (Node built-ins only; plan tasks P20261120.000001-T25, -T26). Consumer: the Lead through `aico:pipeline` (one call after every Step). Uses: `handoff` v3.0 (lint, frontmatter `files-touched`), `plan-tasks` v1.11 (`scope`, `done`, `next`, the record's running task sets and the exported `readPlan`, read-only), `tier-sets` v2.0 (`sync`), `route` v2.0 (`next`), `token-ledger` v1.15 (`hasHookRow`; `add` only with `--usage`), `work-folder-name` v3.0 (`isRunSlug`, `exactWorkPath`).
 Rationale: the Lead closed each Step with 6-9 separate calls (lint, ledger, scope, commit, done, next, tier sync, route); each call filled the Lead's context and caused a Lead hand-over every ~2.5 Steps in run P20261117.000001. One command runs the same checks in the same order and prints one block. No check is dropped.
 
 ## CLI
@@ -17,10 +19,10 @@ Candidates = the Handoff path + every item of the Handoff's frontmatter `files-t
 ## Order (stops at the first failing stage; a stage that did not run prints nothing)
 1. **Lint** the Handoff (`handoff-lint` rules, plain mode). Errors → print them, `step-close: lint failed`, exit 1. Nothing is committed. The Lead redoes the Step as a fresh Step (`aico:pipeline`).
 2. **Scope.**
-   - With `--task`: `plan-tasks scope <slug> <id> -- <candidates>`. A refusal prints its lines, `step-close: scope failed`, exit 1; nothing committed. `sibling` paths are dropped (`dropped: <path> (task <other id>)`); `extra` paths stay and their lines are printed for the Lead.
-   - Without `--task`, when the run has a plan-tasks record: a candidate that overlaps the set of a running task (same overlap rule as `scope`) is dropped, `dropped: <path> (task <id>)`. An unreadable record → `step-close: scope failed`, exit 1, nothing committed (fail-closed).
+   - With `--task`: `plan-tasks scope <slug> <id> -- <candidates>`. A refusal prints its lines, `step-close: scope failed`, exit 1; nothing committed. `sibling` paths are dropped (`dropped: <path> (task <other id>)`); `extra` paths stay and their lines are printed for the Lead. `qa-owned <id> <path>` lines (a builder edit to a QA-owned file, `plan-tasks` v1.7) and the `scope: <n> extra, <n> sibling[, <n> qa-owned]` summary are printed as is; the path is not dropped, the Lead decides (a Blocking `[test]`).
+   - Without `--task`, when the run has a plan-tasks record: a candidate that overlaps the set of a running task (same overlap rule as `scope`) is dropped, `dropped: <path> (task <id>)`. The plan the record names is read with `plan-tasks` `readPlan` and its hash must equal the record's begin hash. An unreadable record, an unreadable plan or a hash mismatch → `step-close: scope failed`, exit 1, nothing committed (fail-closed).
 3. **Commit.** Keep a candidate only if it is relative, has no `..` segment, does not start with `-` or `:`, has no quote, backtick, `$`, `\`, `*`, `?`, `[` or control character, is not `.env*`, and is listed as changed or untracked by `git status --porcelain=v1 -z`. Each other candidate prints `dropped: <path>` when it passed the character rule, else `dropped: ?`. Then `git --literal-pathspecs add -- <paths>` and `git commit -m <msg> -- <paths>` (argv, no shell). Git failure → `step-close: commit failed`, exit 3.
-4. **Ledger.** A hook row exists when the run's token ledger holds a row with `step` `<NN>`, `role` `<role>` and `source` `hook` (`token-ledger` v1.15) → `ledger: hook`. Else with `--usage` → `ledger add … step <NN> <role>` → `ledger: added`; ledger exit 4 prints its `over cap` line and the close goes on. Else → `ledger: missing` (never blocks). Runs after the commit, so a lint or scope failure never leaves a row.
+4. **Ledger.** A hook row exists when the run's token ledger holds a row with `id` `<NN>`, `role` `<role>` and `src` `hook` (what `hasHookRow` tests) (`token-ledger` v1.15) → `ledger: hook`. Else with `--usage` → `ledger add … step <NN> <role>` → `ledger: added`; ledger exit 4 prints its `over cap` line and the close goes on. Else → `ledger: missing` (never blocks). Runs after the commit, so a lint or scope failure never leaves a row.
 5. **Done and next** (only with `--task`): `plan-tasks done`, then `plan-tasks next`; their start lines are printed as is.
 6. **Tier sync** (feature and fix runs with a tier-path record): `tier-set sync <slug>`; its lines are printed.
 7. **Route next** (only without `--task` and when the run has `route.jsonl`): `route next <slug>`; printed as `next: <json>`.
@@ -29,7 +31,7 @@ Candidates = the Handoff path + every item of the Handoff's frontmatter `files-t
 First line: `step-close: <NN> <role> lint ok, commit <short sha>, <k> paths, <d> dropped, ledger <hook|added|missing>`. Then the lines of stages 2 and 4-7 in order. Exit 0 when every stage that ran succeeded.
 
 ## Exit codes
-0 done; 1 lint or scope failed (nothing committed); 2 refused argument (nothing run); 3 git failed.
+0 done; 1 lint or scope failed (nothing committed); 2 refused argument (nothing run); 3 git failed (nothing committed); 4 the commit was made, then a stage 5-7 failed (`step-close: <stage> failed, commit kept`; the printed lines say which). The Lead does not redo the Step on 4.
 
 ## Compatibility
-v1.0. A new optional flag or a new printed line after the first is a minor bump. Dropping a stage, changing the order, reading commit paths from anything but `files-touched`, or committing on a lint or scope failure is a major bump and needs the CEO.
+v1.1. A new optional flag or a new printed line after the first is a minor bump. Dropping a stage, changing the order, reading commit paths from anything but `files-touched`, or committing on a lint or scope failure is a major bump and needs the CEO.
