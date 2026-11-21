@@ -1,6 +1,6 @@
 # Main loop (the main session)
 
-Main only relays. The Lead agent `aico:project-manager` runs the Playbook (`lead-relay` v1, `docs/contracts/lead-relay.md`). Main runs no Step, lint, ledger, commit, Gate or run-state script.
+Main only relays. The Lead agent `aico:project-manager` runs the Playbook (`lead-relay`, `docs/contracts/lead-relay.md`). Main runs no Step, lint, ledger, commit, Gate or run-state script.
 
 ## Start
 `aico start: <playbook>` plus a line `Request:` with the CEO's words counts as "the CEO asks" in a Playbook description. Spawn one `aico:project-manager` in the foreground, never with `run_in_background` (a background spawn is denied). Only main spawns the Lead; one at a time. The prompt is exactly:

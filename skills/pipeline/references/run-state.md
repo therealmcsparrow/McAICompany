@@ -1,6 +1,6 @@
 # Run state
 
-The Lead records where a run is in `.company/work/<slug>/run-state.jsonl` through five commands (`run-state` v1.3, `docs/contracts/run-state.md`). The mods read it; nothing else does. Run each command from the product root.
+The Lead records where a run is in `.company/work/<slug>/run-state.jsonl` through five commands (`run-state`, `docs/contracts/run-state.md`). The mods read it; nothing else does. Run each command from the product root.
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" run-state start '<slug>'
