@@ -1,7 +1,7 @@
 # Guards
 
 ## In short
-A guard is a check that runs before a tool call and can refuse it. aico has four: `cap`, `dotenv`, `model-floor` and `self-protect`. They work in the background while a run is active, and a Role that is refused sees only a short reason. You cannot switch an individual guard off. You can stand all of them down in the main and Lead sessions with `AICO_GUARDS=off`.
+A guard is a check that runs before a tool call and can refuse it. aico has three: `cap`, `dotenv` and `self-protect`. They work in the background while a run is active, and a Role that is refused sees only a short reason. You cannot switch an individual guard off. You can stand all of them down in the main and Lead sessions with `AICO_GUARDS=off`.
 
 Guards stop accidents, not a determined attacker. They block common mistakes, such as touching a `.env` file. They do not stop someone who crafts a command to get around them. Known gaps are tracked as Debt.
 
@@ -13,13 +13,16 @@ Guards stop accidents, not a determined attacker. They block common mistakes, su
 
 ## Technical details
 
-### The four guards
+### The three guards
 | Guard | What it refuses |
 |---|---|
 | `cap` (`cap.M1`) | Tools past the freeze point, 162000 tokens at the default cap of 180000. A Step may then only write its Handoff and one findings ledger. The Lead ends with `STATUS: handover` at 162000 and every tool is refused at 180000. Main is never capped, but in a run it may start only the Lead, and a Role may never start one. See [Context budget](context-budget.md). |
 | `.env` (`dotenv.M-SEC1`) | Tool calls that touch `.env` and `.env.<x>`, except `.env.example`, `.env.sample` and `.env.template`. A shell command is checked for `.env` only. |
-| `model floor` (`model-floor.M1`) | A Role dispatched on a model below its floor. A dispatch with no model passes, and the Role's own file applies. |
 | `self-protect` (`self-protect.M-SEC1`) | Writes to aico's own settings, hooks and pins by a file tool, and writes to the run records (`guard.jsonl`, `forms.jsonl`, `run-state.jsonl`) by a file tool or a shell command. It is hygiene against a model that follows the rules, not a sandbox. |
+
+The `model-floor` guard is removed. The model floor itself stays: the Lead applies it in the dispatch rule, so a Role is still never dispatched below its floor, but no hook re-checks the dispatch. See [Which model a Role runs on](model-choice.md).
+
+`self-protect` is frozen as it is. A way around it is filed as Debt, not as a blocking finding.
 
 Shell commands are checked only for `.env` and for writes to run records (ADR 0079). Any other shell command passes. A command with a target the guard cannot resolve passes too, unless it also names a run-record path. A command over 200000 characters is refused.
 
@@ -35,6 +38,6 @@ Guards fail closed. In an active run, a guard that errors, times out or cannot r
 The engine appends every refusal to a deny log under `MCSPARROW_HOME`, at most 1000 lines. The guard record for a run is `.company/work/<slug>/guard.jsonl`. A deny-log row holds the rule ID, the kind, the time and the session, not the text of your files.
 
 ### Savers are not guards
-A saver, such as the Cache clock or the Browser screenshot note, only shows a note to you. It never refuses a tool. See [Mods](../mods/README.md) and [Switchboard](../mods/switchboard.md).
+A saver, such as the Cache clock, only shows a note to you. The Browser screenshot note (`efficient-browser-use`) is removed; a stored `mods.efficient-browser-use` key is ignored with a note. It never refuses a tool. See [Mods](../mods/README.md) and [Switchboard](../mods/switchboard.md).
 
-Contracts: `context-guard` v3.0, `mod-hook` v1.2, `hook-event` v1.4, `mod-manifest` v1.1.
+Contracts: `context-guard` v3.0, `mod-hook`, `hook-event`, `mod-manifest`.

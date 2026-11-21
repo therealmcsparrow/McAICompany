@@ -4,6 +4,25 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **`step-close`.** One command closes a Step: lint the Handoff, check scope, commit the Handoff and its `files-touched`, record cost, mark the plan task done, sync the tier set and print the next Step. It replaces six to nine separate Lead calls. Contract: `step-close` v1.0 (new).
+- **`ship-check`.** One command runs every pre-Ship check (clean branch, contests, rule drift, cost, review loop, tier and owed Steps, Lead peak, worktrees) and prints one line each. Any `block` stops the Ship Gate. Contract: `ship-check` v1.0 (new).
+- **`pipeline.plan_review`.** `off` or `on`, default `off` at every tier. A plan with Contract majors gets a plan review only when you turn it on. `majors` prints `skipped (settings off)` otherwise. Contract: `plan-review` v1.5.
+- **Security skipped when nothing sensitive changed.** Below high risk, Security is skipped when a diff touches no config, Contract, binary, unknown or guard path; a later raise gives an `owed: security` block at the Ship Gate. Contracts: `route` v2.0, `diff-facts` v1.1.
+- **Stale-test fails go to Debt.** After the last Fix round the Lead asks: Ship with Debt (Recommended), Cut scope or Extra round.
+
+### Changed
+- **Settings v4.0 (breaking).** `pipeline.second_reviewer`, `pipeline.second_reviewer_model`, `pipeline.review_format` and the mod id `efficient-browser-use` are retired. A stored value is ignored with a note; `set` on one and `set-mod efficient-browser-use` are refused; `get` no longer lists them. Contract: `aico-settings` v4.0.
+- **Handoff v3.0 (breaking) and review.** One Handoff format for every Role. Review depth and Contract checks: a Contract change forces high risk only on a major bump. The medium set drops the compliance pass. Contracts: `handoff` v3.0, `dispatch-prompt` v6.0, `tier-sets` v2.0, `review-loop` v2.0.
+- **Pipeline skill is 50 lines or fewer.** Its rules moved to references named by trigger. Contract cites are by name, not version.
+- **One QA task per Module wave.** Contract: `plan-tasks` v1.11.
+
+### Removed
+- **The second reviewer.** The fresh reviewer no longer reviews code; it reads plans only, and only with plan review on.
+- **The pilot format.** No top block, findings rows or findings ledger; `review-loop mark` and `churn` are gone.
+- **The `model-floor` guard.** Three guards remain: `cap`, `dotenv`, `self-protect`. The floor stays in the dispatch rule; no hook re-checks it.
+- **The browser screenshot saver (`efficient-browser-use`).** Contracts: `mod-manifest` v1.2.
+
 ## [0.44.1] - 2026-11-18
 
 Rollback: node scripts/stable.mjs 0.44.0
