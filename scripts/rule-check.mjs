@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.6). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v1.7). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
@@ -59,6 +59,7 @@ const USAGE = [
   '  list',
   '  slices <senior-engineer handoff> [--write]',
   '  drift',
+  '  standing --write | standing check',
   '  fill-security <standards.md> --packs <dir>'
 ].join('\n');
 
@@ -1065,12 +1066,54 @@ function cmdFillSecurity(a) {
   return { code: 0, lines: [...report, ...rows.map(r => `added ${r.id}`)] };
 }
 
+// ---------- standing slice (v1.7) ----------
+
+const SLICE_SHA = /^standards-sha256: ([0-9a-f]{64})$/m;
+
+function standingPaths(root) {
+  const dir = path.join(root, '.company');
+  return { std: path.join(dir, 'standards.md'), rules: path.join(dir, 'rules'), slice: path.join(dir, 'rules', 'standing-slice.md') };
+}
+
+// True only when the slice records the sha-256 of the current standards.md; a missing or unreadable file is stale.
+export function standingFresh(root) {
+  const p = standingPaths(path.resolve(root));
+  try {
+    if (!isFile(p.std) || !isFile(p.slice)) return false;
+    const m = SLICE_SHA.exec(readCapped(p.slice, MAX_TEXT_BYTES, 'standing slice'));
+    return m !== null && m[1] === sha256(readCapped(p.std, MAX_TEXT_BYTES, 'standards.md'));
+  } catch {
+    return false;
+  }
+}
+
+function cmdStanding(a) {
+  const p = standingPaths(a.root);
+  if (!a.write) return { code: 0, lines: [standingFresh(a.root) ? 'fresh' : 'stale'] };
+  if (!isFile(p.std)) throw new Refusal('no standards.md');
+  const text = readCapped(p.std, MAX_TEXT_BYTES, 'standards.md');
+  const { rules } = loadRules(a.root);
+  const musts = [...rules.values()].filter(r => /\.(?:M|M-SEC)\d+$/.test(r.id));
+  const lines = ['# Standing slice', '', `standards-sha256: ${sha256(text)}`, '', '## Must', ...musts.map(r => `- ${r.id} — ${cut(r.text, RULE_CUT)}`), ''];
+  const st = lstatOrNull(p.rules);
+  if (st && !st.isDirectory()) throw new Refusal('rules is not a folder');
+  fs.mkdirSync(p.rules, { recursive: true });
+  const tmp = path.join(p.rules, `.standing-${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(tmp, lines.join('\n'), { flag: 'wx' });
+    fs.renameSync(tmp, p.slice);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+  return { code: 0, lines: [`wrote standing slice (${musts.length} Must rules)`] };
+}
+
 // ---------- CLI ----------
 
 function parseArgs(args) {
   const [command, ...rest] = args;
   const allowed = {
-    run: ['--root', '--base', '--run', '--handoff'], text: ['--base', '--run'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root'], 'fill-security': ['--root', '--packs']
+    run: ['--root', '--base', '--run', '--handoff'], text: ['--base', '--run'], list: ['--root'], slices: ['--root', '--write'], drift: ['--root'], standing: ['--root', '--write'], 'fill-security': ['--root', '--packs']
   };
   if (!command || !Object.hasOwn(allowed, command)) throw new Refusal(USAGE);
   const code = command === 'run' || command === 'text' ? 3 : 2;
@@ -1090,7 +1133,10 @@ function parseArgs(args) {
       positional.push(arg);
     }
   }
-  if (positional.length !== (command === 'slices' || command === 'fill-security' ? 1 : 0)) throw new Refusal(USAGE, code);
+  if (command === 'standing') {
+    const checking = positional.length === 1 && positional[0] === 'check';
+    if (positional.length > 1 || (positional.length === 1 && !checking) || checking === (opts['--write'] === true)) throw new Refusal(USAGE, code);
+  } else if (positional.length !== (command === 'slices' || command === 'fill-security' ? 1 : 0)) throw new Refusal(USAGE, code);
   return { command, opts, positional: positional[0] };
 }
 
@@ -1133,7 +1179,7 @@ export function main(args, options = {}) {
       if (!isFile(abs)) throw new Refusal('bad handoff');
       a.handoff = abs;
     }
-    const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift, 'fill-security': cmdFillSecurity };
+    const handlers = { run: a2 => cmdRun(a2, options), text: a2 => cmdText(a2, options), list: cmdList, slices: cmdSlices, drift: cmdDrift, standing: cmdStanding, 'fill-security': cmdFillSecurity };
     return handlers[command](a);
   } catch (error) {
     if (error instanceof Refusal) return { code: error.code, lines: [`refused: ${error.message}`] };
