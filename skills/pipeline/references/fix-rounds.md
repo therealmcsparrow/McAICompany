@@ -1,6 +1,13 @@
 # Fix rounds
 
-Limit and escalation for blocking findings (`aico:pipeline` §5; `ship-check` v1.0).
+Limit and escalation for blocking findings (`aico:pipeline` §5; `ship-check`).
+
+## Running a round
+When the Reviewer, QA, Security or the Senior Engineer (compliance) returns `## Blocking` items:
+1. One Fix round = dispatch the builder with *all* blocking reviewer Handoffs as input, then re-dispatch *every* reviewer that blocked (in parallel), `Round: N` in each. With a parallel record the builders sent back are the tasks `plan-tasks.mjs round` names, started through `next` (`references/parallel.md` step 8).
+2. Each blocker is tagged `contract|spec|security|test`: send `security`/`contract` blockers to the owning builder first; a `contract` blocker needing a Contract change goes to the Architect (a Plan Gate, not a Fix round).
+3. Nits never trigger a round; they go in the Ship Gate summary. A nit on a Contract or Core path gets one builder Fix Step (`route fix`, `references/route.md`): not a Fix round.
+4. A builder's Must exception (`needs-ceo`, `aico:ruleset`) is a CEO question, not a Fix round. Debt never triggers a round; an exploitable security Must is Blocking, not Debt.
 
 ## Past the last round
 The count is the `round:` field of the Handoffs. The limit is `pipeline.fix_rounds`. Still blocking after the last allowed round → no new round: escalate to the CEO in one form (`references/ceo-pack.md`) with the reviewer Handoff paths. At 0, the first blocking review goes straight to the form.
