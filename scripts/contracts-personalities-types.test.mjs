@@ -351,8 +351,8 @@ test('dispatch-prompt: the exports give the block, or nothing for a Role without
 
 test('dispatch-prompt: the static check still reports a dispatch block with no Context cap', () => {
   assert.deepEqual(check(pluginCopy()).errors, [], 'the copy starts clean');
-  const errors = checkWith('skills/pipeline/SKILL.md', t => t.replace(/^Context cap: .*\n/m, ''));
-  assert.ok(errors.some(e => /skills\/pipeline\/SKILL\.md/.test(e) && /no Context cap:/.test(e)), String(errors));
+  const errors = checkWith('skills/pipeline/references/dispatch.md', t => t.replace(/^Context cap: .*\n/m, ''));
+  assert.ok(errors.some(e => /skills\/pipeline\/references\/dispatch\.md/.test(e) && /no Context cap:/.test(e)), String(errors));
 });
 
 // ================= brainstorm-file v2.1 =====================================================

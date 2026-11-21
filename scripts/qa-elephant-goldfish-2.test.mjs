@@ -403,7 +403,7 @@ describe('AC22: a lesson is classed mechanical or judgement and lint rejects an 
 
 // A Handoff of a given Role with the extra sections between ## Nits and ## Next.
 function handoffText({ role = 'architect', fm = '', decisions = ['- none'], blocking = ['- none'], extra = '' } = {}) {
-  return `---\nstep: 03\nrole: ${role}\ntask: ${SLUG}\nstatus: done\nround: 0\nbase-commit: ${BASE40}\nrisk-tier: high\nacceptance-ids: [AC23]\ncontracts: [handoff v2.0]\n${fm}---\nBy: ${role}\n## Did\n- used the earlier report\n## Decisions\n${decisions.join('\n')}\n## Blocking\n${blocking.join('\n')}\n## Nits\n- none\n${extra}## Next\n- go\n`;
+  return `---\nstep: 03\nrole: ${role}\ntask: ${SLUG}\nstatus: done\nround: 0\nbase-commit: ${BASE40}\nrisk-tier: high\nacceptance-ids: [AC23]\ncontracts: [handoff v3.0]\n${fm}---\nBy: ${role}\n## Did\n- used the earlier report\n## Decisions\n${decisions.join('\n')}\n## Blocking\n${blocking.join('\n')}\n## Nits\n- none\n${extra}## Next\n- go\n`;
 }
 
 // Lints a Handoff text through the shipped command line, in the run folder of the temp product.

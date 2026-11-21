@@ -35,7 +35,7 @@ function run(script, args) {
 }
 
 const USAGE_RUN_STATE = 'refused: usage: start <slug> [<aico version>] | ceo <slug> <brief|plan|ship|none> <1-20> | sub <slug> <start|stop> <role> <id> [<session>] | wave <slug> <n> | ask <slug> <brief|plan|ship> | gate <slug> <brief|plan|ship> <passed|changed|stopped> | pick <slug> <use|edit|keep|stop> <asked> | end <slug> <ship|abort> | show <slug> --json | active --json | list --json | projects --json | triage issue | triage check <nonce> [--route fix]\n'
-const USAGE_REVIEW_LOOP = 'refused: usage: attempt <slug> <step> <role> <round> <reason> | mark <slug> <round> --base <full id> | churn <slug> <round> --base <full id> | gate <slug> [--base <full id>]\n'
+const USAGE_REVIEW_LOOP = 'refused: usage: attempt <slug> <step> <role> <round> <reason> | gate <slug>\n'
 const USAGE_PLAN_CHECK = [
   'refused: usage: plan-check.mjs <command>',
   '  gate <slug> <plan-name> --policy <warn|block> [--json]',

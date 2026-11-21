@@ -1071,19 +1071,18 @@ describe('AC15 a Module declares a Contract version that differs from the file',
   });
 });
 
-describe('AC16 a skill cites a stale Contract version', () => {
-  test('a newer minor or another major fails with file and line; an older minor of the current major passes', () => {
+describe('AC16 a skill cites a Contract by name', () => {
+  test('a skill cites a Contract by name: any version passes (contract-index v1.2), an unknown name fails with file and line', () => {
     const sb = sandbox();
     const root = tree(sb, 'ac16', {
       'docs/contracts/foo.md': FOO,
-      'skills/one/SKILL.md': 'Fine: foo v1 and foo v1.0 and foo v1.1.\nStale: foo v1.3 is cited here.\nOther major: foo v2 too.\n'
+      'skills/one/SKILL.md': 'Fine: foo v1 and foo v1.0 and foo v1.1.\nNot checked: foo v1.3 is cited here.\nNot checked: foo v2 too.\nGone: nothing-here v1.0 is cited.\n'
     });
     const r = drift(sb, root);
     assert.equal(r.code, 1, r.all);
-    assert.match(r.out, /^ERROR skills\/one\/SKILL\.md:2 cites foo v1\.3, current v1\.1$/m);
-    assert.match(r.out, /^ERROR skills\/one\/SKILL\.md:3 cites foo v2, current v1\.1$/m);
-    assert.doesNotMatch(r.out, /SKILL\.md:1 /);
-    assert.match(r.out, /2 error\(s\)/);
+    assert.match(r.out, /^ERROR skills\/one\/SKILL\.md:4 cites nothing-here v1, no such Contract$/m);
+    assert.doesNotMatch(r.out, /SKILL\.md:[123] /);
+    assert.match(r.out, /1 error\(s\)/);
   });
   test('hostile: a long line, a path escape and a binary-looking file neither hang the scan nor read outside the root', () => {
     const sb = sandbox();
@@ -1523,7 +1522,7 @@ describe('AC26 new Handoffs and cooler files carry the Role id', () => {
     assert.equal(lint.code, 0, lint.all);
     assert.equal(fs.readFileSync(old, 'utf8'), text);
     const fresh = path.join(dir, '04-backend-engineer.md');
-    fs.writeFileSync(fresh, handoff('backend-engineer', 'contracts: [handoff v2.0]\n'));
+    fs.writeFileSync(fresh, handoff('backend-engineer', 'contracts: [handoff v3.0]\n'));
     assert.equal(node(sb, dir, 'handoff-lint.mjs', [fresh]).code, 0);
   });
 });
@@ -1602,7 +1601,7 @@ describe('AC29 a display name in .company or a dispatch prompt fails the drift t
   const drift = (sb, root) => spawnSync(process.execPath, ['--test', path.join(root, 'scripts', 'name-drift.test.mjs')], { cwd: root, env: cleanEnv(sb), encoding: 'utf8', timeout: 120000 });
   const fixture = (name) => fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8');
 
-  test('a clean tree passes; a Name: line in a skill dispatch block, a named v1.2 Handoff and a named cooler cue each fail it', () => {
+  test('a clean tree passes; a named v1.2 Handoff and a named cooler cue each fail it', () => {
     const sb = sandbox();
     const root = treeCopy(sb);
     // The scan wants at least one file in .company, so a clean file stays there.
@@ -1611,7 +1610,7 @@ describe('AC29 a display name in .company or a dispatch prompt fails the drift t
     const clean = drift(sb, root);
     assert.equal(clean.status, 0, (clean.stdout + clean.stderr).slice(-800));
     const planted = [
-      ['skills/zz-planted/SKILL.md', fixture('dispatch-name-line.md'), /Name: line in a dispatch block/],
+      // The real-tree scan of skill and agent dispatch blocks was retired with the prose pins (82851c2), so a planted skill Name: line is no longer a live check.
       ['.company/work/zz-run/05-backend-engineer.md', fixture('handoff-v12-name.md'), /By: line of a v1.2 Handoff is not a Role id/],
       ['.company/cooler/2026-10-29 10.00 - Planted.md', fixture('cooler-ids-name-cue.md'), /cue line of an ids: role cooler file/]
     ];
@@ -1688,7 +1687,7 @@ describe('AC31 contested findings', () => {
     if (standards !== undefined) fs.writeFileSync(path.join(dir, '.company', 'standards.md'), standards);
     for (const [name, role, body] of files) {
       const nn = name.slice(0, 2);
-      fs.writeFileSync(path.join(run, name), `---\nstep: ${nn}\nrole: ${role}\ntask: run1\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v2.0]\n---\nBy: ${role}\n${body}\n`);
+      fs.writeFileSync(path.join(run, name), `---\nstep: ${nn}\nrole: ${role}\ntask: run1\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: medium\ncontracts: [handoff v3.0]\n---\nBy: ${role}\n${body}\n`);
     }
     return { dir, run, lint: () => node(sb, dir, 'handoff-lint.mjs', ['--contests', run]) };
   }
@@ -1803,9 +1802,9 @@ describe('AC32 the handoff Contract holds contested findings and the contracts f
     assert.equal(none.code, 1, none.all);
     assert.match(none.all, /missing contracts/);
     assert.equal(write('02-backend-engineer.md', base('').replace('By: backend-engineer', 'By: Bo (backend-engineer)')).code, 0);
-    assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v2.0, run-state v3.0]\n')).code, 0);
-    assert.equal(write('08-backend-engineer.md', base('contracts: [handoff v2.0]\n')).code, 0);
-    const malformed = write('05-backend-engineer.md', base('contracts: handoff v2.0\n'));
+    assert.equal(write('04-backend-engineer.md', base('contracts: [handoff v3.0, run-state v3.0]\n')).code, 0);
+    assert.equal(write('08-backend-engineer.md', base('contracts: [handoff v3.0]\n')).code, 0);
+    const malformed = write('05-backend-engineer.md', base('contracts: handoff v3.0\n'));
     assert.equal(malformed.code, 1, malformed.all);
     assert.match(malformed.all, /contracts must be a \[list\]/);
     const unknown = write('06-backend-engineer.md', base('contracts: [nothing-like-this v1]\n'));
@@ -1813,7 +1812,7 @@ describe('AC32 the handoff Contract holds contested findings and the contracts f
     assert.match(unknown.all, /is not a Contract/);
     const stale = write('07-backend-engineer.md', base('contracts: [handoff v1.9]\n'));
     assert.equal(stale.code, 1, stale.all);
-    assert.match(stale.all, /handoff v1.9 is stale, current v2.8/);
+    assert.match(stale.all, /handoff v1.9 is stale, current v3.0/);
   });
   test('the shipped fixture set covers open, accepted and rejected contests', () => {
     const tests = read('scripts', 'handoff-contest.test.mjs');

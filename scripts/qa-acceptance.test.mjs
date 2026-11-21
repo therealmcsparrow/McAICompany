@@ -207,7 +207,7 @@ test('AC2 project beats user beats plugin, key by key', () => {
 test('AC3 the static check refuses a personality line in a pipeline or research dispatch, and a script mention in a Playbook', async () => {
   const { check } = await import('./check.mjs');
   assert.deepEqual(check(pluginCopy()).errors, [], 'the copy starts clean');
-  for (const rel of ['skills/pipeline/SKILL.md', 'skills/research/SKILL.md']) {
+  for (const rel of ['skills/pipeline/references/dispatch.md', 'skills/research/SKILL.md']) {
     const errors = await staticCheckWith(rel, text => text.replace(/^(Language:.*)$/m, '$1\nPersonality: /tmp/x.md'));
     assert.ok(errors.some(e => e.includes(rel) && /Personality: line/.test(e)), `${rel}: ${errors}`);
   }
