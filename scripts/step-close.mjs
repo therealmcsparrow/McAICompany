@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// step-close (contract: docs/contracts/step-close.md v1.0, plan task T25: stages 1-4 lint, scope, commit, ledger). Node built-ins only.
+// step-close (contract: docs/contracts/step-close.md v1.0, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
 // One call after a Step: lint the Handoff, scope the commit candidates, commit them, record the ledger row. Every argument is
 // untrusted; output holds fixed words, the slug, <NN>, <role>, digits and paths that passed the path rule.
 // Git and the sibling scripts are started with argv arrays, never through a shell.
@@ -190,8 +190,28 @@ export function close(argv, root = process.cwd()) {
       if (r.code === 4) tail.push(...r.lines.filter((x) => x.startsWith('over cap:')));
     }
   }
+  // Stages 5-7 run after the commit; a failure prints its lines and exits 1, the commit stays.
+  const rest = [];
+  let failed = null;
+  const stage = (name, r, fmt = (x) => x) => {
+    rest.push(...r.lines.map(fmt));
+    if (r.code !== 0 && failed === null) failed = name;
+  };
+  const runDir = path.join(root, '.company', 'work', ...workParts(a.slug));
+  if (a.task !== undefined) {
+    stage('done', node('plan-tasks.mjs', ['done', a.slug, a.task], root));
+    if (failed === null) stage('next', node('plan-tasks.mjs', ['next', a.slug], root));
+  }
+  if (failed === null && /-(feature|fix)$/.test(a.slug) && fs.existsSync(path.join(runDir, 'tier-path.jsonl'))) {
+    stage('tier sync', node('tier-set.mjs', ['sync', a.slug], root));
+  }
+  if (failed === null && a.task === undefined && fs.existsSync(path.join(runDir, 'route.jsonl'))) {
+    stage('route next', node('route.mjs', ['next', a.slug], root), (x) => `next: ${x}`);
+  }
   const first = `step-close: ${a.nn} ${a.role} lint ok, commit ${sha}, ${keep.length} paths, ${dropped} dropped, ledger ${ledger}`;
-  return { code: 0, lines: [first, ...out, `ledger: ${ledger}`, ...tail] };
+  const lines = [first, ...out, `ledger: ${ledger}`, ...tail, ...rest];
+  if (failed !== null) return { code: 1, lines: [...lines, `step-close: ${failed} failed`] };
+  return { code: 0, lines };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
