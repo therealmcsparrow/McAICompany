@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// step-close (contract: docs/contracts/step-close.md v1.1, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
+// step-close (contract: docs/contracts/step-close.md v1.2, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
 // One call after a Step: lint the Handoff, scope the commit candidates, commit them, record the ledger row. Every argument is
 // untrusted; output holds fixed words, the slug, <NN>, <role>, digits and paths that passed the path rule.
 // Git and the sibling scripts are started with argv arrays, never through a shell.
@@ -166,12 +166,15 @@ export function close(argv, root = process.cwd()) {
       dropped++;
     } else keep.push(c);
   }
-  if (keep.length === 0) return { code: 3, lines: [...out, 'step-close: commit failed'] };
-  if (git(root, ['--literal-pathspecs', 'add', '--', ...keep]).code !== 0
-    || git(root, ['--literal-pathspecs', 'commit', '-q', '-m', a.msg, '--', ...keep]).code !== 0) {
-    return { code: 3, lines: [...out, 'step-close: commit failed'] };
+  // Nothing to keep: no commit, print `commit none`, stages 4-7 still run.
+  let sha = 'none';
+  if (keep.length > 0) {
+    if (git(root, ['--literal-pathspecs', 'add', '--', ...keep]).code !== 0
+      || git(root, ['--literal-pathspecs', 'commit', '-q', '-m', a.msg, '--', ...keep]).code !== 0) {
+      return { code: 3, lines: [...out, 'step-close: commit failed'] };
+    }
+    sha = git(root, ['rev-parse', '--short', 'HEAD']).out.trim();
   }
-  const sha = git(root, ['rev-parse', '--short', 'HEAD']).out.trim();
 
   let ledger = 'missing';
   const tail = [];

@@ -295,6 +295,7 @@ function appendRecord(rec) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   checkLedgerDir();
   const opened = openLedger(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT);
+  if (opened === null) throw new Refusal('ledger file cannot be opened');
   try {
     if (opened.size + Buffer.byteLength(line) > MAX_LEDGER_BYTES) throw new Refusal('ledger file would pass 1 MiB');
     fs.writeSync(opened.fd, line);
