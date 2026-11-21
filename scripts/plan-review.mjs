@@ -47,7 +47,7 @@ const FENCE = /^\s{0,3}(?:`{3,}|~{3,})/;
 const TAGS = ['contract', 'spec', 'security', 'test', 'comprehension'];
 const KIND_FILES = { plan: ['tests', 'plan-review', 'eval.jsonl'], code: ['tests', 'code-review', 'eval.jsonl'] };
 
-const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan|code --after <file>[,<file>…] | majors <slug> <plan> | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
+const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan --after <file>[,<file>…] | majors <slug> <plan> | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
 
 class Refused extends Error {}
 class Unreadable extends Error {}
@@ -325,14 +325,14 @@ function cmdLines(args, env) {
   const planName = rest[1];
   if (!PLAN_NAME.test(planName)) throw new Refused('bad plan name');
   const mode = flags.get('--mode');
-  if (mode !== 'plan' && mode !== 'code') throw new Refused('mode must be plan or code');
+  if (mode !== 'plan') throw new Refused('mode must be plan');
   const after = flags.get('--after').split(',');
   if (after.length < 1 || after.length > MAX_AFTER) throw new Refused('--after takes 1 to 20 files');
   for (const f of after) {
     if (!HANDOFF_NAME.test(f) || PLAN_NAME.test(f)) throw new Refused('--after takes Handoff file names, never a plan');
   }
   if (new Set(after).size !== after.length) throw new Refused('--after names a file twice');
-  if (mode === 'plan' && !after.some((f) => ARCHITECT_NAME.test(f))) throw new Refused('plan mode needs an architect Handoff in --after');
+  if (!after.some((f) => ARCHITECT_NAME.test(f))) throw new Refused('plan mode needs an architect Handoff in --after');
 
   const realRoot = realRootOf(env.root);
   exactNames(realRoot, slug, [planName, ...after]);
@@ -349,19 +349,16 @@ function cmdLines(args, env) {
     contracts = contracts.slice(0, MAX_CONTRACTS);
     warnings.push(`warning: inputs capped contracts ${MAX_CONTRACTS}`);
   }
-  let code = [];
-  if (mode === 'plan') {
-    code = collectCode(realRoot, text);
-    if (code.length > MAX_CODE) {
-      code = code.slice(0, MAX_CODE);
-      warnings.push(`warning: inputs capped code ${MAX_CODE}`);
-    }
+  let code = collectCode(realRoot, text);
+  if (code.length > MAX_CODE) {
+    code = code.slice(0, MAX_CODE);
+    warnings.push(`warning: inputs capped code ${MAX_CODE}`);
   }
   const base = `.company/work/${slug}`;
   const body = [
     '## Plan', `${base}/${planName}`,
     '## Contracts', ...contracts,
-    ...(mode === 'plan' ? ['## Code', ...code] : ['## Diff', 'judging diff: rule git.M-SEC4'])
+    '## Code', ...code
   ].join('\n') + '\n';
   writeInputs(realRoot, slug, body);
   return {

@@ -206,14 +206,9 @@ describe('lines: reading the fixture plan', () => {
     assert.deepEqual(section(inputs(root), 'Code'), ['src/util.mjs']);
   });
 
-  test('code mode writes the Diff line and no Code section', () => {
+  test('code mode is refused', () => {
     const root = product();
-    const r = run(root, 'lines', 'demo', PLAN, '--mode', 'code', '--after', '01-product-manager.md');
-    assert.equal(r.code, 0);
-    const text = inputs(root);
-    assert.deepEqual(section(text, 'Diff'), ['judging diff: rule git.M-SEC4']);
-    assert.equal(text.includes('## Code'), false);
-    assert.deepEqual(section(text, 'Contracts'), ['docs/contracts/handoff.md']);
+    assert.equal(run(root, 'lines', 'demo', PLAN, '--mode', 'code', '--after', '01-product-manager.md').code, 3);
   });
 
   test('caps: 41 Contracts and 201 code files give the first N and one warning each', () => {
@@ -268,10 +263,9 @@ describe('lines: --after', () => {
     assert.equal(run(root, 'lines', 'demo', PLAN, '--mode', 'both', '--after', '02-architect.md').code, 3);
   });
 
-  test('plan mode needs an architect Handoff, code mode does not', () => {
+  test('plan mode needs an architect Handoff', () => {
     const root = product();
     assert.equal(run(root, 'lines', 'demo', PLAN, '--mode', 'plan', '--after', '01-product-manager.md').code, 3);
-    assert.equal(run(root, 'lines', 'demo', PLAN, '--mode', 'code', '--after', '01-product-manager.md').code, 0);
   });
 });
 

@@ -144,7 +144,6 @@ function securityPath(p, securityPaths) {
   return [p.path, p.from].some(x => {
     if (x === null) return false;
     if (SECURITY_DIRS.some(d => x.startsWith(d)) || SECURITY_FILES.includes(x) || anyMatch(securityPaths, x)) return true;
-    if (x.startsWith('.company/')) return false;
     return x.split('/').some(seg => tokens(seg).some(t => FORCED_HIGH_V1.includes(t)));
   });
 }

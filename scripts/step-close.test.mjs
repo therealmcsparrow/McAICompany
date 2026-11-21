@@ -306,13 +306,13 @@ test('refused arguments exit 2 and run nothing: bad --msg, unknown role, Handoff
   assert.equal(f.rows(), 0);
 });
 
-test('with --task in a qa-first run, a qa-owned path prints qa-owned and scope lines and is not dropped', () => {
+test('with --task in a qa-first run, a qa-owned path prints qa-owned and scope lines and is dropped', () => {
   const f = fixture({ running: [T2], withRecord: true, qa: true });
   const r = f.run({ text: handoff({ task: SLUG, touched: ['src/a.txt', 'src/b.txt'] }), args: ['--task', T2] });
   assert.match(r.out, /^qa-owned \S+ src\/a\.txt$/m, r.all);
   assert.match(r.out, /^scope: \d+ extra, \d+ sibling, 1 qa-owned$/m, r.all);
-  assert.ok(!/^dropped: src\/a\.txt/m.test(r.out), 'qa-owned is reported, never dropped by step-close');
-  assert.ok(f.committed().includes('src/a.txt'), 'the Lead decides; step-close keeps the path');
+  assert.match(r.out, /^dropped: src\/a\.txt \(qa-owned \S+\)$/m, r.all);
+  assert.ok(!f.committed().includes('src/a.txt'), 'a qa-owned path is not committed');
 });
 
 test('with --task and no qa-first record, no qa-owned count is printed in the scope line', () => {

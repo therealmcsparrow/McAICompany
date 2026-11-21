@@ -11,12 +11,12 @@ Exit codes: 0 done, 1 unreadable plan or record, 3 refused (`refused: <reason>`,
 ## Real-path read rule
 Every file the script reads (plan, `--after` files, Contract files, code files, case files, results, the eval record) must have a native real path equal to its lexical path under the real product root (so no link or junction on it), be a regular file with one hard link, and the opened handle must be that file (same device and inode). No lexical fallback. No `O_NOFOLLOW` is assumed on win32. A Contract or code path that fails the rule is dropped; a plan or `--after` file that fails it → exit 3. A code path is also dropped when its key (case, trailing dot or space folded) starts with `.company/` or `docs/contracts/`, or when its real path lies under `<real root>/.company/`.
 
-## `lines <slug> <plan> --mode plan|code --after <file>[,<file>…]`
+## `lines <slug> <plan> --mode plan --after <file>[,<file>…]`
 - The plan is `.company/work/<slug>/<plan>`: at most 256 KiB, UTF-8. Missing, too large or not UTF-8 → exit 1.
-- `--after`: 1 to 20 distinct names, each a plain file in the run folder and not a plan name; plan mode needs at least one `NN-architect.md`. Any failure → exit 3.
-- **Contracts** (both modes): each `docs/contracts/<name>.md` token and each cite `<name> v<x>[.<y>]` whose name is in `buildIndex`, as the Contract file; an unreadable file is dropped; first appearance order, duplicates removed, at most 40.
-- **Code** (plan mode only): every backticked token and every `files:` item outside code fences that passes the `plan-tasks` v1 path rule, is not a folder, and passes the real-path read rule; plan order, duplicates by key removed, at most 200. At most 5000 candidate tokens are examined. Over a cap → the first N and one `warning: inputs capped <kind> <N>` line, `kind` `contracts` or `code`, `N` the cap (40 or 200).
-- Writes `.company/work/<slug>/plan-review/inputs.md` (folder and file must be plain; the file is created `O_CREAT|O_EXCL` or, when present, opened after an `lstat` and handle check, and truncated): `## Plan`, `## Contracts`, `## Code` (code mode: `## Diff` with the one line `judging diff: rule git.M-SEC4`), one path per line, no plan text, LF only.
+- `--after`: 1 to 20 distinct names, each a plain file in the run folder and not a plan name; at least one `NN-architect.md`. Any failure → exit 3.
+- **Contracts** : each `docs/contracts/<name>.md` token and each cite `<name> v<x>[.<y>]` whose name is in `buildIndex`, as the Contract file; an unreadable file is dropped; first appearance order, duplicates removed, at most 40.
+- **Code**: every backticked token and every `files:` item outside code fences that passes the `plan-tasks` v1 path rule, is not a folder, and passes the real-path read rule; plan order, duplicates by key removed, at most 200. At most 5000 candidate tokens are examined. Over a cap → the first N and one `warning: inputs capped <kind> <N>` line, `kind` `contracts` or `code`, `N` the cap (40 or 200).
+- Writes `.company/work/<slug>/plan-review/inputs.md` (folder and file must be plain; the file is created `O_CREAT|O_EXCL` or, when present, opened after an `lstat` and handle check, and truncated): `## Plan`, `## Contracts`, `## Code`, one path per line, no plan text, LF only.
 - Prints exactly `Input Handoffs: none: plan review`, `Review inputs: .company/work/<slug>/plan-review/inputs.md`, `After first pass: <paths joined by ", ">`, then any warning lines.
 
 ## `majors <slug> <plan>`

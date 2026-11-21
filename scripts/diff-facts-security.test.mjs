@@ -33,6 +33,11 @@ test('classify: every security trigger path sets security_changed true', async (
   }
 });
 
+test('classify: a .company path holding a forced-high token gets no exception', async () => {
+  const { classify } = await load();
+  assert.equal(classify([entry('.company/work/x/auth-notes.md')], null).security_changed, true);
+});
+
 test('classify: one trigger among harmless paths still sets the flag', async () => {
   const { classify } = await load();
   const c = classify([entry('skills/x/SKILL.md'), entry('scripts/foo.mjs'), entry('yarn.lock')], null);

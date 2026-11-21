@@ -100,7 +100,11 @@ function scope(root, a, candidates) {
         lines.push(`dropped: ${m[2]} (task ${m[1]})`);
         gone.add(m[2]);
         dropped++;
-      } else if (/^extra \S+$/.test(l) || /^qa-owned \S+ \S+$/.test(l) || /^scope: \d+ extra, \d+ sibling(, \d+ qa-owned)?$/.test(l)) lines.push(l);
+      } else if ((m = /^qa-owned (\S+) (\S+)$/.exec(l))) {
+        lines.push(l, `dropped: ${m[2]} (qa-owned ${m[1]})`);
+        gone.add(m[2]);
+        dropped++;
+      } else if (/^extra \S+$/.test(l) || /^scope: \d+ extra, \d+ sibling(, \d+ qa-owned)?$/.test(l)) lines.push(l);
     }
     kept = candidates.filter((c) => !gone.has(c.replaceAll('\\', '/')));
     return { fail: false, lines, candidates: kept, dropped };
