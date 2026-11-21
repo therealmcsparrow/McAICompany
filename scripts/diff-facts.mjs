@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/diff-facts.md v1.2
+// contract: docs/contracts/diff-facts.md v1.3
 // Classifies what a run changed (docs, tests, code, contracts, ...) into one facts file that gates read.
 // Node built-ins and git only. Every git call is a judging call: child env without GIT_*, no shell, literal
 // pathspecs, no replace objects, no ext-diff or textconv, NUL-separated output, ids checked before git runs.
