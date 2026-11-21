@@ -101,7 +101,7 @@ function handoffText({ nn, role = 'qa', status = 'done', round = 0, blocking = [
     'risk-tier: high',
     'acceptance-ids: [AC12]',
     `files-touched: [${files.join(', ')}]`,
-    'contracts: [handoff v2.8]',
+    'contracts: [handoff v3.0]',
     '---',
     `By: ${role}`,
     '```aico-top',

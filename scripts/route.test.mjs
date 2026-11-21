@@ -84,7 +84,7 @@ function baseDraft(extra = {}) {
 
 function facts(sb, flags = {}, kinds = ['code'], name = '05-backend-engineer') {
   const f = {
-    v: 1, step: name, base: BASE40, head: 'b'.repeat(40),
+    v: 1, step: name, base: BASE40, head: sb.head || 'b'.repeat(40),
     paths: kinds.map((k, i) => ({ path: `p${i}.${k}`, from: null, status: 'M', kind: k })),
     truncated: false, ui_changed: true, strings_changed: true, contract_changed: false, docs_only: false,
     ...flags,
@@ -931,8 +931,19 @@ describe('next and owed: conditional security (route v2.0)', () => {
     fs.writeFileSync(f, rows.join('\n') + '\n');
   }
   const tier = (t) => ({ v: 1, state: 'on', tier: t });
+  // route v2.1 reads security facts only at the current HEAD: the product root is a real repo with one commit.
+  const gitEnv = () => Object.fromEntries(Object.entries(process['env']).filter(([k]) => !/^GIT_/i.test(k)));
+  const gitIn = (root, ...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd: root, env: gitEnv(), encoding: 'utf8' });
+  function gitRoot(sb) {
+    assert.equal(gitIn(sb.root, 'init', '-q').status, 0);
+    fs.writeFileSync(path.join(sb.root, 'f.txt'), 'x');
+    assert.equal(gitIn(sb.root, 'add', 'f.txt').status, 0);
+    assert.equal(gitIn(sb.root, 'commit', '-q', '-m', 'init').status, 0);
+    sb.head = gitIn(sb.root, 'rev-parse', 'HEAD').stdout.trim();
+    assert.match(sb.head, /^[0-9a-f]{40}$/);
+  }
   function setup(t, flags = { security_changed: false }, kinds = ['code']) {
-    const sb = sandbox(); seed(sb, { when: SEC_WHEN });
+    const sb = sandbox(); seed(sb, { when: SEC_WHEN }); gitRoot(sb);
     if (t !== undefined && t !== 'none') setTier(sb, tier(t));
     if (flags !== null) facts(sb, flags, kinds);
     written(sb, secDraft());
@@ -1000,6 +1011,27 @@ describe('next and owed: conditional security (route v2.0)', () => {
     secDecision(sb);
     setTier(sb, { broken: true, tier: 'medium' });
     assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: security\n');
+  });
+  test('facts at an old HEAD run security; a new commit makes a skip owed (route v2.1)', () => {
+    const stale = setup('medium', null);
+    stale.head = 'c'.repeat(40);
+    facts(stale, { security_changed: false });
+    assert.equal(secDecision(stale).do, 'run');
+    const ok = setup('medium');
+    secDecision(ok);
+    assert.equal(cli(ok, ['owed', SLUG]).out, 'owed: none\n');
+    fs.writeFileSync(path.join(ok.root, 'f.txt'), 'y');
+    assert.equal(gitIn(ok.root, 'commit', '-qam', 'more').status, 0);
+    assert.equal(cli(ok, ['owed', SLUG]).out, 'owed: security\n');
+  });
+  test('facts against another base run security (route v2.1)', () => {
+    const sb = setup('medium', null);
+    facts(sb, { security_changed: false, base: 'd'.repeat(40) });
+    assert.equal(secDecision(sb).do, 'run');
+  });
+  test('owed: none for a run with no route record (route v2.1)', () => {
+    const sb = sandbox(); seed(sb, { when: SEC_WHEN });
+    assert.equal(cli(sb, ['owed', SLUG]).out, 'owed: none\n');
   });
   test('owed writes nothing and needs a route and a slug', () => {
     const sb = setup('medium');

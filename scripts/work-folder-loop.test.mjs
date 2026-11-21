@@ -145,37 +145,29 @@ describe('review-loop run names', () => {
     assert.ok(fs.existsSync(path.join(runDir(root, NAME), 'review-loop.jsonl')));
   });
 
-  test('mark and churn use refs/heads/aico/<branch id>', () => {
+  // review-loop v2: mark and churn are retired (usage refusal, nothing written); the run ref is no longer checked.
+  test('mark and churn are refused and write nothing; gate takes a new name', () => {
     const { root, base } = makeRepo(NAME, `aico/${ID}`);
-    const m = run(root, 'mark', NAME, '1', '--base', base);
-    assert.equal(m.code, 0, m.lines.join('\n'));
-    const c = run(root, 'churn', NAME, '1', '--base', base);
-    assert.deepEqual(c.lines, ['churn: none']);
-    assert.equal(c.code, 0);
-    assert.equal(run(root, 'gate', NAME, '--base', base).code, 0);
-  });
-
-  test('mark on a new name refuses when HEAD is another branch', () => {
-    const { root, base } = makeRepo(NAME, 'aico/other');
-    const m = run(root, 'mark', NAME, '1', '--base', base);
-    assert.equal(m.code, 3);
-    assert.deepEqual(m.lines, [`refused: HEAD is not refs/heads/aico/${ID}`]);
+    for (const cmd of ['mark', 'churn']) {
+      const m = run(root, cmd, NAME, '1', '--base', base);
+      assert.equal(m.code, 3);
+      assert.match(m.lines[0], /^refused: usage: /);
+    }
     assert.equal(fs.existsSync(path.join(runDir(root, NAME), 'review-loop.jsonl')), false);
+    assert.equal(run(root, 'gate', NAME).code, 0);
   });
 
-  test('legacy slug keeps refs/heads/aico/<slug>', () => {
-    const { root, base } = makeRepo(LEGACY, `aico/${LEGACY}`);
-    const m = run(root, 'mark', LEGACY, '0', '--base', base);
-    assert.equal(m.code, 0, m.lines.join('\n'));
+  test('legacy slug takes attempt and gate', () => {
+    const { root } = makeRepo(LEGACY, `aico/${LEGACY}`);
+    assert.deepEqual(run(root, 'attempt', LEGACY, '05', 'qa', '0', 'crash'), { code: 0, lines: ['retry qa'] });
+    assert.equal(run(root, 'gate', LEGACY).code, 0);
   });
 
   for (const bad of BAD) {
     test(`refuses ${JSON.stringify(bad).slice(0, 40)} without echo`, () => {
-      const { root, base } = makeRepo(NAME, `aico/${ID}`);
+      const { root } = makeRepo(NAME, `aico/${ID}`);
       for (const args of [
         ['attempt', bad, '05', 'qa', '0', 'crash'],
-        ['mark', bad, '0', '--base', base],
-        ['churn', bad, '0', '--base', base],
         ['gate', bad],
       ]) {
         const r = run(root, ...args);
