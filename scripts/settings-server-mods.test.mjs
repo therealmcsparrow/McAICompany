@@ -27,7 +27,7 @@ async function boot(t) {
 test('/api/state carries every mod key the page reads, in plugin and resolved', async (t) => {
   const state = await boot(t);
   const keys = pageMods();
-  assert.equal(keys.length, 6);
+  assert.equal(keys.length, 5);
   for (const view of ['plugin', 'resolved']) {
     for (const k of keys) {
       assert.ok(state[view].mods[k], `${view}.mods.${k}`);

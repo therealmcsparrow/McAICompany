@@ -145,7 +145,7 @@ test('CLI get with a leftover exits 0 and prints the settings without the key', 
   const r = spawnSync(process.execPath, [script, 'get'], { cwd: s.cwd, encoding: 'utf8', env: { ...process.env, MCSPARROW_HOME: s.home } });
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(out.mods).sort(), ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard']);
+  assert.deepEqual(Object.keys(out.mods).sort(), ['cache_tax', 'reflect', 'savings', 'savvy', 'switchboard']);
   assert.ok(!r.stdout.includes('LEFTOVER'));
 });
 
