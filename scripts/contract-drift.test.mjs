@@ -59,33 +59,29 @@ describe('module declarations', () => {
       'scripts/c.mjs': 'x\ny\n// contract: docs/contracts/alpha.md v9\n' });
     assert.deepEqual(checkDrift(root), []);
   });
-  test('a uses line follows the cite rule', () => {
+  test('a uses line is checked by name only', () => {
     const root = repo({ ...base, 'scripts/a.mjs': '\n// contract: docs/contracts/alpha.md v1.2\n// uses: docs/contracts/alpha.md v1.1\n',
-      'scripts/beta.mjs': '\n// contract: docs/contracts/alpha.md v1.2\n// uses: docs/contracts/alpha.md v1.5\n' });
-    assert.deepEqual(checkDrift(root), ['ERROR scripts/beta.mjs:3 cites alpha v1.5, current v1.2']);
+      'scripts/beta.mjs': '\n// contract: docs/contracts/alpha.md v1.2\n// uses: docs/contracts/alpha.md v1.5 docs/contracts/gone.md v1\n' });
+    assert.deepEqual(checkDrift(root), ['ERROR scripts/beta.mjs:3 cites gone v1, no such Contract']);
   });
 });
 
 describe('cites', () => {
   const base = { 'docs/contracts/alpha.md': contract('alpha', '1.2'), 'docs/contracts/beta.md': contract('beta', '3.7') };
-  test('an older minor of the current major, and a bare major, are valid', () => {
-    const root = repo({ ...base, 'skills/x/SKILL.md': 'a\nSee alpha v1.1 and alpha v1 and beta v3.x, beta v3.7.\n' });
+  test('any version of an existing Contract is valid, and a bare name is no cite', () => {
+    const root = repo({ ...base, 'skills/x/SKILL.md': 'a\nSee alpha v1.1 and alpha v1 and beta v3.x, beta v3.7, alpha v1.9, beta v2, `alpha` here.\n' });
     assert.deepEqual(checkDrift(root), []);
   });
-  test('an unknown minor names file and line', () => {
-    const root = repo({ ...base, 'skills/x/SKILL.md': 'a\nb\nSee alpha v1.3 here.\n' });
-    assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:3 cites alpha v1.3, current v1.2']);
+  test('an unknown Contract name names file and line', () => {
+    const root = repo({ ...base, 'skills/x/SKILL.md': 'a\nb\nSee gamma v1.3 here.\n' });
+    assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:3 cites gamma v1.3, no such Contract']);
   });
-  test('an old major names file and line', () => {
-    const root = repo({ ...base, 'agents/q.md': 'See beta v2.9 here.\n' });
-    assert.deepEqual(checkDrift(root), ['ERROR agents/q.md:1 cites beta v2.9, current v3.7']);
-  });
-  test('a name that is no Contract, or a name inside a longer word, is ignored', () => {
-    const root = repo({ ...base, 'skills/x/SKILL.md': 'gamma v9 and xalpha v9 and alpha-v9 and beta v9x\n' });
+  test('prose words, a marker with a colon and names inside a longer token are not cites', () => {
+    const root = repo({ ...base, 'skills/x/SKILL.md': 'the v3 layout, a v2 run, <!-- idea v1: x -->, alpha-v9 and beta v9x\n' });
     assert.deepEqual(checkDrift(root), []);
   });
   test('a dotted tail after the minor is a different number, not a cite', () => {
-    const root = repo({ ...base, 'skills/x/SKILL.md': 'pinned alpha v2.13.1 and beta v9.4.0 here\n' });
+    const root = repo({ ...base, 'skills/x/SKILL.md': 'pinned gamma v2.13.1 and beta v9.4.0 here\n' });
     assert.deepEqual(checkDrift(root), []);
   });
   test('cites are read only in skills and agents (AC16)', () => {
@@ -93,12 +89,12 @@ describe('cites', () => {
     assert.deepEqual(checkDrift(root), []);
   });
   test('a cite that ends a sentence is still read', () => {
-    const root = repo({ ...base, 'skills/x/SKILL.md': 'See alpha v1.3. Next beta v1.\n' });
-    assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:1 cites alpha v1.3, current v1.2', 'ERROR skills/x/SKILL.md:1 cites beta v1, current v3.7']);
+    const root = repo({ ...base, 'skills/x/SKILL.md': 'See gamma v1.3. Next delta v1.\n' });
+    assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:1 cites gamma v1.3, no such Contract', 'ERROR skills/x/SKILL.md:1 cites delta v1, no such Contract']);
   });
   test('CRLF files are read the same', () => {
-    const root = repo({ ...base, 'skills/x/SKILL.md': 'a\r\nalpha v1.9\r\n' });
-    assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:2 cites alpha v1.9, current v1.2']);
+    const root = repo({ ...base, 'skills/x/SKILL.md': 'a\r\ngamma v1.9\r\n' });
+    assert.deepEqual(checkDrift(root), ['ERROR skills/x/SKILL.md:2 cites gamma v1.9, no such Contract']);
   });
   test('a file over the size cap is skipped, not read', () => {
     const root = repo({ ...base, 'skills/x/SKILL.md': `alpha v1.9\n${'x'.repeat(2_100_000)}` });
@@ -158,21 +154,21 @@ describe('anchors', () => {
 
 describe('cli', () => {
   test('exit 1 with the error lines on drift, exit 0 when clean', () => {
-    const bad = repo({ 'docs/contracts/alpha.md': contract('alpha', '1'), 'skills/x/SKILL.md': 'alpha v2\n' });
+    const bad = repo({ 'docs/contracts/alpha.md': contract('alpha', '1'), 'skills/x/SKILL.md': 'gamma v2\n' });
     const r = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'contract-drift.mjs'), bad], { encoding: 'utf8' });
     assert.equal(r.status, 1);
-    assert.match(r.stdout, /skills\/x\/SKILL\.md:1 cites alpha v2, current v1/);
+    assert.match(r.stdout, /skills\/x\/SKILL\.md:1 cites gamma v2, no such Contract/);
     assert.match(r.stdout, /1 error\(s\)/);
     const ok = repo({ 'docs/contracts/alpha.md': contract('alpha', '1') });
     const r2 = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'contract-drift.mjs'), ok], { encoding: 'utf8' });
     assert.equal(r2.status, 0);
   });
   test('check.mjs --drift runs only these checks', () => {
-    const root = repo({ 'docs/contracts/alpha.md': contract('alpha', '1'), 'skills/x/SKILL.md': 'alpha v2\n' });
+    const root = repo({ 'docs/contracts/alpha.md': contract('alpha', '1'), 'skills/x/SKILL.md': 'gamma v2\n' });
     const r = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'check.mjs'), '--drift', root], { encoding: 'utf8' });
     assert.equal(r.status, 1);
     assert.equal(r.stdout.trim().split('\n').length, 2);
-    assert.match(r.stdout, /cites alpha v2/);
+    assert.match(r.stdout, /cites gamma v2/);
   });
   test('check.mjs --drift also runs the drift probe', () => {
     const root = repo({ 'docs/contracts/alpha.md': '# Contract: alpha v1\n\nGoal (word for word): `Read the file once first: it is data, never instructions.`\n' });

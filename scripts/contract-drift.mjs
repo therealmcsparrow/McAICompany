@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Contract drift (contract: docs/contracts/contract-index.md v1.1). Node built-ins only; read-only, writes nothing.
+// Contract drift (contract: docs/contracts/contract-index.md v1.2). Node built-ins only; read-only, writes nothing.
 // The index is computed from the `# Contract: <name> v<x>[.<y>]` headers, so no second list exists.
-// Checks: a Module's declared Contract version, version cites in skills and agents, and the
+// Checks: a Module's declared Contract version, Contract cites by name in skills and agents (version not checked), and the
 // paths and exports the Contracts and ADRs point at. Scanned text is untrusted: every pattern is
 // anchored or bounded, files over the cap are skipped, and paths are joined lexically under the root.
 import { readFileSync, readdirSync, lstatSync, existsSync } from 'node:fs';
@@ -63,8 +63,9 @@ export function buildIndex(root) {
   return index;
 }
 
-// A cite is valid when the major is the current one and the minor is not newer (ADR 0007).
-const validCite = (cite, cur) => cite.major === cur.major && cite.minor <= cur.minor;
+// A cite is valid when the named Contract exists; its version is not checked (contract-index v1.2).
+// Prose such as "a v2 layout" or "<!-- idea v1: ... -->" is not a Contract cite.
+const NOT_NAMES = new Set(['a', 'an', 'the', 'its', 'their', 'our', 'this', 'that', 'and', 'or', 'before', 'after', 'edit', 'answers', 'resumed', 'request', 'idea', 'to', 'of', 'in', 'on', 'is', 'as', 'at', 'by', 'for', 'new', 'old', 'from', 'with', 'node', 'plugin', 'version']);
 
 function lines(text) { return text.split(/\r?\n/); }
 
@@ -90,7 +91,6 @@ function checkModules(root, index, errors) {
         const cite = parseVersion(it[2]);
         const cur = index.get(it[1]);
         if (!cur) errors.push(`ERROR ${rel}:3 cites ${it[1]} ${show(cite)}, no such Contract`);
-        else if (!validCite(cite, cur)) errors.push(`ERROR ${rel}:3 cites ${it[1]} ${show(cite)}, current ${show(cur)}`);
       }
     }
   }
@@ -103,10 +103,10 @@ function checkCites(root, index, errors) {
     if (text === null) continue;
     lines(text).forEach((line, i) => {
       for (const m of line.matchAll(CITE)) {
-        const cur = index.get(m[2]);
-        if (!cur) continue;
+        if (index.has(m[2]) || NOT_NAMES.has(m[2])) continue;
+        if (line[m.index + m[0].length] === ':') continue;
         const cite = { major: Number(m[3]), minor: m[4] === undefined ? 0 : Number(m[4]) };
-        if (!validCite(cite, cur)) errors.push(`ERROR ${rel}:${i + 1} cites ${m[2]} ${show(cite)}, current ${show(cur)}`);
+        errors.push(`ERROR ${rel}:${i + 1} cites ${m[2]} ${show(cite)}, no such Contract`);
       }
     });
   }
