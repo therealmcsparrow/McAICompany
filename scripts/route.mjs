@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/route.md v2.0
+// contract: docs/contracts/route.md v2.1
 // The Steps of a run as data: a route ledger with a reason for every skip and merge, a Step budget lint
 // and a fail-open `next` decision. Node built-ins only; facts are read only through `readLatest`.
 import {
@@ -317,17 +317,40 @@ function skipReason(root, role, data, facts, tier) {
   return null;
 }
 
-// The run tier from `tier-set.mjs read <slug>` run as a child (no import: tier-set reaches check.mjs).
+// The run tier and base from `tier-set.mjs read <slug>` run as a child (no import: tier-set reaches check.mjs).
 // null for no record, a broken record or any failure: the caller then runs security (fail-closed).
-function readTier(pluginRoot, root, slug) {
+function readTierInfo(pluginRoot, root, slug) {
   try {
     const r = spawnSync(process.execPath, [join(pluginRoot, 'scripts', 'tier-set.mjs'), 'read', slug], {
       cwd: root, encoding: 'utf8', timeout: 15000, maxBuffer: 64 * KiB,
     });
     if (r.status !== 0 || typeof r.stdout !== 'string') return null;
     const v = JSON.parse(r.stdout);
-    return isPlain(v) && v.state === 'on' && TIERS.includes(v.tier) ? v.tier : null;
+    if (!isPlain(v) || v.state !== 'on' || !TIERS.includes(v.tier)) return null;
+    return { tier: v.tier, base: typeof v.base === 'string' ? v.base : null };
   } catch { return null; }
+}
+
+const readTier = (pluginRoot, root, slug) => readTierInfo(pluginRoot, root, slug)?.tier ?? null;
+
+// The full id of HEAD in the product root, or null. Child env without GIT_*, no shell.
+function headOf(root) {
+  try {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+    const r = spawnSync('git', ['--no-replace-objects', 'rev-parse', 'HEAD'], {
+      cwd: root, env, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * KiB, windowsHide: true,
+    });
+    const id = typeof r.stdout === 'string' ? r.stdout.trim() : '';
+    return r.status === 0 && /^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(id) ? id : null;
+  } catch { return null; }
+}
+
+// Facts a security decision may trust: they were written at the current HEAD against the run's recorded base.
+// Else null (treated as missing facts, so security runs or stays owed).
+function currentFacts(facts, root, info) {
+  if (facts === null || info === null || info.base === null) return null;
+  const head = headOf(root);
+  return head !== null && facts.head === head && facts.base === info.base ? facts : null;
 }
 
 // Security is skipped only below high, on readable facts with no unknown path and security_changed false.
@@ -547,8 +570,9 @@ async function run(argv, root, pluginRoot) {
     if (i >= routeEvent.steps.length) return { code: 0, out: '{"do":"end"}\n' };
     const entry = routeEvent.steps[i];
     const facts = readLatest(runDir);
-    const tier = entry.role === SECURITY && hasOwn(data.when, SECURITY) ? readTier(pluginRoot, root, slug) : null;
-    const d = decide(root, runDir, routeEvent, entry, data, facts, tier);
+    const info = entry.role === SECURITY && hasOwn(data.when, SECURITY) ? readTierInfo(pluginRoot, root, slug) : null;
+    const tier = info === null ? null : info.tier;
+    const d = decide(root, runDir, routeEvent, entry, data, entry.role === SECURITY ? currentFacts(facts, root, info) : facts, tier);
     const fname = factsName(facts);
     appended({ v: 1, ev: 'step', i, role: entry.role, do: d.do, why: d.why, facts: fname });
     const out = { do: d.do, i, role: entry.role, why: d.why, facts: fname };
@@ -558,12 +582,14 @@ async function run(argv, root, pluginRoot) {
 
   if (cmd === 'owed') {
     if (rest.length !== 1) refuse('usage: owed <slug>');
-    if (routeEvent === undefined) refuse('no route written');
+    // A run with no route record owes nothing.
+    if (routeEvent === undefined) return { code: 0, out: 'owed: none\n' };
     // The newest security skip with no later fix event for security is owed once the run is no longer safe.
     let at = -1;
     events.forEach((e, k) => { if (e.ev === 'step' && e.role === SECURITY && e.do === 'skip') at = k; });
     if (at < 0 || events.slice(at + 1).some((e) => e.ev === 'fix' && e.role === SECURITY)) return { code: 0, out: 'owed: none\n' };
-    const safe = safeBelowHigh(readLatest(runDir), readTier(pluginRoot, root, slug));
+    const info = readTierInfo(pluginRoot, root, slug);
+    const safe = safeBelowHigh(currentFacts(readLatest(runDir), root, info), info === null ? null : info.tier);
     return { code: 0, out: safe ? 'owed: none\n' : 'owed: security\n' };
   }
 

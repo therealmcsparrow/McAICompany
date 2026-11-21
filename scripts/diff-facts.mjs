@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/diff-facts.md v1.1
+// contract: docs/contracts/diff-facts.md v1.2
 // Classifies what a run changed (docs, tests, code, contracts, ...) into one facts file that gates read.
 // Node built-ins and git only. Every git call is a judging call: child env without GIT_*, no shell, literal
 // pathspecs, no replace objects, no ext-diff or textconv, NUL-separated output, ids checked before git runs.
@@ -11,7 +11,7 @@ import {
 import { join, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { FORCED_HIGH_V1, tokens } from './tier-set.mjs';
+import { FORCED_HIGH_V1, tokens } from './forced-tokens.mjs';
 import { WorkFolderRefusal, branchId, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const MiB = 1024 * 1024;
@@ -35,7 +35,10 @@ const KINDS = ['binary', 'rename', 'contract', 'test', 'docs', 'locale', 'style'
 const FACT_KEYS = ['base', 'contract_changed', 'docs_only', 'head', 'paths', 'security_changed', 'step', 'strings_changed', 'truncated', 'ui_changed', 'v'];
 const FLAG_KEYS = ['truncated', 'ui_changed', 'strings_changed', 'contract_changed', 'docs_only', 'security_changed'];
 const SECURITY_DIRS = ['hooks/', 'mods/', '.claude/', '.claude-plugin/', '.github/', '.husky/'];
-const SECURITY_FILES = ['scripts/run-guard.mjs'];
+// run-guard plus every script hooks/hooks.json runs: a change there can weaken or skip a guard.
+const SECURITY_FILES = [
+  'scripts/run-guard.mjs', 'scripts/hook-host.mjs', 'scripts/lead-relay.mjs', 'scripts/lead-handover.mjs', 'scripts/step-times.mjs',
+];
 const SECURITY_KINDS = ['config', 'contract', 'binary', 'unknown'];
 const NO_DOCS_CONFIG = Object.freeze({ v: 1, not_docs: Object.freeze(['**']) });
 
