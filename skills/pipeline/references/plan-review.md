@@ -15,7 +15,7 @@ Context cap: <cap> handover <handover>
 Role skills: <names | none>   # fresh-reviewer's lines of `install-skills --status`, built per `aico:pipeline` §1.19 d
 Risk tier: <tier from the latest `set:` output>
 Base commit: <full object id from Step 01>
-Round: <0 in plan mode; in code mode the Fix round>
+Round: 0
 Review mode: plan
 Input Handoffs: none: plan review
 Review inputs: <line from lines>

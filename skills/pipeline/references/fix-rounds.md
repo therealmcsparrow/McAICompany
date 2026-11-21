@@ -13,8 +13,8 @@ When the Reviewer, QA, Security or the Senior Engineer (compliance) returns `## 
 The count is the `round:` field of the Handoffs. The limit is `pipeline.fix_rounds`. Still blocking after the last allowed round → no new round: escalate to the CEO in one form (`references/ceo-pack.md`) with the reviewer Handoff paths. At 0, the first blocking review goes straight to the form.
 
 ## Escalation form
-Single-select, options in this order:
-1. Ship with Debt (Recommended): the open findings go to `## Debt` and the Gate goes on.
+Single-select, options in this order. While an open `[security]` Blocking row is on file, option 1 is not offered (an exploitable security Must is never Debt, only a CEO exception under `aico:ruleset` closes it) and option 2 is the Recommended one:
+1. Ship with Debt (Recommended): the open findings go to `## Debt` and the Gate goes on. Not offered for an open `[security]` row.
 2. Cut scope: drop the failing part and its ACs; re-plan through the Plan Gate.
 3. Extra round: one more Fix round, then the form again if it still blocks.
 

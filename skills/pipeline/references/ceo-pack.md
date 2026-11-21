@@ -1,6 +1,6 @@
 # CEO pack
 
-How the Lead bundles questions to the CEO (`run-state` v3.1, `docs/contracts/run-state.md`; `lead-relay` v1, `docs/contracts/lead-relay.md`). The Lead has no `AskUserQuestion`: it opens each form with `lead-relay open` and ends with that `STATUS: needs-ceo` block; main asks the CEO. The success metric is the number of prompts that appear outside a form.
+How the Lead bundles questions to the CEO (`run-state`, `docs/contracts/run-state.md`; `lead-relay`, `docs/contracts/lead-relay.md`). The Lead has no `AskUserQuestion`: it opens each form with `lead-relay open` and ends with that `STATUS: needs-ceo` block; main asks the CEO. The success metric is the number of prompts that appear outside a form.
 
 ## Rules
 - A Step that returns `status: needs-ceo` does not get its question shown at once. The Lead holds it until every Step of the current wave has returned.

@@ -18,11 +18,8 @@ const DEPTH = new Set(['quick', 'deep']);
 const TAGS = new Set(['contract', 'spec', 'security', 'test']);
 const BLOCK_TAGS = new Set([...TAGS, 'comprehension']);
 const KEYS = new Set(['step', 'role', 'task', 'status', 'round', 'base-commit', 'risk-tier', 'acceptance-ids',
-  'files-touched', 'fetches', 'depth', 'degraded', 'contracts', 'review-mode', 'model']);
-const REVIEW_MODES = new Set(['plan', 'code']);
-const MODELS = new Set(['opus', 'sonnet', 'haiku', 'fable']);
-const MODEL_RANK = { haiku: 1, sonnet: 2, opus: 3 };
-const MAX_FLOOR_FILE = 16 * 1024;
+  'files-touched', 'fetches', 'depth', 'degraded', 'contracts', 'review-mode']);
+const REVIEW_MODES = new Set(['plan']);
 const MAX_EVIDENCE = 1024 * 1024;
 const MAX_RULINGS = 64 * 1024;
 const MAX_EVIDENCE_READS = 100;
@@ -138,36 +135,12 @@ function checkContracts(raw, index, errors) {
 
 const SIDE_SECTIONS = new Set(['Paraphrase', 'First pass', 'Decisions', 'Sources', 'Glossary', 'ADR drafts', 'Prototype question']);
 
-// The model of a code-mode fresh reviewer is self-declared; the lint checks the key and warns below the code-reviewer floor.
-let floorCache;
-function codeReviewerFloor() {
-  if (floorCache === undefined) {
-    floorCache = MODEL_RANK.opus;
-    try {
-      const file = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'company', 'model-floor.json');
-      if (statSync(file).size <= MAX_FLOOR_FILE) {
-        const rank = MODEL_RANK[JSON.parse(readFileSync(file, 'utf8'))?.floor?.['code-reviewer']];
-        if (rank) floorCache = rank;
-      }
-    } catch { floorCache = MODEL_RANK.opus; }
-  }
-  return floorCache;
-}
-
 function checkModeKeys(fm, at, fresh, errors, warnings) {
   if ('review-mode' in fm) {
     if (!fresh) errors.push(`line ${at['review-mode']}: review-mode key is for fresh-reviewer only`);
-    else if (!REVIEW_MODES.has(fm['review-mode'])) errors.push(`line ${at['review-mode']}: review-mode must be plan|code`);
+    else if (!REVIEW_MODES.has(fm['review-mode'])) errors.push(`line ${at['review-mode']}: review-mode must be plan`);
   } else if (fresh) {
     errors.push('frontmatter: missing review-mode');
-  }
-  const code = fresh && fm['review-mode'] === 'code';
-  if ('model' in fm) {
-    if (!code) errors.push(`line ${at.model}: model key is for fresh-reviewer code mode only`);
-    else if (!MODELS.has(fm.model)) errors.push(`line ${at.model}: model must be opus|sonnet|haiku|fable`);
-    else if ((MODEL_RANK[fm.model] ?? 0) < codeReviewerFloor()) warnings.push(`warning line ${at.model}: model ${fm.model} below the code-reviewer floor`);
-  } else if (code) {
-    errors.push('frontmatter: missing model (required for fresh-reviewer code mode)');
   }
 }
 
@@ -817,7 +790,7 @@ export function contests(runFolder, sink = null) {
   }
   files.sort((a, b) => a.nn - b.nn || (a.file < b.file ? -1 : 1));
 
-  // One finding followed through the Handoffs of its Role; the fresh reviewer's plan and code modes are separate lineages.
+  // One finding followed through the Handoffs of its Role; the fresh reviewer reviews plans only.
   const lineages = new Map();
   const byRoleN = new Map();
   for (const f of files) {
