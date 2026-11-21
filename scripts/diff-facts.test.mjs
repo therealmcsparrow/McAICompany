@@ -970,7 +970,7 @@ test('readLatest: newest valid facts object, otherwise null', async t => {
 
 test('fixtures: version.txt matches the Contract header', () => {
   const g = loadGolden('diff-facts');
-  assert.equal(g.version, '1.2');
+  assert.equal(g.version, '1.3');
 });
 
 // ---------------------------------------------------------------- write branch, git environment, blob probe and write path sets
