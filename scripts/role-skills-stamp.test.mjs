@@ -45,7 +45,7 @@ test('stamp write then stamp check with no change prints unchanged', (t) => {
 test('after a catalog change stamp check prints changed', (t) => {
   const p = setup(t);
   assert.equal(run(p, ['stamp', 'write']).code, 0);
-  const a = run(p, ['add'], ENTRY);
+  const a = run(p, ['add'], { ...ENTRY, save: true });
   assert.equal(a.code, 0, a.text);
   const c = run(p, ['stamp', 'check']);
   assert.match(c.text, /(?<!un)changed/);
@@ -53,7 +53,7 @@ test('after a catalog change stamp check prints changed', (t) => {
 
 test('after stamp write following the change, check prints unchanged again', (t) => {
   const p = setup(t);
-  assert.equal(run(p, ['add'], ENTRY).code, 0);
+  assert.equal(run(p, ['add'], { ...ENTRY, save: true }).code, 0);
   assert.equal(run(p, ['stamp', 'write']).code, 0);
   assert.match(run(p, ['stamp', 'check']).text, /\bunchanged\b/);
 });
@@ -61,7 +61,7 @@ test('after stamp write following the change, check prints unchanged again', (t)
 test('a changed selection (project settings) also reads as changed', (t) => {
   const p = setup(t);
   assert.equal(run(p, ['stamp', 'write']).code, 0);
-  fs.writeFileSync(path.join(p.cwd, '.company', 'settings.json'), JSON.stringify({ roles: { 'backend-engineer': { skills: ['my-skill'] } } }));
+  fs.writeFileSync(path.join(p.cwd, '.company', 'settings.json'), JSON.stringify({ aico_settings: { version: 1, roles: { 'backend-engineer': { skills: [{ name: 'tanstack-query', approved: TODAY }] } } } }));
   assert.match(run(p, ['stamp', 'check']).text, /(?<!un)changed/);
 });
 
@@ -79,7 +79,7 @@ test('a corrupt stamp file reads as changed and never throws', (t) => {
 
 test('the stamp holds sha-256 hex, not skill text', (t) => {
   const p = setup(t);
-  run(p, ['add'], ENTRY);
+  run(p, ['add'], { ...ENTRY, save: true });
   run(p, ['stamp', 'write']);
   const raw = fs.readFileSync(stampFile(p), 'utf8');
   assert.match(raw, /[0-9a-f]{64}/);

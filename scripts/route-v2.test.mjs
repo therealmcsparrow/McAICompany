@@ -32,6 +32,8 @@ function sandbox({ when = WHEN_SEC } = {}) {
     if (f.endsWith('.mjs') && !f.endsWith('.test.mjs')) fs.copyFileSync(path.join(REPO, 'scripts', f), path.join(plugin, 'scripts', f));
   }
   fs.cpSync(path.join(REPO, 'mods', 'lib'), path.join(plugin, 'mods', 'lib'), { recursive: true });
+  // diff-facts imports tier-set, which reaches run-state and the hooks libs and rules.
+  fs.cpSync(path.join(REPO, 'hooks'), path.join(plugin, 'hooks'), { recursive: true, filter: (src) => !/\.test\.mjs$/.test(src) });
   fs.mkdirSync(path.join(plugin, 'company'), { recursive: true });
   fs.mkdirSync(path.join(plugin, 'agents'), { recursive: true });
   for (const a of AGENTS) fs.writeFileSync(path.join(plugin, 'agents', `${a}.md`), `---\nname: ${a}\n---\n`);

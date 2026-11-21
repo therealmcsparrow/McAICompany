@@ -31,6 +31,8 @@ function env(home, extra = {}) {
   if (!fs.existsSync(gcfg)) fs.writeFileSync(gcfg, '');
   return {
     ...process.env, MCSPARROW_HOME: home, GIT_CONFIG_GLOBAL: gcfg, GIT_CONFIG_NOSYSTEM: '1',
+    // A global ignore file (XDG) that hides .company/ must not decide what the fixture repo commits.
+    XDG_CONFIG_HOME: path.join(home, 'xdg'),
     GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid', ...extra
   };
 }

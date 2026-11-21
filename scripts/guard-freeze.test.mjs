@@ -46,7 +46,8 @@ test('the kept rule modules and manifests are still there', () => {
 
 test('hooks/pins.json pins no dropped file', () => {
   const files = Object.keys(read('hooks/pins.json').files);
-  assert.deepEqual(files.filter((f) => /model-floor|browser/.test(f)), []);
+  // company/model-floor.json is data the dispatch rule keeps (plan Decisions); only the hook files are dropped.
+  assert.deepEqual(files.filter((f) => /model-floor|browser/.test(f) && f !== 'company/model-floor.json'), []);
   assert.ok(files.includes('hooks/rules/self-protect.mjs'));
 });
 

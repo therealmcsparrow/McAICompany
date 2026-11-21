@@ -33,7 +33,7 @@ function repo({ budgets = { feature: 3, fix: 3 }, when = { 'ui-ux-designer': ['u
   write(root, 'company/step-budgets.json', { v: 1, budgets, source: 'test fixture' });
   write(root, 'company/role-when.json', { v: 1, when });
   // The script reads its data from the folder above its own, so this fixture is also a plugin root.
-  for (const d of ['scripts', 'hooks/lib', 'mods/lib']) cpSync(join(REPO, d), join(root, d), { recursive: true, filter: isShipped });
+  for (const d of ['scripts', 'hooks/lib', 'hooks/rules', 'mods/lib']) cpSync(join(REPO, d), join(root, d), { recursive: true, filter: isShipped });
   return root;
 }
 
