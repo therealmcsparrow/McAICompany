@@ -153,16 +153,20 @@ function freshHandoff({ mode = 'plan', paraphrase = PARAPHRASE, firstPass = '- n
 }
 const freshErrors = (text, opts) => lint(text, opts).errors.join('\n');
 
-test('a well-formed fresh-reviewer Handoff lints in both modes', () => {
+test('a well-formed fresh-reviewer Handoff lints in plan mode; code mode and the model key are no longer known', () => {
   assert.deepEqual(lint(freshHandoff()).errors, []);
-  assert.deepEqual(lint(freshHandoff({ mode: 'code', extraFm: 'model: opus\n' })).errors, []);
+  assert.match(freshErrors(freshHandoff({ mode: 'code' })), /review-mode must be plan$/m);
+  assert.doesNotMatch(freshErrors(freshHandoff({ mode: 'code' })), /model/);
+  assert.match(freshErrors(freshHandoff({ extraFm: 'model: opus\n' })), /unknown frontmatter key/);
+  assert.match(freshErrors(freshHandoff({ mode: 'code', extraFm: 'model: opus\n' })), /review-mode must be plan/);
   assert.deepEqual(lint(freshHandoff({ firstPass: '- R-1 the cited Contract is stale\n- R-2 task 3 has no depends-on' })).errors, []);
   assert.deepEqual(lint(freshHandoff({ blocking: '- [comprehension] R-1 plan.md:3 — paraphrase differs — change the text' })).errors, []);
 });
 
-test('review-mode is required for the fresh reviewer, a plan or code value, and refused for every other Role', () => {
+test('review-mode is required for the fresh reviewer, plan is the only value, and refused for every other Role', () => {
   assert.match(freshErrors(freshHandoff().replace('review-mode: plan\n', '')), /missing review-mode/);
-  assert.match(freshErrors(freshHandoff({ mode: 'both' })), /review-mode must be plan\|code/);
+  assert.match(freshErrors(freshHandoff({ mode: 'both' })), /review-mode must be plan$/m);
+  assert.match(freshErrors(freshHandoff({ mode: 'code' })), /review-mode must be plan$/m);
   const other = freshHandoff().replace('role: fresh-reviewer', 'role: code-reviewer').replace('By: fresh-reviewer', 'By: code-reviewer');
   assert.match(freshErrors(other), /line 9: review-mode key is for fresh-reviewer only/);
 });

@@ -85,8 +85,25 @@ const PLAN = `# Plan
 - parallel: yes
 `;
 
+const PLAN_QA = `# Plan
+
+## Tasks
+
+### ${T1} tests
+- role: qa
+- files: src/a.txt
+- depends-on: none
+- parallel: yes
+
+### ${T2} build
+- role: backend-engineer
+- files: src/b.txt
+- depends-on: ${T1}
+- parallel: yes
+`;
+
 // A repo with one commit holding src/{a,b,free,clean}.txt; the working tree changes src/{a,b,free}.txt and adds a Handoff.
-function fixture({ running = [], withRecord = false } = {}) {
+function fixture({ running = [], withRecord = false, qa = false } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'step-close-'));
   temps.push(base);
   const root = path.join(base, 'repo');
@@ -102,11 +119,11 @@ function fixture({ running = [], withRecord = false } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '..', '00-project.md'), 'A demo project\n');
   if (withRecord) {
-    const bytes = Buffer.from(PLAN);
+    const bytes = Buffer.from(qa ? PLAN_QA : PLAN);
     fs.writeFileSync(path.join(dir, '02-plan.md'), bytes);
     const hash = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 12);
     const at = '2026-11-20T10:00:00Z';
-    const lines = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash, cap: 3, mode: 'parallel', tasks: 2, ow: [] }];
+    const lines = [{ v: 1, at, ev: 'begin', plan: '02-plan.md', hash, cap: 3, mode: 'parallel', tasks: 2, ow: [], ...(qa ? { qa: true } : {}) }];
     for (const task of running) lines.push({ v: 1, at, ev: 'start', task, round: 0, ow: [] });
     fs.writeFileSync(path.join(dir, 'parallel.jsonl'), `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
   }
@@ -122,7 +139,7 @@ function fixture({ running = [], withRecord = false } = {}) {
   const committed = () => git(root, home, 'show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean);
   const hookRow = (over = {}) => {
     fs.mkdirSync(path.dirname(ledger), { recursive: true });
-    const row = { v: 1, run: SLUG, kind: 'step', id: '05', role: 'qa', agent: 'a1', source: 'hook', ctx_end: 1000, t1: '2026-11-20T10:00:00Z', ...over };
+    const row = { v: 1, run: SLUG, kind: 'step', id: '05', role: 'qa', agent: 'a1', src: 'hook', ctx_end: 1000, ...over };
     fs.appendFileSync(ledger, `${JSON.stringify(row)}\n`);
   };
   const rows = () => (fs.existsSync(ledger) ? fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).length : 0);
@@ -210,7 +227,7 @@ test('with --task, a sibling running task\'s path is dropped and the own path is
   assert.ok(!files.includes('src/b.txt'), files.join());
 });
 
-test('a hook row (source hook, same step and role) prints "ledger: hook" and --usage adds no row', () => {
+test('a hook row (src hook, same step and role) prints "ledger: hook" and --usage adds no row', () => {
   const f = fixture();
   f.hookRow();
   const r = f.run({ text: handoff({ touched: ['src/free.txt'] }), args: ['--usage', '1000,3,500'] });
@@ -230,9 +247,9 @@ test('a hook row of another role or another step does not count: ledger missing 
   assert.equal(f.rows(), 2);
 });
 
-test('a row with source other than hook does not count either', () => {
+test('a row with src other than hook does not count either', () => {
   const f = fixture();
-  f.hookRow({ source: 'notification' });
+  f.hookRow({ src: 'notification', t1: '2026-11-20T10:00:00Z' });
   const r = f.run({ text: handoff({ touched: ['src/free.txt'] }) });
   assert.match(r.out, /^ledger: missing$/m, r.all);
 });
@@ -285,6 +302,44 @@ test('refused arguments exit 2 and run nothing: bad --msg, unknown role, Handoff
   assert.equal(noRole.code, 2, noRole.all);
   const wrongPath = f.run({ handoffRel: `.company/work/${SLUG}/../05-qa.md`, text: undefined });
   assert.equal(wrongPath.code, 2, wrongPath.all);
+  assert.equal(f.head(), before);
+  assert.equal(f.rows(), 0);
+});
+
+test('with --task in a qa-first run, a qa-owned path prints qa-owned and scope lines and is not dropped', () => {
+  const f = fixture({ running: [T2], withRecord: true, qa: true });
+  const r = f.run({ text: handoff({ task: SLUG, touched: ['src/a.txt', 'src/b.txt'] }), args: ['--task', T2] });
+  assert.match(r.out, /^qa-owned \S+ src\/a\.txt$/m, r.all);
+  assert.match(r.out, /^scope: \d+ extra, \d+ sibling, 1 qa-owned$/m, r.all);
+  assert.ok(!/^dropped: src\/a\.txt/m.test(r.out), 'qa-owned is reported, never dropped by step-close');
+  assert.ok(f.committed().includes('src/a.txt'), 'the Lead decides; step-close keeps the path');
+});
+
+test('with --task and no qa-first record, no qa-owned count is printed in the scope line', () => {
+  const f = fixture({ running: [T1], withRecord: true });
+  const r = f.run({ text: handoff({ task: SLUG, touched: ['src/a.txt'] }), args: ['--task', T1] });
+  assert.match(r.out, /^scope: \d+ extra, \d+ sibling$/m, r.all);
+  assert.ok(!/qa-owned/.test(r.out), r.out);
+});
+
+test('a stage failing after the commit exits 4, prints "<stage> failed, commit kept" and the commit stays', () => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.dir, 'tier-path.jsonl'), 'not json\n');
+  const before = f.count();
+  const r = f.run({ text: handoff({ touched: ['src/free.txt'] }) });
+  assert.equal(r.code, 4, r.all);
+  assert.match(r.out, /^step-close: tier sync failed, commit kept$/m);
+  assert.equal(f.count(), before + 1, 'the commit is kept');
+  assert.match(r.out.split('\n')[0], /^step-close: 05 qa lint ok, commit [0-9a-f]{7,40}/);
+});
+
+test('without --task, a plan edited after begin (hash mismatch) fails closed: scope failed, nothing committed', () => {
+  const f = fixture({ running: [T1], withRecord: true });
+  fs.appendFileSync(path.join(f.dir, '02-plan.md'), '\nedited after begin\n');
+  const before = f.head();
+  const r = f.run({ text: handoff({ touched: ['src/free.txt'] }), args: ['--usage', '1000,3,500'] });
+  assert.equal(r.code, 1, r.all);
+  assert.match(r.out, /step-close: scope failed/);
   assert.equal(f.head(), before);
   assert.equal(f.rows(), 0);
 });

@@ -15,43 +15,51 @@ function handoff({ role = 'backend-engineer', fm = '', head = '', sections = {},
   const extra = Object.entries(sections).map(([h, lines]) => `## ${h}\n${lines.join('\n')}\n`).join('');
   return `---\nstep: 05\nrole: ${role}\ntask: t\nstatus: done\nround: 0\nbase-commit: 0123456789abcdef0123456789abcdef01234567\nrisk-tier: high\ncontracts: [handoff v3.0]\n${fm}---\nBy: ${role}\n${head}## Did\n- work\n## Decisions\n- none\n## Blocking\n${blocking}\n## Nits\n- none\n${extra}## Next\n- go\n`;
 }
-const fresh = ({ mode = 'code', model, blocking } = {}) => handoff({
+const fresh = ({ mode = 'plan', model, blocking } = {}) => handoff({
   role: 'fresh-reviewer',
-  fm: `review-mode: ${mode}\n${model === undefined ? '' : `model: ${model}\n`}`,
-  head: `## Paraphrase\n${PARAPHRASE}\n## First pass\n- none\n`,
+  fm: `review-mode: ${mode}
+${model === undefined ? '' : `model: ${model}
+`}`,
+  head: `## Paraphrase
+${PARAPHRASE}
+## First pass
+- none
+`,
   blocking,
 });
 const errs = (text, opts) => lint(text, opts).errors.join('\n');
 
-test('model: is required on a code-mode fresh-reviewer Handoff and refused everywhere else', () => {
-  assert.match(errs(fresh({ mode: 'code' })), /missing model/);
-  assert.deepEqual(lint(fresh({ mode: 'code', model: 'opus' })).errors, []);
-  assert.match(errs(fresh({ mode: 'code', model: 'gpt-5' })), /line 11: model must be opus\|sonnet\|haiku\|fable/);
-  assert.match(errs(fresh({ mode: 'plan', model: 'opus' })), /line 11: model key is for fresh-reviewer code mode only/);
-  assert.match(errs(handoff({ role: 'code-reviewer', fm: 'model: opus\n' })), /line 10: model key is for fresh-reviewer code mode only/);
-  assert.match(errs(handoff({ fm: 'model: sonnet\n' })), /model key is for fresh-reviewer code mode only/);
+test('code mode and the model: key are gone: a plan-mode fresh-reviewer lints clean, the rest is refused', () => {
+  assert.deepEqual(lint(fresh({ mode: 'plan' })).errors, []);
+  assert.match(errs(fresh({ mode: 'code' })), /line 10: review-mode must be plan/);
+  assert.doesNotMatch(errs(fresh({ mode: 'code' })), /missing model/);
+  assert.match(errs(fresh({ mode: 'plan', model: 'opus' })), /line 11: unknown frontmatter key/);
+  assert.match(errs(fresh({ mode: 'code', model: 'opus' })), /line 11: unknown frontmatter key/);
+  assert.match(errs(handoff({ role: 'code-reviewer', fm: 'model: opus\n' })), /line 10: unknown frontmatter key/);
+  assert.match(errs(handoff({ fm: 'model: sonnet\n' })), /unknown frontmatter key/);
   assert.deepEqual(lint(handoff()).errors, []);
 });
 
-test('model: below the code-reviewer floor, or unranked, warns and never errors', () => {
-  assert.deepEqual(lint(fresh({ model: 'opus' })).warnings, []);
-  for (const m of ['sonnet', 'haiku', 'fable']) {
+test('a model: key never yields a floor warning any more', () => {
+  for (const m of ['opus', 'sonnet', 'haiku', 'fable']) {
     const r = lint(fresh({ model: m }));
-    assert.deepEqual(r.errors, [], m);
-    assert.deepEqual(r.warnings, [`warning line 11: model ${m} below the code-reviewer floor`], m);
+    assert.deepEqual(r.warnings, [], m);
+    assert.ok(!r.errors.some((e) => /floor|missing model/.test(e)), m);
   }
 });
 
-test('the command line prints the warning and still exits 0 with the routing JSON', () => {
+test('the command line exits non-zero for a code-mode fresh-reviewer Handoff and zero for plan mode', () => {
   const dir = mkdtempSync(join(tmpdir(), 'v13-'));
   try {
     const file = join(dir, '05-fresh-reviewer.md');
-    writeFileSync(file, fresh({ model: 'haiku' }));
-    const out = spawnSync(process.execPath, [SCRIPT, file], { encoding: 'utf8' });
-    assert.equal(out.status, 0, out.stdout);
-    const lines = out.stdout.trim().split('\n');
-    assert.equal(lines[0], 'warning line 11: model haiku below the code-reviewer floor');
-    assert.equal(JSON.parse(lines[1]).status, 'done');
+    writeFileSync(file, fresh({ mode: 'plan' }));
+    const ok = spawnSync(process.execPath, [SCRIPT, file], { encoding: 'utf8' });
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.equal(JSON.parse(ok.stdout.trim().split('\n').at(-1)).status, 'done');
+    writeFileSync(file, fresh({ mode: 'code' }));
+    const bad = spawnSync(process.execPath, [SCRIPT, file], { encoding: 'utf8' });
+    assert.notEqual(bad.status, 0, bad.stdout);
+    assert.match(bad.stdout + bad.stderr, /review-mode must be plan/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -56,13 +56,14 @@ function git(root, ...args) {
 }
 
 // stub: { '<name>': { out, code } or '<name> <first arg>': { out, code } }
-function fixture(stub = {}) {
+function fixture(stub = {}, { realRoute = false } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-check-'));
   temps.push(base);
   fs.writeFileSync(path.join(base, 'gitconfig'), '');
   const plugin = path.join(base, 'plugin');
   copyClosure('scripts/ship-check.mjs', plugin);
   for (const s of STUBBED) fs.writeFileSync(path.join(plugin, 'scripts', `${s}.mjs`), STUB);
+  if (realRoute) copyClosure('scripts/route.mjs', plugin);
   fs.writeFileSync(path.join(plugin, 'stub.json'), JSON.stringify(stub));
   fs.writeFileSync(path.join(plugin, 'calls.log'), '');
   for (const d of ['agents', 'company']) fs.cpSync(path.join(REPO, d), path.join(plugin, d), { recursive: true });
@@ -119,6 +120,16 @@ test('tier blocks when route owed prints "owed: security"', () => {
   const r = f.run();
   assert.equal(r.code, 1, r.all);
   assert.match(line(r.out, 'tier'), /^tier: block — /);
+});
+
+test('tier with the real route: a run with no route.jsonl prints "owed: none" (exit 0), so it is no block', () => {
+  const f = fixture({ 'tier-set sync': { out: 'tier-path: feature tier high' } }, { realRoute: true });
+  assert.ok(!fs.existsSync(path.join(f.root, '.company', 'work', ID, '01-feature', 'route.jsonl')));
+  const r = f.run();
+  assert.doesNotMatch(line(r.out, 'tier') ?? '', /block/, r.all);
+  assert.doesNotMatch(r.all, /route owed exit/, r.all);
+  assert.ok(!f.calls().some((c) => c.startsWith('route ')), 'the stub route was not used');
+  assert.equal(r.code, 0, r.all);
 });
 
 test('tier does not block on "owed: none" and a clean sync: info line, exit 0', () => {

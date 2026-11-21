@@ -157,3 +157,23 @@ test('show: the printed key set holds security_changed beside the v1.0 keys', ()
     assert.ok(keys.includes(k), k);
   }
 });
+
+test('classify: each hook script (hook-host, lead-relay, lead-handover, step-times) sets security_changed true', async () => {
+  const { classify } = await load();
+  for (const p of ['scripts/hook-host.mjs', 'scripts/lead-relay.mjs', 'scripts/lead-handover.mjs', 'scripts/step-times.mjs']) {
+    assert.equal(classify([entry(p)], null).security_changed, true, p);
+  }
+  assert.equal(classify([entry('scripts/foo.mjs')], null).security_changed, false, 'control: a plain script stays false');
+});
+
+test('classify: the hook scripts stay security even when the config lists other security_paths', async () => {
+  const { classify } = await load();
+  const config = { v: 1, not_docs: [], security_paths: ['nothing/**'] };
+  assert.equal(classify([entry('scripts/hook-host.mjs')], config).security_changed, true);
+});
+
+test('show: a diff touching scripts/lead-relay.mjs prints security_changed true', () => {
+  const r = repoWith({ 'README.md': 'a\n' }, { 'scripts/lead-relay.mjs': 'export {};\n' }).show();
+  assert.equal(r.status, 0, r.out);
+  assert.equal(r.facts.security_changed, true);
+});

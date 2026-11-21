@@ -46,7 +46,13 @@ function sandbox({ when = WHEN_SEC } = {}) {
   fs.mkdirSync(home);
   const run = path.join(root, '.company', 'work', ...SLUG.split('/'));
   fs.mkdirSync(run, { recursive: true });
-  return { root, plugin, home, run };
+  // The product root is a git repo: route trusts facts only when facts.head is HEAD and facts.base the recorded base.
+  const git = (...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  git('commit', '-q', '--allow-empty', '-m', 'init');
+  const head = git('rev-parse', 'HEAD').stdout.trim();
+  assert.match(head, /^[0-9a-f]{40}$/);
+  return { root, plugin, home, run, head, git };
 }
 
 function cli(sb, args) {
@@ -76,7 +82,7 @@ function tierRecord(sb, tier, raises = []) {
 
 function facts(sb, flags = {}, name = '05-backend-engineer') {
   const f = {
-    v: 1, step: name, base: BASE40, head: 'b'.repeat(40),
+    v: 1, step: name, base: BASE40, head: sb.head,
     paths: [{ path: 'p0.code', from: null, status: 'M', kind: 'code' }],
     truncated: false, ui_changed: false, strings_changed: false, contract_changed: false, docs_only: false,
     security_changed: false,
@@ -193,6 +199,22 @@ describe('next: security below high', () => {
     facts(sb, { security_changed: false });
     assert.equal(decideSecurity(sb).do, 'run');
   });
+  test('facts whose head is not HEAD -> run', () => {
+    control();
+    const sb = sandbox();
+    writeRoute(sb);
+    tierRecord(sb, 'medium');
+    facts(sb, { security_changed: false, head: 'b'.repeat(40) });
+    assert.equal(decideSecurity(sb).do, 'run');
+  });
+  test('facts whose base is not the recorded base -> run', () => {
+    control();
+    const sb = sandbox();
+    writeRoute(sb);
+    tierRecord(sb, 'medium');
+    facts(sb, { security_changed: false, base: 'c'.repeat(40) });
+    assert.equal(decideSecurity(sb).do, 'run');
+  });
   test('missing facts -> run', () => {
     control();
     const sb = sandbox();
@@ -282,11 +304,33 @@ describe('owed: a skipped security Step that a later raise makes due', () => {
     assert.equal(r.code, 0, r.out + r.err);
     assert.doesNotMatch(r.out, /owed: security/);
   });
-  test('owed refuses a bad slug and a missing route', () => {
+  test('owed refuses a bad slug; a run with no route.jsonl prints `owed: none`, exit 0', () => {
     const sb = sandbox();
     assert.notEqual(cli(sb, ['owed', '../x']).code, 0);
-    assert.notEqual(cli(sb, ['owed', SLUG]).code, 0);
+    assert.ok(!fs.existsSync(path.join(sb.run, 'route.jsonl')));
+    const r = cli(sb, ['owed', SLUG]);
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.equal(r.out.trim(), 'owed: none');
     writeRoute(sb);
     assert.equal(cli(sb, ['owed', SLUG]).code, 0, 'control: owed answers on a written route');
+  });
+  test('skip, then HEAD moves (stale facts) -> `owed: security`', () => {
+    const sb = sandbox();
+    writeRoute(sb);
+    tierRecord(sb, 'medium');
+    facts(sb, { security_changed: false });
+    assert.equal(decideSecurity(sb).do, 'skip');
+    assert.match(cli(sb, ['owed', SLUG]).out, /owed: none/, 'control: fresh facts owe nothing');
+    sb.git('commit', '-q', '--allow-empty', '-m', 'later');
+    assert.match(cli(sb, ['owed', SLUG]).out, /owed: security/);
+  });
+  test('skip, then facts written against another base -> `owed: security`', () => {
+    const sb = sandbox();
+    writeRoute(sb);
+    tierRecord(sb, 'medium');
+    facts(sb, { security_changed: false });
+    assert.equal(decideSecurity(sb).do, 'skip');
+    facts(sb, { security_changed: false, base: 'c'.repeat(40) });
+    assert.match(cli(sb, ['owed', SLUG]).out, /owed: security/);
   });
 });
