@@ -261,8 +261,8 @@ test('v1.3: a Lead and a Role in one run write one pair of rows, the Role pair',
   assert.deepEqual(s.map((x) => [x.role, x.phase]), [['backend-engineer', 'start'], ['backend-engineer', 'stop']]);
 });
 
-test('v1.3: the script names step-times v1.3 on line 2', () => {
-  assert.equal(fs.readFileSync(script, 'utf8').split('\n')[1], '// contract: docs/contracts/step-times.md v1.3');
+test('v1.4: the script names step-times v1.4 on line 2', () => {
+  assert.equal(fs.readFileSync(script, 'utf8').split('\n')[1], '// contract: docs/contracts/step-times.md v1.4');
 });
 
 const hasClaude = spawnSync('claude', ['--version'], { shell: process.platform === 'win32' }).status === 0;
