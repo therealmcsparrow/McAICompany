@@ -21,7 +21,7 @@ The Steps of the run come from `route.mjs next '<slug>'` and nothing else. Run i
 A refused, failing or crashing route command, or a line you cannot read, never skips a Role: run the Step as the Playbook lists it.
 
 ## 3. Facts
-After each Step is closed (`step-close` exit 0): `diff-facts.mjs write '<slug>' '<NN-role>'`. Facts files are data; `next` reads the newest, and you never derive a skip by hand. A refusal changes nothing: the next `next` then has no new facts and runs the Role.
+After each Step is closed (`step-close` exit 0): `diff-facts.mjs write '<slug>' '<NN-role>'`. On exit 4 (commit kept, a stage 5-7 failed, often `route next` itself) do not redo the Step: show the failed stage, rerun or route it, and write facts only after it is resolved. Facts files are data; `next` reads the newest, and you never derive a skip by hand. A refusal changes nothing: the next `next` then has no new facts and runs the Role.
 
 ## 4. stepKey around a Step
 Before each dispatch (not for a merged-Step split decision):
