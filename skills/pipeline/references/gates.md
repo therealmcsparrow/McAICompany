@@ -4,7 +4,7 @@ What the Lead runs at a Gate (`ship-check`, `docs/contracts/ship-check.md`; `aic
 
 ## Ship Gate: one call
 Before every Ship Gate form, once the last review is clean, run
-`node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ship-check '<slug>' --base <Base commit> --branch '<branch>' --acs <acs> [--baseline <run>,<run>,<run>]`.
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" ship-check '<slug>' --base <Base commit> --branch '<branch>' --acs <acs> [--baseline '<run>,<run>,<run>']`.
 - `--branch` is the printed `branch:` value; `--acs` the Brief's ACs shipped.
 - It runs eight checks, always all, in order: `tree`, `contests`, `drift`, `ledger`, `review-loop`, `tier`, `lead`, `worktrees`. One block per check: `ok`, `block`, or `info`. Last line: `ship-check: <b> blocking, <i> info`.
 - Run the full test suite once, in the foreground, after this call; quote its result line. `ship-check` never runs it.
