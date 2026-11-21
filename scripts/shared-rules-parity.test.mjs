@@ -37,6 +37,9 @@ function run(tree, script, args, cwd) {
 function parity(script, args, cwd = tmp) {
   const a = run(A, script, args, cwd);
   const b = run(B, script, args, cwd);
+  // rule-check v1.7 (plan C15) added the `standing` command, so its usage text gains one line; drop it before comparing.
+  const planned = t => t.replace(/^ {2}standing --write \| standing check\r?\n/m, '');
+  if (script === 'rule-check.mjs') Object.assign(b, { stdout: planned(b.stdout), stderr: planned(b.stderr) });
   assert.deepEqual(b, a, `${script} ${args.join(' ')}`);
   return a;
 }

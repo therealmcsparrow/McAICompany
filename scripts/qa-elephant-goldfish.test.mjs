@@ -441,18 +441,26 @@ describe('AC4 plan review findings join the Plan Gate summary; no Gate is added'
 // ==================================================================
 
 describe('AC7 the fresh reviewer keeps a Paraphrase, even with no findings, and the Gate shows it', () => {
-  for (const mode of ['plan', 'code']) {
-    test(`${mode} mode with zero findings: lint passes and the gate command prints the paraphrase`, () => {
-      const sb = sandbox();
-      const p = product(sb);
-      const file = p.put(`.company/work/${SLUG}/04-fresh-reviewer.md`, handoffText({ role: 'fresh-reviewer', step: '04', mode }));
-      const l = lintFile(sb, p.dir, file);
-      assert.equal(l.code, 0, l.all);
-      const g = p.run_('plan-review.mjs', ['gate', SLUG, '04-fresh-reviewer.md']);
-      assert.equal(g.code, 0, g.all);
-      assert.deepEqual(g.lines, ['paraphrase:', ...PARAPHRASE.split('\n').map((x) => `> ${x}`), 'first pass: 0 findings']);
-    });
-  }
+  test('plan mode with zero findings: lint passes and the gate command prints the paraphrase', () => {
+    const sb = sandbox();
+    const p = product(sb);
+    const file = p.put(`.company/work/${SLUG}/04-fresh-reviewer.md`, handoffText({ role: 'fresh-reviewer', step: '04', mode: 'plan' }));
+    const l = lintFile(sb, p.dir, file);
+    assert.equal(l.code, 0, l.all);
+    const g = p.run_('plan-review.mjs', ['gate', SLUG, '04-fresh-reviewer.md']);
+    assert.equal(g.code, 0, g.all);
+    assert.deepEqual(g.lines, ['paraphrase:', ...PARAPHRASE.split('\n').map((x) => `> ${x}`), 'first pass: 0 findings']);
+  });
+
+  // plan-review v2.0 (AC6) retired code mode: the lint refuses review-mode code.
+  test('code mode is retired: a fresh reviewer Handoff with review-mode code fails the lint', () => {
+    const sb = sandbox();
+    const p = product(sb);
+    const file = p.put(`.company/work/${SLUG}/04-fresh-reviewer.md`, handoffText({ role: 'fresh-reviewer', step: '04', mode: 'code' }));
+    const l = lintFile(sb, p.dir, file);
+    assert.equal(l.code, 1, l.all);
+    assert.match(l.out, /review-mode must be plan/);
+  });
 
   test('a fresh reviewer Handoff with no Paraphrase, or an empty one, fails the lint and the gate refuses it', () => {
     const sb = sandbox();
