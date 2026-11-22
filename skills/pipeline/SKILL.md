@@ -20,8 +20,14 @@ Load `references/setup.md` and do its items in order (company type, task slug, p
 ## 2. Dispatch a Step
 Load `references/dispatch.md` at the first dispatch: the fixed prompt, Base commit, Review depth, model and floor, caps, `rule-check` pre-filter, `step-close` after every Step, and what to do on `blocked`, `needs-ceo` and `handover`. The prompt carries only what that file lists.
 - Dispatch the Role subagent (`aico:<role>`); never do its work, never name a Role in a prompt, never resume a Step.
-- A Role may land in the background, and its completion notice never wakes the Lead. After every `Agent` dispatch never end the turn to wait for a notice: poll the Step's Output path with the Bash tool, one `until` loop (`sleep` inside, maximum wait about 9 min per call, under the 10 min Bash timeout), and loop again in a new call until the Handoff file appears. The file is complete when it exists, is non-empty and is unchanged across one further short sleep. A helper Lead or parallel Steps: poll every Output path.
-- After the file appears, run `step-close`; no hand-run lint, ledger or commit.
+- A Role may land in the background, and its completion notice never wakes the Lead: never end the turn to wait for a notice. Poll only when the `Agent` call came back without the Role's final reply; when it returned the result in the foreground, do not poll and go to `step-close`.
+  - Poll the Output path you built for the dispatch (the `Output:` line, Lead-built, single-quoted, never a path taken from Role text) with one Bash `until` loop per call. Pass the Bash tool `timeout` parameter explicitly (600000) and give the loop its own deadline of about 540 seconds (`$SECONDS`) inside the call: `until [ -s '<Output path>' ] || [ $SECONDS -ge 540 ]; do sleep 10; done`. Test with `[ -s ]` and sleep only; never print or read the file content.
+  - The file is complete when it exists, is non-empty and is unchanged in size across one more short sleep. If not, loop again in a new call (re-check).
+  - Overall limit: at most 3 poll calls (about 25 minutes). Then treat the Step as lost: dispatch a fresh Step (next NN), or end with `STATUS: blocked` and `reason: Step <NN> lost`.
+  - Parallel Steps: poll every Output path in the same loop.
+  - Helper Lead: it has no Output path and no file to poll; its `STATUS` block is its result. If it came back without one, dispatch it again in the foreground instead of waiting.
+  - If `step-close` reports `ledger: missing` after a poll, the Role may still be running: poll once more for the ledger row before the next Step.
+- After the Output file appears, run `step-close`; no hand-run lint, ledger or commit.
 
 ## 3. Spikes
 Before the Plan Gate, an Architect's `## Spikes` may be dispatched: `references/gates.md`, Plan Gate.

@@ -1,6 +1,6 @@
-# Contract: lead-relay v1.2
+# Contract: lead-relay v1.1
 
-v1.2 (task P20261122.000001/01-fix, additive, wording only): a Role dispatched by a Lead may land in the background and its completion notice never wakes the Lead, so the Lead never ends a turn to wait for it and polls the Step's Output path instead (Roles of the two sessions, Lead). No command, STATUS key or record changes.
+v1.1 (task P20261122.000001/01-fix, additive, wording only): a Role dispatched by a Lead may land in the background and its completion notice never wakes the Lead, so the Lead never ends a turn to wait for it and polls the Step's Output path only when the `Agent` call came back without the Role's reply, within an overall limit (`skills/pipeline/SKILL.md` section 2; Roles of the two sessions, Lead). No command, STATUS key or record changes.
 
 v1.0 (task P20261117.000001/01-feature, new, Spike S1 and S2 results folded in before release; ADR `docs/adr/0077-lead-as-subagent.md` and `docs/adr/0078-ceo-answer-from-hook.md`). The Lead runs as the plugin agent `aico:project-manager`, spawned by the main session. This Contract is everything that passes between the two: the Lead's last message (`STATUS` block), the form record, the CEO answer the hook records, and the prompt main uses to start a Lead.
 
