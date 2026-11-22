@@ -20,7 +20,8 @@ Load `references/setup.md` and do its items in order (company type, task slug, p
 ## 2. Dispatch a Step
 Load `references/dispatch.md` at the first dispatch: the fixed prompt, Base commit, Review depth, model and floor, caps, `rule-check` pre-filter, `step-close` after every Step, and what to do on `blocked`, `needs-ceo` and `handover`. The prompt carries only what that file lists.
 - Dispatch the Role subagent (`aico:<role>`); never do its work, never name a Role in a prompt, never resume a Step.
-- After each Step run `step-close`; no hand-run lint, ledger or commit.
+- A Role may land in the background, and its completion notice never wakes the Lead. After every `Agent` dispatch never end the turn to wait for a notice: poll the Step's Output path with the Bash tool, one `until` loop (`sleep` inside, maximum wait about 9 min per call, under the 10 min Bash timeout), and loop again in a new call until the Handoff file appears. The file is complete when it exists, is non-empty and is unchanged across one further short sleep. A helper Lead or parallel Steps: poll every Output path.
+- After the file appears, run `step-close`; no hand-run lint, ledger or commit.
 
 ## 3. Spikes
 Before the Plan Gate, an Architect's `## Spikes` may be dispatched: `references/gates.md`, Plan Gate.
