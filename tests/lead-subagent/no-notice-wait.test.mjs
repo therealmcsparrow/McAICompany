@@ -73,3 +73,54 @@ test('lead-handover.md: Step running case polls the Output path, no "Wait for it
   assert.doesNotMatch(handover, /wait for the running Step/i);
   assert.match(handover, /poll[^.\n]*Output/i);
 });
+
+// Fix round 2: harness moves any Bash call to the background after ~180 s (reviewer 13: R-1, R-3, R-12, R-10).
+const dispatchMd = read('skills/pipeline/references/dispatch.md');
+const resume = read('skills/pipeline/references/lead-resume.md');
+const pollLines = dispatchSection.split('\n').filter(x => /until|deadline|timeout/i.test(x)).join('\n');
+
+test('pipeline section 2: per-call poll deadline is 150 s or less (R-1)', () => {
+  const nums = [...pollLines.matchAll(/(?:\$SECONDS\s*-ge\s+|deadline[^.\n]*?\b|about\s+)(\d{2,3})\b(?!\d)/gi)].map(m => Number(m[1]));
+  assert.ok(nums.length > 0, `no deadline found: ${pollLines}`);
+  assert.ok(nums.every(n => n <= 150), `deadline values ${nums}`);
+  assert.match(dispatchSection, /\$SECONDS\s*-ge\s+(1[0-4]\d|150|[5-9]\d)\b/);
+});
+test('pipeline section 2: Bash timeout is 170000 or less, no 540/600000 wording (R-1)', () => {
+  assert.match(dispatchSection, /timeout[^.\n]*\b1[0-7]\d000\b|\b1[0-7]\d000\b[^.\n]*timeout/i);
+  assert.doesNotMatch(dispatchSection, /\b540\b|600000/);
+  assert.doesNotMatch(agent, /\b540\b|600000/);
+});
+test('pipeline section 2: overall limit in minutes, not 3 calls of 9 min (R-1)', () => {
+  assert.match(dispatchSection, /(about|~|up to|at most|max(imum)?)[^.\n]*\b\d+\s*(min|minutes)\b[^.\n]*|\b\d+\s*(min|minutes)\b/i);
+  assert.match(dispatchSection, /about \d+ (poll )?calls|\d+ (poll )?calls/i);
+  assert.doesNotMatch(dispatchSection, /at most 3 poll calls/i);
+});
+test('pipeline section 2: a poll call moved to the background: never wait for its notice, start a new short poll (R-1)', () => {
+  const s = sentences(dispatchSection).filter(x => /(moved|lands?|went|goes|sent) (to|into) the background|backgrounded|in the background anyway/i.test(x) && /poll/i.test(x));
+  assert.ok(s.some(x => /(never|not|no|don'?t)[^.\n]*(wait|notice)/i.test(x) && /(new|fresh|another|start)[^.\n]*(short )?poll/i.test(x)), `bg poll sentence: ${s.join(' | ')}`);
+});
+test('pipeline section 2: helper Lead without STATUS is never spawned again, ends blocked helper Lead lost (R-3)', () => {
+  const s = sentences(dispatchSection).filter(x => /helper Lead/i.test(x));
+  const j = s.join(' ');
+  assert.doesNotMatch(j, /dispatch it again|spawn (it|another|a second)[^.\n]*again[^.\n]*foreground/i);
+  assert.match(j, /never (spawn|dispatch|start)[^.\n]*(again|second|another)|not (spawn|dispatch)[^.\n]*again|no second/i);
+  assert.match(j, /STATUS: blocked/);
+  assert.match(j, /helper Lead lost/);
+});
+for (const [n, t] of [['dispatch.md', dispatchMd], ['lead-resume.md', resume]]) {
+  test(`${n}: helper Lead pointer does not tell to spawn it again (R-3)`, () => {
+    const hl = t.split('\n').filter(x => /helper Lead/i.test(x)).join('\n');
+    assert.doesNotMatch(hl, /(dispatch|spawn|start) it again|again in the foreground/i);
+    assert.match(hl, /lost|never (spawn|start)[^.\n]*(second|again|another)|no second|SKILL\.md/i);
+  });
+}
+test('pipeline section 2: on the overall limit a fresh Step only when step-close shows the old ledger row (R-12)', () => {
+  const s = sentences(dispatchSection).join('\n');
+  assert.match(s, /fresh Step[^.\n]*(only|just)[^.\n]*(step-close|ledger)|(only|just)[^.\n]*(step-close|ledger)[^.\n]*fresh Step|(step-close|ledger row)[^.\n]*(Role ended|ended)[^.\n]*fresh Step|fresh Step[^.\n]*(ledger row|Role ended)/i);
+  assert.match(s, /ledger row/i);
+  assert.match(s, /otherwise[^.\n]*STATUS: blocked|STATUS: blocked[^.\n]*otherwise/i);
+  assert.match(s, /Step <NN> lost/);
+});
+test('pipeline section 2: no unconditional fresh Step dispatch on lost (R-12)', () => {
+  assert.doesNotMatch(dispatchSection, /treat the Step as lost: dispatch a fresh Step/i);
+});
