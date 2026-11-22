@@ -103,7 +103,7 @@ test('hook-check check: NUL file raw, lone CR flips, real change mismatches', ()
 
 // ---- dep-pins: depHashes / verifyDeps ----------------------------------------------------------------
 
-const ENTRIES = ['scripts/lead-handover.mjs', 'scripts/run-state.mjs'];
+const ENTRIES = ['scripts/lead-handover.mjs', 'scripts/run-state.mjs', 'scripts/lead-relay.mjs'];
 function depRoot(body) {
   const r = tmp();
   for (const e of ENTRIES) put(r, e, body);

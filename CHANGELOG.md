@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.44.3] - 2026-11-19
+
+Rollback: node scripts/stable.mjs 0.44.2
+
+### Fixed
+- **Background Lead spawns keep their result.** A Lead started in the background could lose its `STATUS` line, and a slow hook host could block the run. The hook host now writes the Lead result record, a shield file protects it, a refused `again` on an ended run is explicit, and the host has a timeout. Contracts: `lead-relay`, `mod-hook` v1.3, `hook-event` and `context-guard` (bumps).
+
 ## [0.44.2] - 2026-11-18
 
 Rollback: node scripts/stable.mjs 0.44.1
