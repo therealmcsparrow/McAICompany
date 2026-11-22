@@ -114,12 +114,18 @@ for (const [n, t] of [['dispatch.md', dispatchMd], ['lead-resume.md', resume]]) 
     assert.match(hl, /lost|never (spawn|start)[^.\n]*(second|again|another)|no second|SKILL\.md/i);
   });
 }
-test('pipeline section 2: on the overall limit a fresh Step only when step-close shows the old ledger row (R-12)', () => {
-  const s = sentences(dispatchSection).join('\n');
-  assert.match(s, /fresh Step[^.\n]*(only|just)[^.\n]*(step-close|ledger)|(only|just)[^.\n]*(step-close|ledger)[^.\n]*fresh Step|(step-close|ledger row)[^.\n]*(Role ended|ended)[^.\n]*fresh Step|fresh Step[^.\n]*(ledger row|Role ended)/i);
-  assert.match(s, /ledger row/i);
-  assert.match(s, /otherwise[^.\n]*STATUS: blocked|STATUS: blocked[^.\n]*otherwise/i);
-  assert.match(s, /Step <NN> lost/);
+test('pipeline section 2: on the overall limit the Step is lost: STATUS blocked, no step-close, no fresh Step (R-16, R-17)', () => {
+  const s = sentences(dispatchSection).join(' ');
+  assert.match(s, /STATUS: blocked/);
+  assert.match(s, /reason: Step <NN> lost without step-close/);
+  assert.match(s, /do not run `step-close`/);
+  assert.match(s, /do not dispatch a fresh Step/);
+  assert.doesNotMatch(s, /ledger row/i);
+});
+test('pipeline section 2: wc -c allowed, parallel Steps wait for all Output paths, main shows reason and stops (R-13, R-14, R-18)', () => {
+  assert.match(dispatchSection, /wc -c < '<Output path>'/);
+  assert.match(dispatchSection, /poll every Output path[^.\n]*wait for all of them/i);
+  assert.match(dispatchSection, /main shows the reason and stops/);
 });
 test('pipeline section 2: no unconditional fresh Step dispatch on lost (R-12)', () => {
   assert.doesNotMatch(dispatchSection, /treat the Step as lost: dispatch a fresh Step/i);
