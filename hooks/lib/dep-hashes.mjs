@@ -7,7 +7,7 @@ export const DEP_HASHES = {
   "scripts/handoff-lint.mjs": "1ee5bdd92702923fec813a0c6686fcf1da20da1c12e82ef2f938d20d665e8cda",
   "scripts/idea-flow.mjs": "dab49706de84f46a37d85e3c13f87fd205a76cf2381d4bf3d845471b39ed1430",
   "scripts/lead-handover.mjs": "32b7c51f126b623c31988e497407323b2eee71683f882fcd3f5beea6a08810a6",
-  "scripts/lead-relay.mjs": "64b10e2791af484cd57108978ff632a2a97afcb3cd755f66b4417f4aad86c50d",
+  "scripts/lead-relay.mjs": "18755613ad0bb0740daa7e28f352f05787ecc43b34def594dac75b27176b5314",
   "scripts/plan-markdown.mjs": "e4fbd913270cf1a3e9843d267e05297849fb9fd4ec7c7d898f7df391653d8891",
   "scripts/plan-tasks.mjs": "b2f14aef4b0fac4aa8163d783cae1524af708cdf0de74160cc14dc66ef315d22",
   "scripts/run-cap.mjs": "b71e9529372e10ecc7d9b59a8aeebf2436167697804b679e2277ca8eaad4078b",

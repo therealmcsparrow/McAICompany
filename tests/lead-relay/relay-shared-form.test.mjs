@@ -75,7 +75,7 @@ test('a Gate form open in run A refuses the same-text ask form in run B, by open
   setup(A2, 13 * 3600000);
   setup(B, 60000);
   fs.rmSync(path.join(dirOf(B), 'forms.jsonl'), { force: true });
-  const opts = (result) => [{ label: 'Pass', description: 'Pass it', ...(result ? { result: 'pass' } : {}) }, { label: 'Stop', description: 'Stop it', ...(result ? { result: 'stop' } : {}) }];
+  const opts = (result) => [{ label: 'Pass', description: 'Pass it', ...(result ? { result: 'passed' } : {}) }, { label: 'Stop', description: 'Stop it', ...(result ? { result: 'stopped' } : {}) }];
   const mk = (name, result) => {
     const f = path.join(root, name);
     fs.writeFileSync(f, JSON.stringify([{ q: 'Gate-vs-ask text?', header: 'Gate', multi: false, options: opts(result) }]));
@@ -86,7 +86,7 @@ test('a Gate form open in run A refuses the same-text ask form in run B, by open
   assert.equal(g.status, 0, g.stdout + g.stderr);
   const rowG = JSON.parse(fs.readFileSync(path.join(dirOf(A2), 'forms.jsonl'), 'utf8').trim().split('\n')[0]);
   assert.equal(rowG.kind, 'gate:ship');
-  assert.equal(rowG.questions[0].options[0].result, 'pass');
+  assert.equal(rowG.questions[0].options[0].result, 'passed');
 
   const b = relay(['open', B, 'ask', mk('ask.json', false)]);
   assert.equal(b.status, 1, b.stdout + b.stderr);
