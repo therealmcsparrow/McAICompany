@@ -23,9 +23,27 @@ test('handoff skill: or poll the result on disk in short calls', () => {
   assert.match(handoff, /poll[^.\n]*(on disk|file|result)[^.\n]*short|short[^.\n]*poll[^.\n]*(on disk|file|result)/i);
 });
 test('handoff skill: a command moved to the background anyway is never waited on by notice', () => {
-  const s = sentences(handoff).filter(x => /background/i.test(x));
-  assert.ok(s.length > 0, 'no background sentence in skills/handoff/SKILL.md');
-  assert.ok(s.some(x => /(never|not|no|don'?t)[^.\n]*(wait|end)/i.test(x)), s.join(' | '));
+  const s = sentences(handoff).filter(x => /moved to the background anyway/i.test(x));
+  assert.ok(s.length > 0, 'no "moved to the background anyway" sentence in skills/handoff/SKILL.md');
+  assert.ok(s.some(x => /never waited on by (the )?notice/i.test(x) && /start a new (short )?poll/i.test(x)), s.join(' | '));
+});
+test('handoff skill: foreground only when the command fits one call', () => {
+  assert.match(handoff, /foreground only if it finishes inside one call/i);
+});
+test('handoff skill: per-call deadline 150 s and Bash timeout 170000', () => {
+  assert.match(handoff, /deadline (of )?150 ?s/i);
+  assert.match(handoff, /timeout`? (of at most |of )?170000/i);
+  assert.match(handoff, /per-call deadline 150 s, Bash `timeout` 170000/i);
+});
+test('handoff skill: background command appends an exit marker', () => {
+  assert.match(handoff, /echo "exit \$\?"/);
+  assert.match(handoff, /`exit` marker/i);
+});
+test('handoff skill: poll only the tail of the output file', () => {
+  assert.match(handoff, /only the tail of the output file/i);
+});
+test('handoff skill: overall limit then status blocked', () => {
+  assert.match(handoff, /overall limit.*`status: blocked`/i);
 });
 test('handoff skill: the rule sits in Starting a Step or its own section, before Finishing a Step', () => {
   const i = handoff.search(/background/i);
