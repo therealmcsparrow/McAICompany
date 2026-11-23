@@ -14,6 +14,10 @@ import { runSlugs, show, MAX_FORMS } from './run-state.mjs';
 import { isRunSlug, exactWorkPath } from '../mods/lib/work-folder.mjs';
 
 const FORMS = 'forms.jsonl';
+const RESULT = 'lead-result.txt';
+const LEAD_TYPE = 'aico:project-manager';
+const MAX_RESULT_LINES = 40;
+const MAX_RESULT_BYTES = 8192;
 const MAX_ARG = 4096;
 const MAX_STDIN = 64 * 1024;
 const MAX_INPUT = 64 * 1024;
@@ -154,6 +158,11 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
   return real;
 }
 
+// A form of an ended run gets no reply recorded (the hook skips ended runs), so `open` and `again` refuse it.
+function refuseEnded(root, slug) {
+  if (show(root, slug).state === 'ended') refuse('run ended');
+}
+
 // An open form with the same questions in another unended run would make `answer` match twice and drop the answer.
 function refuseSharedForm(root, slug, questions) {
   // Same comparison `answer` uses (sameQuestions): a Gate option's `result` is not compared.
@@ -174,6 +183,7 @@ function cmdOpen(root, [slug, kind, file, ...more]) {
   if (typeof file !== 'string' || more.length) refuse('usage');
   if (!isRunSlug(slug)) refuse('bad slug');
   const f = formsPath(root, slug);
+  refuseEnded(root, slug);
   const text = readSmall(confined(root, file), MAX_INPUT);
   if (text === null) refuse('questions file unreadable');
   let parsed;
@@ -201,6 +211,7 @@ function cmdAgain(root, [slug, id, ...more]) {
   const rows = loadRows(formsPath(root, slug));
   const row = openForms(rows).find((r) => r.id === id);
   if (!row) refuse('no open form with that id');
+  refuseEnded(root, slug);
   refuseSharedForm(root, slug, row.questions);
   return statusBlock(slug, lastHandoff(root, slug), row);
 }
@@ -277,6 +288,117 @@ export function answer(text, root = process.cwd()) {
   try { appendRow(hits[0].file, { v: 1, at: iso(Date.now()), ev: 'answer', id: hits[0].form.id, src: 'hook', answers }); } catch { /* nothing recorded */ }
 }
 
+// ---- Lead result (written by the hook host, read by `result`) ----------------------------------------------------------
+// No CLI word writes lead-result.txt: hook-host calls leadStart (SubagentStart) and leadStop (SubagentStop, only when it does
+// not block the stop). The file is shielded like forms.jsonl, so a Role cannot write it. A Lead start deletes every recorded
+// result of the project, so a result on disk comes from a Lead that started after the last one was acted on.
+
+const BAD_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u180E\u2065\u{E0000}-\u{E007F}]/gu;
+const STATUS_RE = /^STATUS: (needs-ceo|handover|done|blocked)$/;
+const LIVE = 'lead-live.json';
+const LIVE_TTL_MS = 3 * 3600 * 1000;
+const MAX_LIVE = 16;
+
+const plain = (s) => s.replace(/\t/g, ' ').replace(BAD_TEXT, '');
+
+// Bytes, not characters: cut at a UTF-8 boundary.
+function capBytes(text, max) {
+  const buf = Buffer.from(text, 'utf8');
+  if (buf.length <= max) return text;
+  return new TextDecoder().decode(buf.subarray(0, max)).replace(/\uFFFD+$/, '');
+}
+
+// Create-new write on a random name (O_EXCL never follows a planted link), then rename over the target entry.
+function writeFresh(dir, name, text) {
+  const tmp = path.join(dir, `${name}.${crypto.randomBytes(8).toString('hex')}.tmp`);
+  const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NOFOLLOW, 0o644);
+  try { fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
+  try { fs.renameSync(tmp, path.join(dir, name)); } catch (e) { try { fs.unlinkSync(tmp); } catch { /* gone */ } throw e; }
+}
+
+// Live Lead agents of the project: { <agent id>: <start ms> }, entries past the TTL dropped.
+function readLive(stateDir, now) {
+  const text = readSmall(path.join(stateDir, LIVE), 4096);
+  let o = {};
+  try { o = text === null ? {} : JSON.parse(text); } catch { o = {}; }
+  const out = {};
+  if (isObj(o)) for (const [k, v] of Object.entries(o)) if (typeof v === 'number' && now - v < LIVE_TTL_MS && Object.keys(out).length < MAX_LIVE) out[k] = v;
+  return out;
+}
+
+function leadPayload(text, event) {
+  let p;
+  try { p = JSON.parse(text); } catch { return null; }
+  if (!isObj(p) || p.hook_event_name !== event || p.agent_type !== LEAD_TYPE) return null;
+  return typeof p.agent_id === 'string' && p.agent_id.length > 0 && p.agent_id.length <= 512 ? p : null;
+}
+
+// SubagentStart of a Lead: it joins the live set, and every recorded result of the project is dropped (older than this Lead).
+export function leadStart(text, root, stateDir, now = Date.now()) {
+  const p = leadPayload(text, 'SubagentStart');
+  if (!p) return;
+  try {
+    const live = readLive(stateDir, now);
+    live[p.agent_id] = now;
+    fs.mkdirSync(stateDir, { recursive: true });
+    writeFresh(stateDir, LIVE, JSON.stringify(live));
+  } catch { /* without a live set a helper Lead's block counts as final */ }
+  try {
+    for (const slug of runSlugs(root, { max: MAX_RUNS }).slugs) {
+      try {
+        const dir = workDir(root, slug);
+        if (dir && lstatOrNull(path.join(dir, RESULT))) fs.unlinkSync(path.join(dir, RESULT));
+      } catch { /* this one stays; the others are still dropped */ }
+    }
+  } catch { /* nothing dropped */ }
+}
+
+// Main's PreToolUse spawn of a Lead (the host checks the target): one Lead runs at a time, so a live entry left by a Lead that
+// ended with no SubagentStop (interrupt, crash) is dropped, or it would mute every later result for the TTL.
+export function leadReset(_text, _root, stateDir) {
+  try { fs.rmSync(path.join(stateDir, LIVE), { force: true }); } catch { /* the TTL ends it */ }
+}
+
+// SubagentStop of a Lead that the host lets end (no cap.M1 block): keeps its STATUS block, unless another Lead is still live
+// (a helper Lead's block goes to the Lead that spawned it, not to main). The run comes from the block's own `run:` line.
+export function leadStop(text, root, stateDir, now = Date.now()) {
+  const p = leadPayload(text, 'SubagentStop');
+  if (!p) return;
+  try {
+    const live = readLive(stateDir, now);
+    delete live[p.agent_id];
+    try { writeFresh(stateDir, LIVE, JSON.stringify(live)); } catch { /* the next start rewrites it */ }
+    if (Object.keys(live).length > 0 || typeof p.last_assistant_message !== 'string') return;
+    const lines = p.last_assistant_message.slice(0, 4 * MAX_RESULT_BYTES).trim().split(/\r?\n/).slice(0, MAX_RESULT_LINES).map(plain);
+    if (!STATUS_RE.test(lines[0])) return;
+    const m = lines.map((l) => /^run: \.company\/work\/(\S+)\s*$/.exec(l)).find(Boolean);
+    if (!m || !isRunSlug(m[1])) return;
+    const dir = workDir(root, m[1]);
+    if (!dir || !lstatOrNull(path.join(dir, 'run-state.jsonl'))?.isFile()) return;
+    writeFresh(dir, RESULT, `${capBytes(lines.join('\n'), MAX_RESULT_BYTES)}\n`);
+  } catch { /* nothing recorded */ }
+}
+
+// With no slug (a first Lead, whose run main does not know yet) the newest recorded result of the project.
+function cmdResult(root, [slug, ...more]) {
+  if (more.length) refuse('usage');
+  let files;
+  if (slug === undefined) {
+    files = runSlugs(root, { max: MAX_RUNS }).slugs.map((s) => workDir(root, s)).filter(Boolean).map((d) => path.join(d, RESULT));
+  } else {
+    if (!isRunSlug(slug)) refuse('bad slug');
+    const dir = workDir(root, slug);
+    if (!dir || !lstatOrNull(path.join(dir, 'run-state.jsonl'))?.isFile()) refuse('no run');
+    files = [path.join(dir, RESULT)];
+  }
+  const hits = files.map((f) => ({ f, st: lstatOrNull(f) })).filter((h) => h.st?.isFile()).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
+  const raw = hits.length ? readSmall(hits[0].f, MAX_RESULT_BYTES + 16) : null;
+  // Read side: the same text filter and line 1 check as the write side, whatever is on disk.
+  const lines = raw === null ? [] : raw.split(/\r?\n/).slice(0, MAX_RESULT_LINES).map(plain);
+  if (!STATUS_RE.test(lines[0] ?? '')) return 'result: none\n';
+  return `recorded: ${iso(hits[0].st.mtimeMs)}\n${lines.join('\n').trimEnd()}\n`;
+}
+
 export function preset(text) {
   let p;
   try { p = JSON.parse(text); } catch { return { code: 0 }; }
@@ -328,7 +450,8 @@ export function main(argv, root = process.cwd()) {
     if (cmd === 'open') return { code: 0, out: cmdOpen(root, rest) };
     if (cmd === 'again') return { code: 0, out: cmdAgain(root, rest) };
     if (cmd === 'read') return { code: 0, out: cmdRead(root, rest) };
-    return refuse('usage: open <slug> <kind> <json-file> | again <slug> <id> | read <slug> [<id>] --json');
+    if (cmd === 'result') return { code: 0, out: cmdResult(root, rest) };
+    return refuse('usage: open <slug> <kind> <json-file> | again <slug> <id> | read <slug> [<id>] --json | result [<slug>]');
   } catch (e) {
     if (e instanceof Refusal) return { code: 1, out: `refused: ${e.message}\n` };
     return { code: 1, out: 'error: failed\n' };
