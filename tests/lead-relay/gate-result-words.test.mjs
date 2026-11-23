@@ -43,7 +43,9 @@ for (const kind of ['gate:brief', 'gate:plan', 'gate:ship']) {
   test(`open ${kind} refuses option results that run-state gate does not accept (approve/change/stop)`, () => {
     const r = open(kind, ['approve', 'change', 'stop']);
     assert.equal(r.status, 1, `expected refusal, got: ${r.stdout}${r.stderr}`);
-    assert.ok(/refused/.test(r.stdout + r.stderr));
+    const out = r.stdout + r.stderr;
+    assert.ok(/refused/.test(out));
+    for (const w of ['passed', 'changed', 'stopped']) assert.ok(out.includes(w), `refusal text lacks ${w}: ${out}`);
     assert.ok(!fs.existsSync(forms), 'nothing written');
   });
 }
