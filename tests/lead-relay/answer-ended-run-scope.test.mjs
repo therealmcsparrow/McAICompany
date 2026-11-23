@@ -1,5 +1,6 @@
-// Scope of the ended-run answer (lead-relay v1.1): only a form opened at or after the run's end takes an answer, the newest ended
-// match wins, ambiguity and run-less folders stay skipped, and live runs win over ended ones.
+// Scope of the ended-run answer (lead-relay v1.1): only a form opened at or after the run's end takes an answer, every matching
+// open form of any run counts toward the span (more than one records nothing), `open`/`again` refuse such a twin, and ambiguity
+// and run-less folders stay skipped.
 import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -30,7 +31,7 @@ const payload = payloadFor(questions, 'Build on branch');
 let root;
 let t; // run start time: set once per test by the first run() call
 const relay = (args, input) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, env, encoding: 'utf8', timeout: 20000, input });
-beforeEach(() => { t = undefined; root =fs.mkdtempSync(path.join(os.tmpdir(), 'relay-scope-')); roots.push(root); fs.writeFileSync(path.join(root, 'q.json'), JSON.stringify(questions)); });
+beforeEach(() => { t = undefined; root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-scope-')); roots.push(root); fs.writeFileSync(path.join(root, 'q.json'), JSON.stringify(questions)); });
 
 const dirOf = (slug) => path.join(root, '.company', 'work', ...slug.split('/'));
 // Run started at t, ended at t+1000 (outcome param), or left running.
@@ -51,6 +52,7 @@ const open = (slug) => relay(['open', slug, 'ask', path.join(root, 'q.json')]);
 const again = (slug, id = 'f01') => relay(['again', slug, id]);
 const read = (slug) => relay(['read', slug, 'f01', '--json']).stdout;
 const recorded = (slug) => /"labels":\["Build on branch"\]/.test(read(slug));
+const noForm = (slug) => !fs.existsSync(path.join(dirOf(slug), 'forms.jsonl'));
 const none = (slug) => /answer: none/.test(read(slug));
 const A = 'P20261118.000002/02-lead';
 const B = 'P20261118.000003/02-lead';
@@ -62,35 +64,47 @@ test('a running run keeps taking its answer (unchanged)', () => {
   assert.ok(recorded(A));
 });
 
-test('eligible ended forms in two runs: open is allowed, the answer records nothing (fail closed)', () => {
+test('ended X with an eligible ended twin in Y: open is refused, the named run answer records', () => {
   run(A, true); run(B, true);
   openRow(A, iso(t + 10000));
-  assert.equal(open(B).status, 0);
+  const r = open(B);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stdout + r.stderr, /same questions open in run P20261118\.000002\/02-lead/);
   relay(['answer'], payload);
-  assert.ok(none(B));
-  assert.ok(none(A));
+  assert.ok(recorded(A));
+  assert.ok(noForm(B));
 });
 
-test('older again is refused while a newer twin is open; the recovery works', () => {
+test('live X with an eligible ended twin in Y: open is refused, the named run answer records', () => {
+  run(A, true); run(B, false);
+  openRow(A, iso(t + 10000));
+  assert.notEqual(open(B).status, 0);
+  relay(['answer'], payload);
+  assert.ok(recorded(A));
+  assert.ok(noForm(B));
+});
+
+test('hand-made twins in two ended runs: again is refused both ways, the answer records nothing', () => {
   run(A, true); run(B, true);
   openRow(A, iso(t + 10000));
   openRow(B, iso(t + 20000));
   const r = again(A);
   assert.notEqual(r.status, 0);
   assert.match(r.stdout + r.stderr, /same questions open in run P20261118\.000003\/02-lead/);
+  assert.notEqual(again(B).status, 0);
   relay(['answer'], payload);
   assert.ok(none(B));
   assert.ok(none(A));
-  assert.equal(again(B).status, 0, 'the newer run stays the one to resume');
 });
 
-test('tie on at: again keeps the shared-form order, the answer still records nothing in either run', () => {
-  run(A, true); run(B, true);
-  openRow(A, iso(t + 10000));
-  openRow(B, iso(t + 10000));
-  assert.equal(again(B).status, 0);
-  assert.notEqual(again(A).status, 0);
-  relay(['answer'], payload);
+test('end A while its Gate form waits, then a live twin open in B is refused and nothing is recorded on B', () => {
+  run(A, false); run(B, false);
+  openRow(A, iso(t + 1), 'f01', gateQs, 'gate:ship');
+  fs.appendFileSync(path.join(dirOf(A), 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(t + 5000), ev: 'end', outcome: 'abort' })}\n`);
+  fs.writeFileSync(path.join(root, 'q.json'), JSON.stringify(gateQs.map(({ options, ...q }) => ({ ...q, options: options.map(({ result, ...o }) => o) }))));
+  assert.notEqual(open(B).status, 0);
+  openRow(B, iso(t + 6000), 'f01', gateQs, 'gate:ship');
+  relay(['answer'], payloadFor(gateQs, 'Ship'));
   assert.ok(none(B));
   assert.ok(none(A));
 });
@@ -109,13 +123,16 @@ test('a pre-end Gate form of an aborted run is not answerable until the run is l
   assert.match(read(A), /"labels":\["Ship"\]/);
 });
 
-test('a pre-end form is ignored by the shared-form check', () => {
+test('a pre-end form still counts for the shared-form check: the twin is refused until that run is live again', () => {
   run(A, true); run(B, true);
   openRow(A, iso(t));
-  assert.equal(open(B).status, 0);
+  assert.notEqual(open(B).status, 0);
   relay(['answer'], payload);
-  assert.ok(recorded(B));
+  assert.ok(noForm(B));
   assert.ok(none(A));
+  fs.appendFileSync(path.join(dirOf(A), 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(t + 5000), ev: 'start' })}\n`);
+  relay(['answer'], payload);
+  assert.ok(recorded(A));
 });
 
 test('same-second boundary: a form opened at the end second is recorded', () => {
@@ -132,7 +149,7 @@ test('a bad at on an ended form records nothing', () => {
   assert.ok(none(A));
 });
 
-test('a live run with two open non-matching forms stops the ended search', () => {
+test('a live run with two open non-matching forms records nothing in an ended run', () => {
   run(A, true); run(B, false);
   openRow(A, iso(t + 10000));
   openRow(B, iso(t + 1), 'f01', other);
@@ -151,10 +168,10 @@ test('an ended run with two open forms is ambiguous: nothing is recorded anywher
   assert.ok(none(A));
 });
 
-test('a live run and an eligible ended run with the same form: nothing is recorded (R-30)', () => {
+test('hand-made live and ended twins: nothing is recorded', () => {
   run(A, true); run(B, false);
-  assert.equal(open(A).status, 0);
-  assert.equal(open(B).status, 0, 'an ended twin does not block a live run');
+  openRow(A, iso(t + 10000));
+  openRow(B, iso(t + 10001));
   relay(['answer'], payload);
   assert.ok(none(B));
   assert.ok(none(A));
@@ -169,7 +186,7 @@ test('open on an ended run is refused while a live run holds the same form', () 
 test('again on an ended run is refused while a live run holds the same form', () => {
   run(A, true); run(B, false);
   openRow(A, iso(t + 10000));
-  assert.equal(open(B).status, 0);
+  openRow(B, iso(t + 10001));
   const r = again(A);
   assert.notEqual(r.status, 0);
   assert.match(r.stdout + r.stderr, /same questions open in run/);
@@ -183,28 +200,11 @@ test('a run-less folder (no run-state) is still skipped', () => {
   assert.equal(fs.readFileSync(path.join(dir, 'forms.jsonl'), 'utf8').includes('"ev":"answer"'), false);
 });
 
-test('R-30: an in-flight ended-run form is not taken by a later live open in another run', () => {
-  run(A, true); run(B, false);
-  openRow(A, iso(t + 10000));
-  assert.equal(open(B).status, 0);
-  relay(['answer'], payload);
-  assert.ok(none(A));
-  assert.ok(none(B));
-});
-
-test('R-30: nor by a later open in another ended run', () => {
-  run(A, true); run(B, true);
-  openRow(A, iso(t + 10000));
-  assert.equal(open(B).status, 0);
-  relay(['answer'], payload);
-  assert.ok(none(A));
-  assert.ok(none(B));
-});
-
-test('R-31: restarting an ended run does not let its old form take a pick that also fits another run', () => {
+test('restarting an ended run does not let its old form take a pick that also fits another run', () => {
   run(A, true); run(B, false);
   openRow(A, iso(t - 1000));
-  assert.equal(open(B).status, 0);
+  assert.notEqual(open(B).status, 0);
+  openRow(B, iso(t + 10000));
   fs.appendFileSync(path.join(dirOf(A), 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(t + 20000), ev: 'start' })}\n`);
   relay(['answer'], payload);
   assert.ok(none(A));

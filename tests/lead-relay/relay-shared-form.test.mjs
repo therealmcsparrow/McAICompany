@@ -35,7 +35,7 @@ const qfile = (name, q) => {
 };
 const formsB = () => path.join(dirOf(B), 'forms.jsonl');
 
-test('the same questions open in another run are refused by open and again; allowed once that run ends', () => {
+test('the same questions open in another run are refused by open and again, also after that run ends', () => {
   setup(A, 13 * 3600000);
   setup(B, 60000);
   const same = qfile('same.json', 'Ship it?');
@@ -63,10 +63,11 @@ test('the same questions open in another run are refused by open and again; allo
   assert.ok((again.stdout + again.stderr).includes(`refused: same questions open in run ${A}`), again.stdout + again.stderr);
   fs.rmSync(formsB());
 
-  // (4) run A ended: B may open the same questions
+  // (4) run A ended with its form still open: the form still counts toward the answer, so B stays refused
   fs.appendFileSync(path.join(dirOf(A), 'run-state.jsonl'), `${JSON.stringify({ v: 1, at: iso(Date.now()), ev: 'end', outcome: 'abort' })}\n`);
   const last = relay(['open', B, 'ask', same]);
-  assert.equal(last.status, 0, last.stdout + last.stderr);
+  assert.equal(last.status, 1, last.stdout + last.stderr);
+  assert.ok((last.stdout + last.stderr).includes(`refused: same questions open in run ${A}`), last.stdout + last.stderr);
 });
 
 test('a Gate form open in run A refuses the same-text ask form in run B, by open and again', () => {

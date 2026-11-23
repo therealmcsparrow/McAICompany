@@ -161,28 +161,22 @@ export function confined(root, file, io = { fs, path, realpath: fs.realpathSync.
 const AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 // An ended run takes an answer only for a form opened at or after its end (same second counts); a live run takes any open form.
 const eligible = (form, view) => view.state !== 'ended' || (typeof form.at === 'string' && AT_RE.test(form.at) && typeof view.ended === 'string' && form.at >= view.ended);
-// Total order of ended matches: newest `at`, then slug byte order.
-const ranksAbove = (a, b) => a.at > b.at || (a.at === b.at && a.slug > b.slug);
 
-// An open form with the same questions in another run that would take the answer instead: any live run; an ended run only when
-// both runs ended, its form is eligible and it ranks above this form.
-function refuseSharedForm(root, slug, questions, at) {
+// An open form with the same questions in another run: `answer` counts every one (any run state), so a twin it would drop is
+// never allowed, whatever this run's state.
+function refuseSharedForm(root, slug, questions) {
   // Same comparison `answer` uses (sameQuestions): a Gate option's `result` is not compared.
   const want = questions.map((q) => ({ question: q.q, header: q.header, multiSelect: q.multi, options: q.options.map((o) => ({ label: o.label, description: o.description })) }));
-  let mine = null;
-  try { mine = show(root, slug).state; } catch { /* unknown state: only live runs are compared */ }
   for (const other of runSlugs(root, { max: MAX_RUNS }).slugs) {
     if (other === slug) continue;
     try {
       const view = show(root, other);
       const st = view.state;
-      const live = st === 'running' || st === 'stale';
-      if (!live && !(st === 'ended' && mine === 'ended')) continue;
+      if (st !== 'running' && st !== 'stale' && st !== 'ended') continue;
       const dir = workDir(root, other);
       if (!dir) continue;
       for (const r of openForms(loadRows(path.join(dir, FORMS)))) {
-        if (!sameQuestions(r.questions, want)) continue;
-        if (live || (eligible(r, view) && ranksAbove({ at: r.at, slug: other }, { at, slug }))) refuse(`same questions open in run ${other}`);
+        if (sameQuestions(r.questions, want)) refuse(`same questions open in run ${other}`);
       }
     } catch (e) { if (e instanceof Refusal) throw e; /* a broken run is skipped */ }
   }
@@ -201,7 +195,7 @@ function cmdOpen(root, [slug, kind, file, ...more]) {
   const open = openForms(rows);
   if (open.length) refuse(`open form ${open[0].id}`);
   const at = iso(Date.now());
-  refuseSharedForm(root, slug, questions, at);
+  refuseSharedForm(root, slug, questions);
   const used = new Set(rows.map((r) => r.id));
   let n = 1;
   while (n < 100 && used.has(`f${String(n).padStart(2, '0')}`)) n++;
@@ -222,7 +216,7 @@ function cmdAgain(root, [slug, id, ...more]) {
   if (!row) refuse('no open form with that id');
   const view = show(root, slug);
   if (view.state === 'ended' && !eligible(row, view)) refuse('form opened before the run ended');
-  refuseSharedForm(root, slug, row.questions, row.at);
+  refuseSharedForm(root, slug, row.questions);
   return statusBlock(slug, lastHandoff(root, slug), row);
 }
 
@@ -296,10 +290,10 @@ export function answer(text, root = process.cwd()) {
       if (open.length === 1 && sameQuestions(open[0].questions, p.tool_input.questions)) (st === 'ended' ? ended : live).push({ file, form: open[0], slug, view });
     } catch { /* a broken run is skipped */ }
   }
-  // Fail closed: records only when exactly one run holds a form that can take the answer (a live run's open form, or an ended
-  // run's form opened at or after its end). Eligible matches in more than one run, or an ambiguous live run, record nothing.
-  const cands = [...live, ...ended.filter((e) => eligible(e.form, e.view))];
-  const hit = !liveAmbiguous && !(endedAmbiguous && !live.length) && cands.length === 1 ? cands[0] : null;
+  // Fail closed: every matching open form of any run counts. Records only when exactly one exists and it can take the answer
+  // (a live run's form, or an ended run's form opened at or after its end). An ambiguous live run records nothing.
+  const cands = [...live, ...ended];
+  const hit = !liveAmbiguous && !(endedAmbiguous && !live.length) && cands.length === 1 && eligible(cands[0].form, cands[0].view) ? cands[0] : null;
   if (!hit) return;
   const answers = mapAnswers(hit.form.questions, p.tool_response.answers);
   if (!answers) return;
