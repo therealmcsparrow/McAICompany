@@ -481,12 +481,12 @@ describe('lead-handoff v3.1 CLI root in a linked worktree', () => {
     assert.match(r.stdout, /^handovers 0\n/);
   });
 
-  test('a main .company/work that is a link falls back to the worktree cwd', () => {
+  test('a main .company/work that is a link falls back to the worktree cwd', (ctx) => {
     const fx = fixture();
     const wt = linked(fx);
     const real = path.join(fx.base, 'elsewhere');
     fs.renameSync(fx.work, real);
-    try { fs.symlinkSync(real, fx.work, 'junction'); } catch { return; } // links not creatable here
+    try { fs.symlinkSync(real, fx.work, 'junction'); } catch { ctx.skip('links not creatable here'); return; }
     // The linked target still holds the run; reading through cwd must give the worktree's own folder.
     fs.rmSync(path.join(wt, '.company', 'work', ID, '01-feature'), { recursive: true, force: true });
     const r = runIn(wt, SLUG);

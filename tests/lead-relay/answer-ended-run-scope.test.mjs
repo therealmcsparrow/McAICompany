@@ -28,9 +28,9 @@ const payloadFor = (qs, label) => JSON.stringify({
 const payload = payloadFor(questions, 'Build on branch');
 
 let root;
-let t;
+let t; // run start time: set once per test by the first run() call
 const relay = (args, input) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, env, encoding: 'utf8', timeout: 20000, input });
-beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-scope-')); roots.push(root); fs.writeFileSync(path.join(root, 'q.json'), JSON.stringify(questions)); });
+beforeEach(() => { t = undefined; root =fs.mkdtempSync(path.join(os.tmpdir(), 'relay-scope-')); roots.push(root); fs.writeFileSync(path.join(root, 'q.json'), JSON.stringify(questions)); });
 
 const dirOf = (slug) => path.join(root, '.company', 'work', ...slug.split('/'));
 // Run started at t, ended at t+1000 (outcome param), or left running.
@@ -38,7 +38,7 @@ function run(slug, ended, outcome = 'ship') {
   const dir = dirOf(slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(root, '.company', 'work', slug.split('/')[0], '00-project.md'), 'Demo\n');
-  t = Math.floor((Date.now() - 600000) / 1000) * 1000;
+  t ??= Math.floor((Date.now() - 600000) / 1000) * 1000;
   const rows = ended ? [{ ev: 'start' }, { ev: 'end', outcome }] : [{ ev: 'start' }];
   fs.writeFileSync(path.join(dir, 'run-state.jsonl'), rows.map((r, i) => JSON.stringify({ v: 1, at: iso(t + i * 1000), ...r })).join('\n') + '\n');
 }

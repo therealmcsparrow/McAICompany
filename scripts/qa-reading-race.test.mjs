@@ -185,7 +185,7 @@ test('a folder at the lock name costs no wait and measure still records', () => 
     fs.mkdirSync(fx.lock);
     const t0 = Date.now();
     measure(stopBody(transcript(fx, 70000)), opts);
-    assert.ok(Date.now() - t0 < 100, 'no lock wait');
+    assert.ok(Date.now() - t0 < 400, 'no lock wait (a held lock costs at least 400 ms)');
     assert.equal(reading(fx).peak, 70000);
     assert.equal(fs.statSync(fx.lock).isDirectory(), true, 'the folder is left alone');
     measure(stopBody(transcript(fx, 80000)), opts);
@@ -203,7 +203,7 @@ test('a link at the lock name costs no wait and measure still records', () => {
     fs.symlinkSync(target, fx.lock, 'junction');
     const t0 = Date.now();
     measure(stopBody(transcript(fx, 70000)), opts);
-    assert.ok(Date.now() - t0 < 100, 'no lock wait');
+    assert.ok(Date.now() - t0 < 400, 'no lock wait (a held lock costs at least 400 ms)');
     assert.equal(reading(fx).peak, 70000);
     assert.equal(fs.lstatSync(fx.lock).isSymbolicLink(), true, 'the link is left alone');
     assert.deepEqual(fs.readdirSync(target), []);
