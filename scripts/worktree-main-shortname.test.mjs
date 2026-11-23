@@ -7,15 +7,72 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { worktreeMain } from '../hooks/lib/worktree-main.mjs';
+import { mainRoot } from '../hooks/lib/cap-effects.mjs';
 
-test('worktreeMain refuses a gitdir that is UNC or device-prefixed', () => {
+// A complete fake linked worktree; `gitdirText` is what the pointer file says, `back`/`common` the links.
+function fakeTree(base, { gitdirText, back, common } = {}) {
+  const main0 = fs.mkdtempSync(path.join(base, 'm-'));
+  const wt = fs.mkdtempSync(path.join(base, 'w-'));
+  const gitdir = path.join(main0, '.git', 'worktrees', 'wt');
+  fs.mkdirSync(gitdir, { recursive: true });
+  fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${gitdirText ? gitdirText(gitdir) : gitdir}\n`);
+  fs.writeFileSync(path.join(gitdir, 'gitdir'), `${back ?? path.join(wt, '.git')}\n`);
+  fs.writeFileSync(path.join(gitdir, 'commondir'), `${common ?? '../..'}\n`);
+  return { main0, wt, gitdir };
+}
+
+test('worktreeMain confirms a well-formed fake tree (control)', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ok-'));
+  try {
+    const { main0, wt } = fakeTree(base);
+    assert.equal(fs.realpathSync.native(worktreeMain(wt)), fs.realpathSync.native(main0));
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('worktreeMain refuses a gitdir that is UNC or device-prefixed, without touching it', { skip: process.platform !== 'win32' && 'Windows only' }, () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-unc-'));
   try {
-    for (const bad of ['\\\\host\\share\\main\\.git\\worktrees\\wt', '\\\\?\\C:\\main\\.git\\worktrees\\wt', '\\\\.\\C:\\main\\.git\\worktrees\\wt', '//host/share/main/.git/worktrees/wt']) {
+    // Valid tree, correct back link and commondir: only the REMOTE guard can make these null.
+    const forms = [
+      (g) => `\\\\?\\${g}`,
+      (g) => `\\\\.\\${g}`,
+      (g) => `//?/${g.replace(/\\/g, '/')}`,
+    ];
+    for (const gitdirText of forms) {
+      const { wt, gitdir } = fakeTree(base, { gitdirText });
+      const seen = [];
+      const orig = fs.lstatSync;
+      fs.lstatSync = (p, ...r) => { seen.push(String(p)); return orig(p, ...r); };
+      try { assert.equal(worktreeMain(wt), null, gitdirText(gitdir)); } finally { fs.lstatSync = orig; }
+      assert.deepEqual(seen.filter((p) => /^[\\/]{2}/.test(p)), [], 'fs touched a UNC/device path');
+    }
+    for (const bad of ['\\\\host\\share\\main\\.git\\worktrees\\wt', '//host/share/main/.git/worktrees/wt']) {
       const wt = fs.mkdtempSync(path.join(base, 'w-'));
       fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${bad}\n`);
       assert.equal(worktreeMain(wt), null, bad);
     }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('worktreeMain refuses when the back link or commondir cannot be resolved', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-null-'));
+  try {
+    for (const opt of [{ back: 'x\u0000y' }, { common: 'x\u0000y' }, { back: 'x\u0000y', common: 'x\u0000y' }, { back: 'elsewhere/.git' }]) {
+      const { wt } = fakeTree(base, opt);
+      assert.equal(worktreeMain(wt), null, JSON.stringify(opt));
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('mainRoot follows a confirmed pointer but not a UNC/device gitdir', { skip: process.platform !== 'win32' && 'Windows only' }, () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-root-'));
+  try {
+    const ok = fakeTree(base);
+    fs.mkdirSync(path.join(ok.main0, '.company', 'work'), { recursive: true });
+    assert.equal(fs.realpathSync.native(mainRoot(ok.wt)), fs.realpathSync.native(ok.main0));
+    const dev = fakeTree(base, { gitdirText: (g) => `\\\\?\\${g}` });
+    fs.mkdirSync(path.join(dev.main0, '.company', 'work'), { recursive: true });
+    assert.equal(mainRoot(dev.wt), dev.wt);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 

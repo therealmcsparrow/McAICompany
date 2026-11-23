@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importPinned } from './dep-pins.mjs';
+import { worktreeMain } from './worktree-main.mjs';
 
 export const GUARD_RECORD = 'guard.jsonl';
 const MAX_LINES = 1000;
@@ -32,21 +33,10 @@ function readSmall(file) {
 
 // The tree that holds .company: a worktree's cwd keeps none, so follow its .git pointer (confirmed from both sides).
 export function mainRoot(cwd) {
-  const g = path.join(cwd, '.git');
-  const l = lstatOrNull(g);
+  const l = lstatOrNull(path.join(cwd, '.git'));
   if (!l || !l.isFile()) return cwd;
-  const text = readSmall(g);
-  const m = text === null ? null : /^gitdir: (.+?)\r?\n?$/.exec(text);
-  if (!m) return cwd;
-  const gitdir = path.resolve(cwd, m[1]);
-  const wt = path.dirname(gitdir);
-  if (path.basename(wt) !== 'worktrees' || path.basename(path.dirname(wt)) !== '.git') return cwd;
-  const main = path.dirname(path.dirname(wt));
-  const back = readSmall(path.join(gitdir, 'gitdir'));
-  const common = readSmall(path.join(gitdir, 'commondir'));
-  if (back === null || common === null) return cwd;
-  if (path.resolve(gitdir, back.trim()) !== path.resolve(g)) return cwd;
-  if (path.resolve(gitdir, common.trim()) !== path.join(main, '.git')) return cwd;
+  const main = worktreeMain(cwd);
+  if (main === null) return cwd;
   const w = lstatOrNull(path.join(main, '.company', 'work'));
   return w && w.isDirectory() && !w.isSymbolicLink() ? main : cwd;
 }

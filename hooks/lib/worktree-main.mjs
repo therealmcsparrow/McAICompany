@@ -55,8 +55,13 @@ export function worktreeMain(cwd) {
       const common = readSmall(path.join(gitdir, 'commondir'));
       if (back === null || common === null) return null;
       if (REMOTE.test(back.trim()) || REMOTE.test(common.trim())) return null;
-      if (realOf(path.resolve(gitdir, back.trim())) !== realOf(g)) return null;
-      if (realOf(path.resolve(gitdir, common.trim())) !== realOf(path.join(main, '.git'))) return null;
+      // realOf is null on failure: refuse on null so two failures never compare equal.
+      const backReal = realOf(path.resolve(gitdir, back.trim()));
+      const gReal = realOf(g);
+      if (backReal === null || gReal === null || backReal !== gReal) return null;
+      const commonReal = realOf(path.resolve(gitdir, common.trim()));
+      const mainGit = realOf(path.join(main, '.git'));
+      if (commonReal === null || mainGit === null || commonReal !== mainGit) return null;
       return main;
     }
     if (path.dirname(cur) === cur) return null;
