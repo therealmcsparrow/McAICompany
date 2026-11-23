@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-23
+
+Rollback: node scripts/stable.mjs 0.44.3
+
 ### Added
 - **`step-close`.** One command closes a Step: lint the Handoff, check scope, commit the Handoff and its `files-touched`, record cost, mark the plan task done, sync the tier set and print the next Step. It replaces six to nine separate Lead calls. Contract: `step-close` v1.0 (new).
 - **`ship-check`.** One command runs every pre-Ship check (clean branch, contests, rule drift, cost, review loop, tier and owed Steps, Lead peak, worktrees) and prints one line each. Any `block` stops the Ship Gate. Contract: `ship-check` v1.0 (new).
@@ -22,6 +26,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 - **The pilot format.** No top block, findings rows or findings ledger; `review-loop mark` and `churn` are gone.
 - **The `model-floor` guard.** Three guards remain: `cap`, `dotenv`, `self-protect`. The floor stays in the dispatch rule; no hook re-checks it.
 - **The browser screenshot saver (`efficient-browser-use`).** Contracts: `mod-manifest` v1.2.
+
+### Fixed
+- **The Lead polls for the Output file and never waits on a notice.** A lost agent notice used to stall a run. The Lead now polls the Step's Output file in calls under 150 s; a Step that never writes one ends the run as blocked with a clear lost-Step exit. The pipeline contracts and Lead tests follow.
 
 ## [0.44.3] - 2026-11-19
 
