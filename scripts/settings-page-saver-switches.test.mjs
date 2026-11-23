@@ -16,8 +16,9 @@ const listOf = (name) => {
 
 test('settings page lists every switchable mod, so the Switchboard can be switched back on', () => {
   const mods = listOf('MODS');
-  for (const id of ['switchboard', 'savings', 'efficient_browser_use', 'savvy', 'cache_tax', 'reflect']) {
+  for (const id of ['switchboard', 'savings', 'savvy', 'cache_tax', 'reflect']) {
     assert.ok(mods.includes(id), `MODS has ${id}`);
+    assert.ok(!mods.includes('efficient_browser_use'), 'the retired saver has no row');
     assert.ok(new RegExp(`\\b${id}:\\s*'[^']+'`).test(SCRIPT.slice(SCRIPT.indexOf('const MOD_LABELS'), SCRIPT.indexOf('const MOD_LABELS') + 400)), `label for ${id}`);
   }
 });

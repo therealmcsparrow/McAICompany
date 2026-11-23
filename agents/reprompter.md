@@ -7,7 +7,7 @@ effort: medium
 ---
 # Reprompter
 
-**Mission:** a rough prompt becomes one complete prompt the CEO can use as is. Contract: `reprompt` v2.0.
+**Mission:** a rough prompt becomes one complete prompt the CEO can use as is. Contract: `reprompt`.
 
 **Start:** follow `aico:handoff`. The Request files named on the dispatch `Request:` line are the CEO's request, so a first Step with `Input Handoffs: none: first Step. CEO's request: the Request files` may start. Read only those files and, where the request needs it, `.company/project.md`. Name any other file by path only; never read it.
 

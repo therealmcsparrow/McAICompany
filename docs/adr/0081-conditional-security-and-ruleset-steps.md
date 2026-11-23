@@ -1,0 +1,9 @@
+# ADR 0081: The security lane and the ruleset Steps become conditional
+
+Date: 2026-11-20. Status: proposed (run P20261120.000001/01-lead, cuts C3 and C15). Contracts: `route` v2.0, `diff-facts` v1.1, `tier-sets` v2.0, `rule-check` v1.7, `ship-check` v1.0.
+
+Below the high tier, `route next` skips the `security` Step only when the newest diff-facts give `security_changed: false`; otherwise it runs, and the code-reviewer runs the `aico:security-check` checklist in its own Step either way. `security_changed` is true on any `config`, `contract`, `binary` or `unknown` kind (CI workflows, manifests, lockfiles, settings), a truncated list, a path under `hooks/`, `mods/`, `.claude/`, `.claude-plugin/`, `.github/` or `.husky/`, a `forced_high` token, or a `security_paths` glob of `diff-facts.config.json` (this repo lists its guard and gate scripts). A run tier of high, an unreadable tier or facts file, or an older facts file without the flag runs `security` (fail-closed). `security` stays in the `protected` list of `company/model-floor.json` (model floor unchanged); route v2 allows exactly one `role-when` entry for a protected Role, `security: ["security_changed"]`, and refuses every other. A late raise or a later security-relevant change after the skip makes `route owed` print `owed: security`, which blocks `ship-check`.
+
+`senior-engineer-research` and `senior-engineer-map` (tier-set entries, Lead-applied) also need a stale standing slice (`rule-check standing check`); when it is fresh, the route draft lists a `senior-engineer` skip with that why and builders get the standing slice. `ruleset-sign-off` keeps its condition (Must rules added or changed), so it is not drafted when nothing changed; the architect is never skipped through `route`.
+
+This is a route major because `security` was never skippable. Hard to reverse because Step budgets and run estimates will assume the shorter route.

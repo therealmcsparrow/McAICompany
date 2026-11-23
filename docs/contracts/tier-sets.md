@@ -1,7 +1,8 @@
-# Contract: tier-sets v1.8
+# Contract: tier-sets v2.0
 
 Provider: `scripts/tier-set.mjs` (data file loader, tier and path decision, forced-high path check, run record writer and reader; Node built-ins only) and the plugin data file `company/tier-sets.json`. Writer of the record: the Lead (`aico:pipeline` through `skills/pipeline/references/tier-path.md`), only through the CLI, only for `aico:feature` and `aico:fix` runs. Consumers: the Lead (which Roles and lanes to dispatch, the `Risk tier:` of each later dispatch, the Gate summary lines), and `scripts/ledger.mjs` `ship` through the exported `readTierPath` (`token-ledger` v1.4).
 Uses: `run-state` v1.3 `show(root, slug)` (the view's `tier`, read only), `plan-tasks` v1 exports `parsePlan` and `normalizePath` and its plan file name rule, `aico-settings` v1.8 `pipeline.short_path` (passed in by the caller as `--short`; the script reads no settings), `run-state` v1.4 `triage check --route fix` (only through the caller's `--triage` value), `git` (object format and base resolution at `begin`; object format, the base check, Core and the diff at `sync`), run as the "Git" paragraph below says (v1.1; `rule-check` v1.1 and `review-depth` v1.1 run their git the same way).
+v2.0 (task P20261120.000001, T15; major: `docs/adr/0007-contract-minor-versions.md`): (1) a path under `docs/contracts/` forces high only on a **major** Contract change: the `# Contract: <name> v<major>.<minor>` header line at the head has another major than at the base. A new Contract file (absent at the base) and an edit with the same major (a minor bump or a body edit) are no hit and print `none forced high`. A deleted file, an unreadable header on either side, a non-`.md` file under the folder, or any failing read or git call is a hit (`check: high: contract <path>`, fail closed). The rule applies to `--diff` only; a `--plan` path under `docs/contracts/` cannot be classified before it is built and stays a hit. (2) The `second-reviewer` entry is removed from the route, every set and the data file. (3) The medium set drops `senior-engineer-compliance` (feature); high equals the route; the data file `rev` is 3. (4) `begin` records `skip` for a medium start too (the route entries not in the medium set), so a later raise to high prints `add before ship: senior-engineer-compliance`. (5) New record event `ran` and command `ran <slug> <entry>`: it clears one entry from `add before ship:` once that Role has run. (6) Research/map conditions: `senior-engineer-research` is also due when the standing slice is stale (`rule-check` v1.7 `standing check` does not print `fresh`), `senior-engineer-map` otherwise.
 v1.8 (task P20261109.000009, T27; additive, `docs/adr/0007-contract-minor-versions.md`): the slug (`--run` for `rule-check` and `review-depth`) is accepted with `isRunSlug` (`work-folder-name` v3.0), so a v3 run slug `<ProjectID>/<NN>-<playbook>` is valid. Its folder is `exactWorkPath(io, root, workParts(slug))` and the record is `.company/work/<ID>/<NN>-<playbook>/tier-path.jsonl` for a v3 slug. The run ref is `refs/heads/aico/` plus `branchId(<slug>)`, so a v3 run reads `refs/heads/aico/<ProjectID>`, never the slug with a `/`. Every git clause, refusal and exit code is unchanged. A v2, v1.1 or legacy name gives byte-identical output to v1.7.
 v1.7 is additive (task Project Id Naming, T10; `docs/adr/0007-contract-minor-versions.md`): the slug may be a v2 run name; the run ref is `refs/heads/aico/` plus `branchId(<slug>)` checked by `isBranchId` (`work-folder-name` v2.0), so a v2 run reads `refs/heads/aico/<ProjectID>`. `--plan` calls `parsePlan(text, { slug })` (`plan-tasks` v1.8): only that project's ticket IDs head a task. Sets, tiers and the data file are unchanged.
 v1.6 is additive (task role-skills-file, T1): the `design-researcher` condition reads Role selections (`skill-catalog` v1, `aico-settings` v1.12), not `## Design skills`, since that section is no longer read at run time (`design-skills-section` v2.0). The 180 days are unchanged. Sets, tiers and the data file are unchanged.
@@ -25,16 +26,16 @@ Rationale: `docs/adr/0034-tier-sets-data-file.md`. Amended in Fix round 1 of tas
 Plugin file, shipped with the plugin; a project cannot change it (Brief Gate Q3; `aico-settings` v1.8 can only switch the short path off). At most 16 KiB, UTF-8, a regular file and not a link (`lstat`). Exactly these keys:
 
 ```json
-{ "v": 1, "rev": 2,
+{ "v": 1, "rev": 3,
   "playbooks": {
     "feature": {
       "low": ["product-manager", "prototype", "design-researcher", "architect", "ui-ux-designer", "brand-artist", "spikes", "senior-engineer-map", "ruleset-sign-off", "builders", "asset-artists", "code-reviewer", "qa", "legal", "accessibility-tester", "writer", "destination-spec", "localizer", "devops"],
-      "medium": ["<the 26 feature route entries, route order>"],
-      "high": ["<the 26 feature route entries, route order>"] },
+      "medium": ["<the 24 feature route entries without senior-engineer-compliance, route order>"],
+      "high": ["<the 25 feature route entries, route order>"] },
     "fix": {
       "low": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "devops"],
-      "medium": ["qa-reproduce", "owning-engineer", "code-reviewer", "second-reviewer", "qa-rerun", "security", "devops"],
-      "high": ["qa-reproduce", "owning-engineer", "code-reviewer", "second-reviewer", "qa-rerun", "security", "devops"] } },
+      "medium": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "security", "devops"],
+      "high": ["qa-reproduce", "owning-engineer", "code-reviewer", "qa-rerun", "security", "devops"] } },
   "forced_high": ["<tokens, below>"] }
 ```
 The shipped file writes the medium and high lists out in full (no placeholders). `rev` is the version key the ledger stores: an integer 1-999, raised by one for every change to the file (a tune is a data-file change and a new `rev`).
@@ -50,17 +51,16 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 | feature | `brand-artist` | 2 | `## Art direction` empty or new Assets needed | |
 | feature | `spikes` | 2a | the Architect listed Spikes | |
 | feature | `persona-tester` | 2b | UI work and `lanes.persona` on | |
-| feature | `senior-engineer-research` | 2c | a pack missing, stale or new | |
+| feature | `senior-engineer-research` | 2c | a pack missing, stale or new, or the standing slice stale (v2.0) | |
 | feature | `senior-engineer-map` | 2c | otherwise | |
 | feature | `ruleset-sign-off` | 2d | Must rules added or changed | |
 | feature | `plan-review` | 2e | the architect ran and `plan-review` `majors` finds a Contract major (v1.5); after `ruleset-sign-off` (v1.2) | |
 | feature | `builders` | 3 | always | yes |
 | feature | `asset-artists` | 3b | the build needs Assets | |
 | feature | `code-reviewer` | 4 | always | yes |
-| feature | `second-reviewer` | 4 | run tier `high` and `pipeline.second_reviewer` `on`; after `code-reviewer` (v1.2) | |
 | feature | `qa` | 4 | always | yes |
 | feature | `security` | 4 | `lanes.security` on | |
-| feature | `senior-engineer-compliance` | 4 | `lanes.compliance` on | |
+| feature | `senior-engineer-compliance` | 4 | `lanes.compliance` on; in the high set only (v2.0) | |
 | feature | `legal` | 4 | `lanes.legal` on, or `auto` and AI, payments or personal data | yes |
 | feature | `hands-on-tester` | 4 | UI work and `lanes.hands_on` on | |
 | feature | `accessibility-tester` | 4 | UI work and `lanes.accessibility` on | yes |
@@ -71,12 +71,11 @@ The shipped file writes the medium and high lists out in full (no placeholders).
 | fix | `qa-reproduce` | 1 | always | yes |
 | fix | `owning-engineer` | 2 | always | yes |
 | fix | `code-reviewer` | 3 | always | yes |
-| fix | `second-reviewer` | 3 | run tier `high` and `pipeline.second_reviewer` `on`; after `code-reviewer` (v1.2) | |
 | fix | `qa-rerun` | 3 | always | yes |
 | fix | `security` | 3 | touches auth, input handling or data, and `lanes.security` on | |
 | fix | `devops` | 4 | a release is needed | |
 
-Low sets (v1.2): `plan-review` and `second-reviewer` are in no low set (feature or fix); `prototype` and `destination-spec` are in every feature set, the low one included, because each is gated by its condition or required at ship, and in no fix set. Medium and high equal the route.
+Low sets (v1.2): `plan-review` is in no low set (feature or fix); `prototype` and `destination-spec` are in every feature set, the low one included, because each is gated by its condition or required at ship, and in no fix set. High equals the route. Medium equals the route without `senior-engineer-compliance` (v2.0).
 Gates, the Core/Contract Plan Gate exception of fix, the test per AC, the fix regression test, the full suite before the Ship Gate, the rule-check pre-filter and handoff-lint are not entries: no data file can touch them.
 `senior-engineer-map` when `senior-engineer-research` is due but not in the set: the Senior Engineer runs map and writes one `## Debt` line per missing, stale or new pack (`tier-path.md` step 7).
 `legal` and `accessibility-tester` are required by the Architect beyond AC2 (EU law: GDPR/AI Act advice and EAA/EN 301 549 stay at every tier).
@@ -86,12 +85,12 @@ Gates, the Core/Contract Plan Gate exception of fix, the test per AC, the fix re
 
 ### Validation (`loadTierSets(pluginRoot)` → `{ ok, rev, sets, forced_high, reason }`)
 First failing rule wins; the reason goes into the one refused line. `<x>` is echoed only when it matches `^[a-z0-9-]{1,40}$`, else `?`.
-`missing` · `unreadable` (not a regular file, a link, a read error, not UTF-8) · `too large` · `invalid json` · `shape` (top-level keys not exactly `v`, `rev`, `playbooks`, `forced_high`; `v` not `1`; `rev` not an integer 1-999) · `unknown playbook <x>` (a `playbooks` key other than `feature` and `fix`) · `missing playbook <x>` · `unknown tier <x>` / `missing tier <pb> <x>` (tier keys exactly `low`, `medium`, `high`) · `<pb> <tier> not a list` · `unknown entry <x>` (not in `ROUTE_V018[<pb>]`) · `<pb> <tier> order` (a duplicate, or not in route order) · `<pb> <tier> lacks <entry>` (a required entry) · `<pb> <tier> differs from the v0.18 route` (medium or high not equal to `ROUTE_V018[<pb>]`) · `forced_high` (not an array of 1-200 unique strings matching `^[a-z0-9]{2,32}$`) · `forced_high lacks <x>` (the first `FORCED_HIGH_V1` token, in v1 order, that the array lacks).
+`missing` · `unreadable` (not a regular file, a link, a read error, not UTF-8) · `too large` · `invalid json` · `shape` (top-level keys not exactly `v`, `rev`, `playbooks`, `forced_high`; `v` not `1`; `rev` not an integer 1-999) · `unknown playbook <x>` (a `playbooks` key other than `feature` and `fix`) · `missing playbook <x>` · `unknown tier <x>` / `missing tier <pb> <x>` (tier keys exactly `low`, `medium`, `high`) · `<pb> <tier> not a list` · `unknown entry <x>` (not in `ROUTE_V018[<pb>]`) · `<pb> <tier> order` (a duplicate, or not in route order) · `<pb> <tier> lacks <entry>` (a required entry) · `<pb> <tier> differs from the v2.0 route` (high not equal to `ROUTE_V018[<pb>]`, or medium not equal to it minus the high-only entries) · `forced_high` (not an array of 1-200 unique strings matching `^[a-z0-9]{2,32}$`) · `forced_high lacks <x>` (the first `FORCED_HIGH_V1` token, in v1 order, that the array lacks).
 Refused → `sets` = `ROUTE_V018` for every tier of both Playbooks, `rev` = 0, `forced_high` = `FORCED_HIGH_V1`.
 
 ## Forced-high check
 Paths come from `--plan` (every task's `files:` items, `plan-tasks` v1 `parsePlan`) or `--diff` (git, below). Each path gets a **check key**: `\` → `/`, every segment loses trailing dots and spaces, lowercase, trailing `/` removed. Per path, first match wins:
-1. `contract`: the key starts with `docs/contracts/`.
+1. `contract`: the key starts with `docs/contracts/`. In a `--diff` it is a hit only on a major Contract change (v2.0, above).
 2. `core`: the key equals a Core key or starts with it followed by `/`. Core keys = the approved Core paths (below) plus the three governance files frozen in the script as `CORE_FIXED`: `.company/project.md`, `.company/settings.json`, `.company/standards.md`. `CORE_FIXED` holds even when `## Core` lists nothing.
 3. `pattern <token>`: the key does not start with `.company/`, and a **token** of any segment equals a `forced_high` token. Tokens of a segment = the union, in this order without repeats, of two splits of the original-case segment (trailing dots and spaces removed):
    - **A (word split):** insert a break between a lower-case letter or digit and a following upper-case letter (`([a-z0-9])([A-Z])`), lowercase, split on `[^a-z0-9]+`, drop empty parts.
@@ -119,17 +118,18 @@ Append-only (`O_APPEND`), LF; a line at most 512 bytes, the file at most 16 KiB 
 |---|---|---|
 | `v` | `1` | all |
 | `at` | UTC `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`, written by the script | all |
-| `ev` | `begin \| raise` | all |
+| `ev` | `begin \| raise \| ran` | all |
 | `pb` | `feature \| fix` | begin |
-| `tier` | `low \| medium \| high` (begin: the start tier; raise: the new tier) | all |
+| `tier` | `low \| medium \| high` (begin: the start tier; raise: the new tier) | begin, raise |
 | `path` | `short \| full` | begin |
 | `why` | `short \| refused \| tier \| setting \| ceo` | begin |
 | `rev` | integer 0-999 (0 when refused) | begin |
 | `base` | the resolved full commit id, `^[0-9a-f]{40}$` or `^[0-9a-f]{64}$` (the reader checks this shape only; `sync` never aims the check with it alone: it must be exactly the id the Lead's `--base` resolves to, above) | begin |
-| `skip` | array: the entries of `ROUTE_V018[pb]` not in the data-file set for (`pb`, start tier) at `begin`, route order, no repeats, none in `REQUIRED[pb]`; `[]` when `path` is `full` | begin |
+| `skip` | array: the entries of `ROUTE_V018[pb]` not in the data-file set for (`pb`, start tier) at `begin`, route order, no repeats, none in `REQUIRED[pb]`; `[]` when `path` is `full` and the start tier is not `medium` | begin |
 | `cause` | `step \| plan \| diff \| sets \| ceo` | raise |
+| `entry` | one entry of the begin `skip`, owed after a raise and not yet cleared | ran |
 
-Every key listed for an `ev` is required; every other key is refused. A first line that is not `begin`, a second `begin`, a `raise` whose tier is not above the current tier, a `base` of another length, or a `skip` that breaks its rule is a bad line.
+Every key listed for an `ev` is required; every other key is refused. A first line that is not `begin`, a second `begin`, a `raise` whose tier is not above the current tier, a `ran` before any raise, for an entry not in `skip` or already cleared, a `base` of another length, or a `skip` that breaks its rule is a bad line.
 
 ## Reader `readTierPath(root, slug)` (fail-loud; never loads the data file)
 - No file → `{ v: 1, slug, state: "none" }`.
@@ -138,7 +138,7 @@ Every key listed for an `ev` is required; every other key is refused. A first li
   - `tier` = the last `raise` tier, else the start tier. `raised` = true when any `raise` exists. `cause` = the first `raise` cause, else `null`.
   - `skipped` = the record's `skip`.
   - `set` = `ROUTE_V018[pb]` minus `skipped` when not raised; `ROUTE_V018[pb]` when raised (medium and high always equal the route, whatever the cause).
-  - `add` = `skipped` when raised, else empty. They never ran, so all of them run before the Ship Gate.
+  - `add` = `skipped` minus the entries of every `ran` line when raised, else empty. What is left never ran, so it runs before the Ship Gate.
 - A legacy second argument (`{ pluginRoot }`) is accepted and ignored.
 
 ## CLI `scripts/tier-set.mjs` (cwd = product root; `main(args, { now, root, pluginRoot, git })` exported; `git` injectable for tests)
@@ -151,6 +151,7 @@ Exit codes: **0** done (a refused data file included: it prints its refused line
 | `begin <slug> --playbook <pb> --triage <t> --short <on\|off> --base <sha> [--ceo <short\|full>]` | resolves `--base` to one full commit id of the repo's object format that is an ancestor of HEAD (git, above; refused → exit 3, no record), then appends `begin` with `skip` (trust rules 2-3; no `--ceo` → `full`, `ceo`); refused when a `begin` exists. Prints the status block |
 | `sync <slug> [--plan <plan>] [--diff] [--base <sha>]` | computes the run tier (trust rule 2, plus the check when asked, plus trust rule 4); appends one `raise` when it is above the recorded tier (cause, first that applies: `sets`, `diff`, `plan`, `step`); prints the status block, then the check lines. `--base` is the Lead's own base (trust rule 8) and is allowed only with `--plan` or `--diff`: with neither → exit 3 (usage); a value that is not a sha → exit 3 (`base must be a commit sha`); both checked before the record is read. `--plan` or `--diff` without `--base` is no refusal: the base check fails, so the check is unknown (high) and the `raise` is recorded. No record → `tier-path: none`, exit 0 |
 | `raise <slug> <medium\|high>` | only after a CEO form answer asks for it; appends `raise` with cause `ceo` when above the current tier, else changes nothing; prints the status block. Does not load the data file |
+| `ran <slug> <entry>` | records that an `add before ship:` entry has run (v2.0): appends `ran` and prints the status block. Refused (exit 3, `entry is not owed`) when the entry is not in `add` (not owed yet, not in the route, or already cleared), and with no record. Does not load the data file |
 | `read <slug>` | the reader view as JSON; broken record → the error line, exit 1 |
 
 **Status block** (stdout, in this order; the Lead pastes lines 2-4 into Gate summaries):

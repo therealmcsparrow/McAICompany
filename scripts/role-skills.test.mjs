@@ -634,3 +634,28 @@ test('role-skills.mjs holds no 0 byte', () => {
   const buf = fs.readFileSync(new URL('./role-skills.mjs', import.meta.url));
   assert.equal(buf.includes(0), false);
 });
+
+test('stamp: no file is changed, after write unchanged, after a catalog change changed', (t) => {
+  const p = project(t);
+  assert.equal(run(p, APPLY).code, 0);
+  assert.equal(run(p, ['stamp', 'check']).text, 'changed');
+  const w = run(p, ['stamp', 'write']);
+  assert.equal(w.code, 0, w.text);
+  assert.ok(fs.existsSync(path.join(p.cwd, '.company', 'role-skills-stamp.json')));
+  assert.equal(run(p, ['stamp', 'check']).text, 'unchanged');
+  // a catalog change
+  const cat = JSON.parse(fs.readFileSync(userFile(p), 'utf8'));
+  cat.entries.find((e) => e.skillname === 'stk-skill').license = 'Apache-2.0';
+  fs.writeFileSync(userFile(p), JSON.stringify(cat));
+  assert.equal(run(p, ['stamp', 'check']).text, 'changed');
+  run(p, ['stamp', 'write']);
+  assert.equal(run(p, ['stamp', 'check']).text, 'unchanged');
+});
+
+test('stamp: a garbage stamp reads changed, a bad argument is refused', (t) => {
+  const p = project(t);
+  fs.writeFileSync(path.join(p.cwd, '.company', 'role-skills-stamp.json'), 'not json');
+  assert.equal(run(p, ['stamp', 'check']).text, 'changed');
+  assert.equal(run(p, ['stamp']).code, 1);
+  assert.equal(run(p, ['stamp', 'now']).code, 1);
+});

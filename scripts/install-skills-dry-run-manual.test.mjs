@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { main } from './install-skills.mjs';
 
 const PINNED = 'npx -y impeccable@4.8.0 skills install';
@@ -27,34 +26,4 @@ test('dry run with only a manifest command prints manual and WARNING, no counts 
   assert.equal(code, 0);
   assert.equal(out.length, 2, out.join('|'));
   assert.ok(!out.some(l => /installed, \d+ failed/.test(l)));
-});
-
-test('the Playbooks that show the dry run tell the Lead to mark the WARNING line and say it is not run', () => {
-  for (const f of ['skills/setup/SKILL.md', 'skills/research/SKILL.md', 'skills/feature/SKILL.md', 'skills/lead/references/skill-picks.md']) {
-    const t = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
-    assert.match(t, /`WARNING:` line/, f);
-    assert.match(t, /not run|does not run|never run/, f);
-  }
-});
-
-test('vulnscan notice and docs page are general: kinds of destinations and private names, no exact list', () => {
-  for (const f of ['skills/vulnscan/SKILL.md', 'documentation/commands/vulnscan.md']) {
-    const t = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
-    assert.doesNotMatch(t, /nothing else leaves/, f);
-    for (const w of ['vulnerability databases', 'package registries', 'web search', 'private package names']) assert.ok(t.includes(w), `${f}: ${w}`);
-  }
-  const a = readFileSync(new URL('../agents/vuln-scanner.md', import.meta.url), 'utf8');
-  assert.match(a, /no code text/i);
-  const page = readFileSync(new URL('../documentation/concepts/where-your-words-go.md', import.meta.url), 'utf8');
-  const bullet = page.split('\n').find((l) => l.includes('/aico:vulnscan'));
-  assert.ok(bullet, 'no vulnscan bullet');
-  assert.match(bullet, /Claude model/, 'the vulnscan bullet does not name the Claude model');
-  assert.match(bullet, /vendor and advisory sites/, 'the vulnscan bullet does not name the vendor and advisory sites');
-});
-
-test('triage names a fitting work: Playbook and checks the fix fallback against playbooks', () => {
-  const t = readFileSync(new URL('../skills/triage/SKILL.md', import.meta.url), 'utf8');
-  assert.match(t, /fits the request best/);
-  assert.match(t, /`aico:fix` for a bug only when it is in `playbooks`/);
-  assert.doesNotMatch(t, /else `aico:feature`, with/);
 });

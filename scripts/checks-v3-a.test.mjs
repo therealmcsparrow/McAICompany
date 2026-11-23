@@ -35,32 +35,6 @@ const put = (root, rel, text) => {
 const slugDir = (root, slug) => path.join(root, '.company', 'work', ...slug.split('/'));
 const stamp = (root, slug, t) => fs.utimesSync(slugDir(root, slug), t, t);
 const read = (root, rel) => fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8');
-const head = (file, n = 5) => fs.readFileSync(path.join(PLUGIN, file), 'utf8').split('\n').slice(0, n).join('\n');
-
-// ---------- contract versions (each doc and its provider's cite flip together) ----------
-describe('contract versions and the Reader rule paragraph', () => {
-  const cases = [
-    ['cited-report', 'scripts/cited.mjs', '1.3'],
-    ['drift-report', 'scripts/drift-report.mjs', '1.3'],
-    ['slop-scan', 'scripts/slop-scan.mjs', '1.1'],
-    ['skillspector-scan', 'scripts/skillspector.mjs', '1.4'],
-  ];
-  for (const [name, script, v] of cases) {
-    test(`${name} doc header is v${v}`, () => {
-      assert.match(head(`docs/contracts/${name}.md`, 1), new RegExp(`^# Contract: ${name} v${v.replace('.', '\\.')}$`));
-    });
-    test(`${script} cites ${name} v${v} in its first lines`, () => {
-      assert.match(head(script), new RegExp(`docs/contracts/${name}\\.md v${v.replace('.', '\\.')}(?![0-9])`));
-    });
-    test(`${name} doc has a v${v} paragraph saying v2, v1.1 and legacy output is byte-identical`, () => {
-      const text = fs.readFileSync(path.join(PLUGIN, 'docs', 'contracts', `${name}.md`), 'utf8');
-      const para = text.split(/\n\n/).find((p) => p.startsWith(`v${v} `) || p.startsWith(`v${v}:`) || p.startsWith(`v${v} (`));
-      assert.ok(para, `no paragraph starting v${v}`);
-      assert.match(para, /byte-identical/);
-      assert.match(para, /<ProjectID>\/<NN>-<playbook>|v3/);
-    });
-  }
-});
 
 // ---------- cited-report ----------
 describe('cited-report on v3 runs', () => {

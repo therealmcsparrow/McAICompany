@@ -429,11 +429,3 @@ test('source: lf reads no numstat and the binary type list is one frozen table',
   assert.match(rule, /export const BINARY_TYPES = Object\.freeze\(/);
   assert.equal([...rule.matchAll(/BINARY_TYPES = /g)].length, 1);
 });
-
-test('source: no Role or pipeline text puts a <path> placeholder into a command', () => {
-  for (const file of ['agents/code-reviewer.md', 'agents/security.md', 'agents/senior-engineer.md', 'skills/pipeline/SKILL.md', 'skills/review/SKILL.md']) {
-    for (const line of read(file).split('\n')) {
-      if (/rule-check\.mjs|review-depth\.mjs|git diff|--text|git (?:-c \S+ )*status|git push/.test(line)) assert.doesNotMatch(line, /<paths?>/, `${file}: ${line.slice(0, 80)}`);
-    }
-  }
-});

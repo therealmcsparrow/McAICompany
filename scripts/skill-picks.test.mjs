@@ -766,10 +766,3 @@ test('lint: a command line beside an unreadable baseline refuses, exit 2, and yi
   assert.equal(r.stdout.trim(), 'refused: baseline catalog unreadable');
   assert.ok(!r.stdout.includes('"picks"'));
 });
-
-// ---------- a name the Role's agent text also loads loads once ----------
-test('the once rule for a name on Role skills: and in the agent text is written in the handoff skill and the dispatch prompt contract', () => {
-  const once = /A name (?:the Role's|your) agent text also loads \(`aico:ui-design`\) loads once/;
-  assert.match(readFileSync(join(root, 'skills', 'handoff', 'SKILL.md'), 'utf8'), once);
-  assert.match(readFileSync(join(root, 'docs', 'contracts', 'dispatch-prompt.md'), 'utf8'), once);
-});

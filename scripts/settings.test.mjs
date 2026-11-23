@@ -87,7 +87,7 @@ test('plugin defaults come from frontmatter and names.json', (t) => {
     name: 'Quinn', model: 'sonnet', effort: 'medium', context_cap: 180000, floor: 'sonnet', protected: false, skills: [],
     source: { name: 'plugin', model: 'plugin', effort: 'plugin', context_cap: 'plugin', skills: 'plugin' }
   });
-  assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, second_reviewer_model_effective: 'opus', context_handover: 162000, source: { context_cap: 'plugin' } });
+  assert.deepEqual(r.pipeline, { ...PIPELINE_DEFAULTS, context_handover: 162000, source: { context_cap: 'plugin' } });
   assert.deepEqual(r.gates, GATE_DEFAULTS);
   assert.deepEqual(r.brainstorm, BRAINSTORM_DEFAULTS);
   assert.equal(r.pipeline.context_cap, 180000);
@@ -770,46 +770,46 @@ test('writeLayer refuses a bad debate value with the Contract text and writes no
   assert.equal(out.out, 'refused: no setting brainstorm.nope\n');
 });
 
-test('pipeline.review_format rejects hostile values first and accepts only plain or pilot', () => {
-  const msg = ['pipeline.review_format must be plain or pilot'];
-  for (const bad of ['PILOT', 'Plain', ' pilot', '__proto__', 3, true, null, ['pilot'], { a: 1 }, 'x'.repeat(10 * 1024)]) {
-    assert.deepEqual(validateLayer({ version: 1, pipeline: { review_format: bad } }, roleSet), msg, String(bad).slice(0, 20));
+test('pipeline.plan_review rejects hostile values first and accepts only off or on', () => {
+  const msg = ['pipeline.plan_review must be off or on'];
+  for (const bad of ['ON', 'Off', ' on', '__proto__', 3, true, null, ['on'], { a: 1 }, 'x'.repeat(10 * 1024)]) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { plan_review: bad } }, roleSet), msg, String(bad).slice(0, 20));
   }
-  for (const ok of ['plain', 'pilot']) assert.deepEqual(validateLayer({ version: 1, pipeline: { review_format: ok } }, roleSet), []);
+  for (const ok of ['off', 'on']) assert.deepEqual(validateLayer({ version: 1, pipeline: { plan_review: ok } }, roleSet), []);
 });
 
-test('review_format defaults to plain, resolves per field and is not a lock', (t) => {
+test('plan_review defaults to off, resolves per field and is not a lock', (t) => {
   const s = sandbox(t);
-  assert.equal(PIPELINE_DEFAULTS.review_format, 'plain');
-  assert.equal(resolveSettings(s.ctx).pipeline.review_format, 'plain');
-  assert.equal(s.cli('get', 'pipeline.review_format').out, 'plain\n');
-  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { review_format: 'plain' } });
-  s.project({ pipeline: { review_format: 'pilot' } });
+  assert.equal(PIPELINE_DEFAULTS.plan_review, 'off');
+  assert.equal(resolveSettings(s.ctx).pipeline.plan_review, 'off');
+  assert.equal(s.cli('get', 'pipeline.plan_review').out, 'off\n');
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { plan_review: 'off' } });
+  s.project({ pipeline: { plan_review: 'on' } });
   const r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.review_format, 'pilot');
+  assert.equal(r.pipeline.plan_review, 'on');
   assert.deepEqual(r.ignored, []);
-  assert.equal(s.cli('get', 'pipeline.review_format').out, 'pilot\n');
-  assert.equal(JSON.parse(s.cli('get').out).pipeline.review_format, 'pilot');
+  assert.equal(s.cli('get', 'pipeline.plan_review').out, 'on\n');
+  assert.equal(JSON.parse(s.cli('get').out).pipeline.plan_review, 'on');
 });
 
-test('a bad review_format layer falls back to the level below with a warning and a fail-closed project does not change it', (t) => {
+test('a bad plan_review layer falls back to the level below with a warning and a fail-closed project does not change it', (t) => {
   const s = sandbox(t);
-  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { review_format: 'pilot' } });
-  s.project({ pipeline: { review_format: 'PILOT' } });
+  s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { plan_review: 'on' } });
+  s.project({ pipeline: { plan_review: 'ON' } });
   const r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.review_format, 'pilot');
-  assert.equal(r.warnings.filter((w) => /review_format/.test(w)).length, 1);
+  assert.equal(r.pipeline.plan_review, 'on');
+  assert.equal(r.warnings.filter((w) => /plan_review/.test(w)).length, 1);
   assert.equal(r.gates.ship, 'ask');
-  s.user({ pipeline: { review_format: 7 } });
-  assert.equal(resolveSettings(s.ctx).pipeline.review_format, 'plain');
+  s.user({ pipeline: { plan_review: 7 } });
+  assert.equal(resolveSettings(s.ctx).pipeline.plan_review, 'off');
 });
 
-test('writeLayer refuses a bad review_format with the Contract text and writes nothing', (t) => {
+test('writeLayer refuses a bad plan_review with the Contract text and writes nothing', (t) => {
   const s = sandbox(t);
-  assert.throws(() => writeLayer('user', { version: 1, pipeline: { review_format: 'Pilot' } }, s.ctx), /pipeline\.review_format must be plain or pilot/);
+  assert.throws(() => writeLayer('user', { version: 1, pipeline: { plan_review: 'maybe' } }, s.ctx), /pipeline\.plan_review must be off or on/);
   assert.equal(fs.existsSync(s.config), false);
-  writeLayer('user', { version: 1, pipeline: { review_format: 'pilot' } }, s.ctx);
-  assert.deepEqual(readLayer('user', s.ctx).layer, { version: 1, pipeline: { review_format: 'pilot' } });
+  writeLayer('user', { version: 1, pipeline: { plan_review: 'on' } }, s.ctx);
+  assert.deepEqual(readLayer('user', s.ctx).layer, { version: 1, pipeline: { plan_review: 'on' } });
 });
 
 test('no keep-warm key exists in the schema', () => {
@@ -822,17 +822,18 @@ const MODS_ALL = {
   savvy: { enabled: true, pane: 'auto' },
   cache_tax: { enabled: true, pane: 'command' },
   reflect: { enabled: true, step_check: true, retrospective: true, mode: 'deterministic' },
-  efficient_browser_use: { enabled: false },
   switchboard: { enabled: true, seen: false },
   savings: { enabled: true }
 };
-const MOD_KEYS = ['cache_tax', 'efficient_browser_use', 'reflect', 'savings', 'savvy', 'switchboard'];
+const MOD_KEYS = ['cache_tax', 'reflect', 'savings', 'savvy', 'switchboard'];
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const modsOf = (s) => plain(resolveSettings(s.ctx).mods);
 
 test('MODS_DEFAULTS (v3.0): the three mods plus the saver switches, efficient browser off, no keep-warm key', () => {
-  assert.deepEqual(plain(MODS_DEFAULTS), MODS_ALL);
-  assert.deepEqual(Object.keys(MODS_DEFAULTS).sort(), MOD_KEYS);
+  // hooks/lib/mods-defaults.mjs may still list the retired saver; settings.mjs drops it from every resolved table.
+  const { efficient_browser_use: _retired, ...live } = plain(MODS_DEFAULTS);
+  assert.deepEqual(live, MODS_ALL);
+  assert.deepEqual(Object.keys(live).sort(), MOD_KEYS);
   assert.ok(!JSON.stringify(MODS_DEFAULTS).includes('keep_warm'));
 });
 
@@ -1923,7 +1924,7 @@ test('a bad stored parallel_cap falls back one level with one warning that does 
 test('a fail-closed project layer does not change parallel_cap', (t) => {
   const s = sandbox(t);
   s.user({ gates: { ship: 'auto' }, unlocked: ['ship'], pipeline: { parallel_cap: 3 } });
-  s.project({ pipeline: { parallel_cap: 5, review_format: 'PILOT' } });
+  s.project({ pipeline: { parallel_cap: 5, plan_review: 'ON' } });
   const r = resolveSettings(s.ctx);
   assert.equal(r.gates.ship, 'ask');
   assert.equal(r.pipeline.parallel_cap, 5);
@@ -1940,9 +1941,9 @@ test('writeLayer refuses a bad parallel_cap with the Contract text and writes no
 
 test('a v1.6 file without parallel_cap resolves as before, plus the default key', (t) => {
   const s = sandbox(t);
-  s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', review_format: 'pilot' } });
+  s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', plan_review: 'on' } });
   const r = resolveSettings(s.ctx);
-  assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.review_format, r.pipeline.parallel_cap], [3, 'sequential', 'pilot', 4]);
+  assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.plan_review, r.pipeline.parallel_cap], [3, 'sequential', 'on', 4]);
 });
 
 // ---- pipeline.short_path (aico-settings v1.8) ----
@@ -1961,7 +1962,7 @@ test('short_path defaults to on in get and in get pipeline.short_path', (t) => {
   assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'on');
   assert.equal(s.cli('get', 'pipeline.short_path').out, 'on\n');
   assert.equal(JSON.parse(s.cli('get').out).pipeline.short_path, 'on');
-  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'second_reviewer', 'second_reviewer_model', 'second_reviewer_model_effective', 'worktrees', 'context_cap', 'review_format', 'lanes', 'context_handover', 'source']);
+  assert.deepEqual(Object.keys(JSON.parse(s.cli('get').out).pipeline), ['fix_rounds', 'dispatch', 'parallel_cap', 'short_path', 'worktrees', 'context_cap', 'plan_review', 'lanes', 'context_handover', 'source']);
 });
 
 test('short_path off from the user level resolves off', (t) => {
@@ -2005,10 +2006,10 @@ test('a project on under a user off is ignored and listed once', (t) => {
 
 test('a fail-closed project layer holds short_path off and keeps the warning', (t) => {
   const s = sandbox(t);
-  s.project({ pipeline: { review_format: 'PILOT' } });
+  s.project({ pipeline: { plan_review: 'ON' } });
   const r = resolveSettings(s.ctx);
   assert.equal(r.pipeline.short_path, 'off');
-  assert.ok(r.warnings.some((w) => /review_format/.test(w)));
+  assert.ok(r.warnings.some((w) => /plan_review/.test(w)));
   s.user({ pipeline: { short_path: 'on' } });
   assert.equal(resolveSettings(s.ctx).pipeline.short_path, 'off');
   fs.writeFileSync(s.projectFile, '{ not json');
@@ -2048,9 +2049,9 @@ test('writeLayer refuses a bad short_path with the Contract text and writes noth
 
 test('a v1.7 file without short_path resolves as before, plus the default key', (t) => {
   const s = sandbox(t);
-  s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', parallel_cap: 5, review_format: 'pilot' } });
+  s.user({ pipeline: { fix_rounds: 3, dispatch: 'sequential', parallel_cap: 5, plan_review: 'on' } });
   const r = resolveSettings(s.ctx);
-  assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.parallel_cap, r.pipeline.review_format, r.pipeline.short_path], [3, 'sequential', 5, 'pilot', 'on']);
+  assert.deepEqual([r.pipeline.fix_rounds, r.pipeline.dispatch, r.pipeline.parallel_cap, r.pipeline.plan_review, r.pipeline.short_path], [3, 'sequential', 5, 'on', 'on']);
   assert.deepEqual(r.ignored, []);
   assert.deepEqual(r.warnings, []);
 });
@@ -2075,121 +2076,74 @@ function reviewerSandbox(t, { floorText } = {}) {
   return s;
 }
 
-test('the new pipeline keys refuse hostile values first, with messages that never echo the value', (t) => {
+test('pipeline.worktrees refuses hostile values first, with messages that never echo the value', (t) => {
   const s = reviewerSandbox(t);
   const bad = [undefined, null, 1, true, [], {}, 'ON', 'on ', '', 'yes', '__proto__', 'x'.repeat(5000), 'secret-value'];
-  for (const [key, msg] of [['second_reviewer', 'pipeline.second_reviewer must be off or on'], ['worktrees', 'pipeline.worktrees must be off or on']]) {
-    for (const v of bad) {
-      assert.deepEqual(validateLayer({ version: 1, pipeline: { [key]: v } }, s.roleSet), [msg]);
-    }
-    for (const ok of ['on', 'off']) assert.deepEqual(validateLayer({ version: 1, pipeline: { [key]: ok } }, s.roleSet), []);
+  for (const v of bad) {
+    assert.deepEqual(validateLayer({ version: 1, pipeline: { worktrees: v } }, s.roleSet), ['pipeline.worktrees must be off or on']);
   }
-  const modelMsg = 'pipeline.second_reviewer_model must be default or a model at or above the code-reviewer floor (opus)';
-  for (const v of [...bad, 'sonnet', 'haiku', 'fable', 'gpt-4o', 'inherit', 'Opus']) {
-    assert.deepEqual(validateLayer({ version: 1, pipeline: { second_reviewer_model: v } }, s.roleSet), [modelMsg]);
-  }
-  for (const ok of ['default', 'opus']) assert.deepEqual(validateLayer({ version: 1, pipeline: { second_reviewer_model: ok } }, s.roleSet), []);
+  for (const ok of ['on', 'off']) assert.deepEqual(validateLayer({ version: 1, pipeline: { worktrees: ok } }, s.roleSet), []);
 });
 
-test('a save of a bad value is refused with the fixed message and writes nothing', (t) => {
+test('a save of a bad worktrees value is refused with the fixed message and writes nothing', (t) => {
   const s = reviewerSandbox(t);
-  for (const [key, v] of [['second_reviewer', 'maybe'], ['worktrees', 'sometimes'], ['second_reviewer_model', 'gpt-4o'], ['second_reviewer_model', 'fable'], ['second_reviewer_model', 'sonnet'], ['second_reviewer_model', 'haiku']]) {
-    assert.throws(() => writeLayer('user', { version: 1, pipeline: { [key]: v } }, s.ctx), (e) => e instanceof Refusal && e.message.startsWith(`pipeline.${key} must be`) && !e.message.includes(v));
-  }
+  assert.throws(() => writeLayer('user', { version: 1, pipeline: { worktrees: 'sometimes' } }, s.ctx), (e) => e instanceof Refusal && e.message.startsWith('pipeline.worktrees must be') && !e.message.includes('sometimes'));
   assert.equal(fs.existsSync(s.config), false);
 });
 
-test('defaults: second reviewer off, model default (effective is the fresh-reviewer model), worktrees off', (t) => {
+test('defaults: worktrees off', (t) => {
   const s = reviewerSandbox(t);
-  const p = resolveSettings(s.ctx).pipeline;
-  assert.equal(p.second_reviewer, 'off');
-  assert.equal(p.second_reviewer_model, 'default');
-  assert.equal(p.second_reviewer_model_effective, 'opus');
-  assert.equal(p.worktrees, 'off');
-  assert.equal(s.cli('get', 'pipeline.second_reviewer').out, 'off\n');
+  assert.equal(resolveSettings(s.ctx).pipeline.worktrees, 'off');
   assert.equal(s.cli('get', 'pipeline.worktrees').out, 'off\n');
-  assert.equal(JSON.parse(s.cli('get').out).pipeline.second_reviewer_model_effective, 'opus');
-  assert.equal(PIPELINE_DEFAULTS.second_reviewer, 'off');
   assert.equal(PIPELINE_DEFAULTS.worktrees, 'off');
 });
 
-test('user values count: on, opus and worktrees on', (t) => {
+test('user worktrees on counts', (t) => {
   const s = reviewerSandbox(t);
-  s.user({ pipeline: { second_reviewer: 'on', second_reviewer_model: 'opus', worktrees: 'on' } });
+  s.user({ pipeline: { worktrees: 'on' } });
   const r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.second_reviewer, 'on');
-  assert.equal(r.pipeline.second_reviewer_model, 'opus');
-  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
   assert.equal(r.pipeline.worktrees, 'on');
   assert.deepEqual(r.ignored, []);
 });
 
-test('project values of the new keys are ignored and listed', (t) => {
+test('a project worktrees value is ignored and listed', (t) => {
   const s = reviewerSandbox(t);
   for (const v of ['on', 'off']) {
-    s.project({ pipeline: { second_reviewer: v, second_reviewer_model: 'opus', worktrees: v } });
+    s.project({ pipeline: { worktrees: v } });
     const r = resolveSettings(s.ctx);
-    assert.equal(r.pipeline.second_reviewer, 'off');
-    assert.equal(r.pipeline.second_reviewer_model, 'default');
     assert.equal(r.pipeline.worktrees, 'off');
-    assert.deepEqual(r.ignored, [
-      'pipeline.second_reviewer: set it at the user level',
-      'pipeline.second_reviewer_model: set it at the user level',
-      'pipeline.worktrees: set it at the user level'
-    ]);
+    assert.deepEqual(r.ignored, ['pipeline.worktrees: set it at the user level']);
   }
-  s.user({ pipeline: { second_reviewer: 'on', worktrees: 'on' } });
-  const r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.second_reviewer, 'on');
-  assert.equal(r.pipeline.worktrees, 'on');
+  s.user({ pipeline: { worktrees: 'on' } });
+  assert.equal(resolveSettings(s.ctx).pipeline.worktrees, 'on');
 });
 
-test('a fail-closed project layer leaves the new keys unchanged', (t) => {
+test('a fail-closed project layer leaves worktrees unchanged', (t) => {
   const s = reviewerSandbox(t);
-  s.user({ pipeline: { second_reviewer: 'on', worktrees: 'on' } });
+  s.user({ pipeline: { worktrees: 'on' } });
   s.project({ pipeline: { fix_rounds: 99 } });
   const r = resolveSettings(s.ctx);
   assert.ok(r.warnings.some((w) => w.includes('ignoring')));
-  assert.equal(r.pipeline.second_reviewer, 'on');
   assert.equal(r.pipeline.worktrees, 'on');
 });
 
-test('a bad stored user value falls back to the default with a warning', (t) => {
+test('a bad stored user worktrees value falls back to the default with a warning', (t) => {
   const s = reviewerSandbox(t);
-  s.user({ pipeline: { second_reviewer: 'maybe', second_reviewer_model: 'fable', worktrees: 'x' } });
+  s.user({ pipeline: { worktrees: 'x' } });
   const r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.second_reviewer, 'off');
-  assert.equal(r.pipeline.second_reviewer_model, 'default');
   assert.equal(r.pipeline.worktrees, 'off');
-  assert.equal(r.warnings.filter((w) => w.includes('ignoring pipeline.')).length, 3);
-  assert.ok(r.warnings.some((w) => w.includes('pipeline.second_reviewer_model must be default')));
-  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
+  assert.equal(r.warnings.filter((w) => w.includes('ignoring pipeline.')).length, 1);
 });
 
-test('default effective model is never below opus, also with a project fresh-reviewer model below the floor', (t) => {
-  const s = reviewerSandbox(t);
-  s.project({ roles: { 'fresh-reviewer': { model: 'sonnet' } } });
-  const r = resolveSettings(s.ctx);
-  assert.equal(r.roles['fresh-reviewer'].model, 'opus');
-  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
-  s.project({ roles: { 'fresh-reviewer': { model: 'inherit' } } });
-  assert.equal(resolveSettings(s.ctx).pipeline.second_reviewer_model_effective, 'opus');
-});
-
-test('an unreadable model floor file gives effective opus and a warning', (t) => {
+test('an unreadable model floor file gives a warning', (t) => {
   const s = reviewerSandbox(t, { floorText: '{not json' });
-  const r = resolveSettings(s.ctx);
-  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
-  assert.ok(r.warnings.some((w) => w.startsWith('model floor:')));
-  s.user({ pipeline: { second_reviewer_model: 'opus' } });
-  assert.equal(resolveSettings(s.ctx).pipeline.second_reviewer_model_effective, 'opus');
+  assert.ok(resolveSettings(s.ctx).warnings.some((w) => w.startsWith('model floor:')));
 });
 
-test('the shipped plugin: six protected names and an effective opus by default', (t) => {
+test('the shipped plugin: six protected names', (t) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-real-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const r = resolveSettings({ home, cwd: home });
-  assert.equal(r.pipeline.second_reviewer_model_effective, 'opus');
   assert.equal(r.roles['fresh-reviewer'].protected, true);
   assert.equal(loadModelFloor().protected.length, 6);
 });
@@ -2448,15 +2402,15 @@ test('AC15 (v3.0): a hand-written guard key is an unknown key, refused on write,
 });
 
 test('v3.0 saver switches validate as booleans at the user and the project level', (t) => {
-  for (const [key, bad] of [['efficient_browser_use', 'yes'], ['switchboard', 1], ['savings', null]]) {
+  for (const [key, bad] of [['switchboard', 1], ['savings', null]]) {
     assert.deepEqual(validateLayer({ version: 1, mods: { [key]: { enabled: bad } } }, roleSet), [`mods.${key}.enabled must be true or false`], key);
   }
   const s = sandbox(t);
   s.user({ mods: { savings: { enabled: false } } });
-  s.project({ mods: { efficient_browser_use: { enabled: true } } });
+  s.project({ mods: { switchboard: { enabled: false } } });
   const r = resolveSettings(s.ctx);
   assert.equal(r.mods.savings.enabled, false);
-  assert.equal(r.mods.efficient_browser_use.enabled, true, 'a project may switch a saver');
+  assert.equal(r.mods.switchboard.enabled, false, 'a project may switch a saver');
 });
 
 test('v3.0 mods.switchboard.seen is user level only: a project value is ignored', (t) => {

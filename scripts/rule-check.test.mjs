@@ -399,11 +399,9 @@ test('run node-test: a green fixture suite gives no row, a red one gives one row
   assert.ok(rows[0].split(' | ')[2].length <= 160, rows[0]);
 });
 
-test('node-test limits: 480 s and 16 MiB, written in the Contract', () => {
+test('node-test limits: 480 s and 16 MiB', () => {
   assert.equal(NODE_TEST_TIMEOUT_MS, 480000);
   assert.equal(NODE_TEST_OUTPUT, 16 * MiB);
-  const doc = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'rule-check.md'), 'utf8');
-  assert.ok(doc.includes('timeout 480 s and output cap 16 MiB'));
 });
 
 test('run node-test: a suite past the time limit gives "tool failed" with the limit in seconds', () => {

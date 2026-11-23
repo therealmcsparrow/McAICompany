@@ -116,8 +116,8 @@ test('AC2: every manifest file is valid and unique by id and rule ID', () => {
 
 test('AC2: kinds of the release 1 manifests', () => {
   const kinds = {
-    cap: 'guard', 'self-protect': 'guard', dotenv: 'guard', 'model-floor': 'guard',
-    'cache-tax': 'saver', savvy: 'saver', reflect: 'saver', 'efficient-browser-use': 'saver', switchboard: 'saver', savings: 'saver',
+    cap: 'guard', 'self-protect': 'guard', dotenv: 'guard',
+    'cache-tax': 'saver', savvy: 'saver', reflect: 'saver', switchboard: 'saver', savings: 'saver',
     'plan-gate': 'gate', 'fresh-step': 'gate', 'reprompt-gate': 'gate'
   };
   const bad = [];
@@ -164,9 +164,9 @@ test('AC2: every guard event is wired to the hook host in hooks/hooks.json', () 
   assert.deepEqual(bad, []);
 });
 
-test('ADR 0079: exactly four guard manifests and no git-add anywhere', () => {
+test('ADR 0079: exactly three guard manifests and no git-add anywhere', () => {
   const guards = manifestFiles().map((f) => load(f.replace(/\.json$/, ''))).filter((m) => m.kind === 'guard').map((m) => m.id).sort();
-  assert.deepEqual(guards, ['cap', 'dotenv', 'model-floor', 'self-protect']);
+  assert.deepEqual(guards, ['cap', 'dotenv', 'self-protect']);
   assert.ok(!fs.existsSync(path.join(manifestDir, 'git-add.json')), 'hooks/manifests/git-add.json removed');
   assert.ok(!fs.existsSync(path.join(root, 'hooks', 'rules', 'git-add.mjs')), 'hooks/rules/git-add.mjs removed');
   assert.ok(!fs.existsSync(path.join(root, 'hooks', 'fixtures', 'git-add.M-SEC1')), 'hooks/fixtures/git-add.M-SEC1 removed');

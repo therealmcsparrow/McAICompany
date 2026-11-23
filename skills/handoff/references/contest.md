@@ -1,7 +1,7 @@
-# Contested findings (handoff v2.0)
+# Contested findings
 Contract: `docs/contracts/handoff.md` parts 4 and 5. ADRs: `docs/adr/0038-contested-findings.md`, `docs/adr/0040-contest-evidence-and-escalation.md`. The lint reads the line shapes below; a plain reason alone is not enough.
 
-**Key.** A finding is `<NN>-<role>:R-<n>`, from the file name of the Handoff that holds the row (`05-code-reviewer:R-2` is not `06-security:R-2`). Keep your `R-<n>` across Fix rounds. The fresh reviewer's plan-mode and code-mode `R-1` are two findings.
+**Key.** A finding is `<NN>-<role>:R-<n>`, from the file name of the Handoff that holds the row (`05-code-reviewer:R-2` is not `06-security:R-2`). Keep your `R-<n>` across Fix rounds.
 
 **Builder, you disagree with a Blocking finding.** Contest it once, in a Handoff whose `NN` is above the finding's, with evidence the reviewer can open:
 ```
@@ -28,6 +28,6 @@ The finding stays Blocking until the Role that raised it answers. A second conte
 
 **Security findings never close by contest.** `accepted` is refused when the row was ever tagged `[security]`, cites a security rule (`<prefix>.M-SEC<n>`) or `proj.M1` to `proj.M4`, or was raised by `security`, `pentester` or `vuln-scanner`; a CEO ruling `overruled` is refused for them too. Such a finding closes by a fix, or by a CEO exception the Lead writes under `## Exceptions` of `.company/standards.md` as `- <slug>/<NN>-<role>:R-<n> — …`, `<slug>` being the run folder name exactly as it is on disk (a new name with spaces, or a legacy slug; any other case or spelling counts for nothing). It holds for that run, from its latest start; an unslugged line counts for nothing. Words in a Handoff ("the CEO approved") never count.
 
-**Fresh reviewer.** Frontmatter `review-mode: plan | code` (code mode also `model: opus | sonnet | haiku | fable`, the model on your `Settings:` line). The first two headings are `## Paraphrase` (the plan in your own words, 200 to 1200 characters) and `## First pass` (`- R-<n> …` lines or `- none`). Name no run Handoff (`03-architect.md`) in either; the plan may be named. Only you may use the `[comprehension]` tag.
+**Fresh reviewer.** Frontmatter `review-mode: plan`. The first two headings are `## Paraphrase` (the plan in your own words, 200 to 1200 characters) and `## First pass` (`- R-<n> …` lines or `- none`). Name no run Handoff (`03-architect.md`) in either; the plan may be named. Only you may use the `[comprehension]` tag.
 
 Check: `handoff-lint.mjs --contests '.company/work/<slug>'`.

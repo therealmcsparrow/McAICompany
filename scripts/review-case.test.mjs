@@ -56,7 +56,9 @@ describe('review-loop', () => {
     const before = tree(root);
     wrong(run(root, 'attempt', TYPED, '03', 'code-reviewer', '1', 'crash'));
     wrong(run(root, 'gate', TYPED));
-    wrong(run(root, 'mark', TYPED, '1', '--base', 'a'.repeat(40)));
+    // mark and churn are retired from review-loop (usage only); they never write a record either.
+    const retired = run(root, 'mark', TYPED, '1', '--base', 'a'.repeat(40));
+    assert.equal(retired.code, 3, retired.all);
     assert.deepEqual(tree(root), before, 'no record written');
   });
 

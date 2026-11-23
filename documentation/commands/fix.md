@@ -12,7 +12,7 @@
 ## How it works
 1. **QA** reproduces the bug and writes a failing regression test, naming the suspect Module.
 2. The **engineer** who owns that Module finds the root cause and fixes it test-first.
-3. **Code Reviewer** ∥ **QA** (re-runs the regression test and the affected test files only, no full suite) ∥ at risk `high` with `pipeline.second_reviewer` `on`, the **Fresh Reviewer** beside the Code Reviewer (see [The fresh reviewer](../concepts/review.md)) ∥ **Security** (if the bug touches auth, input or data; skipped on the [short path](../concepts/risk-tier.md), which a fix gets only through a trusted low-risk triage record while the Brief Gate setting is `ask`). Fix rounds apply. **→ Ship Gate.**
+3. **Code Reviewer** ∥ **QA** (re-runs the regression test and the affected test files only, no full suite) ∥ **Security** (if the bug touches auth, input or data; skipped on the [short path](../concepts/risk-tier.md), which a fix gets only through a trusted low-risk triage record while the Brief Gate setting is `ask`, and skipped at medium risk when no security-relevant path changed). There is one code reviewer; the second reviewer is gone ([Review](../concepts/review.md)). Fix rounds apply. **→ Ship Gate**, after `ship-check` passes (see [Handoffs](../concepts/handoffs.md#closing-a-step-step-close) for how each Step closes).
 4. **DevOps** releases if needed.
 
 ## Technical details

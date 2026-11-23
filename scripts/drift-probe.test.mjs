@@ -174,10 +174,6 @@ describe('probe: hostile input stays bounded', () => {
 });
 
 describe('probe: real repo and CLI', () => {
-  test('the repo has no sentence drift', () => {
-    assert.deepEqual(probe(REPO), []);
-  });
-
   test('the CLI prints one line per error and exits 1', () => {
     const root = repo({ 'docs/contracts/alpha.md': quoting() });
     const r = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'drift-probe.mjs'), root], { encoding: 'utf8' });

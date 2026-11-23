@@ -46,8 +46,3 @@ test('a Role id line, where present, equals the file name and sits before the Mi
     assert.ok(text.indexOf('Role id:') < text.indexOf('**Mission'), `${f}: Role id before Mission`);
   }
 });
-
-test('the handoff skill tells a Role its By: is the agent file name', () => {
-  const t = readFileSync(join(ROOT, 'skills', 'handoff', 'SKILL.md'), 'utf8');
-  assert.match(t, /`By:` is (?:your Role id, )?the agent file name \(e\.g\. `By: qa`\)/);
-});

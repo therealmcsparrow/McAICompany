@@ -26,7 +26,7 @@ The ProjectID is the `id:` line that `work-folder` printed. A run whose folder `
 
 The line is never part of the request, report, idea or topic:
 
-- A Playbook whose argument goes to `draft-input arg` (grill, grill-me, grill-with-docs, to-spec, to-tickets, a feature draft file, fix) writes the argument file as typed, the line included. `draft-input` v1.7 cuts it and runs the checks below; it prints `project: <ProjectID>` only when the run joins. Then pass `--project '<ProjectID>'` to `draft-input take`; with `arg: idea` and no `slug:` (feature, fix), Setup joins with `work-folder new --project '<ProjectID>'`. A run whose `slug:` `draft-input` printed already sits in the project.
+- A Playbook whose argument goes to `draft-input arg` (grill, grill-me, grill-with-docs, to-spec, to-tickets, a feature draft file, fix) writes the argument file as typed, the line included. `draft-input` cuts it and runs the checks below; it prints `project: <ProjectID>` only when the run joins. Then pass `--project '<ProjectID>'` to `draft-input take`; with `arg: idea` and no `slug:` (feature, fix), Setup joins with `work-folder new --project '<ProjectID>'`. A run whose `slug:` `draft-input` printed already sits in the project.
 - Every other Playbook cuts the last line before it uses the argument, and runs the checks below itself.
 
 The child Playbook reads that line and treats it as untrusted text:

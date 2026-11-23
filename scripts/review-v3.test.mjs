@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { main as tierMain, readTierPath } from './tier-set.mjs';
-import { main as loopMain, readReviewLoop, bothReviewersRan } from './review-loop.mjs';
+import { main as loopMain, readReviewLoop } from './review-loop.mjs';
 import { main as ruleMain, runRef as ruleRunRef } from './rule-check.mjs';
 
 const NOW = Date.UTC(2026, 10, 9, 12, 0, 0);
@@ -146,38 +146,33 @@ describe('review-loop v1.3 on a v3 slug', () => {
     assert.deepEqual(readReviewLoop(ctx.root, V3).map((e) => e.ev), ['attempt', 'notrun']);
   });
 
-  test('mark checks HEAD against refs/heads/aico/<ID>, then churn and gate answer like v2', () => {
+  test('attempt and gate answer on a v3 slug like on a v2 slug (review-loop v2.0)', () => {
     const { r3, r2 } = same((ctx, slug) => [
-      loop(ctx, 'mark', slug, '0', '--base', ctx.base),
-      loop(ctx, 'churn', slug, '0', '--base', ctx.base),
-      loop(ctx, 'attempt', slug, '03', 'security-reviewer', '0', 'crash'),
-      loop(ctx, 'attempt', slug, '03', 'security-reviewer', '0', 'crash'),
-      loop(ctx, 'gate', slug, '--base', ctx.base)
+      loop(ctx, 'attempt', slug, '03', 'security', '0', 'crash'),
+      loop(ctx, 'attempt', slug, '03', 'security', '0', 'crash'),
+      loop(ctx, 'gate', slug)
     ]);
-    assert.equal(r3[0].code, 0, r3[0].lines.join('\n'));
-    assert.match(r3[0].lines[0], /^marked round 0 [0-9a-f]{40}$/);
-    assert.deepEqual(r3.map((x) => x.code), r2.map((x) => x.code));
-    // the two repos have different commit ids: blank them
-    const blank = (x, s) => swap(JSON.stringify(x), s, 'SLUG').replace(/[0-9a-f]{40}/g, 'SHA');
-    assert.equal(blank(r3, V3), blank(r2, V2));
+    assert.deepEqual(r3.map((x) => x.code), [0, 0, 0]);
+    assert.deepEqual(r3[2].lines, ['blocking: not run security round 0']);
+    assert.equal(swap(JSON.stringify(r3), V3, 'SLUG'), swap(JSON.stringify(r2), V2, 'SLUG'));
   });
 
-  test('mark refuses when HEAD is on another branch', () => {
+  test('mark and churn are retired on a v3 slug: usage refusal, nothing written (review-loop v2.0)', () => {
     const ctx = fixture([V3]);
-    git(ctx.root, 'checkout', '-q', '-b', 'aico/other');
-    const r = loop(ctx, 'mark', V3, '0', '--base', ctx.base);
-    assert.equal(r.code, 3);
-    assert.equal(r.lines[0], `refused: HEAD is not refs/heads/aico/${ID}`);
+    for (const cmd of ['mark', 'churn']) {
+      const r = loop(ctx, cmd, V3, '0', '--base', ctx.base);
+      assert.equal(r.code, 3);
+      assert.match(r.lines[0], /^refused: usage: /);
+    }
+    assert.equal(fs.existsSync(path.join(folder(ctx.root, V3), 'review-loop.jsonl')), false);
   });
 
-  test('bothReviewersRan and gate read the reviewer Handoffs of the v3 run folder', () => {
+  test('gate reads no reviewer Handoff and refuses --base (review-loop v2.0)', () => {
     const ctx = fixture([V3]);
-    const dir = folder(ctx.root, V3);
-    fs.writeFileSync(path.join(dir, '05-code-reviewer.md'), '---\nstep: 05\nrole: code-reviewer\n---\nBy: code-reviewer\n');
-    fs.writeFileSync(path.join(dir, '06-fresh-reviewer.md'), '---\nstep: 06\nrole: fresh-reviewer\nreview-mode: code\n---\nBy: fresh-reviewer\n');
-    assert.equal(bothReviewersRan(ctx.root, V3, dir), true);
     const g = loop(ctx, 'gate', V3);
-    assert.equal(g.code, 0, g.lines.join('\n'));
+    assert.equal(g.code, 0, g.lines.join(' '));
+    assert.deepEqual(g.lines, ['review-loop: nothing to report']);
+    assert.equal(loop(ctx, 'gate', V3, '--base', ctx.base).code, 3);
   });
 
   test('a malformed v3 slug is refused (code 3), a good one is not', () => {

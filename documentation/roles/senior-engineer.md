@@ -16,6 +16,6 @@ Erik, the senior engineer, researches sourced best-practice rules for every tool
 - Tools: Read, Grep, Glob, Skill, Write, Bash, WebSearch, WebFetch
 - Inputs: the Input Handoffs named in the dispatch. Output: one Handoff file at the Output path.
 - Writes only rule packs and the Ruleset. Never edits source.
-- With `pipeline.review_format: pilot` (default `plain`) it writes findings as `ID | file:line | problem | why | fix` rows. See [Ruleset and debt](../concepts/ruleset-and-debt.md).
+- The compliance pass runs at high risk only; at medium risk it is dropped. Findings are ordinary Handoff lines. See [Ruleset and debt](../concepts/ruleset-and-debt.md).
 
 Back to [all Roles](README.md).

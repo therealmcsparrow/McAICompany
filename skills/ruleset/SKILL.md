@@ -25,7 +25,7 @@ Every product follows sourced rules for its tools. **Security is law.** A Fix ro
 
 ## Loading
 1. Read `.company/standards.md`; missing → follow `aico:security-check` and note "no ruleset" in your Handoff.
-2. **Builders:** a `Rule slice:` line names `.company/work/<slug>/rules/<task>.md` files: follow them instead of the senior-engineer Handoff and the whole ruleset (`dispatch-prompt` v5), open a rule's source only where a slice cuts its text or you touch a security Must, and cite the slice's IDs in `## Standards`. Bad path or missing file → `blocked — missing rule slice`. No line: your `## Rules per task` row in the Senior Engineer's Handoff, or without that Handoff (`/aico:fix`, `/aico:incident`, `/aico:maintain`) `## Project rules` plus the Must and Security sections of the committed packs for the tools you touch.
+2. **Builders:** a `Rule slice:` line names `.company/work/<slug>/rules/<task>.md` files: follow them instead of the senior-engineer Handoff and the whole ruleset (`dispatch-prompt`), open a rule's source only where a slice cuts its text or you touch a security Must, and cite the slice's IDs in `## Standards`. Bad path or missing file → `blocked — missing rule slice`. No line: your `## Rules per task` row in the Senior Engineer's Handoff, or without that Handoff (`/aico:fix`, `/aico:incident`, `/aico:maintain`) `## Project rules` plus the Must and Security sections of the committed packs for the tools you touch.
    **Reviewers** (Code Reviewer, Security, Senior Engineer compliance): `## Project rules`, `## Exceptions`, the Must, Should and Security sections of the committed packs the diff touches, and `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" rule-check list`: the tool judges a tool-checked rule, you confirm its `T-` row.
 3. **Never read the library.** A missing library never blocks; the committed copies are the rules.
 
@@ -36,7 +36,7 @@ A Ruleset may lack a loaded pack's `-SEC` Must rows (an ID in `## Debt` or `## E
 
 ## Self-check, exceptions, debt
 - **Builders, before `done`:** `## Standards`: each mapped Must ID → `complied` or `exception requested`.
-- **Exceptions:** a builder who can't meet a Must sets `status: needs-ceo` with rule ID, scope, why and cost under `## Blocking`. Only the CEO approves, into `## Exceptions`: a rule as `<ID> — <scope> — <reason> — approved: <date> (CEO)`, a reviewer finding as `<slug>/<NN>-<role>:R-<n> — <scope> — <reason> — approved: <date> (CEO)` (`<slug>` is the run folder name; it counts only for that run, from the date of its latest start; `handoff` v2.0). Never a Fix round.
+- **Exceptions:** a builder who can't meet a Must sets `status: needs-ceo` with rule ID, scope, why and cost under `## Blocking`. Only the CEO approves, into `## Exceptions`: a rule as `<ID> — <scope> — <reason> — approved: <date> (CEO)`, a reviewer finding as `<slug>/<NN>-<role>:R-<n> — <scope> — <reason> — approved: <date> (CEO)` (`<slug>` is the run folder name; it counts only for that run, from the date of its latest start; `handoff`). Never a Fix round.
 - **Debt:** when a rule arrives, existing violations go to `## Debt` (`<ID> — <file:line> — <S/M/L>`); it never blocks, and the CEO picks `/aico:fix` or `/aico:refactor` runs from it. An exploitable security-Must violation is `## Blocking` (Security may flag `/aico:incident`).
 
 ## Research hygiene (Senior Engineer)

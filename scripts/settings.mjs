@@ -22,18 +22,14 @@ export const GATES = ['brief', 'plan', 'ship', 'installs'];
 export const LOCKABLE = ['ship', 'security', 'installs'];
 export { CONTEXT_CAP_DEFAULT, CONTEXT_CAP_MIN, CONTEXT_CAP_MAX };
 export const DEBATES = ['crossfire', 'full_pass'];
-export const REVIEW_FORMATS = ['plain', 'pilot'];
-export const SECOND_REVIEWER_MODELS = ['default', 'opus', 'sonnet', 'haiku', 'fable'];
 export const PIPELINE_DEFAULTS = {
   fix_rounds: 2,
   dispatch: 'parallel',
   parallel_cap: 4,
   short_path: 'on',
-  second_reviewer: 'off',
-  second_reviewer_model: 'default',
   worktrees: 'off',
   context_cap: CONTEXT_CAP_DEFAULT,
-  review_format: 'plain',
+  plan_review: 'off',
   lanes: { security: true, compliance: true, legal: 'auto', persona: true, hands_on: true, accessibility: true }
 };
 export const GATE_DEFAULTS = { brief: 'ask', plan: 'ask', ship: 'ask', installs: 'ask' };
@@ -41,9 +37,14 @@ export const BRAINSTORM_DEFAULTS = { film_script: false, debate: 'crossfire' };
 export const MODS = ['savvy', 'cache_tax', 'reflect'];
 // A mod key removed from the schema: dropped on read with one warning, refused on write as an unknown key.
 const RETIRED_MOD = 'blast_radius';
+// aico-settings v4.0: retired keys are dropped on read with one note and refused on write as unknown keys.
+const RETIRED_PIPELINE = ['second_reviewer', 'second_reviewer_model', 'review_format'];
+const RETIRED_SAVER = 'efficient_browser_use';
+// The saver table without the retired id (hooks/lib/mods-defaults.mjs may still list it).
+const { [RETIRED_SAVER]: _retiredSaver, ...MODS_LIVE } = MODS_DEFAULTS;
 export { MODS_DEFAULTS };
 // Saver ids `set-mod` may switch; the stored key is mods.<id with underscores>.enabled.
-const SWITCHABLE = ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard'];
+const SWITCHABLE = ['cache-tax', 'savings', 'switchboard'];
 const switchKey = (id) => id.replaceAll('-', '_');
 export const SKILLSPECTOR_MODES = ['no-llm', 'claude_cli'];
 export const SKILLSPECTOR_DEFAULTS = { mode: 'no-llm' };
@@ -189,7 +190,7 @@ export function pluginDefaults(pluginRoot = DEFAULT_PLUGIN_ROOT) {
     const name = typeof names[role] === 'string' && Object.hasOwn(names, role) ? names[role] : role;
     roles[role] = { name, model, effort };
   }
-  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS }, mods: structuredClone(MODS_DEFAULTS), skillspector: { ...SKILLSPECTOR_DEFAULTS }, reprompt: { ...REPROMPT_DEFAULTS }, plan_check: { ...PLAN_CHECK_DEFAULTS } };
+  return { roles, pipeline: structuredClone(PIPELINE_DEFAULTS), gates: { ...GATE_DEFAULTS }, brainstorm: { ...BRAINSTORM_DEFAULTS }, mods: structuredClone(MODS_LIVE), skillspector: { ...SKILLSPECTOR_DEFAULTS }, reprompt: { ...REPROMPT_DEFAULTS }, plan_check: { ...PLAN_CHECK_DEFAULTS } };
 }
 
 // company/model-floor.json (aico-settings v1.6). Unreadable or invalid fails closed: every Role protected at opus.
@@ -262,16 +263,10 @@ const PIPELINE_RULES = {
   parallel_cap: { ok: (v) => Number.isInteger(v) && v >= 3 && v <= 5, msg: 'pipeline.parallel_cap must be a whole number from 3 to 5' },
   short_path: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.short_path must be on or off' },
   context_cap: CONTEXT_CAP,
-  review_format: { ok: (v) => REVIEW_FORMATS.includes(v), msg: `pipeline.review_format must be ${REVIEW_FORMATS.join(' or ')}` },
-  second_reviewer: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.second_reviewer must be off or on' },
+  plan_review: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.plan_review must be off or on' },
   worktrees: { ok: (v) => v === 'on' || v === 'off', msg: 'pipeline.worktrees must be off or on' }
 };
 
-// The second reviewer's model counts only when it is `default` or ranked at or above the floor (fable is unranked).
-const secondReviewerModelRule = (floor) => ({
-  ok: (v) => v === 'default' || (typeof v === 'string' && SECOND_REVIEWER_MODELS.includes(v) && rankOf(v) > 0 && rankOf(v) >= rankOf(floor)),
-  msg: `pipeline.second_reviewer_model must be default or a model at or above the code-reviewer floor (${floor})`
-});
 const BRAINSTORM_RULES = {
   film_script: BOOLEAN,
   debate: { ok: (v) => DEBATES.includes(v), msg: `brainstorm.debate must be ${DEBATES.join(' or ')}` }
@@ -287,7 +282,6 @@ const MOD_RULES = {
     retrospective: modBool('reflect', 'retrospective'),
     mode: modOneOf('reflect', 'mode', ['deterministic', 'model'])
   },
-  efficient_browser_use: { enabled: modBool('efficient_browser_use', 'enabled') },
   switchboard: { enabled: modBool('switchboard', 'enabled'), seen: modBool('switchboard', 'seen') },
   savings: { enabled: modBool('savings', 'enabled') }
 };
@@ -588,7 +582,7 @@ function sanitize(layer, roleNames, floor = 'opus') {
     } else if (key === 'pipeline') {
       if (!isObject(value)) { reasons.push('pipeline: must be an object'); continue; }
       const before = reasons.length;
-      const pipeline = checkFields(value, { ...PIPELINE_RULES, second_reviewer_model: secondReviewerModelRule(floor) }, 'pipeline', reasons, ['lanes']);
+      const pipeline = checkFields(value, PIPELINE_RULES, 'pipeline', reasons, ['lanes']);
       if (Object.hasOwn(value, 'context_cap') && !Object.hasOwn(pipeline, 'context_cap')) {
         const at = reasons.indexOf(CONTEXT_CAP.msg, before);
         if (at !== -1) capReasons.set(at, 'pipeline.context_cap');
@@ -677,6 +671,20 @@ function loadLayer(level, ctx, roleNames, floor = 'opus') {
   if (!Object.hasOwn(data, KEY)) return { raw: bytes, layer: empty, warnings: [], reasons: [] };
   let stored = data[KEY];
   let retired = false;
+  const retiredNotes = [];
+  const pipe = stored?.pipeline;
+  if (pipe !== null && typeof pipe === 'object' && !Array.isArray(pipe) && RETIRED_PIPELINE.some((k) => Object.hasOwn(pipe, k))) {
+    const rest = { ...pipe };
+    for (const k of RETIRED_PIPELINE) {
+      if (Object.hasOwn(rest, k)) { delete rest[k]; retiredNotes.push(`pipeline.${k}: ignored, retired in aico-settings 4.0`); }
+    }
+    stored = { ...stored, pipeline: rest };
+  }
+  if (stored?.mods !== null && typeof stored?.mods === 'object' && !Array.isArray(stored.mods) && Object.hasOwn(stored.mods, RETIRED_SAVER)) {
+    const { [RETIRED_SAVER]: _gone, ...rest } = stored.mods;
+    stored = { ...stored, mods: rest };
+    retiredNotes.push(`mods.${RETIRED_SAVER}: ignored, retired in aico-settings 4.0`);
+  }
   const mods = stored?.mods;
   if (mods !== null && typeof mods === 'object' && !Array.isArray(mods) && Object.hasOwn(mods, RETIRED_MOD)) {
     const { [RETIRED_MOD]: _dropped, ...rest } = mods;
@@ -687,7 +695,7 @@ function loadLayer(level, ctx, roleNames, floor = 'opus') {
   const warn = storedWarning(file);
   // The refusal text stays as the Contract words it; a bad pipeline cap warning also names the value, cut to 35 characters.
   const warnings = reasons.map((r, i) => (capReasons.has(i) ? `${file}: ignoring ${capReasons.get(i)}: ${r.replace(/^context_cap /, '')}` : warn(r)));
-  return { raw: bytes, layer: clean, warnings, reasons, retired, capRefused: capReasons.size > 0 };
+  return { raw: bytes, layer: clean, warnings, retiredNotes: retiredNotes.map((n) => `${file}: ${n}`), reasons, retired, capRefused: capReasons.size > 0 };
 }
 
 // The code-reviewer floor from the model floor file; an unreadable file gives opus.
@@ -845,11 +853,11 @@ export function writeProfile(changes, { cwd, pluginRoot = DEFAULT_PLUGIN_ROOT, d
 
 // Resolves `mods.*`: free keys per field, then the Reflect lock.
 function resolveMods(user, project, { broken, ignored, warnings }) {
-  const out = structuredClone(MODS_DEFAULTS);
+  const out = structuredClone(MODS_LIVE);
   const u = (mod, key) => user.mods?.[mod]?.[key];
   const p = (mod, key) => project.mods?.[mod]?.[key];
-  for (const mod of Object.keys(MODS_DEFAULTS)) {
-    for (const key of Object.keys(MODS_DEFAULTS[mod])) {
+  for (const mod of Object.keys(MODS_LIVE)) {
+    for (const key of Object.keys(MODS_LIVE[mod])) {
       if (mod === 'reflect' && key === 'mode') continue;
       if (mod === 'switchboard' && key === 'seen') {
         out[mod][key] = u(mod, key) ?? MODS_DEFAULTS[mod][key];
@@ -888,14 +896,6 @@ function userOnly(user, project, key, ignored) {
   return Object.hasOwn(user.pipeline ?? {}, key) ? user.pipeline[key] : PIPELINE_DEFAULTS[key];
 }
 
-// `default` follows the fresh-reviewer's resolved model, never below the code-reviewer floor; an unreadable floor file gives opus.
-function effectiveReviewerModel(setting, resolved, table) {
-  if (setting !== 'default') return setting;
-  if (table.release === null) return 'opus';
-  const floor = rankOf(table.floor['code-reviewer']) > 0 ? table.floor['code-reviewer'] : 'opus';
-  return rankOf(resolved) >= rankOf(floor) && rankOf(resolved) > 0 ? resolved : floor;
-}
-
 function resolveShortPath(user, project, broken, ignored) {
   const u = user.pipeline?.short_path;
   const p = project.pipeline?.short_path;
@@ -912,7 +912,8 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
   const p = loadLayer('project', { home, cwd }, roleNames, floorName);
   const user = u.layer;
   const project = p.layer;
-  const warnings = [...u.warnings, ...p.warnings];
+  // A retired key is a note only: it never makes the project layer count as broken.
+  const warnings = [...u.warnings, ...p.warnings, ...(u.retiredNotes ?? []), ...(p.retiredNotes ?? [])];
   const ignored = [];
   const unlocked = user.unlocked ?? [];
   for (const k of project.unlocked ?? []) ignored.push(`project unlocked: ${k}`);
@@ -939,17 +940,13 @@ export function resolveSettings({ home, cwd, pluginRoot = DEFAULT_PLUGIN_ROOT } 
     dispatch: pick(project.pipeline?.dispatch, user.pipeline?.dispatch, PIPELINE_DEFAULTS.dispatch)[0],
     parallel_cap: pick(project.pipeline?.parallel_cap, user.pipeline?.parallel_cap, PIPELINE_DEFAULTS.parallel_cap)[0],
     short_path: resolveShortPath(user, project, p.warnings.length > 0, ignored),
-    second_reviewer: userOnly(user, project, 'second_reviewer', ignored),
-    second_reviewer_model: userOnly(user, project, 'second_reviewer_model', ignored),
-    second_reviewer_model_effective: null,
     worktrees: userOnly(user, project, 'worktrees', ignored),
     context_cap: capValue,
-    review_format: pick(project.pipeline?.review_format, user.pipeline?.review_format, PIPELINE_DEFAULTS.review_format)[0],
+    plan_review: pick(project.pipeline?.plan_review, user.pipeline?.plan_review, PIPELINE_DEFAULTS.plan_review)[0],
     lanes: {},
     context_handover: handoverOf(capValue),
     source: { context_cap: capSource }
   };
-  pipeline.second_reviewer_model_effective = effectiveReviewerModel(pipeline.second_reviewer_model, roles['fresh-reviewer']?.model, table);
   // Not locks: no unlock is involved, and a fail-closed project layer does not change them.
   const brainstorm = {};
   for (const k of Object.keys(BRAINSTORM_DEFAULTS)) {
@@ -1251,6 +1248,7 @@ export function modelEnvLine({ env = process.env, readVersion, readSources = () 
 
 // Switches one saver at the user level: one key, written atomically. A key the project layer sets is refused, since it would win.
 function setMod(id, word, { home, cwd, pluginRoot }) {
+  if (id === 'efficient-browser-use') throw new Refusal('efficient-browser-use is retired, removed in aico-settings 4.0');
   if (!SWITCHABLE.includes(id)) throw new Refusal(`${label(id)} cannot be switched`);
   const key = switchKey(id);
   const seen = id === 'switchboard' && word === 'seen';

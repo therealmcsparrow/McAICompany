@@ -177,15 +177,6 @@ test('role-names: project beats user beats plugin per key, and a bad stored valu
   assert.ok(!JSON.stringify(r.warnings).includes('bad "topic"'));
 });
 
-test('role-names: personalities exist only on the three social surfaces', () => {
-  assert.match(read('skills/cooler/SKILL.md'), /^Personality:/m);
-  assert.match(read('skills/brainstorm/references/format-1.md'), /^Personality:/m);
-  assert.match(read('scripts/brainstorm.mjs'), /personalityBlock/);
-  for (const rel of ['skills/pipeline/SKILL.md', 'skills/research/SKILL.md', 'skills/brainstorm/SKILL.md', 'skills/brainstorm/references/format-2.md']) {
-    assert.doesNotMatch(read(rel), /^Personality:/m, rel);
-  }
-});
-
 test('role-names: a personalities file with a missing key or a bad value fails the static check, naming the field and not the value', () => {
   const missing = checkWith('company/personalities.json', t => {
     const o = JSON.parse(t);
@@ -296,38 +287,6 @@ test('aico-settings: a broken project personality layer holds the locks closed, 
 
 // ================= dispatch-prompt v3.2 =====================================================
 
-const promptDoc = read('docs/contracts/dispatch-prompt.md');
-const dispatchBlocks = rel => {
-  const out = [];
-  let open = null;
-  read(rel).split('\n').forEach((line, i) => {
-    const m = /^\s*(`{3,})/.exec(line);
-    if (!open) { if (m) open = { size: m[1].length, start: i + 1, lines: [] }; }
-    else if (m && m[1].length >= open.size && /^\s*`+\s*$/.test(line)) { out.push(open); open = null; }
-    else open.lines.push(line);
-  });
-  return out.filter(b => b.lines.some(l => /^Company profile:/.test(l)));
-};
-
-test('dispatch-prompt: the Personality line is the last line of a cooler turn and a format 1 round and appears in no other dispatch', () => {
-  assert.match(promptDoc, /^# Contract: dispatch-prompt v(?:[4-9]|\d{2,})\.\d+/);
-  for (const rel of ['skills/cooler/SKILL.md', 'skills/brainstorm/references/format-1.md']) {
-    const withLine = dispatchBlocks(rel).filter(b => b.lines.some(l => /^Personality:/.test(l)));
-    assert.ok(withLine.length >= 1, rel);
-    for (const b of withLine) {
-      const lines = b.lines.filter(l => l.trim());
-      assert.match(lines.at(-1), /^Personality:/, `${rel}:${b.start}`);
-      const order = ['Project profile', 'Company profile', 'Language'].map(k => lines.findIndex(l => l.startsWith(`${k}:`)));
-      assert.deepEqual(order, [...order].sort((a, b) => a - b), 'the earlier lines keep their order');
-      assert.ok(!lines.some(l => /^Output: \.company\/work\//.test(l)), 'a social turn writes no Handoff');
-    }
-  }
-  for (const rel of ['skills/pipeline/SKILL.md', 'skills/research/SKILL.md', 'skills/brainstorm/SKILL.md', 'skills/brainstorm/references/format-2.md']) {
-    for (const b of dispatchBlocks(rel)) assert.ok(!b.lines.some(l => /^Personality:/.test(l)), `${rel}:${b.start}`);
-  }
-  assert.match(promptDoc, /Never `Personality:`\./);
-});
-
 test('dispatch-prompt: stage writes one file per Role and prints paths only; the folder ignores itself', () => {
   const sb = sandbox();
   const r = sb.run('personality.mjs', ['stage', 'brainstorm-20261027-1200', 'architect,writer,architect']);
@@ -390,15 +349,10 @@ test('dispatch-prompt: the exports give the block, or nothing for a Role without
   for (const role of ['ghost', '../architect', '__proto__', 'constructor', '']) assert.equal(personalityBlock(role, ctx), '', JSON.stringify(role));
 });
 
-test('dispatch-prompt: the v3.1 Context cap rule still holds under v3.2', () => {
+test('dispatch-prompt: the static check still reports a dispatch block with no Context cap', () => {
   assert.deepEqual(check(pluginCopy()).errors, [], 'the copy starts clean');
-  const errors = checkWith('skills/pipeline/SKILL.md', t => t.replace(/^Context cap: .*\n/m, ''));
-  assert.ok(errors.some(e => /skills\/pipeline\/SKILL\.md/.test(e) && /no Context cap:/.test(e)), String(errors));
-  // The v3.1 sentence stays word for word, and the static check still enforces it.
-  assert.ok(promptDoc.includes('**Enforcement:** `scripts/check.mjs` reports an `ERROR` for any fenced dispatch block that has an `Output: .company/work/` line and no `Context cap:` line. No Playbook is exempt.'));
-  assert.match(promptDoc, /\| `Context cap: <cap> handover <n>` \|/);
-  assert.match(promptDoc, /\*\*Pipeline Step:\*\* `Project profile:`, `Company profile:`, `Language:`, `Settings:` \(optional\), `Context cap:`/);
-  assert.ok(!/^\s*Name:/m.test(read('skills/pipeline/SKILL.md')));
+  const errors = checkWith('skills/pipeline/references/dispatch.md', t => t.replace(/^Context cap: .*\n/m, ''));
+  assert.ok(errors.some(e => /skills\/pipeline\/references\/dispatch\.md/.test(e) && /no Context cap:/.test(e)), String(errors));
 });
 
 // ================= brainstorm-file v2.1 =====================================================
@@ -472,7 +426,6 @@ test('brainstorm-file: the block appears nowhere else, and the file still passes
   assert.ok(preview.out.length > 0, 'the preview is still a prompt');
   assert.doesNotMatch(preview.out + preview.err, /Personality|Style data/);
   for (const key of ['temperament', 'talk', 'topic']) assert.ok(!(preview.out + preview.err).includes(DEFAULTS.architect[key]), `${key} leaked into the preview`);
-  assert.match(promptDoc, /\*\*No script prints the block \(Fix round 1\)\.\*\*/);
   // The preview is repeatable: the same call twice gives the same bytes.
   assert.equal(sb.run('brainstorm.mjs', ['prompt', bs.file, 'architect']).out, preview.out);
   // With a personality set in the project the preview stays clean as well.
@@ -614,18 +567,7 @@ test('company-type: the manifests and the always-on commands cover every Playboo
   assert.ok(orphan.some(e => e.includes('zz-orphan')), String(orphan));
 });
 
-test('company-type: every Playbook has the Type line after its Help line, with one empty line between', () => {
-  const listed = PLAYBOOKS.filter(n => !ALWAYS.includes(n));
-  assert.equal(listed.length, 28);
-  for (const name of listed) {
-    const lines = read(`skills/${name}/SKILL.md`).split('\n');
-    const help = lines.findIndex(l => l.startsWith('**Help:**'));
-    assert.ok(help > 0, name);
-    assert.equal(lines[help + 1], '', name);
-    assert.ok(lines[help + 2].startsWith(`**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`), name);
-    assert.equal(lines.filter(l => l.startsWith('**Type:**')).length, 1, name);
-  }
-  for (const name of ALWAYS) assert.doesNotMatch(read(`skills/${name}/SKILL.md`), /^\*\*Type:\*\*/m, name);
+test('company-type: the static check refuses a Playbook whose Type line is missing its gap or names another Playbook', () => {
   const noGap = checkWith('skills/fix/SKILL.md', t => t.replace(/(\*\*Help:\*\*[^\n]*\n)\n(\*\*Type:\*\*)/, '$1$2'));
   assert.ok(noGap.some(e => e.includes('skills/fix/SKILL.md')), String(noGap));
   const wrongName = checkWith('skills/fix/SKILL.md', t => t.replace('check-playbook fix', 'check-playbook feature'));
@@ -993,23 +935,3 @@ test('aico-settings: a profile Save through the page keeps the company_type line
   }
 });
 
-test('company-type: the consumers named in the Contract do what it says', () => {
-  const pipeline = read('skills/pipeline/SKILL.md');
-  assert.match(pipeline, /\*\*Company type \(§1\.0\)\*\*, before every other Setup step/);
-  assert.match(pipeline, /check-role <role>/);
-  assert.match(pipeline, /the summary's first line is `Ship means: <ship\.meaning>`/);
-  assert.match(pipeline, /each item in `ship\.checks` without its satisfying Handoff/);
-  // Consumers read the readable lines: the first line decides, and a script that parses adds --json.
-  assert.match(pipeline, /Exit not 0, no output or a first line that starts with neither `ok: ` nor `company type: ` → show its output line/);
-  assert.match(pipeline, /type lines/);
-  const help = read('skills/help/SKILL.md');
-  assert.match(help, /Keep the id from the first line \(`company type: <id> \(<label>\)…`\) and the `playbooks:` line/);
-  assert.match(help, /list and explain only commands in `playbooks`/);
-  const setup = read('skills/setup/SKILL.md');
-  assert.match(setup, /run\.mjs" company-type list/);
-  assert.match(setup, /run\.mjs" company-type set <id>/);
-  assert.match(setup, /`Area: company-type`/);
-  assert.match(read('skills/lead/references/project-template.md'), /^<!-- company_type: .*-->$/m);
-  assert.match(typeDoc, /\| `claims-cited` \| an `editor` Handoff in the run, `status: done`, no `## Blocking`/);
-  assert.match(typeDoc, /\| `handoff-package` \| a `ui-ux-designer` Handoff listing files, specs, tokens and the asset licence record/);
-});

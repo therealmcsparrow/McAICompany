@@ -1,4 +1,4 @@
-// Tests: handoff-lint and rule-check give byte-identical output and exit codes
+// Tests: rule-check (handoff-lint parity retired with handoff v3.0) and the shared normalizer give byte-identical output and exit codes
 // to the base commit. Base = git archive of the base commit; "now" = the same tree with the working scripts/, mods/
 // and hooks/ laid over it, docs/ kept at base so only the script change is measured.
 import { test, before, after } from 'node:test';
@@ -37,53 +37,12 @@ function run(tree, script, args, cwd) {
 function parity(script, args, cwd = tmp) {
   const a = run(A, script, args, cwd);
   const b = run(B, script, args, cwd);
+  // rule-check v1.7 (plan C15) added the `standing` command, so its usage text gains one line; drop it before comparing.
+  const planned = t => t.replace(/^ {2}standing --write \| standing check\r?\n/m, '');
+  if (script === 'rule-check.mjs') Object.assign(b, { stdout: planned(b.stdout), stderr: planned(b.stderr) });
   assert.deepEqual(b, a, `${script} ${args.join(' ')}`);
   return a;
 }
-
-const HEAD = `---
-step: 03
-role: backend-engineer
-task: demo
-status: done
-round: 0
-base-commit: ${BASE}
-risk-tier: medium
-acceptance-ids: [AC1]
-files-touched: [src/x.ts]
-contracts: [handoff v2.7]
----
-By: backend-engineer
-`;
-const BODY = '## Did\n- x\n## Decisions\n- y\n## Blocking\n- none\n## Nits\n- none\n## Next\n- z\n';
-const HANDOFFS = {
-  valid: HEAD + BODY,
-  badStatus: HEAD.replace('status: done', 'status: maybe') + BODY,
-  noContracts: HEAD.replace('contracts: [handoff v2.7]\n', '') + BODY,
-  hostileFiles: HEAD.replace('files-touched: [src/x.ts]', 'files-touched: [.ENV, ../x, C:\\a, a/.git/x, con, a/b., .env.example, src/a b]') + BODY,
-  badSection: HEAD + '## Did\n- x\n',
-  blocking: HEAD + BODY.replace('- none\n## Nits', '- [test] scripts/a.mjs:3 — broken — fix.\n## Nits'),
-  empty: ''
-};
-
-for (const [name, text] of Object.entries(HANDOFFS)) {
-  test(`AC20: handoff-lint ${name}: output and exit code equal base`, () => {
-    const dir = path.join(tmp, `h-${name}`);
-    fs.mkdirSync(dir, { recursive: true });
-    const f = path.join(dir, '03-backend-engineer.md');
-    fs.writeFileSync(f, text);
-    parity('handoff-lint.mjs', [f]);
-    parity('handoff-lint.mjs', [f, '--require-top']);
-    parity('handoff-lint.mjs', [f, '--findings']);
-  });
-}
-
-test('AC20: handoff-lint usage and missing file equal base', () => {
-  parity('handoff-lint.mjs', []);
-  parity('handoff-lint.mjs', ['--bogus', 'x']);
-  parity('handoff-lint.mjs', [path.join(tmp, 'nope.md')]);
-  parity('handoff-lint.mjs', ['--applied']);
-});
 
 const HOSTILE_EVIDENCE = [
   'src/a.mjs', 'src/dir/', 'a/b.mjs', 'SRC/A.mjs', 'a\\b', '.env', '.ENV', 'a/.env.local', '.env.example', '.env.', '.env ', '.env::$DATA',
@@ -124,8 +83,8 @@ const STANDARDS = `# Standards
 - bad.X1 — wrong class
 - ${'a'.repeat(24)}.M3 — longest id
 - ${'a'.repeat(25)}.M4 — too long
-- model-floor.S2 — should
-- browser.Y1 — may
+- lint.S2 — should
+- style.Y1 — may
 - cap.M1 — duplicate
 ## Notes
 - other.M9 — outside the section

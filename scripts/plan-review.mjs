@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Plan review (contract: docs/contracts/plan-review.md v1.4). Node built-ins only.
-// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v2.0 docs/contracts/work-folder-name.md v3.0
+// Plan review (contract: docs/contracts/plan-review.md v2.0). Node built-ins only.
+// uses: docs/contracts/contract-index.md v1 docs/contracts/plan-tasks.md v1.2 docs/contracts/handoff.md v3.0 docs/contracts/work-folder-name.md v3.0 docs/contracts/aico-settings.md v4.0
 // `lines` writes the inputs file a reviewer reads, `gate` prints the reviewer's paraphrase for the CEO,
 // `majors` says whether a plan raises a Contract's major version, `score` counts seeded flaws a reviewer caught. Plans, Handoffs, case files and arguments are untrusted:
 // every pattern is anchored over a character class, sizes are capped before parsing, every file is read by
@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { buildIndex } from './contract-drift.mjs';
 import { parseLocations } from './handoff-lint.mjs';
 import { normalizePath } from './plan-tasks.mjs';
+import { resolveSettings } from './settings.mjs';
 import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
 
 const KiB = 1024;
@@ -46,7 +47,7 @@ const FENCE = /^\s{0,3}(?:`{3,}|~{3,})/;
 const TAGS = ['contract', 'spec', 'security', 'test', 'comprehension'];
 const KIND_FILES = { plan: ['tests', 'plan-review', 'eval.jsonl'], code: ['tests', 'code-review', 'eval.jsonl'] };
 
-const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan|code --after <file>[,<file>…] | majors <slug> <plan> | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
+const USAGE = 'usage: plan-review.mjs lines <slug> <plan> --mode plan --after <file>[,<file>…] | majors <slug> <plan> | gate <slug> <handoff> | score <cases> <results> [--tag] [--record <x.y.z> [--kind plan|code]]';
 
 class Refused extends Error {}
 class Unreadable extends Error {}
@@ -324,14 +325,14 @@ function cmdLines(args, env) {
   const planName = rest[1];
   if (!PLAN_NAME.test(planName)) throw new Refused('bad plan name');
   const mode = flags.get('--mode');
-  if (mode !== 'plan' && mode !== 'code') throw new Refused('mode must be plan or code');
+  if (mode !== 'plan') throw new Refused('mode must be plan');
   const after = flags.get('--after').split(',');
   if (after.length < 1 || after.length > MAX_AFTER) throw new Refused('--after takes 1 to 20 files');
   for (const f of after) {
     if (!HANDOFF_NAME.test(f) || PLAN_NAME.test(f)) throw new Refused('--after takes Handoff file names, never a plan');
   }
   if (new Set(after).size !== after.length) throw new Refused('--after names a file twice');
-  if (mode === 'plan' && !after.some((f) => ARCHITECT_NAME.test(f))) throw new Refused('plan mode needs an architect Handoff in --after');
+  if (!after.some((f) => ARCHITECT_NAME.test(f))) throw new Refused('plan mode needs an architect Handoff in --after');
 
   const realRoot = realRootOf(env.root);
   exactNames(realRoot, slug, [planName, ...after]);
@@ -348,19 +349,16 @@ function cmdLines(args, env) {
     contracts = contracts.slice(0, MAX_CONTRACTS);
     warnings.push(`warning: inputs capped contracts ${MAX_CONTRACTS}`);
   }
-  let code = [];
-  if (mode === 'plan') {
-    code = collectCode(realRoot, text);
-    if (code.length > MAX_CODE) {
-      code = code.slice(0, MAX_CODE);
-      warnings.push(`warning: inputs capped code ${MAX_CODE}`);
-    }
+  let code = collectCode(realRoot, text);
+  if (code.length > MAX_CODE) {
+    code = code.slice(0, MAX_CODE);
+    warnings.push(`warning: inputs capped code ${MAX_CODE}`);
   }
   const base = `.company/work/${slug}`;
   const body = [
     '## Plan', `${base}/${planName}`,
     '## Contracts', ...contracts,
-    ...(mode === 'plan' ? ['## Code', ...code] : ['## Diff', 'judging diff: rule git.M-SEC4'])
+    '## Code', ...code
   ].join('\n') + '\n';
   writeInputs(realRoot, slug, body);
   return {
@@ -387,6 +385,15 @@ function raisesMajor(line, index) {
   return false;
 }
 
+// pipeline.plan_review (aico-settings v4.0): off unless a layer says on. Any read failure counts as off.
+function planReviewOn(root) {
+  try {
+    return resolveSettings({ cwd: root }).pipeline.plan_review === 'on';
+  } catch {
+    return false;
+  }
+}
+
 function cmdMajors(args, env) {
   if (args.length !== 2) throw new Refused(USAGE);
   const slug = needSlug(args[0]);
@@ -395,6 +402,7 @@ function cmdMajors(args, env) {
   const realRoot = realRootOf(env.root);
   exactNames(realRoot, slug, [planName]);
   const text = planFile(realRoot, slug, planName, MAX_PLAN_BYTES);
+  if (!planReviewOn(env.root)) return { code: 0, lines: ['majors: skipped (settings off)'] };
   const index = buildIndex(realRoot);
   const lines = [];
   for (const [i, line] of text.split(/\r\n|\n|\r/).entries()) {

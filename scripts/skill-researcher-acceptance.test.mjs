@@ -1,7 +1,6 @@
-// Wiring and Contract-level checks that no other suite pins (Role report layout, approve and install forms, skill-recommendation, registration, Savvy bars), plus the
-// checks for skill-recommendation v1, skills-section v1 and aico-mods v1.1.
-// The deep suites live in skillspector.test.mjs (skillspector-scan v1), skill-picks.test.mjs, settings.test.mjs
-// (aico-settings v1.2), mods-lib.test.mjs (bars) and install-skills-skills.test.mjs (skills-section parser).
+// Wiring checks that no other suite pins (registration, Savvy bars, settings page row).
+// The deep suites live in skillspector.test.mjs, skill-picks.test.mjs, settings.test.mjs,
+// mods-lib.test.mjs (bars) and install-skills-skills.test.mjs (skills-section parser).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -21,55 +20,9 @@ const order = (text, parts) => {
   }
 };
 
-// ---------- report layout: Candidates, Recommended set, Rejected ----------
-test('AC1 Contract and Role agree: Candidates, Recommended set, Rejected, in order, at most 5, never ranked by stars', () => {
-  const contract = read('docs/contracts/skill-recommendation.md');
-  order(contract, ['## Candidates', '## Recommended set', '## Rejected']);
-  assert.match(contract, /at most 5/);
-  assert.match(contract, /never used to rank/);
-  const agent = read('agents/skill-researcher.md');
-  assert.match(agent, /`## Candidates`, `## Recommended set`, `## Rejected`/);
-  assert.match(agent, /at most 5/);
-  assert.match(agent, /never by downloads or stars/);
-  assert.match(agent, /Every candidate is in the set or in Rejected/);
-  for (const area of ['stack', 'product-type', 'company-type', 'design']) assert.ok(agent.includes(area), area);
-});
-
-// ---------- form order: approve before install ----------
-test('AC5 the Lead asks the approve form before the Install / Skip form; Skip installs nothing; both must be yes', () => {
-  const t = read('skills/lead/references/skill-picks.md');
-  order(t, ['**Approve form** (never auto)', '**Install / Skip form**']);
-  assert.match(t, /Skip writes nothing/);
-  assert.match(t, /--dry-run/);
-  assert.match(t, /only after approval/i);
-  assert.match(read('docs/contracts/skill-recommendation.md'), /Nothing installs unless the approve form says yes and the Install form says yes/);
-});
-
-// ---------- skill-recommendation v1 ----------
-test('AC6 skill-recommendation v1 names area, keeps the source/name allow-list by reusing the design-skills-section allow-list', () => {
-  const c = read('docs/contracts/skill-recommendation.md');
-  assert.match(c, /^# Contract: skill-recommendation v2/);
-  assert.match(c, /area: \(stack\|product-type\|company-type\|design\)/);
-  assert.match(c, /`design-skills-section` v2\.0 \(field allow-list\)/);
-  assert.match(c, /\| `vet <handoff> --json` \|/);
-  assert.match(c, /commit: \(\[\^;\]\+\)/);
-  assert.ok(read('docs/contracts/design-skills-section.md').includes('# Contract: design-skills-section v2'), 'v2 not bumped');
-});
-
-// ---------- skills-section v1 ----------
-test('skills-section v2: the Contract and the installer agree on the old ## Skills section', () => {
-  const c = read('docs/contracts/skills-section.md');
-  assert.match(c, /^# Contract: skills-section v2/);
-  assert.match(c, /area: \(stack\|product-type\|company-type\)/);
-  assert.match(c, /At most 5 lines per area, 15 in all/);
-  assert.match(read('scripts/install-skills.mjs'), /parseSkillsSection/);
-});
-
 // ---------- registration and check.mjs ----------
-test('AC7 skill-researcher is registered everywhere and scripts/check.mjs passes', () => {
+test('AC7 skill-researcher is registered in names.json and scripts/check.mjs passes', () => {
   assert.equal(JSON.parse(read('company/names.json'))['skill-researcher'], 'Selin');
-  for (const f of ['documentation/roles/README.md', 'README.md', 'documentation/concepts/research-and-skills.md']) assert.match(read(f), /skill-researcher/, f);
-  assert.match(read('documentation/commands/skillspector.md'), /\/aico:skillspector/);
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'check.mjs')], { cwd: root, encoding: 'utf8', timeout: 120000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
@@ -99,16 +52,11 @@ test('aico-mods v1.1: only the pane draws bars; the status part and the off swit
   order(savvy, ['labelled(\'Elapsed\'', '...progressRows(model.view, width)', 'No subagent running.']);
   assert.match(savvy, /savvy is off; switch it on in \/aico:settings/);
   assert.doesNotMatch(read('mods/lib/bars.mjs'), /[^\x00-\x7f]/, 'ASCII only');
-  assert.match(read('docs/contracts/aico-mods.md'), /^# Contract: aico-mods v[12]\.\d+/);
   for (const f of ['mods/shared/status.ts', 'mods/lib/status.mjs']) assert.doesNotMatch(read(f), /progressRows|Gates \[/, f);
 });
 
 // ---------- aico-settings v1.2 ----------
-test('aico-settings v1.2: Contract version, plugin default and the page row are in place', () => {
-  // v1.2 or later (later versions are additive)
-  const m = read('docs/contracts/aico-settings.md').match(/^# Contract: aico-settings v(\d+)\.(\d+)/);
-  assert.ok(m, 'Contract header present');
-  assert.ok(Number(m[1]) > 1 || Number(m[2]) >= 2, `Contract is v1.2 or later, got v${m && m[1]}.${m && m[2]}`);
+test('aico-settings: the plugin default and the page row are in place', () => {
   assert.match(read('scripts/settings.mjs'), /SKILLSPECTOR_DEFAULTS/);
   assert.match(read('scripts/settings-page.html'), /Scan mode/);
 });

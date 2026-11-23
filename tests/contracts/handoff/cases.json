@@ -12,14 +12,7 @@
   "bad status": {
     "file": "bad-status.md",
     "errors": [
-      "frontmatter: status must be done|blocked|needs-ceo|handover",
-      "aico-top: status must be done|blocked|needs-ceo|handover"
-    ]
-  },
-  "bad top block": {
-    "file": "bad-top.md",
-    "errors": [
-      "aico-top: tokens_used must be an integer or unknown"
+      "frontmatter: status must be done|blocked|needs-ceo|handover"
     ]
   },
   "routing": {
@@ -36,8 +29,7 @@
       "files-touched": [
         "src/x.ts"
       ],
-      "blocking": [],
-      "findings": []
+      "blocking": []
     }
   },
   "v1.2 reviewer row with R-id": {

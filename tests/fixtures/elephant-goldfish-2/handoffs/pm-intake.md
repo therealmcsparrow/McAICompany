@@ -7,7 +7,7 @@ round: 0
 base-commit: 0123456789abcdef0123456789abcdef01234567
 risk-tier: high
 acceptance-ids: [AC28, AC30]
-contracts: [handoff v2.0]
+contracts: [handoff v3.0]
 ---
 By: product-manager
 ## Did

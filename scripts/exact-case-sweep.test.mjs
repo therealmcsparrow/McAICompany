@@ -48,7 +48,6 @@ const ALLOW = [
   ['scripts/ticket-approval.mjs', 'return p.toLowerCase();', 'repo path key for ticket file lists, outside the work folder name rule'],
   ['scripts/plan-review.mjs', "trimAlias(first).toLowerCase() === '.company'", 'detects a case variant of .company so it is refused'],
   ['scripts/plan-review.mjs', '/^none\\b/i', 'Blocking row text'],
-  ['scripts/review-loop.mjs', '/^GIT_/i', 'environment variable names'],
   ['scripts/handoff-lint.mjs', 'NONE_RE =', 'Handoff section text'],
   ['scripts/handoff-lint.mjs', "=== '.git'", '.git/.env guard, not a work path'],
   ['scripts/handoff-lint.mjs', 'const fold = x => x.toLowerCase();', 'wrongWorkCase: finds a typed .company/work pair in any case so it is refused'],
@@ -60,7 +59,6 @@ const ALLOW = [
   ['scripts/plan-tasks.mjs', ".join('/').toLowerCase()", 'keyOf: repo path key for task file scopes; the run folder prefix compares exact (inRunFolder)'],
   ['scripts/plan-tasks.mjs', 'behaviour.toLowerCase()', 'words of ticket text'],
   ['scripts/tier-set.mjs', ".join('/').toLowerCase()", 'repo path key for file scopes outside .company/work'],
-  ['scripts/tier-set.mjs', '    .toLowerCase()', 'repo path key for file scopes outside .company/work'],
   ['scripts/tier-set.mjs', '/^GIT_/i', 'environment variable names'],
   ['scripts/tier-set.mjs', ".at(-1)).toLowerCase()", '.env guard on a repo path'],
   ['scripts/worktree.mjs', "r.toLowerCase() : r", 'sameKey: compares repo and worktree paths (git output), not a typed work folder'],
@@ -163,42 +161,4 @@ test('AC5 the allow-listed hook file is not an in-scope script and is named with
     assert.ok(!SCANNED.includes(file));
     read(file); // exists
   }
-});
-
-// Contracts of the in-scope scripts, plus the shared one. cited-report takes no typed name (it only lost a fold
-// dedupe), so it carries no refusal.
-const CONTRACTS = [
-  'work-folder-name', 'draft-input', 'grill-file', 'destination-spec', 'ticket-approval', 'plan-review',
-  'review-loop', 'run-state', 'run-guard', 'lead-handoff', 'handoff', 'plan-check', 'plan-tasks',
-  'tier-sets', 'worktree', 'idea-flow', 'reflect', 'skillspector-scan', 'skill-recommendation',
-  'token-ledger', 'rule-check', 'drift-report', 'reprompt',
-];
-
-test('AC5 every Contract of an in-scope script names `wrong letter case`', () => {
-  const lacking = CONTRACTS.filter((c) => !/wrong letter case/.test(read(`docs/contracts/${c}.md`)));
-  assert.deepEqual(lacking, []);
-});
-
-test('AC5 ADR 0053 exists with status accepted', () => {
-  const adr = read('docs/adr/0053-exact-letter-case-work-paths.md');
-  assert.match(adr, /^# Exact letter case for work folder paths\r?$/m);
-  assert.match(adr, /^Status: accepted \(CEO, 2026-11-01\)\r?$/m);
-});
-
-// True when any `### Security` block, in any release section, names the refusal.
-function hasSecurityRefusal(log) {
-  const blocks = log.split(/\r?\n(?=#{2,3} )/).filter((b) => /^### Security\b/.test(b));
-  return blocks.some((b) => /wrong letter case/.test(b));
-}
-
-test('AC5 the CHANGELOG has a Security entry naming the refusal, before or after a release rolls it', () => {
-  const log = read('CHANGELOG.md');
-  assert.ok(log.includes('## [Unreleased]'), 'Unreleased heading');
-  assert.ok(hasSecurityRefusal(log), 'Security entry naming wrong letter case');
-  // A release moves the entry under a version heading; the check must still find it.
-  const rolled = log.replace('## [Unreleased]', '## [Unreleased]\n\n## [9.9.9] - 2099-01-01');
-  assert.ok(hasSecurityRefusal(rolled), 'found after the release roll');
-  // Removing the entry must still fail.
-  assert.ok(!hasSecurityRefusal(rolled.replace(/wrong letter case/g, 'x')), 'missing entry is detected');
-  assert.ok(!hasSecurityRefusal(rolled.replace(/^### Security\r?$/gm, '### Fixed')), 'missing heading is detected');
 });

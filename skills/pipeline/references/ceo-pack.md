@@ -1,6 +1,6 @@
 # CEO pack
 
-How the Lead bundles questions to the CEO (`run-state` v3.1, `docs/contracts/run-state.md`; `lead-relay` v1, `docs/contracts/lead-relay.md`). The Lead has no `AskUserQuestion`: it opens each form with `lead-relay open` and ends with that `STATUS: needs-ceo` block; main asks the CEO. The success metric is the number of prompts that appear outside a form.
+How the Lead bundles questions to the CEO (`run-state`, `docs/contracts/run-state.md`; `lead-relay`, `docs/contracts/lead-relay.md`). The Lead has no `AskUserQuestion`: it opens each form with `lead-relay open` and ends with that `STATUS: needs-ceo` block; main asks the CEO. The success metric is the number of prompts that appear outside a form.
 
 ## Rules
 - A Step that returns `status: needs-ceo` does not get its question shown at once. The Lead holds it until every Step of the current wave has returned.
@@ -15,3 +15,6 @@ How the Lead bundles questions to the CEO (`run-state` v3.1, `docs/contracts/run
 - `none` counts a prompt that appeared outside any form (a stray question in text, a permission prompt the Lead had to ask alone). It is the number to drive down.
 - Pass only the checked words and the count. Never put a question, an answer or CEO text in an argument.
 - A refused command is named in the next Gate summary and the run goes on.
+
+## Escalation form
+An escalation after the Fix-round limit offers, in this order: Ship with Debt (Recommended), Cut scope, Extra round (`references/fix-rounds.md`). One form, single-select, no comma in a label.

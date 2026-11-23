@@ -80,9 +80,7 @@ describe('handoff Contract fixtures', () => {
       if (c.errors) assert.deepEqual(errors, c.errors);
       if (c.routing) {
         assert.deepEqual(errors, []);
-        const { top, ...rest } = routing;
-        assert.deepEqual(rest, c.routing);
-        assert.ok(top);
+        assert.deepEqual(routing, c.routing);
       }
     });
   }

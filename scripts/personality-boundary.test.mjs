@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import * as settings from './settings.mjs';
 import * as checkModule from './check.mjs';
 
-// Boundary tests for the personality feature: where personality text may exist, that the
+// Boundary tests for the personality feature: that the
 // settings `get` output cannot carry it, who may import the resolver, and that hostile values
 // never turn into instructions.
 
@@ -27,28 +27,6 @@ function walk(dir, keep, out = []) {
   return out;
 }
 
-// Fenced blocks of a markdown text as { start, lines }; a longer fence may hold shorter ones.
-function fencedBlocks(text) {
-  const out = [];
-  let open = null;
-  text.split('\n').forEach((line, i) => {
-    const m = /^\s*(`{3,})/.exec(line);
-    if (!open) {
-      if (m) open = { size: m[1].length, start: i + 1, lines: [] };
-    } else if (m && m[1].length >= open.size && /^\s*`+\s*$/.test(line)) {
-      out.push(open);
-      open = null;
-    } else {
-      open.lines.push(line);
-    }
-  });
-  return out;
-}
-
-const isDispatchBlock = (block) => block.lines.some((l) => /^(Company profile|Input Handoffs|Output):/.test(l));
-const hasPersonalityLine = (block) => block.lines.some((l) => /^\s*Personality:/.test(l));
-const PERSONALITY_VALUE_WORDS = /temperament|pet topic|way of talking/i;
-
 // The code files that could import the resolver or the personality module (tests excluded).
 const CODE_RE = /\.(mjs|cjs|js|ts|html)$/;
 const codeFiles = () => walk(root, (f) => CODE_RE.test(f) && !/\.test\.(mjs|cjs|js|ts)$/.test(f));
@@ -60,90 +38,8 @@ function specifiers(src) {
   return out;
 }
 
-const SKILL_FILES = walk(path.join(root, 'skills'), (f) => f.endsWith('.md'));
-const AGENT_FILES = walk(path.join(root, 'agents'), (f) => f.endsWith('.md'));
-
-// The only files allowed to carry a `Personality:` line in a fenced block.
-const LINE_ALLOWED = new Set(['skills/cooler/SKILL.md', 'skills/brainstorm/references/format-1.md']);
-// The only files allowed to mention the personality script.
-const SCRIPT_MENTION_ALLOWED = new Set([...LINE_ALLOWED, 'skills/settings/SKILL.md']);
 const RESOLVER_ALLOWED = new Set(['scripts/settings.mjs', 'scripts/personality.mjs', 'scripts/settings-server.mjs']);
 const MODULE_IMPORTERS_ALLOWED = new Set(['scripts/brainstorm.mjs']);
-
-// --- prompts and skills never carry personality ---------------------------------------------
-
-test('the scanners find a personality line and a script mention in a fixture', () => {
-  const md = ['# x', '```', 'Company profile: p', 'Language: en', 'Personality: /tmp/a.md', '```', 'Run personality.mjs stage'].join('\n');
-  const blocks = fencedBlocks(md);
-  assert.equal(blocks.length, 1);
-  assert.ok(isDispatchBlock(blocks[0]));
-  assert.ok(hasPersonalityLine(blocks[0]));
-  const nested = ['````', '```', 'Personality: x', '```', '````'].join('\n');
-  assert.equal(fencedBlocks(nested).length, 1);
-  assert.deepEqual(specifiers("import a from './personality.mjs';\nconst b = await import(\"./x.mjs\");\nconst c = require('y');"), ['./personality.mjs', './x.mjs', 'y']);
-});
-
-test('the walk covers every skill file and every agent', () => {
-  assert.ok(SKILL_FILES.length >= 40, `skill files: ${SKILL_FILES.length}`);
-  assert.ok(AGENT_FILES.length >= 33, `agent files: ${AGENT_FILES.length}`);
-  assert.ok(SKILL_FILES.map(rel).includes('skills/pipeline/SKILL.md'));
-  assert.ok(SKILL_FILES.map(rel).includes('skills/cooler/SKILL.md'));
-});
-
-test('no fenced block in any skill carries a Personality: line except the cooler and brainstorm format 1', () => {
-  const offenders = [];
-  for (const file of SKILL_FILES) {
-    if (LINE_ALLOWED.has(rel(file))) continue;
-    for (const block of fencedBlocks(fs.readFileSync(file, 'utf8'))) {
-      if (hasPersonalityLine(block)) offenders.push(`${rel(file)}:${block.start}`);
-    }
-  }
-  assert.deepEqual(offenders, []);
-});
-
-test('no agent file carries a Personality: line', () => {
-  const offenders = AGENT_FILES.filter((f) => /^\s*Personality:/m.test(fs.readFileSync(f, 'utf8'))).map(rel);
-  assert.deepEqual(offenders, []);
-});
-
-test('only the cooler, brainstorm format 1 and the settings skill mention personality.mjs', () => {
-  const offenders = [...SKILL_FILES, ...AGENT_FILES].filter((f) => !SCRIPT_MENTION_ALLOWED.has(rel(f)) && /personality\.mjs/i.test(fs.readFileSync(f, 'utf8'))).map(rel);
-  assert.deepEqual(offenders, []);
-});
-
-test('no dispatch block in any skill holds a personality value label', () => {
-  const offenders = [];
-  for (const file of SKILL_FILES) {
-    if (LINE_ALLOWED.has(rel(file))) continue;
-    for (const block of fencedBlocks(fs.readFileSync(file, 'utf8'))) {
-      if (isDispatchBlock(block) && PERSONALITY_VALUE_WORDS.test(block.lines.join('\n'))) offenders.push(`${rel(file)}:${block.start}`);
-    }
-  }
-  assert.deepEqual(offenders, []);
-});
-
-test('the pipeline, research and brainstorm format 2 dispatch blocks have no Personality: key', () => {
-  for (const file of ['skills/pipeline/SKILL.md', 'skills/research/SKILL.md', 'skills/brainstorm/SKILL.md', 'skills/brainstorm/references/format-2.md']) {
-    if (!fs.existsSync(path.join(root, file))) continue;
-    const blocks = fencedBlocks(read(file)).filter(isDispatchBlock);
-    for (const block of blocks) assert.ok(!hasPersonalityLine(block), `${file}:${block.start}`);
-  }
-  const pipelineBlocks = fencedBlocks(read('skills/pipeline/SKILL.md')).filter(isDispatchBlock);
-  assert.ok(pipelineBlocks.length >= 1, 'the pipeline has a dispatch block');
-});
-
-test('the cooler and brainstorm format 1 dispatch blocks end with the Personality: line', () => {
-  for (const file of [...LINE_ALLOWED]) {
-    const blocks = fencedBlocks(read(file)).filter((b) => b.lines.some((l) => /^Company profile:/.test(l)));
-    assert.ok(blocks.length >= 1, `${file} has a dispatch block`);
-    const withLine = blocks.filter(hasPersonalityLine);
-    assert.ok(withLine.length >= 1, `${file} has a Personality: line in a dispatch block`);
-    for (const block of withLine) {
-      const last = block.lines.filter((l) => l.trim() !== '').at(-1);
-      assert.match(last, /^Personality:/, `${file}:${block.start}: Personality: is the last line`);
-    }
-  }
-});
 
 // --- who may import what --------------------------------------------------------------------
 
