@@ -1,4 +1,8 @@
-# Contract: token-ledger v1.14
+# Contract: token-ledger v1.16
+
+v1.16 (task P20261120.000001, minor): the ledger link rule under Storage. `readLedger` and `appendRecord` refuse a linked `.company` or `.company/ledger` folder, a ledger file that is a link, has more than one hard link or is not a plain file, and a file swapped during the open. A read then gives "no ledger" with a warning, and a write is refused (exit 2, `addFromHook` `{ ok: false, reason }`). A plain ledger in plain folders reads and writes the same bytes as in v1.15.
+
+v1.15 (task P20261120.000001-T29, minor, additive): (1) row source `hook`: written by the SubagentStop hook (`step-times` v1.4) through the exported `addFromHook(rec, { root })`, `rec` = `{ run, kind, id, role, agent, ctx_end, tool_uses?, ms?, model? }`. A `hook` row has the shape of a `notification` row (`ctx_end` required, no `tokens`, no `t0`/`t1`) and `reconcile` pairs it with its transcript like one. `kind` is `step`, `round`, `crossfire` or `replay`, `id` and `role` as for `notification`. The same `id` and `role` again writes no second row (`{ ok: true, added: false }`); a refused row returns `{ ok: false, reason }`. (2) New kind `lead`: a Lead row, `src: hook`, `role: lead`, `agent` required, optional `id` of 12 lowercase hex, keyed by `agent` (same agent again, no second row); `reconcile` skips it. `lead` is refused with any other `src` or role. (3) New export `hasHookRow(step, role, { root, run })` for `step-close`: true when a `hook` row with that `id` and `role` exists. (4) `report`, `scorecard` and `receipt` treat a `hook` row like a `notification` row. `add` stays as the fallback. Every v1.14 file is a valid v1.15 file; a v1.14 reader skips `hook` and `lead` lines with `warning: line <n> skipped`.
 
 v1.14 (task P20261114.000001/01-feature, minor, additive; uses `run-state` v3.0): (1) the over-cap threshold is `runCap(root, run).cap` of `run-state` v3.0 (snapshot threshold, valid 60000-250000, else 180000); lines, refusals and exit codes as v1.13. (2) New read-only command `ledger.mjs baseline --before <x.y.z> --json` (the Savings saver, `aico-mods` v2.2): from the newest 10 shipped runs (a `ship` record) whose `meta.aico` is below `<x.y.z>`, the median real tokens per Step (`step` records with a count only) as `{ "state": "ok"|"no-data"|"unmeasured"|"unknown", "median": int|null, "runs": int, "steps": int, "unknown": int }`: `no-data` no such run; `unmeasured` runs but no counted Step; `unknown` counts shipped runs with no `meta` line (never used as baseline; `state: "unknown"` only when those are all there is). Bad `<x.y.z>` → `refused: --before must be x.y.z`, exit 2. Writes nothing. Every v1.13 file is a valid v1.14 file.
 
@@ -33,6 +37,7 @@ v1.6 is additive (task build-draft): `run` may be a work folder name (for exampl
 
 ## Storage
 - `.company/ledger/<run>.jsonl`, one JSON object per line. `<run>` = the work folder name of the run (or, for a run started before work-folder-name v1, its task slug), or `brainstorm-<YYYYMMDD-HHMM>` for a brainstorm, `replay-<name>` for a replay, `baseline-<name>` for an imported baseline. Committed with the run's Finish when the product tracks `.company/`; otherwise it stays local. Readers only need the local file.
+- **Link rule (v1.16).** `.company` and `.company/ledger` must be real folders: not a link or junction (`lstat`). The ledger file is opened with an `lstat` check before the open, `O_NOFOLLOW` where the platform has it, and an `fstat` plus a second `lstat` after it. It must be a plain file with exactly one hard link, and all three stats must show the same device and inode, so a file swapped during the open is caught. A missing folder or file is not an error. For a read (`readLedger`, used by every command that reads a run), a failed check gives "no ledger" (`exists: false`, no records) and one warning `warning: <reason>, not read`. The command goes on as for a run without a ledger. For a write (`appendRecord`, used by `add`, `add-mod`, `reconcile`, `ship` and `addFromHook`), a failed check is refused with `refused: <reason>` (exit 2) and nothing is written; `addFromHook` returns `{ ok: false, reason }`. The `meta` and `par` lines that `ship` writes first are skipped on a refusal, as before, and the `ship` record is then refused. The folder is checked again after it is created and before the open. Reasons: `ledger folder is a link or not a folder`, `ledger folder cannot be read`, `ledger file is a link or not a plain file`, `ledger file cannot be read`, `ledger file cannot be opened`, `ledger file changed or is linked`.
 - **Counts, enums and UTC times only, never prompt or reply content** (GDPR Art. 5(1)(c)). The schema is an allow-list: unknown keys and free text are refused. Times have the same one-second precision as the git commits of the run.
 - `run` is written **live** by the Lead from the dispatch's task slug. It is never derived from a branch, a session or a time window.
 
@@ -41,6 +46,7 @@ v1.6 is additive (task build-draft): `run` may be a work folder name (for exampl
 |---|---|---|
 | `notification` | the `<usage><subagent_tokens>N</subagent_tokens><tool_uses>T</tool_uses><duration_ms>D</duration_ms></usage>` block of the task notification, written live by the Lead | `N`: the context size at the end of the dispatch (input + cache write + cache read + output of the last request, up to +2%). **Not spend, never summed as cost**, cache not split. `T` and `D` go to `tool_uses` and `ms` (v1.1) |
 | `transcript` | `reconcile` (host subagent transcript) or `import` (frozen baseline) | the four counts summed over every request of the dispatch: real processed volume |
+| `hook` (v1.15) | `addFromHook`, from the SubagentStop hook | the context size and `tool_uses`/`ms` of the dispatch, like `notification`; also the Lead row (kind `lead`) |
 | `mod` (part M) | `add-mod`, from the `usage` the engine returns for a mod's own model call (`$.model.complete`, Reflect `model` mode only) | the four counts of that one call, exactly as returned |
 
 Caching gives no saving across dispatches (Spike S2: the prompt sits before the Role block, with no cache breakpoint after it). Savings are measured as reading less, on `transcript` counts only.
@@ -52,13 +58,13 @@ Caching gives no saving across dispatches (Spike S2: the prompt sits before the 
 |---|---|
 | `v` | `1` |
 | `run` | a work folder name (`work-folder-name` v1: `isWorkFolder` from `mods/lib/work-folder.mjs`, the one check) or a legacy slug `^[a-z0-9][a-z0-9-]{0,63}$` |
-| `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect \| meta \| par` (`reflect`: part M, `src: mod` only; `meta`: v1.2; `par`: v1.3, below) |
+| `kind` | `step \| round \| crossfire \| replay \| total \| ship \| reflect \| meta \| par \| lead` (`reflect`: part M, `src: mod` only; `meta`: v1.2; `par`: v1.3, below; `lead`: v1.15, `src: hook` only, no `id`) |
 | `id` | Step `^\d{2,3}$`, round `^R\d{1,3}$`; for `total` the session prefix `^[0-9a-f]{8}$`; `reflect` a Step `^\d{2,3}$` or `RT` (retrospective). A re-dispatch (Fix round, handover) appends a new record with the same `id` |
 | `role` | an `agents/*.md` name, or `lead` (not on `ship`; always `lead` on `reflect`) |
 | `agent` | the Agent result's `agentId`, `^[A-Za-z0-9_-]{1,64}$`; required on `step`, `round`, `crossfire`, `replay`; the key `reconcile` uses; refused on `reflect` |
-| `src` | `notification \| transcript \| mod` (not on `ship`) |
-| `ctx_end` | integer 0–10000000; required when `src` is `notification`, optional on `transcript`, refused on `mod` |
-| `tokens` | object with exactly `in`, `cache_write`, `cache_read`, `out`, each an integer 0–1000000000; required when `src` is `transcript` or `mod`, refused on `notification` |
+| `src` | `notification \| transcript \| mod \| hook` (`hook`: v1.15) (not on `ship`) |
+| `ctx_end` | integer 0–10000000; required when `src` is `notification` or `hook`, optional on `transcript`, refused on `mod` |
+| `tokens` | object with exactly `in`, `cache_write`, `cache_read`, `out`, each an integer 0–1000000000; required when `src` is `transcript` or `mod`, refused on `notification` and `hook` |
 | `reqs`, `tool_uses` | optional integers 0–100000 |
 | `ms` | optional integer 0–86400000 |
 | `model` | optional, `^[a-z0-9][a-z0-9.-]{0,63}$` |

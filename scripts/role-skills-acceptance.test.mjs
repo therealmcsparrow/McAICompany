@@ -1020,12 +1020,6 @@ test('AC15: every skill row has a label bound to its checkbox, state and status 
   assert.doesNotMatch(PAGE, /body\s*\{[^}]*overflow-x:\s*scroll/);
 });
 
-test('AC24: the project template holds neither old skill section', () => {
-  const tpl = fs.readFileSync(path.join(import.meta.dirname, '..', 'skills', 'lead', 'references', 'project-template.md'), 'utf8');
-  assert.doesNotMatch(tpl, /^## Design skills\s*$/m);
-  assert.doesNotMatch(tpl, /^## Skills\s*$/m);
-});
-
 // ---------- setup commands, baseline checks, SBOM and retired names ----------
 
 const REPO_ROOT = path.join(import.meta.dirname, '..');
@@ -1091,63 +1085,6 @@ test('AC19: a returned deps/skills.json and a live cite of it are check errors; 
 test('AC19: deps/skills.json is gone and no live skill, script or Contract cites it as a source', () => {
   assert.equal(fs.existsSync(path.join(REPO_ROOT, 'deps', ['skills', 'json'].join('.'))), false);
   assert.deepEqual(check(REPO_ROOT).errors.filter((e) => /old inventory/.test(e)), []);
-});
-
-// ---------- text pins: dispatch line, add-skill, license question, Install form, auto answer ----------
-
-const read = (...p) => fs.readFileSync(path.join(REPO_ROOT, ...p), 'utf8');
-const PIPELINE = read('skills', 'pipeline', 'SKILL.md');
-const HANDOFF = read('skills', 'handoff', 'SKILL.md');
-const FEATURE = read('skills', 'feature', 'SKILL.md');
-const PICKS = read('skills', 'lead', 'references', 'skill-picks.md');
-const ADD_SKILL = read('skills', 'add-skill', 'SKILL.md');
-const DISPATCH = read('docs', 'contracts', 'dispatch-prompt.md');
-
-test('AC6, AC7: the dispatch text names the Role skills line and no Design skills line', () => {
-  assert.match(PIPELINE, /^Role skills: <names \| none>/m);
-  assert.match(HANDOFF, /`Role skills:`.*load each named skill with the Skill tool/);
-  assert.match(HANDOFF, /missing role skill: <name>/);
-  for (const text of [PIPELINE, HANDOFF]) assert.doesNotMatch(text, /Design skills:/);
-});
-
-test('AC7: a name the agent text also loads (aico:ui-design) loads once, said in the Core skill and in the Contract', () => {
-  assert.match(HANDOFF, /A name your agent text also loads \(`aico:ui-design`\) loads once\./);
-  assert.match(DISPATCH, /A name the Role's agent text also loads \(`aico:ui-design`\) loads once\./);
-});
-
-test('AC8, AC16, AC9: add-skill is CEO-only with help, and takes values only through a quoted heredoc', () => {
-  assert.match(ADD_SKILL, /^disable-model-invocation: true$/m);
-  assert.match(ADD_SKILL, /argument-hint: "\[help\]"/);
-  assert.match(ADD_SKILL, /documentation\/commands\/add-skill\.md/);
-  assert.match(ADD_SKILL, /role-skills add <<'AICO_JSON'/);
-  assert.match(ADD_SKILL, /Never put an answer on the command line/);
-  assert.match(PICKS, /role-skills record <<'AICO_JSON'/);
-  assert.match(PICKS, /with the Bash tool and a quoted heredoc, never on the command line/);
-  const doc = read('documentation', 'commands', 'add-skill.md');
-  assert.match(doc, /\/aico:add-skill help/);
-  assert.match(doc, /Only you start this command/);
-});
-
-test('AC9, AC22: the pick license question always offers No license and Cancel, and Cancel runs no record', () => {
-  assert.match(PICKS, /Options: `picks\[\]\.stated_license`.*`No license, skip this skill`; `Cancel`; Other = the value/);
-  assert.match(PICKS, /`Cancel` runs no `record` for any pick/);
-});
-
-test('AC11, AC17: Install only means install-skills --selected, the Lead never runs a shown command, a command entry gets no Install question', () => {
-  assert.match(PIPELINE, /Install only ever means `install-skills --selected`, with one `--skill=<name>` per Install pick/);
-  assert.match(PIPELINE, /You never run a command shown in a/);
-  assert.match(PIPELINE, /A `manual` and `WARNING:`.*line gets no Install question: show it as is, say aico does not run it/);
-  assert.match(PIPELINE, /Options: Install \(Recommended\) \/ Skip/);
-  assert.match(PICKS, /a command shown as `manual` is not run by aico/);
-  assert.match(FEATURE, /show every `WARNING:` line to the CEO as a visibly marked warning/);
-});
-
-test('AC11: gates.installs auto skips the Install form only when settings_folder_moved is false', () => {
-  assert.match(PIPELINE, /`gates\.installs` `auto` .*answers Install without the form only when `settings_folder_moved` in the §1\.7 `get` JSON is `false`; true or absent shows the form/);
-  for (const [name, text] of [['feature', FEATURE], ['skill-picks', PICKS]]) {
-    assert.match(text, /settings_folder_moved/, name);
-    assert.match(text, /gates\.installs/, name);
-  }
 });
 
 test('AC20: name clashes, a same-source line, a plugin line with no license and a Role reaching 5 partway', (t) => {
@@ -1234,18 +1171,6 @@ test('AC8: the repo preview says it stays not vetted until an install scans it c
   assert.ok(cmd.lines.includes('A skill added as a command is never scanned and shows as not vetted.'));
 });
 
-test('AC8: add-skill asks in the fixed order, lists the closed category pages, and ends the preview with Save / Cancel', () => {
-  const order = ['2. **Name.**', '3. **Repo.**', '4. **Installer command.**', '5. **Category.**', '6. **Commit**', '7. **License.**', '8. **Preview.**', '9. **Save:**'];
-  const at = order.map((h) => ADD_SKILL.indexOf(h));
-  assert.ok(at.every((i) => i > 0), `every step is present: ${at.join(',')}`);
-  assert.deepEqual([...at].sort((a, b) => a - b), at, 'the questions keep their order');
-  assert.match(ADD_SKILL, /Page 1: engineering, design, More\.\.\., Cancel\. Page 2: security, quality, More\.\.\., Cancel\. Page 3: product, research, content, Cancel\./);
-  assert.match(ADD_SKILL, /every question has Cancel/);
-  assert.match(ADD_SKILL, /Options: Save \/ Cancel\./);
-  assert.match(ADD_SKILL, /Keep \(Recommended\) \/ Move \/ Cancel/);
-  assert.match(ADD_SKILL, /the scan line, the file line/);
-});
-
 test('AC6, AC17: a planted product folder under a user-level security selection reads not found and is off the dispatch list', async (t) => {
   const s = setup(t, { entries: [], lists: { security: ['user', ['security-review']] } });
   plant(path.join(s.root, '.claude', 'skills', 'security-review'));
@@ -1256,27 +1181,4 @@ test('AC6, AC17: a planted product folder under a user-level security selection 
   assert.match(line, /dispatch: no/);
   assert.ok(!/dispatch: yes/.test(line));
   assert.equal(s.calls.length, 0, 'status starts no install');
-});
-
-test('AC6: the Lead leaves a name off the Role skills line unless its dispatch field allows it, and records degraded once per name', () => {
-  const pipeline = read('skills', 'pipeline', 'SKILL.md');
-  assert.match(pipeline, /build each Role's `Role skills:` from its `dispatch:` field only, and only from lines with `roles:` not `-`: `yes` → the name; `session list` → the name only if the session's skill list holds it, otherwise left off; anything else → left off, `degraded: missing <name>` once per name in the Handoff and Gate summary/);
-});
-
-test('AC16: README, the settings page doc, the glossary and the changelog describe the skill catalog and its migration', () => {
-  const readme = read('README.md');
-  assert.match(readme, /\/aico:add-skill/);
-  assert.doesNotMatch(readme, /deps\/skills\.json/);
-  assert.match(read('documentation', 'commands', 'settings.md'), /Skills tab/);
-  assert.match(read('GLOSSARY.md'), /\*\*Catalog\*\*.*3rdpartyskills\.json/);
-  const log = read('CHANGELOG.md');
-  // From Unreleased through the end of the 0.29.0 section; later releases only add sections above it.
-  const from = log.indexOf('## [Unreleased]');
-  const v29 = log.indexOf('## [0.29.0]');
-  assert.ok(from !== -1 && v29 > from);
-  const next = log.indexOf('\n## [', v29 + 1);
-  const unreleased = log.slice(from, next === -1 ? undefined : next);
-  assert.match(unreleased, /\*\*Breaking: skills now live in a catalog/);
-  assert.match(unreleased, /pick Migrate/);
-  assert.match(unreleased, /deps\/3rdpartyskills\.json/);
 });

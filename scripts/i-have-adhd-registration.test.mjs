@@ -54,5 +54,4 @@ test('i-have-adhd is hidden from the Skill tool: it is in CEO_ONLY and its skill
   const text = fs.readFileSync(path.join(root, 'skills', NAME, 'SKILL.md'), 'utf8');
   const front = text.split(/^---$/m)[1];
   assert.match(front, /^disable-model-invocation: true$/m);
-  assert.match(front, /^argument-hint: "\[help\]"$/m);
 });

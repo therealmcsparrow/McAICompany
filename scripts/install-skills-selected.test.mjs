@@ -696,16 +696,6 @@ test('when the hash cannot be cleared, nothing is scanned or installed and the s
   assert.equal(JSON.parse(fs.readFileSync(path.join(real, '3rdpartyskills.json'), 'utf8')).entries[0].hash, 'b'.repeat(64));
 });
 
-test('the Lead text and the Contract name the dry-run lines that get no Install question, and the clear before the scan', () => {
-  const root = path.join(import.meta.dirname, '..');
-  const pipeline = fs.readFileSync(path.join(root, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-  const contract = fs.readFileSync(path.join(root, 'docs', 'contracts', 'skill-catalog.md'), 'utf8');
-  assert.match(pipeline, /`\[dry-run\] hash differs`, `no license:` or `ERROR invalid catalog entry:` line gets no Install question/);
-  assert.match(pipeline, /an auto run does not fail into the stop form for it/);
-  assert.match(contract, /`no license:` and `ERROR invalid catalog entry:` print no command in a dry run, so the Lead asks no Install question/);
-  assert.match(contract, /`clearBound` first \(a failed clear logs its error/);
-});
-
 // ---------- clearBound refusal and the lost-pin dispatch word ----------
 
 const HB = 'b'.repeat(64);

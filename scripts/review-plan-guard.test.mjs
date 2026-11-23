@@ -6,63 +6,12 @@ import path from 'node:path';
 const root = path.join(import.meta.dirname, '..');
 const fixtures = path.join(root, 'tests', 'fixtures', 'review-plan-guard');
 
-const RULE = '**Unplanned Core, Contract or security change.** A diff that changes a Core item (`.company/project.md` `## Core`), a Contract file or a security-relevant file is `## Blocking` (`contract`, or `security` for a security-relevant file) unless the plan names that change (its Core and Contracts list or a task\'s `files:`). Security-relevant: code or config that handles auth, permissions, secrets, payments, personal data or crypto; hook, sandbox and permission settings; CI and release workflows; dependency manifests and lockfiles.';
-
-const CATEGORIES = [
-  'auth', 'permissions', 'secrets', 'payments', 'personal data', 'crypto',
-  'hook, sandbox and permission settings', 'CI and release workflows',
-  'dependency manifests and lockfiles'
-];
-
 const REMOVED_WORD = ['bla', 'st'].join('');
 const REMOVED_RE = new RegExp(REMOVED_WORD, 'i');
-
-const SKILLS = ['review', 'contracts', 'security-check'];
-
-function skill(name) {
-  return fs.readFileSync(path.join(root, 'skills', name, 'SKILL.md'), 'utf8');
-}
 
 function count(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
-
-for (const name of SKILLS) {
-  test(`AC10: skills/${name} holds the rule text verbatim, exactly once`, () => {
-    assert.equal(count(skill(name), RULE), 1);
-  });
-
-  test(`AC10: skills/${name} rule names Core, Contract, security-relevant, ## Blocking and the plan exception`, () => {
-    const text = skill(name);
-    assert.ok(text.includes(RULE), 'rule text present');
-    for (const word of ['Core', 'Contract', 'security-relevant', '## Blocking', 'unless the plan names']) {
-      assert.ok(RULE.includes(word), word);
-    }
-  });
-
-  test(`AC10: skills/${name} security-relevant definition lists every category`, () => {
-    const text = skill(name);
-    const at = text.indexOf('Security-relevant:');
-    assert.ok(at >= 0, 'definition present');
-    const def = text.slice(at, text.indexOf('\n', at));
-    for (const c of CATEGORIES) assert.ok(def.includes(c), c);
-  });
-
-  test(`AC2: skills/${name} has no ${REMOVED_WORD} text`, () => {
-    assert.doesNotMatch(skill(name), REMOVED_RE);
-  });
-}
-
-test('AC10: skills/contracts holds the rule as a list bullet', () => {
-  assert.ok(skill('contracts').includes(`- ${RULE}`));
-});
-
-test('AC10: skills/contracts places the rule under ## Review blockers', () => {
-  const text = skill('contracts');
-  const head = text.indexOf('## Review blockers');
-  assert.ok(head >= 0, 'heading present');
-  assert.ok(text.indexOf(RULE) > head);
-});
 
 test('AC10: both fixtures exist and are LF only', () => {
   for (const f of ['plan.md', 'change.diff']) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Drift probe (contract: docs/contracts/contract-index.md v1.1). Node built-ins only; read-only, writes nothing.
+// Drift probe (contract: docs/contracts/contract-index.md v1.2). Node built-ins only; read-only, writes nothing.
 // A Contract sentence introduced by "word for word" or "exact text" must appear byte for byte in every file the
 // line names and in at least one test file. Scanned text is untrusted: patterns are anchored or bounded, files
 // over the cap are skipped, and paths are joined lexically under the root.

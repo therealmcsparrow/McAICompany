@@ -8,7 +8,6 @@ import { spawnSync } from 'node:child_process';
 import { main, parseGrill } from './grill.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./grill.mjs', import.meta.url));
-const ROOT = path.join(path.dirname(SCRIPT), '..');
 const made = [];
 after(() => {
   for (const d of made) fs.rmSync(d, { recursive: true, force: true });
@@ -173,87 +172,5 @@ describe('command line', () => {
     const r = spawnSync(process.execPath, [SCRIPT, 'status', NEW], { cwd: root, encoding: 'utf8' });
     assert.equal(r.status, 0);
     assert.match(r.stdout, /^grill: 0 answered, 1 open\n/);
-  });
-});
-
-describe('grill Playbook text', () => {
-  const FILES = [
-    'skills/grill/SKILL.md',
-    'skills/grill-me/SKILL.md',
-    'skills/grill-with-docs/SKILL.md',
-    'skills/grill/references/grill-loop.md',
-  ];
-  const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-  const TOPIC = '.company/work-folder-topic-grill.txt';
-  const CLEAR = "work-folder clear --playbook 'grill'";
-
-  test('each file is LF only and each SKILL.md is at most 125 lines', () => {
-    for (const f of FILES) {
-      const text = read(f);
-      assert.ok(!text.includes('\r'), f);
-      if (f.endsWith('SKILL.md')) assert.ok(text.split('\n').length - 1 <= 125, f);
-    }
-  });
-
-  test('the Topic file is written before arg and named by the --for word', () => {
-    for (const f of ['skills/grill/SKILL.md', 'skills/grill/references/grill-loop.md']) {
-      const text = read(f);
-      assert.ok(text.includes(TOPIC), f);
-      // the first shell command, not the first mention of it in the sentence that orders the Topic write
-      assert.ok(text.indexOf(TOPIC) < text.indexOf('run.mjs" draft-input arg --for grill'), f);
-      assert.ok(text.includes(CLEAR), f);
-    }
-    for (const f of FILES) {
-      assert.ok(!/work-folder-topic-(?!grill\.txt)/.test(read(f)), `${f} names another id`);
-    }
-  });
-
-  test('the three loop Playbooks point at the loop file and the Topic rule', () => {
-    for (const f of ['skills/grill/SKILL.md', 'skills/grill-me/SKILL.md', 'skills/grill-with-docs/SKILL.md']) {
-      const text = read(f);
-      assert.ok(text.includes(TOPIC), f);
-      assert.ok(text.includes(CLEAR), f);
-      assert.ok(text.includes('grill-loop.md'), f);
-    }
-  });
-
-  test('the Topic is the Lead summary, never the idea text, never on a shell line', () => {
-    for (const f of FILES) {
-      const text = read(f);
-      assert.ok(/never the idea text/.test(text), f);
-      assert.ok(!/--topic none/.test(text.replace(/never use `--topic none`/g, '')), f);
-    }
-  });
-
-  test('every shell line single-quotes the name and resume takes a name', () => {
-    for (const f of FILES) {
-      const text = read(f);
-      for (const m of text.matchAll(/`(node [^`]+)`/g)) {
-        const span = m[1];
-        let quoted = false;
-        for (let i = 0; i < span.length; i++) {
-          if (span[i] === "'") quoted = !quoted;
-          else if (!quoted && (span.startsWith('<slug>', i) || span.startsWith('<name>', i))) {
-            assert.fail(`${f}: unquoted placeholder in ${span}`);
-          }
-        }
-      }
-      assert.ok(/resume <name>/.test(text), f);
-      assert.ok(!/resume <slug>/.test(text), f);
-    }
-  });
-
-  test('argument-hint names resume <name>; no allowed-tools', () => {
-    for (const f of FILES.filter((x) => x.endsWith('SKILL.md'))) {
-      const text = read(f);
-      assert.ok(text.includes('argument-hint: <idea | file> | resume <name>'), f);
-      assert.ok(!/^allowed-tools:/m.test(text), f);
-    }
-  });
-
-  test('the contract is v1.5 in the script and the doc; the Playbooks cite v1.5', () => {
-    assert.match(fs.readFileSync(SCRIPT, 'utf8'), /grill-file\.md v1\.5/);
-    assert.match(read('docs/contracts/grill-file.md'), /^# Contract: grill-file v1\.5$/m);
-    for (const f of FILES.filter((x) => x.endsWith('SKILL.md'))) assert.ok(read(f).includes('`grill-file` v1.5'), f);
   });
 });

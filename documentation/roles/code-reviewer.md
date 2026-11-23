@@ -15,6 +15,6 @@ Rui, the code reviewer, reads the finished branch diff and checks that it matche
 - Model: opus. Effort: high. Protected Role: it never runs below opus. Set the model with `roles.<role>.model` in `/aico:settings`.
 - Tools: Read, Grep, Glob, Skill, Write, Bash
 - Inputs: the Input Handoffs named in the dispatch. Output: one Handoff file at the Output path.
-- Pilot for Handoff v1.1: with `pipeline.review_format: pilot` (default `plain`) it writes a top block and `ID | file:line | problem | why | fix` rows, and keeps a findings ledger. Depth follows the touched paths. See [Review](../concepts/review.md).
+- Writes an ordinary Handoff; each blocking finding has an ID such as `R-2`. Depth follows the touched paths. It is the only code reviewer: there is no second reviewer. Below high risk it also runs the security checklist when Security is skipped. See [Review](../concepts/review.md).
 
 Back to [all Roles](README.md).

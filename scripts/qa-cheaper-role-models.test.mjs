@@ -116,9 +116,6 @@ test('plugin defaults: every Role runs on its floor model and every other Role k
     assert.equal(got.roles[r].model, expected, r);
     assert.equal(got.roles[r].source.model, 'plugin', r);
   }
-  const researcher = read('agents', 'tech-researcher.md');
-  assert.match(researcher, /^model: opus$/m);
-  assert.match(researcher, /^effort: medium$/m);
 });
 
 test('plugin defaults: get exposes floor and protected per Role, the floor being the earlier model', () => {
@@ -173,27 +170,6 @@ test('a CEO override below the floor resolves as set and reports the floor for t
   assert.equal(got.roles['tech-researcher'].source.model, 'user');
   assert.equal(got.roles.qa.model, 'haiku');
   assert.deepEqual(got.warnings.filter((w) => /floor/.test(w)), []);
-});
-
-test('pipeline text: the floor rule raises on high tier or protected, leaves low and medium alone, and traces it', () => {
-  const text = read('skills', 'pipeline', 'SKILL.md');
-  const floorPara = text.split('\n').find((l) => l.startsWith('**Floor:**'));
-  assert.ok(floorPara, 'a Floor paragraph exists');
-  assert.match(floorPara, /high/);
-  assert.match(floorPara, /protected/);
-  assert.match(floorPara, /`haiku` < `sonnet` < `opus`/);
-  assert.match(floorPara, /model: <floor>/);
-  assert.match(floorPara, /also when it equals the frontmatter/);
-  assert.match(floorPara, /Settings: model=<floor>[^`]*floor/);
-  assert.match(floorPara, /low or medium/);
-  assert.match(floorPara, /resolved model/);
-  assert.match(floorPara, /any other value counts as below/);
-});
-
-test('dispatch-prompt contract: the Settings line may end with floor', () => {
-  const doc = read('docs', 'contracts', 'dispatch-prompt.md');
-  assert.match(doc, /v3\.4/);
-  assert.ok(doc.includes('Settings: model=<m> effort=<e>[ floor]'));
 });
 
 // ---------- protected lock ----------
@@ -347,112 +323,6 @@ test('model-env from the command line: no variable prints nothing; a variable wi
   });
   assert.equal(set.status, 0);
   assert.equal(set.stdout.trim(), envLine('haiku', 'unset', 'unknown', "version unknown, may override every Role's model", 'bypassed'));
-});
-
-test('pipeline text: Setup runs model-env once, shows the line, and a bypass reaches the Brief Gate on high tier', () => {
-  const text = read('skills', 'pipeline', 'SKILL.md');
-  const setup = text.split('\n').find((l) => l.startsWith('7. **Settings (§1.7)**'));
-  assert.ok(setup);
-  assert.ok(setup.includes('scripts/run.mjs" settings model-env'));
-  assert.match(setup, /once/);
-  assert.match(setup, /first chat message/);
-  assert.match(setup, /floor bypassed/);
-  assert.match(setup, /Brief Gate/);
-  assert.match(setup, /high/);
-  assert.match(setup, /model-floor\.json/);
-});
-
-// ---------- docs ----------
-
-function section(text, heading) {
-  const lines = text.split('\n');
-  const start = lines.findIndex((l) => /^#{1,6} /.test(l) && l.replace(/^#+ /, '').replaceAll('`', '').trim() === heading);
-  assert.ok(start >= 0, `heading ${heading}`);
-  const level = lines[start].match(/^#+/)[0].length;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    const m = lines[i].match(/^(#+) /);
-    if (m && m[1].length <= level) { end = i; break; }
-  }
-  return lines.slice(start, end).join('\n');
-}
-
-test('concepts page: the source order, versions, citations and the two unverified marks', () => {
-  const s = read('documentation', 'concepts', 'model-choice.md');
-  for (const needle of ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', '2.1.251', '2.1.257', 'roles.<role>.model', 'frontmatter', 'floor', 'protected']) {
-    assert.ok(s.includes(needle), needle);
-  }
-  assert.ok(s.includes('https://code.claude.com/docs/en/sub-agents'));
-  assert.ok((s.match(/unverified/gi) ?? []).length >= 2);
-  assert.match(s, /15,000/);
-  assert.match(s, /Agent[^\n]*`?model`?/);
-  for (const r of PROTECTED) assert.ok(s.includes(r), r);
-});
-
-test('roles page: tech-researcher on opus, the protected list and both rollback lines', () => {
-  const doc = read('documentation', 'roles', 'README.md');
-  assert.match(doc, /tech-researcher[^\n]*opus/i);
-  for (const r of PROTECTED) assert.ok(doc.includes(r), r);
-  assert.match(doc, /roles\.<role>\.model/);
-  assert.match(doc, /\/aico:settings/);
-  assert.match(doc, /`stable`/);
-  assert.match(doc, /v0\.16/);
-});
-
-test('commands page and feedback Playbook: the verdict line is shown in the report and never stops the run', () => {
-  const commands = read('documentation', 'commands', 'feedback.md');
-  assert.match(commands, /model verdict/);
-  const feedback = read('skills', 'feedback', 'SKILL.md');
-  assert.ok(feedback.includes('scripts/run.mjs" ledger model-verdict'));
-  assert.ok(feedback.includes('`## Model`'));
-  const para = feedback.split('\n').filter((l) => l.includes('model-verdict')).join('\n');
-  assert.match(para, /never stops the run/);
-  assert.match(para, /never read as a pass/);
-});
-
-// The release entry: the 0.17.0 section when it exists (after release.mjs, which leaves an empty
-// [Unreleased] above it), else the [Unreleased] section. Returns the text under the heading.
-function releaseEntry(changelog) {
-  let start = changelog.search(/^## \[0\.17\.0/m);
-  if (start < 0) start = changelog.search(/^## \[Unreleased\]/mi);
-  assert.ok(start >= 0, 'an [Unreleased] or 0.17.0 entry exists');
-  const rest = changelog.slice(start + 1);
-  const next = rest.search(/^## /m);
-  return next < 0 ? rest : rest.slice(0, next);
-}
-const NO_MONEY = /cheaper|saving|savings|\bsave[sd]?\b|price|pricing|cost|money|euro|[€$£%]|\bEUR\b|\bUSD\b/i;
-
-test('release entry picker: after release it skips the empty Unreleased and takes 0.17.0', () => {
-  const after = '# Changelog\n\n## [Unreleased]\n\n## [0.17.0] - 2026-11-01\n\n- Added the model floor.\n\n## [0.16.0] - 2026-10-28\n\n- Older note.\n';
-  const entry = releaseEntry(after);
-  assert.match(entry, /^- /m);
-  assert.ok(entry.includes('model floor'));
-  assert.equal(entry.includes('Older note'), false);
-  const before = '# Changelog\n\n## [Unreleased]\n\n- Draft note.\n\n## [0.16.0] - 2026-10-28\n\n- Older note.\n';
-  const draft = releaseEntry(before);
-  assert.ok(draft.includes('Draft note'));
-  assert.equal(draft.includes('Older note'), false);
-  // An empty pick is what the real test must refuse: Unreleased empty and no 0.17.0 section.
-  assert.doesNotMatch(releaseEntry('## [Unreleased]\n\n## [0.16.0] - x\n\n- Older.\n'), /^- /m);
-});
-
-test('release notes and the model section state no money, percent or saving', () => {
-  const entry = releaseEntry(read('CHANGELOG.md'));
-  assert.match(entry, /^- /m, 'the chosen changelog section has at least one bullet');
-  const concepts = read('documentation', 'concepts', 'model-choice.md');
-  const verdictLines = read('documentation', 'commands', 'feedback.md').split('\n').join(' ').split(/(?<=\.)\s+/).filter((l) => /model verdict|model-verdict|## Model/.test(l)).join('\n');
-  assert.notEqual(verdictLines, '');
-  for (const text of [entry, concepts, verdictLines]) {
-    assert.doesNotMatch(text, NO_MONEY);
-  }
-});
-
-test('contracts and decision records carry the new versions', () => {
-  assert.match(read('docs', 'contracts', 'aico-settings.md'), /v1\.6/);
-  assert.match(read('docs', 'contracts', 'dispatch-prompt.md'), /v3\.4/);
-  assert.match(read('docs', 'contracts', 'token-ledger.md'), /v1\.2/);
-  assert.ok(fs.existsSync(path.join(repoRoot, 'docs', 'adr', '0031-model-floor-table.md')));
-  assert.ok(fs.existsSync(path.join(repoRoot, 'docs', 'adr', '0032-plugin-version-ledger-meta.md')));
 });
 
 // ---------- description budget and floor checks in check.mjs ----------

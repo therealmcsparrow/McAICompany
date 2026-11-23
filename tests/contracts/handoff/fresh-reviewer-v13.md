@@ -7,7 +7,7 @@ round: 0
 base-commit: 0123456789abcdef0123456789abcdef01234567
 risk-tier: high
 review-mode: plan
-contracts: [handoff v2.0]
+contracts: [handoff v3.0]
 ---
 By: fresh-reviewer
 ## Paraphrase

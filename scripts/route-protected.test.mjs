@@ -19,8 +19,10 @@ function product(mutate) {
   const dir = mkdtempSync(join(tmpdir(), 'route-protected-'));
   temps.push(dir);
   for (const d of ['company', 'agents']) cpSync(join(root, d), join(dir, d), { recursive: true });
-  for (const f of ['route.mjs', 'diff-facts.mjs']) cpSync(join(root, 'scripts', f), join(dir, 'scripts', f));
-  cpSync(join(root, 'mods', 'lib', 'work-folder.mjs'), join(dir, 'mods', 'lib', 'work-folder.mjs'));
+  // diff-facts imports tier-set, which reaches more scripts: copy the non-test scripts and mods/lib.
+  const src = join(root, 'scripts');
+  cpSync(src, join(dir, 'scripts'), { recursive: true, filter: (f) => f === src || !/\.test\.mjs$/.test(f) });
+  for (const d of ['mods', 'hooks']) cpSync(join(root, d), join(dir, d), { recursive: true, filter: (f) => !/\.test\.mjs$/.test(f) });
   mkdirSync(join(dir, 'product', '.company'), { recursive: true });
   if (mutate) mutate(join(dir, 'company', 'model-floor.json'), dir);
   return dir;
@@ -161,4 +163,16 @@ test('main(argv, cwd, pluginRoot): the plugin root argument picks the floor, cwd
   const refused = await route.main(['check', draft(good)], cwd, bad);
   assert.equal(refused.code, 2, refused.out);
   assert.match(refused.out, /^refused: model floor unreadable$/m);
+});
+
+test('lintData allows only security on security_changed for a protected Role', async () => {
+  const dir = product();
+  const prot = await route.readProtected(dir);
+  const put = (when) => writeFileSync(join(dir, 'company', 'role-when.json'), JSON.stringify({ v: 1, when }));
+  put({ security: ['security_changed'] });
+  assert.deepEqual(route.lintData(dir, prot), []);
+  for (const when of [{ security: ['ui_changed'] }, { architect: ['security_changed'] }, { 'code-reviewer': ['ui_changed'] }]) {
+    put(when);
+    assert.ok(route.lintData(dir, prot).length > 0, JSON.stringify(when));
+  }
 });

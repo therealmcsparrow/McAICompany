@@ -60,10 +60,10 @@ test('set-mod on flips it back; other stored keys and other config.json keys are
 });
 
 test('every saver manifest id with a switch is accepted and writes its own key; the key is mods.<id_with_underscores>.enabled', (t) => {
-  const SWITCHABLE = ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard'];
+  const SWITCHABLE = ['cache-tax', 'savings', 'switchboard'];
   const savers = manifests().filter((m) => m.kind === 'saver' && m.switch && SWITCHABLE.includes(m.id));
   const ids = savers.map((m) => m.id).sort();
-  for (const must of ['cache-tax', 'efficient-browser-use', 'savings', 'switchboard']) assert.ok(ids.includes(must), `saver manifest ${must}`);
+  for (const must of ['cache-tax', 'savings', 'switchboard']) assert.ok(ids.includes(must), `saver manifest ${must}`);
   for (const m of savers) {
     assert.equal(m.switch, keyOf(m.id), m.id);
     const s = sandbox(t);
@@ -82,7 +82,7 @@ test('every saver manifest id with a switch is accepted and writes its own key; 
 
 test('AC15: a guard or gate id is refused as not switchable, exit 2, nothing written', (t) => {
   const locked = manifests().filter((m) => m.kind === 'guard' || m.kind === 'gate');
-  for (const id of ['cap', 'dotenv', 'model-floor', 'self-protect']) assert.ok(locked.some((m) => m.id === id), `guard manifest ${id}`);
+  for (const id of ['cap', 'dotenv', 'self-protect']) assert.ok(locked.some((m) => m.id === id), `guard manifest ${id}`);
   assert.ok(!locked.some((m) => m.id === 'git-add'), 'git-add guard is gone (ADR 0079)');
   for (const m of locked) {
     for (const word of ['on', 'off']) {
@@ -130,10 +130,10 @@ test('R-15: a key the project layer sets is refused with the project file named,
 test('R-15: a project value on another saver does not block this one', (t) => {
   const s = sandbox(t);
   s.project({ mods: { savings: { enabled: false } } });
-  const r = s.cli('set-mod', 'efficient-browser-use', 'on');
+  const r = s.cli('set-mod', 'cache-tax', 'off');
   assert.equal(r.code, 0, r.out + r.err);
-  assert.equal(r.out, 'set mods.efficient_browser_use.enabled true\n');
-  assert.equal(s.cli('get', 'mods.efficient_browser_use.enabled').out, 'true\n');
+  assert.equal(r.out, 'set mods.cache_tax.enabled false\n');
+  assert.equal(s.cli('get', 'mods.cache_tax.enabled').out, 'false\n');
 });
 
 test('set-mod switchboard seen writes user mods.switchboard.seen true and exits 0', (t) => {

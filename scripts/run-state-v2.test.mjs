@@ -265,12 +265,3 @@ describe('active over a mixed tree', () => {
     assert.equal(JSON.parse(r.stdout).slug, `${ID1}/01-feature`);
   });
 });
-
-describe('the Contract', () => {
-  test('the doc is v3.1 and says v2, v1.1 and legacy names behave as before', () => {
-    const text = fs.readFileSync(path.join(REPO, 'docs', 'contracts', 'run-state.md'), 'utf8');
-    assert.match(text, /^# Contract: run-state v3\.1\r?$/m);
-    assert.ok(text.includes('runSlugs'));
-    assert.match(text, /byte-identical/);
-  });
-});

@@ -1,8 +1,10 @@
-# Contract: contract-index v1.1
+# Contract: contract-index v1.2
 
-Provider: `scripts/contract-drift.mjs` (Node built-ins only; read-only, writes nothing); `buildIndex(root)` and `checkDrift(root)` exported by `scripts/contract-drift.mjs`. Consumers: `scripts/check.mjs --drift` (the one call; no check logic in Core), `scripts/handoff-lint.mjs` (the `contracts:` frontmatter cite check, `handoff` v2.8), `aico:maintain`, CI. Rationale: `docs/adr/0036-contract-index-from-headers.md`; the cite rule is `docs/adr/0007-contract-minor-versions.md`.
+Provider: `scripts/contract-drift.mjs` (Node built-ins only; read-only, writes nothing); `buildIndex(root)` and `checkDrift(root)` exported by `scripts/contract-drift.mjs`. Consumers: `scripts/check.mjs --drift` (the one call; no check logic in Core), `scripts/handoff-lint.mjs` (the `contracts:` frontmatter cite check, `handoff` v3.0), `aico:maintain`, CI. Rationale: `docs/adr/0036-contract-index-from-headers.md`; the cite rule is `docs/adr/0007-contract-minor-versions.md`.
 
 v1.1 (task P20261115.000002/02-lead, minor, wording only): names `scripts/handoff-lint.mjs` as a consumer. No index, cite, anchor or error rule changes; v1.0 declarations and cites stay valid under the cite rule.
+
+v1.2 (task P20261120.000001-T33, minor): the cite check is by name. A cite is valid when the named Contract exists; its version is not checked. Module declarations keep the exact version match.
 
 ## Index
 `buildIndex(root)` returns `Map` of name → `{ major, minor, file }`, computed from line 1 of each `docs/contracts/*.md`: `# Contract: <name> v<x>` or `v<x>.<y>` (a missing minor is 0). No other list exists. A file whose line 1 does not match is not in the index.
@@ -11,7 +13,7 @@ v1.1 (task P20261115.000002/02-lead, minor, wording only): names `scripts/handof
 A Module is a script in `scripts/` (not `*.test.mjs`) whose line 2 holds `contract: docs/contracts/<name>.md v<x>[.<y>]`, bare (`// contract: ...`) or inside a header sentence (`// Plan check (contract: ...). ...`). An optional line 3 `// uses: docs/contracts/<name>.md v<x>[.<y>] ...` lists Contracts the Module reads. The declared version must equal the header version exactly; a `uses` entry follows the cite rule.
 
 ## Cite rule
-A cite is `<contract-name> v<x>[.<y>]` in a skill (`skills/**`) or an agent (`agents/**`) only; `documentation/`, README, Contracts and ADRs are not scanned for cites (plan AC16), where the name is in the index and not part of a longer word. It is valid when the major equals the current major and the minor is not newer: an older minor of the current major is valid ("since" cites), a bare `v<x>` and `v<x>.x` mean minor 0. A newer minor or another major is an error.
+A cite is `<contract-name> v<x>[.<y>]` in a skill (`skills/**`) or an agent (`agents/**`) only; `documentation/`, README, Contracts and ADRs are not scanned for cites (plan AC16). It is valid when the named Contract is in the index; the version is not checked (an older, newer or other major all pass). A name not in the index is an error `no such Contract`, except common prose words (`a v2 layout`) and a name followed by `:` (a marker such as `<!-- idea v1: ... -->`). A `uses` entry follows the same rule.
 
 ## Anchors
 In every Contract and ADR, a backticked token that starts in a folder existing at the repo root, with an optional `:<line>` suffix or arguments after the first space, is an anchor. Globs, `<placeholders>`, one-letter file names (examples) and `.company/` paths are skipped. The path is joined lexically under the root; a `..` segment is refused, never read. A sentence "`<name>` exported by `<path>`" also needs `<name>` exported from `<path>` (`export function|const|let|var|class <name>` or in an `export { ... }` list).
@@ -19,7 +21,7 @@ In every Contract and ADR, a backticked token that starts in a folder existing a
 ## Errors and exit
 One line each, sorted by check, duplicates removed:
 - `ERROR module <script> contract <c> declares v<a>, file v<b>` (also `no such Contract` when the file is not in the index)
-- `ERROR <file>:<line> cites <c> v<a>, current v<b>`
+- `ERROR <file>:<line> cites <c> v<a>, no such Contract`
 - `ERROR <doc>:<line> anchor <path> missing` or `refused`
 - `ERROR <contract> provider <script> lacks export <name>`
 

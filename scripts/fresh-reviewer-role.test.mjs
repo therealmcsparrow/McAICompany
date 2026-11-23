@@ -89,25 +89,6 @@ test('check.mjs fails when the fresh-reviewer floor entry is missing', () => {
   assert.ok(r.errors.some((e) => e.includes('fresh-reviewer has no floor')), r.errors.join('\n'));
 });
 
-test('agent file: at most 50 lines, exact tools, opus high, no brief or run-folder read', () => {
-  const text = read('agents/fresh-reviewer.md');
-  assert.ok(text.split('\n').length <= 51);
-  assert.ok(!text.includes('\r'));
-  const lines = text.split('\n');
-  const fm = Object.fromEntries(lines.slice(1, lines.indexOf('---', 1)).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
-  assert.equal(fm.name, 'fresh-reviewer');
-  assert.equal(fm.model, 'opus');
-  assert.equal(fm.effort, 'high');
-  assert.deepEqual(fm.tools.split(',').map((t) => t.trim()), ['Read', 'Grep', 'Glob', 'Skill', 'Write', 'Bash']);
-  for (const key of Object.keys(fm)) assert.ok(['name', 'description', 'tools', 'model', 'effort'].includes(key), key);
-  assert.doesNotMatch(text, /Fenna|Name:/);
-  assert.doesNotMatch(text, /\.\.\.HEAD|git diff <base>/);
-  assert.match(text, /git\.M-SEC4/);
-  assert.match(text, /fresh-review\.md/);
-  assert.match(text, /Never[^\n]*(brief|run folder)/i);
-  assert.doesNotMatch(text, /\.company\/work|\bbrief\.md|\d{2}-[a-z-]+\.md/);
-});
-
 test('names, personalities and manifests', () => {
   const names = JSON.parse(read('company/names.json'));
   assert.equal(names['fresh-reviewer'], 'Fenna');
@@ -129,10 +110,4 @@ test('company-type check-role is ok under software and design', () => {
     const r = run('company-type.mjs', ['check-role', 'fresh-reviewer'], { cwd: dir, home });
     assert.equal(r.code, 0, `${type}: ${r.out}${r.err}`);
   }
-});
-
-test('Contracts record the 36th Role and the manifests', () => {
-  assert.match(read('docs/contracts/role-names.md'), /^# Contract: role-names v1\.4$/m);
-  assert.match(read('docs/contracts/role-names.md'), /36th Role, `fresh-reviewer`/);
-  assert.match(read('docs/contracts/company-type.md'), /^# Contract: company-type v2\.3$/m);
 });

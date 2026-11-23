@@ -1,0 +1,16 @@
+{
+  "_note": "Spike C10 (T42). Real SubagentStop payload captured on Windows 11 (spike run P20261117.000001), redacted. Keys are the ones seen; values are placeholders.",
+  "session_id": "<uuid>",
+  "transcript_path": "C:\Users\<user>\.claude\projects\<slug>\<session_id>.jsonl",
+  "cwd": "Z:\projects\<repo>",
+  "prompt_id": "<uuid>",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "a99810bc7fa401597",
+  "agent_type": "aico:qa",
+  "effort": { "level": "medium" },
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "C:\Users\<user>\.claude\projects\<slug>\<session_id>\subagents\agent-a99810bc7fa401597.jsonl",
+  "last_assistant_message": "<redacted>",
+  "_timed_read": { "file_bytes": 34675126, "rows": 551, "tool_uses": 163, "ctx_end": 115158, "ms_runs": [181, 157, 192] }
+}

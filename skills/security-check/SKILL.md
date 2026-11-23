@@ -15,6 +15,15 @@ description: Use when the aico security Role audits code, or a builder handles a
 - **Bound the work.** Size limits before parsing, linear-time patterns (no nested or overlapping quantifiers), a test that a worst-case input finishes fast.
 - **Test the hostile cases first:** malformed and truncated input, encoding tricks, values split across fields, and very large input — plus the safe cases that must still pass.
 
+**Checklist** (the code-reviewer runs it below high, on added or changed lines; the security Role runs it in full at high). Hit → finding with confidence and file:line:
+- Secrets, tokens or keys in code, config, logs or fixtures.
+- Auth and access control: every new route, command or IPC channel checks who may call it.
+- Input at the boundary: allow-list, parsed like the consumer, bounded (see above).
+- Injection: shell, SQL, path, template, deserialization built from input.
+- Personal data: minimized, not logged, not sent out.
+- Dependencies: new or changed manifest or lockfile entries, audit output.
+- Guard evasion (a way round a hook, shell guard or self-protect rule) is `## Debt`, never Blocking (ADR 0079 accepted risk).
+
 **Ruleset:** these rules are the project ruleset's `proj.M1`–`proj.M4` (`aico:ruleset`); security rules there are always Must.
 
 **Unplanned Core, Contract or security change.** A diff that changes a Core item (`.company/project.md` `## Core`), a Contract file or a security-relevant file is `## Blocking` (`contract`, or `security` for a security-relevant file) unless the plan names that change (its Core and Contracts list or a task's `files:`). Security-relevant: code or config that handles auth, permissions, secrets, payments, personal data or crypto; hook, sandbox and permission settings; CI and release workflows; dependency manifests and lockfiles.

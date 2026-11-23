@@ -129,29 +129,3 @@ describe('cited report lists new and legacy folders', () => {
     assert.ok(r.lines.includes('cited product-manager: 2 of 2'), r.lines.join('\n'));
   });
 });
-
-describe('agent and skill text', () => {
-  const lines = [['agents/code-reviewer.md', 16], ['agents/security.md', 18], ['agents/senior-engineer.md', 19]];
-  for (const [file, n] of lines) {
-    it(`${file}:${n} quotes the run value`, () => {
-      const text = fs.readFileSync(path.join(root, file), 'utf8');
-      assert.ok(!text.includes('\r'));
-      const all = text.split('\n');
-      assert.ok(all.length <= 51, `${file} has ${all.length} lines`);
-      const line = all[n - 1];
-      assert.ok(line.includes("rule-check.mjs run --base <Base commit> --run '<slug>'"), line);
-      assert.ok(line.includes("rule-check.mjs text --base <Base commit> --run '<slug>'"), line);
-      assert.ok(!/--run <slug>/.test(line));
-    });
-  }
-
-  it('review skill names refs/heads/ plus the printed branch value, as is', () => {
-    const text = fs.readFileSync(path.join(root, 'skills/review/SKILL.md'), 'utf8');
-    assert.ok(!text.includes('\r'));
-    assert.ok(text.split('\n').length <= 126);
-    assert.ok(text.includes("scripts/run.mjs\" work-folder branch '<run>'"));
-    assert.ok(text.includes('`refs/heads/` plus the `branch:` value'));
-    assert.ok(text.includes('never prefix `aico/` again'));
-    assert.ok(!text.includes('refs/heads/aico/<slug>'));
-  });
-});

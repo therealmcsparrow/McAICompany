@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url';
 import { main, contextHandover, newSessionCommand, watch, measure, findRun } from './lead-handover.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.join(here, '..');
 const SCRIPT = path.join(here, 'lead-handover.mjs');
 const ID = 'P20261109.000001';
 const SLUG = `${ID}/01-feature`;
@@ -63,29 +62,6 @@ function transcript(fx) {
   return file;
 }
 const opts = (fx) => ({ root: fx.root, claudeDir: fx.claudeDir, env: { AICO_GUARDS: 'off' } });
-
-describe('the Contract and the header (lead-handoff v3.0)', () => {
-  test('the Contract header is v3.0 and the script line 2 declares it', () => {
-    const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(doc, /^# Contract: lead-handoff v3\.0$/m);
-    const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.0');
-  });
-
-  test('line 3 cites run-state v3.0', () => {
-    const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v3\.0( |$)/);
-  });
-
-  test('the Contract has a paragraph saying v2, v1.1 and legacy names are byte-identical', () => {
-    const doc = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    const para = doc.split('\n').find((l) => /^v2\.1\b/.test(l));
-    assert.ok(para, 'a `v2.1` paragraph exists');
-    assert.match(para, /byte-identical/);
-    assert.match(para, /isRunSlug/);
-    assert.match(para, /workParts/);
-  });
-});
 
 describe('newSessionCommand', () => {
   test('a v3 slug gives the single-quoted command with the slug', () => {

@@ -10,15 +10,6 @@ acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
 ---
 By: backend-engineer
-```aico-top
-status: done
-files: [src/x.ts]
-ac_ids: [AC1, AC3]
-rule_ids: [proj.M3]
-risks: []
-read_next: [src/x.ts]
-tokens_used: unknown
-```
 ## Did
 - Changed src/x.ts.
 ## Decisions

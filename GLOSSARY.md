@@ -77,7 +77,11 @@ _Avoid_: orchestrator (use Lead).
 
 **Handoff Contract** — the machine-readable shape of a Handoff: frontmatter fields (`status`, `round`, `base-commit`, `risk-tier`, `acceptance-ids`, `files-touched`) plus a `contract|spec|security|test` blocking taxonomy, so the Lead routes and resumes from fields rather than prose.
 
-**Top block** — the `aico-top` block of Handoff v1.1 with `status`, `files`, `ac_ids`, `rule_ids`, `risks`, `read_next` and `tokens_used`. Pilot: code-reviewer and compliance only, and only with `pipeline.review_format: pilot` (default `plain`). Their findings are rows `ID | file:line | problem | why | fix` with stable IDs.
+**Step close** — the one command (`step-close`) the Lead runs after each Step: lint the Handoff, check scope, commit the Handoff and its `files-touched`, record cost, mark the plan task done and print what is next.
+
+**Ship check** — the one command (`ship-check`) the Lead runs before every Ship Gate form. It runs every pre-Ship check and prints one line each; a `block` line stops the Gate.
+
+**Plan review** — the fresh reviewer's read of a plan before the builders start. Off by default (`pipeline.plan_review`); the CEO turns it on.
 
 **Context cap** — the max context of every Role and the Lead in a run, the setting `pipeline.context_cap` (project, else user, else 180000; a whole number from 60000 to 250000; user level only), with the hand-over at 90% of it (floor). Read from a snapshot when each Step starts, so a change takes effect at the next Step, and passed in each dispatch as `Context cap: <cap> handover <n>` (default `180000 handover 162000`). A per-Role `context_cap` is accepted but has no effect. A soft limit. Contracts `aico-settings` v3.0, `run-state` v3.0; ADR 0070.
 
@@ -163,7 +167,7 @@ _Avoid_: orchestrator (use Lead).
 
 **Guard** — a fail-closed deny hook, locked on, that runs in every session (the Lead and every Step). On a crash, timeout or unreadable input it denies. Only the CEO's one-session off switch stands it down. Proposed in ADR 0071.
 
-**Saver** — a fail-open advisory mod, switchable in settings, that runs in the Lead session only. It may allow or add a note, never deny or change a tool call; on any failure it passes the call through unchanged. Proposed in ADR 0071.
+**Saver** — a fail-open advisory mod (such as the Cache clock), switchable in settings, that runs in the Lead session only. It may allow or add a note, never deny or change a tool call; on any failure it passes the call through unchanged. Proposed in ADR 0071.
 
 **Run-state** — the small record of a run's wave, Gates and end, written by the Lead through `scripts/run-state.mjs`. Savvy reads it. It never blocks a Step or a Gate.
 

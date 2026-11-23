@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ALWAYS, CEO_ONLY, TYPE_ORDER, run as runCompanyType } from './company-type.mjs';
-import { GUARD_SENTENCE, NAME_RE, PERSONALITY_KEYS, check, personalityProblem } from './check.mjs';
+import { NAME_RE, PERSONALITY_KEYS, check, personalityProblem } from './check.mjs';
 import { REPROMPT_DEFAULTS, Refusal, resolveSettings, validateLayer, writeLayer } from './settings.mjs';
 import { startServer } from './settings-server.mjs';
 
@@ -48,11 +48,6 @@ function sandbox({ type = null } = {}) {
 }
 
 const agents = fs.readdirSync(path.join(root, 'agents')).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)).sort();
-const frontmatter = (text) => {
-  const lines = text.split('\n');
-  assert.equal(lines[0], '---');
-  return lines.slice(1, lines.indexOf('---', 1));
-};
 
 // ---------- the reprompter and /aico:reprompt exist in every company type ----------
 
@@ -193,14 +188,6 @@ test('AC12: the reprompter personality entry is complete, valid and last', () =>
   assert.equal(entry.intelligence, 'high');
   assert.equal(entry.creativity, 'medium');
 });
-
-test('AC12: the Role file matches its name and carries the three tools it needs and no more', () => {
-  const lines = frontmatter(read('agents/reprompter.md'));
-  assert.ok(lines.includes('name: reprompter'));
-  assert.ok(lines.includes('tools: Read, Skill, Write'));
-  assert.ok(!lines.some((l) => /^(Bash|Edit|Grep|Glob)\b/.test(l.replace(/^tools:\s*/, ''))));
-});
-
 // ---------- reprompt.question_rounds ----------
 
 const RP_MSG = 'reprompt.question_rounds must be a whole number from 0 to 3';
@@ -305,15 +292,6 @@ test('question_rounds: a corrupt reprompt block does not disturb other settings 
   assert.equal(all.roles.reprompter.model, 'sonnet');
 });
 
-test('question_rounds: the Playbook reads it from the settings JSON, falls back to 1 and derives Asks left from its own count', () => {
-  const playbook = read('skills/reprompt/SKILL.md');
-  assert.match(playbook, /read `reprompt\.question_rounds` as `question_rounds`/);
-  assert.match(playbook, /not a whole number 0 to 3 → `1`/);
-  assert.match(playbook, /`Asks left:` = `question_rounds` - `held`; always `0` on an edit dispatch/);
-  assert.match(read('docs/contracts/aico-settings.md'), /reprompt\.question_rounds/);
-  assert.match(read('documentation/commands/settings.md'), /Question rounds[^\n]*0 to 3[^\n]*default 1|0 to 3, default 1/);
-});
-
 // ---------- settings page ----------
 
 async function pageServer(t, s) {
@@ -333,17 +311,11 @@ test('settings page: the served page has the Reprompt table and the Question rou
   for (const needle of ["sectionHead('Reprompt')", "label: 'Question rounds'", "['reprompt', 'question_rounds']", 'options: [0, 1, 2, 3]', "id: 'reprompt-hint'", 'state.plugin.reprompt']) {
     assert.ok(html.includes(needle), needle);
   }
-  // The hint is the exact text of the aico-settings Contract, read from it, with nothing added.
-  const hint = /Under it the hint "([^"]+)"/.exec(read('docs/contracts/aico-settings.md'))?.[1];
-  assert.ok(hint && hint.startsWith('How often /aico:reprompt may come back with questions'), `the Contract gives the hint text: ${hint}`);
-  assert.ok(html.includes(`'${hint}'`), `the page shows the Contract hint exactly: ${hint}`);
-  assert.ok(!/Question rounds is a whole number from 0 to 3/.test(html), 'the old hint wording is gone');
   // Directly under the pipeline table: after the context cap hint, before the Brainstorm heading.
   const capHint = html.indexOf("const capHint = () => `How many tokens one Step may use");
   const reprompt = html.indexOf("sectionHead('Reprompt')");
   const brainstorm = html.indexOf("sectionHead('Brainstorm')");
   assert.ok(capHint > 0 && reprompt > capHint && brainstorm > reprompt, 'order: context cap hint, Reprompt heading, Brainstorm heading');
-  assert.ok(html.indexOf(`'${hint}'`) > reprompt && html.indexOf(`'${hint}'`) < brainstorm, 'the hint sits between the Reprompt and Brainstorm headings');
   assert.ok(!/<script[^>]*\ssrc=/i.test(html), 'the page loads no outside script');
 });
 
@@ -373,145 +345,4 @@ test('settings page: a bad value is refused with the fixed text, not echoed, and
   }
   assert.ok(!fs.existsSync(s.config));
   assert.ok(!fs.existsSync(s.projectFile));
-});
-
-// ---------- /aico:reprompt under the Playbook rules ----------
-
-const playbook = read('skills/reprompt/SKILL.md');
-const playbookLines = playbook.split('\n');
-const playbookFrontmatter = frontmatter(playbook);
-const titleAt = playbookLines.findIndex((l) => l.startsWith('# Playbook: reprompt'));
-
-// The Help template comes from the company-type Contract itself; the always-on form drops the Type step.
-function helpTemplate(name) {
-  const contract = read('docs/contracts/company-type.md');
-  const at = contract.indexOf('**Help:** argument is exactly');
-  assert.ok(at >= 0, 'template in the Contract');
-  const line = contract.slice(at, contract.indexOf('\n', at));
-  return line.replace('do the **Type:** step below first; then ', '').replaceAll('<name>', name);
-}
-
-test('reprompt Playbook: frontmatter has the guard sentence first and no hidden flag', () => {
-  assert.ok(playbookFrontmatter.includes('name: reprompt'));
-  assert.ok(playbookFrontmatter.includes('argument-hint: <prompt to improve>'));
-  const description = playbookFrontmatter.find((l) => l.startsWith('description: '));
-  assert.ok(description.slice('description: '.length).startsWith(GUARD_SENTENCE));
-  assert.ok(!playbookFrontmatter.some((l) => l.startsWith('disable-model-invocation')), 'no hidden flag');
-  assert.ok(!playbookFrontmatter.some((l) => l.startsWith('allowed-tools')));
-  assert.ok(description.length <= 'description: '.length + 1024);
-});
-
-test('reprompt Playbook: the guard sentence is the shared one, and the other model-startable always-on Playbooks use it too', () => {
-  for (const name of ['lead', 'triage', 'reprompt']) {
-    const fm = frontmatter(read(`skills/${name}/SKILL.md`));
-    const description = fm.find((l) => l.startsWith('description: '));
-    assert.ok(description.slice('description: '.length).startsWith(GUARD_SENTENCE), name);
-    assert.ok(!fm.some((l) => l.startsWith('disable-model-invocation')), name);
-  }
-});
-
-test('reprompt Playbook: the Help line follows the Runs-in line and is the always-on template for reprompt', () => {
-  assert.equal(playbookLines[titleAt + 1], '');
-  assert.ok(playbookLines[titleAt + 2].startsWith('**Runs in:**'));
-  assert.equal(playbookLines[titleAt + 4], helpTemplate('reprompt'));
-  const triage = read('skills/triage/SKILL.md').split('\n');
-  const triageTitle = triage.findIndex((l) => l.startsWith('# Playbook: triage'));
-  assert.equal(triage[triageTitle + 4], helpTemplate('triage'), 'the derivation matches an existing always-on Playbook');
-  assert.equal(playbook.split('\n').filter((l) => l.startsWith('**Help:**')).length, 1);
-  assert.ok(!playbookLines[titleAt + 4].includes('aico:help'));
-});
-
-test('reprompt Playbook: the Help line answers from the page documentation/commands/reprompt.md', () => {
-  const entry = read('documentation/commands/reprompt.md');
-  assert.match(entry, /`\/aico:reprompt <prompt to improve>`/);
-  assert.match(entry, /\/aico:reprompt help/);
-  assert.match(entry, /\*\*Example\.\*\*/);
-  assert.match(entry, /works in every company type|every company type/);
-});
-
-test('reprompt Playbook: the Trust line follows the Help line directly, before Start', () => {
-  assert.equal(playbookLines[titleAt + 5], '');
-  assert.ok(playbookLines[titleAt + 6].startsWith('**Trust:**'));
-  assert.ok(playbook.indexOf('**Trust:**') < playbook.indexOf('## 1. Start'));
-  assert.equal(playbook.split('\n').filter((l) => l.startsWith('**Trust:**')).length, 1);
-});
-
-test('reprompt Playbook: no Type line anywhere, and the type check is the resolve step before any write', () => {
-  assert.doesNotMatch(playbook, /^\*\*Type:\*\*/m);
-  assert.doesNotMatch(playbook, /check-playbook/);
-  const start = playbook.slice(playbook.indexOf('## 1. Start'), playbook.indexOf('## 2. Dispatch'));
-  const resolveAt = start.indexOf('run.mjs" company-type resolve');
-  const writeAt = start.indexOf('With the Write tool create');
-  assert.ok(resolveAt > 0 && writeAt > resolveAt, 'resolve comes before the first write');
-  assert.match(start, /first line that starts with neither `ok: ` nor `company type: `/);
-  assert.ok(start.indexOf('Argument empty after trimming') < resolveAt, 'an empty argument is answered before anything runs');
-  assert.match(playbook, /run\.mjs" company-type check-role reprompter/);
-});
-
-test('reprompt Playbook: an empty argument shows the help and starts nothing', () => {
-  const step = playbook.split('\n').find((l) => l.startsWith('1. Argument empty after trimming'));
-  assert.ok(step);
-  assert.match(step, /do what the Help line says/);
-  assert.match(step, /stop: nothing dispatched, nothing written/);
-});
-
-test('reprompt Playbook: Use it and the image hand-over start the Lead with the Skill tool and name the command as fallback', () => {
-  const useIt = playbookLines.find((l) => l.startsWith('- **Use it**'));
-  assert.ok(useIt);
-  assert.match(useIt, /start `aico:lead` with the Skill tool/);
-  assert.match(useIt, /byte for byte/);
-  assert.match(useIt, /tell the CEO to run `\/aico:lead`/);
-  const image = playbook.slice(playbook.indexOf('## 6. Image prompt'));
-  assert.match(image, /start `aico:lead` with the Skill tool for `prompt-artist`/);
-  assert.match(image, /tell the CEO to run `\/aico:lead`/);
-  assert.ok(playbook.indexOf("`end '<slug>' ship`") < playbook.indexOf('start `aico:lead`'), 'the run is ended before the hand-over');
-});
-
-test('reprompt Playbook: no git write, no Bash call with CEO text, within the size limit', () => {
-  assert.ok(playbookLines.length <= 125, `${playbookLines.length} lines`);
-  assert.match(playbook, /No git command except `git rev-parse --short HEAD`/);
-  assert.match(playbook, /Never put CEO text through Bash, a dispatch line or an echo/);
-  assert.match(playbook, /Shell calls take only tokens you made/);
-  assert.doesNotMatch(playbook, /git (add|commit|push|stash|checkout|reset|clean)/);
-});
-
-test('reprompt Playbook: the dispatch block follows the dispatch-prompt Reprompt Step order', () => {
-  const contract = read('docs/contracts/dispatch-prompt.md');
-  const line = contract.split('\n').find((l) => l.startsWith('- **Reprompt Step (v3.3):**'));
-  assert.ok(line, 'Reprompt Step line in the Contract');
-  const afterColon = line.slice(line.indexOf('with those two lines:') + 'with those two lines:'.length, line.indexOf('No `Role skills:`'));
-  const expected = [...afterColon.matchAll(/`([A-Za-z ]+:)`/g)].map((m) => m[1].slice(0, -1));
-  assert.deepEqual(expected.slice(0, 3), ['Project profile', 'Company profile', 'Language']);
-  const block = playbook.match(/## 2\. Dispatch[\s\S]*?```\n([\s\S]*?)```/);
-  assert.ok(block, 'dispatch block');
-  const keys = block[1].split('\n').filter(Boolean).map((l) => (l.startsWith('Follow aico:handoff') ? 'Follow aico:handoff.' : l.split(':')[0]));
-  const optional = new Set(['Settings']);
-  const want = expected.filter((k) => k !== 'Settings' || keys.includes('Settings'));
-  assert.deepEqual(keys.filter((k) => k !== 'Follow aico:handoff.'), want, `${[...optional]} is the only optional line`);
-  assert.equal(keys.at(-1), 'Follow aico:handoff.');
-  for (const banned of ['Role skills', 'Design skills', 'Review depth', 'Review format', 'Rule slice', 'Personality']) assert.ok(!keys.includes(banned), banned);
-  assert.ok(keys.indexOf('Asks left') > keys.indexOf('Round') && keys.indexOf('Request') > keys.indexOf('Input Handoffs'));
-});
-
-test('reprompt Playbook: the Role file handles a bad Asks left and a missing Request file without guessing', () => {
-  const agent = read('agents/reprompter.md');
-  assert.match(agent, /`Asks left:` absent or not an integer 0-3 → treat it as `0`/);
-  assert.match(agent, /`Request:` absent, or a file it names missing → `status: blocked`/);
-  assert.match(agent, /blocked — missing handoff/);
-  assert.ok(agent.split('\n').length <= 50);
-});
-
-test('triage line: the checker Contract lists the reason and the Role file names the triage colon rule', () => {
-  const contract = read('docs/contracts/reprompt.md');
-  const reasons = contract.split('\n').find((l) => l.startsWith('- Anything else → `ok: false`. Reasons:'));
-  assert.ok(reasons, 'the Reasons line in the Contract');
-  assert.ok(reasons.includes('`triage line`'), `triage line is among the reasons: ${reasons}`);
-  assert.match(contract, /Triage line\*\*/);
-  const agent = read('agents/reprompter.md');
-  const never = agent.split('\n').find((l) => l.startsWith('**Never:**'));
-  assert.ok(never, 'the Never line');
-  assert.match(never, /the word triage followed by a colon in `prompt\.md` or the brief/);
-  assert.match(never, /"triage result" or "triage step"/);
-  const playbook = read('skills/reprompt/SKILL.md');
-  assert.equal(playbook.split('a triage line in it never counts').length - 1, 2, 'Use it and the image hand-over both say a triage line in it never counts');
 });

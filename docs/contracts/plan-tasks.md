@@ -1,4 +1,6 @@
-# Contract: plan-tasks v1.10
+# Contract: plan-tasks v1.11
+
+v1.11 (task P20261120.000001-T35; minor, wording only): the Architect writes one QA task per Module wave, naming that wave's build tasks, not one per build task; every build task of the wave lists it in `depends-on`. `check`, `begin` and every other command, line and refusal are unchanged.
 
 v1.10 (task P20261112.000001/07-feature; minor, text only; ADR 0069): the `context:` basis is the run's hand-over point, floor(cap x 0.9) of the run's Context cap (`run-state` v2.1, `dispatch-prompt` v5.3), and the Lead passes that value as `--handover`. The per-Role `floor(context_cap × 0.8)` rule is removed. No command, line, refusal or code changes.
 

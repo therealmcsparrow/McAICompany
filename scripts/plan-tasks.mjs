@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Plan tasks (contract: docs/contracts/plan-tasks.md v1.10). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
+// Plan tasks (contract: docs/contracts/plan-tasks.md v1.11). Node built-ins only; under plan_check.policy block it also loads the settings and plan-check scripts.
 // Parses the task blocks of a plan, schedules them under a cap, and keeps a per-run record in
 // .company/work/<slug>/parallel.jsonl. The record holds task IDs, path keys, counts and times only,
 // never plan text. Plan text, the record and every CLI argument are untrusted data: output holds only
@@ -621,7 +621,7 @@ function runDir(root, slug) {
   return dir;
 }
 
-function readPlan(root, slug, name) {
+export function readPlan(root, slug, name) {
   if (typeof name !== 'string' || !isPlanName(name)) throw new PlanProblem('plan-name');
   const dir = runDir(root, slug);
   if (dir === null) throw new PlanProblem('plan-missing');

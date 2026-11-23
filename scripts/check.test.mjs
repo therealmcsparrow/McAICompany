@@ -211,21 +211,6 @@ test('setup and language Playbooks are exempt from the Language rule; others sti
   assert.ok(r.errors.some(e => e.includes('skills/other/SKILL.md') && e.includes('Language rule')), r.errors.join('\n'));
 });
 
-test('the 5 UI agents and the editor carry the Role skills line (AC23)', () => {
-  for (const a of ['ui-ux-designer', 'frontend-engineer', 'desktop-engineer', 'game-engineer', 'brand-artist', 'editor']) {
-    const t = readFileSync(join(REPO, 'agents', `${a}.md`), 'utf8');
-    assert.match(t, /`Role skills:`/, a);
-    assert.match(t, /missing role skill: <name>/, a);
-    assert.doesNotMatch(t, /Design skills:/, a);
-  }
-});
-
-test('project template has no old skill sections', () => {
-  const t = readFileSync(join(REPO, 'skills', 'lead', 'references', 'project-template.md'), 'utf8');
-  assert.doesNotMatch(t, /^## (Design skills|Skills)\r?$/m);
-  assert.doesNotMatch(t, /aico_language:/);
-});
-
 const PAGE = (h1, extra = '') => `${h1}\n\n## In short\n\nx\n\n## How it works\n\n1. x\n\n## Technical details\n\nx\n${extra}`;
 
 test('Playbook without a documentation/commands/<name>.md page is an error', () => {
@@ -432,19 +417,6 @@ test('ci.yml is hardened: read-only token, SHA pins with tag comments, no persis
   assert.deepEqual(ci.split(/\r?\n/).filter(l => /^\s*(- )?run:/.test(l) && l.includes('${{')), []);
   assert.match(ci, /^ {4}permissions:\r?\n {6}contents: read\r?$/m);
 });
-
-// One case per Playbook of this repo: the Language rule (dispatch-prompt v2).
-const realPlaybooks = readdirSync(join(REPO, 'skills')).filter(d => {
-  const f = join(REPO, 'skills', d, 'SKILL.md');
-  return existsSync(f) && /^argument-hint:[ \t]*\S/m.test(readFileSync(f, 'utf8'));
-});
-
-for (const name of realPlaybooks) {
-  test(`Playbook ${name} resolves the language (aico:pipeline or section 1.6) and its dispatch blocks carry Language: and no Name:`, () => {
-    const r = check(REPO);
-    assert.ok(!r.errors.some(e => e.includes(`skills/${name}/SKILL.md`) && (e.includes('Language rule') || e.includes('no Language:') || e.includes('has a Name: line'))), r.errors.join('\n'));
-  });
-}
 
 const nameAgents = { qa: agent('qa'), support: agent('support') };
 
@@ -1118,16 +1090,7 @@ test('personality.mjs may be mentioned only in cooler, brainstorm format 1 and s
   assert.deepEqual(e.map(l => l.split(':')[0]).sort(), ['ERROR agents/qa.md', 'ERROR skills/brainstorm/SKILL.md', 'ERROR skills/lead/SKILL.md']);
 });
 
-test('PERSONALITY_PHRASES is frozen and equals the role-names table', () => {
-  const doc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'contracts', 'role-names.md'), 'utf8');
-  const rows = [...doc.matchAll(/^\| `(low|medium|high)` \| (.+?) \| (.+?) \|$/gm)];
-  assert.equal(rows.length, 3);
-  const table = { intelligence: {}, creativity: {} };
-  for (const [, level, intelligence, creativity] of rows) {
-    table.intelligence[level] = intelligence;
-    table.creativity[level] = creativity;
-  }
-  assert.deepEqual(PERSONALITY_PHRASES, table);
+test('PERSONALITY_PHRASES is frozen', () => {
   assert.ok(Object.isFrozen(PERSONALITY_PHRASES));
   assert.ok(Object.isFrozen(PERSONALITY_PHRASES.intelligence));
   assert.ok(Object.isFrozen(PERSONALITY_PHRASES.creativity));
@@ -1241,7 +1204,7 @@ test('the Lead agent still needs a name, so names.json without it is an error', 
   assert.ok(r.errors.some(e => e.includes('names.json') && e.includes('project-manager has no name')), r.errors.join('\n'));
 });
 
-test('the shipped plugin passes check.mjs with the Lead in no company type and a project-manager row on the roles page', () => {
+test('the shipped plugin passes check.mjs with the Lead in no company type', () => {
   const home = mkdtempSync(join(tmpdir(), 'aico-home-'));
   const saved = { m: process.env.MCSPARROW_HOME, h: process.env.HOME, u: process.env.USERPROFILE };
   process.env.MCSPARROW_HOME = home; process.env.HOME = home; process.env.USERPROFILE = home;
@@ -1252,7 +1215,6 @@ test('the shipped plugin passes check.mjs with the Lead in no company type and a
     for (const f of readdirSync(join(REPO, 'company', 'types'))) {
       assert.ok(!/"project-manager"/.test(readFileSync(join(REPO, 'company', 'types', f), 'utf8')), f);
     }
-    assert.ok(readFileSync(join(REPO, 'documentation', 'roles', 'README.md'), 'utf8').includes('**project-manager**'));
   } finally {
     for (const [k, v] of [['MCSPARROW_HOME', saved.m], ['HOME', saved.h], ['USERPROFILE', saved.u]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }

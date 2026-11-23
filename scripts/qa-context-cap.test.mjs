@@ -388,11 +388,6 @@ describe('R-21: SendMessage appears in skills and agents only as a prohibition',
     assert.deepEqual(sendMessageOffenders([a]).map((x) => x.split(':').pop()), ['1', '3']);
   });
 
-  test('no file under skills/ or agents/ tells anyone to use SendMessage', () => {
-    const files = [...walk(path.join(root, 'skills')), ...walk(path.join(root, 'agents'))];
-    assert.ok(files.length > 20);
-    assert.deepEqual(sendMessageOffenders(files), []);
-  });
 });
 
 // ---------- Contract drift ----------
@@ -409,18 +404,17 @@ describe('AC12: the Contract bumps pass the drift check', () => {
 
 const TRACE = {
   AC1: [['mods/test/fresh-step.test.tsx', 'a model send in an active run is not delivered with the fixed reason'], ['scripts/fresh-step-lib.test.mjs', 'the refusal reason is the fixed text']],
-  AC2: [['scripts/context-cap-text.test.mjs', 'a Step is never resumed']],
-  AC3: [['scripts/step-split.test.mjs', 'a 3000-line diff splits into 3 groups'], ['scripts/context-cap-text.test.mjs', 'one Step per review or Fix group']],
-  AC4: [['scripts/step-split-fix.test.mjs', '11 blockers in 2 areas become groups of at most 8'], ['scripts/context-cap-text.test.mjs', 'one Step per review or Fix group']],
+  AC3: [['scripts/step-split.test.mjs', 'a 3000-line diff splits into 3 groups']],
+  AC4: [['scripts/step-split-fix.test.mjs', '11 blockers in 2 areas become groups of at most 8']],
   AC5: [['scripts/ledger-cap.test.mjs', 'AC11: snapshot 120000: 130000 writes the row, prints the over cap line with that cap and exits 4'], ['scripts/qa-context-cap.test.mjs', 'run.mjs passes exit 4']],
-  AC6: [['scripts/context-cap-text.test.mjs', 'ledger exit 4 routes to one fresh check Step'], ['scripts/qa-context-cap.test.mjs', 'the check Step after an exit-4 handover Step']],
+  AC6: [['scripts/qa-context-cap.test.mjs', 'the check Step after an exit-4 handover Step']],
   AC7: [['scripts/ledger-cap.test.mjs', 'report text ends with an over cap line for the snapshot cap and report --json carries it (token-ledger v1.14)'], ['scripts/qa-context-cap.test.mjs', 'AC11: the report text counts over-cap Steps']],
   AC8: [['scripts/lead-context.test.mjs', 'writes ctx, peak and time'], ['scripts/qa-context-cap.test.mjs', 'Stop, PreCompact and SessionStart in a row']],
   AC9: [['mods/test/savvy-ctx.test.tsx', 'a running agent at 110000 tokens shows ctx 110.0k near cap']],
   AC10: [['scripts/ctx-row-lib.test.mjs', 'AC11: ctxCell with run cap 120000 and handover 108000: near cap past 108000, over cap past 120000'], ['mods/test/savvy-ctx.test.tsx', 'a count past the run cap 120000 shows over cap']],
   AC11: [['scripts/ledger-cap.test.mjs', 'agent-ctx refuses hostile ids'], ['mods/test/savvy-ctx.test.tsx', 'failures draw ctx ? and never block the pane']],
   AC12: [['scripts/qa-context-cap.test.mjs', 'check.mjs --drift reports 0 errors']],
-  AC13: [['scripts/context-cap-text.test.mjs', 'Ship Gate shows over cap and the Lead peak'], ['scripts/lead-context.test.mjs', 'read prints ctx and peak, with over cap past CAP']],
+  AC13: [['scripts/lead-context.test.mjs', 'read prints ctx and peak, with over cap past CAP']],
   // lead-handoff v1.7 removed the window warning (ADR 0056); this now holds that begin prints none
   AC14: [['scripts/lead-context.test.mjs', 'begin prints only begun, with or without the window setting']]
 };

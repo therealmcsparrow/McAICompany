@@ -34,11 +34,11 @@ Method: every file of the pack searched for LICENSE files, `license` keys, SPDX 
 | # | Pack mod | Clashes with | aico rule that wins |
 |---|---|---|---|
 | 1 | handoff | 250k handoff offer vs 180k default cap | `cap` guard, context-guard v2.0: default 180000, range 60000-250000, freeze 90%, hand over 100% |
-| 2 | model-router | Haiku picks the subagent model | `model-floor` guard and Role pins in `agents/*.md` |
+| 2 | model-router | Haiku picks the subagent model | the dispatch Floor rule of `aico:pipeline` and Role pins in `agents/*.md` |
 | 3 | effort-optimizer | sets effort per prompt | Role effort in agent files |
 | 4 | input-router | Haiku summary replaces the file text Claude reads | exact text for Read before Edit and for review |
 | 5 | research-router | web research routed through a cheap worker | `aico:sourcing` tiers, caps and untrusted-page rules |
-| 6 | efficient-browser-use | shrinks screenshots | hands-on-tester evidence is never shrunk (AC25) |
+| 6 | efficient-browser-use (dropped) | shrinks screenshots | hands-on-tester evidence is never shrunk (AC25) |
 | 7 | mods | its own `switches.json` | aico settings with locks (AC15, AC23) |
 | 8 | savings-proof | estimated savings | real tokens from the ledger; estimates in a separate labelled field (AC24) |
 
@@ -64,4 +64,4 @@ Notes for the Lead and QA:
 - AC26 needs one executable test per row: the rows above carry the clash id (`clash.1` to `clash.8`) plus the cache-clock extra. The Haiku rows are specified now, tested in release 2 (brainstorm).
 - A saver ships only when its row is green. A pack mod that fails its row is dropped (Q-24 default; the CEO decides when it happens).
 - Removal trigger for a skill's text: its mod passes the replay (brainstorm round 14).
-- Row release 1 count: 5 rows (cache-clock, handoff as `cap`, efficient-browser-use, mods, savings-proof). Release 2: 4 Haiku rows.
+- Row release 1 count: 4 rows (cache-clock, handoff as `cap`, mods, savings-proof; efficient-browser-use dropped in v0.45 guard freeze). Release 2: 4 Haiku rows.

@@ -15,10 +15,10 @@ argument-hint: "[drift]"
 Run with `aico:pipeline`. The only argument besides `help` is `drift`. No Plan Gate. If an upgrade changes a Contract or Core, pause for one. Read-only first: no builders until the CEO picks.
 
 1. In parallel: `aico:security` (dependency vulnerabilities, flag exploited ones: stop and suggest `/aico:incident`), `aico:legal` (license re-check), `aico:devops` (outdated dependencies, report SBOM status, CI health), `aico:senior-engineer` (refresh: stale packs, changed guidance, deprecations, advisories).
-   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index` v1) and add each `ERROR` line to the report under Important.
+   Also run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" check --drift` (Contract versions, cites and anchors, `contract-index`) and add each `ERROR` line to the report under Important.
    Drift (behaviour check, informational): only when the argument is exactly `drift`; without it, no drift Step is dispatched and `pick` is not run. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" drift-report pick` and follow `references/drift.md`: one `aico:architect` Step, in parallel with this step.
 2. You (the Lead) merge the Handoffs into `.company/work/<slug>/maintenance-report.md`: Critical / Important / Minor, each with owner and size.
-   The CEO's picks first: an `ask` form (`lead-relay` v1; `multi` allowed, labels without commas). Then **→ Brief Gate** as a single-select `gate:brief` form. One open form at a time.
+   The CEO's picks first: an `ask` form (`lead-relay`; `multi` allowed, labels without commas). Then **→ Brief Gate** as a single-select `gate:brief` form. One open form at a time.
 3. Rule changes the CEO picked: `aico:senior-engineer` (research), then `aico:architect` sign-off if Must rules changed. Then the owning engineer per upgrade group (one Step per group), then `aico:code-reviewer` ∥ `aico:qa` ∥ `aico:security` ∥ `aico:senior-engineer` (compliance) when `lanes.compliance` is on (`aico:pipeline` §1.7).
    **→ Ship Gate**
 

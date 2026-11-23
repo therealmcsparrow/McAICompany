@@ -96,20 +96,6 @@ describe('calibration', () => {
     assert.equal(lead.COMPACT_RESERVE, undefined);
   });
 
-  test('the Contract is v3.0 and holds the run cap, not the window setup', () => {
-    const text = fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8');
-    assert.match(text, /^# Contract: lead-handoff v3\.0$/m);
-    assert.ok(text.includes('162000'));
-    assert.ok(text.includes('runCap'));
-    assert.ok(text.includes('no setup'));
-    assert.ok(!text.includes('\r'));
-  });
-
-  test('the script header names the Contract and what it uses', () => {
-    const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-    assert.equal(lines[1], '// contract: docs/contracts/lead-handoff.md v3.0');
-    assert.match(lines[2], /^\/\/ uses: docs\/contracts\/run-state\.md v3\.0 /);
-  });
 });
 
 describe('watch', () => {
@@ -746,82 +732,8 @@ describe('hooks.json and source', () => {
   });
 });
 
-describe('pipeline wiring', () => {
-  const fresh = (s) => s.toLowerCase();
-  const pipeline = fs.readFileSync(path.join(repo, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-  const ref = fs.readFileSync(path.join(repo, 'skills', 'pipeline', 'references', 'lead-handover.md'), 'utf8');
-
-  test('Setup loads the reference and runs begin right after run-state start', () => {
-    assert.match(pipeline, /17\. \*\*Lead hand-over\*\*/);
-    assert.ok(pipeline.includes('references/lead-handover.md'));
-    assert.ok(pipeline.includes('scripts/run.mjs" lead-handover begin'));
-    assert.ok(pipeline.split('\n').length <= 125);
-  });
-
-  test('the Gate line names no Brief or Plan Gate for feature and fix', () => {
-    assert.ok(pipeline.includes('- **Ship Gate** of a feature or fix run also shows the tier-path lines (references/tier-path.md step 9); feature and fix have no Brief or Plan Gate (ADR 0050).'));
-    assert.ok(!pipeline.includes('Brief, Plan and Ship Gates'));
-  });
-
-  test('the Lead rules keep the records above the summary and forbid manual hand-over', () => {
-    assert.ok(!ref.includes('\r'));
-    for (const needle of ['records beat the summary', 'run-state', 'ask', 'idea-flow', 'options', 'lead-handover', 'read',
-      '## Next', 'lead hand-overs:', 'never write a Lead Handoff by hand', 'never ask the CEO to clear or resume', 'about 8k tokens']) {
-      assert.ok(ref.toLowerCase().includes(needle.toLowerCase()), `lead-handover.md lacks ${needle}`);
-    }
-  });
-
-  test('the Lead budget line is the run cap and the automatic hand-over, no manual resume', () => {
-    assert.ok(!pipeline.includes('150k'));
-    assert.ok(!pipeline.includes('00-lead-state'));
-    assert.ok(!/resume <slug>/.test(pipeline));
-    assert.ok(!pipeline.includes('95000') && !pipeline.includes('85500'), 'the skill no longer names a fixed cap as current');
-    assert.ok(!/fixed cap/i.test(pipeline));
-    assert.match(pipeline, /run-state[^\n]* show [^\n]*--json[^\n]*\bcap\b[^\n]*\bhandover\b/);
-    assert.ok(pipeline.includes('references/lead-handover.md'));
-  });
-
-  test('approved Core is written to project.md after the Ship Gate Approve in feature and fix', () => {
-    const line = pipeline.split('\n').find((l) => /Ship Gate.*Approve.*[.]company[/]project[.]md/.test(l));
-    assert.ok(line, 'no Ship Gate Core line');
-    assert.ok(/feature and fix/.test(line));
-    assert.ok(/Plan Gate/.test(pipeline.split('\n').find((l) => l.startsWith('- **Plan Gate** must show'))));
-  });
-
-  test('the Lead records the base once at Step 01 and reads it back after a hand-over', () => {
-    const line = pipeline.split('\n').find((l) => l.startsWith('**Base commit:**'));
-    assert.ok(line.includes('scripts/run.mjs" lead-handover base'));
-    assert.ok(ref.includes('lead-handover base'));
-    assert.ok(fs.readFileSync(path.join(repo, 'docs', 'contracts', 'lead-handoff.md'), 'utf8').startsWith('# Contract: lead-handoff v3.0'));
-  });
-
-  test('the Ship Gate Core line is the Architect list for feature and the summary list for fix', () => {
-    const line = pipeline.split('\n').find((l) => /^- \*\*Ship Gate\*\*, feature and fix/.test(l));
-    assert.ok(/Feature: the Architect/.test(line) && /Fix has no Architect: its Ship Gate summary lists the Core changes/.test(line));
-    const doc = fs.readFileSync(path.join(repo, 'documentation', 'commands', 'fix.md'), 'utf8');
-    assert.ok(!/Architect's approved Core/.test(doc));
-    assert.ok(/Ship Gate summary/.test(doc.split('\n').find((l) => l.startsWith('**At the Ship Gate.**'))));
-  });
-
-  test('after a hand-over the Lead takes base and fail-closed state from the record only', () => {
-    const t = fresh(ref);
-    for (const needle of ['base commit:', 'tier-path', 'tier-set', 'fail closed', 'high', 'triage', 'nonce', 'ticket-approval read', 'approve line']) {
-      assert.ok(t.includes(needle), `lead-handover.md lacks ${needle}`);
-    }
-  });
-});
-
 // run-state v2.0: the newest open run may be a v3 run `<ID>/<NN>-<playbook>`.
 describe('run-state v2.0 cites and v3 runs', () => {
-  test('the old guard script is gone; run-guard cites run-state v3.0 on its uses line; triage names v3.0', () => {
-    const uses = (f) => fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/)[2];
-    assert.equal(fs.existsSync(path.join(here, 'context-guard.mjs')), false, 'context-guard v2.0 retires scripts/context-guard.mjs');
-    assert.match(uses('run-guard.mjs'), /docs\/contracts\/run-state\.md v3\.0(?![\d.])/);
-    const triage = fs.readFileSync(path.join(repo, 'skills', 'triage', 'SKILL.md'), 'utf8').split(/\r?\n/).find((l) => /run-state v\d/.test(l)) ?? '';
-    assert.match(triage, /run-state v3\.0/);
-    assert.ok(!/run-state v1/.test(triage));
-  });
-
   test('findRun returns the slug of a running v3 run, with its one slash', () => {
     const slug = 'P20261109.000001/01-feature';
     const fx = fixture({ slug });

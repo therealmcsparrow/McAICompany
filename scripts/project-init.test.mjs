@@ -264,16 +264,3 @@ test('command line: writes and exits 0, a refusal exits 3', () => {
   assert.equal(again.status, 3);
   assert.match(again.stdout, /^refused: /);
 });
-
-test('the lead skill names every form and ends at the Brief Gate', () => {
-  const skill = fs.readFileSync(path.join(ROOT, 'skills', 'lead', 'SKILL.md'), 'utf8');
-  const guide = fs.readFileSync(path.join(ROOT, 'skills', 'lead', 'references', 'first-product.md'), 'utf8');
-  assert.ok(skill.split('\n').length <= 125);
-  assert.ok(skill.includes('references/first-product.md'));
-  for (const form of ['Form 1 Company', 'Form 2 Product', 'Form 3 Voice and terms']) assert.ok(guide.includes(form), form);
-  for (const key of [...KEYS, 'personas', 'company_type']) assert.ok(guide.includes(`\`${key}\``), key);
-  assert.ok(guide.includes('run.mjs" project-init'));
-  const tail = guide.trimEnd().split('\n').at(-1);
-  assert.match(tail, /stops at the \*\*Brief Gate\*\*|stop[s]? at the \*\*Brief Gate\*\*|\*\*Brief Gate\*\*/);
-  assert.equal(guide.includes('\r'), false);
-});

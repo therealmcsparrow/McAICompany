@@ -1,4 +1,4 @@
-# Wayfinder map (wayfinder v1)
+# Wayfinder map (wayfinder)
 
 A map for an effort that spans several sessions. It records decisions made, questions still open and pointers to the files that hold the real content. It copies nothing from those files. Contract: `docs/contracts/wayfinder.md`.
 

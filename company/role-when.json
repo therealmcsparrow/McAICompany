@@ -5,6 +5,7 @@
     "ui-ux-designer": ["ui_changed"],
     "hands-on-tester": ["ui_changed"],
     "persona-tester": ["ui_changed"],
-    "localizer": ["strings_changed", "languages>1"]
+    "localizer": ["strings_changed", "languages>1"],
+    "security": ["security_changed"]
   }
 }

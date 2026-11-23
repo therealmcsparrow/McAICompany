@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// contract: docs/contracts/route.md v1.0
+// contract: docs/contracts/route.md v2.1
 // The Steps of a run as data: a route ledger with a reason for every skip and merge, a Step budget lint
 // and a fail-open `next` decision. Node built-ins only; facts are read only through `readLatest`.
 import {
   closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, writeSync,
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readLatest, main as factsMain } from './diff-facts.mjs';
 import { isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
@@ -24,6 +25,9 @@ const SIZES = ['XS', 'S', 'M', 'L'];
 const CONDITIONS = ['ui_changed', 'strings_changed', 'contract_changed', 'languages>1'];
 const FLAG_CONDITIONS = ['ui_changed', 'strings_changed', 'contract_changed'];
 const NEVER_SKIP = ['qa', 'security'];
+const SECURITY = 'security';
+const SECURITY_WHEN = 'security_changed';
+const TIERS = ['low', 'medium', 'high'];
 const MERGE_ROLE = `code-reviewer`;
 const SLUG = /^[a-z][a-z0-9-]{0,40}$/;
 const HANDOFF_NAME = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.md$/;
@@ -140,7 +144,10 @@ export function loadData(root, protectedRoles = []) {
         const conds = w.when[k];
         const name = clean(k);
         if (!SLUG.test(k) || !roles.has(k)) { errors.push(`ERROR route: role-when.json ${name} has no agents file`); continue; }
-        if (never.has(k)) { errors.push(`ERROR route: role-when.json ${name} may not be skipped`); continue; }
+        // The one allowed entry for a protected Role: security on security_changed (route v2.0).
+        const allowed = k === SECURITY && Array.isArray(conds) && conds.length === 1 && conds[0] === SECURITY_WHEN;
+        if (never.has(k) && !allowed) { errors.push(`ERROR route: role-when.json ${name} may not be skipped`); continue; }
+        if (allowed) { data.when[k] = [...conds]; continue; }
         if (!Array.isArray(conds) || conds.length < 1 || conds.length > CONDITIONS.length
           || !conds.every((c) => typeof c === 'string' && CONDITIONS.includes(c))) {
           errors.push(`ERROR route: role-when.json ${name} has an unknown condition`);
@@ -292,7 +299,8 @@ function languageCount(root) {
 const factsName = (facts) => (facts === null ? 'none' : facts.step);
 
 // Role skip from facts: returns a why when a listed condition is false, else null (run).
-function skipReason(root, role, data, facts) {
+function skipReason(root, role, data, facts, tier) {
+  if (role === SECURITY) return securitySkip(data, facts, tier);
   if (!hasOwn(data.when, role) || data.protectedRoles.includes(role)) return null;
   if (facts === null) return null;
   if (facts.paths.some((p) => p.kind === 'unknown')) return null;
@@ -307,6 +315,54 @@ function skipReason(root, role, data, facts) {
     }
   }
   return null;
+}
+
+// The run tier and base from `tier-set.mjs read <slug>` run as a child (no import: tier-set reaches check.mjs).
+// null for no record, a broken record or any failure: the caller then runs security (fail-closed).
+function readTierInfo(pluginRoot, root, slug) {
+  try {
+    const r = spawnSync(process.execPath, [join(pluginRoot, 'scripts', 'tier-set.mjs'), 'read', slug], {
+      cwd: root, encoding: 'utf8', timeout: 15000, maxBuffer: 64 * KiB,
+    });
+    if (r.status !== 0 || typeof r.stdout !== 'string') return null;
+    const v = JSON.parse(r.stdout);
+    if (!isPlain(v) || v.state !== 'on' || !TIERS.includes(v.tier)) return null;
+    return { tier: v.tier, base: typeof v.base === 'string' ? v.base : null };
+  } catch { return null; }
+}
+
+const readTier = (pluginRoot, root, slug) => readTierInfo(pluginRoot, root, slug)?.tier ?? null;
+
+// The full id of HEAD in the product root, or null. Child env without GIT_*, no shell.
+function headOf(root) {
+  try {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+    const r = spawnSync('git', ['--no-replace-objects', 'rev-parse', 'HEAD'], {
+      cwd: root, env, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * KiB, windowsHide: true,
+    });
+    const id = typeof r.stdout === 'string' ? r.stdout.trim() : '';
+    return r.status === 0 && /^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(id) ? id : null;
+  } catch { return null; }
+}
+
+// Facts a security decision may trust: they were written at the current HEAD against the run's recorded base.
+// Else null (treated as missing facts, so security runs or stays owed).
+function currentFacts(facts, root, info) {
+  if (facts === null || info === null || info.base === null) return null;
+  const head = headOf(root);
+  return head !== null && facts.head === head && facts.base === info.base ? facts : null;
+}
+
+// Security is skipped only below high, on readable facts with no unknown path and security_changed false.
+// A facts file without the key reads as true.
+function safeBelowHigh(facts, tier) {
+  return (tier === 'low' || tier === 'medium') && facts !== null
+    && !facts.paths.some((p) => p.kind === 'unknown') && facts.security_changed === false;
+}
+
+function securitySkip(data, facts, tier) {
+  if (!hasOwn(data.when, SECURITY) || !safeBelowHigh(facts, tier)) return null;
+  return `security_changed false in facts ${facts.step}, tier ${tier}`;
 }
 
 // A Handoff counts only as <NN>-<agents slug>.md with NN not all zero.
@@ -333,7 +389,7 @@ function needsCeo(runDir, roles) {
 }
 
 // One decision for one route entry. runDir may be null (dry run): the needs-ceo scan is then skipped.
-function decide(root, runDir, route, entry, data, facts) {
+function decide(root, runDir, route, entry, data, facts, tier = null) {
   if (entry.role === 'tasks') return { do: 'tasks', why: 'run the plan tasks through plan-tasks, then call next again' };
   if (hasOwn(entry, 'merge')) {
     const split = (why) => ({ do: 'split', why: clean(why, MAX_WHY), roles: ['qa', MERGE_ROLE] });
@@ -346,7 +402,7 @@ function decide(root, runDir, route, entry, data, facts) {
     }
     return { do: 'run', why: `merged qa and code-reviewer: S, contract_changed false in facts ${facts.step}` };
   }
-  const why = skipReason(root, entry.role, data, facts);
+  const why = skipReason(root, entry.role, data, facts, tier);
   if (why !== null) return { do: 'skip', why: clean(why, MAX_WHY) };
   return { do: 'run', why: clean(entry.why, MAX_WHY) };
 }
@@ -417,7 +473,7 @@ function lintEvents(events, data) {
 
 async function run(argv, root, pluginRoot) {
   const [cmd, ...rest] = argv;
-  if (['check', 'dry', 'write', 'tasks', 'fix', 'next'].includes(cmd)) await protectedList(pluginRoot);
+  if (['check', 'dry', 'write', 'tasks', 'fix', 'next', 'owed'].includes(cmd)) await protectedList(pluginRoot);
   if (cmd === 'check') {
     if (rest.length !== 1) refuse('usage: check <file>');
     const prot = await protectedList(pluginRoot);
@@ -514,7 +570,9 @@ async function run(argv, root, pluginRoot) {
     if (i >= routeEvent.steps.length) return { code: 0, out: '{"do":"end"}\n' };
     const entry = routeEvent.steps[i];
     const facts = readLatest(runDir);
-    const d = decide(root, runDir, routeEvent, entry, data, facts);
+    const info = entry.role === SECURITY && hasOwn(data.when, SECURITY) ? readTierInfo(pluginRoot, root, slug) : null;
+    const tier = info === null ? null : info.tier;
+    const d = decide(root, runDir, routeEvent, entry, data, entry.role === SECURITY ? currentFacts(facts, root, info) : facts, tier);
     const fname = factsName(facts);
     appended({ v: 1, ev: 'step', i, role: entry.role, do: d.do, why: d.why, facts: fname });
     const out = { do: d.do, i, role: entry.role, why: d.why, facts: fname };
@@ -522,7 +580,20 @@ async function run(argv, root, pluginRoot) {
     return { code: 0, out: `${JSON.stringify(out)}\n` };
   }
 
-  return refuse('usage: write | tasks | next | fix | dry | check');
+  if (cmd === 'owed') {
+    if (rest.length !== 1) refuse('usage: owed <slug>');
+    // A run with no route record owes nothing.
+    if (routeEvent === undefined) return { code: 0, out: 'owed: none\n' };
+    // The newest security skip with no later fix event for security is owed once the run is no longer safe.
+    let at = -1;
+    events.forEach((e, k) => { if (e.ev === 'step' && e.role === SECURITY && e.do === 'skip') at = k; });
+    if (at < 0 || events.slice(at + 1).some((e) => e.ev === 'fix' && e.role === SECURITY)) return { code: 0, out: 'owed: none\n' };
+    const info = readTierInfo(pluginRoot, root, slug);
+    const safe = safeBelowHigh(currentFacts(readLatest(runDir), root, info), info === null ? null : info.tier);
+    return { code: 0, out: safe ? 'owed: none\n' : 'owed: security\n' };
+  }
+
+  return refuse('usage: write | tasks | next | fix | owed | dry | check');
 }
 
 export async function main(argv, cwd = process.cwd(), pluginRoot = PLUGIN_ROOT) {

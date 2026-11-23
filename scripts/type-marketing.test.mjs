@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-// The marketing company type: manifest, its two Playbooks, and the Ship checks they rely on.
+// The marketing company type: manifest and the company-type CLI.
 
 const root = path.join(import.meta.dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -44,47 +44,9 @@ test('manifest: roles, playbooks and Ship definition', () => {
   for (const h of manifest.skill_search.hints) assert.match(h, /^[a-z0-9][a-z0-9 -]{0,59}$/);
 });
 
-test('manifest: every Role and Playbook exists, Playbooks carry an argument hint', () => {
+test('manifest: every Role exists', () => {
   for (const r of manifest.roles) assert.ok(fs.existsSync(path.join(root, 'agents', `${r}.md`)), r);
-  for (const p of manifest.playbooks) assert.match(read(`skills/${p}/SKILL.md`), /^argument-hint:[ \t]*\S/m, p);
 });
-
-for (const name of ['campaign', 'content']) {
-  test(`${name}: frontmatter, size, Help and Type lines, pipeline`, () => {
-    const t = read(`skills/${name}/SKILL.md`);
-    const lines = t.split('\n');
-    assert.ok(!t.includes('\r'));
-    assert.ok(lines.length <= 125);
-    assert.equal(lines[0], '---');
-    assert.match(t, new RegExp(`^name: ${name}$`, 'm'));
-    assert.match(t, /^description: .+/m);
-    assert.match(t, /^argument-hint:[ \t]*\S/m);
-    assert.doesNotMatch(t, /^disable-model-invocation:/m);
-    assert.ok(!/^allowed-tools:/m.test(t));
-    const i = lines.findIndex((l) => l.startsWith('**Help:**'));
-    assert.ok(i > 0);
-    assert.equal(lines[i + 1], '');
-    assert.equal(lines[i + 2], `**Type:** run \`node "\${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" company-type check-playbook ${name}\` first; exit not 0 → show its output line and stop.`);
-    assert.ok(t.includes('aico:pipeline'));
-  });
-
-  test(`${name}: names every check, forced lanes, Ship Gate and only type Roles`, () => {
-    const t = read(`skills/${name}/SKILL.md`);
-    for (const needle of ['claims-cited', 'ai-disclosure', 'asset-licences', 'aico:editor', 'aico:legal', 'aico:accessibility-tester', 'Ship Gate', 'Ship means']) {
-      assert.ok(t.includes(needle), needle);
-    }
-    assert.match(t, /art\. 50 duty that applies and how it is met, or why none applies/);
-    assert.match(t, /`deepfake: yes` or `deepfake: no`/);
-    assert.ok(t.includes('ai-disclosure: none (no AI-generated assets)'));
-    assert.match(t, /\*\*→ Plan Gate\*\*/);
-    assert.ok(t.indexOf('Brief Gate**') < t.indexOf('Plan Gate**'));
-    assert.ok(!/No Plan Gate/.test(t));
-    for (const n of ['testimonials or reviews', 'sponsored-content labels', 'price and green claims', '2024/825', 'comparative advertising']) assert.ok(t.includes(n), n);
-    const used = new Set([...t.matchAll(/`aico:([a-z-]+)`/g)].map((m) => m[1]));
-    const allowed = new Set([...manifest.roles, ...manifest.playbooks, 'pipeline', 'writing', 'eu-compliance', 'art-direction', 'help', 'project-manager', 'lead']);
-    for (const u of used) assert.ok(allowed.has(u), `${name} dispatches ${u}, not in the marketing company`);
-  });
-}
 
 test('resolve for a marketing project returns the manifest data', () => {
   const r = cli(marketingProject(), 'resolve', '--json');

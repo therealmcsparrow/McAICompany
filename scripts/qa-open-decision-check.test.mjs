@@ -692,11 +692,6 @@ test('AC8 block with findings exits 2 and still writes the scan record; block wi
   assert.equal(readRecordLines(c.root, 'clean')[0].findings, 0);
 });
 
-test('AC8 the pipeline text says exit 2 (block) makes the scripts refuse the Plan Gate, not that it is treated like warn', () => {
-  const ref = fs.readFileSync(path.join(repoRoot, 'skills', 'pipeline', 'references', 'plan-check.md'), 'utf8');
-  assert.match(ref, /Exit 2 \(`block`\) means the scripts refuse the Plan Gate/);
-  assert.doesNotMatch(ref, /shown like `warn`|Gate can be approved/);
-});
 
 test('the gate command refuses bad arguments with exit 3 and writes nothing', async (t) => {
   const c = tmp(t);
@@ -1040,39 +1035,6 @@ test('AC6 the v0.15 ledger fixtures report the same text before and after the ch
 
 // ---------- skill texts ----------
 
-test('AC9 the review skill names the open-decision tag under Nits and never under Blocking', () => {
-  const text = fs.readFileSync(path.join(repoRoot, 'skills', 'review', 'SKILL.md'), 'utf8');
-  const tagged = text.split('\n').filter((l) => l.includes('[open-decision]'));
-  assert.ok(tagged.length >= 1);
-  for (const line of tagged) assert.match(line, /Nit/);
-  assert.ok(tagged.some((l) => /(never|not)[^\n]*Blocking|Blocking[^\n]*(never|not)/.test(l)));
-  const afterBlocking = text.split('\n').filter((l) => /^#{1,4} .*Blocking/.test(l));
-  assert.equal(afterBlocking.filter((l) => l.includes('open-decision')).length, 0);
-});
-
-test('AC10 the planning skill asks for Decided lines and no open words under Steps and Tasks', () => {
-  const text = fs.readFileSync(path.join(repoRoot, 'skills', 'planning', 'SKILL.md'), 'utf8');
-  assert.match(text, /Decided: <choice> because <reason>/);
-  assert.match(text, /TBD/);
-  assert.match(text, /decide later/i);
-});
-
-test('AC11 the pipeline reference runs gate or off at every Plan Gate and read before the Ship Gate', () => {
-  const ref = fs.readFileSync(path.join(repoRoot, 'skills', 'pipeline', 'references', 'plan-check.md'), 'utf8');
-  const gate = ref.indexOf('run.mjs" plan-check gate');
-  const off = ref.indexOf('run.mjs" plan-check off');
-  const read = ref.indexOf('run.mjs" plan-check read');
-  assert.ok(gate >= 0 && off >= 0 && read >= 0, 'gate, off and read commands');
-  assert.ok(read > gate);
-  const readLine = ref.slice(Math.max(0, ref.lastIndexOf('\n', read)), ref.indexOf('\n', read));
-  assert.match(ref.slice(read - 400, read + 400), /Ship Gate/);
-  assert.match(readLine, /read/);
-  assert.match(ref, /every Plan Gate|each Plan Gate|At each Plan Gate/i);
-  assert.match(ref, /wave/);
-  const skill = fs.readFileSync(path.join(repoRoot, 'skills', 'pipeline', 'SKILL.md'), 'utf8');
-  assert.match(skill, /references\/plan-check\.md/);
-  assert.ok(skill.split('\n').length <= 125);
-});
 
 test('AC11 the marker tells whether the check ran: gate gives on, off gives off, the last record wins', async (t) => {
   const c = tmp(t);

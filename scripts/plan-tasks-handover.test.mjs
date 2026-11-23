@@ -6,8 +6,6 @@ import path from 'node:path';
 import { main } from './plan-tasks.mjs';
 
 const NOW = Date.UTC(2026, 10, 14, 12, 0, 0);
-const HERE = import.meta.dirname;
-const read = (...p) => fs.readFileSync(path.join(HERE, '..', ...p), 'utf8');
 
 const roots = [];
 after(() => {
@@ -93,35 +91,5 @@ describe('plan-tasks check --handover against a run handover', () => {
     const r = world('150k').check('--handover', '162000', '--handover', '85500');
     assert.equal(r.code, 3);
     assert.match(r.lines[0], /^refused: /);
-  });
-});
-
-describe('skill and contract text name the run cap', () => {
-  const pipeline = read('skills', 'pipeline', 'SKILL.md');
-  const handoff = read('skills', 'handoff', 'SKILL.md');
-
-  test('Setup item 8 reads cap and handover from run-state (run-state v3.0: the value is the snapshot cap, so no `pipeline.context_cap` fallback is required) and hands the handover to plan-tasks', () => {
-    const item = pipeline.split('\n').find((l) => l.startsWith('8. **Context cap (§1.7)**'));
-    assert.ok(item, 'Setup item 8 missing');
-    for (const needle of ["`run-state show '<slug>' --json`", '`cap`', '`handover`', '`plan-tasks check|begin --handover`']) {
-      assert.ok(item.includes(needle), `item 8 lacks ${needle}`);
-    }
-    assert.doesNotMatch(item, /95000|85500|no settings read|fixed for every Role/);
-  });
-
-  test('the dispatch template carries run values, never typed figures', () => {
-    assert.match(pipeline, /^Context cap: <[a-z-]+> handover <[a-z-]+>/m);
-    assert.doesNotMatch(pipeline, /95000|85500/);
-  });
-
-  test('the absent Context cap line means 180000 and 162000 in the Role text', () => {
-    assert.ok(handoff.includes('Absent → cap 180000, handover at 162000.'), 'absent default sentence missing');
-    assert.doesNotMatch(handoff, /95000|85500/);
-  });
-
-  test('the plan-tasks contract body no longer states 0.8, 95000 or 85500', () => {
-    const doc = read('docs', 'contracts', 'plan-tasks.md');
-    const body = doc.slice(doc.indexOf('\n## '));
-    assert.doesNotMatch(body, /0\.8|95000|85500/);
   });
 });

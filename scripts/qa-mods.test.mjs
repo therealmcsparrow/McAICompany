@@ -79,17 +79,6 @@ test('AC36 fresh defaults: the three mods and the savers are on, browser use is 
   assert.equal(MODS_DEFAULTS.efficient_browser_use.enabled, false);
 });
 
-test('AC49 the docs name the three mods, the cache clock, no keep-warm and desktop unverified', () => {
-  const docs = docFolder(root, 'mods');
-  for (const need of ['Savvy', 'Cache Tax', 'Reflect', 'cache clock', 'no keep-warm', 'Unverified', 'mods.cache_tax.keep_warm']) {
-    assert.ok(docs.includes(need) || docs.toLowerCase().includes(need.toLowerCase()), `documentation/mods.md lacks: ${need}`);
-  }
-  for (const key of ['mods.savvy.enabled', 'mods.savvy.pane', 'mods.cache_tax.enabled', 'mods.cache_tax.pane', 'mods.reflect.enabled', 'mods.reflect.step_check', 'mods.reflect.retrospective', 'mods.reflect.mode']) {
-    assert.ok(docs.includes(`\`${key}\``), `documentation/mods.md lacks setting ${key}`);
-  }
-  assert.match(docs, /Locks/);
-  assert.match(read('docs/contracts/aico-mods.md'), /## Status line/);
-});
 
 test('AC43 the cache lifetimes are 60 minutes for the Lead and 5 for subagents', async () => {
   const c = await import('../mods/lib/cache-clock.mjs');

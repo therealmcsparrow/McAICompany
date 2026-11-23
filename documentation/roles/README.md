@@ -22,7 +22,7 @@ Every Role has a person name for display (change them in `/aico:settings`). You 
 Which Roles a project has depends on its [company type](../concepts/company-types.md). A software company has 35 of the 36; the editor belongs to the research, marketing and design types. A Role outside your type is not dispatched.
 
 ### Model floor and protected Roles
-The tech-researcher runs on Opus; every other Role keeps the model it had in v0.16.0, which is its **floor**. On a high-risk run a Role is never dispatched below its floor. Six Roles are **protected** and hold their floor at every risk tier, whatever you set: architect, code-reviewer, fresh-reviewer, pentester, security and vuln-scanner. Details and sources are in [Which model a Role runs on](../concepts/model-choice.md).
+The tech-researcher runs on Opus; every other Role keeps the model it had in v0.16.0, which is its **floor**. On a high-risk run the Lead never dispatches a Role below its floor; no hook re-checks it any more. Six Roles are **protected** and hold their floor at every risk tier, whatever you set: architect, code-reviewer, fresh-reviewer, pentester, security and vuln-scanner. Details and sources are in [Which model a Role runs on](../concepts/model-choice.md).
 
 **Rollback, one line per Role.**
 - One Role: in `/aico:settings`, set `roles.<role>.model` to the model you want, for example `sonnet` for the tech-researcher. A protected Role cannot be set below its floor.
@@ -71,7 +71,7 @@ The first three researchers run in parallel inside [`/aico:research`](../command
 | Role | Model | Effort | Name | What it's for |
 |---|---|---|---|---|
 | **code-reviewer** | opus | high | Rui | Reviews the branch diff for spec match, correctness, standards and Core/Module/Contract rules. Never edits code. [Page](code-reviewer.md) |
-| **fresh-reviewer** | opus | high | Fenna | Reads a plan before the builders start (feature and fix have no Plan Gate), and at high risk with the second reviewer on a diff, as a newcomer: it never reads the brief or the builders' notes, writes the plan in its own words first, then lists what the text does not make clear. Protected: never runs below opus. Never edits code. See [The fresh reviewer](../concepts/review.md). [Page](fresh-reviewer.md) |
+| **fresh-reviewer** | opus | high | Fenna | Reads a plan before the builders start, only when `pipeline.plan_review` is on (default off; feature and fix have no Plan Gate). It no longer reviews code. It reads as a newcomer: it never reads the brief or the builders' notes, writes the plan in its own words first, then lists what the text does not make clear. Protected: never runs below opus. Never edits code. See [The fresh reviewer](../concepts/review.md). [Page](fresh-reviewer.md) |
 | **qa** | sonnet | medium | Quinn | Reproduces bugs, turns acceptance criteria into tests, writes contract tests per Module, runs the suite. Edits test files only. [Page](qa.md) |
 | **security** | opus | high | Sam | Audits code, dependencies and configuration for vulnerabilities, auth flaws, secrets and data exposure. Never edits code. [Page](security.md) |
 | **pentester** | opus | high | Pavel | *On demand.* Authorized red team against your own local/staging build — see below. Never edits code. [Page](pentester.md) |
@@ -103,8 +103,8 @@ The first three researchers run in parallel inside [`/aico:research`](../command
 
 Most Roles produce plans, designs, reviews or reports. Only the engineers write product code. **Code-reviewer, fresh-reviewer, security, pentester, vuln-scanner, senior-engineer, legal, product-manager, account-manager, support and the four researchers never edit source.** Researchers write only their own Handoff and never install anything; any install happens after your approval in a form. The editor has no Bash and no web access, and writes only its own Handoff. The localizer edits only string resource files; QA edits only tests; the architect writes only ADRs and Contract definitions; the senior-engineer writes only rule packs and the Ruleset. Testers never edit.
 
-### Review Roles and the Handoff block
-The **code-reviewer** and the **senior-engineer** (compliance) are the pilot for [Handoff v1.1](../concepts/handoffs.md). By default (`pipeline.review_format: plain`) they write ordinary findings. With `pilot` set in [settings](../concepts/settings-and-locks.md), they write a top block and findings as `ID | file:line | problem | why | fix` rows, and keep a findings ledger so a handover mid-review loses nothing. With either value they confirm tool-check failures before those block, and the reviewer's depth follows the touched paths. All other Roles write Handoffs as before. In a brainstorm, a Role may skip a round, and the Architect adds an S/M/L estimate.
+### Review Roles and the Handoff
+The **code-reviewer** and the **senior-engineer** (compliance) write ordinary Handoffs like every other Role. The pilot format and the `pipeline.review_format` setting are removed ([Handoffs](../concepts/handoffs.md)). They confirm tool-check failures before those block, and the reviewer's depth follows the touched paths. In a brainstorm, a Role may skip a round, and the Architect adds an S/M/L estimate.
 
 ### The two on-demand security Roles
 The pentester and the vuln-scanner never run in the default build, audit or maintain flows. You call them deliberately: [pentester](pentester.md) with [`/aico:pentest`](../commands/pentest.md), [vuln-scanner](vuln-scanner.md) with [`/aico:vulnscan`](../commands/vulnscan.md).

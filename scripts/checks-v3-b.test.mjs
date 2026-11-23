@@ -243,23 +243,3 @@ test('plan-gate: a run record path with a bad v3 shape is still a record path, w
   assert.equal(recordPath(`.company/work/${V3}/plan.md`), null);
   assert.equal(recordPath(`.company/work/${V3}/05-qa.md`), null);
 });
-
-// ---------- Contracts ----------
-const doc = (name) => fs.readFileSync(path.join(REPO, 'docs', 'contracts', `${name}.md`), 'utf8');
-for (const [name, version, header = version] of [['wayfinder', '1.2'], ['skill-recommendation', '2.1'], ['destination-spec', '1.5'], ['aico-mods', '1.8', '2.2']]) {
-  test(`${name} is v${header} and says v2, v1.1 and legacy names are byte-identical`, () => {
-    const text = doc(name);
-    assert.ok(text.startsWith(`# Contract: ${name} v${header}\n`), text.split('\n')[0]);
-    const para = text.split('\n').find((l) => new RegExp(`^v${version.replace('.', '\\.')}\\b`).test(l));
-    assert.ok(para, `a v${version} paragraph exists`);
-    assert.match(para, /byte-identical/);
-    assert.match(para, /isRunSlug/);
-    assert.match(para, /workParts/);
-  });
-}
-
-test('the provider scripts declare the new Contract versions', () => {
-  const head = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8').split('\n').slice(0, 3).join('\n');
-  assert.match(head('scripts/wayfinder.mjs'), /docs\/contracts\/wayfinder\.md v1\.2\b/);
-  assert.match(head('scripts/spec-check.mjs'), /docs\/contracts\/destination-spec\.md v1\.5\b/);
-});

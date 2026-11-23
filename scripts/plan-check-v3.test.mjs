@@ -236,6 +236,8 @@ function product(slug = V3, planText = fs.readFileSync(path.join(FIX, 'plan.md')
   put(root, `${dir}/01-product-manager.md`, '# pm\n');
   put(root, `${dir}/02-architect.md`, '# architect\n');
   put(root, '.company/standards.md', '# standards\n');
+  // plan-review v1.5: majors runs only with pipeline.plan_review on.
+  put(root, '.company/settings.json', JSON.stringify({ aico_settings: { version: 1, pipeline: { plan_review: 'on' } } }));
   return root;
 }
 const rv = (root, ...args) => review(args, { root, now: NOW });

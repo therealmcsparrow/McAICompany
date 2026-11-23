@@ -14,7 +14,7 @@ const SCRIPT = fileURLToPath(new URL('./diff-facts.mjs', import.meta.url));
 const SLUG = 'P20261116.000003/01-feature';
 const RUN_REL = '.company/work/P20261116.000003/01-feature';
 const FLAGS = ['ui_changed', 'strings_changed', 'contract_changed', 'docs_only'];
-const FACT_KEYS = ['base', 'contract_changed', 'docs_only', 'head', 'paths', 'step', 'strings_changed', 'truncated', 'ui_changed', 'v'];
+const FACT_KEYS = ['base', 'contract_changed', 'docs_only', 'head', 'paths', 'security_changed', 'step', 'strings_changed', 'truncated', 'ui_changed', 'v'];
 
 const roots = [];
 after(() => { for (const r of roots) rmSync(r, { recursive: true, force: true, maxRetries: 3 }); });
@@ -890,7 +890,7 @@ function factsObject(over = {}) {
   return {
     v: 1, step: '05-backend-engineer', base: 'a'.repeat(40), head: 'b'.repeat(40),
     paths: [{ path: 'docs/a.md', from: null, status: 'A', kind: 'docs' }],
-    truncated: false, ui_changed: false, strings_changed: false, contract_changed: false, docs_only: true,
+    truncated: false, ui_changed: false, strings_changed: false, contract_changed: false, docs_only: true, security_changed: false,
     ...over,
   };
 }
@@ -970,7 +970,7 @@ test('readLatest: newest valid facts object, otherwise null', async t => {
 
 test('fixtures: version.txt matches the Contract header', () => {
   const g = loadGolden('diff-facts');
-  assert.equal(g.version, '1.0');
+  assert.equal(g.version, '1.3');
 });
 
 // ---------------------------------------------------------------- write branch, git environment, blob probe and write path sets

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/diff-facts.md v1.0
+// contract: docs/contracts/diff-facts.md v1.3
 // Classifies what a run changed (docs, tests, code, contracts, ...) into one facts file that gates read.
 // Node built-ins and git only. Every git call is a judging call: child env without GIT_*, no shell, literal
 // pathspecs, no replace objects, no ext-diff or textconv, NUL-separated output, ids checked before git runs.
@@ -11,6 +11,7 @@ import {
 import { join, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { FORCED_HIGH_V1, tokens } from './forced-tokens.mjs';
 import { WorkFolderRefusal, branchId, exactWorkPath, isRunSlug, workParts } from '../mods/lib/work-folder.mjs';
 
 const MiB = 1024 * 1024;
@@ -31,8 +32,15 @@ const STEP = /^\d{2,3}-[a-z][a-z0-9-]{0,40}$/;
 const FACTS_FILE = /^(\d{2,3})-([a-z][a-z0-9-]{0,40})\.json$/;
 const STATUSES = ['A', 'M', 'D', 'R', 'C', 'T'];
 const KINDS = ['binary', 'rename', 'contract', 'test', 'docs', 'locale', 'style', 'ui', 'config', 'code', 'unknown'];
-const FACT_KEYS = ['base', 'contract_changed', 'docs_only', 'head', 'paths', 'step', 'strings_changed', 'truncated', 'ui_changed', 'v'];
-const FLAG_KEYS = ['truncated', 'ui_changed', 'strings_changed', 'contract_changed', 'docs_only'];
+const FACT_KEYS = ['base', 'contract_changed', 'docs_only', 'head', 'paths', 'security_changed', 'step', 'strings_changed', 'truncated', 'ui_changed', 'v'];
+const FLAG_KEYS = ['truncated', 'ui_changed', 'strings_changed', 'contract_changed', 'docs_only', 'security_changed'];
+const SECURITY_DIRS = ['hooks/', 'mods/', '.claude/', '.claude-plugin/', '.github/', '.husky/'];
+// run-guard plus every script hooks/hooks.json runs: a change there can weaken or skip a guard.
+const SECURITY_FILES = [
+  'scripts/run-guard.mjs', 'scripts/hook-host.mjs', 'scripts/lead-relay.mjs', 'scripts/lead-handover.mjs', 'scripts/step-times.mjs',
+  'scripts/forced-tokens.mjs',
+];
+const SECURITY_KINDS = ['config', 'contract', 'binary', 'unknown'];
 const NO_DOCS_CONFIG = Object.freeze({ v: 1, not_docs: Object.freeze(['**']) });
 
 const CONTRACT = ['docs/contracts/**', '**/contracts/**', '**/*.proto', '**/openapi*.json', '**/openapi*.yaml', '**/openapi*.yml', '**/*.schema.json'];
@@ -119,12 +127,26 @@ function hostile(p) {
 
 const isCount = n => n === null || n === undefined || n === '-';
 
+const validGlobs = list => Array.isArray(list) && list.length <= MAX_GLOBS
+  && list.every(g => typeof g === 'string' && g.length > 0 && g.length <= MAX_GLOB_LENGTH && !/[\x00-\x1f\x7f]/.test(g));
+
 function validConfig(config) {
   if (config === null || typeof config !== 'object' || Array.isArray(config)) return false;
   const keys = Object.keys(config);
-  if (keys.length !== 2 || !keys.includes('v') || !keys.includes('not_docs')) return false;
-  if (config.v !== 1 || !Array.isArray(config.not_docs) || config.not_docs.length > MAX_GLOBS) return false;
-  return config.not_docs.every(g => typeof g === 'string' && g.length > 0 && g.length <= MAX_GLOB_LENGTH && !/[\x00-\x1f\x7f]/.test(g));
+  if (!keys.includes('v') || !keys.includes('not_docs')) return false;
+  if (keys.some(k => !['v', 'not_docs', 'security_paths'].includes(k))) return false;
+  if (config.v !== 1 || !validGlobs(config.not_docs)) return false;
+  return !keys.includes('security_paths') || validGlobs(config.security_paths);
+}
+
+// True when a path (or its old path) can touch trust: a config-like kind, a guarded folder, a forced-high token or a config glob.
+function securityPath(p, securityPaths) {
+  if (SECURITY_KINDS.includes(p.kind)) return true;
+  return [p.path, p.from].some(x => {
+    if (x === null) return false;
+    if (SECURITY_DIRS.some(d => x.startsWith(d)) || SECURITY_FILES.includes(x) || anyMatch(securityPaths, x)) return true;
+    return x.split('/').some(seg => tokens(seg).some(t => FORCED_HIGH_V1.includes(t)));
+  });
 }
 
 // Rules 4 to 10 for one path.
@@ -178,6 +200,7 @@ export function classify(entries, config) {
     if (paths.length >= MAX_PATHS || used > PATH_BUDGET) { truncated = true; break; }
     paths.push(p);
   }
+  const securityPaths = config !== null && config !== undefined && validConfig(config) ? (config.security_paths ?? []) : [];
   const kinds = paths.map(p => p.kind);
   const some = list => kinds.some(k => list.includes(k));
   const every = list => kinds.every(k => list.includes(k));
@@ -189,6 +212,7 @@ export function classify(entries, config) {
     strings_changed: truncated || empty || !every(['docs', 'test', 'style']),
     contract_changed: truncated || some(['contract', 'binary', 'unknown']),
     docs_only: !truncated && !empty && every(['docs']),
+    security_changed: truncated || empty || paths.some(p => securityPath(p, securityPaths)),
   };
 }
 
@@ -620,10 +644,12 @@ function newestName(factsDir) {
 function validFacts(o) {
   if (o === null || typeof o !== 'object' || Array.isArray(o)) return false;
   const keys = Object.keys(o).sort();
-  if (keys.length !== FACT_KEYS.length || keys.some((k, i) => k !== FACT_KEYS[i])) return false;
+  // A v1.0 file has no security_changed; it stays valid and readers treat the missing key as true.
+  const want = keys.includes('security_changed') ? FACT_KEYS : FACT_KEYS.filter(k => k !== 'security_changed');
+  if (keys.length !== want.length || keys.some((k, i) => k !== want[i])) return false;
   if (o.v !== 1 || typeof o.step !== 'string' || !STEP.test(o.step)) return false;
   if (typeof o.base !== 'string' || !FULL_ID.test(o.base) || typeof o.head !== 'string' || !FULL_ID.test(o.head)) return false;
-  if (FLAG_KEYS.some(k => typeof o[k] !== 'boolean')) return false;
+  if (FLAG_KEYS.some(k => k in o && typeof o[k] !== 'boolean')) return false;
   if (!Array.isArray(o.paths) || o.paths.length > MAX_PATHS) return false;
   return o.paths.every(p => {
     if (p === null || typeof p !== 'object' || Array.isArray(p)) return false;
