@@ -20,7 +20,7 @@ delete env.AICO_GUARDS;
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const questions = [{ q: 'PR is open. How do I handle it?', header: 'PR', multi: false, options: [{ label: 'Build on branch', description: 'Work on its branch' }, { label: 'Wait for merge', description: 'Stop now' }] }];
 const other = [{ q: 'Something else entirely?', header: 'Else', multi: false, options: [{ label: 'Yes', description: 'Do it' }, { label: 'No', description: 'Skip it' }] }];
-const gateQs = [{ q: 'Ship it?', header: 'Ship', multi: false, options: [{ label: 'Ship', description: 'Go', result: 'approved' }, { label: 'Hold', description: 'Stop', result: 'rejected' }] }];
+const gateQs = [{ q: 'Ship it?', header: 'Ship', multi: false, options: [{ label: 'Ship', description: 'Go', result: 'passed' }, { label: 'Hold', description: 'Stop', result: 'stopped' }] }];
 const payloadFor = (qs, label) => JSON.stringify({
   hook_event_name: 'PostToolUse', tool_name: 'AskUserQuestion',
   tool_input: { questions: qs.map((q) => ({ question: q.q, header: q.header, multiSelect: q.multi, options: q.options.map((o) => ({ label: o.label, description: o.description })) })) },

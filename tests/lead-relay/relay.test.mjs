@@ -129,7 +129,7 @@ describe('lead-relay answer: recorded picks (AC4)', () => {
     assert.equal(rows.length, 1);
   });
   test('Gate form (single-select, results) records the picked label', () => {
-    const qs = [{ q: 'Pass the brief?', header: 'Brief', multi: false, options: [opt('Approve', 'go', { result: 'pass' }), opt('Revise', 'again', { result: 'fix' })] }];
+    const qs = [{ q: 'Pass the brief?', header: 'Brief', multi: false, options: [opt('Approve', 'go', { result: 'passed' }), opt('Revise', 'again', { result: 'changed' })] }];
     const { rows } = roundTrip(qs, { kind: 'gate:brief', resp: answerOf(qs, ['Approve']) });
     assert.deepEqual(rows[0].answers, [{ labels: ['Approve'], other: null }]);
   });
@@ -269,9 +269,9 @@ describe('lead-relay open: refused forms (cch.M21)', () => {
   }
   const two = (extra = {}) => ({ q: 'Q?', header: 'H', multi: false, options: [opt('Yes'), opt('No')], ...extra });
   test('duplicate question text', () => refused([single('Same?'), multi('Same?')]));
-  test('multi question in a Gate form', () => refused([two({ multi: true, options: [opt('Yes', 'y', { result: 'pass' }), opt('No', 'n', { result: 'fix' })] })], 'gate:plan'));
+  test('multi question in a Gate form', () => refused([two({ multi: true, options: [opt('Yes', 'y', { result: 'passed' }), opt('No', 'n', { result: 'changed' })] })], 'gate:plan'));
   test('Gate option without a result', () => refused([single()], 'gate:ship'));
-  test('result on a non-Gate form', () => refused([two({ options: [opt('A', 'a', { result: 'pass' }), opt('B')] })]));
+  test('result on a non-Gate form', () => refused([two({ options: [opt('A', 'a', { result: 'passed' }), opt('B')] })]));
   test('option label with a comma', () => refused([two({ options: [opt('Yes, now'), opt('No')] })]));
   test('option label with an em dash', () => refused([two({ options: [opt('Yes — now'), opt('No')] })]));
   test('header with ]', () => refused([two({ header: 'A]B' })]));

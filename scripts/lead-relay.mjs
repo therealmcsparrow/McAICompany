@@ -28,7 +28,7 @@ const SELF_EXIT_MS = 1000;
 const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 const BAD_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const ID_RE = /^f(0[1-9]|[1-9]\d)$/;
-const RESULT_RE = /^[a-z]{1,20}$/;
+const GATE_RESULTS = ['passed', 'changed', 'stopped']; // the words `run-state gate` accepts
 const KIND_RE = /^(gate:(brief|plan|ship)|idea|ask|step:[a-z][a-z0-9-]{0,30})$/;
 const DENY = 'aico: AskUserQuestion with preset answers is refused';
 
@@ -105,7 +105,7 @@ function checkQuestions(kind, qs) {
       labels.add(o.label);
       const opt = { label: o.label, description: o.description };
       if (gate) {
-        if (typeof o.result !== 'string' || !RESULT_RE.test(o.result)) refuse('a Gate option needs a result');
+        if (typeof o.result !== 'string' || !GATE_RESULTS.includes(o.result)) refuse(`a Gate option result must be one of ${GATE_RESULTS.join('|')} (Approve=passed, Change=changed, Stop=stopped)`);
         opt.result = o.result;
       } else if (o.result !== undefined) refuse('result is for Gate forms only');
       return opt;
