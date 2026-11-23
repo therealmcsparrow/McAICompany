@@ -10,7 +10,7 @@ The short boot path of a Lead session that starts or resumes a run after a hand-
    - `pending idea-<f>`: run `idea-flow options '<slug>'`, open it with `lead-relay open` and end with its block.
    - `pending step-<s>`: continue that inline step from its file.
    - `form: none`: dispatch the next Step named by that `## Next`.
-4. **Helper Lead** (`lead-relay`): you may spawn one `aico:project-manager` in the foreground only (never `run_in_background`); its `STATUS` block returns to you, and on its `needs-ceo` you run `lead-relay again '<slug>' <id>` and end with that block. A Role never spawns a Lead.
+4. **Helper Lead** (`lead-relay`): you may spawn one `aico:project-manager` in the foreground only (never `run_in_background`); its `STATUS` block returns to you (no file to poll, never wait for a notice; `SKILL.md` section 2), and on its `needs-ceo` you run `lead-relay again '<slug>' <id>` and end with that block. A Role never spawns a Lead.
 5. Dispatch rules: load the skill `aico:pipeline` (its `SKILL.md`) once, when the first dispatch is due.
 
 ## Do not load at boot
