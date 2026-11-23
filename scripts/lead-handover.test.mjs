@@ -727,7 +727,7 @@ describe('hooks.json and source', () => {
   test('the script is LF only, imports no package and holds no process killer', () => {
     const src = fs.readFileSync(SCRIPT, 'utf8');
     assert.ok(!src.includes('\r'));
-    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(m[1].startsWith('node:') || m[1].startsWith('./') || m[1] === '../mods/lib/work-folder.mjs' || m[1] === '../hooks/lib/event.mjs', m[1]);
+    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(m[1].startsWith('node:') || m[1].startsWith('./') || m[1] === '../mods/lib/work-folder.mjs' || m[1] === '../hooks/lib/worktree-main.mjs', m[1]);
     assert.ok(!/child_process|execSync|spawn|eval\(|new Function/.test(src));
   });
 });

@@ -1,4 +1,4 @@
-// worktreeMain (hooks/lib/event.mjs) must confirm the back link when the pointer files name the
+// worktreeMain (hooks/lib/worktree-main.mjs) must confirm the back link when the pointer files name the
 // tree by its Windows 8.3 short path (CI temp dirs such as C:\Users\RUNNER~1\...) while cwd resolves long.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,7 +6,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { worktreeMain } from '../hooks/lib/event.mjs';
+import { worktreeMain } from '../hooks/lib/worktree-main.mjs';
+
+test('worktreeMain refuses a gitdir that is UNC or device-prefixed', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-unc-'));
+  try {
+    for (const bad of ['\\\\host\\share\\main\\.git\\worktrees\\wt', '\\\\?\\C:\\main\\.git\\worktrees\\wt', '\\\\.\\C:\\main\\.git\\worktrees\\wt', '//host/share/main/.git/worktrees/wt']) {
+      const wt = fs.mkdtempSync(path.join(base, 'w-'));
+      fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${bad}\n`);
+      assert.equal(worktreeMain(wt), null, bad);
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
 
 function shortOf(p) {
   const r = spawnSync('cmd', ['/d', '/c', `for %I in ("${p}") do @echo %~sI`], { encoding: 'utf8', windowsVerbatimArguments: true });

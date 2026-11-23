@@ -6,7 +6,7 @@ export const DEP_HASHES = {
   "scripts/forced-tokens.mjs": "48dfbf4ac5caa9646edc1c91d61647b074bbf76bcd6b2f3b6a3729b32070c307",
   "scripts/handoff-lint.mjs": "1ee5bdd92702923fec813a0c6686fcf1da20da1c12e82ef2f938d20d665e8cda",
   "scripts/idea-flow.mjs": "dab49706de84f46a37d85e3c13f87fd205a76cf2381d4bf3d845471b39ed1430",
-  "scripts/lead-handover.mjs": "6c122c83161043ed85240782c21d7d76fe9e86785449adc200848b0fcc09c160",
+  "scripts/lead-handover.mjs": "32b7c51f126b623c31988e497407323b2eee71683f882fcd3f5beea6a08810a6",
   "scripts/lead-relay.mjs": "878bb1a64654e34fc2ca7ec241e25b592551cc873e7722bdb2dd1c284ffd8818",
   "scripts/plan-markdown.mjs": "e4fbd913270cf1a3e9843d267e05297849fb9fd4ec7c7d898f7df391653d8891",
   "scripts/plan-tasks.mjs": "b2f14aef4b0fac4aa8163d783cae1524af708cdf0de74160cc14dc66ef315d22",

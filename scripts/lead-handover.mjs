@@ -17,7 +17,7 @@ import { main as flow } from './idea-flow.mjs';
 import { readTierPath } from './tier-set.mjs';
 import { readInside } from './handoff-lint.mjs';
 import { isRunSlug, isProjectId, parseRun, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
-import { worktreeMain } from '../hooks/lib/event.mjs';
+import { worktreeMain } from '../hooks/lib/worktree-main.mjs';
 
 // Defaults only; the active run's values come from runCap.
 export const CAP = CONTEXT_CAP_DEFAULT;
