@@ -297,8 +297,8 @@ export function worktreeMain(cwd) {
       const back = readSmall(path.join(gitdir, 'gitdir'));
       const common = readSmall(path.join(gitdir, 'commondir'));
       if (back === null || common === null) return null;
-      if (path.resolve(gitdir, back.trim()) !== path.resolve(g)) return null;
-      if (path.resolve(gitdir, common.trim()) !== path.join(main, '.git')) return null;
+      if (realOf(path.resolve(gitdir, back.trim())) !== realOf(g)) return null;
+      if (realOf(path.resolve(gitdir, common.trim())) !== realOf(path.join(main, '.git'))) return null;
       return main;
     }
     if (path.dirname(cur) === cur) return null;
