@@ -49,7 +49,11 @@ test('worktreeMain refuses a gitdir that is UNC or device-prefixed, without touc
     for (const bad of ['\\\\host\\share\\main\\.git\\worktrees\\wt', '//host/share/main/.git/worktrees/wt']) {
       const wt = fs.mkdtempSync(path.join(base, 'w-'));
       fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${bad}\n`);
-      assert.equal(worktreeMain(wt), null, bad);
+      const seen = [];
+      const orig = fs.lstatSync;
+      fs.lstatSync = (p, ...r) => { seen.push(String(p)); return orig(p, ...r); };
+      try { assert.equal(worktreeMain(wt), null, bad); } finally { fs.lstatSync = orig; }
+      assert.deepEqual(seen.filter((p) => /^[\/]{2}/.test(p)), [], 'fs touched a UNC host path');
     }
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
@@ -62,6 +66,21 @@ test('worktreeMain refuses when the back link or commondir cannot be resolved', 
       assert.equal(worktreeMain(wt), null, JSON.stringify(opt));
     }
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('worktreeMain refuses when every realpath after the first throws (both sides null, not equal)', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-spy-'));
+  const orig = fs.realpathSync.native;
+  try {
+    const { wt } = fakeTree(base);
+    let calls = 0;
+    // Let the cwd lookup through; every later resolve (back link, commondir) fails, so both compare sides are null.
+    fs.realpathSync.native = (p, ...r) => { if (calls++ === 0) return orig(p, ...r); throw new Error('ENAMETOOLONG'); };
+    let got;
+    try { got = worktreeMain(wt); } finally { fs.realpathSync.native = orig; }
+    assert.ok(calls > 1, 'spy never saw a later realpath call');
+    assert.equal(got, null);
+  } finally { fs.realpathSync.native = orig; fs.rmSync(base, { recursive: true, force: true }); }
 });
 
 test('mainRoot follows a confirmed pointer but not a UNC/device gitdir', { skip: process.platform !== 'win32' && 'Windows only' }, () => {
